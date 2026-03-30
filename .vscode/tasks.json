@@ -1,0 +1,59 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "RFSuite: Deploy to Simulator",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\.vscode\\scripts\\deploy-rfsuite-demo.ps1"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Start EdgeTX Simulator (TX16S MK3)",
+      "type": "process",
+      "command": "C:\\Program Files (x86)\\EdgeTX\\Companion 2.12\\bin\\simulator.exe",
+      "args": [
+        "--radio",
+        "edgetx-tx16smk3",
+        "--start-with",
+        "sd",
+        "--sd-path",
+        "${workspaceFolder}\\simulator"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Deploy + Start Simulator (TX16S MK3)",
+      "dependsOn": [
+        "RFSuite: Deploy to Simulator",
+        "RFSuite: Start EdgeTX Simulator (TX16S MK3)"
+      ],
+      "dependsOrder": "sequence",
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    }
+  ]
+}

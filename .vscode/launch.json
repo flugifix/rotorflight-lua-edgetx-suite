@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "RFSuite: Deploy to Simulator",
+      "type": "pwa-node",
+      "request": "launch",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "echo RFSuite deployment completed"
+      ],
+      "console": "internalConsole",
+      "internalConsoleOptions": "neverOpen",
+      "preLaunchTask": "RFSuite: Deploy to Simulator"
+    },
+    {
+      "name": "RFSuite: Deploy + Run Simulator (TX16S MK3)",
+      "type": "pwa-node",
+      "request": "launch",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "echo RFSuite deploy and simulator start triggered"
+      ],
+      "console": "internalConsole",
+      "internalConsoleOptions": "neverOpen",
+      "preLaunchTask": "RFSuite: Deploy + Start Simulator (TX16S MK3)"
+    }
+  ]
+}
