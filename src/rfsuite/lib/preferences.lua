@@ -1,0 +1,115 @@
+local M = {}
+
+local PREF_PATH = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
+
+local function trim(s)
+  local asString = tostring(s or "")
+  asString = string.gsub(asString, "^%s+", "")
+  asString = string.gsub(asString, "%s+$", "")
+  return asString
+end
+
+local function parseValue(v)
+  local t = trim(v)
+  local lower = string.lower(t)
+  if lower == "true" then return true end
+  if lower == "false" then return false end
+  local n = tonumber(t)
+  if n ~= nil then return n end
+  return t
+end
+
+local function serializeValue(v)
+  local vt = type(v)
+  if vt == "boolean" then
+    return v and "true" or "false"
+  end
+  if vt == "number" then
+    return tostring(v)
+  end
+  return tostring(v)
+end
+
+local function defaultPreferences()
+  return {
+    general = {
+      developer_tools = false,
+      iconsize = 2,
+      txbatt_type = 0,
+      theme_loader = 1,
+      hs_loader = 0,
+      toolbar_timeout = 10
+    }
+  }
+end
+
+function M.getPath()
+  return PREF_PATH
+end
+
+local function loadFileAsString(path)
+  local f = io.open(path, "r")
+  if not f then
+    return nil
+  end
+
+  local content = io.read(f, 2048)
+  io.close(f)
+
+  if content == nil or content == "" then
+    return nil
+  end
+
+  return content
+end
+
+function M.load()
+  local prefs = defaultPreferences()
+  local content = loadFileAsString(PREF_PATH)
+  if not content then
+    return prefs, false
+  end
+
+  local section = nil
+  for line in string.gmatch(content, "[^\r\n]+") do
+    local normalized = trim(line)
+    if normalized ~= "" and string.sub(normalized, 1, 1) ~= ";" and string.sub(normalized, 1, 1) ~= "#" then
+      local sec = string.match(normalized, "^%[(.-)%]$")
+      if sec then
+        section = trim(sec)
+        if prefs[section] == nil then
+          prefs[section] = {}
+        end
+      else
+        local k, v = string.match(normalized, "^([^=]+)=(.*)$")
+        if k and v and section then
+          prefs[section][trim(k)] = parseValue(v)
+        end
+      end
+    end
+  end
+
+  return prefs, true
+end
+
+function M.save(prefs)
+  local f, err = io.open(PREF_PATH, "w")
+  if not f then
+    return false, err
+  end
+
+  local general = (prefs and prefs.general) or {}
+  local content = "[general]\n"
+    .. "developer_tools=" .. serializeValue(general.developer_tools == true) .. "\n"
+    .. "iconsize=" .. serializeValue(general.iconsize or 2) .. "\n"
+    .. "txbatt_type=" .. serializeValue(general.txbatt_type or 0) .. "\n"
+    .. "theme_loader=" .. serializeValue(general.theme_loader or 1) .. "\n"
+    .. "hs_loader=" .. serializeValue(general.hs_loader or 0) .. "\n"
+    .. "toolbar_timeout=" .. serializeValue(general.toolbar_timeout or 10) .. "\n"
+
+  io.write(f, content)
+  io.close(f)
+  return true
+end
+
+return M

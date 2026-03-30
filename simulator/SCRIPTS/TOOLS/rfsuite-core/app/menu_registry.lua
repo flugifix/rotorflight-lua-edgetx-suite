@@ -142,7 +142,9 @@ function MenuRegistry.new(manifest, i18n, options)
 
       for j = 1, #entries do
         local p = entries[j]
-        cards[j] = {
+        local enabled = isEntryEnabled(p)
+        if not (enabled == false and p.hideWhenDisabled == true) then
+          cards[#cards + 1] = {
           id = p.id,
           sectionId = section.id,
           row = p.row or 1,
@@ -151,9 +153,10 @@ function MenuRegistry.new(manifest, i18n, options)
             text = resolveTitle(p),
             icon = p.icon and (iconRoot .. p.icon) or nil,
             isMenu = p.menuId ~= nil,
-            enabled = isEntryEnabled(p)
+            enabled = enabled
           }
         }
+        end
       end
 
       groups[i] = {
@@ -288,9 +291,11 @@ function MenuRegistry.new(manifest, i18n, options)
     local cards = {}
     for i = 1, #entries do
       local p = entries[i]
+      local enabled = isEntryEnabled(p)
+      if not (enabled == false and p.hideWhenDisabled == true) then
       local row = p.row or math.floor((i - 1) / 3) + 1
       local col = p.col or ((i - 1) % 3) + 1
-      cards[i] = {
+      cards[#cards + 1] = {
         id = p.id,
         row = row,
         col = col,
@@ -298,9 +303,10 @@ function MenuRegistry.new(manifest, i18n, options)
           text = resolveTitle(p),
           icon = p.icon and (iconRoot .. p.icon) or nil,
           isMenu = p.menuId ~= nil,
-          enabled = isEntryEnabled(p)
+          enabled = enabled
         }
       }
+      end
     end
 
     return cards
@@ -308,6 +314,10 @@ function MenuRegistry.new(manifest, i18n, options)
 
   function self.getCurrentEntryId()
     return self.currentEntryId
+  end
+
+  function self.getCurrentMenuId()
+    return self.currentMenuId
   end
 
   function self.isRootEntryEnabled(sectionId, entryId)
