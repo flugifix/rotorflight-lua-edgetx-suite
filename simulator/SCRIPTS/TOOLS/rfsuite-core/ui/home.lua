@@ -1,16 +1,16 @@
 local function loadModule(path)
-  local fullPath = "/SCRIPTS/TOOLS/rfsuite/" .. path
+  local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
   local chunk = assert(loadScript(fullPath, "t"))
   return chunk()
 end
 
-local GridLayout   = loadModule("rfsuite/layouts/grid.lua")
-local I18n         = loadModule("rfsuite/i18n/init.lua")
-local manifest     = loadModule("rfsuite/app/manifest.lua")
-local MenuRegistry = loadModule("rfsuite/app/menu_registry.lua")
+local GridLayout   = loadModule("layouts/grid.lua")
+local I18n         = loadModule("i18n/init.lua")
+local manifest     = loadModule("app/manifest.lua")
+local MenuRegistry = loadModule("app/menu_registry.lua")
 
-local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite/rfsuite/assets/icons/"
-local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite/rfsuite/assets/icon.png"
+local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
+local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
 
 local CONTENT_PAD   = 6
 local LABEL_INDENT  = 6    -- extra left padding for section title labels
@@ -20,11 +20,12 @@ local GROUP_DIV_H    = 3   -- divider line height
 local GROUP_GAP_AFTER = 10 -- gap between divider bottom and first tile row
 local GROUP_HEADER_H  = GROUP_TITLE_H + GROUP_DIV_H + GROUP_GAP_AFTER
 
-local TOP_BUTTON_W_SMALL = 32
-local TOP_BUTTON_W_ACTION = 84
-local TOP_BUTTON_H = 28
+local TOP_BUTTON_W_SMALL = 45
+local TOP_BUTTON_W_ACTION = 45
+local TOP_BUTTON_H = 45
 local TOP_BUTTON_GAP = 4
-local TOP_BUTTON_Y = 10
+local TOP_BUTTON_Y = 8
+local TOP_BUTTON_BORDER = 2
 
 local M = {}
 
@@ -199,17 +200,20 @@ local function resolveHeaderActions()
 end
 
 local function appendTopActionButton(layout, x, w, text, enabled, pressHandler)
-  layout[#layout + 1] = {
-    type = "button",
-    x = x,
-    y = TOP_BUTTON_Y,
-    w = w,
-    h = TOP_BUTTON_H,
-    text = text,
-    press = enabled and pressHandler or nil
-  }
-
-  if not enabled then
+  if enabled then
+    -- Enabled buttons keep native button rendering to preserve icon glyph support.
+    layout[#layout + 1] = {
+      type  = "button",
+      x = x,
+      y = TOP_BUTTON_Y,
+      w = w,
+      h = TOP_BUTTON_H,
+      text  = text,
+      press = pressHandler
+    }
+  else
+    -- Disabled buttons are plain placeholders: white fill + gray text, no button widget,
+    -- so they are truly non-interactive and cannot receive touch focus styling.
     layout[#layout + 1] = {
       type = "rectangle",
       x = x + 1,
@@ -223,14 +227,62 @@ local function appendTopActionButton(layout, x, w, text, enabled, pressHandler)
     layout[#layout + 1] = {
       type = "label",
       x = x,
-      y = TOP_BUTTON_Y + 3,
+      y = TOP_BUTTON_Y + 10,
       w = w,
       text = text,
-      color = WHITE,
+      color = COLOR_THEME_PRIMARY2,
       align = CENTER,
       font = SMLSIZE
     }
   end
+
+  -- Thin border drawn on top of the button (same color as icon for visual coherence).
+  local borderColor = enabled and COLOR_THEME_PRIMARY1 or GREY_DEFAULT
+  for i = 0, TOP_BUTTON_BORDER - 1 do
+    layout[#layout + 1] = {
+      type = "rectangle",
+      x = x + i,
+      y = TOP_BUTTON_Y + i,
+      w = w - (i * 2),
+      h = 1,
+      color = borderColor,
+      filled = true
+    }
+    layout[#layout + 1] = {
+      type = "rectangle",
+      x = x + i,
+      y = TOP_BUTTON_Y + TOP_BUTTON_H - 1 - i,
+      w = w - (i * 2),
+      h = 1,
+      color = borderColor,
+      filled = true
+    }
+    layout[#layout + 1] = {
+      type = "rectangle",
+      x = x + i,
+      y = TOP_BUTTON_Y + i,
+      w = 1,
+      h = TOP_BUTTON_H - (i * 2),
+      color = borderColor,
+      filled = true
+    }
+    layout[#layout + 1] = {
+      type = "rectangle",
+      x = x + w - 1 - i,
+      y = TOP_BUTTON_Y + i,
+      w = 1,
+      h = TOP_BUTTON_H - (i * 2),
+      color = borderColor,
+      filled = true
+    }
+  end
+end
+
+local function tAction(key, fallback)
+  if state.i18n and state.i18n.t then
+    return state.i18n.t("app.actions." .. key)
+  end
+  return fallback
 end
 
 -- Append tile widgets into the children table (no pg: calls)
@@ -411,11 +463,11 @@ function M.buildUI()
   local xSave = xReload - TOP_BUTTON_GAP - TOP_BUTTON_W_ACTION
   local xBack = xSave - TOP_BUTTON_GAP - TOP_BUTTON_W_ACTION
 
-  appendTopActionButton(lyt, xHelp, TOP_BUTTON_W_SMALL, "?", actions.help, onHelp)
-  appendTopActionButton(lyt, xStar, TOP_BUTTON_W_SMALL, "*", actions.star, onStar)
-  appendTopActionButton(lyt, xReload, TOP_BUTTON_W_ACTION, "RELOAD", actions.reload, onReload)
-  appendTopActionButton(lyt, xSave, TOP_BUTTON_W_ACTION, "SAVE", actions.save, onSave)
-  appendTopActionButton(lyt, xBack, TOP_BUTTON_W_ACTION, "BACK", true, onBack)
+  appendTopActionButton(lyt, xHelp, TOP_BUTTON_W_SMALL, tAction("help", "?"), actions.help, onHelp)
+  appendTopActionButton(lyt, xStar, TOP_BUTTON_W_SMALL, tAction("star", "*"), actions.star, onStar)
+  appendTopActionButton(lyt, xReload, TOP_BUTTON_W_ACTION, tAction("reload", "RELOAD"), actions.reload, onReload)
+  appendTopActionButton(lyt, xSave, TOP_BUTTON_W_ACTION, tAction("save", "SAVE"), actions.save, onSave)
+  appendTopActionButton(lyt, xBack, TOP_BUTTON_W_ACTION, tAction("back", "BACK"), true, onBack)
 
   lvgl.build(lyt)
 end

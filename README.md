@@ -18,7 +18,9 @@ This workspace contains a first implementation step for an EdgeTX LVGL-based RFS
 
 ## Entrypoint
 
-- `src/main.lua` (tools script name: `RFSuite`)
+- Tool entrypoint source: `src/main.lua` (deployed as `SCRIPTS/TOOLS/rfsuite.lua`)
+- Core package source: `src/rfsuite/` (deployed as `SCRIPTS/TOOLS/rfsuite-core/`)
+- Widget source: `src/widgets/rfsuite/` (deployed as `WIDGETS/rfsuite/`)
 
 ## VS Code Run Configuration
 
@@ -27,10 +29,14 @@ This workspace contains a first implementation step for an EdgeTX LVGL-based RFS
 - Task: `RFSuite: Deploy to Simulator`
 - Task: `RFSuite: Start EdgeTX Simulator (TX16S MK3)`
 - Task: `RFSuite: Deploy + Start Simulator (TX16S MK3)`
-- Deploy target: `simulator/SCRIPTS/TOOLS/rfsuite`
+- Deploy targets:
+  - `simulator/SCRIPTS/TOOLS/rfsuite.lua`
+  - `simulator/SCRIPTS/TOOLS/rfsuite-core/`
+  - `simulator/WIDGETS/rfsuite/`
 
-The run configuration executes a pre-launch deploy task that copies all files from `src/`
-to the simulator tool folder. This keeps the simulator copy in sync for quick iteration.
+The run configuration executes a pre-launch deploy task that copies the tool entrypoint,
+core package, and widget folder into the simulator SD card layout. This keeps the simulator
+copy in sync for quick iteration.
 The combined run configuration then starts `simulator.exe` using `--radio edgetx-tx16smk3`
 and `--sd-path ${workspaceFolder}/simulator`.
 

@@ -1,8 +1,8 @@
 local I18n = {}
 
 local bundles = {
-  de = assert(loadScript("/SCRIPTS/TOOLS/rfsuite/rfsuite/i18n/de.lua", "t"))(),
-  en = assert(loadScript("/SCRIPTS/TOOLS/rfsuite/rfsuite/i18n/en.lua", "t"))()
+  de = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/i18n/de.lua", "t"))(),
+  en = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/i18n/en.lua", "t"))()
 }
 
 local function getPathValue(root, key)

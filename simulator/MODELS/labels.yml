@@ -3,8 +3,9 @@ Labels:
 Sort: 1
 Models:
   model1.yml:
-    hash: "511a0000745c70af"
+    hash: "b41a00007e5c1ca4"
     name: "MODEL01"
+    mod0type: 5
     labels: ""
     bitmap: ""
     lastopen: 1774040572

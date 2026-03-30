@@ -32,6 +32,13 @@ return {
       back = "<",
       help = "HELP"
     },
+    actions = {
+      back = "\xEF\x81\xA0",
+      save = "\xEF\x80\x99",
+      reload = "\xEF\x80\xA1",
+      star = "*",
+      help = "?"
+    },
     help = {
       title = "Help",
       layout = "Demo for dynamic menu + breadcrumb + layout"
