@@ -40,7 +40,6 @@ end
 local ui = {
   loaded = false,
   dirty  = false,
-  comboOpen = nil,
   sections = {
     safety      = true,
     integration = false,
@@ -87,48 +86,8 @@ end
 local function ensureLoaded(prefs)
   if ui.loaded then return end
   copyFromPrefs(prefs)
-  ui.loaded    = true
-  ui.dirty     = false
-  ui.comboOpen = nil
-end
-
--- ─── Combo (icon size) ───────────────────────────────────────────────────────
-
-
-local function appendComboRow(children, x, y, w, labelText, valueText, selected, onPress)
-  local valueW = math.floor(w * 0.52)
-  local valueX = x + w - valueW
-  children[#children + 1] = { type = "label",     x = x,                    y = y + 10, w = valueX - x - 8, text = labelText,  color = WHITE,                           font = MIDSIZE }
-  children[#children + 1] = { type = "button",    x = valueX,               y = y,      w = valueW,         h = 40, text = "", press = onPress, color = selected and COLOR_THEME_SECONDARY1 or GREY_DEFAULT }
-  children[#children + 1] = { type = "label",     x = valueX + 8,           y = y + 10, w = valueW - 30,    text = valueText, color = selected and BLACK or WHITE, align = RIGHT, font = MIDSIZE }
-  children[#children + 1] = { type = "label",     x = valueX + valueW - 20, y = y + 10, w = 14,             text = "v",       color = selected and BLACK or WHITE, align = RIGHT, font = MIDSIZE }
-  children[#children + 1] = { type = "rectangle", x = x,                    y = y + 40, w = w,              h = 1,            color = GREY_DEFAULT, filled = true }
-end
-
-local function appendComboPopup(children, x, y, w, i18n, requestRebuild)
-  local popupW  = math.min(380, math.floor(w * 0.52))
-  local popupX  = x + w - popupW
-  local optionH = 44
-  children[#children + 1] = { type = "rectangle", x = popupX, y = y, w = popupW, h = optionH * #ICONSIZE_OPTIONS, color = GREY_DEFAULT, filled = true }
-  for i = 1, #ICONSIZE_OPTIONS do
-    local opt      = ICONSIZE_OPTIONS[i]
-    local selected = opt.value == ui.config.iconsize
-    children[#children + 1] = {
-      type  = "button",
-      x     = popupX,
-      y     = y + (i - 1) * optionH,
-      w     = popupW,
-      h     = optionH,
-      text  = t(i18n, opt.key, opt.fallback),
-      color = selected and COLOR_THEME_SECONDARY1 or GREY_DEFAULT,
-      press = function()
-        ui.config.iconsize = opt.value
-        ui.comboOpen       = nil
-        markDirty()
-        requestRebuild()
-      end
-    }
-  end
+  ui.loaded = true
+  ui.dirty  = false
 end
 
 -- ─── Section content builders ────────────────────────────────────────────────
@@ -204,13 +163,12 @@ function M.getHeaderActions()
 end
 
 function M.allowMemAutoRefresh()
-  return ui.comboOpen == nil
+  return true
 end
 
 function M.onReload(ctx)
   copyFromPrefs(ctx.preferences)
-  ui.comboOpen = nil
-  ui.dirty     = false
+  ui.dirty = false
 end
 
 function M.onSave(ctx)
@@ -254,7 +212,6 @@ function M.build(ctx)
       t(i18n, section.titleKey, section.titleFallback),
       ui.sections[key],
       function()
-        ui.comboOpen = nil
         toggleSection(key)
         requestRebuild()
       end

@@ -296,7 +296,7 @@ end
 
 -- ── ComboSelect ───────────────────────────────────────────────────────────────
 -- Generic dropdown using native lvgl.choice.
--- Returns ROW_H + 1 so callers can advance cursorY.
+-- Returns the effective row height + 1 so callers can advance cursorY.
 --
 -- Parameters:
 --   options       – array of { value = any, label = string }
