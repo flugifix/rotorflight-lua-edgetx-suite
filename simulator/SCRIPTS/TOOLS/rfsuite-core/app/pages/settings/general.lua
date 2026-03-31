@@ -146,50 +146,46 @@ local function buildSafety(cursorY, children, x, w, i18n, requestRebuild)
   }
   for _, item in ipairs(items) do
     local k = item.key
-    Controls.appendRadioSwitch(children, x, cursorY, w,
+    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
       t(i18n, item.labelKey, item.fallback),
       ui.config[k] == true,
       nil, nil,
       function()
         ui.config[k] = not ui.config[k]
         markDirty()
-        requestRebuild()
       end,
       i18n
     )
-    cursorY = cursorY + 44
   end
   return cursorY
 end
 
 local function buildIntegration(cursorY, children, x, w, i18n, requestRebuild)
-  Controls.appendRadioSwitch(children, x, cursorY, w,
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "sync_model_name", "Modellname synchronisieren"),
     ui.config.syncname == true,
     nil, nil,
     function()
       ui.config.syncname = not ui.config.syncname
       markDirty()
-      requestRebuild()
     end,
     i18n
   )
-  return cursorY + 44
+  return cursorY
 end
 
 local function buildDevelopment(cursorY, children, x, w, i18n, requestRebuild)
-  Controls.appendRadioSwitch(children, x, cursorY, w,
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "developer_tools", "Entwickler Tools"),
     ui.config.developer_tools == true,
     nil, nil,
     function()
       ui.config.developer_tools = not ui.config.developer_tools
       markDirty()
-      requestRebuild()
     end,
     i18n
   )
-  return cursorY + 44
+  return cursorY
 end
 
 -- ─── Section manifest ────────────────────────────────────────────────────────

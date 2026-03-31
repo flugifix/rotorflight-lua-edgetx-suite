@@ -10,6 +10,9 @@ local SettingsDashboardPage = loadPage("settings/dashboard.lua")
 --local SettingsActiveLookPage = loadPage("settings/activelook.lua")
 local SettingsLocalizationPage = loadPage("settings/localization.lua")
 local SettingsAudioPage = loadPage("settings/audio.lua")
+local SettingsAudioEventsPage = loadPage("settings/audio_events.lua")
+local SettingsAudioSwitchesPage = loadPage("settings/audio_switches.lua")
+local SettingsAudioTimerPage = loadPage("settings/audio_timer.lua")
 
 return {
   byMenuId = {
@@ -18,6 +21,10 @@ return {
     settings_dashboard_page = SettingsDashboardPage,
     --settings_activelook_page = SettingsActiveLookPage,
     settings_localization_page = SettingsLocalizationPage,
-    settings_audio_page = SettingsAudioPage
+    settings_audio_page = SettingsAudioPage,
+    settings_audio_events_page = SettingsAudioEventsPage,
+    settings_audio_switches_page = SettingsAudioSwitchesPage,
+    settings_audio_timer_page = SettingsAudioTimerPage
   }
 }
+

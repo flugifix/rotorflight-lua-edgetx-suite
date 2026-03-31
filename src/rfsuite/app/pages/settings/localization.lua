@@ -28,7 +28,6 @@ end
 local ui = {
   loaded    = false,
   dirty     = false,
-  comboOpen = nil,
   config    = buildDefaultConfig(),
 }
 
@@ -39,7 +38,13 @@ local function t(i18n, key, fallback)
   return fallback
 end
 
-local function markDirty() ui.dirty = true end
+local function markDirty(requestRebuild)
+  if ui.dirty then return end
+  ui.dirty = true
+  if requestRebuild then
+    requestRebuild()
+  end
+end
 
 local function copyFromPrefs(prefs)
   local loc = (prefs and prefs.localizations) or {}
@@ -51,9 +56,8 @@ end
 local function ensureLoaded(prefs)
   if ui.loaded then return end
   copyFromPrefs(prefs)
-  ui.loaded    = true
-  ui.dirty     = false
-  ui.comboOpen = nil
+  ui.loaded = true
+  ui.dirty  = false
 end
 
 local function getTempOptions(i18n)
@@ -78,16 +82,11 @@ local function buildLocalization(cursorY, children, x, w, i18n, requestRebuild)
     t(i18n, "temperature_unit", "Temperatureinheit"),
     getTempOptions(i18n),
     ui.config.temperature_unit,
-    ui.comboOpen == "temperature_unit",
-    function()
-      ui.comboOpen = (ui.comboOpen == "temperature_unit") and nil or "temperature_unit"
-      requestRebuild()
-    end,
+    false,
+    nil,
     function(val)
       ui.config.temperature_unit = val
-      ui.comboOpen = nil
-      markDirty()
-      requestRebuild()
+      markDirty(requestRebuild)
     end
   )
 
@@ -96,16 +95,11 @@ local function buildLocalization(cursorY, children, x, w, i18n, requestRebuild)
     t(i18n, "altitude_unit", "Hoeheneinheit"),
     getAltOptions(i18n),
     ui.config.altitude_unit,
-    ui.comboOpen == "altitude_unit",
-    function()
-      ui.comboOpen = (ui.comboOpen == "altitude_unit") and nil or "altitude_unit"
-      requestRebuild()
-    end,
+    false,
+    nil,
     function(val)
       ui.config.altitude_unit = val
-      ui.comboOpen = nil
-      markDirty()
-      requestRebuild()
+      markDirty(requestRebuild)
     end
   )
 
@@ -119,13 +113,12 @@ function M.getHeaderActions()
 end
 
 function M.allowMemAutoRefresh()
-  return ui.comboOpen == nil
+  return true
 end
 
 function M.onReload(ctx)
   copyFromPrefs(ctx.preferences)
-  ui.comboOpen = nil
-  ui.dirty     = false
+  ui.dirty = false
 end
 
 function M.onSave(ctx)

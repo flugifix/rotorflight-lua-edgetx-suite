@@ -70,7 +70,11 @@ return {
     },
     settings_audio_page = {
       title = "@i18n(app.modules.audio.name)@",
-      pages = {}
+      pages = {
+        { id = "audio_events", title = "@i18n(app.modules.audio_events.name)@", menuId = "settings_audio_events_page", icon = "audio_events.png", row = 1, col = 1, enabled = true },
+        { id = "audio_switches", title = "@i18n(app.modules.audio_switches.name)@", menuId = "settings_audio_switches_page", icon = "audio_switches.png", row = 1, col = 2, enabled = true },
+        { id = "audio_timer", title = "@i18n(app.modules.audio_timer.name)@", menuId = "settings_audio_timer_page", icon = "audio_timer.png", row = 1, col = 3, enabled = true }
+      }
     },
     developer_menu = {
       title = "@i18n(app.modules.developer.name)@",
@@ -81,13 +85,17 @@ return {
         { id = "developer_settings", title = "@i18n(app.modules.developer_settings.name)@", icon = "settings.png", row = 1, col = 4, enabled = true }
       }
     },
-    audio_menu = {
-      title = "@i18n(app.modules.audio.name)@",
-      pages = {
-        { id = "audio_events", title = "@i18n(app.modules.audio_events.name)@", icon = "audio.png", row = 1, col = 1, enabled = false },
-        { id = "audio_switches", title = "@i18n(app.modules.audio_switches.name)@", icon = "input.png", row = 1, col = 2, enabled = false },
-        { id = "audio_timer", title = "@i18n(app.modules.audio_timer.name)@", icon = "logs.png", row = 1, col = 3, enabled = false }
-      }
+    settings_audio_events_page = {
+      title = "@i18n(app.modules.audio_events.name)@",
+      pages = {}
+    },
+    settings_audio_switches_page = {
+      title = "@i18n(app.modules.audio_switches.name)@",
+      pages = {}
+    },
+    settings_audio_timer_page = {
+      title = "@i18n(app.modules.audio_timer.name)@",
+      pages = {}
     }
   }
 }

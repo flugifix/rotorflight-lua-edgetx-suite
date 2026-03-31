@@ -54,6 +54,41 @@ local function defaultPreferences()
     localizations = {
       temperature_unit = 0,
       altitude_unit    = 0,
+    },
+    audio_events = {
+      arming_flags = true,
+      governor_state = true,
+      voltage_alert = true,
+      pid_profile = true,
+      rate_profile = true,
+      esc_temperature = false,
+      esc_threshold = 90,
+      adjustment_events = false,
+      fuel_alerts = true,
+      battery_profile = true,
+      model_announcement = false,
+    },
+    audio_switches = {
+      flight_mode_switch = false,
+      arm_disarm_switch = false,
+      stabilize_mode_switch = false,
+      acro_mode_switch = false,
+      altitude_hold_switch = false,
+      position_hold_switch = false,
+      return_to_home_switch = false,
+      channel_6_switch = false,
+      switch_feedback = false,
+    },
+    audio_timer = {
+      timer1_alerts = false,
+      timer2_alerts = false,
+      timer3_alerts = false,
+      flight_time_alert = false,
+      battery_timer = false,
+      armed_timer = false,
+      count_down_timer = false,
+      count_up_timer = false,
+      timer_bell_sound = false,
     }
   }
 end

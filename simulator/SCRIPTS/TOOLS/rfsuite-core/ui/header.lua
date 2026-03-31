@@ -3,6 +3,8 @@
 
 local Header = {}
 
+local SHOW_RAM_LABEL = true
+
 local DEFAULT_LAYOUT = {
   rightPad = 20,
   memW = 126,
@@ -139,14 +141,15 @@ function Header.appendToLayout(lyt, ctx)
   local xReload = xStar    - cfg.topButtonGap - cfg.topButtonWAction
   local xSave   = xReload  - cfg.topButtonGap - cfg.topButtonWAction
   local xBack   = xSave    - cfg.topButtonGap - cfg.topButtonWAction
-  local xMem    = xBack    - cfg.topButtonGap - cfg.memW
-
-  lyt[#lyt + 1] = {
-    type  = "label",
-    x = xMem, y = cfg.topButtonY + cfg.memYOffset, w = cfg.memW,
-    text  = Header.getLuaMemLabel(),
-    color = WHITE, align = RIGHT, font = SMLSIZE
-  }
+  if SHOW_RAM_LABEL then
+    local xMem = xBack - cfg.topButtonGap - cfg.memW
+    lyt[#lyt + 1] = {
+      type  = "label",
+      x = xMem, y = cfg.topButtonY + cfg.memYOffset, w = cfg.memW,
+      text  = Header.getLuaMemLabel(),
+      color = WHITE, align = RIGHT, font = SMLSIZE
+    }
+  end
 
   appendButton(lyt, cfg, xHelp,   cfg.topButtonWSmall,  t("help",   "?"),      actions.help,   ctx.onHelp)
   appendButton(lyt, cfg, xStar,   cfg.topButtonWSmall,  t("star",   "*"),      actions.star,   ctx.onStar)

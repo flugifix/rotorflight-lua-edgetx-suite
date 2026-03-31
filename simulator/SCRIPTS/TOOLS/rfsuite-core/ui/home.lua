@@ -78,6 +78,7 @@ local state = {
   i18n         = nil,
   menu         = nil,
   preferences  = nil,
+  manifest     = manifest,
   cardHandlers = {},
   focusIndex   = 0,
   ignoreNextPageKey = false,
@@ -236,7 +237,6 @@ end
 
 function M.buildUI()
   if lvgl == nil then return end
-  lvgl.clear()
 
   local profile = DisplayProfile.current()
   local contentPad = profile.contentPad
@@ -347,6 +347,7 @@ function M.buildUI()
         i18n = state.i18n,
         preferences = state.preferences,
         menu = state.menu,
+        manifest = state.manifest,
         requestRebuild = M.buildUI
       })
     else
