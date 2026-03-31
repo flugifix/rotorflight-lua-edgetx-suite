@@ -82,8 +82,6 @@ local function buildLocalization(cursorY, children, x, w, i18n, requestRebuild)
     t(i18n, "temperature_unit", "Temperatureinheit"),
     getTempOptions(i18n),
     ui.config.temperature_unit,
-    false,
-    nil,
     function(val)
       ui.config.temperature_unit = val
       markDirty(requestRebuild)
@@ -95,8 +93,6 @@ local function buildLocalization(cursorY, children, x, w, i18n, requestRebuild)
     t(i18n, "altitude_unit", "Hoeheneinheit"),
     getAltOptions(i18n),
     ui.config.altitude_unit,
-    false,
-    nil,
     function(val)
       ui.config.altitude_unit = val
       markDirty(requestRebuild)

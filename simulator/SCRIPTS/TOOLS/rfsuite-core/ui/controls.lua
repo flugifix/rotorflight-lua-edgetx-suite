@@ -301,8 +301,6 @@ end
 -- Parameters:
 --   options       – array of { value = any, label = string }
 --   selectedValue – currently selected value (compared with ==)
---   isOpen        – legacy arg (ignored)
---   onToggle      – legacy arg (ignored)
 --   onSelect      – called with (value) when an option is chosen
 
 local COMBO_OPTION_H = 44
@@ -313,9 +311,7 @@ Controls.COMBO_ROW_H    = math.max(ROW_H, NUMBER_H) + 1
 Controls.COMBO_OPTION_H = COMBO_OPTION_H
 
 function Controls.appendComboSelect(children, x, y, w, labelText, options,
-                                     selectedValue, isOpen, onToggle, onSelect)
-  local _ = isOpen
-  _ = onToggle
+                                     selectedValue, onSelect)
 
   local rowH = math.max(ROW_H, NUMBER_H)
   local comboW = 172
