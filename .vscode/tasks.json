@@ -54,6 +54,70 @@
       "runOptions": {
         "instanceLimit": 1
       }
+    },
+    {
+      "label": "RFSuite: Start EdgeTX Simulator (TX16S)",
+      "type": "process",
+      "command": "C:\\Program Files (x86)\\EdgeTX\\Companion 2.12\\bin\\simulator.exe",
+      "args": [
+        "--radio",
+        "edgetx-tx16s",
+        "--start-with",
+        "sd",
+        "--sd-path",
+        "${workspaceFolder}\\simulator"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Deploy + Start Simulator (TX16S)",
+      "dependsOn": [
+        "RFSuite: Deploy to Simulator",
+        "RFSuite: Start EdgeTX Simulator (TX16S)"
+      ],
+      "dependsOrder": "sequence",
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "RFSuite: Start EdgeTX Simulator (TX15)",
+      "type": "process",
+      "command": "C:\\Program Files (x86)\\EdgeTX\\Companion 2.12\\bin\\simulator.exe",
+      "args": [
+        "--radio",
+        "edgetx-tx15",
+        "--start-with",
+        "sd",
+        "--sd-path",
+        "${workspaceFolder}\\simulator"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Deploy + Start Simulator (TX15)",
+      "dependsOn": [
+        "RFSuite: Deploy to Simulator",
+        "RFSuite: Start EdgeTX Simulator (TX15)"
+      ],
+      "dependsOrder": "sequence",
+      "runOptions": {
+        "instanceLimit": 1
+      }
     }
   ]
 }

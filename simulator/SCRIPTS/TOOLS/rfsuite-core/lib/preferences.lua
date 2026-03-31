@@ -33,12 +33,27 @@ end
 local function defaultPreferences()
   return {
     general = {
-      developer_tools = false,
-      iconsize = 2,
-      txbatt_type = 0,
-      theme_loader = 1,
-      hs_loader = 0,
-      toolbar_timeout = 10
+      -- display
+      iconsize                     = 2,
+      txbatt_type                  = 0,
+      theme_loader                 = 1,
+      hs_loader                    = 0,
+      toolbar_timeout              = 10,
+      -- safety & prompts
+      save_confirm                 = false,
+      save_dirty_only              = true,
+      save_armed_warning           = true,
+      reload_confirm               = false,
+      show_battery_profile_startup = true,
+      show_confirmation_dialog     = true,
+      -- integration
+      syncname                     = false,
+      -- development
+      developer_tools              = false,
+    },
+    localizations = {
+      temperature_unit = 0,
+      altitude_unit    = 0,
     }
   }
 end
@@ -92,22 +107,21 @@ function M.load()
   return prefs, true
 end
 
+-- Writes ALL sections and keys from prefs to the INI file.
+-- No field list to maintain — adding a key to prefs automatically persists it.
 function M.save(prefs)
   local f, err = io.open(PREF_PATH, "w")
-  if not f then
-    return false, err
+  if not f then return false, err end
+
+  for section, values in pairs(prefs or {}) do
+    if type(values) == "table" then
+      io.write(f, "[" .. tostring(section) .. "]\n")
+      for k, v in pairs(values) do
+        io.write(f, tostring(k) .. "=" .. serializeValue(v) .. "\n")
+      end
+    end
   end
 
-  local general = (prefs and prefs.general) or {}
-  local content = "[general]\n"
-    .. "developer_tools=" .. serializeValue(general.developer_tools == true) .. "\n"
-    .. "iconsize=" .. serializeValue(general.iconsize or 2) .. "\n"
-    .. "txbatt_type=" .. serializeValue(general.txbatt_type or 0) .. "\n"
-    .. "theme_loader=" .. serializeValue(general.theme_loader or 1) .. "\n"
-    .. "hs_loader=" .. serializeValue(general.hs_loader or 0) .. "\n"
-    .. "toolbar_timeout=" .. serializeValue(general.toolbar_timeout or 10) .. "\n"
-
-  io.write(f, content)
   io.close(f)
   return true
 end

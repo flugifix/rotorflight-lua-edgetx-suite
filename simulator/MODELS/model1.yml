@@ -204,22 +204,6 @@ switchWarning:
       pos: up
    SF:
       pos: up
-   SG:
-      pos: up
-   SH:
-      pos: up
-   SW1:
-      pos: down
-   SW2:
-      pos: up
-   SW3:
-      pos: up
-   SW4:
-      pos: up
-   SW5:
-      pos: up
-   SW6:
-      pos: up
 rssiSource: none
 rfAlarms: 
    warning: 45
@@ -491,14 +475,6 @@ topbarData:
                   type: Color
                   value: 
                      color: 0x48AC50
-      6:
-         widgetName: Date Time
-         widgetData: 
-            options: 
-               0:
-                  type: Color
-                  value: 
-                     color: COLIDX1
 topbarWidgetWidth: 
    0:
       val: 1
@@ -512,10 +488,8 @@ topbarWidgetWidth:
       val: 1
    5:
       val: 1
-   6:
-      val: 1
 view: 0
-modelRegistrationID: ""
+modelRegistrationID: "-eC!U*U*"
 customSwitches: 
    SW1:
       name: ""

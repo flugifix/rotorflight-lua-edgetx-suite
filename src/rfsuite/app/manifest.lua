@@ -41,11 +41,11 @@ return {
       title = "@i18n(app.modules.settings.name)@",
       pages = {
         { id = "general", title = "@i18n(app.modules.general.name)@", menuId = "settings_general_page", icon = "setup.png", row = 1, col = 1, enabled = true },
-        { id = "shortcuts", title = "@i18n(app.modules.shortcuts.name)@", menuId = "settings_shortcuts_page", icon = "input.png", row = 1, col = 2, enabled = true },
-        { id = "dashboard", title = "@i18n(app.modules.dashboard.name)@", menuId = "settings_dashboard_page", icon = "display.png", row = 1, col = 3, enabled = true },
-        { id = "activelook", title = "@i18n(app.modules.activelook.name)@", menuId = "settings_activelook_page", icon = "developer.png", row = 1, col = 4, enabled = true },
-        { id = "localization", title = "@i18n(app.modules.localization.name)@", menuId = "settings_localization_page", icon = "logs.png", row = 1, col = 5, enabled = true },
-        { id = "audio", title = "@i18n(app.modules.audio.name)@", menuId = "settings_audio_page", icon = "audio.png", row = 1, col = 6, enabled = true }
+        { id = "dashboard", title = "@i18n(app.modules.dashboard.name)@", menuId = "settings_dashboard_page", icon = "display.png", row = 1, col = 2, enabled = true },
+        { id = "localization", title = "@i18n(app.modules.localization.name)@", menuId = "settings_localization_page", icon = "localizations.png", row = 1, col = 3, enabled = true },
+        { id = "audio", title = "@i18n(app.modules.audio.name)@", menuId = "settings_audio_page", icon = "audio.png", row = 1, col = 4, enabled = true },
+        { id = "shortcuts", title = "@i18n(app.modules.shortcuts.name)@", menuId = "settings_shortcuts_page", icon = "input.png", row = 1, col = 5, enabled = false, hideWhenDisabled = true },
+        { id = "activelook", title = "@i18n(app.modules.activelook.name)@", menuId = "settings_activelook_page", icon = "developer.png", row = 1, col = 6, enabled = false, hideWhenDisabled = true }
       }
     },
     settings_general_page = {

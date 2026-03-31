@@ -6,33 +6,70 @@ end
 
 local GridLayout   = loadModule("layouts/grid.lua")
 local I18n         = loadModule("i18n/init.lua")
+local DisplayProfile = loadModule("core/display_profile.lua")
 local manifest     = loadModule("app/manifest.lua")
 local MenuRegistry = loadModule("app/menu_registry.lua")
 local PageRegistry = loadModule("app/pages/init.lua")
-local Preferences  = nil
+local Tiles             = loadModule("ui/tiles.lua")
+local Header            = loadModule("ui/header.lua")
+local PreferencesSafe   = loadModule("ui/preferences.lua")
 
 local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
 
-local CONTENT_PAD   = 6
-local LABEL_INDENT  = 6    -- extra left padding for section title labels
-local TILE_GAP      = 12
-local GROUP_TITLE_H  = 24  -- height reserved for section heading text
-local GROUP_DIV_H    = 3   -- divider line height
-local GROUP_GAP_AFTER = 10 -- gap between divider bottom and first tile row
-local GROUP_HEADER_H  = GROUP_TITLE_H + GROUP_DIV_H + GROUP_GAP_AFTER
-
-local TOP_BUTTON_W_SMALL = 45
-local TOP_BUTTON_W_ACTION = 45
-local TOP_BUTTON_H = 45
-local TOP_BUTTON_GAP = 4
-local TOP_BUTTON_Y = 8
-local TOP_BUTTON_BORDER = 2
-
 local M = {}
 
-local loadPreferencesSafe
-local savePreferencesSafe
+local Prefs           = PreferencesSafe.new(loadModule)
+local loadPreferencesSafe  = Prefs.load
+local savePreferencesSafe  = Prefs.save
+
+-- Global access point: rfsuite.preferences and rfsuite.savePreferences
+-- Any module can read settings via: rfsuite.preferences.general.save_confirm
+_G.rfsuite = _G.rfsuite or {}
+_G.rfsuite.savePreferences = function()
+  return savePreferencesSafe(_G.rfsuite.preferences)
+end
+
+local function computeTileSize(cardW, cfg)
+  local hardMax = math.min(cfg.tileMax, cardW)
+  if cardW < cfg.tileMin then
+    return hardMax
+  end
+  local soft = math.max(cfg.tileMin, hardMax)
+  return soft
+end
+
+local function getRequiredColumns(items)
+  local required = 1
+  for i = 1, #items do
+    local c = tonumber(items[i].col)
+    if c and c > required then
+      required = c
+    end
+  end
+  return required
+end
+
+local function toWrappedItems(items, cols)
+  local wrapped = {}
+  local c = 1
+  local r = 1
+  for i = 1, #items do
+    local item = items[i]
+    wrapped[i] = {
+      id = item.id,
+      row = r,
+      col = c,
+      data = item.data
+    }
+    c = c + 1
+    if c > cols then
+      c = 1
+      r = r + 1
+    end
+  end
+  return wrapped, r
+end
 
 local state = {
   shouldExit   = false,
@@ -43,6 +80,8 @@ local state = {
   preferences  = nil,
   cardHandlers = {},
   focusIndex   = 0,
+  ignoreNextPageKey = false,
+  suppressPressFrames = 0,
   memBucket    = nil,
   memLastTick  = 0,
   lastInputTick = 0,
@@ -66,7 +105,8 @@ local state = {
       -- pids = { reload = true, save = true, star = true }
     },
     byMenuId = {
-      settings_general_page = { save = true, reload = true, help = false }
+      settings_general_page      = { save = true, reload = true, help = false },
+      settings_localization_page = { save = true, reload = true, help = false }
     }
   }
 }
@@ -108,6 +148,7 @@ local function onReload()
 
   if page and page.onReload then
     state.preferences = loadPreferencesSafe()
+    _G.rfsuite.preferences = state.preferences
     page.onReload({
       i18n = state.i18n,
       preferences = state.preferences,
@@ -137,7 +178,13 @@ local function onSave()
       i18n = state.i18n,
       preferences = state.preferences,
       menu = state.menu,
-      savePreferences = function() return savePreferencesSafe(state.preferences) end,
+      savePreferences = function()
+        local ok, err = savePreferencesSafe(state.preferences)
+        -- keep global in sync after save
+        _G.rfsuite.preferences = state.preferences
+        _G.rfsuite.savePreferences = function() return savePreferencesSafe(_G.rfsuite.preferences) end
+        return ok, err
+      end,
       refresh = M.buildUI
     })
     M.buildUI()
@@ -155,8 +202,12 @@ end
 local function getCardPressHandler(cardId)
   if state.cardHandlers[cardId] then return state.cardHandlers[cardId] end
   local fn = function()
+    if (state.suppressPressFrames or 0) > 0 then
+      return
+    end
     if state.menu and (not state.menu.isRoot()) then
       state.menu.openEntry(cardId)
+      state.focusIndex = 0
       M.buildUI()
     end
   end
@@ -168,8 +219,12 @@ local function getRootCardPressHandler(sectionId, cardId)
   local key = sectionId .. ":" .. cardId
   if state.cardHandlers[key] then return state.cardHandlers[key] end
   local fn = function()
+    if (state.suppressPressFrames or 0) > 0 then
+      return
+    end
     if state.menu and state.menu.isRoot() then
       state.menu.openRootEntry(sectionId, cardId)
+      state.focusIndex = 0
       M.buildUI()
     end
   end
@@ -177,300 +232,20 @@ local function getRootCardPressHandler(sectionId, cardId)
   return fn
 end
 
--- ── Helpers ───────────────────────────────────────────────────────────────────
-
-local function computeColumns(width, minCardWidth, maxColumns)
-  local cols = math.floor(width / minCardWidth)
-  if cols < 1 then cols = 1 end
-  if cols > maxColumns then cols = maxColumns end
-  return cols
-end
-
-local function flattenRootCards(groups)
-  local flat = {}
-  for i = 1, #groups do
-    local cards = groups[i].cards or {}
-    for j = 1, #cards do flat[#flat + 1] = cards[j] end
-  end
-  return flat
-end
-
-local function formatTileText(text)
-  if type(text) ~= "string" then return "" end
-  local len = string.len(text)
-  if len <= 11 then return text end
-  local bestSpace, mid = nil, math.floor(len / 2)
-  for i = 1, len do
-    if string.sub(text, i, i) == " " then
-      if bestSpace == nil or math.abs(i - mid) < math.abs(bestSpace - mid) then
-        bestSpace = i
-      end
-    end
-  end
-  if bestSpace then
-    return string.sub(text, 1, bestSpace - 1) .. "\n" .. string.sub(text, bestSpace + 1)
-  end
-  return string.sub(text, 1, mid) .. "\n" .. string.sub(text, mid + 1)
-end
-
-local function resolveHeaderActions()
-  local defaults = state.headerActions.defaults
-  local rootDefaults = defaults.root or {}
-  local menuDefaults = defaults.menu or {}
-  local isRoot = not state.menu or state.menu.isRoot()
-  local base = isRoot and rootDefaults or menuDefaults
-  local actions = {
-    back = true,
-    save = base.save == true,
-    reload = base.reload == true,
-    star = base.star == true,
-    help = base.help ~= false
-  }
-
-  if state.menu and not isRoot then
-    local menuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
-    if menuId then
-      local byMenu = state.headerActions.byMenuId and state.headerActions.byMenuId[menuId] or nil
-      if type(byMenu) == "table" then
-        if byMenu.save ~= nil then actions.save = byMenu.save == true end
-        if byMenu.reload ~= nil then actions.reload = byMenu.reload == true end
-        if byMenu.star ~= nil then actions.star = byMenu.star == true end
-        if byMenu.help ~= nil then actions.help = byMenu.help == true end
-      end
-
-      local pageModule = PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[menuId] or nil
-      if pageModule and pageModule.getHeaderActions then
-        local fromPage = pageModule.getHeaderActions({
-          i18n = state.i18n,
-          preferences = state.preferences,
-          menu = state.menu
-        })
-        if type(fromPage) == "table" then
-          if fromPage.save ~= nil then actions.save = fromPage.save == true end
-          if fromPage.reload ~= nil then actions.reload = fromPage.reload == true end
-          if fromPage.star ~= nil then actions.star = fromPage.star == true end
-          if fromPage.help ~= nil then actions.help = fromPage.help == true end
-        end
-      end
-    end
-
-    local entryId = state.menu.getCurrentEntryId and state.menu.getCurrentEntryId() or nil
-    if entryId then
-      local override = state.headerActions.byEntryId[entryId]
-      if type(override) == "table" then
-        if override.save ~= nil then actions.save = override.save == true end
-        if override.reload ~= nil then actions.reload = override.reload == true end
-        if override.star ~= nil then actions.star = override.star == true end
-        if override.help ~= nil then actions.help = override.help == true end
-      end
-    end
-  end
-
-  return actions
-end
-
-local function appendTopActionButton(layout, x, w, text, enabled, pressHandler)
-  if enabled then
-    -- Enabled buttons keep native button rendering to preserve icon glyph support.
-    layout[#layout + 1] = {
-      type  = "button",
-      x = x,
-      y = TOP_BUTTON_Y,
-      w = w,
-      h = TOP_BUTTON_H,
-      text  = text,
-      press = pressHandler
-    }
-  else
-    -- Disabled buttons are plain placeholders: white fill + gray text, no button widget,
-    -- so they are truly non-interactive and cannot receive touch focus styling.
-    layout[#layout + 1] = {
-      type = "rectangle",
-      x = x + 1,
-      y = TOP_BUTTON_Y + 1,
-      w = w - 2,
-      h = TOP_BUTTON_H - 2,
-      color = GREY_DEFAULT,
-      filled = true
-    }
-
-    layout[#layout + 1] = {
-      type = "label",
-      x = x,
-      y = TOP_BUTTON_Y + 10,
-      w = w,
-      text = text,
-      color = COLOR_THEME_PRIMARY2,
-      align = CENTER,
-      font = SMLSIZE
-    }
-  end
-
-  -- Thin border drawn on top of the button (same color as icon for visual coherence).
-  local borderColor = enabled and COLOR_THEME_PRIMARY1 or GREY_DEFAULT
-  for i = 0, TOP_BUTTON_BORDER - 1 do
-    layout[#layout + 1] = {
-      type = "rectangle",
-      x = x + i,
-      y = TOP_BUTTON_Y + i,
-      w = w - (i * 2),
-      h = 1,
-      color = borderColor,
-      filled = true
-    }
-    layout[#layout + 1] = {
-      type = "rectangle",
-      x = x + i,
-      y = TOP_BUTTON_Y + TOP_BUTTON_H - 1 - i,
-      w = w - (i * 2),
-      h = 1,
-      color = borderColor,
-      filled = true
-    }
-    layout[#layout + 1] = {
-      type = "rectangle",
-      x = x + i,
-      y = TOP_BUTTON_Y + i,
-      w = 1,
-      h = TOP_BUTTON_H - (i * 2),
-      color = borderColor,
-      filled = true
-    }
-    layout[#layout + 1] = {
-      type = "rectangle",
-      x = x + w - 1 - i,
-      y = TOP_BUTTON_Y + i,
-      w = 1,
-      h = TOP_BUTTON_H - (i * 2),
-      color = borderColor,
-      filled = true
-    }
-  end
-end
-
-local function tAction(key, fallback)
-  if state.i18n and state.i18n.t then
-    return state.i18n.t("app.actions." .. key)
-  end
-  return fallback
-end
-
-local function getLuaMemLabel()
-  local kb = collectgarbage and collectgarbage("count") or 0
-  return string.format("LUA: %dKB", math.floor(kb + 0.5))
-end
-
-local function defaultPreferences()
-  return {
-    general = {
-      developer_tools = false,
-      iconsize = 2,
-      txbatt_type = 0,
-      theme_loader = 1,
-      hs_loader = 0,
-      toolbar_timeout = 10
-    }
-  }
-end
-
-local function getPreferencesModule()
-  if Preferences == false then
-    return nil
-  end
-
-  if Preferences ~= nil then
-    return Preferences
-  end
-
-  local ok, module = pcall(function()
-    return loadModule("lib/preferences.lua")
-  end)
-
-  if ok and type(module) == "table" then
-    Preferences = module
-    return Preferences
-  end
-
-  Preferences = false
-  return nil
-end
-
-loadPreferencesSafe = function()
-  local prefs = defaultPreferences()
-  local module = getPreferencesModule()
-  if not module or type(module.load) ~= "function" then
-    return prefs
-  end
-
-  local ok, loadedPrefs = pcall(module.load)
-  if ok and type(loadedPrefs) == "table" then
-    return loadedPrefs
-  end
-
-  return prefs
-end
-
-savePreferencesSafe = function(prefs)
-  local module = getPreferencesModule()
-  if not module or type(module.save) ~= "function" then
-    return false, "Preferences unavailable in this build"
-  end
-
-  local ok, saveOk, err = pcall(module.save, prefs)
-  if not ok then
-    return false, tostring(saveOk)
-  end
-
-  return saveOk, err
-end
-
--- Append tile widgets into the children table (no pg: calls)
--- LVGL handles focus/ENTER natively between button tiles via its built-in focus box.
-local function appendTile(children, x, y, size, iconFile, text, focused, pressHandler, enabled)
-  local isEnabled = enabled ~= false
-
-  children[#children + 1] = {
-    type  = "button",
-    x = x, y = y, w = size, h = size,
-    text  = "",
-    press = isEnabled and pressHandler or nil
-  }
-
-  if not isEnabled then
-    children[#children + 1] = {
-      type = "rectangle", x = x + 1, y = y + 1, w = size - 2, h = size - 2,
-      color = GREY_DEFAULT, filled = true
-    }
-  end
-
-  if iconFile then
-    local iconSize = math.max(16, math.floor(size * 0.36))
-    children[#children + 1] = {
-      type = "image",
-      x = x + math.floor((size - iconSize) / 2),
-      y = y + math.max(5, math.floor(size * 0.08)),
-      w = iconSize, h = iconSize,
-      file = iconFile
-    }
-  end
-
-  children[#children + 1] = {
-    type  = "label",
-    x = x + 4,
-    y = y + math.floor(size * 0.56),
-    w = size - 8,
-    text  = formatTileText(text),
-    font  = SMLSIZE,
-    color = isEnabled and BLACK or WHITE,
-    align = CENTER
-  }
-end
-
 -- ── Main UI build ─────────────────────────────────────────────────────────────
 
 function M.buildUI()
   if lvgl == nil then return end
   lvgl.clear()
+
+  local profile = DisplayProfile.current()
+  local contentPad = profile.contentPad
+  local labelIndent = profile.labelIndent
+  local tileGap = profile.tileGap
+  local groupTitleH = profile.groupTitleH
+  local groupDivH = profile.groupDivH
+  local groupGapAfter = profile.groupGapAfter
+  local groupHeaderH = groupTitleH + groupDivH + groupGapAfter
 
   local breadcrumb = ""
   if not state.menu.isRoot() then
@@ -483,14 +258,14 @@ function M.buildUI()
   -- Build children list for the page
   local children = {}
 
-  local contentX = CONTENT_PAD
-  local contentY = TILE_GAP
-  local contentW = LCD_W - CONTENT_PAD * 2
+  local contentX = contentPad
+  local contentY = tileGap
+  local contentW = LCD_W - contentPad * 2
 
   if state.menu.isRoot() then
     local groups    = state.menu.getRootGroups(ICON_ROOT)
     state.groupedCards = groups
-    local flatCards = flattenRootCards(groups)
+    local flatCards = Tiles.flattenRootCards(groups)
     state.cards     = flatCards
     state.focusIndex = math.max(0, math.min(state.focusIndex, #flatCards))
 
@@ -499,12 +274,21 @@ function M.buildUI()
 
     for i = 1, #groups do
       local group   = groups[i]
-      local columns = computeColumns(contentW, 72, 6)
+      local computedCols = Tiles.computeColumns(contentW, profile.rootMinCardWidth, profile.rootMaxColumns)
+      local columns = computedCols
+      local rows = 1
+      local layoutItems = group.cards
+      if profile.wrapTiles == true then
+        layoutItems, rows = toWrappedItems(group.cards, columns)
+      else
+        local requiredCols = getRequiredColumns(group.cards)
+        columns = math.max(computedCols, requiredCols)
+      end
 
       -- Section heading label (indented from left edge)
       children[#children + 1] = {
         type  = "label",
-        x = contentX + LABEL_INDENT, y = cursorY,
+        x = contentX + labelIndent, y = cursorY,
         text  = group.title,
         color = COLOR_THEME_PRIMARY1,
         font  = SMLSIZE
@@ -512,16 +296,16 @@ function M.buildUI()
       -- Divider line
       children[#children + 1] = {
         type   = "rectangle",
-        x = contentX, y = cursorY + GROUP_TITLE_H,
-        w = contentW, h = GROUP_DIV_H,
+        x = contentX, y = cursorY + groupTitleH,
+        w = contentW, h = groupDivH,
         color  = COLOR_THEME_SECONDARY1,
         filled = true
       }
-      cursorY = cursorY + GROUP_HEADER_H
+      cursorY = cursorY + groupHeaderH
 
       local groupCards = GridLayout.layout(
-        { x = contentX, y = cursorY, w = contentW, h = 120 },
-        { rows = 1, cols = columns, gap = TILE_GAP, padding = 0, items = group.cards },
+        { x = contentX, y = cursorY, w = contentW, h = profile.rootRowHeight * rows },
+        { rows = rows, cols = columns, gap = tileGap, padding = 0, items = layoutItems },
         {}
       )
 
@@ -529,11 +313,11 @@ function M.buildUI()
       for j = 1, #groupCards do
         local card     = groupCards[j]
         flatIndex      = flatIndex + 1
-        local tileSize = math.max(80, math.min(card.w, 112))
+        local tileSize = computeTileSize(card.w, profile)
         local tileX    = card.x + math.floor((card.w - tileSize) / 2)
         local tileY    = card.y
 
-        appendTile(
+        Tiles.append(
           children, tileX, tileY, tileSize,
           card.data.icon, card.data.text,
           flatIndex == state.focusIndex,
@@ -545,7 +329,7 @@ function M.buildUI()
         if bottom > groupBottom then groupBottom = bottom end
       end
 
-      cursorY = groupBottom + 16
+      cursorY = groupBottom + profile.groupGapBottom
     end
 
   else
@@ -567,11 +351,20 @@ function M.buildUI()
       })
     else
       local gridItems = state.menu.getCards(ICON_ROOT)
-      local columns   = computeColumns(contentW, 72, 6)
+      local computedCols = Tiles.computeColumns(contentW, profile.menuMinCardWidth, profile.menuMaxColumns)
+      local columns   = computedCols
       local rows      = math.max(1, math.ceil(#gridItems / columns))
+      local layoutItems = gridItems
+      if profile.wrapTiles == true then
+        layoutItems, rows = toWrappedItems(gridItems, columns)
+      else
+        local requiredCols = getRequiredColumns(gridItems)
+        columns = math.max(computedCols, requiredCols)
+        rows = math.max(1, math.ceil(#gridItems / columns))
+      end
       local cards     = GridLayout.layout(
         { x = contentX, y = contentY, w = contentW, h = LCD_H },
-        { rows = rows, cols = columns, gap = TILE_GAP, padding = 2, items = gridItems },
+        { rows = rows, cols = columns, gap = tileGap, padding = 2, items = layoutItems },
         state.cards
       )
       state.cards = cards
@@ -579,11 +372,11 @@ function M.buildUI()
 
       for i = 1, #cards do
         local card     = cards[i]
-        local tileSize = math.max(80, math.min(card.w, 112))
+        local tileSize = computeTileSize(card.w, profile)
         local tileX    = card.x + math.floor((card.w - tileSize) / 2)
         local tileY    = card.y
 
-        appendTile(
+        Tiles.append(
           children, tileX, tileY, tileSize,
           card.data.icon, card.data.text,
           i == state.focusIndex,
@@ -606,32 +399,23 @@ function M.buildUI()
     }
   }
 
-  local actions = resolveHeaderActions()
-  local rightEdge = LCD_W - 20
-  local xHelp = rightEdge - TOP_BUTTON_W_SMALL
-  local xStar = xHelp - TOP_BUTTON_GAP - TOP_BUTTON_W_SMALL
-  local xReload = xStar - TOP_BUTTON_GAP - TOP_BUTTON_W_ACTION
-  local xSave = xReload - TOP_BUTTON_GAP - TOP_BUTTON_W_ACTION
-  local xBack = xSave - TOP_BUTTON_GAP - TOP_BUTTON_W_ACTION
-  local memW = 126
-  local xMem = xBack - TOP_BUTTON_GAP - memW
-
-  lyt[#lyt + 1] = {
-    type = "label",
-    x = xMem,
-    y = TOP_BUTTON_Y + 13,
-    w = memW,
-    text = getLuaMemLabel(),
-    color = WHITE,
-    align = RIGHT,
-    font = SMLSIZE
-  }
-
-  appendTopActionButton(lyt, xHelp, TOP_BUTTON_W_SMALL, tAction("help", "?"), actions.help, onHelp)
-  appendTopActionButton(lyt, xStar, TOP_BUTTON_W_SMALL, tAction("star", "*"), actions.star, onStar)
-  appendTopActionButton(lyt, xReload, TOP_BUTTON_W_ACTION, tAction("reload", "RELOAD"), actions.reload, onReload)
-  appendTopActionButton(lyt, xSave, TOP_BUTTON_W_ACTION, tAction("save", "SAVE"), actions.save, onSave)
-  appendTopActionButton(lyt, xBack, TOP_BUTTON_W_ACTION, tAction("back", "BACK"), true, onBack)
+  local actions = Header.resolveActions({
+    headerActions = state.headerActions,
+    menu          = state.menu,
+    i18n          = state.i18n,
+    preferences   = state.preferences,
+    PageRegistry  = PageRegistry
+  })
+  Header.appendToLayout(lyt, {
+    actions  = actions,
+    i18n     = state.i18n,
+    layout   = profile.header,
+    onHelp   = onHelp,
+    onStar   = onStar,
+    onReload = onReload,
+    onSave   = onSave,
+    onBack   = onBack
+  })
 
   lvgl.build(lyt)
 end
@@ -643,6 +427,8 @@ function M.init()
   state.i18n       = I18n.new("de")
   local prefs = loadPreferencesSafe()
   state.preferences = prefs
+  _G.rfsuite.preferences = prefs
+  _G.rfsuite.savePreferences = function() return savePreferencesSafe(_G.rfsuite.preferences) end
   state.menu       = MenuRegistry.new(manifest, state.i18n, {
     conditions = {
       developerTools = prefs.general and prefs.general.developer_tools == true
@@ -651,6 +437,9 @@ function M.init()
   state.memBucket  = nil
   state.memLastTick = 0
   state.lastInputTick = getTime and getTime() or 0
+  state.ignoreNextPageKey = false
+  state.suppressPressFrames = 0
+  state.focusIndex = 0
   M.buildUI()
 end
 
@@ -668,42 +457,23 @@ function M.run(event, touchState)
   end
 
   if state.menu then
+    if (state.suppressPressFrames or 0) > 0 then
+      state.suppressPressFrames = state.suppressPressFrames - 1
+    end
+
     if getTime and event and event ~= 0 then
       state.lastInputTick = getTime()
     end
 
-    -- LVGL handles NEXT/PREV/ENTER natively for tile buttons — their built-in focus
-    -- chain moves correctly and ENTER fires the right button's press callback.
-    -- We must NOT call lvgl.build() on nav events: that resets LVGL focus to tile #1,
-    -- which would make ENTER always open the first tile regardless of selection.
-    -- EXIT is always handled by us so the back-stack stays consistent.
+    -- Keep a single focus model: LVGL handles PAGE/PAGE- and ENTER natively.
+    -- We only handle EXIT/back here.
     if isEvent(event, EVT_VIRTUAL_EXIT, EVT_EXIT_BREAK) then
       onBack()
     end
 
-    -- Auto-refresh MEM label when idle and current page allows it.
-    -- Gated on no navigable tile cards so rebuilds never happen during tile navigation.
-    if not state.shouldExit and lvgl ~= nil and getTime then
-      local now = getTime()
-      local currentMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
-      local pageModule = PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[currentMenuId] or nil
-      local pageAllowsRefresh = true
-      if pageModule and pageModule.allowMemAutoRefresh then
-        pageAllowsRefresh = pageModule.allowMemAutoRefresh() == true
-      end
-
-      local idleEnough = (now - state.lastInputTick) >= 300
-      local hasNavigableCards = #state.cards > 0
-      if pageAllowsRefresh and (not hasNavigableCards) and idleEnough and (now - state.memLastTick) >= 100 then
-        state.memLastTick = now
-        local kb = collectgarbage and collectgarbage("count") or 0
-        local bucket = math.floor((kb + 0.5) / 2) * 2
-        if bucket ~= state.memBucket then
-          state.memBucket = bucket
-          M.buildUI()
-        end
-      end
-    end
+    -- Intentionally no periodic MEM-triggered rebuild here.
+    -- Rebuilding while navigating resets LVGL focus on some pages.
+    -- MEM value updates on normal UI rebuild points (navigation/actions).
   end
 
   if state.shouldExit then return 2 end

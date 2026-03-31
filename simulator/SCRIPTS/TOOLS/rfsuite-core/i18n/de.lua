@@ -65,7 +65,16 @@ return {
     pages = {
       settings_general = {
         section_display = "Anzeige",
+        section_safety = "Sicherheit & Prompts",
+        section_integration = "Integration",
         section_development = "Entwicklung",
+        sync_model_name = "Modellname synchronisieren",
+        save_confirm = "Bestätigen beim Speichern",
+        save_dirty_only = "Speichern nur bei Änderungen",
+        save_armed_warning = "Warnung 'Bitte disarmen zum Speichern'",
+        reload_confirm = "Bestätigen beim Neuladen",
+        show_battery_profile_startup = "Akkutyp bei Verbindung",
+        show_confirmation_dialog = "Akkutyp bestätigen",
         icon_size = "Icongroesse",
         combo_text = "TEXT",
         combo_small = "KLEIN",
@@ -128,16 +137,16 @@ return {
       },
       settings_localization = {
         section_localization = "Lokalisierung",
-        language = "Sprache",
-        units = "Einheiten",
-        number_format = "Zahlenformat",
-        date_format = "Datumsformat",
-        time_format = "Zeitformat",
-        value_language = "DE",
-        value_units = "METRISCH",
-        value_number_format = "1,23",
-        value_date_format = "TT.MM.JJJJ",
-        value_time_format = "24H"
+        temperature_unit     = "Temperatureinheit",
+        altitude_unit        = "Hoeheneinheit",
+        temp_celsius         = "Celsius",
+        temp_fahrenheit      = "Fahrenheit",
+        alt_meter            = "Meter",
+        alt_feet             = "Fuss",
+        saved_title          = "Gespeichert",
+        saved_message        = "Einstellungen gespeichert",
+        save_error_title     = "Fehler",
+        save_error_message   = "Speichern fehlgeschlagen"
       },
       settings_audio = {
         section_audio = "Audio",
