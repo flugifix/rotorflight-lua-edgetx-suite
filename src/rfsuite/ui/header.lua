@@ -30,11 +30,12 @@ function Header.tAction(i18n, key, fallback)
 end
 
 -- Resolve which header actions are visible/enabled.
--- ctx: { headerActions, menu, i18n, preferences, PageRegistry }
+-- ctx: { headerActions, menu, i18n, preferences, PageRegistry, HelpRegistry }
 function Header.resolveActions(ctx)
   local headerActions = ctx.headerActions
   local menu          = ctx.menu
   local PageRegistry  = ctx.PageRegistry
+  local HelpRegistry  = ctx.HelpRegistry
   local defaults     = headerActions.defaults
   local rootDefaults = defaults.root or {}
   local menuDefaults = defaults.menu or {}
@@ -72,6 +73,10 @@ function Header.resolveActions(ctx)
           if fromPage.star   ~= nil then actions.star   = fromPage.star   == true end
           if fromPage.help   ~= nil then actions.help   = fromPage.help   == true end
         end
+      end
+
+      if HelpRegistry and HelpRegistry.hasHelp and HelpRegistry.hasHelp(menuId) then
+        actions.help = true
       end
     end
 

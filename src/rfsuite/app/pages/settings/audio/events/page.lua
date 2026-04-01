@@ -282,7 +282,7 @@ function M.build(ctx)
             ui.config[k] == true,
             function()
               ui.config[k] = not ui.config[k]
-              markDirty()
+              markDirty(requestRebuild)
             end
           )
         end

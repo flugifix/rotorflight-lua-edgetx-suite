@@ -158,6 +158,7 @@ function M.save(prefs)
   end
 
   io.close(f)
+  collectgarbage("collect")
   return true
 end
 

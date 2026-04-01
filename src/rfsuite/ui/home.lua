@@ -10,6 +10,7 @@ local DisplayProfile = loadModule("core/display_profile.lua")
 local manifest     = loadModule("app/manifest.lua")
 local MenuRegistry = loadModule("app/menu_registry.lua")
 local PageRegistry = loadModule("app/pages/init.lua")
+local HelpRegistryFactory = loadModule("app/pages/help_registry.lua")
 local Tiles             = loadModule("ui/tiles.lua")
 local Header            = loadModule("ui/header.lua")
 local PreferencesSafe   = loadModule("ui/preferences.lua")
@@ -22,6 +23,9 @@ local M = {}
 local Prefs           = PreferencesSafe.new(loadModule)
 local loadPreferencesSafe  = Prefs.load
 local savePreferencesSafe  = Prefs.save
+local HelpRegistry = HelpRegistryFactory.new({
+  pagePathByMenuId = PageRegistry.pagePathByMenuId
+})
 
 -- Global access point: rfsuite.preferences and rfsuite.savePreferences
 -- Any module can read settings via: rfsuite.preferences.general.save_confirm
@@ -86,6 +90,7 @@ local state = {
   memBucket    = nil,
   memLastTick  = 0,
   lastInputTick = 0,
+  activePageMenuId = nil,
   headerActions = {
     defaults = {
       root = {
@@ -112,6 +117,37 @@ local state = {
   }
 }
 
+local function buildPageContext()
+  return {
+    i18n = state.i18n,
+    preferences = state.preferences,
+    menu = state.menu,
+    manifest = state.manifest,
+    refresh = M.buildUI,
+    savePreferences = function()
+      local ok, err = savePreferencesSafe(state.preferences)
+      _G.rfsuite.preferences = state.preferences
+      _G.rfsuite.savePreferences = function()
+        return savePreferencesSafe(_G.rfsuite.preferences)
+      end
+      return ok, err
+    end
+  }
+end
+
+local function syncActivePageModule()
+  local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+  if state.activePageMenuId == currentMenuId then
+    return
+  end
+
+  if state.activePageMenuId and PageRegistry and PageRegistry.release then
+    PageRegistry.release(state.activePageMenuId, buildPageContext())
+  end
+
+  state.activePageMenuId = currentMenuId
+end
+
 -- ── Handlers ─────────────────────────────────────────────────────────────────
 
 local function onBack()
@@ -124,12 +160,82 @@ local function onBack()
 end
 
 local function onHelp()
-  if lvgl and lvgl.alert and state.i18n then
-    lvgl.alert({
-      title   = state.i18n.t("app.help.title"),
-      message = state.i18n.t("app.help.layout")
-    })
+  local menuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+  if not menuId then return end
+
+  local helpData = HelpRegistry and HelpRegistry.get and HelpRegistry.get(menuId, {
+    i18n = state.i18n,
+    preferences = state.preferences,
+    menu = state.menu,
+    manifest = state.manifest
+  }) or nil
+
+  local message = nil
+  if type(helpData) == "string" then
+    message = helpData
+  elseif type(helpData) == "table" then
+    message = helpData.message or helpData.text
   end
+  if type(message) ~= "string" or message == "" then
+    return
+  end
+
+  local title = state.menu.getHeaderTitle and state.menu.getHeaderTitle() or ""
+  local breadcrumb = state.menu.getHeaderBreadcrumb and state.menu.getHeaderBreadcrumb() or ""
+  if breadcrumb ~= "" then
+    title = breadcrumb .. " / " .. title
+  end
+
+  if not (lvgl and lvgl.dialog) then
+    return
+  end
+
+  local closeLabel = "Close"
+  if state.i18n and state.i18n.t then
+    local closeKey = "app.actions.close"
+    local translated = state.i18n.t(closeKey)
+    if translated and translated ~= closeKey and translated ~= "" then
+      closeLabel = translated
+    end
+  end
+
+  local dialogW = math.min(LCD_W - 20, 700)
+  local dialogH = math.min(LCD_H - 40, math.floor(LCD_H * 0.72))
+  local messageW = dialogW - 24
+  local titleBarH = 44
+  local buttonW = 150
+  local buttonH = 44
+  local buttonX = math.floor((dialogW - buttonW) / 2)
+  local buttonY = dialogH - titleBarH - buttonH - 12
+
+  local dg = lvgl.dialog({
+    title = title,
+    w = dialogW,
+    h = dialogH
+  })
+
+  if not dg then return end
+
+  dg:build({
+    {
+      type = "label",
+      x = 12,
+      y = 8,
+      w = messageW,
+      text = message
+    },
+    {
+      type = "button",
+      x = buttonX,
+      y = buttonY,
+      w = buttonW,
+      h = buttonH,
+      text = closeLabel,
+      press = function()
+        dg:close()
+      end
+    }
+  })
 end
 
 local function onStar()
@@ -189,6 +295,7 @@ local function onSave()
       refresh = M.buildUI
     })
     M.buildUI()
+    collectgarbage("collect")
     return
   end
 
@@ -237,6 +344,8 @@ end
 
 function M.buildUI()
   if lvgl == nil then return end
+
+  syncActivePageModule()
 
   local profile = DisplayProfile.current()
   local contentPad = profile.contentPad
@@ -405,7 +514,8 @@ function M.buildUI()
     menu          = state.menu,
     i18n          = state.i18n,
     preferences   = state.preferences,
-    PageRegistry  = PageRegistry
+    PageRegistry  = PageRegistry,
+    HelpRegistry  = HelpRegistry
   })
   Header.appendToLayout(lyt, {
     actions  = actions,
@@ -424,6 +534,10 @@ end
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
 function M.init()
+  if PageRegistry and PageRegistry.releaseAll then
+    PageRegistry.releaseAll(buildPageContext())
+  end
+
   state.shouldExit = false
   state.i18n       = I18n.new("de")
   local prefs = loadPreferencesSafe()
@@ -442,6 +556,7 @@ function M.init()
   state.ignoreNextPageKey = false
   state.suppressPressFrames = 0
   state.focusIndex = 0
+  state.activePageMenuId = nil
   M.buildUI()
 end
 

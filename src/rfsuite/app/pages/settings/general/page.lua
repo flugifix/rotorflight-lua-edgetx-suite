@@ -57,8 +57,12 @@ local function t(i18n, key, fallback)
   return fallback
 end
 
-local function markDirty()
+local function markDirty(requestRebuild)
+  if ui.dirty then return end
   ui.dirty = true
+  if requestRebuild then
+    requestRebuild()
+  end
 end
 
 local function toggleSection(name)
@@ -110,7 +114,7 @@ local function buildSafety(cursorY, children, x, w, i18n, requestRebuild)
       ui.config[k] == true,
       function()
         ui.config[k] = not ui.config[k]
-        markDirty()
+        markDirty(requestRebuild)
       end
     )
   end
@@ -123,7 +127,7 @@ local function buildIntegration(cursorY, children, x, w, i18n, requestRebuild)
     ui.config.syncname == true,
     function()
       ui.config.syncname = not ui.config.syncname
-      markDirty()
+      markDirty(requestRebuild)
     end
   )
   return cursorY
@@ -135,7 +139,7 @@ local function buildDevelopment(cursorY, children, x, w, i18n, requestRebuild)
     ui.config.developer_tools == true,
     function()
       ui.config.developer_tools = not ui.config.developer_tools
-      markDirty()
+      markDirty(requestRebuild)
     end
   )
   return cursorY

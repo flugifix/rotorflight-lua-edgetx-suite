@@ -59,8 +59,12 @@ local function t(i18n, key, fallback)
   return fallback
 end
 
-local function markDirty()
+local function markDirty(requestRebuild)
+  if ui.dirty then return end
   ui.dirty = true
+  if requestRebuild then
+    requestRebuild()
+  end
 end
 
 local function toggleSection(name)
@@ -200,7 +204,7 @@ function M.build(ctx)
           ui.config[k] == true,
           function()
             ui.config[k] = not ui.config[k]
-            markDirty()
+            markDirty(requestRebuild)
           end
         )
       end

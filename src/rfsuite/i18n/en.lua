@@ -56,7 +56,8 @@ return {
       save = "\xEF\x80\x99",
       reload = "\xEF\x80\xA1",
       star = "*",
-      help = "?"
+      help = "?",
+      close = "Close"
     },
     help = {
       title = "Help",
@@ -182,6 +183,7 @@ return {
         fuel_alerts = "Fuel",
         battery_profile = "Battery Capacity",
         model_announcement = "Model Announcement",
+        help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
         saved_title = "Saved",
         saved_message = "Audio events saved",
         save_error_title = "Error",
