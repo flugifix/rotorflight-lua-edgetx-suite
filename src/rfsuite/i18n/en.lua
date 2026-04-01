@@ -52,7 +52,7 @@ return {
       help = "HELP"
     },
     actions = {
-      back = "\xEF\x81\xA0",
+      back = "\xEF\x81\x93",
       save = "\xEF\x80\x99",
       reload = "\xEF\x80\xA1",
       star = "*",

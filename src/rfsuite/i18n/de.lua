@@ -56,8 +56,7 @@ return {
       save = "\xEF\x80\x99",
       reload = "\xEF\x80\xA1",
       star = "*",
-      help = "?",
-      close = "Schliessen"
+      help = "?"
     },
     help = {
       title = "Hilfe",
@@ -183,7 +182,6 @@ return {
         fuel_alerts = "Kraftstoff",
         battery_profile = "Akku-Kapazitaet",
         model_announcement = "Modellansage",
-        help_message = "In diesem Bereich kannst du festlegen, welche Systemereignisse und Telemetriedaten Sprachansagen oder Warnungen ausloesen.",
         saved_title = "Gespeichert",
         saved_message = "Audio-Ereignisse gespeichert",
         save_error_title = "Fehler",

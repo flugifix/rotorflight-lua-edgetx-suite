@@ -141,7 +141,7 @@ local SECTIONS = {
 -- ─── Module API ──────────────────────────────────────────────────────────────
 
 function M.getHeaderActions()
-  return { save = ui.dirty, reload = true, help = false }
+  return { save = ui.dirty, reload = ui.dirty, help = false }
 end
 
 function M.allowMemAutoRefresh()
@@ -151,6 +151,7 @@ end
 function M.onReload(ctx)
   copyFromPrefs(ctx.preferences)
   ui.dirty = false
+  return true
 end
 
 function M.onSave(ctx)
@@ -164,13 +165,12 @@ function M.onSave(ctx)
   local ok, err = ctx.savePreferences()
   if ok then
     ui.dirty = false
-    if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "saved_title", "Gespeichert"), message = t(ctx.i18n, "saved_message", "Audio-Timer gespeichert") })
-    end
+    return true
   else
     if lvgl and lvgl.alert then
       lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Fehler"), message = t(ctx.i18n, "save_error_message", "Speichern fehlgeschlagen") .. ": " .. tostring(err or "io") })
     end
+    return true
   end
 end
 
@@ -201,9 +201,13 @@ function M.build(ctx)
         local k = item.key
         cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
           t(i18n, item.labelKey, item.labelFallback),
-          ui.config[k] == true,
-          function()
-            ui.config[k] = not ui.config[k]
+          function(nextVal)
+            if nextVal ~= nil then return end
+            return ui.config[k] == true
+          end,
+          function(nextVal)
+            local nextBool = (nextVal == true)
+            ui.config[k] = nextBool
             markDirty(requestRebuild)
           end
         )

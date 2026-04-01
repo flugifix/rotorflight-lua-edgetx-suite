@@ -91,6 +91,10 @@ local state = {
   memLastTick  = 0,
   lastInputTick = 0,
   activePageMenuId = nil,
+  helpDialog = nil,
+  helpDialogOpen = false,
+  pendingBuildUI = false,
+  pendingGcAfterBuild = false,
   headerActions = {
     defaults = {
       root = {
@@ -123,6 +127,29 @@ local function performSave()
   return savePreferencesSafe(state.preferences)
 end
 
+local function resolveLocaleFromSystem()
+  local locale = "de"
+
+  if system and system.getGeneralSettings then
+    local ok, gs = pcall(system.getGeneralSettings)
+    if ok and type(gs) == "table" then
+      local gsLocale = gs.locale or gs.language or gs.lang
+      if type(gsLocale) == "string" and gsLocale ~= "" then
+        locale = gsLocale
+      end
+    end
+  end
+
+  if locale == "de" and system and system.getLocale then
+    local sysLocale = system.getLocale()
+    if type(sysLocale) == "string" and sysLocale ~= "" then
+      locale = sysLocale
+    end
+  end
+
+  return locale
+end
+
 local function buildPageContext()
   return {
     i18n = state.i18n,
@@ -132,6 +159,13 @@ local function buildPageContext()
     refresh = M.buildUI,
     savePreferences = performSave
   }
+end
+
+local function scheduleBuildUI(withGc)
+  state.pendingBuildUI = true
+  if withGc == true then
+    state.pendingGcAfterBuild = true
+  end
 end
 
 local function syncActivePageModule()
@@ -150,15 +184,26 @@ end
 -- ── Handlers ─────────────────────────────────────────────────────────────────
 
 local function onBack()
+  if state.helpDialog and state.helpDialog.close then
+    local dlg = state.helpDialog
+    state.helpDialog = nil
+    state.helpDialogOpen = false
+    pcall(dlg.close, dlg)
+  end
+
   if state.menu and state.menu.goBack() then
     state.focusIndex = 0
-    M.buildUI()
+    scheduleBuildUI(false)
     return
   end
   state.shouldExit = true
 end
 
 local function onHelp()
+  if state.helpDialogOpen then
+    return
+  end
+
   local menuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
   if not menuId then return end
 
@@ -214,6 +259,8 @@ local function onHelp()
   })
 
   if not dg then return end
+  state.helpDialog = dg
+  state.helpDialogOpen = true
 
   dg:build({
     {
@@ -231,7 +278,17 @@ local function onHelp()
       h = buttonH,
       text = closeLabel,
       press = function()
-        dg:close()
+        local dlg = state.helpDialog
+        state.helpDialog = nil
+        state.helpDialogOpen = false
+        if dlg and dlg.close then
+          pcall(dlg.close, dlg)
+        else
+          pcall(dg.close, dg)
+        end
+        if collectgarbage then
+          collectgarbage("collect")
+        end
       end
     }
   })
@@ -253,19 +310,40 @@ local function getActivePageModule()
   return PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[menuId]
 end
 
+local function closeHelpDialogIfOpen()
+  if not (state.helpDialog and state.helpDialog.close) then return end
+  local dlg = state.helpDialog
+  state.helpDialog = nil
+  state.helpDialogOpen = false
+  pcall(dlg.close, dlg)
+end
+
 local function onReload()
   local page = getActivePageModule()
 
   if page and page.onReload then
-    state.preferences = loadPreferencesSafe()
+    local actions = nil
+    if type(page.getHeaderActions) == "function" then
+      actions = page.getHeaderActions()
+    end
+    if type(actions) == "table" and actions.reload == false then
+      return
+    end
+
+    closeHelpDialogIfOpen()
+
+    -- Keep preferences in-memory for reload to avoid repeated disk loads and table churn.
+    -- The app loads preferences once during init and pages should work against that shared state.
     _G.rfsuite.preferences = state.preferences
-    page.onReload({
+    local shouldRebuild = page.onReload({
       i18n = state.i18n,
       preferences = state.preferences,
       menu = state.menu,
       refresh = M.buildUI
     })
-    M.buildUI()
+    if shouldRebuild ~= false then
+      scheduleBuildUI(true)
+    end
     return
   end
 
@@ -281,14 +359,18 @@ local function onSave()
   local page = getActivePageModule()
 
   if page and page.onSave then
-    page.onSave({
+    closeHelpDialogIfOpen()
+
+    local shouldRebuild = page.onSave({
       i18n = state.i18n,
       preferences = state.preferences,
       menu = state.menu,
       savePreferences = performSave,
       refresh = M.buildUI
     })
-    M.buildUI()
+    if shouldRebuild ~= false then
+      scheduleBuildUI(false)
+    end
     return
   end
 
@@ -535,7 +617,8 @@ function M.init()
   end
 
   state.shouldExit = false
-  state.i18n       = I18n.new("de")
+  local locale = resolveLocaleFromSystem()
+  state.i18n       = I18n.new(locale)
   local prefs = loadPreferencesSafe()
   state.preferences = prefs
   _G.rfsuite.preferences = prefs
@@ -553,6 +636,10 @@ function M.init()
   state.suppressPressFrames = 0
   state.focusIndex = 0
   state.activePageMenuId = nil
+  state.helpDialog = nil
+  state.helpDialogOpen = false
+  state.pendingBuildUI = false
+  state.pendingGcAfterBuild = false
   M.buildUI()
 end
 
@@ -582,6 +669,16 @@ function M.run(event, touchState)
     -- We only handle EXIT/back here.
     if isEvent(event, EVT_VIRTUAL_EXIT, EVT_EXIT_BREAK) then
       onBack()
+    end
+
+    if state.pendingBuildUI then
+      state.pendingBuildUI = false
+      local doGc = state.pendingGcAfterBuild == true
+      state.pendingGcAfterBuild = false
+      M.buildUI()
+      if doGc and collectgarbage then
+        collectgarbage("collect")
+      end
     end
 
     -- Intentionally no periodic MEM-triggered rebuild here.
