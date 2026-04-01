@@ -114,8 +114,14 @@ local state = {
       settings_general_page      = { save = true, reload = true, help = false },
       settings_localization_page = { save = true, reload = true, help = false }
     }
-  }
+  },
+  children = {}
 }
+
+local function performSave()
+  _G.rfsuite.preferences = state.preferences
+  return savePreferencesSafe(state.preferences)
+end
 
 local function buildPageContext()
   return {
@@ -124,14 +130,7 @@ local function buildPageContext()
     menu = state.menu,
     manifest = state.manifest,
     refresh = M.buildUI,
-    savePreferences = function()
-      local ok, err = savePreferencesSafe(state.preferences)
-      _G.rfsuite.preferences = state.preferences
-      _G.rfsuite.savePreferences = function()
-        return savePreferencesSafe(_G.rfsuite.preferences)
-      end
-      return ok, err
-    end
+    savePreferences = performSave
   }
 end
 
@@ -247,11 +246,15 @@ local function onStar()
   end
 end
 
+local function getActivePageModule()
+  if not state.menu then return nil end
+  local menuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId()
+  if not menuId then return nil end
+  return PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[menuId]
+end
+
 local function onReload()
-  local page = state.menu and (function()
-    local menuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
-    return PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[menuId] or nil
-  end)() or nil
+  local page = getActivePageModule()
 
   if page and page.onReload then
     state.preferences = loadPreferencesSafe()
@@ -275,27 +278,17 @@ local function onReload()
 end
 
 local function onSave()
-  local page = state.menu and (function()
-    local menuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
-    return PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[menuId] or nil
-  end)() or nil
+  local page = getActivePageModule()
 
   if page and page.onSave then
     page.onSave({
       i18n = state.i18n,
       preferences = state.preferences,
       menu = state.menu,
-      savePreferences = function()
-        local ok, err = savePreferencesSafe(state.preferences)
-        -- keep global in sync after save
-        _G.rfsuite.preferences = state.preferences
-        _G.rfsuite.savePreferences = function() return savePreferencesSafe(_G.rfsuite.preferences) end
-        return ok, err
-      end,
+      savePreferences = performSave,
       refresh = M.buildUI
     })
     M.buildUI()
-    collectgarbage("collect")
     return
   end
 
@@ -364,8 +357,11 @@ function M.buildUI()
 
   local pageTitle = state.menu.isRoot() and "Rotorflight" or state.menu.getHeaderTitle()
 
-  -- Build children list for the page
-  local children = {}
+  -- Clear and reuse the children table to reduce garbage collection
+  local children = state.children
+  for k in pairs(children) do
+    children[k] = nil
+  end
 
   local contentX = contentPad
   local contentY = tileGap
@@ -543,7 +539,7 @@ function M.init()
   local prefs = loadPreferencesSafe()
   state.preferences = prefs
   _G.rfsuite.preferences = prefs
-  _G.rfsuite.savePreferences = function() return savePreferencesSafe(_G.rfsuite.preferences) end
+  _G.rfsuite.savePreferences = performSave
   state.menu       = MenuRegistry.new(manifest, state.i18n, {
     conditions = {
       developerTools = prefs.general and prefs.general.developer_tools == true
