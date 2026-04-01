@@ -51,6 +51,24 @@ The combined run configurations then start `simulator.exe` with one of these rad
 
 All simulator launch tasks use `--sd-path ${workspaceFolder}/simulator`.
 
+### Simulator Path Setup (Per Developer)
+
+The simulator executable path is centralized via the VS Code setting `rfsuite.simulatorPath`.
+All start tasks in `tasks.json` use `${config:rfsuite.simulatorPath}`.
+
+If your local Companion version/path differs, set it once in your **User Settings**
+(`Preferences: Open User Settings (JSON)`):
+
+Hint: press `Ctrl+Shift+P`, run `Preferences: Open User Settings (JSON)`, then add/update the value.
+
+```json
+{
+  "rfsuite.simulatorPath": "C:\\Program Files (x86)\\EdgeTX\\Companion 2.12\\bin\\simulator.exe"
+}
+```
+
+After that, all run configurations continue to work without editing task definitions.
+
 ## Notes
 
 - The demo script returns `useLvgl = true` and expects EdgeTX with LVGL support.

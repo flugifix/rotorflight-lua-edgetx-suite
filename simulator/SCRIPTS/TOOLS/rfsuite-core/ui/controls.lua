@@ -88,31 +88,18 @@ end
 --   x, y, w              – bounds of the full content row
 --   labelText            – descriptive label on the left
 --   value                – boolean: true = ON
---   labelOff, labelOn    – optional strings for OFF / ON side labels
 --   onToggle             – press callback (no arguments)
---   i18n                 – optional i18n context; used when labels are nil
 
 local TOGGLE_W   = 64
 local TOGGLE_H   = 26
 local TOGGLE_Y_OFFSET = -6
-local SIDE_W     = 40
-local SIDE_GAP   = 6
 
 local NUMBER_W        = 172
 local NUMBER_H        = 62
 local NUMBER_Y_OFFSET = 6
 
 function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
-                                     labelOff, labelOn, onToggle, i18n)
-  if (not labelOff) and i18n and i18n.t then
-    labelOff = i18n.t("app.pages.settings_general.value_off")
-  end
-  if (not labelOn) and i18n and i18n.t then
-    labelOn = i18n.t("app.pages.settings_general.value_on")
-  end
-  labelOff = labelOff or "AUS"
-  labelOn  = labelOn  or "EIN"
-
+                                     onToggle)
   local getValue
   if type(value) == "function" then
     getValue = value
@@ -124,13 +111,11 @@ function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
     end
   end
 
-  local barW   = SIDE_W + SIDE_GAP + TOGGLE_W + SIDE_GAP + SIDE_W
-  local barX   = x + w - barW
-  local trackX = barX + SIDE_W + SIDE_GAP
-  local einX   = trackX + TOGGLE_W + SIDE_GAP
+  local barW   = TOGGLE_W
+  local barX   = x + w - barW - 15
+  local trackX = barX
   local rowH   = math.max(ROW_H, NUMBER_H)
   local trackY = y + math.floor((rowH - TOGGLE_H) / 2) + TOGGLE_Y_OFFSET
-  local sideY  = y + math.floor((rowH - 20) / 2)
   local labelY = y + math.floor((rowH - 20) / 2)
 
   children[#children + 1] = {
@@ -177,29 +162,6 @@ function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
   }
 
   children[#children + 1] = {
-    type  = "label",
-    x = barX, y = sideY,
-    w = SIDE_W,
-    text  = labelOff,
-    color = function()
-      return (not getValue()) and COLOR_THEME_PRIMARY1 or COLOR_THEME_SECONDARY1
-    end,
-    align = RIGHT,
-    font  = SMLSIZE
-  }
-
-  children[#children + 1] = {
-    type  = "label",
-    x = einX, y = sideY,
-    w = SIDE_W,
-    text  = labelOn,
-    color = function()
-      return getValue() and COLOR_THEME_PRIMARY1 or COLOR_THEME_SECONDARY1
-    end,
-    font  = SMLSIZE
-  }
-
-  children[#children + 1] = {
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
@@ -239,7 +201,7 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
 
   local fieldW = NUMBER_W
   if fieldW > w then fieldW = w end
-  local fieldX = x + w - fieldW
+  local fieldX = x + w - fieldW - 10
   local rowH = math.max(ROW_H, NUMBER_H)
   local fieldY = y + math.floor((rowH - NUMBER_H) / 2) + NUMBER_Y_OFFSET
 
@@ -247,10 +209,11 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
   local textColor = function()
     return enabledGetter() and COLOR_THEME_PRIMARY1 or GREY_DEFAULT
   end
+  local labelY = y + math.floor((rowH - 20) / 2)
 
   children[#children + 1] = {
     type  = "label",
-    x = x, y = y + 12,
+    x = x, y = labelY,
     w = fieldX - x - 8,
     text  = labelText,
     color = COLOR_THEME_PRIMARY1,
@@ -296,7 +259,7 @@ end
 
 -- ── ComboSelect ───────────────────────────────────────────────────────────────
 -- Generic dropdown using native lvgl.choice.
--- Returns ROW_H + 1 so callers can advance cursorY.
+-- Returns the effective row height + 1 so callers can advance cursorY.
 --
 -- Parameters:
 --   options       – array of { value = any, label = string }
@@ -316,7 +279,7 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
   local rowH = math.max(ROW_H, NUMBER_H)
   local comboW = 172
   if comboW > w then comboW = w end
-  local comboX = x + w - comboW
+  local comboX = x + w - comboW - 10
   local comboY = y + math.floor((rowH - COMBO_H) / 2) + COMBO_Y_OFFSET
   local labelY = y + math.floor((rowH - 20) / 2)
 

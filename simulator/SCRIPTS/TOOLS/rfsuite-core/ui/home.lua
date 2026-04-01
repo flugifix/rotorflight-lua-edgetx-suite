@@ -433,7 +433,8 @@ function M.init()
   state.menu       = MenuRegistry.new(manifest, state.i18n, {
     conditions = {
       developerTools = prefs.general and prefs.general.developer_tools == true
-    }
+    },
+    iconByMenuId = PageRegistry.iconByMenuId
   })
   state.memBucket  = nil
   state.memLastTick = 0

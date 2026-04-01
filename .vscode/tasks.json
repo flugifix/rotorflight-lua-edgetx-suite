@@ -26,7 +26,7 @@
     {
       "label": "RFSuite: Start EdgeTX Simulator (TX16S MK3)",
       "type": "process",
-      "command": "C:\\Program Files (x86)\\EdgeTX\\Companion 2.12\\bin\\simulator.exe",
+      "command": "${config:rfsuite.simulatorPath}",
       "args": [
         "--radio",
         "edgetx-tx16smk3",
@@ -58,7 +58,7 @@
     {
       "label": "RFSuite: Start EdgeTX Simulator (TX16S)",
       "type": "process",
-      "command": "C:\\Program Files (x86)\\EdgeTX\\Companion 2.12\\bin\\simulator.exe",
+      "command": "${config:rfsuite.simulatorPath}",
       "args": [
         "--radio",
         "edgetx-tx16s",
@@ -90,7 +90,7 @@
     {
       "label": "RFSuite: Start EdgeTX Simulator (TX15)",
       "type": "process",
-      "command": "C:\\Program Files (x86)\\EdgeTX\\Companion 2.12\\bin\\simulator.exe",
+      "command": "${config:rfsuite.simulatorPath}",
       "args": [
         "--radio",
         "edgetx-tx15",

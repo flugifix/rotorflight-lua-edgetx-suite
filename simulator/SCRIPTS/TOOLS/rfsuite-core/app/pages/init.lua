@@ -1,30 +1,34 @@
-local function loadPage(path)
-  local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/" .. path
+local function loadPageEntry(path)
+  local pagePath = path .. "/page.lua"
+  local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/" .. pagePath
   local chunk = assert(loadScript(fullPath, "t"))
-  return chunk()
+  return {
+    module = chunk(),
+    iconPath = path .. "/icon.png"
+  }
 end
 
-local SettingsGeneralPage = loadPage("settings/general.lua")
---local SettingsShortcutsPage = loadPage("settings/shortcuts.lua")
-local SettingsDashboardPage = loadPage("settings/dashboard.lua")
---local SettingsActiveLookPage = loadPage("settings/activelook.lua")
-local SettingsLocalizationPage = loadPage("settings/localization.lua")
-local SettingsAudioPage = loadPage("settings/audio.lua")
-local SettingsAudioEventsPage = loadPage("settings/audio_events.lua")
-local SettingsAudioSwitchesPage = loadPage("settings/audio_switches.lua")
-local SettingsAudioTimerPage = loadPage("settings/audio_timer.lua")
-
-return {
-  byMenuId = {
-    settings_general_page = SettingsGeneralPage,
-    --settings_shortcuts_page = SettingsShortcutsPage,
-    settings_dashboard_page = SettingsDashboardPage,
-    --settings_activelook_page = SettingsActiveLookPage,
-    settings_localization_page = SettingsLocalizationPage,
-    settings_audio_page = SettingsAudioPage,
-    settings_audio_events_page = SettingsAudioEventsPage,
-    settings_audio_switches_page = SettingsAudioSwitchesPage,
-    settings_audio_timer_page = SettingsAudioTimerPage
-  }
+local entries = {
+  settings_general_page = loadPageEntry("settings/general"),
+  --settings_shortcuts_page = loadPageEntry("settings/shortcuts"),
+  settings_dashboard_page = loadPageEntry("settings/dashboard"),
+  --settings_activelook_page = loadPageEntry("settings/activelook"),
+  settings_localization_page = loadPageEntry("settings/localization"),
+  settings_audio_page = loadPageEntry("settings/audio"),
+  settings_audio_events_page = loadPageEntry("settings/audio/events"),
+  settings_audio_switches_page = loadPageEntry("settings/audio/switches"),
+  settings_audio_timer_page = loadPageEntry("settings/audio/timer")
 }
 
+local byMenuId = {}
+local iconByMenuId = {}
+
+for menuId, entry in pairs(entries) do
+  byMenuId[menuId] = entry.module
+  iconByMenuId[menuId] = entry.iconPath
+end
+
+return {
+  byMenuId = byMenuId,
+  iconByMenuId = iconByMenuId
+}

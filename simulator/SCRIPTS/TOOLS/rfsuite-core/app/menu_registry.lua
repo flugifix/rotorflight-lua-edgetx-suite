@@ -2,6 +2,7 @@ local MenuRegistry = {}
 
 function MenuRegistry.new(manifest, i18n, options)
   options = options or {}
+  local iconByMenuId = options.iconByMenuId or {}
 
   local self = {
     i18n = i18n,
@@ -53,6 +54,22 @@ function MenuRegistry.new(manifest, i18n, options)
     end
 
     return ""
+  end
+
+  local function resolveIconPath(iconRoot, icon, menuId)
+    if type(icon) == "string" and icon ~= "" then
+      if string.sub(icon, 1, 7) == "@pages/" then
+        return "/SCRIPTS/TOOLS/rfsuite-core/app/pages/" .. string.sub(icon, 8)
+      end
+      return iconRoot .. icon
+    end
+
+    local pageIcon = menuId and iconByMenuId[menuId] or nil
+    if type(pageIcon) == "string" and pageIcon ~= "" then
+      return "/SCRIPTS/TOOLS/rfsuite-core/app/pages/" .. pageIcon
+    end
+
+    return nil
   end
 
   local function getSectionById(id)
@@ -151,7 +168,7 @@ function MenuRegistry.new(manifest, i18n, options)
           col = p.col or j,
           data = {
             text = resolveTitle(p),
-            icon = p.icon and (iconRoot .. p.icon) or nil,
+            icon = resolveIconPath(iconRoot, p.icon, p.menuId),
             isMenu = p.menuId ~= nil,
             enabled = enabled
           }
@@ -301,7 +318,7 @@ function MenuRegistry.new(manifest, i18n, options)
         col = col,
         data = {
           text = resolveTitle(p),
-          icon = p.icon and (iconRoot .. p.icon) or nil,
+          icon = resolveIconPath(iconRoot, p.icon, p.menuId),
           isMenu = p.menuId ~= nil,
           enabled = enabled
         }
