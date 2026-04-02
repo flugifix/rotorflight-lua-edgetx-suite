@@ -1,0 +1,166 @@
+local function loadModule(path)
+  local chunk = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, "t"))
+  return chunk()
+end
+
+local Controls = loadModule("ui/controls.lua")
+local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
+
+local THEME_PATH = "system/default"
+local THEME_DEFAULTS = {
+  v_min = 18.0,
+  v_max = 25.2,
+}
+
+local ui = {
+  loaded = false,
+  dirty = false,
+  config = {
+    v_min_tenths = 180,
+    v_max_tenths = 252,
+  }
+}
+
+local function clamp(value, minValue, maxValue)
+  if value < minValue then return minValue end
+  if value > maxValue then return maxValue end
+  return value
+end
+
+local function loadConfig(prefs)
+  if ui.loaded then return end
+
+  local cfg = DashboardLib.getThemeConfig(prefs, THEME_PATH, THEME_DEFAULTS)
+  local vMin = tonumber(cfg.v_min) or THEME_DEFAULTS.v_min
+  local vMax = tonumber(cfg.v_max) or THEME_DEFAULTS.v_max
+
+  vMin = clamp(vMin, 5.0, 64.9)
+  vMax = clamp(vMax, vMin + 0.1, 65.0)
+
+  ui.config.v_min_tenths = math.floor((vMin * 10) + 0.5)
+  ui.config.v_max_tenths = math.floor((vMax * 10) + 0.5)
+  ui.loaded = true
+  ui.dirty = false
+end
+
+local function saveConfig(prefs)
+  DashboardLib.setThemeConfig(prefs, THEME_PATH, {
+    v_min = (tonumber(ui.config.v_min_tenths) or 180) / 10,
+    v_max = (tonumber(ui.config.v_max_tenths) or 252) / 10,
+  })
+end
+
+local function getMin()
+  local current = tonumber(ui.config.v_min_tenths) or 180
+  local maxAllowed = (tonumber(ui.config.v_max_tenths) or 252) - 1
+  return clamp(current, 50, maxAllowed)
+end
+
+local function setMin(value)
+  local maxAllowed = (tonumber(ui.config.v_max_tenths) or 252) - 1
+  local nextValue = clamp(tonumber(value) or 180, 50, maxAllowed)
+  if ui.config.v_min_tenths ~= nextValue then
+    ui.config.v_min_tenths = nextValue
+    ui.dirty = true
+  end
+end
+
+local function getMax()
+  local current = tonumber(ui.config.v_max_tenths) or 252
+  local minAllowed = (tonumber(ui.config.v_min_tenths) or 180) + 1
+  return clamp(current, minAllowed, 650)
+end
+
+local function setMax(value)
+  local minAllowed = (tonumber(ui.config.v_min_tenths) or 180) + 1
+  local nextValue = clamp(tonumber(value) or 252, minAllowed, 650)
+  if ui.config.v_max_tenths ~= nextValue then
+    ui.config.v_max_tenths = nextValue
+    ui.dirty = true
+  end
+end
+
+local M = {}
+
+function M.getHeaderActions()
+  return { save = ui.dirty, reload = true, help = false }
+end
+
+function M.allowMemAutoRefresh()
+  return true
+end
+
+function M.onReload(ctx)
+  ui.loaded = false
+  loadConfig(ctx.preferences)
+  return true
+end
+
+function M.onSave(ctx)
+  saveConfig(ctx.preferences)
+  local ok, err = ctx.savePreferences()
+  if ok then
+    ui.dirty = false
+  elseif lvgl and lvgl.alert then
+    local i18n = ctx.i18n
+    local title = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_title") or "Error"
+    local message = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_message") or "Save failed"
+    lvgl.alert({ title = title, message = message .. ": " .. tostring(err or "io") })
+  end
+  return true
+end
+
+function M.build(ctx)
+  loadConfig(ctx.preferences)
+
+  local children = ctx.children
+  local x, y, w = ctx.x, ctx.y, ctx.w
+  local i18n = ctx.i18n
+  local cursorY = y
+
+  local sectionTitle = "Default Theme Voltage"
+  if i18n and i18n.t then
+    local translated = i18n.t("app.pages.settings_dashboard_settings.section_default_voltage")
+    if translated and translated ~= "app.pages.settings_dashboard_settings.section_default_voltage" and translated ~= "" then
+      sectionTitle = translated
+    end
+  end
+
+  Controls.appendSectionHeader(children, x, cursorY, w, sectionTitle, true, function() end)
+  cursorY = cursorY + Controls.SECTION_H
+
+  local minLabel = "Min"
+  local maxLabel = "Max"
+  if i18n and i18n.t then
+    local minTranslated = i18n.t("app.pages.settings_dashboard_settings.min")
+    local maxTranslated = i18n.t("app.pages.settings_dashboard_settings.max")
+    if minTranslated and minTranslated ~= "app.pages.settings_dashboard_settings.min" and minTranslated ~= "" then
+      minLabel = minTranslated
+    end
+    if maxTranslated and maxTranslated ~= "app.pages.settings_dashboard_settings.max" and maxTranslated ~= "" then
+      maxLabel = maxTranslated
+    end
+  end
+
+  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, minLabel, {
+    min = 50,
+    max = 649,
+    get = getMin,
+    set = setMin,
+    display = function(value)
+      return string.format("%.1fV", (tonumber(value) or 180) / 10)
+    end
+  })
+
+  cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, maxLabel, {
+    min = 51,
+    max = 650,
+    get = getMax,
+    set = setMax,
+    display = function(value)
+      return string.format("%.1fV", (tonumber(value) or 252) / 10)
+    end
+  })
+end
+
+return M

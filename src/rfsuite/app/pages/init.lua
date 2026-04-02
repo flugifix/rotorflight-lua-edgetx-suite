@@ -8,7 +8,8 @@ end
 local entries = {
   settings_general_page = definePage("settings/general"),
   --settings_shortcuts_page = definePage("settings/shortcuts"),
-  settings_dashboard_page = definePage("settings/dashboard"),
+  settings_dashboard_theme_page = definePage("settings/dashboard/theme"),
+  settings_dashboard_settings_page = definePage("settings/dashboard/settings"),
   --settings_activelook_page = definePage("settings/activelook"),
   settings_localization_page = definePage("settings/localization"),
   settings_audio_page = definePage("settings/audio"),
@@ -22,8 +23,18 @@ local loadedByMenuId = {}
 local iconByMenuId = {}
 local pagePathByMenuId = {}
 
+local function isDynamicDashboardSettingsPage(menuId)
+  if type(menuId) ~= "string" then return false end
+  return string.match(menuId, "^settings_dashboard_settings_[0-9a-f]+_page$") ~= nil
+end
+
 local function loadPageModule(menuId)
   local entry = entries[menuId]
+  if not entry and isDynamicDashboardSettingsPage(menuId) then
+    entry = entries.settings_dashboard_settings_page
+    iconByMenuId[menuId] = entry.iconPath
+    pagePathByMenuId[menuId] = entry.pagePath
+  end
   if not entry then
     return nil
   end

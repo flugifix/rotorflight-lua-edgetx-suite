@@ -70,6 +70,17 @@ local function defaultPreferences()
       count_up_timer = false,
       timer_bell_sound = false,
     },
+    dashboard = {
+      theme_preflight = "system/default",
+      theme_inflight = "system/default",
+      theme_postflight = "system/default",
+      model_override = false,
+      model_theme_preflight = "nil",
+      model_theme_inflight = "nil",
+      model_theme_postflight = "nil",
+      theme_config_target = "system/default",
+      connection_guard = true,
+    },
   }
 end
 

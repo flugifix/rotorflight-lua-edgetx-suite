@@ -6,14 +6,36 @@ local function wipeTable(t)
   for k in pairs(t) do t[k] = nil end
 end
 
+local function populateDynamicMenus(menus)
+  if type(menus) ~= "table" then return end
+
+  -- Populate settings_dashboard_settings_menu dynamically
+  local dashboardMenu = menus["settings_dashboard_settings_menu"]
+  if type(dashboardMenu) == "table" and dashboardMenu._dynamicThemes == true then
+    local dashboardBuilder = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/app/lib/dashboard_builder.lua", "t"))()
+    local entries, themeMenus = dashboardBuilder.buildDashboardSettingsThemeMenus()
+    dashboardMenu.pages = entries
+
+    -- Add theme-specific menus to the registry
+    if type(themeMenus) == "table" then
+      for menuId, menuDef in pairs(themeMenus) do
+        menus[menuId] = menuDef
+      end
+    end
+  end
+end
+
 function MenuRegistry.new(manifest, i18n, options)
   options = options or {}
   local iconByMenuId = options.iconByMenuId or {}
 
+  local menus = manifest.menus or {}
+  populateDynamicMenus(menus)
+
   local self = {
     i18n = i18n,
     sections = manifest.sections or {},
-    menus = manifest.menus or {},
+    menus = menus,
     conditions = options.conditions or {},
     activeSectionId = nil,
     currentMenuId = nil,
@@ -104,6 +126,9 @@ function MenuRegistry.new(manifest, i18n, options)
 
   local function resolveIconPath(iconRoot, icon, menuId)
     if type(icon) == "string" and icon ~= "" then
+      if string.sub(icon, 1, 1) == "/" then
+        return icon
+      end
       if string.sub(icon, 1, 7) == "@pages/" then
         return "/SCRIPTS/TOOLS/rfsuite-core/app/pages/" .. string.sub(icon, 8)
       end

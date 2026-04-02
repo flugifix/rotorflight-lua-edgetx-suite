@@ -195,6 +195,7 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
     enabledGetter = function() return enabled end
   end
   local suffix = opts.suffix or ""
+  local displayFn = opts.display
   local minVal = tonumber(opts.min) or 0
   local maxVal = tonumber(opts.max) or 100
   local getter = opts.get or function() return minVal end
@@ -239,6 +240,12 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
     end,
     display = function(val)
       local shown = tonumber(val) or minVal
+      if type(displayFn) == "function" then
+        local ok, text = pcall(displayFn, shown)
+        if ok and type(text) == "string" then
+          return text
+        end
+      end
       return tostring(shown) .. suffix
     end
   }

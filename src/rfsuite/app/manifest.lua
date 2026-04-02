@@ -1,4 +1,18 @@
-return {
+local SYSTEM_THEMES_PATH = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/"
+local USER_THEMES_PATH = "/SCRIPTS/TOOLS/rfsuite.user/dashboard/"
+
+local function hexEncode(input)
+  if type(input) ~= "string" then return "" end
+  local result = ""
+  for i = 1, string.len(input) do
+    local byte = string.byte(input, i)
+    result = result .. string.format("%02x", byte)
+  end
+  return result
+end
+
+-- Static manifest definition - themes are loaded dynamically at runtime
+local manifest = {
   sections = {
     {
       id = "configuration",
@@ -41,22 +55,38 @@ return {
       title = "@i18n(app.modules.settings.name)@",
       pages = {
         { id = "general", title = "@i18n(app.modules.general.name)@", menuId = "settings_general_page", row = 1, col = 1, enabled = true },
-        { id = "dashboard", title = "@i18n(app.modules.dashboard.name)@", menuId = "settings_dashboard_page", row = 1, col = 2, enabled = true },
+        { id = "dashboard", title = "@i18n(app.modules.dashboard.name)@", menuId = "settings_dashboard_menu", icon = "@pages/settings/dashboard/icon.png", row = 1, col = 2, enabled = true },
         { id = "localization", title = "@i18n(app.modules.localization.name)@", menuId = "settings_localization_page", row = 1, col = 3, enabled = true },
         { id = "audio", title = "@i18n(app.modules.audio.name)@", menuId = "settings_audio_page", row = 1, col = 4, enabled = true },
         { id = "shortcuts", title = "@i18n(app.modules.shortcuts.name)@", menuId = "settings_shortcuts_page", row = 1, col = 5, enabled = false, hideWhenDisabled = true },
         { id = "activelook", title = "@i18n(app.modules.activelook.name)@", menuId = "settings_activelook_page", row = 1, col = 6, enabled = false, hideWhenDisabled = true }      }
     },
+    settings_dashboard_menu = {
+      title = "@i18n(app.modules.dashboard.name)@",
+      pages = {
+        { id = "dashboard_theme", title = "@i18n(app.modules.dashboard_theme.name)@", menuId = "settings_dashboard_theme_page", row = 1, col = 1, enabled = true },
+        { id = "dashboard_settings", title = "@i18n(app.modules.dashboard_settings.name)@", menuId = "settings_dashboard_settings_menu", icon = "@pages/settings/dashboard/settings/icon.png", row = 1, col = 2, enabled = true }
+      }
+    },
+    settings_dashboard_settings_menu = {
+      title = "@i18n(app.modules.dashboard_settings.name)@",
+      pages = {},  -- Populated dynamically at runtime by dashboard_builder
+      _dynamicThemes = true  -- Flag to indicate this menu should be populated dynamically
+    },
     settings_general_page = {
       title = "@i18n(app.modules.general.name)@",
       pages = {}
     },
-    settings_shortcuts_page = {
-      title = "@i18n(app.modules.shortcuts.name)@",
+    settings_dashboard_theme_page = {
+      title = "@i18n(app.modules.dashboard_theme.name)@",
       pages = {}
     },
-    settings_dashboard_page = {
-      title = "@i18n(app.modules.dashboard.name)@",
+    settings_dashboard_settings_page = {
+      title = "@i18n(app.modules.dashboard_settings.name)@",
+      pages = {}
+    },
+    settings_shortcuts_page = {
+      title = "@i18n(app.modules.shortcuts.name)@",
       pages = {}
     },
     settings_activelook_page = {
@@ -97,3 +127,5 @@ return {
     }
   }
 }
+
+return manifest
