@@ -268,5 +268,25 @@ return {
         save_error_message = "Save failed"
       }
     }
+  },
+  widgets = {
+    dashboard = {
+      time = "FLIGHT TIME",
+      blackbox = "BLACKBOX",
+      flights = "FLIGHTS",
+      profile = "PID PROFILE",
+      rates = "RATE PROFILE",
+      link = "LQ",
+      voltage = "VOLTAGE",
+      last_flight = "LAST FLIGHT",
+      total_time = "TOTAL TIME",
+      min_cell = "MIN V/CELL",
+      min_link = "MIN LINK",
+      bb_ready = "READY",
+      bb_rec = "REC",
+      bb_logged = "LOGGED",
+      status_armed = "ARMED",
+      status_disarmed = "DISARMED"
+    }
   }
 }

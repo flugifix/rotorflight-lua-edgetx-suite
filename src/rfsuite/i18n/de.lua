@@ -268,5 +268,25 @@ return {
         save_error_message = "Speichern fehlgeschlagen"
       }
     }
+  },
+  widgets = {
+    dashboard = {
+      time = "ZEIT",
+      blackbox = "BLACKBOX",
+      flights = "FLUEGE",
+      profile = "PROFIL",
+      rates = "RATEN",
+      link = "LQ",
+      voltage = "SPANNUNG",
+      last_flight = "LETZTER FLUG",
+      total_time = "GESAMTZEIT",
+      min_cell = "MIN V/ZELLE",
+      min_link = "MIN LINK",
+      bb_ready = "BEREIT",
+      bb_rec = "AUFN",
+      bb_logged = "GEL",
+      status_armed = "ARM",
+      status_disarmed = "DISARM"
+    }
   }
 }
