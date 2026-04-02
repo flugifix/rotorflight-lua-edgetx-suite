@@ -1,4 +1,10 @@
 local MenuRegistry = {}
+local EMPTY_ENTRIES = {}
+
+local function wipeTable(t)
+  if type(t) ~= "table" then return end
+  for k in pairs(t) do t[k] = nil end
+end
 
 function MenuRegistry.new(manifest, i18n, options)
   options = options or {}
@@ -12,8 +18,42 @@ function MenuRegistry.new(manifest, i18n, options)
     activeSectionId = nil,
     currentMenuId = nil,
     currentEntryId = nil,
-    breadcrumbStack = {}
+    breadcrumbStack = {},
+    _titleCache = {},
+    _cachedLocale = nil,
+    _conditionsVersion = 0,
+    _rootCache = {locale = nil, iconRoot = nil, version = -1, data = nil},
+    _cardsCache = {locale = nil, iconRoot = nil, menuId = nil, version = -1, data = nil}
   }
+
+  local function currentLocale()
+    if i18n and i18n.getLocale then
+      return i18n.getLocale()
+    end
+    return nil
+  end
+
+  local function invalidateCaches()
+    self._rootCache.locale = nil
+    self._rootCache.iconRoot = nil
+    self._rootCache.version = -1
+    self._rootCache.data = nil
+
+    self._cardsCache.locale = nil
+    self._cardsCache.iconRoot = nil
+    self._cardsCache.menuId = nil
+    self._cardsCache.version = -1
+    self._cardsCache.data = nil
+  end
+
+  local function refreshLocaleCaches()
+    local locale = currentLocale()
+    if self._cachedLocale ~= locale then
+      self._cachedLocale = locale
+      wipeTable(self._titleCache)
+      invalidateCaches()
+    end
+  end
 
   local function isEntryEnabled(entry)
     if type(entry) ~= "table" then
@@ -45,15 +85,21 @@ function MenuRegistry.new(manifest, i18n, options)
       return ""
     end
 
+    refreshLocaleCaches()
+
+    local cached = self._titleCache[entry]
+    if cached ~= nil then return cached end
+
+    local resolved = ""
+
     if entry.titleKey then
-      return i18n.t(entry.titleKey)
+      resolved = i18n.t(entry.titleKey)
+    elseif entry.title then
+      resolved = i18n.resolve(entry.title)
     end
 
-    if entry.title then
-      return i18n.resolve(entry.title)
-    end
-
-    return ""
+    self._titleCache[entry] = resolved or ""
+    return self._titleCache[entry]
   end
 
   local function resolveIconPath(iconRoot, icon, menuId)
@@ -90,7 +136,7 @@ function MenuRegistry.new(manifest, i18n, options)
 
   local function getCurrentEntries()
     local container = getCurrentContainer()
-    if not container then return {} end
+    if not container then return EMPTY_ENTRIES end
     return container.pages or {}
   end
 
@@ -151,6 +197,12 @@ function MenuRegistry.new(manifest, i18n, options)
   end
 
   function self.getRootGroups(iconRoot)
+    refreshLocaleCaches()
+    local cache = self._rootCache
+    if cache.data and cache.locale == self._cachedLocale and cache.iconRoot == iconRoot and cache.version == self._conditionsVersion then
+      return cache.data
+    end
+
     local groups = {}
     for i = 1, #self.sections do
       local section = self.sections[i]
@@ -183,6 +235,11 @@ function MenuRegistry.new(manifest, i18n, options)
       }
     end
 
+    cache.locale = self._cachedLocale
+    cache.iconRoot = iconRoot
+    cache.version = self._conditionsVersion
+    cache.data = groups
+
     return groups
   end
 
@@ -208,6 +265,8 @@ function MenuRegistry.new(manifest, i18n, options)
           syncCurrentEntry()
         end
 
+        self._cardsCache.data = nil
+
         return true
       end
     end
@@ -229,6 +288,7 @@ function MenuRegistry.new(manifest, i18n, options)
           self.currentMenuId = entry.menuId
           pushBreadcrumb("menu", entry.menuId, resolveTitle(self.menus[entry.menuId]))
           syncCurrentEntry()
+          self._cardsCache.data = nil
         end
         return true
       end
@@ -262,6 +322,7 @@ function MenuRegistry.new(manifest, i18n, options)
     end
 
     syncCurrentEntry()
+    self._cardsCache.data = nil
     return true
   end
 
@@ -304,6 +365,12 @@ function MenuRegistry.new(manifest, i18n, options)
   end
 
   function self.getCards(iconRoot)
+    refreshLocaleCaches()
+    local cache = self._cardsCache
+    if cache.data and cache.locale == self._cachedLocale and cache.iconRoot == iconRoot and cache.menuId == self.currentMenuId and cache.version == self._conditionsVersion then
+      return cache.data
+    end
+
     local entries = getCurrentEntries()
     local cards = {}
     for i = 1, #entries do
@@ -325,6 +392,12 @@ function MenuRegistry.new(manifest, i18n, options)
       }
       end
     end
+
+    cache.locale = self._cachedLocale
+    cache.iconRoot = iconRoot
+    cache.menuId = self.currentMenuId
+    cache.version = self._conditionsVersion
+    cache.data = cards
 
     return cards
   end
@@ -367,7 +440,11 @@ function MenuRegistry.new(manifest, i18n, options)
   end
 
   function self.setCondition(key, value)
-    self.conditions[key] = value == true
+    local nextValue = value == true
+    if self.conditions[key] == nextValue then return end
+    self.conditions[key] = nextValue
+    self._conditionsVersion = self._conditionsVersion + 1
+    invalidateCaches()
   end
 
   return self

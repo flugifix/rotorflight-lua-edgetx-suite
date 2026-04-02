@@ -56,7 +56,8 @@ return {
       save = "\xEF\x80\x99",
       reload = "\xEF\x80\xA1",
       star = "*",
-      help = "?"
+      help = "?",
+      close = "Schließen"
     },
     help = {
       title = "Hilfe",
@@ -180,8 +181,18 @@ return {
         esc_threshold = "Schwellwert (°)",
         adjustment_events = "Einstellungsansagen",
         fuel_alerts = "Kraftstoff",
+        fuel_callout_percent = "Ansage %",
+        fuel_repeat_below_zero = "Wiederholungen unter 0%",
+        fuel_haptic_below_zero = "Haptisch unter 0%",
+        fuel_callout_default = "Standard",
+        fuel_callout_5 = "5%",
+        fuel_callout_10 = "10%",
+        fuel_callout_20 = "20%",
+        fuel_callout_25 = "25%",
+        fuel_callout_50 = "50%",
         battery_profile = "Akku-Kapazitaet",
         model_announcement = "Modellansage",
+        help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
         saved_title = "Gespeichert",
         saved_message = "Audio-Ereignisse gespeichert",
         save_error_title = "Fehler",

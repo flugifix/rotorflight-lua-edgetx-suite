@@ -7,6 +7,7 @@ local function loadModule(path)
 end
 
 local Controls = loadModule("ui/controls.lua")
+local Common = loadModule("app/pages/settings/common.lua")
 
 -- ─── Config schema ────────────────────────────────────────────────────────────
 -- All persisted localization settings. Loading and saving are automatic.
@@ -31,20 +32,11 @@ local ui = {
   config    = buildDefaultConfig(),
 }
 
+ui.runtime = Common.createFormRuntime(ui)
+
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local function t(i18n, key, fallback)
-  if i18n and i18n.t then return i18n.t("app.pages.settings_localization." .. key) end
-  return fallback
-end
-
-local function markDirty(requestRebuild)
-  if ui.dirty then return end
-  ui.dirty = true
-  if requestRebuild then
-    requestRebuild()
-  end
-end
+local t = Common.pageT("settings_localization")
 
 local function copyFromPrefs(prefs)
   local loc = (prefs and prefs.localizations) or {}
@@ -76,7 +68,7 @@ end
 
 -- ─── Section builder ─────────────────────────────────────────────────────────
 
-local function buildLocalization(cursorY, children, x, w, i18n, requestRebuild)
+local function buildLocalization(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendComboSelect(
     children, x, cursorY, w,
     t(i18n, "temperature_unit", "Temperatureinheit"),
@@ -84,7 +76,7 @@ local function buildLocalization(cursorY, children, x, w, i18n, requestRebuild)
     ui.config.temperature_unit,
     function(val)
       ui.config.temperature_unit = val
-      markDirty(requestRebuild)
+      ui.runtime.markDirty()
     end
   )
 
@@ -95,7 +87,7 @@ local function buildLocalization(cursorY, children, x, w, i18n, requestRebuild)
     ui.config.altitude_unit,
     function(val)
       ui.config.altitude_unit = val
-      markDirty(requestRebuild)
+      ui.runtime.markDirty()
     end
   )
 
@@ -138,13 +130,13 @@ end
 function M.build(ctx)
   ensureLoaded(ctx.preferences)
 
-  local children       = ctx.children
-  local x, w           = ctx.x, ctx.w
-  local i18n           = ctx.i18n
-  local requestRebuild = ctx.requestRebuild
-  local cursorY        = ctx.y
+  local children = ctx.children
+  local x, w = ctx.x, ctx.w
+  local i18n = ctx.i18n
+  local cursorY = ctx.y
 
-  buildLocalization(cursorY, children, x, w, i18n, requestRebuild)
+  ui.runtime.setRequestRebuild(ctx.requestRebuild)
+  buildLocalization(cursorY, children, x, w, i18n)
 end
 
 return M

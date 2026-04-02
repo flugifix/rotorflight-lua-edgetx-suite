@@ -7,6 +7,77 @@ function M.t(i18n, pageKey, key, fallback)
   return fallback
 end
 
+function M.pageT(pageKey)
+  return function(i18n, key, fallback)
+    return M.t(i18n, pageKey, key, fallback)
+  end
+end
+
+-- Reusable runtime helpers for settings pages with toggle fields.
+-- Keeps per-build allocations low by caching handlers/getters/setters.
+function M.createFormRuntime(ui)
+  local runtime = {
+    requestRebuild = nil,
+    sectionToggleHandlers = {},
+    boolGetters = {},
+    boolSetters = {}
+  }
+
+  local function markDirty()
+    if ui.dirty then return end
+    ui.dirty = true
+    local rebuild = runtime.requestRebuild
+    if rebuild then rebuild() end
+  end
+
+  function runtime.setRequestRebuild(fn)
+    runtime.requestRebuild = fn
+  end
+
+  function runtime.markDirty()
+    markDirty()
+  end
+
+  function runtime.getSectionToggleHandler(name)
+    local handler = runtime.sectionToggleHandlers[name]
+    if handler then return handler end
+
+    handler = function()
+      ui.sections[name] = not ui.sections[name]
+      local rebuild = runtime.requestRebuild
+      if rebuild then rebuild() end
+    end
+    runtime.sectionToggleHandlers[name] = handler
+    return handler
+  end
+
+  function runtime.getBoolGetter(key)
+    local getter = runtime.boolGetters[key]
+    if getter then return getter end
+
+    getter = function(nextVal)
+      if nextVal ~= nil then return end
+      return ui.config[key] == true
+    end
+    runtime.boolGetters[key] = getter
+    return getter
+  end
+
+  function runtime.getBoolSetter(key)
+    local setter = runtime.boolSetters[key]
+    if setter then return setter end
+
+    setter = function(nextVal)
+      ui.config[key] = (nextVal == true)
+      markDirty()
+    end
+    runtime.boolSetters[key] = setter
+    return setter
+  end
+
+  return runtime
+end
+
 function M.appendSectionHeader(children, x, y, w, title)
   children[#children + 1] = {
     type = "label",

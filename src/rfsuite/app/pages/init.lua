@@ -71,9 +71,9 @@ end
 
 function registry.release(menuId, ctx)
   local released = closePageModule(menuId, ctx)
-  if released and collectgarbage then
-    collectgarbage("collect")
-  end
+  -- Do NOT force collectgarbage() here.
+  -- Forcing GC before lvgl.build() replaces the scene can collect Lua closures
+  -- that LVGL still holds raw references to, causing a crash in lvgl.build().
   return released
 end
 

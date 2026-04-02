@@ -7,6 +7,7 @@ local function loadModule(path)
 end
 
 local Controls = loadModule("ui/controls.lua")
+local Common = loadModule("app/pages/settings/common.lua")
 
 -- ─── Config schema ───────────────────────────────────────────────────────────
 -- Single source of truth for all persisted settings.
@@ -48,26 +49,11 @@ local ui = {
   config = buildDefaultConfig()
 }
 
+ui.runtime = Common.createFormRuntime(ui)
+
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local function t(i18n, key, fallback)
-  if i18n and i18n.t then
-    return i18n.t("app.pages.settings_general." .. key)
-  end
-  return fallback
-end
-
-local function markDirty(requestRebuild)
-  if ui.dirty then return end
-  ui.dirty = true
-  if requestRebuild then
-    requestRebuild()
-  end
-end
-
-local function toggleSection(name)
-  ui.sections[name] = not ui.sections[name]
-end
+local t = Common.pageT("settings_general")
 
 local function prefBool(value, default)
   if value == nil then return default end
@@ -97,50 +83,41 @@ end
 -- ─── Section content builders ────────────────────────────────────────────────
 -- Signature: (cursorY, children, x, w, i18n, requestRebuild) -> newCursorY
 
+local SAFETY_ITEMS = {
+  { key = "save_confirm",                 labelKey = "save_confirm",                 fallback = "Bestätigen beim Speichern" },
+  { key = "save_dirty_only",              labelKey = "save_dirty_only",              fallback = "Speichern nur bei Änderungen" },
+  { key = "save_armed_warning",           labelKey = "save_armed_warning",           fallback = "Warnung beim Speichern (armed)" },
+  { key = "reload_confirm",               labelKey = "reload_confirm",               fallback = "Bestätigen beim Neuladen" },
+  { key = "show_battery_profile_startup", labelKey = "show_battery_profile_startup", fallback = "Akkutyp bei Verbindung" },
+  { key = "show_confirmation_dialog",     labelKey = "show_confirmation_dialog",     fallback = "Akkutyp bestätigen" }
+}
 
-local function buildSafety(cursorY, children, x, w, i18n, requestRebuild)
-  local items = {
-    { key = "save_confirm",                 labelKey = "save_confirm",                 fallback = "Bestätigen beim Speichern"   },
-    { key = "save_dirty_only",              labelKey = "save_dirty_only",              fallback = "Speichern nur bei Änderungen" },
-    { key = "save_armed_warning",           labelKey = "save_armed_warning",           fallback = "Warnung beim Speichern (armed)" },
-    { key = "reload_confirm",               labelKey = "reload_confirm",               fallback = "Bestätigen beim Neuladen"    },
-    { key = "show_battery_profile_startup", labelKey = "show_battery_profile_startup", fallback = "Akkutyp bei Verbindung"      },
-    { key = "show_confirmation_dialog",     labelKey = "show_confirmation_dialog",     fallback = "Akkutyp bestätigen"          },
-  }
-  for _, item in ipairs(items) do
+local function buildSafety(cursorY, children, x, w, i18n)
+  for _, item in ipairs(SAFETY_ITEMS) do
     local k = item.key
     cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
       t(i18n, item.labelKey, item.fallback),
-      ui.config[k] == true,
-      function()
-        ui.config[k] = not ui.config[k]
-        markDirty(requestRebuild)
-      end
+      ui.runtime.getBoolGetter(k),
+      ui.runtime.getBoolSetter(k)
     )
   end
   return cursorY
 end
 
-local function buildIntegration(cursorY, children, x, w, i18n, requestRebuild)
+local function buildIntegration(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "sync_model_name", "Modellname synchronisieren"),
-    ui.config.syncname == true,
-    function()
-      ui.config.syncname = not ui.config.syncname
-      markDirty(requestRebuild)
-    end
+    ui.runtime.getBoolGetter("syncname"),
+    ui.runtime.getBoolSetter("syncname")
   )
   return cursorY
 end
 
-local function buildDevelopment(cursorY, children, x, w, i18n, requestRebuild)
+local function buildDevelopment(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "developer_tools", "Entwickler Tools"),
-    ui.config.developer_tools == true,
-    function()
-      ui.config.developer_tools = not ui.config.developer_tools
-      markDirty(requestRebuild)
-    end
+    ui.runtime.getBoolGetter("developer_tools"),
+    ui.runtime.getBoolSetter("developer_tools")
   )
   return cursorY
 end
@@ -199,7 +176,7 @@ function M.build(ctx)
   local children       = ctx.children
   local x, w          = ctx.x, ctx.w
   local i18n           = ctx.i18n
-  local requestRebuild = ctx.requestRebuild
+  ui.runtime.setRequestRebuild(ctx.requestRebuild)
   local cursorY        = ctx.y
 
   for i, section in ipairs(SECTIONS) do
@@ -209,15 +186,12 @@ function M.build(ctx)
     Controls.appendSectionHeader(children, x, cursorY, w,
       t(i18n, section.titleKey, section.titleFallback),
       ui.sections[key],
-      function()
-        toggleSection(key)
-        requestRebuild()
-      end
+      ui.runtime.getSectionToggleHandler(key)
     )
 
     cursorY = cursorY + Controls.SECTION_H
     if ui.sections[key] then
-      cursorY = section.build(cursorY, children, x, w, i18n, requestRebuild)
+      cursorY = section.build(cursorY, children, x, w, i18n)
     end
   end
 end

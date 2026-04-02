@@ -101,12 +101,13 @@ local NUMBER_Y_OFFSET = 6
 function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
                                      onToggle)
   local getValue
+  local setValue
   if type(value) == "function" then
     getValue = value
   else
     local localValue = value == true
     getValue = function() return localValue end
-    value = function(nextBool)
+    setValue = function(nextBool)
       localValue = nextBool == true
     end
   end
@@ -155,7 +156,7 @@ function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
         end
       end
       if nextBool ~= getValue() then
-        value(nextBool)
+        if setValue then setValue(nextBool) end
         onToggle(nextBool)
       end
     end
@@ -204,11 +205,6 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
   local fieldX = x + w - fieldW - 10
   local rowH = math.max(ROW_H, NUMBER_H)
   local fieldY = y + math.floor((rowH - NUMBER_H) / 2) + NUMBER_Y_OFFSET
-
-  local bgColor = WHITE
-  local textColor = function()
-    return enabledGetter() and COLOR_THEME_PRIMARY1 or GREY_DEFAULT
-  end
   local labelY = y + math.floor((rowH - 20) / 2)
 
   children[#children + 1] = {

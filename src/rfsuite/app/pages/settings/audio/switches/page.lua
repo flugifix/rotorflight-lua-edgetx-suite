@@ -7,6 +7,7 @@ local function loadModule(path)
 end
 
 local Controls = loadModule("ui/controls.lua")
+local Common = loadModule("app/pages/settings/common.lua")
 
 -- ─── Config schema ───────────────────────────────────────────────────────────
 -- Single source of truth for all persisted audio switch settings.
@@ -46,30 +47,11 @@ local ui = {
   config = buildDefaultConfig()
 }
 
+ui.runtime = Common.createFormRuntime(ui)
+
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local function t(i18n, key, fallback)
-  local fullKey = "app.pages.settings_audio_switches." .. key
-  if i18n and i18n.t then
-    local translated = i18n.t(fullKey)
-    if translated and translated ~= fullKey then
-      return translated
-    end
-  end
-  return fallback
-end
-
-local function markDirty(requestRebuild)
-  if ui.dirty then return end
-  ui.dirty = true
-  if requestRebuild then
-    requestRebuild()
-  end
-end
-
-local function toggleSection(name)
-  ui.sections[name] = not ui.sections[name]
-end
+local t = Common.pageT("settings_audio_switches")
 
 local function prefBool(value, default)
   if value == nil then return default end
@@ -180,7 +162,7 @@ function M.build(ctx)
   local children       = ctx.children
   local x, w          = ctx.x, ctx.w
   local i18n           = ctx.i18n
-  local requestRebuild = ctx.requestRebuild
+  ui.runtime.setRequestRebuild(ctx.requestRebuild)
   local cursorY        = ctx.y
 
   for i, section in ipairs(SECTIONS) do
@@ -189,10 +171,7 @@ function M.build(ctx)
     Controls.appendSectionHeader(children, x, cursorY, w,
       t(i18n, section.titleKey, section.titleFallback),
       ui.sections[section.key],
-      function()
-        toggleSection(section.key)
-        requestRebuild()
-      end
+      ui.runtime.getSectionToggleHandler(section.key)
     )
 
     cursorY = cursorY + Controls.SECTION_H
@@ -201,15 +180,8 @@ function M.build(ctx)
         local k = item.key
         cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
           t(i18n, item.labelKey, item.labelFallback),
-          function(nextVal)
-            if nextVal ~= nil then return end
-            return ui.config[k] == true
-          end,
-          function(nextVal)
-            local nextBool = (nextVal == true)
-            ui.config[k] = nextBool
-            markDirty(requestRebuild)
-          end
+          ui.runtime.getBoolGetter(k),
+          ui.runtime.getBoolSetter(k)
         )
       end
     end

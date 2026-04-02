@@ -13,6 +13,7 @@ local PageRegistry = loadModule("app/pages/init.lua")
 local HelpRegistryFactory = loadModule("app/pages/help_registry.lua")
 local Tiles             = loadModule("ui/tiles.lua")
 local Header            = loadModule("ui/header.lua")
+local HelpView          = loadModule("ui/help_view.lua")
 local PreferencesSafe   = loadModule("ui/preferences.lua")
 
 local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
@@ -75,6 +76,11 @@ local function toWrappedItems(items, cols)
   return wrapped, r
 end
 
+local function wipeTable(t)
+  if type(t) ~= "table" then return end
+  for k in pairs(t) do t[k] = nil end
+end
+
 local state = {
   shouldExit   = false,
   cards        = {},
@@ -91,8 +97,9 @@ local state = {
   memLastTick  = 0,
   lastInputTick = 0,
   activePageMenuId = nil,
-  helpDialog = nil,
-  helpDialogOpen = false,
+  helpContent = nil,
+  helpPageTitle = nil,
+  helpPageSubtitle = nil,
   pendingBuildUI = false,
   pendingGcAfterBuild = false,
   headerActions = {
@@ -184,11 +191,12 @@ end
 -- ── Handlers ─────────────────────────────────────────────────────────────────
 
 local function onBack()
-  if state.helpDialog and state.helpDialog.close then
-    local dlg = state.helpDialog
-    state.helpDialog = nil
-    state.helpDialogOpen = false
-    pcall(dlg.close, dlg)
+  if state.helpContent then
+    state.helpContent = nil
+    state.helpPageTitle = nil
+    state.helpPageSubtitle = nil
+    scheduleBuildUI(false)
+    return
   end
 
   if state.menu and state.menu.goBack() then
@@ -200,9 +208,7 @@ local function onBack()
 end
 
 local function onHelp()
-  if state.helpDialogOpen then
-    return
-  end
+  if state.helpContent then return end
 
   local menuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
   if not menuId then return end
@@ -225,73 +231,19 @@ local function onHelp()
   end
 
   local title = state.menu.getHeaderTitle and state.menu.getHeaderTitle() or ""
+  local subtitle = nil
   local breadcrumb = state.menu.getHeaderBreadcrumb and state.menu.getHeaderBreadcrumb() or ""
+  if breadcrumb == "" and state.menu.getBreadcrumb then
+    breadcrumb = state.menu.getBreadcrumb() or ""
+  end
   if breadcrumb ~= "" then
-    title = breadcrumb .. " / " .. title
+    subtitle = breadcrumb
   end
 
-  if not (lvgl and lvgl.dialog) then
-    return
-  end
-
-  local closeLabel = "Close"
-  if state.i18n and state.i18n.t then
-    local closeKey = "app.actions.close"
-    local translated = state.i18n.t(closeKey)
-    if translated and translated ~= closeKey and translated ~= "" then
-      closeLabel = translated
-    end
-  end
-
-  local dialogW = math.min(LCD_W - 20, 700)
-  local dialogH = math.min(LCD_H - 40, math.floor(LCD_H * 0.72))
-  local messageW = dialogW - 24
-  local titleBarH = 44
-  local buttonW = 150
-  local buttonH = 44
-  local buttonX = math.floor((dialogW - buttonW) / 2)
-  local buttonY = dialogH - titleBarH - buttonH - 12
-
-  local dg = lvgl.dialog({
-    title = title,
-    w = dialogW,
-    h = dialogH
-  })
-
-  if not dg then return end
-  state.helpDialog = dg
-  state.helpDialogOpen = true
-
-  dg:build({
-    {
-      type = "label",
-      x = 12,
-      y = 8,
-      w = messageW,
-      text = message
-    },
-    {
-      type = "button",
-      x = buttonX,
-      y = buttonY,
-      w = buttonW,
-      h = buttonH,
-      text = closeLabel,
-      press = function()
-        local dlg = state.helpDialog
-        state.helpDialog = nil
-        state.helpDialogOpen = false
-        if dlg and dlg.close then
-          pcall(dlg.close, dlg)
-        else
-          pcall(dg.close, dg)
-        end
-        if collectgarbage then
-          collectgarbage("collect")
-        end
-      end
-    }
-  })
+  state.helpContent = message
+  state.helpPageTitle = title
+  state.helpPageSubtitle = subtitle
+  scheduleBuildUI(false)
 end
 
 local function onStar()
@@ -311,11 +263,9 @@ local function getActivePageModule()
 end
 
 local function closeHelpDialogIfOpen()
-  if not (state.helpDialog and state.helpDialog.close) then return end
-  local dlg = state.helpDialog
-  state.helpDialog = nil
-  state.helpDialogOpen = false
-  pcall(dlg.close, dlg)
+  state.helpContent = nil
+  state.helpPageTitle = nil
+  state.helpPageSubtitle = nil
 end
 
 local function onReload()
@@ -391,7 +341,7 @@ local function getCardPressHandler(cardId)
     if state.menu and (not state.menu.isRoot()) then
       state.menu.openEntry(cardId)
       state.focusIndex = 0
-      M.buildUI()
+      scheduleBuildUI(false)
     end
   end
   state.cardHandlers[cardId] = fn
@@ -408,7 +358,7 @@ local function getRootCardPressHandler(sectionId, cardId)
     if state.menu and state.menu.isRoot() then
       state.menu.openRootEntry(sectionId, cardId)
       state.focusIndex = 0
-      M.buildUI()
+      scheduleBuildUI(false)
     end
   end
   state.cardHandlers[key] = fn
@@ -441,19 +391,40 @@ function M.buildUI()
 
   -- Clear and reuse the children table to reduce garbage collection
   local children = state.children
-  for k in pairs(children) do
-    children[k] = nil
-  end
+  wipeTable(children)
 
   local contentX = contentPad
   local contentY = tileGap
   local contentW = LCD_W - contentPad * 2
 
+  -- ── Help view (no lvgl.dialog – avoids LVGL lifecycle crashes) ───────────────
+  if state.helpContent then
+    local helpLyt = HelpView.build({
+      i18n = state.i18n,
+      contentX = contentX,
+      contentY = contentY,
+      contentW = contentW,
+      lcdH = LCD_H,
+      message = state.helpContent,
+      title = state.helpPageTitle or pageTitle,
+      subtitle = state.helpPageSubtitle,
+      icon = APP_ICON,
+      onBack = onBack,
+      header = Header,
+      headerLayout = profile.header
+    })
+    lvgl.build(helpLyt)
+    return
+  end
+  -- ── End help view ────────────────────────────────────────────────────────────
+
   if state.menu.isRoot() then
     local groups    = state.menu.getRootGroups(ICON_ROOT)
     state.groupedCards = groups
     local flatCards = Tiles.flattenRootCards(groups)
-    state.cards     = flatCards
+    -- Never alias cached root card tables into state.cards because submenu grid
+    -- layout reuses state.cards as mutable output and would overwrite root data.
+    wipeTable(state.cards)
     state.focusIndex = math.max(0, math.min(state.focusIndex, #flatCards))
 
     local cursorY   = contentY
@@ -523,7 +494,7 @@ function M.buildUI()
     local currentMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
     local pageModule = PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[currentMenuId] or nil
     if pageModule and pageModule.build then
-      state.cards = {}
+      wipeTable(state.cards)
       state.focusIndex = 0
       pageModule.build({
         children = children,
@@ -535,7 +506,7 @@ function M.buildUI()
         preferences = state.preferences,
         menu = state.menu,
         manifest = state.manifest,
-        requestRebuild = M.buildUI
+        requestRebuild = function() scheduleBuildUI(false) end
       })
     else
       local gridItems = state.menu.getCards(ICON_ROOT)
@@ -636,8 +607,9 @@ function M.init()
   state.suppressPressFrames = 0
   state.focusIndex = 0
   state.activePageMenuId = nil
-  state.helpDialog = nil
-  state.helpDialogOpen = false
+  state.helpContent = nil
+  state.helpPageTitle = nil
+  state.helpPageSubtitle = nil
   state.pendingBuildUI = false
   state.pendingGcAfterBuild = false
   M.buildUI()

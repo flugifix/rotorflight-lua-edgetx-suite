@@ -7,6 +7,7 @@ local function loadModule(path)
 end
 
 local Controls = loadModule("ui/controls.lua")
+local Common = loadModule("app/pages/settings/common.lua")
 
 -- ─── Config schema ───────────────────────────────────────────────────────────
 -- Single source of truth for all persisted audio event settings.
@@ -21,6 +22,9 @@ local CONFIG_SCHEMA = {
   { key = "esc_threshold",     type = "number", default = 90  },
   { key = "adjustment_events", type = "bool", default = false },
   { key = "fuel_alerts",       type = "bool", default = true  },
+  { key = "fuel_callout_percent", type = "number", default = 10 },
+  { key = "fuel_repeat_below_zero", type = "number", default = 1 },
+  { key = "fuel_haptic_below_zero", type = "bool", default = false },
   { key = "battery_profile",   type = "bool", default = true  },
   { key = "model_announcement",type = "bool", default = false },
 }
@@ -50,32 +54,150 @@ local ui = {
     battery = true,
     other = true,
   },
-  config = buildDefaultConfig()
+  config = buildDefaultConfig(),
+  runtime = {
+    escThresholdEnabled = nil,
+    escThresholdGet = nil,
+    escThresholdSet = nil,
+    fuelEnabled = nil,
+    fuelCalloutGet = nil,
+    fuelCalloutSet = nil,
+    fuelRepeatGet = nil,
+    fuelRepeatSet = nil,
+    fuelHapticGet = nil,
+    fuelHapticSet = nil
+  }
 }
+
+ui.runtime = setmetatable(ui.runtime, {__index = Common.createFormRuntime(ui)})
 
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local function t(i18n, key, fallback)
-  local fullKey = "app.pages.settings_audio_events." .. key
-  if i18n and i18n.t then
-    local translated = i18n.t(fullKey)
-    if translated and translated ~= fullKey then
-      return translated
+local t = Common.pageT("settings_audio_events")
+local FUEL_CALLOUT_VALUES = { [0] = true, [5] = true, [10] = true, [20] = true, [25] = true, [50] = true }
+
+local function getEscThresholdEnabled()
+  if ui.runtime.escThresholdEnabled then return ui.runtime.escThresholdEnabled end
+  ui.runtime.escThresholdEnabled = function()
+    return ui.config.esc_temperature == true
+  end
+  return ui.runtime.escThresholdEnabled
+end
+
+local function getEscThresholdGetter(minVal, maxVal)
+  if ui.runtime.escThresholdGet then return ui.runtime.escThresholdGet end
+  ui.runtime.escThresholdGet = function()
+    local current = tonumber(ui.config.esc_threshold) or minVal
+    if current < minVal then current = minVal end
+    if current > maxVal then current = maxVal end
+    return current
+  end
+  return ui.runtime.escThresholdGet
+end
+
+local function getEscThresholdSetter(minVal, maxVal)
+  if ui.runtime.escThresholdSet then return ui.runtime.escThresholdSet end
+  ui.runtime.escThresholdSet = function(val)
+    local nextVal = tonumber(val) or minVal
+    if nextVal < minVal then nextVal = minVal end
+    if nextVal > maxVal then nextVal = maxVal end
+    if ui.config.esc_threshold ~= nextVal then
+      ui.config.esc_threshold = nextVal
+      ui.runtime.markDirty()
     end
   end
-  return fallback
+  return ui.runtime.escThresholdSet
 end
 
-local function markDirty(requestRebuild)
-  if ui.dirty then return end
-  ui.dirty = true
-  if requestRebuild then
-    requestRebuild()
+local function getFuelEnabled()
+  if ui.runtime.fuelEnabled then return ui.runtime.fuelEnabled end
+  ui.runtime.fuelEnabled = function()
+    return ui.config.fuel_alerts == true
   end
+  return ui.runtime.fuelEnabled
 end
 
-local function toggleSection(name)
-  ui.sections[name] = not ui.sections[name]
+local function getFuelCalloutOptions(i18n)
+  return {
+    { value = 0, label = t(i18n, "fuel_callout_default", "Standard") },
+    { value = 5, label = t(i18n, "fuel_callout_5", "5%") },
+    { value = 10, label = t(i18n, "fuel_callout_10", "10%") },
+    { value = 20, label = t(i18n, "fuel_callout_20", "20%") },
+    { value = 25, label = t(i18n, "fuel_callout_25", "25%") },
+    { value = 50, label = t(i18n, "fuel_callout_50", "50%") },
+  }
+end
+
+local function getFuelCalloutGetter()
+  if ui.runtime.fuelCalloutGet then return ui.runtime.fuelCalloutGet end
+  ui.runtime.fuelCalloutGet = function()
+    local value = tonumber(ui.config.fuel_callout_percent) or 10
+    if not FUEL_CALLOUT_VALUES[value] then return 10 end
+    return value
+  end
+  return ui.runtime.fuelCalloutGet
+end
+
+local function getFuelCalloutSetter()
+  if ui.runtime.fuelCalloutSet then return ui.runtime.fuelCalloutSet end
+  ui.runtime.fuelCalloutSet = function(value)
+    if ui.config.fuel_alerts ~= true then return end
+    local nextValue = tonumber(value) or 10
+    if not FUEL_CALLOUT_VALUES[nextValue] then nextValue = 10 end
+    if ui.config.fuel_callout_percent ~= nextValue then
+      ui.config.fuel_callout_percent = nextValue
+      ui.runtime.markDirty()
+    end
+  end
+  return ui.runtime.fuelCalloutSet
+end
+
+local function getFuelRepeatGetter(minVal, maxVal)
+  if ui.runtime.fuelRepeatGet then return ui.runtime.fuelRepeatGet end
+  ui.runtime.fuelRepeatGet = function()
+    local current = tonumber(ui.config.fuel_repeat_below_zero) or minVal
+    if current < minVal then current = minVal end
+    if current > maxVal then current = maxVal end
+    return current
+  end
+  return ui.runtime.fuelRepeatGet
+end
+
+local function getFuelRepeatSetter(minVal, maxVal)
+  if ui.runtime.fuelRepeatSet then return ui.runtime.fuelRepeatSet end
+  ui.runtime.fuelRepeatSet = function(value)
+    if ui.config.fuel_alerts ~= true then return end
+    local nextValue = tonumber(value) or minVal
+    if nextValue < minVal then nextValue = minVal end
+    if nextValue > maxVal then nextValue = maxVal end
+    if ui.config.fuel_repeat_below_zero ~= nextValue then
+      ui.config.fuel_repeat_below_zero = nextValue
+      ui.runtime.markDirty()
+    end
+  end
+  return ui.runtime.fuelRepeatSet
+end
+
+local function getFuelHapticGetter()
+  if ui.runtime.fuelHapticGet then return ui.runtime.fuelHapticGet end
+  ui.runtime.fuelHapticGet = function(nextVal)
+    if nextVal ~= nil then return end
+    return ui.config.fuel_alerts == true and ui.config.fuel_haptic_below_zero == true
+  end
+  return ui.runtime.fuelHapticGet
+end
+
+local function getFuelHapticSetter()
+  if ui.runtime.fuelHapticSet then return ui.runtime.fuelHapticSet end
+  ui.runtime.fuelHapticSet = function(nextVal)
+    if ui.config.fuel_alerts ~= true then return end
+    local nextBool = (nextVal == true)
+    if ui.config.fuel_haptic_below_zero ~= nextBool then
+      ui.config.fuel_haptic_below_zero = nextBool
+      ui.runtime.markDirty()
+    end
+  end
+  return ui.runtime.fuelHapticSet
 end
 
 local function prefBool(value, default)
@@ -97,6 +219,9 @@ local function copyFromPrefs(prefs)
 
   if ui.config.esc_threshold < 60 then ui.config.esc_threshold = 60 end
   if ui.config.esc_threshold > 300 then ui.config.esc_threshold = 300 end
+  if not FUEL_CALLOUT_VALUES[ui.config.fuel_callout_percent] then ui.config.fuel_callout_percent = 10 end
+  if ui.config.fuel_repeat_below_zero < 1 then ui.config.fuel_repeat_below_zero = 1 end
+  if ui.config.fuel_repeat_below_zero > 10 then ui.config.fuel_repeat_below_zero = 10 end
 end
 
 local function ensureLoaded(prefs)
@@ -164,7 +289,10 @@ local SECTIONS = {
     titleKey = "section_fuel",
     titleFallback = "Kraftstoff",
     items = {
-      { key = "fuel_alerts", labelKey = "fuel_alerts", labelFallback = "Kraftstoff" },
+      { kind = "bool", key = "fuel_alerts", labelKey = "fuel_alerts", labelFallback = "Kraftstoff" },
+      { kind = "choice", key = "fuel_callout_percent", labelKey = "fuel_callout_percent", labelFallback = "Ansage %" },
+      { kind = "number", key = "fuel_repeat_below_zero", labelKey = "fuel_repeat_below_zero", labelFallback = "Wiederholungen unter 0%", min = 1, max = 10, suffix = "x" },
+      { kind = "bool", key = "fuel_haptic_below_zero", labelKey = "fuel_haptic_below_zero", labelFallback = "Haptisch unter 0%" },
     },
   },
   {
@@ -227,7 +355,7 @@ function M.build(ctx)
   local children       = ctx.children
   local x, w          = ctx.x, ctx.w
   local i18n           = ctx.i18n
-  local requestRebuild = ctx.requestRebuild
+  ui.runtime.setRequestRebuild(ctx.requestRebuild)
   local cursorY        = ctx.y
 
   for i, section in ipairs(SECTIONS) do
@@ -236,58 +364,62 @@ function M.build(ctx)
     Controls.appendSectionHeader(children, x, cursorY, w,
       t(i18n, section.titleKey, section.titleFallback),
       ui.sections[section.key],
-      function()
-        toggleSection(section.key)
-        requestRebuild()
-      end
+      ui.runtime.getSectionToggleHandler(section.key)
     )
 
     cursorY = cursorY + Controls.SECTION_H
     if ui.sections[section.key] then
       for _, item in ipairs(section.items) do
         local k = item.key
-        if item.kind == "number" then
+        if item.kind == "choice" and k == "fuel_callout_percent" then
+          cursorY = cursorY + Controls.appendComboSelect(
+            children, x, cursorY, w,
+            t(i18n, item.labelKey, item.labelFallback),
+            getFuelCalloutOptions(i18n),
+            getFuelCalloutGetter()(),
+            getFuelCalloutSetter()
+          )
+        elseif item.kind == "number" and k == "fuel_repeat_below_zero" then
+          local minVal = item.min or 1
+          local maxVal = item.max or 10
+          cursorY = cursorY + Controls.appendNumberField(
+            children, x, cursorY, w,
+            t(i18n, item.labelKey, item.labelFallback),
+            {
+              enabled = getFuelEnabled(),
+              min = minVal,
+              max = maxVal,
+              suffix = item.suffix or "",
+              get = getFuelRepeatGetter(minVal, maxVal),
+              set = getFuelRepeatSetter(minVal, maxVal)
+            }
+          )
+        elseif item.kind == "number" then
           local minVal = item.min or 0
           local maxVal = item.max or 100
           cursorY = cursorY + Controls.appendNumberField(
             children, x, cursorY, w,
             t(i18n, item.labelKey, item.labelFallback),
             {
-              enabled = function()
-                return ui.config.esc_temperature == true
-              end,
+              enabled = getEscThresholdEnabled(),
               min = minVal,
               max = maxVal,
               suffix = item.suffix or "",
-              get = function()
-                local current = tonumber(ui.config[k]) or minVal
-                if current < minVal then current = minVal end
-                if current > maxVal then current = maxVal end
-                return current
-              end,
-              set = function(val)
-                local nextVal = tonumber(val) or minVal
-                if nextVal < minVal then nextVal = minVal end
-                if nextVal > maxVal then nextVal = maxVal end
-                if ui.config[k] ~= nextVal then
-                  ui.config[k] = nextVal
-                  markDirty(requestRebuild)
-                end
-              end
+              get = getEscThresholdGetter(minVal, maxVal),
+              set = getEscThresholdSetter(minVal, maxVal)
             }
+          )
+        elseif item.kind == "bool" and k == "fuel_haptic_below_zero" then
+          cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+            t(i18n, item.labelKey, item.labelFallback),
+            getFuelHapticGetter(),
+            getFuelHapticSetter()
           )
         else
           cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
             t(i18n, item.labelKey, item.labelFallback),
-            function(nextVal)
-              if nextVal ~= nil then return end
-              return ui.config[k] == true
-            end,
-            function(nextVal)
-              local nextBool = (nextVal == true)
-              ui.config[k] = nextBool
-              markDirty(requestRebuild)
-            end
+            ui.runtime.getBoolGetter(k),
+            ui.runtime.getBoolSetter(k)
           )
         end
       end
