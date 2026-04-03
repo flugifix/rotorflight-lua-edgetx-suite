@@ -135,26 +135,28 @@ local function performSave()
 end
 
 local function resolveLocaleFromSystem()
-  local locale = "de"
+  if type(_G) == "table" and type(_G.__rfsuiteSystemLocaleModule) == "table" then
+    local okResolve, locale = pcall(_G.__rfsuiteSystemLocaleModule.resolveSystemLanguage, "de")
+    if okResolve and type(locale) == "string" and locale ~= "" then
+      return locale
+    end
+  end
 
-  if system and system.getGeneralSettings then
-    local ok, gs = pcall(system.getGeneralSettings)
-    if ok and type(gs) == "table" then
-      local gsLocale = gs.locale or gs.language or gs.lang
-      if type(gsLocale) == "string" and gsLocale ~= "" then
-        locale = gsLocale
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", "t")
+  if chunk then
+    local ok, localeMod = pcall(chunk)
+    if ok and type(localeMod) == "table" and type(localeMod.resolveSystemLanguage) == "function" then
+      if type(_G) == "table" then
+        _G.__rfsuiteSystemLocaleModule = localeMod
+      end
+      local okResolve, locale = pcall(localeMod.resolveSystemLanguage, "de")
+      if okResolve and type(locale) == "string" and locale ~= "" then
+        return locale
       end
     end
   end
 
-  if locale == "de" and system and system.getLocale then
-    local sysLocale = system.getLocale()
-    if type(sysLocale) == "string" and sysLocale ~= "" then
-      locale = sysLocale
-    end
-  end
-
-  return locale
+  return "de"
 end
 
 local function buildPageContext()

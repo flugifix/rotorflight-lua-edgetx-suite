@@ -14,6 +14,7 @@ local SIM_FILE_ALIASES = {
   ["RTE#"] = "rate_profile",
   ["BatP"] = "battery_profile",
   ["Bat%"] = "fuel",
+  ["RQly"] = "link",
   ["Vbat"] = "voltage",
   ["Hspd"] = "rpm",
   ["TescT"] = "temp_esc",
@@ -23,9 +24,23 @@ local SIM_FILE_ALIASES = {
   ["Alt"] = "altitude",
 }
 
-local debugEnabled = true
+local debugEnabled = false
 local loggedSimulatorState = false
 local loggedSources = {}
+local simValueCache = {}
+
+local function nowSeconds()
+  if type(getTime) == "function" then
+    local ok, value = pcall(getTime)
+    if ok and type(value) == "number" then
+      return value / 100
+    end
+  end
+  if os and type(os.clock) == "function" then
+    return os.clock()
+  end
+  return 0
+end
 
 local function debugLog(key, msg)
   if not debugEnabled then return end
@@ -62,18 +77,31 @@ local function readSimSensorFile(name)
     local base = SIM_SENSOR_PATHS[p]
     for i = 1, #candidates do
       local filePath = base .. candidates[i] .. ".lua"
-      local chunk = nil
+      local cached = simValueCache[filePath]
+      local now = nowSeconds()
+      if cached and (now - (cached.t or 0)) <= 0.05 then
+        if cached.v ~= nil then
+          debugLog("sim-hit:" .. name, "sim cache hit " .. filePath .. " = " .. tostring(cached.v))
+          return cached.v
+        end
+      else
+        local f = io.open(filePath, "r")
+        local v = nil
+        if f then
+          local content = io.read(f, 64)
+          io.close(f)
+          if type(content) == "string" then
+            local n = string.match(content, "return%s+([%+%-]?%d+%.?%d*)")
+            if n then
+              v = tonumber(n)
+            end
+          end
+        end
 
-      if type(loadfile) == "function" then
-        local okFile, loaded = pcall(loadfile, filePath)
-        if okFile then chunk = loaded end
-      end
-
-      if chunk then
-        local ok, value = pcall(chunk)
-        if ok and type(value) == "number" then
-          debugLog("sim-hit:" .. name, "sim file hit " .. filePath .. " = " .. tostring(value))
-          return value
+        simValueCache[filePath] = { t = now, v = v }
+        if v ~= nil then
+          debugLog("sim-hit:" .. name, "sim file hit " .. filePath .. " = " .. tostring(v))
+          return v
         end
       end
     end
@@ -117,6 +145,7 @@ Sensors.map = {
   -- Speeds / RPM
   Hspd = { label = "Headspeed", unit = "rpm", prec = 0, fallback = 0 },
   Tspd = { label = "Tailspeed", unit = "rpm", prec = 0, fallback = 0 },
+  RQly = { label = "Link Quality", unit = "dB", prec = 0, fallback = 0 },
 
   -- Attitude
   Ptch = { label = "Pitch", unit = "°", prec = 1, fallback = 0 },
@@ -137,6 +166,7 @@ Sensors.map = {
 Sensors.aliases = {
   voltage = "Vbat",
   rpm = "Hspd",
+  link = "RQly",
   fuel = "Bat%",
   current = "Curr",
   pid_profile = "PID#",

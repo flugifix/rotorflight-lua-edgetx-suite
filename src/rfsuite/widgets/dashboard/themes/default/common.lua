@@ -1,3 +1,7 @@
+if type(_G) == "table" and type(_G.__rfsuiteThemeDefaultCommonModule) == "table" then
+  return _G.__rfsuiteThemeDefaultCommonModule
+end
+
 local Common = {}
 
 local LOGO_FILE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png"
@@ -5,25 +9,42 @@ local LOGO_FILE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png"
 local i18nModule = nil
 local i18nContext = nil
 local i18nLocale = nil
+local localeModule = nil
 
-local function resolveLocale()
-  local locale = "en"
-  if system and system.getGeneralSettings then
-    local ok, settings = pcall(system.getGeneralSettings)
-    if ok and type(settings) == "table" then
-      local detected = settings.locale or settings.language or settings.lang
-      if type(detected) == "string" and detected ~= "" then
-        locale = detected
+local function getLocaleModule()
+  if localeModule then
+    return localeModule
+  end
+
+  if type(_G) == "table" and type(_G.__rfsuiteSystemLocaleModule) == "table" then
+    localeModule = _G.__rfsuiteSystemLocaleModule
+    return localeModule
+  end
+
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", "t")
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then
+      localeModule = mod
+      if type(_G) == "table" then
+        _G.__rfsuiteSystemLocaleModule = mod
       end
     end
   end
-  if system and system.getLocale then
-    local detected = system.getLocale()
-    if type(detected) == "string" and detected ~= "" then
-      locale = detected
+
+  return localeModule
+end
+
+local function resolveLocale()
+  local mod = getLocaleModule()
+  if mod and type(mod.resolveSystemLanguage) == "function" then
+    local ok, locale = pcall(mod.resolveSystemLanguage, "en")
+    if ok and type(locale) == "string" and locale ~= "" then
+      return locale
     end
   end
-  return locale
+
+  return "en"
 end
 
 local function getI18nContext()
@@ -473,4 +494,5 @@ function Common.buildPostflight(zone, state)
   return nodes
 end
 
+if type(_G) == "table" then _G.__rfsuiteThemeDefaultCommonModule = Common end
 return Common

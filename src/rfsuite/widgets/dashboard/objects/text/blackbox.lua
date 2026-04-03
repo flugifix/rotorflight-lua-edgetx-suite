@@ -2,6 +2,7 @@ local Render = {}
 
 function Render.render(nodes, rect, box, state, themeCommon, utils)
   local valueText = themeCommon.blackboxLabel(state)
+  local valueFont = utils.resolveValue(box.font, box, state) or MIDSIZE
   utils.pushLabel(
     nodes,
     rect.x + 4,
@@ -10,7 +11,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     valueText,
     box.textcolor or BLACK,
     box.valuealign or box.titlealign or CENTER,
-    MIDSIZE
+    valueFont
   )
 end
 

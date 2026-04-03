@@ -3,17 +3,20 @@ $ErrorActionPreference = 'Stop'
 $workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $sourceRoot = Join-Path $workspaceRoot 'src'
 $sourceCore = Join-Path $sourceRoot 'rfsuite'
+$sourceAudioRoot = Join-Path $sourceCore 'audio'
 $sourceToolEntrypoint = Join-Path $sourceRoot 'main.lua'
 $sourceWidgetRoot = Join-Path $sourceRoot 'widgets\rfsuite'
 $sourceUserRoot = Join-Path $sourceRoot 'rfsuite.user'
 
 $toolsRoot = Join-Path $workspaceRoot 'simulator\SCRIPTS\TOOLS'
 $widgetsRoot = Join-Path $workspaceRoot 'simulator\WIDGETS'
+$soundsRoot = Join-Path $workspaceRoot 'simulator\SOUNDS'
 
 $targetCore = Join-Path $toolsRoot 'rfsuite-core'
 $targetToolEntrypoint = Join-Path $toolsRoot 'rfsuite.lua'
 $targetUserRoot = Join-Path $toolsRoot 'rfsuite.user'
 $targetWidgetRoot = Join-Path $widgetsRoot 'rfsuite'
+$targetSoundsRoot = Join-Path $soundsRoot 'rfsuite'
 
 $legacyToolFolder = Join-Path $toolsRoot 'rfsuite'
 
@@ -33,6 +36,10 @@ if (-not (Test-Path $sourceWidgetRoot)) {
     throw "Widget source folder not found: $sourceWidgetRoot"
 }
 
+if (-not (Test-Path $sourceAudioRoot)) {
+    throw "Audio source folder not found: $sourceAudioRoot"
+}
+
 if (-not (Test-Path $sourceUserRoot)) {
     throw "User source folder not found: $sourceUserRoot"
 }
@@ -43,6 +50,10 @@ if (-not (Test-Path $toolsRoot)) {
 
 if (-not (Test-Path $widgetsRoot)) {
     New-Item -ItemType Directory -Path $widgetsRoot -Force | Out-Null
+}
+
+if (-not (Test-Path $soundsRoot)) {
+    New-Item -ItemType Directory -Path $soundsRoot -Force | Out-Null
 }
 
 if (Test-Path $legacyToolFolder) {
@@ -134,12 +145,57 @@ function New-ThemeIndexFile {
     Set-Content -Path $indexFile -Value $lines -Encoding ASCII
 }
 
+function Copy-LanguageAudioPack {
+    param(
+        [Parameter(Mandatory = $true)][string]$Language,
+        [Parameter(Mandatory = $true)][string]$SourceAudioDir,
+        [Parameter(Mandatory = $true)][string]$TargetAudioDir
+    )
+
+    $sourceLanguageRoot = Join-Path $SourceAudioDir $Language
+    $sourcePack = Join-Path $sourceLanguageRoot 'default'
+    if (-not (Test-Path $sourcePack)) {
+        $sourcePack = $sourceLanguageRoot
+    }
+
+    if (-not (Test-Path $sourcePack)) {
+        return
+    }
+
+    if (Test-Path $TargetAudioDir) {
+        Remove-Item -Path $TargetAudioDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $TargetAudioDir -Force | Out-Null
+
+    foreach ($sub in @('adjfunctions', 'app', 'events', 'status')) {
+        $srcSub = Join-Path $sourcePack $sub
+        if (Test-Path $srcSub) {
+            Copy-Item -Path $srcSub -Destination (Join-Path $TargetAudioDir $sub) -Recurse -Force
+        }
+    }
+}
+
 if (Test-Path $targetWidgetRoot) {
     Remove-Item -Path $targetWidgetRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Path $targetWidgetRoot -Force | Out-Null
 Copy-Item -Path (Join-Path $sourceWidgetRoot '*') -Destination $targetWidgetRoot -Recurse -Force
 Get-ChildItem -Path $targetWidgetRoot -Filter '*.luac' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+
+if (Test-Path $targetSoundsRoot) {
+    Remove-Item -Path $targetSoundsRoot -Recurse -Force
+}
+New-Item -ItemType Directory -Path $targetSoundsRoot -Force | Out-Null
+
+Copy-LanguageAudioPack -Language 'en' -SourceAudioDir $sourceAudioRoot -TargetAudioDir (Join-Path $targetSoundsRoot 'en')
+Copy-LanguageAudioPack -Language 'de' -SourceAudioDir $sourceAudioRoot -TargetAudioDir (Join-Path $targetSoundsRoot 'de')
+
+foreach ($wav in @('beep.wav', 'multibeep.wav', 'warn.wav', 'alarm.wav')) {
+    $src = Join-Path $sourceAudioRoot $wav
+    if (Test-Path $src) {
+        Copy-Item -Path $src -Destination $targetSoundsRoot -Force
+    }
+}
 
 New-ThemeIndexFile -TargetCoreDir $targetCore -TargetUserDir $targetUserRoot
 

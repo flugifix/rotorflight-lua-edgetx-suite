@@ -261,7 +261,7 @@ return {
         min = "Minimum",
         max = "Maximum",
         no_configurable_themes = "Keine konfigurierbaren Dashboard-Designs gefunden",
-        no_theme_settings = "Keine Einstellungen fuer dieses Dashboard-Design verfuegbar",
+        no_theme_settings = "Keine Einstellungen fuer dieses Dashboard-Design verfügbar",
         value_theme_config = "OEFFNEN",
         value_connection_guard = "EIN",
         save_error_title = "Fehler",
@@ -273,7 +273,7 @@ return {
     dashboard = {
       time = "ZEIT",
       blackbox = "BLACKBOX",
-      flights = "FLUEGE",
+      flights = "FLÜGE",
       profile = "PROFIL",
       rates = "RATEN",
       link = "LQ",

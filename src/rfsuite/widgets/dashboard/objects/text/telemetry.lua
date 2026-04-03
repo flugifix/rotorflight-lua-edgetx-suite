@@ -7,6 +7,13 @@ function Render.render(nodes, rect, box, state, _, utils)
 
   local valueText = utils.formatDisplayValue(raw, utils.resolveValue(box.decimals, box, state))
   valueText = utils.appendUnit(valueText, utils.resolveValue(box.unit, box, state))
+  local valueFont = utils.resolveValue(box.font, box, state) or MIDSIZE
+
+  local autoSizeChars = utils.resolveValue(box.autosize_chars, box, state)
+
+  if type(autoSizeChars) == "number" and type(valueText) == "string" and string.len(valueText) > autoSizeChars then
+    valueFont = utils.resolveValue(box.autosize_font, box, state) or SMLSIZE
+  end
 
   utils.pushLabel(
     nodes,
@@ -16,7 +23,7 @@ function Render.render(nodes, rect, box, state, _, utils)
     valueText,
     box.textcolor or BLACK,
     box.valuealign or box.titlealign or CENTER,
-    MIDSIZE
+    valueFont
   )
 end
 

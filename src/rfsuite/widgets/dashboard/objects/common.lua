@@ -1,31 +1,49 @@
+if type(_G) == "table" and type(_G.__rfsuiteObjectsCommonModule) == "table" then
+  return _G.__rfsuiteObjectsCommonModule
+end
+
 local Utils = {}
 
 local i18nModule = nil
 local i18nContext = nil
 local i18nLocale = nil
 local sensorsModule = nil
+local localeModule = nil
 
-local function resolveLocale()
-  local locale = "en"
+local function getLocaleModule()
+  if localeModule then
+    return localeModule
+  end
 
-  if system and system.getGeneralSettings then
-    local ok, settings = pcall(system.getGeneralSettings)
-    if ok and type(settings) == "table" then
-      local detected = settings.locale or settings.language or settings.lang
-      if type(detected) == "string" and detected ~= "" then
-        locale = detected
+  if type(_G) == "table" and type(_G.__rfsuiteSystemLocaleModule) == "table" then
+    localeModule = _G.__rfsuiteSystemLocaleModule
+    return localeModule
+  end
+
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", "t")
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then
+      localeModule = mod
+      if type(_G) == "table" then
+        _G.__rfsuiteSystemLocaleModule = mod
       end
     end
   end
 
-  if system and system.getLocale then
-    local detected = system.getLocale()
-    if type(detected) == "string" and detected ~= "" then
-      locale = detected
+  return localeModule
+end
+
+local function resolveLocale()
+  local mod = getLocaleModule()
+  if mod and type(mod.resolveSystemLanguage) == "function" then
+    local ok, locale = pcall(mod.resolveSystemLanguage, "en")
+    if ok and type(locale) == "string" and locale ~= "" then
+      return locale
     end
   end
 
-  return locale
+  return "en"
 end
 
 local function getI18nContext()
@@ -102,6 +120,19 @@ end
 function Utils.mapTelemetrySource(source, state)
   if type(source) ~= "string" then return nil end
 
+  -- Fast-path hot dashboard values from runtime state to avoid file/telemetry
+  -- lookups in every refresh.
+  if source == "pid_profile" then return state and state.profile end
+  if source == "rate_profile" then return state and state.rateProfile end
+  if source == "battery_profile" then return state and state.batteryProfile end
+  if source == "link" then return state and state.lq end
+  if source == "voltage" then return state and state.voltage end
+  if source == "rpm" then return state and state.rpm end
+  if source == "fuel" then return state and state.fuel end
+  if source == "governor" then return state and state.gov end
+  if source == "esc_temp" then return state and state.temp_esc end
+  if source == "mcu_temp" then return state and state.temp_mcu end
+
   -- Load sensors module lazily
   if not sensorsModule then
     local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors.lua", "t")
@@ -117,14 +148,6 @@ function Utils.mapTelemetrySource(source, state)
     local value = sensorsModule.getValue(source)
     if type(value) == "number" then return value end
   end
-
-  -- Fallback: legacy internal state mapping (for backwards compatibility)
-  if source == "pid_profile" then return state and state.profile end
-  if source == "rate_profile" then return state and state.rateProfile end
-  if source == "link" then return state and state.lq end
-  if source == "voltage" then return state and state.voltage end
-  if source == "rpm" then return state and state.rpm end
-  if source == "fuel" then return state and state.fuel end
 
   return nil
 end
@@ -212,4 +235,5 @@ function Utils.drawContainer(nodes, rect, box, state)
   )
 end
 
+if type(_G) == "table" then _G.__rfsuiteObjectsCommonModule = Utils end
 return Utils
