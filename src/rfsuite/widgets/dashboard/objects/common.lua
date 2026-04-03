@@ -3,6 +3,7 @@ local Utils = {}
 local i18nModule = nil
 local i18nContext = nil
 local i18nLocale = nil
+local sensorsModule = nil
 
 local function resolveLocale()
   local locale = "en"
@@ -100,16 +101,31 @@ end
 
 function Utils.mapTelemetrySource(source, state)
   if type(source) ~= "string" then return nil end
-  if type(getValue) == "function" then
-    local ok, value = pcall(getValue, source)
-    if ok and type(value) == "number" then return value end
+
+  -- Load sensors module lazily
+  if not sensorsModule then
+    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors.lua", "t")
+    if chunk then
+      local ok, mod = pcall(chunk)
+      if ok and type(mod) == "table" then
+        sensorsModule = mod
+      end
+    end
   end
+
+  if sensorsModule and type(sensorsModule.getValue) == "function" then
+    local value = sensorsModule.getValue(source)
+    if type(value) == "number" then return value end
+  end
+
+  -- Fallback: legacy internal state mapping (for backwards compatibility)
   if source == "pid_profile" then return state and state.profile end
   if source == "rate_profile" then return state and state.rateProfile end
   if source == "link" then return state and state.lq end
   if source == "voltage" then return state and state.voltage end
   if source == "rpm" then return state and state.rpm end
   if source == "fuel" then return state and state.fuel end
+
   return nil
 end
 

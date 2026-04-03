@@ -2,6 +2,7 @@ local Engine = {}
 
 local Common = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/default/common.lua", "t"))()
 local Utils = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/common.lua", "t"))()
+local Sensors = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors.lua", "t"))()
 
 local OBJECTS_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/"
 local objectWrappers = {}
@@ -105,10 +106,10 @@ function Engine.renderKey(state, boxSources)
     tostring(math.floor(total + 0.5)),
     tostring(math.floor(voltage * 10 + 0.5))
   }
-  if boxSources and type(getValue) == "function" then
+  if boxSources then
     for i = 1, #boxSources do
-      local ok, v = pcall(getValue, boxSources[i])
-      parts[#parts + 1] = (ok and type(v) == "number") and tostring(math.floor(v * 10 + 0.5)) or "x"
+      local v = Sensors.getValue(boxSources[i])
+      parts[#parts + 1] = (type(v) == "number") and tostring(math.floor(v * 10 + 0.5)) or "x"
     end
   end
   return table.concat(parts, "|")

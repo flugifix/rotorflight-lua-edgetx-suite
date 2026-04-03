@@ -1,0 +1,242 @@
+--[[
+  Central sensor definition for RFSuite dashboard
+  Based on RF2 telemetry sensor schema (4-character names)
+  Provides unified mapping for simulator and hardware
+]]--
+
+local Sensors = {}
+local SIM_SENSOR_PATHS = {
+  "/SCRIPTS/TOOLS/rfsuite-core/sim/sensors/",
+  "/SCRIPTS/TOOLS/rfsuite.user/sim/sensors/",
+}
+local SIM_FILE_ALIASES = {
+  ["PID#"] = "pid_profile",
+  ["RTE#"] = "rate_profile",
+  ["BatP"] = "battery_profile",
+  ["Bat%"] = "fuel",
+  ["Vbat"] = "voltage",
+  ["Hspd"] = "rpm",
+  ["TescT"] = "temp_esc",
+  ["TmcuT"] = "temp_mcu",
+  ["Thr%"] = "throttle_percent",
+  ["Cel#"] = "cell_count",
+  ["Alt"] = "altitude",
+}
+
+local debugEnabled = true
+local loggedSimulatorState = false
+local loggedSources = {}
+
+local function debugLog(key, msg)
+  if not debugEnabled then return end
+  if key and loggedSources[key] then return end
+  if key then loggedSources[key] = true end
+  if print then print("[rfsuite.sensors] " .. tostring(msg)) end
+end
+
+local function readTelemetryValue(name)
+  if type(name) ~= "string" or type(getValue) ~= "function" then return nil end
+  local ok, value = pcall(getValue, name)
+  if ok and type(value) == "number" then
+    return value
+  end
+  return nil
+end
+
+local function readSimSensorFile(name)
+  if type(name) ~= "string" or name == "" then return nil end
+  local candidates = {}
+  local function addCandidate(value)
+    if type(value) ~= "string" or value == "" then return end
+    for i = 1, #candidates do
+      if candidates[i] == value then return end
+    end
+    candidates[#candidates + 1] = value
+  end
+
+  addCandidate(name)
+  addCandidate(string.lower(name))
+  addCandidate(SIM_FILE_ALIASES[name])
+
+  for p = 1, #SIM_SENSOR_PATHS do
+    local base = SIM_SENSOR_PATHS[p]
+    for i = 1, #candidates do
+      local filePath = base .. candidates[i] .. ".lua"
+      local chunk = nil
+
+      if type(loadfile) == "function" then
+        local okFile, loaded = pcall(loadfile, filePath)
+        if okFile then chunk = loaded end
+      end
+
+      if chunk then
+        local ok, value = pcall(chunk)
+        if ok and type(value) == "number" then
+          debugLog("sim-hit:" .. name, "sim file hit " .. filePath .. " = " .. tostring(value))
+          return value
+        end
+      end
+    end
+  end
+
+  debugLog("sim-miss:" .. name, "sim file miss for source " .. tostring(name))
+  return nil
+end
+
+local function normalizeSimValue(name, value)
+  if type(value) ~= "number" then return value end
+  local meta = Sensors.map and Sensors.map[name] or nil
+  local prec = meta and tonumber(meta.prec) or 0
+  if prec and prec > 0 then
+    local div = 10 ^ prec
+    if div > 0 then
+      return value / div
+    end
+  end
+  return value
+end
+
+-- Sensor definitions: 4-char name → metadata
+Sensors.map = {
+  -- Flight Control
+  ARM  = { label = "Arm Flags", unit = "raw", prec = 0, fallback = 0 },
+  Gov  = { label = "Governor", unit = "raw", prec = 0, fallback = 0 },
+
+  -- Power System
+  Vbat = { label = "Main Voltage", unit = "V", prec = 2, fallback = 24.2 },
+  Curr = { label = "Current", unit = "A", prec = 2, fallback = 0 },
+  Capa = { label = "Consumption", unit = "mAh", prec = 0, fallback = 0 },
+  ["Bat%"] = { label = "Fuel", unit = "%", prec = 0, fallback = 100 },
+  Vbec = { label = "BEC Voltage", unit = "V", prec = 2, fallback = 8.0 },
+
+  -- Flight Profiles
+  ["PID#"] = { label = "PID Profile", unit = "raw", prec = 0, fallback = 1 },
+  ["RTE#"] = { label = "Rate Profile", unit = "raw", prec = 0, fallback = 1 },
+  BatP = { label = "Battery Profile", unit = "raw", prec = 0, fallback = 1 },
+
+  -- Speeds / RPM
+  Hspd = { label = "Headspeed", unit = "rpm", prec = 0, fallback = 0 },
+  Tspd = { label = "Tailspeed", unit = "rpm", prec = 0, fallback = 0 },
+
+  -- Attitude
+  Ptch = { label = "Pitch", unit = "°", prec = 1, fallback = 0 },
+  Roll = { label = "Roll", unit = "°", prec = 1, fallback = 0 },
+  Yaw  = { label = "Yaw", unit = "°", prec = 1, fallback = 0 },
+
+  -- Temperature
+  TescT = { label = "ESC Temp", unit = "°C", prec = 0, fallback = 25 },
+  TmcuT = { label = "MCU Temp", unit = "°C", prec = 0, fallback = 25 },
+
+  -- Other
+  ["Thr%"] = { label = "Throttle %", unit = "%", prec = 0, fallback = 0 },
+  Alt  = { label = "Altitude", unit = "m", prec = 1, fallback = 0 },
+  ["Cel#"] = { label = "Cell Count", unit = "raw", prec = 0, fallback = 6 },
+}
+
+-- Aliases: dashboard/internal names → 4-char sensor names
+Sensors.aliases = {
+  voltage = "Vbat",
+  rpm = "Hspd",
+  fuel = "Bat%",
+  current = "Curr",
+  pid_profile = "PID#",
+  rate_profile = "RTE#",
+  battery_profile = "BatP",
+  throttle = "Thr%",
+  altitude = "Alt",
+  pitch = "Ptch",
+  roll = "Roll",
+  yaw = "Yaw",
+  armflags = "ARM",
+  governor = "Gov",
+}
+
+-- Detect if running in simulator
+function Sensors.isSimulator()
+  if getVersion then
+    local ok, _, fw = pcall(getVersion)
+    if ok and type(fw) == "string" then
+      return string.sub(fw, -4) == "simu"
+    end
+  end
+  return false
+end
+
+-- Resolve alias to 4-char sensor name
+function Sensors.resolveName(source)
+  if type(source) ~= "string" then return nil end
+  if Sensors.aliases[source] then
+    return Sensors.aliases[source]
+  end
+  if Sensors.map[source] then
+    return source
+  end
+  return nil
+end
+
+-- Get sensor metadata by 4-char name or alias
+function Sensors.getMetadata(source)
+  local name = Sensors.resolveName(source)
+  if name then
+    return Sensors.map[name]
+  end
+  return nil
+end
+
+function Sensors.getValue(source)
+  if type(source) ~= "string" then return nil end
+
+  if not loggedSimulatorState then
+    loggedSimulatorState = true
+    debugLog(nil, "simulator detected = " .. tostring(Sensors.isSimulator()))
+  end
+
+  local resolved = Sensors.resolveName(source)
+
+  -- In simulator mode we prefer file-based values so widget updates follow the sensor tool.
+  if Sensors.isSimulator() then
+    if resolved then
+      local simValue = readSimSensorFile(resolved)
+      if type(simValue) == "number" then
+        local normalized = normalizeSimValue(resolved, simValue)
+        debugLog("sim-use:" .. source, "using sim value " .. resolved .. " = " .. tostring(normalized))
+        return normalized
+      end
+    end
+
+    local simDirect = readSimSensorFile(source)
+    if type(simDirect) == "number" then
+      local normalized = normalizeSimValue(source, simDirect)
+      debugLog("sim-direct-use:" .. source, "using sim direct value " .. source .. " = " .. tostring(normalized))
+      return normalized
+    end
+  end
+
+  if resolved then
+    local value = readTelemetryValue(resolved)
+    if type(value) == "number" then
+      debugLog("telemetry-hit:" .. source, "telemetry hit " .. resolved .. " = " .. tostring(value))
+      return value
+    end
+  end
+
+  local direct = readTelemetryValue(source)
+  if type(direct) == "number" then
+    debugLog("telemetry-direct-hit:" .. source, "telemetry direct hit " .. source .. " = " .. tostring(direct))
+    return direct
+  end
+
+  return nil
+end
+
+-- Get all 4-char sensor names (for tool enumeration)
+function Sensors.getAllNames()
+  local names = {}
+  for name, _ in pairs(Sensors.map) do
+    names[#names + 1] = name
+  end
+  table.sort(names)
+  return names
+end
+
+return Sensors

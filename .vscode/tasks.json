@@ -118,6 +118,54 @@
       "runOptions": {
         "instanceLimit": 1
       }
+    },
+    {
+      "label": "Sensors: Build Tool",
+      "type": "shell",
+      "command": "cmd.exe",
+      "args": [
+        "/c",
+        "${workspaceFolder}\\bin\\sensors\\src\\make.cmd"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "Sensors: Run Tool",
+      "type": "process",
+      "command": "${workspaceFolder}\\bin\\sensors\\sensors.exe",
+      "options": {
+        "cwd": "${workspaceFolder}\\bin\\sensors",
+        "env": {
+          "RFSUITE_SIMULATOR_PATH": "${env:RFSUITE_SIMULATOR_PATH}",
+          "EDGETX_SIMULATOR_PATH": "${env:EDGETX_SIMULATOR_PATH}"
+        }
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "Sensors: Build + Run Tool",
+      "dependsOn": [
+        "Sensors: Build Tool",
+        "Sensors: Run Tool"
+      ],
+      "dependsOrder": "sequence",
+      "group": "build",
+      "runOptions": {
+        "instanceLimit": 1
+      }
     }
   ]
 }
