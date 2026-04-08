@@ -24,6 +24,30 @@
       }
     },
     {
+      "label": "RFSuite: Deploy to Radio",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\.vscode\\scripts\\deploy-rfsuite-demo.ps1",
+        "-Target",
+        "radio"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
       "label": "RFSuite: Start EdgeTX Simulator (TX16S MK3)",
       "type": "process",
       "command": "${config:rfsuite.simulatorPath}",

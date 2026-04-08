@@ -67,8 +67,12 @@ return {
       settings_general = {
         section_display = "Anzeige",
         section_safety = "Sicherheit & Prompts",
+        section_localization = "Lokalisierung",
         section_integration = "Integration",
         section_development = "Entwicklung",
+        language = "Sprache",
+        language_en = "Englisch",
+        language_de = "Deutsch",
         sync_model_name = "Modellname synchronisieren",
         save_confirm = "Bestätigen beim Speichern",
         save_dirty_only = "Speichern nur bei Änderungen",
@@ -233,6 +237,18 @@ return {
         timer_bell_sound = "Glockensound bei Timer",
         saved_title = "Gespeichert",
         saved_message = "Audio-Timer gespeichert",
+        save_error_title = "Fehler",
+        save_error_message = "Speichern fehlgeschlagen"
+      },
+      settings_developer_settings = {
+        section_logging = "Protokollierung",
+        debug_level = "Debug-Level",
+        debug_level_off = "AUS",
+        debug_level_info = "INFO",
+        debug_level_debug = "DEBUG",
+        enable_serial_debug = "Serielles Debug aktivieren",
+        saved_title = "Gespeichert",
+        saved_message = "Entwickler-Einstellungen gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen"
       },

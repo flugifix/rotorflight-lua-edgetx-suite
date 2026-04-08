@@ -96,40 +96,19 @@ function Header.resolveActions(ctx)
 end
 
 local function appendButton(layout, cfg, x, w, text, enabled, pressHandler)
-  if enabled then
-    -- Enabled buttons keep native button rendering to preserve icon glyph support.
-    layout[#layout + 1] = {
-      type  = "button",
-      x = x, y = cfg.topButtonY, w = w, h = cfg.topButtonH,
-      text  = text,
-      press = pressHandler
-    }
-  else
-    -- Disabled buttons are plain placeholders; no button widget so they cannot
-    -- receive touch focus styling.
-    layout[#layout + 1] = {
-      type = "rectangle",
-      x = x + 1, y = cfg.topButtonY + 1,
-      w = w - 2,  h = cfg.topButtonH - 2,
-      color = GREY_DEFAULT, filled = true
-    }
-    layout[#layout + 1] = {
-      type = "label",
-      x = x, y = cfg.topButtonY + math.floor((cfg.topButtonH - 18) / 2),
-      w = w, text = text,
-      color = COLOR_THEME_PRIMARY2,
-      align = CENTER, font = SMLSIZE
-    }
-  end
-
-  -- Thin border drawn on top of the button.
-  local borderColor = enabled and COLOR_THEME_PRIMARY1 or GREY_DEFAULT
-  for i = 0, cfg.topButtonBorder - 1 do
-    layout[#layout + 1] = { type = "rectangle", x = x + i,         y = cfg.topButtonY + i,                        w = w - (i * 2), h = 1,                        color = borderColor, filled = true }
-    layout[#layout + 1] = { type = "rectangle", x = x + i,         y = cfg.topButtonY + cfg.topButtonH - 1 - i, w = w - (i * 2), h = 1,                        color = borderColor, filled = true }
-    layout[#layout + 1] = { type = "rectangle", x = x + i,         y = cfg.topButtonY + i,                        w = 1, h = cfg.topButtonH - (i * 2),           color = borderColor, filled = true }
-    layout[#layout + 1] = { type = "rectangle", x = x + w - 1 - i, y = cfg.topButtonY + i,                        w = 1, h = cfg.topButtonH - (i * 2),           color = borderColor, filled = true }
-  end
+  -- Use `active` to signal enabled/disabled state to LVGL.
+  -- When active=false, EdgeTX removes the button from the encoder focus group,
+  -- so it cannot receive wheel focus and does not interfere with page scroll.
+  -- Do NOT add border rectangles as additional siblings: overlapping rectangles
+  -- on top of a button widget confuse LVGL's hit-testing during scroll, which
+  -- was the root cause of the "erratic scroll" bug near header buttons.
+  layout[#layout + 1] = {
+    type  = "button",
+    x = x, y = cfg.topButtonY, w = w, h = cfg.topButtonH,
+    text  = text,
+    active = function() return enabled == true end,
+    press  = enabled and pressHandler or nil
+  }
 end
 
 -- Append memory label and all action buttons to `lyt`.

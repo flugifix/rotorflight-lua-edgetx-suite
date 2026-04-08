@@ -135,13 +135,8 @@ local function performSave()
 end
 
 local function resolveLocaleFromSystem()
-  if type(_G) == "table" and type(_G.__rfsuiteSystemLocaleModule) == "table" then
-    local okResolve, locale = pcall(_G.__rfsuiteSystemLocaleModule.resolveSystemLanguage, "de")
-    if okResolve and type(locale) == "string" and locale ~= "" then
-      return locale
-    end
-  end
-
+  -- Always reload module on init so locale behavior changes are picked up
+  -- immediately and not held back by stale cached globals.
   local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", "t")
   if chunk then
     local ok, localeMod = pcall(chunk)
@@ -149,14 +144,14 @@ local function resolveLocaleFromSystem()
       if type(_G) == "table" then
         _G.__rfsuiteSystemLocaleModule = localeMod
       end
-      local okResolve, locale = pcall(localeMod.resolveSystemLanguage, "de")
+      local okResolve, locale = pcall(localeMod.resolveSystemLanguage, "en")
       if okResolve and type(locale) == "string" and locale ~= "" then
         return locale
       end
     end
   end
 
-  return "de"
+  return "en"
 end
 
 local function buildPageContext()
@@ -270,6 +265,18 @@ local function closeHelpDialogIfOpen()
   state.helpPageSubtitle = nil
 end
 
+local function applyLocaleFromPreferences()
+  local lang = nil
+  local general = state.preferences and state.preferences.general
+  if type(general) == "table" then
+    lang = general.language
+  end
+
+  if state.i18n and type(state.i18n.setLocale) == "function" then
+    pcall(state.i18n.setLocale, lang or "en")
+  end
+end
+
 local function onReload()
   local page = getActivePageModule()
 
@@ -320,6 +327,10 @@ local function onSave()
       savePreferences = performSave,
       refresh = M.buildUI
     })
+
+    -- Apply possibly updated language setting immediately after save.
+    applyLocaleFromPreferences()
+
     if shouldRebuild ~= false then
       scheduleBuildUI(false)
     end
@@ -390,6 +401,15 @@ function M.buildUI()
   end
 
   local pageTitle = state.menu.isRoot() and "Rotorflight" or state.menu.getHeaderTitle()
+  local currentMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or "root"
+  local actions = Header.resolveActions({
+    headerActions = state.headerActions,
+    menu          = state.menu,
+    i18n          = state.i18n,
+    preferences   = state.preferences,
+    PageRegistry  = PageRegistry,
+    HelpRegistry  = HelpRegistry
+  })
 
   -- Clear and reuse the children table to reduce garbage collection
   local children = state.children
@@ -415,6 +435,9 @@ function M.buildUI()
       header = Header,
       headerLayout = profile.header
     })
+    if lvgl and type(lvgl.clear) == "function" then
+      lvgl.clear()
+    end
     lvgl.build(helpLyt)
     return
   end
@@ -493,7 +516,7 @@ function M.buildUI()
     end
 
   else
-    local currentMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+    currentMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
     local pageModule = PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[currentMenuId] or nil
     if pageModule and pageModule.build then
       wipeTable(state.cards)
@@ -560,14 +583,6 @@ function M.buildUI()
     }
   }
 
-  local actions = Header.resolveActions({
-    headerActions = state.headerActions,
-    menu          = state.menu,
-    i18n          = state.i18n,
-    preferences   = state.preferences,
-    PageRegistry  = PageRegistry,
-    HelpRegistry  = HelpRegistry
-  })
   Header.appendToLayout(lyt, {
     actions  = actions,
     i18n     = state.i18n,
@@ -579,6 +594,9 @@ function M.buildUI()
     onBack   = onBack
   })
 
+  if lvgl and type(lvgl.clear) == "function" then
+    lvgl.clear()
+  end
   lvgl.build(lyt)
 end
 
@@ -590,11 +608,11 @@ function M.init()
   end
 
   state.shouldExit = false
-  local locale = resolveLocaleFromSystem()
-  state.i18n       = I18n.new(locale)
   local prefs = loadPreferencesSafe()
   state.preferences = prefs
   _G.rfsuite.preferences = prefs
+  local locale = resolveLocaleFromSystem()
+  state.i18n       = I18n.new(locale)
   _G.rfsuite.savePreferences = performSave
   state.menu       = MenuRegistry.new(manifest, state.i18n, {
     conditions = {

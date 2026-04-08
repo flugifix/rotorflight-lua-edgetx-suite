@@ -25,10 +25,12 @@ This workspace contains a first implementation step for an EdgeTX LVGL-based RFS
 ## VS Code Run Configuration
 
 - Run/Debug config: `RFSuite: Deploy to Simulator`
+- Run/Debug config: `RFSuite: Deploy to Radio`
 - Run/Debug config: `RFSuite: Deploy + Run Simulator (TX16S MK3)`
 - Run/Debug config: `RFSuite: Deploy + Run Simulator (TX16S)`
 - Run/Debug config: `RFSuite: Deploy + Run Simulator (TX15)`
 - Task: `RFSuite: Deploy to Simulator`
+- Task: `RFSuite: Deploy to Radio`
 - Task: `RFSuite: Start EdgeTX Simulator (TX16S MK3)`
 - Task: `RFSuite: Deploy + Start Simulator (TX16S MK3)`
 - Task: `RFSuite: Start EdgeTX Simulator (TX16S)`
@@ -39,6 +41,8 @@ This workspace contains a first implementation step for an EdgeTX LVGL-based RFS
   - `simulator/SCRIPTS/TOOLS/rfsuite.lua`
   - `simulator/SCRIPTS/TOOLS/rfsuite-core/`
   - `simulator/WIDGETS/rfsuite/`
+
+The radio deploy configuration uses the same copy logic, but writes into the mounted radio SD-card root configured via `rfsuite.radioSdPath`.
 
 The run configuration executes a pre-launch deploy task that copies the tool entrypoint,
 core package, and widget folder into the simulator SD card layout. This keeps the simulator
@@ -68,6 +72,26 @@ Hint: press `Ctrl+Shift+P`, run `Preferences: Open User Settings (JSON)`, then a
 ```
 
 After that, all run configurations continue to work without editing task definitions.
+
+### Radio SD Path Setup (Per Developer)
+
+`RFSuite: Deploy to Radio` now auto-detects the mounted radio storage when possible (same idea as Ethos-style drive detection).
+
+If auto-detection does not find the correct target on your system, set the mounted SD-card root once in your **User Settings**:
+
+```json
+{
+  "rfsuite.radioSdPath": "E:\\"
+}
+```
+
+This path must point to the root of the mounted radio storage, not to `SCRIPTS` itself. The `RFSuite: Deploy to Radio` run configuration then updates:
+
+- `SCRIPTS/TOOLS/rfsuite.lua`
+- `SCRIPTS/TOOLS/rfsuite-core/`
+- `SCRIPTS/TOOLS/rfsuite.user/preferences.ini` if it does not exist yet
+- `WIDGETS/rfsuite/`
+- `SOUNDS/rfsuite/`
 
 ## Notes
 

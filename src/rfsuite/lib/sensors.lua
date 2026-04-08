@@ -5,6 +5,16 @@
 ]]--
 
 local Sensors = {}
+local Log = nil
+do
+  local okLoad, chunk = pcall(loadScript, "/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
+  if okLoad and type(chunk) == "function" then
+    local okMod, mod = pcall(chunk)
+    if okMod and type(mod) == "table" and type(mod.emit) == "function" then
+      Log = mod
+    end
+  end
+end
 local SIM_SENSOR_PATHS = {
   "/SCRIPTS/TOOLS/rfsuite-core/sim/sensors/",
   "/SCRIPTS/TOOLS/rfsuite.user/sim/sensors/",
@@ -46,7 +56,9 @@ local function debugLog(key, msg)
   if not debugEnabled then return end
   if key and loggedSources[key] then return end
   if key then loggedSources[key] = true end
-  if print then print("[rfsuite.sensors] " .. tostring(msg)) end
+  if Log then
+    Log.emit("rfsuite.sensors", tostring(msg), "debug", true)
+  end
 end
 
 local function readTelemetryValue(name)

@@ -47,6 +47,10 @@ function Tiles.append(children, x, y, size, iconFile, text, focused, pressHandle
     type  = "button",
     x = x, y = y, w = size, h = size,
     text  = "",
+    -- Disabled tiles must be excluded from wheel focus traversal.
+    active = function()
+      return isEnabled
+    end,
     press = isEnabled and pressHandler or nil
   }
 

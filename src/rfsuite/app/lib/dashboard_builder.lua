@@ -8,12 +8,13 @@ local function loadModule(path)
 end
 
 local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
+local Log = loadModule("lib/log.lua")
 local FALLBACK_ICON = "@pages/settings/dashboard/settings/icon.png"
 local DEBUG_PREFIX = "[dashboard.builder] "
 
 local function debugLog(message)
-  if type(print) == "function" then
-    print(DEBUG_PREFIX .. tostring(message))
+  if Log and type(Log.emit) == "function" then
+    Log.emit("dashboard.builder", DEBUG_PREFIX .. tostring(message), "debug", true)
   end
 end
 

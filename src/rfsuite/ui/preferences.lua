@@ -14,6 +14,7 @@ local function defaultPreferences()
   return {
     general = {
       -- display
+      language                     = "en",
       iconsize                     = 2,
       txbatt_type                  = 0,
       theme_loader                 = 1,
@@ -30,6 +31,8 @@ local function defaultPreferences()
       syncname                     = false,
       -- development
       developer_tools              = false,
+      enable_serial_debug          = false,
+      debug_level                  = "off",
     },
     localizations = {
       temperature_unit = 0,

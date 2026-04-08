@@ -7,14 +7,15 @@ end
 local Common = loadModule("app/pages/settings/common.lua")
 local Controls = loadModule("ui/controls.lua")
 local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
+local Log = loadModule("lib/log.lua")
 
 local M = {}
 
 local DEBUG_PREFIX = "[dashboard.theme.page] "
 
 local function debugLog(message)
-  if type(print) == "function" then
-    print(DEBUG_PREFIX .. tostring(message))
+  if Log and type(Log.emit) == "function" then
+    Log.emit("dashboard.theme.page", DEBUG_PREFIX .. tostring(message), "debug", true)
   end
 end
 

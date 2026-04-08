@@ -67,8 +67,12 @@ return {
       settings_general = {
         section_display = "Display",
         section_safety = "Safety & Prompts",
+        section_localization = "Localization",
         section_integration = "Integration",
         section_development = "Development",
+        language = "Language",
+        language_en = "English",
+        language_de = "German",
         sync_model_name = "Synchronize Model Name",
         save_confirm = "Confirm on Save",
         save_dirty_only = "Save Requires Changes",
@@ -233,6 +237,18 @@ return {
         timer_bell_sound = "Timer Bell Sound",
         saved_title = "Saved",
         saved_message = "Audio timer saved",
+        save_error_title = "Error",
+        save_error_message = "Save failed"
+      },
+      settings_developer_settings = {
+        section_logging = "Logging",
+        debug_level = "Debug Level",
+        debug_level_off = "OFF",
+        debug_level_info = "INFO",
+        debug_level_debug = "DEBUG",
+        enable_serial_debug = "Enable Serial Debug",
+        saved_title = "Saved",
+        saved_message = "Developer settings saved",
         save_error_title = "Error",
         save_error_message = "Save failed"
       },

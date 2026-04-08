@@ -3,9 +3,20 @@ local M = {}
 local DEBUG_PREFIX = "[dashboard.lib] "
 local INDEX_PATH = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/settings/dashboard/theme_index.lua"
 
+local Log = nil
+do
+  local okLoad, chunk = pcall(loadScript, "/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
+  if okLoad and type(chunk) == "function" then
+    local okMod, mod = pcall(chunk)
+    if okMod and type(mod) == "table" and type(mod.emit) == "function" then
+      Log = mod
+    end
+  end
+end
+
 local function debugLog(message)
-  if type(print) == "function" then
-    print(DEBUG_PREFIX .. tostring(message))
+  if Log then
+    Log.emit("dashboard.lib", DEBUG_PREFIX .. tostring(message), "debug", true)
   end
 end
 

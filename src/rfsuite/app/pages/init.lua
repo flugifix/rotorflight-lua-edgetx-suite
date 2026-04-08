@@ -7,6 +7,7 @@ end
 
 local entries = {
   settings_general_page = definePage("settings/general"),
+  developer_settings_page = definePage("developer/developer_settings"),
   --settings_shortcuts_page = definePage("settings/shortcuts"),
   settings_dashboard_theme_page = definePage("settings/dashboard/theme"),
   settings_dashboard_settings_page = definePage("settings/dashboard/settings"),

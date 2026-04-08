@@ -113,10 +113,6 @@ end
 function utils.log(self, msg, level)
   if Log and type(Log.emit) == "function" then
     Log.emit("rfsuite.audio", msg, level, shouldLogAudio(self))
-    return
-  end
-  if shouldLogAudio(self) and type(print) == "function" then
-    print("[rfsuite.audio][" .. tostring(level or "debug") .. "] " .. tostring(msg))
   end
 end
 
@@ -486,6 +482,12 @@ local function computeFlightMode(state)
   return "preflight"
 end
 
+local function publishPreferencesToGlobal(prefs)
+  if type(_G) ~= "table" then return end
+  _G.rfsuite = _G.rfsuite or {}
+  _G.rfsuite.preferences = prefs or {}
+end
+
 local function reloadPreferencesIfNeeded(self, force)
   local now = nowSeconds()
   if not force and (now - (self.preferencesLastLoadedAt or 0)) < 0.5 then
@@ -494,7 +496,13 @@ local function reloadPreferencesIfNeeded(self, force)
 
   local prefs = loadPreferences()
   if type(prefs) == "table" then
+    local prevLang = self.preferences and self.preferences.general and self.preferences.general.language
+    local newLang = prefs.general and prefs.general.language
+    if prevLang ~= newLang then
+      self.built = false
+    end
     self.preferences = prefs
+    publishPreferencesToGlobal(prefs)
   end
 
   self.preferencesLastLoadedAt = now
@@ -504,6 +512,7 @@ function Runtime.new(zone, options)
   local dashboardLib = loadDashboardLib()
   local dashboardEngine = loadDashboardEngine()
   local prefs = loadPreferences() or {}
+  publishPreferencesToGlobal(prefs)
   local dashboard = (prefs and prefs.dashboard) or {}
 
   local widget = {

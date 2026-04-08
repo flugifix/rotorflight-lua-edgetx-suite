@@ -1,3 +1,10 @@
+param(
+    [ValidateSet('simulator', 'radio')]
+    [string]$Target = 'simulator',
+
+    [string]$TargetRoot
+)
+
 $ErrorActionPreference = 'Stop'
 
 $workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -8,9 +15,86 @@ $sourceToolEntrypoint = Join-Path $sourceRoot 'main.lua'
 $sourceWidgetRoot = Join-Path $sourceRoot 'widgets\rfsuite'
 $sourceUserRoot = Join-Path $sourceRoot 'rfsuite.user'
 
-$toolsRoot = Join-Path $workspaceRoot 'simulator\SCRIPTS\TOOLS'
-$widgetsRoot = Join-Path $workspaceRoot 'simulator\WIDGETS'
-$soundsRoot = Join-Path $workspaceRoot 'simulator\SOUNDS'
+function Test-LikelyRadioRoot {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    if (-not (Test-Path $Root)) { return $false }
+
+    $hasScripts = Test-Path (Join-Path $Root 'SCRIPTS')
+    $hasSounds = Test-Path (Join-Path $Root 'SOUNDS')
+    $hasWidgets = Test-Path (Join-Path $Root 'WIDGETS')
+
+    # Ethos/EdgeTX removable media often expose one of these marker files.
+    $hasMarker = (Test-Path (Join-Path $Root 'radio.cpuid')) -or (Test-Path (Join-Path $Root 'sdcard.cpuid')) -or (Test-Path (Join-Path $Root 'flash.cpuid')) -or (Test-Path (Join-Path $Root 'RADIO\radio.yml'))
+
+    if (($hasScripts -and $hasSounds -and $hasWidgets) -or ($hasScripts -and $hasMarker)) {
+        return $true
+    }
+
+    return $false
+}
+
+function Resolve-RadioTargetRoot {
+    # Prefer mounted removable roots with Ethos/EdgeTX markers.
+    $candidates = @()
+
+    try {
+        $drives = Get-PSDrive -PSProvider FileSystem -ErrorAction Stop
+        foreach ($drive in $drives) {
+            if (-not $drive.Root) { continue }
+            $root = $drive.Root
+            if (Test-LikelyRadioRoot -Root $root) {
+                $score = 0
+                if (Test-Path (Join-Path $root 'radio.cpuid')) { $score += 8 }
+                if (Test-Path (Join-Path $root 'sdcard.cpuid')) { $score += 8 }
+                if (Test-Path (Join-Path $root 'flash.cpuid')) { $score += 8 }
+                if (Test-Path (Join-Path $root 'RADIO\radio.yml')) { $score += 4 }
+                if (Test-Path (Join-Path $root 'SCRIPTS\TOOLS')) { $score += 2 }
+                if (Test-Path (Join-Path $root 'WIDGETS')) { $score += 1 }
+                if (Test-Path (Join-Path $root 'SOUNDS')) { $score += 1 }
+                $candidates += [pscustomobject]@{ Root = $root; Score = $score }
+            }
+        }
+    } catch {
+        # Fall back to no auto-detected path.
+    }
+
+    if ($candidates.Count -eq 0) {
+        return $null
+    }
+
+    $best = $candidates | Sort-Object -Property Score -Descending | Select-Object -First 1
+    return $best.Root
+}
+
+if ([string]::IsNullOrWhiteSpace($TargetRoot)) {
+    if ($Target -eq 'simulator') {
+        $TargetRoot = Join-Path $workspaceRoot 'simulator'
+    } else {
+        $TargetRoot = Resolve-RadioTargetRoot
+        if ([string]::IsNullOrWhiteSpace($TargetRoot)) {
+            throw "Radio target not auto-detected. Mount the radio USB storage and retry, or set rfsuite.radioSdPath / pass -TargetRoot explicitly."
+        }
+    }
+}
+
+# If VS Code setting substitution did not resolve, treat it as unset.
+if (($Target -eq 'radio') -and ($TargetRoot -like '${config:*')) {
+    $TargetRoot = Resolve-RadioTargetRoot
+    if ([string]::IsNullOrWhiteSpace($TargetRoot)) {
+        throw "Radio target not auto-detected. Mount the radio USB storage and retry, or set rfsuite.radioSdPath / pass -TargetRoot explicitly."
+    }
+}
+
+$TargetRoot = [System.IO.Path]::GetFullPath($TargetRoot)
+
+if (-not (Test-Path $TargetRoot)) {
+    throw "Target root not found: $TargetRoot"
+}
+
+$toolsRoot = Join-Path $TargetRoot 'SCRIPTS\TOOLS'
+$widgetsRoot = Join-Path $TargetRoot 'WIDGETS'
+$soundsRoot = Join-Path $TargetRoot 'SOUNDS'
 
 $targetCore = Join-Path $toolsRoot 'rfsuite-core'
 $targetToolEntrypoint = Join-Path $toolsRoot 'rfsuite.lua'
@@ -64,7 +148,9 @@ if (Test-Path $targetCore) {
     Remove-Item -Path $targetCore -Recurse -Force
 }
 New-Item -ItemType Directory -Path $targetCore -Force | Out-Null
-Copy-Item -Path (Join-Path $sourceCore '*') -Destination $targetCore -Recurse -Force
+Get-ChildItem -Path $sourceCore -Force | Where-Object { $_.Name -ne 'audio' } | ForEach-Object {
+    Copy-Item -Path $_.FullName -Destination $targetCore -Recurse -Force
+}
 Get-ChildItem -Path $targetCore -Filter '*.luac' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
 Copy-Item -Path $sourceToolEntrypoint -Destination $targetToolEntrypoint -Force
@@ -200,6 +286,8 @@ foreach ($wav in @('beep.wav', 'multibeep.wav', 'warn.wav', 'alarm.wav')) {
 New-ThemeIndexFile -TargetCoreDir $targetCore -TargetUserDir $targetUserRoot
 
 Write-Host "RFSuite demo deployed to:"
+Write-Host "  Target mode:     $Target"
+Write-Host "  Target root:     $TargetRoot"
 Write-Host "  Tool entrypoint: $targetToolEntrypoint"
 Write-Host "  Core package:    $targetCore"
 Write-Host "  User data:       $targetUserRoot"

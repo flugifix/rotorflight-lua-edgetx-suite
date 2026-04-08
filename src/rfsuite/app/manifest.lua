@@ -110,8 +110,12 @@ local manifest = {
         { id = "msp_speed", title = "@i18n(app.modules.msp_speed.name)@", icon = "@pages/developer/msp_speed/icon.png", row = 1, col = 1, enabled = true },
         { id = "api_tester", title = "@i18n(app.modules.api_tester.name)@", icon = "@pages/developer/api_tester/icon.png", row = 1, col = 2, enabled = true },
         { id = "msp_experiments", title = "@i18n(app.modules.msp_experiments.name)@", icon = "@pages/developer/msp_experiments/icon.png", row = 1, col = 3, enabled = true },
-        { id = "developer_settings", title = "@i18n(app.modules.developer_settings.name)@", icon = "@pages/developer/developer_settings/icon.png", row = 1, col = 4, enabled = true }
+        { id = "developer_settings", title = "@i18n(app.modules.developer_settings.name)@", menuId = "developer_settings_page", icon = "@pages/developer/developer_settings/icon.png", row = 1, col = 4, enabled = true }
       }
+    },
+    developer_settings_page = {
+      title = "@i18n(app.modules.developer_settings.name)@",
+      pages = {}
     },
     settings_audio_events_page = {
       title = "@i18n(app.modules.audio_events.name)@",
