@@ -16,7 +16,6 @@ local Common = loadModule("app/pages/settings/common.lua")
 --   type "number" → stored/restored via tonumber(), default must be a number
 
 local CONFIG_SCHEMA = {
-  { key = "language",                     type = "string", default = "en"  },
   { key = "iconsize",                     type = "number", default = 2     },
   { key = "developer_tools",              type = "bool",   default = false  },
   { key = "syncname",                     type = "bool",   default = false  },
@@ -44,7 +43,6 @@ local ui = {
   dirty  = false,
   sections = {
     safety      = true,
-    localization = true,
     integration = false,
     development = false,
   },
@@ -79,10 +77,6 @@ local function copyFromPrefs(prefs)
       ui.config[field.key] = prefBool(raw, field.default)
     end
   end
-
-  if ui.config.language ~= "en" and ui.config.language ~= "de" then
-    ui.config.language = "en"
-  end
 end
 
 local function ensureLoaded(prefs)
@@ -114,13 +108,6 @@ local function getValueSetter(key)
   end
   ui.runtime.valueSetters[key] = setter
   return setter
-end
-
-local function buildLanguageOptions(i18n)
-  return {
-    { value = "en", label = t(i18n, "language_en", "English") },
-    { value = "de", label = t(i18n, "language_de", "Deutsch") }
-  }
 end
 
 -- ─── Section content builders ────────────────────────────────────────────────
@@ -156,16 +143,6 @@ local function buildIntegration(cursorY, children, x, w, i18n)
   return cursorY
 end
 
-local function buildLocalization(cursorY, children, x, w, i18n)
-  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-    t(i18n, "language", "Language"),
-    buildLanguageOptions(i18n),
-    getValueGetter("language")(),
-    getValueSetter("language")
-  )
-  return cursorY
-end
-
 local function buildDevelopment(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "developer_tools", "Entwickler Tools"),
@@ -180,7 +157,6 @@ end
 
 local SECTIONS = {
   { key = "safety",      titleKey = "section_safety",      titleFallback = "Sicherheit & Prompts", build = buildSafety      },
-  { key = "localization", titleKey = "section_localization", titleFallback = "Localization",        build = buildLocalization },
   { key = "integration", titleKey = "section_integration", titleFallback = "Integration",         build = buildIntegration },
   { key = "development", titleKey = "section_development", titleFallback = "Entwicklung",         build = buildDevelopment },
 }

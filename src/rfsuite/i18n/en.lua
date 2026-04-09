@@ -45,7 +45,15 @@ return {
       msp_speed = { name = "MSP Speed" },
       api_tester = { name = "API Tester" },
       msp_experiments = { name = "MSP Experiments" },
-      developer_settings = { name = "Settings" }
+      developer_settings = { name = "Settings" },
+      copyprofiles = { name = "Copy Profiles" },
+      profile_select = { name = "Select Profile" },
+      diagnostics = { name = "Diagnostics" },
+      fblsensors = { name = "FBL Sensors" },
+      fblstatus = { name = "FBL Status" },
+      rfstatus = { name = "Rotorflight Status" },
+      validate_sensors = { name = "Validate Sensors" },
+      info = { name = "Info" }
     },
     navigation = {
       back = "<",
@@ -142,6 +150,9 @@ return {
       },
       settings_localization = {
         section_localization = "Localization",
+        language             = "Language",
+        language_en          = "English",
+        language_de          = "German",
         temperature_unit     = "Temperature Unit",
         altitude_unit        = "Altitude Unit",
         temp_celsius         = "Celsius",

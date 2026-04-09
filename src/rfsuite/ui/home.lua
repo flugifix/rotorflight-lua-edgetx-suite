@@ -15,6 +15,7 @@ local Tiles             = loadModule("ui/tiles.lua")
 local Header            = loadModule("ui/header.lua")
 local HelpView          = loadModule("ui/help_view.lua")
 local PreferencesSafe   = loadModule("ui/preferences.lua")
+local Version           = loadModule("lib/version.lua")
 
 local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
@@ -129,6 +130,33 @@ local state = {
   children = {}
 }
 
+local function shortenBreadcrumb(breadcrumb)
+  -- Reduces full breadcrumb to "../LastPart" format
+  -- E.g., "System / Tools" or "System > Tools" becomes "../Tools"
+  if type(breadcrumb) ~= "string" or breadcrumb == "" then
+    return breadcrumb
+  end
+  
+  local parts = {}
+  local normalized = string.gsub(breadcrumb, " > ", " / ")
+  for part in string.gmatch(normalized, "[^/]+") do
+    local trimmed = string.match(part, "^%s*(.-)%s*$")
+    if trimmed then
+      parts[#parts + 1] = trimmed
+    end
+  end
+  
+  if #parts <= 1 then
+    return breadcrumb
+  end
+  
+  local lastPart = parts[#parts]
+  if lastPart then
+    return "../" .. lastPart
+  end
+  return breadcrumb
+end
+
 local function performSave()
   _G.rfsuite.preferences = state.preferences
   return savePreferencesSafe(state.preferences)
@@ -234,7 +262,7 @@ local function onHelp()
     breadcrumb = state.menu.getBreadcrumb() or ""
   end
   if breadcrumb ~= "" then
-    subtitle = breadcrumb
+    subtitle = shortenBreadcrumb(breadcrumb)
   end
 
   state.helpContent = message
@@ -576,7 +604,7 @@ function M.buildUI()
     {
       type     = "page",
       title    = pageTitle,
-      subtitle = breadcrumb ~= "" and breadcrumb or nil,
+      subtitle = breadcrumb ~= "" and shortenBreadcrumb(breadcrumb) or (state.menu.isRoot() and Version.getVersionString() or nil),
       icon     = APP_ICON,
       back     = onBack,
       children = children

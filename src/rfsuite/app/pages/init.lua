@@ -16,7 +16,12 @@ local entries = {
   settings_audio_page = definePage("settings/audio"),
   settings_audio_events_page = definePage("settings/audio/events"),
   settings_audio_switches_page = definePage("settings/audio/switches"),
-  settings_audio_timer_page = definePage("settings/audio/timer")
+  settings_audio_timer_page = definePage("settings/audio/timer"),
+  diagnostics_fblsensors_page = definePage("tools/diagnostics/fblsensors"),
+  diagnostics_fblstatus_page = definePage("tools/diagnostics/fblstatus"),
+  diagnostics_rfstatus_page = definePage("tools/diagnostics/rfstatus"),
+  diagnostics_validate_sensors_page = definePage("tools/diagnostics/validate_sensors"),
+  diagnostics_info_page = definePage("tools/diagnostics/info")
 }
 
 local registry = {}

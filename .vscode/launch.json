@@ -28,6 +28,19 @@
       "preLaunchTask": "RFSuite: Deploy to Radio"
     },
     {
+      "name": "RFSuite: Build Radio Install ZIP",
+      "type": "pwa-node",
+      "request": "launch",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "echo RFSuite install zip build completed"
+      ],
+      "console": "internalConsole",
+      "internalConsoleOptions": "neverOpen",
+      "preLaunchTask": "RFSuite: Build Radio Install ZIP"
+    },
+    {
       "name": "RFSuite: Deploy + Run Simulator (TX16S MK3)",
       "type": "pwa-node",
       "request": "launch",

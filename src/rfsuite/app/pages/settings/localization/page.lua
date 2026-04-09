@@ -29,6 +29,7 @@ end
 local ui = {
   loaded    = false,
   dirty     = false,
+  language  = "en",
   config    = buildDefaultConfig(),
 }
 
@@ -40,6 +41,15 @@ local t = Common.pageT("settings_localization")
 
 local function copyFromPrefs(prefs)
   local loc = (prefs and prefs.localizations) or {}
+  local general = (prefs and prefs.general) or {}
+
+  local language = tostring(general.language or "")
+  language = string.lower(language)
+  if language ~= "de" and language ~= "en" then
+    language = "en"
+  end
+  ui.language = language
+
   for _, field in ipairs(CONFIG_SCHEMA) do
     ui.config[field.key] = tonumber(loc[field.key]) or field.default
   end
@@ -66,9 +76,33 @@ local function getAltOptions(i18n)
   }
 end
 
+local function getLanguageOptions(i18n)
+  return {
+    { value = "en", label = t(i18n, "language_en", "English") },
+    { value = "de", label = t(i18n, "language_de", "Deutsch") },
+  }
+end
+
 -- ─── Section builder ─────────────────────────────────────────────────────────
 
 local function buildLocalization(cursorY, children, x, w, i18n)
+  cursorY = cursorY + Controls.appendComboSelect(
+    children, x, cursorY, w,
+    t(i18n, "language", "Language"),
+    getLanguageOptions(i18n),
+    ui.language,
+    function(val)
+      local nextLang = tostring(val or "")
+      nextLang = string.lower(nextLang)
+      if nextLang ~= "de" and nextLang ~= "en" then
+        nextLang = "en"
+      end
+      if ui.language == nextLang then return end
+      ui.language = nextLang
+      ui.runtime.markDirty()
+    end
+  )
+
   cursorY = cursorY + Controls.appendComboSelect(
     children, x, cursorY, w,
     t(i18n, "temperature_unit", "Temperatureinheit"),
@@ -111,6 +145,10 @@ end
 
 function M.onSave(ctx)
   if not ctx.preferences.localizations then ctx.preferences.localizations = {} end
+  if not ctx.preferences.general then ctx.preferences.general = {} end
+
+  ctx.preferences.general.language = ui.language
+
   for _, field in ipairs(CONFIG_SCHEMA) do
     ctx.preferences.localizations[field.key] = ui.config[field.key]
   end

@@ -26,7 +26,7 @@ local manifest = {
       id = "system",
       title = "@i18n(app.header_system)@",
       pages = {
-        { id = "tools", title = "@i18n(app.modules.tools.name)@", icon = "@pages/tools/icon.png", row = 1, col = 1, enabled = false },
+        { id = "tools", title = "@i18n(app.modules.tools.name)@", menuId = "tools_menu", icon = "@pages/tools/icon.png", row = 1, col = 1, enabled = true },
         { id = "logs", title = "@i18n(app.modules.logs.name)@", icon = "@pages/logs/icon.png", row = 1, col = 2, enabled = false },
         { id = "settings", title = "@i18n(app.modules.settings.name)@", menuId = "settings_admin", icon = "@pages/settings/icon.png", row = 1, col = 3, enabled = true },
         { id = "developer", title = "@i18n(app.modules.developer.name)@", menuId = "developer_menu", icon = "@pages/developer/icon.png", row = 1, col = 4, enabledWhen = "developerTools", hideWhenDisabled = true }
@@ -34,6 +34,24 @@ local manifest = {
     }
   },
   menus = {
+    tools_menu = {
+      title = "@i18n(app.modules.tools.name)@",
+      pages = {
+        { id = "copy_profiles", title = "@i18n(app.modules.copyprofiles.name)@", icon = "@pages/tools/copy.png", row = 1, col = 1, enabled = true },
+        { id = "select_profile", title = "@i18n(app.modules.profile_select.name)@", icon = "@pages/tools/select_profile.png", row = 1, col = 2, enabled = true },
+        { id = "diagnostics", title = "@i18n(app.modules.diagnostics.name)@", menuId = "diagnostics_menu", icon = "@pages/tools/diagnostics.png", row = 1, col = 3, enabled = true }
+      }
+    },
+    diagnostics_menu = {
+      title = "@i18n(app.modules.diagnostics.name)@",
+      pages = {
+        { id = "fblsensors", title = "@i18n(app.modules.fblsensors.name)@", menuId = "diagnostics_fblsensors_page", row = 1, col = 1, enabled = true },
+        { id = "fblstatus", title = "@i18n(app.modules.fblstatus.name)@", menuId = "diagnostics_fblstatus_page", row = 1, col = 2, enabled = true },
+        { id = "rfstatus", title = "@i18n(app.modules.rfstatus.name)@", menuId = "diagnostics_rfstatus_page", row = 1, col = 3, enabled = true },
+        { id = "validate_sensors", title = "@i18n(app.modules.validate_sensors.name)@", menuId = "diagnostics_validate_sensors_page", row = 1, col = 4, enabled = true },
+        { id = "info", title = "@i18n(app.modules.info.name)@", menuId = "diagnostics_info_page", row = 1, col = 5, enabled = true }
+      }
+    },
     flight_tuning_menu = {
       title = "@i18n(app.modules.flight_tuning.name)@",
       pages = {
