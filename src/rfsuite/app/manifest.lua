@@ -18,8 +18,8 @@ local manifest = {
       id = "configuration",
       title = "@i18n(app.header_configuration)@",
       pages = {
-        { id = "flight_tuning", title = "@i18n(app.modules.flight_tuning.name)@", menuId = "flight_tuning_menu", icon = "@pages/flight_tuning/icon.png", row = 1, col = 1, enabled = true },
-        { id = "setup", title = "@i18n(app.modules.setup.name)@", menuId = "setup_menu", icon = "@pages/setup/icon.png", row = 1, col = 2, enabled = false }
+        { id = "flight_tuning", title = "@i18n(app.modules.flight_tuning.name)@", menuId = "flight_tuning_menu", icon = "@pages/flight_tuning/icon.png", row = 1, col = 1, enabledWhen = "fblConnected" },
+        { id = "setup", title = "@i18n(app.modules.setup.name)@", menuId = "setup_menu", icon = "@pages/setup/icon.png", row = 1, col = 2, enabledWhen = "fblConnected" }
       }
     },
     {
@@ -37,18 +37,18 @@ local manifest = {
     tools_menu = {
       title = "@i18n(app.modules.tools.name)@",
       pages = {
-        { id = "copy_profiles", title = "@i18n(app.modules.copyprofiles.name)@", icon = "@pages/tools/copy.png", row = 1, col = 1, enabled = true },
-        { id = "select_profile", title = "@i18n(app.modules.profile_select.name)@", icon = "@pages/tools/select_profile.png", row = 1, col = 2, enabled = true },
+        { id = "copy_profiles", title = "@i18n(app.modules.copyprofiles.name)@", icon = "@pages/tools/copy.png", row = 1, col = 1, enabledWhen = "fblConnected" },
+        { id = "select_profile", title = "@i18n(app.modules.profile_select.name)@", icon = "@pages/tools/select_profile.png", row = 1, col = 2, enabledWhen = "fblConnected" },
         { id = "diagnostics", title = "@i18n(app.modules.diagnostics.name)@", menuId = "diagnostics_menu", icon = "@pages/tools/diagnostics.png", row = 1, col = 3, enabled = true }
       }
     },
     diagnostics_menu = {
       title = "@i18n(app.modules.diagnostics.name)@",
       pages = {
-        { id = "fblsensors", title = "@i18n(app.modules.fblsensors.name)@", menuId = "diagnostics_fblsensors_page", row = 1, col = 1, enabled = true },
-        { id = "fblstatus", title = "@i18n(app.modules.fblstatus.name)@", menuId = "diagnostics_fblstatus_page", row = 1, col = 2, enabled = true },
-        { id = "rfstatus", title = "@i18n(app.modules.rfstatus.name)@", menuId = "diagnostics_rfstatus_page", row = 1, col = 3, enabled = true },
-        { id = "validate_sensors", title = "@i18n(app.modules.validate_sensors.name)@", menuId = "diagnostics_validate_sensors_page", row = 1, col = 4, enabled = true },
+        { id = "fblsensors", title = "@i18n(app.modules.fblsensors.name)@", menuId = "diagnostics_fblsensors_page", row = 1, col = 1, enabledWhen = "fblConnected" },
+        { id = "fblstatus", title = "@i18n(app.modules.fblstatus.name)@", menuId = "diagnostics_fblstatus_page", row = 1, col = 2, enabledWhen = "fblConnected" },
+        { id = "rfstatus", title = "@i18n(app.modules.rfstatus.name)@", menuId = "diagnostics_rfstatus_page", row = 1, col = 3, enabledWhen = "fblConnected" },
+        { id = "validate_sensors", title = "@i18n(app.modules.validate_sensors.name)@", menuId = "diagnostics_validate_sensors_page", row = 1, col = 4, enabledWhen = "fblConnected" },
         { id = "info", title = "@i18n(app.modules.info.name)@", menuId = "diagnostics_info_page", row = 1, col = 5, enabled = true }
       }
     },
@@ -145,6 +145,26 @@ local manifest = {
     },
     settings_audio_timer_page = {
       title = "@i18n(app.modules.audio_timer.name)@",
+      pages = {}
+    },
+    diagnostics_fblsensors_page = {
+      title = "@i18n(app.modules.fblsensors.name)@",
+      pages = {}
+    },
+    diagnostics_fblstatus_page = {
+      title = "@i18n(app.modules.fblstatus.name)@",
+      pages = {}
+    },
+    diagnostics_rfstatus_page = {
+      title = "@i18n(app.modules.rfstatus.name)@",
+      pages = {}
+    },
+    diagnostics_validate_sensors_page = {
+      title = "@i18n(app.modules.validate_sensors.name)@",
+      pages = {}
+    },
+    diagnostics_info_page = {
+      title = "@i18n(app.modules.info.name)@",
       pages = {}
     }
   }

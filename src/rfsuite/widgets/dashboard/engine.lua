@@ -7,6 +7,13 @@ local Sensors = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors.lua",
 local OBJECTS_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/"
 local objectWrappers = {}
 
+local function isSimulator()
+  if type(getVersion) ~= "function" then return false end
+  local ok, _, fw = pcall(getVersion)
+  if not ok or type(fw) ~= "string" then return false end
+  return string.sub(string.lower(fw), -4) == "simu"
+end
+
 local function loadObjectWrapper(typ)
   if objectWrappers[typ] ~= nil then
     return objectWrappers[typ]
@@ -73,7 +80,16 @@ function Engine.build(zone, state, theme)
   local boxes = Utils.resolveValue(theme.boxes, nil, state) or {}
   local rects = buildGridRects(zone, layout, boxes)
 
-  for i = 1, #rects do
+  local maxMainRects = #rects
+  local maxHeaderRects = 9999
+  if isSimulator() then
+    -- Simulator has a stricter per-refresh instruction budget than TX16.
+    -- Render a reduced subset to keep the widget alive in desktop simulation.
+    maxMainRects = math.min(maxMainRects, 8)
+    maxHeaderRects = 4
+  end
+
+  for i = 1, maxMainRects do
     renderBox(nodes, rects[i], state)
   end
 
@@ -83,7 +99,8 @@ function Engine.build(zone, state, theme)
     local headerHeight = math.max(24, math.floor(zone.h * 0.16))
     local headerZone = { x = zone.x, y = zone.y, w = zone.w, h = headerHeight }
     local headerRects = buildGridRects(headerZone, headerLayout, headerBoxes)
-    for i = 1, #headerRects do
+    local headerLimit = math.min(#headerRects, maxHeaderRects)
+    for i = 1, headerLimit do
       renderBox(nodes, headerRects[i], state)
     end
   end

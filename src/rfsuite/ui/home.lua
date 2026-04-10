@@ -16,11 +16,15 @@ local Header            = loadModule("ui/header.lua")
 local HelpView          = loadModule("ui/help_view.lua")
 local PreferencesSafe   = loadModule("ui/preferences.lua")
 local Version           = loadModule("lib/version.lua")
+local MspRuntime        = loadModule("tasks/msp/runtime.lua")
 
 local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
 
 local M = {}
+
+local mspUnsupportedDialogModule = nil
+local mspUnsupportedDialogLoadTried = false
 
 local Prefs           = PreferencesSafe.new(loadModule)
 local loadPreferencesSafe  = Prefs.load
@@ -103,6 +107,13 @@ local state = {
   helpPageSubtitle = nil,
   pendingBuildUI = false,
   pendingGcAfterBuild = false,
+  mspAttached = false,
+  mspLastTick = 0,
+  fblConnected = false,
+  infoSessionSnapshot = nil,
+  mspUnsupportedDialogShown = false,
+  mspUnsupportedVersionShown = nil,
+  mspLinkConfigWarningAt = 0,
   headerActions = {
     defaults = {
       root = {
@@ -302,6 +313,237 @@ local function applyLocaleFromPreferences()
 
   if state.i18n and type(state.i18n.setLocale) == "function" then
     pcall(state.i18n.setLocale, lang or "en")
+  end
+end
+
+local function getMspUnsupportedDialogModule()
+  if mspUnsupportedDialogLoadTried then
+    return mspUnsupportedDialogModule
+  end
+
+  mspUnsupportedDialogLoadTried = true
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/ui/msp_unsupported_dialog.lua", "t")
+  if type(chunk) ~= "function" then
+    return nil
+  end
+
+  local ok, mod = pcall(chunk)
+  if ok and type(mod) == "table" and type(mod.show) == "function" then
+    mspUnsupportedDialogModule = mod
+  end
+
+  return mspUnsupportedDialogModule
+end
+
+local function maybeShowUnsupportedMspDialog()
+  if not state.i18n then
+    return
+  end
+
+  local root = _G and _G.rfsuite
+  local session = root and root.session
+  local diagnostics = root and root.diagnostics
+  if type(session) ~= "table" and type(diagnostics) ~= "table" then
+    return
+  end
+
+  local function tr(key, fallback)
+    local value = state.i18n.t and state.i18n.t(key) or nil
+    if type(value) ~= "string" or value == "" or value == key then
+      return fallback
+    end
+    return value
+  end
+
+  local apiSupported = nil
+  if type(session) == "table" and session.apiSupported ~= nil then
+    apiSupported = session.apiSupported
+  elseif type(diagnostics) == "table" and diagnostics.apiSupported ~= nil then
+    apiSupported = diagnostics.apiSupported
+  end
+
+  if apiSupported == true then
+    state.mspUnsupportedDialogShown = false
+    state.mspUnsupportedVersionShown = nil
+    return
+  end
+
+  if apiSupported ~= false then
+    return
+  end
+
+  local apiVersion = nil
+  if type(session) == "table" and session.apiVersion ~= nil then
+    apiVersion = session.apiVersion
+  elseif type(diagnostics) == "table" and diagnostics.apiVersion ~= nil then
+    apiVersion = diagnostics.apiVersion
+  end
+  local version = tostring(apiVersion or "?")
+  if state.mspUnsupportedDialogShown and state.mspUnsupportedVersionShown == version then
+    return
+  end
+
+  state.mspUnsupportedDialogShown = true
+  state.mspUnsupportedVersionShown = version
+
+  local supported = "-"
+  if Version and type(Version.getSupportedMspApiVersionsString) == "function" then
+    supported = Version.getSupportedMspApiVersionsString() or "-"
+  end
+
+  local title = tr("app.msp.unsupported_title", "Unsupported MSP API")
+  local prefix = tr("app.msp.unsupported_message_prefix", "MSP API version ")
+  local suffix = tr("app.msp.unsupported_message_suffix", " is not supported.")
+  local supportedLabel = tr("app.msp.supported_label", "Supported: ")
+  local message = prefix .. version .. suffix .. "\n" .. supportedLabel .. tostring(supported)
+
+  local dialog = getMspUnsupportedDialogModule()
+  if dialog then
+    local shown = dialog.show({
+      title = title,
+      message = message,
+      onFallback = function(fallbackTitle, fallbackMessage)
+        state.helpContent = fallbackMessage
+        state.helpPageTitle = fallbackTitle
+        state.helpPageSubtitle = nil
+        scheduleBuildUI(false)
+      end
+    })
+    if shown then
+      return
+    end
+  end
+
+  -- Ultimate fallback if dialog module failed to load.
+  state.helpContent = message
+  state.helpPageTitle = title
+  state.helpPageSubtitle = nil
+  scheduleBuildUI(false)
+end
+
+local function maybeShowMspLinkConfigDialog()
+  if not state.i18n then
+    return
+  end
+
+  local root = _G and _G.rfsuite
+  local session = root and root.session
+  local diagnostics = root and root.diagnostics
+  if type(session) ~= "table" and type(diagnostics) ~= "table" then
+    return
+  end
+
+  local function tr(key, fallback)
+    local value = state.i18n.t and state.i18n.t(key) or nil
+    if type(value) ~= "string" or value == "" or value == key then
+      return fallback
+    end
+    return value
+  end
+
+  local errMsg = nil
+  local errAt = 0
+  if type(session) == "table" then
+    errMsg = session.mspLastError or errMsg
+    errAt = tonumber(session.mspLastErrorAt) or errAt
+  end
+  if (not errMsg or errMsg == "") and type(diagnostics) == "table" then
+    errMsg = diagnostics.mspLastError or errMsg
+    errAt = tonumber(diagnostics.mspLastErrorAt) or errAt
+  end
+
+  if type(errMsg) ~= "string" or errMsg == "" then
+    state.mspLinkConfigWarningAt = 0
+    return
+  end
+
+  if not string.find(errMsg, "cmd=1", 1, true) then
+    return
+  end
+
+  if errAt > 0 and state.mspLinkConfigWarningAt == errAt then
+    return
+  end
+
+  local title = tr("app.msp.link_config_title", "MSP link configuration")
+  local l1 = tr("app.msp.link_config_message_1", "Initial MSP read failed (API_VERSION).")
+  local l2 = tr("app.msp.link_config_message_2", "Please check Rotorflight telemetry settings.")
+  local l3 = tr("app.msp.link_config_message_3", "Packet Rate and Packet Ratio must match the ELRS link.")
+  local l4 = tr("app.msp.link_config_message_4", "Then reconnect and open Info again.")
+  local message = l1 .. "\n" .. l2 .. "\n" .. l3 .. "\n" .. l4
+
+  local dialog = getMspUnsupportedDialogModule()
+  if dialog then
+    local shown = dialog.show({
+      title = title,
+      message = message,
+      onFallback = function(fallbackTitle, fallbackMessage)
+        state.helpContent = fallbackMessage
+        state.helpPageTitle = fallbackTitle
+        state.helpPageSubtitle = nil
+        scheduleBuildUI(false)
+      end
+    })
+    if shown then
+      state.mspLinkConfigWarningAt = errAt > 0 and errAt or (state.mspLinkConfigWarningAt + 1)
+      return
+    end
+  end
+
+  state.helpContent = message
+  state.helpPageTitle = title
+  state.helpPageSubtitle = nil
+  state.mspLinkConfigWarningAt = errAt > 0 and errAt or (state.mspLinkConfigWarningAt + 1)
+  scheduleBuildUI(false)
+end
+
+local function readFblConnected()
+  if not MspRuntime or type(MspRuntime.getState) ~= "function" then
+    return false
+  end
+
+  local mspState = MspRuntime.getState()
+  if type(mspState) ~= "table" then
+    return false
+  end
+
+  if mspState.unsupportedApi == true then
+    return false
+  end
+
+  return mspState.lastConnected == true
+end
+
+local function updateRuntimeMenuConditions()
+  if not state.menu then return end
+
+  local nextFblConnected = readFblConnected()
+  if state.fblConnected ~= nextFblConnected then
+    state.fblConnected = nextFblConnected
+    state.menu.setCondition("fblConnected", nextFblConnected)
+    scheduleBuildUI(false)
+  end
+end
+
+local function maybeRefreshInfoPageFromSession()
+  if not state.menu or state.menu.getCurrentMenuId() ~= "diagnostics_info_page" then
+    state.infoSessionSnapshot = nil
+    return
+  end
+
+  local root = _G and _G.rfsuite
+  local session = root and root.session
+  local diagnostics = root and root.diagnostics
+  if type(session) ~= "table" then
+    return
+  end
+
+  local snapshot = tostring(session.apiVersion or "") .. "|" .. tostring(session.fcVersion or "") .. "|" .. tostring(session.rfVersion or "") ..
+    "|" .. tostring(session.mspLastError or "") .. "|" .. tostring(session.mspLastErrorAt or "") ..
+    "|" .. tostring(diagnostics and diagnostics.mspLastError or "") .. "|" .. tostring(diagnostics and diagnostics.mspLastErrorAt or "")
+  if state.infoSessionSnapshot ~= snapshot then
+    state.infoSessionSnapshot = snapshot
+    scheduleBuildUI(false)
   end
 end
 
@@ -644,7 +886,8 @@ function M.init()
   _G.rfsuite.savePreferences = performSave
   state.menu       = MenuRegistry.new(manifest, state.i18n, {
     conditions = {
-      developerTools = prefs.general and prefs.general.developer_tools == true
+      developerTools = prefs.general and prefs.general.developer_tools == true,
+      fblConnected = false
     },
     iconByMenuId = PageRegistry.iconByMenuId
   })
@@ -660,6 +903,16 @@ function M.init()
   state.helpPageSubtitle = nil
   state.pendingBuildUI = false
   state.pendingGcAfterBuild = false
+  state.mspLastTick = 0
+  state.fblConnected = false
+  state.infoSessionSnapshot = nil
+  state.mspUnsupportedDialogShown = false
+  state.mspUnsupportedVersionShown = nil
+  state.mspLinkConfigWarningAt = 0
+  if MspRuntime and type(MspRuntime.attach) == "function" then
+    MspRuntime.attach("tool")
+    state.mspAttached = true
+  end
   M.buildUI()
 end
 
@@ -701,12 +954,32 @@ function M.run(event, touchState)
       end
     end
 
+    if MspRuntime and type(MspRuntime.tick) == "function" then
+      local now = getTime and getTime() or 0
+      if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then
+        state.mspLastTick = now
+        MspRuntime.tick()
+      end
+    end
+
+    updateRuntimeMenuConditions()
+    maybeRefreshInfoPageFromSession()
+
+    maybeShowUnsupportedMspDialog()
+    maybeShowMspLinkConfigDialog()
+
     -- Intentionally no periodic MEM-triggered rebuild here.
     -- Rebuilding while navigating resets LVGL focus on some pages.
     -- MEM value updates on normal UI rebuild points (navigation/actions).
   end
 
-  if state.shouldExit then return 2 end
+  if state.shouldExit then
+    if state.mspAttached and MspRuntime and type(MspRuntime.detach) == "function" then
+      MspRuntime.detach("tool")
+      state.mspAttached = false
+    end
+    return 2
+  end
   return 0
 end
 

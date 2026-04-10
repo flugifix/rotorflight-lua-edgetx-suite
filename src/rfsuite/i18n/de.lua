@@ -71,6 +71,17 @@ return {
       title = "Hilfe",
       layout = "Demo fuer dynamisches Menu + Breadcrumb + Layout"
     },
+    msp = {
+      unsupported_title = "MSP-API nicht unterstuetzt",
+      unsupported_message_prefix = "MSP-API-Version ",
+      unsupported_message_suffix = " wird nicht unterstuetzt.",
+      supported_label = "Unterstuetzt: ",
+      link_config_title = "MSP-Link-Konfiguration",
+      link_config_message_1 = "Initiales MSP-Lesen ist fehlgeschlagen (API_VERSION).",
+      link_config_message_2 = "Bitte Rotorflight-Telemetrie-Einstellungen pruefen.",
+      link_config_message_3 = "Packet Rate und Packet Ratio muessen zum ELRS-Link passen.",
+      link_config_message_4 = "Danach neu verbinden und Info erneut oeffnen."
+    },
     pages = {
       settings_general = {
         section_display = "Anzeige",
@@ -250,6 +261,23 @@ return {
         saved_message = "Audio-Timer gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen"
+      },
+      diagnostics_info = {
+        version = "Version",
+        edgetx_version = "EdgeTX-Version",
+        rf_version = "Rotorflight-Version",
+        fc_version = "FC-Version",
+        variant = "Variante",
+        board_info = "Board-Info",
+        build_info = "Build-Info",
+        msp_version = "MSP-Version",
+        msp_transport = "MSP-Transport",
+        supported_versions = "Unterstuetzte MSP-API",
+        simulation = "Simulation",
+        loading_title = "Laden",
+        loading_message = "Live-Daten werden gelesen",
+        loading_failed = "Laden fehlgeschlagen",
+        loading_timeout = "Zeitueberschreitung beim Lesen vom FBL"
       },
       settings_developer_settings = {
         section_logging = "Protokollierung",
