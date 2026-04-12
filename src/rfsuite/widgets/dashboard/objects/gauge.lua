@@ -3,15 +3,6 @@ local Wrapper = {}
 local utils = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/common.lua", "t"))()
 local themeCommon = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/default/common.lua", "t"))()
 
-local function detectSimulator()
-  if type(getVersion) ~= "function" then return false end
-  local ok, _, fw = pcall(getVersion)
-  if not ok or type(fw) ~= "string" then return false end
-  return string.sub(string.lower(fw), -4) == "simu"
-end
-
-local IS_SIMULATOR = detectSimulator()
-
 local function rgb(hex, fallback)
   if lcd and type(lcd.RGB) == "function" then
     return lcd.RGB(hex)
@@ -125,29 +116,9 @@ local function renderArc(nodes, rect, box, state)
   )
 end
 
-local function renderLite(nodes, rect, box, state)
-  local gaugeValue = utils.toNumber(utils.mapTelemetrySource(utils.resolveValue(box.source, box, state), state), 0)
-  local valueY = rect.y + math.floor((rect.h - 20) * 0.5)
-
-  utils.pushLabel(
-    nodes,
-    rect.x + 4,
-    valueY,
-    rect.w - 8,
-    themeCommon.formatVoltage(gaugeValue),
-    box.textcolor or BLACK,
-    box.valuealign or box.titlealign or CENTER,
-    MIDSIZE
-  )
-end
-
 function Wrapper.render(nodes, rect, box, state)
   utils.drawContainer(nodes, rect, box, state)
-  if IS_SIMULATOR then
-    renderLite(nodes, rect, box or {}, state)
-  else
-    renderArc(nodes, rect, box or {}, state)
-  end
+  renderArc(nodes, rect, box or {}, state)
 end
 
 return Wrapper

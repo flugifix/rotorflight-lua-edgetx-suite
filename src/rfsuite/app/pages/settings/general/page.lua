@@ -6,8 +6,8 @@ local function loadModule(path)
   return chunk()
 end
 
-local Controls = loadModule("ui/controls.lua")
-local Common = loadModule("app/pages/settings/common.lua")
+local Controls = nil
+local Common = nil
 
 -- ─── Config schema ───────────────────────────────────────────────────────────
 -- Single source of truth for all persisted settings.
@@ -19,6 +19,8 @@ local CONFIG_SCHEMA = {
   { key = "iconsize",                     type = "number", default = 2     },
   { key = "developer_tools",              type = "bool",   default = false  },
   { key = "syncname",                     type = "bool",   default = false  },
+  { key = "auto_msp_telem_sync",          type = "bool",   default = false  },
+  { key = "postflight_hold_seconds",      type = "number", default = 20     },
   { key = "save_confirm",                 type = "bool",   default = false  },
   { key = "save_dirty_only",              type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
@@ -49,13 +51,28 @@ local ui = {
   config = buildDefaultConfig()
 }
 
-ui.runtime = Common.createFormRuntime(ui)
-ui.runtime.valueGetters = {}
-ui.runtime.valueSetters = {}
+ui.runtime = nil
 
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local t = Common.pageT("settings_general")
+local t = nil
+
+local function ensureDeps()
+  if not Common then
+    Common = loadModule("app/pages/settings/common.lua")
+  end
+  if not Controls then
+    Controls = loadModule("ui/controls.lua")
+  end
+  if not ui.runtime then
+    ui.runtime = Common.createFormRuntime(ui)
+    ui.runtime.valueGetters = {}
+    ui.runtime.valueSetters = {}
+  end
+  if not t then
+    t = Common.pageT("settings_general")
+  end
+end
 
 local function prefBool(value, default)
   if value == nil then return default end
@@ -77,6 +94,8 @@ local function copyFromPrefs(prefs)
       ui.config[field.key] = prefBool(raw, field.default)
     end
   end
+  if ui.config.postflight_hold_seconds < 0 then ui.config.postflight_hold_seconds = 0 end
+  if ui.config.postflight_hold_seconds > 120 then ui.config.postflight_hold_seconds = 120 end
 end
 
 local function ensureLoaded(prefs)
@@ -135,10 +154,52 @@ local function buildSafety(cursorY, children, x, w, i18n)
 end
 
 local function buildIntegration(cursorY, children, x, w, i18n)
+  local holdOptions = {
+    { value = 0, label = t(i18n, "value_off", "OFF") },
+    { value = 10, label = "10s" },
+    { value = 20, label = "20s" },
+    { value = 30, label = "30s" },
+    { value = 60, label = "60s" },
+    { value = 120, label = "120s" },
+  }
+
+  local function resolveHoldChoiceValue(raw)
+    local current = tonumber(raw) or 20
+    local nearest = holdOptions[1].value
+    local nearestDiff = math.abs(current - nearest)
+    for i = 2, #holdOptions do
+      local v = holdOptions[i].value
+      local d = math.abs(current - v)
+      if d < nearestDiff then
+        nearest = v
+        nearestDiff = d
+      end
+    end
+    return nearest
+  end
+
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "sync_model_name", "Modellname synchronisieren"),
     ui.runtime.getBoolGetter("syncname"),
     ui.runtime.getBoolSetter("syncname")
+  )
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    t(i18n, "auto_msp_telem_sync", "MSP Telemetry automatisch abgleichen"),
+    ui.runtime.getBoolGetter("auto_msp_telem_sync"),
+    ui.runtime.getBoolSetter("auto_msp_telem_sync")
+  )
+
+  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+    t(i18n, "postflight_hold_seconds", "Postflight halten"),
+    holdOptions,
+    resolveHoldChoiceValue(ui.config.postflight_hold_seconds),
+    function(value)
+      local nextVal = tonumber(value) or 20
+      if ui.config.postflight_hold_seconds ~= nextVal then
+        ui.config.postflight_hold_seconds = nextVal
+        ui.runtime.markDirty()
+      end
+    end
   )
   return cursorY
 end
@@ -164,6 +225,7 @@ local SECTIONS = {
 -- ─── Module API ──────────────────────────────────────────────────────────────
 
 function M.getHeaderActions()
+  ensureDeps()
   return { save = ui.dirty, reload = true, help = false }
 end
 
@@ -172,11 +234,13 @@ function M.allowMemAutoRefresh()
 end
 
 function M.onReload(ctx)
+  ensureDeps()
   copyFromPrefs(ctx.preferences)
   ui.dirty = false
 end
 
 function M.onSave(ctx)
+  ensureDeps()
   if not ctx.preferences.general then ctx.preferences.general = {} end
 
   -- Saves all settings using the schema — no manual field list.
@@ -201,6 +265,7 @@ function M.onSave(ctx)
 end
 
 function M.build(ctx)
+  ensureDeps()
   ensureLoaded(ctx.preferences)
 
   local children       = ctx.children
@@ -224,6 +289,13 @@ function M.build(ctx)
       cursorY = section.build(cursorY, children, x, w, i18n)
     end
   end
+end
+
+function M.onClose()
+  ui.runtime = nil
+  Controls = nil
+  Common = nil
+  t = nil
 end
 
 return M

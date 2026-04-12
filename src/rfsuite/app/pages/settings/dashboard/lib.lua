@@ -338,7 +338,7 @@ function M.getConfigurableThemes(themes)
   return configurable
 end
 
-function M.getThemeConfig(prefs, path, defaults)
+function M.getThemeConfig(prefs, path, defaults, modelPrefs)
   local out = {}
   local source = defaults or {}
   for k, v in pairs(source) do
@@ -347,9 +347,10 @@ function M.getThemeConfig(prefs, path, defaults)
 
   local dashboard = prefs and prefs.dashboard
   if type(dashboard) ~= "table" then
-    return out
+    dashboard = {}
   end
 
+  -- First, apply global preferences
   for k in pairs(source) do
     local key = themeConfigKey(path, k)
     if key and dashboard[key] ~= nil then
@@ -357,15 +358,30 @@ function M.getThemeConfig(prefs, path, defaults)
     end
   end
 
+  -- Then, apply model-specific preferences (higher priority)
+  if type(modelPrefs) == "table" then
+    local modelDashboard = modelPrefs.dashboard
+    if type(modelDashboard) == "table" then
+      for k in pairs(source) do
+        local key = themeConfigKey(path, k)
+        if key and modelDashboard[key] ~= nil then
+          out[k] = modelDashboard[key]
+        end
+      end
+    end
+  end
+
   return out
 end
 
-function M.setThemeConfig(prefs, path, values)
-  if type(prefs) ~= "table" then return end
+function M.setThemeConfig(prefs, path, values, modelPrefs)
+  -- If modelPrefs provided, save to model prefs; otherwise save to global prefs
+  local target = modelPrefs or prefs
+  if type(target) ~= "table" then return end
   if type(values) ~= "table" then return end
 
-  prefs.dashboard = prefs.dashboard or {}
-  local dashboard = prefs.dashboard
+  target.dashboard = target.dashboard or {}
+  local dashboard = target.dashboard
   if type(dashboard) ~= "table" then return end
 
   for k, v in pairs(values) do

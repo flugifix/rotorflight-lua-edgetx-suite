@@ -8,11 +8,20 @@ local renders = {}
 
 local function getRender(subtype)
   local key = subtype or "telemetry"
-  if renders[key] then return renders[key] end
+  local cached = renders[key]
+  if cached ~= nil then
+    return cached ~= false and cached or nil
+  end
   local chunk = loadScript(folder .. key .. ".lua", "t")
-  if not chunk then return nil end
+  if not chunk then
+    renders[key] = false
+    return nil
+  end
   local ok, render = pcall(chunk)
-  if not ok or type(render) ~= "table" then return nil end
+  if not ok or type(render) ~= "table" then
+    renders[key] = false
+    return nil
+  end
   renders[key] = render
   return render
 end

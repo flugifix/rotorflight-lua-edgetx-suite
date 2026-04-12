@@ -49,8 +49,12 @@ local function defaultPreferences()
       show_confirmation_dialog     = true,
       -- integration
       syncname                     = false,
+      auto_msp_telem_sync         = false,
+      postflight_hold_seconds      = 20,
       -- development
       developer_tools              = false,
+      continuous_memory_log        = false,
+      show_header_memory           = false,
       enable_serial_debug          = false,
       debug_level                  = "off",
     },

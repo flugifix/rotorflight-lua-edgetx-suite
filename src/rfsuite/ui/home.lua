@@ -4,19 +4,22 @@ local function loadModule(path)
   return chunk()
 end
 
-local GridLayout   = loadModule("layouts/grid.lua")
-local I18n         = loadModule("i18n/init.lua")
-local DisplayProfile = loadModule("core/display_profile.lua")
-local manifest     = loadModule("app/manifest.lua")
-local MenuRegistry = loadModule("app/menu_registry.lua")
-local PageRegistry = loadModule("app/pages/init.lua")
-local HelpRegistryFactory = loadModule("app/pages/help_registry.lua")
-local Tiles             = loadModule("ui/tiles.lua")
-local Header            = loadModule("ui/header.lua")
-local HelpView          = loadModule("ui/help_view.lua")
-local PreferencesSafe   = loadModule("ui/preferences.lua")
-local Version           = loadModule("lib/version.lua")
-local MspRuntime        = loadModule("tasks/msp/runtime.lua")
+local GridLayout = nil
+local I18n = nil
+local DisplayProfile = nil
+local manifest = nil
+local MenuRegistry = nil
+local PageRegistry = nil
+local HelpRegistryFactory = nil
+local HelpRegistry = nil
+local Tiles = nil
+local Header = nil
+local HelpView = nil
+local PreferencesSafe = nil
+local Version = nil
+local MspRuntime = nil
+
+local MEM_LOG_INTERVAL_TICKS = 100
 
 local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
@@ -26,12 +29,84 @@ local M = {}
 local mspUnsupportedDialogModule = nil
 local mspUnsupportedDialogLoadTried = false
 
-local Prefs           = PreferencesSafe.new(loadModule)
-local loadPreferencesSafe  = Prefs.load
-local savePreferencesSafe  = Prefs.save
-local HelpRegistry = HelpRegistryFactory.new({
-  pagePathByMenuId = PageRegistry.pagePathByMenuId
-})
+local Prefs = nil
+local loadPreferencesSafe = nil
+local savePreferencesSafe = nil
+
+local function ensurePreferencesSafe()
+  if not PreferencesSafe then
+    PreferencesSafe = loadModule("ui/preferences.lua")
+  end
+  if not Prefs and PreferencesSafe and type(PreferencesSafe.new) == "function" then
+    Prefs = PreferencesSafe.new(loadModule)
+    loadPreferencesSafe = Prefs.load
+    savePreferencesSafe = Prefs.save
+  end
+end
+
+local function ensureVersion()
+  if not Version then
+    Version = loadModule("lib/version.lua")
+  end
+end
+
+local function ensureMspRuntime()
+  if not MspRuntime then
+    MspRuntime = loadModule("tasks/msp/runtime.lua")
+  end
+end
+
+local function ensurePageRegistry()
+  if not PageRegistry then
+    PageRegistry = loadModule("app/pages/init.lua")
+  end
+end
+
+local function ensureHelpRegistry()
+  ensurePageRegistry()
+  if not HelpRegistryFactory then
+    HelpRegistryFactory = loadModule("app/pages/help_registry.lua")
+  end
+  if not HelpRegistry and HelpRegistryFactory and type(HelpRegistryFactory.new) == "function" then
+    HelpRegistry = HelpRegistryFactory.new({
+      pagePathByMenuId = PageRegistry.pagePathByMenuId
+    })
+  end
+end
+
+local function ensureBuildDeps()
+  if not GridLayout then
+    GridLayout = loadModule("layouts/grid.lua")
+  end
+  if not DisplayProfile then
+    DisplayProfile = loadModule("core/display_profile.lua")
+  end
+  if not Tiles then
+    Tiles = loadModule("ui/tiles.lua")
+  end
+  if not Header then
+    Header = loadModule("ui/header.lua")
+  end
+end
+
+local function ensureHelpView()
+  if not HelpView then
+    HelpView = loadModule("ui/help_view.lua")
+  end
+end
+
+local function ensureInitDeps()
+  ensurePreferencesSafe()
+  if not I18n then
+    I18n = loadModule("i18n/init.lua")
+  end
+  if not manifest then
+    manifest = loadModule("app/manifest.lua")
+  end
+  if not MenuRegistry then
+    MenuRegistry = loadModule("app/menu_registry.lua")
+  end
+end
 
 -- Global access point: rfsuite.preferences and rfsuite.savePreferences
 -- Any module can read settings via: rfsuite.preferences.general.save_confirm
@@ -89,17 +164,17 @@ end
 local state = {
   shouldExit   = false,
   cards        = {},
-  groupedCards = {},
   i18n         = nil,
   menu         = nil,
   preferences  = nil,
-  manifest     = manifest,
+  manifest     = nil,
   cardHandlers = {},
   focusIndex   = 0,
   ignoreNextPageKey = false,
   suppressPressFrames = 0,
   memBucket    = nil,
   memLastTick  = 0,
+  memPeakKb    = 0,
   lastInputTick = 0,
   activePageMenuId = nil,
   helpContent = nil,
@@ -171,6 +246,47 @@ end
 local function performSave()
   _G.rfsuite.preferences = state.preferences
   return savePreferencesSafe(state.preferences)
+end
+
+local function isContinuousMemoryLogEnabled()
+  local general = state.preferences and state.preferences.general
+  return type(general) == "table" and general.continuous_memory_log == true
+end
+
+local function isSerialMemoryLogEnabled()
+  local general = state.preferences and state.preferences.general
+  return type(general) == "table" and general.enable_serial_debug == true and type(serialWrite) == "function"
+end
+
+local function logMemoryUsage(now)
+  if not isContinuousMemoryLogEnabled() then
+    state.memLastTick = 0
+    return
+  end
+
+  if type(collectgarbage) ~= "function" then
+    return
+  end
+
+  local tickNow = tonumber(now) or 0
+  if tickNow > 0 and state.memLastTick > 0 and (tickNow - state.memLastTick) < MEM_LOG_INTERVAL_TICKS then
+    return
+  end
+
+  local memKb = math.floor((collectgarbage("count") or 0) + 0.5)
+  if memKb > (state.memPeakKb or 0) then
+    state.memPeakKb = memKb
+  end
+
+  state.memLastTick = tickNow > 0 and tickNow or (state.memLastTick or 0)
+
+  local line = "[mem][info] lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
+  if type(print) == "function" then
+    print(line)
+  end
+  if isSerialMemoryLogEnabled() then
+    pcall(serialWrite, line .. "\n")
+  end
 end
 
 local function resolveLocaleFromSystem()
@@ -249,6 +365,8 @@ local function onHelp()
   local menuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
   if not menuId then return end
 
+  ensureHelpRegistry()
+
   local helpData = HelpRegistry and HelpRegistry.get and HelpRegistry.get(menuId, {
     i18n = state.i18n,
     preferences = state.preferences,
@@ -295,6 +413,7 @@ local function getActivePageModule()
   if not state.menu then return nil end
   local menuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId()
   if not menuId then return nil end
+  ensurePageRegistry()
   return PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[menuId]
 end
 
@@ -387,6 +506,7 @@ local function maybeShowUnsupportedMspDialog()
   state.mspUnsupportedVersionShown = version
 
   local supported = "-"
+  ensureVersion()
   if Version and type(Version.getSupportedMspApiVersionsString) == "function" then
     supported = Version.getSupportedMspApiVersionsString() or "-"
   end
@@ -539,6 +659,7 @@ local function maybeRefreshInfoPageFromSession()
   end
 
   local snapshot = tostring(session.apiVersion or "") .. "|" .. tostring(session.fcVersion or "") .. "|" .. tostring(session.rfVersion or "") ..
+    "|" .. tostring(session.mcu_id or "") ..
     "|" .. tostring(session.mspLastError or "") .. "|" .. tostring(session.mspLastErrorAt or "") ..
     "|" .. tostring(diagnostics and diagnostics.mspLastError or "") .. "|" .. tostring(diagnostics and diagnostics.mspLastErrorAt or "")
   if state.infoSessionSnapshot ~= snapshot then
@@ -653,6 +774,8 @@ end
 function M.buildUI()
   if lvgl == nil then return end
 
+  ensureBuildDeps()
+
   syncActivePageModule()
 
   local profile = DisplayProfile.current()
@@ -672,6 +795,9 @@ function M.buildUI()
 
   local pageTitle = state.menu.isRoot() and "Rotorflight" or state.menu.getHeaderTitle()
   local currentMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or "root"
+  if currentMenuId ~= "root" and not PageRegistry then
+    ensurePageRegistry()
+  end
   local actions = Header.resolveActions({
     headerActions = state.headerActions,
     menu          = state.menu,
@@ -691,6 +817,7 @@ function M.buildUI()
 
   -- ── Help view (no lvgl.dialog – avoids LVGL lifecycle crashes) ───────────────
   if state.helpContent then
+    ensureHelpView()
     local helpLyt = HelpView.build({
       i18n = state.i18n,
       contentX = contentX,
@@ -715,7 +842,6 @@ function M.buildUI()
 
   if state.menu.isRoot() then
     local groups    = state.menu.getRootGroups(ICON_ROOT)
-    state.groupedCards = groups
     local flatCards = Tiles.flattenRootCards(groups)
     -- Never alias cached root card tables into state.cards because submenu grid
     -- layout reuses state.cards as mutable output and would overwrite root data.
@@ -787,6 +913,7 @@ function M.buildUI()
 
   else
     currentMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+    ensurePageRegistry()
     local pageModule = PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[currentMenuId] or nil
     if pageModule and pageModule.build then
       wipeTable(state.cards)
@@ -842,11 +969,18 @@ function M.buildUI()
   end
 
   -- Build layout: page + children table, then "?" button as sibling (same as Save in page.lua)
+  local rootSubtitle = nil
+  if breadcrumb ~= "" then
+    rootSubtitle = shortenBreadcrumb(breadcrumb)
+  elseif state.menu.isRoot() and Version and type(Version.getVersionString) == "function" then
+    rootSubtitle = Version.getVersionString()
+  end
+
   local lyt = {
     {
       type     = "page",
       title    = pageTitle,
-      subtitle = breadcrumb ~= "" and shortenBreadcrumb(breadcrumb) or (state.menu.isRoot() and Version.getVersionString() or nil),
+      subtitle = rootSubtitle,
       icon     = APP_ICON,
       back     = onBack,
       children = children
@@ -856,6 +990,7 @@ function M.buildUI()
   Header.appendToLayout(lyt, {
     actions  = actions,
     i18n     = state.i18n,
+    preferences = state.preferences,
     layout   = profile.header,
     onHelp   = onHelp,
     onStar   = onStar,
@@ -873,10 +1008,9 @@ end
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
 function M.init()
-  if PageRegistry and PageRegistry.releaseAll then
-    PageRegistry.releaseAll(buildPageContext())
-  end
+  ensureInitDeps()
 
+  ensurePreferencesSafe()
   state.shouldExit = false
   local prefs = loadPreferencesSafe()
   state.preferences = prefs
@@ -884,15 +1018,20 @@ function M.init()
   local locale = resolveLocaleFromSystem()
   state.i18n       = I18n.new(locale)
   _G.rfsuite.savePreferences = performSave
+  state.manifest = manifest
   state.menu       = MenuRegistry.new(manifest, state.i18n, {
     conditions = {
       developerTools = prefs.general and prefs.general.developer_tools == true,
       fblConnected = false
     },
-    iconByMenuId = PageRegistry.iconByMenuId
+    iconByMenuIdProvider = function()
+      ensurePageRegistry()
+      return PageRegistry and PageRegistry.iconByMenuId or nil
+    end
   })
   state.memBucket  = nil
   state.memLastTick = 0
+  state.memPeakKb = 0
   state.lastInputTick = getTime and getTime() or 0
   state.ignoreNextPageKey = false
   state.suppressPressFrames = 0
@@ -909,10 +1048,7 @@ function M.init()
   state.mspUnsupportedDialogShown = false
   state.mspUnsupportedVersionShown = nil
   state.mspLinkConfigWarningAt = 0
-  if MspRuntime and type(MspRuntime.attach) == "function" then
-    MspRuntime.attach("tool")
-    state.mspAttached = true
-  end
+  state.mspAttached = false
   M.buildUI()
 end
 
@@ -930,6 +1066,16 @@ function M.run(event, touchState)
   end
 
   if state.menu then
+    local now = getTime and getTime() or 0
+
+    if not state.mspAttached then
+      ensureMspRuntime()
+      if MspRuntime and type(MspRuntime.attach) == "function" then
+        MspRuntime.attach("tool")
+        state.mspAttached = true
+      end
+    end
+
     if (state.suppressPressFrames or 0) > 0 then
       state.suppressPressFrames = state.suppressPressFrames - 1
     end
@@ -955,12 +1101,13 @@ function M.run(event, touchState)
     end
 
     if MspRuntime and type(MspRuntime.tick) == "function" then
-      local now = getTime and getTime() or 0
       if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then
         state.mspLastTick = now
         MspRuntime.tick()
       end
     end
+
+    logMemoryUsage(now)
 
     updateRuntimeMenuConditions()
     maybeRefreshInfoPageFromSession()

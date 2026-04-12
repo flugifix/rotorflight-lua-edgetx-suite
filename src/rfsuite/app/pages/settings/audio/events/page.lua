@@ -6,8 +6,8 @@ local function loadModule(path)
   return chunk()
 end
 
-local Controls = loadModule("ui/controls.lua")
-local Common = loadModule("app/pages/settings/common.lua")
+local Controls = nil
+local Common = nil
 
 -- ─── Config schema ───────────────────────────────────────────────────────────
 -- Single source of truth for all persisted audio event settings.
@@ -69,11 +69,27 @@ local ui = {
   }
 }
 
-ui.runtime = setmetatable(ui.runtime, {__index = Common.createFormRuntime(ui)})
+ui.runtimeBase = nil
 
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local t = Common.pageT("settings_audio_events")
+local t = nil
+
+local function ensureDeps()
+  if not Common then
+    Common = loadModule("app/pages/settings/common.lua")
+  end
+  if not Controls then
+    Controls = loadModule("ui/controls.lua")
+  end
+  if not ui.runtimeBase then
+    ui.runtimeBase = Common.createFormRuntime(ui)
+    setmetatable(ui.runtime, {__index = ui.runtimeBase})
+  end
+  if not t then
+    t = Common.pageT("settings_audio_events")
+  end
+end
 local FUEL_CALLOUT_VALUES = { [0] = true, [5] = true, [10] = true, [20] = true, [25] = true, [50] = true }
 
 local function getEscThresholdEnabled()
@@ -316,6 +332,7 @@ local SECTIONS = {
 -- ─── Module API ──────────────────────────────────────────────────────────────
 
 function M.getHeaderActions()
+  ensureDeps()
   return { save = ui.dirty, reload = ui.dirty, help = false }
 end
 
@@ -324,12 +341,14 @@ function M.allowMemAutoRefresh()
 end
 
 function M.onReload(ctx)
+  ensureDeps()
   copyFromPrefs(ctx.preferences)
   ui.dirty = false
   return true
 end
 
 function M.onSave(ctx)
+  ensureDeps()
   if not ctx.preferences.audio_events then ctx.preferences.audio_events = {} end
 
   -- Saves all settings using the schema
@@ -350,6 +369,7 @@ function M.onSave(ctx)
 end
 
 function M.build(ctx)
+  ensureDeps()
   ensureLoaded(ctx.preferences)
 
   local children       = ctx.children
@@ -425,6 +445,14 @@ function M.build(ctx)
       end
     end
   end
+end
+
+function M.onClose()
+  setmetatable(ui.runtime, nil)
+  ui.runtimeBase = nil
+  Controls = nil
+  Common = nil
+  t = nil
 end
 
 return M

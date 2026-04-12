@@ -4,10 +4,10 @@ local function loadModule(path)
   return chunk()
 end
 
-local Common = loadModule("app/pages/settings/common.lua")
-local Controls = loadModule("ui/controls.lua")
-local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
-local Log = loadModule("lib/log.lua")
+local Common = nil
+local Controls = nil
+local DashboardLib = nil
+local Log = nil
 
 local M = {}
 
@@ -34,10 +34,32 @@ local ui = {
   themes = nil,
 }
 
-ui.runtime = Common.createFormRuntime(ui)
-local t = Common.pageT("settings_dashboard_theme")
+ui.runtime = nil
+local t = nil
+
+local function ensureDeps()
+  if not Common then
+    Common = loadModule("app/pages/settings/common.lua")
+  end
+  if not Controls then
+    Controls = loadModule("ui/controls.lua")
+  end
+  if not DashboardLib then
+    DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
+  end
+  if not Log then
+    Log = loadModule("lib/log.lua")
+  end
+  if not ui.runtime then
+    ui.runtime = Common.createFormRuntime(ui)
+  end
+  if not t then
+    t = Common.pageT("settings_dashboard_theme")
+  end
+end
 
 local function refreshThemes()
+  ensureDeps()
   ui.themes = DashboardLib.listThemes()
   debugLog("refreshThemes count=" .. tostring(ui.themes and #ui.themes or 0))
 end
@@ -132,6 +154,7 @@ local function saveToPreferences(prefs)
 end
 
 function M.getHeaderActions()
+  ensureDeps()
   return { save = ui.dirty, reload = true, help = false }
 end
 
@@ -140,6 +163,7 @@ function M.allowMemAutoRefresh()
 end
 
 function M.onReload(ctx)
+  ensureDeps()
   ui.loaded = false
   ui.themes = nil
   ensureLoaded(ctx.preferences)
@@ -148,6 +172,7 @@ function M.onReload(ctx)
 end
 
 function M.onSave(ctx)
+  ensureDeps()
   saveToPreferences(ctx.preferences)
   local ok, err = ctx.savePreferences()
   if ok then
@@ -159,6 +184,7 @@ function M.onSave(ctx)
 end
 
 function M.build(ctx)
+  ensureDeps()
   ensureLoaded(ctx.preferences)
   refreshThemes()
   ensureValidSelections()
@@ -257,6 +283,16 @@ function M.build(ctx)
       function(id) setModelThemeFromId("model_theme_postflight", id) end
     )
   end
+end
+
+function M.onClose()
+  ui.runtime = nil
+  ui.themes = nil
+  Controls = nil
+  Common = nil
+  DashboardLib = nil
+  Log = nil
+  t = nil
 end
 
 return M

@@ -1,18 +1,121 @@
 local Render = {}
 
+local boxConfigCache = setmetatable({}, { __mode = "k" })
+
+local function isSimulator()
+  if type(getVersion) ~= "function" then return false end
+  local ok, _, fw = pcall(getVersion)
+  if not ok or type(fw) ~= "string" then return false end
+  return string.sub(string.lower(fw), -4) == "simu"
+end
+
+local IS_SIMULATOR = isSimulator()
+
+local FAST_STATE_SOURCES = {
+  pid_profile = "profile",
+  rate_profile = "rateProfile",
+  battery_profile = "batteryProfile",
+  link = "lq",
+  voltage = "voltage",
+  rpm = "rpm",
+  fuel = "fuel",
+  governor = "governor",
+  esc_temp = "escTemp",
+  mcu_temp = "mcuTemp"
+}
+
+local function compileBoxConfig(box)
+  local cfg = {
+    source = box and box.source or nil,
+    sourceDynamic = type(box and box.source) == "function",
+    transform = box and box.transform or nil,
+    transformDynamic = type(box and box.transform) == "function",
+    decimals = box and box.decimals or nil,
+    decimalsDynamic = type(box and box.decimals) == "function",
+    unit = box and box.unit or nil,
+    unitDynamic = type(box and box.unit) == "function",
+    font = box and box.font or nil,
+    fontDynamic = type(box and box.font) == "function",
+    autoSizeChars = box and box.autosize_chars or nil,
+    autoSizeCharsDynamic = type(box and box.autosize_chars) == "function",
+    autoSizeFont = box and box.autosize_font or nil,
+    autoSizeFontDynamic = type(box and box.autosize_font) == "function"
+  }
+  boxConfigCache[box] = cfg
+  return cfg
+end
+
+local function getBoxConfig(box)
+  local cfg = box and boxConfigCache[box] or nil
+  if cfg then return cfg end
+  return compileBoxConfig(box)
+end
+
+local function mapSourceFast(source, state, utils)
+  if type(source) ~= "string" then
+    return nil
+  end
+
+  local stateKey = FAST_STATE_SOURCES[source]
+  if stateKey and type(state) == "table" then
+    local direct = state[stateKey]
+    if direct ~= nil then
+      return direct
+    end
+  end
+
+  return utils.mapTelemetrySource(source, state)
+end
+
 function Render.render(nodes, rect, box, state, _, utils)
-  local source = utils.resolveValue(box.source, box, state)
-  local raw = source ~= nil and utils.mapTelemetrySource(source, state) or nil
-  raw = utils.applyTransform(raw, utils.resolveValue(box.transform, box, state))
+  local cfg = getBoxConfig(box)
 
-  local valueText = utils.formatDisplayValue(raw, utils.resolveValue(box.decimals, box, state))
-  valueText = utils.appendUnit(valueText, utils.resolveValue(box.unit, box, state))
-  local valueFont = utils.resolveValue(box.font, box, state) or MIDSIZE
+  local source = cfg.source
+  if cfg.sourceDynamic then
+    source = utils.resolveValue(source, box, state)
+  end
 
-  local autoSizeChars = utils.resolveValue(box.autosize_chars, box, state)
+  local raw = source ~= nil and mapSourceFast(source, state, utils) or nil
 
-  if type(autoSizeChars) == "number" and type(valueText) == "string" and string.len(valueText) > autoSizeChars then
-    valueFont = utils.resolveValue(box.autosize_font, box, state) or SMLSIZE
+  local transform = cfg.transform
+  if cfg.transformDynamic then
+    transform = utils.resolveValue(transform, box, state)
+  end
+  raw = utils.applyTransform(raw, transform)
+
+  local decimals = cfg.decimals
+  if cfg.decimalsDynamic then
+    decimals = utils.resolveValue(decimals, box, state)
+  end
+
+  local valueText = utils.formatDisplayValue(raw, decimals)
+
+  local unit = cfg.unit
+  if cfg.unitDynamic then
+    unit = utils.resolveValue(unit, box, state)
+  end
+  valueText = utils.appendUnit(valueText, unit)
+
+  local valueFont = cfg.font
+  if cfg.fontDynamic then
+    valueFont = utils.resolveValue(valueFont, box, state)
+  end
+  valueFont = valueFont or MIDSIZE
+
+  local autoSizeChars = nil
+  if not IS_SIMULATOR then
+    autoSizeChars = cfg.autoSizeChars
+    if cfg.autoSizeCharsDynamic then
+      autoSizeChars = utils.resolveValue(autoSizeChars, box, state)
+    end
+  end
+
+  if type(autoSizeChars) == "number" and type(valueText) == "string" and #valueText > autoSizeChars then
+    local autoSizeFont = cfg.autoSizeFont
+    if cfg.autoSizeFontDynamic then
+      autoSizeFont = utils.resolveValue(autoSizeFont, box, state)
+    end
+    valueFont = autoSizeFont or SMLSIZE
   end
 
   utils.pushLabel(

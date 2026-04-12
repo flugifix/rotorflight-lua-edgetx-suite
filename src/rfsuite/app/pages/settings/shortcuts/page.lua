@@ -4,11 +4,18 @@ local function loadModule(path)
   return chunk()
 end
 
-local Common = loadModule("common.lua")
+local Common = nil
 
 local M = {}
 
+local function ensureDeps()
+  if not Common then
+    Common = loadModule("common.lua")
+  end
+end
+
 function M.build(ctx)
+  ensureDeps()
   Common.buildSimplePage(ctx, "settings_shortcuts", "section_shortcuts", "Shortcuts", {
     { labelKey = "primary_actions", labelFallback = "Primary Actions", valueKey = "value_primary_actions", valueFallback = "MODE 1" },
     { labelKey = "secondary_actions", labelFallback = "Secondary Actions", valueKey = "value_secondary_actions", valueFallback = "MODE 2" },
@@ -16,6 +23,10 @@ function M.build(ctx)
     { labelKey = "quick_access", labelFallback = "Quick Access", valueKey = "value_quick_access", valueFallback = "ENABLED" },
     { labelKey = "long_press_delay", labelFallback = "Long Press Delay", valueKey = "value_long_press_delay", valueFallback = "500ms", withArrow = false }
   })
+end
+
+function M.onClose()
+  Common = nil
 end
 
 return M

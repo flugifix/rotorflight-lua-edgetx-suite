@@ -3,8 +3,6 @@
 
 local Header = {}
 
-local SHOW_RAM_LABEL = true
-
 local DEFAULT_LAYOUT = {
   rightPad = 20,
   memW = 126,
@@ -116,6 +114,7 @@ end
 function Header.appendToLayout(lyt, ctx)
   local actions = ctx.actions
   local i18n    = ctx.i18n
+  local prefs   = ctx.preferences
   local cfg = ctx.layout or DEFAULT_LAYOUT
   local t = function(key, fb) return Header.tAction(i18n, key, fb) end
 
@@ -125,7 +124,9 @@ function Header.appendToLayout(lyt, ctx)
   local xReload = xStar    - cfg.topButtonGap - cfg.topButtonWAction
   local xSave   = xReload  - cfg.topButtonGap - cfg.topButtonWAction
   local xBack   = xSave    - cfg.topButtonGap - cfg.topButtonWAction
-  if SHOW_RAM_LABEL then
+  local general = type(prefs) == "table" and prefs.general or nil
+  local showRamLabel = type(general) == "table" and general.show_header_memory == true
+  if showRamLabel then
     local xMem = xBack - cfg.topButtonGap - cfg.memW
     lyt[#lyt + 1] = {
       type  = "label",
@@ -135,11 +136,11 @@ function Header.appendToLayout(lyt, ctx)
     }
   end
 
-  appendButton(lyt, cfg, xHelp,   cfg.topButtonWSmall,  t("help",   "?"),      actions.help,   ctx.onHelp)
-  appendButton(lyt, cfg, xStar,   cfg.topButtonWSmall,  t("star",   "*"),      actions.star,   ctx.onStar)
-  appendButton(lyt, cfg, xReload, cfg.topButtonWAction, t("reload", "RELOAD"), actions.reload, ctx.onReload)
-  appendButton(lyt, cfg, xSave,   cfg.topButtonWAction, t("save",   "SAVE"),   actions.save,   ctx.onSave)
   appendButton(lyt, cfg, xBack,   cfg.topButtonWAction, t("back",   "BACK"),   true,           ctx.onBack)
+  appendButton(lyt, cfg, xSave,   cfg.topButtonWAction, t("save",   "SAVE"),   actions.save,   ctx.onSave)
+  appendButton(lyt, cfg, xReload, cfg.topButtonWAction, t("reload", "RELOAD"), actions.reload, ctx.onReload)
+  appendButton(lyt, cfg, xStar,   cfg.topButtonWSmall,  t("star",   "*"),      actions.star,   ctx.onStar)
+  appendButton(lyt, cfg, xHelp,   cfg.topButtonWSmall,  t("help",   "?"),      actions.help,   ctx.onHelp)
 end
 
 return Header

@@ -3,6 +3,8 @@ local Runtime = {}
 local SYSTEM_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/"
 local USER_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite.user/dashboard/"
 local AUDIO_LOG_FORCE = false
+local POSTFLIGHT_HOLD_SECONDS = 20
+local SPLASH_READY_HOLD_SECONDS = 1.0
 
 local function scriptExists(path)
   if type(path) ~= "string" or path == "" then return false end
@@ -57,6 +59,24 @@ if type(loadDashboardAudioModule) == "function" then
   end
 end
 
+local loadDashboardSplashModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/splash")
+local DashboardSplash = nil
+if type(loadDashboardSplashModule) == "function" then
+  local ok, mod = pcall(loadDashboardSplashModule)
+  if ok and type(mod) == "table" and type(mod.build) == "function" then
+    DashboardSplash = mod
+  end
+end
+
+local loadMspRuntimeModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/runtime")
+local MspRuntime = nil
+if type(loadMspRuntimeModule) == "function" then
+  local ok, mod = pcall(loadMspRuntimeModule)
+  if ok and type(mod) == "table" then
+    MspRuntime = mod
+  end
+end
+
 local PID_PROFILE_SOURCES = { "PID#", "PIDP", "PidP", "PIDP1", "PID Profile", "PID" }
 local RATE_PROFILE_SOURCES = { "RTE#", "RateP", "RTPR", "Rate Profile", "Rate" }
 local BATTERY_PROFILE_SOURCES = { "BatP", "battery_profile", "Battery Profile", "BatProfile" }
@@ -65,6 +85,9 @@ local GOVERNOR_SOURCES = { "Gov", "Governor" }
 local FUEL_SOURCES = { "Fuel", "Bat%" }
 local VOLTAGE_SOURCES = { "VFAS", "Vbat", "voltage", "VBAT" }
 local ESC_TEMP_SOURCES = { "ESC_TMP", "TescT", "ESC Temp" }
+local LINK_QUALITY_SOURCES = { "RQly", "LQ", "Link", "link_quality" }
+local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
+local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
 
 local SIM_SENSOR_PATHS = {
   "/SCRIPTS/TOOLS/rfsuite-core/sim/sensors/",
@@ -118,6 +141,12 @@ end
 
 local function audioLog(self, msg, level)
   utils.log(self, msg, level)
+end
+
+local function widgetLog(self, msg, level)
+  if Log and type(Log.emit) == "function" then
+    Log.emit("rfsuite.widget", msg, level or "debug", true)
+  end
 end
 
 local function nowSeconds()
@@ -217,6 +246,110 @@ local function processAudioEvents(self)
   end
 end
 
+local function tickMspRuntime(self)
+  if not MspRuntime then
+    return
+  end
+
+  if not self.mspAttached and type(MspRuntime.attach) == "function" then
+    MspRuntime.attach("dashboard-widget")
+    self.mspAttached = true
+  end
+
+  if type(MspRuntime.tick) ~= "function" then
+    return
+  end
+
+  local now = (type(getTime) == "function" and getTime()) or 0
+  if now == 0 or (now - (self.mspLastTick or 0)) >= 5 then
+    self.mspLastTick = now
+    MspRuntime.tick()
+  end
+end
+
+local function buildConnectionSplash(zone, statusLine)
+  if DashboardSplash and type(DashboardSplash.build) == "function" then
+    return DashboardSplash.build(zone, statusLine)
+  end
+
+  local w = (zone and zone.w) or LCD_W or 320
+  local h = (zone and zone.h) or LCD_H or 172
+  return {
+    {
+      type = "rectangle",
+      x = 0,
+      y = 0,
+      w = w,
+      h = h,
+      color = COLOR_THEME_PRIMARY2,
+      filled = true
+    }
+  }
+end
+
+local function resolvePostflightHoldSeconds(prefs, fallback)
+  local defaultValue = tonumber(fallback) or POSTFLIGHT_HOLD_SECONDS
+  local general = type(prefs) == "table" and prefs.general or nil
+  local raw = general and general.postflight_hold_seconds or defaultValue
+  local value = tonumber(raw) or defaultValue
+  if value < 0 then value = 0 end
+  if value > 120 then value = 120 end
+  return math.floor(value + 0.5)
+end
+
+local function updateConnectionState(self)
+  local runtimeState = (MspRuntime and type(MspRuntime.getState) == "function") and MspRuntime.getState() or nil
+  local connected = type(runtimeState) == "table" and runtimeState.lastConnected == true
+  local hasVoltage = type(self.state.voltage) == "number" and self.state.voltage > 0
+  local hasFuel = type(self.state.fuel) == "number" and self.state.fuel >= 0
+  local hasLq = type(self.state.lq) == "number" and self.state.lq > 0
+  local hasRss1 = type(self.state.rss1) == "number" and self.state.rss1 > 0
+  local hasRss2 = type(self.state.rss2) == "number" and self.state.rss2 > 0
+  local batteryReady = hasVoltage or hasFuel
+  local rfReady = hasLq or hasRss1 or hasRss2
+  local rawReady = connected and batteryReady and rfReady
+  local now = nowSeconds()
+
+  if rawReady then
+    if not self.readySince then
+      self.readySince = now
+    end
+  else
+    self.readySince = nil
+  end
+
+  local ready = rawReady and self.readySince ~= nil and (now - self.readySince) >= SPLASH_READY_HOLD_SECONDS
+
+  local statusLine = nil
+  if not connected then
+    statusLine = "Waiting for MSP link"
+  elseif not rfReady then
+    statusLine = "Waiting for receiver telemetry (1RSS/2RSS)"
+  elseif not batteryReady then
+    statusLine = "Waiting for battery telemetry"
+  elseif not ready then
+    statusLine = "Connected, starting dashboard..."
+  end
+
+  if self.connectionReady ~= ready then
+    self.connectionReady = ready
+    self.built = false
+    self.renderKey = nil
+    if ready then
+      widgetLog(self, "FBL connected and telemetry initialized", "info")
+    else
+      widgetLog(self, "FBL not ready yet", "info")
+      if self.audioState then
+        self.audioState.initialized = false
+      end
+    end
+  end
+
+  self.state.fblConnected = connected
+  self.state.connectionReady = ready
+  return ready, statusLine
+end
+
 local function readFirstValue(names, fallback)
   if type(names) ~= "table" then
     return fallback
@@ -301,6 +434,8 @@ local function updateDerivedFlightState(state)
     if (state.currentFlightSeconds or 0) >= 1 then
       state.flights = (state.flights or 0) + 1
     end
+    state.lastDisarmAt = now
+    state.hadArmedFlight = true
     state.lastMinVoltage = state.currentFlightMinVoltage
     state.lastMinLq = state.currentFlightMinLq
     state.currentFlightSeconds = 0
@@ -427,12 +562,12 @@ local function resolveThemePathForState(dashboard, flightMode)
   end
 
   local modelValue = modelOverride and dashboard and dashboard[modelKey] or nil
-  if type(modelValue) == "string" and modelValue ~= "" and modelValue ~= "nil" then
+  if modelValue and modelValue ~= "" and modelValue ~= "nil" then
     return modelValue
   end
 
   local globalValue = dashboard and dashboard[key] or nil
-  if type(globalValue) == "string" and globalValue ~= "" then
+  if globalValue and globalValue ~= "" then
     return globalValue
   end
 
@@ -441,7 +576,9 @@ end
 
 local function readTelemetry(state)
   state.rpm = readValue("RPM", state.rpm)
-  state.lq = readValue("RQly", state.lq)
+  state.lq = readFirstNumber(LINK_QUALITY_SOURCES, state.lq)
+  state.rss1 = readFirstNumber(RSS1_SOURCES, state.rss1)
+  state.rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   state.profile = roundInt(readFirstValue(PID_PROFILE_SOURCES, state.profile), state.profile or 1)
   state.rateProfile = roundInt(readFirstValue(RATE_PROFILE_SOURCES, state.rateProfile), state.rateProfile or 1)
   state.batteryProfile = roundInt(readFirstValue(BATTERY_PROFILE_SOURCES, state.batteryProfile), state.batteryProfile or 1)
@@ -477,7 +614,13 @@ local function computeFlightMode(state)
     return "inflight"
   end
   if state.hadArmedFlight == true then
-    return "postflight"
+    local disarmAt = tonumber(state.lastDisarmAt)
+    local now = nowSeconds()
+    if disarmAt and (now - disarmAt) <= (tonumber(state.postflightHoldSeconds) or POSTFLIGHT_HOLD_SECONDS) then
+      return "postflight"
+    end
+    state.hadArmedFlight = false
+    return "preflight"
   end
   return "preflight"
 end
@@ -503,6 +646,9 @@ local function reloadPreferencesIfNeeded(self, force)
     end
     self.preferences = prefs
     publishPreferencesToGlobal(prefs)
+    if self.state then
+      self.state.postflightHoldSeconds = resolvePostflightHoldSeconds(prefs, self.state.postflightHoldSeconds)
+    end
   end
 
   self.preferencesLastLoadedAt = now
@@ -531,6 +677,8 @@ function Runtime.new(zone, options)
     state = {
       armed = false,
       hadArmedFlight = false,
+      fblConnected = false,
+      connectionReady = false,
       rpm = 0,
       profile = 1,
       rateProfile = 1,
@@ -540,6 +688,8 @@ function Runtime.new(zone, options)
       escTemp = 0,
       flights = 0,
       lq = 0,
+      rss1 = 0,
+      rss2 = 0,
       fuel = 100,
       voltage = 0,
       flightSeconds = 0,
@@ -547,6 +697,8 @@ function Runtime.new(zone, options)
       totalFlightSeconds = 0,
       lastMinVoltage = nil,
       lastMinLq = nil,
+      lastDisarmAt = nil,
+      postflightHoldSeconds = resolvePostflightHoldSeconds(prefs, POSTFLIGHT_HOLD_SECONDS),
       themeConfig = { v_min = 18.0, v_max = 25.2 }
     },
     audioState = {
@@ -576,7 +728,12 @@ function Runtime.new(zone, options)
       lastEnabled = {
         governor_state = nil
       }
-    }
+    },
+    connectionReady = false,
+    statusLine = "Waiting for MSP link",
+    readySince = nil,
+    mspAttached = false,
+    mspLastTick = 0
   }
 
   local function reloadActiveTheme(self)
@@ -621,12 +778,33 @@ function Runtime.new(zone, options)
   end
 
   function widget.refresh(self)
+    tickMspRuntime(self)
     reloadPreferencesIfNeeded(self, false)
     self.state.zoneW = self.zone and self.zone.w or 0
     self.state.zoneH = self.zone and self.zone.h or 0
     readTelemetry(self.state)
-    processAudioEvents(self)
     local nextMode = computeFlightMode(self.state)
+    local ready, statusLine = updateConnectionState(self)
+
+    if ready then
+      processAudioEvents(self)
+    end
+
+    if not ready and nextMode ~= "postflight" then
+      local splashKey = "splash|" .. tostring(statusLine or "") .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
+      if self.renderKey ~= splashKey then
+        self.renderKey = splashKey
+        self.built = false
+      end
+
+      if not self.built then
+        lvgl.clear()
+        lvgl.build(buildConnectionSplash(self.zone, statusLine))
+        self.built = true
+      end
+      return
+    end
+
     local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, nextMode)
 
     if nextMode ~= self.flightMode then
@@ -667,9 +845,13 @@ function Runtime.new(zone, options)
   end
 
   function widget.background(self)
+    tickMspRuntime(self)
     reloadPreferencesIfNeeded(self, false)
     readTelemetry(self.state)
-    processAudioEvents(self)
+    local ready = updateConnectionState(self)
+    if ready then
+      processAudioEvents(self)
+    end
     local nextMode = computeFlightMode(self.state)
     local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, nextMode)
 

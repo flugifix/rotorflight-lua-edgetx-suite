@@ -85,7 +85,7 @@ function Engine.build(zone, state, theme)
   if isSimulator() then
     -- Simulator has a stricter per-refresh instruction budget than TX16.
     -- Render a reduced subset to keep the widget alive in desktop simulation.
-    maxMainRects = math.min(maxMainRects, 8)
+    maxMainRects = math.min(maxMainRects, 10)
     maxHeaderRects = 4
   end
 

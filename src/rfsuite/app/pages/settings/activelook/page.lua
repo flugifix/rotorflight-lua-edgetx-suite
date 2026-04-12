@@ -4,11 +4,18 @@ local function loadModule(path)
   return chunk()
 end
 
-local Common = loadModule("common.lua")
+local Common = nil
 
 local M = {}
 
+local function ensureDeps()
+  if not Common then
+    Common = loadModule("common.lua")
+  end
+end
+
 function M.build(ctx)
+  ensureDeps()
   Common.buildSimplePage(ctx, "settings_activelook", "section_activelook", "ActiveLook", {
     { labelKey = "style", labelFallback = "Style", valueKey = "value_style", valueFallback = "MODERN" },
     { labelKey = "icon_pack", labelFallback = "Icon Pack", valueKey = "value_icon_pack", valueFallback = "RF SUITE" },
@@ -16,6 +23,10 @@ function M.build(ctx)
     { labelKey = "highlight", labelFallback = "Highlight", valueKey = "value_highlight", valueFallback = "AMBER" },
     { labelKey = "animations", labelFallback = "Animations", valueKey = "value_animations", valueFallback = "ON", withArrow = false }
   })
+end
+
+function M.onClose()
+  Common = nil
 end
 
 return M

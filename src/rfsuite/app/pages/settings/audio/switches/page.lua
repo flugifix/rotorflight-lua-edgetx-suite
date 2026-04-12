@@ -6,8 +6,8 @@ local function loadModule(path)
   return chunk()
 end
 
-local Controls = loadModule("ui/controls.lua")
-local Common = loadModule("app/pages/settings/common.lua")
+local Controls = nil
+local Common = nil
 
 -- ─── Config schema ───────────────────────────────────────────────────────────
 -- Single source of truth for all persisted audio switch settings.
@@ -47,11 +47,26 @@ local ui = {
   config = buildDefaultConfig()
 }
 
-ui.runtime = Common.createFormRuntime(ui)
+ui.runtime = nil
 
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local t = Common.pageT("settings_audio_switches")
+local t = nil
+
+local function ensureDeps()
+  if not Common then
+    Common = loadModule("app/pages/settings/common.lua")
+  end
+  if not Controls then
+    Controls = loadModule("ui/controls.lua")
+  end
+  if not ui.runtime then
+    ui.runtime = Common.createFormRuntime(ui)
+  end
+  if not t then
+    t = Common.pageT("settings_audio_switches")
+  end
+end
 
 local function prefBool(value, default)
   if value == nil then return default end
@@ -123,6 +138,7 @@ local SECTIONS = {
 -- ─── Module API ──────────────────────────────────────────────────────────────
 
 function M.getHeaderActions()
+  ensureDeps()
   return { save = ui.dirty, reload = ui.dirty, help = false }
 end
 
@@ -131,12 +147,14 @@ function M.allowMemAutoRefresh()
 end
 
 function M.onReload(ctx)
+  ensureDeps()
   copyFromPrefs(ctx.preferences)
   ui.dirty = false
   return true
 end
 
 function M.onSave(ctx)
+  ensureDeps()
   if not ctx.preferences.audio_switches then ctx.preferences.audio_switches = {} end
 
   -- Saves all settings using the schema
@@ -157,6 +175,7 @@ function M.onSave(ctx)
 end
 
 function M.build(ctx)
+  ensureDeps()
   ensureLoaded(ctx.preferences)
 
   local children       = ctx.children
@@ -186,6 +205,13 @@ function M.build(ctx)
       end
     end
   end
+end
+
+function M.onClose()
+  ui.runtime = nil
+  Controls = nil
+  Common = nil
+  t = nil
 end
 
 return M

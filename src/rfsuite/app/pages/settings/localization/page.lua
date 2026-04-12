@@ -6,8 +6,8 @@ local function loadModule(path)
   return chunk()
 end
 
-local Controls = loadModule("ui/controls.lua")
-local Common = loadModule("app/pages/settings/common.lua")
+local Controls = nil
+local Common = nil
 
 -- ─── Config schema ────────────────────────────────────────────────────────────
 -- All persisted localization settings. Loading and saving are automatic.
@@ -33,11 +33,26 @@ local ui = {
   config    = buildDefaultConfig(),
 }
 
-ui.runtime = Common.createFormRuntime(ui)
+ui.runtime = nil
 
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local t = Common.pageT("settings_localization")
+local t = nil
+
+local function ensureDeps()
+  if not Common then
+    Common = loadModule("app/pages/settings/common.lua")
+  end
+  if not Controls then
+    Controls = loadModule("ui/controls.lua")
+  end
+  if not ui.runtime then
+    ui.runtime = Common.createFormRuntime(ui)
+  end
+  if not t then
+    t = Common.pageT("settings_localization")
+  end
+end
 
 local function copyFromPrefs(prefs)
   local loc = (prefs and prefs.localizations) or {}
@@ -131,6 +146,7 @@ end
 -- ─── Module API ──────────────────────────────────────────────────────────────
 
 function M.getHeaderActions()
+  ensureDeps()
   return { save = ui.dirty, reload = true, help = false }
 end
 
@@ -139,11 +155,13 @@ function M.allowMemAutoRefresh()
 end
 
 function M.onReload(ctx)
+  ensureDeps()
   copyFromPrefs(ctx.preferences)
   ui.dirty = false
 end
 
 function M.onSave(ctx)
+  ensureDeps()
   if not ctx.preferences.localizations then ctx.preferences.localizations = {} end
   if not ctx.preferences.general then ctx.preferences.general = {} end
 
@@ -166,6 +184,7 @@ function M.onSave(ctx)
 end
 
 function M.build(ctx)
+  ensureDeps()
   ensureLoaded(ctx.preferences)
 
   local children = ctx.children
@@ -175,6 +194,13 @@ function M.build(ctx)
 
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
   buildLocalization(cursorY, children, x, w, i18n)
+end
+
+function M.onClose()
+  ui.runtime = nil
+  Controls = nil
+  Common = nil
+  t = nil
 end
 
 return M

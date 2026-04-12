@@ -6,11 +6,13 @@ local function loadModule(path)
   return chunk()
 end
 
-local Controls = loadModule("ui/controls.lua")
-local Common = loadModule("app/pages/settings/common.lua")
+local Controls = nil
+local Common = nil
 
 local CONFIG_SCHEMA = {
   { key = "debug_level", type = "string", default = "off" },
+  { key = "continuous_memory_log", type = "bool", default = false },
+  { key = "show_header_memory", type = "bool", default = false },
   { key = "enable_serial_debug", type = "bool", default = false }
 }
 
@@ -33,11 +35,26 @@ local ui = {
   config = buildDefaultConfig()
 }
 
-ui.runtime = Common.createFormRuntime(ui)
-ui.runtime.valueGetters = {}
-ui.runtime.valueSetters = {}
+ui.runtime = nil
 
-local t = Common.pageT("settings_developer_settings")
+local t = nil
+
+local function ensureDeps()
+  if not Common then
+    Common = loadModule("app/pages/settings/common.lua")
+  end
+  if not Controls then
+    Controls = loadModule("ui/controls.lua")
+  end
+  if not ui.runtime then
+    ui.runtime = Common.createFormRuntime(ui)
+    ui.runtime.valueGetters = {}
+    ui.runtime.valueSetters = {}
+  end
+  if not t then
+    t = Common.pageT("settings_developer_settings")
+  end
+end
 
 local function prefBool(value, default)
   if value == nil then return default end
@@ -113,6 +130,18 @@ local function buildLogging(cursorY, children, x, w, i18n)
   )
 
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    t(i18n, "continuous_memory_log", "Continuous Memory Log"),
+    ui.runtime.getBoolGetter("continuous_memory_log"),
+    ui.runtime.getBoolSetter("continuous_memory_log")
+  )
+
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    t(i18n, "show_header_memory", "Show Header Memory"),
+    ui.runtime.getBoolGetter("show_header_memory"),
+    ui.runtime.getBoolSetter("show_header_memory")
+  )
+
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "enable_serial_debug", "Enable Serial Debug"),
     ui.runtime.getBoolGetter("enable_serial_debug"),
     ui.runtime.getBoolSetter("enable_serial_debug")
@@ -130,6 +159,7 @@ local SECTIONS = {
 }
 
 function M.getHeaderActions()
+  ensureDeps()
   return { save = ui.dirty, reload = true, help = false }
 end
 
@@ -138,11 +168,13 @@ function M.allowMemAutoRefresh()
 end
 
 function M.onReload(ctx)
+  ensureDeps()
   copyFromPrefs(ctx.preferences)
   ui.dirty = false
 end
 
 function M.onSave(ctx)
+  ensureDeps()
   if not ctx.preferences.general then ctx.preferences.general = {} end
 
   for _, field in ipairs(CONFIG_SCHEMA) do
@@ -163,6 +195,7 @@ function M.onSave(ctx)
 end
 
 function M.build(ctx)
+  ensureDeps()
   ensureLoaded(ctx.preferences)
 
   local children = ctx.children
@@ -186,6 +219,13 @@ function M.build(ctx)
       cursorY = section.build(cursorY, children, x, w, i18n)
     end
   end
+end
+
+function M.onClose()
+  ui.runtime = nil
+  Controls = nil
+  Common = nil
+  t = nil
 end
 
 return M

@@ -4,8 +4,8 @@ local function loadModule(path)
   return chunk()
 end
 
-local Common = loadModule("app/pages/settings/common.lua")
-local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
+local Common = nil
+local DashboardLib = nil
 
 local M = {}
 
@@ -19,8 +19,23 @@ local ui = {
   activeModule = nil,
 }
 
-ui.runtime = Common.createFormRuntime(ui)
-local t = Common.pageT("settings_dashboard_settings")
+ui.runtime = nil
+local t = nil
+
+local function ensureDeps()
+  if not Common then
+    Common = loadModule("app/pages/settings/common.lua")
+  end
+  if not DashboardLib then
+    DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
+  end
+  if not ui.runtime then
+    ui.runtime = Common.createFormRuntime(ui)
+  end
+  if not t then
+    t = Common.pageT("settings_dashboard_settings")
+  end
+end
 
 local function hexDecode(input)
   if type(input) ~= "string" or input == "" then return nil end
@@ -44,6 +59,7 @@ local function themePathFromMenu(ctx)
 end
 
 local function ensureThemes()
+  ensureDeps()
   ui.themes = DashboardLib.listThemes()
   ui.configurableThemes = DashboardLib.getConfigurableThemes(ui.themes)
 end
@@ -113,6 +129,7 @@ local function loadThemeModule(ctx)
 end
 
 function M.getHeaderActions()
+  ensureDeps()
   local module = ui.activeModule
   if type(module) == "table" then
     if type(module.getHeaderActions) == "function" then
@@ -134,6 +151,7 @@ function M.allowMemAutoRefresh()
 end
 
 function M.onReload(ctx)
+  ensureDeps()
   ui.loaded = false
   ui.themes = nil
   ui.configurableThemes = nil
@@ -150,6 +168,7 @@ function M.onReload(ctx)
 end
 
 function M.onSave(ctx)
+  ensureDeps()
   local module = loadThemeModule(ctx)
   if type(module) == "table" then
     if type(module.onSave) == "function" then
@@ -171,6 +190,7 @@ function M.onSave(ctx)
 end
 
 function M.build(ctx)
+  ensureDeps()
   ensureLoaded(ctx.preferences)
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
 
@@ -203,6 +223,18 @@ function M.build(ctx)
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
   }
+end
+
+function M.onClose()
+  ui.runtime = nil
+  ui.themes = nil
+  ui.configurableThemes = nil
+  ui.activeThemeConfigPath = nil
+  ui.activeTheme = nil
+  ui.activeModule = nil
+  Common = nil
+  DashboardLib = nil
+  t = nil
 end
 
 return M

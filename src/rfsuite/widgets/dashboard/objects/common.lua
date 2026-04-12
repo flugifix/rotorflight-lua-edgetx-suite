@@ -7,8 +7,19 @@ local Utils = {}
 local i18nModule = nil
 local i18nContext = nil
 local i18nLocale = nil
+local resolvedLocale = nil
 local sensorsModule = nil
 local localeModule = nil
+local titleCache = {}
+
+local function detectSimulator()
+  if type(getVersion) ~= "function" then return false end
+  local ok, _, fw = pcall(getVersion)
+  if not ok or type(fw) ~= "string" then return false end
+  return string.sub(string.lower(fw), -4) == "simu"
+end
+
+local IS_SIMULATOR = detectSimulator()
 
 local function getLocaleModule()
   if localeModule then
@@ -35,15 +46,21 @@ local function getLocaleModule()
 end
 
 local function resolveLocale()
+  if resolvedLocale and resolvedLocale ~= "" then
+    return resolvedLocale
+  end
+
   local mod = getLocaleModule()
   if mod and type(mod.resolveSystemLanguage) == "function" then
     local ok, locale = pcall(mod.resolveSystemLanguage, "en")
     if ok and type(locale) == "string" and locale ~= "" then
-      return locale
+      resolvedLocale = locale
+      return resolvedLocale
     end
   end
 
-  return "en"
+  resolvedLocale = "en"
+  return resolvedLocale
 end
 
 local function getI18nContext()
@@ -91,11 +108,20 @@ end
 
 function Utils.normalizeTitle(raw)
   if type(raw) ~= "string" or raw == "" then return nil end
-  if string.find(raw, "@i18n(", 1, true) then
+
+  local locale = i18nLocale or resolveLocale()
+  local cacheKey = locale .. "|" .. raw
+  local cached = titleCache[cacheKey]
+  if cached ~= nil then
+    return cached ~= false and cached or nil
+  end
+
+  if not IS_SIMULATOR and string.find(raw, "@i18n(", 1, true) then
     local i18n = getI18nContext()
     if i18n and type(i18n.resolve) == "function" then
       local ok, resolved = pcall(i18n.resolve, raw)
       if ok and type(resolved) == "string" and resolved ~= "" then
+        titleCache[cacheKey] = resolved
         return resolved
       end
     end
@@ -105,10 +131,15 @@ function Utils.normalizeTitle(raw)
   if token then
     local key = string.match(token, "([^.]+)$") or token
     if string.find(raw, ":upper%(", 1, false) then
-      return string.upper(key)
+      local out = string.upper(key)
+      titleCache[cacheKey] = out
+      return out
     end
+    titleCache[cacheKey] = key
     return key
   end
+
+  titleCache[cacheKey] = raw
   return raw
 end
 
@@ -129,9 +160,9 @@ function Utils.mapTelemetrySource(source, state)
   if source == "voltage" then return state and state.voltage end
   if source == "rpm" then return state and state.rpm end
   if source == "fuel" then return state and state.fuel end
-  if source == "governor" then return state and state.gov end
-  if source == "esc_temp" then return state and state.temp_esc end
-  if source == "mcu_temp" then return state and state.temp_mcu end
+  if source == "governor" then return state and state.governor end
+  if source == "esc_temp" then return state and state.escTemp end
+  if source == "mcu_temp" then return state and state.mcuTemp end
 
   -- Load sensors module lazily
   if not sensorsModule then

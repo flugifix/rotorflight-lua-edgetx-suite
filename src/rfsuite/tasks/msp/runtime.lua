@@ -17,13 +17,17 @@ local function loadModule(path)
   return mod
 end
 
-local DetectProtocol = loadModule("tasks/msp/protocols.lua")
-local CommonModule = loadModule("tasks/msp/common.lua")
-local QueueModule = loadModule("tasks/msp/queue.lua")
-local ApiVersionApi = loadModule("tasks/msp/api/api_version.lua")
-local FcVersionApi = loadModule("tasks/msp/api/fc_version.lua")
-local Log = loadModule("lib/log.lua")
-local Version = loadModule("lib/version.lua")
+local DetectProtocol = nil
+local CommonModule = nil
+local QueueModule = nil
+local ApiVersionApi = nil
+local FcVersionApi = nil
+local UidApi = nil
+local TelemetryConfigApi = nil
+local TelemetrySyncClass = nil
+local Log = nil
+local Version = nil
+local ModelPreferences = nil
 
 local state = {
   initialized = false,
@@ -35,7 +39,10 @@ local state = {
   values = {
     apiVersion = "0",
     fcVersion = "0",
-    rfVersion = "0"
+    rfVersion = "0",
+    mcuId = nil,
+    modelPreferences = nil,
+    modelPreferencesFile = nil
   },
   unsupportedApi = false,
   unsupportedApiLogged = false,
@@ -44,6 +51,13 @@ local state = {
   mspLastError = nil,
   mspLastErrorAt = 0,
   pendingVersionRead = true,
+  pendingUidRead = true,
+  pendingTelemetryConfigRead = false,
+  telemetryAutoSyncDone = false,
+  telemetryLinkRate = nil,
+  telemetryLinkRatio = nil,
+  telemetryConfigBuffer = nil,
+  telemetrySync = nil,
   lastArmed = nil,
   lastConnected = nil
 }
@@ -62,8 +76,44 @@ local function nowSeconds()
 end
 
 local function log(msg, level)
+  if not Log then
+    Log = loadModule("lib/log.lua")
+  end
   if Log and type(Log.emit) == "function" then
     Log.emit("rfsuite.msp", msg, level or "debug", true)
+  end
+end
+
+local function ensureBaseDeps()
+  if not DetectProtocol then
+    DetectProtocol = loadModule("tasks/msp/protocols.lua")
+  end
+  if not CommonModule then
+    CommonModule = loadModule("tasks/msp/common.lua")
+  end
+  if not QueueModule then
+    QueueModule = loadModule("tasks/msp/queue.lua")
+  end
+end
+
+local function ensureVersionDeps()
+  if not ApiVersionApi then
+    ApiVersionApi = loadModule("tasks/msp/api/api_version.lua")
+  end
+  if not FcVersionApi then
+    FcVersionApi = loadModule("tasks/msp/api/fc_version.lua")
+  end
+  if not Version then
+    Version = loadModule("lib/version.lua")
+  end
+end
+
+local function ensureUidDep()
+  if not UidApi then
+    UidApi = loadModule("tasks/msp/api/uid.lua")
+  end
+  if not ModelPreferences then
+    ModelPreferences = loadModule("lib/model_preferences.lua")
   end
 end
 
@@ -81,13 +131,16 @@ local function publish()
   session.apiVersion = state.values.apiVersion
   session.fcVersion = state.values.fcVersion
   session.rfVersion = state.values.rfVersion
+  session.mcu_id = state.values.mcuId
+  session.modelPreferences = state.values.modelPreferences
+  session.modelPreferencesFile = state.values.modelPreferencesFile
   session.apiSupported = not state.unsupportedApi
   session.mspLastError = state.mspLastError
   session.mspLastErrorAt = state.mspLastErrorAt
-
   diagnostics.apiVersion = state.values.apiVersion
   diagnostics.fcVersion = state.values.fcVersion
   diagnostics.rfVersion = state.values.rfVersion
+  diagnostics.mcu_id = state.values.mcuId
   diagnostics.apiSupported = not state.unsupportedApi
   diagnostics.mspLastError = state.mspLastError
   diagnostics.mspLastErrorAt = state.mspLastErrorAt
@@ -101,6 +154,10 @@ end
 local function isApiVersionSupported(version)
   if type(version) ~= "string" or version == "" then
     return false
+  end
+
+  if not Version then
+    Version = loadModule("lib/version.lua")
   end
 
   if not Version or type(Version.getSupportedMspApiVersions) ~= "function" then
@@ -188,6 +245,28 @@ local function isConnected()
   return rssi > 0
 end
 
+local function applyModelPreferencesForMcu(mcuId)
+  if type(mcuId) ~= "string" or mcuId == "" then
+    state.values.modelPreferences = nil
+    state.values.modelPreferencesFile = nil
+    return
+  end
+
+  if not ModelPreferences then
+    ModelPreferences = loadModule("lib/model_preferences.lua")
+  end
+
+  if not ModelPreferences or type(ModelPreferences.loadByMcuId) ~= "function" then
+    state.values.modelPreferences = nil
+    state.values.modelPreferencesFile = nil
+    return
+  end
+
+  local prefs, filePath = ModelPreferences.loadByMcuId(mcuId)
+  state.values.modelPreferences = prefs
+  state.values.modelPreferencesFile = filePath
+end
+
 local function enqueueVersionReads(now)
   if not state.pendingVersionRead then
     return
@@ -199,6 +278,7 @@ local function enqueueVersionReads(now)
     return
   end
 
+  ensureVersionDeps()
   state.pendingVersionRead = false
   state.queue:add({
     command = ApiVersionApi.command,
@@ -244,10 +324,213 @@ local function enqueueVersionReads(now)
   })
 end
 
+local function enqueueUidRead(now)
+  if not state.pendingUidRead then
+    return
+  end
+  if not state.queue or not state.queue:isProcessed() then
+    return
+  end
+  if state.requestBackoffUntil and now < state.requestBackoffUntil then
+    return
+  end
+  ensureUidDep()
+  if not UidApi or type(UidApi.parse) ~= "function" then
+    state.pendingUidRead = false
+    return
+  end
+
+  state.pendingUidRead = false
+  state.queue:add({
+    command = UidApi.command,
+    simulatorResponse = UidApi.simulatorResponse,
+    processReply = function(_, buf)
+      local parsed = UidApi.parse(buf)
+      if parsed and parsed.mcuId and parsed.mcuId ~= "" then
+        state.values.mcuId = tostring(parsed.mcuId)
+        applyModelPreferencesForMcu(state.values.mcuId)
+      end
+      publish()
+    end,
+    errorHandler = function()
+      state.pendingUidRead = true
+      publish()
+    end
+  })
+end
+
+local function ensureTelemetrySyncDeps()
+  if not TelemetryConfigApi then
+    TelemetryConfigApi = loadModule("tasks/msp/api/telemetry_config.lua")
+  end
+  if not TelemetrySyncClass then
+    TelemetrySyncClass = loadModule("tasks/msp/telemetry_sync.lua")
+  end
+end
+
+local function enqueueTelemetryConfigRead(now)
+  if not state.pendingTelemetryConfigRead then
+    return
+  end
+  if state.telemetryAutoSyncDone == true then
+    state.pendingTelemetryConfigRead = false
+    return
+  end
+  if not state.queue or not state.queue:isProcessed() then
+    return
+  end
+  if state.requestBackoffUntil and now < state.requestBackoffUntil then
+    return
+  end
+  ensureTelemetrySyncDeps()
+  if not TelemetryConfigApi or type(TelemetryConfigApi.parse) ~= "function" then
+    state.pendingTelemetryConfigRead = false
+    return
+  end
+
+  state.pendingTelemetryConfigRead = false
+  state.queue:add({
+    command = TelemetryConfigApi.readCommand,
+    simulatorResponse = TelemetryConfigApi.simulatorResponse,
+    retryBackoff = 1.2,
+    timeout = 4.0,
+    processReply = function(_, buf)
+      local parsed = TelemetryConfigApi.parse(buf)
+      if parsed then
+        state.telemetryLinkRate = parsed.crsf_telemetry_link_rate
+        state.telemetryLinkRatio = parsed.crsf_telemetry_link_ratio
+        state.telemetryConfigBuffer = parsed.buffer
+        if state.telemetrySync and type(state.telemetrySync.onReadSuccess) == "function" then
+          state.telemetrySync:onReadSuccess(state.telemetryLinkRate, state.telemetryLinkRatio)
+        end
+      end
+      publish()
+    end,
+    errorHandler = function()
+      if state.telemetryAutoSyncDone ~= true then
+        state.pendingTelemetryConfigRead = true
+      end
+      publish()
+    end
+  })
+end
+
+local function isTelemetryAutoSyncEnabled()
+  local prefs = _G and _G.rfsuite and _G.rfsuite.preferences
+  local general = prefs and prefs.general
+  return type(general) == "table" and general.auto_msp_telem_sync == true
+end
+
+local function ensureTelemetrySync()
+  if state.telemetrySync then
+    return state.telemetrySync
+  end
+  ensureTelemetrySyncDeps()
+  if TelemetrySyncClass and type(TelemetrySyncClass.new) == "function" then
+    state.telemetrySync = TelemetrySyncClass.new({
+      nowSeconds = nowSeconds,
+      log = log,
+    })
+  end
+  return state.telemetrySync
+end
+
+local function enqueueTelemetryConfigWrite(now, desiredRate, desiredRatio)
+  if state.telemetrySync and state.telemetrySync:isWriteInFlight() then
+    return
+  end
+  if not state.queue or not state.queue:isProcessed() then
+    return
+  end
+  ensureTelemetrySyncDeps()
+  if not TelemetryConfigApi or type(TelemetryConfigApi.buildWritePayload) ~= "function" then
+    return
+  end
+
+  local payload = TelemetryConfigApi.buildWritePayload(state.telemetryConfigBuffer, {
+    crsf_telemetry_link_rate = desiredRate,
+    crsf_telemetry_link_ratio = desiredRatio
+  })
+
+  if state.telemetrySync and type(state.telemetrySync.onWriteQueued) == "function" then
+    state.telemetrySync:onWriteQueued(now, desiredRate, desiredRatio)
+  end
+
+  state.queue:add({
+    command = TelemetryConfigApi.writeCommand,
+    payload = payload,
+    retryBackoff = 1.2,
+    timeout = 4.0,
+    processReply = function()
+      state.pendingTelemetryConfigRead = true
+      if state.telemetrySync and type(state.telemetrySync.onWriteSuccess) == "function" then
+        state.telemetrySync:onWriteSuccess(nowSeconds())
+      end
+      publish()
+    end,
+    errorHandler = function()
+      setMspError("TELEMETRY_CONFIG write failed (cmd=74)", nowSeconds())
+      if state.telemetrySync and type(state.telemetrySync.onWriteError) == "function" then
+        state.telemetrySync:onWriteError(nowSeconds())
+      end
+      publish()
+    end,
+    isWrite = true
+  })
+end
+
+local function maybeRunTelemetryAutoSync(now)
+  if state.telemetryAutoSyncDone == true then
+    return
+  end
+
+  if isTelemetryAutoSyncEnabled() then
+    ensureTelemetrySync()
+  end
+
+  if not state.telemetrySync or type(state.telemetrySync.evaluate) ~= "function" then
+    return
+  end
+
+  local decision = state.telemetrySync:evaluate(
+    now,
+    isTelemetryAutoSyncEnabled(),
+    state.telemetryLinkRate,
+    state.telemetryLinkRatio
+  )
+
+  if type(decision) ~= "table" then
+    return
+  end
+
+  if decision.action == "read" then
+    state.pendingTelemetryConfigRead = true
+    return
+  end
+
+  if decision.action == "write" then
+    enqueueTelemetryConfigWrite(now, decision.desiredRate, decision.desiredRatio)
+  end
+
+  if state.telemetrySync and type(state.telemetrySync.isSyncDone) == "function" and state.telemetrySync:isSyncDone() then
+    -- Release sync-related transient memory after one-shot auto-sync completed.
+    state.telemetryAutoSyncDone = true
+    state.telemetryConfigBuffer = nil
+    state.telemetryLinkRate = nil
+    state.telemetryLinkRatio = nil
+    state.telemetrySync = nil
+    TelemetryConfigApi = nil
+    TelemetrySyncClass = nil
+    state.pendingTelemetryConfigRead = false
+  end
+end
+
 local function initIfNeeded()
   if state.initialized then
     return state.available
   end
+
+  ensureBaseDeps()
 
   state.isSimulator = isSimulator()
   state.protocol = type(DetectProtocol) == "function" and DetectProtocol() or nil
@@ -320,10 +603,37 @@ function Runtime.tick()
     if connected then
       log("MSP link connected", "info")
       state.pendingVersionRead = true
+      state.pendingUidRead = true
+      state.telemetryAutoSyncDone = false
+      state.pendingTelemetryConfigRead = isTelemetryAutoSyncEnabled()
+      if isTelemetryAutoSyncEnabled() then
+        ensureTelemetrySync()
+      end
+      state.telemetryLinkRate = nil
+      state.telemetryLinkRatio = nil
+      if state.telemetrySync and type(state.telemetrySync.onConnected) == "function" then
+        state.telemetrySync:onConnected(now)
+      end
     else
       log("MSP link disconnected", "info")
       state.queue:clear()
       state.pendingVersionRead = true
+      state.pendingUidRead = true
+      state.telemetryAutoSyncDone = false
+      state.pendingTelemetryConfigRead = true
+      state.telemetryConfigBuffer = nil
+      state.telemetryLinkRate = nil
+      state.telemetryLinkRatio = nil
+      state.values.mcuId = nil
+      state.values.modelPreferences = nil
+      state.values.modelPreferencesFile = nil
+      if state.telemetrySync and type(state.telemetrySync.onDisconnected) == "function" then
+        state.telemetrySync:onDisconnected(now)
+      end
+      state.telemetrySync = nil
+      TelemetryConfigApi = nil
+      TelemetrySyncClass = nil
+      publish()
     end
   end
 
@@ -351,6 +661,9 @@ function Runtime.tick()
   end
 
   enqueueVersionReads(now)
+  enqueueUidRead(now)
+  enqueueTelemetryConfigRead(now)
+  maybeRunTelemetryAutoSync(now)
   state.queue:processQueue(now)
   publish()
   return true
