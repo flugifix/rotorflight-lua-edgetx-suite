@@ -1,5 +1,12 @@
 local M = {}
 
+local function wipeTable(t)
+  if type(t) ~= "table" then return end
+  for k in pairs(t) do
+    t[k] = nil
+  end
+end
+
 function M.t(i18n, pageKey, key, fallback)
   if i18n and i18n.t then
     return i18n.t("app.pages." .. pageKey .. "." .. key)
@@ -76,6 +83,50 @@ function M.createFormRuntime(ui)
   end
 
   return runtime
+end
+
+-- Shared teardown helper for page modules.
+-- Keeps close/reset behavior consistent across pages.
+function M.resetPageState(ui, opts)
+  opts = opts or {}
+  if type(ui) ~= "table" then return end
+
+  if opts.resetLoaded ~= false and ui.loaded ~= nil then
+    ui.loaded = false
+  end
+  if opts.resetDirty ~= false and ui.dirty ~= nil then
+    ui.dirty = false
+  end
+  if opts.clearRebuild == true and ui.rebuild ~= nil then
+    ui.rebuild = nil
+  end
+  if opts.clearLastAutoRefresh == true and ui.lastAutoRefreshAt ~= nil then
+    ui.lastAutoRefreshAt = 0
+  end
+
+  if type(ui.handlers) == "table" then
+    wipeTable(ui.handlers)
+  end
+
+  if type(ui.runtime) == "table" then
+    ui.runtime.requestRebuild = nil
+    wipeTable(ui.runtime.sectionToggleHandlers)
+    wipeTable(ui.runtime.boolGetters)
+    wipeTable(ui.runtime.boolSetters)
+    wipeTable(ui.runtime.valueGetters)
+    wipeTable(ui.runtime.valueSetters)
+  end
+  ui.runtime = nil
+
+  local tablesToWipe = opts.tablesToWipe
+  if type(tablesToWipe) == "table" then
+    for i = 1, #tablesToWipe do
+      local key = tablesToWipe[i]
+      if type(key) == "string" and type(ui[key]) == "table" then
+        wipeTable(ui[key])
+      end
+    end
+  end
 end
 
 function M.appendSectionHeader(children, x, y, w, title)

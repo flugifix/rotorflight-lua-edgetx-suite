@@ -354,7 +354,8 @@ local function startLiveLoad()
     return
   end
 
-  AsyncLoadUi.begin(state, nowSeconds(), 4, forced or not hasCachedSlowFields)
+  -- Show the same progress overlay pattern used by other MSP read flows.
+  AsyncLoadUi.begin(state, nowSeconds(), 4, true)
 
   local function onFailure(name, cmd)
     local runtimeMsg = readRuntimeErrorMessage()
@@ -608,6 +609,11 @@ function M.closePage()
   ensureCoreDeps()
   if state.attached and MspRuntime and type(MspRuntime.detach) == "function" then
     MspRuntime.detach("info-page")
+  end
+  local runtimeState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState() or nil
+  local queue = runtimeState and runtimeState.queue
+  if queue and type(queue.clear) == "function" then
+    queue:clear()
   end
   state.started = false
   state.attached = false

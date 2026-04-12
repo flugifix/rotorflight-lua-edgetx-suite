@@ -673,6 +673,46 @@ function Runtime.getState()
   return state
 end
 
+function Runtime.getProgress()
+  local total = 0
+  local done = 0
+
+  -- Core startup reads (API version + UID) are always tracked.
+  total = total + 1
+  if state.pendingVersionRead ~= true then
+    done = done + 1
+  end
+
+  total = total + 1
+  if state.pendingUidRead ~= true then
+    done = done + 1
+  end
+
+  -- Telemetry config is optional and only counted when the sync flow engaged.
+  local telemetryTracked = state.pendingTelemetryConfigRead == true
+    or state.telemetryAutoSyncDone == true
+    or state.telemetrySync ~= nil
+  if telemetryTracked then
+    total = total + 1
+    if state.telemetryAutoSyncDone == true or (state.pendingTelemetryConfigRead ~= true and state.telemetrySync == nil) then
+      done = done + 1
+    end
+  end
+
+  local queueIdle = true
+  if state.queue and type(state.queue.isProcessed) == "function" then
+    queueIdle = state.queue:isProcessed() == true
+  end
+
+  local active = (state.available == true) and ((done < total) or (queueIdle == false))
+  return {
+    active = active,
+    done = done,
+    total = total,
+    queueIdle = queueIdle,
+  }
+end
+
 if type(_G) == "table" then
   _G.__rfsuite_msp_runtime_module = Runtime
 end

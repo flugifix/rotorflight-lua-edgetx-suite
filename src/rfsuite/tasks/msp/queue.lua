@@ -233,6 +233,7 @@ function Queue:processQueue(now)
     if not self.lastTimeCommandSent or (self.lastTimeCommandSent + retryDelay < now) then
       self.lastTimeCommandSent = now
       self.retryCount = self.retryCount + 1
+      msg.__retryCount = self.retryCount
       msg.buf = msg.simulatorResponse
       if type(msg.processReply) == "function" then
         msg.processReply(msg, msg.buf)
@@ -247,27 +248,7 @@ function Queue:processQueue(now)
     return
   end
 
-  local canSendByInterval = not self.lastTimeCommandSent or (self.lastTimeCommandSent + commandInterval < now)
-  local canSendByBackoff = (self.retryCount == 0) or (self.lastTimeCommandSent and (now - self.lastTimeCommandSent) >= retryDelay)
-
-  if canSendByInterval and canSendByBackoff and self.retryCount <= self.maxRetries then
-    local payload = msg.payload or {}
-    local okSend = self.common and type(self.common.sendRequest) == "function"
-      and self.common.sendRequest(msg.command, payload, { write = isWriteMessage(msg) })
-    if okSend then
-      self.lastTimeCommandSent = now
-      if not self.currentMessageStartTime then
-        self.currentMessageStartTime = now
-      end
-      self.retryCount = self.retryCount + 1
-      if self.retryCount > 1 then
-        self.log(formatMspState(msg) .. " retry=" .. tostring(self.retryCount) .. "/" .. tostring(self.maxRetries + 1), "debug")
-      else
-        self.log(formatMspState(msg) .. " send", "debug")
-      end
-    end
-  end
-
+  -- Flush any pending TX fragments before checking for replies.
   if self.common and type(self.common.processTxQ) == "function" then
     self.common.processTxQ()
   end
@@ -300,6 +281,7 @@ function Queue:processQueue(now)
   if success then
     msg.buf = buf
     if type(msg.processReply) == "function" then
+      msg.__retryCount = self.retryCount
       msg.processReply(msg, msg.buf)
     end
     if not simulatorMode then
@@ -314,7 +296,33 @@ function Queue:processQueue(now)
     return
   end
 
+  local canSendByInterval = not self.lastTimeCommandSent or (self.lastTimeCommandSent + commandInterval < now)
+  local canSendByBackoff = (self.retryCount == 0) or (self.lastTimeCommandSent and (now - self.lastTimeCommandSent) >= retryDelay)
+
+  if canSendByInterval and canSendByBackoff and self.retryCount <= self.maxRetries then
+    local payload = msg.payload or {}
+    local okSend = self.common and type(self.common.sendRequest) == "function"
+      and self.common.sendRequest(msg.command, payload, { write = isWriteMessage(msg) })
+    if okSend then
+      self.lastTimeCommandSent = now
+      if not self.currentMessageStartTime then
+        self.currentMessageStartTime = now
+      end
+      self.retryCount = self.retryCount + 1
+      if self.retryCount > 1 then
+        self.log(formatMspState(msg) .. " retry=" .. tostring(self.retryCount) .. "/" .. tostring(self.maxRetries + 1), "debug")
+      else
+        self.log(formatMspState(msg) .. " send", "debug")
+      end
+
+      if self.common and type(self.common.processTxQ) == "function" then
+        self.common.processTxQ()
+      end
+    end
+  end
+
   if self.currentMessage and self.currentMessageStartTime and (now - self.currentMessageStartTime) > timeoutSeconds then
+    msg.__retryCount = self.retryCount
     if type(msg.errorHandler) == "function" then
       msg.errorHandler(msg, "timeout")
     end
@@ -332,6 +340,7 @@ function Queue:processQueue(now)
   end
 
   if self.retryCount > self.maxRetries then
+    msg.__retryCount = self.retryCount
     if type(msg.errorHandler) == "function" then
       msg.errorHandler(msg, "max_retries")
     end

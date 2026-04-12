@@ -7,6 +7,8 @@ end
 
 local entries = {
   settings_general_page = definePage("settings/general"),
+  developer_msp_speed_page = definePage("developer/msp_speed"),
+  developer_api_tester_page = definePage("developer/api_tester"),
   developer_settings_page = definePage("developer/developer_settings"),
   --settings_shortcuts_page = definePage("settings/shortcuts"),
   settings_dashboard_theme_page = definePage("settings/dashboard/theme"),
@@ -28,10 +30,45 @@ local registry = {}
 local loadedByMenuId = {}
 local iconByMenuId = {}
 local pagePathByMenuId = {}
+local cacheOrder = {}
+local MAX_CACHED_PAGE_MODULES = 8
+local closePageModule
 
 local function isDynamicDashboardSettingsPage(menuId)
   if type(menuId) ~= "string" then return false end
   return string.match(menuId, "^settings_dashboard_settings_[0-9a-f]+_page$") ~= nil
+end
+
+local function isCacheableMenuId(menuId)
+  -- Dynamic dashboard settings IDs can grow over time; do not retain them.
+  return not isDynamicDashboardSettingsPage(menuId)
+end
+
+local function touchCache(menuId)
+  for i = #cacheOrder, 1, -1 do
+    if cacheOrder[i] == menuId then
+      table.remove(cacheOrder, i)
+      break
+    end
+  end
+  cacheOrder[#cacheOrder + 1] = menuId
+end
+
+local function removeFromCacheOrder(menuId)
+  for i = #cacheOrder, 1, -1 do
+    if cacheOrder[i] == menuId then
+      table.remove(cacheOrder, i)
+    end
+  end
+end
+
+local function evictIfNeeded(keepMenuId, ctx)
+  while #cacheOrder > MAX_CACHED_PAGE_MODULES do
+    local victim = table.remove(cacheOrder, 1)
+    if victim and victim ~= keepMenuId then
+      closePageModule(victim, ctx)
+    end
+  end
 end
 
 local function loadPageModule(menuId)
@@ -48,23 +85,28 @@ local function loadPageModule(menuId)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/" .. entry.pagePath
   local chunk = assert(loadScript(fullPath, "t"))
   local module = chunk()
-  loadedByMenuId[menuId] = module
+  if isCacheableMenuId(menuId) then
+    loadedByMenuId[menuId] = module
+    touchCache(menuId)
+  end
   return module
 end
 
-local function closePageModule(menuId, ctx)
+closePageModule = function(menuId, ctx)
   local module = loadedByMenuId[menuId]
   if type(module) ~= "table" then
     loadedByMenuId[menuId] = nil
+    removeFromCacheOrder(menuId)
     return false
   end
 
-  local hook = module.onClose or module.close or module.destroy
+  local hook = module.onClose or module.close or module.closePage or module.destroy
   if type(hook) == "function" then
     pcall(hook, ctx or {})
   end
 
   loadedByMenuId[menuId] = nil
+  removeFromCacheOrder(menuId)
   return true
 end
 
@@ -80,14 +122,31 @@ function registry.get(menuId)
 
   local module = loadedByMenuId[menuId]
   if module ~= nil then
+    touchCache(menuId)
     return module
   end
 
-  return loadPageModule(menuId)
+  local loaded = loadPageModule(menuId)
+  if loaded and isCacheableMenuId(menuId) then
+    evictIfNeeded(menuId)
+  end
+  return loaded
 end
 
 function registry.release(menuId, ctx)
-  local released = closePageModule(menuId, ctx)
+  local released = false
+  if not isCacheableMenuId(menuId) then
+    released = closePageModule(menuId, ctx)
+  else
+    local module = loadedByMenuId[menuId]
+    if type(module) == "table" then
+      local hook = module.onClose or module.close or module.closePage or module.destroy
+      if type(hook) == "function" then
+        pcall(hook, ctx or {})
+      end
+      released = true
+    end
+  end
   -- Do NOT force collectgarbage() here.
   -- Forcing GC before lvgl.build() replaces the scene can collect Lua closures
   -- that LVGL still holds raw references to, causing a crash in lvgl.build().

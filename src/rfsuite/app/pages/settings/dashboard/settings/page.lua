@@ -226,7 +226,7 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  ui.runtime = nil
+  Common.resetPageState(ui)
   ui.themes = nil
   ui.configurableThemes = nil
   ui.activeThemeConfigPath = nil

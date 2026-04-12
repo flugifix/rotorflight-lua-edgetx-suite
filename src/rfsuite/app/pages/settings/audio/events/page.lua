@@ -448,7 +448,12 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  setmetatable(ui.runtime, nil)
+  if type(ui.runtime) == "table" then
+    setmetatable(ui.runtime, nil)
+  end
+  Common.resetPageState(ui, {
+    tablesToWipe = { "sections", "runtime" }
+  })
   ui.runtimeBase = nil
   Controls = nil
   Common = nil

@@ -207,22 +207,23 @@ function M.build(ctx)
   for i, section in ipairs(SECTIONS) do
     if i > 1 then cursorY = cursorY + 10 end
 
-    local key = section.key
-    Controls.appendSectionHeader(children, x, cursorY, w,
-      t(i18n, section.titleKey, section.titleFallback),
-      ui.sections[key],
-      ui.runtime.getSectionToggleHandler(key)
+    Controls.appendStaticSectionHeader(children, x, cursorY, w,
+      t(i18n, section.titleKey, section.titleFallback)
     )
 
-    cursorY = cursorY + Controls.SECTION_H
-    if ui.sections[key] then
-      cursorY = section.build(cursorY, children, x, w, i18n)
-    end
+    cursorY = cursorY + Controls.STATIC_SECTION_H
+    cursorY = section.build(cursorY, children, x, w, i18n)
   end
 end
 
 function M.onClose()
-  ui.runtime = nil
+  if Common and type(Common.resetPageState) == "function" then
+    Common.resetPageState(ui)
+  else
+    ui.runtime = nil
+    ui.loaded = false
+    ui.dirty = false
+  end
   Controls = nil
   Common = nil
   t = nil

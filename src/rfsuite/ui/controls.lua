@@ -22,8 +22,10 @@ local SECTION_H            = 48
 local SECTION_BAR_H        = 3
 local SECTION_ARROW_W      = 30
 local SECTION_ARROW_H      = 30
+local STATIC_SECTION_H     = 50
 
 Controls.SECTION_H = SECTION_H
+Controls.STATIC_SECTION_H = STATIC_SECTION_H
 
 function Controls.appendSectionHeader(children, x, y, w, title, expanded, onToggle)
   -- Title label
@@ -75,6 +77,23 @@ function Controls.appendSectionHeader(children, x, y, w, title, expanded, onTogg
     x = x, y = y + SECTION_H - 1,
     w = w, h = 1,
     color  = GREY_DEFAULT, filled = true
+  }
+end
+
+function Controls.appendStaticSectionHeader(children, x, y, w, title)
+  children[#children + 1] = {
+    type  = "label",
+    x = x, y = y + 2,
+    text  = title,
+    color = COLOR_THEME_PRIMARY1,
+    font  = MIDSIZE
+  }
+
+  children[#children + 1] = {
+    type   = "rectangle",
+    x = x, y = y + STATIC_SECTION_H - 6,
+    w = w, h = 3,
+    color  = COLOR_THEME_SECONDARY1, filled = true
   }
 end
 

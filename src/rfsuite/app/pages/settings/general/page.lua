@@ -292,7 +292,9 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  ui.runtime = nil
+  Common.resetPageState(ui, {
+    tablesToWipe = { "sections" }
+  })
   Controls = nil
   Common = nil
   t = nil

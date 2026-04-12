@@ -30,7 +30,7 @@ local function copyBuffer(buf)
 end
 
 function Api.parse(buf)
-  if type(buf) ~= "table" or #buf < 12 then
+  if type(buf) ~= "table" or #buf < 6 then
     return nil
   end
 
@@ -44,15 +44,37 @@ function Api.parse(buf)
     return lo + hi * 256
   end
 
+  local function u32(idx)
+    local b1 = tonumber(buf[idx]) or 0
+    local b2 = tonumber(buf[idx + 1]) or 0
+    local b3 = tonumber(buf[idx + 2]) or 0
+    local b4 = tonumber(buf[idx + 3]) or 0
+    return b1 + b2 * 256 + b3 * 65536 + b4 * 16777216
+  end
+
   local parsed = {
     telemetry_inverted = u8(1),
     halfDuplex = u8(2),
-    pinSwap = u8(7),
-    crsf_telemetry_mode = u8(8),
-    crsf_telemetry_link_rate = u16(9),
-    crsf_telemetry_link_ratio = u16(11),
+    enableSensors = u32(3),
     buffer = copyBuffer(buf)
   }
+
+  if #buf >= 12 then
+    parsed.pinSwap = u8(7)
+    parsed.crsf_telemetry_mode = u8(8)
+    parsed.crsf_telemetry_link_rate = u16(9)
+    parsed.crsf_telemetry_link_ratio = u16(11)
+
+    local slotBase = 13
+    for i = 1, 40 do
+      local idx = slotBase + i - 1
+      local byte = tonumber(buf[idx])
+      if byte == nil then
+        break
+      end
+      parsed["telem_sensor_slot_" .. tostring(i)] = byte
+    end
+  end
 
   return parsed
 end

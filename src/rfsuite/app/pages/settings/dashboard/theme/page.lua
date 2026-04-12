@@ -286,7 +286,7 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  ui.runtime = nil
+  Common.resetPageState(ui)
   ui.themes = nil
   Controls = nil
   Common = nil

@@ -20,7 +20,13 @@ function transport.mspSend(payload)
 end
 
 function transport.mspPoll()
-  while true do
+  -- Keep polling cooperative: scan only a bounded number of frames per call
+  -- so the UI loop stays responsive on radios with busy telemetry streams.
+  local scanned = 0
+  local maxFramesPerPoll = transport.maxFramesPerPoll or 24
+
+  while scanned < maxFramesPerPoll do
+    scanned = scanned + 1
     local cmd, data = crossfireTelemetryPop()
     if cmd == CRSF_FRAMETYPE_MSP_RESP and data and data[1] == CRSF_ADDRESS_RADIO_TRANSMITTER and data[2] == CRSF_ADDRESS_BETAFLIGHT then
       local mspData = {}
@@ -32,6 +38,8 @@ function transport.mspPoll()
       return nil
     end
   end
+
+  return nil
 end
 
 transport.maxTxBufferSize = 8
@@ -40,5 +48,6 @@ transport.mspPollBudget = 0.1
 transport.mspNonBlocking = true
 transport.mspPollSliceSeconds = 0.004
 transport.mspPollSlicePolls = 6
+transport.maxFramesPerPoll = 24
 
 return transport

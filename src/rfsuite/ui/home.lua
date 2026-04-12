@@ -124,17 +124,6 @@ local function computeTileSize(cardW, cfg)
   return soft
 end
 
-local function getRequiredColumns(items)
-  local required = 1
-  for i = 1, #items do
-    local c = tonumber(items[i].col)
-    if c and c > required then
-      required = c
-    end
-  end
-  return required
-end
-
 local function toWrappedItems(items, cols)
   local wrapped = {}
   local c = 1
@@ -668,6 +657,19 @@ local function maybeRefreshInfoPageFromSession()
   end
 end
 
+local function getMspProgressState()
+  if not MspRuntime or type(MspRuntime.getProgress) ~= "function" then
+    return nil
+  end
+
+  local ok, progress = pcall(MspRuntime.getProgress)
+  if not ok or type(progress) ~= "table" or progress.active ~= true then
+    return nil
+  end
+
+  return progress
+end
+
 local function onReload()
   local page = getActivePageModule()
 
@@ -855,14 +857,7 @@ function M.buildUI()
       local group   = groups[i]
       local computedCols = Tiles.computeColumns(contentW, profile.rootMinCardWidth, profile.rootMaxColumns)
       local columns = computedCols
-      local rows = 1
-      local layoutItems = group.cards
-      if profile.wrapTiles == true then
-        layoutItems, rows = toWrappedItems(group.cards, columns)
-      else
-        local requiredCols = getRequiredColumns(group.cards)
-        columns = math.max(computedCols, requiredCols)
-      end
+      local layoutItems, rows = toWrappedItems(group.cards, columns)
 
       -- Section heading label (indented from left edge)
       children[#children + 1] = {
@@ -934,15 +929,7 @@ function M.buildUI()
       local gridItems = state.menu.getCards(ICON_ROOT)
       local computedCols = Tiles.computeColumns(contentW, profile.menuMinCardWidth, profile.menuMaxColumns)
       local columns   = computedCols
-      local rows      = math.max(1, math.ceil(#gridItems / columns))
-      local layoutItems = gridItems
-      if profile.wrapTiles == true then
-        layoutItems, rows = toWrappedItems(gridItems, columns)
-      else
-        local requiredCols = getRequiredColumns(gridItems)
-        columns = math.max(computedCols, requiredCols)
-        rows = math.max(1, math.ceil(#gridItems / columns))
-      end
+      local layoutItems, rows = toWrappedItems(gridItems, columns)
       local cards     = GridLayout.layout(
         { x = contentX, y = contentY, w = contentW, h = LCD_H },
         { rows = rows, cols = columns, gap = tileGap, padding = 2, items = layoutItems },
@@ -966,6 +953,59 @@ function M.buildUI()
         )
       end
     end
+  end
+
+  local mspProgress = getMspProgressState()
+  if mspProgress then
+    local barX = contentX
+    local barW = contentW
+    local barY = LCD_H - 16
+    local progressLabel = "MSP init"
+    if state.i18n and type(state.i18n.t) == "function" then
+      local localized = state.i18n.t("app.msp.init_progress")
+      if type(localized) == "string" and localized ~= "" and localized ~= "app.msp.init_progress" then
+        progressLabel = localized
+      end
+    end
+    local done = tonumber(mspProgress.done) or 0
+    local total = tonumber(mspProgress.total) or 1
+    if total < 1 then total = 1 end
+    if done < 0 then done = 0 end
+    if done > total then done = total end
+    local ratio = done / total
+    local fillW = math.floor((barW - 2) * ratio + 0.5)
+    if fillW < 0 then fillW = 0 end
+    if fillW > (barW - 2) then fillW = barW - 2 end
+
+    children[#children + 1] = {
+      type = "label",
+      x = barX,
+      y = barY - 14,
+      w = barW,
+      text = progressLabel .. " " .. tostring(done) .. "/" .. tostring(total),
+      color = COLOR_THEME_PRIMARY1,
+      font = XXSMLSIZE
+    }
+
+    children[#children + 1] = {
+      type = "rectangle",
+      x = barX,
+      y = barY,
+      w = barW,
+      h = 8,
+      color = GREY_DARK,
+      filled = true
+    }
+
+    children[#children + 1] = {
+      type = "rectangle",
+      x = barX + 1,
+      y = barY + 1,
+      w = fillW,
+      h = 6,
+      color = COLOR_THEME_SECONDARY1,
+      filled = true
+    }
   end
 
   -- Build layout: page + children table, then "?" button as sibling (same as Save in page.lua)
@@ -1100,11 +1140,26 @@ function M.run(event, touchState)
       end
     end
 
-    if MspRuntime and type(MspRuntime.tick) == "function" then
+    local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+    local mspSpeedPageActive = currentMenuId == "developer_msp_speed_page"
+
+    if (not mspSpeedPageActive) and MspRuntime and type(MspRuntime.tick) == "function" then
       if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then
         state.mspLastTick = now
         MspRuntime.tick()
       end
+    end
+
+    local activePage = getActivePageModule()
+    local wakeupFn = activePage and (activePage.wakeup or activePage.onWake)
+    if type(wakeupFn) == "function" then
+      pcall(wakeupFn, {
+        i18n = state.i18n,
+        preferences = state.preferences,
+        menu = state.menu,
+        manifest = state.manifest,
+        requestRebuild = function() scheduleBuildUI(false) end
+      })
     end
 
     logMemoryUsage(now)
