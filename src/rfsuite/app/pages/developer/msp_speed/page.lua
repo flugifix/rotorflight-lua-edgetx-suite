@@ -534,11 +534,7 @@ function M.build(ctx)
           ui.test.durationSec = nextDuration
         end
       end
-    end,
-    focusable = function()
-      return not ui.test.active
-    end,
-    disabled = ui.test.active,
+    end
   }
 
   local buttonText = values.active and t(i18n, "stop", "Stop") or t(i18n, "start", "Start")

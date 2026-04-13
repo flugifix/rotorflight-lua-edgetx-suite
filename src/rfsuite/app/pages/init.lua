@@ -10,6 +10,7 @@ local entries = {
   developer_msp_speed_page = definePage("developer/msp_speed"),
   developer_api_tester_page = definePage("developer/api_tester"),
   developer_settings_page = definePage("developer/developer_settings"),
+  developer_msp_experiments_page = definePage("developer/msp_experiments"),
   --settings_shortcuts_page = definePage("settings/shortcuts"),
   settings_dashboard_theme_page = definePage("settings/dashboard/theme"),
   settings_dashboard_settings_page = definePage("settings/dashboard/settings"),
