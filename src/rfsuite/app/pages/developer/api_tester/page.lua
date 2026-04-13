@@ -1,9 +1,15 @@
+local Log = nil
 local M = {}
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
   local chunk = assert(loadScript(fullPath, "t"))
   return chunk()
+end
+
+-- Log laden
+if not Log then
+  Log = loadModule("lib/log.lua")
 end
 
 local Common = nil
@@ -13,9 +19,8 @@ local LoadingOverlay = nil
 local AsyncLoadUi = nil
 
 local API_DIR_CANDIDATES = {
-  "SCRIPTS:/TOOLS/rfsuite-core/tasks/msp/api/",
-  "SCRIPTS:/rfsuite-core/tasks/msp/api/",
   "/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/",
+  "/SCRIPTS/TOOLS/rfsuite/tasks/msp/api/",
 }
 local FALLBACK_API_NAMES = {
   "api_version",
@@ -224,56 +229,55 @@ local function addApiName(name, names, seen)
 end
 
 local function listApiDir(path, names, seen)
-  if type(system) ~= "table" or type(system.listFiles) ~= "function" then
-    return
-  end
+  Log.emit("api_tester", "listApiDir: trying path " .. tostring(path), "debug", true)
 
-  local files = system.listFiles(path) or {}
-  for i = 1, #files do
-    local filename = tostring(files[i] or "")
-    local apiName = filename:match("([^/\\]+)%.lua$")
-    if apiName then
-      addApiName(apiName, names, seen)
+  -- Prefer EdgeTX/Ethos native dir() if available
+  if type(dir) == "function" then
+    Log.emit("api_tester", "listApiDir: using dir() for " .. tostring(path), "debug", true)
+    
+    -- WICHTIG: Das Ausführen von dir() absichern und die Rückgabe speichern
+    local okDir, iterator = pcall(dir, path)
+    
+    -- Nur in die Schleife gehen, wenn wirklich ein Iterator (Funktion) zurückkam
+    if okDir and type(iterator) == "function" then
+      for fname in iterator do
+        local ok, err = pcall(function()
+          Log.emit("api_tester", "listApiDir: processing entry: '" .. tostring(fname) .. "' (type=" .. type(fname) .. ")", "debug", true)
+          
+          local clean = ""
+          if type(fname) == "string" then
+            clean = string.gsub(fname, "^/*", "")
+            clean = string.gsub(clean, "/*$", "")
+            clean = string.gsub(clean, "%s+$", "")
+          end
+          
+          Log.emit("api_tester", "listApiDir: clean='" .. tostring(clean) .. "'", "debug", true)
+          
+          if type(clean) == "string" and clean ~= "" then
+            local apiName = string.match(clean, "([%w_%-]+)%.lua$")
+            
+            if apiName then
+              Log.emit("api_tester", "listApiDir: addApiName AUFRUF mit apiName='" .. tostring(apiName) .. "'", "debug", true)
+              addApiName(apiName, names, seen)
+            end
+          end
+        end)
+        if not ok then
+          Log.emit("api_tester", "listApiDir: ERROR bei Verarbeitung von '" .. tostring(fname) .. "': " .. tostring(err), "error", true)
+        end
+      end
+    else
+      -- Ordner existiert nicht oder ist leer
+      Log.emit("api_tester", "listApiDir: Ordner nicht gefunden oder leer für " .. tostring(path), "warn", true)
     end
+
+    local namesStr = (names and #names > 0) and table.concat(names, ", ") or "<leer>"
+    Log.emit("api_tester", "listApiDir: final names for path '" .. tostring(path) .. "': [" .. namesStr .. "]", "debug", true)
+  else
+    Log.emit("api_tester", "listApiDir: no dir() available for " .. tostring(path), "error", true)
   end
 end
 
-local function discoverApis()
-  local names = {}
-  local seen = {}
-
-  for i = 1, #API_DIR_CANDIDATES do
-    listApiDir(API_DIR_CANDIDATES[i], names, seen)
-  end
-
-  -- Fallback keeps the tester usable even when listFiles path resolution differs.
-  if #names == 0 then
-    for i = 1, #FALLBACK_API_NAMES do
-      addApiName(FALLBACK_API_NAMES[i], names, seen)
-    end
-  end
-
-  table.sort(names)
-  ui.apiNames = names
-  ui.choices = {}
-  ui.choiceLabels = {}
-
-  if #names == 0 then
-    ui.choices[1] = { value = 1, label = tr("choice_no_api_files", "No API files") }
-    ui.choiceLabels[1] = tr("choice_no_api_files", "No API files")
-    ui.selectedIndex = 1
-    return
-  end
-
-  for i = 1, #names do
-    ui.choices[i] = { value = i, label = names[i] }
-    ui.choiceLabels[i] = names[i]
-  end
-
-  if ui.selectedIndex < 1 or ui.selectedIndex > #ui.choices then
-    ui.selectedIndex = 1
-  end
-end
 
 local function enqueueApiRead(apiName)
   ensureMspDeps()
@@ -427,6 +431,44 @@ end
 
 function M.allowMemAutoRefresh()
   return true
+end
+
+local function discoverApis()
+  Log.emit("api_tester", "discoverApis: starting", "debug", true)
+  
+  local names = {}
+  local seen = {}
+
+  -- Durchsuche alle konfigurierten Ordner
+  for i = 1, #API_DIR_CANDIDATES do
+    local path = API_DIR_CANDIDATES[i]
+    Log.emit("api_tester", "discoverApis: checking candidate " .. tostring(path), "debug", true)
+    listApiDir(path, names, seen)
+  end
+
+  -- Wenn gar nichts gefunden wurde (z.B. im Simulator ohne echtes Filesystem),
+  -- Fallbacks laden
+  if #names == 0 then
+    Log.emit("api_tester", "discoverApis: fallback to hardcoded list", "warn", true)
+    for i = 1, #FALLBACK_API_NAMES do
+      addApiName(FALLBACK_API_NAMES[i], names, seen)
+    end
+  end
+
+  table.sort(names)
+
+  -- UI Daten vorbereiten
+  ui.apiNames = names
+  ui.choices = {}
+  ui.choiceLabels = {}
+  
+  for i = 1, #names do
+    ui.choices[i] = i
+    ui.choiceLabels[i] = names[i]
+  end
+
+  ui.selectedIndex = 1
+  Log.emit("api_tester", "discoverApis: finished. Found " .. tostring(#names) .. " APIs.", "debug", true)
 end
 
 function M.onReload()

@@ -112,6 +112,18 @@ local function ensureCoreDeps()
   end
 end
 
+local function isFblConnected()
+  ensureCoreDeps()
+  local runtimeState = MspRuntime and MspRuntime.getState and MspRuntime.getState() or nil
+  if type(runtimeState) ~= "table" then
+    return false
+  end
+  if runtimeState.isSimulator == true then
+    return true
+  end
+  return runtimeState.lastConnected == true
+end
+
 local function ensureLiveDeps()
   ensureCoreDeps()
   if not VariantApi then
@@ -318,6 +330,11 @@ local function abortLoading(i18n, reason)
 end
 
 local function startLiveLoad()
+  if not isFblConnected() then
+    state.started = false
+    state.forceReload = false
+    return
+  end
   ensureLiveDeps()
 
   local forced = state.forceReload == true
@@ -444,6 +461,10 @@ local function queueLiveLoad(force)
 end
 
 local function pollPacketRateLive()
+  if not isFblConnected() then
+    state.packetRateRequestPending = false
+    return
+  end
   if state.loading then
     return
   end
@@ -493,10 +514,13 @@ function M.getModuleTitle()
 end
 
 function M.getHeaderActions()
-  return { reload = true, save = false, help = false }
+  return { reload = isFblConnected(), save = false, help = false }
 end
 
 function M.onReload()
+  if not isFblConnected() then
+    return false
+  end
   queueLiveLoad(true)
   return false
 end
@@ -514,7 +538,10 @@ function M.build(ctx)
   local i18n = ctx.i18n
 
   state.rebuild = ctx.requestRebuild
-  if not state.started and not state.pendingStart then
+  if not isFblConnected() then
+    state.pendingStart = false
+    state.deferStartBuild = false
+  elseif not state.started and not state.pendingStart then
     state.pendingStart = true
     state.deferStartBuild = true
   end

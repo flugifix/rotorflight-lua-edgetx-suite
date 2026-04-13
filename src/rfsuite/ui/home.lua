@@ -1153,13 +1153,21 @@ function M.run(event, touchState)
     local activePage = getActivePageModule()
     local wakeupFn = activePage and (activePage.wakeup or activePage.onWake)
     if type(wakeupFn) == "function" then
-      pcall(wakeupFn, {
+      local ok, err = pcall(wakeupFn, {
         i18n = state.i18n,
         preferences = state.preferences,
         menu = state.menu,
         manifest = state.manifest,
         requestRebuild = function() scheduleBuildUI(false) end
       })
+      if not ok then
+        if type(print) == "function" then
+          print("[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err))
+        end
+        if type(serialWrite) == "function" then
+          pcall(serialWrite, "[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err) .. "\n")
+        end
+      end
     end
 
     logMemoryUsage(now)
