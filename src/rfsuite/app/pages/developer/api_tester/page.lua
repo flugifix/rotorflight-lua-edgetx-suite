@@ -383,11 +383,15 @@ local function enqueueApiRead(apiName)
     requestRebuild()
   end
 
+
+  -- Für große APIs wie adjustment_ranges (cmd 52) längeres retryBackoff setzen
+  local retryBackoff = (command == 52) and 5.0 or 0.20
+  local timeout = 5.0
   queue:add({
     command = command,
     simulatorResponse = api.simulatorResponse,
-    timeout = 2.5,
-    retryBackoff = 0.20,
+    timeout = timeout,
+    retryBackoff = retryBackoff,
     processReply = onComplete,
     errorHandler = onError,
   })

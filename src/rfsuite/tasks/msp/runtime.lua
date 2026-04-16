@@ -395,7 +395,10 @@ local function enqueueTelemetryConfigRead(now)
     retryBackoff = 1.2,
     timeout = 4.0,
     processReply = function(_, buf)
-      local parsed = TelemetryConfigApi.parse(buf)
+      local parsed = nil
+      if TelemetryConfigApi and type(TelemetryConfigApi.parse) == "function" then
+        parsed = TelemetryConfigApi.parse(buf)
+      end
       if parsed then
         state.telemetryLinkRate = parsed.crsf_telemetry_link_rate
         state.telemetryLinkRatio = parsed.crsf_telemetry_link_ratio

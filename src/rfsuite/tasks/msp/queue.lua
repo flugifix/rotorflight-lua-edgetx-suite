@@ -296,10 +296,12 @@ function Queue:processQueue(now)
     return
   end
 
-  local canSendByInterval = not self.lastTimeCommandSent or (self.lastTimeCommandSent + commandInterval < now)
-  local canSendByBackoff = (self.retryCount == 0) or (self.lastTimeCommandSent and (now - self.lastTimeCommandSent) >= retryDelay)
 
-  if canSendByInterval and canSendByBackoff and self.retryCount <= self.maxRetries then
+  -- Patch: Ein neuer Request (Retry) darf erst nach Ablauf von timeout gesendet werden
+  local canSendByInterval = not self.lastTimeCommandSent or (self.lastTimeCommandSent + commandInterval < now)
+  local canSendByTimeout = (self.currentMessageStartTime == nil) or ((now - self.currentMessageStartTime) >= timeoutSeconds)
+
+  if canSendByInterval and canSendByTimeout and self.retryCount <= self.maxRetries then
     local payload = msg.payload or {}
     local okSend = self.common and type(self.common.sendRequest) == "function"
       and self.common.sendRequest(msg.command, payload, { write = isWriteMessage(msg) })

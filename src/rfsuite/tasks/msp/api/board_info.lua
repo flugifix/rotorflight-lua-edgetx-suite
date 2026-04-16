@@ -1,51 +1,80 @@
 local Api = {
-  command = 4,
-  simulatorResponse = { 0x42, 0, 0, 0, 0, 11, 82, 79, 84, 79, 82, 70, 76, 73, 71, 72, 84 } -- Board ID 0x42, Name "ROTORFLIGHT"
+  command = 4, -- MSP_BOARD_INFO
+  simulatorResponse = {
+    82, 70, 76, 84, -- board_identifier_1..4 ("RFLT")
+    0, 0,           -- hardware_revision
+    0,              -- fc_type
+    0,              -- target_capabilities
+    0,              -- target_name_length
+    -- target_name_1..32
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,              -- board_name_length
+    -- board_name_1..20
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,              -- board_design_length
+    -- board_design_1..12
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,              -- manufacturer_id_length
+    -- manufacturer_id_1..4
+    0, 0, 0, 0,
+    -- signature_1..32
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, -- mcu_type_id
+    0, -- configuration_state
+    0, 0, -- gyro_sample_rate_hz
+    0, 0, 0, 0, -- configuration_problems
+    0, -- spi_device_count
+    0  -- i2c_device_count
+  }
 }
 
+local function parseString(buf, startIdx, len)
+  local out = ""
+  for i = 0, len - 1 do
+    local b = tonumber(buf[startIdx + i]) or 0
+    if b == 0 then break end
+    out = out .. string.char(b)
+  end
+  return out
+end
+
 function Api.parse(buf)
-  if type(buf) ~= "table" or #buf < 6 then return nil end
-  
-  local boardId = tonumber(buf[1]) or 0
-  local boardVersion = tonumber(buf[2]) or 0
-  local boardType = tonumber(buf[6]) or 0
-  local nameLength = tonumber(buf[7]) or 0
-  
-  -- Parse board name (null-terminated or length-limited)
-  local boardName = ""
-  if nameLength > 0 and #buf >= (7 + nameLength) then
-    for i = 1, nameLength do
-      local byte = tonumber(buf[7 + i]) or 0
-      if byte ~= 0 then
-        boardName = boardName .. string.char(byte)
-      end
-    end
-  end
-
-  if boardName == "" then
-    local startIdx = 6
-    for i = 6, #buf do
-      local b = tonumber(buf[i]) or 0
-      if b >= 32 and b <= 126 then
-        startIdx = i
-        break
-      end
-    end
-
-    for i = startIdx, #buf do
-      local b = tonumber(buf[i]) or 0
-      if b == 0 then break end
-      if b >= 32 and b <= 126 then
-        boardName = boardName .. string.char(b)
-      end
-    end
-  end
-  
+  if type(buf) ~= "table" or #buf < 20 then return nil end
+  local idx = 1
+  local board_identifier = string.char(buf[idx] or 0, buf[idx+1] or 0, buf[idx+2] or 0, buf[idx+3] or 0)
+  idx = idx + 4
+  local hardware_revision = (buf[idx] or 0) + ((buf[idx+1] or 0) * 256)
+  idx = idx + 2
+  local fc_type = buf[idx] or 0
+  idx = idx + 1
+  local target_capabilities = buf[idx] or 0
+  idx = idx + 1
+  local target_name_length = buf[idx] or 0
+  idx = idx + 1
+  local target_name = parseString(buf, idx, target_name_length)
+  idx = idx + 32
+  local board_name_length = buf[idx] or 0
+  idx = idx + 1
+  local board_name = parseString(buf, idx, board_name_length)
+  idx = idx + 20
+  local board_design_length = buf[idx] or 0
+  idx = idx + 1
+  local board_design = parseString(buf, idx, board_design_length)
+  idx = idx + 12
+  local manufacturer_id_length = buf[idx] or 0
+  idx = idx + 1
+  local manufacturer_id = parseString(buf, idx, manufacturer_id_length)
+  idx = idx + 4
+  -- signature, mcu_type_id, etc. können bei Bedarf ergänzt werden
   return {
-    boardId = boardId,
-    boardVersion = boardVersion,
-    boardType = boardType,
-    boardName = boardName
+    board_identifier = board_identifier,
+    hardware_revision = hardware_revision,
+    fc_type = fc_type,
+    target_capabilities = target_capabilities,
+    target_name = target_name,
+    board_name = board_name,
+    board_design = board_design,
+    manufacturer_id = manufacturer_id
   }
 end
 
