@@ -11,7 +11,6 @@ local M = {}
 
 local ui = {
   loaded = false,
-  dirty = false,
   themes = nil,
   configurableThemes = nil,
   activeThemeConfigPath = nil,
@@ -69,7 +68,6 @@ local function ensureLoaded(prefs)
   ensureThemes()
 
   ui.loaded = true
-  ui.dirty = false
 end
 
 local function loadThemeModule(ctx)

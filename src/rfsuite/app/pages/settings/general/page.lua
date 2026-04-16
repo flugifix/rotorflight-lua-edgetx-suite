@@ -22,7 +22,6 @@ local CONFIG_SCHEMA = {
   { key = "auto_msp_telem_sync",          type = "bool",   default = false  },
   { key = "postflight_hold_seconds",      type = "number", default = 20     },
   { key = "save_confirm",                 type = "bool",   default = false  },
-  { key = "save_dirty_only",              type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = false  },
   { key = "show_battery_profile_startup", type = "bool",   default = true   },
@@ -42,7 +41,6 @@ end
 
 local ui = {
   loaded = false,
-  dirty  = false,
   sections = {
     safety      = true,
     integration = false,
@@ -102,7 +100,6 @@ local function ensureLoaded(prefs)
   if ui.loaded then return end
   copyFromPrefs(prefs)
   ui.loaded = true
-  ui.dirty  = false
 end
 
 local function getValueGetter(key)
@@ -123,7 +120,6 @@ local function getValueSetter(key)
   setter = function(value)
     if ui.config[key] == value then return end
     ui.config[key] = value
-    ui.runtime.markDirty()
   end
   ui.runtime.valueSetters[key] = setter
   return setter
@@ -134,7 +130,6 @@ end
 
 local SAFETY_ITEMS = {
   { key = "save_confirm",                 labelKey = "save_confirm",                 fallback = "Bestätigen beim Speichern" },
-  { key = "save_dirty_only",              labelKey = "save_dirty_only",              fallback = "Speichern nur bei Änderungen" },
   { key = "save_armed_warning",           labelKey = "save_armed_warning",           fallback = "Warnung beim Speichern (armed)" },
   { key = "reload_confirm",               labelKey = "reload_confirm",               fallback = "Bestätigen beim Neuladen" },
   { key = "show_battery_profile_startup", labelKey = "show_battery_profile_startup", fallback = "Akkutyp bei Verbindung" },
@@ -197,7 +192,6 @@ local function buildIntegration(cursorY, children, x, w, i18n)
       local nextVal = tonumber(value) or 20
       if ui.config.postflight_hold_seconds ~= nextVal then
         ui.config.postflight_hold_seconds = nextVal
-        ui.runtime.markDirty()
       end
     end
   )
@@ -226,7 +220,7 @@ local SECTIONS = {
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = ui.dirty, reload = true, help = false }
+  return { save = true, help = false }
 end
 
 function M.allowMemAutoRefresh()
@@ -236,7 +230,6 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
-  ui.dirty = false
 end
 
 function M.onSave(ctx)
@@ -253,7 +246,6 @@ function M.onSave(ctx)
     if ctx.menu and ctx.menu.setCondition then
       ctx.menu.setCondition("developerTools", ui.config.developer_tools == true)
     end
-    ui.dirty = false
     if lvgl and lvgl.alert then
       lvgl.alert({ title = t(ctx.i18n, "saved_title", "Gespeichert"), message = t(ctx.i18n, "saved_message", "Einstellungen gespeichert") })
     end

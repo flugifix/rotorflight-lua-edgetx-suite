@@ -14,7 +14,6 @@ local THEME_DEFAULTS = {
 
 local ui = {
   loaded = false,
-  dirty = false,
   config = {
     v_min_tenths = 180,
     v_max_tenths = 252,
@@ -40,7 +39,6 @@ local function loadConfig(prefs)
   ui.config.v_min_tenths = math.floor((vMin * 10) + 0.5)
   ui.config.v_max_tenths = math.floor((vMax * 10) + 0.5)
   ui.loaded = true
-  ui.dirty = false
 end
 
 local function saveConfig(prefs)
@@ -61,7 +59,6 @@ local function setMin(value)
   local nextValue = clamp(tonumber(value) or 180, 50, maxAllowed)
   if ui.config.v_min_tenths ~= nextValue then
     ui.config.v_min_tenths = nextValue
-    ui.dirty = true
   end
 end
 
@@ -76,14 +73,13 @@ local function setMax(value)
   local nextValue = clamp(tonumber(value) or 252, minAllowed, 650)
   if ui.config.v_max_tenths ~= nextValue then
     ui.config.v_max_tenths = nextValue
-    ui.dirty = true
   end
 end
 
 local M = {}
 
 function M.getHeaderActions()
-  return { save = ui.dirty, reload = true, help = false }
+  return { save = true, help = false }
 end
 
 function M.allowMemAutoRefresh()
@@ -99,9 +95,7 @@ end
 function M.onSave(ctx)
   saveConfig(ctx.preferences)
   local ok, err = ctx.savePreferences()
-  if ok then
-    ui.dirty = false
-  elseif lvgl and lvgl.alert then
+  if lvgl and lvgl.alert then
     local i18n = ctx.i18n
     local title = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_title") or "Error"
     local message = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_message") or "Save failed"

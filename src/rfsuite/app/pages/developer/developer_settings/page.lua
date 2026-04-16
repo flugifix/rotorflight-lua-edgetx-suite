@@ -28,7 +28,6 @@ end
 
 local ui = {
   loaded = false,
-  dirty = false,
   sections = {
     logging = true
   },
@@ -86,7 +85,6 @@ local function ensureLoaded(prefs)
   if ui.loaded then return end
   copyFromPrefs(prefs)
   ui.loaded = true
-  ui.dirty = false
 end
 
 local function getValueGetter(key)
@@ -107,7 +105,6 @@ local function getValueSetter(key)
   setter = function(value)
     if ui.config[key] == value then return end
     ui.config[key] = value
-    ui.runtime.markDirty()
   end
   ui.runtime.valueSetters[key] = setter
   return setter
@@ -160,7 +157,7 @@ local SECTIONS = {
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = ui.dirty, reload = true, help = false }
+  return { save = true, help = false }
 end
 
 function M.allowMemAutoRefresh()
@@ -170,7 +167,6 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
-  ui.dirty = false
 end
 
 function M.onSave(ctx)
@@ -183,7 +179,6 @@ function M.onSave(ctx)
 
   local ok, err = ctx.savePreferences()
   if ok then
-    ui.dirty = false
     if lvgl and lvgl.alert then
       lvgl.alert({ title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Developer settings saved") })
     end
@@ -222,7 +217,6 @@ function M.onClose()
   else
     ui.runtime = nil
     ui.loaded = false
-    ui.dirty = false
   end
   Controls = nil
   Common = nil

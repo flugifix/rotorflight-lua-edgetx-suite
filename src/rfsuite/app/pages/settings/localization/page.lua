@@ -28,7 +28,6 @@ end
 
 local ui = {
   loaded    = false,
-  dirty     = false,
   language  = "en",
   config    = buildDefaultConfig(),
 }
@@ -74,7 +73,6 @@ local function ensureLoaded(prefs)
   if ui.loaded then return end
   copyFromPrefs(prefs)
   ui.loaded = true
-  ui.dirty  = false
 end
 
 local function getTempOptions(i18n)
@@ -114,7 +112,6 @@ local function buildLocalization(cursorY, children, x, w, i18n)
       end
       if ui.language == nextLang then return end
       ui.language = nextLang
-      ui.runtime.markDirty()
     end
   )
 
@@ -125,7 +122,6 @@ local function buildLocalization(cursorY, children, x, w, i18n)
     ui.config.temperature_unit,
     function(val)
       ui.config.temperature_unit = val
-      ui.runtime.markDirty()
     end
   )
 
@@ -136,7 +132,6 @@ local function buildLocalization(cursorY, children, x, w, i18n)
     ui.config.altitude_unit,
     function(val)
       ui.config.altitude_unit = val
-      ui.runtime.markDirty()
     end
   )
 
@@ -147,7 +142,7 @@ end
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = ui.dirty, reload = true, help = false }
+  return { save = true, help = false }
 end
 
 function M.allowMemAutoRefresh()
@@ -157,7 +152,6 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
-  ui.dirty = false
 end
 
 function M.onSave(ctx)
@@ -172,7 +166,6 @@ function M.onSave(ctx)
   end
   local ok, err = ctx.savePreferences()
   if ok then
-    ui.dirty = false
     if lvgl and lvgl.alert then
       lvgl.alert({ title = t(ctx.i18n, "saved_title", "Gespeichert"), message = t(ctx.i18n, "saved_message", "Einstellungen gespeichert") })
     end

@@ -616,7 +616,11 @@ local function readFblConnected()
     return false
   end
 
+  -- MSP-Version nicht unterstützt? Dann wie "nicht verbunden" behandeln
   if mspState.unsupportedApi == true then
+    return false
+  end
+  if mspState.apiSupported == false then
     return false
   end
 

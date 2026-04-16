@@ -109,7 +109,6 @@ This path must point to the root of the mounted radio storage, not to `SCRIPTS` 
 - Choice settings use native LVGL `choice` via `Controls.appendComboSelect(children, x, y, w, labelText, options, selectedValue, onSelect)`.
 - Settings rows use an enlarged shared row height derived from `ROW_H` and `NUMBER_H` so toggle, number, and choice controls align consistently.
 - Choice popups are now handled by EdgeTX itself; pages no longer need local open/close popup state for `appendComboSelect(...)`.
-- Save button state is driven by page-local `ui.dirty`; pages may trigger a one-time rebuild on the first dirty transition so the header refreshes without rebuilding on every edit.
 
 ## License
 

@@ -113,9 +113,11 @@ local TOGGLE_W   = 64
 local TOGGLE_H   = 26
 local TOGGLE_Y_OFFSET = -6
 
+
 local NUMBER_W        = 172
 local NUMBER_H        = 62
 local NUMBER_Y_OFFSET = 6
+Controls.NUMBER_H = NUMBER_H
 
 function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
                                      onToggle)

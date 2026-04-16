@@ -21,7 +21,6 @@ end
 
 local ui = {
   loaded = false,
-  dirty = false,
   config = {
     theme_preflight = nil,
     theme_inflight = nil,
@@ -105,7 +104,6 @@ local function ensureLoaded(prefs)
   ui.config.model_theme_postflight = src.model_theme_postflight or "nil"
 
   ui.loaded = true
-  ui.dirty = false
 end
 
 local function getThemeId(path)
@@ -124,7 +122,6 @@ local function setThemeFromId(key, id)
   if not theme then return end
   if ui.config[key] ~= theme.path then
     ui.config[key] = theme.path
-    ui.runtime.markDirty()
   end
 end
 
@@ -138,7 +135,6 @@ local function setModelThemeFromId(key, id)
   end
   if ui.config[key] ~= nextPath then
     ui.config[key] = nextPath
-    ui.runtime.markDirty()
   end
 end
 
@@ -155,7 +151,7 @@ end
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = ui.dirty, reload = true, help = false }
+  return { save = true, help = false }
 end
 
 function M.allowMemAutoRefresh()
@@ -167,7 +163,6 @@ function M.onReload(ctx)
   ui.loaded = false
   ui.themes = nil
   ensureLoaded(ctx.preferences)
-  ui.dirty = false
   return true
 end
 
@@ -176,7 +171,6 @@ function M.onSave(ctx)
   saveToPreferences(ctx.preferences)
   local ok, err = ctx.savePreferences()
   if ok then
-    ui.dirty = false
   elseif lvgl and lvgl.alert then
     lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
   end

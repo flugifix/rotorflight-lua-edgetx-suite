@@ -42,7 +42,6 @@ end
 
 local ui = {
   loaded = false,
-  dirty  = false,
   sections = {
     arming = true,
     governor = true,
@@ -119,7 +118,6 @@ local function getEscThresholdSetter(minVal, maxVal)
     if nextVal > maxVal then nextVal = maxVal end
     if ui.config.esc_threshold ~= nextVal then
       ui.config.esc_threshold = nextVal
-      ui.runtime.markDirty()
     end
   end
   return ui.runtime.escThresholdSet
@@ -135,12 +133,12 @@ end
 
 local function getFuelCalloutOptions(i18n)
   return {
-    { value = 0, label = t(i18n, "fuel_callout_default", "Standard") },
-    { value = 5, label = t(i18n, "fuel_callout_5", "5%") },
-    { value = 10, label = t(i18n, "fuel_callout_10", "10%") },
-    { value = 20, label = t(i18n, "fuel_callout_20", "20%") },
-    { value = 25, label = t(i18n, "fuel_callout_25", "25%") },
-    { value = 50, label = t(i18n, "fuel_callout_50", "50%") },
+    { value = 0, label = t(i18n, "fuel_callout_default", "Default (Only at 10%)") },
+    { value = 5, label = t(i18n, "fuel_callout_5", "Every 5%") },
+    { value = 10, label = t(i18n, "fuel_callout_10", "Every 10%") },
+    { value = 20, label = t(i18n, "fuel_callout_20", "Every 20%") },
+    { value = 25, label = t(i18n, "fuel_callout_25", "Every 25%") },
+    { value = 50, label = t(i18n, "fuel_callout_50", "Every 50%") },
   }
 end
 
@@ -162,7 +160,6 @@ local function getFuelCalloutSetter()
     if not FUEL_CALLOUT_VALUES[nextValue] then nextValue = 10 end
     if ui.config.fuel_callout_percent ~= nextValue then
       ui.config.fuel_callout_percent = nextValue
-      ui.runtime.markDirty()
     end
   end
   return ui.runtime.fuelCalloutSet
@@ -188,7 +185,6 @@ local function getFuelRepeatSetter(minVal, maxVal)
     if nextValue > maxVal then nextValue = maxVal end
     if ui.config.fuel_repeat_below_zero ~= nextValue then
       ui.config.fuel_repeat_below_zero = nextValue
-      ui.runtime.markDirty()
     end
   end
   return ui.runtime.fuelRepeatSet
@@ -210,7 +206,6 @@ local function getFuelHapticSetter()
     local nextBool = (nextVal == true)
     if ui.config.fuel_haptic_below_zero ~= nextBool then
       ui.config.fuel_haptic_below_zero = nextBool
-      ui.runtime.markDirty()
     end
   end
   return ui.runtime.fuelHapticSet
@@ -244,7 +239,6 @@ local function ensureLoaded(prefs)
   if ui.loaded then return end
   copyFromPrefs(prefs)
   ui.loaded = true
-  ui.dirty  = false
 end
 
 -- ─── Settings items ──────────────────────────────────────────────────────────
@@ -333,7 +327,7 @@ local SECTIONS = {
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = ui.dirty, reload = ui.dirty, help = false }
+  return { save = true, help = false }
 end
 
 function M.allowMemAutoRefresh()
@@ -343,7 +337,6 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
-  ui.dirty = false
   return true
 end
 
@@ -358,7 +351,6 @@ function M.onSave(ctx)
 
   local ok, err = ctx.savePreferences()
   if ok then
-    ui.dirty = false
     return true
   else
     if lvgl and lvgl.alert then

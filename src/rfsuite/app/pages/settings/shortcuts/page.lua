@@ -1,3 +1,7 @@
+function M.getHeaderActions()
+  ensureDeps()
+  return { save = true, help = false }
+end
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/settings/" .. path
   local chunk = assert(loadScript(fullPath, "t"))

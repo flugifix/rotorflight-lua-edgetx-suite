@@ -127,9 +127,9 @@ local manifest = {
     developer_menu = {
       title = "@i18n(app.modules.developer.name)@",
       pages = {
-        { id = "msp_speed", title = "@i18n(app.modules.msp_speed.name)@", menuId = "developer_msp_speed_page", icon = "@pages/developer/msp_speed/icon.png", enabled = true },
-        { id = "api_tester", title = "@i18n(app.modules.api_tester.name)@", menuId = "developer_api_tester_page", icon = "@pages/developer/api_tester/icon.png", enabled = true },
-        { id = "msp_experiments", title = "@i18n(app.modules.msp_experiments.name)@", menuId = "developer_msp_experiments_page", icon = "@pages/developer/msp_experiments/icon.png", enabled = true },
+        { id = "msp_speed", title = "@i18n(app.modules.msp_speed.name)@", menuId = "developer_msp_speed_page", icon = "@pages/developer/msp_speed/icon.png", enabledWhen = "fblConnected" },
+        { id = "api_tester", title = "@i18n(app.modules.api_tester.name)@", menuId = "developer_api_tester_page", icon = "@pages/developer/api_tester/icon.png", enabledWhen = "fblConnected" },
+        { id = "msp_experiments", title = "@i18n(app.modules.msp_experiments.name)@", menuId = "developer_msp_experiments_page", icon = "@pages/developer/msp_experiments/icon.png", enabledWhen = "fblConnected" },
         { id = "developer_settings", title = "@i18n(app.modules.developer_settings.name)@", menuId = "developer_settings_page", icon = "@pages/developer/developer_settings/icon.png", enabled = true },
       }
     },

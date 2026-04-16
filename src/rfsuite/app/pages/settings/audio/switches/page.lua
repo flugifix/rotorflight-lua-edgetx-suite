@@ -37,7 +37,6 @@ end
 
 local ui = {
   loaded = false,
-  dirty  = false,
   sections = {
     core = true,
     modes = true,
@@ -90,7 +89,6 @@ local function ensureLoaded(prefs)
   if ui.loaded then return end
   copyFromPrefs(prefs)
   ui.loaded = true
-  ui.dirty  = false
 end
 
 -- ─── Settings items ──────────────────────────────────────────────────────────
@@ -139,7 +137,7 @@ local SECTIONS = {
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = ui.dirty, reload = ui.dirty, help = false }
+  return { save = true, help = false }
 end
 
 function M.allowMemAutoRefresh()
@@ -149,7 +147,6 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
-  ui.dirty = false
   return true
 end
 
@@ -164,7 +161,6 @@ function M.onSave(ctx)
 
   local ok, err = ctx.savePreferences()
   if ok then
-    ui.dirty = false
     return true
   else
     if lvgl and lvgl.alert then

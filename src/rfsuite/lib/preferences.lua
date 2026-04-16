@@ -42,7 +42,6 @@ local function defaultPreferences()
       toolbar_timeout              = 10,
       -- safety & prompts
       save_confirm                 = false,
-      save_dirty_only              = true,
       save_armed_warning           = true,
       reload_confirm               = false,
       show_battery_profile_startup = true,
