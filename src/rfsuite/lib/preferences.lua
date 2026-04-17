@@ -41,9 +41,9 @@ local function defaultPreferences()
       hs_loader                    = 0,
       toolbar_timeout              = 10,
       -- safety & prompts
-      save_confirm                 = false,
+      save_confirm                 = true,
       save_armed_warning           = true,
-      reload_confirm               = false,
+      reload_confirm               = true,
       show_battery_profile_startup = true,
       show_confirmation_dialog     = true,
       -- integration

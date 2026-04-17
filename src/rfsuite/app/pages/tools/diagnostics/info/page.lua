@@ -428,7 +428,7 @@ local function startLiveLoad()
   })
 
   queue:add({
-    command = TelemetryConfigApi.readCommand,
+    command = TelemetryConfigApi.command,
     simulatorResponse = TelemetryConfigApi.simulatorResponse,
     retryDelay = 1.6,
     timeout = 4.0,
@@ -441,7 +441,7 @@ local function startLiveLoad()
       end
       markStepDone()
     end,
-    errorHandler = function() onFailure("TELEMETRY_CONFIG", TelemetryConfigApi.readCommand) end
+    errorHandler = function() onFailure("TELEMETRY_CONFIG", TelemetryConfigApi.command) end
   })
 
   requestRebuild()
@@ -489,7 +489,7 @@ local function pollPacketRateLive()
   state.lastPacketRateFetchAt = now
 
   queue:add({
-    command = TelemetryConfigApi.readCommand,
+    command = TelemetryConfigApi.command,
     simulatorResponse = TelemetryConfigApi.simulatorResponse,
     retryDelay = 1.2,
     timeout = 3.0,

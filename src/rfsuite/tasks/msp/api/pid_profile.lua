@@ -1,0 +1,115 @@
+-- Ported PID_PROFILE -> pid_profile.lua
+local Api = {
+    command = 94,
+    writeCommand = 95
+}
+
+local FIELD_SPEC = {
+    {"pid_mode", "U8"},
+    {"error_decay_time_ground", "U8"},
+    {"error_decay_time_cyclic", "U8"},
+    {"error_decay_time_yaw", "U8"},
+    {"error_decay_limit_cyclic", "U8"},
+    {"error_decay_limit_yaw", "U8"},
+    {"error_rotation", "U8"},
+    {"error_limit_0", "U8"},
+    {"error_limit_1", "U8"},
+    {"error_limit_2", "U8"},
+    {"gyro_cutoff_0", "U8"},
+    {"gyro_cutoff_1", "U8"},
+    {"gyro_cutoff_2", "U8"},
+    {"dterm_cutoff_0", "U8"},
+    {"dterm_cutoff_1", "U8"},
+    {"dterm_cutoff_2", "U8"},
+    {"iterm_relax_type", "U8"},
+    {"iterm_relax_cutoff_0", "U8"},
+    {"iterm_relax_cutoff_1", "U8"},
+    {"iterm_relax_cutoff_2", "U8"},
+    {"yaw_cw_stop_gain", "U8"},
+    {"yaw_ccw_stop_gain", "U8"},
+    {"yaw_precomp_cutoff", "U8"},
+    {"yaw_cyclic_ff_gain", "U8"},
+    {"yaw_collective_ff_gain", "U8"},
+    {"yaw_collective_dynamic_gain", "U8"},
+    {"yaw_collective_dynamic_decay", "U8"},
+    {"pitch_collective_ff_gain", "U8"},
+    {"angle_level_strength", "U8"},
+    {"angle_level_limit", "U8"},
+    {"horizon_level_strength", "U8"},
+    {"trainer_gain", "U8"},
+    {"trainer_angle_limit", "U8"},
+    {"cyclic_cross_coupling_gain", "U8"},
+    {"cyclic_cross_coupling_ratio", "U8"},
+    {"cyclic_cross_coupling_cutoff", "U8"},
+    {"offset_limit_0", "U8"},
+    {"offset_limit_1", "U8"},
+    {"bterm_cutoff_0", "U8"},
+    {"bterm_cutoff_1", "U8"},
+    {"bterm_cutoff_2", "U8"},
+    {"yaw_inertia_precomp_gain", "U8"},
+    {"yaw_inertia_precomp_cutoff", "U8"}
+}
+
+local SIM_RESPONSE = {
+    3,25,250,0,12,0,1,45,45,60,50,50,100,15,15,20,2,10,10,15,100,100,6,0,30,0,0,0,40,55,0,75,20,25,0,15,90,90,15,15,20,10,20
+}
+
+local function expected_bytes(spec)
+    local n = 0
+    for _, f in ipairs(spec) do
+        local typ = f[2]
+        if typ == "U8" or typ == "S8" then n = n + 1
+        elseif typ == "U16" or typ == "S16" then n = n + 2
+        else n = n + 1 end
+    end
+    return n
+end
+
+local function to_u16(lo, hi)
+    lo = tonumber(lo) or 0
+    hi = tonumber(hi) or 0
+    return ((hi & 0xFF) << 8) | (lo & 0xFF)
+end
+
+local function from_u16(v)
+    v = tonumber(v) or 0
+    v = v & 0xFFFF
+    return v & 0xFF, (v >> 8) & 0xFF
+end
+
+Api.simulatorResponse = (function()
+    local t = {}
+    for _, b in ipairs(SIM_RESPONSE) do t[#t+1] = b end
+    return t
+end)()
+
+function Api.parse(buf)
+    if type(buf) ~= "table" then return nil end
+    local need = expected_bytes(FIELD_SPEC)
+    if #buf < need then return nil end
+    local out = {}
+    local i = 1
+    for _, t in ipairs(FIELD_SPEC) do
+        local name, typ = t[1], t[2]
+        if typ == "U8" then out[name] = tonumber(buf[i]) or 0; i = i + 1
+        elseif typ == "S8" then local v = tonumber(buf[i]) or 0; if v >= 128 then v = v - 256 end; out[name] = v; i = i + 1
+        elseif typ == "U16" then out[name] = to_u16(buf[i], buf[i+1]); i = i + 2
+        else out[name] = tonumber(buf[i]) or 0; i = i + 1 end
+    end
+    return out
+end
+
+function Api.buildWritePayload(data)
+    data = data or {}
+    local p = {}
+    for _, t in ipairs(FIELD_SPEC) do
+        local name, typ = t[1], t[2]
+        local val = data[name] or 0
+        if typ == "U8" or typ == "S8" then p[#p+1] = val & 0xFF
+        elseif typ == "U16" then local lo, hi = from_u16(val); p[#p+1] = lo; p[#p+1] = hi
+        else p[#p+1] = val & 0xFF end
+    end
+    return p
+end
+
+return Api

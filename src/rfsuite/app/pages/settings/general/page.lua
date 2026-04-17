@@ -21,9 +21,9 @@ local CONFIG_SCHEMA = {
   { key = "syncname",                     type = "bool",   default = false  },
   { key = "auto_msp_telem_sync",          type = "bool",   default = false  },
   { key = "postflight_hold_seconds",      type = "number", default = 20     },
-  { key = "save_confirm",                 type = "bool",   default = false  },
+  { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
-  { key = "reload_confirm",               type = "bool",   default = false  },
+  { key = "reload_confirm",               type = "bool",   default = true   },
   { key = "show_battery_profile_startup", type = "bool",   default = true   },
   { key = "show_confirmation_dialog",     type = "bool",   default = true   },
 }

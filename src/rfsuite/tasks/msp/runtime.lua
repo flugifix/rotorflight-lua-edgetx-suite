@@ -390,7 +390,7 @@ local function enqueueTelemetryConfigRead(now)
 
   state.pendingTelemetryConfigRead = false
   state.queue:add({
-    command = TelemetryConfigApi.readCommand,
+    command = TelemetryConfigApi.command,
     simulatorResponse = TelemetryConfigApi.simulatorResponse,
     retryBackoff = 1.2,
     timeout = 4.0,

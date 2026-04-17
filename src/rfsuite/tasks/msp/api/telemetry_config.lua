@@ -1,5 +1,5 @@
 local Api = {
-  readCommand = 73,
+  command = 73,
   writeCommand = 74,
   simulatorResponse = {
     0,

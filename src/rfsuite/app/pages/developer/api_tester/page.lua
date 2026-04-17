@@ -297,7 +297,7 @@ local function enqueueApiRead(apiName)
 
   local loaderPath = "tasks/msp/api/" .. tostring(apiName) .. ".lua"
   local okLoad, api = pcall(loadModule, loaderPath)
-  local command = (type(api) == "table") and (tonumber(api.readCommand) or tonumber(api.command)) or nil
+  local command = (type(api) == "table") and (tonumber(api.command)) or nil
   if not okLoad or type(api) ~= "table" or type(command) ~= "number" then
     setStatus(tr("status_load_failed", "Load failed"))
     setInfoRows({
@@ -384,8 +384,7 @@ local function enqueueApiRead(apiName)
   end
 
 
-  -- Für große APIs wie adjustment_ranges (cmd 52) längeres retryBackoff setzen
-  local retryBackoff = (command == 52) and 5.0 or 0.20
+  local retryBackoff = 0.20
   local timeout = 5.0
   queue:add({
     command = command,
@@ -461,14 +460,27 @@ local function discoverApis()
 
   table.sort(names)
 
+  -- Filter: nur APIs anzeigen, die ein numerisches `command` besitzen.
+  local filtered = {}
+  for i = 1, #names do
+    local apiName = names[i]
+    local loaderPath = "tasks/msp/api/" .. tostring(apiName) .. ".lua"
+    local ok, api = pcall(loadModule, loaderPath)
+    if ok and type(api) == "table" and api.command ~= nil then
+      filtered[#filtered + 1] = apiName
+    else
+      Log.emit("api_tester", "discoverApis: skipping '" .. tostring(apiName) .. "' (no command or load failed)", "debug", true)
+    end
+  end
+
   -- UI Daten vorbereiten
-  ui.apiNames = names
+  ui.apiNames = filtered
   ui.choices = {}
   ui.choiceLabels = {}
-  
-  for i = 1, #names do
+
+  for i = 1, #filtered do
     ui.choices[i] = i
-    ui.choiceLabels[i] = names[i]
+    ui.choiceLabels[i] = filtered[i]
   end
 
   ui.selectedIndex = 1
