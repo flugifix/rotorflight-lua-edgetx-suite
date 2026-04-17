@@ -18,6 +18,7 @@ local HelpView = nil
 local PreferencesSafe = nil
 local Version = nil
 local MspRuntime = nil
+local Log = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
 
@@ -53,6 +54,12 @@ end
 local function ensureMspRuntime()
   if not MspRuntime then
     MspRuntime = loadModule("tasks/msp/runtime.lua")
+  end
+end
+
+local function ensureLog()
+  if not Log then
+    Log = loadModule("lib/log.lua")
   end
 end
 
@@ -270,12 +277,9 @@ local function logMemoryUsage(now)
   state.memLastTick = tickNow > 0 and tickNow or (state.memLastTick or 0)
 
   local line = "[mem][info] lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
-  if type(print) == "function" then
-    print(line)
-  end
-  if isSerialMemoryLogEnabled() then
-    pcall(serialWrite, line .. "\n")
-  end
+  local msg = "lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
+  ensureLog()
+  pcall(Log.emit, "mem", msg, "info", true)
 end
 
 local function resolveLocaleFromSystem()
@@ -672,21 +676,62 @@ local function onReload()
     if type(actions) == "table" and actions.reload == false then
       return
     end
-
     closeHelpDialogIfOpen()
 
-    -- Keep preferences in-memory for reload to avoid repeated disk loads and table churn.
-    -- The app loads preferences once during init and pages should work against that shared state.
-    _G.rfsuite.preferences = state.preferences
-    local shouldRebuild = page.onReload({
-      i18n = state.i18n,
-      preferences = state.preferences,
-      menu = state.menu,
-      refresh = M.buildUI
-    })
-    if shouldRebuild ~= false then
-      scheduleBuildUI(true)
+    local function doPageReload()
+      -- Keep preferences in-memory for reload to avoid repeated disk loads and table churn.
+      _G.rfsuite.preferences = state.preferences
+      local shouldRebuild = page.onReload({
+        i18n = state.i18n,
+        preferences = state.preferences,
+        menu = state.menu,
+        refresh = M.buildUI
+      })
+      if shouldRebuild ~= false then
+        scheduleBuildUI(true)
+      end
     end
+
+    local reloadPref = state.preferences and state.preferences.general and state.preferences.general.reload_confirm
+    if reloadPref == true and lvgl then
+      local function tr(key, fallback)
+        if state and state.i18n and type(state.i18n.t) == "function" then
+          local ok, val = pcall(state.i18n.t, key)
+          if ok and type(val) == "string" and val ~= "" and val ~= key then
+            return val
+          end
+        end
+        return fallback
+      end
+
+      local title = tr("app.pages.settings_general.reload_confirm", "Confirm on Reload")
+      local message = tr("app.dialogs.confirm_reload", "Reload and discard unsaved changes?")
+
+      ensureLog()
+      pcall(Log.emit, "rfsuite", "onReload invoked; reloadPref=true", "debug", true)
+      if lvgl then
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
+      else
+        pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
+      end
+
+      if type(lvgl.confirm) == "function" then
+        local ok, res = pcall(lvgl.confirm, { title = title, message = message })
+        ensureLog()
+        pcall(Log.emit, "rfsuite", "called lvgl.confirm; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
+        if ok and res == true then doPageReload() end
+        return
+      end
+
+      -- Fallback: no confirm UI available — proceed with reload.
+      ensureLog()
+      pcall(Log.emit, "rfsuite", "no confirm API available; performing reload fallback", "debug", true)
+      doPageReload()
+      return
+    end
+
+    -- Preference disabled: just reload immediately.
+    doPageReload()
     return
   end
 
@@ -704,20 +749,65 @@ local function onSave()
   if page and page.onSave then
     closeHelpDialogIfOpen()
 
-    local shouldRebuild = page.onSave({
-      i18n = state.i18n,
-      preferences = state.preferences,
-      menu = state.menu,
-      savePreferences = performSave,
-      refresh = M.buildUI
-    })
+    -- Helper that performs the actual page save logic.
+    local function doPageSave()
+      local shouldRebuild = page.onSave({
+        i18n = state.i18n,
+        preferences = state.preferences,
+        menu = state.menu,
+        savePreferences = performSave,
+        refresh = M.buildUI
+      })
 
-    -- Apply possibly updated language setting immediately after save.
-    applyLocaleFromPreferences()
+      -- Apply possibly updated language setting immediately after save.
+      applyLocaleFromPreferences()
 
-    if shouldRebuild ~= false then
-      scheduleBuildUI(false)
+      if shouldRebuild ~= false then
+        scheduleBuildUI(false)
+      end
     end
+
+    -- Check preference and show confirm dialog if enabled.
+    local savePref = state.preferences and state.preferences.general and state.preferences.general.save_confirm
+    if savePref == true and lvgl then
+      local function tr(key, fallback)
+        if state and state.i18n and type(state.i18n.t) == "function" then
+          local ok, val = pcall(state.i18n.t, key)
+          if ok and type(val) == "string" and val ~= "" and val ~= key then
+            return val
+          end
+        end
+        return fallback
+      end
+
+      local title = tr("app.pages.settings_general.save_confirm", "Confirm on Save")
+      local message = tr("app.dialogs.confirm_save", "Save changes?")
+
+      ensureLog()
+      pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug", true)
+      if lvgl then
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
+      else
+        pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
+      end
+
+      if type(lvgl.confirm) == "function" then
+        local ok, res = pcall(lvgl.confirm, { title = title, message = message })
+        ensureLog()
+        pcall(Log.emit, "rfsuite", "called lvgl.confirm; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
+        if ok and res == true then doPageSave() end
+        return
+      end
+
+      -- Fallback: no confirm API available — proceed with save.
+      ensureLog()
+      pcall(Log.emit, "rfsuite", "no confirm API available; performing save fallback", "debug", true)
+      doPageSave()
+      return
+    end
+
+    -- Preference disabled: just save immediately.
+    doPageSave()
     return
   end
 
@@ -1100,9 +1190,8 @@ function M.run(event, touchState)
         requestRebuild = function() scheduleBuildUI(false) end
       })
       if not ok then
-        if type(print) == "function" then
-          print("[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err))
-        end
+        ensureLog()
+        pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error", true)
         if type(serialWrite) == "function" then
           pcall(serialWrite, "[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err) .. "\n")
         end

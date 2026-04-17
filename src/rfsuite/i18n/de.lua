@@ -67,6 +67,13 @@ return {
       help = "?",
       close = "Schließen"
     },
+
+    dialogs = {
+      yes = "Ja",
+      no = "Nein",
+      confirm_save = "Möchtest du die Änderungen speichern?",
+      confirm_reload = "Möchtest du neu laden und ungespeicherte Änderungen verwerfen?"
+    },
     help = {
       title = "Hilfe",
       layout = "Demo fuer dynamisches Menu + Breadcrumb + Layout"

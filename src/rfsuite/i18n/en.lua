@@ -67,6 +67,13 @@ return {
       help = "?",
       close = "Close"
     },
+
+    dialogs = {
+      yes = "Yes",
+      no = "No",
+      confirm_save = "Do you want to save the changes?",
+      confirm_reload = "Do you want to reload and discard unsaved changes?"
+    },
     help = {
       title = "Help",
       layout = "Demo for dynamic menu + breadcrumb + layout"
