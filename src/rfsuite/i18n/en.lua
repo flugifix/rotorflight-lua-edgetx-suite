@@ -436,7 +436,13 @@ return {
       bb_rec = "REC",
       bb_logged = "LOGGED",
       status_armed = "ARMED",
-      status_disarmed = "DISARMED"
+      status_disarmed = "DISARMED",
+      connecting_fbl = "Connecting FBL...",
+      please_wait_for_telemetry = "Please wait for telemetry",
+      waiting_for_msp_link = "Waiting for MSP link",
+      waiting_for_receiver_telemetry = "Waiting for receiver telemetry (1RSS/2RSS)",
+      waiting_for_battery_telemetry = "Waiting for battery telemetry",
+      connected_starting = "Connected, starting dashboard..."
     }
   }
 }

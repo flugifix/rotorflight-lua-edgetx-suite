@@ -2,7 +2,7 @@ local Splash = {}
 
 local LOGO_FILE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png"
 
-function Splash.build(zone, statusLine)
+function Splash.build(zone, statusLine, title)
   local w = (zone and zone.w) or LCD_W or 320
   local h = (zone and zone.h) or LCD_H or 172
   local logoW = math.max(112, math.min(math.floor(w * 0.80), 240))
@@ -35,7 +35,7 @@ function Splash.build(zone, statusLine)
       x = 0,
       y = titleY,
       w = w,
-      text = "Connecting FBL...",
+      text = tostring(title or "Connecting FBL..."),
       align = CENTER,
       color = WHITE,
       font = MIDSIZE

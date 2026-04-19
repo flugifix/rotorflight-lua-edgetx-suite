@@ -19,6 +19,7 @@ local PreferencesSafe = nil
 local Version = nil
 local MspRuntime = nil
 local Log = nil
+local Events = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
 
@@ -54,6 +55,12 @@ end
 local function ensureMspRuntime()
   if not MspRuntime then
     MspRuntime = loadModule("tasks/msp/runtime.lua")
+  end
+end
+
+local function ensureEvents()
+  if not Events then
+    Events = loadModule("tasks/events/runtime.lua")
   end
 end
 
@@ -182,8 +189,6 @@ local state = {
   mspLastTick = 0,
   fblConnected = false,
   infoSessionSnapshot = nil,
-  mspUnsupportedDialogShown = false,
-  mspUnsupportedVersionShown = nil,
   mspLinkConfigWarningAt = 0,
   headerActions = {
     defaults = {
@@ -447,6 +452,24 @@ local function getMspUnsupportedDialogModule()
   return mspUnsupportedDialogModule
 end
 
+local confirmDialogModule = nil
+local confirmDialogLoadTried = false
+local function getConfirmDialogModule()
+  if confirmDialogLoadTried then
+    return confirmDialogModule
+  end
+  confirmDialogLoadTried = true
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/ui/confirm_dialog.lua", "t")
+  if type(chunk) ~= "function" then
+    return nil
+  end
+  local ok, mod = pcall(chunk)
+  if ok and type(mod) == "table" and type(mod.show) == "function" then
+    confirmDialogModule = mod
+  end
+  return confirmDialogModule
+end
+
 local function maybeShowUnsupportedMspDialog()
   if not state.i18n then
     return
@@ -475,8 +498,6 @@ local function maybeShowUnsupportedMspDialog()
   end
 
   if apiSupported == true then
-    state.mspUnsupportedDialogShown = false
-    state.mspUnsupportedVersionShown = nil
     return
   end
 
@@ -491,12 +512,6 @@ local function maybeShowUnsupportedMspDialog()
     apiVersion = diagnostics.apiVersion
   end
   local version = tostring(apiVersion or "?")
-  if state.mspUnsupportedDialogShown and state.mspUnsupportedVersionShown == version then
-    return
-  end
-
-  state.mspUnsupportedDialogShown = true
-  state.mspUnsupportedVersionShown = version
 
   local supported = "-"
   ensureVersion()
@@ -515,6 +530,7 @@ local function maybeShowUnsupportedMspDialog()
     local shown = dialog.show({
       title = title,
       message = message,
+      version = version,
       onFallback = function(fallbackTitle, fallbackMessage)
         state.helpContent = fallbackMessage
         state.helpPageTitle = fallbackTitle
@@ -611,6 +627,12 @@ local function maybeShowMspLinkConfigDialog()
 end
 
 local function readFblConnected()
+  local root = _G and _G.rfsuite
+  local session = root and root.session
+  if type(session) == "table" and session.isConnected ~= nil then
+    return session.isConnected == true
+  end
+
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false
   end
@@ -710,9 +732,23 @@ local function onReload()
       ensureLog()
       pcall(Log.emit, "rfsuite", "onReload invoked; reloadPref=true", "debug", true)
       if lvgl then
-        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
       else
         pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
+      end
+
+      local confirmModule = getConfirmDialogModule()
+      if confirmModule and type(confirmModule.show) == "function" then
+        local ok, res = pcall(confirmModule.show, {
+          title = title,
+          message = message,
+          onConfirm = doPageReload,
+          onCancel = function() end,
+          onFallback = doPageReload
+        })
+        ensureLog()
+        pcall(Log.emit, "rfsuite", "called confirm.show; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
+        if ok and res == true then return end
       end
 
       if type(lvgl.confirm) == "function" then
@@ -786,9 +822,23 @@ local function onSave()
       ensureLog()
       pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug", true)
       if lvgl then
-        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
       else
         pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
+      end
+
+      local confirmModule = getConfirmDialogModule()
+      if confirmModule and type(confirmModule.show) == "function" then
+        local ok, res = pcall(confirmModule.show, {
+          title = title,
+          message = message,
+          onConfirm = doPageSave,
+          onCancel = function() end,
+          onFallback = doPageSave
+        })
+        ensureLog()
+        pcall(Log.emit, "rfsuite", "called confirm.show; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
+        if ok and res == true then return end
       end
 
       if type(lvgl.confirm) == "function" then
@@ -1176,6 +1226,11 @@ function M.run(event, touchState)
       if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then
         state.mspLastTick = now
         MspRuntime.tick()
+        -- Let the events manager observe MSP state transitions (connect/disconnect)
+        ensureEvents()
+        if Events and type(Events.wakeup) == "function" then
+          pcall(Events.wakeup)
+        end
       end
     end
 

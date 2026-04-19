@@ -46,6 +46,7 @@ local state = {
   },
   unsupportedApi = false,
   unsupportedApiLogged = false,
+  _disconnectHandled = false,
   requestBackoffUntil = 0,
   consecutiveApiVersionFailures = 0,
   mspLastError = nil,
@@ -418,6 +419,42 @@ local function enqueueTelemetryConfigRead(now)
   })
 end
 
+local function doDisconnect(now, reason)
+  -- Make disconnect idempotent to avoid log spam when called repeatedly.
+  if state._disconnectHandled then
+    return
+  end
+  state._disconnectHandled = true
+  -- Ensure runtime reflects disconnected state.
+  state.lastConnected = false
+
+  if type(reason) == "string" and reason ~= "" then
+    log("MSP link disconnected (" .. tostring(reason) .. ")", "info")
+  else
+    log("MSP link disconnected", "info")
+  end
+  if state.queue and type(state.queue.clear) == "function" then
+    state.queue:clear()
+  end
+  state.pendingVersionRead = true
+  state.pendingUidRead = true
+  state.telemetryAutoSyncDone = false
+  state.pendingTelemetryConfigRead = true
+  state.telemetryConfigBuffer = nil
+  state.telemetryLinkRate = nil
+  state.telemetryLinkRatio = nil
+  state.values.mcuId = nil
+  state.values.modelPreferences = nil
+  state.values.modelPreferencesFile = nil
+  if state.telemetrySync and type(state.telemetrySync.onDisconnected) == "function" then
+    state.telemetrySync:onDisconnected(now)
+  end
+  state.telemetrySync = nil
+  TelemetryConfigApi = nil
+  TelemetrySyncClass = nil
+  publish()
+end
+
 local function isTelemetryAutoSyncEnabled()
   local prefs = _G and _G.rfsuite and _G.rfsuite.preferences
   local general = prefs and prefs.general
@@ -599,11 +636,18 @@ function Runtime.tick()
   end
 
   local now = nowSeconds()
-
   local connected = isConnected()
+  -- Treat unsupported API as a disconnected link so we don't re-enter connect
+  -- state (which would immediately trigger a disconnect again).
+  if state.unsupportedApi then
+    connected = false
+  end
+
   if state.lastConnected ~= connected then
     state.lastConnected = connected
     if connected then
+      -- Reset disconnect guard when link becomes active again
+      state._disconnectHandled = false
       log("MSP link connected", "info")
       state.pendingVersionRead = true
       state.pendingUidRead = true
@@ -618,25 +662,7 @@ function Runtime.tick()
         state.telemetrySync:onConnected(now)
       end
     else
-      log("MSP link disconnected", "info")
-      state.queue:clear()
-      state.pendingVersionRead = true
-      state.pendingUidRead = true
-      state.telemetryAutoSyncDone = false
-      state.pendingTelemetryConfigRead = true
-      state.telemetryConfigBuffer = nil
-      state.telemetryLinkRate = nil
-      state.telemetryLinkRatio = nil
-      state.values.mcuId = nil
-      state.values.modelPreferences = nil
-      state.values.modelPreferencesFile = nil
-      if state.telemetrySync and type(state.telemetrySync.onDisconnected) == "function" then
-        state.telemetrySync:onDisconnected(now)
-      end
-      state.telemetrySync = nil
-      TelemetryConfigApi = nil
-      TelemetrySyncClass = nil
-      publish()
+      doDisconnect(now, state.unsupportedApi and "unsupported API" or nil)
     end
   end
 
@@ -655,6 +681,10 @@ function Runtime.tick()
   end
 
   if state.unsupportedApi then
+    -- If API unsupported and we still consider the link connected, treat as disconnected.
+    if state.lastConnected == true then
+      doDisconnect(now, "unsupported API")
+    end
     return false
   end
 
@@ -669,6 +699,13 @@ function Runtime.tick()
   maybeRunTelemetryAutoSync(now)
   state.queue:processQueue(now)
   publish()
+  -- If the version read cleared/marked unsupported during processing, ensure we
+  -- treat the runtime as disconnected so callers see a consistent state.
+  if state.unsupportedApi and state.lastConnected == true then
+    doDisconnect(now, "unsupported API")
+    return false
+  end
+
   return true
 end
 

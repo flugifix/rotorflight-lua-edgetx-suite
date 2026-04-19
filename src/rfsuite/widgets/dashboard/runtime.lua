@@ -77,6 +77,15 @@ if type(loadMspRuntimeModule) == "function" then
   end
 end
 
+local loadI18nModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/i18n/init")
+local I18nModule = nil
+if type(loadI18nModule) == "function" then
+  local ok, mod = pcall(loadI18nModule)
+  if ok and type(mod) == "table" then
+    I18nModule = mod
+  end
+end
+
 local PID_PROFILE_SOURCES = { "PID#", "PIDP", "PidP", "PIDP1", "PID Profile", "PID" }
 local RATE_PROFILE_SOURCES = { "RTE#", "RateP", "RTPR", "Rate Profile", "Rate" }
 local BATTERY_PROFILE_SOURCES = { "BatP", "battery_profile", "Battery Profile", "BatProfile" }
@@ -267,9 +276,9 @@ local function tickMspRuntime(self)
   end
 end
 
-local function buildConnectionSplash(zone, statusLine)
+local function buildConnectionSplash(zone, statusLine, title)
   if DashboardSplash and type(DashboardSplash.build) == "function" then
-    return DashboardSplash.build(zone, statusLine)
+    return DashboardSplash.build(zone, statusLine, title)
   end
 
   local w = (zone and zone.w) or LCD_W or 320
@@ -319,16 +328,17 @@ local function updateConnectionState(self)
   end
 
   local ready = rawReady and self.readySince ~= nil and (now - self.readySince) >= SPLASH_READY_HOLD_SECONDS
+  local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
 
   local statusLine = nil
   if not connected then
-    statusLine = "Waiting for MSP link"
+    statusLine = (t and t("widgets.dashboard.waiting_for_msp_link")) or "Waiting for MSP link"
   elseif not rfReady then
-    statusLine = "Waiting for receiver telemetry (1RSS/2RSS)"
+    statusLine = (t and t("widgets.dashboard.waiting_for_receiver_telemetry")) or "Waiting for receiver telemetry (1RSS/2RSS)"
   elseif not batteryReady then
-    statusLine = "Waiting for battery telemetry"
+    statusLine = (t and t("widgets.dashboard.waiting_for_battery_telemetry")) or "Waiting for battery telemetry"
   elseif not ready then
-    statusLine = "Connected, starting dashboard..."
+    statusLine = (t and t("widgets.dashboard.connected_starting")) or "Connected, starting dashboard..."
   end
 
   if self.connectionReady ~= ready then
@@ -646,6 +656,15 @@ local function reloadPreferencesIfNeeded(self, force)
     end
     self.preferences = prefs
     publishPreferencesToGlobal(prefs)
+    -- Update i18n context when language changes
+    if I18nModule and prevLang ~= newLang then
+      if self.i18n and type(self.i18n.setLocale) == "function" then
+        pcall(self.i18n.setLocale, newLang)
+      else
+        local ok, ctx = pcall(I18nModule.new, newLang)
+        if ok and type(ctx) == "table" then self.i18n = ctx end
+      end
+    end
     if self.state then
       self.state.postflightHoldSeconds = resolvePostflightHoldSeconds(prefs, self.state.postflightHoldSeconds)
     end
@@ -736,6 +755,15 @@ function Runtime.new(zone, options)
     mspLastTick = 0
   }
 
+  -- Initialize i18n context for the widget using loaded preferences
+  if I18nModule and type(I18nModule.new) == "function" then
+    local locale = (prefs and prefs.general and prefs.general.language) or nil
+    local ok, ctx = pcall(I18nModule.new, locale)
+    if ok and type(ctx) == "table" then
+      widget.i18n = ctx
+    end
+  end
+
   local function reloadActiveTheme(self)
     local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, self.flightMode)
     local nextConfig = { v_min = 18.0, v_max = 25.2 }
@@ -798,8 +826,10 @@ function Runtime.new(zone, options)
       end
 
       if not self.built then
+        local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
+        local title = (t and t("widgets.dashboard.connecting_fbl")) or "Connecting FBL..."
         lvgl.clear()
-        lvgl.build(buildConnectionSplash(self.zone, statusLine))
+        lvgl.build(buildConnectionSplash(self.zone, statusLine, title))
         self.built = true
       end
       return

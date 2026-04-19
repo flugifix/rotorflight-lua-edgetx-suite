@@ -435,8 +435,14 @@ return {
       bb_ready = "BEREIT",
       bb_rec = "AUFN",
       bb_logged = "GEL",
-      status_armed = "ARM",
-      status_disarmed = "DISARM"
+      status_armed = "ARMED",
+      status_disarmed = "DISARMED",
+      connecting_fbl = "Verbinde mit FBL...",
+      please_wait_for_telemetry = "Bitte warten, Telemetrie wird empfangen",
+      waiting_for_msp_link = "Warte auf MSP-Link",
+      waiting_for_receiver_telemetry = "Warte auf Empfänger-Telemetrie (1RSS/2RSS)",
+      waiting_for_battery_telemetry = "Warte auf Batterie-Telemetrie",
+      connected_starting = "Verbunden, Dashboard wird gestartet..."
     }
   }
 }
