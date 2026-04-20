@@ -29,6 +29,7 @@ local entries = {
 
 local registry = {}
 local loadedByMenuId = {}
+local loadedByPagePath = {}
 local iconByMenuId = {}
 local pagePathByMenuId = {}
 local cacheOrder = {}
@@ -84,6 +85,18 @@ local function loadPageModule(menuId)
   end
 
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/" .. entry.pagePath
+
+  -- Special cache for dashboard settings page: always cache by file path
+  if entry.pagePath == "settings/dashboard/settings/page.lua" then
+    if loadedByPagePath[fullPath] then
+      return loadedByPagePath[fullPath]
+    end
+    local chunk = assert(loadScript(fullPath, "t"))
+    local module = chunk()
+    loadedByPagePath[fullPath] = module
+    return module
+  end
+
   local chunk = assert(loadScript(fullPath, "t"))
   local module = chunk()
   if isCacheableMenuId(menuId) then
@@ -94,18 +107,35 @@ local function loadPageModule(menuId)
 end
 
 closePageModule = function(menuId, ctx)
+  -- Special handling: dashboard settings page module is cached by file path
+  local entry = entries[menuId]
+  if not entry and isDynamicDashboardSettingsPage(menuId) then
+    entry = entries.settings_dashboard_settings_page
+  end
+  if entry and entry.pagePath == "settings/dashboard/settings/page.lua" then
+    local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/" .. entry.pagePath
+    local module = loadedByPagePath[fullPath]
+    if type(module) == "table" then
+      local hook = module.onClose or module.close or module.closePage or module.destroy
+      if type(hook) == "function" then
+        pcall(hook, ctx or {})
+      end
+      loadedByPagePath[fullPath] = nil
+      return true
+    end
+    return false
+  end
+  -- Default: cache by menuId
   local module = loadedByMenuId[menuId]
   if type(module) ~= "table" then
     loadedByMenuId[menuId] = nil
     removeFromCacheOrder(menuId)
     return false
   end
-
   local hook = module.onClose or module.close or module.closePage or module.destroy
   if type(hook) == "function" then
     pcall(hook, ctx or {})
   end
-
   loadedByMenuId[menuId] = nil
   removeFromCacheOrder(menuId)
   return true

@@ -1,7 +1,23 @@
+
+local loadedModules = {}
+local loadedThemeConfigs = {}
 local function loadModule(path)
+  if loadedModules[path] then return loadedModules[path] end
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
   local chunk = assert(loadScript(fullPath, "t"))
-  return chunk()
+  local mod = chunk()
+  loadedModules[path] = mod
+  return mod
+end
+
+local function loadThemeConfig(configurePath)
+  if loadedThemeConfigs[configurePath] then return loadedThemeConfigs[configurePath] end
+  local ok, chunk = pcall(loadScript, configurePath, "t")
+  if not ok or type(chunk) ~= "function" then return nil end
+  local loadedOk, loaded = pcall(chunk)
+  if not loadedOk then return nil end
+  loadedThemeConfigs[configurePath] = loaded
+  return loaded
 end
 
 local Common = nil
@@ -94,16 +110,7 @@ local function loadThemeModule(ctx)
     return nil
   end
 
-  local ok, chunk = pcall(loadScript, theme.configurePath, "t")
-  if not ok or type(chunk) ~= "function" then
-    return nil
-  end
-
-  local loadedOk, loaded = pcall(chunk)
-  if not loadedOk then
-    return nil
-  end
-
+  local loaded = loadThemeConfig(theme.configurePath)
   if type(loaded) == "function" then
     local createdOk, created = pcall(loaded, {
       theme = theme,
@@ -117,27 +124,16 @@ local function loadThemeModule(ctx)
       loaded = nil
     end
   end
-
   if type(loaded) ~= "table" then
     loaded = {}
   end
-
   ui.activeModule = loaded
   return loaded
 end
 
 function M.getHeaderActions()
-  ensureDeps()
-  local module = ui.activeModule
-  if type(module) == "table" then
-    if type(module.getHeaderActions) == "function" then
-      return module.getHeaderActions()
-    end
-    if type(module.onSave) == "function" or type(module.write) == "function" then
-      return { save = true, reload = true, help = false }
-    end
-  end
-  return { save = false, reload = true, help = false }
+  -- Save und Reload immer aktiv für Theme-Settings
+  return { save = true, reload = true, help = false }
 end
 
 function M.allowMemAutoRefresh()
