@@ -59,35 +59,20 @@ function M.show(ctx)
       return true
     end
   end
-  -- Only use lvgl.message per request; try a few common message signatures.
-  if lvgl and type(lvgl.message) == "function" then
-    local ok, res = safeCall(function() lvgl.message({ title = title, message = message }) end)
-    if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.msp_unsupported_dialog", "lvgl.message attempt ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-    if ok then
-      if root then
-        local keys = root._msp_unsupported_dialog_shown_keys or {}
-        keys[title_msg_key] = true
-        if version_key then keys[version_key] = true end
-        root._msp_unsupported_dialog_shown_keys = keys
-      end
-      return true
-    end
+  -- Do not call LVGL APIs here (some targets lack `message`/`alert`).
+  -- Log the condition, mark the title/message as shown to dedupe,
+  -- and invoke the provided fallback if present.
+  if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.msp_unsupported_dialog", "unsupported MSP API: " .. tostring(title_msg_key), "debug", true) end
+  if root then
+    local keys = root._msp_unsupported_dialog_shown_keys or {}
+    keys[title_msg_key] = true
+    if version_key then keys[version_key] = true end
+    root._msp_unsupported_dialog_shown_keys = keys
   end
-
-  -- If LVGL message couldn't be used, run the provided fallback and mark
-  -- the version/title so subsequent callers won't duplicate the fallback.
   if type(ctx and ctx.onFallback) == "function" then
-    if root then
-      local keys = root._msp_unsupported_dialog_shown_keys or {}
-      keys[title_msg_key] = true
-      if version_key then keys[version_key] = true end
-      root._msp_unsupported_dialog_shown_keys = keys
-    end
-    ctx.onFallback(title, message)
-    return true
+    pcall(ctx.onFallback, title, message)
   end
-
-  return false
+  return true
 end
 
 return M

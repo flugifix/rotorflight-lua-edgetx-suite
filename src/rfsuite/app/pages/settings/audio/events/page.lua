@@ -83,6 +83,7 @@ local function ensureDeps()
   end
   if not ui.runtimeBase then
     ui.runtimeBase = Common.createFormRuntime(ui)
+    if type(ui.runtime) ~= "table" then ui.runtime = {} end
     setmetatable(ui.runtime, {__index = ui.runtimeBase})
   end
   if not t then
@@ -349,14 +350,46 @@ function M.onSave(ctx)
     ctx.preferences.audio_events[field.key] = ui.config[field.key]
   end
 
-  local ok, err = ctx.savePreferences()
+  -- Diagnostic logging for save flow
+  local okLog, Log = pcall(loadModule, "lib/log.lua")
+  if okLog and type(Log) == "table" and type(Log.emit) == "function" then
+    local parts = {}
+    for _, field in ipairs(CONFIG_SCHEMA) do
+      local k = field.key
+      local v = (ctx and ctx.preferences and ctx.preferences.audio_events) and ctx.preferences.audio_events[k] or "<nil>"
+      parts[#parts+1] = tostring(k) .. "=" .. tostring(v)
+    end
+    pcall(Log.emit, "rfsuite", "onSave: prefs.audio_events=" .. table.concat(parts, ","), "debug", true)
+    local parts2 = {}
+    for _, field in ipairs(CONFIG_SCHEMA) do
+      parts2[#parts2+1] = tostring(field.key) .. "=" .. tostring(ui.config[field.key])
+    end
+    pcall(Log.emit, "rfsuite", "onSave: ui.config=" .. table.concat(parts2, ","), "debug", true)
+  end
+
+  local ok, err = nil, nil
+  if type(ctx.savePreferences) == "function" then
+    ok, err = ctx.savePreferences()
+  else
+    if okLog and type(Log) == "table" and type(Log.emit) == "function" then
+      pcall(Log.emit, "rfsuite", "onSave: ctx.savePreferences not a function", "warn", true)
+    end
+    return false
+  end
+
   if ok then
+    if okLog and type(Log) == "table" and type(Log.emit) == "function" then
+      pcall(Log.emit, "rfsuite", "onSave: savePreferences OK", "info", true)
+    end
     return true
   else
+    if okLog and type(Log) == "table" and type(Log.emit) == "function" then
+      pcall(Log.emit, "rfsuite", "onSave: savePreferences failed: " .. tostring(err or "?"), "error", true)
+    end
     if lvgl and lvgl.alert then
       lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Fehler"), message = t(ctx.i18n, "save_error_message", "Speichern fehlgeschlagen") .. ": " .. tostring(err or "io") })
     end
-    return true
+    return false
   end
 end
 

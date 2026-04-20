@@ -474,6 +474,99 @@ telemetrySensors:
       onlyPositive: 0
       cfg: 
          param: 0
+   15:
+      id1: 
+         id: 2
+      id2: 
+         instance: 0
+      label: "GPS"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 40
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg: 
+         param: 0
+   16:
+      id1: 
+         id: 2
+      id2: 
+         instance: 2
+      label: "GSpd"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 7
+      prec: 1
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg: 
+         custom: 
+            ratio: 0
+            offset: 0
+   17:
+      id1: 
+         id: 2
+      id2: 
+         instance: 3
+      label: "Hdg"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 20
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg: 
+         custom: 
+            ratio: 0
+            offset: 0
+   18:
+      id1: 
+         id: 2
+      id2: 
+         instance: 4
+      label: "GAlt"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 9
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg: 
+         custom: 
+            ratio: 0
+            offset: 0
+   19:
+      id1: 
+         id: 2
+      id2: 
+         instance: 5
+      label: "Sats"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg: 
+         custom: 
+            ratio: 0
+            offset: 0
 screenData: 
    0:
       LayoutId: Layout1x1

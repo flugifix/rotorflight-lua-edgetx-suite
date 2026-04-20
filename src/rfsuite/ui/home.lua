@@ -747,7 +747,6 @@ local function onReload()
           onFallback = doPageReload
         })
         ensureLog()
-        pcall(Log.emit, "rfsuite", "called confirm.show; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
         if ok and res == true then return end
       end
 
@@ -837,7 +836,6 @@ local function onSave()
           onFallback = doPageSave
         })
         ensureLog()
-        pcall(Log.emit, "rfsuite", "called confirm.show; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
         if ok and res == true then return end
       end
 

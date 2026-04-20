@@ -29,6 +29,14 @@ local function copyBuffer(buf)
   return out
 end
 
+local function debugLog(msg, level)
+  if type(log) == "function" then
+    log(msg, level or "info")
+  elseif type(print) == "function" then
+    print("[TELEMETRY_CONFIG.parse]["..(level or "info").."] "..tostring(msg))
+  end
+end
+
 function Api.parse(buf)
   if type(buf) ~= "table" or #buf < 6 then
     return nil
@@ -52,6 +60,9 @@ function Api.parse(buf)
     return b1 + b2 * 256 + b3 * 65536 + b4 * 16777216
   end
 
+  -- DEBUG: Log buffer content
+  debugLog("buf len="..tostring(#buf).." first="..table.concat((function() local parts = {}; for i = 1, math.min(#buf, 64) do parts[#parts+1] = tostring(buf[i]) end; return parts end)(), ","), "info")
+
   local parsed = {
     telemetry_inverted = u8(1),
     halfDuplex = u8(2),
@@ -70,10 +81,21 @@ function Api.parse(buf)
       local idx = slotBase + i - 1
       local byte = tonumber(buf[idx])
       if byte == nil then
+        debugLog("slot "..tostring(i).." idx="..tostring(idx).." is nil (break)", "warn")
         break
       end
       parsed["telem_sensor_slot_" .. tostring(i)] = byte
     end
+  end
+
+  -- DEBUG: Log parsed slots
+  do
+    local slotParts = {}
+    for i = 1, 40 do
+      local v = parsed["telem_sensor_slot_"..tostring(i)]
+      slotParts[#slotParts+1] = tostring(v or "nil")
+    end
+    debugLog("parsed slots: "..table.concat(slotParts, ","), "info")
   end
 
   return parsed

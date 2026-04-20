@@ -33,92 +33,29 @@ function M.show(ctx)
   local message = (ctx and ctx.message) or ""
   local onConfirm = ctx and ctx.onConfirm
   local onCancel = ctx and ctx.onCancel
-  local onFallback = ctx and ctx.onFallback
 
-  -- Diagnostics
   ensureLog()
-  if Log and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl types: message=" .. tostring(type(lvgl and lvgl.message)), "debug", true)
+  if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl types: message=" .. tostring(type(lvgl and lvgl.message)), "debug", true) end
+
+  local handled = false
+  local function doConfirm()
+    if handled then return end
+    handled = true
+    if type(onConfirm) == "function" then pcall(onConfirm) end
+  end
+  local function doCancel()
+    if handled then return end
+    handled = true
+    if type(onCancel) == "function" then pcall(onCancel) end
   end
 
-  local function handle(action)
-    if type(action) == "number" then
-      if action == 1 then if type(onConfirm) == "function" then pcall(onConfirm) end else if type(onCancel) == "function" then pcall(onCancel) end end
-    elseif type(action) == "string" then
-      local s = string.lower(action)
-      if string.find(s, "y") or string.find(s, "ok") or string.find(s, "ja") or string.find(s, "yes") then
-        if type(onConfirm) == "function" then pcall(onConfirm) end
-      else
-        if type(onCancel) == "function" then pcall(onCancel) end
-      end
-    else
-      if type(onCancel) == "function" then pcall(onCancel) end
-    end
-  end
-
-  -- Only use lvgl.message per request; try common message signatures.
-  if lvgl and type(lvgl.message) == "function" then
-    do
-      local ok, res = safeCall(function() lvgl.message({ title = title, text = message, buttons = {"Yes", "No"}, onAction = handle }) end)
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.message attempt 1 ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-      if ok then return true end
-      ok, res = safeCall(function() lvgl.message({ title = title, message = message, buttons = {"Yes", "No"}, onAction = handle }) end)
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.message attempt 2 ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-      if ok then return true end
-      ok, res = safeCall(function() lvgl.message({ title = title, text = message, onClose = handle }) end)
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.message attempt 3 ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-      if ok then return true end
-      ok, res = safeCall(function() lvgl.message(title, message, {"Yes", "No"}, handle) end)
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.message attempt 4 ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-      if ok then return true end
-    end
-  end
-
-  if type(onFallback) == "function" then
-    pcall(onFallback, title, message)
-    return true
-  end
-
-  return false
-end
-
-return M
-      elseif type(action) == "string" then
-        local s = string.lower(action)
-        if string.find(s, "y") or string.find(s, "ok") or string.find(s, "ja") or string.find(s, "yes") then
-          if type(onConfirm) == "function" then pcall(onConfirm) end
-        else
-          if type(onCancel) == "function" then pcall(onCancel) end
-        end
-      else
-        if type(onCancel) == "function" then pcall(onCancel) end
-      end
-    end
-
-    do
-      local ok, res = safeCall(function() lvgl.dialog({ title = title, message = message, buttons = {"Yes", "No"}, onAction = handle }) end)
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.dialog attempt 1 ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-      if ok then return true end
-      ok, res = safeCall(function() lvgl.dialog({ title = title, text = message, buttons = {"Yes", "No"}, onAction = handle }) end)
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.dialog attempt 2 ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-      if ok then return true end
-      ok, res = safeCall(function() lvgl.dialog({ title = title, message = message, onClose = handle }) end)
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.dialog attempt 3 ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-      if ok then return true end
-      ok, res = safeCall(function() lvgl.dialog(title, message, {"Yes", "No"}, handle) end)
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.dialog attempt 4 ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-      if ok then return true end
-    end
-  end
-
-  -- Fallback: simple alert then treat as confirmed (legacy behavior used to proceed)
-  if lvgl and type(lvgl.alert) == "function" then
-    local ok, res = safeCall(lvgl.alert, { title = title, message = message })
-    if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.alert ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-    if ok then
-      if type(onConfirm) == "function" then pcall(onConfirm) end
-      return true
-    end
+  -- Prefer `lvgl.confirm` when available; avoid noisy lvgl.message/dialog attempts.
+  if lvgl and type(lvgl.confirm) == "function" then
+    local ok, res = safeCall(function()
+      return lvgl.confirm({ title = title, message = message, confirm = doConfirm, cancel = doCancel })
+    end)
+    if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.confirm attempt ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
+    if ok then return true end
   end
 
   if type(onFallback) == "function" then

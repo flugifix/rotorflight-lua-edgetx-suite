@@ -269,11 +269,7 @@ local function tickMspRuntime(self)
     return
   end
 
-  local now = (type(getTime) == "function" and getTime()) or 0
-  if now == 0 or (now - (self.mspLastTick or 0)) >= 5 then
-    self.mspLastTick = now
-    MspRuntime.tick()
-  end
+  MspRuntime.tick()
 end
 
 local function buildConnectionSplash(zone, statusLine, title)
@@ -307,7 +303,12 @@ local function resolvePostflightHoldSeconds(prefs, fallback)
 end
 
 local function updateConnectionState(self)
-  local runtimeState = (MspRuntime and type(MspRuntime.getState) == "function") and MspRuntime.getState() or nil
+  local runtimeState = nil
+  if MspRuntime and type(MspRuntime.getState) == "function" then
+    runtimeState = MspRuntime.getState()
+  elseif Rf2Runtime and type(Rf2Runtime.getState) == "function" then
+    runtimeState = Rf2Runtime.getState()
+  end
   local connected = type(runtimeState) == "table" and runtimeState.lastConnected == true
   local hasVoltage = type(self.state.voltage) == "number" and self.state.voltage > 0
   local hasFuel = type(self.state.fuel) == "number" and self.state.fuel >= 0
@@ -665,6 +666,11 @@ local function reloadPreferencesIfNeeded(self, force)
         if ok and type(ctx) == "table" then self.i18n = ctx end
       end
     end
+      -- expose i18n on the runtime state so theme renderers can access it
+      if self.i18n then
+        if type(self.state) ~= "table" then self.state = {} end
+        self.state.i18n = self.i18n
+      end
     if self.state then
       self.state.postflightHoldSeconds = resolvePostflightHoldSeconds(prefs, self.state.postflightHoldSeconds)
     end
@@ -762,6 +768,10 @@ function Runtime.new(zone, options)
     if ok and type(ctx) == "table" then
       widget.i18n = ctx
     end
+  end
+  -- ensure renderers can access the same i18n via state
+  if widget.i18n then
+    widget.state.i18n = widget.i18n
   end
 
   local function reloadActiveTheme(self)

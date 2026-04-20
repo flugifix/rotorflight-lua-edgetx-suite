@@ -106,23 +106,39 @@ function Utils.resolveValue(value, box, state)
   return value
 end
 
-function Utils.normalizeTitle(raw)
+function Utils.normalizeTitle(raw, i18nCtx)
   if type(raw) ~= "string" or raw == "" then return nil end
 
-  local locale = i18nLocale or resolveLocale()
-  local cacheKey = locale .. "|" .. raw
+  local ctxLocale = nil
+  if type(i18nCtx) == "table" and type(i18nCtx.getLocale) == "function" then
+    local ok, v = pcall(i18nCtx.getLocale)
+    if ok and type(v) == "string" then ctxLocale = v end
+  end
+
+  local cacheLocale = ctxLocale or i18nLocale or resolveLocale()
+  local cacheKey = cacheLocale .. "|" .. raw
   local cached = titleCache[cacheKey]
   if cached ~= nil then
     return cached ~= false and cached or nil
   end
 
-  if not IS_SIMULATOR and string.find(raw, "@i18n(", 1, true) then
-    local i18n = getI18nContext()
-    if i18n and type(i18n.resolve) == "function" then
-      local ok, resolved = pcall(i18n.resolve, raw)
+  if string.find(raw, "@i18n(", 1, true) then
+    if i18nCtx and type(i18nCtx.resolve) == "function" then
+      local ok, resolved = pcall(i18nCtx.resolve, raw)
       if ok and type(resolved) == "string" and resolved ~= "" then
         titleCache[cacheKey] = resolved
         return resolved
+      end
+    end
+
+    if not IS_SIMULATOR then
+      local i18n = getI18nContext()
+      if i18n and type(i18n.resolve) == "function" then
+        local ok, resolved = pcall(i18n.resolve, raw)
+        if ok and type(resolved) == "string" and resolved ~= "" then
+          titleCache[cacheKey] = resolved
+          return resolved
+        end
       end
     end
   end
@@ -249,7 +265,8 @@ function Utils.drawContainer(nodes, rect, box, state)
     filled = true
   }
 
-  local title = Utils.normalizeTitle(Utils.resolveValue(box.title, box, state))
+  local rawTitle = Utils.resolveValue(box.title, box, state)
+  local title = Utils.normalizeTitle(rawTitle, state and state.i18n)
   if not title then return end
 
   local titlePos = box.titlepos or "top"
