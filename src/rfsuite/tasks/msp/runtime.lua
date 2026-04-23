@@ -652,12 +652,10 @@ function Runtime.tick()
       state.pendingVersionRead = true
       state.pendingUidRead = true
       state.telemetryAutoSyncDone = false
-      state.pendingTelemetryConfigRead = isTelemetryAutoSyncEnabled()
-      if isTelemetryAutoSyncEnabled() then
-        ensureTelemetrySync()
-      end
+      -- MSP 73 (TELEMETRY_CONFIG) wird beim Connect nicht mehr automatisch ausgelesen
       state.telemetryLinkRate = nil
       state.telemetryLinkRatio = nil
+      -- Kein ensureTelemetrySync() und kein pendingTelemetryConfigRead mehr
       if state.telemetrySync and type(state.telemetrySync.onConnected) == "function" then
         state.telemetrySync:onConnected(now)
       end
@@ -695,7 +693,7 @@ function Runtime.tick()
 
   enqueueVersionReads(now)
   enqueueUidRead(now)
-  enqueueTelemetryConfigRead(now)
+  -- MSP 73 (TELEMETRY_CONFIG) wird nicht mehr automatisch ausgelesen
   maybeRunTelemetryAutoSync(now)
   state.queue:processQueue(now)
   publish()

@@ -255,6 +255,15 @@ local function processAudioEvents(self)
   end
 end
 
+local loadEventsModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/events/runtime")
+local EventsRuntime = nil
+if type(loadEventsModule) == "function" then
+  local ok, mod = pcall(loadEventsModule)
+  if ok and type(mod) == "table" then
+    EventsRuntime = mod
+  end
+end
+
 local function tickMspRuntime(self)
   if not MspRuntime then
     return
@@ -270,6 +279,10 @@ local function tickMspRuntime(self)
   end
 
   MspRuntime.tick()
+  
+  if EventsRuntime and type(EventsRuntime.wakeup) == "function" then
+    pcall(EventsRuntime.wakeup)
+  end
 end
 
 local function buildConnectionSplash(zone, statusLine, title)

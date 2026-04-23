@@ -84,6 +84,16 @@ local function publishConnected(val)
   if Log and type(Log.emit) == "function" then
     pcall(Log.emit, "rfsuite.events", "session.isConnected=" .. tostring(val), "info", true)
   end
+  if val == false and _G.rfsuite and _G.rfsuite.tasks and _G.rfsuite.tasks.events then
+    for name, runner in pairs(_G.rfsuite.tasks.events) do
+      if type(runner) == "table" and type(runner.reset) == "function" then
+        pcall(runner.reset)
+        if Log and type(Log.emit) == "function" then
+          pcall(Log.emit, "rfsuite.events", "reset runner " .. tostring(name), "debug", true)
+        end
+      end
+    end
+  end
 end
 
 function Events.reset()
@@ -124,7 +134,18 @@ function Events.wakeup()
     if state.linkStableUp then
       local onconnect = ensureEventRunner("onconnect")
       if onconnect and type(onconnect.wakeup) == "function" then
-        pcall(onconnect.wakeup)
+        local ok, err = pcall(onconnect.wakeup)
+        if not ok and Log and type(Log.emit) == "function" then
+          pcall(Log.emit, "rfsuite.events", "onconnect.wakeup error: " .. tostring(err), "error", true)
+        end
+      end
+    end
+
+    local telemetry_bg = ensureEventRunner("telemetry_bg")
+    if telemetry_bg and type(telemetry_bg.wakeup) == "function" then
+      local ok, err = pcall(telemetry_bg.wakeup)
+      if not ok and Log and type(Log.emit) == "function" then
+        pcall(Log.emit, "rfsuite.events", "telemetry_bg.wakeup error: " .. tostring(err), "error", true)
       end
     end
 
@@ -138,12 +159,18 @@ function Events.wakeup()
       if armed then
         local onarm = ensureEventRunner("onarm")
         if onarm and type(onarm.wakeup) == "function" then
-          pcall(onarm.wakeup)
+          local ok, err = pcall(onarm.wakeup)
+          if not ok and Log and type(Log.emit) == "function" then
+            pcall(Log.emit, "rfsuite.events", "onarm.wakeup error: " .. tostring(err), "error", true)
+          end
         end
       else
         local ondisarm = ensureEventRunner("ondisarm")
         if ondisarm and type(ondisarm.wakeup) == "function" then
-          pcall(ondisarm.wakeup)
+          local ok, err = pcall(ondisarm.wakeup)
+          if not ok and Log and type(Log.emit) == "function" then
+            pcall(Log.emit, "rfsuite.events", "ondisarm.wakeup error: " .. tostring(err), "error", true)
+          end
         end
       end
     end
