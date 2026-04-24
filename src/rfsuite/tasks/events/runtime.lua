@@ -176,10 +176,18 @@ function Events.wakeup()
         end
       else
         local ondisarm = ensureEventRunner("ondisarm")
-        if ondisarm and type(ondisarm.wakeup) == "function" then
-          local ok, err = pcall(ondisarm.wakeup, { context = context })
-          if not ok and Log and type(Log.emit) == "function" then
-            pcall(Log.emit, "rfsuite.events", "ondisarm.wakeup error: " .. tostring(err), "error", true)
+        if ondisarm then
+          if type(ondisarm.resetAllTasks) == "function" then
+            local ok, err = pcall(ondisarm.resetAllTasks)
+            if not ok and Log and type(Log.emit) == "function" then
+              pcall(Log.emit, "rfsuite.events", "ondisarm.resetAllTasks error: " .. tostring(err), "error", true)
+            end
+          end
+          if type(ondisarm.wakeup) == "function" then
+            local ok, err = pcall(ondisarm.wakeup, { context = context })
+            if not ok and Log and type(Log.emit) == "function" then
+              pcall(Log.emit, "rfsuite.events", "ondisarm.wakeup error: " .. tostring(err), "error", true)
+            end
           end
         end
       end

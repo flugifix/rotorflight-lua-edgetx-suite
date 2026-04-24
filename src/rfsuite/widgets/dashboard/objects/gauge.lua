@@ -46,9 +46,40 @@ local function getArcValueColor(value, state, box)
 end
 
 local function renderArc(nodes, rect, box, state)
+  -- Logging-Setup (nur einmal pro Render)
+  local log = nil
+  if _G and _G.rfsuite and _G.rfsuite.log then log = _G.rfsuite.log end
+  local function safeLog(msg)
+    if log and type(log.emit) == "function" then pcall(log.emit, "rfsuite.widgets.gauge", msg, "warn", true) end
+  end
+
+  -- Schutz gegen nil/fehlerhafte Werte
+  if not rect or not rect.x or not rect.y or not rect.w or not rect.h then
+    safeLog("rect invalid: " .. tostring(rect))
+    return
+  end
+  if not box then
+    safeLog("box is nil")
+    return
+  end
+  if not state then
+    safeLog("state is nil")
+    return
+  end
+
   local gaugeMin = utils.toNumber(utils.resolveValue(box.min, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_min, 18.0))
   local gaugeMax = utils.toNumber(utils.resolveValue(box.max, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_max, 25.2))
   local gaugeValue = utils.toNumber(utils.mapTelemetrySource(utils.resolveValue(box.source, box, state), state), 0)
+
+  -- Schutz gegen extreme Werte
+  if gaugeMin == gaugeMax or gaugeMax - gaugeMin < 0.1 then
+    safeLog("gaugeMin == gaugeMax oder Range zu klein: min=" .. tostring(gaugeMin) .. ", max=" .. tostring(gaugeMax))
+    return
+  end
+  if math.abs(gaugeValue) > 1000 then
+    safeLog("gaugeValue extrem: " .. tostring(gaugeValue))
+    return
+  end
 
   local ratio = 0
   if gaugeMax > gaugeMin then

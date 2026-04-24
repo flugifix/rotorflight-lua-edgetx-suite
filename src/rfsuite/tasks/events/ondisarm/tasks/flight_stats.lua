@@ -29,17 +29,22 @@ end
 
 function M.wakeup(args)
   ensureLog()
-  if done then return end
+  if done then
+    if Log and type(Log.emit) == "function" then
+      pcall(Log.emit, "rfsuite.tasks.flight_stats", "wakeup: already done", "debug", true)
+    end
+    return
+  end
 
   -- Kontext pruefen: Nur fuer Widget-Kontext ausfuehren
   local context = args and args.context or "tool"
+  local origContext = context
+  local sessionContext = (_G and _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.event_context) or nil
   if not context or context == "tool" then
-    if _G and _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.event_context then
-      context = _G.rfsuite.session.event_context
-    end
+    context = sessionContext or context
   end
-  if not requestSent and Log and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.tasks.flight_stats", "ondisarm flight_stats.wakeup called, context=" .. tostring(context), "debug", true)
+  if Log and type(Log.emit) == "function" then
+    pcall(Log.emit, "rfsuite.tasks.flight_stats", "ondisarm flight_stats.wakeup called, context=" .. tostring(context) .. ", origContext=" .. tostring(origContext) .. ", sessionContext=" .. tostring(sessionContext), "debug", true)
   end
   if context ~= "widget" and context ~= "both" then
     done = true
@@ -54,7 +59,12 @@ function M.wakeup(args)
   local session = root.session
   if type(session) ~= "table" then return end
 
-  if requestSent then return end
+  if requestSent then
+    if Log and type(Log.emit) == "function" then
+      pcall(Log.emit, "rfsuite.tasks.flight_stats", "wakeup: already requestSent", "debug", true)
+    end
+    return
+  end
   requestSent = true
 
   -- MSP flight_stats API laden
@@ -62,11 +72,19 @@ function M.wakeup(args)
     flightStats = loadModule("tasks/msp/api/flight_stats.lua")
   end
   local msp = loadModule("tasks/msp/runtime.lua")
-  if not msp or not flightStats then return end
+  if not msp or not flightStats then
+    if Log and type(Log.emit) == "function" then
+      pcall(Log.emit, "rfsuite.tasks.flight_stats", "flight_stats or msp runtime not loaded", "warn", true)
+    end
+    return
+  end
 
   local mspState = type(msp.getState) == "function" and msp.getState()
   if not mspState or not mspState.queue then
     done = true
+    if Log and type(Log.emit) == "function" then
+      pcall(Log.emit, "rfsuite.tasks.flight_stats", "mspState or queue missing", "warn", true)
+    end
     return
   end
 
