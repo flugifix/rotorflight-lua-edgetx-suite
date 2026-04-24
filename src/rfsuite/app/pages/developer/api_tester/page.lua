@@ -22,15 +22,7 @@ local API_DIR_CANDIDATES = {
   "/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/",
   "/SCRIPTS/TOOLS/rfsuite/tasks/msp/api/",
 }
-local FALLBACK_API_NAMES = {
-  "api_version",
-  "fc_version",
-  "uid",
-  "variant",
-  "board_info",
-  "build_info",
-  "telemetry_config",
-}
+
 local ROW_ORDER_KEYS = { "status", "info", "error", "value" }
 
 local ui = {
@@ -447,15 +439,6 @@ local function discoverApis()
     local path = API_DIR_CANDIDATES[i]
     Log.emit("api_tester", "discoverApis: checking candidate " .. tostring(path), "debug", true)
     listApiDir(path, names, seen)
-  end
-
-  -- Wenn gar nichts gefunden wurde (z.B. im Simulator ohne echtes Filesystem),
-  -- Fallbacks laden
-  if #names == 0 then
-    Log.emit("api_tester", "discoverApis: fallback to hardcoded list", "warn", true)
-    for i = 1, #FALLBACK_API_NAMES do
-      addApiName(FALLBACK_API_NAMES[i], names, seen)
-    end
   end
 
   table.sort(names)

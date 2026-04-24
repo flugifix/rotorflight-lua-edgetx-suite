@@ -307,9 +307,7 @@ function Queue:processQueue(now)
       and self.common.sendRequest(msg.command, payload, { write = isWriteMessage(msg) })
     if okSend then
       self.lastTimeCommandSent = now
-      if not self.currentMessageStartTime then
-        self.currentMessageStartTime = now
-      end
+      self.currentMessageStartTime = now -- Timeout-Fenster für jeden Retry neu setzen
       self.retryCount = self.retryCount + 1
       if self.retryCount > 1 then
         self.log(formatMspState(msg) .. " retry=" .. tostring(self.retryCount) .. "/" .. tostring(self.maxRetries + 1), "debug")
@@ -323,7 +321,26 @@ function Queue:processQueue(now)
     end
   end
 
+  -- Only give up after all retries have been versucht
+  if self.retryCount > self.maxRetries then
+    msg.__retryCount = self.retryCount
+    if type(msg.errorHandler) == "function" then
+      msg.errorHandler(msg, "max_retries")
+    end
+    if type(msg.setErrorHandler) == "function" then
+      msg.setErrorHandler(msg)
+    end
+    self.log(formatMspState(msg) .. " max retries", "warn")
+    self:clear()
+    return
+  end
+
+  -- Timeout: nur abbrechen, wenn keine weiteren Retries mehr erlaubt sind
   if self.currentMessage and self.currentMessageStartTime and (now - self.currentMessageStartTime) > timeoutSeconds then
+    if self.retryCount < self.maxRetries + 1 then
+      -- Noch ein Retry erlaubt, warte auf Retry-Logik oben
+      return
+    end
     msg.__retryCount = self.retryCount
     if type(msg.errorHandler) == "function" then
       msg.errorHandler(msg, "timeout")
@@ -339,18 +356,6 @@ function Queue:processQueue(now)
       self._nextMessageAt = now + self.interMessageDelay
     end
     return
-  end
-
-  if self.retryCount > self.maxRetries then
-    msg.__retryCount = self.retryCount
-    if type(msg.errorHandler) == "function" then
-      msg.errorHandler(msg, "max_retries")
-    end
-    if type(msg.setErrorHandler) == "function" then
-      msg.setErrorHandler(msg)
-    end
-    self.log(formatMspState(msg) .. " max retries", "warn")
-    self:clear()
   end
 end
 

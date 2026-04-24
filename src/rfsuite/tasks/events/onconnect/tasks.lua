@@ -72,10 +72,10 @@ end
 local function ensureTaskModule(task)
   if not task or not task.path then return nil, "invalid task" end
   if task.module then return task.module end
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. task.path, "t")
-  if type(chunk) ~= "function" then return nil, "load failed" end
+  local chunk, err = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. task.path, "t")
+  if type(chunk) ~= "function" then return nil, "load failed: " .. tostring(err) end
   local ok, mod = pcall(chunk)
-  if not ok or type(mod) ~= "table" then return nil, "invalid module" end
+  if not ok or type(mod) ~= "table" then return nil, "invalid module: " .. tostring(mod) end
   task.module = mod
   return mod
 end
@@ -128,6 +128,10 @@ function M.findTasks()
 end
 
 function M.resetAllTasks()
+  resetQueuesAndState()
+end
+
+function M.reset()
   resetQueuesAndState()
 end
 

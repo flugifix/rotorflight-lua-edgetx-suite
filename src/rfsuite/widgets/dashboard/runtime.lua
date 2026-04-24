@@ -828,12 +828,27 @@ function Runtime.new(zone, options)
     self.built = false
   end
 
+
   function widget.refresh(self)
+    -- Set event context to 'widget' before events wakeup
+    if type(_G) == "table" then
+      _G.rfsuite = _G.rfsuite or {}
+      _G.rfsuite.session = _G.rfsuite.session or {}
+      _G.rfsuite.session.event_context = "widget"
+    end
     tickMspRuntime(self)
+    -- Clear event_context immediately after events
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+      _G.rfsuite.session.event_context = nil
+    end
     reloadPreferencesIfNeeded(self, false)
     self.state.zoneW = self.zone and self.zone.w or 0
     self.state.zoneH = self.zone and self.zone.h or 0
     readTelemetry(self.state)
+    -- Update flightcount from session if available (from MSP)
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session and type(_G.rfsuite.session.flightcount) == "number" then
+      self.state.flights = _G.rfsuite.session.flightcount
+    end
     local nextMode = computeFlightMode(self.state)
     local ready, statusLine = updateConnectionState(self)
 
@@ -898,7 +913,17 @@ function Runtime.new(zone, options)
   end
 
   function widget.background(self)
+    -- Set event context to 'widget' before events wakeup
+    if type(_G) == "table" then
+      _G.rfsuite = _G.rfsuite or {}
+      _G.rfsuite.session = _G.rfsuite.session or {}
+      _G.rfsuite.session.event_context = "widget"
+    end
     tickMspRuntime(self)
+    -- Clear event_context immediately after events
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+      _G.rfsuite.session.event_context = nil
+    end
     reloadPreferencesIfNeeded(self, false)
     readTelemetry(self.state)
     local ready = updateConnectionState(self)

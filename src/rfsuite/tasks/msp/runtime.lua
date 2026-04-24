@@ -53,6 +53,7 @@ local state = {
   mspLastErrorAt = 0,
   pendingVersionRead = true,
   pendingUidRead = true,
+  versionReadCompleted = false,
   pendingTelemetryConfigRead = false,
   telemetryAutoSyncDone = false,
   telemetryLinkRate = nil,
@@ -284,6 +285,7 @@ local function enqueueVersionReads(now)
   state.queue:add({
     command = ApiVersionApi.command,
     simulatorResponse = ApiVersionApi.simulatorResponse,
+    timeout = 5.0,
     processReply = function(_, buf)
       local parsed = ApiVersionApi.parse(buf)
       if parsed and parsed.version then
@@ -299,6 +301,7 @@ local function enqueueVersionReads(now)
           state.queue:clear()
         end
       end
+      state.versionReadCompleted = true
       publish()
     end,
     errorHandler = function()
@@ -307,6 +310,7 @@ local function enqueueVersionReads(now)
       state.requestBackoffUntil = nowSeconds() + backoff
       setMspError("API_VERSION read failed (cmd=1)", nowSeconds())
       log("API_VERSION read failed repeatedly; backoff " .. tostring(backoff) .. "s", "warn")
+      state.pendingVersionRead = true
       publish()
     end
   })
@@ -314,6 +318,7 @@ local function enqueueVersionReads(now)
   state.queue:add({
     command = FcVersionApi.command,
     simulatorResponse = FcVersionApi.simulatorResponse,
+    timeout = 5.0,
     processReply = function(_, buf)
       local parsed = FcVersionApi.parse(buf)
       if parsed then
@@ -345,6 +350,7 @@ local function enqueueUidRead(now)
   state.queue:add({
     command = UidApi.command,
     simulatorResponse = UidApi.simulatorResponse,
+    timeout = 5.0,
     processReply = function(_, buf)
       local parsed = UidApi.parse(buf)
       if parsed and parsed.mcuId and parsed.mcuId ~= "" then
@@ -438,6 +444,7 @@ local function doDisconnect(now, reason)
   end
   state.pendingVersionRead = true
   state.pendingUidRead = true
+  state.versionReadCompleted = false
   state.telemetryAutoSyncDone = false
   state.pendingTelemetryConfigRead = true
   state.telemetryConfigBuffer = nil
@@ -693,7 +700,7 @@ function Runtime.tick()
 
   enqueueVersionReads(now)
   enqueueUidRead(now)
-  -- MSP 73 (TELEMETRY_CONFIG) wird nicht mehr automatisch ausgelesen
+  enqueueTelemetryConfigRead(now)
   maybeRunTelemetryAutoSync(now)
   state.queue:processQueue(now)
   publish()

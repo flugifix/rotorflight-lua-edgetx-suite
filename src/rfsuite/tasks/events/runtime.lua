@@ -81,6 +81,9 @@ local function publishConnected(val)
   local session = _G.rfsuite.session
   if session.isConnected == val then return end
   session.isConnected = val
+  if val == false then
+    session.flightcount = 0
+  end
   if Log and type(Log.emit) == "function" then
     pcall(Log.emit, "rfsuite.events", "session.isConnected=" .. tostring(val), "info", true)
   end
@@ -131,10 +134,17 @@ function Events.wakeup()
   -- Trigger per-category runners
   do
     -- onconnect: call runner while linkStableUp is true (runner progresses internally)
+
+    -- Determine context: widget/tool/both
+    local context = "tool"
+    if _G and _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.event_context then
+      context = _G.rfsuite.session.event_context
+    end
+
     if state.linkStableUp then
       local onconnect = ensureEventRunner("onconnect")
       if onconnect and type(onconnect.wakeup) == "function" then
-        local ok, err = pcall(onconnect.wakeup)
+        local ok, err = pcall(onconnect.wakeup, { context = context })
         if not ok and Log and type(Log.emit) == "function" then
           pcall(Log.emit, "rfsuite.events", "onconnect.wakeup error: " .. tostring(err), "error", true)
         end
@@ -167,7 +177,7 @@ function Events.wakeup()
       else
         local ondisarm = ensureEventRunner("ondisarm")
         if ondisarm and type(ondisarm.wakeup) == "function" then
-          local ok, err = pcall(ondisarm.wakeup)
+          local ok, err = pcall(ondisarm.wakeup, { context = context })
           if not ok and Log and type(Log.emit) == "function" then
             pcall(Log.emit, "rfsuite.events", "ondisarm.wakeup error: " .. tostring(err), "error", true)
           end

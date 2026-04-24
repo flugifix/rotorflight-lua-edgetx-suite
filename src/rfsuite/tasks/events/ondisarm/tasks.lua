@@ -128,6 +128,10 @@ function M.resetAllTasks()
   resetQueuesAndState()
 end
 
+function M.reset()
+  resetQueuesAndState()
+end
+
 function M.wakeup()
   ensureLog()
   if not tasksLoaded then M.findTasks() end
