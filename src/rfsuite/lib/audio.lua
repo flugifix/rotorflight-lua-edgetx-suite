@@ -1,14 +1,29 @@
 local Audio = {}
 
-local AUDIO_PACK_BASE = "/SOUNDS/rfsuite/"
+-- Globaler Throttle für Low-Voltage-Alarm (reload-sicher)
+local function getGlobalLowVoltageAt()
+  if type(_G) == "table" then
+    _G.__rfsuiteLastLowVoltageAt = _G.__rfsuiteLastLowVoltageAt or 0
+    return _G.__rfsuiteLastLowVoltageAt
+  end
+  return 0
+end
+
+local function setGlobalLowVoltageAt(val)
+  if type(_G) == "table" then
+    _G.__rfsuiteLastLowVoltageAt = val
+  end
+end
+
+local AUDIO_PACK_BASE = "/SOUNDS/rf/"
 local AUDIO_DEFAULT_FALLBACK = "en"
 local AUDIO_ROOT_BASE = "/audio/"
 local localeModule = nil
 
 local ARM_FILE_MAP = {
-  [0] = "disarmed.wav",
+  [0] = "disarm.wav",
   [1] = "armed.wav",
-  [2] = "disarmed.wav",
+  [2] = "disarm.wav",
   [3] = "armed.wav"
 }
 
@@ -23,7 +38,7 @@ local GOVERNOR_FILE_MAP = {
   [7] = "autorot.wav",
   [8] = "bailout.wav",
   [100] = "disabled.wav",
-  [101] = "disarmed.wav"
+  [101] = "disarm.wav"
 }
 
 local function nowSeconds()
@@ -117,7 +132,12 @@ local function playResolvedEventFile(relativePath, opts)
 
   local fullPath = AUDIO_PACK_BASE .. selectedFolder .. "/" .. relativePath
   emitLog(opts, "playFile -> " .. fullPath, "info")
-  playFile(fullPath)
+  local ok, err = pcall(playFile, fullPath)
+  if not ok then
+    emitLog(opts, "playFile error: " .. tostring(err), "error")
+    -- Rückgabe true, damit das Cooldown greift und Spam/Abstürze vermieden werden
+    return true
+  end
   return true
 end
 
@@ -125,15 +145,19 @@ local function playRawFile(path)
   if type(playFile) ~= "function" or type(path) ~= "string" or path == "" then
     return false
   end
-  playFile(path)
-  return true
+  local ok, err = pcall(playFile, path)
+  return ok
 end
 
 local function scheduleAudioCooldown(audioState, now, seconds)
   audioState.nextAllowedAt = now + (seconds or 0.25)
 end
 
+
 local function tryPlayEventFile(audioState, now, relativePath, opts)
+  if not audioState.lastAlertAt then
+    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
+  end
   if now < (audioState.nextAllowedAt or 0) then
     emitLog(opts, "cooldown active; skip " .. tostring(relativePath), "debug")
     return false
@@ -185,6 +209,9 @@ local function announceModelName(audioState)
     AUDIO_ROOT_BASE .. string.gsub(modelName, " ", "_") .. ".wav"
   }
 
+  -- Als angekündigt markieren, um endlose Fehler-Loops zu vermeiden, falls die Datei fehlt
+  audioState.modelAnnounced = true
+
   for i = 1, #candidates do
     if playRawFile(candidates[i]) then
       audioState.modelAnnounced = true
@@ -200,13 +227,15 @@ local function announceProfileEvent(self, eventKey, value, soundFile, opts)
   end
 
   local audioState = self.audioState
+  if not audioState.lastAlertAt then
+    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
+  end
   if audioState.lastValues[eventKey] == rounded then
     return
   end
 
   local now = nowSeconds()
   if now < (audioState.nextAllowedAt or 0) then
-    audioState.pendingValues[eventKey] = rounded
     return
   end
 
@@ -222,17 +251,20 @@ local function announceProfileEvent(self, eventKey, value, soundFile, opts)
     tryPlayEventFile(audioState, now, soundFile, opts)
     if type(playNumber) == "function" then
       emitLog(opts, "playNumber -> " .. tostring(rounded), "info")
-      playNumber(rounded, 0)
+      local ok, err = pcall(playNumber, rounded, 0)
+      if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
     end
     scheduleAudioCooldown(audioState, now, 0.25)
   end
 
   audioState.lastValues[eventKey] = rounded
-  audioState.pendingValues[eventKey] = nil
 end
 
 local function announceArmEvent(self, opts)
   local audioState = self.audioState
+  if not audioState.lastAlertAt then
+    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
+  end
   local rounded = roundProfileValue(self.state.armFlags)
   if rounded == nil then return false end
   if audioState.lastValues.arming_flags == rounded then
@@ -257,11 +289,14 @@ local function announceArmEvent(self, opts)
 
   local now = nowSeconds()
   emitLog(opts, "arming change value=" .. tostring(rounded) .. " file=" .. tostring(file), "info")
-  return tryPlayEventFile(audioState, now, "events/alerts/" .. file, opts)
+  return tryPlayEventFile(audioState, now, "evt/" .. file, opts)
 end
 
 local function announceGovernorEvent(self, opts)
   local audioState = self.audioState
+  if not audioState.lastAlertAt then
+    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
+  end
   local rounded = roundProfileValue(self.state.governor)
   if rounded == nil then return false end
   if audioState.lastValues.governor_state == rounded then
@@ -276,7 +311,7 @@ local function announceGovernorEvent(self, opts)
   local file = GOVERNOR_FILE_MAP[rounded]
   if type(file) ~= "string" then return false end
   local now = nowSeconds()
-  return tryPlayEventFile(audioState, now, "events/gov/" .. file, opts)
+  return tryPlayEventFile(audioState, now, "gov/" .. file, opts)
 end
 
 function Audio.process(self, opts)
@@ -306,9 +341,9 @@ function Audio.process(self, opts)
     announceGovernorEvent(self, opts)
   end
 
-  announceProfileEvent(self, "pid_profile", self.state.profile, "events/alerts/profile.wav", opts)
-  announceProfileEvent(self, "rate_profile", self.state.rateProfile, "events/alerts/rates.wav", opts)
-  announceProfileEvent(self, "battery_profile", self.state.batteryProfile, "events/alerts/battery.wav", opts)
+  announceProfileEvent(self, "pid_profile", self.state.profile, "evt/profile.wav", opts)
+  announceProfileEvent(self, "rate_profile", self.state.rateProfile, "evt/rates.wav", opts)
+  announceProfileEvent(self, "battery_profile", self.state.batteryProfile, "evt/battery.wav", opts)
 
   if prefEnabled(events, "voltage_alert", true) then
     local warnBase = (self.state.themeConfig and tonumber(self.state.themeConfig.v_min)) or 18.0
@@ -318,17 +353,18 @@ function Audio.process(self, opts)
     if type(voltage) == "number" and voltage > 0 then
       if voltage <= warn then
         local lastAt = audioState.lastAlertAt.voltage or 0
-        if now - lastAt >= 10 then
-          if tryPlayEventFile(audioState, now, "events/alerts/lowvoltage.wav", opts) then
+        local globalLast = getGlobalLowVoltageAt()
+        -- globaler Throttle (reload-sicher)
+        if now - globalLast >= 10 and now - lastAt >= 10 then
+          if tryPlayEventFile(audioState, now, "evt/lowvbat.wav", opts) then
             audioState.lastAlertAt.voltage = now
+            setGlobalLowVoltageAt(now)
           end
         end
       elseif voltage >= reset then
-        audioState.lastAlertAt.voltage = 0
+        -- kein hartes Rücksetzen, damit Cooldown erhalten bleibt
       end
     end
-  else
-    audioState.lastAlertAt.voltage = 0
   end
 
   if prefEnabled(events, "esc_temperature", false) then
@@ -338,19 +374,17 @@ function Audio.process(self, opts)
       if escTemp >= threshold then
         local lastAt = audioState.lastAlertAt.esc_temperature or 0
         if now - lastAt >= 10 then
-          if tryPlayEventFile(audioState, now, "events/alerts/esctemp.wav", opts) then
+          if tryPlayEventFile(audioState, now, "evt/esctemp.wav", opts) then
             if type(playHaptic) == "function" then
-              playHaptic(15, 10, 3)
+              pcall(playHaptic, 15, 10, 3)
             end
             audioState.lastAlertAt.esc_temperature = now
           end
         end
       else
-        audioState.lastAlertAt.esc_temperature = 0
+        -- kein hartes Rücksetzen, damit Cooldown erhalten bleibt
       end
     end
-  else
-    audioState.lastAlertAt.esc_temperature = 0
   end
 
   if prefEnabled(events, "fuel_alerts", true) then
@@ -366,9 +400,9 @@ function Audio.process(self, opts)
       if fuelValue <= 0 then
         local canRepeat = (now - (audioState.lowFuelLastAt or 0)) >= 10
         if (not audioState.lowFuelActive) or (audioState.lowFuelRepeatCount < repeats and canRepeat) then
-          if tryPlayEventFile(audioState, now, "status/alerts/lowfuel.wav", opts) then
+          if tryPlayEventFile(audioState, now, "stat/lowfuel.wav", opts) then
             if events.fuel_haptic_below_zero == true and type(playHaptic) == "function" then
-              playHaptic(15, 10, 3)
+              pcall(playHaptic, 15, 10, 3)
             end
             audioState.lowFuelActive = true
             audioState.lowFuelLastAt = now
@@ -390,10 +424,11 @@ function Audio.process(self, opts)
             for i = 1, #thresholds do
               local threshold = thresholds[i]
               if currentRounded <= threshold and lastCallout > threshold then
-                if tryPlayEventFile(audioState, now, "status/alerts/fuel.wav", opts) then
+                if tryPlayEventFile(audioState, now, "stat/fuel.wav", opts) then
                   if type(playNumber) == "function" then
                     emitLog(opts, "fuel callout playNumber -> " .. tostring(threshold), "info")
-                    playNumber(threshold, unitPercent())
+                    local ok, err = pcall(playNumber, threshold, unitPercent())
+                    if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
                   end
                   audioState.lastFuelCallout = threshold
                 end

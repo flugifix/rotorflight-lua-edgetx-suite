@@ -265,8 +265,15 @@ function Utils.drawContainer(nodes, rect, box, state)
     filled = true
   }
 
+  -- Titel-Cache pro Box
+  box._lastTitleRaw = box._lastTitleRaw or nil
+  box._lastTitle = box._lastTitle or nil
   local rawTitle = Utils.resolveValue(box.title, box, state)
-  local title = Utils.normalizeTitle(rawTitle, state and state.i18n)
+  if box._lastTitleRaw ~= rawTitle then
+    box._lastTitle = Utils.normalizeTitle(rawTitle, state and state.i18n)
+    box._lastTitleRaw = rawTitle
+  end
+  local title = box._lastTitle
   if not title then return end
 
   local titlePos = box.titlepos or "top"

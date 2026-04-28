@@ -100,7 +100,7 @@ $targetCore = Join-Path $toolsRoot 'rfsuite-core'
 $targetToolEntrypoint = Join-Path $toolsRoot 'rfsuite.lua'
 $targetUserRoot = Join-Path $toolsRoot 'rfsuite.user'
 $targetWidgetRoot = Join-Path $widgetsRoot 'rfsuite'
-$targetSoundsRoot = Join-Path $soundsRoot 'rfsuite'
+$targetSoundsRoot = Join-Path $soundsRoot 'rf'
 
 $legacyToolFolder = Join-Path $toolsRoot 'rfsuite'
 
@@ -253,7 +253,7 @@ function Copy-LanguageAudioPack {
     }
     New-Item -ItemType Directory -Path $TargetAudioDir -Force | Out-Null
 
-    foreach ($sub in @('adjfunctions', 'app', 'events', 'status')) {
+    foreach ($sub in @('adj', 'app', 'evt', 'stat', 'gov')) {
         $srcSub = Join-Path $sourcePack $sub
         if (Test-Path $srcSub) {
             Copy-Item -Path $srcSub -Destination (Join-Path $TargetAudioDir $sub) -Recurse -Force

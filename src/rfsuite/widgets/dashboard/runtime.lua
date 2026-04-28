@@ -50,7 +50,7 @@ if type(loadPreferencesModule) == "function" then
   end
 end
 
-local loadDashboardAudioModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/audio")
+local loadDashboardAudioModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/audio")
 local DashboardAudio = nil
 if type(loadDashboardAudioModule) == "function" then
   local ok, mod = pcall(loadDashboardAudioModule)
@@ -86,48 +86,15 @@ if type(loadI18nModule) == "function" then
   end
 end
 
-local PID_PROFILE_SOURCES = { "PID#", "PIDP", "PidP", "PIDP1", "PID Profile", "PID" }
-local RATE_PROFILE_SOURCES = { "RTE#", "RateP", "RTPR", "Rate Profile", "Rate" }
-local BATTERY_PROFILE_SOURCES = { "BatP", "battery_profile", "Battery Profile", "BatProfile" }
-local ARM_SOURCES = { "ARM", "Arm", "ARMF", "ArmF" }
-local GOVERNOR_SOURCES = { "Gov", "Governor" }
-local FUEL_SOURCES = { "Fuel", "Bat%" }
-local VOLTAGE_SOURCES = { "VFAS", "Vbat", "voltage", "VBAT" }
-local ESC_TEMP_SOURCES = { "ESC_TMP", "TescT", "ESC Temp" }
-local LINK_QUALITY_SOURCES = { "RQly", "LQ", "Link", "link_quality" }
+local loadSensorsModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors")
+local Sensors = nil
+if type(loadSensorsModule) == "function" then
+  local ok, mod = pcall(loadSensorsModule)
+  if ok and type(mod) == "table" then Sensors = mod end
+end
+
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
 local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
-
-local SIM_SENSOR_PATHS = {
-  "/SCRIPTS/TOOLS/rfsuite-core/sim/sensors/",
-  "/SCRIPTS/TOOLS/rfsuite.user/sim/sensors/"
-}
-
-local simValueCache = {}
-local simSensorAliases = {
-  ["PIDP"] = "PID#",
-  ["PID Profile"] = "PID#",
-  ["PID"] = "PID#",
-  ["RateP"] = "RTE#",
-  ["RTPR"] = "RTE#",
-  ["Rate Profile"] = "RTE#",
-  ["Rate"] = "RTE#",
-  ["RPM"] = "Hspd",
-  ["Fuel"] = "Bat%",
-  ["ESC_TMP"] = "TescT",
-  ["VFAS"] = "Vbat",
-  ["VBAT"] = "Vbat",
-  ["Vbat"] = "voltage",
-  ["voltage"] = "Vbat"
-}
-
-local function normalizeSimSensorValue(name, value)
-  if type(value) ~= "number" then return value end
-  if name == "Vbat" or name == "VFAS" then
-    return value / 100
-  end
-  return value
-end
 
 local utils = {}
 
@@ -173,67 +140,7 @@ local function nowSeconds()
   return 0
 end
 
-local function isSimulator()
-  if type(getVersion) ~= "function" then return false end
-  local ok, _, fw = pcall(getVersion)
-  if not ok or type(fw) ~= "string" then return false end
-  return string.sub(string.lower(fw), -4) == "simu"
-end
-
-local function readSimSensorValue(name)
-  if type(name) ~= "string" or name == "" then return nil end
-
-  local candidates = { name }
-  local alias = simSensorAliases[name]
-  if type(alias) == "string" and alias ~= "" and alias ~= name then
-    candidates[#candidates + 1] = alias
-  end
-
-  for p = 1, #SIM_SENSOR_PATHS do
-    local base = SIM_SENSOR_PATHS[p]
-    for i = 1, #candidates do
-      local filePath = base .. candidates[i] .. ".lua"
-      local now = nowSeconds()
-      local cached = simValueCache[filePath]
-      if cached and (now - (cached.t or 0)) <= 0.05 then
-        if cached.v ~= nil then
-          return normalizeSimSensorValue(candidates[i], cached.v)
-        end
-      else
-        local value = nil
-        local f = io.open(filePath, "r")
-        if f then
-          local content = io.read(f, 64)
-          io.close(f)
-          if type(content) == "string" then
-            local num = string.match(content, "return%s+([%+%-]?%d+%.?%d*)")
-            if not num then
-              num = string.match(content, "([%+%-]?%d+%.?%d*)")
-            end
-            if num then
-              value = tonumber(num)
-            end
-          end
-        end
-        simValueCache[filePath] = { t = now, v = value }
-        if value ~= nil then
-          return normalizeSimSensorValue(candidates[i], value)
-        end
-      end
-    end
-  end
-
-  return nil
-end
-
 local function readValue(name, fallback)
-  if isSimulator() then
-    local simValue = readSimSensorValue(name)
-    if simValue ~= nil then
-      return simValue
-    end
-  end
-
   if not getValue then return fallback end
   local ok, value = pcall(getValue, name)
   if not ok or value == nil then return fallback end
@@ -325,9 +232,9 @@ local function updateConnectionState(self)
   local connected = type(runtimeState) == "table" and runtimeState.lastConnected == true
   local hasVoltage = type(self.state.voltage) == "number" and self.state.voltage > 0
   local hasFuel = type(self.state.fuel) == "number" and self.state.fuel >= 0
-  local hasLq = type(self.state.lq) == "number" and self.state.lq > 0
-  local hasRss1 = type(self.state.rss1) == "number" and self.state.rss1 > 0
-  local hasRss2 = type(self.state.rss2) == "number" and self.state.rss2 > 0
+  local hasLq = type(self.state.lq) == "number" and self.state.lq ~= 0
+  local hasRss1 = type(self.state.rss1) == "number" and self.state.rss1 ~= 0
+  local hasRss2 = type(self.state.rss2) == "number" and self.state.rss2 ~= 0
   local batteryReady = hasVoltage or hasFuel
   local rfReady = hasLq or hasRss1 or hasRss2
   local rawReady = connected and batteryReady and rfReady
@@ -372,21 +279,6 @@ local function updateConnectionState(self)
   self.state.fblConnected = connected
   self.state.connectionReady = ready
   return ready, statusLine
-end
-
-local function readFirstValue(names, fallback)
-  if type(names) ~= "table" then
-    return fallback
-  end
-
-  for i = 1, #names do
-    local value = readValue(names[i], nil)
-    if value ~= nil then
-      return value
-    end
-  end
-
-  return fallback
 end
 
 local function readFirstNumber(names, fallback)
@@ -599,35 +491,38 @@ local function resolveThemePathForState(dashboard, flightMode)
 end
 
 local function readTelemetry(state)
-  state.rpm = readValue("RPM", state.rpm)
-  state.lq = readFirstNumber(LINK_QUALITY_SOURCES, state.lq)
+  if Sensors and type(Sensors.getValue) == "function" then
+    state.rpm = Sensors.getValue("rpm") or state.rpm
+    state.lq = Sensors.getValue("link") or state.lq
+    state.profile = roundInt(Sensors.getValue("pid_profile") or state.profile, state.profile or 1)
+    state.rateProfile = roundInt(Sensors.getValue("rate_profile") or state.rateProfile, state.rateProfile or 1)
+    state.batteryProfile = roundInt(Sensors.getValue("battery_profile") or state.batteryProfile, state.batteryProfile or 1)
+    state.armFlags = roundInt(Sensors.getValue("armflags") or state.armFlags, state.armFlags or 0)
+    state.governor = roundInt(Sensors.getValue("governor") or state.governor, state.governor or 0)
+    state.escTemp = roundInt(Sensors.getValue("temp_esc") or state.escTemp, state.escTemp or 0)
+
+    local fuel = Sensors.getValue("fuel")
+    if type(fuel) == "number" then
+      if fuel < 0 then fuel = 0 end
+      if fuel > 100 then fuel = 100 end
+      state.fuel = fuel
+    end
+
+    local voltage = Sensors.getValue("voltage")
+    if type(voltage) == "number" then
+      state.voltage = voltage
+    end
+
+    local armState = Sensors.getValue("armflags")
+    if type(armState) == "number" and bit32 then
+      state.armed = bit32.btest(armState, 1)
+    elseif type(armState) == "number" then
+      state.armed = armState ~= 0
+    end
+  end
+
   state.rss1 = readFirstNumber(RSS1_SOURCES, state.rss1)
   state.rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
-  state.profile = roundInt(readFirstValue(PID_PROFILE_SOURCES, state.profile), state.profile or 1)
-  state.rateProfile = roundInt(readFirstValue(RATE_PROFILE_SOURCES, state.rateProfile), state.rateProfile or 1)
-  state.batteryProfile = roundInt(readFirstValue(BATTERY_PROFILE_SOURCES, state.batteryProfile), state.batteryProfile or 1)
-  state.armFlags = roundInt(readFirstValue(ARM_SOURCES, state.armFlags), state.armFlags or 0)
-  state.governor = roundInt(readFirstValue(GOVERNOR_SOURCES, state.governor), state.governor or 0)
-  state.escTemp = roundInt(readFirstValue(ESC_TEMP_SOURCES, state.escTemp), state.escTemp or 0)
-
-  local fuel = readFirstValue(FUEL_SOURCES, state.fuel)
-  if type(fuel) == "number" then
-    if fuel < 0 then fuel = 0 end
-    if fuel > 100 then fuel = 100 end
-    state.fuel = fuel
-  end
-
-  local voltage = readFirstNumber(VOLTAGE_SOURCES, state.voltage)
-  if type(voltage) == "number" then
-    state.voltage = voltage
-  end
-
-  local armState = readFirstValue(ARM_SOURCES, state.armFlags or 0)
-  if type(armState) == "number" and bit32 then
-    state.armed = bit32.btest(armState, 1)
-  elseif type(armState) == "number" then
-    state.armed = armState ~= 0
-  end
 
   updateDerivedFlightState(state)
 end
@@ -747,10 +642,7 @@ function Runtime.new(zone, options)
       lowFuelActive = false,
       lowFuelLastAt = 0,
       lowFuelRepeatCount = 0,
-      lastAlertAt = {
-        voltage = 0,
-        esc_temperature = 0
-      },
+      -- lastAlertAt wird nicht mehr hier initialisiert, sondern nur noch lazy in Audio
       lastValues = {
         arming_flags = nil,
         governor_state = nil,
@@ -830,6 +722,11 @@ function Runtime.new(zone, options)
 
 
   function widget.refresh(self)
+    local now = nowSeconds()
+    if not self._lastRefreshTick then self._lastRefreshTick = 0 end
+    if (now - self._lastRefreshTick) < 0.1 then return end
+    self._lastRefreshTick = now
+
     -- Set event context to 'widget' before events wakeup
     if type(_G) == "table" then
       _G.rfsuite = _G.rfsuite or {}
@@ -878,10 +775,13 @@ function Runtime.new(zone, options)
     if nextMode ~= self.flightMode then
       self.flightMode = nextMode
       reloadActiveTheme(self)
+      return
     elseif selectedTheme ~= self.themePath then
       reloadActiveTheme(self)
+      return
     elseif not self.theme then
       reloadActiveTheme(self)
+      return
     end
 
     if not self.theme then return end
@@ -896,6 +796,8 @@ function Runtime.new(zone, options)
     if nextRenderKey ~= self.renderKey then
       self.renderKey = nextRenderKey
       self.built = false
+      -- Ausführung auf den nächsten Tick verschieben, um das CPU Limit beim Zeichnen zu umgehen
+      return
     end
 
     if not self.built then
@@ -913,6 +815,11 @@ function Runtime.new(zone, options)
   end
 
   function widget.background(self)
+    local now = nowSeconds()
+    if not self._lastBgTick then self._lastBgTick = 0 end
+    if (now - self._lastBgTick) < 0.1 then return 0 end
+    self._lastBgTick = now
+
     -- Set event context to 'widget' before events wakeup
     if type(_G) == "table" then
       _G.rfsuite = _G.rfsuite or {}

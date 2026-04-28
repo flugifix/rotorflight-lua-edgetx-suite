@@ -46,6 +46,8 @@ local function getArcValueColor(value, state, box)
 end
 
 local function renderArc(nodes, rect, box, state)
+  local source = utils.resolveValue(box.source, box, state)
+  local gaugeValue = utils.toNumber(utils.mapTelemetrySource(source, state), 0)
   -- Logging-Setup (nur einmal pro Render)
   local log = nil
   if _G and _G.rfsuite and _G.rfsuite.log then log = _G.rfsuite.log end
@@ -67,9 +69,11 @@ local function renderArc(nodes, rect, box, state)
     return
   end
 
-  local gaugeMin = utils.toNumber(utils.resolveValue(box.min, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_min, 18.0))
-  local gaugeMax = utils.toNumber(utils.resolveValue(box.max, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_max, 25.2))
-  local gaugeValue = utils.toNumber(utils.mapTelemetrySource(utils.resolveValue(box.source, box, state), state), 0)
+  -- Statische Werte cachen
+  box._gaugeMin = box._gaugeMin or utils.toNumber(utils.resolveValue(box.min, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_min, 18.0))
+  box._gaugeMax = box._gaugeMax or utils.toNumber(utils.resolveValue(box.max, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_max, 25.2))
+  local gaugeMin = box._gaugeMin
+  local gaugeMax = box._gaugeMax
 
   -- Schutz gegen extreme Werte
   if gaugeMin == gaugeMax or gaugeMax - gaugeMin < 0.1 then

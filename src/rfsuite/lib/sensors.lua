@@ -61,8 +61,25 @@ local function debugLog(key, msg)
   end
 end
 
+local fieldInfoCache = {}
+local fieldInfoMisses = {}
+
 local function readTelemetryValue(name)
   if type(name) ~= "string" or type(getValue) ~= "function" then return nil end
+  if getFieldInfo then
+    local info = fieldInfoCache[name]
+    if not info then
+      local now = nowSeconds()
+      if now - (fieldInfoMisses[name] or 0) < 2.0 then return nil end
+      info = getFieldInfo(name)
+      if info and info.id ~= nil then
+        fieldInfoCache[name] = info
+      else
+        fieldInfoMisses[name] = now
+        return nil
+      end
+    end
+  end
   local ok, value = pcall(getValue, name)
   if ok and type(value) == "number" then
     return value
@@ -91,7 +108,7 @@ local function readSimSensorFile(name)
       local filePath = base .. candidates[i] .. ".lua"
       local cached = simValueCache[filePath]
       local now = nowSeconds()
-      if cached and (now - (cached.t or 0)) <= 0.05 then
+      if cached and (now - (cached.t or 0)) <= 0.25 then
         if cached.v ~= nil then
           debugLog("sim-hit:" .. name, "sim cache hit " .. filePath .. " = " .. tostring(cached.v))
           return cached.v
@@ -193,6 +210,26 @@ Sensors.aliases = {
   governor = "Gov",
 }
 
+Sensors.search_paths = {
+  voltage = { "Vbat", "VFAS", "voltage", "VBAT" },
+  fuel = { "Bat%", "Fuel", "fuel" },
+  rpm = { "Hspd", "RPM", "rpm" },
+  link = { "RQly", "LQ", "Link", "link_quality", "1RSS", "2RSS" },
+  current = { "Curr", "Current", "current" },
+  pid_profile = { "PID#", "PIDP", "PidP", "PID Profile", "PID" },
+  rate_profile = { "RTE#", "RateP", "RTPR", "Rate Profile", "Rate" },
+  battery_profile = { "BAT#", "BatP", "BatProfile", "Battery Profile" },
+  throttle = { "Thr%", "Throttle", "throttle" },
+  altitude = { "Alt", "Altitude", "altitude" },
+  pitch = { "Ptch", "Pitch", "pitch" },
+  roll = { "Roll", "roll" },
+  yaw = { "Yaw", "yaw" },
+  armflags = { "ARM", "Arm", "ARMF", "ArmF", "armflags" },
+  governor = { "Gov", "Governor", "governor" },
+  temp_esc = { "Tesc", "ESC_TMP", "TescT", "ESC Temp", "temp_esc" },
+  temp_mcu = { "Tmcu", "TmcuT", "temp_mcu" }
+}
+
 -- Detect if running in simulator
 function Sensors.isSimulator()
   if getVersion then
@@ -254,9 +291,33 @@ function Sensors.getValue(source)
     end
   end
 
+  local activePath = Sensors.active_paths and Sensors.active_paths[source]
+  if activePath then
+    local val = readTelemetryValue(activePath)
+    if type(val) == "number" then
+      debugLog("telemetry-hit-cached:" .. source, "hit " .. activePath .. " = " .. tostring(val))
+      return val
+    end
+  end
+
+  local paths = Sensors.search_paths[source]
+  if paths then
+    for i = 1, #paths do
+      local val = readTelemetryValue(paths[i])
+      if type(val) == "number" then
+        Sensors.active_paths = Sensors.active_paths or {}
+        Sensors.active_paths[source] = paths[i]
+        debugLog("telemetry-hit:" .. source, "hit " .. paths[i] .. " = " .. tostring(val))
+        return val
+      end
+    end
+  end
+
   if resolved then
     local value = readTelemetryValue(resolved)
     if type(value) == "number" then
+      Sensors.active_paths = Sensors.active_paths or {}
+      Sensors.active_paths[source] = resolved
       debugLog("telemetry-hit:" .. source, "telemetry hit " .. resolved .. " = " .. tostring(value))
       return value
     end
@@ -264,6 +325,8 @@ function Sensors.getValue(source)
 
   local direct = readTelemetryValue(source)
   if type(direct) == "number" then
+    Sensors.active_paths = Sensors.active_paths or {}
+    Sensors.active_paths[source] = source
     debugLog("telemetry-direct-hit:" .. source, "telemetry direct hit " .. source .. " = " .. tostring(direct))
     return direct
   end

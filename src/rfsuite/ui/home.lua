@@ -20,6 +20,8 @@ local Version = nil
 local MspRuntime = nil
 local Log = nil
 local Events = nil
+local Audio = nil
+local Sensors = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
 
@@ -61,6 +63,12 @@ end
 local function ensureEvents()
   if not Events then
     Events = loadModule("tasks/events/runtime.lua")
+  end
+  if not Audio then
+    Audio = loadModule("lib/audio.lua")
+  end
+  if not Sensors then
+    Sensors = loadModule("lib/sensors.lua")
   end
 end
 
@@ -189,6 +197,21 @@ local state = {
   mspLastTick = 0,
   fblConnected = false,
   infoSessionSnapshot = nil,
+  lastAudioTick = 0,
+  audioState = {
+    initialized = false,
+    nextAllowedAt = 0,
+    modelAnnounced = false,
+    lastFuelCallout = nil,
+    lowFuelActive = false,
+    lowFuelLastAt = 0,
+    lowFuelRepeatCount = 0,
+    -- lastAlertAt wird nicht mehr hier initialisiert, sondern nur noch lazy in Audio
+    lastValues = { arming_flags = nil, governor_state = nil, pid_profile = nil, rate_profile = nil, battery_profile = nil },
+    pendingValues = { pid_profile = nil, rate_profile = nil, battery_profile = nil },
+    lastEnabled = { governor_state = nil }
+  },
+  telemetryState = { profile = 1, rateProfile = 1, batteryProfile = 1, voltage = 0, escTemp = 0, fuel = 100, armFlags = 0, governor = 0, themeConfig = { v_min = 18.0 } },
   mspLinkConfigWarningAt = 0,
   headerActions = {
     defaults = {
@@ -1255,6 +1278,42 @@ function M.run(event, touchState)
 
     updateRuntimeMenuConditions()
     maybeRefreshInfoPageFromSession()
+
+    -- Audio Feedback Polling (gedrosselt auf ca. 5Hz)
+    if Audio and type(Audio.process) == "function" and (now - state.lastAudioTick) > 0.2 then
+      state.lastAudioTick = now
+      
+      local lq = Sensors and Sensors.getValue("link") or 0
+      local vbat = Sensors and Sensors.getValue("voltage") or 0
+      local fuel = Sensors and Sensors.getValue("fuel") or -1
+
+      if Sensors then
+        state.telemetryState.profile = Sensors.getValue("pid_profile") or state.telemetryState.profile
+        state.telemetryState.rateProfile = Sensors.getValue("rate_profile") or state.telemetryState.rateProfile
+        state.telemetryState.batteryProfile = Sensors.getValue("battery_profile") or state.telemetryState.batteryProfile
+        state.telemetryState.armFlags = Sensors.getValue("armflags") or state.telemetryState.armFlags
+        state.telemetryState.governor = Sensors.getValue("governor") or state.telemetryState.governor
+        state.telemetryState.escTemp = Sensors.getValue("temp_esc") or state.telemetryState.escTemp
+      end
+
+      state.telemetryState.voltage = vbat > 0 and vbat or state.telemetryState.voltage
+      state.telemetryState.fuel = fuel >= 0 and fuel or state.telemetryState.fuel
+
+      local batteryReady = (vbat > 0) or (fuel >= 0)
+      local rfReady = (lq ~= 0)
+      local connected = readFblConnected()
+
+      if connected and batteryReady and rfReady then
+        local audioContext = {
+          audioState = state.audioState,
+          preferences = state.preferences,
+          state = state.telemetryState
+        }
+        Audio.process(audioContext, { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
+      else
+        state.audioState.initialized = false
+      end
+    end
 
     maybeShowUnsupportedMspDialog()
     maybeShowMspLinkConfigDialog()
