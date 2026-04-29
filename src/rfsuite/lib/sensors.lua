@@ -5,6 +5,7 @@
 ]]--
 
 local Sensors = {}
+Sensors.sim_search_misses = {}
 local Log = nil
 do
   local okLoad, chunk = pcall(loadScript, "/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
@@ -62,20 +63,22 @@ local function debugLog(key, msg)
 end
 
 local fieldInfoCache = {}
-local fieldInfoMisses = {}
+local valueMisses = {}
 
 local function readTelemetryValue(name)
   if type(name) ~= "string" or type(getValue) ~= "function" then return nil end
+
+  local now = nowSeconds()
+  if now - (valueMisses[name] or 0) < 2.0 then return nil end
+
   if getFieldInfo then
     local info = fieldInfoCache[name]
     if not info then
-      local now = nowSeconds()
-      if now - (fieldInfoMisses[name] or 0) < 2.0 then return nil end
       info = getFieldInfo(name)
       if info and info.id ~= nil then
         fieldInfoCache[name] = info
       else
-        fieldInfoMisses[name] = now
+        valueMisses[name] = now
         return nil
       end
     end
@@ -84,6 +87,8 @@ local function readTelemetryValue(name)
   if ok and type(value) == "number" then
     return value
   end
+
+  valueMisses[name] = now
   return nil
 end
 
@@ -102,6 +107,7 @@ local function readSimSensorFile(name)
   addCandidate(string.lower(name))
   addCandidate(SIM_FILE_ALIASES[name])
 
+
   for p = 1, #SIM_SENSOR_PATHS do
     local base = SIM_SENSOR_PATHS[p]
     for i = 1, #candidates do
@@ -113,6 +119,8 @@ local function readSimSensorFile(name)
           debugLog("sim-hit:" .. name, "sim cache hit " .. filePath .. " = " .. tostring(cached.v))
           return cached.v
         end
+      elseif cached and (now - (cached.t or 0)) <= 2.0 then
+        -- Bereits erfolglos gepruefte Datei ueberspringen
       else
         local f = io.open(filePath, "r")
         local v = nil
@@ -126,9 +134,9 @@ local function readSimSensorFile(name)
             end
           end
         end
-
         simValueCache[filePath] = { t = now, v = v }
         if v ~= nil then
+          Sensors.sim_active_paths[name] = filePath
           debugLog("sim-hit:" .. name, "sim file hit " .. filePath .. " = " .. tostring(v))
           return v
         end
@@ -136,6 +144,7 @@ local function readSimSensorFile(name)
     end
   end
 
+  Sensors.sim_search_misses[name] = now
   debugLog("sim-miss:" .. name, "sim file miss for source " .. tostring(name))
   return nil
 end
@@ -300,6 +309,12 @@ function Sensors.getValue(source)
     end
   end
 
+  local now = nowSeconds()
+  Sensors.search_misses = Sensors.search_misses or {}
+  if now - (Sensors.search_misses[source] or 0) < 2.0 then
+    return nil
+  end
+
   local paths = Sensors.search_paths[source]
   if paths then
     for i = 1, #paths do
@@ -331,6 +346,7 @@ function Sensors.getValue(source)
     return direct
   end
 
+  Sensors.search_misses[source] = now
   return nil
 end
 
