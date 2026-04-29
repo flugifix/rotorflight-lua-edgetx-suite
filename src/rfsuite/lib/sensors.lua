@@ -94,6 +94,12 @@ end
 
 local function readSimSensorFile(name)
   if type(name) ~= "string" or name == "" then return nil end
+  
+  local now = nowSeconds()
+  if (Sensors.sim_search_misses[name] or 0) > 0 and (now - Sensors.sim_search_misses[name]) < 2.0 then
+    return nil
+  end
+
   local candidates = {}
   local function addCandidate(value)
     if type(value) ~= "string" or value == "" then return end
@@ -113,7 +119,6 @@ local function readSimSensorFile(name)
     for i = 1, #candidates do
       local filePath = base .. candidates[i] .. ".lua"
       local cached = simValueCache[filePath]
-      local now = nowSeconds()
       if cached and (now - (cached.t or 0)) <= 0.25 then
         if cached.v ~= nil then
           debugLog("sim-hit:" .. name, "sim cache hit " .. filePath .. " = " .. tostring(cached.v))
@@ -136,6 +141,7 @@ local function readSimSensorFile(name)
         end
         simValueCache[filePath] = { t = now, v = v }
         if v ~= nil then
+          Sensors.sim_active_paths = Sensors.sim_active_paths or {}
           Sensors.sim_active_paths[name] = filePath
           debugLog("sim-hit:" .. name, "sim file hit " .. filePath .. " = " .. tostring(v))
           return v
@@ -240,13 +246,17 @@ Sensors.search_paths = {
 }
 
 -- Detect if running in simulator
+local isSimulatorCached = nil
 function Sensors.isSimulator()
+  if isSimulatorCached ~= nil then return isSimulatorCached end
   if getVersion then
     local ok, _, fw = pcall(getVersion)
     if ok and type(fw) == "string" then
-      return string.sub(fw, -4) == "simu"
+      isSimulatorCached = (string.sub(fw, -4) == "simu")
+      return isSimulatorCached
     end
   end
+  isSimulatorCached = false
   return false
 end
 

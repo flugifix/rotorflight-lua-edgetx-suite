@@ -491,40 +491,57 @@ local function resolveThemePathForState(dashboard, flightMode)
 end
 
 local function readTelemetry(state)
-  if Sensors and type(Sensors.getValue) == "function" then
-    state.rpm = Sensors.getValue("rpm") or state.rpm
-    state.lq = Sensors.getValue("link") or state.lq
-    state.profile = roundInt(Sensors.getValue("pid_profile") or state.profile, state.profile or 1)
-    state.rateProfile = roundInt(Sensors.getValue("rate_profile") or state.rateProfile, state.rateProfile or 1)
-    state.batteryProfile = roundInt(Sensors.getValue("battery_profile") or state.batteryProfile, state.batteryProfile or 1)
-    state.armFlags = roundInt(Sensors.getValue("armflags") or state.armFlags, state.armFlags or 0)
-    state.governor = roundInt(Sensors.getValue("governor") or state.governor, state.governor or 0)
-    state.escTemp = roundInt(Sensors.getValue("temp_esc") or state.escTemp, state.escTemp or 0)
+  if not (Sensors and type(Sensors.getValue) == "function") then return end
+  local changed = false
+  -- Cache sensor values to avoid duplicate calls
+  local cache = {}
+  local function getSensor(name)
+    if cache[name] == nil then cache[name] = Sensors.getValue(name) end
+    return cache[name]
+  end
 
-    local fuel = Sensors.getValue("fuel")
-    if type(fuel) == "number" then
-      if fuel < 0 then fuel = 0 end
-      if fuel > 100 then fuel = 100 end
-      state.fuel = fuel
-    end
-
-    local voltage = Sensors.getValue("voltage")
-    if type(voltage) == "number" then
-      state.voltage = voltage
-    end
-
-    local armState = Sensors.getValue("armflags")
-    if type(armState) == "number" and bit32 then
-      state.armed = bit32.btest(armState, 1)
-    elseif type(armState) == "number" then
-      state.armed = armState ~= 0
+  local function setField(field, value)
+    if value ~= nil and value ~= state[field] then
+      state[field] = value
+      changed = true
     end
   end
 
-  state.rss1 = readFirstNumber(RSS1_SOURCES, state.rss1)
-  state.rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
+  setField("rpm", getSensor("rpm"))
+  setField("lq", getSensor("link"))
+  setField("profile", roundInt(getSensor("pid_profile") or state.profile, state.profile or 1))
+  setField("rateProfile", roundInt(getSensor("rate_profile") or state.rateProfile, state.rateProfile or 1))
+  setField("batteryProfile", roundInt(getSensor("battery_profile") or state.batteryProfile, state.batteryProfile or 1))
+  setField("armFlags", roundInt(getSensor("armflags") or state.armFlags, state.armFlags or 0))
+  setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
+  setField("escTemp", roundInt(getSensor("temp_esc") or state.escTemp, state.escTemp or 0))
 
-  updateDerivedFlightState(state)
+  local fuel = getSensor("fuel")
+  if type(fuel) == "number" then
+    local f = fuel
+    if f < 0 then f = 0 end
+    if f > 100 then f = 100 end
+    setField("fuel", f)
+  end
+
+  local voltage = getSensor("voltage")
+  if type(voltage) == "number" then
+    setField("voltage", voltage)
+  end
+
+  local armState = getSensor("armflags")
+  if type(armState) == "number" and bit32 then
+    setField("armed", bit32.btest(armState, 1))
+  elseif type(armState) == "number" then
+    setField("armed", armState ~= 0)
+  end
+
+  local rss1 = readFirstNumber(RSS1_SOURCES, state.rss1)
+  setField("rss1", rss1)
+  local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
+  setField("rss2", rss2)
+
+  if changed then updateDerivedFlightState(state) end
 end
 
 local function computeFlightMode(state)
