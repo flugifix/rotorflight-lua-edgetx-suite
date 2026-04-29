@@ -96,6 +96,8 @@ local function ensureHelpRegistry()
   end
 end
 
+local LoadingOverlay = nil
+
 local function ensureBuildDeps()
   if not GridLayout then
     GridLayout = loadModule("layouts/grid.lua")
@@ -108,6 +110,9 @@ local function ensureBuildDeps()
   end
   if not Header then
     Header = loadModule("ui/header.lua")
+  end
+  if not LoadingOverlay then
+    LoadingOverlay = loadModule("ui/loading_overlay.lua")
   end
 end
 
@@ -372,12 +377,12 @@ local function onBack()
     return
   end
 
-  if state.menu and state.menu.goBack() then
-    state.focusIndex = 0
+  if state.menu and not state.menu.isRoot() then
+    state.loadingMenuId = "back"
     scheduleBuildUI(false)
     return
   end
-  state.shouldExit = true
+  state.isClosing = true
 end
 
 local function onHelp()
@@ -897,8 +902,7 @@ local function getCardPressHandler(cardId)
       return
     end
     if state.menu and (not state.menu.isRoot()) then
-      state.menu.openEntry(cardId)
-      state.focusIndex = 0
+      state.loadingMenuId = cardId
       scheduleBuildUI(false)
     end
   end
@@ -914,8 +918,7 @@ local function getRootCardPressHandler(sectionId, cardId)
       return
     end
     if state.menu and state.menu.isRoot() then
-      state.menu.openRootEntry(sectionId, cardId)
-      state.focusIndex = 0
+      state.loadingMenuId = { section = sectionId, card = cardId }
       scheduleBuildUI(false)
     end
   end
@@ -929,6 +932,34 @@ function M.buildUI()
   if lvgl == nil then return end
 
   ensureBuildDeps()
+
+  if state.loadingMenuId then
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    local tr = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
+    lvgl.build({
+      {
+        type = "rectangle",
+        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        color = COLOR_THEME_PRIMARY3,
+        filled = true
+      },
+      {
+        type = "label",
+        x = 0, y = (LCD_H or 240) / 2 - 10, w = LCD_W or 320,
+        text = tr,
+        color = COLOR_THEME_PRIMARY2,
+        align = CENTER,
+        font = MIDSIZE
+      }
+    })
+    if state.loadingMenuId == "back" then
+      state.pendingMenuBack = true
+    else
+      state.pendingMenuOpen = state.loadingMenuId
+    end
+    state.loadingMenuId = nil
+    return
+  end
 
   syncActivePageModule()
 
@@ -1107,7 +1138,6 @@ function M.buildUI()
     end
   end
 
-
   -- Build layout: page + children table, then "?" button as sibling (same as Save in page.lua)
   local rootSubtitle = nil
   if breadcrumb ~= "" then
@@ -1230,7 +1260,40 @@ function M.run(event, touchState)
       onBack()
     end
 
-    if state.pendingBuildUI then
+    if state.isClosing then
+      if not state.closeTicks then
+        state.closeTicks = 0
+        if lvgl and lvgl.clear then
+          lvgl.clear()
+          local tr = state.i18n and state.i18n.t and state.i18n.t("app.closing_rfsuite") or "Closing RFSuite..."
+          lvgl.build({
+            {
+              type = "rectangle",
+              x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+              color = COLOR_THEME_PRIMARY3,
+              filled = true
+            },
+            {
+              type = "label",
+              x = 0, y = (LCD_H or 240) / 2 - 10, w = LCD_W or 320,
+              text = tr,
+              color = COLOR_THEME_PRIMARY2,
+              align = CENTER,
+              font = MIDSIZE
+            }
+          })
+        end
+      end
+      state.closeTicks = state.closeTicks + 1
+      if collectgarbage then
+        collectgarbage("step", 200)
+      end
+      if state.closeTicks > 15 then
+        state.shouldExit = true
+      end
+    end
+
+    if state.pendingBuildUI and not state.isClosing then
       state.pendingBuildUI = false
       local doGc = state.pendingGcAfterBuild == true
       state.pendingGcAfterBuild = false
@@ -1238,6 +1301,25 @@ function M.run(event, touchState)
       if doGc and collectgarbage then
         collectgarbage("collect")
       end
+    end
+
+    if state.pendingMenuOpen and not state.isClosing then
+      if type(state.pendingMenuOpen) == "table" then
+        state.menu.openRootEntry(state.pendingMenuOpen.section, state.pendingMenuOpen.card)
+      else
+        state.menu.openEntry(state.pendingMenuOpen)
+      end
+      state.focusIndex = 0
+      state.pendingMenuOpen = nil
+      scheduleBuildUI(false)
+    end
+
+    if state.pendingMenuBack and not state.isClosing then
+      if state.menu and state.menu.goBack() then
+        state.focusIndex = 0
+      end
+      state.pendingMenuBack = false
+      scheduleBuildUI(false)
     end
 
     local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil

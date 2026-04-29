@@ -1,5 +1,7 @@
 return {
   app = {
+    loading = "Loading...",
+    closing_rfsuite = "Closing RFSuite...",
     header_system = "System",
     header_configuration = "Configuration",
     modules = {

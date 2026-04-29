@@ -337,7 +337,7 @@ function Audio.process(self, opts)
     announceArmEvent(self, opts)
   end
 
-  if governorEnabled and audioState.initialized then
+  if governorEnabled then
     announceGovernorEvent(self, opts)
   end
 
