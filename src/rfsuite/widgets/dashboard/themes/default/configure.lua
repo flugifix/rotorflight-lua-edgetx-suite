@@ -29,7 +29,12 @@ end
 local function loadConfig(prefs)
   if ui.loaded then return end
 
-  local cfg = DashboardLib.getThemeConfig(prefs, THEME_PATH, THEME_DEFAULTS)
+  local modelPrefs = nil
+  if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
+    modelPrefs = _G.rfsuite.session.modelPreferences
+  end
+
+  local cfg = DashboardLib.getThemeConfig(prefs, THEME_PATH, THEME_DEFAULTS, modelPrefs)
   local vMin = tonumber(cfg.v_min) or THEME_DEFAULTS.v_min
   local vMax = tonumber(cfg.v_max) or THEME_DEFAULTS.v_max
 
@@ -42,10 +47,24 @@ local function loadConfig(prefs)
 end
 
 local function saveConfig(prefs)
+  local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
+  local modelPrefs = session and session.modelPreferences
+
+  -- Fallback auf prefs, wenn keine mcu_id / modelPrefs existieren
   DashboardLib.setThemeConfig(prefs, THEME_PATH, {
     v_min = (tonumber(ui.config.v_min_tenths) or 180) / 10,
     v_max = (tonumber(ui.config.v_max_tenths) or 252) / 10,
-  })
+  }, modelPrefs)
+
+  if session and session.mcu_id and modelPrefs then
+    local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
+    if type(loadMod) == "function" then
+      local ok, MP = pcall(loadMod)
+      if ok and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
+        MP.saveByMcuId(session.mcu_id, modelPrefs)
+      end
+    end
+  end
 end
 
 local function getMin()

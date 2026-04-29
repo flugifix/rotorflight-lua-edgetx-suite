@@ -464,8 +464,9 @@ local function loadThemeModuleForState(themePath, flightMode)
   return nil
 end
 
-local function resolveThemePathForState(dashboard, flightMode)
-  local modelOverride = dashboard and dashboard.model_override == true
+local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
+  local modelDashboard = modelPrefs and modelPrefs.dashboard or {}
+  local modelOverride = modelDashboard.model_override == true or dashboard.model_override == true
   local key = "theme_preflight"
   local modelKey = "model_theme_preflight"
 
@@ -477,7 +478,12 @@ local function resolveThemePathForState(dashboard, flightMode)
     modelKey = "model_theme_postflight"
   end
 
-  local modelValue = modelOverride and dashboard and dashboard[modelKey] or nil
+  local modelValue = modelOverride and modelDashboard[modelKey] or nil
+  -- fallback to global dashboard if it happens to be set there for backward compat
+  if not modelValue or modelValue == "" or modelValue == "nil" then
+    modelValue = modelOverride and dashboard and dashboard[modelKey] or nil
+  end
+
   if modelValue and modelValue ~= "" and modelValue ~= "nil" then
     return modelValue
   end
@@ -697,10 +703,14 @@ function Runtime.new(zone, options)
   end
 
   local function reloadActiveTheme(self)
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, self.flightMode)
+    local modelPrefs = nil
+    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
+      modelPrefs = _G.rfsuite.session.modelPreferences
+    end
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, self.flightMode)
     local nextConfig = { v_min = 18.0, v_max = 25.2 }
     if self.dashboardLib and self.dashboardLib.getThemeConfig then
-      nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, nextConfig)
+      nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, nextConfig, modelPrefs)
     end
 
     self.themePath = selectedTheme
@@ -787,7 +797,11 @@ function Runtime.new(zone, options)
       return
     end
 
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, nextMode)
+    local modelPrefs = nil
+    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
+      modelPrefs = _G.rfsuite.session.modelPreferences
+    end
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, nextMode)
 
     if nextMode ~= self.flightMode then
       self.flightMode = nextMode
@@ -855,7 +869,11 @@ function Runtime.new(zone, options)
       processAudioEvents(self)
     end
     local nextMode = computeFlightMode(self.state)
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, nextMode)
+    local modelPrefs = nil
+    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
+      modelPrefs = _G.rfsuite.session.modelPreferences
+    end
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, nextMode)
 
     if nextMode ~= self.flightMode then
       self.flightMode = nextMode

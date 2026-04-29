@@ -1,7 +1,6 @@
 local M = {}
 
 local USER_ROOT = "/SCRIPTS/TOOLS/rfsuite.user"
-local MODELS_DIR = USER_ROOT .. "/models"
 
 local function trim(s)
   local asString = tostring(s or "")
@@ -78,17 +77,11 @@ local function loadFileAsString(path)
   local f = io.open(path, "r")
   if not f then return nil end
 
-  local chunks = {}
-  while true do
-    local chunk = io.read(f, 1024)
-    if not chunk then break end
-    chunks[#chunks + 1] = chunk
-  end
-
+  local content = io.read(f, 2048)
   io.close(f)
 
-  if #chunks == 0 then return nil end
-  return table.concat(chunks)
+  if content == nil or content == "" then return nil end
+  return content
 end
 
 local function parseIni(content)
@@ -152,13 +145,12 @@ end
 local function ensureDirs()
   if type(os) == "table" and type(os.mkdir) == "function" then
     pcall(os.mkdir, USER_ROOT)
-    pcall(os.mkdir, MODELS_DIR)
   end
 end
 
 function M.buildPath(mcuId)
   if type(mcuId) ~= "string" or mcuId == "" then return nil end
-  return MODELS_DIR .. "/" .. mcuId .. ".ini"
+  return USER_ROOT .. "/" .. mcuId .. ".ini"
 end
 
 function M.loadByMcuId(mcuId)

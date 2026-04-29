@@ -95,13 +95,20 @@ local function ensureLoaded(prefs)
   local defaultPath = DashboardLib.getDefaultThemePath(ui.themes)
   local src = (prefs and prefs.dashboard) or {}
 
+  local modelSrc = src
+  if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and type(_G.rfsuite.session.modelPreferences) == "table" then
+    if _G.rfsuite.session.modelPreferences.dashboard then
+      modelSrc = _G.rfsuite.session.modelPreferences.dashboard
+    end
+  end
+
   ui.config.theme_preflight = src.theme_preflight or defaultPath
   ui.config.theme_inflight = src.theme_inflight or defaultPath
   ui.config.theme_postflight = src.theme_postflight or defaultPath
   ui.config.model_override = src.model_override == true
-  ui.config.model_theme_preflight = src.model_theme_preflight or "nil"
-  ui.config.model_theme_inflight = src.model_theme_inflight or "nil"
-  ui.config.model_theme_postflight = src.model_theme_postflight or "nil"
+  ui.config.model_theme_preflight = modelSrc.model_theme_preflight or "nil"
+  ui.config.model_theme_inflight = modelSrc.model_theme_inflight or "nil"
+  ui.config.model_theme_postflight = modelSrc.model_theme_postflight or "nil"
 
   ui.loaded = true
 end
@@ -143,10 +150,28 @@ local function saveToPreferences(prefs)
   prefs.dashboard.theme_preflight = ui.config.theme_preflight
   prefs.dashboard.theme_inflight = ui.config.theme_inflight
   prefs.dashboard.theme_postflight = ui.config.theme_postflight
-  prefs.dashboard.model_override = ui.config.model_override == true
-  prefs.dashboard.model_theme_preflight = ui.config.model_theme_preflight
-  prefs.dashboard.model_theme_inflight = ui.config.model_theme_inflight
-  prefs.dashboard.model_theme_postflight = ui.config.model_theme_postflight
+
+  if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
+    local session = _G.rfsuite.session
+    if session.mcu_id then
+      if type(session.modelPreferences) ~= "table" then session.modelPreferences = {} end
+      if type(session.modelPreferences.dashboard) ~= "table" then session.modelPreferences.dashboard = {} end
+      local mDashboard = session.modelPreferences.dashboard
+
+      mDashboard.model_theme_preflight = ui.config.model_theme_preflight
+      mDashboard.model_theme_inflight = ui.config.model_theme_inflight
+      mDashboard.model_theme_postflight = ui.config.model_theme_postflight
+
+      -- Save model preferences using ModelPreferences module
+      local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
+      if type(loadMod) == "function" then
+        local ok, MP = pcall(loadMod)
+        if ok and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
+          MP.saveByMcuId(session.mcu_id, session.modelPreferences)
+        end
+      end
+    end
+  end
 end
 
 function M.getHeaderActions()
