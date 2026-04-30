@@ -1,5 +1,5 @@
 -- Manifest for onconnect tasks (ordered)
 return {
   "apiversion",
-  "flight_stats",
+  { name = "flight_stats", context = "widget" },
 }

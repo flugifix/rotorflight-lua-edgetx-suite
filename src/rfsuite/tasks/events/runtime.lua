@@ -21,6 +21,7 @@ end
 
 local MspRuntime = nil
 local Log = nil
+local Env = nil
 
 -- Per-category task runners cache will be stored at `_G.rfsuite.tasks.events`
 local function ensureEventRunner(name)
@@ -60,6 +61,7 @@ local state = {
 local function ensureDeps()
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not Log then Log = loadModule("lib/log.lua") end
+  if not Env then Env = loadModule("lib/env.lua") end
 end
 
 local function nowSeconds()
@@ -136,10 +138,7 @@ function Events.wakeup()
     -- onconnect: call runner while linkStableUp is true (runner progresses internally)
 
     -- Determine context: widget/tool/both
-    local context = "tool"
-    if _G and _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.event_context then
-      context = _G.rfsuite.session.event_context
-    end
+    local context = Env and Env.get() or "tool"
 
     if state.linkStableUp then
       local onconnect = ensureEventRunner("onconnect")

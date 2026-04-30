@@ -1,4 +1,4 @@
 -- Manifest for ondisarm tasks (ordered)
 return {
-  "flight_stats",
+  { name = "flight_stats", context = "widget" },
 }
