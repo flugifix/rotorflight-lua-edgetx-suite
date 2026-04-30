@@ -1,4 +1,5 @@
 -- Generic sequential tasks runner for RFSuite events
+-- Supports shared state between Tool and Widget contexts
 local M = {}
 
 local DEFAULT_TASK_TIMEOUT_SECONDS = 25
@@ -22,7 +23,6 @@ function M.new(category)
 
   local tasksQueue = {}
   local tasksLoaded = false
-  local queueIndex = 1
   local tasksDoneLogged = false
 
   local Log = nil
@@ -52,36 +52,22 @@ function M.new(category)
       return
     end
 
-    ensureEnv()
-    local currentEnv = Env and Env.get() or "tool"
-
     for _, entry in ipairs(manifest) do
       local name = nil
       local context = "both"
-      local isShared = false
 
       if type(entry) == "table" then
         name = entry.name
         context = entry.context or "both"
-        isShared = entry.shared == true
       else
         name = entry
       end
 
-      local eligible = false
-      if context == "both" then
-        eligible = true
-      elseif context == "tool" and currentEnv == "tool" then
-        eligible = true
-      elseif context == "widget" and currentEnv == "widget" then
-        eligible = true
-      end
-
-      if name and eligible then
-        local path = (isShared or name == "flight_stats") and (COMMON_PATH .. name .. ".lua") or (BASE_PATH .. name .. ".lua")
+      if name then
         tasksQueue[#tasksQueue + 1] = {
           name = name,
-          path = path,
+          context = context,
+          path = BASE_PATH .. name .. ".lua",
           module = nil,
           initialized = false,
           complete = false,
@@ -98,7 +84,6 @@ function M.new(category)
 
   local function clearTaskEntries()
     for i = #tasksQueue, 1, -1 do tasksQueue[i] = nil end
-    queueIndex = 1
     tasksDoneLogged = false
   end
 
@@ -139,27 +124,28 @@ function M.new(category)
       t.nextEligibleAt = 0
       t.startTime = nil
     end
-    queueIndex = 1
     tasksDoneLogged = false
   end
 
-  local function currentTask()
-    return tasksQueue[queueIndex]
-  end
+  local function findNextEligibleTask(currentEnv)
+    for i = 1, #tasksQueue do
+      local t = tasksQueue[i]
+      if not t.complete and not t.failed then
+        local eligible = false
+        if t.context == "both" then
+          eligible = true
+        elseif t.context == "tool" and currentEnv == "tool" then
+          eligible = true
+        elseif t.context == "widget" and currentEnv == "widget" then
+          eligible = true
+        end
 
-  local function advancePastCompletedOrFailed()
-    local idx = queueIndex or 1
-    while idx <= #tasksQueue do
-      local t = tasksQueue[idx]
-      if t and not t.complete and not t.failed then break end
-      idx = idx + 1
+        if eligible then
+          return t, i
+        end
+      end
     end
-    queueIndex = idx
-  end
-
-  local function isQueueDone()
-    advancePastCompletedOrFailed()
-    return (queueIndex or 1) > #tasksQueue
+    return nil
   end
 
   function runner.findTasks()
@@ -180,16 +166,19 @@ function M.new(category)
     ensureLog()
     if not tasksLoaded then runner.findTasks() end
     if #tasksQueue == 0 then return end
-    if isQueueDone() then
+
+    ensureEnv()
+    local currentEnv = Env and Env.get() or "tool"
+    local task, idx = findNextEligibleTask(currentEnv)
+
+    if not task then
       if not tasksDoneLogged then
-        if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "all " .. category .. " tasks complete", "debug", true) end
+        if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "all eligible " .. category .. " tasks complete for " .. currentEnv, "debug", true) end
         tasksDoneLogged = true
       end
       return
     end
 
-    local task = currentTask()
-    if not task then return end
     local now = (type(os) == "table" and type(os.clock) == "function") and os.clock() or 0
 
     if task.nextEligibleAt and task.nextEligibleAt > now then return end
@@ -202,8 +191,6 @@ function M.new(category)
       task.startTime = nil
       task.nextEligibleAt = 0
       if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "failed to load task " .. tostring(task.name) .. ": " .. tostring(err or "?"), "info", true) end
-      queueIndex = (queueIndex or 1) + 1
-      advancePastCompletedOrFailed()
       return
     end
 
@@ -217,8 +204,6 @@ function M.new(category)
       task.nextEligibleAt = 0
       releaseTaskModule(task, false)
       if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "completed task " .. tostring(task.name), "debug", true) end
-      queueIndex = (queueIndex or 1) + 1
-      advancePastCompletedOrFailed()
       return
     end
 
@@ -236,14 +221,14 @@ function M.new(category)
         task.startTime = nil
         releaseTaskModule(task, false)
         if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, string.format("Task '%s' failed after %d attempts. Skipping.", task.name, MAX_RETRIES), "info", true) end
-        queueIndex = (queueIndex or 1) + 1
-        advancePastCompletedOrFailed()
       end
     end
   end
 
   function runner.active()
-    return not isQueueDone()
+    ensureEnv()
+    local currentEnv = Env and Env.get() or "tool"
+    return findNextEligibleTask(currentEnv) ~= nil
   end
 
   return runner

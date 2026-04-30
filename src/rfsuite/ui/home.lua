@@ -1386,14 +1386,20 @@ function M.run(event, touchState)
       local connected = readFblConnected()
 
       if connected and batteryReady and rfReady then
+        local modelName = nil
+        if _G.rfsuite and _G.rfsuite.session then
+          modelName = _G.rfsuite.session.modelName
+        end
         local audioContext = {
           audioState = state.audioState,
           preferences = state.preferences,
-          state = state.telemetryState
+          state = state.telemetryState,
+          modelName = modelName
         }
         Audio.process(audioContext, { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
       else
         state.audioState.initialized = false
+        state.audioState.modelAnnounced = false
       end
     end
 

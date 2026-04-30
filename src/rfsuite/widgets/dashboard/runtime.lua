@@ -149,6 +149,11 @@ end
 
 local function processAudioEvents(self)
   if DashboardAudio and type(DashboardAudio.process) == "function" then
+    local modelName = nil
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+      modelName = _G.rfsuite.session.modelName
+    end
+    self.modelName = modelName
     DashboardAudio.process(self, {
       log = function(msg, level)
         audioLog(self, msg, level)
@@ -272,6 +277,7 @@ local function updateConnectionState(self)
       widgetLog(self, "FBL not ready yet", "info")
       if self.audioState then
         self.audioState.initialized = false
+        self.audioState.modelAnnounced = false
       end
     end
   end

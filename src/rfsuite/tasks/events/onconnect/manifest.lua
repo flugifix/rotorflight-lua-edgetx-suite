@@ -2,4 +2,5 @@
 return {
   "apiversion",
   { name = "flight_stats", context = "widget" },
+  { name = "name", context = "widget" },
 }

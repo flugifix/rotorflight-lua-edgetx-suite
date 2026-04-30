@@ -99,60 +99,41 @@ local function getLocaleModule()
     local ok, mod = pcall(chunk)
     if ok and type(mod) == "table" then
       localeModule = mod
-      if type(_G) == "table" then
-        _G.__rfsuiteSystemLocaleModule = mod
-      end
+      return localeModule
     end
   end
 
-  return localeModule
+  return nil
 end
 
-local function resolveAudioLanguage()
-  local mod = getLocaleModule()
-  if mod and type(mod.resolveAudioFolder) == "function" then
-    local ok, folder = pcall(mod.resolveAudioFolder, AUDIO_DEFAULT_FALLBACK)
-    if ok and (folder == "de" or folder == "en") then
-      return folder
-    end
-  end
-
-  return AUDIO_DEFAULT_FALLBACK
+local function resolveEventPath(relativePath)
+  local locale = (getLocaleModule() and type(getLocaleModule().resolveSystemLanguage) == "function") and getLocaleModule().resolveSystemLanguage("en") or AUDIO_DEFAULT_FALLBACK
+  local path = AUDIO_PACK_BASE .. locale .. "/" .. relativePath
+  return path
 end
 
 local function playResolvedEventFile(relativePath, opts)
-  if type(playFile) ~= "function" or type(relativePath) ~= "string" or relativePath == "" then
-    return false
+  local path = resolveEventPath(relativePath)
+  if type(playFile) == "function" then
+    emitLog(opts, "playFile -> " .. tostring(path), "debug")
+    local ok, err = pcall(playFile, path)
+    if not ok then emitLog(opts, "playFile error: " .. tostring(err), "error") end
+    return ok
   end
-
-  local selectedFolder = resolveAudioLanguage()
-  if selectedFolder ~= "de" and selectedFolder ~= "en" then
-    selectedFolder = AUDIO_DEFAULT_FALLBACK
-  end
-
-  local fullPath = AUDIO_PACK_BASE .. selectedFolder .. "/" .. relativePath
-  emitLog(opts, "playFile -> " .. fullPath, "info")
-  local ok, err = pcall(playFile, fullPath)
-  if not ok then
-    emitLog(opts, "playFile error: " .. tostring(err), "error")
-    -- Rückgabe true, damit das Cooldown greift und Spam/Abstürze vermieden werden
-    return true
-  end
-  return true
+  return false
 end
 
 local function playRawFile(path)
-  if type(playFile) ~= "function" or type(path) ~= "string" or path == "" then
-    return false
+  if type(playFile) == "function" then
+    local ok, _ = pcall(playFile, path)
+    return ok
   end
-  local ok, err = pcall(playFile, path)
-  return ok
+  return false
 end
 
 local function scheduleAudioCooldown(audioState, now, seconds)
   audioState.nextAllowedAt = now + (seconds or 0.25)
 end
-
 
 local function tryPlayEventFile(audioState, now, relativePath, opts)
   if not audioState.lastAlertAt then
@@ -200,22 +181,30 @@ local function getModelName()
   return name
 end
 
-local function announceModelName(audioState)
-  local modelName = getModelName()
-  if not modelName then return end
+local function announceModelName(audioState, modelName, opts)
+  if not modelName or type(modelName) ~= "string" or modelName == "" then return end
 
   local candidates = {
-    AUDIO_ROOT_BASE .. modelName .. ".wav",
-    AUDIO_ROOT_BASE .. string.gsub(modelName, " ", "_") .. ".wav"
+    "/SOUNDS/" .. modelName .. ".wav",
+    "/SOUNDS/" .. string.gsub(modelName, " ", "_") .. ".wav",
+    "SOUNDS/" .. modelName .. ".wav",
+    "SOUNDS/" .. string.gsub(modelName, " ", "_") .. ".wav"
   }
 
-  -- Als angekündigt markieren, um endlose Fehler-Loops zu vermeiden, falls die Datei fehlt
+  -- Als angekündigt markieren, um endlose Fehler loops zu vermeiden
   audioState.modelAnnounced = true
 
   for i = 1, #candidates do
-    if playRawFile(candidates[i]) then
-      audioState.modelAnnounced = true
-      return
+    local path = candidates[i]
+    local f = io.open(path, "r")
+    if f then
+      io.close(f)
+      emitLog(opts, "model announcement -> " .. path, "info")
+      if playRawFile(path) then
+        return
+      end
+    else
+      emitLog(opts, "model announcement file not found: " .. path, "debug")
     end
   end
 end
@@ -254,51 +243,39 @@ local function announceProfileEvent(self, eventKey, value, soundFile, opts)
       local ok, err = pcall(playNumber, rounded, 0)
       if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
     end
-    scheduleAudioCooldown(audioState, now, 0.25)
+    audioState.lastValues[eventKey] = rounded
+    audioState.pendingValues[eventKey] = nil
+  else
+    audioState.lastValues[eventKey] = rounded
   end
-
-  audioState.lastValues[eventKey] = rounded
 end
 
 local function announceArmEvent(self, opts)
+  local value = roundProfileValue(self.state.armFlags)
+  if value == nil then return end
+
   local audioState = self.audioState
-  if not audioState.lastAlertAt then
-    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
-  end
-  local rounded = roundProfileValue(self.state.armFlags)
-  if rounded == nil then return false end
-  if audioState.lastValues.arming_flags == rounded then
-    return false
+  if audioState.lastValues.arming_flags == value then
+    return
   end
 
-  audioState.lastValues.arming_flags = rounded
+  audioState.lastValues.arming_flags = value
   if not audioState.initialized then
-    return false
+    return
   end
 
-  local file = ARM_FILE_MAP[rounded]
-  if type(file) ~= "string" then
-    local armed = false
-    if bit32 and type(bit32.btest) == "function" then
-      armed = bit32.btest(rounded, 1)
-    else
-      armed = rounded ~= 0
-    end
-    file = armed and "armed.wav" or "disarmed.wav"
-  end
-
+  local file = ARM_FILE_MAP[value]
+  if type(file) ~= "string" then return end
   local now = nowSeconds()
-  emitLog(opts, "arming change value=" .. tostring(rounded) .. " file=" .. tostring(file), "info")
-  return tryPlayEventFile(audioState, now, "evt/" .. file, opts)
+  tryPlayEventFile(audioState, now, "evt/" .. file, opts)
 end
 
 local function announceGovernorEvent(self, opts)
+  local value = roundProfileValue(self.state.governor)
+  if value == nil then return false end
+
+  local rounded = value
   local audioState = self.audioState
-  if not audioState.lastAlertAt then
-    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
-  end
-  local rounded = roundProfileValue(self.state.governor)
-  if rounded == nil then return false end
   if audioState.lastValues.governor_state == rounded then
     return false
   end
@@ -330,7 +307,7 @@ function Audio.process(self, opts)
   end
 
   if not audioState.modelAnnounced and prefEnabled(events, "model_announcement", false) then
-    announceModelName(audioState)
+    announceModelName(audioState, self.modelName, opts)
   end
 
   if prefEnabled(events, "arming_flags", true) then
