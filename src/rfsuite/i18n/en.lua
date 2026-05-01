@@ -434,7 +434,7 @@ return {
       total_time = "TOTAL TIME",
       min_cell = "MIN V/CELL",
       min_link = "MIN LINK",
-      bb_ready = "READY",
+      bb_ready = "?",
       bb_rec = "REC",
       bb_logged = "LOGGED",
       status_armed = "ARMED",

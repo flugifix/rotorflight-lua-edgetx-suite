@@ -2,5 +2,6 @@
 return {
   "apiversion",
   { name = "flight_stats", context = "widget" },
+  { name = "dataflash_summary", context = "widget" },
   { name = "name", context = "widget" },
 }

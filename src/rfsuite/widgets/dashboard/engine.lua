@@ -115,13 +115,17 @@ function Engine.renderKey(state, boxSources)
   local rpm = Utils.toNumber(state and state.rpm, 0)
   local flight = Utils.toNumber(state and state.flightSeconds, 0)
   local total = Utils.toNumber(state and state.totalFlightSeconds, 0)
+  local bb_used = state and state.dataflash and state.dataflash.used or 0
+  local bb_total = state and state.dataflash and state.dataflash.total or 0
   local parts = {
     tostring(math.floor(lq + 0.5)),
     tostring(math.floor(fuel + 0.5)),
     tostring(math.floor(rpm + 0.5)),
     tostring(math.floor(flight + 0.5)),
     tostring(math.floor(total + 0.5)),
-    tostring(math.floor(voltage * 10 + 0.5))
+    tostring(math.floor(voltage * 10 + 0.5)),
+    tostring(bb_used),
+    tostring(bb_total)
   }
   if boxSources and state then
     for i = 1, #boxSources do

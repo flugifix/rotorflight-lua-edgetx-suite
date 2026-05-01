@@ -772,9 +772,14 @@ function Runtime.new(zone, options)
     self.state.zoneW = self.zone and self.zone.w or 0
     self.state.zoneH = self.zone and self.zone.h or 0
     readTelemetry(self.state)
-    -- Update flightcount from session if available (from MSP)
-    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session and type(_G.rfsuite.session.flightcount) == "number" then
-      self.state.flights = _G.rfsuite.session.flightcount
+    -- Update session values if available (from MSP)
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+      if type(_G.rfsuite.session.flightcount) == "number" then
+        self.state.flights = _G.rfsuite.session.flightcount
+      end
+      if type(_G.rfsuite.session.dataflash) == "table" then
+        self.state.dataflash = _G.rfsuite.session.dataflash
+      end
     end
     local nextMode = computeFlightMode(self.state)
     local ready, statusLine = updateConnectionState(self)

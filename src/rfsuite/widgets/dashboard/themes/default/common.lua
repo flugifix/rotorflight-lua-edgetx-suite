@@ -162,6 +162,14 @@ end
 
 function Common.blackboxLabel(state)
   if state and state.armed then return t("widgets.dashboard.bb_rec", "REC") end
+
+  if state and state.dataflash and type(state.dataflash.total) == "number" and state.dataflash.total > 0 then
+    -- Convert bytes to MB (using 1048576 = 1024 * 1024)
+    local usedMB = (state.dataflash.used or 0) / 1048576
+    local totalMB = state.dataflash.total / 1048576
+    return string.format("%.1f/%.1fMB", usedMB, totalMB)
+  end
+
   if state and state.hadArmedFlight then return t("widgets.dashboard.bb_logged", "LOGGED") end
   return t("widgets.dashboard.bb_ready", "READY")
 end
@@ -251,6 +259,17 @@ function Common.addMetricCard(nodes, spec)
     font = SMLSIZE
   }
 
+  local valFont = spec.font or MIDSIZE
+  if spec.autoSizeChars then
+    valFont = function()
+      local txt = type(spec.value) == "function" and spec.value() or tostring(spec.value)
+      if #txt > spec.autoSizeChars then
+        return spec.autoSizeFont or SMLSIZE
+      end
+      return type(spec.font) == "function" and spec.font() or (spec.font or MIDSIZE)
+    end
+  end
+
   nodes[#nodes + 1] = {
     type = "label",
     x = spec.x + 6,
@@ -259,7 +278,7 @@ function Common.addMetricCard(nodes, spec)
     text = spec.value,
     color = spec.valueColor or BLACK,
     align = spec.align or CENTER,
-    font = spec.font or MIDSIZE
+    font = valFont
   }
 
   if spec.note then
@@ -320,7 +339,8 @@ function Common.buildPreflight(zone, state)
     h = smallH,
     title = "BLACKBOX",
     value = function() return Common.blackboxLabel(state) end,
-    font = MIDSIZE
+    font = MIDSIZE,
+    autoSizeChars = 12
   })
   Common.addMetricCard(nodes, {
     x = zone.x + smallW + boxGap,
