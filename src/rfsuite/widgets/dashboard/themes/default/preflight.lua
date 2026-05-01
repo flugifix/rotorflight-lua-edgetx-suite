@@ -8,7 +8,7 @@ Theme.layout = { cols = 20, rows = 8, padding = 1 }
 
 Theme.boxes = function(_, state)
 	return {
-		{ col = 1, row = 1, colspan = 12, rowspan = 4, type = "image", subtype = "model", bgcolor = BLACK },
+		{ col = 1, row = 1, colspan = 12, rowspan = 4, type = "image", subtype = "model", bgcolor = BLACK, textcolor = WHITE, titlecolor = GREY_DEFAULT },
 		{ col = 1, row = 5, colspan = 6, rowspan = 2, type = "time", subtype = "flight", font = autoFont, title = "@i18n(widgets.dashboard.time)@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK },
 		{ col = 7, row = 5, colspan = 6, rowspan = 2, type = "text", subtype = "blackbox", font = autoFont, title = "@i18n(widgets.dashboard.blackbox)@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK },
 		{ col = 1, row = 7, colspan = 3, rowspan = 2, type = "text", subtype = "telemetry", font = autoFont, source = "pid_profile", title = "@i18n(widgets.dashboard.profile)@", titlepos = "bottom", transform = "floor", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK },
