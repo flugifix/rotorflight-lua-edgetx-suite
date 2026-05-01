@@ -72,13 +72,10 @@ local function ensureEvents()
   end
 end
 
-local function ensureLog()
-  if not Log then
-    Log = loadModule("lib/log.lua")
-  end
+local Log = nil
+if Log == nil then
+  Log = loadModule("lib/log.lua") or false
 end
-
-ensureLog()
 
 local function ensurePageRegistry()
   if not PageRegistry then

@@ -1,15 +1,6 @@
 local M = {}
 
 local Log = nil
-local function ensureLog()
-  if Log then return end
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
-  if type(chunk) ~= "function" then return end
-  local ok, mod = pcall(chunk)
-  if ok and type(mod) == "table" and type(mod.emit) == "function" then
-    Log = mod
-  end
-end
 
 local unpack_fn = table.unpack or unpack
 local function safeCall(fn, ...)
@@ -28,7 +19,21 @@ end
 function M.show(ctx)
   local title = (ctx and ctx.title) or "Unsupported MSP API"
   local message = (ctx and ctx.message) or ""
-  ensureLog()
+
+  if Log == nil then
+    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
+    if type(chunk) == "function" then
+      local ok, mod = pcall(chunk)
+      if ok and type(mod) == "table" and type(mod.emit) == "function" then
+        Log = mod
+      else
+        Log = false
+      end
+    else
+      Log = false
+    end
+  end
+
   -- Deduplicate: prefer an API-version-based key so different localized
   -- titles/messages for the same API version don't show twice. Keep a set
   -- of shown keys in `_G.rfsuite._msp_unsupported_dialog_shown_keys`.

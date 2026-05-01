@@ -1,15 +1,6 @@
 local M = {}
 
 local Log = nil
-local function ensureLog()
-  if Log then return end
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
-  if type(chunk) ~= "function" then return end
-  local ok, mod = pcall(chunk)
-  if ok and type(mod) == "table" and type(mod.emit) == "function" then
-    Log = mod
-  end
-end
 
 local unpack_fn = table.unpack or unpack
 local function safeCall(fn, ...)
@@ -34,8 +25,21 @@ function M.show(ctx)
   local onConfirm = ctx and ctx.onConfirm
   local onCancel = ctx and ctx.onCancel
 
-  ensureLog()
-  if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl types: message=" .. tostring(type(lvgl and lvgl.message)), "debug", true) end
+  if Log == nil then
+    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
+    if type(chunk) == "function" then
+      local ok, mod = pcall(chunk)
+      if ok and type(mod) == "table" and type(mod.emit) == "function" then
+        Log = mod
+      else
+        Log = false
+      end
+    else
+      Log = false
+    end
+  end
+
+  if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl types: message=" .. tostring(type(lvgl and lvgl.message)), "debug", true) end
 
   local handled = false
   local function doConfirm()

@@ -28,26 +28,21 @@ function M.new(category)
   local Log = nil
   local Env = nil
 
-  local function ensureLog()
-    if not Log then Log = loadModule("lib/log.lua") end
-  end
-
   local function ensureEnv()
     if not Env then Env = loadModule("lib/env.lua") end
   end
 
   local function loadManifest()
+    if Log == nil then Log = loadModule("lib/log.lua") or false end
     local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. MANIFEST_PATH, "t")
     if type(chunk) ~= "function" then
-      ensureLog()
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "manifest missing: " .. tostring(MANIFEST_PATH), "debug", true) end
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "manifest missing: " .. tostring(MANIFEST_PATH), "debug", true) end
       tasksLoaded = true
       return
     end
     local ok, manifest = pcall(chunk)
     if not ok or type(manifest) ~= "table" then
-      ensureLog()
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "invalid manifest: " .. tostring(MANIFEST_PATH), "debug", true) end
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "invalid manifest: " .. tostring(MANIFEST_PATH), "debug", true) end
       tasksLoaded = true
       return
     end
@@ -163,7 +158,7 @@ function M.new(category)
   end
 
   function runner.wakeup(args)
-    ensureLog()
+    if Log == nil then Log = loadModule("lib/log.lua") or false end
     if not tasksLoaded then runner.findTasks() end
     if #tasksQueue == 0 then return end
 

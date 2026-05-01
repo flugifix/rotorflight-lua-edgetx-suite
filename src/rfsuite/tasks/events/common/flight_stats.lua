@@ -6,16 +6,6 @@ local requestSent = false
 local flightStats = nil
 local Log = nil
 
-local function ensureLog()
-  if not Log then
-    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
-    if type(chunk) == "function" then
-      local ok, mod = pcall(chunk)
-      if ok and type(mod) == "table" then Log = mod end
-    end
-  end
-end
-
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
   local chunk = loadScript(fullPath, "t")
@@ -26,7 +16,10 @@ local function loadModule(path)
 end
 
 function M.wakeup(args)
-  ensureLog()
+  if Log == nil then
+    Log = loadModule("lib/log.lua") or false
+  end
+
   if done then return end
 
   local root = _G and _G.rfsuite
@@ -50,7 +43,7 @@ function M.wakeup(args)
     return
   end
 
-  if Log and type(Log.emit) == "function" then
+  if type(Log) == "table" and type(Log.emit) == "function" then
     pcall(Log.emit, "rfsuite.tasks.flight_stats", "MSP request for flight_stats (cmd=" .. tostring(flightStats.command) .. ") via queue", "debug", true)
   end
 
@@ -64,13 +57,13 @@ function M.wakeup(args)
         session.flightcount = stats.flightcount
       end
       done = true
-      if Log and type(Log.emit) == "function" then
+      if type(Log) == "table" and type(Log.emit) == "function" then
         pcall(Log.emit, "rfsuite.tasks.flight_stats", "flight_stats received: " .. tostring(stats and stats.flightcount), "debug", true)
       end
     end,
     errorHandler = function()
       done = true
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.flight_stats", "flight_stats read failed", "warn", true) end
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.flight_stats", "flight_stats read failed", "warn", true) end
     end
   })
 end

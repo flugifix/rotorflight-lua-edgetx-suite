@@ -11,10 +11,6 @@ local function loadModule(path)
   return mod
 end
 
-local function ensureLog()
-  if not Log then Log = loadModule("lib/log.lua") end
-end
-
 local done = false
 
 local function nowSeconds()
@@ -28,7 +24,9 @@ end
 
 function M.wakeup()
   if done then return end
-  ensureLog()
+  if Log == nil then
+    Log = loadModule("lib/log.lua") or false
+  end
 
   local root = _G and _G.rfsuite
   if type(root) ~= "table" then return end
@@ -58,8 +56,7 @@ function M.wakeup()
           message = msg,
           version = tostring(session.apiVersion or "?"),
           onFallback = function(t, m)
-            ensureLog()
-            if Log and type(Log.emit) == "function" then
+            if type(Log) == "table" and type(Log.emit) == "function" then
               pcall(Log.emit, "rfsuite.tasks.apiversion", "Unsupported MSP API: " .. tostring(session.apiVersion), "warn", true)
             end
           end
