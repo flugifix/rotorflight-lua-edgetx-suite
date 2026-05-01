@@ -167,7 +167,7 @@ function Common.blackboxLabel(state)
     -- Convert bytes to MB (using 1048576 = 1024 * 1024)
     local usedMB = (state.dataflash.used or 0) / 1048576
     local totalMB = state.dataflash.total / 1048576
-    return string.format("%.1f/%.1fMB", usedMB, totalMB)
+    return string.format("%.1f/%.0fMB", usedMB, totalMB)
   end
 
   if state and state.hadArmedFlight then return t("widgets.dashboard.bb_logged", "LOGGED") end
