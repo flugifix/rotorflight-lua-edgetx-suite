@@ -101,22 +101,29 @@ end
 local function ensureVersionDeps()
   if not ApiVersionApi then
     ApiVersionApi = loadModule("tasks/msp/api/api_version.lua")
+    return false
   end
   if not FcVersionApi then
     FcVersionApi = loadModule("tasks/msp/api/fc_version.lua")
+    return false
   end
   if not Version then
     Version = loadModule("lib/version.lua")
+    return false
   end
+  return true
 end
 
 local function ensureUidDep()
   if not UidApi then
     UidApi = loadModule("tasks/msp/api/uid.lua")
+    return false
   end
   if not ModelPreferences then
     ModelPreferences = loadModule("lib/model_preferences.lua")
+    return false
   end
+  return true
 end
 
 local function ensureRootState()
@@ -271,16 +278,18 @@ end
 
 local function enqueueVersionReads(now)
   if not state.pendingVersionRead then
-    return
+    return true
   end
   if not state.queue or not state.queue:isProcessed() then
-    return
+    return true
   end
   if state.requestBackoffUntil and now < state.requestBackoffUntil then
-    return
+    return true
   end
 
-  ensureVersionDeps()
+  if not ensureVersionDeps() then
+    return false
+  end
   state.pendingVersionRead = false
   state.queue:add({
     command = ApiVersionApi.command,
@@ -328,22 +337,26 @@ local function enqueueVersionReads(now)
       publish()
     end
   })
+  
+  return true
 end
 
 local function enqueueUidRead(now)
   if not state.pendingUidRead then
-    return
+    return true
   end
   if not state.queue or not state.queue:isProcessed() then
-    return
+    return true
   end
   if state.requestBackoffUntil and now < state.requestBackoffUntil then
-    return
+    return true
   end
-  ensureUidDep()
+  if not ensureUidDep() then
+    return false
+  end
   if not UidApi or type(UidApi.parse) ~= "function" then
     state.pendingUidRead = false
-    return
+    return true
   end
 
   state.pendingUidRead = false
@@ -364,35 +377,42 @@ local function enqueueUidRead(now)
       publish()
     end
   })
+  
+  return true
 end
 
 local function ensureTelemetrySyncDeps()
   if not TelemetryConfigApi then
     TelemetryConfigApi = loadModule("tasks/msp/api/telemetry_config.lua")
+    return false
   end
   if not TelemetrySyncClass then
     TelemetrySyncClass = loadModule("tasks/msp/telemetry_sync.lua")
+    return false
   end
+  return true
 end
 
 local function enqueueTelemetryConfigRead(now)
   if not state.pendingTelemetryConfigRead then
-    return
+    return true
   end
   if state.telemetryAutoSyncDone == true then
     state.pendingTelemetryConfigRead = false
-    return
+    return true
   end
   if not state.queue or not state.queue:isProcessed() then
-    return
+    return true
   end
   if state.requestBackoffUntil and now < state.requestBackoffUntil then
-    return
+    return true
   end
-  ensureTelemetrySyncDeps()
+  if not ensureTelemetrySyncDeps() then
+    return false
+  end
   if not TelemetryConfigApi or type(TelemetryConfigApi.parse) ~= "function" then
     state.pendingTelemetryConfigRead = false
-    return
+    return true
   end
 
   state.pendingTelemetryConfigRead = false
@@ -423,6 +443,8 @@ local function enqueueTelemetryConfigRead(now)
       publish()
     end
   })
+  
+  return true
 end
 
 local function doDisconnect(now, reason)

@@ -26,8 +26,8 @@ local function getLocaleModule()
     return localeModule
   end
 
-  if type(_G) == "table" and type(_G.__rfsuiteSystemLocaleModule) == "table" then
-    localeModule = _G.__rfsuiteSystemLocaleModule
+  if type(_G) == "table" and type(_G.__rfsuite_system_locale_module) == "table" then
+    localeModule = _G.__rfsuite_system_locale_module
     return localeModule
   end
 
@@ -37,7 +37,7 @@ local function getLocaleModule()
     if ok and type(mod) == "table" then
       localeModule = mod
       if type(_G) == "table" then
-        _G.__rfsuiteSystemLocaleModule = mod
+        _G.__rfsuite_system_locale_module = mod
       end
     end
   end

@@ -78,6 +78,8 @@ local function ensureLog()
   end
 end
 
+ensureLog()
+
 local function ensurePageRegistry()
   if not PageRegistry then
     PageRegistry = loadModule("app/pages/init.lua")
@@ -311,7 +313,6 @@ local function logMemoryUsage(now)
 
   local line = "[mem][info] lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
   local msg = "lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
-  ensureLog()
   pcall(Log.emit, "mem", msg, "info", true)
 end
 
@@ -323,7 +324,7 @@ local function resolveLocaleFromSystem()
     local ok, localeMod = pcall(chunk)
     if ok and type(localeMod) == "table" and type(localeMod.resolveSystemLanguage) == "function" then
       if type(_G) == "table" then
-        _G.__rfsuiteSystemLocaleModule = localeMod
+        _G.__rfsuite_system_locale_module = localeMod
       end
       local okResolve, locale = pcall(localeMod.resolveSystemLanguage, "en")
       if okResolve and type(locale) == "string" and locale ~= "" then
@@ -757,7 +758,6 @@ local function onReload()
       local title = tr("app.pages.settings_general.reload_confirm", "Confirm on Reload")
       local message = tr("app.dialogs.confirm_reload", "Reload and discard unsaved changes?")
 
-      ensureLog()
       pcall(Log.emit, "rfsuite", "onReload invoked; reloadPref=true", "debug", true)
       if lvgl then
         pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
@@ -774,20 +774,17 @@ local function onReload()
           onCancel = function() end,
           onFallback = doPageReload
         })
-        ensureLog()
         if ok and res == true then return end
       end
 
       if type(lvgl.confirm) == "function" then
         local ok, res = pcall(lvgl.confirm, { title = title, message = message })
-        ensureLog()
         pcall(Log.emit, "rfsuite", "called lvgl.confirm; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
         if ok and res == true then doPageReload() end
         return
       end
 
       -- Fallback: no confirm UI available — proceed with reload.
-      ensureLog()
       pcall(Log.emit, "rfsuite", "no confirm API available; performing reload fallback", "debug", true)
       doPageReload()
       return
@@ -808,7 +805,6 @@ end
 
 local function onSave()
   local page = getActivePageModule()
-
   if page and page.onSave then
     closeHelpDialogIfOpen()
 
@@ -846,7 +842,6 @@ local function onSave()
       local title = tr("app.pages.settings_general.save_confirm", "Confirm on Save")
       local message = tr("app.dialogs.confirm_save", "Save changes?")
 
-      ensureLog()
       pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug", true)
       if lvgl then
         pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
@@ -863,20 +858,17 @@ local function onSave()
           onCancel = function() end,
           onFallback = doPageSave
         })
-        ensureLog()
         if ok and res == true then return end
       end
 
       if type(lvgl.confirm) == "function" then
         local ok, res = pcall(lvgl.confirm, { title = title, message = message })
-        ensureLog()
         pcall(Log.emit, "rfsuite", "called lvgl.confirm; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
         if ok and res == true then doPageSave() end
         return
       end
 
       -- Fallback: no confirm API available — proceed with save.
-      ensureLog()
       pcall(Log.emit, "rfsuite", "no confirm API available; performing save fallback", "debug", true)
       doPageSave()
       return
@@ -932,6 +924,7 @@ function M.buildUI()
   if lvgl == nil then return end
 
   ensureBuildDeps()
+
 
   if state.loadingMenuId then
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
@@ -1348,7 +1341,6 @@ function M.run(event, touchState)
         requestRebuild = function() scheduleBuildUI(false) end
       })
       if not ok then
-        ensureLog()
         pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error", true)
         if type(serialWrite) == "function" then
           pcall(serialWrite, "[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err) .. "\n")

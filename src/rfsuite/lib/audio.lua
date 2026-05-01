@@ -15,7 +15,7 @@ local function setGlobalLowVoltageAt(val)
   end
 end
 
-local AUDIO_PACK_BASE = "/SOUNDS/rf/"
+local AUDIO_PACK_BASE = "/SOUNDS/"
 local AUDIO_DEFAULT_FALLBACK = "en"
 local AUDIO_ROOT_BASE = "/audio/"
 local localeModule = nil
@@ -89,8 +89,8 @@ local function getLocaleModule()
     return localeModule
   end
 
-  if type(_G) == "table" and type(_G.__rfsuiteSystemLocaleModule) == "table" then
-    localeModule = _G.__rfsuiteSystemLocaleModule
+  if type(_G) == "table" and type(_G.__rfsuite_system_locale_module) == "table" then
+    localeModule = _G.__rfsuite_system_locale_module
     return localeModule
   end
 
@@ -108,8 +108,17 @@ end
 
 local function resolveEventPath(relativePath)
   local locale = (getLocaleModule() and type(getLocaleModule().resolveSystemLanguage) == "function") and getLocaleModule().resolveSystemLanguage("en") or AUDIO_DEFAULT_FALLBACK
-  local path = AUDIO_PACK_BASE .. locale .. "/" .. relativePath
-  return path
+  
+  -- 1. Try namespaced folder (Rotorflight standard)
+  local rfPath = AUDIO_PACK_BASE .. "rf/" .. locale .. "/" .. relativePath
+  local f = io.open(rfPath, "r")
+  if f then
+    io.close(f)
+    return rfPath
+  end
+
+  -- 2. Fallback to standard language folder
+  return AUDIO_PACK_BASE .. locale .. "/" .. relativePath
 end
 
 local function playResolvedEventFile(relativePath, opts)

@@ -748,17 +748,14 @@ function Runtime.new(zone, options)
     self.boxSources = sources
   end
 
-  function widget.update(self, newOptions)
-    self.options = newOptions
-    self.built = false
-  end
-
-
-  function widget.refresh(self)
+  local function performBackgroundWork(self)
     local now = nowSeconds()
-    if not self._lastRefreshTick then self._lastRefreshTick = 0 end
-    if (now - self._lastRefreshTick) < 0.1 then return end
-    self._lastRefreshTick = now
+    if self._lastWorkTick == now then return self.connectionReady end
+    self._lastWorkTick = now
+
+    if not self._lastLogicTick then self._lastLogicTick = 0 end
+    if (now - self._lastLogicTick) < 0.1 then return self.connectionReady end
+    self._lastLogicTick = now
 
     -- Set event context to 'widget' before events wakeup
     if type(_G) == "table" then
@@ -781,13 +778,42 @@ function Runtime.new(zone, options)
     end
     local nextMode = computeFlightMode(self.state)
     local ready, statusLine = updateConnectionState(self)
+    if statusLine ~= nil then self.statusLine = statusLine end
 
     if ready then
       processAudioEvents(self)
     end
 
-    if not ready and nextMode ~= "postflight" then
-      local splashKey = "splash|" .. tostring(statusLine or "") .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
+    local modelPrefs = nil
+    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
+      modelPrefs = _G.rfsuite.session.modelPreferences
+    end
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, nextMode)
+
+    if nextMode ~= self.flightMode then
+      self.flightMode = nextMode
+      reloadActiveTheme(self)
+    elseif selectedTheme ~= self.themePath then
+      reloadActiveTheme(self)
+    elseif not self.theme then
+      reloadActiveTheme(self)
+    end
+    
+    return ready
+  end
+
+  function widget.update(self, newOptions)
+    self.options = newOptions
+    self.built = false
+  end
+
+
+  function widget.refresh(self)
+    local ready = performBackgroundWork(self)
+
+    if not ready and self.flightMode ~= "postflight" then
+      local statusLine = self.statusLine or "Please wait..."
+      local splashKey = "splash|" .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
       if self.renderKey ~= splashKey then
         self.renderKey = splashKey
         self.built = false
@@ -800,24 +826,6 @@ function Runtime.new(zone, options)
         lvgl.build(buildConnectionSplash(self.zone, statusLine, title))
         self.built = true
       end
-      return
-    end
-
-    local modelPrefs = nil
-    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
-      modelPrefs = _G.rfsuite.session.modelPreferences
-    end
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, nextMode)
-
-    if nextMode ~= self.flightMode then
-      self.flightMode = nextMode
-      reloadActiveTheme(self)
-      return
-    elseif selectedTheme ~= self.themePath then
-      reloadActiveTheme(self)
-      return
-    elseif not self.theme then
-      reloadActiveTheme(self)
       return
     end
 
@@ -852,41 +860,7 @@ function Runtime.new(zone, options)
   end
 
   function widget.background(self)
-    local now = nowSeconds()
-    if not self._lastBgTick then self._lastBgTick = 0 end
-    if (now - self._lastBgTick) < 0.1 then return 0 end
-    self._lastBgTick = now
-
-    -- Set event context to 'widget' before events wakeup
-    if type(_G) == "table" then
-      _G.rfsuite = _G.rfsuite or {}
-      _G.rfsuite.session = _G.rfsuite.session or {}
-      _G.rfsuite.session.event_context = "widget"
-    end
-    tickMspRuntime(self)
-    -- Clear event_context immediately after events
-    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
-      _G.rfsuite.session.event_context = nil
-    end
-    reloadPreferencesIfNeeded(self, false)
-    readTelemetry(self.state)
-    local ready = updateConnectionState(self)
-    if ready then
-      processAudioEvents(self)
-    end
-    local nextMode = computeFlightMode(self.state)
-    local modelPrefs = nil
-    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
-      modelPrefs = _G.rfsuite.session.modelPreferences
-    end
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, nextMode)
-
-    if nextMode ~= self.flightMode then
-      self.flightMode = nextMode
-      reloadActiveTheme(self)
-    elseif selectedTheme ~= self.themePath then
-      reloadActiveTheme(self)
-    end
+    performBackgroundWork(self)
     return 0
   end
 

@@ -1,7 +1,26 @@
 local Wrapper = {}
 
-local utils = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/common.lua", "t"))()
-local themeCommon = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/default/common.lua", "t"))()
+local function loadModule(path, globalKey)
+  if globalKey and _G[globalKey] then return _G[globalKey] end
+  local chunk = loadScript(path, "t")
+  if not chunk then return nil end
+  local ok, mod = pcall(chunk)
+  if ok and type(mod) == "table" then
+    if globalKey then _G[globalKey] = mod end
+    return mod
+  end
+  return nil
+end
+
+
+
+local function getUtils()
+  return loadModule("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/common.lua", "__rfsuiteObjectsCommonModule")
+end
+
+local function getThemeCommon()
+  return loadModule("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/default/common.lua", "__rfsuiteThemeDefaultCommonModule")
+end
 
 local function rgb(hex, fallback)
   if lcd and type(lcd.RGB) == "function" then
@@ -11,11 +30,14 @@ local function rgb(hex, fallback)
 end
 
 local ARC_BG_COLOR = rgb(0x444444, GREY_DEFAULT)
-local ARC_OK_COLOR = rgb(0x00FF00, GREEN or COLOR_THEME_PRIMARY1)
-local ARC_WARN_COLOR = rgb(0xFF8000, COLOR_THEME_WARNING)
-local ARC_ALERT_COLOR = rgb(0xFF0000, COLOR_THEME_WARNING)
+local ARC_OK_COLOR = rgb(0x00FF00, GREEN or 0x00FF00)
+local ARC_WARN_COLOR = rgb(0xFF8000, 0xFF8000)
+local ARC_ALERT_COLOR = rgb(0xFF0000, 0xFF0000)
 
-local function getArcValueColor(value, state, box)
+local function getArcValueColor(value, state, box, themeCommon, utils)
+   if type(value) ~= "number" or value <= 0 then
+    return ARC_BG_COLOR
+  end
   if type(value) ~= "number" or value <= 0 then
     return ARC_BG_COLOR
   end
@@ -23,7 +45,7 @@ local function getArcValueColor(value, state, box)
   local cells = 1
   if themeCommon and type(themeCommon.estimateCellCount) == "function" then
     cells = math.max(1, themeCommon.estimateCellCount(state))
-  else
+  elseif utils then
     local maxValue = utils.toNumber(utils.resolveValue(box.max, box, state), 25.2)
     if type(maxValue) == "number" and maxValue > 0 then
       cells = math.max(1, math.floor((maxValue / 4.2) + 0.5))
@@ -45,29 +67,9 @@ local function getArcValueColor(value, state, box)
   return ARC_OK_COLOR
 end
 
-local function renderArc(nodes, rect, box, state)
+local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local source = utils.resolveValue(box.source, box, state)
   local gaugeValue = utils.toNumber(utils.mapTelemetrySource(source, state), 0)
-  -- Logging-Setup (nur einmal pro Render)
-  local log = nil
-  if _G and _G.rfsuite and _G.rfsuite.log then log = _G.rfsuite.log end
-  local function safeLog(msg)
-    if log and type(log.emit) == "function" then pcall(log.emit, "rfsuite.widgets.gauge", msg, "warn", true) end
-  end
-
-  -- Schutz gegen nil/fehlerhafte Werte
-  if not rect or not rect.x or not rect.y or not rect.w or not rect.h then
-    safeLog("rect invalid: " .. tostring(rect))
-    return
-  end
-  if not box then
-    safeLog("box is nil")
-    return
-  end
-  if not state then
-    safeLog("state is nil")
-    return
-  end
 
   -- Statische Werte cachen
   box._gaugeMin = box._gaugeMin or utils.toNumber(utils.resolveValue(box.min, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_min, 18.0))
@@ -76,14 +78,7 @@ local function renderArc(nodes, rect, box, state)
   local gaugeMax = box._gaugeMax
 
   -- Schutz gegen extreme Werte
-  if gaugeMin == gaugeMax or gaugeMax - gaugeMin < 0.1 then
-    safeLog("gaugeMin == gaugeMax oder Range zu klein: min=" .. tostring(gaugeMin) .. ", max=" .. tostring(gaugeMax))
-    return
-  end
-  if math.abs(gaugeValue) > 1000 then
-    safeLog("gaugeValue extrem: " .. tostring(gaugeValue))
-    return
-  end
+  if gaugeMin == gaugeMax or gaugeMax - gaugeMin < 0.1 then return end
 
   local ratio = 0
   if gaugeMax > gaugeMin then
@@ -99,14 +94,13 @@ local function renderArc(nodes, rect, box, state)
   local thickness = math.max(5, math.floor(radius * 0.18))
   local startAngle = utils.toNumber(utils.resolveValue(box.arcstart, box, state), 135)
   local endAngle = utils.toNumber(utils.resolveValue(box.arcend, box, state), 405)
-  if endAngle <= startAngle then
-    endAngle = startAngle + 250
-  end
+  
+  if endAngle <= startAngle then endAngle = startAngle + 250 end
   local sweep = endAngle - startAngle
   local valueEndAngle = startAngle + math.floor(sweep * ratio + 0.5)
 
   local arcBgColor = box.fillbgcolor or ARC_BG_COLOR
-  local arcValueColor = box.fillcolor or getArcValueColor(gaugeValue, state, box)
+  local arcValueColor = box.fillcolor or getArcValueColor(gaugeValue, state, box, themeCommon, utils)
 
   nodes[#nodes + 1] = {
     type = "arc",
@@ -135,16 +129,14 @@ local function renderArc(nodes, rect, box, state)
   end
 
   local valueY = cy - math.floor(thickness * 0.5)
-  if valueY < rect.y + 10 then
-    valueY = rect.y + 10
-  end
+  if valueY < rect.y + 10 then valueY = rect.y + 10 end
 
   utils.pushLabel(
     nodes,
     rect.x + 4,
     valueY,
     rect.w - 8,
-    themeCommon.formatVoltage(gaugeValue),
+    (themeCommon and type(themeCommon.formatVoltage) == "function") and themeCommon.formatVoltage(gaugeValue) or tostring(gaugeValue),
     box.textcolor or BLACK,
     box.valuealign or box.titlealign or CENTER,
     DBLSIZE
@@ -152,8 +144,12 @@ local function renderArc(nodes, rect, box, state)
 end
 
 function Wrapper.render(nodes, rect, box, state)
+  local utils = getUtils()
+  local themeCommon = getThemeCommon()
+  if not utils then return end
+
   utils.drawContainer(nodes, rect, box, state)
-  renderArc(nodes, rect, box or {}, state)
+  renderArc(nodes, rect, box or {}, state, themeCommon, utils)
 end
 
 return Wrapper

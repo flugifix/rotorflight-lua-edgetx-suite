@@ -123,9 +123,22 @@ function Engine.renderKey(state, boxSources)
     tostring(math.floor(total + 0.5)),
     tostring(math.floor(voltage * 10 + 0.5))
   }
-  if boxSources then
+  if boxSources and state then
     for i = 1, #boxSources do
-      local v = Sensors.getValue(boxSources[i])
+      local source = boxSources[i]
+      local v = nil
+      -- Zuerst im State suchen (wird in readTelemetry aktualisiert)
+      if source == "esc_temp" then v = state.escTemp
+      elseif source == "mcu_temp" then v = state.mcuTemp
+      elseif source == "pid_profile" then v = state.profile
+      elseif source == "rate_profile" then v = state.rateProfile
+      elseif source == "battery_profile" then v = state.batteryProfile
+      elseif source == "governor" then v = state.governor
+      else
+        -- Fallback auf Sensors, aber gedrosselt oder nur wenn absolut nötig
+        -- In der Regel sollten alle wichtigen Dashboard-Quellen im State sein
+        v = state[source]
+      end
       parts[#parts + 1] = (type(v) == "number") and tostring(math.floor(v * 10 + 0.5)) or "x"
     end
   end

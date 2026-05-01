@@ -1,9 +1,14 @@
+if type(_G) == "table" and type(_G.__rfsuite_system_locale_module) == "table" then
+  return _G.__rfsuite_system_locale_module
+end
+
 local M = {}
 
 local function trace(message)
-  if type(print) == "function" then
-    print("[system_locale] " .. tostring(message))
-  end
+  -- Silenced to reduce log spam in production
+  -- if type(print) == "function" then
+  --   print("[system_locale] " .. tostring(message))
+  -- end
 end
 
 local function normalizeLanguage(value)
@@ -43,6 +48,10 @@ function M.resolveAudioFolder(defaultFolder)
     return "en"
   end
   return lang
+end
+
+if type(_G) == "table" then
+  _G.__rfsuite_system_locale_module = M
 end
 
 return M

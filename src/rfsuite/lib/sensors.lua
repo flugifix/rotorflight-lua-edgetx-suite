@@ -19,6 +19,8 @@ end
 local SIM_SENSOR_PATHS = {
   "/SCRIPTS/TOOLS/rfsuite-core/sim/sensors/",
   "/SCRIPTS/TOOLS/rfsuite.user/sim/sensors/",
+  "/SCRIPTS/rfsuite-core/sim/sensors/",
+  "SCRIPTS/TOOLS/rfsuite-core/sim/sensors/",
 }
 local SIM_FILE_ALIASES = {
   ["PID#"] = "pid_profile",
@@ -33,6 +35,9 @@ local SIM_FILE_ALIASES = {
   ["Thr%"] = "throttle_percent",
   ["Cel#"] = "cell_count",
   ["Alt"] = "altitude",
+  ["voltage"] = "voltage",
+  ["fuel"] = "fuel",
+  ["rpm"] = "rpm",
 }
 
 local debugEnabled = false
@@ -66,16 +71,19 @@ local fieldInfoCache = {}
 local valueMisses = {}
 
 local function readTelemetryValue(name)
-  if type(name) ~= "string" or type(getValue) ~= "function" then return nil end
+  if type(name) ~= "string" then return nil end
+  local getV = _G.getValue
+  if type(getV) ~= "function" then return nil end
 
   local now = nowSeconds()
-  if now - (valueMisses[name] or 0) < 2.0 then return nil end
+  if now - (valueMisses[name] or 0) < 1.0 then return nil end
 
-  if getFieldInfo then
+  local getFInfo = _G.getFieldInfo
+  if type(getFInfo) == "function" then
     local info = fieldInfoCache[name]
     if not info then
-      info = getFieldInfo(name)
-      if info and info.id ~= nil then
+      info = getFInfo(name)
+      if type(info) == "table" and info.id ~= nil then
         fieldInfoCache[name] = info
       else
         valueMisses[name] = now
@@ -83,7 +91,8 @@ local function readTelemetryValue(name)
       end
     end
   end
-  local ok, value = pcall(getValue, name)
+
+  local ok, value = pcall(getV, name)
   if ok and type(value) == "number" then
     return value
   end
@@ -92,84 +101,157 @@ local function readTelemetryValue(name)
   return nil
 end
 
-local function readSimSensorFile(name)
+local SIM_SENSOR_PATHS = {
+  "/SCRIPTS/TOOLS/rfsuite-core/sim/sensors/",
+  "/SCRIPTS/TOOLS/rfsuite.user/sim/sensors/",
+  "/SCRIPTS/rfsuite-core/sim/sensors/",
+  "SCRIPTS/TOOLS/rfsuite-core/sim/sensors/",
+  "/rfsuite-core/sim/sensors/",
+  "rfsuite-core/sim/sensors/",
+}
+local function readSimSensorFile(name, source)
   if type(name) ~= "string" or name == "" then return nil end
-  
+
   local now = nowSeconds()
+  -- Negativ-Cache wieder aktivieren um CPU Last bei fehlenden Dateien zu senken
   if (Sensors.sim_search_misses[name] or 0) > 0 and (now - Sensors.sim_search_misses[name]) < 2.0 then
     return nil
   end
 
-  local candidates = {}
-  local function addCandidate(value)
-    if type(value) ~= "string" or value == "" then return end
-    for i = 1, #candidates do
-      if candidates[i] == value then return end
+  local function tryReadFile(filePath)
+    local cached = simValueCache[filePath]
+    if cached then
+      if cached.exists then
+        local v = cached.v
+        -- Führe das gecachte Skript aus, um dynamische Werte (math.random) zu erhalten
+        if cached.chunk then
+          local ok, result = pcall(cached.chunk)
+          if ok and type(result) == "number" then
+            v = result
+          end
+        end
+        
+        -- Skript alle 2 Sekunden neu laden, um Änderungen an der Datei zu übernehmen
+        if (now - cached.t) > 2.0 then
+          -- Drosselung: Maximal ein Skript-Reload pro Tick, um CPU-Spitzen zu vermeiden
+          if _G.__rfsuite_sim_last_reload ~= now then
+            _G.__rfsuite_sim_last_reload = now
+            local chunk = loadScript(filePath, "t")
+            if chunk then
+              cached.chunk = chunk
+            else
+              -- Datei wurde evtl. gelöscht
+              local f = io.open(filePath, "r")
+              if not f then cached.exists = false end
+              if f then io.close(f) end
+            end
+            cached.t = now
+          end
+        end
+        return v, true
+      else
+        -- Datei existierte beim letzten Check nicht, 2 Sekunden lang ignorieren
+        if (now - cached.t) <= 2.0 then
+          return nil, false
+        end
+      end
     end
+
+    -- Erst mit io.open prüfen ob die Datei existiert um -E- Log-Spam von loadScript zu vermeiden
+    local f = io.open(filePath, "r")
+    if not f then 
+      simValueCache[filePath] = { t = now, exists = false, v = nil }
+      return nil, false 
+    end
+    io.close(f)
+
+    -- Datei existiert, nun als Lua-Skript ausführen und cachen
+    local chunk = loadScript(filePath, "t")
+    local v = nil
+    if chunk then
+      local ok, result = pcall(chunk)
+      if ok and type(result) == "number" then
+        v = result
+      end
+    end
+    simValueCache[filePath] = { t = now, exists = true, v = v, chunk = chunk }
+    return v, true
+  end
+
+  -- 1. Bereits erfolgreichen Pfad probieren (O(1))
+  -- ... (rest of the logic)
+
+
+  local activePath = Sensors.sim_active_paths and Sensors.sim_active_paths[name]
+  if activePath then
+    local v, hit = tryReadFile(activePath)
+    if hit then return v end
+  end
+
+  -- 2. Kandidatenliste aufbauen
+  -- Drosselung: Nur ein intensiver Suchlauf nach fehlenden Dateien pro Tick, um CPU-Limit zu vermeiden
+  if _G.__rfsuite_sim_last_search == now then
+    return nil
+  end
+  _G.__rfsuite_sim_last_search = now
+
+  local candidates = {}
+  local seenCands = {}
+  local function addCandidate(value)
+    if type(value) ~= "string" or value == "" or seenCands[value] then return end
     candidates[#candidates + 1] = value
+    seenCands[value] = true
   end
 
   addCandidate(name)
   addCandidate(string.lower(name))
+  if source then
+    addCandidate(source)
+    addCandidate(string.lower(source))
+    addCandidate(SIM_FILE_ALIASES[source])
+  end
   addCandidate(SIM_FILE_ALIASES[name])
 
-
+  -- 3. In Pfaden suchen
   for p = 1, #SIM_SENSOR_PATHS do
     local base = SIM_SENSOR_PATHS[p]
     for i = 1, #candidates do
       local filePath = base .. candidates[i] .. ".lua"
-      local cached = simValueCache[filePath]
-      if cached and (now - (cached.t or 0)) <= 0.25 then
-        if cached.v ~= nil then
-          debugLog("sim-hit:" .. name, "sim cache hit " .. filePath .. " = " .. tostring(cached.v))
-          return cached.v
-        end
-      elseif cached and (now - (cached.t or 0)) <= 2.0 then
-        -- Bereits erfolglos gepruefte Datei ueberspringen
-      else
-        local f = io.open(filePath, "r")
-        local v = nil
-        if f then
-          local content = io.read(f, 64)
-          io.close(f)
-          if type(content) == "string" then
-            local n = string.match(content, "return%s+([%+%-]?%d+%.?%d*)")
-            if n then
-              v = tonumber(n)
-            end
-          end
-        end
-        simValueCache[filePath] = { t = now, v = v }
-        if v ~= nil then
-          Sensors.sim_active_paths = Sensors.sim_active_paths or {}
-          Sensors.sim_active_paths[name] = filePath
-          debugLog("sim-hit:" .. name, "sim file hit " .. filePath .. " = " .. tostring(v))
-          return v
-        end
+      local v, hit = tryReadFile(filePath)
+      if hit and v ~= nil then
+        Sensors.sim_active_paths = Sensors.sim_active_paths or {}
+        Sensors.sim_active_paths[name] = filePath
+        debugLog("sim-hit:" .. name, "sim file hit " .. filePath .. " = " .. tostring(v))
+        return v
       end
     end
   end
 
-  Sensors.sim_search_misses[name] = now
-  debugLog("sim-miss:" .. name, "sim file miss for source " .. tostring(name))
+  -- Füge Jitter hinzu, damit nicht alle Sensoren im exakt gleichen Tick ablaufen
+  Sensors.sim_search_misses[name] = now + (math.random() * 2.0)
   return nil
 end
 
 local function normalizeSimValue(name, value)
   if type(value) ~= "number" then return value end
-  local meta = Sensors.map and Sensors.map[name] or nil
+  
+  -- Wenn der Wert bereits Nachkommastellen hat, ist er bereits skaliert (z.B. return 25.2)
+  if value % 1 ~= 0 then return value end
+  
+  -- Wenn es ein Integer ist (z.B. return 2520), skalieren wir ihn anhand der Metadaten
+  local meta = Sensors.getMetadata(name)
   local prec = meta and tonumber(meta.prec) or 0
-  if prec and prec > 0 then
-    local div = 10 ^ prec
-    if div > 0 then
-      return value / div
-    end
+  if prec > 0 then
+    return value / (10 ^ prec)
   end
+  
   return value
 end
 
 -- Sensor definitions: 4-char name → metadata
+-- ... (rest of Sensors.map)
 Sensors.map = {
+-- ... (rest of metadata)
   -- Flight Control
   ARM  = { label = "Arm Flags", unit = "raw", prec = 0, fallback = 0 },
   Gov  = { label = "Governor", unit = "raw", prec = 0, fallback = 0 },
@@ -249,6 +331,17 @@ Sensors.search_paths = {
 local isSimulatorCached = nil
 function Sensors.isSimulator()
   if isSimulatorCached ~= nil then return isSimulatorCached end
+  
+  -- EdgeTX 2.10+
+  if type(system) == "table" and type(system.getVersion) == "function" then
+    local ok, info = pcall(system.getVersion)
+    if ok and type(info) == "table" and info.simulation then
+      isSimulatorCached = true
+      return true
+    end
+  end
+
+  -- Fallback für ältere Versionen
   if getVersion then
     local ok, _, fw = pcall(getVersion)
     if ok and type(fw) == "string" then
@@ -294,7 +387,7 @@ function Sensors.getValue(source)
   -- In simulator mode we prefer file-based values so widget updates follow the sensor tool.
   if Sensors.isSimulator() then
     if resolved then
-      local simValue = readSimSensorFile(resolved)
+      local simValue = readSimSensorFile(resolved, source)
       if type(simValue) == "number" then
         local normalized = normalizeSimValue(resolved, simValue)
         debugLog("sim-use:" .. source, "using sim value " .. resolved .. " = " .. tostring(normalized))
@@ -302,12 +395,15 @@ function Sensors.getValue(source)
       end
     end
 
-    local simDirect = readSimSensorFile(source)
+    local simDirect = readSimSensorFile(source, source)
     if type(simDirect) == "number" then
       local normalized = normalizeSimValue(source, simDirect)
       debugLog("sim-direct-use:" .. source, "using sim direct value " .. source .. " = " .. tostring(normalized))
       return normalized
     end
+    
+    -- WICHTIG: Im Simulator kein Hardware-Fallback!
+    return nil
   end
 
   local activePath = Sensors.active_paths and Sensors.active_paths[source]

@@ -93,6 +93,44 @@ This path must point to the root of the mounted radio storage, not to `SCRIPTS` 
 - `WIDGETS/rfsuite/`
 - `SOUNDS/rfsuite/`
 
+## Audio Setup
+
+RFSuite provides status and event-based audio announcements (e.g., arming state, governor mode, profiles, battery/fuel alerts).
+
+### Installation of Audio Packs
+To use the built-in announcements, copy the audio files from the repository to your SD card:
+1. Locate the `src/rfsuite/audio/` directory in the project.
+2. Copy the contents (including language subfolders like `en/`, `de/`) to the `/SOUNDS/rf/` directory on your SD card.
+   - Example path: `/SOUNDS/rf/en/evt/armed.wav`
+
+### Model Announcements
+You can have the radio announce the name of your model when starting the RFSuite tool.
+1. Create or obtain a `.wav` file for your model.
+2. Place the file directly into the `/SOUNDS/` directory on your SD card.
+3. **Naming:** The file name must match your model name in EdgeTX (e.g., `Kraken.wav`). Spaces in the model name can be replaced by underscores (e.g., `My_Heli.wav`).
+
+### Model Images
+RFSuite can display model-specific images in **dashboard widgets**.
+The image resolution follows this priority:
+1. **FBL Model Name:** An image in `/IMAGES/` matching the name reported by Rotorflight (e.g., `/IMAGES/Kraken.png`). Spaces can be replaced by underscores.
+2. **EdgeTX Model Image:** The image assigned to the model memory in EdgeTX settings.
+3. **Fallback:** The default Rotorflight logo.
+
+**Features:**
+- **Automatic Scaling:** The image is automatically scaled to fit the widget box.
+- **Model Name Display:** If a model name is retrieved from the flight controller, it is displayed in a small font below the image, and the image is automatically adjusted to make room.
+
+**Requirements:**
+- **Format:** `.png` (recommended) or `.jpg`.
+- **Location:** All images must be in the `/IMAGES/` directory at the root of your SD card.
+- **Dimensions:** For best results, use standard EdgeTX model image sizes (e.g., 192x114 or 160x128).
+
+### Activation
+By default, some announcements might be disabled. To configure them:
+1. Open the **RFSuite** tool on your radio.
+2. Navigate to **System** -> **Settings** -> **Audio** -> **Audio Events**.
+3. Enable the desired events (e.g., `Model Announcement`, `Arming-Flags`, etc.).
+
 ## Notes
 
 - The demo script returns `useLvgl = true` and expects EdgeTX with LVGL support.
