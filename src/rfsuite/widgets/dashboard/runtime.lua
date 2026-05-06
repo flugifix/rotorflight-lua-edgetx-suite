@@ -259,6 +259,7 @@ local function updateConnectionState(self)
   local statusLine = nil
   if not connected then
     statusLine = (t and t("widgets.dashboard.waiting_for_msp_link")) or "Waiting for MSP link"
+    self.batteryDialogState = "pending"
   elseif not rfReady then
     statusLine = (t and t("widgets.dashboard.waiting_for_receiver_telemetry")) or "Waiting for receiver telemetry (1RSS/2RSS)"
   elseif not batteryReady then
@@ -780,6 +781,9 @@ function Runtime.new(zone, options)
       if type(_G.rfsuite.session.dataflash) == "table" then
         self.state.dataflash = _G.rfsuite.session.dataflash
       end
+      if type(_G.rfsuite.session.battery_config) == "table" then
+        self.state.battery_config = _G.rfsuite.session.battery_config
+      end
     end
     local nextMode = computeFlightMode(self.state)
     local ready, statusLine = updateConnectionState(self)
@@ -813,8 +817,17 @@ function Runtime.new(zone, options)
   end
 
 
-  function widget.refresh(self)
+  function widget.refresh(self, event, touchState)
+    -- Route touch/key events to LVGL engine when active (e.g. fullscreen)
+    if lvgl and type(lvgl.onEvent) == "function" and event ~= nil then
+       -- On some EdgeTX versions, touchState coordinates are global.
+       -- We need to ensure LVGL knows the widget's offset if it doesn't handle it.
+       -- However, in Fullscreen, offset is usually 0,0.
+       lvgl.onEvent(event, touchState)
+    end
+
     local ready = performBackgroundWork(self)
+
 
     if not ready and self.flightMode ~= "postflight" then
       local statusLine = self.statusLine or "Please wait..."
@@ -836,8 +849,12 @@ function Runtime.new(zone, options)
 
     if not self.theme then return end
 
+    -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
+    local isInteractive = (event ~= nil)
     local nextRenderKey = nil
-    if type(self.theme.renderKey) == "function" then
+    if isInteractive then
+      nextRenderKey = "fullscreen_menu"
+    elseif type(self.theme.renderKey) == "function" then
       nextRenderKey = self.theme.renderKey(self.zone, self.state)
     elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
       nextRenderKey = self.dashboardEngine.renderKey(self.state, self.boxSources)
@@ -852,13 +869,25 @@ function Runtime.new(zone, options)
 
     if not self.built then
       lvgl.clear()
-      local children = nil
-      if type(self.theme.build) == "function" then
-        children = self.theme.build(self.zone, self.state)
-      elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
-        children = self.dashboardEngine.build(self.zone, self.state, self.theme)
+      local children = {}
+      
+      if isInteractive then
+         local menuChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/fullscreen_menu")
+         if menuChunk then
+           local ok, menu = pcall(menuChunk)
+           if ok and type(menu) == "table" and type(menu.build) == "function" then
+             menu.build(children, self)
+           end
+         end
+      else
+         if type(self.theme.build) == "function" then
+           children = self.theme.build(self.zone, self.state)
+         elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
+           children = self.dashboardEngine.build(self.zone, self.state, self.theme)
+         end
+         if type(children) ~= "table" then return end
       end
-      if type(children) ~= "table" then return end
+
       lvgl.build(children)
       self.built = true
     end

@@ -444,7 +444,11 @@ return {
       waiting_for_msp_link = "Waiting for MSP link",
       waiting_for_receiver_telemetry = "Waiting for receiver telemetry (1RSS/2RSS)",
       waiting_for_battery_telemetry = "Waiting for battery telemetry",
-      connected_starting = "Connected, starting dashboard..."
+      connected_starting = "Connected, starting dashboard...",
+      select_battery = "SELECT BATTERY",
+      switch_to_fullscreen = "Please switch to fullscreen mode to select the battery",
+      quick_settings = "QUICK SETTINGS",
+      battery_profile = "BATTERY PROFILE"
     }
   }
 }

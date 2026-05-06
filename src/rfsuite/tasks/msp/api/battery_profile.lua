@@ -4,7 +4,7 @@
 local Api = {
   command = 175, -- MSP_BATTERY_PROFILE
   writeCommand = 176, -- MSP_SET_BATTERY_PROFILE
-  simulatorResponse = { 0 }, -- batteryProfile
+  simulatorResponse = { 1 }, -- batteryProfile
 }
 
 function Api.parse(buf)

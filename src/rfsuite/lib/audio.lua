@@ -78,6 +78,11 @@ local function unitPercent()
   return 0
 end
 
+local function unitMah()
+  if type(UNIT_MAH) == "number" then return UNIT_MAH end
+  return 108 -- fallback typical for OpenTX/EdgeTX
+end
+
 local function emitLog(opts, msg, level)
   if opts and type(opts.log) == "function" then
     opts.log(msg, level)
@@ -300,6 +305,72 @@ local function announceGovernorEvent(self, opts)
   return tryPlayEventFile(audioState, now, "gov/" .. file, opts)
 end
 
+local function announceBatteryCapacityEvent(self, opts)
+  local profile = roundProfileValue(self.state.batteryProfile)
+  if profile == nil or profile < 1 or profile > 6 then
+    return
+  end
+
+  local configIndex = profile
+
+  local audioState = self.audioState
+  if not audioState.lastAlertAt then
+    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
+  end
+
+  if audioState.lastValues.battery_profile == profile and audioState.batteryCapacityAnnounced then
+    return
+  end
+
+  local capacity = nil
+  local configReady = false
+  if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+    local bConf = _G.rfsuite.session.battery_config
+    if type(bConf) == "table" then
+      capacity = bConf["batteryCapacity_" .. tostring(configIndex - 1)]
+      configReady = true
+    end
+  end
+
+  if not configReady then
+    return
+  end
+
+  local now = nowSeconds()
+  if now < (audioState.nextAllowedAt or 0) then
+    return
+  end
+
+  local events = (self.preferences and self.preferences.audio_events) or nil
+  if not prefEnabled(events, "battery_profile", true) then
+    audioState.lastValues.battery_profile = profile
+    audioState.batteryCapacityAnnounced = true
+    return
+  end
+
+  if audioState.initialized then
+    if capacity and capacity > 0 then
+      emitLog(opts, "battery capacity change profile=" .. tostring(profile) .. " capacity=" .. tostring(capacity), "info")
+      tryPlayEventFile(audioState, now, "evt/battery.wav", opts)
+      if type(playNumber) == "function" then
+        emitLog(opts, "playNumber -> " .. tostring(capacity) .. " mAh", "info")
+        local ok, err = pcall(playNumber, capacity, unitMah())
+        if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+      end
+    else
+      emitLog(opts, "battery profile change value=" .. tostring(profile) .. " file=evt/battery.wav", "info")
+      tryPlayEventFile(audioState, now, "evt/battery.wav", opts)
+      if type(playNumber) == "function" then
+        local ok, err = pcall(playNumber, configIndex, 0)
+        if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+      end
+    end
+  end
+
+  audioState.lastValues.battery_profile = profile
+  audioState.batteryCapacityAnnounced = true
+end
+
 function Audio.process(self, opts)
   if type(self) ~= "table" or type(self.audioState) ~= "table" then
     return
@@ -329,7 +400,7 @@ function Audio.process(self, opts)
 
   announceProfileEvent(self, "pid_profile", self.state.profile, "evt/profile.wav", opts)
   announceProfileEvent(self, "rate_profile", self.state.rateProfile, "evt/rates.wav", opts)
-  announceProfileEvent(self, "battery_profile", self.state.batteryProfile, "evt/battery.wav", opts)
+  announceBatteryCapacityEvent(self, opts)
 
   if prefEnabled(events, "voltage_alert", true) then
     local warnBase = (self.state.themeConfig and tonumber(self.state.themeConfig.v_min)) or 18.0

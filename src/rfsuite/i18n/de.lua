@@ -444,7 +444,11 @@ return {
       waiting_for_msp_link = "Warte auf MSP-Link",
       waiting_for_receiver_telemetry = "Warte auf Empfänger-Telemetrie (1RSS/2RSS)",
       waiting_for_battery_telemetry = "Warte auf Batterie-Telemetrie",
-      connected_starting = "Verbunden, Dashboard wird gestartet..."
+      connected_starting = "Verbunden, Dashboard wird gestartet...",
+      select_battery = "AKKU AUSWÄHLEN",
+      switch_to_fullscreen = "Bitte in den Vollbildmodus wechseln um den Akku auszuwählen",
+      quick_settings = "SCHNELLEINSTELLUNGEN",
+      battery_profile = "AKKUPROFIL"
     }
   }
 }
