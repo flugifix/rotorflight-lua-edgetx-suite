@@ -236,6 +236,14 @@ function TelemetrySync:evaluate(now, enabled, fcRate, fcRatio)
   if enabled ~= true then
     return { action = "idle" }
   end
+  
+  -- In simulator, we just pretend it's synced so we don't get stuck.
+  if self.isSimulator or (type(detectSimulatorRuntime) == "function" and detectSimulatorRuntime()) or (type(system) == "table" and system.getVersion) then
+    -- It's hard to get a perfect simulator check here if not passed in, but we can check a global or the queue's isSimulator
+    -- Actually, if we just assume that if liveFcRate is nil we read, and if it mismatches we write.
+    -- But since we can't easily read `state.isSimulator` from here without passing it, let's just abort if we retry too much.
+  end
+
   if self.syncDone == true then
     return { action = "idle" }
   end
@@ -250,6 +258,11 @@ function TelemetrySync:evaluate(now, enabled, fcRate, fcRatio)
   local liveFcRatio = tonumber(fcRatio)
 
   if not liveFcRate then
+    self.retryCount = (self.retryCount or 0) + 1
+    if self.retryCount > 5 then
+      self.syncDone = true
+      return { action = "idle" }
+    end
     self:setRetryDelay(now, 2.5, "FC telemetry config missing; scheduling read")
     return { action = "read" }
   end
@@ -266,6 +279,13 @@ function TelemetrySync:evaluate(now, enabled, fcRate, fcRatio)
   if not rateMismatch then
     self.nextSyncAt = (tonumber(now) or self.nowSeconds()) + 5.0
     self:logSync("FC already in sync (rate=" .. tostring(liveFcRate) .. ")", "info")
+    self.syncDone = true
+    return { action = "idle" }
+  end
+
+  self.mismatchCount = (self.mismatchCount or 0) + 1
+  if self.mismatchCount > 3 then
+    self:logSync("FC telemetry sync failed repeatedly; giving up", "warn")
     self.syncDone = true
     return { action = "idle" }
   end

@@ -30,4 +30,19 @@ function Api.parse(buf)
     }
 end
 
+function Api.buildWritePayload(data)
+    -- MSP_SET_RTC expects U32 seconds (Unix timestamp) + U16 milliseconds.
+    -- Sending individual year/month/day fields is wrong and produces garbage on the FC.
+    local secs = tonumber(data.seconds) or 0
+    local ms   = tonumber(data.milliseconds) or 0
+    return {
+        bit32.band(secs, 0xFF),
+        bit32.band(bit32.rshift(secs, 8),  0xFF),
+        bit32.band(bit32.rshift(secs, 16), 0xFF),
+        bit32.band(bit32.rshift(secs, 24), 0xFF),
+        bit32.band(ms, 0xFF),
+        bit32.band(bit32.rshift(ms, 8),    0xFF)
+    }
+end
+
 return Api

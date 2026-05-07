@@ -104,7 +104,6 @@ return {
         language_de = "Deutsch",
         sync_model_name = "Modellname synchronisieren",
         auto_msp_telem_sync = "MSP-Telemetrie-Link automatisch abgleichen",
-        postflight_hold_seconds = "Postflight halten",
         save_confirm = "Bestätigen beim Speichern",
         save_armed_warning = "Warnung 'Bitte disarmen zum Speichern'",
         reload_confirm = "Bestätigen beim Neuladen",
@@ -434,7 +433,7 @@ return {
       total_time = "GESAMTZEIT",
       min_cell = "MIN V/ZELLE",
       min_link = "MIN LINK",
-      bb_ready = "?",
+      bb_ready = "MSP warten",
       bb_rec = "AUFN",
       bb_logged = "GEL",
       status_armed = "ARMED",
@@ -445,10 +444,13 @@ return {
       waiting_for_receiver_telemetry = "Warte auf Empfänger-Telemetrie (1RSS/2RSS)",
       waiting_for_battery_telemetry = "Warte auf Batterie-Telemetrie",
       connected_starting = "Verbunden, Dashboard wird gestartet...",
+      loading_tasks = "Lade Daten...",
       select_battery = "AKKU AUSWÄHLEN",
       switch_to_fullscreen = "Bitte in den Vollbildmodus wechseln um den Akku auszuwählen",
       quick_settings = "SCHNELLEINSTELLUNGEN",
-      battery_profile = "AKKUPROFIL"
+      battery_profile = "AKKUPROFIL",
+      erase_blackbox = "BLACKBOX LÖSCHEN",
+      erasing_blackbox = "Lösche Blackbox..."
     }
   }
 }

@@ -29,7 +29,6 @@ local function defaultPreferences()
       -- integration
       syncname                     = false,
       auto_msp_telem_sync         = false,
-      postflight_hold_seconds      = 20,
       -- development
       developer_tools              = false,
       continuous_memory_log        = false,

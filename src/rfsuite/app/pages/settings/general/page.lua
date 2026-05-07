@@ -20,7 +20,6 @@ local CONFIG_SCHEMA = {
   { key = "developer_tools",              type = "bool",   default = false  },
   { key = "syncname",                     type = "bool",   default = false  },
   { key = "auto_msp_telem_sync",          type = "bool",   default = false  },
-  { key = "postflight_hold_seconds",      type = "number", default = 20     },
   { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
@@ -92,8 +91,6 @@ local function copyFromPrefs(prefs)
       ui.config[field.key] = prefBool(raw, field.default)
     end
   end
-  if ui.config.postflight_hold_seconds < 0 then ui.config.postflight_hold_seconds = 0 end
-  if ui.config.postflight_hold_seconds > 120 then ui.config.postflight_hold_seconds = 120 end
 end
 
 local function ensureLoaded(prefs)
@@ -149,30 +146,6 @@ local function buildSafety(cursorY, children, x, w, i18n)
 end
 
 local function buildIntegration(cursorY, children, x, w, i18n)
-  local holdOptions = {
-    { value = 0, label = t(i18n, "value_off", "OFF") },
-    { value = 10, label = "10s" },
-    { value = 20, label = "20s" },
-    { value = 30, label = "30s" },
-    { value = 60, label = "60s" },
-    { value = 120, label = "120s" },
-  }
-
-  local function resolveHoldChoiceValue(raw)
-    local current = tonumber(raw) or 20
-    local nearest = holdOptions[1].value
-    local nearestDiff = math.abs(current - nearest)
-    for i = 2, #holdOptions do
-      local v = holdOptions[i].value
-      local d = math.abs(current - v)
-      if d < nearestDiff then
-        nearest = v
-        nearestDiff = d
-      end
-    end
-    return nearest
-  end
-
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "sync_model_name", "Modellname synchronisieren"),
     ui.runtime.getBoolGetter("syncname"),
@@ -184,17 +157,6 @@ local function buildIntegration(cursorY, children, x, w, i18n)
     ui.runtime.getBoolSetter("auto_msp_telem_sync")
   )
 
-  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-    t(i18n, "postflight_hold_seconds", "Postflight halten"),
-    holdOptions,
-    resolveHoldChoiceValue(ui.config.postflight_hold_seconds),
-    function(value)
-      local nextVal = tonumber(value) or 20
-      if ui.config.postflight_hold_seconds ~= nextVal then
-        ui.config.postflight_hold_seconds = nextVal
-      end
-    end
-  )
   return cursorY
 end
 

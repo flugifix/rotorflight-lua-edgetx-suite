@@ -226,6 +226,31 @@ function M.new(category)
     return findNextEligibleTask(currentEnv) ~= nil
   end
 
+  function runner.getProgress()
+    ensureEnv()
+    local currentEnv = Env and Env.get() or "tool"
+    local total = 0
+    local done = 0
+    for i = 1, #tasksQueue do
+      local t = tasksQueue[i]
+      local eligible = false
+      if t.context == "both" then
+        eligible = true
+      elseif t.context == "tool" and currentEnv == "tool" then
+        eligible = true
+      elseif t.context == "widget" and currentEnv == "widget" then
+        eligible = true
+      end
+      if eligible then
+        total = total + 1
+        if t.complete or t.failed then
+          done = done + 1
+        end
+      end
+    end
+    return { done = done, total = total }
+  end
+
   return runner
 end
 

@@ -104,7 +104,6 @@ return {
         language_de = "German",
         sync_model_name = "Synchronize Model Name",
         auto_msp_telem_sync = "Auto-sync MSP Telemetry Link",
-        postflight_hold_seconds = "Postflight Hold",
         save_confirm = "Confirm on Save",
         save_armed_warning = "Show Disarm-to-Save Warning",
         reload_confirm = "Confirm on Reload",
@@ -434,7 +433,7 @@ return {
       total_time = "TOTAL TIME",
       min_cell = "MIN V/CELL",
       min_link = "MIN LINK",
-      bb_ready = "?",
+      bb_ready = "MSP Wait...",
       bb_rec = "REC",
       bb_logged = "LOGGED",
       status_armed = "ARMED",
@@ -445,10 +444,13 @@ return {
       waiting_for_receiver_telemetry = "Waiting for receiver telemetry (1RSS/2RSS)",
       waiting_for_battery_telemetry = "Waiting for battery telemetry",
       connected_starting = "Connected, starting dashboard...",
+      loading_tasks = "Loading data...",
       select_battery = "SELECT BATTERY",
       switch_to_fullscreen = "Please switch to fullscreen mode to select the battery",
       quick_settings = "QUICK SETTINGS",
-      battery_profile = "BATTERY PROFILE"
+      battery_profile = "BATTERY PROFILE",
+      erase_blackbox = "ERASE BLACKBOX",
+      erasing_blackbox = "Erasing Blackbox..."
     }
   }
 }

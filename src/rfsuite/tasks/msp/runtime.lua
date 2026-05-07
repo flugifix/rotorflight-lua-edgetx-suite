@@ -528,6 +528,7 @@ local function enqueueTelemetryConfigWrite(now, desiredRate, desiredRatio)
   state.queue:add({
     command = TelemetryConfigApi.writeCommand,
     payload = payload,
+    simulatorResponse = {},
     retryBackoff = 1.2,
     timeout = 4.0,
     processReply = function()
@@ -720,10 +721,16 @@ function Runtime.tick()
     log("MSP resumed after DISARM", "info")
   end
 
-  enqueueVersionReads(now)
-  enqueueUidRead(now)
+  -- The telemetry link must be stabilized first to avoid "Sensor lost" due to FC flooding the link.
   enqueueTelemetryConfigRead(now)
   maybeRunTelemetryAutoSync(now)
+
+  -- Defer version and UID reads until telemetry is fully synced or sync is disabled
+  if state.telemetryAutoSyncDone == true then
+    enqueueVersionReads(now)
+    enqueueUidRead(now)
+  end
+
   state.queue:processQueue(now)
   publish()
   -- If the version read cleared/marked unsupported during processing, ensure we
@@ -744,26 +751,26 @@ function Runtime.getProgress()
   local total = 0
   local done = 0
 
-  -- Core startup reads (API version + UID) are always tracked.
-  total = total + 1
-  if state.pendingVersionRead ~= true then
-    done = done + 1
-  end
-
-  total = total + 1
-  if state.pendingUidRead ~= true then
-    done = done + 1
-  end
-
   -- Telemetry config is optional and only counted when the sync flow engaged.
   local telemetryTracked = state.pendingTelemetryConfigRead == true
     or state.telemetryAutoSyncDone == true
     or state.telemetrySync ~= nil
   if telemetryTracked then
     total = total + 1
-    if state.telemetryAutoSyncDone == true or (state.pendingTelemetryConfigRead ~= true and state.telemetrySync == nil) then
+    if state.telemetryAutoSyncDone == true then
       done = done + 1
     end
+  end
+
+  -- Core startup reads (API version + UID) are always tracked.
+  total = total + 1
+  if state.versionReadCompleted == true then
+    done = done + 1
+  end
+
+  total = total + 1
+  if state.values.mcuId ~= nil then
+    done = done + 1
   end
 
   local queueIdle = true

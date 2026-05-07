@@ -3,7 +3,6 @@ local Runtime = {}
 local SYSTEM_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/"
 local USER_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite.user/dashboard/"
 local AUDIO_LOG_FORCE = false
-local POSTFLIGHT_HOLD_SECONDS = 20
 local SPLASH_READY_HOLD_SECONDS = 1.0
 
 local function scriptExists(path)
@@ -217,22 +216,16 @@ local function buildConnectionSplash(zone, statusLine, title)
   }
 end
 
-local function resolvePostflightHoldSeconds(prefs, fallback)
-  local defaultValue = tonumber(fallback) or POSTFLIGHT_HOLD_SECONDS
-  local general = type(prefs) == "table" and prefs.general or nil
-  local raw = general and general.postflight_hold_seconds or defaultValue
-  local value = tonumber(raw) or defaultValue
-  if value < 0 then value = 0 end
-  if value > 120 then value = 120 end
-  return math.floor(value + 0.5)
-end
-
 local function updateConnectionState(self)
   local runtimeState = nil
+  local mspProgress = nil
   if MspRuntime and type(MspRuntime.getState) == "function" then
     runtimeState = MspRuntime.getState()
   elseif Rf2Runtime and type(Rf2Runtime.getState) == "function" then
     runtimeState = Rf2Runtime.getState()
+  end
+  if MspRuntime and type(MspRuntime.getProgress) == "function" then
+    mspProgress = MspRuntime.getProgress()
   end
   local connected = type(runtimeState) == "table" and runtimeState.lastConnected == true
   local hasVoltage = type(self.state.voltage) == "number" and self.state.voltage > 0
@@ -242,7 +235,26 @@ local function updateConnectionState(self)
   local hasRss2 = type(self.state.rss2) == "number" and self.state.rss2 ~= 0
   local batteryReady = hasVoltage or hasFuel
   local rfReady = hasLq or hasRss1 or hasRss2
-  local rawReady = connected and batteryReady and rfReady
+  
+  local tasksDone = true
+  if mspProgress and type(mspProgress.total) == "number" and type(mspProgress.done) == "number" then
+    tasksDone = (mspProgress.done >= mspProgress.total)
+  end
+
+  local onconnectActive = false
+  local onconnectProgress = nil
+  if EventsRuntime and type(EventsRuntime.isOnconnectActive) == "function" then
+    onconnectActive = EventsRuntime.isOnconnectActive()
+  end
+  if EventsRuntime and type(EventsRuntime.getOnconnectProgress) == "function" then
+    onconnectProgress = EventsRuntime.getOnconnectProgress()
+  end
+
+  if onconnectActive then
+    tasksDone = false
+  end
+  
+  local rawReady = connected and batteryReady and rfReady and tasksDone
   local now = nowSeconds()
 
   if rawReady then
@@ -260,6 +272,18 @@ local function updateConnectionState(self)
   if not connected then
     statusLine = (t and t("widgets.dashboard.waiting_for_msp_link")) or "Waiting for MSP link"
     self.batteryDialogState = "pending"
+  elseif not tasksDone then
+    local pDone = 0
+    local pTotal = 1
+    if onconnectProgress and onconnectProgress.total > 0 then
+      pDone = onconnectProgress.done or 0
+      pTotal = onconnectProgress.total or 1
+    elseif mspProgress then
+      pDone = mspProgress.done or 0
+      pTotal = mspProgress.total or 1
+    end
+    local loadingTasksStr = (t and t("widgets.dashboard.loading_tasks")) or "Loading data..."
+    statusLine = loadingTasksStr .. " (" .. tostring(pDone) .. "/" .. tostring(pTotal) .. ")"
   elseif not rfReady then
     statusLine = (t and t("widgets.dashboard.waiting_for_receiver_telemetry")) or "Waiting for receiver telemetry (1RSS/2RSS)"
   elseif not batteryReady then
@@ -563,13 +587,7 @@ local function computeFlightMode(state)
     return "inflight"
   end
   if state.hadArmedFlight == true then
-    local disarmAt = tonumber(state.lastDisarmAt)
-    local now = nowSeconds()
-    if disarmAt and (now - disarmAt) <= (tonumber(state.postflightHoldSeconds) or POSTFLIGHT_HOLD_SECONDS) then
-      return "postflight"
-    end
-    state.hadArmedFlight = false
-    return "preflight"
+    return "postflight"
   end
   return "preflight"
 end
@@ -581,11 +599,10 @@ local function publishPreferencesToGlobal(prefs)
 end
 
 local function reloadPreferencesIfNeeded(self, force)
-  local now = nowSeconds()
-  if not force and (now - (self.preferencesLastLoadedAt or 0)) < 0.5 then
-    return
-  end
-
+local now = nowSeconds()
+if not force and (now - (self.preferencesLastLoadedAt or 0)) < 5.0 then
+  return
+end
   local prefs = loadPreferences()
   if type(prefs) == "table" then
     local prevLang = self.preferences and self.preferences.general and self.preferences.general.language
@@ -609,9 +626,6 @@ local function reloadPreferencesIfNeeded(self, force)
         if type(self.state) ~= "table" then self.state = {} end
         self.state.i18n = self.i18n
       end
-    if self.state then
-      self.state.postflightHoldSeconds = resolvePostflightHoldSeconds(prefs, self.state.postflightHoldSeconds)
-    end
   end
 
   self.preferencesLastLoadedAt = now
@@ -661,7 +675,6 @@ function Runtime.new(zone, options)
       lastMinVoltage = nil,
       lastMinLq = nil,
       lastDisarmAt = nil,
-      postflightHoldSeconds = resolvePostflightHoldSeconds(prefs, POSTFLIGHT_HOLD_SECONDS),
       themeConfig = { v_min = 18.0, v_max = 25.2 }
     },
     audioState = {
@@ -690,6 +703,7 @@ function Runtime.new(zone, options)
       }
     },
     connectionReady = false,
+    lastFblConnected = false,
     statusLine = "Waiting for MSP link",
     readySince = nil,
     mspAttached = false,
@@ -765,10 +779,7 @@ function Runtime.new(zone, options)
       _G.rfsuite.session.event_context = "widget"
     end
     tickMspRuntime(self)
-    -- Clear event_context immediately after events
-    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
-      _G.rfsuite.session.event_context = nil
-    end
+    
     reloadPreferencesIfNeeded(self, false)
     self.state.zoneW = self.zone and self.zone.w or 0
     self.state.zoneH = self.zone and self.zone.h or 0
@@ -785,8 +796,25 @@ function Runtime.new(zone, options)
         self.state.battery_config = _G.rfsuite.session.battery_config
       end
     end
-    local nextMode = computeFlightMode(self.state)
+    local wasFblConnected = self.lastFblConnected == true
     local ready, statusLine = updateConnectionState(self)
+    local isFblConnected = self.state.fblConnected == true
+    if isFblConnected and not wasFblConnected then
+      -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
+      self.state.hadArmedFlight = false
+      self.state.wasArmed = false
+      self.state.armed = false
+      self.state.lastDisarmAt = nil
+      self.flightMode = "preflight"
+      self.theme = nil
+      self.built = false
+      self.renderKey = nil
+      self._cachedRenderKey = nil
+      widgetLog(self, "FBL reconnect edge: reset dashboard session state", "info")
+    end
+    self.lastFblConnected = isFblConnected
+
+    local nextMode = computeFlightMode(self.state)
     if statusLine ~= nil then self.statusLine = statusLine end
 
     if ready then
@@ -808,6 +836,11 @@ function Runtime.new(zone, options)
       reloadActiveTheme(self)
     end
     
+    -- Clear event_context immediately after all widget background logic
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+      _G.rfsuite.session.event_context = nil
+    end
+
     return ready
   end
 
@@ -854,10 +887,21 @@ function Runtime.new(zone, options)
     local nextRenderKey = nil
     if isInteractive then
       nextRenderKey = "fullscreen_menu"
-    elseif type(self.theme.renderKey) == "function" then
-      nextRenderKey = self.theme.renderKey(self.zone, self.state)
-    elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
-      nextRenderKey = self.dashboardEngine.renderKey(self.state, self.boxSources)
+    else
+      -- Throttle dashboard rendering to max 2Hz (0.5s) to save CPU
+      if not self._lastUIRefresh then self._lastUIRefresh = 0 end
+      local now = nowSeconds()
+      if (now - self._lastUIRefresh) >= 0.5 then
+        self._lastUIRefresh = now
+        local newKey = nil
+        if type(self.theme.renderKey) == "function" then
+          newKey = self.theme.renderKey(self.zone, self.state)
+        elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
+          newKey = self.dashboardEngine.renderKey(self.state, self.boxSources)
+        end
+        self._cachedRenderKey = newKey
+      end
+      nextRenderKey = self._cachedRenderKey
     end
 
     if nextRenderKey ~= self.renderKey then

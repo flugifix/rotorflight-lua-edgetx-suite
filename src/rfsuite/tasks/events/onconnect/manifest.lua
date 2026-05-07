@@ -1,6 +1,7 @@
 -- Manifest for onconnect tasks (ordered)
 return {
   "apiversion",
+  "rtc",
   { name = "flight_stats", context = "widget" },
   { name = "dataflash_summary", context = "widget" },
   { name = "battery_config", context = "widget" },

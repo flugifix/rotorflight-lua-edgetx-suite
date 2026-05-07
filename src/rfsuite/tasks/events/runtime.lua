@@ -107,6 +107,23 @@ function Events.reset()
   state.linkStableUp = false
   ensureSession()
   _G.rfsuite.session.isConnected = false
+  _G.rfsuite.session.modelName = nil
+end
+
+function Events.isOnconnectActive()
+  local onconnect = ensureEventRunner("onconnect")
+  if onconnect and type(onconnect.active) == "function" then
+    return onconnect.active()
+  end
+  return false
+end
+
+function Events.getOnconnectProgress()
+  local onconnect = ensureEventRunner("onconnect")
+  if onconnect and type(onconnect.getProgress) == "function" then
+    return onconnect.getProgress()
+  end
+  return nil
 end
 
 function Events.wakeup()
@@ -140,21 +157,30 @@ function Events.wakeup()
     -- Determine context: widget/tool/both
     local context = Env and Env.get() or "tool"
 
+    local onconnectActive = false
     if state.linkStableUp then
       local onconnect = ensureEventRunner("onconnect")
-      if onconnect and type(onconnect.wakeup) == "function" then
-        local ok, err = pcall(onconnect.wakeup, { context = context })
-        if not ok and Log and type(Log.emit) == "function" then
-          pcall(Log.emit, "rfsuite.events", "onconnect.wakeup error: " .. tostring(err), "error", true)
+      if onconnect then
+        if type(onconnect.active) == "function" then
+          onconnectActive = onconnect.active()
+        end
+        if type(onconnect.wakeup) == "function" then
+          local ok, err = pcall(onconnect.wakeup, { context = context })
+          if not ok and Log and type(Log.emit) == "function" then
+            pcall(Log.emit, "rfsuite.events", "onconnect.wakeup error: " .. tostring(err), "error", true)
+          end
         end
       end
     end
 
-    local telemetry_bg = ensureEventRunner("telemetry_bg")
-    if telemetry_bg and type(telemetry_bg.wakeup) == "function" then
-      local ok, err = pcall(telemetry_bg.wakeup)
-      if not ok and Log and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.events", "telemetry_bg.wakeup error: " .. tostring(err), "error", true)
+    -- Defer telemetry_bg until onconnect tasks are done to avoid blocking the Lua VM during startup
+    if state.linkStableUp and not onconnectActive then
+      local telemetry_bg = ensureEventRunner("telemetry_bg")
+      if telemetry_bg and type(telemetry_bg.wakeup) == "function" then
+        local ok, err = pcall(telemetry_bg.wakeup)
+        if not ok and Log and type(Log.emit) == "function" then
+          pcall(Log.emit, "rfsuite.events", "telemetry_bg.wakeup error: " .. tostring(err), "error", true)
+        end
       end
     end
 

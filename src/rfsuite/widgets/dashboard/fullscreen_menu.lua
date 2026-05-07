@@ -112,7 +112,69 @@ function M.build(children, widget)
   
   -- 4. Content Area
   local contentY = dY + headerH + contentGap
+
+  -- 4a. Erase Blackbox Button
+  local eraseBtnW = math.floor(dW - paddingX * 2)
+  children[#children+1] = {
+    type = "button", x=dX + paddingX, y=contentY, w=eraseBtnW, h=btnH, color=btn_color,
+    press = function()
+         local mspModule = nil
+         local mspChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/runtime")
+         if mspChunk then
+            local ok, mod = pcall(mspChunk)
+            if ok and type(mod) == "table" then mspModule = mod end
+         end
+
+         if mspModule and mspModule.getState then
+            local mState = mspModule.getState()
+            if mState.queue then
+               local eraseApiChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/dataflash_erase")
+               local summaryApiChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/dataflash_summary")
+               
+               if eraseApiChunk and summaryApiChunk then
+                 local eraseApi = eraseApiChunk()
+                 local summaryApi = summaryApiChunk()
+                 if eraseApi and summaryApi then
+                   mState.queue:add({
+                      command = eraseApi.writeCommand,
+                      payload = eraseApi.buildWritePayload({}),
+                      simulatorResponse = {},
+                      isWrite = true,
+                      timeout = 10.0,
+                   })
+                   mState.queue:add({
+                      command = summaryApi.command,
+                      simulatorResponse = summaryApi.simulatorResponse,
+                      processReply = function(_, buf)
+                        local stats = summaryApi.parse(buf)
+                        if stats then
+                          if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+                            _G.rfsuite.session.dataflash = stats
+                          end
+                        end
+                      end
+                   })
+                 end
+               end
+            end
+         end
+         
+         widget.built = false
+         widget.renderKey = nil
+         if lcd and type(lcd.exitFullScreen) == "function" then
+            lcd.exitFullScreen()
+         end
+    end
+  }
+  local eraseTextY = contentY + math.floor((btnH - fontH)/2) + btnTextOffY
+  children[#children+1] = {
+    type = "label", x=dX + paddingX, y=eraseTextY, w=eraseBtnW, 
+    text=t("widgets.dashboard.erase_blackbox", "ERASE BLACKBOX"), color=WHITE, align=CENTER, font=titleFont
+  }
+
+  contentY = contentY + btnH + titleGap
   
+  -- 4b. Battery Profile Section Title
   children[#children+1] = {
     type = "label", x=dX + paddingX, y=contentY, w=dW-(paddingX*2), 
     text=t("widgets.dashboard.battery_profile", "BATTERY PROFILE"), color=WHITE, align=LEFT, font=titleFont
@@ -168,7 +230,7 @@ function M.build(children, widget)
                  if api and type(api.buildWritePayload) == "function" then
                    mState.queue:add({
                       command = api.writeCommand,
-                      payload = api.buildWritePayload({ batteryProfile = c.index + 1 }),
+                      payload = api.buildWritePayload({ batteryProfile = c.index }),
                       simulatorResponse = {}
                    })
                  end
