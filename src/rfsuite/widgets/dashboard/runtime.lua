@@ -94,6 +94,10 @@ end
 
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
 local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
+local THROTTLE_INFLIGHT_THRESHOLD = 35
+local THROTTLE_INFLIGHT_THRESHOLD_DIRECT = 8
+local RPM_INFLIGHT_THRESHOLD_DIRECT = 500
+local CURRENT_INFLIGHT_THRESHOLD_DIRECT = 8
 
 local utils = {}
 
@@ -216,6 +220,81 @@ local function buildConnectionSplash(zone, statusLine, title)
   }
 end
 
+local function loadPreferences()
+  if not PreferencesModule or type(PreferencesModule.load) ~= "function" then
+    return nil
+  end
+  local loadedOk, prefs = pcall(PreferencesModule.load)
+  if not loadedOk or type(prefs) ~= "table" then
+    return nil
+  end
+  return prefs
+end
+
+local function publishPreferencesToGlobal(prefs)
+  if type(_G) ~= "table" then return end
+  _G.rfsuite = _G.rfsuite or {}
+  _G.rfsuite.preferences = prefs or {}
+end
+
+local function reloadPreferencesIfNeeded(self, force)
+  local now = nowSeconds()
+
+  local signalReload = false
+  if not force then
+    if type(model) == "table" and type(model.getGlobalVariable) == "function" then
+      -- Signaling mechanism: GV9 (index 8) for FM8 (index 8) set to 1 by the Tool
+      local ok, val = pcall(model.getGlobalVariable, 8, 8)
+      if ok and val == 1 then
+        signalReload = true
+      end
+    end
+  end
+
+  if not force and not signalReload then
+    return
+  end
+
+  -- Safety: Do not reload files while ARMED to prevent CPU spikes or sensor lost
+  if self.state.armed then
+    return
+  end
+
+  local prefs = loadPreferences()
+  if type(prefs) == "table" then
+    local prevLang = self.preferences and self.preferences.general and self.preferences.general.language
+    local newLang = prefs.general and prefs.general.language
+    if prevLang ~= newLang then
+      self.built = false
+    end
+    self.preferences = prefs
+    publishPreferencesToGlobal(prefs)
+    
+    -- Update i18n context when language changes
+    if I18nModule and prevLang ~= newLang then
+      if self.i18n and type(self.i18n.setLocale) == "function" then
+        pcall(self.i18n.setLocale, newLang)
+      else
+        local ok, ctx = pcall(I18nModule.new, newLang)
+        if ok and type(ctx) == "table" then self.i18n = ctx end
+      end
+    end
+    
+    -- Expose i18n on the runtime state so theme renderers can access it
+    if self.i18n then
+      if type(self.state) ~= "table" then self.state = {} end
+      self.state.i18n = self.i18n
+    end
+
+    -- Reset signal if we successfully reloaded based on a trigger
+    if signalReload and type(model) == "table" and type(model.setGlobalVariable) == "function" then
+      pcall(model.setGlobalVariable, 8, 8, 0)
+    end
+  end
+
+  self.preferencesLastLoadedAt = now
+end
+
 local function updateConnectionState(self)
   local runtimeState = nil
   local mspProgress = nil
@@ -274,16 +353,19 @@ local function updateConnectionState(self)
     self.batteryDialogState = "pending"
   elseif not tasksDone then
     local pDone = 0
-    local pTotal = 1
+    local pTotal = 0
+    local showNumbers = false
     if onconnectProgress and onconnectProgress.total > 0 then
       pDone = onconnectProgress.done or 0
-      pTotal = onconnectProgress.total or 1
-    elseif mspProgress then
-      pDone = mspProgress.done or 0
-      pTotal = mspProgress.total or 1
+      pTotal = onconnectProgress.total or 0
+      showNumbers = true
     end
     local loadingTasksStr = (t and t("widgets.dashboard.loading_tasks")) or "Loading data..."
-    statusLine = loadingTasksStr .. " (" .. tostring(pDone) .. "/" .. tostring(pTotal) .. ")"
+    if showNumbers then
+      statusLine = loadingTasksStr .. " (" .. tostring(pDone) .. "/" .. tostring(pTotal) .. ")"
+    else
+      statusLine = loadingTasksStr
+    end
   elseif not rfReady then
     statusLine = (t and t("widgets.dashboard.waiting_for_receiver_telemetry")) or "Waiting for receiver telemetry (1RSS/2RSS)"
   elseif not batteryReady then
@@ -298,6 +380,8 @@ local function updateConnectionState(self)
     self.renderKey = nil
     if ready then
       widgetLog(self, "FBL connected and telemetry initialized", "info")
+      -- Force reload preferences when connection ready to ensure we have the latest model settings
+      reloadPreferencesIfNeeded(self, true)
     else
       widgetLog(self, "FBL not ready yet", "info")
       if self.audioState then
@@ -356,12 +440,60 @@ local function updateDerivedFlightState(state)
     state.currentFlightSeconds = 0
     state.currentFlightMinVoltage = nil
     state.currentFlightMinLq = nil
+    state.currentFlightMaxThrottlePercent = nil
+    state.currentFlightMaxRpm = nil
+    state.currentFlightMaxCurrent = nil
+    state.currentFlightMaxWatts = nil
+    state.currentFlightMaxEscTemp = nil
+    state.currentFlightMinFuel = nil
     state.hadArmedFlight = true
   end
 
   if isArmed then
     state.currentFlightSeconds = (state.currentFlightSeconds or 0) + delta
     state.totalFlightSeconds = (state.totalFlightSeconds or 0) + delta
+
+    if type(state.throttlePercent) == "number" then
+      local currentMaxThrottle = state.currentFlightMaxThrottlePercent
+      if currentMaxThrottle == nil or state.throttlePercent > currentMaxThrottle then
+        state.currentFlightMaxThrottlePercent = state.throttlePercent
+      end
+    end
+
+    if type(state.rpm) == "number" then
+      local currentMaxRpm = state.currentFlightMaxRpm
+      if currentMaxRpm == nil or state.rpm > currentMaxRpm then
+        state.currentFlightMaxRpm = state.rpm
+      end
+    end
+
+    if type(state.current) == "number" then
+      local currentMaxCurrent = state.currentFlightMaxCurrent
+      if currentMaxCurrent == nil or state.current > currentMaxCurrent then
+        state.currentFlightMaxCurrent = state.current
+      end
+    end
+
+    if type(state.watts) == "number" then
+      local currentMaxWatts = state.currentFlightMaxWatts
+      if currentMaxWatts == nil or state.watts > currentMaxWatts then
+        state.currentFlightMaxWatts = state.watts
+      end
+    end
+
+    if type(state.escTemp) == "number" then
+      local currentMaxEscTemp = state.currentFlightMaxEscTemp
+      if currentMaxEscTemp == nil or state.escTemp > currentMaxEscTemp then
+        state.currentFlightMaxEscTemp = state.escTemp
+      end
+    end
+
+    if state.fuelTelemetrySeen == true and type(state.fuel) == "number" then
+      local currentMinFuel = state.currentFlightMinFuel
+      if currentMinFuel == nil or state.fuel < currentMinFuel then
+        state.currentFlightMinFuel = state.fuel
+      end
+    end
 
     if type(state.voltage) == "number" and state.voltage > 0 then
       local currentMinVoltage = state.currentFlightMinVoltage
@@ -383,11 +515,24 @@ local function updateDerivedFlightState(state)
     end
     state.lastDisarmAt = now
     state.hadArmedFlight = true
+    state.lastFlightMaxThrottlePercent = state.currentFlightMaxThrottlePercent
+    state.lastFlightMaxRpm = state.currentFlightMaxRpm
+    state.lastFlightMaxCurrent = state.currentFlightMaxCurrent
+    state.lastFlightMaxWatts = state.currentFlightMaxWatts
+    state.lastFlightMaxEscTemp = state.currentFlightMaxEscTemp
+    state.lastFlightMinFuel = state.currentFlightMinFuel
     state.lastMinVoltage = state.currentFlightMinVoltage
     state.lastMinLq = state.currentFlightMinLq
     state.currentFlightSeconds = 0
     state.currentFlightMinVoltage = nil
     state.currentFlightMinLq = nil
+    state.fuelTelemetrySeen = false
+    state.currentFlightMaxThrottlePercent = nil
+    state.currentFlightMaxRpm = nil
+    state.currentFlightMaxCurrent = nil
+    state.currentFlightMaxWatts = nil
+    state.currentFlightMaxEscTemp = nil
+    state.currentFlightMinFuel = nil
   end
 
   if isArmed then
@@ -396,6 +541,7 @@ local function updateDerivedFlightState(state)
     state.flightSeconds = state.lastFlightSeconds or 0
   end
 
+  state.prevArmed = wasArmed
   state.wasArmed = isArmed
 end
 
@@ -429,17 +575,6 @@ local function parseThemePath(raw)
     return "system", "default"
   end
   return source, folder
-end
-
-local function loadPreferences()
-  if not PreferencesModule or type(PreferencesModule.load) ~= "function" then
-    return nil
-  end
-  local loadedOk, prefs = pcall(PreferencesModule.load)
-  if not loadedOk or type(prefs) ~= "table" then
-    return nil
-  end
-  return prefs
 end
 
 local function loadThemeInit(themePath)
@@ -545,25 +680,52 @@ local function readTelemetry(state)
   end
 
   setField("rpm", getSensor("rpm"))
-  setField("lq", getSensor("link"))
+  local linkValue = getSensor("link")
+  if type(linkValue) ~= "number" or linkValue <= 0 then
+    -- Prefer direct radio telemetry names used by ELRS and common Tx stacks.
+    linkValue = readFirstNumber({ "RQly", "LQ", "Link", "link_quality", "1RSS", "2RSS" }, nil)
+  end
+  if type(linkValue) ~= "number" or linkValue <= 0 then
+    local lqCandidates = { "RQly", "LQ", "link_quality", "1RSS", "2RSS" }
+    for i = 1, #lqCandidates do
+      local candidate = getSensor(lqCandidates[i])
+      if type(candidate) == "number" and candidate > 0 then
+        linkValue = candidate
+        break
+      end
+    end
+  end
+  setField("lq", linkValue)
   setField("profile", roundInt(getSensor("pid_profile") or state.profile, state.profile or 1))
   setField("rateProfile", roundInt(getSensor("rate_profile") or state.rateProfile, state.rateProfile or 1))
   setField("batteryProfile", roundInt(getSensor("battery_profile") or state.batteryProfile, state.batteryProfile or 1))
   setField("armFlags", roundInt(getSensor("armflags") or state.armFlags, state.armFlags or 0))
+  setField("armDisableFlags", getSensor("armdisableflags") or state.armDisableFlags)
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
   setField("escTemp", roundInt(getSensor("temp_esc") or state.escTemp, state.escTemp or 0))
+  setField("throttlePercent", roundInt(getSensor("throttle_percent") or state.throttlePercent, state.throttlePercent or 0))
+  local currentValue = getSensor("current")
+  local voltageValue = getSensor("voltage")
+  local wattsValue = getSensor("watts")
+  if type(wattsValue) ~= "number" and type(currentValue) == "number" and type(voltageValue) == "number" then
+    wattsValue = voltageValue * currentValue
+  end
+
+  setField("current", currentValue or state.current)
+  setField("watts", wattsValue or state.watts)
+  setField("consumedMah", getSensor("smartconsumption") or getSensor("consumption") or state.consumedMah)
 
   local fuel = getSensor("fuel")
   if type(fuel) == "number" then
     local f = fuel
     if f < 0 then f = 0 end
     if f > 100 then f = 100 end
+    state.fuelTelemetrySeen = true
     setField("fuel", f)
   end
 
-  local voltage = getSensor("voltage")
-  if type(voltage) == "number" then
-    setField("voltage", voltage)
+  if type(voltageValue) == "number" then
+    setField("voltage", voltageValue)
   end
 
   local armState = getSensor("armflags")
@@ -582,53 +744,46 @@ local function readTelemetry(state)
 end
 
 local function computeFlightMode(state)
-  if state.armed == true then
-    state.hadArmedFlight = true
-    return "inflight"
+  local isArmed = state.armed == true
+  local wasArmed = state.prevArmed == true
+
+  -- Match Ethos behavior: after arming, stay in preflight until governor becomes active
+  -- (or throttle rises above a safety threshold).
+  if isArmed and not wasArmed then
+    state.hadInflightFlight = false
+    return "preflight"
   end
-  if state.hadArmedFlight == true then
+
+  if isArmed then
+    local governor = tonumber(state.governor)
+    local throttle = tonumber(state.throttlePercent) or 0
+    local rpm = tonumber(state.rpm) or 0
+    local current = tonumber(state.current) or 0
+    local governorActive = (type(governor) == "number" and governor >= 4 and governor <= 8)
+    local governorDisabled = (governor == 100 or governor == 0)
+    local directModeActive = governorDisabled
+      and (
+        rpm >= RPM_INFLIGHT_THRESHOLD_DIRECT
+        or current >= CURRENT_INFLIGHT_THRESHOLD_DIRECT
+        or throttle >= THROTTLE_INFLIGHT_THRESHOLD_DIRECT
+      )
+    if governorActive or throttle > THROTTLE_INFLIGHT_THRESHOLD or directModeActive then
+      state.hadInflightFlight = true
+    end
+
+    -- Once we reached inflight in this armed session, stay inflight until disarm.
+    if state.hadInflightFlight == true then
+      return "inflight"
+    end
+
+    return "preflight"
+  end
+
+  if state.hadInflightFlight == true then
     return "postflight"
   end
+
   return "preflight"
-end
-
-local function publishPreferencesToGlobal(prefs)
-  if type(_G) ~= "table" then return end
-  _G.rfsuite = _G.rfsuite or {}
-  _G.rfsuite.preferences = prefs or {}
-end
-
-local function reloadPreferencesIfNeeded(self, force)
-local now = nowSeconds()
-if not force and (now - (self.preferencesLastLoadedAt or 0)) < 5.0 then
-  return
-end
-  local prefs = loadPreferences()
-  if type(prefs) == "table" then
-    local prevLang = self.preferences and self.preferences.general and self.preferences.general.language
-    local newLang = prefs.general and prefs.general.language
-    if prevLang ~= newLang then
-      self.built = false
-    end
-    self.preferences = prefs
-    publishPreferencesToGlobal(prefs)
-    -- Update i18n context when language changes
-    if I18nModule and prevLang ~= newLang then
-      if self.i18n and type(self.i18n.setLocale) == "function" then
-        pcall(self.i18n.setLocale, newLang)
-      else
-        local ok, ctx = pcall(I18nModule.new, newLang)
-        if ok and type(ctx) == "table" then self.i18n = ctx end
-      end
-    end
-      -- expose i18n on the runtime state so theme renderers can access it
-      if self.i18n then
-        if type(self.state) ~= "table" then self.state = {} end
-        self.state.i18n = self.i18n
-      end
-  end
-
-  self.preferencesLastLoadedAt = now
 end
 
 function Runtime.new(zone, options)
@@ -654,6 +809,9 @@ function Runtime.new(zone, options)
     state = {
       armed = false,
       hadArmedFlight = false,
+      hadInflightFlight = false,
+      prevArmed = false,
+      wasArmed = false,
       fblConnected = false,
       connectionReady = false,
       rpm = 0,
@@ -661,17 +819,29 @@ function Runtime.new(zone, options)
       rateProfile = 1,
       batteryProfile = 1,
       armFlags = 0,
+      armDisableFlags = 0,
       governor = 0,
+      throttlePercent = 0,
       escTemp = 0,
+      current = 0,
+      watts = 0,
+      consumedMah = 0,
+      currentFlightMaxThrottlePercent = nil,
+      currentFlightMaxRpm = nil,
+      currentFlightMaxCurrent = nil,
+      currentFlightMaxWatts = nil,
+      currentFlightMaxEscTemp = nil,
+      currentFlightMinFuel = nil,
       flights = 0,
       lq = 0,
       rss1 = 0,
       rss2 = 0,
-      fuel = 100,
+      fuel = 0,
       voltage = 0,
       flightSeconds = 0,
       lastFlightSeconds = 0,
       totalFlightSeconds = 0,
+      fuelTelemetrySeen = false,
       lastMinVoltage = nil,
       lastMinLq = nil,
       lastDisarmAt = nil,
@@ -685,7 +855,6 @@ function Runtime.new(zone, options)
       lowFuelActive = false,
       lowFuelLastAt = 0,
       lowFuelRepeatCount = 0,
-      -- lastAlertAt wird nicht mehr hier initialisiert, sondern nur noch lazy in Audio
       lastValues = {
         arming_flags = nil,
         governor_state = nil,
@@ -802,6 +971,8 @@ function Runtime.new(zone, options)
     if isFblConnected and not wasFblConnected then
       -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
       self.state.hadArmedFlight = false
+      self.state.hadInflightFlight = false
+      self.state.prevArmed = false
       self.state.wasArmed = false
       self.state.armed = false
       self.state.lastDisarmAt = nil

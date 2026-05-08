@@ -179,6 +179,11 @@ function Utils.mapTelemetrySource(source, state)
   if source == "governor" then return state and state.governor end
   if source == "esc_temp" then return state and state.escTemp end
   if source == "mcu_temp" then return state and state.mcuTemp end
+  if source == "throttle_percent" then return state and state.throttlePercent end
+  if source == "current" then return state and state.current end
+  if source == "watts" then return state and state.watts end
+  if source == "smartfuel" then return state and state.fuel end
+  if source == "smartconsumption" then return state and state.consumedMah end
 
   -- Load sensors module lazily
   if not sensorsModule then
@@ -245,12 +250,53 @@ function Utils.pushLabel(nodes, x, y, w, text, color, align, font)
   }
 end
 
+function Utils.isLowResolution(state)
+  local w = tonumber(state and state.zoneW) or tonumber(LCD_W) or 0
+  local h = tonumber(state and state.zoneH) or tonumber(LCD_H) or 0
+  return (w > 0 and w <= 480) or (h > 0 and h <= 176)
+end
+
+function Utils.truncateText(text, maxChars)
+  if type(text) ~= "string" then return text end
+  local limit = tonumber(maxChars)
+  if not limit or limit <= 0 then return text end
+  if #text <= limit then return text end
+  if limit <= 3 then
+    return string.sub(text, 1, limit)
+  end
+  return string.sub(text, 1, limit - 3) .. "..."
+end
+
+function Utils.applyLowResMaxChars(text, box, state, prop)
+  if not Utils.isLowResolution(state) then return text end
+  local key = prop or "max_chars_lowres"
+  local limit = Utils.resolveValue(box and box[key], box, state)
+  return Utils.truncateText(text, limit)
+end
+
+function Utils.resolveFont(box, state, defaultFont, fontProp, lowResFontProp)
+  local mainKey = fontProp or "font"
+  local lowKey = lowResFontProp or "font_lowres"
+
+  local font = Utils.resolveValue(box and box[mainKey], box, state)
+  if Utils.isLowResolution(state) then
+    local lowFont = Utils.resolveValue(box and box[lowKey], box, state)
+    if lowFont ~= nil then
+      return lowFont
+    end
+  end
+
+  return font or defaultFont
+end
+
 function Utils.defaultValueY(rect, box)
   local titlePos = box and box.titlepos or "top"
   local valueY = rect.y + math.max(14, math.floor(rect.h * 0.45))
   if titlePos == "bottom" then
     valueY = rect.y + math.max(8, math.floor(rect.h * 0.35)) - 4
   end
+  local valueOffsetY = Utils.toNumber(Utils.resolveValue(box and box.value_offset_y, box, nil), 0)
+  valueY = valueY + valueOffsetY
   return valueY
 end
 
@@ -276,8 +322,25 @@ function Utils.drawContainer(nodes, rect, box, state)
   local title = box._lastTitle
   if not title then return end
 
+  if Utils.isLowResolution(state) then
+    local lowTitle = Utils.resolveValue(box.title_lowres, box, state)
+    if type(lowTitle) == "string" and lowTitle ~= "" then
+      title = lowTitle
+    end
+  end
+
+  title = Utils.applyLowResMaxChars(title, box, state, "title_max_chars_lowres")
+
   local titlePos = box.titlepos or "top"
   local titleY = titlePos == "bottom" and (rect.y + rect.h - 24) or (rect.y + 4)
+  local titleOffsetY = Utils.toNumber(Utils.resolveValue(box and box.title_offset_y, box, state), 0)
+  if Utils.isLowResolution(state) then
+    titleOffsetY = Utils.toNumber(
+      Utils.resolveValue(box and box.title_offset_y_lowres, box, state),
+      titleOffsetY
+    )
+  end
+  titleY = titleY + titleOffsetY
   Utils.pushLabel(
     nodes,
     rect.x + 4,
@@ -286,7 +349,7 @@ function Utils.drawContainer(nodes, rect, box, state)
     title,
     box.titlecolor or GREY_DEFAULT,
     box.titlealign or CENTER,
-    SMLSIZE
+    Utils.resolveFont(box, state, SMLSIZE, "titlefont", "titlefont_lowres")
   )
 end
 

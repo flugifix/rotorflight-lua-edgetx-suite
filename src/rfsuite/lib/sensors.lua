@@ -33,6 +33,7 @@ local SIM_FILE_ALIASES = {
   ["TescT"] = "temp_esc",
   ["TmcuT"] = "temp_mcu",
   ["Thr%"] = "throttle_percent",
+  ["Thr"] = "throttle_percent",
   ["Cel#"] = "cell_count",
   ["Alt"] = "altitude",
   ["voltage"] = "voltage",
@@ -44,6 +45,7 @@ local debugEnabled = false
 local loggedSimulatorState = false
 local loggedSources = {}
 local simValueCache = {}
+local SIM_SOURCE_RELOAD_SECONDS = 15.0
 
 local function nowSeconds()
   if type(getTime) == "function" then
@@ -131,8 +133,8 @@ local function readSimSensorFile(name, source)
           end
         end
         
-        -- Skript alle 2 Sekunden neu laden, um Änderungen an der Datei zu übernehmen
-        if (now - cached.t) > 2.0 then
+        -- Source-Reload deutlich drosseln, um Telemetrie-Flapping im Simulator zu vermeiden.
+        if (now - cached.t) > SIM_SOURCE_RELOAD_SECONDS then
           -- Drosselung: Maximal ein Skript-Reload pro Tick, um CPU-Spitzen zu vermeiden
           if _G.__rfsuite_sim_last_reload ~= now then
             _G.__rfsuite_sim_last_reload = now
@@ -294,11 +296,15 @@ Sensors.aliases = {
   rpm = "Hspd",
   link = "RQly",
   fuel = "Bat%",
+  consumption = "Capa",
+  smartconsumption = "Capa",
   current = "Curr",
   pid_profile = "PID#",
   rate_profile = "RTE#",
   battery_profile = "BatP",
+  armdisableflags = "ARMD",
   throttle = "Thr%",
+  throttle_percent = "Thr%",
   altitude = "Alt",
   pitch = "Ptch",
   roll = "Roll",
@@ -317,11 +323,13 @@ Sensors.search_paths = {
   rate_profile = { "RTE#", "RateP", "RTPR", "Rate Profile", "Rate" },
   battery_profile = { "BAT#", "BatP", "BatProfile", "Battery Profile" },
   throttle = { "Thr%", "Throttle", "throttle" },
+  throttle_percent = { "Thr%", "Thr", "Throttle", "throttle", "throttle_percent" },
   altitude = { "Alt", "Altitude", "altitude" },
   pitch = { "Ptch", "Pitch", "pitch" },
   roll = { "Roll", "roll" },
   yaw = { "Yaw", "yaw" },
   armflags = { "ARM", "Arm", "ARMF", "ArmF", "armflags" },
+  armdisableflags = { "ARMD", "ArmD", "arming_disable_flags", "armdisableflags" },
   governor = { "Gov", "Governor", "governor" },
   temp_esc = { "Tesc", "ESC_TMP", "TescT", "ESC Temp", "temp_esc" },
   temp_mcu = { "Tmcu", "TmcuT", "temp_mcu" }
@@ -356,6 +364,15 @@ end
 -- Resolve alias to 4-char sensor name
 function Sensors.resolveName(source)
   if type(source) ~= "string" then return nil end
+  local baseSource, suffix = string.match(source, "^(.-)([+-])$")
+  if baseSource and suffix then
+    if Sensors.aliases[baseSource] then
+      return Sensors.aliases[baseSource] .. suffix
+    end
+    if Sensors.map[baseSource] then
+      return baseSource .. suffix
+    end
+  end
   if Sensors.aliases[source] then
     return Sensors.aliases[source]
   end
@@ -369,7 +386,15 @@ end
 function Sensors.getMetadata(source)
   local name = Sensors.resolveName(source)
   if name then
-    return Sensors.map[name]
+    local meta = Sensors.map[name]
+    if meta then
+      return meta
+    end
+
+    local baseName = string.match(name, "^(.-)[+-]$")
+    if baseName then
+      return Sensors.map[baseName]
+    end
   end
   return nil
 end

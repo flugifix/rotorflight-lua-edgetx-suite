@@ -35,10 +35,20 @@ local ARC_WARN_COLOR = rgb(0xFF8000, 0xFF8000)
 local ARC_ALERT_COLOR = rgb(0xFF0000, 0xFF0000)
 
 local function getArcValueColor(value, state, box, themeCommon, utils)
-   if type(value) ~= "number" or value <= 0 then
+  if type(value) ~= "number" then
     return ARC_BG_COLOR
   end
-  if type(value) ~= "number" or value <= 0 then
+
+  local unit = box and box.unit
+  if unit == "%" then
+    local alertPct = tonumber(box and box.alertpct) or 15
+    local warnPct = tonumber(box and box.warnpct) or 30
+    if value <= alertPct then return ARC_ALERT_COLOR end
+    if value <= warnPct then return ARC_WARN_COLOR end
+    return ARC_OK_COLOR
+  end
+
+  if value <= 0 then
     return ARC_BG_COLOR
   end
 
@@ -69,7 +79,9 @@ end
 
 local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local source = utils.resolveValue(box.source, box, state)
-  local gaugeValue = utils.toNumber(utils.mapTelemetrySource(source, state), 0)
+  local rawValue = utils.mapTelemetrySource(source, state)
+  local hasValue = type(rawValue) == "number"
+  local gaugeValue = utils.toNumber(rawValue, 0)
 
   -- Statische Werte cachen
   box._gaugeMin = box._gaugeMin or utils.toNumber(utils.resolveValue(box.min, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_min, 18.0))
@@ -128,16 +140,37 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     }
   end
 
-  local valueY = cy - math.floor(thickness * 0.5)
+  local valueYOffset = utils.toNumber(utils.resolveValue(box.value_offset_y, box, state), 0)
+  local valueY = cy - math.floor(thickness * 1.3) + valueYOffset
   if valueY < rect.y + 10 then valueY = rect.y + 10 end
+
+  local unit = utils.resolveValue(box.unit, box, state)
+  local decimals = utils.resolveValue(box.decimals, box, state)
+  local valueText = nil
+  if source == "voltage" and themeCommon and type(themeCommon.formatVoltage) == "function" then
+    valueText = themeCommon.formatVoltage(gaugeValue)
+  elseif not hasValue then
+    if unit ~= nil and unit ~= "" then
+      valueText = "-- " .. tostring(unit)
+    else
+      valueText = "--"
+    end
+  else
+    valueText = utils.appendUnit(utils.formatDisplayValue(gaugeValue, decimals), unit)
+  end
+
+  local valueColor = box.textcolor or BLACK
+  if unit == "%" and hasValue then
+    valueColor = getArcValueColor(gaugeValue, state, box, themeCommon, utils)
+  end
 
   utils.pushLabel(
     nodes,
     rect.x + 4,
     valueY,
     rect.w - 8,
-    (themeCommon and type(themeCommon.formatVoltage) == "function") and themeCommon.formatVoltage(gaugeValue) or tostring(gaugeValue),
-    box.textcolor or BLACK,
+    valueText,
+    valueColor,
     box.valuealign or box.titlealign or CENTER,
     DBLSIZE
   )

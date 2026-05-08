@@ -49,7 +49,7 @@ local function ensureEventRunner(name)
 end
 
 local CONNECT_STABLE_SECONDS = 0.6
-local DISCONNECT_STABLE_SECONDS = 0.8
+local DISCONNECT_STABLE_SECONDS = 2.0
 
 local state = {
   linkUpSince = nil,

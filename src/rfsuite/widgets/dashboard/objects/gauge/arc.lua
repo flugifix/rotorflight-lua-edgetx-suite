@@ -17,6 +17,16 @@ local function getArcValueColor(value, minValue, maxValue, state, box, themeComm
     return ARC_BG_COLOR
   end
 
+  -- For percentage sources, use direct % thresholds instead of cell-voltage math
+  local unit = box and box.unit
+  if unit == "%" then
+    local alertPct = tonumber(box.alertpct) or 15
+    local warnPct  = tonumber(box.warnpct)  or 30
+    if value <= alertPct then return ARC_ALERT_COLOR end
+    if value <= warnPct  then return ARC_WARN_COLOR  end
+    return ARC_OK_COLOR
+  end
+
   local cells = 1
   if themeCommon and type(themeCommon.estimateCellCount) == "function" then
     cells = math.max(1, themeCommon.estimateCellCount(state))
@@ -40,9 +50,10 @@ local function getArcValueColor(value, minValue, maxValue, state, box, themeComm
 end
 
 function Render.render(nodes, rect, box, state, themeCommon, utils)
+  local sourceName = utils.resolveValue(box.source, box, state)
   local gaugeMin = utils.toNumber(utils.resolveValue(box.min, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_min, 18.0))
   local gaugeMax = utils.toNumber(utils.resolveValue(box.max, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_max, 25.2))
-  local gaugeValue = utils.toNumber(utils.mapTelemetrySource(utils.resolveValue(box.source, box, state), state), 0)
+  local gaugeValue = utils.toNumber(utils.mapTelemetrySource(sourceName, state), 0)
 
   local ratio = 0
   if gaugeMax > gaugeMin then
@@ -102,7 +113,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     rect.x + 4,
     valueY,
     rect.w - 8,
-    themeCommon.formatVoltage(gaugeValue),
+    (sourceName == "voltage" and themeCommon and type(themeCommon.formatVoltage) == "function") and themeCommon.formatVoltage(gaugeValue) or utils.appendUnit(utils.formatDisplayValue(gaugeValue, utils.resolveValue(box.decimals, box, state)), utils.resolveValue(box.unit, box, state)),
     box.textcolor or BLACK,
     box.valuealign or box.titlealign or CENTER,
     DBLSIZE

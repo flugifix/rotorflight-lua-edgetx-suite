@@ -238,6 +238,8 @@ class SensorApp:
             alias_name = SIM_FILE_ALIASES.get(sensor_name)
             if alias_name and alias_name not in names:
                 names.append(alias_name)
+            if sensor_name == "Curr":
+                names.append("Curr+")
             return names
 
         for name, (var, mult, sensor_type, val_map) in self.controls.items():

@@ -174,6 +174,13 @@ function M.save(prefs)
   end
 
   io.close(f)
+
+  -- Signal the widget to reload preferences using EdgeTX Global Variables
+  -- GV9 (index 8) for FM8 (index 8) set to 1
+  if type(model) == "table" and type(model.setGlobalVariable) == "function" then
+    pcall(model.setGlobalVariable, 8, 8, 1)
+  end
+
   return true
 end
 

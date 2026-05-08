@@ -2,15 +2,6 @@ local Render = {}
 
 local boxConfigCache = setmetatable({}, { __mode = "k" })
 
-local function isSimulator()
-  if type(getVersion) ~= "function" then return false end
-  local ok, _, fw = pcall(getVersion)
-  if not ok or type(fw) ~= "string" then return false end
-  return string.sub(string.lower(fw), -4) == "simu"
-end
-
-local IS_SIMULATOR = isSimulator()
-
 local FAST_STATE_SOURCES = {
   pid_profile = "profile",
   rate_profile = "rateProfile",
@@ -36,6 +27,8 @@ local function compileBoxConfig(box)
     unitDynamic = type(box and box.unit) == "function",
     font = box and box.font or nil,
     fontDynamic = type(box and box.font) == "function",
+    fontLowRes = box and box.font_lowres or nil,
+    fontLowResDynamic = type(box and box.font_lowres) == "function",
     autoSizeChars = box and box.autosize_chars or nil,
     autoSizeCharsDynamic = type(box and box.autosize_chars) == "function",
     autoSizeFont = box and box.autosize_font or nil,
@@ -100,14 +93,22 @@ function Render.render(nodes, rect, box, state, _, utils)
   if cfg.fontDynamic then
     valueFont = utils.resolveValue(valueFont, box, state)
   end
+  if utils.isLowResolution(state) then
+    local lowFont = cfg.fontLowRes
+    if cfg.fontLowResDynamic then
+      lowFont = utils.resolveValue(lowFont, box, state)
+    end
+    if lowFont ~= nil then
+      valueFont = lowFont
+    end
+  end
   valueFont = valueFont or MIDSIZE
 
-  local autoSizeChars = nil
-  if not IS_SIMULATOR then
-    autoSizeChars = cfg.autoSizeChars
-    if cfg.autoSizeCharsDynamic then
-      autoSizeChars = utils.resolveValue(autoSizeChars, box, state)
-    end
+  valueText = utils.applyLowResMaxChars(valueText, box, state, "max_chars_lowres")
+
+  local autoSizeChars = cfg.autoSizeChars
+  if cfg.autoSizeCharsDynamic then
+    autoSizeChars = utils.resolveValue(autoSizeChars, box, state)
   end
 
   if type(autoSizeChars) == "number" and type(valueText) == "string" and #valueText > autoSizeChars then
