@@ -462,6 +462,7 @@ return {
       rates = "RATE PROFILE",
       link = "LQ",
       voltage = "VOLTAGE",
+      throttle = "THROTTLE",
       flight_duration = "FLIGHT TIME",
       throttle_max = "MAX THROTTLE",
       consumed_mah = "CONSUMED",
@@ -469,6 +470,7 @@ return {
       current_max = "MAX CURRENT",
       fuel_remaining = "FUEL REMAIN",
       rpm_max = "MAX RPM",
+      rpm_min = "MIN RPM",
       esc_max_temp = "MAX ESC TEMP",
       min_volts_cell = "MIN V/CELL",
       watts_max = "MAX WATTS",
@@ -477,6 +479,8 @@ return {
       total_time = "TOTAL TIME",
       min_cell = "MIN V/CELL",
       min_link = "MIN LINK",
+      link_min = "MIN LINK",
+      link_max = "MAX LINK",
       bb_ready = "MSP Wait...",
       bb_rec = "REC",
       bb_logged = "LOGGED",
@@ -495,6 +499,21 @@ return {
       battery_profile = "BATTERY PROFILE",
       erase_blackbox = "ERASE BLACKBOX",
       erasing_blackbox = "Erasing Blackbox..."
+    },
+    governor = {
+      ACTIVE = "ACTIVE",
+      ARMED = "ARMED",
+      AUTOROT = "AUTOROT",
+      BAILOUT = "BAILOUT",
+      DISABLED = "DISABLED",
+      DISARMED = "DISARMED",
+      IDLE = "IDLE",
+      LOSTHS = "LOST-HS",
+      OFF = "OFF",
+      RECOVERY = "RECOVERY",
+      SPOOLUP = "SPOOLUP",
+      THROFF = "THR-OFF",
+      UNKNOWN = "UNKNOWN"
     }
   }
 }

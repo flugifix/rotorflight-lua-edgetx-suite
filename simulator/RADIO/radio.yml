@@ -1,9 +1,9 @@
-checksum: 59585
+checksum: 13825
 manuallyEdited: 0
 timezoneMinutes: 0
 ppmunit: 0
 semver: 2.12.0
-board: tx16s
+board: tx16smk3
 calib: 
    LH:
       mid: 1023
@@ -29,10 +29,6 @@ calib:
       mid: 1023
       spanNeg: 1008
       spanPos: 1008
-   P3:
-      mid: 1023
-      spanNeg: 1008
-      spanPos: 1008
    SL1:
       mid: 1023
       spanNeg: 1008
@@ -46,14 +42,6 @@ calib:
       spanNeg: 1008
       spanPos: 1008
    EXT2:
-      mid: 1023
-      spanNeg: 1008
-      spanPos: 1008
-   EXT3:
-      mid: 1023
-      spanNeg: 1008
-      spanPos: 1008
-   EXT4:
       mid: 1023
       spanNeg: 1008
       spanPos: 1008
@@ -92,7 +80,7 @@ speakerVolume: 12
 vBatMin: 90
 vBatMax: 120
 backlightBright: 0
-globalTimer: 439001
+globalTimer: 455196
 bluetoothBaudrate: 0
 bluetoothMode: OFF
 countryCode: 2
@@ -147,6 +135,90 @@ switchConfig:
    SJ:
       name: ""
       type: NONE
+   SW1:
+      name: ""
+      type: 2POS
+      start: START_PREVIOUS
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 255
+         b: 255
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW2:
+      name: ""
+      type: 2POS
+      start: START_PREVIOUS
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 255
+         b: 255
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW3:
+      name: ""
+      type: 2POS
+      start: START_PREVIOUS
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 255
+         b: 255
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW4:
+      name: ""
+      type: 2POS
+      start: START_PREVIOUS
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 255
+         b: 255
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW5:
+      name: ""
+      type: 2POS
+      start: START_PREVIOUS
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 255
+         b: 255
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
+   SW6:
+      name: ""
+      type: 2POS
+      start: START_PREVIOUS
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor: 
+         r: 255
+         g: 255
+         b: 255
+      offColor: 
+         r: 0
+         g: 0
+         b: 0
    FL1:
       name: ""
       type: NONE
@@ -158,7 +230,6 @@ blOffBright: 19
 bluetoothName: ""
 ownerRegistrationID: "-eC!U*U*"
 rotEncMode: 0
-uartSampleMode: 0
 imuMax: 0
 imuOffset: 0
 selectedTheme: "EdgeTX Default"

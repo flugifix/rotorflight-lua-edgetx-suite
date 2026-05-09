@@ -442,6 +442,7 @@ local function updateDerivedFlightState(state)
     state.currentFlightMinLq = nil
     state.currentFlightMaxThrottlePercent = nil
     state.currentFlightMaxRpm = nil
+    state.currentFlightMinRpm = nil
     state.currentFlightMaxCurrent = nil
     state.currentFlightMaxWatts = nil
     state.currentFlightMaxEscTemp = nil
@@ -464,6 +465,13 @@ local function updateDerivedFlightState(state)
       local currentMaxRpm = state.currentFlightMaxRpm
       if currentMaxRpm == nil or state.rpm > currentMaxRpm then
         state.currentFlightMaxRpm = state.rpm
+      end
+
+      if state.rpm > 0 then
+        local currentMinRpm = state.currentFlightMinRpm
+        if currentMinRpm == nil or state.rpm < currentMinRpm then
+          state.currentFlightMinRpm = state.rpm
+        end
       end
     end
 
@@ -517,6 +525,7 @@ local function updateDerivedFlightState(state)
     state.hadArmedFlight = true
     state.lastFlightMaxThrottlePercent = state.currentFlightMaxThrottlePercent
     state.lastFlightMaxRpm = state.currentFlightMaxRpm
+    state.lastFlightMinRpm = state.currentFlightMinRpm
     state.lastFlightMaxCurrent = state.currentFlightMaxCurrent
     state.lastFlightMaxWatts = state.currentFlightMaxWatts
     state.lastFlightMaxEscTemp = state.currentFlightMaxEscTemp
@@ -529,6 +538,7 @@ local function updateDerivedFlightState(state)
     state.fuelTelemetrySeen = false
     state.currentFlightMaxThrottlePercent = nil
     state.currentFlightMaxRpm = nil
+    state.currentFlightMinRpm = nil
     state.currentFlightMaxCurrent = nil
     state.currentFlightMaxWatts = nil
     state.currentFlightMaxEscTemp = nil
@@ -703,6 +713,7 @@ local function readTelemetry(state)
   setField("armDisableFlags", getSensor("armdisableflags") or state.armDisableFlags)
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
   setField("escTemp", roundInt(getSensor("temp_esc") or state.escTemp, state.escTemp or 0))
+  setField("bec_voltage", getSensor("bec_voltage") or state.bec_voltage)
   setField("throttlePercent", roundInt(getSensor("throttle_percent") or state.throttlePercent, state.throttlePercent or 0))
   local currentValue = getSensor("current")
   local voltageValue = getSensor("voltage")
@@ -823,11 +834,13 @@ function Runtime.new(zone, options)
       governor = 0,
       throttlePercent = 0,
       escTemp = 0,
+      bec_voltage = 0,
       current = 0,
       watts = 0,
       consumedMah = 0,
       currentFlightMaxThrottlePercent = nil,
       currentFlightMaxRpm = nil,
+      currentFlightMinRpm = nil,
       currentFlightMaxCurrent = nil,
       currentFlightMaxWatts = nil,
       currentFlightMaxEscTemp = nil,
@@ -844,6 +857,7 @@ function Runtime.new(zone, options)
       fuelTelemetrySeen = false,
       lastMinVoltage = nil,
       lastMinLq = nil,
+      lastFlightMinRpm = nil,
       lastDisarmAt = nil,
       themeConfig = { v_min = 18.0, v_max = 25.2 }
     },

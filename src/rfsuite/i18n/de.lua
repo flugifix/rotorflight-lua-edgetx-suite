@@ -462,6 +462,7 @@ return {
       rates = "RATEN",
       link = "LQ",
       voltage = "SPANNUNG",
+      throttle = "GAS",
       flight_duration = "FLUGZEIT",
       throttle_max = "MAX GAS",
       consumed_mah = "VERBRAUCH",
@@ -469,6 +470,7 @@ return {
       current_max = "MAX STROM",
       fuel_remaining = "AKKU REST",
       rpm_max = "MAX DREHZAHL",
+      rpm_min = "MIN DREHZAHL",
       esc_max_temp = "MAX ESC TEMP",
       min_volts_cell = "MIN V/ZELLE",
       watts_max = "MAX WATT",
@@ -477,6 +479,8 @@ return {
       total_time = "GESAMTZEIT",
       min_cell = "MIN V/ZELLE",
       min_link = "MIN LINK",
+      link_min = "MIN LINK",
+      link_max = "MAX LINK",
       bb_ready = "MSP warten",
       bb_rec = "AUFN",
       bb_logged = "GEL",
@@ -495,6 +499,21 @@ return {
       battery_profile = "AKKUPROFIL",
       erase_blackbox = "BLACKBOX LÖSCHEN",
       erasing_blackbox = "Lösche Blackbox..."
+    },
+    governor = {
+      ACTIVE = "AKTIV",
+      ARMED = "SCHARF",
+      AUTOROT = "AUTOROTATION",
+      BAILOUT = "NOTAUS",
+      DISABLED = "DEAKTIVIERT",
+      DISARMED = "DISARMED",
+      IDLE = "LEERLAUF",
+      LOSTHS = "KEIN SIGNAL",
+      OFF = "AUS",
+      RECOVERY = "ERHOLUNG",
+      SPOOLUP = "HOCHLAUF",
+      THROFF = "GAS-AUS",
+      UNKNOWN = "UNBEKANNT"
     }
   }
 }

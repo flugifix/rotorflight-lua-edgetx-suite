@@ -174,6 +174,7 @@ function Utils.mapTelemetrySource(source, state)
   if source == "battery_profile" then return state and state.batteryProfile end
   if source == "link" then return state and state.lq end
   if source == "voltage" then return state and state.voltage end
+  if source == "bec_voltage" then return state and state.bec_voltage end
   if source == "rpm" then return state and state.rpm end
   if source == "fuel" then return state and state.fuel end
   if source == "governor" then return state and state.governor end

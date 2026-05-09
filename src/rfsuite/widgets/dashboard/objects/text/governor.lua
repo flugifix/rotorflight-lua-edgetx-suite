@@ -6,7 +6,7 @@ local GOVERNOR_LABELS = {
   [2] = "SPOOLUP",
   [3] = "RECOVERY",
   [4] = "ACTIVE",
-  [5] = "THR-OFF",
+  [5] = "THROFF",
   [6] = "LOSTHS",
   [7] = "AUTOROT",
   [8] = "BAILOUT",
@@ -96,12 +96,16 @@ local function governorText(state)
   local armed = state and state.armed == true
   local raw = tonumber(state and state.governor)
   if not armed then
-    return GOVERNOR_LABELS[101]
+    return translate(state, "widgets.governor.DISARMED", GOVERNOR_LABELS[101])
   end
   if raw == nil then
-    return "UNKNOWN"
+    return translate(state, "widgets.governor.UNKNOWN", "UNKNOWN")
   end
-  return GOVERNOR_LABELS[raw] or "UNKNOWN"
+  local key = GOVERNOR_LABELS[raw]
+  if not key then
+    return translate(state, "widgets.governor.UNKNOWN", "UNKNOWN")
+  end
+  return translate(state, "widgets.governor." .. key, key)
 end
 
 local function governorColor(state, box)

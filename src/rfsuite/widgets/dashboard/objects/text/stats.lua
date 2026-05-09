@@ -49,6 +49,8 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     elseif stattype == "min" then
       if source == "fuel" then
         statValue = state and (state.lastFlightMinFuel or state.currentFlightMinFuel or state.fuel)
+      elseif source == "rpm" then
+        statValue = state and (state.lastFlightMinRpm or state.currentFlightMinRpm or state.rpm)
       end
     end
 
