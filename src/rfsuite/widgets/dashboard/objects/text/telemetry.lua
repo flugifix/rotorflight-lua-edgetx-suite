@@ -60,7 +60,7 @@ local function mapSourceFast(source, state, utils)
   return utils.mapTelemetrySource(source, state)
 end
 
-function Render.render(nodes, rect, box, state, _, utils)
+function Render.render(nodes, rect, box, state, themeCommon, utils)
   local cfg = getBoxConfig(box)
 
   local source = cfg.source
@@ -81,13 +81,20 @@ function Render.render(nodes, rect, box, state, _, utils)
     decimals = utils.resolveValue(decimals, box, state)
   end
 
-  local valueText = utils.formatDisplayValue(raw, decimals)
+  local valueText = nil
+  if source == "voltage" and themeCommon and type(themeCommon.formatVoltage) == "function" then
+    valueText = themeCommon.formatVoltage(raw)
+  else
+    valueText = utils.formatDisplayValue(raw, decimals)
+  end
 
   local unit = cfg.unit
   if cfg.unitDynamic then
     unit = utils.resolveValue(unit, box, state)
   end
-  valueText = utils.appendUnit(valueText, unit)
+  if not (source == "voltage" and themeCommon and type(themeCommon.formatVoltage) == "function") then
+    valueText = utils.appendUnit(valueText, unit)
+  end
 
   local valueFont = cfg.font
   if cfg.fontDynamic then

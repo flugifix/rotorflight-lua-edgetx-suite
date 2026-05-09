@@ -444,8 +444,10 @@ local function updateDerivedFlightState(state)
     state.currentFlightMaxRpm = nil
     state.currentFlightMinRpm = nil
     state.currentFlightMaxCurrent = nil
+    state.currentFlightMinCurrent = nil
     state.currentFlightMaxWatts = nil
     state.currentFlightMaxEscTemp = nil
+    state.currentFlightMaxMcuTemp = nil
     state.currentFlightMinFuel = nil
     state.hadArmedFlight = true
   end
@@ -480,6 +482,11 @@ local function updateDerivedFlightState(state)
       if currentMaxCurrent == nil or state.current > currentMaxCurrent then
         state.currentFlightMaxCurrent = state.current
       end
+
+      local currentMinCurrent = state.currentFlightMinCurrent
+      if currentMinCurrent == nil or state.current < currentMinCurrent then
+        state.currentFlightMinCurrent = state.current
+      end
     end
 
     if type(state.watts) == "number" then
@@ -493,6 +500,13 @@ local function updateDerivedFlightState(state)
       local currentMaxEscTemp = state.currentFlightMaxEscTemp
       if currentMaxEscTemp == nil or state.escTemp > currentMaxEscTemp then
         state.currentFlightMaxEscTemp = state.escTemp
+      end
+    end
+
+    if type(state.mcuTemp) == "number" then
+      local currentMaxMcuTemp = state.currentFlightMaxMcuTemp
+      if currentMaxMcuTemp == nil or state.mcuTemp > currentMaxMcuTemp then
+        state.currentFlightMaxMcuTemp = state.mcuTemp
       end
     end
 
@@ -527,8 +541,10 @@ local function updateDerivedFlightState(state)
     state.lastFlightMaxRpm = state.currentFlightMaxRpm
     state.lastFlightMinRpm = state.currentFlightMinRpm
     state.lastFlightMaxCurrent = state.currentFlightMaxCurrent
+    state.lastFlightMinCurrent = state.currentFlightMinCurrent
     state.lastFlightMaxWatts = state.currentFlightMaxWatts
     state.lastFlightMaxEscTemp = state.currentFlightMaxEscTemp
+    state.lastFlightMaxMcuTemp = state.currentFlightMaxMcuTemp
     state.lastFlightMinFuel = state.currentFlightMinFuel
     state.lastMinVoltage = state.currentFlightMinVoltage
     state.lastMinLq = state.currentFlightMinLq
@@ -540,8 +556,10 @@ local function updateDerivedFlightState(state)
     state.currentFlightMaxRpm = nil
     state.currentFlightMinRpm = nil
     state.currentFlightMaxCurrent = nil
+    state.currentFlightMinCurrent = nil
     state.currentFlightMaxWatts = nil
     state.currentFlightMaxEscTemp = nil
+    state.currentFlightMaxMcuTemp = nil
     state.currentFlightMinFuel = nil
   end
 
@@ -712,6 +730,7 @@ local function readTelemetry(state)
   setField("armFlags", roundInt(getSensor("armflags") or state.armFlags, state.armFlags or 0))
   setField("armDisableFlags", getSensor("armdisableflags") or state.armDisableFlags)
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
+  setField("mcuTemp", roundInt(getSensor("temp_mcu") or state.mcuTemp, state.mcuTemp or 0))
   setField("escTemp", roundInt(getSensor("temp_esc") or state.escTemp, state.escTemp or 0))
   setField("bec_voltage", getSensor("bec_voltage") or state.bec_voltage)
   setField("throttlePercent", roundInt(getSensor("throttle_percent") or state.throttlePercent, state.throttlePercent or 0))
@@ -833,6 +852,7 @@ function Runtime.new(zone, options)
       armDisableFlags = 0,
       governor = 0,
       throttlePercent = 0,
+      mcuTemp = 0,
       escTemp = 0,
       bec_voltage = 0,
       current = 0,
@@ -842,8 +862,10 @@ function Runtime.new(zone, options)
       currentFlightMaxRpm = nil,
       currentFlightMinRpm = nil,
       currentFlightMaxCurrent = nil,
+      currentFlightMinCurrent = nil,
       currentFlightMaxWatts = nil,
       currentFlightMaxEscTemp = nil,
+      currentFlightMaxMcuTemp = nil,
       currentFlightMinFuel = nil,
       flights = 0,
       lq = 0,
@@ -857,6 +879,8 @@ function Runtime.new(zone, options)
       fuelTelemetrySeen = false,
       lastMinVoltage = nil,
       lastMinLq = nil,
+      lastFlightMinCurrent = nil,
+      lastFlightMaxMcuTemp = nil,
       lastFlightMinRpm = nil,
       lastDisarmAt = nil,
       themeConfig = { v_min = 18.0, v_max = 25.2 }

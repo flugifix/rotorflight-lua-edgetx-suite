@@ -1,13 +1,30 @@
 local Render = {}
 
+local function useFahrenheit()
+  local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
+  local localizations = prefs and prefs.localizations or nil
+  return tonumber(localizations and localizations.temperature_unit) == 1
+end
+
 function Render.render(nodes, rect, box, state, themeCommon, utils)
   local source = utils.resolveValue(box.source, box, state)
   local raw = nil
 
   local function formatWithUnit(value)
-    local transformed = utils.applyTransform(value, utils.resolveValue(box.transform, box, state))
-    local decimals = utils.resolveValue(box.decimals, box, state)
+    local adjustedValue = value
     local unit = utils.resolveValue(box.unit, box, state)
+
+    if source == "esc_temp" or source == "mcu_temp" then
+      if useFahrenheit() and type(adjustedValue) == "number" then
+        adjustedValue = (adjustedValue * 9 / 5) + 32
+        unit = "°F"
+      else
+        unit = "°C"
+      end
+    end
+
+    local transformed = utils.applyTransform(adjustedValue, utils.resolveValue(box.transform, box, state))
+    local decimals = utils.resolveValue(box.decimals, box, state)
     return utils.appendUnit(utils.formatDisplayValue(transformed, decimals), unit)
   end
 
@@ -39,6 +56,8 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         if statValue == nil then
           statValue = state and (state.lastFlightMaxCurrent or state.currentFlightMaxCurrent or state.current)
         end
+      elseif source == "mcu_temp" then
+        statValue = state and (state.lastFlightMaxMcuTemp or state.currentFlightMaxMcuTemp or state.mcuTemp)
       elseif source == "watts" then
         statValue = state and (state.lastFlightMaxWatts or state.currentFlightMaxWatts or state.watts)
       elseif source == "esc_temp" then
@@ -51,6 +70,8 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         statValue = state and (state.lastFlightMinFuel or state.currentFlightMinFuel or state.fuel)
       elseif source == "rpm" then
         statValue = state and (state.lastFlightMinRpm or state.currentFlightMinRpm or state.rpm)
+      elseif source == "current" then
+        statValue = state and (state.lastFlightMinCurrent or state.currentFlightMinCurrent or state.current)
       end
     end
 
