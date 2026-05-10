@@ -186,6 +186,22 @@ end
 function Utils.mapTelemetrySource(source, state)
   if type(source) ~= "string" then return nil end
 
+  if source == "model_name" then
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+      local name = _G.rfsuite.session.modelName
+      if type(name) == "string" and name ~= "" then
+        return name
+      end
+    end
+    if model and type(model.getInfo) == "function" then
+      local info = model.getInfo()
+      if info and type(info.name) == "string" and info.name ~= "" then
+        return info.name
+      end
+    end
+    return "--"
+  end
+
   -- Fast-path hot dashboard values from runtime state to avoid file/telemetry
   -- lookups in every refresh.
   if source == "pid_profile" then return state and state.profile end
