@@ -137,13 +137,20 @@ function Engine.renderKey(state, boxSources)
       elseif source == "pid_profile" then v = state.profile
       elseif source == "rate_profile" then v = state.rateProfile
       elseif source == "battery_profile" then v = state.batteryProfile
-      elseif source == "governor" then v = state.governor
+      elseif source == "governor" then
+        v = tostring(state.governor or "x") .. ":" .. tostring(state.armDisableFlags or "x")
       else
         -- Fallback auf Sensors, aber gedrosselt oder nur wenn absolut nötig
         -- In der Regel sollten alle wichtigen Dashboard-Quellen im State sein
         v = state[source]
       end
-      parts[#parts + 1] = (type(v) == "number") and tostring(math.floor(v * 10 + 0.5)) or "x"
+      if type(v) == "number" then
+        parts[#parts + 1] = tostring(math.floor(v * 10 + 0.5))
+      elseif type(v) == "string" then
+        parts[#parts + 1] = v
+      else
+        parts[#parts + 1] = "x"
+      end
     end
   end
   return table.concat(parts, "|")

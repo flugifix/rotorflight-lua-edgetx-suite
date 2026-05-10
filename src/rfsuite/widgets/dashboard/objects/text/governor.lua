@@ -56,12 +56,19 @@ local function translate(state, key, fallback)
 end
 
 local function armingDisableFlagsToText(state)
-  local flags = tonumber(state and state.armDisableFlags)
+  local rawFlags = state and state.armDisableFlags
+  local flags = tonumber(rawFlags)
+  if flags == nil and type(rawFlags) == "string" then
+    flags = tonumber(rawFlags, 16)
+  end
   if flags == nil then
     return nil
   end
 
   flags = math.floor(flags)
+  if flags < 0 then
+    flags = flags + 4294967296
+  end
   if flags == 0 then
     return nil
   end
@@ -87,14 +94,36 @@ local function armingDisableFlagsToText(state)
   return table.concat(labels, ",")
 end
 
+local function armFlagsToIsArmed(value)
+  local numeric = tonumber(value)
+  if numeric == nil then
+    return nil
+  end
+  numeric = math.floor(numeric)
+  if numeric == 1 or numeric == 3 then return true end
+  if numeric == 0 or numeric == 2 then return false end
+  return nil
+end
+
+local function resolveArmedState(state)
+  local fromArmFlags = armFlagsToIsArmed(state and state.armFlags)
+  if fromArmFlags ~= nil then
+    return fromArmFlags
+  end
+  return state and state.armed == true
+end
+
 local function governorText(state)
   local disableReason = armingDisableFlagsToText(state)
   if disableReason then
     return disableReason
   end
 
-  local armed = state and state.armed == true
+  local armed = resolveArmedState(state)
   local raw = tonumber(state and state.governor)
+  if armFlagsToIsArmed(state and state.armFlags) == false then
+    raw = 101
+  end
   if not armed then
     return translate(state, "widgets.governor.DISARMED", GOVERNOR_LABELS[101])
   end
@@ -109,8 +138,11 @@ local function governorText(state)
 end
 
 local function governorColor(state, box)
-  local armed = state and state.armed == true
+  local armed = resolveArmedState(state)
   local value = tonumber(state and state.governor)
+  if armFlagsToIsArmed(state and state.armFlags) == false then
+    value = 101
+  end
   local defaultText = box.textcolor or WHITE
   local warningColor = box.warningcolor or COLOR_THEME_WARNING or RED or defaultText
   local activeColor = box.activecolor or COLOR_THEME_PRIMARY1 or GREEN or defaultText

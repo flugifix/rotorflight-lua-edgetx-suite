@@ -738,8 +738,10 @@ local function readTelemetry(state)
   setField("rateProfile", roundInt(getSensor("rate_profile") or state.rateProfile, state.rateProfile or 1))
   setField("batteryProfile", roundInt(getSensor("battery_profile") or state.batteryProfile, state.batteryProfile or 1))
   setField("armFlags", roundInt(getSensor("armflags") or state.armFlags, state.armFlags or 0))
-  local armDisableFlagsValue = getSensor("armdisableflags") or getSensor("ARMD") or getSensor("arming_disable_flags") or state.armDisableFlags
-  setField("armDisableFlags", armDisableFlagsValue)
+  local armDisableFlagsValue = getSensor("armdisableflags")
+  if type(armDisableFlagsValue) == "number" then
+    setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
+  end
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
   setField("mcuTemp", roundInt(getSensor("temp_mcu") or state.mcuTemp, state.mcuTemp or 0))
   setField("escTemp", roundInt(getSensor("temp_esc") or state.escTemp, state.escTemp or 0))
@@ -755,9 +757,9 @@ local function readTelemetry(state)
   setField("current", currentValue or state.current)
   setField("watts", wattsValue or state.watts)
   setField("altitude", getSensor("altitude") or state.altitude)
-  setField("consumedMah", getSensor("smartconsumption") or getSensor("consumption") or state.consumedMah)
+  setField("consumedMah", getSensor("smartconsumption") or state.consumedMah)
 
-  local fuel = getSensor("fuel")
+  local fuel = getSensor("smartfuel") or getSensor("fuel")
   if type(fuel) == "number" then
     local f = fuel
     if f < 0 then f = 0 end
@@ -770,7 +772,7 @@ local function readTelemetry(state)
     setField("voltage", voltageValue)
   end
 
-  local batteryCellCountValue = getSensor("battery_cell_count") or getSensor("cell_count") or getSensor("cells")
+  local batteryCellCountValue = getSensor("battery_cell_count")
   if type(batteryCellCountValue) == "number" and batteryCellCountValue > 0 then
     setField("batteryCellCount", roundInt(batteryCellCountValue, state.batteryCellCount or 0))
   end
@@ -980,7 +982,11 @@ function Runtime.new(zone, options)
       if parsedBoxes then
         local seen = {}
         for i = 1, #parsedBoxes do
-          local src = parsedBoxes[i].source
+          local box = parsedBoxes[i]
+          local src = box and box.source
+          if type(src) ~= "string" and box and box.type == "text" and box.subtype == "governor" then
+            src = "governor"
+          end
           if type(src) == "string" and not seen[src] then
             seen[src] = true
             sources[#sources + 1] = src

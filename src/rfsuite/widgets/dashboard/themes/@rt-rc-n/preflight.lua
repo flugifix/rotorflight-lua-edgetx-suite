@@ -14,7 +14,7 @@ Theme.layout = { cols = 20, rows = 8, padding = 2 }
 
 Theme.boxes = {
   { col = 1, row = 1, colspan = 8, rowspan = 3, type = "image", subtype = "model", bgcolor = BLACK },
-  { col = 1, row = 4, colspan = 4, rowspan = 3, type = "text", subtype = "governor", title = "@i18n(widgets.dashboard.governor):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, font = 0 },
+  { col = 1, row = 4, colspan = 4, rowspan = 3, type = "text", subtype = "governor", title = "@i18n(widgets.dashboard.governor):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, warningcolor = RED, bgcolor = BLACK, font = 0 },
   { col = 5, row = 4, colspan = 4, rowspan = 3, type = "text", subtype = "telemetry", source = "rpm", transform = "floor", title = "@i18n(widgets.dashboard.headspeed):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK },
   { col = 1, row = 7, colspan = 2, rowspan = 2, type = "text", subtype = "telemetry", source = "pid_profile", title = "@i18n(widgets.dashboard.profile):upper()@", title_lowres = "PROF", titlepos = "bottom", transform = "floor", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, font_lowres = SMLSIZE, title_max_chars_lowres = 6 },
   { col = 3, row = 7, colspan = 2, rowspan = 2, type = "text", subtype = "telemetry", source = "rate_profile", title = "@i18n(widgets.dashboard.rates):upper()@", title_lowres = "RATE", titlepos = "bottom", transform = "floor", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, font_lowres = SMLSIZE, title_max_chars_lowres = 6 },

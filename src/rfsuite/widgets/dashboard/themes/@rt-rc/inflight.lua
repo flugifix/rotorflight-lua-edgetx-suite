@@ -14,7 +14,7 @@ Theme.layout = { cols = 8, rows = 14, padding = 2 }
 
 Theme.boxes = {
   { col = 1, row = 1, colspan = 4, rowspan = 12, type = "gauge", subtype = "arc", source = "voltage", min = voltageMin, max = voltageMax, title = "@i18n(widgets.dashboard.voltage):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, fillbgcolor = GREY_DEFAULT },
-  { col = 5, row = 1, colspan = 4, rowspan = 12, type = "gauge", subtype = "arc", source = "fuel", unit = "%", decimals = 0, min = 0, max = 100, title = "@i18n(widgets.dashboard.battery):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, fillbgcolor = GREY_DEFAULT },
+  { col = 5, row = 1, colspan = 4, rowspan = 12, type = "gauge", subtype = "arc", source = "smartfuel", unit = "%", decimals = 0, min = 0, max = 100, title = "@i18n(widgets.dashboard.battery):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, fillbgcolor = GREY_DEFAULT },
   { col = 1, row = 13, colspan = 2, rowspan = 2, type = "text", subtype = "governor", bgcolor = BLACK, titlecolor = GREY_DEFAULT, textcolor = WHITE, activecolor = WHITE, warningcolor = RED, font_lowres = SMLSIZE, max_chars_lowres = 8, value_offset_y = -6 },
   { col = 3, row = 13, colspan = 2, rowspan = 2, type = "text", subtype = "telemetry", source = "link", unit = "%", transform = "floor", bgcolor = BLACK, titlecolor = GREY_DEFAULT, textcolor = WHITE, font_lowres = SMLSIZE, value_offset_y = -6 },
   { col = 5, row = 13, colspan = 2, rowspan = 2, type = "text", subtype = "telemetry", source = "rpm", unit = "rpm", transform = "floor", bgcolor = BLACK, titlecolor = GREY_DEFAULT, textcolor = WHITE, font_lowres = SMLSIZE, value_offset_y = -6 },

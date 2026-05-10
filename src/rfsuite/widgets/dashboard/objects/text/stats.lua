@@ -1,5 +1,27 @@
 local Render = {}
 
+local function resolveCellCount(state, themeCommon)
+  local stateCells = tonumber(state and state.batteryCellCount)
+  if stateCells and stateCells > 0 then
+    return math.max(1, math.floor(stateCells + 0.5))
+  end
+
+  if themeCommon and type(themeCommon.estimateCellCount) == "function" then
+    local estimated = tonumber(themeCommon.estimateCellCount(state))
+    if estimated and estimated > 0 then
+      return math.max(1, math.floor(estimated + 0.5))
+    end
+  end
+
+  local cfg = state and state.themeConfig or nil
+  local vMax = tonumber(cfg and cfg.v_max)
+  if vMax and vMax > 0 then
+    return math.max(1, math.floor((vMax / 4.2) + 0.5))
+  end
+
+  return 6
+end
+
 local function useFahrenheit()
   local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
   local localizations = prefs and prefs.localizations or nil
@@ -82,7 +104,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     elseif stattype == "cell" then
       if source == "voltage" then
         local voltage = state and state.voltage
-        local cellCount = state and state.batteryCellCount or 6
+        local cellCount = resolveCellCount(state, themeCommon)
         if type(voltage) == "number" and cellCount > 0 then
           statValue = voltage / cellCount
         end

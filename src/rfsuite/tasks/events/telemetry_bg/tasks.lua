@@ -1,6 +1,7 @@
 local M = {}
 
 local RFSensors = nil
+local Smart = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -64,11 +65,18 @@ function M.wakeup()
         RFSensors = loadModule("lib/rf2tlm_sensors.lua")
         if not RFSensors then return end
     end
+    if not Smart then
+        Smart = loadModule("tasks/events/telemetry_bg/smart.lua")
+    end
     
     local limit = 15
     local processed = 0
     while processed < limit and crossfirePop() do
         processed = processed + 1
+    end
+
+    if Smart and type(Smart.wakeup) == "function" then
+        Smart.wakeup()
     end
 end
 
@@ -76,6 +84,9 @@ function M.reset()
     telemetryFrameId = 0
     telemetryFrameSkip = 0
     telemetryFrameCount = 0
+    if Smart and type(Smart.reset) == "function" then
+        Smart.reset()
+    end
 end
 
 return M
