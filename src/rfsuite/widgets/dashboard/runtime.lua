@@ -1027,6 +1027,7 @@ function Runtime.new(zone, options)
 
     self.themePath = selectedTheme
     self.state.themeConfig = nextConfig
+    updateVoltageThemeConfig(self)
     self.theme = loadThemeModuleForState(selectedTheme, self.flightMode)
     self.built = false
     self.renderKey = nil
