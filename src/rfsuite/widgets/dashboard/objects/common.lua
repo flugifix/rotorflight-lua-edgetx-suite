@@ -202,6 +202,7 @@ function Utils.mapTelemetrySource(source, state)
   if source == "throttle_percent" then return state and state.throttlePercent end
   if source == "current" then return state and state.current end
   if source == "watts" then return state and state.watts end
+  if source == "altitude" then return state and state.altitude end
   if source == "smartfuel" then return state and state.fuel end
   if source == "smartconsumption" then return state and state.consumedMah end
 

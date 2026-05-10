@@ -446,6 +446,7 @@ local function updateDerivedFlightState(state)
     state.currentFlightMaxCurrent = nil
     state.currentFlightMinCurrent = nil
     state.currentFlightMaxWatts = nil
+    state.currentFlightMaxAltitude = nil
     state.currentFlightMaxEscTemp = nil
     state.currentFlightMaxMcuTemp = nil
     state.currentFlightMinFuel = nil
@@ -496,6 +497,13 @@ local function updateDerivedFlightState(state)
       end
     end
 
+    if type(state.altitude) == "number" then
+      local currentMaxAltitude = state.currentFlightMaxAltitude
+      if currentMaxAltitude == nil or state.altitude > currentMaxAltitude then
+        state.currentFlightMaxAltitude = state.altitude
+      end
+    end
+
     if type(state.escTemp) == "number" then
       local currentMaxEscTemp = state.currentFlightMaxEscTemp
       if currentMaxEscTemp == nil or state.escTemp > currentMaxEscTemp then
@@ -543,6 +551,7 @@ local function updateDerivedFlightState(state)
     state.lastFlightMaxCurrent = state.currentFlightMaxCurrent
     state.lastFlightMinCurrent = state.currentFlightMinCurrent
     state.lastFlightMaxWatts = state.currentFlightMaxWatts
+    state.lastFlightMaxAltitude = state.currentFlightMaxAltitude
     state.lastFlightMaxEscTemp = state.currentFlightMaxEscTemp
     state.lastFlightMaxMcuTemp = state.currentFlightMaxMcuTemp
     state.lastFlightMinFuel = state.currentFlightMinFuel
@@ -558,6 +567,7 @@ local function updateDerivedFlightState(state)
     state.currentFlightMaxCurrent = nil
     state.currentFlightMinCurrent = nil
     state.currentFlightMaxWatts = nil
+    state.currentFlightMaxAltitude = nil
     state.currentFlightMaxEscTemp = nil
     state.currentFlightMaxMcuTemp = nil
     state.currentFlightMinFuel = nil
@@ -743,6 +753,7 @@ local function readTelemetry(state)
 
   setField("current", currentValue or state.current)
   setField("watts", wattsValue or state.watts)
+  setField("altitude", getSensor("altitude") or state.altitude)
   setField("consumedMah", getSensor("smartconsumption") or getSensor("consumption") or state.consumedMah)
 
   local fuel = getSensor("fuel")
@@ -862,6 +873,7 @@ function Runtime.new(zone, options)
       bec_voltage = 0,
       current = 0,
       watts = 0,
+      altitude = 0,
       consumedMah = 0,
       currentFlightMaxThrottlePercent = nil,
       currentFlightMaxRpm = nil,
@@ -869,6 +881,7 @@ function Runtime.new(zone, options)
       currentFlightMaxCurrent = nil,
       currentFlightMinCurrent = nil,
       currentFlightMaxWatts = nil,
+      currentFlightMaxAltitude = nil,
       currentFlightMaxEscTemp = nil,
       currentFlightMaxMcuTemp = nil,
       currentFlightMinFuel = nil,
@@ -886,6 +899,7 @@ function Runtime.new(zone, options)
       lastMinVoltage = nil,
       lastMinLq = nil,
       lastFlightMinCurrent = nil,
+      lastFlightMaxAltitude = nil,
       lastFlightMaxMcuTemp = nil,
       lastFlightMinRpm = nil,
       lastDisarmAt = nil,

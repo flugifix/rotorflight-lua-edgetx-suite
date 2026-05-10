@@ -129,131 +129,238 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     ratio = utils.clamp((gaugeValue - gaugeMin) / (gaugeMax - gaugeMin), 0, 1)
   end
   
-  local titleReserved = (box and box.titlepos == "top") and 18 or 0
-  local panelY = rect.y + titleReserved + 2
-  local panelH = math.max(20, rect.h - titleReserved - 4)
-  local barHeight = math.max(12, math.floor(panelH * 0.5))
-  local barX = rect.x + 4
-  local barW = rect.w - 8
-  local barY = panelY + math.floor((panelH - barHeight) / 2)
+  local gaugeOrientation = utils.resolveValue(box.gaugeorientation, box, state) or "horizontal"
   
-  local thresholds = box.thresholds or {}
-  local barColor = box.fillcolor or BAR_OK_COLOR
-  if hasValue then
-    barColor = resolveThresholdColor(gaugeValue, thresholds, barColor)
-  end
-  
-  -- Background bar
-  nodes[#nodes + 1] = {
-    type = "rectangle",
-    x = barX,
-    y = barY,
-    w = barW,
-    h = barHeight,
-    color = box.fillbgcolor or BAR_BG_COLOR,
-    filled = true
-  }
-  
-  -- Filled bar
-  if ratio > 0 then
+  -- VERTICAL GAUGE
+  if gaugeOrientation == "vertical" then
+    local gaugePaddingTop = utils.toNumber(utils.resolveValue(box.gaugepaddingtop, box, state), 2)
+    local gaugePaddingBottom = utils.toNumber(utils.resolveValue(box.gaugepaddingbottom, box, state), 0)
+    local gaugePaddingLeft = utils.toNumber(utils.resolveValue(box.gaugepaddingleft, box, state), 4)
+    local gaugePaddingRight = utils.toNumber(utils.resolveValue(box.gaugepaddingright, box, state), 4)
+    local titleReserved = (box and box.titlepos == "bottom") and 20 or 0
+    local panelH = math.max(24, rect.h - titleReserved - gaugePaddingTop - gaugePaddingBottom - 2)
+    local barWidth = math.max(10, math.floor(rect.w - gaugePaddingLeft - gaugePaddingRight))
+    local barX = rect.x + gaugePaddingLeft
+    local panelY = rect.y + gaugePaddingTop
+    local barY = panelY
+    local barH = panelH
+    
+    local thresholds = box.thresholds or {}
+    local barColor = box.fillcolor or BAR_OK_COLOR
+    if hasValue then
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor)
+    end
+    
+    -- Background bar (vertical)
     nodes[#nodes + 1] = {
       type = "rectangle",
       x = barX,
       y = barY,
-      w = math.max(1, math.floor(barW * ratio)),
-      h = barHeight,
-      color = barColor,
+      w = barWidth,
+      h = barH,
+      color = box.fillbgcolor or BAR_BG_COLOR,
       filled = true
     }
-  end
-  
-  -- Value text
-  local unit = utils.resolveValue(box.unit, box, state)
-  local decimals = utils.resolveValue(box.decimals, box, state)
-  local valueText = nil
-  
-  if not hasValue then
-    if unit ~= nil and unit ~= "" then
-      valueText = "-- " .. tostring(unit)
-    else
-      valueText = "--"
+    
+    -- Filled bar (from bottom, grows upward)
+    if ratio > 0 then
+      local filledH = math.max(1, math.floor(barH * ratio))
+      nodes[#nodes + 1] = {
+        type = "rectangle",
+        x = barX,
+        y = barY + (barH - filledH),
+        w = barWidth,
+        h = filledH,
+        color = barColor,
+        filled = true
+      }
     end
-  else
-    valueText = utils.appendUnit(utils.formatDisplayValue(gaugeValue, decimals), unit)
-  end
-  
-  local textFont = utils.resolveValue(box.font, box, state) or DBLSIZE
-  local valuePaddingLeft = utils.toNumber(utils.resolveValue(box.valuepaddingleft, box, state), 8)
-  local valuePaddingTop = utils.toNumber(utils.resolveValue(box.valuepaddingtop, box, state), 0)
-  local valueAlign = utils.resolveValue(box.valuealign, box, state) or LEFT
-  
-  utils.pushLabel(
-    nodes,
-    barX + valuePaddingLeft,
-    barY + math.floor((barHeight - 8) / 2) + valuePaddingTop,
-    barW - valuePaddingLeft - 4,
-    valueText,
-    box.textcolor or WHITE,
-    valueAlign,
-    textFont
-  )
-  
-  -- Battery advanced info (like capacity)
-  if box.battadv then
-    local battAdvText = ""
-    if source == "smartfuel" or source == "fuel" then
-      local voltageText = nil
-      if themeCommon and type(themeCommon.formatVoltage) == "function" and type(state and state.voltage) == "number" and state.voltage > 0 then
-        local cellText = nil
-        local cells = nil
-        if type(state and state.batteryCellCount) == "number" and state.batteryCellCount > 0 then
-          cells = state.batteryCellCount
-        elseif type(themeCommon.estimateCellCount) == "function" then
-          cells = themeCommon.estimateCellCount(state)
-        end
 
-        if type(cells) == "number" and cells > 0 then
-          cellText = string.format("%.2fV (%dS)", state.voltage / cells, cells)
-        elseif type(themeCommon.formatCellVoltage) == "function" then
-          cellText = themeCommon.formatCellVoltage(state, state.voltage)
-        end
-
-        if cellText and cellText ~= "" then
-          voltageText = themeCommon.formatVoltage(state.voltage) .. " / " .. cellText
-        else
-          voltageText = themeCommon.formatVoltage(state.voltage)
-        end
-      end
-
-      local consumptionText = nil
-      local consumedMah = tonumber(state and state.consumedMah)
-      if consumedMah and consumedMah >= 0 then
-        consumptionText = string.format("%d mah", math.floor(consumedMah + 0.5))
-      end
-
-      if voltageText and consumptionText then
-        battAdvText = voltageText .. "\n" .. consumptionText
-      else
-        battAdvText = voltageText or consumptionText or ""
+    -- Optional segmented battery look for vertical bars.
+    if box.battery then
+      local segmentCount = utils.toNumber(utils.resolveValue(box.batterysegments, box, state), 5)
+      segmentCount = utils.clamp(math.floor(segmentCount + 0.5), 2, 10)
+      local separatorColor = box.bgcolor or BLACK
+      for i = 1, segmentCount - 1 do
+        local sepY = barY + math.floor((barH * i) / segmentCount)
+        nodes[#nodes + 1] = {
+          type = "rectangle",
+          x = barX,
+          y = sepY,
+          w = barWidth,
+          h = 1,
+          color = separatorColor,
+          filled = true
+        }
       end
     end
     
-    if battAdvText ~= "" then
-      local battAdvFont = utils.resolveValue(box.battadvfont, box, state) or 0
-      local battAdvPaddingTop = utils.toNumber(utils.resolveValue(box.battadvpaddingtop, box, state), math.floor((barHeight - 8) / 2))
-      local battAdvPaddingRight = utils.toNumber(utils.resolveValue(box.battadvpaddingright, box, state), 6)
-      local battAdvAlign = utils.resolveValue(box.battadvvaluealign, box, state) or RIGHT
+    -- Value text (above or inside gauge)
+    local unit = utils.resolveValue(box.unit, box, state)
+    local decimals = utils.resolveValue(box.decimals, box, state)
+    local valueText = nil
+    
+    if not hasValue then
+      if unit ~= nil and unit ~= "" then
+        valueText = "-- " .. tostring(unit)
+      else
+        valueText = "--"
+      end
+    else
+      valueText = utils.appendUnit(utils.formatDisplayValue(gaugeValue, decimals), unit)
+    end
+    
+    local textFont = utils.resolveValue(box.font, box, state) or DBLSIZE
+    local valuePaddingTop = utils.toNumber(utils.resolveValue(box.valuepaddingtop, box, state), 0)
+    local valuePosition = utils.resolveValue(box.valueposition, box, state) or "center"
+    local valueAlign = utils.resolveValue(box.valuealign, box, state) or CENTER
+    local valueY = barY + math.floor((barH - 8) / 2) + valuePaddingTop
+
+    if valuePosition == "top" then
+      valueY = barY + 4 + valuePaddingTop
+    elseif valuePosition == "bottom" then
+      valueY = barY + barH - 12 + valuePaddingTop
+    end
+    
+    utils.pushLabel(
+      nodes,
+      barX,
+      valueY,
+      barWidth,
+      valueText,
+      box.textcolor or WHITE,
+      valueAlign,
+      textFont
+    )
+  
+  -- HORIZONTAL GAUGE (default)
+  else
+    local titleReserved = (box and box.titlepos == "top") and 18 or 0
+    local panelY = rect.y + titleReserved + 2
+    local panelH = math.max(20, rect.h - titleReserved - 4)
+    local barHeight = math.max(12, math.floor(panelH * 0.5))
+    local barX = rect.x + 4
+    local barW = rect.w - 8
+    local barY = panelY + math.floor((panelH - barHeight) / 2)
+    
+    local thresholds = box.thresholds or {}
+    local barColor = box.fillcolor or BAR_OK_COLOR
+    if hasValue then
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor)
+    end
+    
+    -- Background bar
+    nodes[#nodes + 1] = {
+      type = "rectangle",
+      x = barX,
+      y = barY,
+      w = barW,
+      h = barHeight,
+      color = box.fillbgcolor or BAR_BG_COLOR,
+      filled = true
+    }
+    
+    -- Filled bar
+    if ratio > 0 then
+      nodes[#nodes + 1] = {
+        type = "rectangle",
+        x = barX,
+        y = barY,
+        w = math.max(1, math.floor(barW * ratio)),
+        h = barHeight,
+        color = barColor,
+        filled = true
+      }
+    end
+    
+    -- Value text
+    local unit = utils.resolveValue(box.unit, box, state)
+    local decimals = utils.resolveValue(box.decimals, box, state)
+    local valueText = nil
+    
+    if not hasValue then
+      if unit ~= nil and unit ~= "" then
+        valueText = "-- " .. tostring(unit)
+      else
+        valueText = "--"
+      end
+    else
+      valueText = utils.appendUnit(utils.formatDisplayValue(gaugeValue, decimals), unit)
+    end
+    
+    local textFont = utils.resolveValue(box.font, box, state) or DBLSIZE
+    local valuePaddingLeft = utils.toNumber(utils.resolveValue(box.valuepaddingleft, box, state), 8)
+    local valuePaddingTop = utils.toNumber(utils.resolveValue(box.valuepaddingtop, box, state), 0)
+    local valueAlign = utils.resolveValue(box.valuealign, box, state) or LEFT
+    
+    utils.pushLabel(
+      nodes,
+      barX + valuePaddingLeft,
+      barY + math.floor((barHeight - 8) / 2) + valuePaddingTop,
+      barW - valuePaddingLeft - 4,
+      valueText,
+      box.textcolor or WHITE,
+      valueAlign,
+      textFont
+    )
+  
+    -- Battery advanced info (like capacity) - only for horizontal
+    if box.battadv then
+      local battAdvText = ""
+      if source == "smartfuel" or source == "fuel" then
+        local voltageText = nil
+        if themeCommon and type(themeCommon.formatVoltage) == "function" and type(state and state.voltage) == "number" and state.voltage > 0 then
+          local cellText = nil
+          local cells = nil
+          if type(state and state.batteryCellCount) == "number" and state.batteryCellCount > 0 then
+            cells = state.batteryCellCount
+          elseif type(themeCommon.estimateCellCount) == "function" then
+            cells = themeCommon.estimateCellCount(state)
+          end
+
+          if type(cells) == "number" and cells > 0 then
+            cellText = string.format("%.2fV (%dS)", state.voltage / cells, cells)
+          elseif type(themeCommon.formatCellVoltage) == "function" then
+            cellText = themeCommon.formatCellVoltage(state, state.voltage)
+          end
+
+          if cellText and cellText ~= "" then
+            voltageText = themeCommon.formatVoltage(state.voltage) .. " / " .. cellText
+          else
+            voltageText = themeCommon.formatVoltage(state.voltage)
+          end
+        end
+
+        local consumptionText = nil
+        local consumedMah = tonumber(state and state.consumedMah)
+        if consumedMah and consumedMah >= 0 then
+          consumptionText = string.format("%d mah", math.floor(consumedMah + 0.5))
+        end
+
+        if voltageText and consumptionText then
+          battAdvText = voltageText .. "\n" .. consumptionText
+        else
+          battAdvText = voltageText or consumptionText or ""
+        end
+      end
       
-      utils.pushLabel(
-        nodes,
-        rect.x + 4,
-        barY + battAdvPaddingTop,
-        barW - battAdvPaddingRight - 4,
-        battAdvText,
-        box.battadvtextcolor or WHITE,
-        battAdvAlign,
-        battAdvFont
-      )
+      if battAdvText ~= "" then
+        local battAdvFont = utils.resolveValue(box.battadvfont, box, state) or 0
+        local battAdvPaddingTop = utils.toNumber(utils.resolveValue(box.battadvpaddingtop, box, state), math.floor((barHeight - 8) / 2))
+        local battAdvPaddingRight = utils.toNumber(utils.resolveValue(box.battadvpaddingright, box, state), 6)
+        local battAdvAlign = utils.resolveValue(box.battadvvaluealign, box, state) or RIGHT
+        
+        utils.pushLabel(
+          nodes,
+          rect.x + 4,
+          barY + battAdvPaddingTop,
+          barW - battAdvPaddingRight - 4,
+          battAdvText,
+          box.battadvtextcolor or WHITE,
+          battAdvAlign,
+          battAdvFont
+        )
+      end
     end
   end
 end

@@ -60,6 +60,8 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         statValue = state and (state.lastFlightMaxMcuTemp or state.currentFlightMaxMcuTemp or state.mcuTemp)
       elseif source == "watts" then
         statValue = state and (state.lastFlightMaxWatts or state.currentFlightMaxWatts or state.watts)
+      elseif source == "altitude" then
+        statValue = state and (state.lastFlightMaxAltitude or state.currentFlightMaxAltitude or state.altitude)
       elseif source == "esc_temp" then
         statValue = state and (state.lastFlightMaxEscTemp or state.currentFlightMaxEscTemp or state.escTemp)
       elseif source == "smartconsumption" then
