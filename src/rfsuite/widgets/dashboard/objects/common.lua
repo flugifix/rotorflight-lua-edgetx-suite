@@ -12,6 +12,25 @@ local sensorsModule = nil
 local localeModule = nil
 local titleCache = {}
 
+local function rgb(hex, fallback)
+  if lcd and type(lcd.RGB) == "function" then
+    return lcd.RGB(hex)
+  end
+  return fallback
+end
+
+local COLOR_NAME_MAP = {
+  black = BLACK,
+  white = WHITE,
+  red = RED,
+  green = GREEN,
+  yellow = YELLOW,
+  grey = GREY_DEFAULT,
+  gray = GREY_DEFAULT,
+  orange = rgb(0xFF8000, 0xFF8000),
+  blue = rgb(0x3399FF, 0x3399FF)
+}
+
 local function detectSimulator()
   if type(getVersion) ~= "function" then return false end
   local ok, _, fw = pcall(getVersion)
@@ -238,6 +257,29 @@ function Utils.appendUnit(valueText, unit)
   return valueText .. tostring(unit)
 end
 
+function Utils.normalizeAlign(align, fallback)
+  if type(align) == "number" then return align end
+  if type(align) ~= "string" then return fallback or CENTER end
+
+  local token = string.lower(align)
+  if token == "left" then return LEFT end
+  if token == "right" then return RIGHT end
+  if token == "center" or token == "centre" then return CENTER end
+  return fallback or CENTER
+end
+
+function Utils.normalizeColor(color, fallback)
+  if type(color) == "number" then return color end
+  if type(color) == "string" then
+    local mapped = COLOR_NAME_MAP[string.lower(color)]
+    if type(mapped) == "number" then
+      return mapped
+    end
+  end
+  if type(fallback) == "number" then return fallback end
+  return WHITE
+end
+
 function Utils.pushLabel(nodes, x, y, w, text, color, align, font)
   nodes[#nodes + 1] = {
     type = "label",
@@ -245,8 +287,8 @@ function Utils.pushLabel(nodes, x, y, w, text, color, align, font)
     y = y,
     w = w,
     text = text,
-    color = color,
-    align = align,
+    color = Utils.normalizeColor(color, WHITE),
+    align = Utils.normalizeAlign(align, CENTER),
     font = font
   }
 end

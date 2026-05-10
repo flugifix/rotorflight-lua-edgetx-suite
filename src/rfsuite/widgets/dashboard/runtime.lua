@@ -758,6 +758,11 @@ local function readTelemetry(state)
     setField("voltage", voltageValue)
   end
 
+  local batteryCellCountValue = getSensor("battery_cell_count") or getSensor("cell_count") or getSensor("cells")
+  if type(batteryCellCountValue) == "number" and batteryCellCountValue > 0 then
+    setField("batteryCellCount", roundInt(batteryCellCountValue, state.batteryCellCount or 0))
+  end
+
   local armState = getSensor("armflags")
   if type(armState) == "number" and bit32 then
     setField("armed", bit32.btest(armState, 1))
@@ -873,6 +878,7 @@ function Runtime.new(zone, options)
       rss2 = 0,
       fuel = 0,
       voltage = 0,
+      batteryCellCount = 0,
       flightSeconds = 0,
       lastFlightSeconds = 0,
       totalFlightSeconds = 0,

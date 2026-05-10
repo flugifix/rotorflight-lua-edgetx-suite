@@ -1,0 +1,118 @@
+local Theme = {}
+
+local function loadAercCommon()
+  if type(_G) == "table" and type(_G.__rfsuiteThemeAercCommonModule) == "table" then
+    return _G.__rfsuiteThemeAercCommonModule
+  end
+
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/@aerc/common.lua", "t")
+  if not chunk then return nil end
+  local ok, mod = pcall(chunk)
+  if ok and type(mod) == "table" then
+    return mod
+  end
+  return nil
+end
+
+local AercCommon = loadAercCommon()
+
+local function cfgValue(key, fallback, state)
+  local cfg = state and state.themeConfig or nil
+  local value = cfg and cfg[key] or nil
+  if type(value) == "number" then
+    return value
+  end
+  return fallback
+end
+
+Theme.layout = { cols = 3, rows = 10, padding = 1 }
+
+Theme.boxes = {
+  { col = 1, row = 1, colspan = 1, rowspan = 2, type = "time", subtype = "flight", title = "@i18n(widgets.dashboard.flight_time):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK },
+  AercCommon and AercCommon.batteryBar and AercCommon.batteryBar("fuel", {
+    col = 2,
+    row = 1,
+    colspan = 2,
+    rowspan = 2,
+    title = "@i18n(widgets.dashboard.battery):upper()@",
+    titlepos = "bottom",
+    battadvpaddingright = 10,
+    valuepaddingtop = -23
+  }),
+  {
+    col = 1,
+    row = 3,
+    colspan = 1,
+    rowspan = 8,
+    type = "gauge",
+    subtype = "arc",
+    source = "throttle_percent",
+    arcmax = true,
+    maxprefix = "Max: ",
+    title = "@i18n(widgets.dashboard.throttle):upper()@",
+    titlepos = "bottom",
+    unit = "%",
+    min = 0,
+    max = 100,
+    transform = "floor",
+    maxtextcolor = "orange",
+    maxposition = "bottom",
+    maxalign = CENTER,
+    maxpaddingbottom = 26,
+    titlecolor = GREY_DEFAULT,
+    textcolor = WHITE,
+    bgcolor = BLACK,
+    fillbgcolor = GREY_DEFAULT
+  },
+  {
+    col = 2,
+    row = 3,
+    colspan = 1,
+    rowspan = 8,
+    type = "gauge",
+    subtype = "arc",
+    source = "rpm",
+    arcmax = true,
+    maxprefix = "Max: ",
+    title = "@i18n(widgets.dashboard.headspeed):upper()@",
+    titlepos = "bottom",
+    min = 0,
+    max = function(_, state) return cfgValue("rpm_max", 3000, state) end,
+    transform = "floor",
+    maxtextcolor = "orange",
+    maxposition = "bottom",
+    maxalign = CENTER,
+    maxpaddingbottom = 26,
+    titlecolor = GREY_DEFAULT,
+    textcolor = WHITE,
+    bgcolor = BLACK,
+    fillbgcolor = GREY_DEFAULT
+  },
+  {
+    col = 3,
+    row = 3,
+    colspan = 1,
+    rowspan = 8,
+    type = "gauge",
+    subtype = "arc",
+    source = "esc_temp",
+    arcmax = true,
+    maxprefix = "Max: ",
+    title = "@i18n(widgets.dashboard.esc_temp):upper()@",
+    titlepos = "bottom",
+    unit = "°C",
+    min = 20,
+    max = function(_, state) return cfgValue("esctemp_max", 140, state) end,
+    transform = "floor",
+    maxtextcolor = "orange",
+    maxposition = "bottom",
+    maxalign = CENTER,
+    maxpaddingbottom = 26,
+    titlecolor = GREY_DEFAULT,
+    textcolor = WHITE,
+    bgcolor = BLACK,
+    fillbgcolor = GREY_DEFAULT
+  }
+}
+
+return Theme

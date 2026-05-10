@@ -116,6 +116,11 @@ function Common.getVoltageColor(state)
 end
 
 function Common.estimateCellCount(state)
+  local stateCells = tonumber(state and state.batteryCellCount)
+  if stateCells and stateCells > 0 then
+    return clamp(math.floor(stateCells + 0.5), 1, 14)
+  end
+
   local cfg = state and state.themeConfig or nil
   local vMax = tonumber(cfg and cfg.v_max) or 25.2
   local cells = math.floor((vMax / 4.2) + 0.5)

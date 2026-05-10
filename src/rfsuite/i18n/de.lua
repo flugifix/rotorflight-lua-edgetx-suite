@@ -510,7 +510,14 @@ return {
       quick_settings = "SCHNELLEINSTELLUNGEN",
       battery_profile = "AKKUPROFIL",
       erase_blackbox = "BLACKBOX LÖSCHEN",
-      erasing_blackbox = "Lösche Blackbox..."
+      erasing_blackbox = "Lösche Blackbox...",
+      bec_voltage = "BEC SPANNUNG",
+      esc_temp = "ESC TEMP",
+      flight_time = "FLUGZEIT",
+      min = "MIN",
+      max = "MAX",
+      warning = "WARNUNG",
+      altitude_max = "MAX HÖHE"
     },
     governor = {
       ACTIVE = "AKTIV",

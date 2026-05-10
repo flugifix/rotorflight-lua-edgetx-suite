@@ -33,6 +33,25 @@ local ARC_BG_COLOR = rgb(0x444444, GREY_DEFAULT)
 local ARC_OK_COLOR = rgb(0x00FF00, GREEN or 0x00FF00)
 local ARC_WARN_COLOR = rgb(0xFF8000, 0xFF8000)
 local ARC_ALERT_COLOR = rgb(0xFF0000, 0xFF0000)
+local BAR_BG_COLOR = rgb(0x1a1a1a, BLACK)
+local BAR_OK_COLOR = rgb(0x00FF00, GREEN or 0x00FF00)
+local BAR_WARN_COLOR = rgb(0xFF8000, 0xFF8000)
+local BAR_ALERT_COLOR = rgb(0xFF0000, 0xFF0000)
+
+local function resolveThresholdColor(value, thresholds, defaultColor)
+  if type(value) ~= "number" or type(thresholds) ~= "table" or #thresholds == 0 then
+    return defaultColor
+  end
+
+  for i = 1, #thresholds do
+    local threshold = thresholds[i]
+    if type(threshold) == "table" and type(threshold.value) == "number" and value <= threshold.value then
+      return threshold.fillcolor or threshold.color or defaultColor
+    end
+  end
+
+  return defaultColor
+end
 
 local function getArcValueColor(value, state, box, themeCommon, utils)
   if type(value) ~= "number" then
@@ -77,6 +96,168 @@ local function getArcValueColor(value, state, box, themeCommon, utils)
   return ARC_OK_COLOR
 end
 
+local function getMaxValue(source, state, box, utils)
+  if source == "throttle_percent" then
+    return state.currentFlightMaxThrottlePercent or state.lastFlightMaxThrottlePercent
+  elseif source == "rpm" then
+    return state.currentFlightMaxRpm or state.lastFlightMaxRpm
+  elseif source == "temp_esc" or source == "esc_temp" then
+    return state.currentFlightMaxEscTemp or state.lastFlightMaxEscTemp
+  elseif source == "temp_mcu" or source == "mcu_temp" then
+    return state.currentFlightMaxMcuTemp or state.lastFlightMaxMcuTemp
+  elseif source == "current" then
+    return state.currentFlightMaxCurrent or state.lastFlightMaxCurrent
+  elseif source == "watts" then
+    return state.currentFlightMaxWatts or state.lastFlightMaxWatts
+  end
+  return nil
+end
+
+local function renderBar(nodes, rect, box, state, themeCommon, utils)
+  local source = utils.resolveValue(box.source, box, state)
+  local rawValue = utils.mapTelemetrySource(source, state)
+  local hasValue = type(rawValue) == "number"
+  local gaugeValue = utils.toNumber(rawValue, 0)
+  
+  local gaugeMin = utils.toNumber(utils.resolveValue(box.min, box, state), 0)
+  local gaugeMax = utils.toNumber(utils.resolveValue(box.max, box, state), 100)
+  
+  if gaugeMax <= gaugeMin then gaugeMax = 100 end
+  
+  local ratio = 0
+  if gaugeMax > gaugeMin then
+    ratio = utils.clamp((gaugeValue - gaugeMin) / (gaugeMax - gaugeMin), 0, 1)
+  end
+  
+  local titleReserved = (box and box.titlepos == "top") and 18 or 0
+  local panelY = rect.y + titleReserved + 2
+  local panelH = math.max(20, rect.h - titleReserved - 4)
+  local barHeight = math.max(12, math.floor(panelH * 0.5))
+  local barX = rect.x + 4
+  local barW = rect.w - 8
+  local barY = panelY + math.floor((panelH - barHeight) / 2)
+  
+  local thresholds = box.thresholds or {}
+  local barColor = box.fillcolor or BAR_OK_COLOR
+  if hasValue then
+    barColor = resolveThresholdColor(gaugeValue, thresholds, barColor)
+  end
+  
+  -- Background bar
+  nodes[#nodes + 1] = {
+    type = "rectangle",
+    x = barX,
+    y = barY,
+    w = barW,
+    h = barHeight,
+    color = box.fillbgcolor or BAR_BG_COLOR,
+    filled = true
+  }
+  
+  -- Filled bar
+  if ratio > 0 then
+    nodes[#nodes + 1] = {
+      type = "rectangle",
+      x = barX,
+      y = barY,
+      w = math.max(1, math.floor(barW * ratio)),
+      h = barHeight,
+      color = barColor,
+      filled = true
+    }
+  end
+  
+  -- Value text
+  local unit = utils.resolveValue(box.unit, box, state)
+  local decimals = utils.resolveValue(box.decimals, box, state)
+  local valueText = nil
+  
+  if not hasValue then
+    if unit ~= nil and unit ~= "" then
+      valueText = "-- " .. tostring(unit)
+    else
+      valueText = "--"
+    end
+  else
+    valueText = utils.appendUnit(utils.formatDisplayValue(gaugeValue, decimals), unit)
+  end
+  
+  local textFont = utils.resolveValue(box.font, box, state) or DBLSIZE
+  local valuePaddingLeft = utils.toNumber(utils.resolveValue(box.valuepaddingleft, box, state), 8)
+  local valuePaddingTop = utils.toNumber(utils.resolveValue(box.valuepaddingtop, box, state), 0)
+  local valueAlign = utils.resolveValue(box.valuealign, box, state) or LEFT
+  
+  utils.pushLabel(
+    nodes,
+    barX + valuePaddingLeft,
+    barY + math.floor((barHeight - 8) / 2) + valuePaddingTop,
+    barW - valuePaddingLeft - 4,
+    valueText,
+    box.textcolor or WHITE,
+    valueAlign,
+    textFont
+  )
+  
+  -- Battery advanced info (like capacity)
+  if box.battadv then
+    local battAdvText = ""
+    if source == "smartfuel" or source == "fuel" then
+      local voltageText = nil
+      if themeCommon and type(themeCommon.formatVoltage) == "function" and type(state and state.voltage) == "number" and state.voltage > 0 then
+        local cellText = nil
+        local cells = nil
+        if type(state and state.batteryCellCount) == "number" and state.batteryCellCount > 0 then
+          cells = state.batteryCellCount
+        elseif type(themeCommon.estimateCellCount) == "function" then
+          cells = themeCommon.estimateCellCount(state)
+        end
+
+        if type(cells) == "number" and cells > 0 then
+          cellText = string.format("%.2fV (%dS)", state.voltage / cells, cells)
+        elseif type(themeCommon.formatCellVoltage) == "function" then
+          cellText = themeCommon.formatCellVoltage(state, state.voltage)
+        end
+
+        if cellText and cellText ~= "" then
+          voltageText = themeCommon.formatVoltage(state.voltage) .. " / " .. cellText
+        else
+          voltageText = themeCommon.formatVoltage(state.voltage)
+        end
+      end
+
+      local consumptionText = nil
+      local consumedMah = tonumber(state and state.consumedMah)
+      if consumedMah and consumedMah >= 0 then
+        consumptionText = string.format("%d mah", math.floor(consumedMah + 0.5))
+      end
+
+      if voltageText and consumptionText then
+        battAdvText = voltageText .. "\n" .. consumptionText
+      else
+        battAdvText = voltageText or consumptionText or ""
+      end
+    end
+    
+    if battAdvText ~= "" then
+      local battAdvFont = utils.resolveValue(box.battadvfont, box, state) or 0
+      local battAdvPaddingTop = utils.toNumber(utils.resolveValue(box.battadvpaddingtop, box, state), math.floor((barHeight - 8) / 2))
+      local battAdvPaddingRight = utils.toNumber(utils.resolveValue(box.battadvpaddingright, box, state), 6)
+      local battAdvAlign = utils.resolveValue(box.battadvvaluealign, box, state) or RIGHT
+      
+      utils.pushLabel(
+        nodes,
+        rect.x + 4,
+        barY + battAdvPaddingTop,
+        barW - battAdvPaddingRight - 4,
+        battAdvText,
+        box.battadvtextcolor or WHITE,
+        battAdvAlign,
+        battAdvFont
+      )
+    end
+  end
+end
+
 local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local source = utils.resolveValue(box.source, box, state)
   local rawValue = utils.mapTelemetrySource(source, state)
@@ -112,7 +293,14 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local valueEndAngle = startAngle + math.floor(sweep * ratio + 0.5)
 
   local arcBgColor = box.fillbgcolor or ARC_BG_COLOR
-  local arcValueColor = box.fillcolor or getArcValueColor(gaugeValue, state, box, themeCommon, utils)
+  local arcValueColor = box.fillcolor
+  if not arcValueColor then
+    if type(box.thresholds) == "table" and #box.thresholds > 0 and hasValue then
+      arcValueColor = resolveThresholdColor(gaugeValue, box.thresholds, ARC_OK_COLOR)
+    else
+      arcValueColor = getArcValueColor(gaugeValue, state, box, themeCommon, utils)
+    end
+  end
 
   nodes[#nodes + 1] = {
     type = "arc",
@@ -174,6 +362,49 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     box.valuealign or box.titlealign or CENTER,
     DBLSIZE
   )
+  
+  -- MAX value display
+  if box.arcmax then
+    local maxValue = getMaxValue(source, state, box, utils)
+    if maxValue and type(maxValue) == "number" and maxValue > 0 then
+      local maxPrefix = utils.resolveValue(box.maxprefix, box, state) or "Max: "
+      local maxDecimals = utils.resolveValue(box.maxdecimals, box, state)
+      local maxUnit = utils.resolveValue(box.maxunit, box, state) or unit or ""
+      local maxText = maxPrefix .. utils.formatDisplayValue(maxValue, maxDecimals) .. maxUnit
+      
+      local maxFont = utils.resolveValue(box.maxfont, box, state) or 0
+      local maxTextColor = utils.resolveValue(box.maxtextcolor, box, state) or "orange"
+      local maxPosition = utils.resolveValue(box.maxposition, box, state)
+      local maxAlign = utils.resolveValue(box.maxalign, box, state) or LEFT
+      local maxPaddingTop = utils.toNumber(utils.resolveValue(box.maxpaddingtop, box, state), 30)
+      local maxPaddingLeft = utils.toNumber(utils.resolveValue(box.maxpaddingleft, box, state), 20)
+      local maxPaddingRight = utils.toNumber(utils.resolveValue(box.maxpaddingright, box, state), 4)
+      local maxPaddingBottom = utils.toNumber(utils.resolveValue(box.maxpaddingbottom, box, state), 26)
+
+      local maxX = rect.x + maxPaddingLeft
+      local maxY = rect.y + maxPaddingTop
+      local maxW = rect.w - maxPaddingLeft - maxPaddingRight
+
+      if maxPosition == "bottom" then
+        maxAlign = utils.resolveValue(box.maxalign, box, state) or CENTER
+        maxY = rect.y + rect.h - titleReserved - maxPaddingBottom
+        if maxY < rect.y + 6 then
+          maxY = rect.y + 6
+        end
+      end
+      
+      utils.pushLabel(
+        nodes,
+        maxX,
+        maxY,
+        maxW,
+        maxText,
+        maxTextColor,
+        maxAlign,
+        maxFont
+      )
+    end
+  end
 end
 
 function Wrapper.render(nodes, rect, box, state)
@@ -182,7 +413,14 @@ function Wrapper.render(nodes, rect, box, state)
   if not utils then return end
 
   utils.drawContainer(nodes, rect, box, state)
-  renderArc(nodes, rect, box or {}, state, themeCommon, utils)
+  
+  local subtype = utils.resolveValue(box.subtype, box, state) or "arc"
+  
+  if subtype == "bar" then
+    renderBar(nodes, rect, box or {}, state, themeCommon, utils)
+  else
+    renderArc(nodes, rect, box or {}, state, themeCommon, utils)
+  end
 end
 
 return Wrapper
