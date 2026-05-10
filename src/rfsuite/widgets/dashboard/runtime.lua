@@ -775,6 +775,13 @@ local function readTelemetry(state)
   local batteryCellCountValue = getSensor("battery_cell_count")
   if type(batteryCellCountValue) == "number" and batteryCellCountValue > 0 then
     setField("batteryCellCount", roundInt(batteryCellCountValue, state.batteryCellCount or 0))
+  elseif (state.batteryCellCount == nil or state.batteryCellCount <= 0) and type(voltageValue) == "number" and voltageValue > 0 then
+    local themeConfig = state.themeConfig or nil
+    local maxCellVoltage = tonumber(themeConfig and themeConfig.v_max)
+    if not maxCellVoltage or maxCellVoltage <= 0 then
+      maxCellVoltage = 4.2
+    end
+    setField("batteryCellCount", math.max(1, math.floor((voltageValue / maxCellVoltage) + 0.5)))
   end
 
   local armState = getSensor("armflags")
@@ -953,6 +960,60 @@ function Runtime.new(zone, options)
     widget.state.i18n = widget.i18n
   end
 
+  local function resolveVoltageCellCount(state)
+    local cells = tonumber(state and state.batteryCellCount)
+    if cells and cells > 0 then
+      return math.floor(cells + 0.5)
+    end
+
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+    local sessionCells = tonumber(batteryConfig and batteryConfig.batteryCellCount)
+    if sessionCells and sessionCells > 0 then
+      return math.floor(sessionCells + 0.5)
+    end
+
+    local voltage = tonumber(state and state.voltage)
+    local maxCellVoltage = tonumber(batteryConfig and batteryConfig.vbatmaxcellvoltage) or 4.2
+    if type(voltage) == "number" and voltage > 0 and maxCellVoltage > 0 then
+      return math.max(1, math.floor((voltage / maxCellVoltage) + 0.5))
+    end
+
+    return nil
+  end
+
+  local function updateVoltageThemeConfig(self)
+    local currentConfig = self.state.themeConfig or {}
+    local nextConfig = {
+      v_min = tonumber(currentConfig.v_min) or 18.0,
+      v_max = tonumber(currentConfig.v_max) or 25.2
+    }
+
+    local defaultMin = 18.0
+    local defaultMax = 25.2
+    if math.abs(nextConfig.v_min - defaultMin) > 0.01 or math.abs(nextConfig.v_max - defaultMax) > 0.01 then
+      self.state.themeConfig = nextConfig
+      return
+    end
+
+    local cells = resolveVoltageCellCount(self.state)
+    if not cells or cells <= 0 then
+      self.state.themeConfig = nextConfig
+      return
+    end
+
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+    local minCellVoltage = tonumber(batteryConfig and batteryConfig.vbatmincellvoltage) or 3.3
+    local maxCellVoltage = tonumber(batteryConfig and batteryConfig.vbatmaxcellvoltage) or 4.2
+    if minCellVoltage <= 0 then minCellVoltage = 3.3 end
+    if maxCellVoltage <= 0 then maxCellVoltage = 4.2 end
+
+    nextConfig.v_min = cells * minCellVoltage
+    nextConfig.v_max = cells * maxCellVoltage
+    self.state.themeConfig = nextConfig
+  end
+
   local function reloadActiveTheme(self)
     local modelPrefs = nil
     if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
@@ -1030,6 +1091,7 @@ function Runtime.new(zone, options)
         self.state.battery_config = _G.rfsuite.session.battery_config
       end
     end
+    updateVoltageThemeConfig(self)
     local wasFblConnected = self.lastFblConnected == true
     local ready, statusLine = updateConnectionState(self)
     local isFblConnected = self.state.fblConnected == true
