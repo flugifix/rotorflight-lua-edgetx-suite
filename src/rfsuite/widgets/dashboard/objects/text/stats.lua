@@ -75,6 +75,22 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
       elseif source == "current" then
         statValue = state and (state.lastFlightMinCurrent or state.currentFlightMinCurrent or state.current)
       end
+    elseif stattype == "consumed" then
+      if source == "current" then
+        statValue = state and state.consumedMah
+      end
+    elseif stattype == "cell" then
+      if source == "voltage" then
+        local voltage = state and state.voltage
+        local cellCount = state and state.batteryCellCount or 6
+        if type(voltage) == "number" and cellCount > 0 then
+          statValue = voltage / cellCount
+        end
+      end
+    elseif stattype == "count" then
+      statValue = utils.mapTelemetrySource(source, state)
+    elseif stattype == "time" then
+      statValue = utils.mapTelemetrySource(source, state)
     end
 
     if statValue == nil and statSource then
