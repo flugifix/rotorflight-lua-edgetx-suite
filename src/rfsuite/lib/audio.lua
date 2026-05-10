@@ -403,9 +403,21 @@ function Audio.process(self, opts)
   announceBatteryCapacityEvent(self, opts)
 
   if prefEnabled(events, "voltage_alert", true) then
-    local warnBase = (self.state.themeConfig and tonumber(self.state.themeConfig.v_min)) or 18.0
-    local warn = warnBase + 0.3
-    local reset = warn + 0.2
+    -- Prefer FC battery config (vbatwarningcellvoltage * cells) over hardcoded theme default
+    local warnBase
+    do
+      local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session
+      local bc = session and session.batteryConfig
+      local warnV = bc and tonumber(bc.vbatwarningcellvoltage)
+      local cells = bc and tonumber(bc.batteryCellCount)
+      if warnV and warnV > 0 and cells and cells > 0 then
+        warnBase = warnV * cells
+      else
+        warnBase = (self.state.themeConfig and tonumber(self.state.themeConfig.v_min)) or 18.0
+      end
+    end
+    local warn = warnBase
+    local reset = warn + 0.5
     local voltage = tonumber(self.state.voltage)
     if type(voltage) == "number" and voltage > 0 then
       if voltage <= warn then
