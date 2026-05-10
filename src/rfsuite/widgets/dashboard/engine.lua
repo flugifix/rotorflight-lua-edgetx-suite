@@ -117,6 +117,8 @@ function Engine.renderKey(state, boxSources)
   local total = Utils.toNumber(state and state.totalFlightSeconds, 0)
   local bb_used = state and state.dataflash and state.dataflash.used or 0
   local bb_total = state and state.dataflash and state.dataflash.total or 0
+  local cells = Utils.toNumber(state and state.batteryCellCount, 0)
+  local armFlags = Utils.toNumber(state and state.armFlags, 0)
   local parts = {
     tostring(math.floor(lq + 0.5)),
     tostring(math.floor(fuel + 0.5)),
@@ -125,7 +127,9 @@ function Engine.renderKey(state, boxSources)
     tostring(math.floor(total + 0.5)),
     tostring(math.floor(voltage * 10 + 0.5)),
     tostring(bb_used),
-    tostring(bb_total)
+    tostring(bb_total),
+    tostring(math.floor(cells + 0.5)),
+    tostring(math.floor(armFlags + 0.5))
   }
   if boxSources and state then
     for i = 1, #boxSources do

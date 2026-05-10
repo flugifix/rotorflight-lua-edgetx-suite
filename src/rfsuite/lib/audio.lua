@@ -403,35 +403,44 @@ function Audio.process(self, opts)
   announceBatteryCapacityEvent(self, opts)
 
   if prefEnabled(events, "voltage_alert", true) then
-    -- Prefer FC battery config (vbatwarningcellvoltage * cells) over hardcoded theme default
+    -- Resolve cell count: prefer MSP batteryConfig, fall back to telemetry state,
+    -- then refuse to fire (no valid cell count known yet).
     local warnBase
     do
       local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session
       local bc = session and session.batteryConfig
       local warnV = bc and tonumber(bc.vbatwarningcellvoltage)
+      -- MSP batteryCellCount == 0 means auto-detect; use telemetry Cel# in that case
       local cells = bc and tonumber(bc.batteryCellCount)
+      if not cells or cells <= 0 then
+        cells = tonumber(self.state and self.state.batteryCellCount)
+      end
       if warnV and warnV > 0 and cells and cells > 0 then
         warnBase = warnV * cells
-      else
-        warnBase = (self.state.themeConfig and tonumber(self.state.themeConfig.v_min)) or 18.0
+      elseif cells and cells > 0 then
+        -- batteryConfig not yet loaded; use a safe per-cell default (3.5V * cells)
+        warnBase = 3.5 * cells
       end
+      -- warnBase stays nil if we have no cell count at all → skip the alert
     end
-    local warn = warnBase
-    local reset = warn + 0.5
-    local voltage = tonumber(self.state.voltage)
-    if type(voltage) == "number" and voltage > 0 then
-      if voltage <= warn then
-        local lastAt = audioState.lastAlertAt.voltage or 0
-        local globalLast = getGlobalLowVoltageAt()
-        -- globaler Throttle (reload-sicher)
-        if now - globalLast >= 10 and now - lastAt >= 10 then
-          if tryPlayEventFile(audioState, now, "evt/lowvbat.wav", opts) then
-            audioState.lastAlertAt.voltage = now
-            setGlobalLowVoltageAt(now)
+    if warnBase then
+      local warn = warnBase
+      local reset = warn + 0.5
+      local voltage = tonumber(self.state.voltage)
+      if type(voltage) == "number" and voltage > 0 then
+        if voltage <= warn then
+          local lastAt = audioState.lastAlertAt.voltage or 0
+          local globalLast = getGlobalLowVoltageAt()
+          -- globaler Throttle (reload-sicher)
+          if now - globalLast >= 10 and now - lastAt >= 10 then
+            if tryPlayEventFile(audioState, now, "evt/lowvbat.wav", opts) then
+              audioState.lastAlertAt.voltage = now
+              setGlobalLowVoltageAt(now)
+            end
           end
+        elseif voltage >= reset then
+          audioState.lastAlertAt.voltage = 0
         end
-      elseif voltage >= reset then
-        -- kein hartes Rücksetzen, damit Cooldown erhalten bleibt
       end
     end
   end
