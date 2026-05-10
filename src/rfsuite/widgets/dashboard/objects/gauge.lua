@@ -113,14 +113,34 @@ local function getMaxValue(source, state, box, utils)
   return nil
 end
 
+local function resolveGaugeBounds(box, state, utils, defaultMin, defaultMax)
+  local fallbackMin = utils.toNumber(
+    state and state.themeConfig and state.themeConfig.v_min,
+    utils.toNumber(defaultMin, 0)
+  )
+  local fallbackMax = utils.toNumber(
+    state and state.themeConfig and state.themeConfig.v_max,
+    utils.toNumber(defaultMax, 100)
+  )
+
+  if type(box.min) == "number" and type(box.max) == "number" then
+    box._gaugeMin = box._gaugeMin or box.min
+    box._gaugeMax = box._gaugeMax or box.max
+    return utils.toNumber(box._gaugeMin, fallbackMin), utils.toNumber(box._gaugeMax, fallbackMax)
+  end
+
+  local minValue = utils.toNumber(utils.resolveValue(box.min, box, state), fallbackMin)
+  local maxValue = utils.toNumber(utils.resolveValue(box.max, box, state), fallbackMax)
+  return minValue, maxValue
+end
+
 local function renderBar(nodes, rect, box, state, themeCommon, utils)
   local source = utils.resolveValue(box.source, box, state)
   local rawValue = utils.mapTelemetrySource(source, state)
   local hasValue = type(rawValue) == "number"
   local gaugeValue = utils.toNumber(rawValue, 0)
-  
-  local gaugeMin = utils.toNumber(utils.resolveValue(box.min, box, state), 0)
-  local gaugeMax = utils.toNumber(utils.resolveValue(box.max, box, state), 100)
+
+  local gaugeMin, gaugeMax = resolveGaugeBounds(box, state, utils, 0, 100)
   
   if gaugeMax <= gaugeMin then gaugeMax = 100 end
   
@@ -371,11 +391,7 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local hasValue = type(rawValue) == "number"
   local gaugeValue = utils.toNumber(rawValue, 0)
 
-  -- Statische Werte cachen
-  box._gaugeMin = box._gaugeMin or utils.toNumber(utils.resolveValue(box.min, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_min, 18.0))
-  box._gaugeMax = box._gaugeMax or utils.toNumber(utils.resolveValue(box.max, box, state), utils.toNumber(state and state.themeConfig and state.themeConfig.v_max, 25.2))
-  local gaugeMin = box._gaugeMin
-  local gaugeMax = box._gaugeMax
+  local gaugeMin, gaugeMax = resolveGaugeBounds(box, state, utils, 18.0, 25.2)
 
   -- Schutz gegen extreme Werte
   if gaugeMin == gaugeMax or gaugeMax - gaugeMin < 0.1 then return end
