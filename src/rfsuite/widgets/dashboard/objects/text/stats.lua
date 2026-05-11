@@ -72,11 +72,9 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
       elseif source == "rpm" then
         statValue = state and (state.lastFlightMaxRpm or state.currentFlightMaxRpm or state.rpm)
       elseif source == "current" then
-        if statSource then
+        statValue = state and (state.lastFlightMaxCurrent or state.currentFlightMaxCurrent or state.current)
+        if statValue == nil and statSource then
           statValue = utils.mapTelemetrySource(statSource, state)
-        end
-        if statValue == nil then
-          statValue = state and (state.lastFlightMaxCurrent or state.currentFlightMaxCurrent or state.current)
         end
       elseif source == "mcu_temp" then
         statValue = state and (state.lastFlightMaxMcuTemp or state.currentFlightMaxMcuTemp or state.mcuTemp)
@@ -90,7 +88,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         statValue = state and state.consumedMah
       end
     elseif stattype == "min" then
-      if source == "fuel" then
+      if source == "fuel" or source == "smartfuel" then
         statValue = state and (state.lastFlightMinFuel or state.currentFlightMinFuel or state.fuel)
       elseif source == "rpm" then
         statValue = state and (state.lastFlightMinRpm or state.currentFlightMinRpm or state.rpm)

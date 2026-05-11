@@ -123,11 +123,23 @@ local function resolveEventPath(relativePath)
   end
 
   -- 2. Fallback to standard language folder
-  return AUDIO_PACK_BASE .. locale .. "/" .. relativePath
+  local localePath = AUDIO_PACK_BASE .. locale .. "/" .. relativePath
+  f = io.open(localePath, "r")
+  if f then
+    io.close(f)
+    return localePath
+  end
+
+  -- 3. If file not found in any locale, return nil to indicate failure
+  return nil
 end
 
 local function playResolvedEventFile(relativePath, opts)
   local path = resolveEventPath(relativePath)
+  if not path then
+    emitLog(opts, "playFile: file not found for " .. tostring(relativePath), "warn")
+    return false
+  end
   if type(playFile) == "function" then
     emitLog(opts, "playFile -> " .. tostring(path), "debug")
     local ok, err = pcall(playFile, path)
@@ -178,6 +190,38 @@ local function fuelThresholdList(selection)
   if sel == 5 then return { 50, 5 } end
   if sel > 0 then return { sel } end
   return { 10 }
+end
+
+local function resolveSmartfuelModel(self)
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+  local batteryPrefs = session and session.modelPreferences and session.modelPreferences.battery or nil
+  local modelType = tonumber(batteryPrefs and batteryPrefs.smartfuel_model_type) or 0
+
+  local cellCount = tonumber(batteryConfig and batteryConfig.batteryCellCount) or tonumber(self.state and self.state.batteryCellCount) or 0
+  local hasCapacity = false
+  if batteryConfig then
+    local totalCap = tonumber(batteryConfig.batteryCapacity) or 0
+    if totalCap > 0 then
+      hasCapacity = true
+    else
+      for i = 0, 5 do
+        if (tonumber(batteryConfig["batteryCapacity_" .. tostring(i)]) or 0) > 0 then
+          hasCapacity = true
+          break
+        end
+      end
+    end
+  end
+
+  local autoElectric = (cellCount > 0) or hasCapacity
+  local isElectric = autoElectric
+  if modelType == 1 then
+    isElectric = true
+  elseif modelType == 2 then
+    isElectric = false
+  end
+  return isElectric, modelType, cellCount, hasCapacity
 end
 
 local function getModelName()
@@ -377,6 +421,32 @@ function Audio.process(self, opts)
   end
 
   local audioState = self.audioState
+  if type(audioState.lastAlertAt) ~= "table" then
+    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
+  end
+  if type(audioState.lastValues) ~= "table" then
+    audioState.lastValues = {
+      arming_flags = nil,
+      governor_state = nil,
+      pid_profile = nil,
+      rate_profile = nil,
+      battery_profile = nil
+    }
+  end
+  if type(audioState.pendingValues) ~= "table" then
+    audioState.pendingValues = {
+      pid_profile = nil,
+      rate_profile = nil,
+      battery_profile = nil
+    }
+  end
+  if type(audioState.lastEnabled) ~= "table" then
+    audioState.lastEnabled = { governor_state = nil }
+  end
+  if audioState.fuelSeenPositive ~= true then
+    audioState.fuelSeenPositive = false
+  end
+
   local events = (self.preferences and self.preferences.audio_events) or {}
   local now = nowSeconds()
 
@@ -417,11 +487,11 @@ function Audio.process(self, opts)
       end
       if warnV and warnV > 0 and cells and cells > 0 then
         warnBase = warnV * cells
-      elseif cells and cells > 0 then
-        -- batteryConfig not yet loaded; use a safe per-cell default (3.5V * cells)
+      elseif bc and cells and cells > 0 then
+        -- batteryConfig is available, use safe per-cell default (3.5V * cells)
         warnBase = 3.5 * cells
       end
-      -- warnBase stays nil if we have no cell count at all → skip the alert
+      -- warnBase stays nil if batteryConfig not loaded yet → skip the alert until config available
     end
     if warnBase then
       local warn = warnBase
@@ -466,19 +536,55 @@ function Audio.process(self, opts)
   end
 
   if prefEnabled(events, "fuel_alerts", true) then
+    if self.state.fuelTelemetrySeen ~= true then
+      -- Skip fuel/empty alerts until we have seen at least one real fuel telemetry sample.
+      audioState.lowFuelActive = false
+      audioState.lowFuelLastAt = 0
+      audioState.lowFuelRepeatCount = 0
+      audioState.lastFuelCallout = nil
+      audioState.fuelSeenPositive = false
+      goto fuel_alerts_done
+    end
+
     local fuelValue = tonumber(self.state.fuel)
     if type(fuelValue) == "number" then
       if fuelValue < 0 then fuelValue = 0 end
       if fuelValue > 100 then fuelValue = 100 end
+      if fuelValue > 0 then
+        audioState.fuelSeenPositive = true
+      end
+
+      local isElectricModel, modelType, cellCount, hasCapacity = resolveSmartfuelModel(self)
+      local emptyFuelSound = isElectricModel and "lowbat.wav" or "stat/alerts/lowfuel.wav"
+      if audioState.smartfuelModelType ~= modelType
+        or audioState.smartfuelCellCount ~= cellCount
+        or audioState.smartfuelHasCapacity ~= hasCapacity
+        or audioState.smartfuelIsElectric ~= isElectricModel
+        or audioState.smartfuelEmptySound ~= emptyFuelSound then
+        audioState.smartfuelModelType = modelType
+        audioState.smartfuelCellCount = cellCount
+        audioState.smartfuelHasCapacity = hasCapacity
+        audioState.smartfuelIsElectric = isElectricModel
+        audioState.smartfuelEmptySound = emptyFuelSound
+        emitLog(
+          opts,
+          "smartfuel classify modelType=" .. tostring(modelType)
+            .. " cells=" .. tostring(cellCount)
+            .. " hasCapacity=" .. tostring(hasCapacity)
+            .. " isElectric=" .. tostring(isElectricModel)
+            .. " emptySound=" .. tostring(emptyFuelSound),
+          "debug"
+        )
+      end
 
       local repeats = tonumber(events.fuel_repeat_below_zero) or 1
       if repeats < 1 then repeats = 1 end
       if repeats > 10 then repeats = 10 end
 
-      if fuelValue <= 0 then
+      if fuelValue <= 0 and audioState.fuelSeenPositive == true then
         local canRepeat = (now - (audioState.lowFuelLastAt or 0)) >= 10
         if (not audioState.lowFuelActive) or (audioState.lowFuelRepeatCount < repeats and canRepeat) then
-          if tryPlayEventFile(audioState, now, "stat/lowfuel.wav", opts) then
+          if tryPlayEventFile(audioState, now, emptyFuelSound, opts) then
             if events.fuel_haptic_below_zero == true and type(playHaptic) == "function" then
               pcall(playHaptic, 15, 10, 3)
             end
@@ -502,7 +608,7 @@ function Audio.process(self, opts)
             for i = 1, #thresholds do
               local threshold = thresholds[i]
               if currentRounded <= threshold and lastCallout > threshold then
-                if tryPlayEventFile(audioState, now, "stat/fuel.wav", opts) then
+                if tryPlayEventFile(audioState, now, "stat/alerts/fuel.wav", opts) then
                   if type(playNumber) == "function" then
                     emitLog(opts, "fuel callout playNumber -> " .. tostring(threshold), "info")
                     local ok, err = pcall(playNumber, threshold, unitPercent())
@@ -520,11 +626,13 @@ function Audio.process(self, opts)
         end
       end
     end
+    ::fuel_alerts_done::
   else
     audioState.lowFuelActive = false
     audioState.lowFuelLastAt = 0
     audioState.lowFuelRepeatCount = 0
     audioState.lastFuelCallout = nil
+    audioState.fuelSeenPositive = false
   end
 
   if not audioState.initialized then

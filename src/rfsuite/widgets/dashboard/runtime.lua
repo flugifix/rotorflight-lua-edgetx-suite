@@ -424,6 +424,26 @@ local function roundInt(value, fallback)
   return math.floor(value + 0.5)
 end
 
+local function normalizeCellVoltage(value, fallback)
+  local v = tonumber(value)
+  if type(v) ~= "number" or v <= 0 then
+    return fallback
+  end
+  -- Accept common storage encodings:
+  -- volts (4.2), decivolts (42), centivolts (420), millivolts (4200).
+  if v > 1000 then
+    v = v / 1000
+  elseif v > 100 then
+    v = v / 100
+  elseif v > 10 then
+    v = v / 10
+  end
+  if v <= 0 then
+    return fallback
+  end
+  return v
+end
+
 local function updateDerivedFlightState(state)
   local now = nowSeconds()
   local lastTick = state.lastTickAt or now
@@ -775,13 +795,23 @@ local function readTelemetry(state)
   local batteryCellCountValue = getSensor("battery_cell_count")
   if type(batteryCellCountValue) == "number" and batteryCellCountValue > 0 then
     setField("batteryCellCount", roundInt(batteryCellCountValue, state.batteryCellCount or 0))
-  elseif (state.batteryCellCount == nil or state.batteryCellCount <= 0) and type(voltageValue) == "number" and voltageValue > 0 then
-    local themeConfig = state.themeConfig or nil
-    local maxCellVoltage = tonumber(themeConfig and themeConfig.v_max)
-    if not maxCellVoltage or maxCellVoltage <= 0 then
-      maxCellVoltage = 4.2
+  elseif type(voltageValue) == "number" and voltageValue > 0 then
+    -- Try to infer cell count from battery config's max cell voltage
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
+
+    local inferredCells = math.max(1, math.floor((voltageValue / maxCellVoltage) + 0.5))
+    local existingCells = tonumber(state.batteryCellCount)
+    if not existingCells or existingCells <= 0 then
+      setField("batteryCellCount", inferredCells)
+    else
+      local perCell = voltageValue / existingCells
+      -- Reconnect-safe: replace stale cell count if implied per-cell voltage is implausible.
+      if perCell < 2.5 or perCell > 4.5 then
+        setField("batteryCellCount", inferredCells)
+      end
     end
-    setField("batteryCellCount", math.max(1, math.floor((voltageValue / maxCellVoltage) + 0.5)))
   end
 
   local armState = getSensor("armflags")
@@ -909,9 +939,15 @@ function Runtime.new(zone, options)
       lastMinVoltage = nil,
       lastMinLq = nil,
       lastFlightMinCurrent = nil,
-      lastFlightMaxAltitude = nil,
-      lastFlightMaxMcuTemp = nil,
+      lastFlightMaxCurrent = nil,
+      lastFlightMaxThrottlePercent = nil,
+      lastFlightMaxRpm = nil,
       lastFlightMinRpm = nil,
+      lastFlightMaxWatts = nil,
+      lastFlightMaxAltitude = nil,
+      lastFlightMaxEscTemp = nil,
+      lastFlightMaxMcuTemp = nil,
+      lastFlightMinFuel = nil,
       lastDisarmAt = nil,
       themeConfig = { v_min = 18.0, v_max = 25.2 }
     },
@@ -983,6 +1019,49 @@ function Runtime.new(zone, options)
   end
 
   local function updateVoltageThemeConfig(self)
+    local function applyThemeConfig(nextConfig)
+      local prev = self.state.themeConfig or {}
+      local prevMin = tonumber(prev.v_min)
+      local prevMax = tonumber(prev.v_max)
+      local nextMin = tonumber(nextConfig and nextConfig.v_min)
+      local nextMax = tonumber(nextConfig and nextConfig.v_max)
+
+      self.state.themeConfig = nextConfig
+
+      local changed = (
+        type(prevMin) ~= "number" or type(prevMax) ~= "number" or
+        type(nextMin) ~= "number" or type(nextMax) ~= "number" or
+        math.abs(prevMin - nextMin) > 0.01 or math.abs(prevMax - nextMax) > 0.01
+      )
+      if changed then
+        self.built = false
+        self.renderKey = nil
+        self._cachedRenderKey = nil
+      end
+    end
+
+    local function logVoltageThemeDecision(reason, cells, inMin, inMax, outMin, outMax)
+      if not shouldLogAudio(self) then return end
+      local key = table.concat({
+        tostring(reason or "?"),
+        tostring(cells or "x"),
+        tostring(inMin or "x"),
+        tostring(inMax or "x"),
+        tostring(outMin or "x"),
+        tostring(outMax or "x")
+      }, "|")
+      if self._lastVoltageThemeDebugKey == key then return end
+      self._lastVoltageThemeDebugKey = key
+      widgetLog(
+        self,
+        "voltage theme normalize reason=" .. tostring(reason)
+          .. " cells=" .. tostring(cells)
+          .. " in=" .. tostring(inMin) .. "/" .. tostring(inMax)
+          .. " out=" .. tostring(outMin) .. "/" .. tostring(outMax),
+        "debug"
+      )
+    end
+
     local currentConfig = self.state.themeConfig or {}
     local nextConfig = {
       v_min = tonumber(currentConfig.v_min) or 18.0,
@@ -991,27 +1070,38 @@ function Runtime.new(zone, options)
 
     local defaultMin = 18.0
     local defaultMax = 25.2
-    if math.abs(nextConfig.v_min - defaultMin) > 0.01 or math.abs(nextConfig.v_max - defaultMax) > 0.01 then
-      self.state.themeConfig = nextConfig
+    local cells = resolveVoltageCellCount(self.state)
+    if not cells or cells <= 0 then
+      applyThemeConfig(nextConfig)
+      logVoltageThemeDecision("no-cells", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
-    local cells = resolveVoltageCellCount(self.state)
-    if not cells or cells <= 0 then
-      self.state.themeConfig = nextConfig
+    local isExactDefault = math.abs(nextConfig.v_min - defaultMin) <= 0.01 and math.abs(nextConfig.v_max - defaultMax) <= 0.01
+    local perCellMin = nextConfig.v_min / cells
+    local perCellMax = nextConfig.v_max / cells
+    -- Reconnect-safe: if configured bounds are implausible for detected cell count,
+    -- treat them as stale defaults and re-derive from battery config.
+    local looksInvalidForCells = (
+      perCellMin < 2.0 or perCellMin > 5.0 or
+      perCellMax < 3.0 or perCellMax > 5.2 or
+      perCellMax <= perCellMin
+    )
+    if (not isExactDefault) and (not looksInvalidForCells) then
+      applyThemeConfig(nextConfig)
+      logVoltageThemeDecision("keep", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
     local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
     local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
-    local minCellVoltage = tonumber(batteryConfig and batteryConfig.vbatmincellvoltage) or 3.3
-    local maxCellVoltage = tonumber(batteryConfig and batteryConfig.vbatmaxcellvoltage) or 4.2
-    if minCellVoltage <= 0 then minCellVoltage = 3.3 end
-    if maxCellVoltage <= 0 then maxCellVoltage = 4.2 end
+    local minCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmincellvoltage, 3.3)
+    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
 
     nextConfig.v_min = cells * minCellVoltage
     nextConfig.v_max = cells * maxCellVoltage
-    self.state.themeConfig = nextConfig
+    applyThemeConfig(nextConfig)
+    logVoltageThemeDecision("normalize", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
   end
 
   local function reloadActiveTheme(self)
@@ -1079,7 +1169,20 @@ function Runtime.new(zone, options)
     reloadPreferencesIfNeeded(self, false)
     self.state.zoneW = self.zone and self.zone.w or 0
     self.state.zoneH = self.zone and self.zone.h or 0
-    readTelemetry(self.state)
+    local wasFblConnected = self.lastFblConnected == true
+    local ready, statusLine = updateConnectionState(self)
+    local isFblConnected = self.state.fblConnected == true
+    
+    -- Preserve postflight statistics when disconnected:
+    -- Skip telemetry updates when we had an inflight flight and connection is lost,
+    -- so that lastFlightMaxCurrent, lastMinVoltage, consumedMah etc. remain visible.
+    -- Use hadInflightFlight instead of flightMode, because flightMode can jump to preflight
+    -- when sensors go offline, while hadInflightFlight stays true until next session.
+    local isPostflightOffline = (self.state.hadInflightFlight == true) and not isFblConnected
+    if not isPostflightOffline then
+      readTelemetry(self.state)
+    end
+    
     -- Update session values if available (from MSP)
     if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
       if type(_G.rfsuite.session.flightcount) == "number" then
@@ -1093,9 +1196,6 @@ function Runtime.new(zone, options)
       end
     end
     updateVoltageThemeConfig(self)
-    local wasFblConnected = self.lastFblConnected == true
-    local ready, statusLine = updateConnectionState(self)
-    local isFblConnected = self.state.fblConnected == true
     if isFblConnected and not wasFblConnected then
       -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
       self.state.hadArmedFlight = false
@@ -1103,12 +1203,19 @@ function Runtime.new(zone, options)
       self.state.prevArmed = false
       self.state.wasArmed = false
       self.state.armed = false
+      self.state.batteryCellCount = 0
+      self.state.currentFlightSeconds = 0
+      self.state.lastFlightSeconds = 0
+      self.state.flightSeconds = 0
       self.state.lastDisarmAt = nil
       self.flightMode = "preflight"
       self.theme = nil
       self.built = false
       self.renderKey = nil
       self._cachedRenderKey = nil
+      -- Recalculate voltage theme config now that batteryCellCount is reset to 0
+      -- This ensures gauge bounds are computed fresh, not with stale cell count from previous session
+      updateVoltageThemeConfig(self)
       widgetLog(self, "FBL reconnect edge: reset dashboard session state", "info")
     end
     self.lastFblConnected = isFblConnected
