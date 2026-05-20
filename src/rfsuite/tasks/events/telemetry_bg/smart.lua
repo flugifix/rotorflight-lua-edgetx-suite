@@ -7,9 +7,22 @@ local SENSOR_NAME_SMARTFUEL = "SmFt"
 local SENSOR_NAME_SMARTCONSUMPTION = "SmCp"
 local FORCE_REFRESH_INTERVAL = 2.0
 
+local MIRROR_FUEL_QUERIES = {
+  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x5007 },
+  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x0600 },
+  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x1014 }
+}
+
+local MIRROR_CONSUMPTION_QUERIES = {
+  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x5008 },
+  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x5250 },
+  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x1013 }
+}
+
 local Sensors = nil
 local MspRuntime = nil
 local Log = nil
+local ApiVersion = nil
 
 local initialized = false
 local lastWake = 0
@@ -114,6 +127,36 @@ local function getSensor(name)
   return Sensors.getValue(name)
 end
 
+local function readSourceValue(query)
+  if type(system) ~= "table" or type(system.getSource) ~= "function" then
+    return nil
+  end
+  local source = system.getSource(query)
+  if not source then return nil end
+  if source.state and source:state() == false then return nil end
+  return source:value()
+end
+
+local function readFirstSourceValue(queries)
+  for i = 1, #queries do
+    local value = readSourceValue(queries[i])
+    if type(value) == "number" then
+      return value
+    end
+  end
+  return nil
+end
+
+local function applyReservePercent(value, warningPercent)
+  if type(value) ~= "number" then return nil end
+  local fuel = clamp(value, 0, 100)
+  local warning = clamp(tonumber(warningPercent) or 0, 0, 99)
+  if warning > 0 then
+    fuel = (fuel - warning) * 100 / (100 - warning)
+  end
+  return clamp(fuel, 0, 100)
+end
+
 local function scaleField(raw, fallback, minValue, maxValue, scale)
   local value = tonumber(raw)
   if value == nil then return fallback end
@@ -135,24 +178,60 @@ local function getSmartConfig(session)
   local cfg = session and session.smartfuel_config or nil
   local batteryPrefs = session and session.modelPreferences and session.modelPreferences.battery or nil
 
+  local function readLegacyLocalSource()
+    local source = batteryPrefs and tonumber(batteryPrefs.smartfuel_source) or nil
+    if source == nil then
+      source = batteryPrefs and tonumber(batteryPrefs.calc_local) or nil
+    end
+    return source
+  end
+
+  local function getFirmwareSource()
+    local apiVersion = ApiVersion and ApiVersion.parse and ApiVersion.parse(session and session.apiVersion)
+    if not (ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(apiVersion, { 12, 0, 9 })) then
+      return nil
+    end
+    local mode = cfg and tonumber(cfg.smartfuel_mode) or nil
+    if mode == nil then
+      local batteryConfig = session and session.battery_config
+      mode = batteryConfig and tonumber(batteryConfig.smartfuelRemoteSource) or nil
+    end
+    return mode
+  end
+
   local function pick(key)
     if cfg and cfg[key] ~= nil then return cfg[key] end
     if batteryPrefs and batteryPrefs[key] ~= nil then return batteryPrefs[key] end
     return nil
   end
 
-  local source = tonumber(pick("smartfuel_source"))
-  if source == nil then
-    source = tonumber(pick("calc_local"))
-  end
+  local source = readLegacyLocalSource()
   if source == nil then source = 0 end
 
+  local voltageDropRate = tonumber(pick("voltage_drop_rate"))
+  local chargeDropRate = tonumber(pick("charge_drop_rate"))
+
+  local voltageFallPerSecond = nil
+  if voltageDropRate ~= nil then
+    voltageFallPerSecond = voltageDropRate / 1000
+  else
+    voltageFallPerSecond = scaleField(pick("voltage_fall_limit"), 0.05, 0, 1, 100)
+  end
+
+  local fuelDropPerSecond = nil
+  if chargeDropRate ~= nil then
+    fuelDropPerSecond = chargeDropRate / 100
+  else
+    fuelDropPerSecond = scaleField(pick("fuel_drop_rate"), 1.0, 0, 50, 10)
+  end
+
   return {
+    firmwareSource = getFirmwareSource(),
     source = source,
     stabilizeDelaySeconds = scaleField(pick("stabilize_delay"), 1.5, 0, 10, 1000),
     stableWindowVolts = scaleField(pick("stable_window"), 0.15, 0, 1, 100),
-    voltageFallPerSecond = scaleField(pick("voltage_fall_limit"), 0.05, 0, 1, 100),
-    fuelDropPerSecond = scaleField(pick("fuel_drop_rate"), 1.0, 0, 50, 10)
+    voltageFallPerSecond = voltageFallPerSecond,
+    fuelDropPerSecond = fuelDropPerSecond
   }
 end
 
@@ -340,6 +419,7 @@ function Smart.wakeup()
     Sensors = loadModule("lib/sensors.lua")
     MspRuntime = loadModule("tasks/msp/runtime.lua")
     Log = loadModule("lib/log.lua")
+    ApiVersion = loadModule("lib/api_version.lua")
     initialized = true
   end
   if not Sensors then return end
@@ -363,6 +443,8 @@ function Smart.wakeup()
 
   local cfg = getSmartConfig(session)
   local sourceMode = tonumber(cfg.source) or 0
+  local firmwareSource = tonumber(cfg.firmwareSource)
+  local firmwareActive = type(firmwareSource) == "number" and firmwareSource > 0
   local packCapacity = getActivePackCapacity(session, batteryConfig)
   local cellCount = tonumber(batteryConfig.batteryCellCount) or tonumber(getSensor("battery_cell_count")) or 0
   local reserve = tonumber(batteryConfig.consumptionWarningPercentage) or 30
@@ -373,6 +455,7 @@ function Smart.wakeup()
   end
 
   local signature = table.concat({
+    tostring(firmwareSource or "nil"),
     tostring(sourceMode),
     tostring(cellCount),
     tostring(packCapacity),
@@ -390,20 +473,33 @@ function Smart.wakeup()
   end
 
   local voltage = tonumber(getSensor("voltage"))
-  if not voltage or voltage <= 2 then
-    resetComputedState()
-    return
+  if not firmwareActive then
+    if not voltage or voltage <= 2 then
+      resetComputedState()
+      return
+    end
   end
 
-  local stabilized = updateVoltageStability(voltage, now, cfg.stableWindowVolts)
-  local armed = isArmed()
+  local stabilized = false
+  local armed = false
+  if not firmwareActive then
+    stabilized = updateVoltageStability(voltage, now, cfg.stableWindowVolts)
+    armed = isArmed()
+  end
 
   local fuelPercent = nil
   local smartConsumption = nil
-  if sourceMode == 1 then
-    fuelPercent, smartConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed)
+  if firmwareActive then
+    local rawFuel = readFirstSourceValue(MIRROR_FUEL_QUERIES)
+    local rawConsumption = readFirstSourceValue(MIRROR_CONSUMPTION_QUERIES)
+    fuelPercent = applyReservePercent(rawFuel, reserve)
+    smartConsumption = rawConsumption
   else
-    fuelPercent, smartConsumption = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized)
+    if sourceMode == 1 then
+      fuelPercent, smartConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed)
+    else
+      fuelPercent, smartConsumption = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized)
+    end
   end
 
   if type(fuelPercent) == "number" then

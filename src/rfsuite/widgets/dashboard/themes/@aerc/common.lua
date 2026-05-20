@@ -153,7 +153,12 @@ function Common.batteryBar(source, overrides)
       end
       return -6
     end,
-    title_offset_y = 8,
+    title_offset_y = function(_, state)
+      if isTx16Mk3(state) then
+        return 0
+      end
+      return 8
+    end,
     valuefont = function(_, state)
       if isTx16Mk3(state) then
         return DBLSIZE

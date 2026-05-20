@@ -37,37 +37,80 @@ local manifest = {
     tools_menu = {
       title = "@i18n(app.modules.tools.name)@",
       pages = {
-        { id = "copy_profiles", title = "@i18n(app.modules.copyprofiles.name)@", icon = "@pages/tools/copy.png", enabledWhen = "fblConnected" },
-        { id = "select_profile", title = "@i18n(app.modules.profile_select.name)@", icon = "@pages/tools/select_profile.png", enabledWhen = "fblConnected" },
+        { id = "copy_profiles", title = "@i18n(app.modules.copyprofiles.name)@", icon = "@pages/tools/copy.png", enabledWhen = "fblConnected", enabled = false },
+        { id = "select_profile", title = "@i18n(app.modules.profile_select.name)@", icon = "@pages/tools/select_profile.png", enabledWhen = "fblConnected", enabled = false },
         { id = "diagnostics", title = "@i18n(app.modules.diagnostics.name)@", menuId = "diagnostics_menu", icon = "@pages/tools/diagnostics.png", enabled = true }
       }
     },
     diagnostics_menu = {
       title = "@i18n(app.modules.diagnostics.name)@",
       pages = {
-        { id = "fblsensors", title = "@i18n(app.modules.fblsensors.name)@", menuId = "diagnostics_fblsensors_page", enabledWhen = "fblConnected" },
-        { id = "fblstatus", title = "@i18n(app.modules.fblstatus.name)@", menuId = "diagnostics_fblstatus_page", enabledWhen = "fblConnected" },
-        { id = "rfstatus", title = "@i18n(app.modules.rfstatus.name)@", menuId = "diagnostics_rfstatus_page", enabledWhen = "fblConnected" },
-        { id = "validate_sensors", title = "@i18n(app.modules.validate_sensors.name)@", menuId = "diagnostics_validate_sensors_page", enabledWhen = "fblConnected" },
+        { id = "fblsensors", title = "@i18n(app.modules.fblsensors.name)@", menuId = "diagnostics_fblsensors_page", enabledWhen = "fblConnected", enabled = false },
+        { id = "fblstatus", title = "@i18n(app.modules.fblstatus.name)@", menuId = "diagnostics_fblstatus_page", enabledWhen = "fblConnected", enabled = false },
+        { id = "rfstatus", title = "@i18n(app.modules.rfstatus.name)@", menuId = "diagnostics_rfstatus_page", enabledWhen = "fblConnected", enabled = false },
+        { id = "validate_sensors", title = "@i18n(app.modules.validate_sensors.name)@", menuId = "diagnostics_validate_sensors_page", enabledWhen = "fblConnected", enabled = false },
         { id = "info", title = "@i18n(app.modules.info.name)@", menuId = "diagnostics_info_page", enabled = true }
       }
     },
     flight_tuning_menu = {
       title = "@i18n(app.modules.flight_tuning.name)@",
       pages = {
-        { id = "pids", title = "@i18n(app.modules.pids.name)@", icon = "@pages/flight_tuning/pids/icon.png", enabled = true },
-        { id = "rates", title = "@i18n(app.modules.rates.name)@", icon = "@pages/flight_tuning/rates/icon.png", enabled = true },
-        { id = "governor", title = "@i18n(app.modules.governor.name)@", icon = "@pages/flight_tuning/governor/icon.png", enabled = true },
-        { id = "advanced", title = "@i18n(app.modules.advanced.name)@", icon = "@pages/flight_tuning/advanced/icon.png", enabled = true }
+        { id = "pids", title = "@i18n(app.modules.pids.name)@", icon = "@pages/flight_tuning/pids/icon.png", enabled = false },
+        { id = "rates", title = "@i18n(app.modules.rates.name)@", icon = "@pages/flight_tuning/rates/icon.png", enabled = false },
+        { id = "governor", title = "@i18n(app.modules.governor.name)@", icon = "@pages/flight_tuning/governor/icon.png", enabled = false },
+        { id = "advanced", title = "@i18n(app.modules.advanced.name)@", icon = "@pages/flight_tuning/advanced/icon.png", enabled = false }
       }
     },
     setup_menu = {
       title = "@i18n(app.modules.setup.name)@",
       pages = {
-        { id = "configuration", title = "@i18n(app.modules.configuration.name)@", icon = "@pages/setup/configuration/icon.png", enabled = false },
-        { id = "radio_config", title = "@i18n(app.modules.radio_config.name)@", icon = "@pages/setup/radio_config/icon.png", enabled = false },
-        { id = "telemetry", title = "@i18n(app.modules.telemetry.name)@", icon = "@pages/setup/telemetry/icon.png", enabled = false }
+        { id = "configuration", title = "@i18n(app.modules.configuration.name)@", icon = "@pages/setup/configuration/icon.png", row = 1, col = 1, enabled = false },
+        { id = "radio_config", title = "@i18n(app.modules.radio_config.name)@", icon = "@pages/setup/radio_config/icon.png", row = 1, col = 2, enabled = false },
+        { id = "telemetry", title = "@i18n(app.modules.telemetry.name)@", menuId = "setup_telemetry_page", icon = "@pages/setup/telemetry/icon.png", row = 1, col = 3, enabled = true },
+        { id = "accelerometer", title = "@i18n(app.modules.accelerometer.name)@", icon = "@pages/setup/accelerometer/icon.png", row = 1, col = 4, enabled = false },
+        { id = "alignment", title = "@i18n(app.modules.alignment.name)@", icon = "@pages/setup/alignment/icon.png", row = 1, col = 5, enabled = false },
+        { id = "ports", title = "@i18n(app.modules.ports.name)@", icon = "@pages/setup/ports/icon.png", row = 1, col = 6, enabled = false },
+        { id = "mixer", title = "@i18n(app.modules.mixer.name)@", icon = "@pages/setup/mixer/icon.png", row = 2, col = 1, enabled = false },
+        { id = "servos", title = "@i18n(app.modules.servos.name)@", icon = "@pages/setup/servos/icon.png", row = 2, col = 2, enabled = false },
+        { id = "controls", title = "@i18n(app.modules.controls.name)@", icon = "@pages/setup/controls/icon.png", row = 2, col = 3, enabled = false },
+        { id = "power", title = "@i18n(app.modules.power.name)@", menuId = "power_menu", icon = "@pages/setup/power/icon.png", row = 2, col = 4, enabled = true },
+        { id = "esc_motors", title = "@i18n(app.modules.esc_motors.name)@", icon = "@pages/setup/esc_motors/icon.png", row = 2, col = 5, enabled = false },
+        { id = "governor", title = "@i18n(app.modules.governor.name)@", icon = "@pages/setup/governor/icon.png", row = 2, col = 6, enabled = false }
       }
+    },
+    power_menu = {
+      title = "@i18n(app.modules.power.name)@",
+      pages = {
+        { id = "battery", title = "@i18n(app.modules.battery.name)@", menuId = "setup_power_battery_page", icon = "@pages/setup/power/battery/icon.png", row = 1, col = 1, enabled = false },
+        { id = "alerts", title = "@i18n(app.modules.alerts.name)@", menuId = "setup_power_alerts_page", icon = "@pages/setup/power/alerts/icon.png", row = 1, col = 2, enabled = false },
+        { id = "sources", title = "@i18n(app.modules.sources.name)@", menuId = "setup_power_sources_page", icon = "@pages/setup/power/sources/icon.png", row = 1, col = 3, enabled = false },
+        { id = "smartfuel", title = "@i18n(app.modules.smartfuel.name)@", menuId = "setup_power_smartfuel_page", icon = "@pages/setup/power/smartfuel/icon.png", row = 1, col = 4, enabled = true },
+        { id = "preferences", title = "@i18n(app.modules.preferences.name)@", menuId = "setup_power_preferences_page", icon = "@pages/setup/power/preferences/icon.png", row = 1, col = 5, enabled = false }
+      }
+    },
+    setup_power_battery_page = {
+      title = "@i18n(app.modules.battery.name)@",
+      pages = {}
+    },
+    setup_power_alerts_page = {
+      title = "@i18n(app.modules.alerts.name)@",
+      pages = {}
+    },
+    setup_power_sources_page = {
+      title = "@i18n(app.modules.sources.name)@",
+      pages = {}
+    },
+    setup_power_smartfuel_page = {
+      title = "@i18n(app.modules.smartfuel.name)@",
+      pages = {}
+    },
+    setup_power_preferences_page = {
+      title = "@i18n(app.modules.preferences.name)@",
+      pages = {}
+    },
+    setup_telemetry_page = {
+      title = "@i18n(app.modules.telemetry.name)@",
+      pages = {}
     },
     settings_admin = {
       title = "@i18n(app.modules.settings.name)@",

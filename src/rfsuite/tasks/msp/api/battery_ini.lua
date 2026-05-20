@@ -4,7 +4,7 @@ local Api = {}
 
 local FIELD_SPEC = {
     {"smartfuel_model_type", "U8", 0, 2, 0},
-    {"smartfuel_source", "U8", 0, 1, 0},
+    {"smartfuel_source", "U8", 0, 2, 0},
     {"stabilize_delay", "U16", 0, 10000, 1500, "s", 1, 1000, 1},
     {"stable_window", "U16", 0, 100, 15, "V", 2, 100, 1},
     {"voltage_fall_limit", "U16", 0, 100, 5, "V/s", 2, 100, 1},

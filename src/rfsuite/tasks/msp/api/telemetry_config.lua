@@ -101,26 +101,43 @@ function Api.parse(buf)
   return parsed
 end
 
-function Api.buildWritePayload(existingBuffer, updates)
-  local payload = copyBuffer(existingBuffer)
-  if #payload < 12 then
-    payload = copyBuffer(Api.simulatorResponse)
-  end
+function Api.buildWritePayload(updates)
+  local payload = copyBuffer(Api.simulatorResponse)
 
   updates = updates or {}
-  local rate = tonumber(updates.crsf_telemetry_link_rate)
-  local ratio = tonumber(updates.crsf_telemetry_link_ratio)
 
-  if rate and rate >= 0 and rate <= 65535 then
-    local r = math.floor(rate + 0.5)
-    payload[9] = r % 256
-    payload[10] = math.floor(r / 256)
+  if tonumber(updates.telemetry_inverted) ~= nil then
+    payload[1] = tonumber(updates.telemetry_inverted) % 256
   end
 
-  if ratio and ratio >= 0 and ratio <= 65535 then
-    local q = math.floor(ratio + 0.5)
-    payload[11] = q % 256
-    payload[12] = math.floor(q / 256)
+  if tonumber(updates.halfDuplex) ~= nil then
+    payload[2] = tonumber(updates.halfDuplex) % 256
+  end
+
+  if tonumber(updates.pinSwap) ~= nil then
+    payload[7] = tonumber(updates.pinSwap) % 256
+  end
+
+  if tonumber(updates.crsf_telemetry_mode) ~= nil then
+    payload[8] = tonumber(updates.crsf_telemetry_mode) % 256
+  end
+
+  if tonumber(updates.crsf_telemetry_link_rate) ~= nil then
+    local rate = tonumber(updates.crsf_telemetry_link_rate)
+    if rate >= 0 and rate <= 65535 then
+      local r = math.floor(rate + 0.5)
+      payload[9] = r % 256
+      payload[10] = math.floor(r / 256)
+    end
+  end
+
+  if tonumber(updates.crsf_telemetry_link_ratio) ~= nil then
+    local ratio = tonumber(updates.crsf_telemetry_link_ratio)
+    if ratio >= 0 and ratio <= 65535 then
+      local q = math.floor(ratio + 0.5)
+      payload[11] = q % 256
+      payload[12] = math.floor(q / 256)
+    end
   end
 
   return payload

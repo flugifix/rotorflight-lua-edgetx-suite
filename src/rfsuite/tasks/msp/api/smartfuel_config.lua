@@ -5,8 +5,8 @@
 ]]
 
 local Api = {
-  command = 0x3006,
-  writeCommand = 0x3007
+  command = 0x4000,
+  writeCommand = 0x4001
 }
 
 local modeTable = {

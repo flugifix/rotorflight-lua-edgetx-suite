@@ -424,7 +424,25 @@ local function onHelp()
   scheduleBuildUI(false)
 end
 
+local getActivePageModule
+local closeHelpDialogIfOpen
+
 local function onStar()
+  local page = getActivePageModule()
+  if page and type(page.onStar) == "function" then
+    closeHelpDialogIfOpen()
+    local shouldRebuild = page.onStar({
+      i18n = state.i18n,
+      preferences = state.preferences,
+      menu = state.menu,
+      refresh = M.buildUI
+    })
+    if shouldRebuild ~= false then
+      scheduleBuildUI(false)
+    end
+    return
+  end
+
   if lvgl and lvgl.alert and state.i18n then
     lvgl.alert({
       title = state.i18n.t("app.help.title"),
@@ -433,7 +451,7 @@ local function onStar()
   end
 end
 
-local function getActivePageModule()
+getActivePageModule = function()
   if not state.menu then return nil end
   local menuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId()
   if not menuId then return nil end
@@ -441,7 +459,7 @@ local function getActivePageModule()
   return PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[menuId]
 end
 
-local function closeHelpDialogIfOpen()
+closeHelpDialogIfOpen = function()
   state.helpContent = nil
   state.helpPageTitle = nil
   state.helpPageSubtitle = nil

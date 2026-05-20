@@ -5,24 +5,7 @@ local done = false
 local requestSent = false
 local smartfuelConfigApi = nil
 local Log = nil
-
-local function parseVersionString(value)
-  if type(value) ~= "string" then return nil end
-  local major, minor, patch = string.match(value, "^(%d+)%.(%d+)%.(%d+)$")
-  if not major then return nil end
-  return { tonumber(major), tonumber(minor), tonumber(patch) }
-end
-
-local function isVersionAtLeast(current, required)
-  if type(current) ~= "table" or type(required) ~= "table" then return false end
-  for i = 1, 3 do
-    local a = tonumber(current[i]) or 0
-    local b = tonumber(required[i]) or 0
-    if a > b then return true end
-    if a < b then return false end
-  end
-  return true
-end
+local ApiVersion = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -37,6 +20,9 @@ function M.wakeup()
   if Log == nil then
     Log = loadModule("lib/log.lua") or false
   end
+  if ApiVersion == nil then
+    ApiVersion = loadModule("lib/api_version.lua") or false
+  end
 
   if done or requestSent then return end
 
@@ -45,12 +31,12 @@ function M.wakeup()
   local session = root.session
   if type(session) ~= "table" then return end
 
-  -- Ethos parity: SMARTFUEL_CONFIG is available only from API >= 12.0.10.
-  local apiVersion = parseVersionString(session.apiVersion)
-  if not isVersionAtLeast(apiVersion, { 12, 0, 10 }) then
+  -- Ethos parity: SMARTFUEL_CONFIG is available from API >= 12.0.9.
+  local apiVersion = ApiVersion and ApiVersion.parse and ApiVersion.parse(session.apiVersion)
+  if not (ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(apiVersion, { 12, 0, 9 })) then
     done = true
     if type(Log) == "table" and type(Log.emit) == "function" then
-      pcall(Log.emit, "rfsuite.tasks.smartfuel", "skip smartfuel_config (api < 12.0.10)", "debug", true)
+      pcall(Log.emit, "rfsuite.tasks.smartfuel", "skip smartfuel_config (api < 12.0.9)", "debug", true)
     end
     return
   end
