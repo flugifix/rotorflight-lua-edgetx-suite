@@ -94,6 +94,10 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         statValue = state and (state.lastFlightMinRpm or state.currentFlightMinRpm or state.rpm)
       elseif source == "current" then
         statValue = state and (state.lastFlightMinCurrent or state.currentFlightMinCurrent or state.current)
+      elseif source == "voltage" then
+        statValue = state and (state.lastMinVoltage or state.currentFlightMinVoltage or state.voltage)
+      elseif source == "bec_voltage" then
+        statValue = state and (state.lastMinVoltage or state.currentFlightMinVoltage or state.bec_voltage)
       end
     elseif stattype == "consumed" then
       if source == "current" then

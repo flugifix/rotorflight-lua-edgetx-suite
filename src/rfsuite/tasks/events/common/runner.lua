@@ -226,6 +226,16 @@ function M.new(category)
     return findNextEligibleTask(currentEnv) ~= nil
   end
 
+  function runner.getPendingTaskName()
+    ensureEnv()
+    local currentEnv = Env and Env.get() or "tool"
+    local task = findNextEligibleTask(currentEnv)
+    if task and type(task.name) == "string" and task.name ~= "" then
+      return task.name
+    end
+    return nil
+  end
+
   function runner.getProgress()
     ensureEnv()
     local currentEnv = Env and Env.get() or "tool"

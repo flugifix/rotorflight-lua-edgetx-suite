@@ -4,6 +4,7 @@ local SYSTEM_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/
 local USER_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite.user/dashboard/"
 local AUDIO_LOG_FORCE = false
 local SPLASH_READY_HOLD_SECONDS = 1.0
+local SPLASH_SOFT_TIMEOUT_SECONDS = 15.0
 
 local function scriptExists(path)
   if type(path) ~= "string" or path == "" then return false end
@@ -322,19 +323,36 @@ local function updateConnectionState(self)
 
   local onconnectActive = false
   local onconnectProgress = nil
+  local onconnectPendingTaskName = nil
   if EventsRuntime and type(EventsRuntime.isOnconnectActive) == "function" then
     onconnectActive = EventsRuntime.isOnconnectActive()
   end
   if EventsRuntime and type(EventsRuntime.getOnconnectProgress) == "function" then
     onconnectProgress = EventsRuntime.getOnconnectProgress()
   end
+  if EventsRuntime and type(EventsRuntime.getOnconnectPendingTaskName) == "function" then
+    onconnectPendingTaskName = EventsRuntime.getOnconnectPendingTaskName()
+  end
 
-  if onconnectActive then
+  local onconnectDone = false
+  if onconnectProgress and type(onconnectProgress.total) == "number" and type(onconnectProgress.done) == "number" then
+    onconnectDone = (onconnectProgress.total > 0 and onconnectProgress.done >= onconnectProgress.total)
+  end
+
+  if onconnectActive and not onconnectDone then
     tasksDone = false
   end
   
   local rawReady = connected and batteryReady and rfReady and tasksDone
   local now = nowSeconds()
+
+  if connected and not rawReady then
+    if not self.pendingSince then
+      self.pendingSince = now
+    end
+  else
+    self.pendingSince = nil
+  end
 
   if rawReady then
     if not self.readySince then
@@ -344,7 +362,8 @@ local function updateConnectionState(self)
     self.readySince = nil
   end
 
-  local ready = rawReady and self.readySince ~= nil and (now - self.readySince) >= SPLASH_READY_HOLD_SECONDS
+  local softTimeoutReady = connected and self.pendingSince ~= nil and (now - self.pendingSince) >= SPLASH_SOFT_TIMEOUT_SECONDS
+  local ready = (rawReady and self.readySince ~= nil and (now - self.readySince) >= SPLASH_READY_HOLD_SECONDS) or softTimeoutReady
   local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
 
   local statusLine = nil
@@ -366,12 +385,17 @@ local function updateConnectionState(self)
     else
       statusLine = loadingTasksStr
     end
+    if onconnectPendingTaskName and onconnectPendingTaskName ~= "" then
+      statusLine = statusLine .. " [" .. tostring(onconnectPendingTaskName) .. "]"
+    end
   elseif not rfReady then
     statusLine = (t and t("widgets.dashboard.waiting_for_receiver_telemetry")) or "Waiting for receiver telemetry (1RSS/2RSS)"
   elseif not batteryReady then
     statusLine = (t and t("widgets.dashboard.waiting_for_battery_telemetry")) or "Waiting for battery telemetry"
   elseif not ready then
     statusLine = (t and t("widgets.dashboard.connected_starting")) or "Connected, starting dashboard..."
+  elseif softTimeoutReady then
+    statusLine = "Connected with partial telemetry"
   end
 
   if self.connectionReady ~= ready then
@@ -380,6 +404,9 @@ local function updateConnectionState(self)
     self.renderKey = nil
     if ready then
       widgetLog(self, "FBL connected and telemetry initialized", "info")
+      if softTimeoutReady then
+        widgetLog(self, "Splash soft-timeout reached; continuing without full startup prerequisites", "warn")
+      end
       -- Force reload preferences when connection ready to ensure we have the latest model settings
       reloadPreferencesIfNeeded(self, true)
     else

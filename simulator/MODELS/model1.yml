@@ -146,43 +146,6 @@ expoData:
    chn: 3
    flightModes: 000000000
    name: ""
-flightModeData: 
-   0:
-      name: ""
-      swtch: "NONE"
-      fadeIn: 0
-      fadeOut: 0
-      gvars: 
-         0:
-            val: 0
-         1:
-            val: 0
-         2:
-            val: 0
-         3:
-            val: 0
-         4:
-            val: 0
-         5:
-            val: 0
-         6:
-            val: 0
-         7:
-            val: 0
-         8:
-            val: 1
-         9:
-            val: 0
-         10:
-            val: 0
-         11:
-            val: 0
-         12:
-            val: 0
-         13:
-            val: 0
-         14:
-            val: 0
 thrTraceSrc: Thr
 switchWarning: 
    SA:

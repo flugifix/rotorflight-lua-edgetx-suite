@@ -106,6 +106,36 @@ local function merge(dst, src)
   return dst
 end
 
+local function isTx16Mk3(state)
+  local w = tonumber(state and state.zoneW) or tonumber(_G and _G.LCD_W) or 0
+  return w >= 760
+end
+
+function Common.isCompactDisplay(state)
+  return not isTx16Mk3(state)
+end
+
+function Common.compactStatsFont(_, state)
+  if isTx16Mk3(state) then
+    return MIDSIZE
+  end
+  return SMLSIZE
+end
+
+function Common.gaugeValueFont(_, state)
+  if isTx16Mk3(state) then
+    return DBLSIZE
+  end
+  return MIDSIZE
+end
+
+function Common.gaugeValueOffset(_, state)
+  if isTx16Mk3(state) then
+    return 0
+  end
+  return -10
+end
+
 function Common.batteryBar(source, overrides)
   local box = {
     type = "gauge",
@@ -117,11 +147,42 @@ function Common.batteryBar(source, overrides)
     transform = "floor",
     valuealign = LEFT,
     valuepaddingleft = 8,
-    valuepaddingtop = -25,
+    valuepaddingtop = function(_, state)
+      if isTx16Mk3(state) then
+        return -25
+      end
+      return -6
+    end,
+    title_offset_y = 8,
+    valuefont = function(_, state)
+      if isTx16Mk3(state) then
+        return DBLSIZE
+      end
+      return SMLSIZE
+    end,
     battadv = true,
+    battadvsingleline = function(_, state)
+      return Common.isCompactDisplay(state)
+    end,
     battadvvaluealign = RIGHT,
-    battadvpaddingright = 12,
-    battadvpaddingtop = 0,
+    battadvpaddingright = function(_, state)
+      if isTx16Mk3(state) then
+        return 12
+      end
+      return 8
+    end,
+    battadvpaddingtop = function(_, state)
+      if isTx16Mk3(state) then
+        return 0
+      end
+      return -1
+    end,
+    battadvfont = function(_, state)
+      if isTx16Mk3(state) then
+        return 0
+      end
+      return SMLSIZE
+    end,
     titlecolor = GREY_DEFAULT,
     textcolor = WHITE,
     bgcolor = BLACK,

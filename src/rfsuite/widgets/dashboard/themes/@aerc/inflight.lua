@@ -28,7 +28,7 @@ end
 Theme.layout = { cols = 3, rows = 10, padding = 1 }
 
 Theme.boxes = {
-  { col = 1, row = 1, colspan = 1, rowspan = 2, type = "time", subtype = "flight", title = "@i18n(widgets.dashboard.flight_time):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK },
+  { col = 1, row = 1, colspan = 1, rowspan = 2, type = "time", subtype = "flight", title = "@i18n(widgets.dashboard.flight_time):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, font = AercCommon.compactStatsFont, value_offset_y = -6 },
   AercCommon and AercCommon.batteryBar and AercCommon.batteryBar("fuel", {
     col = 2,
     row = 1,
@@ -36,8 +36,13 @@ Theme.boxes = {
     rowspan = 2,
     title = "@i18n(widgets.dashboard.battery):upper()@",
     titlepos = "bottom",
-    battadvpaddingright = 10,
-    valuepaddingtop = -23
+    title_offset_y = function(_, state)
+      if AercCommon and AercCommon.isCompactDisplay and AercCommon.isCompactDisplay(state) then
+        return 8
+      end
+      return 0
+    end,
+    battadvsingleline = true
   }),
   {
     col = 1,
@@ -59,10 +64,14 @@ Theme.boxes = {
     maxposition = "bottom",
     maxalign = CENTER,
     maxpaddingbottom = 26,
+    maxpaddingleft = 0,
+    maxpaddingright = 0,
     titlecolor = GREY_DEFAULT,
     textcolor = WHITE,
     bgcolor = BLACK,
-    fillbgcolor = GREY_DEFAULT
+    fillbgcolor = GREY_DEFAULT,
+    value_font = AercCommon.gaugeValueFont,
+    value_offset_y = AercCommon.gaugeValueOffset
   },
   {
     col = 2,
@@ -83,10 +92,14 @@ Theme.boxes = {
     maxposition = "bottom",
     maxalign = CENTER,
     maxpaddingbottom = 26,
+    maxpaddingleft = 0,
+    maxpaddingright = 0,
     titlecolor = GREY_DEFAULT,
     textcolor = WHITE,
     bgcolor = BLACK,
-    fillbgcolor = GREY_DEFAULT
+    fillbgcolor = GREY_DEFAULT,
+    value_font = AercCommon.gaugeValueFont,
+    value_offset_y = AercCommon.gaugeValueOffset
   },
   {
     col = 3,
@@ -108,10 +121,14 @@ Theme.boxes = {
     maxposition = "bottom",
     maxalign = CENTER,
     maxpaddingbottom = 26,
+    maxpaddingleft = 0,
+    maxpaddingright = 0,
     titlecolor = GREY_DEFAULT,
     textcolor = WHITE,
     bgcolor = BLACK,
-    fillbgcolor = GREY_DEFAULT
+    fillbgcolor = GREY_DEFAULT,
+    value_font = AercCommon.gaugeValueFont,
+    value_offset_y = AercCommon.gaugeValueOffset
   }
 }
 

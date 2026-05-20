@@ -29,9 +29,9 @@ Theme.layout = { cols = 7, rows = 12, padding = 1 }
 
 Theme.boxes = {
   { col = 1, row = 1, colspan = 3, rowspan = 9, type = "image", subtype = "model", bgcolor = BLACK },
-  { col = 1, row = 10, colspan = 1, rowspan = 3, type = "text", subtype = "telemetry", source = "rate_profile", title = "@i18n(widgets.dashboard.rates):upper()@", titlepos = "bottom", transform = "floor", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK },
-  { col = 2, row = 10, colspan = 1, rowspan = 3, type = "text", subtype = "telemetry", source = "pid_profile", title = "@i18n(widgets.dashboard.profile):upper()@", titlepos = "bottom", transform = "floor", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK },
-  { col = 3, row = 10, colspan = 1, rowspan = 3, type = "time", subtype = "count", title = "@i18n(widgets.dashboard.flights):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK },
+  { col = 1, row = 10, colspan = 1, rowspan = 3, type = "text", subtype = "telemetry", source = "rate_profile", title = "@i18n(widgets.dashboard.rates):upper()@", titlepos = "bottom", transform = "floor", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, font = AercCommon.compactStatsFont, autosize_chars = 2, autosize_font = SMLSIZE },
+  { col = 2, row = 10, colspan = 1, rowspan = 3, type = "text", subtype = "telemetry", source = "pid_profile", title = "@i18n(widgets.dashboard.profile):upper()@", titlepos = "bottom", transform = "floor", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, font = AercCommon.compactStatsFont, autosize_chars = 2, autosize_font = SMLSIZE },
+  { col = 3, row = 10, colspan = 1, rowspan = 3, type = "time", subtype = "count", title = "@i18n(widgets.dashboard.flights):upper()@", titlepos = "bottom", titlecolor = GREY_DEFAULT, textcolor = WHITE, bgcolor = BLACK, font = AercCommon.compactStatsFont, autosize_chars = 3, autosize_font = SMLSIZE },
   AercCommon and AercCommon.batteryBar and AercCommon.batteryBar("smartfuel", {
     col = 4,
     row = 1,
@@ -57,7 +57,9 @@ Theme.boxes = {
     titlecolor = GREY_DEFAULT,
     textcolor = WHITE,
     bgcolor = BLACK,
-    fillbgcolor = GREY_DEFAULT
+    fillbgcolor = GREY_DEFAULT,
+    value_font = AercCommon.gaugeValueFont,
+    value_offset_y = AercCommon.gaugeValueOffset
   },
   {
     col = 4,
@@ -71,7 +73,8 @@ Theme.boxes = {
     titlecolor = GREY_DEFAULT,
     textcolor = WHITE,
     bgcolor = BLACK,
-    autosize_chars = 10
+    autosize_chars = 10,
+    font = AercCommon.compactStatsFont
   },
   {
     col = 6,
@@ -91,7 +94,9 @@ Theme.boxes = {
     titlecolor = GREY_DEFAULT,
     textcolor = WHITE,
     bgcolor = BLACK,
-    fillbgcolor = GREY_DEFAULT
+    fillbgcolor = GREY_DEFAULT,
+    value_font = AercCommon.gaugeValueFont,
+    value_offset_y = AercCommon.gaugeValueOffset
   },
   {
     col = 6,

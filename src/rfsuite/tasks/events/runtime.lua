@@ -126,6 +126,14 @@ function Events.getOnconnectProgress()
   return nil
 end
 
+function Events.getOnconnectPendingTaskName()
+  local onconnect = ensureEventRunner("onconnect")
+  if onconnect and type(onconnect.getPendingTaskName) == "function" then
+    return onconnect.getPendingTaskName()
+  end
+  return nil
+end
+
 function Events.wakeup()
   ensureDeps()
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then return end

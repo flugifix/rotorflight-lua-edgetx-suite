@@ -230,7 +230,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
       valueText = utils.appendUnit(utils.formatDisplayValue(gaugeValue, decimals), unit)
     end
     
-    local textFont = utils.resolveValue(box.font, box, state) or DBLSIZE
+    local textFont = utils.resolveValue(box.valuefont, box, state) or utils.resolveValue(box.font, box, state) or DBLSIZE
     local valuePaddingTop = utils.toNumber(utils.resolveValue(box.valuepaddingtop, box, state), 0)
     local valuePosition = utils.resolveValue(box.valueposition, box, state) or "center"
     local valueAlign = utils.resolveValue(box.valuealign, box, state) or CENTER
@@ -308,7 +308,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
       valueText = utils.appendUnit(utils.formatDisplayValue(gaugeValue, decimals), unit)
     end
     
-    local textFont = utils.resolveValue(box.font, box, state) or DBLSIZE
+    local textFont = utils.resolveValue(box.valuefont, box, state) or utils.resolveValue(box.font, box, state) or DBLSIZE
     local valuePaddingLeft = utils.toNumber(utils.resolveValue(box.valuepaddingleft, box, state), 8)
     local valuePaddingTop = utils.toNumber(utils.resolveValue(box.valuepaddingtop, box, state), 0)
     local valueAlign = utils.resolveValue(box.valuealign, box, state) or LEFT
@@ -357,8 +357,14 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
           consumptionText = string.format("%d mah", math.floor(consumedMah + 0.5))
         end
 
+        local singleLineDetails = utils.resolveValue(box.battadvsingleline, box, state)
+
         if voltageText and consumptionText then
-          battAdvText = voltageText .. "\n" .. consumptionText
+          if singleLineDetails then
+            battAdvText = voltageText .. " " .. consumptionText
+          else
+            battAdvText = voltageText .. "\n" .. consumptionText
+          end
         else
           battAdvText = voltageText or consumptionText or ""
         end
@@ -483,7 +489,7 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     valueText,
     valueColor,
     box.valuealign or box.titlealign or CENTER,
-    DBLSIZE
+    utils.resolveFont(box, state, DBLSIZE, "value_font", "value_font_lowres")
   )
   
   -- MAX value display

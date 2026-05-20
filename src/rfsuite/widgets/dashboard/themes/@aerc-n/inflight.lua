@@ -9,6 +9,11 @@ local function cfgValue(key, fallback, state)
   return fallback
 end
 
+local function isCompactDisplay(state)
+  local w = tonumber(state and state.zoneW) or tonumber(LCD_W)
+  return not (w and w >= 760)
+end
+
 Theme.layout = { cols = 6, rows = 12, padding = 1 }
 
 Theme.boxes = {
@@ -54,7 +59,12 @@ Theme.boxes = {
     type = "time",
     subtype = "flight",
     valueposition = "center",
-    valuepaddingtop = -12,
+    valuepaddingtop = function(_, state)
+      if isCompactDisplay(state) then
+        return -18
+      end
+      return -22
+    end,
     bgcolor = BLACK,
     titlecolor = GREY_DEFAULT,
     textcolor = YELLOW
@@ -120,6 +130,12 @@ Theme.boxes = {
     maxposition = "top",
     maxalign = CENTER,
     maxpaddingtop = 300,
+    value_offset_y = function(_, state)
+      if isCompactDisplay(state) then
+        return 6
+      end
+      return 0
+    end,
     thresholds = {
       { value = 89, fillcolor = BLUE },
       { value = 100, fillcolor = GREEN }
