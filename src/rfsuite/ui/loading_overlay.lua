@@ -40,7 +40,7 @@ function M.append(children, opts)
     y = boxY,
     w = boxW,
     h = boxH,
-    color = BLACK,
+    color = COLOR_THEME_PRIMARY2,
     filled = true
   }
 
@@ -50,7 +50,7 @@ function M.append(children, opts)
     y = boxY + 10,
     w = boxW - 28,
     text = title,
-    color = WHITE,
+    color = COLOR_THEME_PRIMARY1,
     font = MIDSIZE
   }
 
@@ -60,7 +60,7 @@ function M.append(children, opts)
     y = boxY + 42,
     w = boxW - 28,
     text = message,
-    color = WHITE,
+    color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
   }
 

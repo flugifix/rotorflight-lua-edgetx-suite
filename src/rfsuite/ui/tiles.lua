@@ -3,6 +3,13 @@
 
 local Tiles = {}
 
+local function resolveTileTextColor(isEnabled, focused)
+  if not isEnabled or focused then
+    return GREY_DARK or BLACK or COLOR_THEME_SECONDARY2
+  end
+  return COLOR_THEME_PRIMARY1 or WHITE or GREY_DEFAULT
+end
+
 local function formatTileText(text)
   if type(text) ~= "string" then return "" end
   local len = string.len(text)
@@ -79,7 +86,7 @@ function Tiles.append(children, x, y, size, iconFile, text, focused, pressHandle
     w = size - 8,
     text  = formatTileText(text),
     font  = SMLSIZE,
-    color = isEnabled and BLACK or WHITE,
+    color = resolveTileTextColor(isEnabled, focused == true),
     align = CENTER
   }
 end

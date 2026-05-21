@@ -141,13 +141,12 @@ _G.rfsuite.savePreferences = function()
   return savePreferencesSafe(_G.rfsuite.preferences)
 end
 
-local function computeTileSize(cardW, cfg)
-  local hardMax = math.min(cfg.tileMax, cardW)
-  if cardW < cfg.tileMin then
-    return hardMax
+local function computeTileSize(cardW, cardH, cfg)
+  local size = math.min(cfg.tileMax, cardW)
+  if size < 1 then
+    return 1
   end
-  local soft = math.max(cfg.tileMin, hardMax)
-  return soft
+  return size
 end
 
 local function toWrappedItems(items, cols)
@@ -187,6 +186,8 @@ local state = {
   focusIndex   = 0,
   ignoreNextPageKey = false,
   suppressPressFrames = 0,
+  suppressBackFrames = 0,
+  ignoreNextRootBackCallback = 0,
   memBucket    = nil,
   memLastTick  = 0,
   memPeakKb    = 0,
@@ -368,17 +369,49 @@ end
 
 -- ── Handlers ─────────────────────────────────────────────────────────────────
 
-local function onBack()
+local function onBack(source, ev)
+  if (state.ignoreNextRootBackCallback or 0) > 0
+      and (source == nil or source == "unknown")
+      and ev == nil
+      and state.menu
+      and state.menu.isRoot
+      and state.menu.isRoot() then
+    state.ignoreNextRootBackCallback = state.ignoreNextRootBackCallback - 1
+    return
+  end
+
   if state.helpContent then
     state.helpContent = nil
     state.helpPageTitle = nil
     state.helpPageSubtitle = nil
+    state.suppressBackFrames = 6
     scheduleBuildUI(false)
     return
   end
 
   if state.menu and not state.menu.isRoot() then
-    state.loadingMenuId = "back"
+    local didGoBack = false
+    local newMenuId = nil
+    if state.menu.goBack and state.menu.goBack() then
+      didGoBack = true
+      state.focusIndex = 0
+      newMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+    end
+
+    if not didGoBack and state.menu.getActiveSection and state.menu.setActiveSection then
+      local section = state.menu.getActiveSection()
+      if section and section.id then
+        state.menu.setActiveSection(section.id)
+        state.focusIndex = 0
+        newMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+      end
+    end
+
+    if state.menu and state.menu.isRoot and state.menu.isRoot() and newMenuId == nil then
+      state.ignoreNextRootBackCallback = 1
+    end
+
+    state.suppressBackFrames = 6
     scheduleBuildUI(false)
     return
   end
@@ -1123,6 +1156,8 @@ function M.buildUI()
       local computedCols = Tiles.computeColumns(contentW, profile.rootMinCardWidth, profile.rootMaxColumns)
       local columns = computedCols
       local layoutItems, rows = toWrappedItems(group.cards, columns)
+      local rowHeight = profile.rootRowHeight
+      local gridH = rows * rowHeight + math.max(0, rows - 1) * tileGap
 
       -- Section heading label (indented from left edge)
       children[#children + 1] = {
@@ -1143,7 +1178,7 @@ function M.buildUI()
       cursorY = cursorY + groupHeaderH
 
       local groupCards = GridLayout.layout(
-        { x = contentX, y = cursorY, w = contentW, h = profile.rootRowHeight * rows },
+        { x = contentX, y = cursorY, w = contentW, h = gridH },
         { rows = rows, cols = columns, gap = tileGap, padding = 0, items = layoutItems },
         {}
       )
@@ -1152,9 +1187,9 @@ function M.buildUI()
       for j = 1, #groupCards do
         local card     = groupCards[j]
         flatIndex      = flatIndex + 1
-        local tileSize = computeTileSize(card.w, profile)
+        local tileSize = computeTileSize(card.w, card.h, profile)
         local tileX    = card.x + math.floor((card.w - tileSize) / 2)
-        local tileY    = card.y
+        local tileY    = card.y + math.floor((card.h - tileSize) / 2)
 
         Tiles.append(
           children, tileX, tileY, tileSize,
@@ -1195,8 +1230,10 @@ function M.buildUI()
       local computedCols = Tiles.computeColumns(contentW, profile.menuMinCardWidth, profile.menuMaxColumns)
       local columns   = computedCols
       local layoutItems, rows = toWrappedItems(gridItems, columns)
+      local rowHeight = profile.tileMax
+      local gridH = rows * rowHeight + math.max(0, rows - 1) * tileGap
       local cards     = GridLayout.layout(
-        { x = contentX, y = contentY, w = contentW, h = LCD_H },
+        { x = contentX, y = contentY, w = contentW, h = gridH },
         { rows = rows, cols = columns, gap = tileGap, padding = 2, items = layoutItems },
         state.cards
       )
@@ -1205,9 +1242,9 @@ function M.buildUI()
 
       for i = 1, #cards do
         local card     = cards[i]
-        local tileSize = computeTileSize(card.w, profile)
+        local tileSize = computeTileSize(card.w, card.h, profile)
         local tileX    = card.x + math.floor((card.w - tileSize) / 2)
-        local tileY    = card.y
+        local tileY    = card.y + math.floor((card.h - tileSize) / 2)
 
         Tiles.append(
           children, tileX, tileY, tileSize,
@@ -1287,6 +1324,8 @@ function M.init()
   state.lastInputTick = getTime and getTime() or 0
   state.ignoreNextPageKey = false
   state.suppressPressFrames = 0
+  state.suppressBackFrames = 0
+  state.ignoreNextRootBackCallback = 0
   state.focusIndex = 0
   state.activePageMenuId = nil
   state.helpContent = nil
@@ -1315,6 +1354,67 @@ function M.run(event, touchState)
     return false
   end
 
+  local function isGeneratedBackEvent(ev)
+    if type(ev) ~= "number" or ev == 0 then
+      return false
+    end
+
+    -- Observed on some radios/pages: RTN can arrive as raw generated event 1537.
+    if ev == 1537 then
+      return true
+    end
+
+    local keyCandidates = {
+      _G.KEY_EXIT,
+      _G.KEY_RTN,
+      _G.KEY_RETURN,
+      _G.KEY_ESC
+    }
+
+    local generators = {
+      _G.EVT_KEY_BREAK,
+      _G.EVT_KEY_FIRST,
+      _G.EVT_KEY_LONG
+    }
+
+    for gi = 1, #generators do
+      local gen = generators[gi]
+      if type(gen) == "function" then
+        for ki = 1, #keyCandidates do
+          local key = keyCandidates[ki]
+          if type(key) == "number" then
+            local ok, generated = pcall(gen, key)
+            if ok and generated == ev then
+              return true
+            end
+          end
+        end
+      end
+    end
+
+    return false
+  end
+
+  local function isBackEvent(ev)
+    if isEvent(
+      ev,
+      EVT_VIRTUAL_EXIT,
+      EVT_VIRTUAL_EXIT_BREAK,
+      EVT_VIRTUAL_EXIT_FIRST,
+      EVT_VIRTUAL_EXIT_LONG,
+      EVT_EXIT_BREAK,
+      EVT_EXIT_FIRST,
+      EVT_EXIT_LONG,
+      EVT_RTN_BREAK,
+      EVT_RTN_FIRST,
+      EVT_RTN_LONG
+    ) then
+      return true
+    end
+
+    return isGeneratedBackEvent(ev)
+  end
+
   if lvgl == nil then
     lcd.drawText(10, 10, "LVGL support required (EdgeTX 2.11+)", WHITE)
   end
@@ -1333,6 +1433,9 @@ function M.run(event, touchState)
     if (state.suppressPressFrames or 0) > 0 then
       state.suppressPressFrames = state.suppressPressFrames - 1
     end
+    if (state.suppressBackFrames or 0) > 0 then
+      state.suppressBackFrames = state.suppressBackFrames - 1
+    end
 
     if getTime and event and event ~= 0 then
       state.lastInputTick = getTime()
@@ -1340,8 +1443,10 @@ function M.run(event, touchState)
 
     -- Keep a single focus model: LVGL handles PAGE/PAGE- and ENTER natively.
     -- We only handle EXIT/back here.
-    if isEvent(event, EVT_VIRTUAL_EXIT, EVT_EXIT_BREAK) then
-      onBack()
+    local backEvent = isBackEvent(event)
+
+    if backEvent and (state.suppressBackFrames or 0) <= 0 then
+      onBack("event", event)
     end
 
     if state.isClosing then

@@ -6,6 +6,9 @@ local APPID_SMARTCONSUMPTION = 0x5FE0
 local SENSOR_NAME_SMARTFUEL = "SmFt"
 local SENSOR_NAME_SMARTCONSUMPTION = "SmCp"
 local FORCE_REFRESH_INTERVAL = 2.0
+local RESERVE_MIN = 15
+local RESERVE_MAX = 60
+local RESERVE_DEFAULT = 35
 
 local MIRROR_FUEL_QUERIES = {
   { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x5007 },
@@ -157,6 +160,31 @@ local function applyReservePercent(value, warningPercent)
   return clamp(fuel, 0, 100)
 end
 
+local function sanitizeReservePercent(value)
+  local reserve = tonumber(value)
+  if reserve == nil then return RESERVE_DEFAULT end
+  reserve = math.floor(reserve + 0.5)
+  if reserve < RESERVE_MIN or reserve > RESERVE_MAX then
+    return RESERVE_DEFAULT
+  end
+  return reserve
+end
+
+local function resolveReservePercent(session, batteryConfig)
+  local batteryPrefs = session and session.modelPreferences and session.modelPreferences.battery or nil
+  local reserve = batteryPrefs and batteryPrefs.consumption_warning_percentage
+  if reserve == nil then
+    reserve = batteryConfig and batteryConfig.consumptionWarningPercentage
+  end
+  reserve = sanitizeReservePercent(reserve)
+
+  if batteryConfig then
+    batteryConfig.consumptionWarningPercentage = reserve
+  end
+
+  return reserve
+end
+
 local function scaleField(raw, fallback, minValue, maxValue, scale)
   local value = tonumber(raw)
   if value == nil then return fallback end
@@ -253,19 +281,18 @@ local function getActivePackCapacity(session, batteryConfig)
 end
 
 local function getUsableCapacity(packCapacity, reserve)
-  local safeReserve = tonumber(reserve) or 30
-  if safeReserve > 60 or safeReserve < 15 then safeReserve = 35 end
+  local safeReserve = sanitizeReservePercent(reserve)
   local usable = packCapacity * (1 - safeReserve / 100)
   if usable < 10 then usable = packCapacity end
   return usable, safeReserve
 end
 
-local function fuelPercentageFromVoltage(voltage, cellCount, batteryConfig)
+local function fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve)
   ensureCurve()
 
   local minV = (tonumber(batteryConfig and batteryConfig.vbatmincellvoltage) or 330) / 100
   local fullV = (tonumber(batteryConfig and batteryConfig.vbatfullcellvoltage) or 410) / 100
-  local reserve = tonumber(batteryConfig and batteryConfig.consumptionWarningPercentage) or 30
+  local safeReserve = sanitizeReservePercent(reserve)
 
   if cellCount <= 0 then return nil end
 
@@ -280,12 +307,11 @@ local function fuelPercentageFromVoltage(voltage, cellCount, batteryConfig)
   local index = math.floor((scaledV - sigmoidMin) / 0.01) + 1
   index = clamp(index, 1, #dischargeCurveTable)
 
-  if reserve > 60 or reserve < 15 then reserve = 35 end
   local rawPercent = dischargeCurveTable[index]
-  local usableSpan = 100 - reserve
+  local usableSpan = 100 - safeReserve
   if usableSpan <= 0 then return rawPercent end
-  if rawPercent <= reserve then return 0 end
-  return ((rawPercent - reserve) / usableSpan) * 100
+  if rawPercent <= safeReserve then return 0 end
+  return ((rawPercent - safeReserve) / usableSpan) * 100
 end
 
 local function isArmed()
@@ -333,14 +359,14 @@ local function updateVoltageStability(voltage, now, stableWindowVolts)
   return state.voltageStable
 end
 
-local function computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized)
+local function computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
   local consumption = tonumber(getSensor("consumption"))
   if not consumption then
-    return stabilized and fuelPercentageFromVoltage(voltage, cellCount, batteryConfig) or nil, nil
+    return stabilized and fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve) or nil, nil
   end
 
   if state.startConsumptionOffset == nil then
-    local startPercent = stabilized and fuelPercentageFromVoltage(voltage, cellCount, batteryConfig) or 100
+    local startPercent = stabilized and fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve) or 100
     startPercent = clamp(tonumber(startPercent) or 100, 0, 100)
     state.startFuelPercent = startPercent
     local estimatedUsed = usableCapacity * (1 - startPercent / 100)
@@ -357,7 +383,7 @@ local function computeCurrentMode(voltage, cellCount, batteryConfig, usableCapac
   return remaining, consumption
 end
 
-local function computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed)
+local function computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
   if not state.voltageStable then return nil, nil end
 
   local previousVoltage = state.lastFilteredVoltage
@@ -375,7 +401,7 @@ local function computeVoltageMode(now, voltage, cellCount, batteryConfig, usable
     end
   end
 
-  local targetPercent = fuelPercentageFromVoltage(filteredVoltage, cellCount, batteryConfig)
+  local targetPercent = fuelPercentageFromVoltage(filteredVoltage, cellCount, batteryConfig, reserve)
   if type(targetPercent) ~= "number" then
     return nil, nil
   end
@@ -447,7 +473,7 @@ function Smart.wakeup()
   local firmwareActive = type(firmwareSource) == "number" and firmwareSource > 0
   local packCapacity = getActivePackCapacity(session, batteryConfig)
   local cellCount = tonumber(batteryConfig.batteryCellCount) or tonumber(getSensor("battery_cell_count")) or 0
-  local reserve = tonumber(batteryConfig.consumptionWarningPercentage) or 30
+  local reserve = resolveReservePercent(session, batteryConfig)
   local usableCapacity = getUsableCapacity(packCapacity, reserve)
 
   if usableCapacity <= 0 or cellCount <= 0 then
@@ -496,9 +522,9 @@ function Smart.wakeup()
     smartConsumption = rawConsumption
   else
     if sourceMode == 1 then
-      fuelPercent, smartConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed)
+      fuelPercent, smartConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
     else
-      fuelPercent, smartConsumption = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized)
+      fuelPercent, smartConsumption = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
     end
   end
 

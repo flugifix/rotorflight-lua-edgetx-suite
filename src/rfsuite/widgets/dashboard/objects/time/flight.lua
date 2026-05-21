@@ -11,7 +11,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     local textHeight = utils.toNumber(utils.resolveValue(box.valueheight, box, state), 18)
     valueY = rect.y + math.floor((rect.h - textHeight) / 2) + valuePaddingTop
   end
-  utils.pushLabel(nodes, rect.x + 4, valueY, rect.w - 8, valueText, box.textcolor or BLACK, box.valuealign or box.titlealign or CENTER, valueFont)
+  utils.pushLabel(nodes, rect.x + 4, valueY, rect.w - 8, valueText, utils.resolveTextColor(box, state, WHITE), box.valuealign or box.titlealign or CENTER, valueFont)
 end
 
 return Render

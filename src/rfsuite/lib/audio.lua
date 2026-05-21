@@ -73,6 +73,24 @@ local function roundProfileValue(value)
   return math.floor(value + 0.5)
 end
 
+local function normalizeCellVoltage(rawValue, fallback)
+  local value = tonumber(rawValue)
+  if type(value) ~= "number" then
+    return fallback
+  end
+
+  -- FC config often stores per-cell voltage in centi-volts (e.g. 350 => 3.50V).
+  if value > 10 then
+    value = value / 100
+  end
+
+  if value < 2.0 or value > 6.0 then
+    return fallback
+  end
+
+  return value
+end
+
 local function unitPercent()
   if type(UNIT_PERCENT) == "number" then return UNIT_PERCENT end
   return 0
@@ -478,12 +496,15 @@ function Audio.process(self, opts)
     local warnBase
     do
       local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session
-      local bc = session and session.batteryConfig
-      local warnV = bc and tonumber(bc.vbatwarningcellvoltage)
+      local bc = session and (session.batteryConfig or session.battery_config)
+      local warnV = normalizeCellVoltage(bc and bc.vbatwarningcellvoltage, nil)
       -- MSP batteryCellCount == 0 means auto-detect; use telemetry Cel# in that case
       local cells = bc and tonumber(bc.batteryCellCount)
       if not cells or cells <= 0 then
         cells = tonumber(self.state and self.state.batteryCellCount)
+      end
+      if type(cells) == "number" then
+        cells = math.floor(cells + 0.5)
       end
       if warnV and warnV > 0 and cells and cells > 0 then
         warnBase = warnV * cells

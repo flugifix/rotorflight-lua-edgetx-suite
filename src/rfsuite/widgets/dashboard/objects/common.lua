@@ -297,6 +297,24 @@ function Utils.normalizeColor(color, fallback)
   return WHITE
 end
 
+function Utils.resolveTextColor(box, state, fallback)
+  local color = Utils.resolveValue(box and box.textcolor, box, state)
+  if type(color) == "number" then
+    return color
+  end
+
+  local bgColor = Utils.resolveValue(box and box.bgcolor, box, state)
+  if bgColor == BLACK or bgColor == GREY_DEFAULT then
+    return WHITE
+  end
+
+  if type(fallback) == "number" then
+    return fallback
+  end
+
+  return WHITE
+end
+
 function Utils.pushLabel(nodes, x, y, w, text, color, align, font)
   nodes[#nodes + 1] = {
     type = "label",

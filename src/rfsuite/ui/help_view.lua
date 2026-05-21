@@ -53,7 +53,7 @@ function HelpView.build(ctx)
       y = panelY,
       w = panelW,
       h = panelH,
-      color = BLACK,
+      color = COLOR_THEME_PRIMARY2,
       filled = true
     },
     {

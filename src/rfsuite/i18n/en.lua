@@ -331,6 +331,26 @@ return {
         saved_title = "Saved",
         saved_message = "SmartFuel settings saved"
       },
+      setup_power_battery = {
+        section_profiles = "Profiles",
+        battery_slot = "Battery",
+        selected = "Selected",
+        capacity = "Capacity",
+        section_battery = "Battery",
+        max_cell_voltage = "Max cell voltage",
+        full_cell_voltage = "Full cell voltage",
+        warn_cell_voltage = "Warn cell voltage",
+        min_cell_voltage = "Min cell voltage",
+        cell_count = "Cell count",
+        consumption_warning_percentage = "Consumption reserve",
+        help_message = "The battery settings are used to configure the flight controller to monitor the battery voltage and provide warnings when the voltage drops below a certain level.",
+        loading_title = "Loading",
+        loading_message = "Reading battery config",
+        saved_title = "Saved",
+        saved_message = "Battery settings saved",
+        warning_title = "Warning",
+        saved_local_only_message = "Saved locally; FC write pending"
+      },
       setup_telemetry = {
         set_defaults_title = "Telemetry Sensors",
         set_defaults_msg = "Load default telemetry sensors?",

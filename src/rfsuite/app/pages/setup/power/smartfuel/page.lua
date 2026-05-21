@@ -135,7 +135,6 @@ local function loadFromSession()
 	local voltageDrop = (cfg and cfg.voltage_drop_rate) or (batteryPrefs and batteryPrefs.voltage_drop_rate)
 	local chargeDrop = (cfg and cfg.charge_drop_rate) or (batteryPrefs and batteryPrefs.charge_drop_rate)
 	local sagGain = (cfg and cfg.sag_gain) or (batteryPrefs and batteryPrefs.sag_gain)
-
 	ui.config.voltage_drop_rate = clampInt(voltageDrop, 0, 250, 10)
 	ui.config.charge_drop_rate = clampInt(chargeDrop, 0, 250, 50)
 	ui.config.sag_gain = clampInt(sagGain, 0, 100, 40)

@@ -132,7 +132,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     utils.defaultValueY(rect, box),
     rect.w - 8,
     valueText,
-    box.textcolor or BLACK,
+    utils.resolveTextColor(box, state, WHITE),
     box.valuealign or box.titlealign or CENTER,
     valueFont
   )

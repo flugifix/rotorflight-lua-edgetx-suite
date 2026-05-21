@@ -5,6 +5,7 @@ local USER_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite.user/dashboard/"
 local AUDIO_LOG_FORCE = false
 local SPLASH_READY_HOLD_SECONDS = 1.0
 local SPLASH_SOFT_TIMEOUT_SECONDS = 15.0
+local FULLSCREEN_BATTERY_REFRESH_TIMEOUT_SECONDS = 5.0
 
 local function scriptExists(path)
   if type(path) ~= "string" or path == "" then return false end
@@ -83,6 +84,15 @@ if type(loadI18nModule) == "function" then
   local ok, mod = pcall(loadI18nModule)
   if ok and type(mod) == "table" then
     I18nModule = mod
+  end
+end
+
+local loadBatteryConfigApiModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/battery_config")
+local BatteryConfigApi = nil
+if type(loadBatteryConfigApiModule) == "function" then
+  local ok, mod = pcall(loadBatteryConfigApiModule)
+  if ok and type(mod) == "table" then
+    BatteryConfigApi = mod
   end
 end
 
@@ -1176,6 +1186,61 @@ function Runtime.new(zone, options)
     self.boxSources = sources
   end
 
+  local function syncBatteryConfigFromSession(self)
+    if type(_G) ~= "table" or type(_G.rfsuite) ~= "table" then return false end
+    local session = _G.rfsuite.session
+    if type(session) ~= "table" then return false end
+    local batteryConfig = session.battery_config or session.batteryConfig
+    if type(batteryConfig) ~= "table" then return false end
+    self.state.battery_config = batteryConfig
+    return true
+  end
+
+  local function requestBatteryConfigRefresh(self, force)
+    if not MspRuntime or type(MspRuntime.getState) ~= "function" then return false end
+    if type(BatteryConfigApi) ~= "table" or type(BatteryConfigApi.parse) ~= "function" then return false end
+
+    local now = nowSeconds()
+    if self._batteryConfigRefreshPending and not force then
+      local started = tonumber(self._batteryConfigRefreshStartedAt) or 0
+      if started > 0 and (now - started) < FULLSCREEN_BATTERY_REFRESH_TIMEOUT_SECONDS then
+        return false
+      end
+    end
+
+    local mspState = MspRuntime.getState()
+    if type(mspState) ~= "table" or type(mspState.queue) ~= "table" then return false end
+
+    self._batteryConfigRefreshPending = true
+    self._batteryConfigRefreshStartedAt = now
+
+    mspState.queue:add({
+      command = BatteryConfigApi.command,
+      simulatorResponse = BatteryConfigApi.simulatorResponse,
+      timeout = FULLSCREEN_BATTERY_REFRESH_TIMEOUT_SECONDS,
+      processReply = function(_, buf)
+        local data = BatteryConfigApi.parse(buf)
+        if type(data) == "table" and type(_G) == "table" then
+          _G.rfsuite = _G.rfsuite or {}
+          _G.rfsuite.session = _G.rfsuite.session or {}
+          _G.rfsuite.session.battery_config = data
+          _G.rfsuite.session.batteryConfig = data
+          self.state.battery_config = data
+          updateVoltageThemeConfig(self)
+        end
+        self._batteryConfigRefreshPending = false
+        self._batteryConfigRefreshStartedAt = nil
+        self.built = false
+      end,
+      errorHandler = function()
+        self._batteryConfigRefreshPending = false
+        self._batteryConfigRefreshStartedAt = nil
+      end
+    })
+
+    return true
+  end
+
   local function performBackgroundWork(self)
     local now = nowSeconds()
     if self._lastWorkTick == now then return self.connectionReady end
@@ -1317,6 +1382,15 @@ function Runtime.new(zone, options)
 
     -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
     local isInteractive = (event ~= nil)
+    local enteringFullscreen = isInteractive and not self._wasInteractiveLastFrame
+    if enteringFullscreen then
+      syncBatteryConfigFromSession(self)
+      requestBatteryConfigRefresh(self, false)
+    elseif isInteractive then
+      syncBatteryConfigFromSession(self)
+    end
+    self._wasInteractiveLastFrame = isInteractive
+
     local nextRenderKey = nil
     if isInteractive then
       nextRenderKey = "fullscreen_menu"

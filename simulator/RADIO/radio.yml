@@ -1,4 +1,4 @@
-checksum: 63887
+checksum: 11235
 manuallyEdited: 0
 timezoneMinutes: 0
 ppmunit: 0
@@ -80,7 +80,7 @@ speakerVolume: 12
 vBatMin: 90
 vBatMax: 120
 backlightBright: 0
-globalTimer: 540629
+globalTimer: 557944
 bluetoothBaudrate: 0
 bluetoothMode: OFF
 countryCode: 2
@@ -232,7 +232,7 @@ ownerRegistrationID: "-eC!U*U*"
 rotEncMode: 0
 imuMax: 0
 imuOffset: 0
-selectedTheme: "EdgeTX Default"
+selectedTheme: "Grown Up"
 labelSingleSelect: 0
 labelMultiMode: 0
 favMultiMode: 0

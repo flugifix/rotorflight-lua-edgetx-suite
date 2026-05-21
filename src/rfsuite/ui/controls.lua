@@ -58,7 +58,7 @@ function Controls.appendSectionHeader(children, x, y, w, title, expanded, onTogg
     y = btnY + 3,
     w = SECTION_ARROW_W,
     text  = icon,
-    color = WHITE,
+    color = COLOR_THEME_PRIMARY1,
     align = CENTER,
     font  = SMLSIZE
   }

@@ -248,7 +248,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
       valueY,
       barWidth,
       valueText,
-      box.textcolor or WHITE,
+      utils.resolveTextColor(box, state, WHITE),
       valueAlign,
       textFont
     )
@@ -319,7 +319,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
       barY + math.floor((barHeight - 8) / 2) + valuePaddingTop,
       barW - valuePaddingLeft - 4,
       valueText,
-      box.textcolor or WHITE,
+      utils.resolveTextColor(box, state, WHITE),
       valueAlign,
       textFont
     )
@@ -476,7 +476,7 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     valueText = utils.appendUnit(utils.formatDisplayValue(gaugeValue, decimals), unit)
   end
 
-  local valueColor = box.textcolor or BLACK
+  local valueColor = utils.resolveTextColor(box, state, WHITE)
   if unit == "%" and hasValue then
     valueColor = getArcValueColor(gaugeValue, state, box, themeCommon, utils)
   end

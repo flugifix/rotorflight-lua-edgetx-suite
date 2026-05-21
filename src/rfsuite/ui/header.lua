@@ -132,7 +132,7 @@ function Header.appendToLayout(lyt, ctx)
       type  = "label",
       x = xMem, y = cfg.topButtonY + cfg.memYOffset, w = cfg.memW,
       text  = Header.getLuaMemLabel(),
-      color = WHITE, align = RIGHT, font = SMLSIZE
+      color = COLOR_THEME_PRIMARY1, align = RIGHT, font = SMLSIZE
     }
   end
 

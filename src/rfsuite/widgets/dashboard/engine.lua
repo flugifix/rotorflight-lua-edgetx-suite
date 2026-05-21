@@ -40,8 +40,31 @@ local function buildGridRects(zone, layout, boxes)
   local cols = math.max(1, tonumber(layout and layout.cols) or 1)
   local rows = math.max(1, tonumber(layout and layout.rows) or 1)
   local padding = tonumber(layout and layout.padding) or 0
-  local cellW = math.floor((zone.w - (cols - 1) * padding) / cols)
-  local cellH = math.floor((zone.h - (rows - 1) * padding) / rows)
+
+  local function buildTrackStarts(totalSize, trackCount, gap)
+    local starts = {}
+    local sizes = {}
+    local totalGap = (trackCount - 1) * gap
+    local usable = totalSize - totalGap
+    if usable < 0 then usable = 0 end
+
+    local base = math.floor(usable / trackCount)
+    local remainder = usable - (base * trackCount)
+    local cursor = 0
+
+    for i = 1, trackCount do
+      -- Keep early tracks stable and distribute extra pixels to the right/bottom edge.
+      local extra = (i > (trackCount - remainder)) and 1 or 0
+      sizes[i] = base + extra
+      starts[i] = cursor
+      cursor = cursor + sizes[i] + gap
+    end
+
+    return starts, sizes
+  end
+
+  local colStarts, colSizes = buildTrackStarts(zone.w, cols, padding)
+  local rowStarts, rowSizes = buildTrackStarts(zone.h, rows, padding)
 
   for index = 1, #boxes do
     local box = boxes[index]
@@ -52,10 +75,20 @@ local function buildGridRects(zone, layout, boxes)
     local endCol = Utils.clamp(col + colSpan - 1, 1, cols)
     local endRow = Utils.clamp(row + rowSpan - 1, 1, rows)
 
-    local x = zone.x + (col - 1) * (cellW + padding)
-    local y = zone.y + (row - 1) * (cellH + padding)
-    local w = (endCol - col + 1) * cellW + (endCol - col) * padding
-    local h = (endRow - row + 1) * cellH + (endRow - row) * padding
+    local x = zone.x + colStarts[col]
+    local y = zone.y + rowStarts[row]
+
+    local w = 0
+    for c = col, endCol do
+      w = w + colSizes[c]
+    end
+    w = w + (endCol - col) * padding
+
+    local h = 0
+    for r = row, endRow do
+      h = h + rowSizes[r]
+    end
+    h = h + (endRow - row) * padding
 
     rects[#rects + 1] = { box = box, x = x, y = y, w = w, h = h }
   end

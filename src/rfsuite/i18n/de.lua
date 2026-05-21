@@ -331,6 +331,26 @@ return {
         saved_title = "Gespeichert",
         saved_message = "SmartFuel Einstellungen gespeichert"
       },
+      setup_power_battery = {
+        section_profiles = "Profile",
+        battery_slot = "Akku",
+        selected = "Ausgewaehlt",
+        capacity = "Kapazitaet",
+        section_battery = "Batterie",
+        max_cell_voltage = "Max Zellspannung",
+        full_cell_voltage = "Voll Zellspannung",
+        warn_cell_voltage = "Warn Zellspannung",
+        min_cell_voltage = "Min Zellspannung",
+        cell_count = "Zellenzahl",
+        consumption_warning_percentage = "Verbrauchsreserve",
+        help_message = "Die Batterieeinstellungen dienen dazu, den Flugcontroller so zu konfigurieren, dass er die Batteriespannung ueberwacht und Warnungen ausgibt, wenn die Spannung unter einen bestimmten Wert faellt.",
+        loading_title = "Laden",
+        loading_message = "Lese Batteriekonfiguration",
+        saved_title = "Gespeichert",
+        saved_message = "Batterieeinstellungen gespeichert",
+        warning_title = "Warnung",
+        saved_local_only_message = "Lokal gespeichert; FC-Schreiben ausstehend"
+      },
       setup_telemetry = {
         set_defaults_title = "Telemetrie-Sensoren",
         set_defaults_msg = "Standard-Telemetrie-Sensoren laden?",
