@@ -197,6 +197,8 @@ local state = {
   helpPageSubtitle = nil,
   pendingBuildUI = false,
   pendingGcAfterBuild = false,
+  pendingSaveAction = nil,
+  saveOverlayVisible = false,
   mspAttached = false,
   mspLastTick = 0,
   fblConnected = false,
@@ -697,13 +699,42 @@ local function readFblConnected()
   return mspState.lastConnected == true
 end
 
+local function returnToRootOnDisconnect()
+  if not state.menu or state.menu.isRoot() then
+    return
+  end
+
+  closeHelpDialogIfOpen()
+  state.loadingMenuId = nil
+  state.pendingMenuOpen = nil
+  state.pendingMenuBack = false
+
+  local stepped = false
+  while state.menu and (not state.menu.isRoot()) do
+    if state.menu.goBack and state.menu.goBack() then
+      stepped = true
+    else
+      break
+    end
+  end
+
+  if stepped then
+    state.focusIndex = 0
+    scheduleBuildUI(false)
+  end
+end
+
 local function updateRuntimeMenuConditions()
   if not state.menu then return end
 
+  local wasConnected = state.fblConnected == true
   local nextFblConnected = readFblConnected()
   if state.fblConnected ~= nextFblConnected then
     state.fblConnected = nextFblConnected
     state.menu.setCondition("fblConnected", nextFblConnected)
+    if wasConnected and not nextFblConnected then
+      returnToRootOnDisconnect()
+    end
     scheduleBuildUI(false)
   end
 end
@@ -823,22 +854,38 @@ local function onSave()
   if page and page.onSave then
     closeHelpDialogIfOpen()
 
-    -- Helper that performs the actual page save logic.
-    local function doPageSave()
-      local shouldRebuild = page.onSave({
-        i18n = state.i18n,
-        preferences = state.preferences,
-        menu = state.menu,
-        savePreferences = performSave,
-        refresh = M.buildUI
-      })
+    -- Runs save in the next tick so the save overlay can render first.
+    local function queuePageSave()
+      state.pendingSaveAction = function()
+        local ok, shouldRebuild = pcall(page.onSave, {
+          i18n = state.i18n,
+          preferences = state.preferences,
+          menu = state.menu,
+          savePreferences = performSave,
+          refresh = M.buildUI
+        })
 
-      -- Apply possibly updated language setting immediately after save.
-      applyLocaleFromPreferences()
+        if not ok then
+          pcall(Log.emit, "rfsuite", "page.onSave failed: " .. tostring(shouldRebuild), "error", true)
+          if lvgl and lvgl.alert then
+            lvgl.alert({
+              title = "Save",
+              message = tostring(shouldRebuild)
+            })
+          end
+          scheduleBuildUI(false)
+          return
+        end
 
-      if shouldRebuild ~= false then
-        scheduleBuildUI(false)
+        -- Apply possibly updated language setting immediately after save.
+        applyLocaleFromPreferences()
+
+        if shouldRebuild ~= false then
+          scheduleBuildUI(false)
+        end
       end
+      state.saveOverlayVisible = false
+      scheduleBuildUI(false)
     end
 
     -- Check preference and show confirm dialog if enabled.
@@ -869,9 +916,9 @@ local function onSave()
         local ok, res = pcall(confirmModule.show, {
           title = title,
           message = message,
-          onConfirm = doPageSave,
+          onConfirm = queuePageSave,
           onCancel = function() end,
-          onFallback = doPageSave
+          onFallback = queuePageSave
         })
         if ok and res == true then return end
       end
@@ -879,18 +926,18 @@ local function onSave()
       if type(lvgl.confirm) == "function" then
         local ok, res = pcall(lvgl.confirm, { title = title, message = message })
         pcall(Log.emit, "rfsuite", "called lvgl.confirm; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
-        if ok and res == true then doPageSave() end
+        if ok and res == true then queuePageSave() end
         return
       end
 
       -- Fallback: no confirm API available — proceed with save.
       pcall(Log.emit, "rfsuite", "no confirm API available; performing save fallback", "debug", true)
-      doPageSave()
+      queuePageSave()
       return
     end
 
     -- Preference disabled: just save immediately.
-    doPageSave()
+    queuePageSave()
     return
   end
 
@@ -939,6 +986,33 @@ function M.buildUI()
   if lvgl == nil then return end
 
   ensureBuildDeps()
+
+  if state.pendingSaveAction then
+    local tr = state.i18n and state.i18n.t
+    local title = tr and tr("app.saving") or "Saving..."
+    local message = tr and tr("app.saving_settings") or "Applying settings"
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    local lyt = {
+      {
+        type = "rectangle",
+        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        color = COLOR_THEME_PRIMARY3,
+        filled = true
+      }
+    }
+    LoadingOverlay.append(lyt, {
+      x = 0,
+      y = 0,
+      w = LCD_W or 320,
+      h = LCD_H or 240,
+      title = title,
+      message = message,
+      progress = 0.35
+    })
+    lvgl.build(lyt)
+    state.saveOverlayVisible = true
+    return
+  end
 
 
   if state.loadingMenuId then
@@ -1220,6 +1294,8 @@ function M.init()
   state.helpPageSubtitle = nil
   state.pendingBuildUI = false
   state.pendingGcAfterBuild = false
+  state.pendingSaveAction = nil
+  state.saveOverlayVisible = false
   state.mspLastTick = 0
   state.fblConnected = false
   state.infoSessionSnapshot = nil
@@ -1309,6 +1385,13 @@ function M.run(event, touchState)
       if doGc and collectgarbage then
         collectgarbage("collect")
       end
+    end
+
+    if state.pendingSaveAction and state.saveOverlayVisible and not state.isClosing then
+      local action = state.pendingSaveAction
+      state.pendingSaveAction = nil
+      state.saveOverlayVisible = false
+      pcall(action)
     end
 
     if state.pendingMenuOpen and not state.isClosing then

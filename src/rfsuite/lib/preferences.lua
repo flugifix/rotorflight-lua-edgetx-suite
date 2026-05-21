@@ -44,8 +44,6 @@ local function defaultPreferences()
       save_confirm                 = true,
       save_armed_warning           = true,
       reload_confirm               = true,
-      show_battery_profile_startup = true,
-      show_confirmation_dialog     = true,
       -- integration
       syncname                     = false,
       auto_msp_telem_sync         = false,

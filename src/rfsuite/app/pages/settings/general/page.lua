@@ -23,8 +23,6 @@ local CONFIG_SCHEMA = {
   { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
-  { key = "show_battery_profile_startup", type = "bool",   default = true   },
-  { key = "show_confirmation_dialog",     type = "bool",   default = true   },
 }
 
 -- Build ui.config defaults from schema so there is no second place to update.
@@ -129,8 +127,6 @@ local SAFETY_ITEMS = {
   { key = "save_confirm",                 labelKey = "save_confirm",                 fallback = "Bestätigen beim Speichern" },
   { key = "save_armed_warning",           labelKey = "save_armed_warning",           fallback = "Warnung beim Speichern (armed)" },
   { key = "reload_confirm",               labelKey = "reload_confirm",               fallback = "Bestätigen beim Neuladen" },
-  { key = "show_battery_profile_startup", labelKey = "show_battery_profile_startup", fallback = "Akkutyp bei Verbindung" },
-  { key = "show_confirmation_dialog",     labelKey = "show_confirmation_dialog",     fallback = "Akkutyp bestätigen" }
 }
 
 local function buildSafety(cursorY, children, x, w, i18n)

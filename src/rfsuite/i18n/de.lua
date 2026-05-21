@@ -1,6 +1,8 @@
 return {
   app = {
     loading = "Lade...",
+    saving = "Speichere...",
+    saving_settings = "Einstellungen werden angewendet",
     closing_rfsuite = "RFSuite wird beendet...",
     header_system = "System",
     header_configuration = "Konfiguration",
@@ -149,8 +151,6 @@ return {
         save_confirm = "Bestätigen beim Speichern",
         save_armed_warning = "Warnung 'Bitte disarmen zum Speichern'",
         reload_confirm = "Bestätigen beim Neuladen",
-        show_battery_profile_startup = "Akkutyp bei Verbindung",
-        show_confirmation_dialog = "Akkutyp bestätigen",
         icon_size = "Icongroesse",
         combo_text = "TEXT",
         combo_small = "KLEIN",

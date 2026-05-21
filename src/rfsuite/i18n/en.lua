@@ -1,6 +1,8 @@
 return {
   app = {
     loading = "Loading...",
+    saving = "Saving...",
+    saving_settings = "Applying settings",
     closing_rfsuite = "Closing RFSuite...",
     header_system = "System",
     header_configuration = "Configuration",
@@ -149,8 +151,6 @@ return {
         save_confirm = "Confirm on Save",
         save_armed_warning = "Show Disarm-to-Save Warning",
         reload_confirm = "Confirm on Reload",
-        show_battery_profile_startup = "Battery Type on Connect",
-        show_confirmation_dialog = "Battery Type Confirmation",
         icon_size = "Icon Size",
         combo_text = "TEXT",
         combo_small = "SMALL",
