@@ -797,6 +797,9 @@ local function updateRuntimeMenuConditions()
     state.fblConnected = nextFblConnected
     state.menu.setCondition("fblConnected", nextFblConnected)
     if wasConnected and not nextFblConnected then
+      if Audio and type(Audio.resetConnectionState) == "function" then
+        Audio.resetConnectionState(state.audioState)
+      end
       returnToRootOnDisconnect()
     end
     scheduleBuildUI(false)
@@ -1672,8 +1675,12 @@ function M.run(event, touchState)
         }
         Audio.process(audioContext, { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
       else
-        state.audioState.initialized = false
-        state.audioState.modelAnnounced = false
+        if Audio and type(Audio.resetConnectionState) == "function" then
+          Audio.resetConnectionState(state.audioState)
+        else
+          state.audioState.initialized = false
+          state.audioState.modelAnnounced = false
+        end
       end
     end
 

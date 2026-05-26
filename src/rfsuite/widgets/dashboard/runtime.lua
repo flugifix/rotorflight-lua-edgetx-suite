@@ -1300,6 +1300,14 @@ function Runtime.new(zone, options)
       end
     end
     updateVoltageThemeConfig(self)
+    if wasFblConnected and not isFblConnected then
+      if DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
+        DashboardAudio.resetConnectionState(self.audioState)
+      elseif self.audioState then
+        self.audioState.initialized = false
+        self.audioState.modelAnnounced = false
+      end
+    end
     if isFblConnected and not wasFblConnected then
       -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
       self.state.hadArmedFlight = false

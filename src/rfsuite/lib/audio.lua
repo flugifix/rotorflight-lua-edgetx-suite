@@ -525,6 +525,25 @@ local function announceBatteryCapacityEvent(self, opts)
   audioState.batteryCapacityAnnounced = true
 end
 
+function Audio.resetConnectionState(audioState)
+  if type(audioState) ~= "table" then
+    return
+  end
+
+  audioState.initialized = false
+  audioState.modelAnnounced = false
+  audioState.batteryCapacityAnnounced = false
+  audioState.nextAllowedAt = 0
+
+  if type(audioState.lastValues) == "table" then
+    audioState.lastValues.battery_profile = nil
+  end
+
+  if type(audioState.pendingValues) == "table" then
+    audioState.pendingValues.battery_profile = nil
+  end
+end
+
 function Audio.process(self, opts)
   if type(self) ~= "table" or type(self.audioState) ~= "table" then
     return
