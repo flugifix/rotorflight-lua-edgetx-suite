@@ -34,6 +34,8 @@ local SIM_FILE_ALIASES = {
   ["Vbec"] = "bec_voltage",
   ["BecV"] = "bec_voltage",
   ["Hspd"] = "rpm",
+  ["EscT"] = "temp_esc",
+  ["Tesc"] = "temp_esc",
   ["TescT"] = "temp_esc",
   ["TmcuT"] = "temp_mcu",
   ["Thr%"] = "throttle_percent",
@@ -341,7 +343,7 @@ Sensors.search_paths = {
   armdisableflags = { "ARMD", "ArmD", "arming_disable_flags", "armdisableflags" },
   smartconsumption = { "SmCp", "Smart Consumption", "smartconsumption", "Capa", "consumption" },
   governor = { "Gov", "Governor", "governor" },
-  temp_esc = { "Tesc", "ESC_TMP", "TescT", "ESC Temp", "temp_esc" },
+  temp_esc = { "EscT", "Tesc", "ESC_TMP", "TescT", "ESC Temp", "temp_esc" },
   temp_mcu = { "Tmcu", "TmcuT", "temp_mcu" }
 }
 
@@ -435,6 +437,18 @@ function Sensors.getValue(source)
       local normalized = normalizeSimValue(source, simDirect)
       debugLog("sim-direct-use:" .. source, "using sim direct value " .. source .. " = " .. tostring(normalized))
       return normalized
+    end
+
+    local paths = Sensors.search_paths[source]
+    if paths then
+      for i = 1, #paths do
+        local simPathValue = readSimSensorFile(paths[i], source)
+        if type(simPathValue) == "number" then
+          local normalized = normalizeSimValue(paths[i], simPathValue)
+          debugLog("sim-search-hit:" .. source, "using sim search value " .. paths[i] .. " = " .. tostring(normalized))
+          return normalized
+        end
+      end
     end
     
     -- WICHTIG: Im Simulator kein Hardware-Fallback!

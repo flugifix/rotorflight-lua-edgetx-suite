@@ -230,6 +230,7 @@ local state = {
   ignoreNextPageKey = false,
   suppressPressFrames = 0,
   suppressBackFrames = 0,
+  backGestureActive = false,
   memBucket    = nil,
   memLastTick  = 0,
   memPeakKb    = 0,
@@ -413,6 +414,11 @@ end
 
 local function onBack(source, ev)
   local fromEvent = source == "event"
+
+  if state.backGestureActive then
+    return
+  end
+  state.backGestureActive = true
 
   if state.helpContent then
     state.helpContent = nil
@@ -1547,6 +1553,10 @@ function M.run(event, touchState)
     -- Keep a single focus model: LVGL handles PAGE/PAGE- and ENTER natively.
     -- We only handle EXIT/back here.
     local backEvent = isBackEvent(event)
+
+    if not backEvent then
+      state.backGestureActive = false
+    end
 
     if backEvent and (state.suppressBackFrames or 0) <= 0 then
       onBack("event", event)

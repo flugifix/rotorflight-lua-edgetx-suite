@@ -134,7 +134,7 @@ local SENSOR_CATALOG = {
 }
 
 local DEFAULT_SENSORS = {
-  3, 4, 5, 6, 8, 89, 90, 91, 99, 95, 96, 60, 15, 42, 93, 50, 51, 52, 17, 18, 19, 23, 22, 36
+  3, 4, 5, 6, 7, 15, 23, 25, 43, 60, 90, 91, 93, 95, 96, 97, 99
 }
 
 local NOT_AT_SAME_TIME = {
@@ -310,6 +310,7 @@ local function queueTelemetryRead()
   local session = getSession()
   local mspState = MspRuntime.getState()
   local queue = mspState and mspState.queue
+  local telemetryApi = TelemetryApi
   if not queue or type(queue.add) ~= "function" then
     return false, "msp_queue_unavailable"
   end
@@ -318,14 +319,14 @@ local function queueTelemetryRead()
   ui.loading = true
   ui.progress = 0
   queue:add({
-    command = TelemetryApi.command,
-    simulatorResponse = TelemetryApi.simulatorResponse,
+    command = telemetryApi.command,
+    simulatorResponse = telemetryApi.simulatorResponse,
     timeout = 5.0,
     processReply = function(_, buf)
       ui.runtime.readPending = false
       ui.loading = false
       ui.progress = 1
-      local parsed = TelemetryApi.parse and TelemetryApi.parse(buf) or nil
+      local parsed = telemetryApi.parse and telemetryApi.parse(buf) or nil
       if type(session) == "table" and type(parsed) == "table" then
         session.telemetry_config = parsed
       end
@@ -389,18 +390,19 @@ local function queueTelemetryWrite(payload)
   local session = getSession()
   local mspState = MspRuntime.getState()
   local queue = mspState and mspState.queue
+  local telemetryApi = TelemetryApi
   if not queue or type(queue.add) ~= "function" then
     return false, "msp_queue_unavailable"
   end
 
   queue:add({
-    command = TelemetryApi.writeCommand,
+    command = telemetryApi.writeCommand,
     payload = payload,
     timeout = 5.0,
     isWrite = true,
     processReply = function()
-      if type(session) == "table" and type(TelemetryApi.parse) == "function" then
-        session.telemetry_config = TelemetryApi.parse(payload)
+      if type(session) == "table" and type(telemetryApi.parse) == "function" then
+        session.telemetry_config = telemetryApi.parse(payload)
       end
       ui.telemetryBuffer = copyBuffer(payload)
     end,
