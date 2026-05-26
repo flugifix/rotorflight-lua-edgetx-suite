@@ -91,6 +91,98 @@ local function normalizeCellVoltage(rawValue, fallback)
   return value
 end
 
+local function normalizeAlertVoltage(rawValue, fallback)
+  local value = tonumber(rawValue)
+  if type(value) ~= "number" then
+    return fallback
+  end
+
+  -- Power alert values are stored as deci-volts (e.g. 65 -> 6.5V).
+  if value > 20 then
+    value = value / 10
+  end
+
+  if value <= 0 then
+    return fallback
+  end
+
+  return value
+end
+
+local function readBatteryPrefs()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  if not session or type(session.modelPreferences) ~= "table" then
+    return nil
+  end
+  return session.modelPreferences.battery
+end
+
+local function isArmedFromState(state)
+  if type(state) ~= "table" then
+    return false
+  end
+
+  local armFlags = tonumber(state.armFlags or state.armflags)
+  if type(armFlags) ~= "number" then
+    return false
+  end
+
+  if bit32 and type(bit32.btest) == "function" then
+    return bit32.btest(armFlags, 1)
+  end
+
+  return armFlags ~= 0
+end
+
+local function resetBecAverage(audioState)
+  audioState.becSampleIndex = 0
+  audioState.becSampleCount = 0
+  audioState.becSampleSum = 0
+  local samples = audioState.becSamples
+  if type(samples) ~= "table" then
+    samples = {}
+    audioState.becSamples = samples
+  end
+  for i = 1, #samples do
+    samples[i] = nil
+  end
+end
+
+local function pushBecAverage(audioState, value)
+  local samples = audioState.becSamples
+  if type(samples) ~= "table" then
+    samples = {}
+    audioState.becSamples = samples
+  end
+
+  local size = 5
+  local idx = (tonumber(audioState.becSampleIndex) or 0) + 1
+  if idx > size then idx = 1 end
+
+  local count = tonumber(audioState.becSampleCount) or 0
+  local sum = tonumber(audioState.becSampleSum) or 0
+
+  local old = samples[idx]
+  if old ~= nil and count >= size then
+    sum = sum - old
+  elseif count < size then
+    count = count + 1
+  end
+
+  samples[idx] = value
+  sum = sum + value
+
+  audioState.becSampleIndex = idx
+  audioState.becSampleCount = count
+  audioState.becSampleSum = sum
+
+  if count <= 0 then
+    return value
+  end
+
+  return sum / count
+end
+
 local function unitPercent()
   if type(UNIT_PERCENT) == "number" then return UNIT_PERCENT end
   return 0
@@ -440,8 +532,11 @@ function Audio.process(self, opts)
 
   local audioState = self.audioState
   if type(audioState.lastAlertAt) ~= "table" then
-    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
+    audioState.lastAlertAt = { voltage = 0, esc_temperature = 0, bec_voltage = 0, rx_voltage = 0, flight_time = 0 }
   end
+  audioState.lastAlertAt.bec_voltage = tonumber(audioState.lastAlertAt.bec_voltage) or 0
+  audioState.lastAlertAt.rx_voltage = tonumber(audioState.lastAlertAt.rx_voltage) or 0
+  audioState.lastAlertAt.flight_time = tonumber(audioState.lastAlertAt.flight_time) or 0
   if type(audioState.lastValues) ~= "table" then
     audioState.lastValues = {
       arming_flags = nil,
@@ -553,6 +648,98 @@ function Audio.process(self, opts)
       else
         -- kein hartes Rücksetzen, damit Cooldown erhalten bleibt
       end
+    end
+  end
+
+  do
+    local batteryPrefs = readBatteryPrefs()
+    local armed = isArmedFromState(self.state)
+    if audioState.flightArmed ~= armed then
+      audioState.flightArmed = armed
+      if armed then
+        audioState.flightTimerTriggered = false
+        audioState.flightTimerStartAt = nil
+      else
+        audioState.flightTimerTriggered = false
+        audioState.flightTimerStartAt = nil
+        audioState.lastAlertAt.flight_time = 0
+        resetBecAverage(audioState)
+      end
+    end
+
+    if armed then
+      local bec = tonumber(self.state and (self.state.bec_voltage or self.state.becVoltage))
+      local alertType = tonumber(batteryPrefs and batteryPrefs.alert_type) or 0
+      if type(bec) == "number" and bec > 0 and (alertType == 1 or alertType == 2) then
+        local avgBEC = pushBecAverage(audioState, bec)
+        local interval = 10
+
+        if alertType == 1 then
+          local threshold = normalizeAlertVoltage(batteryPrefs and batteryPrefs.becalertvalue, 6.5)
+          if avgBEC < threshold then
+            local lastAt = audioState.lastAlertAt.bec_voltage or 0
+            if now - lastAt >= interval and tryPlayEventFile(audioState, now, "evt/becvolt.wav", opts) then
+              if type(playHaptic) == "function" then
+                pcall(playHaptic, 15, 10, 3)
+              end
+              audioState.lastAlertAt.bec_voltage = now
+            end
+          else
+            audioState.lastAlertAt.bec_voltage = 0
+          end
+          audioState.lastAlertAt.rx_voltage = 0
+        elseif alertType == 2 then
+          local threshold = normalizeAlertVoltage(batteryPrefs and batteryPrefs.rxalertvalue, 7.4)
+          if avgBEC < threshold then
+            local lastAt = audioState.lastAlertAt.rx_voltage or 0
+            if now - lastAt >= interval and tryPlayEventFile(audioState, now, "evt/rxvolt.wav", opts) then
+              if type(playHaptic) == "function" then
+                pcall(playHaptic, 15, 10, 3)
+              end
+              audioState.lastAlertAt.rx_voltage = now
+            end
+          else
+            audioState.lastAlertAt.rx_voltage = 0
+          end
+          audioState.lastAlertAt.bec_voltage = 0
+        end
+      else
+        audioState.lastAlertAt.bec_voltage = 0
+        audioState.lastAlertAt.rx_voltage = 0
+      end
+
+      local targetSeconds = tonumber(batteryPrefs and batteryPrefs.flighttime) or 0
+      if targetSeconds > 0 then
+        local elapsed = tonumber(self.state and self.state.flightSeconds)
+        if type(elapsed) ~= "number" then
+          if type(audioState.flightTimerStartAt) ~= "number" then
+            audioState.flightTimerStartAt = now
+          end
+          elapsed = now - audioState.flightTimerStartAt
+        else
+          if type(audioState.flightTimerStartAt) ~= "number" then
+            audioState.flightTimerStartAt = now - elapsed
+          end
+        end
+
+        if elapsed >= targetSeconds then
+          if audioState.flightTimerTriggered ~= true then
+            local timerPrefs = (self.preferences and self.preferences.audio_timer) or {}
+            local sound = prefEnabled(timerPrefs, "timer_bell_sound", false) and "stat/alerts/timer.wav" or "evt/elapsed.wav"
+            if tryPlayEventFile(audioState, now, sound, opts) then
+              audioState.flightTimerTriggered = true
+              audioState.lastAlertAt.flight_time = now
+            end
+          end
+        else
+          audioState.flightTimerTriggered = false
+        end
+      else
+        audioState.flightTimerTriggered = false
+      end
+    else
+      audioState.lastAlertAt.bec_voltage = 0
+      audioState.lastAlertAt.rx_voltage = 0
     end
   end
 

@@ -82,10 +82,10 @@ local manifest = {
       title = "@i18n(app.modules.power.name)@",
       pages = {
         { id = "battery", title = "@i18n(app.modules.battery.name)@", menuId = "setup_power_battery_page", icon = "@pages/setup/power/battery/icon.png", row = 1, col = 1, enabled = true },
-        { id = "alerts", title = "@i18n(app.modules.alerts.name)@", menuId = "setup_power_alerts_page", icon = "@pages/setup/power/alerts/icon.png", row = 1, col = 2, enabled = false },
-        { id = "sources", title = "@i18n(app.modules.sources.name)@", menuId = "setup_power_sources_page", icon = "@pages/setup/power/sources/icon.png", row = 1, col = 3, enabled = false },
+        { id = "alerts", title = "@i18n(app.modules.alerts.name)@", menuId = "setup_power_alerts_page", icon = "@pages/setup/power/alerts/icon.png", row = 1, col = 2, enabled = true },
+        { id = "sources", title = "@i18n(app.modules.sources.name)@", menuId = "setup_power_sources_page", icon = "@pages/setup/power/sources/icon.png", row = 1, col = 3, enabled = true },
         { id = "smartfuel", title = "@i18n(app.modules.smartfuel.name)@", menuId = "setup_power_smartfuel_page", icon = "@pages/setup/power/smartfuel/icon.png", row = 1, col = 4, enabled = true },
-        { id = "preferences", title = "@i18n(app.modules.preferences.name)@", menuId = "setup_power_preferences_page", icon = "@pages/setup/power/preferences/icon.png", row = 1, col = 5, enabled = false }
+        { id = "preferences", title = "@i18n(app.modules.preferences.name)@", menuId = "setup_power_preferences_page", icon = "@pages/setup/power/preferences/icon.png", row = 1, col = 5, enabled = true }
       }
     },
     setup_power_battery_page = {

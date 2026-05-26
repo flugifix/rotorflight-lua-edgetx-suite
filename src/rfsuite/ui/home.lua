@@ -24,6 +24,9 @@ local Audio = nil
 local Sensors = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
+local CLOSE_MIN_TICKS = 3
+local CLOSE_MAX_TICKS = 8
+local CLOSE_GC_STEP = 400
 
 local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
@@ -187,7 +190,6 @@ local state = {
   ignoreNextPageKey = false,
   suppressPressFrames = 0,
   suppressBackFrames = 0,
-  ignoreNextRootBackCallback = 0,
   memBucket    = nil,
   memLastTick  = 0,
   memPeakKb    = 0,
@@ -218,7 +220,7 @@ local state = {
     pendingValues = { pid_profile = nil, rate_profile = nil, battery_profile = nil },
     lastEnabled = { governor_state = nil }
   },
-  telemetryState = { profile = 1, rateProfile = 1, batteryProfile = 1, voltage = 0, escTemp = 0, fuel = 100, armFlags = 0, governor = 0, themeConfig = { v_min = 18.0 } },
+  telemetryState = { profile = 1, rateProfile = 1, batteryProfile = 1, voltage = 0, bec_voltage = 0, escTemp = 0, fuel = 100, armFlags = 0, governor = 0, themeConfig = { v_min = 18.0 } },
   mspLinkConfigWarningAt = 0,
   headerActions = {
     defaults = {
@@ -370,21 +372,15 @@ end
 -- ── Handlers ─────────────────────────────────────────────────────────────────
 
 local function onBack(source, ev)
-  if (state.ignoreNextRootBackCallback or 0) > 0
-      and (source == nil or source == "unknown")
-      and ev == nil
-      and state.menu
-      and state.menu.isRoot
-      and state.menu.isRoot() then
-    state.ignoreNextRootBackCallback = state.ignoreNextRootBackCallback - 1
-    return
-  end
+  local fromEvent = source == "event"
 
   if state.helpContent then
     state.helpContent = nil
     state.helpPageTitle = nil
     state.helpPageSubtitle = nil
-    state.suppressBackFrames = 6
+    if fromEvent then
+      state.suppressBackFrames = 6
+    end
     scheduleBuildUI(false)
     return
   end
@@ -406,12 +402,9 @@ local function onBack(source, ev)
         newMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
       end
     end
-
-    if state.menu and state.menu.isRoot and state.menu.isRoot() and newMenuId == nil then
-      state.ignoreNextRootBackCallback = 1
+    if fromEvent then
+      state.suppressBackFrames = 6
     end
-
-    state.suppressBackFrames = 6
     scheduleBuildUI(false)
     return
   end
@@ -855,7 +848,11 @@ local function onReload()
         menu = state.menu,
         refresh = M.buildUI
       })
-      if shouldRebuild ~= false then
+      if shouldRebuild == false then
+        -- Even with deferred page-managed reloads, render once so loading state
+        -- (progress/overlay) is visible immediately after pressing Reload.
+        scheduleBuildUI(false)
+      else
         scheduleBuildUI(true)
       end
     end
@@ -1371,7 +1368,6 @@ function M.init()
   state.ignoreNextPageKey = false
   state.suppressPressFrames = 0
   state.suppressBackFrames = 0
-  state.ignoreNextRootBackCallback = 0
   state.focusIndex = 0
   state.activePageMenuId = nil
   state.helpContent = nil
@@ -1381,6 +1377,12 @@ function M.init()
   state.pendingGcAfterBuild = false
   state.pendingSaveAction = nil
   state.saveOverlayVisible = false
+  state.pendingMenuOpen = nil
+  state.pendingMenuBack = false
+  state.loadingMenuId = nil
+  state.isClosing = false
+  state.closeTicks = nil
+  state.closeMemStart = nil
   state.mspLastTick = 0
   state.fblConnected = false
   state.infoSessionSnapshot = nil
@@ -1467,6 +1469,7 @@ function M.run(event, touchState)
 
   if state.menu then
     local now = getTime and getTime() or 0
+    local transitionedMenuThisTick = false
 
     if not state.mspAttached then
       ensureMspRuntime()
@@ -1498,6 +1501,28 @@ function M.run(event, touchState)
     if state.isClosing then
       if not state.closeTicks then
         state.closeTicks = 0
+        state.closeMemStart = (type(collectgarbage) == "function") and (collectgarbage("count") or 0) or nil
+        state.pendingBuildUI = false
+        state.pendingGcAfterBuild = false
+        state.pendingSaveAction = nil
+        state.saveOverlayVisible = false
+        state.pendingMenuOpen = nil
+        state.pendingMenuBack = false
+        state.loadingMenuId = nil
+        closeHelpDialogIfOpen()
+        if state.activePageMenuId and PageRegistry and type(PageRegistry.release) == "function" then
+          pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
+          state.activePageMenuId = nil
+        end
+        if Events and type(Events.reset) == "function" then
+          pcall(Events.reset)
+        end
+        if state.mspAttached then
+          if MspRuntime and type(MspRuntime.detach) == "function" then
+            pcall(MspRuntime.detach, "tool")
+          end
+          state.mspAttached = false
+        end
         if lvgl and lvgl.clear then
           lvgl.clear()
           local tr = state.i18n and state.i18n.t and state.i18n.t("app.closing_rfsuite") or "Closing RFSuite..."
@@ -1521,9 +1546,12 @@ function M.run(event, touchState)
       end
       state.closeTicks = state.closeTicks + 1
       if collectgarbage then
-        collectgarbage("step", 200)
+        collectgarbage("step", CLOSE_GC_STEP)
       end
-      if state.closeTicks > 15 then
+      local memNow = (type(collectgarbage) == "function") and (collectgarbage("count") or 0) or nil
+      local memStart = tonumber(state.closeMemStart)
+      local gcReachedTarget = type(memNow) == "number" and type(memStart) == "number" and memStart > 0 and memNow <= (memStart * 0.92)
+      if state.closeTicks >= CLOSE_MAX_TICKS or (state.closeTicks >= CLOSE_MIN_TICKS and gcReachedTarget) then
         state.shouldExit = true
       end
     end
@@ -1553,6 +1581,7 @@ function M.run(event, touchState)
       end
       state.focusIndex = 0
       state.pendingMenuOpen = nil
+      transitionedMenuThisTick = true
       scheduleBuildUI(false)
     end
 
@@ -1561,13 +1590,14 @@ function M.run(event, touchState)
         state.focusIndex = 0
       end
       state.pendingMenuBack = false
+      transitionedMenuThisTick = true
       scheduleBuildUI(false)
     end
 
     local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
     local mspSpeedPageActive = currentMenuId == "developer_msp_speed_page"
 
-    if (not mspSpeedPageActive) and MspRuntime and type(MspRuntime.tick) == "function" then
+    if (not transitionedMenuThisTick) and (not mspSpeedPageActive) and MspRuntime and type(MspRuntime.tick) == "function" then
       if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then
         state.mspLastTick = now
         MspRuntime.tick()
@@ -1579,20 +1609,22 @@ function M.run(event, touchState)
       end
     end
 
-    local activePage = getActivePageModule()
-    local wakeupFn = activePage and (activePage.wakeup or activePage.onWake)
-    if type(wakeupFn) == "function" then
-      local ok, err = pcall(wakeupFn, {
-        i18n = state.i18n,
-        preferences = state.preferences,
-        menu = state.menu,
-        manifest = state.manifest,
-        requestRebuild = function() scheduleBuildUI(false) end
-      })
-      if not ok then
-        pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error", true)
-        if type(serialWrite) == "function" then
-          pcall(serialWrite, "[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err) .. "\n")
+    if not transitionedMenuThisTick then
+      local activePage = getActivePageModule()
+      local wakeupFn = activePage and (activePage.wakeup or activePage.onWake)
+      if type(wakeupFn) == "function" then
+        local ok, err = pcall(wakeupFn, {
+          i18n = state.i18n,
+          preferences = state.preferences,
+          menu = state.menu,
+          manifest = state.manifest,
+          requestRebuild = function() scheduleBuildUI(false) end
+        })
+        if not ok then
+          pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error", true)
+          if type(serialWrite) == "function" then
+            pcall(serialWrite, "[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err) .. "\n")
+          end
         end
       end
     end
@@ -1614,6 +1646,7 @@ function M.run(event, touchState)
         state.telemetryState.profile = Sensors.getValue("pid_profile") or state.telemetryState.profile
         state.telemetryState.rateProfile = Sensors.getValue("rate_profile") or state.telemetryState.rateProfile
         state.telemetryState.batteryProfile = Sensors.getValue("battery_profile") or state.telemetryState.batteryProfile
+        state.telemetryState.bec_voltage = Sensors.getValue("bec_voltage") or state.telemetryState.bec_voltage
         state.telemetryState.armFlags = Sensors.getValue("armflags") or state.telemetryState.armFlags
         state.telemetryState.governor = Sensors.getValue("governor") or state.telemetryState.governor
         state.telemetryState.escTemp = Sensors.getValue("temp_esc") or state.telemetryState.escTemp
@@ -1644,8 +1677,10 @@ function M.run(event, touchState)
       end
     end
 
-    maybeShowUnsupportedMspDialog()
-    maybeShowMspLinkConfigDialog()
+    if not transitionedMenuThisTick then
+      maybeShowUnsupportedMspDialog()
+      maybeShowMspLinkConfigDialog()
+    end
 
     -- Intentionally no periodic MEM-triggered rebuild here.
     -- Rebuilding while navigating resets LVGL focus on some pages.
