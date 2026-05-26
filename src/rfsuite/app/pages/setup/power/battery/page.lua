@@ -14,6 +14,7 @@ local Common = nil
 local ModelPreferences = nil
 local MspRuntime = nil
 local BatteryConfigApi = nil
+local BatteryProfileApi = nil
 local EepromWriteApi = nil
 local Sensors = nil
 local t = nil
@@ -30,12 +31,15 @@ local RESERVE_MAX = 60
 local function newRuntime()
 	return {
 		capacitySets = {},
+		profileSet = nil,
 		maxCellSet = nil,
 		fullCellSet = nil,
 		warnCellSet = nil,
 		minCellSet = nil,
 		cellCountSet = nil,
 		reserveSet = nil,
+		inlineHelpHandler = nil,
+		openHelp = nil,
 		readPending = false,
 		requestRebuild = nil,
 		lastSessionSignature = nil
@@ -46,6 +50,7 @@ local ui = {
 	loaded = false,
 	dirty = false,
 	config = {
+		selectedBatteryProfile = 0,
 		capacities = { 0, 0, 0, 0, 0, 0 },
 		vbatmaxcellvoltage = 420,
 		vbatfullcellvoltage = 410,
@@ -80,6 +85,7 @@ local function ensureDeps()
 	if not ModelPreferences then ModelPreferences = loadModule("lib/model_preferences.lua") end
 	if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
 	if not BatteryConfigApi then BatteryConfigApi = loadModule("tasks/msp/api/battery_config.lua") end
+	if not BatteryProfileApi then BatteryProfileApi = loadModule("tasks/msp/api/battery_profile.lua") end
 	if not EepromWriteApi then EepromWriteApi = loadModule("tasks/msp/api/eeprom_write.lua") end
 	if not Sensors then Sensors = loadModule("lib/sensors.lua") end
 	if not t then t = Common and Common.pageT("setup_power_battery") or nil end
@@ -90,6 +96,29 @@ local function pageText(i18n, key, fallback)
 		return t(i18n, key, fallback)
 	end
 	return fallback
+end
+
+local function pageHelpText(i18n, key, fallback)
+	return pageText(i18n, key, fallback)
+end
+
+local function optionalPageHelpText(i18n, key)
+	local value = pageHelpText(i18n, key, nil)
+	if type(value) ~= "string" or value == "" then return nil end
+	if string.sub(value, 1, 10) == "app.pages." then return nil end
+	return value
+end
+
+local function getInlineHelpHandler()
+	if ui.runtime.inlineHelpHandler then return ui.runtime.inlineHelpHandler end
+	ui.runtime.inlineHelpHandler = function(helpText, helpTitle)
+		if type(helpText) ~= "string" or helpText == "" then return end
+		local openHelp = ui.runtime.openHelp
+		if type(openHelp) == "function" then
+			openHelp(helpText, helpTitle)
+		end
+	end
+	return ui.runtime.inlineHelpHandler
 end
 
 local function markDirty()
@@ -155,6 +184,7 @@ local function buildSessionSignature()
 	if not batteryConfig then return "nil" end
 
 	local parts = {
+		tostring(resolveProfile(session, batteryConfig)),
 		tostring(batteryConfig.vbatmaxcellvoltage or ""),
 		tostring(batteryConfig.vbatfullcellvoltage or ""),
 		tostring(batteryConfig.vbatwarningcellvoltage or ""),
@@ -172,6 +202,7 @@ local function loadFromSession()
 	local session = getSession()
 	local batteryPrefs = getBatteryPrefs(session)
 	local batteryConfig = getBatteryConfig(session)
+	ui.config.selectedBatteryProfile = resolveProfile(session, batteryConfig)
 
 	for i = 0, 5 do
 		ui.config.capacities[i + 1] = clampInt(batteryConfig and batteryConfig["batteryCapacity_" .. tostring(i)], CAPACITY_MIN, CAPACITY_MAX, 0)
@@ -261,6 +292,17 @@ local function getCapacitySetter(index)
 	end
 	ui.runtime.capacitySets[index] = setter
 	return setter
+end
+
+local function getProfileSetter()
+	if ui.runtime.profileSet then return ui.runtime.profileSet end
+	ui.runtime.profileSet = function(value)
+		local nextValue = clampInt(value, PROFILE_MIN, PROFILE_MAX, PROFILE_MIN)
+		if ui.config.selectedBatteryProfile == nextValue then return end
+		ui.config.selectedBatteryProfile = nextValue
+		markDirty()
+	end
+	return ui.runtime.profileSet
 end
 
 local function getMaxCellSetter()
@@ -392,7 +434,7 @@ function M.onSave(ctx)
 	end
 
 	local reserve = clampInt(ui.config.consumption_warning_percentage, RESERVE_MIN, RESERVE_MAX, 35)
-	local activeProfile = resolveProfile(session, batteryConfig)
+	local activeProfile = clampInt(ui.config.selectedBatteryProfile, PROFILE_MIN, PROFILE_MAX, PROFILE_MIN)
 	local activeCapacity = clampInt(ui.config.capacities[activeProfile + 1], CAPACITY_MIN, CAPACITY_MAX, 0)
 
 	batteryConfig.batteryCellCount = clampInt(ui.config.batteryCellCount, CELL_COUNT_MIN, CELL_COUNT_MAX, 0)
@@ -401,6 +443,7 @@ function M.onSave(ctx)
 	batteryConfig.vbatwarningcellvoltage = clampInt(ui.config.vbatwarningcellvoltage, 250, 500, 350)
 	batteryConfig.vbatmincellvoltage = clampInt(ui.config.vbatmincellvoltage, 250, 500, 330)
 	batteryConfig.consumptionWarningPercentage = reserve
+	batteryConfig.batteryProfile = activeProfile
 	for i = 0, 5 do
 		batteryConfig["batteryCapacity_" .. tostring(i)] = clampInt(ui.config.capacities[i + 1], CAPACITY_MIN, CAPACITY_MAX, 0)
 	end
@@ -425,6 +468,17 @@ function M.onSave(ctx)
 		local queue = mspState and mspState.queue
 		if queue and type(queue.add) == "function" then
 			okMsp = true
+			if BatteryProfileApi and type(BatteryProfileApi.buildWritePayload) == "function" then
+				queue:add({
+					command = BatteryProfileApi.writeCommand,
+					payload = BatteryProfileApi.buildWritePayload({ batteryProfile = activeProfile }),
+					timeout = 5.0,
+					isWrite = true,
+					processReply = function() end,
+					errorHandler = function() end
+				})
+			end
+
 			queue:add({
 				command = BatteryConfigApi.writeCommand,
 				payload = buildBatteryPayload(batteryConfig),
@@ -494,6 +548,7 @@ function M.build(ctx)
 	ensureDeps()
 	ensureLoaded()
 	ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
+	ui.runtime.openHelp = ctx and ctx.openHelp or nil
 
 	local children = ctx.children
 	local x = ctx.x
@@ -506,6 +561,24 @@ function M.build(ctx)
 	Controls.appendStaticSectionHeader(children, x, cursorY, w, pageText(i18n, "section_profiles", "Profiles"))
 	cursorY = cursorY + Controls.STATIC_SECTION_H
 
+	local profileOptions = {}
+	for i = 1, 6 do
+		profileOptions[i] = {
+			value = i - 1,
+			label = pageText(i18n, "battery_slot", "Battery") .. " " .. tostring(i)
+		}
+	end
+
+	cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+		pageText(i18n, "selected", "Selected") .. " " .. pageText(i18n, "battery_slot", "Battery"),
+		profileOptions,
+		ui.config.selectedBatteryProfile,
+		getProfileSetter(), {
+			helpText = optionalPageHelpText(i18n, "help_selected_battery"),
+			helpTitle = pageText(i18n, "selected", "Selected") .. " " .. pageText(i18n, "battery_slot", "Battery"),
+			onHelp = getInlineHelpHandler()
+		})
+
 	for i = 1, 6 do
 		local label = pageText(i18n, "battery_slot", "Battery") .. " " .. tostring(i)
 		cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
@@ -514,6 +587,9 @@ function M.build(ctx)
 				max = CAPACITY_MAX,
 				get = function() return ui.config.capacities[i] end,
 				set = getCapacitySetter(i),
+				helpText = optionalPageHelpText(i18n, "help_capacity"),
+				helpTitle = label,
+				onHelp = getInlineHelpHandler(),
 				display = function(v) return tostring(v) .. " mAh" end
 			})
 	end
@@ -528,6 +604,9 @@ function M.build(ctx)
 			max = 500,
 			get = function() return ui.config.vbatmaxcellvoltage end,
 			set = getMaxCellSetter(),
+			helpText = optionalPageHelpText(i18n, "help_max_cell_voltage"),
+			helpTitle = pageText(i18n, "max_cell_voltage", "Max cell voltage"),
+			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
 		})
 
@@ -537,6 +616,9 @@ function M.build(ctx)
 			max = 500,
 			get = function() return ui.config.vbatfullcellvoltage end,
 			set = getFullCellSetter(),
+			helpText = optionalPageHelpText(i18n, "help_full_cell_voltage"),
+			helpTitle = pageText(i18n, "full_cell_voltage", "Full cell voltage"),
+			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
 		})
 
@@ -546,6 +628,9 @@ function M.build(ctx)
 			max = 500,
 			get = function() return ui.config.vbatwarningcellvoltage end,
 			set = getWarnCellSetter(),
+			helpText = optionalPageHelpText(i18n, "help_warn_cell_voltage"),
+			helpTitle = pageText(i18n, "warn_cell_voltage", "Warn cell voltage"),
+			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
 		})
 
@@ -555,6 +640,9 @@ function M.build(ctx)
 			max = 500,
 			get = function() return ui.config.vbatmincellvoltage end,
 			set = getMinCellSetter(),
+			helpText = optionalPageHelpText(i18n, "help_min_cell_voltage"),
+			helpTitle = pageText(i18n, "min_cell_voltage", "Min cell voltage"),
+			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
 		})
 
@@ -564,6 +652,9 @@ function M.build(ctx)
 			max = CELL_COUNT_MAX,
 			get = function() return ui.config.batteryCellCount end,
 			set = getCellCountSetter(),
+			helpText = optionalPageHelpText(i18n, "help_cell_count"),
+			helpTitle = pageText(i18n, "cell_count", "Cell count"),
+			onHelp = getInlineHelpHandler(),
 			display = function(v) return tostring(v) end
 		})
 
@@ -573,6 +664,9 @@ function M.build(ctx)
 			max = RESERVE_MAX,
 			get = function() return ui.config.consumption_warning_percentage end,
 			set = getReserveSetter(),
+			helpText = optionalPageHelpText(i18n, "help_consumption_warning_percentage"),
+			helpTitle = pageText(i18n, "consumption_warning_percentage", "Consumption reserve"),
+			onHelp = getInlineHelpHandler(),
 			display = function(v) return tostring(v) .. "%" end
 		})
 
@@ -608,6 +702,7 @@ function M.onClose()
 	ModelPreferences = nil
 	MspRuntime = nil
 	BatteryConfigApi = nil
+	BatteryProfileApi = nil
 	EepromWriteApi = nil
 	Sensors = nil
 	t = nil

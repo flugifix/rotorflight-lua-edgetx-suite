@@ -421,7 +421,7 @@ end
 
 function M.getHeaderActions()
   ensureUiDeps()
-  return { save = false, reload = false, help = false }
+  return { save = false, reload = false, help = true }
 end
 
 function M.allowMemAutoRefresh()

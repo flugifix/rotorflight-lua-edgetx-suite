@@ -137,7 +137,7 @@ local SECTIONS = {
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = true, help = false }
+  return { save = true, help = true }
 end
 
 function M.allowMemAutoRefresh()

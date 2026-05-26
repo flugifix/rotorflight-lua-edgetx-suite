@@ -25,6 +25,8 @@ local function newRuntime()
 		voltageSet = nil,
 		chargeSet = nil,
 		sagSet = nil,
+		inlineHelpHandler = nil,
+		openHelp = nil,
 		readPending = false,
 		requestRebuild = nil
 	}
@@ -91,8 +93,24 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
+local function pageHelpText(i18n, key, fallback)
+	return pageText(i18n, key, fallback)
+end
+
 local function markDirty()
 	ui.dirty = true
+end
+
+local function getInlineHelpHandler()
+	if ui.runtime.inlineHelpHandler then return ui.runtime.inlineHelpHandler end
+	ui.runtime.inlineHelpHandler = function(helpText, helpTitle)
+		if type(helpText) ~= "string" or helpText == "" then return end
+		local openHelp = ui.runtime.openHelp
+		if type(openHelp) == "function" then
+			openHelp(helpText, helpTitle)
+		end
+	end
+	return ui.runtime.inlineHelpHandler
 end
 
 local function buildModeOptions()
@@ -406,6 +424,7 @@ function M.build(ctx)
 	ensureDeps()
 	ensureLoaded()
 	ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
+	ui.runtime.openHelp = ctx and ctx.openHelp or nil
 
 	local children = ctx.children
 	local x = ctx.x
@@ -423,7 +442,12 @@ function M.build(ctx)
 			pageText(i18n, "firmware_mode", "Firmware Source"),
 			buildModeOptions(),
 			ui.config.firmware_mode,
-			getFirmwareModeSetter()
+			getFirmwareModeSetter(),
+			{
+				helpText = pageHelpText(i18n, "help_firmware_mode", "Choose whether firmware SmartFuel is disabled, voltage-estimated, current consumption based, or combined. Combined uses the more pessimistic of voltage and current consumption."),
+				helpTitle = pageText(i18n, "firmware_mode", "Firmware Source"),
+				onHelp = getInlineHelpHandler()
+			}
 		)
 	end
 
@@ -433,7 +457,12 @@ function M.build(ctx)
 			pageText(i18n, "local_mode", "Local Source"),
 			buildLocalOptions(),
 			ui.config.local_source,
-			getLocalSourceSetter()
+			getLocalSourceSetter(),
+			{
+				helpText = pageHelpText(i18n, "help_local_mode", "Choose whether local SmartFuel uses current consumption, pack voltage, or combined mode. Combined uses the more pessimistic of voltage and current consumption."),
+				helpTitle = pageText(i18n, "local_mode", "Local Source"),
+				onHelp = getInlineHelpHandler()
+			}
 		)
 	end
 
@@ -448,6 +477,9 @@ function M.build(ctx)
 			get = function() return ui.config.voltage_drop_rate end,
 			set = getVoltageSetter(),
 			enabled = isTuningEnabled,
+			helpText = pageHelpText(i18n, "help_voltage_drop_rate", "Limits how quickly filtered voltage may fall in voltage mode to reduce brief load-sag spikes affecting SmartFuel."),
+			helpTitle = pageText(i18n, "voltage_drop_rate", "Voltage drop rate"),
+			onHelp = getInlineHelpHandler(),
 			display = function(v) return tostring(v) .. " mV/s" end
 		})
 
@@ -458,6 +490,9 @@ function M.build(ctx)
 			get = function() return ui.config.charge_drop_rate end,
 			set = getChargeSetter(),
 			enabled = isTuningEnabled,
+			helpText = pageHelpText(i18n, "help_charge_drop_rate", "Maximum rate the reported SmartFuel value may recover in voltage mode after load is reduced."),
+			helpTitle = pageText(i18n, "charge_drop_rate", "Charge drop rate"),
+			onHelp = getInlineHelpHandler(),
 			display = function(v)
 				local value = (tonumber(v) or 0) / 100
 				return string.format("%.2f %%/s", value)
@@ -471,6 +506,9 @@ function M.build(ctx)
 			get = function() return ui.config.sag_gain end,
 			set = getSagSetter(),
 			enabled = isTuningEnabled,
+			helpText = pageHelpText(i18n, "help_sag_gain", "Strength of load-sag compensation in voltage mode. Higher values compensate more aggressively."),
+			helpTitle = pageText(i18n, "sag_gain", "Sag gain"),
+			onHelp = getInlineHelpHandler(),
 			display = function(v) return tostring(v) .. "%" end
 		})
 

@@ -1,6 +1,6 @@
 function M.getHeaderActions()
   ensureDeps()
-  return { save = true, help = false }
+  return { save = true, help = true }
 end
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/settings/" .. path

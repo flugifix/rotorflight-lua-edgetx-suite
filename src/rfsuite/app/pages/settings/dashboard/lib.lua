@@ -4,6 +4,7 @@ local DEBUG_PREFIX = "[dashboard.lib] "
 local INDEX_PATH = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/settings/dashboard/theme_index.lua"
 
 local Log = nil
+local themesCache = nil
 do
   local okLoad, chunk = pcall(loadScript, "/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
   if okLoad and type(chunk) == "function" then
@@ -168,16 +169,8 @@ local function scanThemes(listBasePath, loadBasePath, source, themes, nextId)
           local initOk, initTable = pcall(chunk)
           if initOk and type(initTable) == "table" and type(initTable.name) == "string" then
             local configurePath = nil
-            local configExists = false
             if type(initTable.configure) == "string" and initTable.configure ~= "" then
               configurePath = loadBasePath .. folder .. "/" .. initTable.configure
-              -- Check if configure file exists
-              local configOk, configChunk = pcall(loadScript, configurePath, "t")
-              configExists = (configOk and configChunk ~= nil)
-              if not configExists then
-                debugLog("configure missing for theme=" .. tostring(folder) .. " path=" .. tostring(configurePath))
-                configurePath = nil
-              end
             end
 
             themes[#themes + 1] = {
@@ -206,7 +199,12 @@ local function scanThemes(listBasePath, loadBasePath, source, themes, nextId)
   return nextId
 end
 
-function M.listThemes()
+function M.listThemes(forceRefresh)
+  if forceRefresh ~= true and type(themesCache) == "table" then
+    debugLog("listThemes cache hit count=" .. tostring(#themesCache))
+    return themesCache
+  end
+
   local themes = {}
   local nextId = 1
 
@@ -231,10 +229,6 @@ function M.listThemes()
         local configurePath = nil
         if type(initTable.configure) == "string" and initTable.configure ~= "" then
           configurePath = SYSTEM_THEMES_LOAD_PATH .. "default/" .. initTable.configure
-          local configOk, configChunk = pcall(loadScript, configurePath, "t")
-          if not (configOk and configChunk) then
-            configurePath = nil
-          end
         end
         themes[#themes + 1] = {
           id = 1,
@@ -260,7 +254,14 @@ function M.listThemes()
   end
   debugLog("listThemes end count=" .. tostring(#themes))
 
+  themesCache = themes
+
   return themes
+end
+
+function M.invalidateThemeCache()
+  themesCache = nil
+  debugLog("theme cache invalidated")
 end
 
 function M.getDefaultThemePath(themes)

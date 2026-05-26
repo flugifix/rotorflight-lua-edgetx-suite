@@ -57,9 +57,9 @@ local function ensureDeps()
   end
 end
 
-local function refreshThemes()
+local function refreshThemes(forceRefresh)
   ensureDeps()
-  ui.themes = DashboardLib.listThemes()
+  ui.themes = DashboardLib.listThemes(forceRefresh == true)
   debugLog("refreshThemes count=" .. tostring(ui.themes and #ui.themes or 0))
 end
 
@@ -91,7 +91,9 @@ end
 local function ensureLoaded(prefs)
   if ui.loaded then return end
 
-  refreshThemes()
+  if not ui.themes then
+    refreshThemes(false)
+  end
   local defaultPath = DashboardLib.getDefaultThemePath(ui.themes)
   local src = (prefs and prefs.dashboard) or {}
 
@@ -176,7 +178,7 @@ end
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = true, help = false }
+  return { save = true, help = true }
 end
 
 function M.allowMemAutoRefresh()
@@ -187,6 +189,9 @@ function M.onReload(ctx)
   ensureDeps()
   ui.loaded = false
   ui.themes = nil
+  if DashboardLib and type(DashboardLib.invalidateThemeCache) == "function" then
+    DashboardLib.invalidateThemeCache()
+  end
   ensureLoaded(ctx.preferences)
   return true
 end
@@ -205,7 +210,9 @@ end
 function M.build(ctx)
   ensureDeps()
   ensureLoaded(ctx.preferences)
-  refreshThemes()
+  if not ui.themes then
+    refreshThemes(false)
+  end
   ensureValidSelections()
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
 

@@ -389,7 +389,7 @@ end
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = false, reload = true, help = false }
+  return { save = false, reload = true, help = true }
 end
 
 function M.allowMemAutoRefresh()

@@ -514,7 +514,7 @@ function M.getModuleTitle()
 end
 
 function M.getHeaderActions()
-  return { reload = isFblConnected(), save = false, help = false }
+  return { reload = isFblConnected(), save = false, help = true }
 end
 
 function M.onReload()

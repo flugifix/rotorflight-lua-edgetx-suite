@@ -424,6 +424,30 @@ local function onHelp()
   local menuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
   if not menuId then return end
 
+  local function resolveI18nHelpMessageFromPagePath(id)
+    if not (state.i18n and type(state.i18n.t) == "function") then
+      return nil
+    end
+    ensurePageRegistry()
+    local pagePathByMenuId = PageRegistry and PageRegistry.pagePathByMenuId or nil
+    local pagePath = type(pagePathByMenuId) == "table" and pagePathByMenuId[id] or nil
+    if type(pagePath) ~= "string" or pagePath == "" then
+      return nil
+    end
+
+    if string.sub(pagePath, -9) == "/page.lua" then
+      pagePath = string.sub(pagePath, 1, -10)
+    end
+
+    local pageKey = string.gsub(pagePath, "/", "_")
+    local i18nKey = "app.pages." .. pageKey .. ".help_message"
+    local translated = state.i18n.t(i18nKey)
+    if type(translated) == "string" and translated ~= "" and translated ~= i18nKey then
+      return translated
+    end
+    return nil
+  end
+
   ensureHelpRegistry()
 
   local helpData = HelpRegistry and HelpRegistry.get and HelpRegistry.get(menuId, {
@@ -440,7 +464,10 @@ local function onHelp()
     message = helpData.message or helpData.text
   end
   if type(message) ~= "string" or message == "" then
-    return
+    message = resolveI18nHelpMessageFromPagePath(menuId)
+    if type(message) ~= "string" or message == "" then
+      return
+    end
   end
 
   local title = state.menu.getHeaderTitle and state.menu.getHeaderTitle() or ""
@@ -451,6 +478,17 @@ local function onHelp()
   end
   if breadcrumb ~= "" then
     subtitle = shortenBreadcrumb(breadcrumb)
+  end
+
+  state.helpContent = message
+  state.helpPageTitle = title
+  state.helpPageSubtitle = subtitle
+  scheduleBuildUI(false)
+end
+
+local function openPageHelpDialog(message, title, subtitle)
+  if type(message) ~= "string" or message == "" then
+    return
   end
 
   state.helpContent = message
@@ -1223,6 +1261,14 @@ function M.buildUI()
         preferences = state.preferences,
         menu = state.menu,
         manifest = state.manifest,
+        openHelp = function(message, title, subtitle)
+          local resolvedTitle = title or pageTitle
+          local resolvedSubtitle = subtitle
+          if resolvedSubtitle == nil and breadcrumb ~= "" then
+            resolvedSubtitle = shortenBreadcrumb(breadcrumb)
+          end
+          openPageHelpDialog(message, resolvedTitle, resolvedSubtitle)
+        end,
         requestRebuild = function() scheduleBuildUI(false) end
       })
     else

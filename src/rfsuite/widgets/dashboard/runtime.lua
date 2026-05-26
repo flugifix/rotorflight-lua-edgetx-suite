@@ -6,6 +6,8 @@ local AUDIO_LOG_FORCE = false
 local SPLASH_READY_HOLD_SECONDS = 1.0
 local SPLASH_SOFT_TIMEOUT_SECONDS = 15.0
 local FULLSCREEN_BATTERY_REFRESH_TIMEOUT_SECONDS = 5.0
+local DASHBOARD_UI_REFRESH_SECONDS = 1.0
+local POSTFLIGHT_FREEZE_DELAY_SECONDS = 2.0
 
 local function scriptExists(path)
   if type(path) ~= "string" or path == "" then return false end
@@ -760,8 +762,18 @@ end
 local function readTelemetry(state)
   if not (Sensors and type(Sensors.getValue) == "function") then return end
   local changed = false
-  -- Cache sensor values to avoid duplicate calls
-  local cache = {}
+  -- Reuse the per-state sensor cache to avoid table churn in wakeup/refresh.
+  local cache = state and state._sensorCache
+  if type(cache) ~= "table" then
+    cache = {}
+    if type(state) == "table" then
+      state._sensorCache = cache
+    end
+  else
+    for key in pairs(cache) do
+      cache[key] = nil
+    end
+  end
   local function getSensor(name)
     if cache[name] == nil then cache[name] = Sensors.getValue(name) end
     return cache[name]
@@ -1392,22 +1404,40 @@ function Runtime.new(zone, options)
     self._wasInteractiveLastFrame = isInteractive
 
     local nextRenderKey = nil
+    local function computeRenderKey()
+      if type(self.theme.renderKey) == "function" then
+        return self.theme.renderKey(self.zone, self.state)
+      end
+      if self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
+        return self.dashboardEngine.renderKey(self.state, self.boxSources)
+      end
+      return nil
+    end
+
     if isInteractive then
       nextRenderKey = "fullscreen_menu"
+      self._postflightFrozenKey = nil
     else
-      -- Throttle dashboard rendering to max 2Hz (0.5s) to save CPU
+      -- Throttle dashboard rendering to reduce CPU and GC pressure.
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
       local now = nowSeconds()
-      if (now - self._lastUIRefresh) >= 0.5 then
-        self._lastUIRefresh = now
-        local newKey = nil
-        if type(self.theme.renderKey) == "function" then
-          newKey = self.theme.renderKey(self.zone, self.state)
-        elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
-          newKey = self.dashboardEngine.renderKey(self.state, self.boxSources)
+      local isPostflight = (self.flightMode == "postflight") and (self.state and self.state.armed ~= true)
+      local disarmAt = tonumber(self.state and self.state.lastDisarmAt) or 0
+      local shouldFreezePostflight = isPostflight and disarmAt > 0 and (now - disarmAt) >= POSTFLIGHT_FREEZE_DELAY_SECONDS
+
+      if shouldFreezePostflight then
+        if self._postflightFrozenKey == nil then
+          self._postflightFrozenKey = computeRenderKey()
         end
-        self._cachedRenderKey = newKey
+        self._cachedRenderKey = self._postflightFrozenKey
+      else
+        self._postflightFrozenKey = nil
+        if (now - self._lastUIRefresh) >= DASHBOARD_UI_REFRESH_SECONDS then
+          self._lastUIRefresh = now
+          self._cachedRenderKey = computeRenderKey()
+        end
       end
+
       nextRenderKey = self._cachedRenderKey
     end
 

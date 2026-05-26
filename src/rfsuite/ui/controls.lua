@@ -117,7 +117,18 @@ local TOGGLE_Y_OFFSET = -6
 local NUMBER_W        = 172
 local NUMBER_H        = 62
 local NUMBER_Y_OFFSET = 6
+local HELP_BTN_W      = 30
+local HELP_BTN_H      = 30
+local HELP_BTN_GAP    = 6
 Controls.NUMBER_H = NUMBER_H
+
+local function showHelpAlert(helpText, helpTitle)
+  if not (lvgl and lvgl.alert) then return end
+  lvgl.alert({
+    title = helpTitle or "Help",
+    message = tostring(helpText or "")
+  })
+end
 
 function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
                                      onToggle)
@@ -224,7 +235,13 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
 
   local fieldW = NUMBER_W
   if fieldW > w then fieldW = w end
+  local helpText = opts.helpText
+  local helpTitle = opts.helpTitle
+  local hasHelp = type(helpText) == "string" and helpText ~= ""
   local fieldX = x + w - fieldW - 10
+  if hasHelp then
+    fieldX = fieldX - HELP_BTN_W - HELP_BTN_GAP
+  end
   local rowH = math.max(ROW_H, NUMBER_H)
   local fieldY = y + math.floor((rowH - NUMBER_H) / 2) + NUMBER_Y_OFFSET
   local labelY = y + math.floor((rowH - 20) / 2)
@@ -271,6 +288,25 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
     end
   }
 
+  if hasHelp then
+    local helpBtnY = y + math.floor((rowH - HELP_BTN_H) / 2)
+    children[#children + 1] = {
+      type = "button",
+      x = fieldX + fieldW + HELP_BTN_GAP,
+      y = helpBtnY,
+      w = HELP_BTN_W,
+      h = HELP_BTN_H,
+      text = "?",
+      press = function()
+        if type(opts.onHelp) == "function" then
+          opts.onHelp(helpText, helpTitle)
+        else
+          showHelpAlert(helpText, helpTitle)
+        end
+      end
+    }
+  end
+
   children[#children + 1] = {
     type   = "rectangle",
     x = x, y = y + rowH,
@@ -298,12 +334,20 @@ Controls.COMBO_ROW_H    = math.max(ROW_H, NUMBER_H) + 1
 Controls.COMBO_OPTION_H = COMBO_OPTION_H
 
 function Controls.appendComboSelect(children, x, y, w, labelText, options,
-                                     selectedValue, onSelect)
+                                     selectedValue, onSelect, opts)
+
+  opts = opts or {}
 
   local rowH = math.max(ROW_H, NUMBER_H)
   local comboW = 172
   if comboW > w then comboW = w end
+  local helpText = opts.helpText
+  local helpTitle = opts.helpTitle
+  local hasHelp = type(helpText) == "string" and helpText ~= ""
   local comboX = x + w - comboW - 10
+  if hasHelp then
+    comboX = comboX - HELP_BTN_W - HELP_BTN_GAP
+  end
   local comboY = y + math.floor((rowH - COMBO_H) / 2) + COMBO_Y_OFFSET
   local labelY = y + math.floor((rowH - 20) / 2)
 
@@ -351,6 +395,25 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
       end
     end
   }
+
+  if hasHelp then
+    local helpBtnY = y + math.floor((rowH - HELP_BTN_H) / 2)
+    children[#children + 1] = {
+      type = "button",
+      x = comboX + comboW + HELP_BTN_GAP,
+      y = helpBtnY,
+      w = HELP_BTN_W,
+      h = HELP_BTN_H,
+      text = "?",
+      press = function()
+        if type(opts.onHelp) == "function" then
+          opts.onHelp(helpText, helpTitle)
+        else
+          showHelpAlert(helpText, helpTitle)
+        end
+      end
+    }
+  end
 
   -- Row divider
   children[#children + 1] = {

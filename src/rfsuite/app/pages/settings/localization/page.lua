@@ -142,7 +142,7 @@ end
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = true, help = false }
+  return { save = true, help = true }
 end
 
 function M.allowMemAutoRefresh()
@@ -186,7 +186,42 @@ function M.build(ctx)
   local cursorY = ctx.y
 
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
-  buildLocalization(cursorY, children, x, w, i18n)
+
+  cursorY = cursorY + Controls.appendComboSelect(
+    children, x, cursorY, w,
+    t(i18n, "language", "Language"),
+    getLanguageOptions(i18n),
+    ui.language,
+    function(val)
+      local nextLang = tostring(val or "")
+      nextLang = string.lower(nextLang)
+      if nextLang ~= "de" and nextLang ~= "en" then
+        nextLang = "en"
+      end
+      if ui.language == nextLang then return end
+      ui.language = nextLang
+    end
+  )
+
+  cursorY = cursorY + Controls.appendComboSelect(
+    children, x, cursorY, w,
+    t(i18n, "temperature_unit", "Temperatureinheit"),
+    getTempOptions(i18n),
+    ui.config.temperature_unit,
+    function(val)
+      ui.config.temperature_unit = val
+    end
+  )
+
+  cursorY = cursorY + Controls.appendComboSelect(
+    children, x, cursorY, w,
+    t(i18n, "altitude_unit", "Hoeheneinheit"),
+    getAltOptions(i18n),
+    ui.config.altitude_unit,
+    function(val)
+      ui.config.altitude_unit = val
+    end
+  )
 end
 
 function M.onClose()

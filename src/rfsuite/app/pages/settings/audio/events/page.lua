@@ -328,7 +328,7 @@ local SECTIONS = {
 
 function M.getHeaderActions()
   ensureDeps()
-  return { save = true, help = false }
+  return { save = true, help = true }
 end
 
 function M.allowMemAutoRefresh()
@@ -417,9 +417,10 @@ function M.build(ctx)
       for _, item in ipairs(section.items) do
         local k = item.key
         if item.kind == "choice" and k == "fuel_callout_percent" then
+          local labelText = t(i18n, item.labelKey, item.labelFallback)
           cursorY = cursorY + Controls.appendComboSelect(
             children, x, cursorY, w,
-            t(i18n, item.labelKey, item.labelFallback),
+            labelText,
             getFuelCalloutOptions(i18n),
             getFuelCalloutGetter()(),
             getFuelCalloutSetter()
@@ -427,9 +428,10 @@ function M.build(ctx)
         elseif item.kind == "number" and k == "fuel_repeat_below_zero" then
           local minVal = item.min or 1
           local maxVal = item.max or 10
+          local labelText = t(i18n, item.labelKey, item.labelFallback)
           cursorY = cursorY + Controls.appendNumberField(
             children, x, cursorY, w,
-            t(i18n, item.labelKey, item.labelFallback),
+            labelText,
             {
               enabled = getFuelEnabled(),
               min = minVal,
@@ -442,9 +444,10 @@ function M.build(ctx)
         elseif item.kind == "number" then
           local minVal = item.min or 0
           local maxVal = item.max or 100
+          local labelText = t(i18n, item.labelKey, item.labelFallback)
           cursorY = cursorY + Controls.appendNumberField(
             children, x, cursorY, w,
-            t(i18n, item.labelKey, item.labelFallback),
+            labelText,
             {
               enabled = getEscThresholdEnabled(),
               min = minVal,

@@ -11,11 +11,21 @@ local function loadModule(path)
 end
 
 local function loadThemeConfig(configurePath)
-  if loadedThemeConfigs[configurePath] then return loadedThemeConfigs[configurePath] end
+  local cached = loadedThemeConfigs[configurePath]
+  if cached ~= nil then
+    if cached == false then return nil end
+    return cached
+  end
   local ok, chunk = pcall(loadScript, configurePath, "t")
-  if not ok or type(chunk) ~= "function" then return nil end
+  if not ok or type(chunk) ~= "function" then
+    loadedThemeConfigs[configurePath] = false
+    return nil
+  end
   local loadedOk, loaded = pcall(chunk)
-  if not loadedOk then return nil end
+  if not loadedOk then
+    loadedThemeConfigs[configurePath] = false
+    return nil
+  end
   loadedThemeConfigs[configurePath] = loaded
   return loaded
 end
@@ -133,7 +143,7 @@ end
 
 function M.getHeaderActions()
   -- Save und Reload immer aktiv für Theme-Settings
-  return { save = true, reload = true, help = false }
+  return { save = true, reload = true, help = true }
 end
 
 function M.allowMemAutoRefresh()
