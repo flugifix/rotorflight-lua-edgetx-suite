@@ -18,6 +18,8 @@ local ApiVersion = nil
 local LoadingOverlay = nil
 local t = nil
 
+M.eepromWrite = true
+
 local function newRuntime()
 	return {
 		localSourceSet = nil,
@@ -336,6 +338,7 @@ function M.onSave(ctx)
 	end
 
 	local okMsp, errMsp = queueSmartfuelWrite(session)
+
 	if not okMsp then
 		if lvgl and lvgl.alert then
 			lvgl.alert({ title = "Warning", message = "Saved local SmartFuel values. FC write pending: " .. tostring(errMsp or "msp") })

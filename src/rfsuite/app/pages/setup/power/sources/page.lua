@@ -13,9 +13,10 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local BatteryConfigApi = nil
-local EepromWriteApi = nil
 local LoadingOverlay = nil
 local t = nil
+
+M.eepromWrite = true
 
 local SOURCE_MIN = 0
 local SOURCE_MAX = 255
@@ -64,7 +65,6 @@ local function ensureDeps()
 	if not Controls then Controls = loadModule("ui/controls.lua") end
 	if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
 	if not BatteryConfigApi then BatteryConfigApi = loadModule("tasks/msp/api/battery_config.lua") end
-	if not EepromWriteApi then EepromWriteApi = loadModule("tasks/msp/api/eeprom_write.lua") end
 	if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
 	if not t then t = Common and Common.pageT("setup_power_sources") or nil end
 end
@@ -311,16 +311,6 @@ function M.onSave(ctx)
 				errorHandler = function() end
 			})
 
-			if EepromWriteApi and type(EepromWriteApi.buildWritePayload) == "function" then
-				queue:add({
-					command = EepromWriteApi.writeCommand,
-					payload = EepromWriteApi.buildWritePayload({}),
-					timeout = 5.0,
-					isWrite = true,
-					processReply = function() end,
-					errorHandler = function() end
-				})
-			end
 		end
 	end
 
@@ -430,7 +420,6 @@ function M.onClose()
 	Common = nil
 	MspRuntime = nil
 	BatteryConfigApi = nil
-	EepromWriteApi = nil
 	LoadingOverlay = nil
 	t = nil
 end

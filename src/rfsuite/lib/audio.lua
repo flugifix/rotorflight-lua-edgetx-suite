@@ -502,22 +502,25 @@ local function announceBatteryCapacityEvent(self, opts)
     return
   end
 
-  if audioState.initialized then
-    if capacity and capacity > 0 then
-      emitLog(opts, "battery capacity change profile=" .. tostring(profile) .. " capacity=" .. tostring(capacity), "info")
-      tryPlayEventFile(audioState, now, "evt/battery.wav", opts)
-      if type(playNumber) == "function" then
-        emitLog(opts, "playNumber -> " .. tostring(capacity) .. " mAh", "info")
-        local ok, err = pcall(playNumber, capacity, unitMah())
-        if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
-      end
-    else
-      emitLog(opts, "battery profile change value=" .. tostring(profile) .. " file=evt/battery.wav", "info")
-      tryPlayEventFile(audioState, now, "evt/battery.wav", opts)
-      if type(playNumber) == "function" then
-        local ok, err = pcall(playNumber, configIndex, 0)
-        if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
-      end
+  if not audioState.initialized then
+    audioState.batteryCapacityAnnounced = false
+    return
+  end
+
+  if capacity and capacity > 0 then
+    emitLog(opts, "battery capacity change profile=" .. tostring(profile) .. " capacity=" .. tostring(capacity), "info")
+    tryPlayEventFile(audioState, now, "evt/battery.wav", opts)
+    if type(playNumber) == "function" then
+      emitLog(opts, "playNumber -> " .. tostring(capacity) .. " mAh", "info")
+      local ok, err = pcall(playNumber, capacity, unitMah())
+      if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+    end
+  else
+    emitLog(opts, "battery profile change value=" .. tostring(profile) .. " file=evt/battery.wav", "info")
+    tryPlayEventFile(audioState, now, "evt/battery.wav", opts)
+    if type(playNumber) == "function" then
+      local ok, err = pcall(playNumber, configIndex, 0)
+      if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
     end
   end
 

@@ -15,9 +15,10 @@ local ModelPreferences = nil
 local MspRuntime = nil
 local BatteryConfigApi = nil
 local BatteryProfileApi = nil
-local EepromWriteApi = nil
 local Sensors = nil
 local t = nil
+
+M.eepromWrite = true
 
 local PROFILE_MIN = 0
 local PROFILE_MAX = 5
@@ -86,7 +87,6 @@ local function ensureDeps()
 	if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
 	if not BatteryConfigApi then BatteryConfigApi = loadModule("tasks/msp/api/battery_config.lua") end
 	if not BatteryProfileApi then BatteryProfileApi = loadModule("tasks/msp/api/battery_profile.lua") end
-	if not EepromWriteApi then EepromWriteApi = loadModule("tasks/msp/api/eeprom_write.lua") end
 	if not Sensors then Sensors = loadModule("lib/sensors.lua") end
 	if not t then t = Common and Common.pageT("setup_power_battery") or nil end
 end
@@ -488,16 +488,6 @@ function M.onSave(ctx)
 				errorHandler = function() end
 			})
 
-			if EepromWriteApi and type(EepromWriteApi.buildWritePayload) == "function" then
-				queue:add({
-					command = EepromWriteApi.writeCommand,
-					payload = EepromWriteApi.buildWritePayload({}),
-					timeout = 5.0,
-					isWrite = true,
-					processReply = function() end,
-					errorHandler = function() end
-				})
-			end
 		end
 	end
 
@@ -703,7 +693,6 @@ function M.onClose()
 	MspRuntime = nil
 	BatteryConfigApi = nil
 	BatteryProfileApi = nil
-	EepromWriteApi = nil
 	Sensors = nil
 	t = nil
 end

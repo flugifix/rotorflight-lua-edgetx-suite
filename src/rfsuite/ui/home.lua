@@ -18,6 +18,7 @@ local HelpView = nil
 local PreferencesSafe = nil
 local Version = nil
 local MspRuntime = nil
+local EepromWriteApi = nil
 local Log = nil
 local Events = nil
 local Audio = nil
@@ -61,6 +62,45 @@ local function ensureMspRuntime()
   if not MspRuntime then
     MspRuntime = loadModule("tasks/msp/runtime.lua")
   end
+end
+
+local function ensureEepromWriteApi()
+  if not EepromWriteApi then
+    EepromWriteApi = loadModule("tasks/msp/api/eeprom_write.lua")
+  end
+end
+
+local function queueEepromWriteIfNeeded(page)
+  if type(page) ~= "table" or page.eepromWrite ~= true then
+    return true
+  end
+
+  ensureMspRuntime()
+  ensureEepromWriteApi()
+
+  if not MspRuntime or type(MspRuntime.getState) ~= "function" then
+    return false, "msp_runtime_unavailable"
+  end
+  if not EepromWriteApi or type(EepromWriteApi.buildWritePayload) ~= "function" then
+    return false, "eeprom_api_unavailable"
+  end
+
+  local mspState = MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue or type(queue.add) ~= "function" then
+    return false, "msp_queue_unavailable"
+  end
+
+  queue:add({
+    command = EepromWriteApi.writeCommand,
+    payload = EepromWriteApi.buildWritePayload({}),
+    timeout = 5.0,
+    isWrite = true,
+    processReply = function() end,
+    errorHandler = function() end
+  })
+
+  return true, nil
 end
 
 local function ensureEvents()
@@ -950,6 +990,17 @@ local function onSave()
 
         -- Apply possibly updated language setting immediately after save.
         applyLocaleFromPreferences()
+
+        local okEeprom, errEeprom = queueEepromWriteIfNeeded(page)
+        if not okEeprom then
+          pcall(Log.emit, "rfsuite", "EEPROM write queue failed: " .. tostring(errEeprom), "warn", true)
+          if lvgl and lvgl.alert then
+            lvgl.alert({
+              title = "Save",
+              message = "Saved, but EEPROM write is pending: " .. tostring(errEeprom)
+            })
+          end
+        end
 
         if shouldRebuild ~= false then
           scheduleBuildUI(false)

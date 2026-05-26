@@ -17,6 +17,8 @@ local ConfirmDialog = nil
 local LoadingOverlay = nil
 local t = nil
 
+M.eepromWrite = true
+
 local SENSOR_GROUP_ORDER = {
   "battery", "voltage", "current", "temps", "esc1", "esc2",
   "rpm", "barometer", "gyro", "gps", "status", "profiles", "control", "system", "debug"
