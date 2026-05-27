@@ -46,7 +46,8 @@ local state = {
   lastFuelValue = nil,
   lastFuelPush = 0,
   lastConsumptionValue = nil,
-  lastConsumptionPush = 0
+  lastConsumptionPush = 0,
+  lastFirmwareFuelMissingLog = 0
 }
 
 local function loadModule(path)
@@ -148,6 +149,27 @@ local function readFirstSourceValue(queries)
     end
   end
   return nil
+end
+
+local function readFirmwareFuelValue()
+  -- Avoid feedback loops: never use SmFt (smartfuel alias) as input for SmFt calculation.
+  -- Prefer direct FC fuel percentage first, then mirror appIds as fallback.
+  local value = tonumber(getSensor("fuel"))
+  if type(value) == "number" then
+    return value, "fuel"
+  end
+
+  value = tonumber(getSensor("Bat%"))
+  if type(value) == "number" then
+    return value, "Bat%"
+  end
+
+  value = readFirstSourceValue(MIRROR_FUEL_QUERIES)
+  if type(value) == "number" then
+    return value, "mirror"
+  end
+
+  return nil, nil
 end
 
 local function applyReservePercent(value, warningPercent)
@@ -476,7 +498,7 @@ function Smart.wakeup()
   local reserve = resolveReservePercent(session, batteryConfig)
   local usableCapacity = getUsableCapacity(packCapacity, reserve)
 
-  if usableCapacity <= 0 or cellCount <= 0 then
+  if not firmwareActive and (usableCapacity <= 0 or cellCount <= 0) then
     return
   end
 
@@ -516,10 +538,19 @@ function Smart.wakeup()
   local fuelPercent = nil
   local smartConsumption = nil
   if firmwareActive then
-    local rawFuel = readFirstSourceValue(MIRROR_FUEL_QUERIES)
+    local rawFuel, rawFuelSource = readFirmwareFuelValue()
     local rawConsumption = readFirstSourceValue(MIRROR_CONSUMPTION_QUERIES)
     fuelPercent = applyReservePercent(rawFuel, reserve)
     smartConsumption = rawConsumption
+    if type(fuelPercent) ~= "number" then
+      if (now - (state.lastFirmwareFuelMissingLog or 0)) >= 5.0 then
+        state.lastFirmwareFuelMissingLog = now
+        logSmart("smart firmware fuel missing mirror/sensor fallback (reserve=" .. tostring(reserve) .. ")", "warn")
+      end
+    elseif (state.lastFirmwareFuelMissingLog or 0) ~= 0 then
+      logSmart("smart firmware fuel recovered from " .. tostring(rawFuelSource) .. " raw=" .. tostring(rawFuel), "info")
+      state.lastFirmwareFuelMissingLog = 0
+    end
   else
     if sourceMode == 1 then
       fuelPercent, smartConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
@@ -548,6 +579,7 @@ function Smart.reset()
   state.lastFuelPush = 0
   state.lastConsumptionValue = nil
   state.lastConsumptionPush = 0
+  state.lastFirmwareFuelMissingLog = 0
   resetComputedState()
 end
 

@@ -828,7 +828,11 @@ local function readTelemetry(state)
   setField("altitude", getSensor("altitude") or state.altitude)
   setField("consumedMah", getSensor("smartconsumption") or state.consumedMah)
 
-  local fuel = getSensor("smartfuel") or getSensor("fuel")
+  -- Prefer strict SmartFuel sensor value first; alias lookups may be cached to Bat%.
+  local fuel = getSensor("SmFt")
+  if type(fuel) ~= "number" then
+    fuel = getSensor("smartfuel") or getSensor("Bat%") or getSensor("fuel")
+  end
   if type(fuel) == "number" then
     local f = fuel
     if f < 0 then f = 0 end

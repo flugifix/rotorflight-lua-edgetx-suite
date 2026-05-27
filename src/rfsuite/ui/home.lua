@@ -1634,7 +1634,12 @@ function M.run(event, touchState)
       local action = state.pendingSaveAction
       state.pendingSaveAction = nil
       state.saveOverlayVisible = false
-      pcall(action)
+      local ok, err = pcall(action)
+      if not ok then
+        pcall(Log.emit, "rfsuite", "pendingSaveAction failed: " .. tostring(err), "error", true)
+      end
+      -- Ensure the save overlay is replaced even when page.onSave returns false.
+      scheduleBuildUI(false)
     end
 
     if state.pendingMenuOpen and not state.isClosing then

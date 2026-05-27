@@ -725,11 +725,11 @@ function Runtime.tick()
   enqueueTelemetryConfigRead(now)
   maybeRunTelemetryAutoSync(now)
 
-  -- Defer version and UID reads until telemetry is fully synced or sync is disabled
-  if state.telemetryAutoSyncDone == true then
-    enqueueVersionReads(now)
-    enqueueUidRead(now)
-  end
+  -- Always progress core startup reads (API version + UID).
+  -- Gating these behind telemetry auto-sync can leave both values permanently nil
+  -- when telemetry sync is inactive or disabled.
+  enqueueVersionReads(now)
+  enqueueUidRead(now)
 
   state.queue:processQueue(now)
   publish()

@@ -24,6 +24,7 @@ function M.show(ctx)
   local message = (ctx and ctx.message) or ""
   local onConfirm = ctx and ctx.onConfirm
   local onCancel = ctx and ctx.onCancel
+  local onFallback = ctx and ctx.onFallback
 
   if Log == nil then
     local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
@@ -59,7 +60,19 @@ function M.show(ctx)
       return lvgl.confirm({ title = title, message = message, confirm = doConfirm, cancel = doCancel })
     end)
     if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.confirm attempt ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
-    if ok then return true end
+
+    if ok and res == true then
+      doConfirm()
+      return true
+    end
+    if ok and res == false then
+      doCancel()
+      return true
+    end
+    if ok and res == nil and type(onFallback) == "function" then
+      pcall(onFallback, title, message)
+      return true
+    end
   end
 
   if type(onFallback) == "function" then

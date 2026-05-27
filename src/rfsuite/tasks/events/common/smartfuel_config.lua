@@ -6,6 +6,11 @@ local requestSent = false
 local smartfuelConfigApi = nil
 local Log = nil
 local ApiVersion = nil
+local waitingLogged = false
+
+local function apiVersionReady(v)
+  return v ~= nil and v ~= "" and tostring(v) ~= "0"
+end
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -31,12 +36,23 @@ function M.wakeup()
   local session = root.session
   if type(session) ~= "table" then return end
 
+  -- Do not block the onconnect pipeline when API version is still unknown.
+  -- SmartFuel page itself can read/write once API becomes available.
+  if not apiVersionReady(session.apiVersion) then
+    done = true
+    if (not waitingLogged) and type(Log) == "table" and type(Log.emit) == "function" then
+      pcall(Log.emit, "rfsuite.tasks.smartfuel", "skip smartfuel_config (api unknown)", "debug", true)
+      waitingLogged = true
+    end
+    return
+  end
+
   -- Ethos parity: SMARTFUEL_CONFIG is available from API >= 12.0.9.
   local apiVersion = ApiVersion and ApiVersion.parse and ApiVersion.parse(session.apiVersion)
   if not (ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(apiVersion, { 12, 0, 9 })) then
     done = true
     if type(Log) == "table" and type(Log.emit) == "function" then
-      pcall(Log.emit, "rfsuite.tasks.smartfuel", "skip smartfuel_config (api < 12.0.9)", "debug", true)
+      pcall(Log.emit, "rfsuite.tasks.smartfuel", "skip smartfuel_config (api=" .. tostring(session.apiVersion) .. " < 12.0.9)", "debug", true)
     end
     return
   end
@@ -88,6 +104,7 @@ end
 function M.reset()
   done = false
   requestSent = false
+  waitingLogged = false
 end
 
 return M

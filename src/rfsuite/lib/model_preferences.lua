@@ -1,7 +1,9 @@
 local M = {}
 
-local USER_ROOT = "/SCRIPTS/TOOLS/rfsuite.user"
-local TOOLS_ROOT = "/SCRIPTS/TOOLS"
+local USER_ROOTS = {
+  "/SCRIPTS/TOOLS/rfsuite.user",
+  "SCRIPTS:/TOOLS/rfsuite.user"
+}
 
 local function trim(s)
   local asString = tostring(s or "")
@@ -146,11 +148,63 @@ local function defaultModelPreferences()
   }
 end
 
-local function ensureDirs()
+local function fileExists(path)
+  local f = io.open(path, "r")
+  if not f then return false end
+  io.close(f)
+  return true
+end
+
+local function getToolsRoot(userRoot)
+  return string.gsub(userRoot or "", "/rfsuite%.user$", "")
+end
+
+local function ensureDirs(userRoot)
   if type(os) == "table" and type(os.mkdir) == "function" then
-    pcall(os.mkdir, TOOLS_ROOT)
-    pcall(os.mkdir, USER_ROOT)
+    local toolsRoot = getToolsRoot(userRoot)
+    if toolsRoot ~= "" then
+      pcall(os.mkdir, toolsRoot)
+    end
+    pcall(os.mkdir, userRoot)
   end
+end
+
+local function buildPathForRoot(userRoot, safeId)
+  return userRoot .. "/" .. safeId .. ".ini"
+end
+
+local function orderedRoots(safeId)
+  local prioritized = {}
+  local used = {}
+
+  local function add(root)
+    if type(root) ~= "string" or root == "" then return end
+    if used[root] then return end
+    used[root] = true
+    prioritized[#prioritized + 1] = root
+  end
+
+  if safeId then
+    for i = 1, #USER_ROOTS do
+      local root = USER_ROOTS[i]
+      if fileExists(buildPathForRoot(root, safeId)) then
+        add(root)
+      end
+    end
+  end
+
+  for i = 1, #USER_ROOTS do
+    local root = USER_ROOTS[i]
+    if fileExists(root .. "/preferences.ini") then
+      add(root)
+    end
+  end
+
+  for i = 1, #USER_ROOTS do
+    add(USER_ROOTS[i])
+  end
+
+  return prioritized
 end
 
 local function normalizeMcuId(mcuId)
@@ -179,47 +233,74 @@ end
 function M.buildPath(mcuId)
   local safeId = normalizeMcuId(mcuId)
   if not safeId then return nil end
-  return USER_ROOT .. "/" .. safeId .. ".ini"
+
+  local roots = orderedRoots(safeId)
+  if #roots == 0 then return nil end
+  return buildPathForRoot(roots[1], safeId)
 end
 
 function M.loadByMcuId(mcuId)
-  local path = M.buildPath(mcuId)
-  if not path then return nil, nil end
-
-  ensureDirs()
-
-  -- Ensure first-time setups always have a physical file on disk.
-  local _ = ensureFileExists(path)
+  local safeId = normalizeMcuId(mcuId)
+  if not safeId then return nil, nil end
 
   local defaults = defaultModelPreferences()
-  local onDisk = parseIni(loadFileAsString(path))
-  local merged = deepCopyTable(onDisk)
-  deepMerge(merged, defaults)
+  local roots = orderedRoots(safeId)
 
-  if not tablesEqual(onDisk, merged) then
-    local ok = saveIni(path, merged)
-    if not ok then
-      -- Save errors are non-fatal; caller still gets usable defaults+loaded values.
+  for i = 1, #roots do
+    local userRoot = roots[i]
+    local path = buildPathForRoot(userRoot, safeId)
+
+    ensureDirs(userRoot)
+
+    -- Ensure first-time setups always have a physical file on disk.
+    local okTouch = ensureFileExists(path)
+    if okTouch then
+      local onDisk = parseIni(loadFileAsString(path))
+      local merged = deepCopyTable(onDisk)
+      deepMerge(merged, defaults)
+
+      if not tablesEqual(onDisk, merged) then
+        local ok = saveIni(path, merged)
+        if not ok then
+          -- Save errors are non-fatal; caller still gets usable defaults+loaded values.
+        end
+      end
+
+      return merged, path
     end
   end
 
-  return merged, path
+  -- Could not create/load file on any root; still return defaults in-memory.
+  return deepCopyTable(defaults), nil
 end
 
 function M.saveByMcuId(mcuId, prefs)
-  local path = M.buildPath(mcuId)
-  if not path then return false, "missing_mcu_id" end
+  local safeId = normalizeMcuId(mcuId)
+  if not safeId then return false, "missing_mcu_id" end
 
-  ensureDirs()
-
-  local okTouch, touchErr = ensureFileExists(path)
-  if not okTouch then
-    return false, touchErr
-  end
-
+  local roots = orderedRoots(safeId)
   local data = deepCopyTable(prefs or {})
   deepMerge(data, defaultModelPreferences())
-  return saveIni(path, data)
+  local lastErr = "io"
+
+  for i = 1, #roots do
+    local userRoot = roots[i]
+    local path = buildPathForRoot(userRoot, safeId)
+    ensureDirs(userRoot)
+
+    local okTouch, touchErr = ensureFileExists(path)
+    if okTouch then
+      local okSave, saveErr = saveIni(path, data)
+      if okSave then
+        return true
+      end
+      lastErr = saveErr or "io"
+    else
+      lastErr = touchErr or "io"
+    end
+  end
+
+  return false, lastErr
 end
 
 return M

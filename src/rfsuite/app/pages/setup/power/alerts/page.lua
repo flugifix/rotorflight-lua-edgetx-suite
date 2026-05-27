@@ -11,7 +11,7 @@ end
 
 local Controls = nil
 local Common = nil
-local ModelPreferences = nil
+local PowerModelPreferences = nil
 local t = nil
 
 local ALERT_TYPE_MIN = 0
@@ -64,7 +64,7 @@ end
 local function ensureDeps()
 	if not Common then Common = loadModule("app/pages/settings/common.lua") end
 	if not Controls then Controls = loadModule("ui/controls.lua") end
-	if not ModelPreferences then ModelPreferences = loadModule("lib/model_preferences.lua") end
+	if not PowerModelPreferences then PowerModelPreferences = loadModule("app/pages/setup/power/model_preferences.lua") end
 	if not t then t = Common and Common.pageT("setup_power_alerts") or nil end
 end
 
@@ -147,13 +147,10 @@ local function ensureLoaded()
 end
 
 local function saveModelPreferences(session)
-	if not session or not ModelPreferences or type(ModelPreferences.saveByMcuId) ~= "function" then
+	if not PowerModelPreferences or type(PowerModelPreferences.save) ~= "function" then
 		return false, "model_preferences_unavailable"
 	end
-	if not session.mcu_id then
-		return false, "missing_mcu_id"
-	end
-	return ModelPreferences.saveByMcuId(session.mcu_id, session.modelPreferences)
+	return PowerModelPreferences.save(session)
 end
 
 local function getAlertTypeSetter()
@@ -391,7 +388,7 @@ function M.onClose()
 	end
 	Controls = nil
 	Common = nil
-	ModelPreferences = nil
+	PowerModelPreferences = nil
 	t = nil
 end
 

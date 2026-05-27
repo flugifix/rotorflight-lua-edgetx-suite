@@ -104,10 +104,15 @@ local function ensureLoaded(prefs)
     end
   end
 
+  local modelOverride = src.model_override == true
+  if type(modelSrc) == "table" and modelSrc.model_override ~= nil then
+    modelOverride = modelSrc.model_override == true
+  end
+
   ui.config.theme_preflight = src.theme_preflight or defaultPath
   ui.config.theme_inflight = src.theme_inflight or defaultPath
   ui.config.theme_postflight = src.theme_postflight or defaultPath
-  ui.config.model_override = src.model_override == true
+  ui.config.model_override = modelOverride
   ui.config.model_theme_preflight = modelSrc.model_theme_preflight or "nil"
   ui.config.model_theme_inflight = modelSrc.model_theme_inflight or "nil"
   ui.config.model_theme_postflight = modelSrc.model_theme_postflight or "nil"
@@ -152,6 +157,7 @@ local function saveToPreferences(prefs)
   prefs.dashboard.theme_preflight = ui.config.theme_preflight
   prefs.dashboard.theme_inflight = ui.config.theme_inflight
   prefs.dashboard.theme_postflight = ui.config.theme_postflight
+  prefs.dashboard.model_override = ui.config.model_override == true
 
   if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
     local session = _G.rfsuite.session
@@ -160,6 +166,7 @@ local function saveToPreferences(prefs)
       if type(session.modelPreferences.dashboard) ~= "table" then session.modelPreferences.dashboard = {} end
       local mDashboard = session.modelPreferences.dashboard
 
+      mDashboard.model_override = ui.config.model_override == true
       mDashboard.model_theme_preflight = ui.config.model_theme_preflight
       mDashboard.model_theme_inflight = ui.config.model_theme_inflight
       mDashboard.model_theme_postflight = ui.config.model_theme_postflight

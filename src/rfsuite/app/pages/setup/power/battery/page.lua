@@ -11,7 +11,7 @@ end
 
 local Controls = nil
 local Common = nil
-local ModelPreferences = nil
+local PowerModelPreferences = nil
 local MspRuntime = nil
 local BatteryConfigApi = nil
 local BatteryProfileApi = nil
@@ -83,7 +83,7 @@ end
 local function ensureDeps()
 	if not Common then Common = loadModule("app/pages/settings/common.lua") end
 	if not Controls then Controls = loadModule("ui/controls.lua") end
-	if not ModelPreferences then ModelPreferences = loadModule("lib/model_preferences.lua") end
+	if not PowerModelPreferences then PowerModelPreferences = loadModule("app/pages/setup/power/model_preferences.lua") end
 	if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
 	if not BatteryConfigApi then BatteryConfigApi = loadModule("tasks/msp/api/battery_config.lua") end
 	if not BatteryProfileApi then BatteryProfileApi = loadModule("tasks/msp/api/battery_profile.lua") end
@@ -372,13 +372,10 @@ local function getReserveSetter()
 end
 
 local function saveModelPreferences(session)
-	if not session or not ModelPreferences or type(ModelPreferences.saveByMcuId) ~= "function" then
+	if not PowerModelPreferences or type(PowerModelPreferences.save) ~= "function" then
 		return false, "model_preferences_unavailable"
 	end
-	if not session.mcu_id then
-		return false, "missing_mcu_id"
-	end
-	return ModelPreferences.saveByMcuId(session.mcu_id, session.modelPreferences)
+	return PowerModelPreferences.save(session)
 end
 
 local function buildBatteryPayload(batteryConfig)
@@ -455,12 +452,6 @@ function M.onSave(ctx)
 
 	batteryPrefs.consumption_warning_percentage = reserve
 	local okPrefs, errPrefs = saveModelPreferences(session)
-	if not okPrefs then
-		if lvgl and lvgl.alert then
-			lvgl.alert({ title = "Error", message = "Saving battery prefs failed: " .. tostring(errPrefs or "io") })
-		end
-		return false
-	end
 
 	local okMsp = false
 	if MspRuntime and BatteryConfigApi and type(MspRuntime.getState) == "function" then
@@ -499,15 +490,25 @@ function M.onSave(ctx)
 	end
 
 	if lvgl and lvgl.alert then
-		if okMsp then
+		if okMsp and okPrefs then
 			lvgl.alert({
 				title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
 				message = pageText(ctx and ctx.i18n, "saved_message", "Battery settings saved")
 			})
-		else
+		elseif okMsp and not okPrefs then
+			lvgl.alert({
+				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
+				message = "Battery values sent to FC. Model prefs save failed: " .. tostring(errPrefs or "io")
+			})
+		elseif (not okMsp) and okPrefs then
 			lvgl.alert({
 				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
 				message = pageText(ctx and ctx.i18n, "saved_local_only_message", "Saved locally; FC write pending")
+			})
+		else
+			lvgl.alert({
+				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
+				message = "FC write pending and model prefs save failed: " .. tostring(errPrefs or "io")
 			})
 		end
 	end
@@ -689,7 +690,7 @@ function M.onClose()
 	ui.progress = 0
 	Controls = nil
 	Common = nil
-	ModelPreferences = nil
+	PowerModelPreferences = nil
 	MspRuntime = nil
 	BatteryConfigApi = nil
 	BatteryProfileApi = nil
