@@ -1,6 +1,7 @@
 local M = {}
 
 local USER_ROOT = "/SCRIPTS/TOOLS/rfsuite.user"
+local TOOLS_ROOT = "/SCRIPTS/TOOLS"
 
 local function trim(s)
   local asString = tostring(s or "")
@@ -147,13 +148,38 @@ end
 
 local function ensureDirs()
   if type(os) == "table" and type(os.mkdir) == "function" then
+    pcall(os.mkdir, TOOLS_ROOT)
     pcall(os.mkdir, USER_ROOT)
   end
 end
 
+local function normalizeMcuId(mcuId)
+  if mcuId == nil then return nil end
+  local id = trim(tostring(mcuId))
+  if id == "" then return nil end
+  -- Keep filename safe even if an unexpected UID format appears.
+  id = string.gsub(id, "[^%w_-]", "_")
+  if id == "" then return nil end
+  return id
+end
+
+local function ensureFileExists(path)
+  local f = io.open(path, "r")
+  if f then
+    io.close(f)
+    return true
+  end
+
+  local newFile, err = io.open(path, "w")
+  if not newFile then return false, err end
+  io.close(newFile)
+  return true
+end
+
 function M.buildPath(mcuId)
-  if type(mcuId) ~= "string" or mcuId == "" then return nil end
-  return USER_ROOT .. "/" .. mcuId .. ".ini"
+  local safeId = normalizeMcuId(mcuId)
+  if not safeId then return nil end
+  return USER_ROOT .. "/" .. safeId .. ".ini"
 end
 
 function M.loadByMcuId(mcuId)
@@ -161,6 +187,9 @@ function M.loadByMcuId(mcuId)
   if not path then return nil, nil end
 
   ensureDirs()
+
+  -- Ensure first-time setups always have a physical file on disk.
+  local _ = ensureFileExists(path)
 
   local defaults = defaultModelPreferences()
   local onDisk = parseIni(loadFileAsString(path))
@@ -182,6 +211,11 @@ function M.saveByMcuId(mcuId, prefs)
   if not path then return false, "missing_mcu_id" end
 
   ensureDirs()
+
+  local okTouch, touchErr = ensureFileExists(path)
+  if not okTouch then
+    return false, touchErr
+  end
 
   local data = deepCopyTable(prefs or {})
   deepMerge(data, defaultModelPreferences())
