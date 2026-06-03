@@ -10,6 +10,7 @@ function MenuRegistry.new(manifest, i18n, options)
   options = options or {}
   local iconByMenuId = options.iconByMenuId or {}
   local iconByMenuIdProvider = options.iconByMenuIdProvider
+  local apiVersionProvider = options.apiVersionProvider
 
   local menus = manifest.menus or {}
   local dashboardBuilder = nil
@@ -51,9 +52,80 @@ function MenuRegistry.new(manifest, i18n, options)
     _titleCache = {},
     _cachedLocale = nil,
     _conditionsVersion = 0,
+    _apiVersionKey = nil,
     _rootCache = {locale = nil, iconRoot = nil, version = -1, data = nil},
     _cardsCache = {locale = nil, iconRoot = nil, menuId = nil, version = -1, data = nil}
   }
+
+  local function parseApiVersion(value)
+    if type(value) == "table" then
+      local major = tonumber(value[1])
+      local minor = tonumber(value[2])
+      local patch = tonumber(value[3]) or 0
+      if not major or not minor then return nil end
+      return { major, minor, patch }
+    end
+
+    if type(value) ~= "string" then
+      return nil
+    end
+
+    local major, minor, patch = string.match(value, "^(%d+)%.(%d+)%.(%d+)$")
+    if major then
+      return { tonumber(major), tonumber(minor), tonumber(patch) }
+    end
+
+    major, minor = string.match(value, "^(%d+)%.(%d+)$")
+    if major then
+      return { tonumber(major), 0, tonumber(minor) }
+    end
+
+    return nil
+  end
+
+  local function isAtLeastVersion(current, required)
+    local a = type(current) == "table" and current or parseApiVersion(current)
+    local b = type(required) == "table" and required or parseApiVersion(required)
+    if type(a) ~= "table" or type(b) ~= "table" then
+      return true
+    end
+
+    for i = 1, 3 do
+      local av = tonumber(a[i]) or 0
+      local bv = tonumber(b[i]) or 0
+      if av > bv then return true end
+      if av < bv then return false end
+    end
+
+    return true
+  end
+
+  local function getApiVersionRaw()
+    if type(apiVersionProvider) == "function" then
+      return apiVersionProvider()
+    end
+    return nil
+  end
+
+  local function apiVersionKey(value)
+    if type(value) == "table" then
+      return tostring(value[1] or "") .. "." .. tostring(value[2] or "") .. "." .. tostring(value[3] or 0)
+    end
+    if value == nil then return "" end
+    return tostring(value)
+  end
+
+  local invalidateCaches
+
+  local function refreshApiVersionCache()
+    local raw = getApiVersionRaw()
+    local key = apiVersionKey(raw)
+    if self._apiVersionKey ~= key then
+      self._apiVersionKey = key
+      invalidateCaches()
+    end
+    return raw
+  end
 
   local function currentLocale()
     if i18n and i18n.getLocale then
@@ -62,7 +134,7 @@ function MenuRegistry.new(manifest, i18n, options)
     return nil
   end
 
-  local function invalidateCaches()
+  invalidateCaches = function()
     self._rootCache.locale = nil
     self._rootCache.iconRoot = nil
     self._rootCache.version = -1
@@ -87,6 +159,14 @@ function MenuRegistry.new(manifest, i18n, options)
   local function isEntryEnabled(entry)
     if type(entry) ~= "table" then
       return false
+    end
+
+    local minApiVersion = entry.minApiVersion
+    if minApiVersion ~= nil then
+      local currentApi = refreshApiVersionCache()
+      if not isAtLeastVersion(currentApi, minApiVersion) then
+        return false
+      end
     end
 
     if entry.enabled == false then
@@ -239,8 +319,9 @@ function MenuRegistry.new(manifest, i18n, options)
 
   function self.getRootGroups(iconRoot)
     refreshLocaleCaches()
+    refreshApiVersionCache()
     local cache = self._rootCache
-    if cache.data and cache.locale == self._cachedLocale and cache.iconRoot == iconRoot and cache.version == self._conditionsVersion then
+    if cache.data and cache.locale == self._cachedLocale and cache.iconRoot == iconRoot and cache.version == self._conditionsVersion and cache.apiVersionKey == self._apiVersionKey then
       return cache.data
     end
 
@@ -279,6 +360,7 @@ function MenuRegistry.new(manifest, i18n, options)
     cache.locale = self._cachedLocale
     cache.iconRoot = iconRoot
     cache.version = self._conditionsVersion
+    cache.apiVersionKey = self._apiVersionKey
     cache.data = groups
 
     return groups
@@ -409,8 +491,9 @@ function MenuRegistry.new(manifest, i18n, options)
 
   function self.getCards(iconRoot)
     refreshLocaleCaches()
+    refreshApiVersionCache()
     local cache = self._cardsCache
-    if cache.data and cache.locale == self._cachedLocale and cache.iconRoot == iconRoot and cache.menuId == self.currentMenuId and cache.version == self._conditionsVersion then
+    if cache.data and cache.locale == self._cachedLocale and cache.iconRoot == iconRoot and cache.menuId == self.currentMenuId and cache.version == self._conditionsVersion and cache.apiVersionKey == self._apiVersionKey then
       return cache.data
     end
 
@@ -440,6 +523,7 @@ function MenuRegistry.new(manifest, i18n, options)
     cache.iconRoot = iconRoot
     cache.menuId = self.currentMenuId
     cache.version = self._conditionsVersion
+    cache.apiVersionKey = self._apiVersionKey
     cache.data = cards
 
     return cards

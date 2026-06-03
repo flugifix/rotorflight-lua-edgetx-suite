@@ -27,6 +27,7 @@ local TelemetryConfigApi = nil
 local TelemetrySyncClass = nil
 local Log = nil
 local Version = nil
+local ApiVersion = nil
 local ModelPreferences = nil
 
 local state = {
@@ -45,6 +46,7 @@ local state = {
     modelPreferencesFile = nil
   },
   unsupportedApi = false,
+  limitedApi = false,
   unsupportedApiLogged = false,
   _disconnectHandled = false,
   requestBackoffUntil = 0,
@@ -111,6 +113,10 @@ local function ensureVersionDeps()
     Version = loadModule("lib/version.lua")
     return false
   end
+  if not ApiVersion then
+    ApiVersion = loadModule("lib/api_version.lua")
+    return false
+  end
   return true
 end
 
@@ -144,6 +150,7 @@ local function publish()
   session.modelPreferences = state.values.modelPreferences
   session.modelPreferencesFile = state.values.modelPreferencesFile
   session.apiSupported = not state.unsupportedApi
+  session.apiLimited = state.limitedApi == true
   session.mspLastError = state.mspLastError
   session.mspLastErrorAt = state.mspLastErrorAt
   diagnostics.apiVersion = state.values.apiVersion
@@ -151,6 +158,7 @@ local function publish()
   diagnostics.rfVersion = state.values.rfVersion
   diagnostics.mcu_id = state.values.mcuId
   diagnostics.apiSupported = not state.unsupportedApi
+  diagnostics.apiLimited = state.limitedApi == true
   diagnostics.mspLastError = state.mspLastError
   diagnostics.mspLastErrorAt = state.mspLastErrorAt
 end
@@ -185,6 +193,77 @@ local function isApiVersionSupported(version)
   end
 
   return false
+end
+
+local function getOldestSupportedApiVersionParsed()
+  if not Version then
+    Version = loadModule("lib/version.lua")
+  end
+  if not ApiVersion then
+    ApiVersion = loadModule("lib/api_version.lua")
+  end
+  if not Version or not ApiVersion then
+    return nil
+  end
+  if type(Version.getSupportedMspApiVersions) ~= "function" or type(ApiVersion.parse) ~= "function" then
+    return nil
+  end
+
+  local supported = Version.getSupportedMspApiVersions()
+  if type(supported) ~= "table" or #supported == 0 then
+    return nil
+  end
+
+  local oldest = nil
+  for i = 1, #supported do
+    local parsed = ApiVersion.parse(supported[i])
+    if type(parsed) == "table" then
+      if not oldest then
+        oldest = parsed
+      elseif ApiVersion.isAtLeast and ApiVersion.isAtLeast(oldest, parsed) then
+        oldest = parsed
+      end
+    end
+  end
+
+  return oldest
+end
+
+local function isApiVersionLimitedCompatible(version)
+  if type(version) ~= "string" or version == "" then
+    return false
+  end
+  if not Version then
+    Version = loadModule("lib/version.lua")
+  end
+  if not ApiVersion then
+    ApiVersion = loadModule("lib/api_version.lua")
+  end
+  if not Version or not ApiVersion then
+    return false
+  end
+  if type(ApiVersion.parse) ~= "function" or type(ApiVersion.isAtLeast) ~= "function" then
+    return false
+  end
+  if type(Version.getLatestSupportedMspApiVersion) ~= "function" then
+    return false
+  end
+
+  local current = ApiVersion.parse(version)
+  local latest = ApiVersion.parse(Version.getLatestSupportedMspApiVersion())
+  if type(current) ~= "table" or type(latest) ~= "table" then
+    return false
+  end
+
+  local oldest = getOldestSupportedApiVersionParsed() or latest
+
+  -- Allow forward patch-level compatibility within the same major.
+  -- Exact support still comes from version.lua; this path avoids hard reconnect
+  -- loops when the FC reports a newer 12.xx patch than currently listed.
+  local currentMajor = tonumber(current[1]) or -1
+  local latestMajor = tonumber(latest[1]) or -2
+  return currentMajor == latestMajor
+    and ApiVersion.isAtLeast(current, oldest)
 end
 
 local function isSimulator()
@@ -303,7 +382,13 @@ local function enqueueVersionReads(now)
         state.mspLastError = nil
         state.mspLastErrorAt = 0
         state.values.apiVersion = parsed.version
-        state.unsupportedApi = not isApiVersionSupported(parsed.version)
+        local fullySupported = isApiVersionSupported(parsed.version)
+        local limitedCompatible = (not fullySupported) and isApiVersionLimitedCompatible(parsed.version)
+        state.unsupportedApi = not (fullySupported or limitedCompatible)
+        state.limitedApi = limitedCompatible
+        if limitedCompatible then
+          log("MSP API version " .. tostring(parsed.version) .. " accepted in limited compatibility mode", "warn")
+        end
         if state.unsupportedApi and not state.unsupportedApiLogged then
           state.unsupportedApiLogged = true
           log("Unsupported MSP API version " .. tostring(parsed.version) .. " (supported: " .. tostring(Version and Version.getSupportedMspApiVersionsString and Version.getSupportedMspApiVersionsString() or "-") .. ")", "warn")
@@ -467,6 +552,7 @@ local function doDisconnect(now, reason)
   state.pendingVersionRead = true
   state.pendingUidRead = true
   state.versionReadCompleted = false
+  state.limitedApi = false
   state.telemetryAutoSyncDone = false
   state.pendingTelemetryConfigRead = true
   state.telemetryConfigBuffer = nil
@@ -667,17 +753,16 @@ function Runtime.tick()
 
   local now = nowSeconds()
   local connected = isConnected()
-  -- Treat unsupported API as a disconnected link so we don't re-enter connect
-  -- state (which would immediately trigger a disconnect again).
-  if state.unsupportedApi then
-    connected = false
-  end
 
   if state.lastConnected ~= connected then
     state.lastConnected = connected
     if connected then
       -- Reset disconnect guard when link becomes active again
       state._disconnectHandled = false
+      -- Re-negotiate API support on each fresh connect.
+      state.unsupportedApi = false
+      state.limitedApi = false
+      state.unsupportedApiLogged = false
       log("MSP link connected", "info")
       state.pendingVersionRead = true
       state.pendingUidRead = true

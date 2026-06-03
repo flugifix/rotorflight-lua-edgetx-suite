@@ -1416,6 +1416,11 @@ function M.init()
       developerTools = prefs.general and prefs.general.developer_tools == true,
       fblConnected = false
     },
+    apiVersionProvider = function()
+      local root = _G and _G.rfsuite
+      local session = root and root.session
+      return session and session.apiVersion or nil
+    end,
     iconByMenuIdProvider = function()
       ensurePageRegistry()
       return PageRegistry and PageRegistry.iconByMenuId or nil

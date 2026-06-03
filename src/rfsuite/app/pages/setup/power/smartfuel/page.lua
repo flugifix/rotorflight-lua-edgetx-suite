@@ -75,7 +75,7 @@ local function parseApiVersionSafe(raw)
 	local a, b, c = string.match(raw, "^(%d+)%.(%d+)%.(%d+)$")
 	if a then return { tonumber(a), tonumber(b), tonumber(c) } end
 	a, b = string.match(raw, "^(%d+)%.(%d+)$")
-	if a then return { tonumber(a), tonumber(b), 0 } end
+	if a then return { tonumber(a), 0, tonumber(b) } end
 	return nil
 end
 

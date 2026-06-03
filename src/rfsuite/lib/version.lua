@@ -9,6 +9,7 @@ M.VERSION = M.MAJOR .. "." .. M.MINOR .. "." .. M.PATCH
 -- Keep supported protocol targets centralized with app versioning.
 -- New Lua package is intended for the latest MSP API version only.
 M.SUPPORTED_MSP_API_VERSIONS = {
+  "12.08",
   "12.09"
 }
 

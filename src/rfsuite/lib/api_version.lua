@@ -24,7 +24,9 @@ function M.parse(value)
 
   major, minor = string.match(value, "^(%d+)%.(%d+)$")
   if major then
-    return { tonumber(major), tonumber(minor), 0 }
+    -- Rotorflight API strings are commonly "major.patch" (e.g. 12.09 => 12.0.9).
+    -- Keep compatibility checks consistent with tuple literals like {12, 0, 9}.
+    return { tonumber(major), 0, tonumber(minor) }
   end
 
   return nil
