@@ -421,9 +421,7 @@ local function onBack(source, ev)
   state.backGestureActive = true
 
   if state.helpContent then
-    state.helpContent = nil
-    state.helpPageTitle = nil
-    state.helpPageSubtitle = nil
+    closeHelpDialogIfOpen()
     if fromEvent then
       state.suppressBackFrames = 6
     end
@@ -572,6 +570,10 @@ getActivePageModule = function()
 end
 
 closeHelpDialogIfOpen = function()
+  if state.helpDialog and type(state.helpDialog.close) == "function" then
+    pcall(state.helpDialog.close, state.helpDialog)
+  end
+  state.helpDialog = nil
   state.helpContent = nil
   state.helpPageTitle = nil
   state.helpPageSubtitle = nil
@@ -1212,20 +1214,48 @@ function M.buildUI()
 
   -- ── Help view (no lvgl.dialog – avoids LVGL lifecycle crashes) ───────────────
   if state.helpContent then
+    local helpMessage = state.helpContent
+    local helpTitle = state.helpPageTitle or pageTitle
+    local helpSubtitle = state.helpPageSubtitle
     ensureHelpView()
+    closeHelpDialogIfOpen()
+    if HelpView and type(HelpView.open) == "function" then
+      local opened = HelpView.open({
+        i18n = state.i18n,
+        contentX = contentX,
+        contentY = contentY,
+        contentW = contentW,
+        lcdH = LCD_H,
+        message = helpMessage,
+        title = helpTitle,
+        subtitle = helpSubtitle,
+        icon = APP_ICON,
+        onBack = onBack,
+        requestRebuild = function() scheduleBuildUI(false) end,
+        header = Header,
+        headerLayout = profile.header,
+        state = state
+      })
+      if opened == true then
+        return
+      end
+    end
+
     local helpLyt = HelpView.build({
       i18n = state.i18n,
       contentX = contentX,
       contentY = contentY,
       contentW = contentW,
       lcdH = LCD_H,
-      message = state.helpContent,
-      title = state.helpPageTitle or pageTitle,
-      subtitle = state.helpPageSubtitle,
+      message = helpMessage,
+      title = helpTitle,
+      subtitle = helpSubtitle,
       icon = APP_ICON,
       onBack = onBack,
+      requestRebuild = function() scheduleBuildUI(false) end,
       header = Header,
-      headerLayout = profile.header
+      headerLayout = profile.header,
+      state = state
     })
     if lvgl and type(lvgl.clear) == "function" then
       lvgl.clear()

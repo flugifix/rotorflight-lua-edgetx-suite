@@ -27,6 +27,61 @@ local STATIC_SECTION_H     = 50
 Controls.SECTION_H = SECTION_H
 Controls.STATIC_SECTION_H = STATIC_SECTION_H
 
+local function clampInt(v, lo, hi)
+  v = math.floor((tonumber(v) or lo) + 0.5)
+  if v < lo then return lo end
+  if v > hi then return hi end
+  return v
+end
+
+-- Shared responsive grid metrics for table-like pages (PIDs, rates, etc.).
+-- Returns stable spacing/cell widths across different radios.
+function Controls.computeGridMetrics(totalW, columns, opts)
+  opts = opts or {}
+  local colCount = tonumber(columns) or 1
+  if colCount < 1 then colCount = 1 end
+
+  local w = tonumber(totalW) or 0
+  if w < 1 then w = 1 end
+
+  local labelRatio = tonumber(opts.labelRatio) or 0.24
+  local labelMin = tonumber(opts.labelMin) or 72
+  local labelMax = tonumber(opts.labelMax) or math.max(labelMin, w - colCount)
+  local gapMin = tonumber(opts.gapMin) or 2
+  local gapMax = tonumber(opts.gapMax) or 8
+  local cellMin = tonumber(opts.cellMin) or 42
+
+  local labelW = clampInt(w * labelRatio, labelMin, labelMax)
+  local available = w - labelW
+  if available < colCount then
+    labelW = math.max(0, w - colCount)
+    available = w - labelW
+  end
+
+  local gap = clampInt(available * 0.02, gapMin, gapMax)
+  local function computeCellWidth()
+    return math.floor((w - labelW - (gap * (colCount - 1))) / colCount)
+  end
+
+  local cellW = computeCellWidth()
+  while cellW < cellMin and gap > gapMin do
+    gap = gap - 1
+    cellW = computeCellWidth()
+  end
+
+  while cellW < cellMin and labelW > labelMin do
+    labelW = labelW - 1
+    cellW = computeCellWidth()
+  end
+
+  if cellW < 1 then cellW = 1 end
+  return {
+    labelW = labelW,
+    gap = gap,
+    cellW = cellW
+  }
+end
+
 function Controls.appendSectionHeader(children, x, y, w, title, expanded, onToggle)
   -- Title label
   children[#children + 1] = {

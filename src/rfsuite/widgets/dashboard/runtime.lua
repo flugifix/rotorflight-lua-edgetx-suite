@@ -142,6 +142,22 @@ local function widgetLog(self, msg, level)
   end
 end
 
+local function isCpuLimitError(err)
+  return type(err) == "string" and string.find(err, "CPU limit", 1, true) ~= nil
+end
+
+local function applyRenderBackoff(self, err, seconds)
+  local now = nowSeconds()
+  local delay = tonumber(seconds) or 0.8
+  self._renderBackoffUntil = now + delay
+  self.built = false
+  if isCpuLimitError(err) then
+    widgetLog(self, "render backoff after CPU limit", "warn")
+  else
+    widgetLog(self, "render error: " .. tostring(err), "warn")
+  end
+end
+
 local function nowSeconds()
   if getTime then
     local ok, value = pcall(getTime)
@@ -1414,6 +1430,12 @@ function Runtime.new(zone, options)
 
 
   function widget.refresh(self, event, touchState)
+    local now = nowSeconds()
+    local renderBackoffUntil = tonumber(self._renderBackoffUntil) or 0
+    if renderBackoffUntil > 0 and now < renderBackoffUntil then
+      return
+    end
+
     -- Route touch/key events to LVGL engine when active (e.g. fullscreen)
     if lvgl and type(lvgl.onEvent) == "function" and event ~= nil then
        -- On some EdgeTX versions, touchState coordinates are global.
@@ -1502,24 +1524,47 @@ function Runtime.new(zone, options)
     end
 
     if not self.built then
-      lvgl.clear()
+      local okClear, clearErr = pcall(lvgl.clear)
+      if not okClear then
+        applyRenderBackoff(self, clearErr, 0.8)
+        return
+      end
+
       local children = {}
       
       if isInteractive then
          local menu = ensureFullscreenMenuModule(self)
          if menu then
-           menu.build(children, self)
+           local okMenu, menuErr = pcall(menu.build, children, self)
+           if not okMenu then
+             applyRenderBackoff(self, menuErr, 0.8)
+             return
+           end
          end
       else
          if type(self.theme.build) == "function" then
-           children = self.theme.build(self.zone, self.state)
+           local okThemeBuild, builtChildren = pcall(self.theme.build, self.zone, self.state)
+           if not okThemeBuild then
+             applyRenderBackoff(self, builtChildren, 0.8)
+             return
+           end
+           children = builtChildren
          elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
-           children = self.dashboardEngine.build(self.zone, self.state, self.theme)
+           local okEngineBuild, builtChildren = pcall(self.dashboardEngine.build, self.zone, self.state, self.theme)
+           if not okEngineBuild then
+             applyRenderBackoff(self, builtChildren, 0.8)
+             return
+           end
+           children = builtChildren
          end
          if type(children) ~= "table" then return end
       end
 
-      lvgl.build(children)
+      local okBuild, buildErr = pcall(lvgl.build, children)
+      if not okBuild then
+        applyRenderBackoff(self, buildErr, 1.0)
+        return
+      end
       self.built = true
     end
   end

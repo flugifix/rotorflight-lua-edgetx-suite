@@ -341,6 +341,25 @@ return {
         saved_title = "Gespeichert",
         saved_message = "SmartFuel Einstellungen gespeichert"
       },
+      flight_tuning_pids = {
+        roll = "Roll",
+        pitch = "Pitch",
+        yaw = "Yaw",
+        p = "P",
+        i = "I",
+        d = "D",
+        f = "FF",
+        o = "O",
+        b = "B",
+        help_p1 = "Vorsteuerung (Roll/Pitch): Beginnen Sie bei 70, erhöhen Sie den Wert, bis Stopps scharf sind und kein Driften auftritt. Halten Sie Roll und Pitch gleich.",
+        help_p2 = "I-Gain (Roll/Pitch): Erhöhen Sie den Wert schrittweise für stabile Piro-Pitch-Pumps. Ein zu hoher Wert verursacht Wackeln; Roll- und Pitch-Werte sollten übereinstimmen.",
+        help_p3 = "Heck P/I/D-Gains: Erhöhen Sie P, bis leichtes Wackeln in Funnels auftritt, dann leicht reduzieren. Erhöhen Sie I, bis das Heck in harten Manövern stabil bleibt (zu hoch verursacht langsames Schwingen). D anpassen für sanfte Stopps - höher für langsame Servos, niedriger für schnelle.",
+        help_p4 = "Testen & Anpassen: Fliegen, beobachten und feinjustieren, um die beste Leistung unter realen Bedingungen zu erreichen.",
+        loading_title = "Laden",
+        loading_message = "Lese PID-Tuning",
+        saved_title = "Gespeichert",
+        saved_message = "PID-Tuning gespeichert"
+      },
       setup_power_battery = {
         section_profiles = "Profile",
         battery_slot = "Akku",

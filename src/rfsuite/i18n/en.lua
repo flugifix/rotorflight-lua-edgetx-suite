@@ -341,6 +341,25 @@ return {
         saved_title = "Saved",
         saved_message = "SmartFuel settings saved"
       },
+      flight_tuning_pids = {
+        roll = "Roll",
+        pitch = "Pitch",
+        yaw = "Yaw",
+        p = "P",
+        i = "I",
+        d = "D",
+        f = "FF",
+        o = "O",
+        b = "B",
+        help_p1 = "FeedForward (Roll/Pitch): Start at 70, increase until stops are sharp with no drift. Keep roll and pitch equal.",
+        help_p2 = "I Gain (Roll/Pitch): Raise gradually for stable piro pitch pumps. Too high causes wobbles; match roll/pitch values.",
+        help_p3 = "Tail P/I/D Gains: Increase P until slight wobble in funnels, then back off slightly. Raise I until tail holds firm in hard moves (too high causes slow wag). Adjust D for smooth stops-higher for slow servos, lower for fast ones.",
+        help_p4 = "Test & Adjust: Fly, observe, and fine-tune for best performance in real conditions.",
+        loading_title = "Loading",
+        loading_message = "Reading PID tuning",
+        saved_title = "Saved",
+        saved_message = "PID tuning saved"
+      },
       setup_power_battery = {
         section_profiles = "Profiles",
         battery_slot = "Battery",

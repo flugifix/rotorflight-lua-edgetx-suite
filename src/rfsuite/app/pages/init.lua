@@ -25,6 +25,7 @@ local entries = {
   setup_power_sources_page = definePage("setup/power/sources"),
   setup_power_smartfuel_page = definePage("setup/power/smartfuel"),
   setup_power_preferences_page = definePage("setup/power/preferences"),
+  flight_tuning_pids_page = definePage("flight_tuning/pids"),
   setup_telemetry_page = definePage("setup/telemetry"),
   diagnostics_fblsensors_page = definePage("tools/diagnostics/fblsensors"),
   diagnostics_fblstatus_page = definePage("tools/diagnostics/fblstatus"),

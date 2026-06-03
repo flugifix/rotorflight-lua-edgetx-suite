@@ -85,6 +85,42 @@ function M.createFormRuntime(ui)
   return runtime
 end
 
+function M.createProfileAwareRuntime(options)
+  options = options or {}
+
+  local runtime = {
+    requestRebuild = nil,
+    profileGetter = options.profileGetter,
+    lastProfile = nil
+  }
+
+  function runtime.getCurrentProfile()
+    if type(runtime.profileGetter) == "function" then
+      return runtime.profileGetter()
+    end
+    return nil
+  end
+
+  function runtime.syncHeaderTitle(baseTitle, navButtons)
+    local profile = runtime.getCurrentProfile()
+    if profile == nil then return false end
+
+    local root = _G and _G.rfsuite
+    local ui = root and root.app and root.app.ui
+    if not ui or type(ui.setHeaderTitle) ~= "function" then
+      return false
+    end
+
+    local title = tostring(baseTitle or "")
+    title = string.gsub(title, " #%d+$", "")
+    ui.setHeaderTitle(title .. " #" .. tostring(profile), nil, navButtons)
+    runtime.lastProfile = profile
+    return true
+  end
+
+  return runtime
+end
+
 -- Shared teardown helper for page modules.
 -- Keeps close/reset behavior consistent across pages.
 function M.resetPageState(ui, opts)
