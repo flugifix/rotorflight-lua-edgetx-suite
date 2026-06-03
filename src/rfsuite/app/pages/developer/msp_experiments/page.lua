@@ -295,15 +295,16 @@ function M.build(ctx)
     }
     cursorY = cursorY + 34
 
+    local fieldsByLabel = {}
+    for _, field in ipairs(state.apidata.formdata.fields or {}) do
+        if field.isUINT8 and field.label ~= nil then
+            fieldsByLabel[field.label] = field
+        end
+    end
+
     for i = 1, state.expBytes do
         local label = "Byte " .. tostring(i)
-        local uint8Field
-        for _, field in ipairs(state.apidata.formdata.fields) do
-            if field.label == i and field.isUINT8 then
-                uint8Field = field
-                break
-            end
-        end
+        local uint8Field = fieldsByLabel[i]
 
         cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, label, {
             min = 0,

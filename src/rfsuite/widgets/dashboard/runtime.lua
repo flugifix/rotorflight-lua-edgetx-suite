@@ -107,6 +107,7 @@ end
 
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
 local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
+local LQ_CANDIDATES = { "RQly", "LQ", "link_quality", "1RSS", "2RSS" }
 local THROTTLE_INFLIGHT_THRESHOLD = 35
 local THROTTLE_INFLIGHT_THRESHOLD_DIRECT = 8
 local RPM_INFLIGHT_THRESHOLD_DIRECT = 500
@@ -658,6 +659,27 @@ local function loadDashboardEngine()
   return engine
 end
 
+local function ensureFullscreenMenuModule(widget)
+  if widget.fullscreenMenu ~= nil then
+    return widget.fullscreenMenu or nil
+  end
+
+  local menuChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/fullscreen_menu")
+  if not menuChunk then
+    widget.fullscreenMenu = false
+    return nil
+  end
+
+  local ok, menu = pcall(menuChunk)
+  if not ok or type(menu) ~= "table" or type(menu.build) ~= "function" then
+    widget.fullscreenMenu = false
+    return nil
+  end
+
+  widget.fullscreenMenu = menu
+  return menu
+end
+
 local function parseThemePath(raw)
   if type(raw) ~= "string" or raw == "" then
     return "system", "default"
@@ -793,9 +815,8 @@ local function readTelemetry(state)
     linkValue = readFirstNumber({ "RQly", "LQ", "Link", "link_quality", "1RSS", "2RSS" }, nil)
   end
   if type(linkValue) ~= "number" or linkValue <= 0 then
-    local lqCandidates = { "RQly", "LQ", "link_quality", "1RSS", "2RSS" }
-    for i = 1, #lqCandidates do
-      local candidate = getSensor(lqCandidates[i])
+    for i = 1, #LQ_CANDIDATES do
+      local candidate = getSensor(LQ_CANDIDATES[i])
       if type(candidate) == "number" and candidate > 0 then
         linkValue = candidate
         break
@@ -1465,12 +1486,9 @@ function Runtime.new(zone, options)
       local children = {}
       
       if isInteractive then
-         local menuChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/fullscreen_menu")
-         if menuChunk then
-           local ok, menu = pcall(menuChunk)
-           if ok and type(menu) == "table" and type(menu.build) == "function" then
-             menu.build(children, self)
-           end
+         local menu = ensureFullscreenMenuModule(self)
+         if menu then
+           menu.build(children, self)
          end
       else
          if type(self.theme.build) == "function" then

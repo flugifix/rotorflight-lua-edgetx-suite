@@ -20,6 +20,7 @@ local DEFAULT_COMMAND_INTERVAL_SECONDS = 0.25
 local DEFAULT_DRAIN_AFTER_REPLY_SECONDS = 0.03
 local DEFAULT_DRAIN_MAX_POLLS = 6
 local QUEUE_COMPACT_THRESHOLD = 64
+local EMPTY_PAYLOAD = {}
 
 local function newQueue()
   return { first = 1, last = 0, data = {} }
@@ -165,6 +166,8 @@ function Queue.new(common, opts)
   self.drainAfterReplySeconds = tonumber(opts.drainAfterReplySeconds) or DEFAULT_DRAIN_AFTER_REPLY_SECONDS
   self.drainMaxPolls = tonumber(opts.drainMaxPolls) or DEFAULT_DRAIN_MAX_POLLS
   self._nextMessageAt = 0
+  self._simDetectDone = opts.isSimulator == true
+  self._simDetected = opts.isSimulator == true
 
   return self
 end
@@ -195,7 +198,16 @@ end
 
 function Queue:processQueue(now)
   now = tonumber(now) or nowSeconds()
-  local simulatorMode = self.isSimulator or detectSimulatorRuntime()
+  local simulatorMode = self.isSimulator == true
+  if not simulatorMode then
+    if self._simDetectDone then
+      simulatorMode = self._simDetected == true
+    else
+      simulatorMode = detectSimulatorRuntime()
+      self._simDetected = simulatorMode == true
+      self._simDetectDone = true
+    end
+  end
   if simulatorMode and not self.isSimulator then
     self.isSimulator = true
   end
@@ -302,7 +314,7 @@ function Queue:processQueue(now)
   local canSendByTimeout = (self.currentMessageStartTime == nil) or ((now - self.currentMessageStartTime) >= timeoutSeconds)
 
   if canSendByInterval and canSendByTimeout and self.retryCount <= self.maxRetries then
-    local payload = msg.payload or {}
+    local payload = msg.payload or EMPTY_PAYLOAD
     local okSend = self.common and type(self.common.sendRequest) == "function"
       and self.common.sendRequest(msg.command, payload, { write = isWriteMessage(msg) })
     if okSend then

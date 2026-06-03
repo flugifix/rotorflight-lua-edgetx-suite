@@ -35,11 +35,27 @@ local function loadObjectWrapper(typ)
   return wrapper
 end
 
-local function buildGridRects(zone, layout, boxes)
-  local rects = {}
+local function resolveGrid(layout)
   local cols = math.max(1, tonumber(layout and layout.cols) or 1)
   local rows = math.max(1, tonumber(layout and layout.rows) or 1)
   local padding = tonumber(layout and layout.padding) or 0
+  return cols, rows, padding
+end
+
+local function canReuseGridRects(cache, zone, boxes, cols, rows, padding)
+  return cache
+    and cache.boxes == boxes
+    and cache.zoneX == zone.x
+    and cache.zoneY == zone.y
+    and cache.zoneW == zone.w
+    and cache.zoneH == zone.h
+    and cache.cols == cols
+    and cache.rows == rows
+    and cache.padding == padding
+end
+
+local function buildGridRects(zone, boxes, cols, rows, padding)
+  local rects = {}
 
   local function buildTrackStarts(totalSize, trackCount, gap)
     local starts = {}
@@ -111,7 +127,32 @@ function Engine.build(zone, state, theme)
   local nodes = {}
   local layout = Utils.resolveValue(theme.layout, nil, state) or { cols = 1, rows = 1, padding = 0 }
   local boxes = Utils.resolveValue(theme.boxes, nil, state) or {}
-  local rects = buildGridRects(zone, layout, boxes)
+  local cols, rows, padding = resolveGrid(layout)
+  local engineCache = state and state._engineCache
+  if type(engineCache) ~= "table" and type(state) == "table" then
+    engineCache = {}
+    state._engineCache = engineCache
+  end
+
+  local rects = nil
+  if canReuseGridRects(engineCache and engineCache.main, zone, boxes, cols, rows, padding) then
+    rects = engineCache.main.rects
+  else
+    rects = buildGridRects(zone, boxes, cols, rows, padding)
+    if engineCache then
+      engineCache.main = {
+        boxes = boxes,
+        zoneX = zone.x,
+        zoneY = zone.y,
+        zoneW = zone.w,
+        zoneH = zone.h,
+        cols = cols,
+        rows = rows,
+        padding = padding,
+        rects = rects
+      }
+    end
+  end
 
   local maxMainRects = #rects
   local maxHeaderRects = 9999
@@ -131,7 +172,26 @@ function Engine.build(zone, state, theme)
   if type(headerLayout) == "table" and type(headerBoxes) == "table" and #headerBoxes > 0 then
     local headerHeight = math.max(24, math.floor(zone.h * 0.16))
     local headerZone = { x = zone.x, y = zone.y, w = zone.w, h = headerHeight }
-    local headerRects = buildGridRects(headerZone, headerLayout, headerBoxes)
+    local hCols, hRows, hPadding = resolveGrid(headerLayout)
+    local headerRects = nil
+    if canReuseGridRects(engineCache and engineCache.header, headerZone, headerBoxes, hCols, hRows, hPadding) then
+      headerRects = engineCache.header.rects
+    else
+      headerRects = buildGridRects(headerZone, headerBoxes, hCols, hRows, hPadding)
+      if engineCache then
+        engineCache.header = {
+          boxes = headerBoxes,
+          zoneX = headerZone.x,
+          zoneY = headerZone.y,
+          zoneW = headerZone.w,
+          zoneH = headerZone.h,
+          cols = hCols,
+          rows = hRows,
+          padding = hPadding,
+          rects = headerRects
+        }
+      end
+    end
     local headerLimit = math.min(#headerRects, maxHeaderRects)
     for i = 1, headerLimit do
       renderBox(nodes, headerRects[i], state)
