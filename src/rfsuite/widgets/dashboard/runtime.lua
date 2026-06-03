@@ -166,16 +166,38 @@ end
 
 local function processAudioEvents(self)
   if DashboardAudio and type(DashboardAudio.process) == "function" then
+    local now = nowSeconds()
+    if now < (tonumber(self._audioBackoffUntil) or 0) then
+      return
+    end
+
+    local zoneH = tonumber(self.state and self.state.zoneH) or tonumber(LCD_H) or 0
+    local minInterval = (zoneH > 0 and zoneH <= 176) and 0.35 or 0.20
+    local lastAt = tonumber(self._lastAudioProcessAt) or 0
+    if lastAt > 0 and (now - lastAt) < minInterval then
+      return
+    end
+
     local modelName = nil
     if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
       modelName = _G.rfsuite.session.modelName
     end
     self.modelName = modelName
-    DashboardAudio.process(self, {
+    self._lastAudioProcessAt = now
+    local ok, err = pcall(DashboardAudio.process, self, {
       log = function(msg, level)
         audioLog(self, msg, level)
       end
     })
+    if not ok then
+      if type(err) == "string" and string.find(err, "CPU limit", 1, true) then
+        -- Back off briefly to avoid repeated widget disable during startup spikes.
+        self._audioBackoffUntil = now + 1.5
+      end
+      if Log and type(Log.emit) == "function" then
+        pcall(Log.emit, "rfsuite.widget", "audio.process error: " .. tostring(err), "warn", true)
+      end
+    end
     return
   end
 
@@ -1116,14 +1138,12 @@ function Runtime.new(zone, options)
 
     local function logVoltageThemeDecision(reason, cells, inMin, inMax, outMin, outMax)
       if not shouldLogAudio(self) then return end
-      local key = table.concat({
-        tostring(reason or "?"),
-        tostring(cells or "x"),
-        tostring(inMin or "x"),
-        tostring(inMax or "x"),
-        tostring(outMin or "x"),
-        tostring(outMax or "x")
-      }, "|")
+      local key = tostring(reason or "?")
+        .. "|" .. tostring(cells or "x")
+        .. "|" .. tostring(inMin or "x")
+        .. "|" .. tostring(inMax or "x")
+        .. "|" .. tostring(outMin or "x")
+        .. "|" .. tostring(outMax or "x")
       if self._lastVoltageThemeDebugKey == key then return end
       self._lastVoltageThemeDebugKey = key
       widgetLog(

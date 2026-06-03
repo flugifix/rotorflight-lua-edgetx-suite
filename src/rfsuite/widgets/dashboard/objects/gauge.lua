@@ -458,7 +458,10 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   end
 
   local valueYOffset = utils.toNumber(utils.resolveValue(box.value_offset_y, box, state), 0)
-  local valueY = cy - math.floor(thickness * 1.3) + valueYOffset
+  local displayH = tonumber(state and state.zoneH) or tonumber(LCD_H) or 0
+  local defaultCenterLift = (displayH >= 400) and 8 or 0
+  local valueCenterLift = utils.toNumber(utils.resolveValue(box.value_center_lift, box, state), defaultCenterLift)
+  local valueY = cy - math.floor(thickness * 1.3) - valueCenterLift + valueYOffset
   if valueY < rect.y + 10 then valueY = rect.y + 10 end
 
   local unit = utils.resolveValue(box.unit, box, state)

@@ -553,6 +553,16 @@ function Audio.process(self, opts)
   end
 
   local audioState = self.audioState
+  local now = nowSeconds()
+  local zoneH = tonumber(self.state and self.state.zoneH) or tonumber(LCD_H) or 0
+  local processInterval = audioState.initialized and ((zoneH > 0 and zoneH <= 176) and 0.40 or 0.25)
+    or ((zoneH > 0 and zoneH <= 176) and 0.60 or 0.35)
+  local nextProcessAt = tonumber(audioState.nextProcessAt) or 0
+  if now < nextProcessAt then
+    return
+  end
+  audioState.nextProcessAt = now + processInterval
+
   if type(audioState.lastAlertAt) ~= "table" then
     audioState.lastAlertAt = { voltage = 0, esc_temperature = 0, bec_voltage = 0, rx_voltage = 0, flight_time = 0 }
   end
@@ -583,7 +593,6 @@ function Audio.process(self, opts)
   end
 
   local events = (self.preferences and self.preferences.audio_events) or {}
-  local now = nowSeconds()
 
   local governorEnabled = prefEnabled(events, "governor_state", true)
   if audioState.lastEnabled.governor_state ~= governorEnabled then
