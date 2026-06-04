@@ -10,7 +10,8 @@ M.VERSION = M.MAJOR .. "." .. M.MINOR .. "." .. M.PATCH
 -- New Lua package is intended for the latest MSP API version only.
 M.SUPPORTED_MSP_API_VERSIONS = {
   "12.08",
-  "12.09"
+  "12.09",
+  "12.10",
 }
 
 function M.getVersionString()

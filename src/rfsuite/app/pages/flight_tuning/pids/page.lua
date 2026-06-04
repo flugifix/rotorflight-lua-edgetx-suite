@@ -62,8 +62,7 @@ local function newRuntime()
 		readPending = false,
 		requestRebuild = nil,
 		fieldSetters = {},
-		lastSessionSignature = nil,
-		lastAnnouncedProfile = nil
+		lastSessionSignature = nil
 	}
 end
 
@@ -256,23 +255,6 @@ local function resolveProfileVoiceFile()
 	return candidates[1]
 end
 
-local function announceProfileChange(profile)
-	profile = tonumber(profile)
-	if not profile or profile <= 0 then return end
-	if ui.runtime.lastAnnouncedProfile == profile then return end
-
-	local playNumber = (system and system.playNumber) or _G.playNumber or _G.system_playNumber
-	local playFile = (system and system.playFile) or _G.playFile
-	local voiceFile = resolveProfileVoiceFile()
-	if type(playFile) == "function" then
-		pcall(playFile, voiceFile)
-	end
-	if type(playNumber) == "function" then
-		pcall(playNumber, profile, 0)
-	end
-	ui.runtime.lastAnnouncedProfile = profile
-end
-
 local function queuePidRead()
 	ensureRuntime()
 	if ui.runtime.readPending then
@@ -292,7 +274,6 @@ local function queuePidRead()
 	ui.runtime.readPending = true
 	ui.loading = true
 	ui.progress = 0
-	ui.runtime.lastAnnouncedProfile = getCurrentProfileDisplay()
 	queue:add({
 		command = PidTuningApi.command,
 		simulatorResponse = PidTuningApi.simulatorResponse,
@@ -602,11 +583,6 @@ function M.wakeup(ctx)
 	end
 	if ui.dirty then return end
 
-	local profile = getCurrentProfileDisplay()
-	if profile ~= nil then
-		announceProfileChange(profile)
-	end
-
 	local signature = buildSessionSignature()
 	if signature ~= ui.runtime.lastSessionSignature then
 		ui.runtime.lastSessionSignature = signature
@@ -673,7 +649,6 @@ function M.onClose()
 	ui.loading = false
 	ui.progress = 0
 	ui.runtimeBase = nil
-	ui.runtime.lastAnnouncedProfile = nil
 	ui.baseTitle = nil
 	Controls = nil
 	Common = nil
