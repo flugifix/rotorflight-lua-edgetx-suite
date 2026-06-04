@@ -195,8 +195,8 @@ function M.build(ctx)
     function(val)
       local nextLang = tostring(val or "")
       nextLang = string.lower(nextLang)
-      if nextLang ~= "de" and nextLang ~= "en" then
-        nextLang = "en"
+      if nextLang ~= "de" and nextLang ~= "en" and nextLang ~= "auto" then
+        nextLang = "auto"
       end
       if ui.language == nextLang then return end
       ui.language = nextLang

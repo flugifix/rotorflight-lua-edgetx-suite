@@ -20,23 +20,15 @@ end
 
 function M.resolveSystemLanguage(defaultLang)
   local fallback = normalizeLanguage(defaultLang) or "en"
-  trace("resolveSystemLanguage(): fallback=" .. tostring(fallback))
 
+  -- Try to get from internal preferences
   local root = _G and _G.rfsuite
   local prefs = root and root.preferences
   local general = prefs and prefs.general
-  local configured = general and general.language
-  local resolved = normalizeLanguage(configured)
+  local configured = normalizeLanguage(general and general.language)
 
-  if resolved then
-    trace("resolved from prefs.general.language=" .. tostring(configured))
-    return resolved
-  end
-
-  if configured ~= nil then
-    trace("unsupported prefs.general.language=" .. tostring(configured) .. ", using fallback")
-  else
-    trace("prefs.general.language not set, using fallback")
+  if configured then
+    return configured
   end
 
   return fallback

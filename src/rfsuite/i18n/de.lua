@@ -98,7 +98,9 @@ return {
         arming_disable_flag_25 = "Arming-Schalter"
       },
       rfstatus = { name = "Rotorflight-Status" },
+      elrs_link = { name = "ELRS Link" },
       validate_sensors = { name = "Sensoren prüfen" },
+      session_logs = { name = "Session Logs" },
       info = { name = "Info" }
     },
     navigation = {
@@ -634,9 +636,7 @@ return {
         save_error_message = "Speichern fehlgeschlagen"
       }
     }
-      elrs_link = { name = "ELRS Link" },
   },
-      session_logs = { name = "Session Logs" },
   widgets = {
     dashboard = {
       governor = "REGLER",
