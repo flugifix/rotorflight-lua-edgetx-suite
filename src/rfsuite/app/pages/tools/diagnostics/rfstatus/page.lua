@@ -22,7 +22,7 @@ local state = {
   rowSignature = "",
   requestRebuild = nil,
   lastRefreshAt = 0,
-  refreshIntervalSec = 6.0,
+  refreshIntervalSec = 3.0,
 }
 
 local function nowSeconds()
@@ -58,6 +58,44 @@ end
 local function getSession()
   local root = getRootState()
   return root and root.session or nil
+end
+
+local function requestData()
+  if not MspRuntime or type(MspRuntime.getState) ~= "function" then return end
+  local mspState = MspRuntime.getState()
+  if not mspState or not mspState.queue then return end
+  
+  -- Request Dataflash Summary (cmd 70)
+  local dfApi = loadModule("tasks/msp/api/dataflash_summary.lua")
+  if dfApi then
+    mspState.queue:add({
+      command = dfApi.command,
+      simulatorResponse = dfApi.simulatorResponse,
+      processReply = function(_, buf)
+        local stats = dfApi.parse(buf)
+        if stats then
+          local session = getSession()
+          if session then session.dataflash = stats end
+        end
+      end
+    })
+  end
+
+  -- Request Status (cmd 101)
+  local statusApi = loadModule("tasks/msp/api/status.lua")
+  if statusApi then
+    mspState.queue:add({
+      command = statusApi.command,
+      simulatorResponse = statusApi.simulatorResponse,
+      processReply = function(_, buf)
+        local res = statusApi.parse(buf)
+        if res and res.parsed then
+          local session = getSession()
+          if session then session.status = res.parsed end
+        end
+      end
+    })
+  end
 end
 
 local function getPerformanceValue(name)
@@ -233,23 +271,22 @@ local function statusColor(ok)
   return ok and GREEN or RED
 end
 
-local function formatCpuLoad(value)
+local function formatCpuLoad()
+  local session = getSession()
+  local status = session and session.status or nil
+  local value = status and status.average_cpu_load or nil
+  
   local numeric = tonumber(value)
   if numeric == nil then
     numeric = readTelemetryNumeric("CPU%")
+  else
+    numeric = numeric / 10
   end
+  
   if numeric == nil then
     return "-"
   end
-  return string.format("%.1f%%", numeric)
-end
-
-local function formatFreeRam(value)
-  local numeric = tonumber(value)
-  if numeric == nil then
-    return "-"
-  end
-  return string.format("%.1f kB", numeric)
+  return string.format("%d%%", math.floor(numeric + 0.5))
 end
 
 local function readBlackboxFreeKiB()
@@ -292,7 +329,7 @@ local function rebuildRows(i18n)
   local apiOk = getApiStatus()
 
   local rows = {
-    { label = pageText(i18n, "cpu_load", "CPU Load"), value = formatCpuLoad(getPerformanceValue("cpuload")), kind = "value" },
+    { label = pageText(i18n, "cpu_load", "CPU Load"), value = formatCpuLoad(), kind = "value" },
     { label = pageText(i18n, "memory_free", "Blackbox free"), value = formatBlackboxFree(), kind = "value" },
     { label = pageText(i18n, "background_task", "Background Task"), value = statusText(i18n, backgroundTaskOk), kind = "status", ok = backgroundTaskOk },
     { label = pageText(i18n, "rf_module", "RF Module"), value = statusText(i18n, rfModuleOk), kind = "status", ok = rfModuleOk },
@@ -337,6 +374,12 @@ function M.build(ctx)
   state.requestRebuild = ctx.requestRebuild
 
   local i18n = ctx.i18n
+  
+  if not state.loaded then
+    requestData()
+    state.loaded = true
+  end
+  
   rebuildRows(i18n)
 
   local children = ctx.children
@@ -392,6 +435,9 @@ function M.wakeup()
     return
   end
   state.lastRefreshAt = now
+  
+  requestData()
+  
   if rebuildRows(nil) and type(state.requestRebuild) == "function" then
     state.requestRebuild()
   end

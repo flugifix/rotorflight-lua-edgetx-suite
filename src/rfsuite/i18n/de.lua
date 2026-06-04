@@ -480,7 +480,11 @@ return {
       },
       diagnostics_rfstatus = {
         cpu_load = "CPU-Last",
+        real_time_load = "Echtzeit-Last",
         memory_free = "Blackbox frei",
+        radio_ram = "Radio LUA RAM",
+        arming_flags = "Arming-Flags",
+        fbl_time = "FBL-Zeit",
         background_task = "Hintergrundtask",
         rf_module = "RF-Modul",
         msp_sensor = "MSP-Sensor",
