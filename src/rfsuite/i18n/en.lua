@@ -484,7 +484,6 @@ return {
         cpu_load = "CPU Load",
         real_time_load = "Real Time Load",
         memory_free = "Blackbox free",
-        radio_ram = "Radio LUA RAM",
         arming_flags = "Arming Flags",
         fbl_time = "FBL Time",
         background_task = "Background Task",
@@ -495,7 +494,25 @@ return {
         api_version = "API version",
         ok = "OK",
         error = "ERROR",
-        help_message = "Shows runtime health, link state, and telemetry sensor validation status."
+       help_message = "Shows runtime health, link state, and telemetry sensor validation status."
+      },
+      diagnostics_smartfuel = {
+        protocol = "Protocol",
+        active_mode = "Active mode",
+        fbl_local = "FBL / local",
+        tuning_source = "Tuning source",
+        fuel_input = "Fuel input",
+        source_mah = "Source mAh",
+        smart_fuel = "Smart Fuel",
+        smart_mah = "Smart mAh",
+        voltage_slew = "Voltage slew",
+        charge_slew = "Charge slew",
+        sag_gain = "Sag gain",
+        capacity = "Pack capacity",
+        reserve_alert = "Reserve alert",
+        reserve_target = "Reserve target",
+        loading_title = "Loading",
+        loading_message = "Reading SmartFuel config"
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",

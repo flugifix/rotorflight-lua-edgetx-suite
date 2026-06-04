@@ -1117,6 +1117,28 @@ function M.buildUI()
 
   ensureBuildDeps()
 
+  if state.initialLoad then
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    local tr = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
+    lvgl.build({
+      {
+        type = "rectangle",
+        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        color = COLOR_THEME_PRIMARY3,
+        filled = true
+      },
+      {
+        type = "label",
+        x = 0, y = (LCD_H or 240) / 2 - 10, w = LCD_W or 320,
+        text = tr,
+        color = COLOR_THEME_PRIMARY2,
+        align = CENTER,
+        font = MIDSIZE
+      }
+    })
+    return
+  end
+
   if state.pendingSaveAction then
     local tr = state.i18n and state.i18n.t
     local title = tr and tr("app.saving") or "Saving..."
@@ -1485,6 +1507,8 @@ function M.init()
   state.mspUnsupportedVersionShown = nil
   state.mspLinkConfigWarningAt = 0
   state.mspAttached = false
+  state.initialLoad = true
+  state.lastProgressSnapshot = ""
   M.buildUI()
 end
 
@@ -1600,6 +1624,33 @@ function M.run(event, touchState)
     if state.isClosing then
       if not state.closeTicks then
         state.closeTicks = 0
+        -- Tick 0: ONLY build the UI overlay. Do NOT do any cleanup or GC yet.
+        -- This ensures the Lua VM yields immediately and EdgeTX can draw the screen.
+        if lvgl and lvgl.clear then
+          lvgl.clear()
+          local tr = state.i18n and state.i18n.t and state.i18n.t("app.closing_rfsuite") or "Closing RFSuite..."
+          lvgl.build({
+            {
+              type = "rectangle",
+              x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+              color = COLOR_THEME_PRIMARY3,
+              filled = true
+            },
+            {
+              type = "label",
+              x = 0, y = (LCD_H or 240) / 2 - 10, w = LCD_W or 320,
+              text = tr,
+              color = COLOR_THEME_PRIMARY2,
+              align = CENTER,
+              font = MIDSIZE
+            }
+          })
+        end
+        return 0 -- Yield to OS immediately
+      end
+      
+      if state.closeTicks == 0 then
+        -- Tick 1: Do the heavy cleanup tasks now that the screen is drawn
         state.closeMemStart = (type(collectgarbage) == "function") and (collectgarbage("count") or 0) or nil
         state.pendingBuildUI = false
         state.pendingGcAfterBuild = false
@@ -1622,37 +1673,32 @@ function M.run(event, touchState)
           end
           state.mspAttached = false
         end
-        if lvgl and lvgl.clear then
-          lvgl.clear()
-          local tr = state.i18n and state.i18n.t and state.i18n.t("app.closing_rfsuite") or "Closing RFSuite..."
-          lvgl.build({
-            {
-              type = "rectangle",
-              x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
-              color = COLOR_THEME_PRIMARY3,
-              filled = true
-            },
-            {
-              type = "label",
-              x = 0, y = (LCD_H or 240) / 2 - 10, w = LCD_W or 320,
-              text = tr,
-              color = COLOR_THEME_PRIMARY2,
-              align = CENTER,
-              font = MIDSIZE
-            }
-          })
-        end
       end
+
       state.closeTicks = state.closeTicks + 1
-      if collectgarbage then
+      
+      -- Tick 2+: Do garbage collection steps
+      if collectgarbage and state.closeTicks > 1 then
         collectgarbage("step", CLOSE_GC_STEP)
       end
+      
       local memNow = (type(collectgarbage) == "function") and (collectgarbage("count") or 0) or nil
       local memStart = tonumber(state.closeMemStart)
       local gcReachedTarget = type(memNow) == "number" and type(memStart) == "number" and memStart > 0 and memNow <= (memStart * 0.92)
+      
       if state.closeTicks >= CLOSE_MAX_TICKS or (state.closeTicks >= CLOSE_MIN_TICKS and gcReachedTarget) then
         state.shouldExit = true
       end
+      
+      -- Skip all other background tasks while closing
+      if state.shouldExit then
+        if state.mspAttached and MspRuntime and type(MspRuntime.detach) == "function" then
+          MspRuntime.detach("tool")
+          state.mspAttached = false
+        end
+        return 2
+      end
+      return 0
     end
 
     if state.pendingBuildUI and not state.isClosing then
@@ -1700,6 +1746,41 @@ function M.run(event, touchState)
 
     local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
     local mspSpeedPageActive = currentMenuId == "developer_msp_speed_page"
+
+    if state.initialLoad then
+      ensureMspRuntime()
+      ensureEvents()
+      local mspProgress = MspRuntime and MspRuntime.getProgress() or { done = 0, total = 0 }
+      local onconnectProgress = Events and Events.getOnconnectProgress() or nil
+
+      local pDone = 0
+      local pTotal = 0
+      if onconnectProgress and onconnectProgress.total > 0 then
+        pDone = onconnectProgress.done or 0
+        pTotal = onconnectProgress.total or 0
+      elseif mspProgress then
+        pDone = mspProgress.done or 0
+        pTotal = mspProgress.total or 0
+      end
+
+      local snapshot = tostring(pDone) .. "/" .. tostring(pTotal)
+      if snapshot ~= state.lastProgressSnapshot then
+        state.lastProgressSnapshot = snapshot
+        scheduleBuildUI(false)
+      end
+
+      -- Finish initial load when MSP is stable and all tasks are done.
+      -- If the FBL is offline, we enter the menu after a short timeout (2s).
+      local mspState = MspRuntime.getState()
+      local isConnected = mspState and mspState.lastConnected == true
+      local timeoutReached = (now - state.lastInputTick) > 200
+
+      if (isConnected and mspProgress and mspProgress.done >= mspProgress.total and not Events.isOnconnectActive())
+         or (not isConnected and timeoutReached) then
+        state.initialLoad = false
+        scheduleBuildUI(false)
+      end
+    end
 
     if (not transitionedMenuThisTick) and (not mspSpeedPageActive) and MspRuntime and type(MspRuntime.tick) == "function" then
       if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then

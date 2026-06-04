@@ -484,7 +484,6 @@ return {
         cpu_load = "CPU-Last",
         real_time_load = "Echtzeit-Last",
         memory_free = "Blackbox frei",
-        radio_ram = "Radio LUA RAM",
         arming_flags = "Arming-Flags",
         fbl_time = "FBL-Zeit",
         background_task = "Hintergrundtask",
@@ -496,6 +495,24 @@ return {
         ok = "OK",
         error = "FEHLER",
         help_message = "Zeigt Laufzeitzustand, Verbindungsstatus und den Validierungsstatus der Telemetrie-Sensoren an."
+      },
+      diagnostics_smartfuel = {
+        protocol = "Protokoll",
+        active_mode = "Aktiver Modus",
+        fbl_local = "FBL / Lokal",
+        tuning_source = "Tuning-Quelle",
+        fuel_input = "Fuel-Eingang",
+        source_mah = "Quell-mAh",
+        smart_fuel = "SmartFuel",
+        smart_mah = "Smart-mAh",
+        voltage_slew = "Spannungsslew",
+        charge_slew = "Ladungsslew",
+        sag_gain = "Sag-Gain",
+        capacity = "Akkukapazität",
+        reserve_alert = "Reservealarm",
+        reserve_target = "Reserveziel",
+        loading_title = "Laden",
+        loading_message = "Lese SmartFuel-Konfiguration"
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",

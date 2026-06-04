@@ -243,18 +243,19 @@ local function queueSmartfuelRead()
 	ui.runtime.readPending = true
 	ui.loading = true
 	ui.progress = 0
-	logDebug("read enqueue cmd=" .. tostring(SmartfuelApi.command) .. " apiVersion=" .. tostring(session and session.apiVersion) .. " firmwareSupport=" .. tostring(ui.support.firmware))
+	local api = SmartfuelApi
+	logDebug("read enqueue cmd=" .. tostring(api.command) .. " apiVersion=" .. tostring(session and session.apiVersion) .. " firmwareSupport=" .. tostring(ui.support.firmware))
 	queue:add({
-		command = SmartfuelApi.command,
-		simulatorResponse = SmartfuelApi.simulatorResponse,
+		command = api.command,
+		simulatorResponse = api.simulatorResponse,
 		timeout = 5.0,
 		processReply = function(_, buf)
-			logDebug("read reply cmd=" .. tostring(SmartfuelApi.command) .. " bytes=" .. tostring(type(buf) == "table" and #buf or 0))
+			logDebug("read reply cmd=" .. tostring(api.command) .. " bytes=" .. tostring(type(buf) == "table" and #buf or 0))
 			ui.runtime.readPending = false
 			ui.loading = false
 			ui.progress = 1
 			if type(session) == "table" then
-				local parsed = SmartfuelApi.parse and SmartfuelApi.parse(buf) or nil
+				local parsed = api.parse and api.parse(buf) or nil
 				if type(parsed) == "table" then
 					session.smartfuel_config = parsed.parsed or parsed
 					if type(session.battery_config) == "table" then
@@ -314,13 +315,14 @@ local function queueSmartfuelWrite(session)
 		return false, "msp_queue_unavailable"
 	end
 
-	local payload = SmartfuelApi.buildWritePayload({
+	local api = SmartfuelApi
+	local payload = api.buildWritePayload({
 		smartfuel_mode = ui.config.firmware_mode,
 		voltage_drop_rate = ui.config.voltage_drop_rate,
 		charge_drop_rate = ui.config.charge_drop_rate,
 		sag_gain = ui.config.sag_gain
 	})
-	logDebug("write enqueue cmd=" .. tostring(SmartfuelApi.writeCommand)
+	logDebug("write enqueue cmd=" .. tostring(api.writeCommand)
 		.. " payload=["
 		.. tostring(payload and payload[1]) .. ","
 		.. tostring(payload and payload[2]) .. ","
@@ -328,12 +330,12 @@ local function queueSmartfuelWrite(session)
 		.. tostring(payload and payload[4]) .. "]")
 
 	queue:add({
-		command = SmartfuelApi.writeCommand,
+		command = api.writeCommand,
 		payload = payload,
 		timeout = 5.0,
 		isWrite = true,
 		processReply = function()
-			logDebug("write reply cmd=" .. tostring(SmartfuelApi.writeCommand))
+			logDebug("write reply cmd=" .. tostring(api.writeCommand))
 			if type(session) == "table" then
 				session.smartfuel_config = session.smartfuel_config or {}
 				session.smartfuel_config.smartfuel_mode = ui.config.firmware_mode
@@ -343,7 +345,7 @@ local function queueSmartfuelWrite(session)
 			end
 		end,
 		errorHandler = function()
-			logWarn("write error cmd=" .. tostring(SmartfuelApi.writeCommand))
+			logWarn("write error cmd=" .. tostring(api.writeCommand))
 			-- Keep local values; FC write can be retried with Save.
 		end
 	})

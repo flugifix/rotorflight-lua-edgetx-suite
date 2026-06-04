@@ -1,9 +1,9 @@
-checksum: 28598
+checksum: 34164
 manuallyEdited: 0
 timezoneMinutes: 0
 ppmunit: 0
 semver: 2.12.0
-board: tx16smk3
+board: tx15
 calib: 
    LH:
       mid: 1023
@@ -26,22 +26,6 @@ calib:
       spanNeg: 1008
       spanPos: 1008
    P2:
-      mid: 1023
-      spanNeg: 1008
-      spanPos: 1008
-   SL1:
-      mid: 1023
-      spanNeg: 1008
-      spanPos: 1008
-   SL2:
-      mid: 1023
-      spanNeg: 1008
-      spanPos: 1008
-   EXT1:
-      mid: 1023
-      spanNeg: 1008
-      spanPos: 1008
-   EXT2:
       mid: 1023
       spanNeg: 1008
       spanPos: 1008
@@ -80,7 +64,7 @@ speakerVolume: 12
 vBatMin: 90
 vBatMax: 120
 backlightBright: 0
-globalTimer: 579791
+globalTimer: 593348
 bluetoothBaudrate: 0
 bluetoothMode: OFF
 countryCode: 2
@@ -123,18 +107,6 @@ switchConfig:
    SF:
       name: ""
       type: 2POS
-   SG:
-      name: ""
-      type: 3POS
-   SH:
-      name: ""
-      type: 2POS
-   SI:
-      name: ""
-      type: NONE
-   SJ:
-      name: ""
-      type: NONE
    SW1:
       name: ""
       type: 2POS
@@ -219,17 +191,12 @@ switchConfig:
          r: 0
          g: 0
          b: 0
-   FL1:
-      name: ""
-      type: NONE
-   FL2:
-      name: ""
-      type: NONE
 currModelFilename: "model1.yml"
 blOffBright: 19
 bluetoothName: ""
 ownerRegistrationID: "-eC!U*U*"
 rotEncMode: 0
+stickDeadZone: 0
 imuMax: 0
 imuOffset: 0
 selectedTheme: "Grown Up"

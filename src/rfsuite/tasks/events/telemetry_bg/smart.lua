@@ -310,13 +310,12 @@ local function getUsableCapacity(packCapacity, reserve)
 end
 
 local function fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve)
+  if not cellCount or cellCount <= 0 then return nil end
   ensureCurve()
 
   local minV = (tonumber(batteryConfig and batteryConfig.vbatmincellvoltage) or 330) / 100
   local fullV = (tonumber(batteryConfig and batteryConfig.vbatfullcellvoltage) or 410) / 100
   local safeReserve = sanitizeReservePercent(reserve)
-
-  if cellCount <= 0 then return nil end
 
   local voltagePerCell = voltage / cellCount
   if voltagePerCell >= fullV then return 100 end
@@ -384,15 +383,21 @@ end
 local function computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
   local consumption = tonumber(getSensor("consumption"))
   if not consumption then
-    return stabilized and fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve) or nil, nil
+    if not stabilized then return nil, nil end
+    return fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve), nil
   end
 
   if state.startConsumptionOffset == nil then
-    local startPercent = stabilized and fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve) or 100
-    startPercent = clamp(tonumber(startPercent) or 100, 0, 100)
+    -- Wait for stable voltage before estimating starting capacity
+    if not stabilized then
+       return nil, consumption
+    end
+    
+    local startPercent = fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve) or 100
     state.startFuelPercent = startPercent
     local estimatedUsed = usableCapacity * (1 - startPercent / 100)
     state.startConsumptionOffset = consumption - estimatedUsed
+    logSmart("smart capture: voltage=" .. string.format("%.2f", voltage) .. " (cell=" .. string.format("%.2f", voltage/cellCount) .. ") start=" .. tostring(roundInt(startPercent)) .. "% offset=" .. tostring(roundInt(state.startConsumptionOffset)), "info")
   end
 
   if usableCapacity <= 0 then
@@ -495,6 +500,15 @@ function Smart.wakeup()
   local firmwareActive = type(firmwareSource) == "number" and firmwareSource > 0
   local packCapacity = getActivePackCapacity(session, batteryConfig)
   local cellCount = tonumber(batteryConfig.batteryCellCount) or tonumber(getSensor("battery_cell_count")) or 0
+
+  local voltage = tonumber(getSensor("voltage"))
+  
+  -- Auto-detect cell count if missing
+  if not firmwareActive and cellCount <= 0 and voltage and voltage > 2 then
+    local maxCellV = (tonumber(batteryConfig.vbatmaxcellvoltage) or 410) / 100
+    cellCount = math.max(1, math.floor((voltage / maxCellV) + 0.5))
+  end
+
   local reserve = resolveReservePercent(session, batteryConfig)
   local usableCapacity = getUsableCapacity(packCapacity, reserve)
 
