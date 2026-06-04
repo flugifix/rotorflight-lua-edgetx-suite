@@ -98,7 +98,9 @@ return {
         arming_disable_flag_25 = "Arm Switch"
       },
       rfstatus = { name = "Rotorflight Status" },
+      elrs_link = { name = "ELRS Link" },
       validate_sensors = { name = "Validate Sensors" },
+      session_logs = { name = "Session Logs" },
       info = { name = "Info" }
     },
     navigation = {
@@ -477,6 +479,27 @@ return {
         loading_message = "Reading live data",
         loading_failed = "Loading failed",
         loading_timeout = "Timeout while reading from FBL"
+      },
+      diagnostics_rfstatus = {
+        cpu_load = "CPU Load",
+        memory_free = "Blackbox free",
+        background_task = "Background Task",
+        rf_module = "RF Module",
+        msp_sensor = "MSP Sensor",
+        telemetry_sensors = "Telemetry Sensors",
+        fbl_connected = "FBL connected",
+        api_version = "API version",
+        ok = "OK",
+        error = "ERROR",
+        help_message = "Shows runtime health, link state, and telemetry sensor validation status."
+      },
+      diagnostics_validate_sensors = {
+        status_ok = "OK",
+        status_invalid = "INVALID",
+        no_sensors = "No telemetry sensors configured.",
+        loading_title = "Loading",
+        loading_message = "Reading telemetry config",
+        help_message = "Validates configured telemetry sensors by checking if they exist in radio telemetry and provide numeric values."
       },
       developer_msp_speed = {
         section_test = "MSP Speed Test",

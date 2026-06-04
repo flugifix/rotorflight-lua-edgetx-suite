@@ -134,7 +134,7 @@ local SENSOR_CATALOG = {
 }
 
 local DEFAULT_SENSORS = {
-  3, 4, 5, 6, 7, 15, 23, 25, 43, 60, 90, 91, 93, 95, 96, 97, 99
+  3, 4, 5, 6, 7, 15, 23, 25, 43, 60, 85, 90, 91, 93, 95, 96, 97, 99
 }
 
 local NOT_AT_SAME_TIME = {

@@ -478,6 +478,27 @@ return {
         loading_failed = "Laden fehlgeschlagen",
         loading_timeout = "Zeitueberschreitung beim Lesen vom FBL"
       },
+      diagnostics_rfstatus = {
+        cpu_load = "CPU-Last",
+        memory_free = "Blackbox frei",
+        background_task = "Hintergrundtask",
+        rf_module = "RF-Modul",
+        msp_sensor = "MSP-Sensor",
+        telemetry_sensors = "Telemetrie-Sensoren",
+        fbl_connected = "FBL verbunden",
+        api_version = "API-Version",
+        ok = "OK",
+        error = "FEHLER",
+        help_message = "Zeigt Laufzeitzustand, Verbindungsstatus und den Validierungsstatus der Telemetrie-Sensoren an."
+      },
+      diagnostics_validate_sensors = {
+        status_ok = "OK",
+        status_invalid = "UNGUELTIG",
+        no_sensors = "Keine Telemetrie-Sensoren konfiguriert.",
+        loading_title = "Laden",
+        loading_message = "Lese Telemetrie-Konfiguration",
+        help_message = "Prueft konfigurierte Telemetrie-Sensoren darauf, ob sie in der Radio-Telemetrie vorhanden sind und numerische Werte liefern."
+      },
       developer_msp_speed = {
         section_test = "MSP-Geschwindigkeitstest",
         duration = "Dauer",
@@ -609,7 +630,9 @@ return {
         save_error_message = "Speichern fehlgeschlagen"
       }
     }
+      elrs_link = { name = "ELRS Link" },
   },
+      session_logs = { name = "Session Logs" },
   widgets = {
     dashboard = {
       governor = "REGLER",

@@ -30,7 +30,10 @@ local entries = {
   diagnostics_fblsensors_page = definePage("tools/diagnostics/fblsensors"),
   diagnostics_fblstatus_page = definePage("tools/diagnostics/fblstatus"),
   diagnostics_rfstatus_page = definePage("tools/diagnostics/rfstatus"),
+  diagnostics_elrs_link_page = definePage("tools/diagnostics/elrs_link"),
   diagnostics_validate_sensors_page = definePage("tools/diagnostics/validate_sensors"),
+  diagnostics_smartfuel_page = definePage("tools/diagnostics/smartfuel"),
+  diagnostics_session_logs_page = definePage("tools/diagnostics/session_logs"),
   diagnostics_info_page = definePage("tools/diagnostics/info")
 }
 
