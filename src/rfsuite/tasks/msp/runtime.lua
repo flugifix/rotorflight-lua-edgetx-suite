@@ -23,8 +23,6 @@ local QueueModule = nil
 local ApiVersionApi = nil
 local FcVersionApi = nil
 local UidApi = nil
-local TelemetryConfigApi = nil
-local TelemetrySyncClass = nil
 local Log = nil
 local Version = nil
 local ApiVersion = nil
@@ -38,9 +36,9 @@ local state = {
   queue = nil,
   clients = {},
   values = {
-    apiVersion = "0",
-    fcVersion = "0",
-    rfVersion = "0",
+    apiVersion = "",
+    fcVersion = "",
+    rfVersion = "",
     mcuId = nil,
     modelPreferences = nil,
     modelPreferencesFile = nil
@@ -56,21 +54,15 @@ local state = {
   pendingVersionRead = true,
   pendingUidRead = true,
   versionReadCompleted = false,
-  pendingTelemetryConfigRead = false,
-  telemetryAutoSyncDone = false,
-  telemetryLinkRate = nil,
-  telemetryLinkRatio = nil,
-  telemetryConfigBuffer = nil,
-  telemetrySync = nil,
   lastArmed = nil,
   lastConnected = nil
 }
 
 local function nowSeconds()
   if type(getTime) == "function" then
-    local ok, v = pcall(getTime)
-    if ok and type(v) == "number" then
-      return v / 100
+    local ok, value = pcall(getTime)
+    if ok and type(value) == "number" then
+      return value / 100
     end
   end
   if type(os) == "table" and type(os.clock) == "function" then
@@ -153,6 +145,7 @@ local function publish()
   session.apiLimited = state.limitedApi == true
   session.mspLastError = state.mspLastError
   session.mspLastErrorAt = state.mspLastErrorAt
+  session.telemetryType = state.protocol
   diagnostics.apiVersion = state.values.apiVersion
   diagnostics.fcVersion = state.values.fcVersion
   diagnostics.rfVersion = state.values.rfVersion
@@ -257,9 +250,6 @@ local function isApiVersionLimitedCompatible(version)
 
   local oldest = getOldestSupportedApiVersionParsed() or latest
 
-  -- Allow forward patch-level compatibility within the same major.
-  -- Exact support still comes from version.lua; this path avoids hard reconnect
-  -- loops when the FC reports a newer 12.xx patch than currently listed.
   local currentMajor = tonumber(current[1]) or -1
   local latestMajor = tonumber(latest[1]) or -2
   return currentMajor == latestMajor
@@ -466,72 +456,6 @@ local function enqueueUidRead(now)
   return true
 end
 
-local function ensureTelemetrySyncDeps()
-  if not TelemetryConfigApi then
-    TelemetryConfigApi = loadModule("tasks/msp/api/telemetry_config.lua")
-    return false
-  end
-  if not TelemetrySyncClass then
-    TelemetrySyncClass = loadModule("tasks/msp/telemetry_sync.lua")
-    return false
-  end
-  return true
-end
-
-local function enqueueTelemetryConfigRead(now)
-  if not state.pendingTelemetryConfigRead then
-    return true
-  end
-  if state.telemetryAutoSyncDone == true then
-    state.pendingTelemetryConfigRead = false
-    return true
-  end
-  if not state.queue or not state.queue:isProcessed() then
-    return true
-  end
-  if state.requestBackoffUntil and now < state.requestBackoffUntil then
-    return true
-  end
-  if not ensureTelemetrySyncDeps() then
-    return false
-  end
-  if not TelemetryConfigApi or type(TelemetryConfigApi.parse) ~= "function" then
-    state.pendingTelemetryConfigRead = false
-    return true
-  end
-
-  state.pendingTelemetryConfigRead = false
-  state.queue:add({
-    command = TelemetryConfigApi.command,
-    simulatorResponse = TelemetryConfigApi.simulatorResponse,
-    retryBackoff = 1.2,
-    timeout = 4.0,
-    processReply = function(_, buf)
-      local parsed = nil
-      if TelemetryConfigApi and type(TelemetryConfigApi.parse) == "function" then
-        parsed = TelemetryConfigApi.parse(buf)
-      end
-      if parsed then
-        state.telemetryLinkRate = parsed.crsf_telemetry_link_rate
-        state.telemetryLinkRatio = parsed.crsf_telemetry_link_ratio
-        state.telemetryConfigBuffer = parsed.buffer
-        if state.telemetrySync and type(state.telemetrySync.onReadSuccess) == "function" then
-          state.telemetrySync:onReadSuccess(state.telemetryLinkRate, state.telemetryLinkRatio)
-        end
-      end
-      publish()
-    end,
-    errorHandler = function()
-      if state.telemetryAutoSyncDone ~= true then
-        state.pendingTelemetryConfigRead = true
-      end
-      publish()
-    end
-  })
-  
-  return true
-end
-
 local function doDisconnect(now, reason)
   -- Make disconnect idempotent to avoid log spam when called repeatedly.
   if state._disconnectHandled then
@@ -553,132 +477,13 @@ local function doDisconnect(now, reason)
   state.pendingUidRead = true
   state.versionReadCompleted = false
   state.limitedApi = false
-  state.telemetryAutoSyncDone = false
-  state.pendingTelemetryConfigRead = true
-  state.telemetryConfigBuffer = nil
-  state.telemetryLinkRate = nil
-  state.telemetryLinkRatio = nil
+  state.values.apiVersion = "0"
+  state.values.fcVersion = "0"
+  state.values.rfVersion = "0"
   state.values.mcuId = nil
   state.values.modelPreferences = nil
   state.values.modelPreferencesFile = nil
-  if state.telemetrySync and type(state.telemetrySync.onDisconnected) == "function" then
-    state.telemetrySync:onDisconnected(now)
-  end
-  state.telemetrySync = nil
-  TelemetryConfigApi = nil
-  TelemetrySyncClass = nil
   publish()
-end
-
-local function isTelemetryAutoSyncEnabled()
-  local prefs = _G and _G.rfsuite and _G.rfsuite.preferences
-  local general = prefs and prefs.general
-  return type(general) == "table" and general.auto_msp_telem_sync == true
-end
-
-local function ensureTelemetrySync()
-  if state.telemetrySync then
-    return state.telemetrySync
-  end
-  ensureTelemetrySyncDeps()
-  if TelemetrySyncClass and type(TelemetrySyncClass.new) == "function" then
-    state.telemetrySync = TelemetrySyncClass.new({
-      nowSeconds = nowSeconds,
-      log = log,
-    })
-  end
-  return state.telemetrySync
-end
-
-local function enqueueTelemetryConfigWrite(now, desiredRate, desiredRatio)
-  if state.telemetrySync and state.telemetrySync:isWriteInFlight() then
-    return
-  end
-  if not state.queue or not state.queue:isProcessed() then
-    return
-  end
-  ensureTelemetrySyncDeps()
-  if not TelemetryConfigApi or type(TelemetryConfigApi.buildWritePayload) ~= "function" then
-    return
-  end
-
-  local payload = TelemetryConfigApi.buildWritePayload(state.telemetryConfigBuffer, {
-    crsf_telemetry_link_rate = desiredRate,
-    crsf_telemetry_link_ratio = desiredRatio
-  })
-
-  if state.telemetrySync and type(state.telemetrySync.onWriteQueued) == "function" then
-    state.telemetrySync:onWriteQueued(now, desiredRate, desiredRatio)
-  end
-
-  state.queue:add({
-    command = TelemetryConfigApi.writeCommand,
-    payload = payload,
-    simulatorResponse = {},
-    retryBackoff = 1.2,
-    timeout = 4.0,
-    processReply = function()
-      state.pendingTelemetryConfigRead = true
-      if state.telemetrySync and type(state.telemetrySync.onWriteSuccess) == "function" then
-        state.telemetrySync:onWriteSuccess(nowSeconds())
-      end
-      publish()
-    end,
-    errorHandler = function()
-      setMspError("TELEMETRY_CONFIG write failed (cmd=74)", nowSeconds())
-      if state.telemetrySync and type(state.telemetrySync.onWriteError) == "function" then
-        state.telemetrySync:onWriteError(nowSeconds())
-      end
-      publish()
-    end,
-    isWrite = true
-  })
-end
-
-local function maybeRunTelemetryAutoSync(now)
-  if state.telemetryAutoSyncDone == true then
-    return
-  end
-
-  if isTelemetryAutoSyncEnabled() then
-    ensureTelemetrySync()
-  end
-
-  if not state.telemetrySync or type(state.telemetrySync.evaluate) ~= "function" then
-    return
-  end
-
-  local decision = state.telemetrySync:evaluate(
-    now,
-    isTelemetryAutoSyncEnabled(),
-    state.telemetryLinkRate,
-    state.telemetryLinkRatio
-  )
-
-  if type(decision) ~= "table" then
-    return
-  end
-
-  if decision.action == "read" then
-    state.pendingTelemetryConfigRead = true
-    return
-  end
-
-  if decision.action == "write" then
-    enqueueTelemetryConfigWrite(now, decision.desiredRate, decision.desiredRatio)
-  end
-
-  if state.telemetrySync and type(state.telemetrySync.isSyncDone) == "function" and state.telemetrySync:isSyncDone() then
-    -- Release sync-related transient memory after one-shot auto-sync completed.
-    state.telemetryAutoSyncDone = true
-    state.telemetryConfigBuffer = nil
-    state.telemetryLinkRate = nil
-    state.telemetryLinkRatio = nil
-    state.telemetrySync = nil
-    TelemetryConfigApi = nil
-    TelemetrySyncClass = nil
-    state.pendingTelemetryConfigRead = false
-  end
 end
 
 local function initIfNeeded()
@@ -766,14 +571,6 @@ function Runtime.tick()
       log("MSP link connected", "info")
       state.pendingVersionRead = true
       state.pendingUidRead = true
-      state.telemetryAutoSyncDone = false
-      -- MSP 73 (TELEMETRY_CONFIG) wird beim Connect nicht mehr automatisch ausgelesen
-      state.telemetryLinkRate = nil
-      state.telemetryLinkRatio = nil
-      -- Kein ensureTelemetrySync() und kein pendingTelemetryConfigRead mehr
-      if state.telemetrySync and type(state.telemetrySync.onConnected) == "function" then
-        state.telemetrySync:onConnected(now)
-      end
     else
       doDisconnect(now, state.unsupportedApi and "unsupported API" or nil)
     end
@@ -806,13 +603,7 @@ function Runtime.tick()
     log("MSP resumed after DISARM", "info")
   end
 
-  -- The telemetry link must be stabilized first to avoid "Sensor lost" due to FC flooding the link.
-  enqueueTelemetryConfigRead(now)
-  maybeRunTelemetryAutoSync(now)
-
-  -- Always progress core startup reads (API version + UID).
-  -- Gating these behind telemetry auto-sync can leave both values permanently nil
-  -- when telemetry sync is inactive or disabled.
+  -- Core startup reads (API version + UID).
   enqueueVersionReads(now)
   enqueueUidRead(now)
 
@@ -835,17 +626,6 @@ end
 function Runtime.getProgress()
   local total = 0
   local done = 0
-
-  -- Telemetry config is optional and only counted when the sync flow engaged.
-  local telemetryTracked = state.pendingTelemetryConfigRead == true
-    or state.telemetryAutoSyncDone == true
-    or state.telemetrySync ~= nil
-  if telemetryTracked then
-    total = total + 1
-    if state.telemetryAutoSyncDone == true then
-      done = done + 1
-    end
-  end
 
   -- Core startup reads (API version + UID) are always tracked.
   total = total + 1

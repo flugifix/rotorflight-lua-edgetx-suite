@@ -17,12 +17,10 @@ local Common = nil
 
 local CONFIG_SCHEMA = {
   { key = "iconsize",                     type = "number", default = 2     },
-  { key = "developer_tools",              type = "bool",   default = false  },
   { key = "syncname",                     type = "bool",   default = false  },
-  { key = "auto_msp_telem_sync",          type = "bool",   default = false  },
-  { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
+  { key = "developer_tools",              type = "bool",   default = false  },
 }
 
 -- Build ui.config defaults from schema so there is no second place to update.
@@ -146,11 +144,6 @@ local function buildIntegration(cursorY, children, x, w, i18n)
     t(i18n, "sync_model_name", "Modellname synchronisieren"),
     ui.runtime.getBoolGetter("syncname"),
     ui.runtime.getBoolSetter("syncname")
-  )
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "auto_msp_telem_sync", "MSP Telemetry automatisch abgleichen"),
-    ui.runtime.getBoolGetter("auto_msp_telem_sync"),
-    ui.runtime.getBoolSetter("auto_msp_telem_sync")
   )
 
   return cursorY

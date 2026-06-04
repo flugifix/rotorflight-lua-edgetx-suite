@@ -46,7 +46,6 @@ local function defaultPreferences()
       reload_confirm               = true,
       -- integration
       syncname                     = false,
-      auto_msp_telem_sync         = false,
       -- development
       developer_tools              = false,
       continuous_memory_log        = false,

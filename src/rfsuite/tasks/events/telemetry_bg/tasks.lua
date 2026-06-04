@@ -24,37 +24,40 @@ local function decU16(data, pos)
     return bit32.lshift(data[pos],8) + data[pos+1], pos+2
 end
 
+local CrsfManager = nil
+
 local function crossfirePop()
     local CRSF_FRAME_CUSTOM_TELEM = 0x88
-    if type(crossfireTelemetryPop) ~= "function" then return false end
+    if not CrsfManager then
+      CrsfManager = loadModule("lib/crsf.lua")
+    end
+    if not CrsfManager then return false end
     
-    local command, data = crossfireTelemetryPop()
-    if command and data then
-        if command == CRSF_FRAME_CUSTOM_TELEM then
-            local fid, sid, val
-            local ptr = 3
-            fid,ptr = decU8(data, ptr)
-            local delta = bit32.band(fid - telemetryFrameId, 0xFF)
-            if delta > 1 then
-                telemetryFrameSkip = telemetryFrameSkip + 1
-            end
-            telemetryFrameId = fid
-            telemetryFrameCount = telemetryFrameCount + 1
-            while ptr < #data do
-                sid,ptr = decU16(data, ptr)
-                local sensor = RFSensors[sid]
-                if sensor and type(sensor.dec) == "function" then
-                    val,ptr = sensor.dec(data, ptr)
-                    if val then
-                        setTelemetryValue(sid, 0, 0, val, sensor.unit or 0, sensor.prec or 0, sensor.name or "")
-                    end
-                else
-                    break
-                end
-            end
-            setTelemetryValue(0xEE01, 0, 0, telemetryFrameCount, 0, 0, "*Cnt")
-            setTelemetryValue(0xEE02, 0, 0, telemetryFrameSkip, 0, 0, "*Skp")
+    local data = CrsfManager.popFrame(CRSF_FRAME_CUSTOM_TELEM)
+    if data then
+        local fid, sid, val
+        local ptr = 3
+        fid,ptr = decU8(data, ptr)
+        local delta = bit32.band(fid - telemetryFrameId, 0xFF)
+        if delta > 1 then
+            telemetryFrameSkip = telemetryFrameSkip + 1
         end
+        telemetryFrameId = fid
+        telemetryFrameCount = telemetryFrameCount + 1
+        while ptr < #data do
+            sid,ptr = decU16(data, ptr)
+            local sensor = RFSensors[sid]
+            if sensor and type(sensor.dec) == "function" then
+                val,ptr = sensor.dec(data, ptr)
+                if val then
+                    setTelemetryValue(sid, 0, 0, val, sensor.unit or 0, sensor.prec or 0, sensor.name or "")
+                end
+            else
+                break
+            end
+        end
+        setTelemetryValue(0xEE01, 0, 0, telemetryFrameCount, 0, 0, "*Cnt")
+        setTelemetryValue(0xEE02, 0, 0, telemetryFrameSkip, 0, 0, "*Skp")
         return true
     end
     return false

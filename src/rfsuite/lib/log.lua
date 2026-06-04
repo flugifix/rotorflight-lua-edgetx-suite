@@ -76,4 +76,9 @@ function Log.emit(tag, msg, level, enabled)
   end
 end
 
+if type(_G) == "table" then
+  _G.rfsuite = _G.rfsuite or {}
+  _G.rfsuite.Log = Log
+end
+
 return Log

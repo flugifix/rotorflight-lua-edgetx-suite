@@ -27,9 +27,9 @@ local state = {
 
 local function nowSeconds()
   if type(getTime) == "function" then
-    local ok, value = pcall(getTime)
-    if ok and type(value) == "number" then
-      return value / 100
+    local ok, v = pcall(getTime)
+    if ok and type(v) == "number" then
+      return v / 100
     end
   end
   if type(os) == "table" and type(os.clock) == "function" then

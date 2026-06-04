@@ -47,7 +47,6 @@ local function buildDashboardSettingsThemeMenus()
       icon = FALLBACK_ICON,
       row = math.floor((i - 1) / 6) + 1,
       col = ((i - 1) % 6) + 1,
-      enabled = true,
       themePath = t.path
     }
     menus[menuId] = {

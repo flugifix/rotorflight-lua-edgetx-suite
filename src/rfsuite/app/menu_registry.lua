@@ -175,7 +175,8 @@ function MenuRegistry.new(manifest, i18n, options)
 
     local conditionKey = entry.enabledWhen
     if conditionKey == nil then
-      return true
+      -- Default to enabled if no condition is present
+      return entry.enabled ~= false
     end
 
     if type(conditionKey) == "string" then

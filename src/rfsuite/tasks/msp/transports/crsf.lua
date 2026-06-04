@@ -19,7 +19,23 @@ function transport.mspSend(payload)
   return crossfireTelemetryPush(currentFrameType, payloadOut)
 end
 
+local function loadModule(path)
+  local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
+  local chunk = loadScript(fullPath, "t")
+  if type(chunk) ~= "function" then return nil end
+  local ok, mod = pcall(chunk)
+  if not ok then return nil end
+  return mod
+end
+
+local CrsfManager = nil
+
 function transport.mspPoll()
+  if not CrsfManager then
+    CrsfManager = loadModule("lib/crsf.lua")
+  end
+  if not CrsfManager then return nil end
+
   -- Keep polling cooperative: scan only a bounded number of frames per call
   -- so the UI loop stays responsive on radios with busy telemetry streams.
   local scanned = 0
@@ -27,14 +43,14 @@ function transport.mspPoll()
 
   while scanned < maxFramesPerPoll do
     scanned = scanned + 1
-    local cmd, data = crossfireTelemetryPop()
-    if cmd == CRSF_FRAMETYPE_MSP_RESP and data and data[1] == CRSF_ADDRESS_RADIO_TRANSMITTER and data[2] == CRSF_ADDRESS_BETAFLIGHT then
+    local data = CrsfManager.popFrame(CRSF_FRAMETYPE_MSP_RESP)
+    if data and data[1] == CRSF_ADDRESS_RADIO_TRANSMITTER and data[2] == CRSF_ADDRESS_BETAFLIGHT then
       local mspData = {}
       for i = 3, #data do
         mspData[i - 2] = data[i]
       end
       return mspData
-    elseif cmd == nil then
+    elseif data == nil then
       return nil
     end
   end
