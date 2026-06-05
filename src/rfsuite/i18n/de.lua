@@ -98,6 +98,7 @@ return {
         arming_disable_flag_25 = "Arming-Schalter"
       },
       rfstatus = { name = "Rotorflight-Status" },
+      fblstatus = { name = "FBL Status" },
       elrs_link = { name = "ELRS Link" },
       validate_sensors = { name = "Sensoren prüfen" },
       session_logs = { name = "Session Logs" },
@@ -494,6 +495,17 @@ return {
         ok = "OK",
         error = "FEHLER",
         help_message = "Zeigt Laufzeitzustand, Verbindungsstatus und den Validierungsstatus der Telemetrie-Sensoren an."
+      },
+      diagnostics_fblstatus = {
+        date = "Datum",
+        time = "Zeit",
+        arming_flags = "Arming-Flags",
+        dataflash_free = "Dataflash frei",
+        real_time_load = "Echtzeit-Last",
+        cpu_load = "CPU-Last",
+        ok = "OK",
+        loading_title = "Laden",
+        loading_message = "Lese FBL-Status..."
       },
       diagnostics_smartfuel = {
         protocol = "Protokoll",
