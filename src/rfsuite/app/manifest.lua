@@ -52,7 +52,7 @@ local manifest = {
         { id = "elrs_link", title = "@i18n(app.modules.elrs_link.name)@", menuId = "diagnostics_elrs_link_page" },
         { id = "validate_sensors", title = "@i18n(app.modules.validate_sensors.name)@", menuId = "diagnostics_validate_sensors_page", enabledWhen = "fblConnected" },
         { id = "smartfuel", title = "@i18n(app.modules.smartfuel.name)@", menuId = "diagnostics_smartfuel_page", enabledWhen = "fblConnected", minApiVersion = { 12, 0, 9 } },
-        { id = "session_logs", title = "@i18n(app.modules.session_logs.name)@", menuId = "diagnostics_session_logs_page", enabled = false },
+        { id = "session_logs", title = "@i18n(app.modules.session_logs.name)@", menuId = "diagnostics_session_logs_page" },
         { id = "info", title = "@i18n(app.modules.info.name)@", menuId = "diagnostics_info_page" }
       }
     },

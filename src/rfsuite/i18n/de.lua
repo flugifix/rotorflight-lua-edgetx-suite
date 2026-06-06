@@ -521,6 +521,10 @@ return {
         loading_title = "Laden",
         loading_message = "Lese FBL-Status..."
       },
+      diagnostics_session_logs = {
+        no_logs = "Keine Protokolle verfügbar",
+        loading = "Lade Protokolle..."
+      },
       diagnostics_smartfuel = {
         protocol = "Protokoll",
         active_mode = "Aktiver Modus",
