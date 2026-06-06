@@ -496,6 +496,20 @@ return {
         error = "FEHLER",
         help_message = "Zeigt Laufzeitzustand, Verbindungsstatus und den Validierungsstatus der Telemetrie-Sensoren an."
       },
+      diagnostics_fblsensors = {
+        sensor = "Sensor",
+        acc_x = "Acc X",
+        acc_y = "Acc Y",
+        acc_z = "Acc Z",
+        gyro_x = "Gyro X",
+        gyro_y = "Gyro Y",
+        gyro_z = "Gyro Z",
+        mag_x = "Mag X",
+        mag_y = "Mag Y",
+        mag_z = "Mag Z",
+        stream = "Echtzeit-Stream",
+        help_message = "Zeigt Live-Sensordaten des Flight Controllers in einem Graphen an."
+      },
       diagnostics_fblstatus = {
         date = "Datum",
         time = "Zeit",

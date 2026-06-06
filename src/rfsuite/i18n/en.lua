@@ -496,6 +496,20 @@ return {
         error = "ERROR",
        help_message = "Shows runtime health, link state, and telemetry sensor validation status."
       },
+      diagnostics_fblsensors = {
+        sensor = "Sensor",
+        acc_x = "Acc X",
+        acc_y = "Acc Y",
+        acc_z = "Acc Z",
+        gyro_x = "Gyro X",
+        gyro_y = "Gyro Y",
+        gyro_z = "Gyro Z",
+        mag_x = "Mag X",
+        mag_y = "Mag Y",
+        mag_z = "Mag Z",
+        stream = "Live Stream",
+        help_message = "Displays live sensor data from the flight controller in a graph."
+      },
       diagnostics_fblstatus = {
         date = "Date",
         time = "Time",

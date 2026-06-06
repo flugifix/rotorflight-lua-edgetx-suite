@@ -27,7 +27,8 @@ local entries = {
   setup_power_preferences_page = definePage("setup/power/preferences"),
   flight_tuning_pids_page = definePage("flight_tuning/pids"),
   setup_telemetry_page = definePage("setup/telemetry"),
-  diagnostics_fblsensors_page = definePage("tools/diagnostics/fblsensors"),
+  -- Disabled for now since the FBL Sensor page is not fully implemented and we don't want users to get confused by a page that doesn't work yet. Will re-enable once the page is ready to be used.
+  -- diagnostics_fblsensors_page = definePage("tools/diagnostics/fblsensors"),
   diagnostics_fblstatus_page = definePage("tools/diagnostics/fblstatus"),
   diagnostics_rfstatus_page = definePage("tools/diagnostics/rfstatus"),
   diagnostics_elrs_link_page = definePage("tools/diagnostics/elrs_link"),
