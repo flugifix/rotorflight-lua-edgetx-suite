@@ -98,7 +98,6 @@ return {
         arming_disable_flag_25 = "Arm Switch"
       },
       rfstatus = { name = "Rotorflight Status" },
-      fblstatus = { name = "FBL Status" },
       elrs_link = { name = "ELRS Link" },
       validate_sensors = { name = "Validate Sensors" },
       session_logs = { name = "Session Logs" },
@@ -520,6 +519,20 @@ return {
         ok = "OK",
         loading_title = "Loading",
         loading_message = "Reading FBL status..."
+      },
+      tools_copy_profiles = {
+        title = "Copy Profile",
+        profile_type = "Type",
+        profile_type_pid = "PID",
+        profile_type_rate = "Rate",
+        source_profile = "Source",
+        dest_profile = "Destination",
+        help_title = "Copy Profile",
+        help_p1 = "Copy settings between profiles.",
+        help_p2 = "Select the type (PID or Rate) and the source/destination profiles.",
+        msgbox_save = "Copy Profile",
+        msgbox_msg = "Are you sure you want to copy the selected profile?",
+        warn_same_profile = "Source and destination profiles are the same."
       },
       diagnostics_profile_select = {
         pid_profile = "PID Profile",

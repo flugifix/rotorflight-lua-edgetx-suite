@@ -28,6 +28,7 @@ local entries = {
   flight_tuning_pids_page = definePage("flight_tuning/pids"),
   setup_telemetry_page = definePage("setup/telemetry"),
   tools_select_profile_page = definePage("tools/select_profile"),
+  tools_copy_profiles_page = definePage("tools/copy_profiles"),
   -- Disabled for now since the FBL Sensor page is not fully implemented and we don't want users to get confused by a page that doesn't work yet. Will re-enable once the page is ready to be used.
   -- diagnostics_fblsensors_page = definePage("tools/diagnostics/fblsensors"),
   diagnostics_fblstatus_page = definePage("tools/diagnostics/fblstatus"),

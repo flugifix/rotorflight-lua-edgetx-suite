@@ -100,18 +100,18 @@ function I18n.new(locale)
 
   local ctx = {}
 
-  function ctx.t(key)
+  function ctx.t(key, fallback)
     local val = getPathValue(active, key)
     if val ~= nil then
       return val
     end
 
     if activeLang ~= "en" then
-      local fallback = getPathValue(getEnglish(), key)
-      if fallback ~= nil then return fallback end
+      local engVal = getPathValue(getEnglish(), key)
+      if engVal ~= nil then return engVal end
     end
 
-    return key
+    return fallback or key
   end
 
   function ctx.setLocale(nextLocale)
