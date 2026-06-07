@@ -521,6 +521,13 @@ return {
         loading_title = "Laden",
         loading_message = "Lese FBL-Status..."
       },
+      diagnostics_profile_select = {
+        pid_profile = "PID-Profil",
+        rate_profile = "Raten-Profil",
+        help_title = "Profil auswählen",
+        help_p1 = "Hier kannst du die aktiven PID- und Raten-Profile deines Flight Controllers umschalten.",
+        help_p2 = "Die Anzeige aktualisiert sich automatisch, wenn das Profil am Sender (z.B. per Schalter) gewechselt wird."
+      },
       diagnostics_session_logs = {
         no_logs = "Keine Protokolle verfügbar",
         loading = "Lade Protokolle..."
@@ -572,7 +579,7 @@ return {
         status_probe_complete = "Prüfung abgeschlossen",
         status_reading_module = "Lese Modul...",
         status_requires_active_link = "Erfordert aktiven Link",
-        status_waiting_rotorflight_config = "Warte auf RF-Konfig.",
+        status_waiting_rotorflight_config = "Warte auf RF-Konfig",
         status_rotorflight_config_not_ready = "RF-Konfig nicht bereit",
         status_pinging_module = "Module suchen...",
         status_no_module = "Kein Modul gefunden",

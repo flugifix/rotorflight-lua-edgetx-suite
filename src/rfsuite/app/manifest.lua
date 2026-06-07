@@ -38,7 +38,7 @@ local manifest = {
       title = "@i18n(app.modules.tools.name)@",
       pages = {
         { id = "copy_profiles", title = "@i18n(app.modules.copyprofiles.name)@", icon = "@pages/tools/copy.png", enabledWhen = "fblConnected", enabled = false },
-        { id = "select_profile", title = "@i18n(app.modules.profile_select.name)@", icon = "@pages/tools/select_profile.png", enabledWhen = "fblConnected", enabled = false },
+        { id = "select_profile", title = "@i18n(app.modules.profile_select.name)@", menuId = "tools_select_profile_page", icon = "@pages/tools/select_profile.png", enabledWhen = "fblConnected" },
         { id = "diagnostics", title = "@i18n(app.modules.diagnostics.name)@", menuId = "diagnostics_menu", icon = "@pages/tools/diagnostics.png" }
       }
     },
@@ -242,6 +242,10 @@ local manifest = {
     },
     diagnostics_info_page = {
       title = "@i18n(app.modules.info.name)@",
+      pages = {}
+    },
+    tools_select_profile_page = {
+      title = "@i18n(app.modules.profile_select.name)@",
       pages = {}
     }
   }

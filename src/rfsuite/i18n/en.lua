@@ -521,6 +521,13 @@ return {
         loading_title = "Loading",
         loading_message = "Reading FBL status..."
       },
+      diagnostics_profile_select = {
+        pid_profile = "PID Profile",
+        rate_profile = "Rate Profile",
+        help_title = "Select Profile",
+        help_p1 = "Switch the active PID and Rate profiles of your flight controller.",
+        help_p2 = "The display updates automatically if profiles are changed via transmitter switches."
+      },
       diagnostics_session_logs = {
         no_logs = "No logs available",
         loading = "Loading logs..."
