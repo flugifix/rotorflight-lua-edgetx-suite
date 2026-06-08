@@ -26,6 +26,7 @@ local entries = {
   setup_power_smartfuel_page = definePage("setup/power/smartfuel"),
   setup_power_preferences_page = definePage("setup/power/preferences"),
   flight_tuning_pids_page = definePage("flight_tuning/pids"),
+  flight_tuning_rates_page = definePage("flight_tuning/rates"),
   setup_telemetry_page = definePage("setup/telemetry"),
   tools_select_profile_page = definePage("tools/select_profile"),
   tools_copy_profiles_page = definePage("tools/copy_profiles"),

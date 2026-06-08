@@ -60,7 +60,7 @@ local manifest = {
       title = "@i18n(app.modules.flight_tuning.name)@",
       pages = {
         { id = "pids", title = "@i18n(app.modules.pids.name)@", menuId = "flight_tuning_pids_page", icon = "@pages/flight_tuning/pids/icon.png" },
-        { id = "rates", title = "@i18n(app.modules.rates.name)@", icon = "@pages/flight_tuning/rates/icon.png", enabled = false },
+        { id = "rates", title = "@i18n(app.modules.rates.name)@", menuId = "flight_tuning_rates_page", icon = "@pages/flight_tuning/rates/icon.png" },
         { id = "governor", title = "@i18n(app.modules.governor.name)@", icon = "@pages/flight_tuning/governor/icon.png", enabled = false },
         { id = "advanced", title = "@i18n(app.modules.advanced.name)@", icon = "@pages/flight_tuning/advanced/icon.png", enabled = false }
       }
@@ -114,6 +114,10 @@ local manifest = {
     },
     flight_tuning_pids_page = {
       title = "@i18n(app.modules.pids.name)@",
+      pages = {}
+    },
+    flight_tuning_rates_page = {
+      title = "@i18n(app.modules.rates.name)@",
       pages = {}
     },
     setup_telemetry_page = {
