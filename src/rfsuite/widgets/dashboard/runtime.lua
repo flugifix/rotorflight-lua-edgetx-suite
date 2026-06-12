@@ -5,9 +5,6 @@ local USER_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite.user/dashboard/"
 local AUDIO_LOG_FORCE = false
 local SPLASH_READY_HOLD_SECONDS = 1.0
 local SPLASH_SOFT_TIMEOUT_SECONDS = 15.0
-local FULLSCREEN_BATTERY_REFRESH_TIMEOUT_SECONDS = 5.0
-local DASHBOARD_UI_REFRESH_SECONDS = 1.0
-local POSTFLIGHT_FREEZE_DELAY_SECONDS = 2.0
 
 local function scriptExists(path)
   if type(path) ~= "string" or path == "" then return false end
@@ -89,15 +86,6 @@ if type(loadI18nModule) == "function" then
   end
 end
 
-local loadBatteryConfigApiModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/battery_config")
-local BatteryConfigApi = nil
-if type(loadBatteryConfigApiModule) == "function" then
-  local ok, mod = pcall(loadBatteryConfigApiModule)
-  if ok and type(mod) == "table" then
-    BatteryConfigApi = mod
-  end
-end
-
 local loadSensorsModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors")
 local Sensors = nil
 if type(loadSensorsModule) == "function" then
@@ -107,7 +95,6 @@ end
 
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
 local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
-local LQ_CANDIDATES = { "RQly", "LQ", "link_quality", "1RSS", "2RSS" }
 local THROTTLE_INFLIGHT_THRESHOLD = 35
 local THROTTLE_INFLIGHT_THRESHOLD_DIRECT = 8
 local RPM_INFLIGHT_THRESHOLD_DIRECT = 500
@@ -142,22 +129,6 @@ local function widgetLog(self, msg, level)
   end
 end
 
-local function isCpuLimitError(err)
-  return type(err) == "string" and string.find(err, "CPU limit", 1, true) ~= nil
-end
-
-local function applyRenderBackoff(self, err, seconds)
-  local now = nowSeconds()
-  local delay = tonumber(seconds) or 0.8
-  self._renderBackoffUntil = now + delay
-  self.built = false
-  if isCpuLimitError(err) then
-    widgetLog(self, "render backoff after CPU limit", "warn")
-  else
-    widgetLog(self, "render error: " .. tostring(err), "warn")
-  end
-end
-
 local function nowSeconds()
   if getTime then
     local ok, value = pcall(getTime)
@@ -182,38 +153,16 @@ end
 
 local function processAudioEvents(self)
   if DashboardAudio and type(DashboardAudio.process) == "function" then
-    local now = nowSeconds()
-    if now < (tonumber(self._audioBackoffUntil) or 0) then
-      return
-    end
-
-    local zoneH = tonumber(self.state and self.state.zoneH) or tonumber(LCD_H) or 0
-    local minInterval = (zoneH > 0 and zoneH <= 176) and 0.35 or 0.20
-    local lastAt = tonumber(self._lastAudioProcessAt) or 0
-    if lastAt > 0 and (now - lastAt) < minInterval then
-      return
-    end
-
     local modelName = nil
     if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
       modelName = _G.rfsuite.session.modelName
     end
     self.modelName = modelName
-    self._lastAudioProcessAt = now
-    local ok, err = pcall(DashboardAudio.process, self, {
+    DashboardAudio.process(self, {
       log = function(msg, level)
         audioLog(self, msg, level)
       end
     })
-    if not ok then
-      if type(err) == "string" and string.find(err, "CPU limit", 1, true) then
-        -- Back off briefly to avoid repeated widget disable during startup spikes.
-        self._audioBackoffUntil = now + 1.5
-      end
-      if Log and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.widget", "audio.process error: " .. tostring(err), "warn", true)
-      end
-    end
     return
   end
 
@@ -697,27 +646,6 @@ local function loadDashboardEngine()
   return engine
 end
 
-local function ensureFullscreenMenuModule(widget)
-  if widget.fullscreenMenu ~= nil then
-    return widget.fullscreenMenu or nil
-  end
-
-  local menuChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/fullscreen_menu")
-  if not menuChunk then
-    widget.fullscreenMenu = false
-    return nil
-  end
-
-  local ok, menu = pcall(menuChunk)
-  if not ok or type(menu) ~= "table" or type(menu.build) ~= "function" then
-    widget.fullscreenMenu = false
-    return nil
-  end
-
-  widget.fullscreenMenu = menu
-  return menu
-end
-
 local function parseThemePath(raw)
   if type(raw) ~= "string" or raw == "" then
     return "system", "default"
@@ -822,18 +750,8 @@ end
 local function readTelemetry(state)
   if not (Sensors and type(Sensors.getValue) == "function") then return end
   local changed = false
-  -- Reuse the per-state sensor cache to avoid table churn in wakeup/refresh.
-  local cache = state and state._sensorCache
-  if type(cache) ~= "table" then
-    cache = {}
-    if type(state) == "table" then
-      state._sensorCache = cache
-    end
-  else
-    for key in pairs(cache) do
-      cache[key] = nil
-    end
-  end
+  -- Cache sensor values to avoid duplicate calls
+  local cache = {}
   local function getSensor(name)
     if cache[name] == nil then cache[name] = Sensors.getValue(name) end
     return cache[name]
@@ -853,8 +771,9 @@ local function readTelemetry(state)
     linkValue = readFirstNumber({ "RQly", "LQ", "Link", "link_quality", "1RSS", "2RSS" }, nil)
   end
   if type(linkValue) ~= "number" or linkValue <= 0 then
-    for i = 1, #LQ_CANDIDATES do
-      local candidate = getSensor(LQ_CANDIDATES[i])
+    local lqCandidates = { "RQly", "LQ", "link_quality", "1RSS", "2RSS" }
+    for i = 1, #lqCandidates do
+      local candidate = getSensor(lqCandidates[i])
       if type(candidate) == "number" and candidate > 0 then
         linkValue = candidate
         break
@@ -887,11 +806,7 @@ local function readTelemetry(state)
   setField("altitude", getSensor("altitude") or state.altitude)
   setField("consumedMah", getSensor("smartconsumption") or state.consumedMah)
 
-  -- Prefer strict SmartFuel sensor value first; alias lookups may be cached to Bat%.
-  local fuel = getSensor("SmFt")
-  if type(fuel) ~= "number" then
-    fuel = getSensor("smartfuel") or getSensor("Bat%") or getSensor("fuel")
-  end
+  local fuel = getSensor("smartfuel") or getSensor("fuel")
   if type(fuel) == "number" then
     local f = fuel
     if f < 0 then f = 0 end
@@ -1154,12 +1069,14 @@ function Runtime.new(zone, options)
 
     local function logVoltageThemeDecision(reason, cells, inMin, inMax, outMin, outMax)
       if not shouldLogAudio(self) then return end
-      local key = tostring(reason or "?")
-        .. "|" .. tostring(cells or "x")
-        .. "|" .. tostring(inMin or "x")
-        .. "|" .. tostring(inMax or "x")
-        .. "|" .. tostring(outMin or "x")
-        .. "|" .. tostring(outMax or "x")
+      local key = table.concat({
+        tostring(reason or "?"),
+        tostring(cells or "x"),
+        tostring(inMin or "x"),
+        tostring(inMax or "x"),
+        tostring(outMin or "x"),
+        tostring(outMax or "x")
+      }, "|")
       if self._lastVoltageThemeDebugKey == key then return end
       self._lastVoltageThemeDebugKey = key
       widgetLog(
@@ -1259,61 +1176,6 @@ function Runtime.new(zone, options)
     self.boxSources = sources
   end
 
-  local function syncBatteryConfigFromSession(self)
-    if type(_G) ~= "table" or type(_G.rfsuite) ~= "table" then return false end
-    local session = _G.rfsuite.session
-    if type(session) ~= "table" then return false end
-    local batteryConfig = session.battery_config or session.batteryConfig
-    if type(batteryConfig) ~= "table" then return false end
-    self.state.battery_config = batteryConfig
-    return true
-  end
-
-  local function requestBatteryConfigRefresh(self, force)
-    if not MspRuntime or type(MspRuntime.getState) ~= "function" then return false end
-    if type(BatteryConfigApi) ~= "table" or type(BatteryConfigApi.parse) ~= "function" then return false end
-
-    local now = nowSeconds()
-    if self._batteryConfigRefreshPending and not force then
-      local started = tonumber(self._batteryConfigRefreshStartedAt) or 0
-      if started > 0 and (now - started) < FULLSCREEN_BATTERY_REFRESH_TIMEOUT_SECONDS then
-        return false
-      end
-    end
-
-    local mspState = MspRuntime.getState()
-    if type(mspState) ~= "table" or type(mspState.queue) ~= "table" then return false end
-
-    self._batteryConfigRefreshPending = true
-    self._batteryConfigRefreshStartedAt = now
-
-    mspState.queue:add({
-      command = BatteryConfigApi.command,
-      simulatorResponse = BatteryConfigApi.simulatorResponse,
-      timeout = FULLSCREEN_BATTERY_REFRESH_TIMEOUT_SECONDS,
-      processReply = function(_, buf)
-        local data = BatteryConfigApi.parse(buf)
-        if type(data) == "table" and type(_G) == "table" then
-          _G.rfsuite = _G.rfsuite or {}
-          _G.rfsuite.session = _G.rfsuite.session or {}
-          _G.rfsuite.session.battery_config = data
-          _G.rfsuite.session.batteryConfig = data
-          self.state.battery_config = data
-          updateVoltageThemeConfig(self)
-        end
-        self._batteryConfigRefreshPending = false
-        self._batteryConfigRefreshStartedAt = nil
-        self.built = false
-      end,
-      errorHandler = function()
-        self._batteryConfigRefreshPending = false
-        self._batteryConfigRefreshStartedAt = nil
-      end
-    })
-
-    return true
-  end
-
   local function performBackgroundWork(self)
     local now = nowSeconds()
     if self._lastWorkTick == now then return self.connectionReady end
@@ -1361,14 +1223,6 @@ function Runtime.new(zone, options)
       end
     end
     updateVoltageThemeConfig(self)
-    if wasFblConnected and not isFblConnected then
-      if DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
-        DashboardAudio.resetConnectionState(self.audioState)
-      elseif self.audioState then
-        self.audioState.initialized = false
-        self.audioState.modelAnnounced = false
-      end
-    end
     if isFblConnected and not wasFblConnected then
       -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
       self.state.hadArmedFlight = false
@@ -1430,12 +1284,6 @@ function Runtime.new(zone, options)
 
 
   function widget.refresh(self, event, touchState)
-    local now = nowSeconds()
-    local renderBackoffUntil = tonumber(self._renderBackoffUntil) or 0
-    if renderBackoffUntil > 0 and now < renderBackoffUntil then
-      return
-    end
-
     -- Route touch/key events to LVGL engine when active (e.g. fullscreen)
     if lvgl and type(lvgl.onEvent) == "function" and event ~= nil then
        -- On some EdgeTX versions, touchState coordinates are global.
@@ -1469,50 +1317,23 @@ function Runtime.new(zone, options)
 
     -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
     local isInteractive = (event ~= nil)
-    local enteringFullscreen = isInteractive and not self._wasInteractiveLastFrame
-    if enteringFullscreen then
-      syncBatteryConfigFromSession(self)
-      requestBatteryConfigRefresh(self, false)
-    elseif isInteractive then
-      syncBatteryConfigFromSession(self)
-    end
-    self._wasInteractiveLastFrame = isInteractive
-
     local nextRenderKey = nil
-    local function computeRenderKey()
-      if type(self.theme.renderKey) == "function" then
-        return self.theme.renderKey(self.zone, self.state)
-      end
-      if self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
-        return self.dashboardEngine.renderKey(self.state, self.boxSources)
-      end
-      return nil
-    end
-
     if isInteractive then
       nextRenderKey = "fullscreen_menu"
-      self._postflightFrozenKey = nil
     else
-      -- Throttle dashboard rendering to reduce CPU and GC pressure.
+      -- Throttle dashboard rendering to max 2Hz (0.5s) to save CPU
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
       local now = nowSeconds()
-      local isPostflight = (self.flightMode == "postflight") and (self.state and self.state.armed ~= true)
-      local disarmAt = tonumber(self.state and self.state.lastDisarmAt) or 0
-      local shouldFreezePostflight = isPostflight and disarmAt > 0 and (now - disarmAt) >= POSTFLIGHT_FREEZE_DELAY_SECONDS
-
-      if shouldFreezePostflight then
-        if self._postflightFrozenKey == nil then
-          self._postflightFrozenKey = computeRenderKey()
+      if (now - self._lastUIRefresh) >= 0.5 then
+        self._lastUIRefresh = now
+        local newKey = nil
+        if type(self.theme.renderKey) == "function" then
+          newKey = self.theme.renderKey(self.zone, self.state)
+        elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
+          newKey = self.dashboardEngine.renderKey(self.state, self.boxSources)
         end
-        self._cachedRenderKey = self._postflightFrozenKey
-      else
-        self._postflightFrozenKey = nil
-        if (now - self._lastUIRefresh) >= DASHBOARD_UI_REFRESH_SECONDS then
-          self._lastUIRefresh = now
-          self._cachedRenderKey = computeRenderKey()
-        end
+        self._cachedRenderKey = newKey
       end
-
       nextRenderKey = self._cachedRenderKey
     end
 
@@ -1524,47 +1345,27 @@ function Runtime.new(zone, options)
     end
 
     if not self.built then
-      local okClear, clearErr = pcall(lvgl.clear)
-      if not okClear then
-        applyRenderBackoff(self, clearErr, 0.8)
-        return
-      end
-
+      lvgl.clear()
       local children = {}
       
       if isInteractive then
-         local menu = ensureFullscreenMenuModule(self)
-         if menu then
-           local okMenu, menuErr = pcall(menu.build, children, self)
-           if not okMenu then
-             applyRenderBackoff(self, menuErr, 0.8)
-             return
+         local menuChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/fullscreen_menu")
+         if menuChunk then
+           local ok, menu = pcall(menuChunk)
+           if ok and type(menu) == "table" and type(menu.build) == "function" then
+             menu.build(children, self)
            end
          end
       else
          if type(self.theme.build) == "function" then
-           local okThemeBuild, builtChildren = pcall(self.theme.build, self.zone, self.state)
-           if not okThemeBuild then
-             applyRenderBackoff(self, builtChildren, 0.8)
-             return
-           end
-           children = builtChildren
+           children = self.theme.build(self.zone, self.state)
          elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
-           local okEngineBuild, builtChildren = pcall(self.dashboardEngine.build, self.zone, self.state, self.theme)
-           if not okEngineBuild then
-             applyRenderBackoff(self, builtChildren, 0.8)
-             return
-           end
-           children = builtChildren
+           children = self.dashboardEngine.build(self.zone, self.state, self.theme)
          end
          if type(children) ~= "table" then return end
       end
 
-      local okBuild, buildErr = pcall(lvgl.build, children)
-      if not okBuild then
-        applyRenderBackoff(self, buildErr, 1.0)
-        return
-      end
+      lvgl.build(children)
       self.built = true
     end
   end

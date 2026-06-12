@@ -9,7 +9,12 @@ end
 
 function M.t(i18n, pageKey, key, fallback)
   if i18n and i18n.t then
-    return i18n.t("app.pages." .. pageKey .. "." .. key)
+    -- The keys in de.lua/en.lua are structured under app.pages...
+    local fullKey = "app.pages." .. pageKey .. "." .. key
+    local val = i18n.t(fullKey)
+    if val ~= fullKey then
+      return val
+    end
   end
   return fallback
 end

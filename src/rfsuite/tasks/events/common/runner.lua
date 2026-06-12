@@ -174,13 +174,7 @@ function M.new(category)
       return
     end
 
-    local now = 0
-    if type(getTime) == "function" then
-      local ok, v = pcall(getTime)
-      if ok and type(v) == "number" then now = v / 100 end
-    elseif type(os) == "table" and type(os.clock) == "function" then
-      now = os.clock()
-    end
+    local now = (type(os) == "table" and type(os.clock) == "function") and os.clock() or 0
 
     if task.nextEligibleAt and task.nextEligibleAt > now then return end
 
@@ -210,7 +204,6 @@ function M.new(category)
 
     local timeout = DEFAULT_TASK_TIMEOUT_SECONDS
     if task.startTime and (now - task.startTime) > timeout then
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, string.format("Task '%s' timing out (now=%.2f, start=%.2f, diff=%.2f)", task.name, now, task.startTime, now - task.startTime), "info", true) end
       task.attempts = (task.attempts or 0) + 1
       if task.attempts <= MAX_RETRIES then
         local backoff = RETRY_BACKOFF_SECONDS * (2 ^ (task.attempts - 1))

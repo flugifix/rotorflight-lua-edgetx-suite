@@ -285,6 +285,7 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
   local displayFn = opts.display
   local minVal = tonumber(opts.min) or 0
   local maxVal = tonumber(opts.max) or 100
+  local stepVal = tonumber(opts.step) or 1
   local getter = opts.get or function() return minVal end
   local setter = opts.set or function() end
 
@@ -314,8 +315,8 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
     x = fieldX,
     y = fieldY,
     w = fieldW,
-    min = minVal,
-    max = maxVal,
+    min = math.floor(minVal / stepVal),
+    max = math.ceil(maxVal / stepVal),
     active = function()
       return enabledGetter()
     end,
@@ -323,16 +324,16 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
       local current = tonumber(getter()) or minVal
       if current < minVal then current = minVal end
       if current > maxVal then current = maxVal end
-      return current
+      return math.floor(current / stepVal)
     end,
     set = function(val)
-      local nextVal = tonumber(val) or minVal
+      local nextVal = (tonumber(val) or math.floor(minVal / stepVal)) * stepVal
       if nextVal < minVal then nextVal = minVal end
       if nextVal > maxVal then nextVal = maxVal end
       setter(nextVal)
     end,
     display = function(val)
-      local shown = tonumber(val) or minVal
+      local shown = (tonumber(val) or math.floor(minVal / stepVal)) * stepVal
       if type(displayFn) == "function" then
         local ok, text = pcall(displayFn, shown)
         if ok and type(text) == "string" then

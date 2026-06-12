@@ -58,9 +58,6 @@ local state = {
   lastArmed = nil,
 }
 
--- Reuse one context table to avoid per-wakeup allocations in hot paths.
-local runnerContext = { context = "tool" }
-
 local function ensureDeps()
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not Log then Log = loadModule("lib/log.lua") end
@@ -167,7 +164,6 @@ function Events.wakeup()
 
     -- Determine context: widget/tool/both
     local context = Env and Env.get() or "tool"
-    runnerContext.context = context
 
     local onconnectActive = false
     if state.linkStableUp then
@@ -177,7 +173,7 @@ function Events.wakeup()
           onconnectActive = onconnect.active()
         end
         if type(onconnect.wakeup) == "function" then
-          local ok, err = pcall(onconnect.wakeup, runnerContext)
+          local ok, err = pcall(onconnect.wakeup, { context = context })
           if not ok and Log and type(Log.emit) == "function" then
             pcall(Log.emit, "rfsuite.events", "onconnect.wakeup error: " .. tostring(err), "error", true)
           end
@@ -221,7 +217,7 @@ function Events.wakeup()
             end
           end
           if type(ondisarm.wakeup) == "function" then
-            local ok, err = pcall(ondisarm.wakeup, runnerContext)
+            local ok, err = pcall(ondisarm.wakeup, { context = context })
             if not ok and Log and type(Log.emit) == "function" then
               pcall(Log.emit, "rfsuite.events", "ondisarm.wakeup error: " .. tostring(err), "error", true)
             end

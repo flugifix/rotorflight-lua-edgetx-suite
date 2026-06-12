@@ -185,6 +185,19 @@ function Queue:add(message)
 end
 
 function Queue:clear()
+  local handlers = {}
+  
+  if self.currentMessage and type(self.currentMessage.errorHandler) == "function" then
+    handlers[#handlers + 1] = self.currentMessage.errorHandler
+  end
+  
+  while qcount(self.queue) > 0 do
+    local msg = qpop(self.queue)
+    if msg and type(msg.errorHandler) == "function" then
+      handlers[#handlers + 1] = msg.errorHandler
+    end
+  end
+  
   qreset(self.queue)
   self.currentMessage = nil
   self.currentMessageStartTime = nil
@@ -193,6 +206,10 @@ function Queue:clear()
   self._nextMessageAt = 0
   if self.common and self.common.clearTxBuf then
     self.common.clearTxBuf()
+  end
+
+  for i = 1, #handlers do
+    pcall(handlers[i])
   end
 end
 

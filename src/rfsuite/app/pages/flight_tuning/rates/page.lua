@@ -67,7 +67,7 @@ local RATE_TABLES = {
       { { apikey="rcRates_1", scale=1, mult=10 }, { apikey="rates_1", scale=1, mult=10 }, { apikey="rcExpo_1", scale=100 } },
       { { apikey="rcRates_2", scale=1, mult=10 }, { apikey="rates_2", scale=1, mult=10 }, { apikey="rcExpo_2", scale=100 } },
       { { apikey="rcRates_3", scale=1, mult=10 }, { apikey="rates_3", scale=1, mult=10 }, { apikey="rcExpo_3", scale=100 } },
-      { { apikey="rcRates_4", scale=4 }, { apikey="rates_4", scale=4 }, { apikey="rcExpo_4", scale=100 } }
+      { { apikey="rcRates_4", scale=4, step=2 }, { apikey="rates_4", scale=4, step=2 }, { apikey="rcExpo_4", scale=100 } }
     }
   },
   [5] = { -- Quick
@@ -87,13 +87,22 @@ local RATE_TABLES = {
       { { apikey="rcRates_1", scale=1, mult=5 }, { apikey="rates_1", scale=1 }, { apikey="rcExpo_1", scale=1 } },
       { { apikey="rcRates_2", scale=1, mult=5 }, { apikey="rates_2", scale=1 }, { apikey="rcExpo_2", scale=1 } },
       { { apikey="rcRates_3", scale=1, mult=5 }, { apikey="rates_3", scale=1 }, { apikey="rcExpo_3", scale=1 } },
-      { { apikey="rcRates_4", scale=40, mult=5 }, { apikey="rates_4", scale=1 }, { apikey="rcExpo_4", scale=1 } }
+      { { apikey="rcRates_4", scale=40, mult=5, step=2 }, { apikey="rates_4", scale=1 }, { apikey="rcExpo_4", scale=1 } }
     }
   }
 }
 
-local ROWS_STANDARD = { "roll", "pitch", "yaw", "collective" }
-local ROWS_POLAR = { "cyclic", "yaw", "collective" }
+local ROWS_STANDARD = {
+  { key = "roll", idx = 1 },
+  { key = "pitch", idx = 2 },
+  { key = "yaw", idx = 3 },
+  { key = "collective", idx = 4 }
+}
+local ROWS_POLAR = {
+  { key = "cyclic", idx = 2, linkedIdx = 1 },
+  { key = "yaw", idx = 3 },
+  { key = "collective", idx = 4 }
+}
 
 local function newRuntime()
   return {
@@ -198,7 +207,7 @@ local function formatValue(val, scale, mult)
   elseif scale == 10 then
     return string.format("%.1f", displayVal)
   elseif scale == 4 then
-    return string.format("%.1f", displayVal)
+    return string.format("%.2f", displayVal)
   elseif scale == 40 then
     return string.format("%.2f", displayVal)
   else
@@ -219,12 +228,15 @@ local function getFieldSetter(fieldName, spec)
   local setter = ui.runtime.fieldSetters[fieldName]
   if setter then return setter end
   setter = function(value)
-    -- Value comes in as string from UI (or raw number from increment)
     local rawVal
-    if type(value) == "string" then
+    if type(value) == "number" then
+      -- Raw number from scroll wheel (increment/decrement)
+      rawVal = math.floor(value + 0.5)
+    elseif type(value) == "string" then
+      -- Manual text entry
       rawVal = parseValue(value, spec.scale, spec.mult)
     else
-      rawVal = parseValue(tostring(value), spec.scale, spec.mult)
+      rawVal = tonumber(value) or 0
     end
     
     if ui.config[fieldName] == rawVal then return end
@@ -269,20 +281,45 @@ local function getBaseTitle()
   return title or "Rates"
 end
 
-local function queueRcRead()
+local function getCurrentProfileDisplay()
+  if Sensors and type(Sensors.getValue) == "function" then
+    local raw = tonumber(Sensors.getValue("rate_profile"))
+    if raw and raw > 0 then
+      return math.floor(raw)
+    end
+  end
+  local session = getSession()
+  local activeProfile = tonumber(session and session.activeRateProfile)
+  if activeProfile ~= nil then
+    return math.floor(activeProfile) + 1
+  end
+  return nil
+end
+
+local function queueRcRead(isAutoReload)
+  if ui.runtime.readPending then return false, "read_pending" end
   if not RcTuningApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
 
   local mspState = MspRuntime.getState()
+  if mspState.lastConnected == false then
+    return false, "disconnected"
+  end
+
   local queue = mspState and mspState.queue
   if not queue or type(queue.add) ~= "function" then
     return false, "msp_queue_unavailable"
   end
 
   ui.runtime.readPending = true
-  ui.loading = true
-  ui.progress = 0
+  if not isAutoReload then
+    ui.loading = true
+    ui.progress = 0
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
 
   queue:add({
     command = RcTuningApi.command,
@@ -294,24 +331,32 @@ local function queueRcRead()
         local session = getSession()
         if session then
           local rcConfig = getRcConfig(session)
+          local oldRatesType = rcConfig.rates_type
           for k, v in pairs(parsed) do
             rcConfig[k] = v
           end
           loadFromSession()
+          
+          ui.runtime.readPending = false
+          ui.loading = false
+          ui.dirty = false
+          ui.progress = 100
+          
+          if not isAutoReload or oldRatesType ~= parsed.rates_type then
+            if type(ui.runtime.requestRebuild) == "function" then
+              ui.runtime.requestRebuild()
+            end
+          end
         end
-      end
-      ui.runtime.readPending = false
-      ui.loading = false
-      ui.dirty = false
-      ui.progress = 100
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
       end
     end,
     errorHandler = function()
       ui.runtime.readPending = false
       ui.loading = false
       ui.progress = 1
+      if not isAutoReload and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
     end
   })
 
@@ -326,7 +371,7 @@ local function ensureLoaded()
   ui.dirty = false
   ui.runtime.lastSessionSignature = buildSessionSignature()
   ui.baseTitle = getBaseTitle()
-  queueRcRead()
+  queueRcRead(false)
 end
 
 local function queueRcWrite(session)
@@ -369,14 +414,14 @@ local function applyConfigToSession(session)
 end
 
 local function getGridMetrics(w, numCols)
-  local labelMin = 84
-  local labelMax = 132
+  local labelMin = 140
+  local labelMax = 180
   local gapMin = 3
   local gapMax = 8
   local cellMin = 54
   if w >= 700 then
-    labelMin = 96
-    labelMax = 152
+    labelMin = 140
+    labelMax = 200
     gapMin = 5
     gapMax = 10
     cellMin = 62
@@ -401,11 +446,11 @@ end
 
 local function getLayoutProfile(w, h)
   local profile = {
-    headerFont = MIDSIZE,
+    headerFont = SMLSIZE,
     headerTextY = 0,
     headerLineY = 36,
     headerH = 40,
-    rowFont = MIDSIZE,
+    rowFont = SMLSIZE,
     rowH = 44,
     rowLabelY = 8,
     cellTop = 4,
@@ -413,11 +458,11 @@ local function getLayoutProfile(w, h)
   }
 
   if w >= 700 then
-    profile.headerFont = MIDSIZE
+    profile.headerFont = SMLSIZE
     profile.headerTextY = 2
     profile.headerLineY = 40
     profile.headerH = 44
-    profile.rowFont = MIDSIZE
+    profile.rowFont = SMLSIZE
     profile.rowH = 46
     profile.rowLabelY = 10
     profile.cellTop = 6
@@ -479,7 +524,10 @@ local function drawGrid(children, x, y, w, i18n, layoutParams, tableDef, rowsCon
   local cellTop = (layoutParams and layoutParams.cellTop) or 4
 
   for i = 1, #rowsConfig do
-    local rowKey = rowsConfig[i]
+    local rowDef = rowsConfig[i]
+    local rowKey = rowDef.key
+    local fieldIdx = rowDef.idx
+    local linkedIdx = rowDef.linkedIdx
     local labelText = pageText(i18n, rowKey, rowKey)
 
     children[#children + 1] = {
@@ -492,26 +540,50 @@ local function drawGrid(children, x, y, w, i18n, layoutParams, tableDef, rowsCon
       font = layoutParams and layoutParams.rowFont or MIDSIZE
     }
 
-    local rowFields = tableDef.fields[i]
+    local rowFields = tableDef.fields[fieldIdx]
     for j = 1, #rowFields do
       local spec = rowFields[j]
+      local linkedSpec = linkedIdx and tableDef.fields[linkedIdx] and tableDef.fields[linkedIdx][j]
       local cellX = x + labelW + ((j - 1) * (cellW + gap))
       
       if spec and not spec.disable then
         local rawVal = ui.config[spec.apikey] or 0
         local displayVal = formatValue(rawVal, spec.scale, spec.mult)
-        
-        Controls.appendNumberField(
-          children,
-          cellX,
-          cursorY + cellTop,
-          cellW,
-          rowH - (cellTop * 2),
-          displayVal,
-          getFieldSetter(spec.apikey, spec),
-          nil, nil, nil, -- min, max, step not strictly used in display text mode
-          nil, COLOR_THEME_PRIMARY1
-        )
+
+        local stepSize = spec.step or 1
+        local rawMin = spec.min or 0
+        local rawMax = spec.max or 1000
+        local isReadonly = tonumber(ui.config.rates_type) == 0
+
+        children[#children + 1] = {
+          type = "numberEdit",
+          x = cellX,
+          y = cursorY + cellTop,
+          w = cellW,
+          min = math.floor(rawMin / stepSize),
+          max = math.ceil(rawMax / stepSize),
+          active = function() return not isReadonly end,
+          get = function()
+            if isReadonly then return 0 end
+            local rVal = ui.config[spec.apikey] or rawMin
+            if rVal < rawMin then rVal = rawMin end
+            if rVal > rawMax then rVal = rawMax end
+            return math.floor(rVal / stepSize)
+          end,
+          set = function(val)
+            if isReadonly then return end
+            local rVal = math.floor((tonumber(val) or math.floor(rawMin / stepSize)) * stepSize)
+            if rVal < rawMin then rVal = rawMin end
+            if rVal > rawMax then rVal = rawMax end
+            local setter = getFieldSetter(spec.apikey, spec, linkedSpec and linkedSpec.apikey)
+            setter(rVal)
+          end,
+          display = function(val)
+            if isReadonly then return "0" end
+            local rVal = math.floor((tonumber(val) or math.floor(rawMin / stepSize)) * stepSize)
+            return formatValue(rVal, spec.scale, spec.mult)
+          end
+        }
       end
     end
     cursorY = cursorY + rowH
@@ -568,6 +640,7 @@ end
 function M.onHelp(ctx)
   local help = loadModule("app/pages/flight_tuning/rates/help.lua")
   if type(help) == "function" then
+    ctx.ratesType = ui.config.rates_type or 6
     return help(ctx)
   end
   return { title = "Help", message = "No help available" }
@@ -576,14 +649,19 @@ end
 function M.build(ctx)
   ensureDeps()
   ui.runtime.requestRebuild = ctx.requestRebuild
+  local children = ctx.children
+  local x = ctx.x
+  local y = ctx.y
+  local w = ctx.w
+  local h = ctx.h
   local i18n = ctx.i18n
 
   ensureLoaded()
 
   if ui.runtime.readPending and ui.loading then
     if LoadingOverlay then
-      LoadingOverlay.append(ctx.children, {
-        x = ctx.x, y = ctx.y, w = ctx.w, h = ctx.h,
+      LoadingOverlay.append(children, {
+        x = x, y = y, w = w, h = h,
         title = pageText(i18n, "loading_title", "Loading"),
         message = pageText(i18n, "loading_message", "Reading Rates"),
         progress = ui.progress
@@ -605,9 +683,9 @@ function M.build(ctx)
   local tableDef = RATE_TABLES[ratesType]
   
   if not tableDef then
-    ctx.children[#ctx.children + 1] = {
+    children[#children + 1] = {
       type = "label",
-      x = ctx.x, y = ctx.y + 20, w = ctx.w,
+      x = x, y = y + 20, w = w,
       text = "Unsupported rates type",
       color = COLOR_THEME_WARNING,
       align = CENTER
@@ -618,29 +696,47 @@ function M.build(ctx)
   local isPolar = ui.config.cyclic_polarity == 1
   local rowsConfig = isPolar and ROWS_POLAR or ROWS_STANDARD
   
-  -- If polar, we skip roll/pitch and use cyclic, mapping it correctly
-  -- For display, we just map row 1, 2, 3 of fields.
-  if isPolar then
-    -- adjust fields index if needed. Ethos uses same rows but maps cyclic to row 1.
-    -- Assuming field arrays match rows 1:1
-  end
-
   -- Update title
   local typeName = pageText(i18n, tableDef.nameKey, string.upper(tableDef.nameKey))
   ui.baseTitle = typeName .. " " .. pageText(i18n, "title", "Rates")
 
-  local layoutProfile = getLayoutProfile(ctx.w, ctx.h)
+  if ui.runtime and type(ui.runtime.syncHeaderTitle) == "function" then
+    ui.runtime.syncHeaderTitle(ui.baseTitle, M.getHeaderActions())
+  end
 
-  local cursorY = ctx.y
-  local headerH = drawColumnHeader(ctx.children, ctx.x, cursorY, ctx.w, i18n, layoutProfile, tableDef.cols)
+  local profileDisplay = getCurrentProfileDisplay() or 1
+  local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 50
+  local cursorY = y
+  if Controls and type(Controls.appendStaticSectionHeader) == "function" then
+    local headingTitle = string.format("%s #%d - %s", pageText(i18n, "title", "Rates"), profileDisplay, typeName)
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, headingTitle)
+    cursorY = cursorY + sectionHeaderH
+  end
+
+  local layoutProfile = getLayoutProfile(w, h)
+  local headerH = drawColumnHeader(children, x, cursorY, w, i18n, layoutProfile, tableDef.cols)
   cursorY = cursorY + headerH + (layoutProfile.afterHeaderGap or 6)
 
-  cursorY = drawGrid(ctx.children, ctx.x, cursorY, ctx.w, i18n, layoutProfile, tableDef, rowsConfig)
+  cursorY = drawGrid(children, x, cursorY, w, i18n, layoutProfile, tableDef, rowsConfig)
 end
 
-function M.wakeup()
-  if ui.runtime and type(ui.runtime.wakeup) == "function" then
-    ui.runtime.wakeup()
+function M.wakeup(ctx)
+  ensureDeps()
+  ensureLoaded()
+  if type(ctx) == "table" and type(ctx.requestRebuild) == "function" then
+    ui.runtime.requestRebuild = ctx.requestRebuild
+  end
+
+  if ui.dirty then return end
+
+  local signature = buildSessionSignature()
+  if signature ~= ui.runtime.lastSessionSignature then
+    ui.runtime.lastSessionSignature = signature
+    queueRcRead(true) -- Silent auto-reload
+  end
+
+  if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then
+    ui.runtime.syncHeaderTitle(ui.baseTitle or getBaseTitle(), ctx and ctx.navButtons or nil)
   end
 end
 

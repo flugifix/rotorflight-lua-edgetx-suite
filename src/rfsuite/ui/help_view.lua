@@ -19,8 +19,15 @@ local function splitLines(text)
     return lines
   end
 
-  for line in string.gmatch(text, "([^\n]+)") do
-    lines[#lines + 1] = line
+  local pos = 1
+  while true do
+    local nextPos = string.find(text, "\n", pos)
+    if not nextPos then
+      lines[#lines + 1] = string.sub(text, pos)
+      break
+    end
+    lines[#lines + 1] = string.sub(text, pos, nextPos - 1)
+    pos = nextPos + 1
   end
 
   return lines

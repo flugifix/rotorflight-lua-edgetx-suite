@@ -223,38 +223,6 @@ local function getCurrentProfileDisplay()
 	return nil
 end
 
-local function resolveVoiceLanguage()
-	local root = _G and _G.rfsuite
-	local prefs = root and root.preferences
-	local general = prefs and prefs.general
-	local lang = general and tostring(general.language or "") or ""
-	lang = string.lower(lang)
-	if lang ~= "de" then
-		lang = "en"
-	end
-	return lang
-end
-
-local function resolveProfileVoiceFile()
-	local lang = resolveVoiceLanguage()
-	local candidates = {
-		"/SOUNDS/rf/" .. lang .. "/evt/profile.wav",
-		"/SOUNDS/" .. lang .. "/evt/profile.wav"
-	}
-
-	if type(io) == "table" and type(io.open) == "function" then
-		for i = 1, #candidates do
-			local f = io.open(candidates[i], "r")
-			if f then
-				io.close(f)
-				return candidates[i]
-			end
-		end
-	end
-
-	return candidates[1]
-end
-
 local function queuePidRead()
 	ensureRuntime()
 	if ui.runtime.readPending then
@@ -298,6 +266,9 @@ local function queuePidRead()
 			ui.runtime.readPending = false
 			ui.loading = false
 			ui.progress = 1
+			if type(ui.runtime.requestRebuild) == "function" then
+				ui.runtime.requestRebuild()
+			end
 		end
 	})
 
@@ -389,11 +360,11 @@ end
 
 local function getLayoutProfile(w, h)
 	local profile = {
-		headerFont = MIDSIZE,
+		headerFont = SMLSIZE,
 		headerTextY = 0,
 		headerLineY = 36,
 		headerH = 40,
-		rowFont = MIDSIZE,
+		rowFont = SMLSIZE,
 		rowH = 44,
 		rowLabelY = 8,
 		cellTop = 4,
@@ -401,11 +372,11 @@ local function getLayoutProfile(w, h)
 	}
 
 	if w >= 700 then
-		profile.headerFont = MIDSIZE
+		profile.headerFont = SMLSIZE
 		profile.headerTextY = 2
 		profile.headerLineY = 40
 		profile.headerH = 44
-		profile.rowFont = MIDSIZE
+		profile.rowFont = SMLSIZE
 		profile.rowH = 46
 		profile.rowLabelY = 10
 		profile.cellTop = 6
@@ -413,7 +384,7 @@ local function getLayoutProfile(w, h)
 	elseif w < 560 then
 		profile.headerFont = SMLSIZE
 		profile.headerTextY = 0
-		profile.headerLineY = 24
+		headerLineY = 24
 		profile.headerH = 30
 		profile.rowFont = SMLSIZE
 		profile.rowH = 40
@@ -468,16 +439,6 @@ local function addGroup(children, x, y, w, i18n, group, layout)
 	local cellTop = (layout and layout.cellTop) or 4
 
 	children[#children + 1] = {
-		type = "rectangle",
-		x = x,
-		y = y + rowH + 10,
-		w = w,
-		h = 1,
-		color = GREY_DEFAULT,
-		filled = true
-	}
-
-	children[#children + 1] = {
 		type = "label",
 		x = x,
 		y = y + rowLabelY,
@@ -515,7 +476,7 @@ local function addGroup(children, x, y, w, i18n, group, layout)
 		end
 	end
 
-	return rowH + 12
+	return rowH
 end
 
 function M.getHeaderActions()

@@ -477,7 +477,7 @@ local function onHelp()
     end
 
     local pageKey = string.gsub(pagePath, "/", "_")
-    local i18nKey = "app.pages." .. pageKey .. ".help_message"
+    local i18nKey = "pages." .. pageKey .. ".help_message"
     local translated = state.i18n.t(i18nKey)
     if type(translated) == "string" and translated ~= "" and translated ~= i18nKey then
       return translated
@@ -487,12 +487,20 @@ local function onHelp()
 
   ensureHelpRegistry()
 
-  local helpData = HelpRegistry and HelpRegistry.get and HelpRegistry.get(menuId, {
+  local helpCtx = {
     i18n = state.i18n,
     preferences = state.preferences,
     menu = state.menu,
     manifest = state.manifest
-  }) or nil
+  }
+
+  local helpData = nil
+  local page = getActivePageModule()
+  if page and type(page.onHelp) == "function" then
+    helpData = page.onHelp(helpCtx)
+  elseif HelpRegistry and HelpRegistry.get then
+    helpData = HelpRegistry.get(menuId, helpCtx)
+  end
 
   local message = nil
   if type(helpData) == "string" then
@@ -533,9 +541,6 @@ local function openPageHelpDialog(message, title, subtitle)
   state.helpPageSubtitle = subtitle
   scheduleBuildUI(false)
 end
-
-local getActivePageModule
-local closeHelpDialogIfOpen
 
 local function onStar()
   local page = getActivePageModule()
@@ -1416,8 +1421,11 @@ function M.buildUI()
   local rootSubtitle = nil
   if breadcrumb ~= "" then
     rootSubtitle = shortenBreadcrumb(breadcrumb)
-  elseif state.menu.isRoot() and Version and type(Version.getVersionString) == "function" then
-    rootSubtitle = Version.getVersionString()
+  elseif state.menu.isRoot() then
+    ensureVersion()
+    if Version and type(Version.getVersionString) == "function" then
+      rootSubtitle = Version.getVersionString()
+    end
   end
 
   local lyt = {
