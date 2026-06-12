@@ -271,7 +271,7 @@ local function queueSmartfuelRead()
 			end
 		end,
 		errorHandler = function()
-			logWarn("read error cmd=" .. tostring(SmartfuelApi.command))
+			logWarn("read error cmd=" .. tostring(api.command))
 			ui.runtime.readPending = false
 			ui.loading = false
 			ui.progress = 1
