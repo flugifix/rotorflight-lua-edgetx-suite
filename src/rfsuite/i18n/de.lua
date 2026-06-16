@@ -63,7 +63,12 @@ return {
       main_rotor = { name = "Hauptrotor" },
       tail_rotor = { name = "Heckrotor" },
       rescue = { name = "Rettung" },
-      rates_advanced = { name = "Rates (Erweitert)" },
+      rates_advanced = { 
+        name = "Rates (Erweitert)",
+        advanced = "Erweitert",
+        cyclic_behaviour = "Zyklisches Verhalten",
+        table = "Rate-Tabelle"
+      },
       audio_events = { name = "Ereignisse" },
       audio_switches = { name = "Schalter" },
       audio_timer = { name = "Timer" },
