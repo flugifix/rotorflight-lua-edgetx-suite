@@ -13,6 +13,7 @@ local Controls = nil
 local Common = nil
 local MspRuntime = nil
 local GovernorApi = nil
+local GovernorConfigApi = nil
 local LoadingOverlay = nil
 local Sensors = nil
 local t = nil
@@ -31,6 +32,7 @@ local GROUPS = {
 	},
 	{
 		key = "gains",
+		horizontal = true,
 		rows = {
 			{ labelKey = "p", field = "governor_p_gain", reqMode = 3 },
 			{ labelKey = "i", field = "governor_i_gain", reqMode = 3 },
@@ -40,6 +42,7 @@ local GROUPS = {
 	},
 	{
 		key = "precomp",
+		horizontal = true,
 		rows = {
 			{ labelKey = "yaw", field = "governor_yaw_weight", reqMode = 3, altField = "governor_yaw_ff_weight", flagKey = "tx_precomp_curve", flagInverse = true },
 			{ labelKey = "cyc", field = "governor_cyclic_weight", reqMode = 3, altField = "governor_cyclic_ff_weight", flagKey = "tx_precomp_curve", flagInverse = true },
@@ -48,11 +51,20 @@ local GROUPS = {
 	},
 	{
 		key = "tail_torque_assist",
+		horizontal = true,
 		rows = {
-			{ labelKey = "tta_gain", field = "governor_tta_gain", reqMode = 3 },
-			{ labelKey = "tta_limit", field = "governor_tta_limit", reqMode = 3 }
+			{ labelKey = "gain", field = "governor_tta_gain", reqMode = 3 },
+			{ labelKey = "limit", field = "governor_tta_limit", reqMode = 3, suffix = "%" }
 		}
 	}
+}
+
+local GOV_MODES = {
+	[0] = "OFF",
+	[1] = "LIMIT",
+	[2] = "DIRECT",
+	[3] = "ELECTRO",
+	[4] = "NITRO"
 }
 
 local function newRuntime()
@@ -106,6 +118,7 @@ local function ensureDeps()
 	if not Controls then Controls = loadModule("ui/controls.lua") end
 	if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
 	if not GovernorApi then GovernorApi = loadModule("tasks/msp/api/governor_profile.lua") end
+	if not GovernorConfigApi then GovernorConfigApi = loadModule("tasks/msp/api/governor_config.lua") end
 	if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
 	if not Sensors then Sensors = loadModule("lib/sensors.lua") end
 	if not t then t = Common and Common.pageT("flight_tuning_governor") or nil end
@@ -189,7 +202,8 @@ local function getLiveProfile()
 end
 
 local function buildSessionSignature()
-	return tostring(getLiveProfile())
+	local session = getSession()
+	return tostring(getLiveProfile()) .. "_" .. tostring(session and session.governorMode or 0)
 end
 
 local function decodeGovernorFlags(flags)
@@ -252,7 +266,7 @@ local function queueGovRead(isAutoReload)
 	if ui.runtime.readPending then
 		return false, "read_pending"
 	end
-	if not GovernorApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+	if not GovernorApi or not GovernorConfigApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
 		return false, "msp_runtime_unavailable"
 	end
 
@@ -271,30 +285,52 @@ local function queueGovRead(isAutoReload)
 			ui.runtime.requestRebuild()
 		end
 	end
+
 	queue:add({
-		command = GovernorApi.command,
-		simulatorResponse = GovernorApi.simulatorResponse,
+		command = GovernorConfigApi.command,
+		simulatorResponse = GovernorConfigApi.simulatorResponse,
 		timeout = 5.0,
 		processReply = function(_, buf)
-			ui.runtime.readPending = false
-			ui.loading = false
-			ui.progress = 1
-			local parsed = GovernorApi.parse and GovernorApi.parse(buf) or nil
-			if type(session) == "table" and type(parsed) == "table" then
-				session.governor_profile = parsed
+			local parsedConfig = GovernorConfigApi.parse and GovernorConfigApi.parse(buf) or nil
+			if type(session) == "table" and type(parsedConfig) == "table" then
+				session.governor_config = parsedConfig
+				session.governorMode = parsedConfig.gov_mode
 			end
-			if not ui.dirty then
-				loadFromSession()
-			end
-			if not isAutoReload and type(ui.runtime.requestRebuild) == "function" then
-				ui.runtime.requestRebuild()
-			end
+
+			queue:add({
+				command = GovernorApi.command,
+				simulatorResponse = GovernorApi.simulatorResponse,
+				timeout = 5.0,
+				processReply = function(_, buf)
+					ui.runtime.readPending = false
+					ui.loading = false
+					ui.progress = 1
+					local parsed = GovernorApi.parse and GovernorApi.parse(buf) or nil
+					if type(session) == "table" and type(parsed) == "table" then
+						session.governor_profile = parsed
+					end
+					if not ui.dirty then
+						loadFromSession()
+					end
+					if type(ui.runtime.requestRebuild) == "function" then
+						ui.runtime.requestRebuild()
+					end
+				end,
+				errorHandler = function()
+					ui.runtime.readPending = false
+					ui.loading = false
+					ui.progress = 1
+					if type(ui.runtime.requestRebuild) == "function" then
+						ui.runtime.requestRebuild()
+					end
+				end
+			})
 		end,
 		errorHandler = function()
 			ui.runtime.readPending = false
 			ui.loading = false
 			ui.progress = 1
-			if not isAutoReload and type(ui.runtime.requestRebuild) == "function" then
+			if type(ui.runtime.requestRebuild) == "function" then
 				ui.runtime.requestRebuild()
 			end
 		end
@@ -357,6 +393,151 @@ local function applyConfigToSession(session)
 	end
 	session.governor_profile = govConfig
 	return govConfig
+end
+
+local function appendCompactNumberField(children, x, y, w, labelText, opts)
+	local rowH = 52
+	local labelY = y + 16
+	local itemY = y + 4
+	local fieldW = 172
+	local fieldX = x + w - fieldW - 10
+	
+	local getter = opts.get
+	local setter = opts.set
+	local minVal = opts.min or 0
+	local maxVal = opts.max or 255
+	local stepVal = opts.step or 1
+	local isActive = opts.enabled ~= false
+	local displayFn = opts.display
+
+	children[#children + 1] = {
+		type = "label",
+		x = x,
+		y = labelY,
+		w = fieldX - x - 8,
+		text = labelText,
+		color = COLOR_THEME_PRIMARY1,
+		font = SMLSIZE
+	}
+
+	children[#children + 1] = {
+		type = "numberEdit",
+		x = fieldX,
+		y = itemY,
+		w = fieldW,
+		h = 44,
+		min = math.floor(minVal / stepVal),
+		max = math.floor(maxVal / stepVal),
+		active = function() return isActive end,
+		get = function()
+			local current = tonumber(getter()) or minVal
+			return math.floor(current / stepVal)
+		end,
+		set = function(val)
+			setter(val * stepVal)
+		end,
+		display = function(val)
+			local shown = val * stepVal
+			if type(displayFn) == "function" then
+				return displayFn(shown)
+			end
+			return tostring(shown)
+		end
+	}
+
+	-- Divider
+	children[#children + 1] = {
+		type = "rectangle",
+		x = x,
+		y = y + rowH,
+		w = w,
+		h = 1,
+		color = GREY_DEFAULT or 0x808080,
+		filled = true
+	}
+
+	return rowH + 1
+end
+
+local function appendHorizontalFields(children, x, y, w, labelText, rows, i18n)
+	local metrics = Controls.computeGridMetrics(w, #rows, { labelMin = 100, labelRatio = 0.25 })
+	local labelW = metrics.labelW
+	local gap = metrics.gap
+	local cellW = metrics.cellW
+	
+	local rowH = 76
+	local headerY = y - 4
+	local itemY = y + 26
+	local groupLabelY = y + 38
+
+	children[#children + 1] = {
+		type = "label",
+		x = x,
+		y = groupLabelY,
+		w = labelW,
+		text = labelText,
+		color = COLOR_THEME_PRIMARY1,
+		font = SMLSIZE
+	}
+
+	for i = 1, #rows do
+		local row = rows[i]
+		local cellX = x + labelW + ((i - 1) * (cellW + gap))
+		local limits = getFieldLimit(row.field)
+		local isActive = true
+		if row.flagKey and ui.flags then
+			local val = ui.flags[row.flagKey]
+			if row.flagInverse then val = not val end
+			isActive = val
+		end
+
+		-- Sub-label centered above box (P, I, D, F etc)
+		children[#children + 1] = {
+			type = "label",
+			x = cellX,
+			y = headerY,
+			w = cellW,
+			text = string.upper(pageText(i18n, row.labelKey, row.labelKey)),
+			color = COLOR_THEME_PRIMARY1,
+			font = SMLSIZE,
+			align = CENTER
+		}
+
+		children[#children + 1] = {
+			type = "numberEdit",
+			x = cellX,
+			y = itemY,
+			w = cellW,
+			h = 44,
+			min = math.floor(limits.min / (limits.step or 1)),
+			max = math.floor(limits.max / (limits.step or 1)),
+			active = function() return isActive end,
+			get = function()
+				local val = ui.config[row.field] or limits.min
+				return math.floor(val / (limits.step or 1))
+			end,
+			set = function(val)
+				getFieldSetter(row.field, row.altField)(val * (limits.step or 1))
+			end,
+			display = function(val)
+				local shown = val * (limits.step or 1)
+				return tostring(shown) .. (row.suffix or "")
+			end
+		}
+	end
+
+	-- Divider
+	children[#children + 1] = {
+		type = "rectangle",
+		x = x,
+		y = y + rowH,
+		w = w,
+		h = 1,
+		color = GREY_DEFAULT or 0x808080,
+		filled = true
+	}
+
+	return rowH + 1
 end
 
 function M.getHeaderActions()
@@ -460,16 +641,17 @@ function M.build(ctx)
 		ui.runtime.syncHeaderTitle(ui.baseTitle or getBaseTitle(), ctx and ctx.navButtons or nil)
 	end
 
+	local session = getSession()
+	local govMode = tonumber(session and session.governorMode or 0) or 0
+	local govModeName = GOV_MODES[govMode] or "OFF"
+
 	local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 50
 	local cursorY = y
 	if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-		local headingTitle = string.format("%s #%d", pageText(i18n, "title", "Governor"), profileDisplay)
+		local headingTitle = string.format("%s #%d - %s", pageText(i18n, "title", "Governor"), profileDisplay, govModeName)
 		Controls.appendStaticSectionHeader(children, x, cursorY, w, headingTitle)
 		cursorY = cursorY + sectionHeaderH
 	end
-
-	local session = getSession()
-	local govMode = tonumber(session and session.governorMode or 0) or 0
 	
 	if govMode == 0 then
 		children[#children + 1] = {
@@ -484,8 +666,6 @@ function M.build(ctx)
 		if ctx.navButtons and ctx.navButtons.save then ctx.navButtons.save.enabled = false end
 		if ctx.navButtons and ctx.navButtons.reload then ctx.navButtons.reload.enabled = false end
 	else
-		local rowH = 44
-
 		for i = 1, #GROUPS do
 			local group = GROUPS[i]
 			
@@ -498,33 +678,37 @@ function M.build(ctx)
 			end
 
 			if groupHasVisibleFields then
-				children[#children + 1] = {
-					type = "label",
-					x = x,
-					y = cursorY + 8,
-					w = w,
-					text = pageText(i18n, group.key, group.key),
-					color = COLOR_THEME_PRIMARY2,
-					font = SMLSIZE
-				}
-				cursorY = cursorY + 36
+				if group.key ~= "basic_setup" and not group.horizontal then
+					children[#children + 1] = {
+						type = "label",
+						x = x,
+						y = cursorY + 8,
+						w = w,
+						text = pageText(i18n, group.key, group.key),
+						color = COLOR_THEME_PRIMARY2,
+						font = SMLSIZE
+					}
+					cursorY = cursorY + 36
+				end
 
-				for j = 1, #group.rows do
-					local row = group.rows[j]
-					local isModeActive = govMode >= row.reqMode
-					local isFlagActive = true
-					if row.flagKey and ui.flags then
-						local val = ui.flags[row.flagKey]
-						if row.flagInverse then val = not val end
-						isFlagActive = val
-					end
+				if group.horizontal then
+					cursorY = cursorY + appendHorizontalFields(children, x, cursorY, w, pageText(i18n, group.key, group.key), group.rows, i18n)
+				else
+					for j = 1, #group.rows do
+						local row = group.rows[j]
+						local isModeActive = govMode >= row.reqMode
+						local isFlagActive = true
+						if row.flagKey and ui.flags then
+							local val = ui.flags[row.flagKey]
+							if row.flagInverse then val = not val end
+							isFlagActive = val
+						end
 
-					if isModeActive then
-						local isActive = isFlagActive
-						local limits = getFieldLimit(row.field)
-						
-						if Controls and type(Controls.appendNumberField) == "function" then
-							Controls.appendNumberField(
+						if isModeActive then
+							local isActive = isFlagActive
+							local limits = getFieldLimit(row.field)
+							
+							cursorY = cursorY + appendCompactNumberField(
 								children,
 								x,
 								cursorY,
@@ -539,46 +723,10 @@ function M.build(ctx)
 									enabled = isActive
 								}
 							)
-						else
-							local labelW = math.floor(w * 0.5)
-							local valX = x + labelW
-							local valueW = w - labelW - 10
-							local stepSize = limits.step or 1
-
-							children[#children + 1] = {
-								type = "label",
-								x = x + 10,
-								y = cursorY + 12,
-								w = labelW,
-								text = pageText(i18n, row.labelKey, row.labelKey),
-								color = isActive and COLOR_THEME_PRIMARY1 or COLOR_THEME_SECONDARY1,
-								font = MIDSIZE
-							}
-							children[#children + 1] = {
-								type = "numberEdit",
-								x = valX,
-								y = cursorY + 4,
-								w = valueW,
-								min = math.floor(limits.min / stepSize),
-								max = math.floor(limits.max / stepSize),
-								active = function() return isActive end,
-								get = function()
-									return math.floor(clampInt(ui.config[row.field], limits.min, limits.max, 0) / stepSize)
-								end,
-								set = function(val)
-									if not isActive then return end
-									getFieldSetter(row.field, row.altField)(val * stepSize)
-								end,
-								display = function(val)
-									return tostring(tonumber(val) * stepSize)
-								end
-							}
 						end
-						
-						cursorY = cursorY + rowH
 					end
 				end
-				cursorY = cursorY + 10
+				cursorY = cursorY + 8
 			end
 		end
 	end

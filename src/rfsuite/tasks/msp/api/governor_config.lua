@@ -5,7 +5,7 @@ local Api = {
   writeCommand = 143,
   simulatorResponse = {
     -- matches Rotorflight Ethos >=12.0.9 layout (values from source)
-    2,       -- gov_mode
+    3,       -- gov_mode
     200, 0,  -- gov_startup_time
     100, 0,  -- gov_spoolup_time
     20, 0,   -- gov_tracking_time
