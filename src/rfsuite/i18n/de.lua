@@ -189,6 +189,11 @@ return {
       },
       flight_tuning_rates = {
         title = "Drehraten",
+        rates_type = "Drehraten-Type",
+        rate_table = "Rate-Tabelle",
+        msg_reset_to_defaults = "Rate-Typ geändert. Werte werden auf Standardwerte zurückgesetzt.",
+        table_help_p1 = "Raten-Typ: Wählen Sie den Rate-Typ aus, mit dem Sie fliegen möchten. Raceflight und Actual sind die einfachsten.",
+        table_help_p2 = "Dynamik: Wird unabhängig vom Rate-Typ angewendet. Anpassen, um Heli-Bewegungen weicher zu machen, z. B. für Scale-Helis.",
         roll = "Roll",
         pitch = "Nick",
         yaw = "Gier",
