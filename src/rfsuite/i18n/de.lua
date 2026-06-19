@@ -227,6 +227,17 @@ return {
         help_table_5 = "RC-Rate: Reduziert die Empfindlichkeit um die Knüppelmitte. Eine RC-Rate, die auf die Hälfte der Maximalrate eingestellt ist, ist linear. Ein niedrigerer Wert reduziert die Empfindlichkeit um die Knüppelmitte. Ein höherer Wert als die Hälfte der Maximalrate erhöht auch die Maximalrate.\n\nMaximaldrehrate: Maximale Rotationsgeschwindigkeit bei vollem Knüppelausschlag in Grad pro Sekunde.\n\nExpo: Verringert die Empfindlichkeit nahe der Knüppelmitte für feinere Steuerung.",
         help_table_6 = "Drehrate: Maximale Rotationsgeschwindigkeit bei vollem Knüppelausschlag in Grad pro Sekunde.\n\nForm: Verschiebt den Scheitelpunkt der Steuerkurve. Bis zu diesem Punkt verläuft die Signalumsetzung linear. Dies definiert, wie weit der Knüppelweg proportional bleibt, bevor die Kurve progressiv wird.\n\nExpo: Verringert die Empfindlichkeit nahe der Knüppelmitte für feinere Steuerung."
       },
+      flight_tuning_rates_advanced_cyclic_behaviour = {
+        title = "Zyklisches Verhalten",
+        cyclic_polarity = "Polarkoordinaten",
+        cyclic_ring = "Zyklik-Ring",
+        cyclic_ring_value = "Zyklik-Ring %",
+        loading_title = "Laden",
+        loading_message = "Lese zyklisches Verhalten",
+        help_title = "Zyklisches Verhalten",
+        help_p1 = "Polarkoordinaten: Definiert zyklische Raten mithilfe von Polarkoordinaten (Größe und Winkel) anstelle von unabhängigen Roll- und Nick-Raten.",
+        help_p2 = "Zyklik-Ring: Begrenzt den gesamten zyklischen Knüppelausschlag auf eine Kreisform, um übermäßige kombinierte Roll- und Nick-Ausschläge zu verhindern."
+      },
       settings_general = {
         section_display = "Anzeige",
         section_safety = "Sicherheit & Prompts",

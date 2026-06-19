@@ -227,6 +227,17 @@ return {
         help_table_5 = "RC Rate: Use to reduce sensitivity around center stick. RC Rate set to one half of the Max Rate is linear. A lower number will reduce sensitivity around center stick. Higher than one half of the Max Rate will also increase the Max Rate.\n\nMax Rate: Maximum rotation rate at full stick deflection in degrees per second.\n\nExpo: Reduces sensitivity near the stick's center where fine controls are needed.",
         help_table_6 = "Rate: Maximum rotation rate at full stick deflection in degrees per second.\n\nShape: Shifts the vertex of the control curve. Up to this point, the signal translation is linear. This defines how far the stick travel remains proportional before the curve becomes progressive.\n\nExpo: Reduces sensitivity near the stick's center where fine controls are needed."
       },
+      flight_tuning_rates_advanced_cyclic_behaviour = {
+        title = "Cyclic Behaviour",
+        cyclic_polarity = "Polar coordinates",
+        cyclic_ring = "Cyclic ring",
+        cyclic_ring_value = "Cyclic ring %",
+        loading_title = "Loading",
+        loading_message = "Reading Cyclic Behaviour",
+        help_title = "Cyclic Behaviour",
+        help_p1 = "Polar coordinates: Defines cyclic rates using polar (magnitude and angle) coordinates instead of independent Roll and Pitch rates.",
+        help_p2 = "Cyclic ring: Limits the total cyclic stick deflection to a circular shape, preventing excessive combined roll and pitch deflection."
+      },
       settings_general = {
         section_display = "Display",
         section_safety = "Safety & Prompts",

@@ -27,6 +27,7 @@ local entries = {
   setup_power_preferences_page = definePage("setup/power/preferences"),
   flight_tuning_pids_page = definePage("flight_tuning/pids"),
   flight_tuning_rates_page = definePage("flight_tuning/rates"),
+  flight_tuning_advanced_rates_advanced_cyclic_behaviour_page = definePage("flight_tuning/advanced/rates_advanced/cyclic_behaviour"),
   flight_tuning_advanced_rates_advanced_table_page = definePage("flight_tuning/advanced/rates_advanced/table"),
   flight_tuning_governor_page = definePage("flight_tuning/governor"),
   setup_telemetry_page = definePage("setup/telemetry"),

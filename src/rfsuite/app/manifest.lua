@@ -82,7 +82,7 @@ local manifest = {
       title = "@i18n(app.modules.rates_advanced.name)@",
       pages = {
         { id = "advanced", title = "@i18n(app.modules.rates_advanced.advanced)@", menuId = "flight_tuning_advanced_rates_advanced_advanced_page", icon = "@pages/flight_tuning/advanced/rates_advanced/advanced/icon.png", enabled = false },
-        { id = "cyclic_behaviour", title = "@i18n(app.modules.rates_advanced.cyclic_behaviour)@", menuId = "flight_tuning_advanced_rates_advanced_cyclic_behaviour_page", icon = "@pages/flight_tuning/advanced/rates_advanced/cyclic_behaviour/icon.png", enabled = false },
+        { id = "cyclic_behaviour", title = "@i18n(app.modules.rates_advanced.cyclic_behaviour)@", menuId = "flight_tuning_advanced_rates_advanced_cyclic_behaviour_page", icon = "@pages/flight_tuning/advanced/rates_advanced/cyclic_behaviour/icon.png" },
         { id = "table", title = "@i18n(app.modules.rates_advanced.table)@", menuId = "flight_tuning_advanced_rates_advanced_table_page", icon = "@pages/flight_tuning/advanced/rates_advanced/table/icon.png" }
       }
     },
