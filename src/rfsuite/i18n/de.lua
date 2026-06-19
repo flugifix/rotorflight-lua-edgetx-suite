@@ -313,6 +313,22 @@ return {
         help_p5 = "Kollektiv-Impuls-FF: Impulsartige Heck-Vorkompensation für kollektive Eingaben. Falls zusätzliche Heck-Vorkompensation zu Beginn einer kollektiven Eingabe erforderlich ist.",
         help_p6 = "Heck-Drehmoment-Unterstützung: Für motorisierte Heckrotoren. Verstärkung und Begrenzung der Drehzahlerhöhung beim Gierausgleich durch das Hauptrotordrehmoment."
       },
+      flight_tuning_advanced_main_rotor = {
+        title = "Hauptrotor",
+        collective_pitch_comp = "Kol. Pitch-Kompensation",
+        collective_pitch_comp_short = "Kol. Pitch-Komp.",
+        cyclic_cross_coupling = "Zyklische Kreuzkopplung",
+        gain = "Verst.",
+        ratio = "Verhältnis",
+        cutoff = "Grenzwert",
+        loading_title = "Laden",
+        loading_message = "Lese Hauptrotoreinstellungen",
+        help_title = "Hauptrotor-Hilfe",
+        help_p1 = "Kollektive Pitch-Kompensation: Erhöhen Sie diesen Wert, um das Kippmoment durch den Heckrotorzug beim Steigen auszugleichen.",
+        help_p2 = "Kreuzkopplungs-Verstärkung: Entfernt Roll-Kopplung, wenn nur Höhenruder (Elevator) angewendet wird.",
+        help_p3 = "Kreuzkopplungs-Verhältnis: Menge der angewandten Kompensation (Nick vs. Roll).",
+        help_p4 = "Kreuzkopplungs-Frequenzgrenze: Frequenzgrenze für die Kompensation – ein höherer Wert führt zu einer schnelleren Kompensationsreaktion."
+      },
       settings_general = {
         section_display = "Anzeige",
         section_safety = "Sicherheit & Prompts",

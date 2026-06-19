@@ -313,6 +313,22 @@ return {
         help_p5 = "Collective Impulse FF: Impulse tail precompensation for collective inputs. If you need extra tail precompensation at the beginning of collective input.",
         help_p6 = "Tail Torque Assist: For motorized tails. Gain and limit of headspeed increase when using main rotor torque for yaw assist."
       },
+      flight_tuning_advanced_main_rotor = {
+        title = "Main Rotor",
+        collective_pitch_comp = "Col. Pitch Compensation",
+        collective_pitch_comp_short = "Col. Pitch Comp",
+        cyclic_cross_coupling = "Cyclic Cross coupling",
+        gain = "Gain",
+        ratio = "Ratio",
+        cutoff = "Cutoff",
+        loading_title = "Loading",
+        loading_message = "Reading Main Rotor Settings",
+        help_title = "Main Rotor Help",
+        help_p1 = "Collective Pitch Compensation: Increasing will compensate for the pitching motion caused by tail drag when climbing.",
+        help_p2 = "Cross Coupling Gain: Removes roll coupling when only elevator is applied.",
+        help_p3 = "Cross Coupling Ratio: Amount of compensation (pitch vs roll) to apply.",
+        help_p4 = "Cross Coupling Freq. Limit: Frequency limit for the compensation, higher value will make the compensation action faster."
+      },
       settings_general = {
         section_display = "Display",
         section_safety = "Safety & Prompts",

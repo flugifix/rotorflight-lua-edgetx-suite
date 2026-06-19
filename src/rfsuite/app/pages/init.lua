@@ -29,6 +29,7 @@ local entries = {
   flight_tuning_rates_page = definePage("flight_tuning/rates"),
   flight_tuning_advanced_rescue_page = definePage("flight_tuning/advanced/rescue"),
   flight_tuning_advanced_tail_rotor_page = definePage("flight_tuning/advanced/tail_rotor"),
+  flight_tuning_advanced_main_rotor_page = definePage("flight_tuning/advanced/main_rotor"),
   flight_tuning_advanced_rates_advanced_advanced_page = definePage("flight_tuning/advanced/rates_advanced/advanced"),
   flight_tuning_advanced_rates_advanced_cyclic_behaviour_page = definePage("flight_tuning/advanced/rates_advanced/cyclic_behaviour"),
   flight_tuning_advanced_rates_advanced_table_page = definePage("flight_tuning/advanced/rates_advanced/table"),
