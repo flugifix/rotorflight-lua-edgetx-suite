@@ -329,6 +329,20 @@ return {
         help_p3 = "Kreuzkopplungs-Verhältnis: Menge der angewandten Kompensation (Nick vs. Roll).",
         help_p4 = "Kreuzkopplungs-Frequenzgrenze: Frequenzgrenze für die Kompensation – ein höherer Wert führt zu einer schnelleren Kompensationsreaktion."
       },
+      flight_tuning_advanced_autolevel = {
+        title = "Autolevel",
+        acro_trainer = "Acro-Trainer",
+        angle_mode = "Winkelmodus",
+        horizon_mode = "Horizontmodus",
+        gain = "Verst.",
+        max = "Max",
+        loading_title = "Laden",
+        loading_message = "Lese Autolevel-Einstellungen",
+        help_title = "Autolevel-Hilfe",
+        help_p1 = "Acro-Trainer: Rückstellkraft des Helikopters zurück zur Waagerechten im Acro-Trainer-Modus.",
+        help_p2 = "Winkelmodus: Rückstellkraft des Helikopters zurück zur Waagerechten im Winkelmodus.",
+        help_p3 = "Horizontmodus: Rückstellkraft des Helikopters zurück zur Waagerechten im Horizontmodus."
+      },
       settings_general = {
         section_display = "Anzeige",
         section_safety = "Sicherheit & Prompts",

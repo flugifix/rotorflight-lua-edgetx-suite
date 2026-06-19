@@ -329,6 +329,20 @@ return {
         help_p3 = "Cross Coupling Ratio: Amount of compensation (pitch vs roll) to apply.",
         help_p4 = "Cross Coupling Freq. Limit: Frequency limit for the compensation, higher value will make the compensation action faster."
       },
+      flight_tuning_advanced_autolevel = {
+        title = "Autolevel",
+        acro_trainer = "Acro trainer",
+        angle_mode = "Angle mode",
+        horizon_mode = "Horizon mode",
+        gain = "Gain",
+        max = "Max",
+        loading_title = "Loading",
+        loading_message = "Reading Autolevel Settings",
+        help_title = "Autolevel Help",
+        help_p1 = "Acro Trainer: How aggressively the heli tilts back to level when flying in Acro Trainer Mode.",
+        help_p2 = "Angle Mode: How aggressively the heli tilts back to level when flying in Angle Mode.",
+        help_p3 = "Horizon Mode: How aggressively the heli tilts back to level when flying in Horizon Mode."
+      },
       settings_general = {
         section_display = "Display",
         section_safety = "Safety & Prompts",
