@@ -343,6 +343,23 @@ return {
         help_p2 = "Angle Mode: How aggressively the heli tilts back to level when flying in Angle Mode.",
         help_p3 = "Horizon Mode: How aggressively the heli tilts back to level when flying in Horizon Mode."
       },
+      flight_tuning_advanced_pid_bandwidth = {
+        title = "PID Bandwidth",
+        roll = "Roll",
+        pitch = "Pitch",
+        yaw = "Yaw",
+        gyro_cutoff = "PID Bandwidth",
+        dterm_cutoff = "D-term cut-off",
+        bterm_cutoff = "B-term cut-off",
+        loading_title = "Loading",
+        loading_message = "Reading PID Bandwidth settings",
+        saved_title = "Saved",
+        saved_message = "PID Bandwidth settings saved",
+        help_title = "PID Bandwidth Help",
+        help_p1 = "PID Bandwidth: Overall bandwidth in Hz used by the PID loop.",
+        help_p2 = "D-term cutoff: D-term cutoff frequency in Hz.",
+        help_p3 = "B-term cutoff: B-term cutoff frequency in Hz."
+      },
       settings_general = {
         section_display = "Display",
         section_safety = "Safety & Prompts",

@@ -343,6 +343,23 @@ return {
         help_p2 = "Winkelmodus: Rückstellkraft des Helikopters zurück zur Waagerechten im Winkelmodus.",
         help_p3 = "Horizontmodus: Rückstellkraft des Helikopters zurück zur Waagerechten im Horizontmodus."
       },
+      flight_tuning_advanced_pid_bandwidth = {
+        title = "PID-Bandbreite",
+        roll = "Roll",
+        pitch = "Pitch",
+        yaw = "Yaw",
+        gyro_cutoff = "PID-Bandbreite",
+        dterm_cutoff = "D-Term Grenzfrequenz",
+        bterm_cutoff = "B-Term Grenzfrequenz",
+        loading_title = "Laden",
+        loading_message = "Lese PID-Bandbreiteneinstellungen",
+        saved_title = "Gespeichert",
+        saved_message = "PID-Bandbreiteneinstellungen gespeichert",
+        help_title = "PID-Bandbreiten-Hilfe",
+        help_p1 = "PID-Bandbreite: Gesamtbandbreite in Hz, die vom PID-Regler verwendet wird.",
+        help_p2 = "D-Term Grenzfrequenz: Grenzfrequenz des D-Terms in Hz.",
+        help_p3 = "B-Term Grenzfrequenz: Grenzfrequenz des B-Terms in Hz."
+      },
       settings_general = {
         section_display = "Anzeige",
         section_safety = "Sicherheit & Prompts",
