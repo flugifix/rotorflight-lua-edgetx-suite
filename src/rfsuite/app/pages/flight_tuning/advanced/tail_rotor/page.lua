@@ -12,9 +12,12 @@ end
 local Controls = nil
 local Common = nil
 local MspRuntime = nil
-local RescueProfileApi = nil
+local PidProfileApi = nil
+local GovernorProfileApi = nil
+local GovernorConfigApi = nil
 local LoadingOverlay = nil
 local Sensors = nil
+local ApiVersion = nil
 local t = nil
 
 local function newRuntime()
@@ -44,10 +47,13 @@ local function ensureDeps()
   if not Common then Common = loadModule("app/pages/settings/common.lua") end
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
-  if not RescueProfileApi then RescueProfileApi = loadModule("tasks/msp/api/rescue_profile.lua") end
+  if not PidProfileApi then PidProfileApi = loadModule("tasks/msp/api/pid_profile.lua") end
+  if not GovernorProfileApi then GovernorProfileApi = loadModule("tasks/msp/api/governor_profile.lua") end
+  if not GovernorConfigApi then GovernorConfigApi = loadModule("tasks/msp/api/governor_config.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not Sensors then Sensors = loadModule("lib/sensors.lua") end
-  if not t then t = Common and Common.pageT("flight_tuning_advanced_rescue") or nil end
+  if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
+  if not t then t = Common and Common.pageT("flight_tuning_advanced_tail_rotor") or nil end
   
   if Common then
     if not ui.runtimeBase then
@@ -86,27 +92,31 @@ local function pageText(i18n, key, fallback)
   return fallback
 end
 
-local function getRcConfig(session)
-  if type(session) ~= "table" then return nil end
-  if type(session.rescue_profile) ~= "table" then
-    session.rescue_profile = session.rescueProfile or {}
-  end
-  session.rescueProfile = session.rescue_profile
-  return session.rescue_profile
-end
-
 local function loadFromSession()
   local session = getSession()
-  local rcConfig = getRcConfig(session)
-  if not rcConfig then return end
-  for k, v in pairs(rcConfig) do
+  if not session then return end
+  local pidConfig = session.pid_profile or {}
+  local govConfig = session.governor_profile or {}
+  for k, v in pairs(pidConfig) do
+    ui.config[k] = v
+  end
+  for k, v in pairs(govConfig) do
     ui.config[k] = v
   end
 end
 
+local function isAtLeastVersion(req)
+  local session = getSession()
+  local rawApiVersion = session and session.apiVersion
+  if not rawApiVersion or rawApiVersion == "" or tostring(rawApiVersion) == "0" then
+    return true -- default true for offline/simulator
+  end
+  return ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(rawApiVersion, req)
+end
+
 local function queueRcRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
-  if not RescueProfileApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not PidProfileApi or not GovernorConfigApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
 
@@ -125,28 +135,76 @@ local function queueRcRead(isAutoReload)
     end
   end
 
+  local session = getSession()
+
+  -- Step 1: Read Governor Config
   queue:add({
-    command = RescueProfileApi.command,
-    simulatorResponse = RescueProfileApi.simulatorResponse,
+    command = GovernorConfigApi.command,
+    simulatorResponse = GovernorConfigApi.simulatorResponse,
     processReply = function(self, buf)
-      local parsed = RescueProfileApi.parse(buf)
-      if parsed then
-        local session = getSession()
-        if session then
-          local rcConfig = getRcConfig(session)
-          for k, v in pairs(parsed) do
-            rcConfig[k] = v
+      local parsedGovConfig = GovernorConfigApi.parse(buf)
+      if parsedGovConfig and session then
+        session.governor_config = parsedGovConfig
+        session.governorMode = parsedGovConfig.gov_mode
+      end
+      
+      -- Step 2: Read Pid Profile
+      queue:add({
+        command = PidProfileApi.command,
+        simulatorResponse = PidProfileApi.simulatorResponse,
+        processReply = function(self, buf)
+          local parsedPid = PidProfileApi.parse(buf)
+          if parsedPid and session then
+            session.pid_profile = parsedPid
           end
-          loadFromSession()
+          
+          -- Step 3: Read Governor Profile if api version >= 12.0.9
+          if isAtLeastVersion({12, 0, 9}) and GovernorProfileApi then
+            queue:add({
+              command = GovernorProfileApi.command,
+              simulatorResponse = GovernorProfileApi.simulatorResponse,
+              processReply = function(self, buf)
+                local parsedGov = GovernorProfileApi.parse(buf)
+                if parsedGov and session then
+                  session.governor_profile = parsedGov
+                end
+                
+                loadFromSession()
+                ui.runtime.readPending = false
+                ui.loading = false
+                ui.dirty = false
+                ui.progress = 100
+                if type(ui.runtime.requestRebuild) == "function" then
+                  ui.runtime.requestRebuild()
+                end
+              end,
+              errorHandler = function()
+                ui.runtime.readPending = false
+                ui.loading = false
+                if type(ui.runtime.requestRebuild) == "function" then
+                  ui.runtime.requestRebuild()
+                end
+              end
+            })
+          else
+            loadFromSession()
+            ui.runtime.readPending = false
+            ui.loading = false
+            ui.dirty = false
+            ui.progress = 100
+            if type(ui.runtime.requestRebuild) == "function" then
+              ui.runtime.requestRebuild()
+            end
+          end
+        end,
+        errorHandler = function()
           ui.runtime.readPending = false
           ui.loading = false
-          ui.dirty = false
-          ui.progress = 100
           if type(ui.runtime.requestRebuild) == "function" then
             ui.runtime.requestRebuild()
           end
         end
-      end
+      })
     end,
     errorHandler = function()
       ui.runtime.readPending = false
@@ -160,8 +218,25 @@ local function queueRcRead(isAutoReload)
   return true, nil
 end
 
+local function writeEeprom(queue)
+  ui.dirty = false
+  local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
+  if eepromApi then
+    queue:add({
+      command = eepromApi.command,
+      payload = {},
+      isWrite = true,
+      processReply = function()
+        queueRcRead(true)
+      end
+    })
+  else
+    queueRcRead(true)
+  end
+end
+
 local function queueRcWrite()
-  if not RescueProfileApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+  if not PidProfileApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
 
@@ -172,32 +247,49 @@ local function queueRcWrite()
   end
 
   local session = getSession()
-  local rcConfig = getRcConfig(session)
+  if not session then return false, "no_session" end
   
-  -- Update config values in session
-  for k, v in pairs(ui.config) do
-    rcConfig[k] = v
+  session.pid_profile = session.pid_profile or {}
+  session.governor_profile = session.governor_profile or {}
+
+  local pidKeys = {
+    "yaw_cw_stop_gain", "yaw_ccw_stop_gain", "yaw_precomp_cutoff",
+    "yaw_cyclic_ff_gain", "yaw_collective_ff_gain",
+    "yaw_inertia_precomp_gain", "yaw_inertia_precomp_cutoff",
+    "yaw_collective_dynamic_gain", "yaw_collective_dynamic_decay"
+  }
+  for _, k in ipairs(pidKeys) do
+    if ui.config[k] ~= nil then
+      session.pid_profile[k] = ui.config[k]
+    end
+  end
+
+  local govKeys = {
+    "governor_tta_gain", "governor_tta_limit"
+  }
+  for _, k in ipairs(govKeys) do
+    if ui.config[k] ~= nil then
+      session.governor_profile[k] = ui.config[k]
+    end
   end
 
   queue:add({
-    command = RescueProfileApi.writeCommand,
-    payload = RescueProfileApi.buildWritePayload(rcConfig),
+    command = PidProfileApi.writeCommand,
+    payload = PidProfileApi.buildWritePayload(session.pid_profile),
     isWrite = true,
-    processReply = function() 
-      ui.dirty = false
-      
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
+    processReply = function()
+      if isAtLeastVersion({12, 0, 9}) and GovernorProfileApi then
         queue:add({
-          command = eepromApi.command,
-          payload = {},
+          command = GovernorProfileApi.writeCommand,
+          payload = GovernorProfileApi.buildWritePayload(session.governor_profile),
           isWrite = true,
           processReply = function()
-            queueRcRead(true)
-          end
+            writeEeprom(queue)
+          end,
+          errorHandler = function() end
         })
       else
-        queueRcRead(true)
+        writeEeprom(queue)
       end
     end,
     errorHandler = function() end
@@ -222,7 +314,7 @@ local function getLiveProfile()
 end
 
 local function getBaseTitle()
-  return pageText(nil, "title", "Rescue")
+  return pageText(nil, "title", "Tail Rotor")
 end
 
 local function buildSessionSignature()
@@ -254,9 +346,10 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
   local rowH = 52
   local labelY = y + 16
   local cellTop = y + 4
-  local mainW    = math.floor(w * 0.24)
-  local labelW1  = math.floor(w * 0.21)
-  local editW1   = math.floor(w * 0.17)
+  
+  local mainW    = math.floor(w * 0.31)
+  local labelW1  = math.floor(w * 0.19)
+  local editW1   = math.floor(w * 0.14)
   local labelGap = 6
   
   -- Left main label
@@ -287,6 +380,9 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
   local rawMin = spec.min or 0
   local rawMax = spec.max or 1000
   local stepSize = spec.step or 1
+  local activeA = spec.active == nil or spec.active
+  if type(activeA) == "function" then activeA = activeA() end
+  
   children[#children + 1] = {
     type = "numberEdit",
     x = xEdit1,
@@ -295,7 +391,7 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
     h = 44,
     min = math.floor(rawMin / stepSize),
     max = math.ceil(rawMax / stepSize),
-    active = function() return true end,
+    active = function() return activeA end,
     get = function()
       local rVal = ui.config[key1] or rawMin
       if rVal < rawMin then rVal = rawMin end
@@ -317,10 +413,13 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
 
   -- Column 2
   if label2 and key2 and spec2 then
-    local labelW2 = math.floor(w * 0.21)
-    local editW2  = math.floor(w * 0.17)
+    local labelW2 = math.floor(w * 0.20)
+    local editW2  = math.floor(w * 0.14)
     local xLabel2 = xEdit1 + editW1 + 5
     local xEdit2  = xLabel2 + labelW2
+    
+    local activeB = spec2.active == nil or spec2.active
+    if type(activeB) == "function" then activeB = activeB() end
 
     children[#children + 1] = {
       type  = "label",
@@ -344,7 +443,7 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
       h = 44,
       min = math.floor(rawMinB / stepSizeB),
       max = math.ceil(rawMaxB / stepSizeB),
-      active = function() return true end,
+      active = function() return activeB end,
       get = function()
         local rVal = ui.config[key2] or rawMinB
         if rVal < rawMinB then rVal = rawMinB end
@@ -365,7 +464,6 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
     }
   end
 
-  -- Draw separator line below the row
   children[#children + 1] = {
     type   = "rectangle",
     x = x, y = y + rowH,
@@ -425,7 +523,7 @@ function M.build(ctx)
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
       title = pageText(i18n, "loading_title", "Loading"),
-      message = pageText(i18n, "loading_message", "Reading Rescue Settings"),
+      message = pageText(i18n, "loading_message", "Reading Tail Rotor Settings"),
       progress = ui.progress / 100
     })
     return
@@ -447,71 +545,68 @@ function M.build(ctx)
 
   cursorY = cursorY + 10
 
-  -- 1) Rescue Mode Enable (Switch)
-  local modeVal = (tonumber(ui.config.rescue_mode) or 0) == 1
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "mode_enable", "Rescue mode enable"), modeVal, function(nextBool)
-    ui.config.rescue_mode = nextBool and 1 or 0
-    ui.dirty = true
-    if type(ui.runtime.requestRebuild) == "function" then
-      ui.runtime.requestRebuild()
-    end
-  end)
+  -- Specs
+  local specGain    = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
+  local specCutoff  = { scale=1, mult=1, min=0, max=250, suffix="Hz", decimals=0 }
+  local specCutoff1 = { scale=10, mult=1, min=0, max=250, suffix="Hz", decimals=1 }
+  local specLimit   = { scale=1, mult=1, min=0, max=100, suffix="%", decimals=0 }
 
-  if modeVal then
-    -- 2) Flip to upright (Switch)
-    local flipUpVal = (tonumber(ui.config.rescue_flip_mode) or 0) == 1
-    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "flip_upright", "Flip to upright"), flipUpVal, function(nextBool)
-      ui.config.rescue_flip_mode = nextBool and 1 or 0
-      ui.dirty = true
-    end)
+  local session = getSession()
+  local govMode = tonumber(session and session.governorMode or 0) or 0
+  local isTtaActive = (govMode >= 1)
 
-    -- Specs
-    local specCollective = { scale=10, mult=1, min=0, max=1000, suffix="%", decimals=0 }
-    local specTime       = { scale=10, mult=1, min=0, max=250, suffix="s", decimals=1 }
-    local specGain       = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
-    local specRate       = { scale=1, mult=1, min=5, max=1000, suffix="°/s", decimals=0 }
-    local specAccel      = { scale=1, mult=1, min=0, max=10000, suffix="°/s^2", decimals=0 }
+  -- 1) Yaw stop gain (CW & CCW)
+  cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w,
+    pageText(i18n, "yaw_stop_gain", "Yaw stop gain"),
+    pageText(i18n, "cw", "CW"), "yaw_cw_stop_gain", specGain,
+    pageText(i18n, "ccw", "CCW"), "yaw_ccw_stop_gain", specGain
+  )
 
-    -- 3) Pull-up (Collective & Time)
-    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
-      pageText(i18n, "pull_up", "Pull-up"), 
-      pageText(i18n, "collective", "Collective"), "rescue_pull_up_collective", specCollective, 
-      pageText(i18n, "time", "Time"), "rescue_pull_up_time", specTime
+  -- 2) Precomp Cutoff
+  cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w,
+    pageText(i18n, "precomp_cutoff", "Precomp Cutoff"),
+    pageText(i18n, "cutoff", "Cutoff"), "yaw_precomp_cutoff", specCutoff,
+    nil, nil, nil
+  )
+
+  -- 3) Cyclic FF gain
+  cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w,
+    pageText(i18n, "cyclic_ff_gain", "Cyclic FF gain"),
+    pageText(i18n, "gain", "Gain"), "yaw_cyclic_ff_gain", specGain,
+    nil, nil, nil
+  )
+
+  -- 4) Collective FF gain
+  cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w,
+    pageText(i18n, "collective_ff_gain", "Collective FF gain"),
+    pageText(i18n, "gain", "Gain"), "yaw_collective_ff_gain", specGain,
+    nil, nil, nil
+  )
+
+  -- 5) Inertia Precomp (12.0.8+) OR Collective Impulse FF (<=12.0.7)
+  if isAtLeastVersion({12, 0, 8}) then
+    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w,
+      pageText(i18n, "inertia_precomp", "Inertia Precomp"),
+      pageText(i18n, "gain", "Gain"), "yaw_inertia_precomp_gain", specGain,
+      pageText(i18n, "cutoff", "Cutoff"), "yaw_inertia_precomp_cutoff", specCutoff1
     )
-
-    -- 4) Climb (Collective & Time)
-    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
-      pageText(i18n, "climb", "Climb"), 
-      pageText(i18n, "collective", "Collective"), "rescue_climb_collective", specCollective, 
-      pageText(i18n, "time", "Time"), "rescue_climb_time", specTime
+  else
+    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w,
+      pageText(i18n, "collective_impulse_ff", "Collective Impulse FF"),
+      pageText(i18n, "gain", "Gain"), "yaw_collective_dynamic_gain", specGain,
+      pageText(i18n, "decay", "Decay"), "yaw_collective_dynamic_decay", specGain
     )
+  end
 
-    -- 5) Hover (Collective)
-    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
-      pageText(i18n, "hover", "Hover"), 
-      pageText(i18n, "collective", "Collective"), "rescue_hover_collective", specCollective, 
-      nil, nil, nil
-    )
-
-    -- 6) Flip (Fail time & Exit time)
-    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
-      pageText(i18n, "flip", "Flip"), 
-      pageText(i18n, "fail_time", "Fail time"), "rescue_flip_time", specTime, 
-      pageText(i18n, "exit_time", "Exit time"), "rescue_exit_time", specTime
-    )
-
-    -- 7) Gains (Level & Flip)
-    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
-      pageText(i18n, "gains", "Gains"), 
-      pageText(i18n, "level_gain", "Level"), "rescue_level_gain", specGain, 
-      pageText(i18n, "flip", "Flip"), "rescue_flip_gain", specGain
-    )
-
-    -- 8) Dynamics (Rate & Accel)
-    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w, 
-      pageText(i18n, "dynamics", "Dynamics"), 
-      pageText(i18n, "rate", "Rate"), "rescue_max_setpoint_rate", specRate, 
-      pageText(i18n, "accel", "Accel"), "rescue_max_setpoint_accel", specAccel
+  -- 6) Tail Torque Assist (12.0.9+)
+  if isAtLeastVersion({12, 0, 9}) then
+    local specTtaGain = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0, active = isTtaActive }
+    local specTtaLimit = { scale=1, mult=1, min=0, max=100, suffix="%", decimals=0, active = isTtaActive }
+    
+    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w,
+      pageText(i18n, "tail_torque_assist", "Tail Torque Assist"),
+      pageText(i18n, "tta_gain", "Gain"), "governor_tta_gain", specTtaGain,
+      pageText(i18n, "tta_limit", "Limit"), "governor_tta_limit", specTtaLimit
     )
   end
 end
@@ -531,6 +626,14 @@ function M.onReload(ctx)
   return true
 end
 
+function M.onHelp(ctx)
+  local help = loadModule("app/pages/flight_tuning/advanced/tail_rotor/help.lua")
+  if type(help) == "function" then
+    return help(ctx)
+  end
+  return { title = "Help", message = "No help available" }
+end
+
 function M.allowMemAutoRefresh()
   return true
 end
@@ -545,9 +648,12 @@ function M.onClose()
   Controls = nil
   Common = nil
   MspRuntime = nil
-  RescueProfileApi = nil
+  PidProfileApi = nil
+  GovernorProfileApi = nil
+  GovernorConfigApi = nil
   LoadingOverlay = nil
   Sensors = nil
+  ApiVersion = nil
   t = nil
 end
 
