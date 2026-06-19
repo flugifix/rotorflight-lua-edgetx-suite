@@ -238,6 +238,27 @@ return {
         help_p1 = "Polarkoordinaten: Definiert zyklische Raten mithilfe von Polarkoordinaten (Größe und Winkel) anstelle von unabhängigen Roll- und Nick-Raten.",
         help_p2 = "Zyklik-Ring: Begrenzt den gesamten zyklischen Knüppelausschlag auf eine Kreisform, um übermäßige kombinierte Roll- und Nick-Ausschläge zu verhindern."
       },
+      flight_tuning_rates_advanced_advanced = {
+        title = "Dynamik",
+        response_time = "Ansprechzeit",
+        acc_limit = "Beschl. Limit",
+        setpoint_boost_gain = "Sollwert-Boost Verst.",
+        setpoint_boost_cutoff = "Sollwert-Boost Grenzf.",
+        dyn_ceiling_gain = "Dyn. Max. Verst.",
+        dyn_deadband_gain = "Dyn. Totband Verst.",
+        dyn_deadband_filter = "Dyn. Totband Filter",
+        roll = "Roll",
+        pitch = "Nick",
+        yaw = "Gier",
+        col = "Kol",
+        loading_title = "Laden",
+        loading_message = "Lese Dynamik",
+        help_title = "Dynamik-Hilfe",
+        help_p1 = "Ansprechzeit: Definiert, wie schnell das Regelsystem auf Knüppeleingaben auf den jeweiligen Achsen reagiert.",
+        help_p2 = "Beschleunigungslimit: Begrenzt die maximal zulässige Beschleunigung, um zyklische und Gier-Bewegungen zu dämpfen.",
+        help_p3 = "Sollwert-Boost: Erhöht den Sollwert vorübergehend, wenn die Knüppel schnell bewegt werden, um das Steuergefühl zu verbessern. Verstärkung bestimmt die Stärke, Grenzfrequenz begrenzt den Frequenzbereich.",
+        help_p4 = "Dynamisches Totband: Filtert automatisch Knüppelrauschen oder geringfügige Bewegungen um die Knüppelmitte auf der Gier-Achse. Dynamische Maximalverstärkung, Totbandverstärkung und Totbandfilter steuern diese Funktion."
+      },
       settings_general = {
         section_display = "Anzeige",
         section_safety = "Sicherheit & Prompts",

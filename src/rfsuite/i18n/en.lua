@@ -238,6 +238,27 @@ return {
         help_p1 = "Polar coordinates: Defines cyclic rates using polar (magnitude and angle) coordinates instead of independent Roll and Pitch rates.",
         help_p2 = "Cyclic ring: Limits the total cyclic stick deflection to a circular shape, preventing excessive combined roll and pitch deflection."
       },
+      flight_tuning_rates_advanced_advanced = {
+        title = "Dynamics",
+        response_time = "Response Time",
+        acc_limit = "Accelerometer Limit",
+        setpoint_boost_gain = "Setpoint boost gain",
+        setpoint_boost_cutoff = "Setpoint boost cutoff",
+        dyn_ceiling_gain = "Dynamic ceiling gain",
+        dyn_deadband_gain = "Dynamic deadband gain",
+        dyn_deadband_filter = "Dynamic deadband filter",
+        roll = "Roll",
+        pitch = "Pitch",
+        yaw = "Yaw",
+        col = "Col",
+        loading_title = "Loading",
+        loading_message = "Reading Dynamics",
+        help_title = "Dynamics Help",
+        help_p1 = "Response Time: Defines how quickly the control system responds to stick inputs on each axis.",
+        help_p2 = "Accelerometer Limit: Limits the maximum acceleration allowed to smooth cyclic and yaw movements.",
+        help_p3 = "Setpoint Boost: Boosts the setpoint temporarily when moving the sticks quickly to enhance stick feel. Gain sets the boost strength, and Cutoff sets the frequency range limit.",
+        help_p4 = "Dynamic Deadband: Automatically filters stick noise or minor movements around the center stick on the Yaw axis. Ceiling gain, Deadband gain, and Deadband filter control this feature."
+      },
       settings_general = {
         section_display = "Display",
         section_safety = "Safety & Prompts",
