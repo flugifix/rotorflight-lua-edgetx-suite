@@ -747,6 +747,26 @@ return {
         help_p1 = "Use this page for system-level setup such as craft name, PID loop speed, and feature flags.",
         help_p2 = "Saving writes these values to EEPROM and reboots the flight controller."
       },
+      setup_radio_config = {
+        title = "Radio Config",
+        stick = "Stick",
+        throttle = "Throttle",
+        deadband = "Deadband",
+        center = "Center",
+        deflection = "Deflection",
+        cyclic = "Cyclic",
+        yaw_deadband = "Yaw",
+        min_throttle = "Min",
+        max_throttle = "Max",
+        arming = "Arming",
+        loading_title = "Loading",
+        loading_message = "Reading radio configuration",
+        saved_title = "Saved",
+        saved_message = "Radio configuration saved",
+        help_title = "Radio Config Help",
+        help_p1 = "Configure your radio settings: Stick center, arm, deflection, throttle limits, and deadbands.",
+        help_p2 = "Saving writes these values to EEPROM."
+      },
       setup_telemetry = {
         set_defaults_title = "Telemetry Sensors",
         set_defaults_msg = "Load default telemetry sensors?",

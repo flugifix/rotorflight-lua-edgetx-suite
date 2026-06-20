@@ -747,6 +747,26 @@ return {
         help_p1 = "Verwenden Sie diese Seite für die Systemkonfiguration wie Fluggerätname, PID-Loop-Geschwindigkeit und Feature-Flags.",
         help_p2 = "Speichern schreibt diese Werte in das EEPROM und startet den Flugcontroller neu."
       },
+      setup_radio_config = {
+        title = "Fernsteuerung",
+        stick = "Knueppel",
+        throttle = "Gas",
+        deadband = "Totzone",
+        center = "Mitte",
+        deflection = "Ausschlag",
+        cyclic = "Zyklisch",
+        yaw_deadband = "Gier",
+        min_throttle = "Min",
+        max_throttle = "Max",
+        arming = "Scharf",
+        loading_title = "Laden",
+        loading_message = "Lese Fernsteuerungskonfiguration",
+        saved_title = "Gespeichert",
+        saved_message = "Fernsteuerungskonfiguration gespeichert",
+        help_title = "Fernsteuerung-Hilfe",
+        help_p1 = "Konfigurieren Sie Ihre Fernsteuerungseinstellungen: Knueppelzentrum, Ausschlag, Scharfschaltschwelle, Gasgrenzen und Totzonen.",
+        help_p2 = "Speichern schreibt diese Werte in das EEPROM."
+      },
       setup_telemetry = {
         set_defaults_title = "Telemetrie-Sensoren",
         set_defaults_msg = "Standard-Telemetrie-Sensoren laden?",
