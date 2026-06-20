@@ -69,7 +69,7 @@ local manifest = {
       title = "@i18n(app.modules.advanced.name)@",
       pages = {
         { id = "filters", title = "@i18n(app.modules.filters.name)@", menuId = "flight_tuning_advanced_filters_page", icon = "@pages/flight_tuning/advanced/filters/icon.png", enabled = false },
-        { id = "pid_controller", title = "@i18n(app.modules.pid_controller.name)@", menuId = "flight_tuning_advanced_pid_controller_page", icon = "@pages/flight_tuning/advanced/pid_controller/icon.png", enabled = false },
+        { id = "pid_controller", title = "@i18n(app.modules.pid_controller.name)@", menuId = "flight_tuning_advanced_pid_controller_page", icon = "@pages/flight_tuning/advanced/pid_controller/icon.png" },
         { id = "pid_bandwidth", title = "@i18n(app.modules.pid_bandwidth.name)@", menuId = "flight_tuning_advanced_pid_bandwidth_page", icon = "@pages/flight_tuning/advanced/pid_bandwidth/icon.png" },
         { id = "autolevel", title = "@i18n(app.modules.autolevel.name)@", menuId = "flight_tuning_advanced_autolevel_page", icon = "@pages/flight_tuning/advanced/autolevel/icon.png" },
         { id = "main_rotor", title = "@i18n(app.modules.main_rotor.name)@", menuId = "flight_tuning_advanced_main_rotor_page", icon = "@pages/flight_tuning/advanced/main_rotor/icon.png" },

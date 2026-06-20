@@ -30,6 +30,7 @@ local entries = {
   flight_tuning_advanced_rescue_page = definePage("flight_tuning/advanced/rescue"),
   flight_tuning_advanced_tail_rotor_page = definePage("flight_tuning/advanced/tail_rotor"),
   flight_tuning_advanced_main_rotor_page = definePage("flight_tuning/advanced/main_rotor"),
+  flight_tuning_advanced_pid_controller_page = definePage("flight_tuning/advanced/pid_controller"),
   flight_tuning_advanced_pid_bandwidth_page = definePage("flight_tuning/advanced/pid_bandwidth"),
   flight_tuning_advanced_autolevel_page = definePage("flight_tuning/advanced/autolevel"),
   flight_tuning_advanced_rates_advanced_advanced_page = definePage("flight_tuning/advanced/rates_advanced/advanced"),
