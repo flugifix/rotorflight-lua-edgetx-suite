@@ -732,6 +732,21 @@ return {
         save_error_title = "Error",
         save_error_message = "Save failed"
       },
+      setup_configuration = {
+        title = "Configuration",
+        craft_name = "Craft name",
+        pid_loop_speed = "PID loop speed",
+        feature_gps = "GPS",
+        feature_led_strip = "LED_STRIP",
+        feature_cms = "CMS",
+        loading_title = "Loading",
+        loading_message = "Reading configuration",
+        saved_title = "Saved",
+        saved_message = "Configuration settings saved",
+        help_title = "Configuration Help",
+        help_p1 = "Use this page for system-level setup such as craft name, PID loop speed, and feature flags.",
+        help_p2 = "Saving writes these values to EEPROM and reboots the flight controller."
+      },
       setup_telemetry = {
         set_defaults_title = "Telemetry Sensors",
         set_defaults_msg = "Load default telemetry sensors?",

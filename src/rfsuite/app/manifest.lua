@@ -133,7 +133,7 @@ local manifest = {
     setup_menu = {
       title = "@i18n(app.modules.setup.name)@",
       pages = {
-        { id = "configuration", title = "@i18n(app.modules.configuration.name)@", icon = "@pages/setup/configuration/icon.png", row = 1, col = 1, enabled = false },
+        { id = "configuration", title = "@i18n(app.modules.configuration.name)@", menuId = "setup_configuration_page", icon = "@pages/setup/configuration/icon.png", row = 1, col = 1 },
         { id = "radio_config", title = "@i18n(app.modules.radio_config.name)@", icon = "@pages/setup/radio_config/icon.png", row = 1, col = 2, enabled = false },
         { id = "telemetry", title = "@i18n(app.modules.telemetry.name)@", menuId = "setup_telemetry_page", icon = "@pages/setup/telemetry/icon.png", row = 1, col = 3 },
         { id = "accelerometer", title = "@i18n(app.modules.accelerometer.name)@", icon = "@pages/setup/accelerometer/icon.png", row = 1, col = 4, enabled = false },
@@ -187,6 +187,10 @@ local manifest = {
     },
     flight_tuning_governor_page = {
       title = "@i18n(app.modules.governor.name)@",
+      pages = {}
+    },
+    setup_configuration_page = {
+      title = "@i18n(app.modules.configuration.name)@",
       pages = {}
     },
     setup_telemetry_page = {

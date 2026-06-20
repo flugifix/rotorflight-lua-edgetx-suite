@@ -482,4 +482,59 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
   return rowH + 1
 end
 
+function Controls.appendTextField(children, x, y, w, labelText, opts)
+  opts = opts or {}
+  local rowH = math.max(ROW_H, NUMBER_H)
+  local labelY = y + math.floor((rowH - 20) / 2)
+
+  local editW = 172
+  if editW > w then editW = w end
+  local editX = x + w - editW - 10
+  local labelW = editX - x - 8
+
+  local getter = opts.get or function() return "" end
+  local setter = opts.set or function() end
+  local activeGetter = opts.active
+  if type(activeGetter) ~= "function" then
+    local activeVal = opts.active ~= false
+    activeGetter = function() return activeVal end
+  end
+  local maxLength = tonumber(opts.length) or 32
+
+  -- Left label
+  children[#children + 1] = {
+    type  = "label",
+    x = x, y = labelY,
+    w = labelW,
+    text  = labelText,
+    color = COLOR_THEME_PRIMARY1,
+    font  = SMLSIZE
+  }
+
+  -- Text edit box
+  children[#children + 1] = {
+    type = "textEdit",
+    x = editX,
+    y = y + 6,
+    w = editW,
+    h = 50,
+    value = getter(),
+    length = maxLength,
+    active = activeGetter,
+    set = function(newVal)
+      setter(newVal)
+    end
+  }
+
+  -- Row divider
+  children[#children + 1] = {
+    type   = "rectangle",
+    x = x, y = y + rowH,
+    w = w, h = 1,
+    color  = GREY_DEFAULT, filled = true
+  }
+
+  return rowH + 1
+end
+
 return Controls

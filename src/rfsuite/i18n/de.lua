@@ -732,6 +732,21 @@ return {
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen"
       },
+      setup_configuration = {
+        title = "Konfiguration",
+        craft_name = "Modellname",
+        pid_loop_speed = "PID-Loop-Geschwindigkeit",
+        feature_gps = "GPS",
+        feature_led_strip = "LED_STRIP",
+        feature_cms = "CMS",
+        loading_title = "Laden",
+        loading_message = "Lese Konfiguration",
+        saved_title = "Gespeichert",
+        saved_message = "Konfiguration gespeichert",
+        help_title = "Konfiguration-Hilfe",
+        help_p1 = "Verwenden Sie diese Seite für die Systemkonfiguration wie Fluggerätname, PID-Loop-Geschwindigkeit und Feature-Flags.",
+        help_p2 = "Speichern schreibt diese Werte in das EEPROM und startet den Flugcontroller neu."
+      },
       setup_telemetry = {
         set_defaults_title = "Telemetrie-Sensoren",
         set_defaults_msg = "Standard-Telemetrie-Sensoren laden?",
