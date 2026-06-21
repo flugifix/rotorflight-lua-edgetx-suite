@@ -42,6 +42,7 @@ local entries = {
   flight_tuning_governor_page = definePage("flight_tuning/governor"),
   setup_telemetry_page = definePage("setup/telemetry"),
   setup_accelerometer_page = definePage("setup/accelerometer"),
+  setup_alignment_page = definePage("setup/alignment"),
   setup_ports_page = definePage("setup/ports"),
   tools_select_profile_page = definePage("tools/select_profile"),
   tools_copy_profiles_page = definePage("tools/copy_profiles"),

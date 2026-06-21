@@ -596,6 +596,13 @@ screenData:
                type: Bool
                value: 
                   boolValue: 0
+   1:
+      LayoutId: Layout1x1AM
+      layoutData: 
+         zones: 
+            0:
+               widgetName: RFSuite
+               widgetData: 
 topbarData: 
    zones: 
       4:
