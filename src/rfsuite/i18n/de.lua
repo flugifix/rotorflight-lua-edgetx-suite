@@ -778,6 +778,23 @@ return {
         saved_title = "Gespeichert",
         saved_message = "Telemetrie-Sensoren gespeichert"
       },
+      setup_accelerometer = {
+        title = "Beschleunigungssensor",
+        roll = "Roll",
+        pitch = "Nick",
+        loading_title = "Laden",
+        loading_message = "Lese Beschleunigungssensor-Trimmungen",
+        saved_title = "Gespeichert",
+        saved_message = "Beschleunigungssensor-Trimmungen gespeichert",
+        help_title = "Beschleunigungssensor-Hilfe",
+        help_p1 = "Der Beschleunigungssensor wird verwendet, um den Winkel des Flugcontrollers in Bezug auf den Horizont zu messen. Diese Daten werden zur Stabilisierung des Fluggeraets und zur Bereitstellung der Selbstnivellierungsfunktion verwendet.",
+        help_p2 = "Speichern schreibt diese Werte in das EEPROM.",
+        msg_calibrate = "Beschleunigungssensor kalibrieren?",
+        calibrating_title = "Kalibrierung",
+        calibrating_message = "Beschleunigungssensor wird kalibriert. Bitte halten Sie das Modell waagerecht und ruhig.",
+        calibrated_title = "Kalibriert",
+        calibrated_message = "Beschleunigungssensor erfolgreich kalibriert und im EEPROM gespeichert."
+      },
       diagnostics_info = {
         version = "Version",
         edgetx_version = "EdgeTX-Version",

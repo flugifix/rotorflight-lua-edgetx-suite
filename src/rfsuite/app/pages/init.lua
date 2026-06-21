@@ -41,6 +41,7 @@ local entries = {
   flight_tuning_advanced_rates_advanced_table_page = definePage("flight_tuning/advanced/rates_advanced/table"),
   flight_tuning_governor_page = definePage("flight_tuning/governor"),
   setup_telemetry_page = definePage("setup/telemetry"),
+  setup_accelerometer_page = definePage("setup/accelerometer"),
   tools_select_profile_page = definePage("tools/select_profile"),
   tools_copy_profiles_page = definePage("tools/copy_profiles"),
   -- Disabled for now since the FBL Sensor page is not fully implemented and we don't want users to get confused by a page that doesn't work yet. Will re-enable once the page is ready to be used.

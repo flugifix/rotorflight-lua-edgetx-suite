@@ -778,6 +778,23 @@ return {
         saved_title = "Saved",
         saved_message = "Telemetry sensors saved"
       },
+      setup_accelerometer = {
+        title = "Accelerometer",
+        roll = "Roll",
+        pitch = "Pitch",
+        loading_title = "Loading",
+        loading_message = "Reading accelerometer trims",
+        saved_title = "Saved",
+        saved_message = "Accelerometer trims saved",
+        help_title = "Accelerometer Help",
+        help_p1 = "The accelerometer is used to measure the angle of the flight controller in relation to the horizon. This data is used to stabilize the aircraft and provide self-leveling functionality.",
+        help_p2 = "Saving writes these values to EEPROM.",
+        msg_calibrate = "Calibrate the accelerometer?",
+        calibrating_title = "Calibrating",
+        calibrating_message = "Calibrating accelerometer. Please keep the model level and still.",
+        calibrated_title = "Calibrated",
+        calibrated_message = "Accelerometer calibrated successfully and saved to EEPROM."
+      },
       diagnostics_info = {
         version = "Version",
         edgetx_version = "EdgeTX Version",

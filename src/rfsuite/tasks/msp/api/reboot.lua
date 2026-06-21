@@ -1,6 +1,7 @@
 -- EdgeTX MSP API: reboot (write-only)
 
 local Api = {
+  command = 68,
   writeCommand = 68
 }
 
