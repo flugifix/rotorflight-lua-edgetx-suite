@@ -62,7 +62,10 @@ function Api.parse(buf)
   local parsed = {}
   local pos = 1
   for i = 1, MAX_SERIAL_PORTS do
-    parsed["port_" .. i .. "_identifier"] = tonumber(buf[pos]) or 0; pos = pos + 1
+    if buf[pos] == nil then break end
+    local identifier = tonumber(buf[pos]) or 0
+    if identifier == 255 then break end
+    parsed["port_" .. i .. "_identifier"] = identifier; pos = pos + 1
     parsed["port_" .. i .. "_function_mask"] = read_u32_le(buf, pos); pos = pos + 4
     parsed["port_" .. i .. "_msp_baud_index"] = tonumber(buf[pos]) or 0; pos = pos + 1
     parsed["port_" .. i .. "_gps_baud_index"] = tonumber(buf[pos]) or 0; pos = pos + 1
