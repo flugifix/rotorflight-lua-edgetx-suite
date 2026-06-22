@@ -23,11 +23,46 @@ return {
       accelerometer = { name = "Accelerometer" },
       alignment = { name = "Alignment" },
       ports = { name = "Ports" },
-      mixer = { name = "Mixer" },
-      servos = { name = "Servos" },
-      controls = { name = "Controls" },
+      mixer = {
+        name = "Mixer",
+        swash = "Swash",
+        geometry = "Geometry",
+        tail = "Tail",
+        trims = "Trims"
+      },
+      servos = {
+        name = "Servos",
+        pwm = "PWM Output",
+        bus = "BUS Output"
+      },
+      controls = {
+        name = "Controls",
+        modes = "Modes",
+        adjustments = "Adjustments",
+        failsafe = "Failsafe",
+        beepers = "Beepers",
+        blackbox = "Blackbox",
+        stats = "Stats"
+      },
+      beepers = {
+        name = "Beepers",
+        configuration = "Configuration",
+        dshot = "ESC Beacon"
+      },
+      blackbox = {
+        name = "Blackbox",
+        configuration = "Configuration",
+        logging = "Logging",
+        status = "Status"
+      },
+      esc_motors = {
+        name = "ESC & Motors",
+        throttle = "Throttle",
+        telemetry = "Telemetry",
+        rpm = "RPM",
+        esc_tools = "ESC Tools"
+      },
       power = { name = "Power" },
-      esc_motors = { name = "ESC & Motors" },
       battery = { name = "Battery" },
       alerts = { name = "Alerts" },
       sources = { name = "Sources" },
@@ -54,7 +89,13 @@ return {
       formats = { name = "Formats" },
       pids = { name = "PIDs" },
       rates = { name = "Rates" },
-      governor = { name = "Governor" },
+      governor = {
+        name = "Governor",
+        general = "General",
+        time = "Ramp Time",
+        filters = "Filters",
+        curves = "Bypass Curve"
+      },
       advanced = { name = "Advanced" },
       filters = { name = "Filters" },
       pid_controller = { name = "PID Controller" },

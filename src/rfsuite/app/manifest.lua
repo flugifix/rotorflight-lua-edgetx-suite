@@ -139,12 +139,21 @@ local manifest = {
         { id = "accelerometer", title = "@i18n(app.modules.accelerometer.name)@", menuId = "setup_accelerometer_page", icon = "@pages/setup/accelerometer/icon.png", row = 1, col = 4 },
         { id = "alignment", title = "@i18n(app.modules.alignment.name)@", menuId = "setup_alignment_page", icon = "@pages/setup/alignment/icon.png", row = 1, col = 5 },
         { id = "ports", title = "@i18n(app.modules.ports.name)@", menuId = "setup_ports_page", icon = "@pages/setup/ports/icon.png", row = 1, col = 6 },
-        { id = "mixer", title = "@i18n(app.modules.mixer.name)@", icon = "@pages/setup/mixer/icon.png", row = 2, col = 1, enabled = false },
-        { id = "servos", title = "@i18n(app.modules.servos.name)@", icon = "@pages/setup/servos/icon.png", row = 2, col = 2, enabled = false },
-        { id = "controls", title = "@i18n(app.modules.controls.name)@", icon = "@pages/setup/controls/icon.png", row = 2, col = 3, enabled = false },
+        { id = "mixer", title = "@i18n(app.modules.mixer.name)@", menuId = "mixer_menu", icon = "@pages/setup/mixer/icon.png", row = 2, col = 1 },
+        { id = "servos", title = "@i18n(app.modules.servos.name)@", menuId = "servos_menu", icon = "@pages/setup/servos/icon.png", row = 2, col = 2 },
+        { id = "controls", title = "@i18n(app.modules.controls.name)@", menuId = "controls_menu", icon = "@pages/setup/controls/icon.png", row = 2, col = 3 },
         { id = "power", title = "@i18n(app.modules.power.name)@", menuId = "power_menu", icon = "@pages/setup/power/icon.png", row = 2, col = 4 },
-        { id = "esc_motors", title = "@i18n(app.modules.esc_motors.name)@", icon = "@pages/setup/esc_motors/icon.png", row = 2, col = 5, enabled = false },
-        { id = "governor", title = "@i18n(app.modules.governor.name)@", icon = "@pages/setup/governor/icon.png", row = 2, col = 6, enabled = false }
+        { id = "esc_motors", title = "@i18n(app.modules.esc_motors.name)@", menuId = "esc_motors_menu", icon = "@pages/setup/esc_motors/icon.png", row = 2, col = 5 },
+        { id = "governor", title = "@i18n(app.modules.governor.name)@", menuId = "governor_menu", icon = "@pages/setup/governor/icon.png", row = 2, col = 6 }
+      }
+    },
+    mixer_menu = {
+      title = "@i18n(app.modules.mixer.name)@",
+      pages = {
+        { id = "swash", title = "@i18n(app.modules.mixer.swash)@", menuId = "setup_mixer_swash_page", icon = "@pages/setup/mixer/swash/icon.png", row = 1, col = 1 },
+        { id = "swashgeometry", title = "@i18n(app.modules.mixer.geometry)@", menuId = "setup_mixer_swashgeometry_page", icon = "@pages/setup/mixer/swashgeometry/icon.png", row = 1, col = 2 },
+        { id = "tail", title = "@i18n(app.modules.mixer.tail)@", menuId = "setup_mixer_tail_page", icon = "@pages/setup/mixer/tail/icon.png", row = 1, col = 3 },
+        { id = "trims", title = "@i18n(app.modules.mixer.trims)@", menuId = "setup_mixer_trims_page", icon = "@pages/setup/mixer/trims/icon.png", row = 1, col = 4 }
       }
     },
     power_menu = {
@@ -156,6 +165,73 @@ local manifest = {
         { id = "smartfuel", title = "@i18n(app.modules.smartfuel.name)@", menuId = "setup_power_smartfuel_page", icon = "@pages/setup/power/smartfuel/icon.png", row = 1, col = 4, minApiVersion = { 12, 0, 9 } },
         { id = "preferences", title = "@i18n(app.modules.preferences.name)@", menuId = "setup_power_preferences_page", icon = "@pages/setup/power/preferences/icon.png", row = 1, col = 5 }
       }
+    },
+    servos_menu = {
+      title = "@i18n(app.modules.servos.name)@",
+      pages = {
+        { id = "pwm", title = "@i18n(app.modules.servos.pwm)@", menuId = "setup_servos_pwm_page", icon = "@pages/setup/servos/pwm/icon.png", row = 1, col = 1 },
+        { id = "bus", title = "@i18n(app.modules.servos.bus)@", menuId = "setup_servos_bus_page", icon = "@pages/setup/servos/bus/icon.png", row = 1, col = 2 }
+      }
+    },
+    controls_menu = {
+      title = "@i18n(app.modules.controls.name)@",
+      pages = {
+        { id = "modes", title = "@i18n(app.modules.controls.modes)@", menuId = "setup_controls_modes_page", icon = "@pages/setup/controls/modes/icon.png", row = 1, col = 1 },
+        { id = "adjustments", title = "@i18n(app.modules.controls.adjustments)@", menuId = "setup_controls_adjustments_page", icon = "@pages/setup/controls/adjustments/icon.png", row = 1, col = 2 },
+        { id = "failsafe", title = "@i18n(app.modules.controls.failsafe)@", menuId = "setup_controls_failsafe_page", icon = "@pages/setup/controls/failsafe/icon.png", row = 1, col = 3 },
+        { id = "beepers", title = "@i18n(app.modules.controls.beepers)@", menuId = "beepers_menu", icon = "@pages/setup/controls/beepers/icon.png", row = 1, col = 4 },
+        { id = "blackbox", title = "@i18n(app.modules.controls.blackbox)@", menuId = "blackbox_menu", icon = "@pages/setup/controls/blackbox/icon.png", row = 1, col = 5 },
+        { id = "stats", title = "@i18n(app.modules.controls.stats)@", menuId = "setup_controls_stats_page", icon = "@pages/setup/controls/stats/icon.png", row = 1, col = 6 }
+      }
+    },
+    beepers_menu = {
+      title = "@i18n(app.modules.controls.beepers)@",
+      pages = {
+        { id = "configuration", title = "@i18n(app.modules.beepers.configuration)@", menuId = "setup_controls_beepers_configuration_page", icon = "@pages/setup/controls/beepers/configuration/icon.png", row = 1, col = 1 },
+        { id = "dshot", title = "@i18n(app.modules.beepers.dshot)@", menuId = "setup_controls_beepers_dshot_page", icon = "@pages/setup/controls/beepers/dshot/icon.png", row = 1, col = 2 }
+      }
+    },
+    blackbox_menu = {
+      title = "@i18n(app.modules.controls.blackbox)@",
+      pages = {
+        { id = "configuration", title = "@i18n(app.modules.blackbox.configuration)@", menuId = "setup_controls_blackbox_configuration_page", icon = "@pages/setup/controls/blackbox/configuration/icon.png", row = 1, col = 1 },
+        { id = "logging", title = "@i18n(app.modules.blackbox.logging)@", menuId = "setup_controls_blackbox_logging_page", icon = "@pages/setup/controls/blackbox/logging/icon.png", row = 1, col = 2 },
+        { id = "status", title = "@i18n(app.modules.blackbox.status)@", menuId = "setup_controls_blackbox_status_page", icon = "@pages/setup/controls/blackbox/status/icon.png", row = 1, col = 3 }
+      }
+    },
+    esc_motors_menu = {
+      title = "@i18n(app.modules.esc_motors.name)@",
+      pages = {
+        { id = "throttle", title = "@i18n(app.modules.esc_motors.throttle)@", menuId = "setup_esc_motors_throttle_page", icon = "@pages/setup/esc_motors/throttle/icon.png", row = 1, col = 1 },
+        { id = "telemetry", title = "@i18n(app.modules.esc_motors.telemetry)@", menuId = "setup_esc_motors_telemetry_page", icon = "@pages/setup/esc_motors/telemetry/icon.png", row = 1, col = 2 },
+        { id = "rpm", title = "@i18n(app.modules.esc_motors.rpm)@", menuId = "setup_esc_motors_rpm_page", icon = "@pages/setup/esc_motors/rpm/icon.png", row = 1, col = 3 },
+        { id = "esc_tools", title = "@i18n(app.modules.esc_motors.esc_tools)@", menuId = "setup_esc_motors_esc_tools_page", icon = "@pages/setup/esc_motors/esc_tools/icon.png", row = 1, col = 4 }
+      }
+    },
+    governor_menu = {
+      title = "@i18n(app.modules.governor.name)@",
+      pages = {
+        { id = "general", title = "@i18n(app.modules.governor.general)@", menuId = "setup_governor_general_page", icon = "@pages/setup/governor/general/icon.png", row = 1, col = 1 },
+        { id = "time", title = "@i18n(app.modules.governor.time)@", menuId = "setup_governor_time_page", icon = "@pages/setup/governor/time/icon.png", row = 1, col = 2 },
+        { id = "filters", title = "@i18n(app.modules.governor.filters)@", menuId = "setup_governor_filters_page", icon = "@pages/setup/governor/filters/icon.png", row = 1, col = 3 },
+        { id = "curves", title = "@i18n(app.modules.governor.curves)@", menuId = "setup_governor_curves_page", icon = "@pages/setup/governor/curves/icon.png", row = 1, col = 4 }
+      }
+    },
+    setup_mixer_swash_page = {
+      title = "@i18n(app.modules.mixer.swash)@",
+      pages = {}
+    },
+    setup_mixer_swashgeometry_page = {
+      title = "@i18n(app.modules.mixer.geometry)@",
+      pages = {}
+    },
+    setup_mixer_tail_page = {
+      title = "@i18n(app.modules.mixer.tail)@",
+      pages = {}
+    },
+    setup_mixer_trims_page = {
+      title = "@i18n(app.modules.mixer.trims)@",
+      pages = {}
     },
     setup_power_battery_page = {
       title = "@i18n(app.modules.battery.name)@",
@@ -335,6 +411,82 @@ local manifest = {
     },
     diagnostics_info_page = {
       title = "@i18n(app.modules.info.name)@",
+      pages = {}
+    },
+    setup_servos_pwm_page = {
+      title = "@i18n(app.modules.servos.pwm)@",
+      pages = {}
+    },
+    setup_servos_bus_page = {
+      title = "@i18n(app.modules.servos.bus)@",
+      pages = {}
+    },
+    setup_controls_modes_page = {
+      title = "@i18n(app.modules.controls.modes)@",
+      pages = {}
+    },
+    setup_controls_adjustments_page = {
+      title = "@i18n(app.modules.controls.adjustments)@",
+      pages = {}
+    },
+    setup_controls_failsafe_page = {
+      title = "@i18n(app.modules.controls.failsafe)@",
+      pages = {}
+    },
+    setup_controls_beepers_configuration_page = {
+      title = "@i18n(app.modules.beepers.configuration)@",
+      pages = {}
+    },
+    setup_controls_beepers_dshot_page = {
+      title = "@i18n(app.modules.beepers.dshot)@",
+      pages = {}
+    },
+    setup_controls_blackbox_configuration_page = {
+      title = "@i18n(app.modules.blackbox.configuration)@",
+      pages = {}
+    },
+    setup_controls_blackbox_logging_page = {
+      title = "@i18n(app.modules.blackbox.logging)@",
+      pages = {}
+    },
+    setup_controls_blackbox_status_page = {
+      title = "@i18n(app.modules.blackbox.status)@",
+      pages = {}
+    },
+    setup_controls_stats_page = {
+      title = "@i18n(app.modules.controls.stats)@",
+      pages = {}
+    },
+    setup_esc_motors_throttle_page = {
+      title = "@i18n(app.modules.esc_motors.throttle)@",
+      pages = {}
+    },
+    setup_esc_motors_telemetry_page = {
+      title = "@i18n(app.modules.esc_motors.telemetry)@",
+      pages = {}
+    },
+    setup_esc_motors_rpm_page = {
+      title = "@i18n(app.modules.esc_motors.rpm)@",
+      pages = {}
+    },
+    setup_esc_motors_esc_tools_page = {
+      title = "@i18n(app.modules.esc_motors.esc_tools)@",
+      pages = {}
+    },
+    setup_governor_general_page = {
+      title = "@i18n(app.modules.governor.general)@",
+      pages = {}
+    },
+    setup_governor_time_page = {
+      title = "@i18n(app.modules.governor.time)@",
+      pages = {}
+    },
+    setup_governor_filters_page = {
+      title = "@i18n(app.modules.governor.filters)@",
+      pages = {}
+    },
+    setup_governor_curves_page = {
+      title = "@i18n(app.modules.governor.curves)@",
       pages = {}
     },
     tools_select_profile_page = {
