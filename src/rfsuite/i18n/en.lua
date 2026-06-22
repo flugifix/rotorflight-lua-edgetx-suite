@@ -237,7 +237,21 @@ return {
         mixer_override = "Mixer Override",
         mixer_override_enabling = "Enabling mixer override...",
         mixer_override_disabling = "Disabling mixer override...",
-        loading_trims = "Reading trims configuration..."
+        loading_trims = "Reading trims configuration...",
+        tail_rotor_mode = "Tail Mode",
+        yaw_direction = "Yaw Direction",
+        tail_center_offset = "Tail center offset",
+        yaw_center_trim = "Yaw Center Trim",
+        yaw_calibration = "Yaw Calibration",
+        yaw_cw_limit = "Yaw CW Limit",
+        yaw_ccw_limit = "Yaw CCW Limit",
+        tail_motor_idle = "Tail Motor Idle",
+        loading_tail = "Reading tail configuration...",
+        tbl_tail_variable_pitch = "Variable Pitch",
+        tbl_tail_motororized_tail = "Motorized Tail",
+        tbl_tail_bidirectional = "Bidirectional Motor",
+        tbl_reversed = "Reversed",
+        tbl_normal = "Normal"
       },
       flight_tuning_governor = {
         title = "Governor",

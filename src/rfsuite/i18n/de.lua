@@ -237,7 +237,21 @@ return {
         mixer_override = "Mischer-Override",
         mixer_override_enabling = "Mischer-Override wird aktiviert...",
         mixer_override_disabling = "Mischer-Override wird deaktiviert...",
-        loading_trims = "Trimmungen werden gelesen..."
+        loading_trims = "Trimmungen werden gelesen...",
+        tail_rotor_mode = "Heckrotor-Modus",
+        yaw_direction = "Heck-Richtung",
+        tail_center_offset = "Heck-Mittenversatz",
+        yaw_center_trim = "Heck-Mitten-Trimmung",
+        yaw_calibration = "Heck-Kalibrierung",
+        yaw_cw_limit = "Heck-CW-Limit",
+        yaw_ccw_limit = "Heck-CCW-Limit",
+        tail_motor_idle = "Heckmotor-Standgas",
+        loading_tail = "Heck-Konfiguration wird gelesen...",
+        tbl_tail_variable_pitch = "Variable Pitch",
+        tbl_tail_motororized_tail = "Motor-Heck",
+        tbl_tail_bidirectional = "Bidirektionaler Motor",
+        tbl_reversed = "Umgekehrt",
+        tbl_normal = "Normal"
       },
       flight_tuning_governor = {
         title = "Regler (Gov)",
