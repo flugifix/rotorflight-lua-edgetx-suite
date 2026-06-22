@@ -193,6 +193,22 @@ return {
       link_config_message_4 = "Then reconnect and open Info again."
     },
     pages = {
+      setup_mixer = {
+        title = "Mixer Setup",
+        swash = "Swashplate",
+        swash_type = "Swashplate type",
+        main_rotor_dir = "Main rotor direction",
+        aileron_direction = "Aileron direction",
+        elevator_direction = "Elevator direction",
+        collective_direction = "Collective direction",
+        cw = "CW",
+        ccw = "CCW",
+        reversed = "Reversed",
+        normal = "Normal",
+        swash_none = "None",
+        swash_direct = "Direct",
+        loading = "Reading swashplate configuration..."
+      },
       flight_tuning_governor = {
         title = "Governor",
         basic_setup = "Basic Setup",

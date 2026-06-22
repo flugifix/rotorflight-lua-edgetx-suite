@@ -193,6 +193,22 @@ return {
       link_config_message_4 = "Danach neu verbinden und Info erneut oeffnen."
     },
     pages = {
+      setup_mixer = {
+        title = "Mischer-Setup",
+        swash = "Taumelscheibe",
+        swash_type = "Taumelscheibentyp",
+        main_rotor_dir = "Hauptrotorrichtung",
+        aileron_direction = "Rollrichtung",
+        elevator_direction = "Nickrichtung",
+        collective_direction = "Kollektivrichtung",
+        cw = "CW",
+        ccw = "CCW",
+        reversed = "Umgekehrt",
+        normal = "Normal",
+        swash_none = "Keine",
+        swash_direct = "Direkt",
+        loading = "Taumelscheiben-Konfiguration wird gelesen..."
+      },
       flight_tuning_governor = {
         title = "Regler (Gov)",
         basic_setup = "Grundeinstellungen",
