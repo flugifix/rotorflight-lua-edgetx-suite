@@ -225,7 +225,19 @@ return {
         swash_override = "Taumelscheiben-Setup-Modus",
         swash_override_enabling = "Einstellmodus wird aktiviert...",
         swash_override_disabling = "Einstellmodus wird deaktiviert...",
-        loading_geometry = "Geometrie-Konfiguration wird gelesen..."
+        loading_geometry = "Geometrie-Konfiguration wird gelesen...",
+        roll_trim = "Roll-Trimmung",
+        pitch_trim = "Nick-Trimmung",
+        collective_trim = "Kollektiv-Trimmung",
+        yaw_trim = "Heck-Trimmung",
+        enable_mixer_override = "Swash-Override aktivieren",
+        enable_mixer_message = "Mischer-Override aktivieren, damit der Flugcontroller die Servos zentriert, waehrend Sie die Trimmungen einstellen. \n\nLive-Aenderung von dieser Seite werden direkt gesendet.",
+        disable_mixer_override = "Swash-Override deaktivieren",
+        disable_mixer_message = "Taumelscheiben-Override deaktivieren und die Mischersteuerung wieder an den Flugcontroller uebergeben.",
+        mixer_override = "Mischer-Override",
+        mixer_override_enabling = "Mischer-Override wird aktiviert...",
+        mixer_override_disabling = "Mischer-Override wird deaktiviert...",
+        loading_trims = "Trimmungen werden gelesen..."
       },
       flight_tuning_governor = {
         title = "Regler (Gov)",

@@ -225,7 +225,19 @@ return {
         swash_override = "Swash Setup Mode",
         swash_override_enabling = "Enabling swash setup mode...",
         swash_override_disabling = "Disabling swash setup mode...",
-        loading_geometry = "Reading swashplate geometry configuration..."
+        loading_geometry = "Reading swashplate geometry configuration...",
+        roll_trim = "Roll trim",
+        pitch_trim = "Pitch trim",
+        collective_trim = "Col. trim",
+        yaw_trim = "Yaw. trim",
+        enable_mixer_override = "Enable swash override",
+        enable_mixer_message = "Enable swash override so the flight controller centers the servos while adjusting trims. \n\nLive changes from this page are sent to the flight controller.",
+        disable_mixer_override = "Disable swash override",
+        disable_mixer_message = "Disable swash override and return mixer control to the flight controller.",
+        mixer_override = "Mixer Override",
+        mixer_override_enabling = "Enabling mixer override...",
+        mixer_override_disabling = "Disabling mixer override...",
+        loading_trims = "Reading trims configuration..."
       },
       flight_tuning_governor = {
         title = "Governor",
