@@ -11,7 +11,7 @@ local FIELD_SPEC = {
 }
 
 local WRITE_FIELD_SPEC = {
-  {"servo_id", "U8"}, {"action", "U8"}
+  {"servo_id", "U8"}, {"action", "U16"}
 }
 
 local SIM_RESPONSE = {209,7, 209,7, 209,7, 209,7, 209,7, 209,7, 209,7, 209,7}
@@ -23,13 +23,6 @@ local function read_u16_le(buf, pos)
   local lo = tonumber(buf[pos]) or 0
   local hi = tonumber(buf[pos+1]) or 0
   return lo + hi * 256
-end
-
-local function pack_u16_le(v)
-  v = tonumber(v) or 0
-  local lo = v % 256
-  local hi = math.floor(v / 256) % 256
-  return lo, hi
 end
 
 function Api.parse(buf)
@@ -46,7 +39,9 @@ end
 function Api.buildWritePayload(data)
   local id = tonumber(data and data.servo_id) or 0
   local action = tonumber(data and data.action) or 0
-  return { id, action }
+  local lo = action % 256
+  local hi = math.floor(action / 256) % 256
+  return { id, lo, hi }
 end
 
 return Api
