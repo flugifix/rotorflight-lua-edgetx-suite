@@ -32,6 +32,11 @@ local function s16_to_u16(s)
   return s
 end
 
+local function round(x)
+  if x >= 0 then return math.floor(x + 0.5) end
+  return math.ceil(x - 0.5)
+end
+
 local function rateToDir(u16rate)
   return (u16_to_s16(u16rate) < 0) and 0 or 1
 end
@@ -174,7 +179,7 @@ local function queueTailRead(isAutoReload)
           ui.config.tail_center_trim = parsed.tail_center_trim or 0
         else
           local t_trim = u16_to_s16(parsed.tail_center_trim or 0)
-          ui.config.tail_center_trim = math.floor(math.abs(t_trim) * 24 / 100 + 0.5)
+          ui.config.tail_center_trim = round(t_trim * 24 / 100)
         end
       end
 
@@ -186,6 +191,7 @@ local function queueTailRead(isAutoReload)
       -- Step 2: Read GET_MIXER_INPUT_YAW
       queue:add({
         command = MixerInputYawApi.command,
+        payload = { 3 },
         simulatorResponse = MixerInputYawApi.simulatorResponse,
         processReply = function(self, buf)
           local parsed = MixerInputYawApi.parse(buf)
@@ -266,7 +272,7 @@ local function queueTailWrite()
     pConfig.tail_center_trim = ui.config.tail_center_trim
   else
     local trim_ui = ui.config.tail_center_trim or 0
-    pConfig.tail_center_trim = s16_to_u16(math.floor(trim_ui * 100 / 24 + 0.5))
+    pConfig.tail_center_trim = s16_to_u16(round(trim_ui * 100 / 24))
   end
 
   local yawRate = ui.config.yaw_calibration or 400
@@ -467,6 +473,7 @@ function M.build(ctx)
                             or pageText(i18n, "yaw_center_trim", "Yaw Center Trim")
   local trimMin = isMotor and -500 or -250
   local trimMax = isMotor and 500 or 250
+  local trimSuffix = isMotor and "%" or "°"
   cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
     trimLabel,
     {
@@ -480,8 +487,8 @@ function M.build(ctx)
           ui.dirty = true
         end
       end,
-      display = function(v) return string.format("%.1f%%", (tonumber(v) or 0) / 10) end,
-      suffix = "%"
+      display = function(v) return string.format("%.1f" .. trimSuffix, (tonumber(v) or 0) / 10) end,
+      suffix = trimSuffix
     }
   )
 

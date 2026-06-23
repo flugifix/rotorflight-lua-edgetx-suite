@@ -23,7 +23,7 @@ end
 
 function Api.buildWritePayload(data)
   local function toU16(val) val = math.floor(tonumber(val) or 0); return val & 0xFF, (val >> 8) & 0xFF end
-  local payload = {}
+  local payload = { 4 }
   local lo, hi = toU16(data.rate_stabilized_collective); payload[#payload+1] = lo; payload[#payload+1] = hi
   lo, hi = toU16(data.min_stabilized_collective); payload[#payload+1] = lo; payload[#payload+1] = hi
   lo, hi = toU16(data.max_stabilized_collective); payload[#payload+1] = lo; payload[#payload+1] = hi

@@ -700,8 +700,8 @@ function M.build(ctx)
             ui.dirty = true
           end
         end,
-        display = function(v) return string.format("%.1f%%", (tonumber(v) or 0) / 10) end,
-        suffix = "%",
+        display = function(v) return tostring(v) .. "us" end,
+        suffix = "us",
         active = function() return not ui.inOverride end
       }
     )
@@ -720,8 +720,8 @@ function M.build(ctx)
             ui.dirty = true
           end
         end,
-        display = function(v) return string.format("%.1f%%", (tonumber(v) or 0) / 10) end,
-        suffix = "%",
+        display = function(v) return tostring(v) .. "us" end,
+        suffix = "us",
         active = function() return not ui.inOverride end
       }
     )
@@ -740,8 +740,8 @@ function M.build(ctx)
             ui.dirty = true
           end
         end,
-        display = function(v) return string.format("%.1f%%", (tonumber(v) or 0) / 10) end,
-        suffix = "%",
+        display = function(v) return tostring(v) end,
+        suffix = "",
         active = function() return not ui.inOverride end
       }
     )
@@ -760,8 +760,8 @@ function M.build(ctx)
             ui.dirty = true
           end
         end,
-        display = function(v) return string.format("%.1f%%", (tonumber(v) or 0) / 10) end,
-        suffix = "%",
+        display = function(v) return tostring(v) end,
+        suffix = "",
         active = function() return not ui.inOverride end
       }
     )

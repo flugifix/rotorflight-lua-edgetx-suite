@@ -356,6 +356,7 @@ local function queueGeometryRead(isAutoReload)
       -- Step 2: Read GET_MIXER_INPUT_PITCH
       queue:add({
         command = MixerInputPitchApi.command,
+        payload = { 2 },
         simulatorResponse = MixerInputPitchApi.simulatorResponse,
         processReply = function(self, buf)
           local parsed = MixerInputPitchApi.parse(buf)
@@ -376,6 +377,7 @@ local function queueGeometryRead(isAutoReload)
           -- Step 3: Read GET_MIXER_INPUT_ROLL
           queue:add({
             command = MixerInputRollApi.command,
+            payload = { 1 },
             simulatorResponse = MixerInputRollApi.simulatorResponse,
             processReply = function(self, buf)
               local parsed = MixerInputRollApi.parse(buf)
@@ -392,6 +394,7 @@ local function queueGeometryRead(isAutoReload)
               -- Step 4: Read GET_MIXER_INPUT_COLLECTIVE
               queue:add({
                 command = MixerInputCollectiveApi.command,
+                payload = { 4 },
                 simulatorResponse = MixerInputCollectiveApi.simulatorResponse,
                 processReply = function(self, buf)
                   local parsed = MixerInputCollectiveApi.parse(buf)
