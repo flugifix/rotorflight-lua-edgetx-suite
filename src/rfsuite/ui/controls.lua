@@ -186,7 +186,7 @@ local function showHelpAlert(helpText, helpTitle)
 end
 
 function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
-                                     onToggle)
+                                     onToggle, active)
   local getValue
   local setValue
   if type(value) == "function" then
@@ -221,6 +221,7 @@ function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
     y = trackY,
     w = TOGGLE_W,
     h = TOGGLE_H,
+    active = active,
     get = function()
       return getValue()
     end,
@@ -437,6 +438,7 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
     w = comboW, h = COMBO_H,
     title = tostring(labelText or ""),
     values = values,
+    active = opts.active,
     get = function()
       return selectedIndex
     end,
