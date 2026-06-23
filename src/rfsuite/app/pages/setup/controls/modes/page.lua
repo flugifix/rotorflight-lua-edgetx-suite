@@ -319,10 +319,11 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local rawExtra = slot and ui.modeRangesExtra[slot] or nil
   if not rawRange or not rawExtra or not rawRange.range then return 0 end
 
-  local rowH = 118
+  local rowH = 130
   local rightPadding = 10
   local gap = 6
   local ctrlH = 50
+  local inputH = 62
 
   -- Line 1: "Range X", Live Value, "Set" Button
   local wSet = 60
@@ -367,7 +368,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "button",
     x = xSet, y = y + 6,
-    w = wSet, h = ctrlH,
+    w = wSet, h = inputH,
     text = pageText(i18n, "set", "Set"),
     press = function()
       onPressSetRange(slot, rawRange, i18n)
@@ -399,7 +400,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "choice",
     x = xAux, y = line2Y,
-    w = wAux, h = ctrlH,
+    w = wAux, h = inputH,
     title = pageText(i18n, "mode", "Mode"),
     values = auxValues,
     get = function()
@@ -426,7 +427,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "choice",
     x = xLogic, y = line2Y,
-    w = wLogic, h = ctrlH,
+    w = wLogic, h = inputH,
     title = pageText(i18n, "mode", "Mode"),
     values = logicValues,
     get = function()
@@ -446,7 +447,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "numberEdit",
     x = xStart, y = line2Y,
-    w = wNum, h = ctrlH,
+    w = wNum, h = inputH,
     min = math.floor(RANGE_MIN / RANGE_STEP),
     max = math.floor(RANGE_MAX / RANGE_STEP),
     get = function()
@@ -474,7 +475,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "numberEdit",
     x = xEnd, y = line2Y,
-    w = wNum, h = ctrlH,
+    w = wNum, h = inputH,
     min = math.floor(RANGE_MIN / RANGE_STEP),
     max = math.floor(RANGE_MAX / RANGE_STEP),
     get = function()
@@ -502,7 +503,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "button",
     x = xDel, y = line2Y,
-    w = wDel, h = ctrlH,
+    w = wDel, h = inputH,
     text = "X",
     press = function()
       removeRangeSlot(slot)
