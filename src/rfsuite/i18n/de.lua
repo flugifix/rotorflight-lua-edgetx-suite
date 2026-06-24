@@ -1187,7 +1187,25 @@ return {
         log_setpoint = "Sollwert",
         log_temps = "Temps",
         log_vbec = "VBEC",
-        log_vbus = "VBUS"
+        log_vbus = "VBUS",
+
+        title_status = "Blackbox-Status",
+        help_status_title = "Blackbox-Status Hilfe",
+        help_status_p1 = "Speichermedien-Status und Speicherplatz überwachen.",
+        help_status_p2 = "Drücke *, um die onboard Dataflash-Logs zu löschen.",
+        loading_status = "Lade Blackbox-Status...",
+        erasing_dataflash = "Datenspeicher wird gelöscht...",
+        erasing_busy = "Löschen / beschäftigt...",
+        erase_prompt = "Onboard Dataflash-Logs löschen?",
+        dataflash = "Dataflash",
+        sdcard = "SD Karte",
+        not_supported = "Nicht unterstützt",
+        no_card = "Keine Karte",
+        initializing_card = "Initialisiere Karte...",
+        initializing_filesystem = "Initialisiere Dateisystem...",
+        error_code_fmt = "Fehler (Code %d)",
+        unknown_state_fmt = "Unbekannter Status (%d)",
+        used_fmt = "Belegt %s / %s"
       },
       setup_ports = {
         title = "Ports",
