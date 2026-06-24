@@ -1207,6 +1207,17 @@ return {
         unknown_state_fmt = "Unbekannter Status (%d)",
         used_fmt = "Belegt %s / %s"
       },
+      setup_stats = {
+        title = "Statistiken",
+        help_title = "Statistiken Hilfe",
+        help_p1 = "Verwenden Sie dieses Modul, um die aufgezeichneten Flugstatistiken am Flugcontroller zu aktualisieren.",
+        loading = "Flugstatistiken laden...",
+        saving = "Flugstatistiken speichern...",
+        save_error_title = "Fehler",
+        unsaved_changes = "Ungespeicherte Änderungen",
+        flightcount = "Fluganzahl",
+        totalflighttime = "Gesamtflugzeit"
+      },
       setup_ports = {
         title = "Ports",
         error_eeprom_write_failed = "EEPROM-Schreiben fehlgeschlagen",

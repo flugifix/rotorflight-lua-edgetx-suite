@@ -1207,6 +1207,17 @@ return {
         unknown_state_fmt = "Unknown state (%d)",
         used_fmt = "Used %s / %s"
       },
+      setup_stats = {
+        title = "Stats",
+        help_title = "Stats Help",
+        help_p1 = "Use this module to update the recorded flight statistics on the flight controller.",
+        loading = "Loading flight statistics...",
+        saving = "Saving flight statistics...",
+        save_error_title = "Error",
+        unsaved_changes = "Unsaved changes",
+        flightcount = "Flight Count",
+        totalflighttime = "Total Flight Time"
+      },
       setup_ports = {
         title = "Ports",
         error_eeprom_write_failed = "EEPROM write failed",
