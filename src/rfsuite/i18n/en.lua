@@ -901,7 +901,21 @@ return {
         help_title_telemetry = "Telemetry Help",
         help_p1_telemetry = "Configure the ESC telemetry protocol and correction coefficients.",
         loading_telemetry = "Loading telemetry configuration...",
-        saving_telemetry = "Saving telemetry configuration..."
+        saving_telemetry = "Saving telemetry configuration...",
+        title_rpm = "RPM",
+        rpm_sensor_source = "RPM Sensor",
+        use_dshot_telemetry = "DShot RPM Telemetry",
+        main_motor_ratio = "Main Motor Ratio",
+        tail_motor_ratio = "Tail Motor Ratio",
+        pinion = "Pinion",
+        main = "Main",
+        rear = "Rear",
+        front = "Front",
+        motor_pole_count = "Motor Pole Count",
+        help_title_rpm = "RPM Help",
+        help_p1_rpm = "Configure motor RPM sensor sources, gear ratios, and pole counts.",
+        loading_rpm = "Loading RPM configuration...",
+        saving_rpm = "Saving RPM configuration..."
       },
       setup_radio_config = {
         title = "Radio Config",

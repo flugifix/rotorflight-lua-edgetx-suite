@@ -259,6 +259,15 @@ end
 local function ensureLoaded()
   if ui.loaded then return end
 
+  if not ui.runtime then
+    ui.runtime = {
+      readPending = false,
+      requestRebuild = nil,
+      lastSessionSignature = nil,
+      syncHeaderTitle = nil
+    }
+  end
+
   ui.config = {
     protocol = 0,
     half_duplex = 0,

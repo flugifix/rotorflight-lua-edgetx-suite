@@ -901,7 +901,21 @@ return {
         help_title_telemetry = "Telemetrie-Hilfe",
         help_p1_telemetry = "Konfigurieren Sie das ESC-Telemetrieprotokoll und die Korrekturkoeffizienten.",
         loading_telemetry = "Lade Telemetriekonfiguration...",
-        saving_telemetry = "Speichere Telemetriekonfiguration..."
+        saving_telemetry = "Speichere Telemetriekonfiguration...",
+        title_rpm = "U/min",
+        rpm_sensor_source = "RPM-Sensor",
+        use_dshot_telemetry = "DShot RPM-Telemetrie",
+        main_motor_ratio = "Hauptübersetzung",
+        tail_motor_ratio = "Heckübersetzung",
+        pinion = "Ritzel",
+        main = "Haupt",
+        rear = "Hinten",
+        front = "Vorne",
+        motor_pole_count = "Anzahl der Motorpole",
+        help_title_rpm = "RPM-Hilfe",
+        help_p1_rpm = "Konfigurieren Sie RPM-Sensoren, Getriebeübersetzungen und Polzahlen.",
+        loading_rpm = "Lade RPM-Konfiguration...",
+        saving_rpm = "Speichere RPM-Konfiguration..."
       },
       setup_radio_config = {
         title = "Fernsteuerung",

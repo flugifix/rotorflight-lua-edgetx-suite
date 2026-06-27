@@ -535,8 +535,10 @@ local function startLoad(requestRebuild)
   ui.runtime.readPending = true
   ui.loading = true
   ui.progress = 0
-  if type(requestRebuild) == "function" then
-    requestRebuild()
+
+  local rebuild = requestRebuild or ui.runtime.requestRebuild
+  if type(rebuild) == "function" then
+    rebuild()
   end
 
   local mspState = MspRuntime.getState()
@@ -551,8 +553,9 @@ local function startLoad(requestRebuild)
     ui.runtime.readPending = false
     ui.loading = false
     ui.progress = 0
-    if type(requestRebuild) == "function" then
-      requestRebuild()
+    local rebuildFn = requestRebuild or ui.runtime.requestRebuild
+    if type(rebuildFn) == "function" then
+      rebuildFn()
     end
   end
 
@@ -562,7 +565,8 @@ local function startLoad(requestRebuild)
     ui.dirty = false
     ui.progress = 100
     ui.loaded = true
-    if type(requestRebuild) == "function" then requestRebuild() end
+    local rebuildFn = requestRebuild or ui.runtime.requestRebuild
+    if type(rebuildFn) == "function" then rebuildFn() end
   end
 
   -- Step 1: Read RX_MAP (command 94) to know mapping of AUX1, AUX2, AUX3
@@ -883,6 +887,18 @@ end
 
 local function ensureLoaded()
   if ui.loaded then return end
+
+  if not ui.runtime then
+    ui.runtime = {
+      readPending = false,
+      requestRebuild = nil,
+      lastSessionSignature = nil,
+      syncHeaderTitle = nil
+    }
+  end
+  ui.loading = false
+  ui.saving = false
+  ui.runtime.readPending = false
 
   ui.adjustmentRanges = {}
   for i = 1, 42 do

@@ -558,9 +558,15 @@ local function startLoad(requestRebuild)
   ui.runtime.readPending = true
   ui.loading = true
   ui.progress = 0
-  if type(requestRebuild) == "function" then
-    requestRebuild()
+
+  local function triggerRebuild()
+    local fn = requestRebuild or ui.runtime.requestRebuild
+    if type(fn) == "function" then
+      fn()
+    end
   end
+
+  triggerRebuild()
 
   local mspState = MspRuntime.getState()
   local queue = mspState and mspState.queue
@@ -574,9 +580,7 @@ local function startLoad(requestRebuild)
     ui.runtime.readPending = false
     ui.loading = false
     ui.progress = 0
-    if type(requestRebuild) == "function" then
-      requestRebuild()
-    end
+    triggerRebuild()
   end
 
   -- Step 1: BOXIDS
@@ -589,7 +593,7 @@ local function startLoad(requestRebuild)
         ui.boxIds = parsedObj.box_ids
       end
       ui.progress = 20
-      if type(requestRebuild) == "function" then requestRebuild() end
+      triggerRebuild()
 
       -- Step 2: BOXNAMES
       queue:add({
@@ -601,7 +605,7 @@ local function startLoad(requestRebuild)
             ui.boxNames = parsedObj2.box_names
           end
           ui.progress = 40
-          if type(requestRebuild) == "function" then requestRebuild() end
+          triggerRebuild()
 
           -- Step 3: MODE_RANGES
           queue:add({
@@ -613,7 +617,7 @@ local function startLoad(requestRebuild)
                 ui.modeRanges = parsedObj3.mode_ranges
               end
               ui.progress = 60
-              if type(requestRebuild) == "function" then requestRebuild() end
+              triggerRebuild()
 
               -- Step 4: MODE_RANGES_EXTRA
               queue:add({
@@ -626,7 +630,7 @@ local function startLoad(requestRebuild)
                     ui.modeRangesExtra = extParsed.mode_ranges_extra
                   end
                   ui.progress = 80
-                  if type(requestRebuild) == "function" then requestRebuild() end
+                  triggerRebuild()
 
                   -- Step 5: RX_MAP
                   queue:add({
@@ -649,7 +653,7 @@ local function startLoad(requestRebuild)
                       ui.loading = false
                       ui.dirty = false
                       ui.progress = 100
-                      if type(requestRebuild) == "function" then requestRebuild() end
+                      triggerRebuild()
                     end,
                     errorHandler = failed
                   })
@@ -660,7 +664,7 @@ local function startLoad(requestRebuild)
             errorHandler = failed
           })
         end,
-        errorHandler = failed
+            errorHandler = failed
       })
     end,
     errorHandler = failed
@@ -858,6 +862,19 @@ end
 
 local function ensureLoaded()
   if ui.loaded then return end
+
+  if not ui.runtime then
+    ui.runtime = {
+      readPending = false,
+      requestRebuild = nil,
+      lastSessionSignature = nil,
+      syncHeaderTitle = nil
+    }
+  end
+  ui.loading = false
+  ui.saving = false
+  ui.runtime.readPending = false
+
   loadFromSession()
   ui.loaded = true
   ui.dirty = false

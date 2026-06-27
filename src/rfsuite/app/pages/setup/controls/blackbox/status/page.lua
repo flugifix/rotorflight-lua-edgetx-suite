@@ -257,6 +257,18 @@ end
 local function ensureLoaded()
   if ui.loaded then return end
 
+  if not ui.runtime then
+    ui.runtime = {
+      readPending = false,
+      requestRebuild = nil,
+      lastSessionSignature = nil,
+      syncHeaderTitle = nil
+    }
+  end
+  ui.loading = false
+  ui.saving = false
+  ui.runtime.readPending = false
+
   ui.dataflash = {
     ready = false,
     supported = false,

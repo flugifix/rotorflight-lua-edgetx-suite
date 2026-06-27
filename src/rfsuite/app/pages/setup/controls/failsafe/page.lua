@@ -255,6 +255,18 @@ end
 local function ensureLoaded()
   if ui.loaded then return end
 
+  if not ui.runtime then
+    ui.runtime = {
+      readPending = false,
+      requestRebuild = nil,
+      lastSessionSignature = nil,
+      syncHeaderTitle = nil
+    }
+  end
+  ui.loading = false
+  ui.saving = false
+  ui.runtime.readPending = false
+
   ui.channels = {}
   for i = 1, 18 do
     ui.channels[i] = { mode = 0, value = 1500 }
