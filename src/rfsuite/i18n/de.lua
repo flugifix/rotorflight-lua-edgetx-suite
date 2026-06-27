@@ -877,6 +877,21 @@ return {
         help_p1 = "Verwenden Sie diese Seite für die Systemkonfiguration wie Fluggerätname, PID-Loop-Geschwindigkeit und Feature-Flags.",
         help_p2 = "Speichern schreibt diese Werte in das EEPROM und startet den Flugcontroller neu."
       },
+      setup_esc_motors = {
+        title_throttle = "Gas",
+        throttle_protocol = "Gasprotokoll",
+        motor_pwm_rate = "Aktualisierungsrate",
+        mincommand = "Motor-Stopp PWM-Wert",
+        min_throttle = "0% Gas PWM-Wert",
+        max_throttle = "100% Gas PWM-Wert",
+        unsynced = "Nicht synchr. ESC-Update",
+        help_title = "Gas-Hilfe",
+        help_p1 = "Konfigurieren Sie die Motor- und Governor-Einstellungen.",
+        loading = "Lade Gaskonfiguration...",
+        saving = "Speichere Gaskonfiguration...",
+        save_error_title = "Fehler",
+        unsaved_changes = "Ungespeicherte Änderungen"
+      },
       setup_radio_config = {
         title = "Fernsteuerung",
         stick = "Knueppel",

@@ -877,6 +877,21 @@ return {
         help_p1 = "Use this page for system-level setup such as craft name, PID loop speed, and feature flags.",
         help_p2 = "Saving writes these values to EEPROM and reboots the flight controller."
       },
+      setup_esc_motors = {
+        title_throttle = "Throttle",
+        throttle_protocol = "Throttle Protocol",
+        motor_pwm_rate = "Update frequency",
+        mincommand = "Motor Stop PWM Value",
+        min_throttle = "0% Throttle PWM Value",
+        max_throttle = "100% Throttle PWM Value",
+        unsynced = "Unsynced ESC Update",
+        help_title = "Throttle Help",
+        help_p1 = "Configure the motor and speed controller features.",
+        loading = "Loading throttle configuration...",
+        saving = "Saving throttle configuration...",
+        save_error_title = "Error",
+        unsaved_changes = "Unsaved changes"
+      },
       setup_radio_config = {
         title = "Radio Config",
         stick = "Stick",
