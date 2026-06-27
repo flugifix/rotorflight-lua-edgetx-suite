@@ -890,7 +890,18 @@ return {
         loading = "Lade Gaskonfiguration...",
         saving = "Speichere Gaskonfiguration...",
         save_error_title = "Fehler",
-        unsaved_changes = "Ungespeicherte Änderungen"
+        unsaved_changes = "Ungespeicherte Änderungen",
+        title_telemetry = "Telemetrie",
+        telemetry_protocol = "Telemetrieprotokoll",
+        half_duplex = "Halbduplex",
+        pin_swap = "Pin-Tausch",
+        voltage_correction = "Spannungskorrektur",
+        current_correction = "Stromkorrektur",
+        consumption_correction = "Verbrauchskorrektur",
+        help_title_telemetry = "Telemetrie-Hilfe",
+        help_p1_telemetry = "Konfigurieren Sie das ESC-Telemetrieprotokoll und die Korrekturkoeffizienten.",
+        loading_telemetry = "Lade Telemetriekonfiguration...",
+        saving_telemetry = "Speichere Telemetriekonfiguration..."
       },
       setup_radio_config = {
         title = "Fernsteuerung",

@@ -890,7 +890,18 @@ return {
         loading = "Loading throttle configuration...",
         saving = "Saving throttle configuration...",
         save_error_title = "Error",
-        unsaved_changes = "Unsaved changes"
+        unsaved_changes = "Unsaved changes",
+        title_telemetry = "Telemetry",
+        telemetry_protocol = "Telemetry Protocol",
+        half_duplex = "Half Duplex",
+        pin_swap = "Pin Swap",
+        voltage_correction = "Voltage Correction",
+        current_correction = "Current Correction",
+        consumption_correction = "Consumption Correction",
+        help_title_telemetry = "Telemetry Help",
+        help_p1_telemetry = "Configure the ESC telemetry protocol and correction coefficients.",
+        loading_telemetry = "Loading telemetry configuration...",
+        saving_telemetry = "Saving telemetry configuration..."
       },
       setup_radio_config = {
         title = "Radio Config",
