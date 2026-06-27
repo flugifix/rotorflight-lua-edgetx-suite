@@ -65,6 +65,7 @@ local entries = {
   setup_esc_motors_telemetry_page = definePage("setup/esc_motors/telemetry"),
   setup_esc_motors_rpm_page = definePage("setup/esc_motors/rpm"),
   setup_esc_motors_esc_tools_page = definePage("setup/esc_motors/esc_tools"),
+  setup_esc_motors_esc_tool_run_page = definePage("setup/esc_motors/esc_tools/run"),
   setup_governor_general_page = definePage("setup/governor/general"),
   setup_governor_time_page = definePage("setup/governor/time"),
   setup_governor_filters_page = definePage("setup/governor/filters"),

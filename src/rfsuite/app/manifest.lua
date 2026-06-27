@@ -473,6 +473,10 @@ local manifest = {
       title = "@i18n(app.modules.esc_motors.esc_tools)@",
       pages = {}
     },
+    setup_esc_motors_esc_tool_run_page = {
+      title = "ESC Configurator",
+      pages = {}
+    },
     setup_governor_general_page = {
       title = "@i18n(app.modules.governor.general)@",
       pages = {}

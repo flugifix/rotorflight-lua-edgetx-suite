@@ -915,7 +915,9 @@ return {
         help_title_rpm = "RPM-Hilfe",
         help_p1_rpm = "Konfigurieren Sie RPM-Sensoren, Getriebeübersetzungen und Polzahlen.",
         loading_rpm = "Lade RPM-Konfiguration...",
-        saving_rpm = "Speichere RPM-Konfiguration..."
+        saving_rpm = "Speichere RPM-Konfiguration...",
+        safety_warning_title = "Sicherheitswarnung",
+        remove_blades_warning = "Bitte entfernen Sie Haupt- und Heckrotorblätter vor der ESC-Konfiguration!"
       },
       setup_radio_config = {
         title = "Fernsteuerung",

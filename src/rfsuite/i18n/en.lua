@@ -915,7 +915,9 @@ return {
         help_title_rpm = "RPM Help",
         help_p1_rpm = "Configure motor RPM sensor sources, gear ratios, and pole counts.",
         loading_rpm = "Loading RPM configuration...",
-        saving_rpm = "Saving RPM configuration..."
+        saving_rpm = "Saving RPM configuration...",
+        safety_warning_title = "Safety Warning",
+        remove_blades_warning = "Please remove main and tail blades before configuring the ESC!"
       },
       setup_radio_config = {
         title = "Radio Config",
