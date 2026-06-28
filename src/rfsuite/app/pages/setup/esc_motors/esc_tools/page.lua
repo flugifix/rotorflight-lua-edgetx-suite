@@ -148,30 +148,36 @@ function M.build(ctx)
 
     local function getPressHandler()
       return function()
-        if not ConfirmDialog then
-          -- Fallback if no confirm dialog
-          _G.rfsuite = _G.rfsuite or {}
-          _G.rfsuite.selectedEscMfg = card.id
-          if ctx.menu and type(ctx.menu.openEntry) == "function" then
-            ctx.menu.openEntry("setup_esc_motors_esc_tool_run_page")
-          end
-          return
+        local targetPage = "setup_esc_motors_esc_tool_run_page"
+        if card.id == "am32" then
+          targetPage = "setup_esc_motors_esc_tools_am32_page"
         end
 
         local warningTitle = pageText(i18n, "safety_warning_title", "Safety Warning")
         local warningMsg = pageText(i18n, "remove_blades_warning", "Please remove main and tail blades before configuring the ESC!")
 
-        ConfirmDialog.show({
-          title = warningTitle,
-          message = warningMsg,
-          onConfirm = function()
-            _G.rfsuite = _G.rfsuite or {}
-            _G.rfsuite.selectedEscMfg = card.id
-            if ctx.menu and type(ctx.menu.openEntry) == "function" then
-              ctx.menu.openEntry("setup_esc_motors_esc_tool_run_page")
-            end
+        if lvgl then
+          if type(lvgl.message) == "function" then
+            pcall(lvgl.message, {
+              title = warningTitle,
+              message = warningMsg
+            })
+          elseif type(lvgl.alert) == "function" then
+            pcall(lvgl.alert, {
+              title = warningTitle,
+              message = warningMsg
+            })
           end
-        })
+        end
+
+        _G.rfsuite = _G.rfsuite or {}
+        _G.rfsuite.selectedEscMfg = card.id
+        if ctx.menu and type(ctx.menu.openEntry) == "function" then
+          ctx.menu.openEntry(targetPage)
+          if type(ctx.refresh) == "function" then
+            ctx.refresh()
+          end
+        end
       end
     end
 

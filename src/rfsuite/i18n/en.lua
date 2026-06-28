@@ -1199,6 +1199,8 @@ return {
         disarm_grace_period = "Disarm grace period",
         initial_erase = "Initial erase",
         rolling_erase = "Rolling erase",
+        debug_mode = "Debug Mode",
+        debug_selection = "Debug Selection",
 
         title_logging = "Blackbox Logging",
         help_logging_title = "Blackbox Logging Help",

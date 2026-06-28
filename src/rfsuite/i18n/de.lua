@@ -1199,6 +1199,8 @@ return {
         disarm_grace_period = "Nachlaufzeit nach Disarm",
         initial_erase = "Erstlöschung",
         rolling_erase = "Ringlöschung",
+        debug_mode = "Debug-Modus",
+        debug_selection = "Debug-Auswahl",
 
         title_logging = "Blackbox-Protokollierung",
         help_logging_title = "Blackbox-Protokollierung Hilfe",

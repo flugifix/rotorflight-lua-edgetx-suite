@@ -1,6 +1,5 @@
 -- EdgeTX MSP API: ESC_PARAMETERS_AM32
--- Ported to EdgeTX schema (Api table + parse)
--- Note: This is a simple field-mapping port. Special normalization/encoding is omitted for brevity.
+-- Ported with proper scaling/normalization functions
 
 local Api = {
   command = 217, -- MSP_ESC_PARAMETERS_AM32
@@ -10,8 +9,87 @@ local Api = {
   },
 }
 
+local function clamp(value, min, max)
+  if value < min then return min end
+  if value > max then return max end
+  return value
+end
+
+local function normalizeTimingAdvance(raw)
+  if raw == nil then return 0 end
+  if raw >= 10 and raw <= 42 then
+    return clamp(math.floor((raw - 10) / 8 + 0.5), 0, 3)
+  end
+  return clamp(math.floor(raw), 0, 3)
+end
+
+local function encodeTimingAdvance(normalized)
+  local n = clamp(math.floor(normalized or 0), 0, 3)
+  return 10 + (n * 8)
+end
+
+local function normalizeMotorKv(raw)
+  if raw == nil then return 0 end
+  return (raw * 40) + 20
+end
+
+local function encodeMotorKv(kv)
+  if kv == nil then return 0 end
+  return clamp(math.floor(((kv - 20) / 40) + 0.5), 0, 255)
+end
+
+local function normalizeServoLow(raw)
+  if raw == nil then return 0 end
+  return (raw * 2) + 750
+end
+
+local function encodeServoLow(value)
+  if value == nil then return 0 end
+  return clamp(math.floor(((value - 750) / 2) + 0.5), 0, 255)
+end
+
+local function normalizeServoHigh(raw)
+  if raw == nil then return 0 end
+  return (raw * 2) + 1750
+end
+
+local function encodeServoHigh(value)
+  if value == nil then return 0 end
+  return clamp(math.floor(((value - 1750) / 2) + 0.5), 0, 255)
+end
+
+local function normalizeServoNeutral(raw)
+  if raw == nil then return 0 end
+  return raw + 1374
+end
+
+local function encodeServoNeutral(value)
+  if value == nil then return 0 end
+  return clamp(math.floor((value - 1374) + 0.5), 0, 255)
+end
+
+local function normalizeLowVoltageThreshold(raw)
+  if raw == nil then return 0 end
+  return raw + 250
+end
+
+local function encodeLowVoltageThreshold(value)
+  if value == nil then return 0 end
+  return clamp(math.floor((value - 250) + 0.5), 0, 255)
+end
+
+local function normalizeCurrentLimit(raw)
+  if raw == nil then return 0 end
+  return raw * 2
+end
+
+local function encodeCurrentLimit(value)
+  if value == nil then return 0 end
+  return clamp(math.floor((value / 2) + 0.5), 0, 255)
+end
+
 function Api.parse(buf)
-  if type(buf) ~= "table" or #buf < 51 then return nil end
+  if type(buf) ~= "table" or #buf < 50 then return nil end
   return {
     esc_signature = buf[1] or 0,
     esc_command = buf[2] or 0,
@@ -38,28 +116,28 @@ function Api.parse(buf)
     complementary_pwm = buf[23] or 0,
     variable_pwm_frequency = buf[24] or 0,
     stuck_rotor_protection = buf[25] or 0,
-    timing_advance = buf[26] or 0,
+    timing_advance = normalizeTimingAdvance(buf[26]),
     pwm_frequency = buf[27] or 0,
     startup_power = buf[28] or 0,
-    motor_kv = buf[29] or 0,
+    motor_kv = normalizeMotorKv(buf[29]),
     motor_poles = buf[30] or 0,
     brake_on_stop = buf[31] or 0,
     stall_protection = buf[32] or 0,
     beep_volume = buf[33] or 0,
     interval_telemetry = buf[34] or 0,
-    servo_low_threshold = buf[35] or 0,
-    servo_high_threshold = buf[36] or 0,
-    servo_neutral = buf[37] or 0,
+    servo_low_threshold = normalizeServoLow(buf[35]),
+    servo_high_threshold = normalizeServoHigh(buf[36]),
+    servo_neutral = normalizeServoNeutral(buf[37]),
     servo_dead_band = buf[38] or 0,
     low_voltage_cutoff = buf[39] or 0,
-    low_voltage_threshold = buf[40] or 0,
+    low_voltage_threshold = normalizeLowVoltageThreshold(buf[40]),
     rc_car_reversing = buf[41] or 0,
     use_hall_sensors = buf[42] or 0,
     sine_mode_range = buf[43] or 0,
     brake_strength = buf[44] or 0,
     running_brake_level = buf[45] or 0,
     temperature_limit = buf[46] or 0,
-    current_limit = buf[47] or 0,
+    current_limit = normalizeCurrentLimit(buf[47]),
     sine_mode_power = buf[48] or 0,
     esc_protocol = buf[49] or 0,
     auto_advance = buf[50] or 0
@@ -68,11 +146,56 @@ end
 
 function Api.buildWritePayload(data)
   local payload = {}
-  for i, k in ipairs({
-    "esc_signature","esc_command","reserved_0","eeprom_version","reserved_1","version_major","version_minor","max_ramp","minimum_duty_cycle","disable_stick_calibration","absolute_voltage_cutoff","current_p","current_i","current_d","active_brake_power","reserved_eeprom_3_0","reserved_eeprom_3_1","reserved_eeprom_3_2","reserved_eeprom_3_3","motor_direction","bidirectional_mode","sinusoidal_startup","complementary_pwm","variable_pwm_frequency","stuck_rotor_protection","timing_advance","pwm_frequency","startup_power","motor_kv","motor_poles","brake_on_stop","stall_protection","beep_volume","interval_telemetry","servo_low_threshold","servo_high_threshold","servo_neutral","servo_dead_band","low_voltage_cutoff","low_voltage_threshold","rc_car_reversing","use_hall_sensors","sine_mode_range","brake_strength","running_brake_level","temperature_limit","current_limit","sine_mode_power","esc_protocol","auto_advance"
-  }) do
-    payload[i] = tonumber(data[k]) or 0
-  end
+  payload[1] = tonumber(data.esc_signature) or 0
+  payload[2] = tonumber(data.esc_command) or 0
+  payload[3] = tonumber(data.reserved_0) or 0
+  payload[4] = tonumber(data.eeprom_version) or 0
+  payload[5] = tonumber(data.reserved_1) or 0
+  payload[6] = tonumber(data.version_major) or 0
+  payload[7] = tonumber(data.version_minor) or 0
+  payload[8] = tonumber(data.max_ramp) or 0
+  payload[9] = tonumber(data.minimum_duty_cycle) or 0
+  payload[10] = tonumber(data.disable_stick_calibration) or 0
+  payload[11] = tonumber(data.absolute_voltage_cutoff) or 0
+  payload[12] = tonumber(data.current_p) or 0
+  payload[13] = tonumber(data.current_i) or 0
+  payload[14] = tonumber(data.current_d) or 0
+  payload[15] = tonumber(data.active_brake_power) or 0
+  payload[16] = tonumber(data.reserved_eeprom_3_0) or 0
+  payload[17] = tonumber(data.reserved_eeprom_3_1) or 0
+  payload[18] = tonumber(data.reserved_eeprom_3_2) or 0
+  payload[19] = tonumber(data.reserved_eeprom_3_3) or 0
+  payload[20] = tonumber(data.motor_direction) or 0
+  payload[21] = tonumber(data.bidirectional_mode) or 0
+  payload[22] = tonumber(data.sinusoidal_startup) or 0
+  payload[23] = tonumber(data.complementary_pwm) or 0
+  payload[24] = tonumber(data.variable_pwm_frequency) or 0
+  payload[25] = tonumber(data.stuck_rotor_protection) or 0
+  payload[26] = encodeTimingAdvance(data.timing_advance)
+  payload[27] = tonumber(data.pwm_frequency) or 0
+  payload[28] = tonumber(data.startup_power) or 0
+  payload[29] = encodeMotorKv(data.motor_kv)
+  payload[30] = tonumber(data.motor_poles) or 0
+  payload[31] = tonumber(data.brake_on_stop) or 0
+  payload[32] = tonumber(data.stall_protection) or 0
+  payload[33] = tonumber(data.beep_volume) or 0
+  payload[34] = tonumber(data.interval_telemetry) or 0
+  payload[35] = encodeServoLow(data.servo_low_threshold)
+  payload[36] = encodeServoHigh(data.servo_high_threshold)
+  payload[37] = encodeServoNeutral(data.servo_neutral)
+  payload[38] = tonumber(data.servo_dead_band) or 0
+  payload[39] = tonumber(data.low_voltage_cutoff) or 0
+  payload[40] = encodeLowVoltageThreshold(data.low_voltage_threshold)
+  payload[41] = tonumber(data.rc_car_reversing) or 0
+  payload[42] = tonumber(data.use_hall_sensors) or 0
+  payload[43] = tonumber(data.sine_mode_range) or 0
+  payload[44] = tonumber(data.brake_strength) or 0
+  payload[45] = tonumber(data.running_brake_level) or 0
+  payload[46] = tonumber(data.temperature_limit) or 0
+  payload[47] = encodeCurrentLimit(data.current_limit)
+  payload[48] = tonumber(data.sine_mode_power) or 0
+  payload[49] = tonumber(data.esc_protocol) or 0
+  payload[50] = tonumber(data.auto_advance) or 0
   return payload
 end
 

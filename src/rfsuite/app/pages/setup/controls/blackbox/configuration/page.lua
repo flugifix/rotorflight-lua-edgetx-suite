@@ -14,14 +14,74 @@ local Common = nil
 local MspRuntime = nil
 local BlackboxConfigApi = nil
 local FeatureConfigApi = nil
+local StatusApi = nil
+local DebugConfigApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local ApiVersion = nil
 local t = nil
 
+local DEBUG_MODES = {
+  [0] = "NONE",
+  [1] = "CYCLETIME",
+  [2] = "BATTERY",
+  [3] = "GYRO_FILTERED",
+  [4] = "ACCELEROMETER",
+  [5] = "PIDLOOP",
+  [6] = "GYRO_RAW",
+  [7] = "HUT",
+  [8] = "RC_INTERPOLATION",
+  [9] = "ANGLERATE",
+  [10] = "ESC_SENSOR",
+  [11] = "SCHEDULER",
+  [12] = "STACK",
+  [13] = "ESC_SENSOR_RPM",
+  [14] = "ESC_SENSOR_TMP",
+  [15] = "ALTITUDE",
+  [16] = "THREADS",
+  [17] = "REMOTERX",
+  [18] = "GYRO_NOTCH",
+  [19] = "ACC_DIFFERENTIAL",
+  [20] = "PWM",
+  [21] = "DSHOT_TELEMETRY",
+  [22] = "GREETING",
+  [23] = "AIRMODE",
+  [24] = "PARITY",
+  [25] = "RX_FRSKY_SPI",
+  [26] = "RUNAWAY_TAKEOFF",
+  [27] = "ALIGNMENT",
+  [28] = "SPEED_LIMITING",
+  [29] = "SENSORS",
+  [30] = "BOXES",
+  [31] = "CRSF_LINK_STATISTICS",
+  [32] = "DSHOT_RPM",
+  [33] = "RPM_FILTER",
+  [34] = "DSHOT_BIND",
+  [35] = "FLIGHT_ANGLERATE",
+  [36] = "DEDICATED_HID",
+  [37] = "CRSF_LINK_STATISTICS_HYBRID",
+  [38] = "CRSF_PACKET_TIMES",
+  [39] = "SMARTPORT",
+  [40] = "IBUS_TELEMETRY",
+  [41] = "FPORT_TELEMETRY",
+  [42] = "CROSSFIRE_TELEMETRY",
+  [43] = "GHST_TELEMETRY",
+  [44] = "LTM_TELEMETRY",
+  [45] = "SERIAL_RX",
+  [46] = "ESC_COMMAND",
+  [47] = "ACC_RAW",
+  [48] = "COMPASS",
+  [49] = "MSP_PROBE",
+  [50] = "TIMING",
+  [51] = "RC_COMMAND",
+  [52] = "VOLTAGE_CORRECTION"
+}
+
 local ui = {
   loaded = false,
   dirty = false,
+  featureBitmap = 0,
+  pidDeltaUs = 1000,
   cfg = {
     blackbox_supported = 0,
     device = 0,
@@ -31,6 +91,12 @@ local ui = {
     initialEraseFreeSpaceKiB = 0,
     rollingErase = 0,
     gracePeriod = 5
+  },
+  debug = {
+    debug_count = 8,
+    debug_value_count = 8,
+    debug_mode = 0,
+    debug_axis = 0
   },
   media = {
     dataflashSupported = true,
@@ -58,6 +124,8 @@ local function ensureDeps()
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not BlackboxConfigApi then BlackboxConfigApi = loadModule("tasks/msp/api/blackbox_config.lua") end
   if not FeatureConfigApi then FeatureConfigApi = loadModule("tasks/msp/api/feature_config.lua") end
+  if not StatusApi then StatusApi = loadModule("tasks/msp/api/status.lua") end
+  if not DebugConfigApi then DebugConfigApi = loadModule("tasks/msp/api/debug_config.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
@@ -75,8 +143,8 @@ local function pageText(i18n, key, fallback)
 end
 
 local function buildSessionSignature()
-  local session = getSession()
-  return session and session.signature or "1"
+  local s = tostring(ui.cfg.device) .. ";" .. tostring(ui.cfg.mode) .. ";" .. tostring(ui.cfg.denom) .. ";" .. tostring(ui.debug.debug_mode) .. ";" .. tostring(ui.debug.debug_axis)
+  return s
 end
 
 local function canEdit()
@@ -86,6 +154,8 @@ end
 local function loadFromSession()
   local session = getSession()
   if not session or type(session.blackbox) ~= "table" or type(session.blackbox.config) ~= "table" then return false end
+  ui.featureBitmap = tonumber(session.blackbox.feature and session.blackbox.feature.enabledFeatures or 0) or 0
+  ui.pidDeltaUs = tonumber(session.blackbox.pidDeltaUs or 1000) or 1000
   local parsed = session.blackbox.config
   ui.cfg.blackbox_supported = tonumber(parsed.blackbox_supported or 0) or 0
   ui.cfg.device = tonumber(parsed.device or 0) or 0
@@ -95,6 +165,14 @@ local function loadFromSession()
   ui.cfg.initialEraseFreeSpaceKiB = tonumber(parsed.initialEraseFreeSpaceKiB or 0) or 0
   ui.cfg.rollingErase = tonumber(parsed.rollingErase or 0) or 0
   ui.cfg.gracePeriod = tonumber(parsed.gracePeriod or 0) or 0
+
+  local dbg = session.blackbox.debug or nil
+  if dbg then
+    ui.debug.debug_count = tonumber(dbg.debug_count or 8) or 8
+    ui.debug.debug_value_count = tonumber(dbg.debug_value_count or 8) or 8
+    ui.debug.debug_mode = tonumber(dbg.debug_mode or 0) or 0
+    ui.debug.debug_axis = tonumber(dbg.debug_axis or 0) or 0
+  end
 
   local media = session.blackbox.media or nil
   if media then
@@ -125,107 +203,139 @@ local function queueBlackboxRead(isAutoReload)
     end
   end
 
-  -- Queue FEATURE_CONFIG read first
-  queue:add({
-    command = FeatureConfigApi.command,
-    simulatorResponse = FeatureConfigApi.simulatorResponse,
-    processReply = function(self, buf)
-      local reply = FeatureConfigApi.parse(buf)
-      local featureBitmap = (reply and reply.enabledFeatures) or 0
+  local step2, step3, step4, finalizeRead
 
-      -- Now queue BLACKBOX_CONFIG read
+  -- Step 1: Read STATUS
+  local function step1()
+    if StatusApi then
       queue:add({
-        command = BlackboxConfigApi.command,
-        simulatorResponse = BlackboxConfigApi.simulatorResponse,
-        processReply = function(self2, buf2)
-          local parsed = BlackboxConfigApi.parse(buf2)
-          if parsed then
-            ui.cfg.blackbox_supported = parsed.blackbox_supported or 0
-            ui.cfg.device = parsed.device or 0
-            ui.cfg.mode = parsed.mode or 0
-            ui.cfg.denom = parsed.denom or 1
-            ui.cfg.fields = parsed.fields or 0
-            ui.cfg.initialEraseFreeSpaceKiB = parsed.initialEraseFreeSpaceKiB or 0
-            ui.cfg.rollingErase = parsed.rollingErase or 0
-            ui.cfg.gracePeriod = parsed.gracePeriod or 0
-
-            -- Sync to session
-            local session = getSession()
-            if session then
-              if type(session.blackbox) ~= "table" then
-                session.blackbox = {}
-              end
-              session.blackbox.feature = { enabledFeatures = featureBitmap }
-              session.blackbox.config = {
-                blackbox_supported = ui.cfg.blackbox_supported,
-                device = ui.cfg.device,
-                mode = ui.cfg.mode,
-                denom = ui.cfg.denom,
-                fields = ui.cfg.fields,
-                initialEraseFreeSpaceKiB = ui.cfg.initialEraseFreeSpaceKiB,
-                rollingErase = ui.cfg.rollingErase,
-                gracePeriod = ui.cfg.gracePeriod
-              }
-              session.blackbox.media = {
-                dataflashSupported = ui.media.dataflashSupported,
-                sdcardSupported = ui.media.sdcardSupported
-              }
-            end
+        command = StatusApi.command,
+        simulatorResponse = StatusApi.simulatorResponse,
+        processReply = function(self, buf)
+          local reply = StatusApi.parse(buf)
+          local status = reply and reply.parsed
+          if status and status.task_delta_time_pid then
+            ui.pidDeltaUs = status.task_delta_time_pid
           end
-
-          ui.runtime.readPending = false
-          ui.loading = false
-          ui.dirty = false
-          ui.progress = 100
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
+          step2()
         end,
         errorHandler = function()
-          ui.runtime.readPending = false
-          ui.loading = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
+          step2()
         end
       })
-    end,
-    errorHandler = function()
-      -- If feature config fails, still try to read blackbox config
-      queue:add({
-        command = BlackboxConfigApi.command,
-        simulatorResponse = BlackboxConfigApi.simulatorResponse,
-        processReply = function(self2, buf2)
-          local parsed = BlackboxConfigApi.parse(buf2)
-          if parsed then
-            ui.cfg.blackbox_supported = parsed.blackbox_supported or 0
-            ui.cfg.device = parsed.device or 0
-            ui.cfg.mode = parsed.mode or 0
-            ui.cfg.denom = parsed.denom or 1
-            ui.cfg.fields = parsed.fields or 0
-            ui.cfg.initialEraseFreeSpaceKiB = parsed.initialEraseFreeSpaceKiB or 0
-            ui.cfg.rollingErase = parsed.rollingErase or 0
-            ui.cfg.gracePeriod = parsed.gracePeriod or 0
-          end
-          ui.runtime.readPending = false
-          ui.loading = false
-          ui.dirty = false
-          ui.progress = 100
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end,
-        errorHandler = function()
-          ui.runtime.readPending = false
-          ui.loading = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end
-      })
+    else
+      step2()
     end
-  })
+  end
 
+  -- Step 2: Read FEATURE_CONFIG
+  function step2()
+    queue:add({
+      command = FeatureConfigApi.command,
+      simulatorResponse = FeatureConfigApi.simulatorResponse,
+      processReply = function(self, buf)
+        local reply = FeatureConfigApi.parse(buf)
+        ui.featureBitmap = (reply and reply.enabledFeatures) or 0
+        step3()
+      end,
+      errorHandler = function()
+        step3()
+      end
+    })
+  end
+
+  -- Step 3: Read BLACKBOX_CONFIG
+  function step3()
+    queue:add({
+      command = BlackboxConfigApi.command,
+      simulatorResponse = BlackboxConfigApi.simulatorResponse,
+      processReply = function(self, buf)
+        local parsed = BlackboxConfigApi.parse(buf)
+        if parsed then
+          ui.cfg.blackbox_supported = parsed.blackbox_supported or 0
+          ui.cfg.device = parsed.device or 0
+          ui.cfg.mode = parsed.mode or 0
+          ui.cfg.denom = parsed.denom or 1
+          ui.cfg.fields = parsed.fields or 0
+          ui.cfg.initialEraseFreeSpaceKiB = parsed.initialEraseFreeSpaceKiB or 0
+          ui.cfg.rollingErase = parsed.rollingErase or 0
+          ui.cfg.gracePeriod = parsed.gracePeriod or 0
+        end
+        step4()
+      end,
+      errorHandler = function()
+        step4()
+      end
+    })
+  end
+
+  -- Step 4: Read DEBUG_CONFIG
+  function step4()
+    if DebugConfigApi then
+      queue:add({
+        command = DebugConfigApi.command,
+        simulatorResponse = DebugConfigApi.simulatorResponse,
+        processReply = function(self, buf)
+          local parsed = DebugConfigApi.parse(buf)
+          if parsed then
+            ui.debug.debug_count = parsed.debug_count or 8
+            ui.debug.debug_value_count = parsed.debug_value_count or 8
+            ui.debug.debug_mode = parsed.debug_mode or 0
+            ui.debug.debug_axis = parsed.debug_axis or 0
+          end
+          finalizeRead()
+        end,
+        errorHandler = function()
+          finalizeRead()
+        end
+      })
+    else
+      finalizeRead()
+    end
+  end
+
+  -- Finalize Read
+  function finalizeRead()
+    -- Sync to session
+    local session = getSession()
+    if session then
+      if type(session.blackbox) ~= "table" then
+        session.blackbox = {}
+      end
+      session.blackbox.feature = { enabledFeatures = ui.featureBitmap }
+      session.blackbox.config = {
+        blackbox_supported = ui.cfg.blackbox_supported,
+        device = ui.cfg.device,
+        mode = ui.cfg.mode,
+        denom = ui.cfg.denom,
+        fields = ui.cfg.fields,
+        initialEraseFreeSpaceKiB = ui.cfg.initialEraseFreeSpaceKiB,
+        rollingErase = ui.cfg.rollingErase,
+        gracePeriod = ui.cfg.gracePeriod
+      }
+      session.blackbox.media = {
+        dataflashSupported = ui.media.dataflashSupported,
+        sdcardSupported = ui.media.sdcardSupported
+      }
+      session.blackbox.debug = {
+        debug_count = ui.debug.debug_count,
+        debug_value_count = ui.debug.debug_value_count,
+        debug_mode = ui.debug.debug_mode,
+        debug_axis = ui.debug.debug_axis
+      }
+      session.blackbox.pidDeltaUs = ui.pidDeltaUs
+    end
+
+    ui.runtime.readPending = false
+    ui.loading = false
+    ui.dirty = false
+    ui.progress = 100
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+
+  step1()
   return true, nil
 end
 
@@ -256,59 +366,34 @@ local function queueBlackboxWrite(requestRebuild)
     requestRebuild()
   end
 
+  local writeEEPROM
+
+  -- Step 1: Write BLACKBOX_CONFIG
   queue:add({
     command = BlackboxConfigApi.writeCommand,
     payload = payload,
     isWrite = true,
     simulatorResponse = {},
     processReply = function()
-      -- Step 2: Write EEPROM
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
+      -- Step 2: Write DEBUG_CONFIG (if available)
+      if DebugConfigApi then
         queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
+          command = DebugConfigApi.writeCommand,
+          payload = DebugConfigApi.buildWritePayload({
+            debug_mode = ui.debug.debug_mode,
+            debug_axis = ui.debug.debug_axis
+          }),
           isWrite = true,
           simulatorResponse = {},
           processReply = function()
-            -- Success! Update local session
-            local session = getSession()
-            if session then
-              if type(session.blackbox) ~= "table" then
-                session.blackbox = {}
-              end
-              session.blackbox.config = {
-                blackbox_supported = ui.cfg.blackbox_supported,
-                device = ui.cfg.device,
-                mode = ui.cfg.mode,
-                denom = ui.cfg.denom,
-                fields = ui.cfg.fields,
-                initialEraseFreeSpaceKiB = ui.cfg.initialEraseFreeSpaceKiB,
-                rollingErase = ui.cfg.rollingErase,
-                gracePeriod = ui.cfg.gracePeriod
-              }
-              session.blackbox.media = {
-                dataflashSupported = ui.media.dataflashSupported,
-                sdcardSupported = ui.media.sdcardSupported
-              }
-            end
-            ui.dirty = false
-            ui.saving = false
-            queueBlackboxRead(true)
+            writeEEPROM()
           end,
           errorHandler = function()
-            ui.saving = false
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
+            writeEEPROM()
           end
         })
       else
-        ui.dirty = false
-        ui.saving = false
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
+        writeEEPROM()
       end
     end,
     errorHandler = function()
@@ -318,6 +403,63 @@ local function queueBlackboxWrite(requestRebuild)
       end
     end
   })
+
+  -- Write EEPROM
+  function writeEEPROM()
+    local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
+    if eepromApi then
+      queue:add({
+        command = eepromApi.writeCommand,
+        payload = {},
+        isWrite = true,
+        simulatorResponse = {},
+        processReply = function()
+          -- Success! Update local session
+          local session = getSession()
+          if session then
+            if type(session.blackbox) ~= "table" then
+              session.blackbox = {}
+            end
+            session.blackbox.config = {
+              blackbox_supported = ui.cfg.blackbox_supported,
+              device = ui.cfg.device,
+              mode = ui.cfg.mode,
+              denom = ui.cfg.denom,
+              fields = ui.cfg.fields,
+              initialEraseFreeSpaceKiB = ui.cfg.initialEraseFreeSpaceKiB,
+              rollingErase = ui.cfg.rollingErase,
+              gracePeriod = ui.cfg.gracePeriod
+            }
+            session.blackbox.debug = {
+              debug_count = ui.debug.debug_count,
+              debug_value_count = ui.debug.debug_value_count,
+              debug_mode = ui.debug.debug_mode,
+              debug_axis = ui.debug.debug_axis
+            }
+            session.blackbox.media = {
+              dataflashSupported = ui.media.dataflashSupported,
+              sdcardSupported = ui.media.sdcardSupported
+            }
+          end
+          ui.dirty = false
+          ui.saving = false
+          queueBlackboxRead(true)
+        end,
+        errorHandler = function()
+          ui.saving = false
+          if type(requestRebuild) == "function" then
+            requestRebuild()
+          end
+        end
+      })
+    else
+      ui.dirty = false
+      ui.saving = false
+      if type(requestRebuild) == "function" then
+        requestRebuild()
+      end
+    end
+  end
 
   return true, nil
 end
@@ -347,6 +489,13 @@ local function ensureLoaded()
     rollingErase = 0,
     gracePeriod = 5
   }
+  ui.debug = {
+    debug_count = 8,
+    debug_value_count = 8,
+    debug_mode = 0,
+    debug_axis = 0
+  }
+  ui.pidDeltaUs = 1000
 
   loadFromSession()
   ui.loaded = true
@@ -456,7 +605,8 @@ function M.build(ctx)
   local function formatRateHz(denom)
     local d = tonumber(denom or 1) or 1
     if d < 1 then d = 1 end
-    local hz = 1000 / d
+    local base = 1000000 / (ui.pidDeltaUs or 1000)
+    local hz = base / d
     if math.floor(hz) == hz then
       return string.format("%dHz", hz)
     end
@@ -596,6 +746,47 @@ function M.build(ctx)
     function() return isOnboardFlashActive == true end
   )
 
+  -- 7. Debug Mode
+  local debugModeOptions = {}
+  local debugCount = tonumber(ui.debug.debug_count) or 8
+  if debugCount < 1 then debugCount = 8 end
+  for i = 0, debugCount - 1 do
+    local label = DEBUG_MODES[i] or ("Custom " .. tostring(i))
+    debugModeOptions[#debugModeOptions + 1] = { label = label, value = i }
+  end
+
+  cursorY = cursorY + Controls.appendComboSelect(
+    children, x, cursorY, w,
+    pageText(i18n, "debug_mode", "Debug Mode"),
+    debugModeOptions,
+    ui.debug.debug_mode,
+    function(v)
+      ui.debug.debug_mode = tonumber(v) or 0
+      ui.dirty = true
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end,
+    { active = function() return edit end }
+  )
+
+  -- 8. Debug Selection (Axis)
+  cursorY = cursorY + Controls.appendNumberField(
+    children, x, cursorY, w,
+    pageText(i18n, "debug_selection", "Debug Selection"),
+    {
+      min = 0,
+      max = 255,
+      step = 1,
+      get = function() return ui.debug.debug_axis end,
+      set = function(v)
+        ui.debug.debug_axis = tonumber(v) or 0
+        ui.dirty = true
+      end,
+      enabled = edit
+    }
+  )
+
   if ui.dirty then
     children[#children + 1] = {
       type = "label",
@@ -655,6 +846,8 @@ function M.onClose()
   MspRuntime = nil
   BlackboxConfigApi = nil
   FeatureConfigApi = nil
+  StatusApi = nil
+  DebugConfigApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
   ApiVersion = nil

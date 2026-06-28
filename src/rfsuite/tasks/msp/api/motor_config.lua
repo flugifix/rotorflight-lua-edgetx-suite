@@ -40,8 +40,10 @@ local SIM_RESPONSE = {
     0, -- use_unsynced_pwm
     0,0,0,0, -- motor_pole_count_0..3
     0,0,0,0, -- motor_rpm_lpf_0..3
-    0,0, -- main_rotor_gear_ratio_0..1
-    0,0, -- tail_rotor_gear_ratio_0..1
+    0,0, -- main_rotor_gear_ratio_0
+    0,0, -- main_rotor_gear_ratio_1
+    0,0, -- tail_rotor_gear_ratio_0
+    0,0, -- tail_rotor_gear_ratio_1
 }
 
 local function to_u16(lo, hi)
@@ -62,28 +64,22 @@ Api.simulatorResponse = (function()
     return t
 end)()
 
-local function expected_bytes(spec)
-    local n = 0
-    for _, f in ipairs(spec) do
-        local typ = f[2]
-        if typ == "U8" then n = n + 1
-        elseif typ == "U16" then n = n + 2
-        else n = n + 1 end
-    end
-    return n
-end
-
 function Api.parse(buf)
     if type(buf) ~= "table" then return nil end
-    local need = expected_bytes(FIELD_SPEC)
-    if #buf < need then return nil end
     local out = {}
     local i = 1
     for _, t in ipairs(FIELD_SPEC) do
         local name, typ = t[1], t[2]
-        if typ == "U8" then out[name] = tonumber(buf[i]) or 0; i = i + 1
-        elseif typ == "U16" then out[name] = to_u16(buf[i], buf[i+1]); i = i + 2
-        else out[name] = tonumber(buf[i]) or 0; i = i + 1 end
+        if typ == "U8" then
+            out[name] = buf[i] and tonumber(buf[i]) or 0
+            i = i + 1
+        elseif typ == "U16" then
+            out[name] = (buf[i] and buf[i+1]) and to_u16(buf[i], buf[i+1]) or 0
+            i = i + 2
+        else
+            out[name] = buf[i] and tonumber(buf[i]) or 0
+            i = i + 1
+        end
     end
     return out
 end

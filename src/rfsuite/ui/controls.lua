@@ -278,8 +278,10 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
   local enabledGetter
   if type(opts.enabled) == "function" then
     enabledGetter = opts.enabled
+  elseif type(opts.active) == "function" then
+    enabledGetter = opts.active
   else
-    local enabled = opts.enabled ~= false
+    local enabled = (opts.enabled ~= false) and (opts.active ~= false)
     enabledGetter = function() return enabled end
   end
   local suffix = opts.suffix or ""

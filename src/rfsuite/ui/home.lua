@@ -986,7 +986,8 @@ local function onSave()
           preferences = state.preferences,
           menu = state.menu,
           savePreferences = performSave,
-          refresh = M.buildUI
+          refresh = M.buildUI,
+          requestRebuild = function() scheduleBuildUI(false) end
         })
 
         if not ok then
@@ -1019,7 +1020,7 @@ local function onSave()
           scheduleBuildUI(false)
         end
       end
-      state.saveOverlayVisible = false
+      state.saveOverlayVisible = true
       scheduleBuildUI(false)
     end
 

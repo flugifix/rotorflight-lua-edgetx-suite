@@ -205,7 +205,22 @@ local manifest = {
         { id = "throttle", title = "@i18n(app.modules.esc_motors.throttle)@", menuId = "setup_esc_motors_throttle_page", icon = "@pages/setup/esc_motors/throttle/icon.png", row = 1, col = 1 },
         { id = "telemetry", title = "@i18n(app.modules.esc_motors.telemetry)@", menuId = "setup_esc_motors_telemetry_page", icon = "@pages/setup/esc_motors/telemetry/icon.png", row = 1, col = 2 },
         { id = "rpm", title = "@i18n(app.modules.esc_motors.rpm)@", menuId = "setup_esc_motors_rpm_page", icon = "@pages/setup/esc_motors/rpm/icon.png", row = 1, col = 3 },
-        { id = "esc_tools", title = "@i18n(app.modules.esc_motors.esc_tools)@", menuId = "setup_esc_motors_esc_tools_page", icon = "@pages/setup/esc_motors/esc_tools/icon.png", row = 1, col = 4 }
+        { id = "esc_tools", title = "@i18n(app.modules.esc_motors.esc_tools)@", menuId = "esc_tools_menu", icon = "@pages/setup/esc_motors/esc_tools/icon.png", row = 1, col = 4 }
+      }
+    },
+    esc_tools_menu = {
+      title = "@i18n(app.modules.esc_motors.esc_tools)@",
+      pages = {
+        { id = "am32", title = "AM32", menuId = "setup_esc_motors_esc_tools_am32_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/am32/icon.png", row = 1, col = 1 },
+        { id = "blheli_s", title = "BLHeli_S", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/blheli_s/icon.png", row = 1, col = 2 },
+        { id = "bluejay", title = "Bluejay", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/bluejay/icon.png", row = 1, col = 3 },
+        { id = "flrtr", title = "Flyrotor", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/flrtr/icon.png", row = 1, col = 4 },
+        { id = "hw5", title = "Hobbywing V5", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/hw5/icon.png", row = 1, col = 5 },
+        { id = "omp", title = "OMP", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/omp/icon.png", row = 2, col = 1 },
+        { id = "scorp", title = "Scorpion", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/scorp/icon.png", row = 2, col = 2 },
+        { id = "xdfly", title = "XDFly", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/xdfly/icon.png", row = 2, col = 3 },
+        { id = "yge", title = "YGE", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/yge/icon.png", row = 2, col = 4 },
+        { id = "ztw", title = "ZTW", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/ztw/icon.png", row = 2, col = 5 }
       }
     },
     governor_menu = {
@@ -471,6 +486,10 @@ local manifest = {
     },
     setup_esc_motors_esc_tools_page = {
       title = "@i18n(app.modules.esc_motors.esc_tools)@",
+      pages = {}
+    },
+    setup_esc_motors_esc_tools_am32_page = {
+      title = "AM32 Configurator",
       pages = {}
     },
     setup_esc_motors_esc_tool_run_page = {
