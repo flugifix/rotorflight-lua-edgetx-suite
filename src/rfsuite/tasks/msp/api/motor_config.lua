@@ -28,17 +28,40 @@ local FIELD_SPEC = {
     {"tail_rotor_gear_ratio_1", "U16"}
 }
 
+local WRITE_FIELD_SPEC = {
+    {"minthrottle", "U16"},
+    {"maxthrottle", "U16"},
+    {"mincommand", "U16"},
+    {"motor_pole_count_blheli", "U8"},
+    {"use_dshot_telemetry", "U8"},
+    {"motor_pwm_protocol", "U8"},
+    {"motor_pwm_rate", "U16"},
+    {"use_unsynced_pwm", "U8"},
+    {"motor_pole_count_0", "U8"},
+    {"motor_pole_count_1", "U8"},
+    {"motor_pole_count_2", "U8"},
+    {"motor_pole_count_3", "U8"},
+    {"motor_rpm_lpf_0", "U8"},
+    {"motor_rpm_lpf_1", "U8"},
+    {"motor_rpm_lpf_2", "U8"},
+    {"motor_rpm_lpf_3", "U8"},
+    {"main_rotor_gear_ratio_0", "U16"},
+    {"main_rotor_gear_ratio_1", "U16"},
+    {"tail_rotor_gear_ratio_0", "U16"},
+    {"tail_rotor_gear_ratio_1", "U16"}
+}
+
 local SIM_RESPONSE = {
-    45,4, -- minthrottle
-    200,6, -- maxthrottle
-    0,0, -- mincommand
+    45,4, -- minthrottle (1070)
+    200,6, -- maxthrottle (2000)
+    232,3, -- mincommand (1000)
     1, -- motor_count_blheli
     3, -- motor_pole_count_blheli
-    0, -- use_dshot_telemetry
-    0, -- motor_pwm_protocol
-    0,0, -- motor_pwm_rate
+    1, -- use_dshot_telemetry (enabled)
+    5, -- motor_pwm_protocol (DSHOT150)
+    244,1, -- motor_pwm_rate (500)
     0, -- use_unsynced_pwm
-    0,0,0,0, -- motor_pole_count_0..3
+    10,10,10,10, -- motor_pole_count_0..3 (10 poles)
     0,0,0,0, -- motor_rpm_lpf_0..3
     0,0, -- main_rotor_gear_ratio_0
     0,0, -- main_rotor_gear_ratio_1
@@ -84,11 +107,11 @@ function Api.parse(buf)
     return out
 end
 
--- Build payload using the canonical FIELD_SPEC order (fallback/simple write)
+-- Build payload using the canonical WRITE_FIELD_SPEC order
 function Api.buildWritePayload(data)
     data = data or {}
     local p = {}
-    for _, t in ipairs(FIELD_SPEC) do
+    for _, t in ipairs(WRITE_FIELD_SPEC) do
         local name, typ = t[1], t[2]
         local val = data[name] or 0
         if typ == "U8" then p[#p+1] = val & 0xFF
