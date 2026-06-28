@@ -143,8 +143,8 @@ local function pageText(i18n, key, fallback)
 end
 
 local function buildSessionSignature()
-  local s = tostring(ui.cfg.device) .. ";" .. tostring(ui.cfg.mode) .. ";" .. tostring(ui.cfg.denom) .. ";" .. tostring(ui.debug.debug_mode) .. ";" .. tostring(ui.debug.debug_axis)
-  return s
+  local session = getSession()
+  return session and session.signature or "1"
 end
 
 local function canEdit()
@@ -207,11 +207,13 @@ local function queueBlackboxRead(isAutoReload)
 
   -- Step 1: Read STATUS
   local function step1()
+    if not ui.runtime or not ui.runtime.readPending then return end
     if StatusApi then
       queue:add({
         command = StatusApi.command,
         simulatorResponse = StatusApi.simulatorResponse,
         processReply = function(self, buf)
+          if not ui.runtime or not ui.runtime.readPending then return end
           local reply = StatusApi.parse(buf)
           local status = reply and reply.parsed
           if status and status.task_delta_time_pid then
@@ -220,6 +222,7 @@ local function queueBlackboxRead(isAutoReload)
           step2()
         end,
         errorHandler = function()
+          if not ui.runtime or not ui.runtime.readPending then return end
           step2()
         end
       })
@@ -230,15 +233,18 @@ local function queueBlackboxRead(isAutoReload)
 
   -- Step 2: Read FEATURE_CONFIG
   function step2()
+    if not ui.runtime or not ui.runtime.readPending then return end
     queue:add({
       command = FeatureConfigApi.command,
       simulatorResponse = FeatureConfigApi.simulatorResponse,
       processReply = function(self, buf)
+        if not ui.runtime or not ui.runtime.readPending then return end
         local reply = FeatureConfigApi.parse(buf)
         ui.featureBitmap = (reply and reply.enabledFeatures) or 0
         step3()
       end,
       errorHandler = function()
+        if not ui.runtime or not ui.runtime.readPending then return end
         step3()
       end
     })
@@ -246,10 +252,12 @@ local function queueBlackboxRead(isAutoReload)
 
   -- Step 3: Read BLACKBOX_CONFIG
   function step3()
+    if not ui.runtime or not ui.runtime.readPending then return end
     queue:add({
       command = BlackboxConfigApi.command,
       simulatorResponse = BlackboxConfigApi.simulatorResponse,
       processReply = function(self, buf)
+        if not ui.runtime or not ui.runtime.readPending then return end
         local parsed = BlackboxConfigApi.parse(buf)
         if parsed then
           ui.cfg.blackbox_supported = parsed.blackbox_supported or 0
@@ -264,6 +272,7 @@ local function queueBlackboxRead(isAutoReload)
         step4()
       end,
       errorHandler = function()
+        if not ui.runtime or not ui.runtime.readPending then return end
         step4()
       end
     })
@@ -271,11 +280,13 @@ local function queueBlackboxRead(isAutoReload)
 
   -- Step 4: Read DEBUG_CONFIG
   function step4()
+    if not ui.runtime or not ui.runtime.readPending then return end
     if DebugConfigApi then
       queue:add({
         command = DebugConfigApi.command,
         simulatorResponse = DebugConfigApi.simulatorResponse,
         processReply = function(self, buf)
+          if not ui.runtime or not ui.runtime.readPending then return end
           local parsed = DebugConfigApi.parse(buf)
           if parsed then
             ui.debug.debug_count = parsed.debug_count or 8
@@ -286,6 +297,7 @@ local function queueBlackboxRead(isAutoReload)
           finalizeRead()
         end,
         errorHandler = function()
+          if not ui.runtime or not ui.runtime.readPending then return end
           finalizeRead()
         end
       })
@@ -296,6 +308,7 @@ local function queueBlackboxRead(isAutoReload)
 
   -- Finalize Read
   function finalizeRead()
+    if not ui.runtime or not ui.runtime.readPending then return end
     -- Sync to session
     local session = getSession()
     if session then
