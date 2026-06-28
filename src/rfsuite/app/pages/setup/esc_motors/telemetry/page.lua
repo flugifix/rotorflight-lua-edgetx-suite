@@ -215,7 +215,13 @@ local function queueTelemetryWrite(requestRebuild)
                 processReply = function()
                   ui.dirty = false
                   ui.saving = false
-                  queueTelemetryRead(true)
+                  local session = getSession()
+                  if session then
+                    session.setup_esc_motors_telemetry = nil
+                  end
+                  if type(requestRebuild) == "function" then
+                    requestRebuild()
+                  end
                 end,
                 errorHandler = function()
                   ui.saving = false
@@ -227,7 +233,13 @@ local function queueTelemetryWrite(requestRebuild)
             else
               ui.dirty = false
               ui.saving = false
-              queueTelemetryRead(true)
+              local session = getSession()
+              if session then
+                session.setup_esc_motors_telemetry = nil
+              end
+              if type(requestRebuild) == "function" then
+                requestRebuild()
+              end
             end
           end,
           errorHandler = function()

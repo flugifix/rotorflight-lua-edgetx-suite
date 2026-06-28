@@ -267,7 +267,13 @@ local function queueRpmWrite(requestRebuild)
                     processReply = function()
                       ui.dirty = false
                       ui.saving = false
-                      queueRpmRead(true)
+                      local session = getSession()
+                      if session then
+                        session.setup_esc_motors_rpm = nil
+                      end
+                      if type(requestRebuild) == "function" then
+                        requestRebuild()
+                      end
                     end,
                     errorHandler = function()
                       ui.saving = false
@@ -279,7 +285,13 @@ local function queueRpmWrite(requestRebuild)
                 else
                   ui.dirty = false
                   ui.saving = false
-                  queueRpmRead(true)
+                  local session = getSession()
+                  if session then
+                    session.setup_esc_motors_rpm = nil
+                  end
+                  if type(requestRebuild) == "function" then
+                    requestRebuild()
+                  end
                 end
               end,
               errorHandler = function()
