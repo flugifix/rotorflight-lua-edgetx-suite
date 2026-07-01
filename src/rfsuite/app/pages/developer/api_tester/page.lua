@@ -283,10 +283,6 @@ local function enqueueApiRead(apiName)
     return false
   end
 
-  if type(queue.clear) == "function" then
-    queue:clear()
-  end
-
   local loaderPath = "tasks/msp/api/" .. tostring(apiName) .. ".lua"
   local okLoad, api = pcall(loadModule, loaderPath)
   local command = (type(api) == "table") and (tonumber(api.command)) or nil
@@ -298,6 +294,12 @@ local function enqueueApiRead(apiName)
     return false
   end
 
+  local isEsc = (command == 217 or apiName:sub(1, 15) == "esc_parameters_")
+
+  if (not isEsc or not ui.connState or ui.connState == 0) and type(queue.clear) == "function" then
+    queue:clear()
+  end
+
   ui.requestSeq = (tonumber(ui.requestSeq) or 0) + 1
   local requestId = ui.requestSeq
   ui.activeRequest = {
@@ -305,6 +307,71 @@ local function enqueueApiRead(apiName)
     apiName = apiName,
     startedAt = nowSeconds(),
   }
+
+  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
+  if FwdProgApi and isEsc then
+    if not ui.connState or ui.connState == 0 then
+      ui.connState = 1
+      setStatus("Resetting 4WIF link (target 100)...")
+      setInfoRows({
+        { label = tr("label_status", "Status"), value = "Sending reset target..." }
+      }, 0)
+      beginLoading("read", 1, true)
+      queue:add({
+        command = FwdProgApi.writeCommand,
+        payload = FwdProgApi.buildWritePayload({ target = 100 }),
+        isWrite = true,
+        processReply = function()
+          ui.connState = 2
+          ui.connTimer = nowSeconds()
+          ui.activeRequest = nil
+          requestRebuild()
+        end,
+        errorHandler = function(_, err)
+          ui.connState = 0
+          ui.activeRequest = nil
+          abortLoading(ui.i18n, tostring(err or "Reset failed"))
+          setStatus(tr("label_error", "Error"))
+          setInfoRows({
+            { label = tr("label_status", "Status"), value = "Reset failed" },
+            { label = tr("label_error", "Error"), value = tostring(err) }
+          }, 0)
+          requestRebuild()
+        end
+      })
+      return true
+    elseif ui.connState == 3 then
+      ui.connState = 4
+      setStatus("Selecting ESC 1 (target 0)...")
+      setInfoRows({
+        { label = tr("label_status", "Status"), value = "Sending select target..." }
+      }, 0)
+      beginLoading("read", 1, true)
+      queue:add({
+        command = FwdProgApi.writeCommand,
+        payload = FwdProgApi.buildWritePayload({ target = 0 }),
+        isWrite = true,
+        processReply = function()
+          ui.connState = 5
+          ui.connTimer = nowSeconds()
+          ui.activeRequest = nil
+          requestRebuild()
+        end,
+        errorHandler = function(_, err)
+          ui.connState = 0
+          ui.activeRequest = nil
+          abortLoading(ui.i18n, tostring(err or "Selection failed"))
+          setStatus(tr("label_error", "Error"))
+          setInfoRows({
+            { label = tr("label_status", "Status"), value = "Selection failed" },
+            { label = tr("label_error", "Error"), value = tostring(err) }
+          }, 0)
+          requestRebuild()
+        end
+      })
+      return true
+    end
+  end
 
   setStatus(tr("status_reading", "Reading") .. " " .. tostring(apiName) .. "...")
   setInfoRows({
@@ -375,9 +442,8 @@ local function enqueueApiRead(apiName)
     requestRebuild()
   end
 
-
   local retryBackoff = 0.20
-  local timeout = 5.0
+  local timeout = isEsc and 15.0 or 5.0
   queue:add({
     command = command,
     simulatorResponse = api.simulatorResponse,
@@ -481,6 +547,8 @@ function M.onReload()
   ui.choiceLabels = {}
   ui.activeRequest = nil
   ui.requestSeq = (tonumber(ui.requestSeq) or 0) + 1
+  ui.connState = 0
+  ui.connTimer = nil
   setStatus(tr("status_idle", "Idle"))
   setInfoRows({
     { label = tr("label_info", "Info"), value = tr("msg_choose_api", "Choose an API and press Test") }
@@ -497,11 +565,27 @@ function M.wakeup()
     discoverApis()
     requestRebuild()
   end
+
+  if ui.connState == 2 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 2.5 then
+      ui.connState = 3
+      local apiName = selectedApiName()
+      if apiName then enqueueApiRead(apiName) end
+    end
+  elseif ui.connState == 5 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 5.0 then
+      ui.connState = 6
+      local apiName = selectedApiName()
+      if apiName then enqueueApiRead(apiName) end
+    end
+  end
 end
 
 function M.onClose()
   ui.requestSeq = (tonumber(ui.requestSeq) or 0) + 1
   ui.activeRequest = nil
+  ui.connState = nil
+  ui.connTimer = nil
   local runtimeState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState() or nil
   local queue = runtimeState and runtimeState.queue or nil
   if queue and type(queue.clear) == "function" then

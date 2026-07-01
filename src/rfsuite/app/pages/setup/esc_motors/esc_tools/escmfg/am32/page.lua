@@ -103,30 +103,20 @@ local function pageText(i18n, key, fallback)
   return fallback
 end
 
-local function queueAm32Read(isAutoReload)
-  if not MspRuntime or not EscParametersAm32Api or type(MspRuntime.getState) ~= "function" then
-    return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  if ui.runtime.readPending then return true, nil end
-
-  ui.runtime.readPending = true
-  if not isAutoReload then
-    ui.loading = true
-    ui.progress = 0
-    if type(ui.runtime.requestRebuild) == "function" then
-      ui.runtime.requestRebuild()
+local function nowSeconds()
+  if type(getTime) == "function" then
+    local ok, ticks = pcall(getTime)
+    if ok and type(ticks) == "number" then
+      return ticks / 100
     end
   end
+  return 0
+end
 
+local function queueAm32ReadActual(queue)
   queue:add({
     command = EscParametersAm32Api.command,
+    timeout = 15,
     simulatorResponse = EscParametersAm32Api.simulatorResponse,
     processReply = function(self, buf)
       local parsed = EscParametersAm32Api.parse(buf)
@@ -167,6 +157,94 @@ local function queueAm32Read(isAutoReload)
       end
     end
   })
+end
+
+local function queueAm32Read(isAutoReload)
+  if not MspRuntime or not EscParametersAm32Api or type(MspRuntime.getState) ~= "function" then
+    return false, "msp_runtime_unavailable"
+  end
+
+  local mspState = MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue or type(queue.add) ~= "function" then
+    return false, "msp_queue_unavailable"
+  end
+
+  if ui.runtime.readPending then return true, nil end
+
+  ui.runtime.readPending = true
+  if not isAutoReload then
+    ui.loading = true
+    ui.progress = 0
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+
+  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
+  if FwdProgApi then
+    if not ui.connState or ui.connState == 0 then
+      ui.connState = 1
+      -- Step 1: Write target reset (100)
+      queue:add({
+        command = FwdProgApi.writeCommand,
+        payload = FwdProgApi.buildWritePayload({ target = 100 }),
+        isWrite = true,
+        simulatorResponse = {},
+        processReply = function()
+          if not ui.runtime then return end
+          ui.connState = 2
+          ui.connTimer = nowSeconds()
+          ui.runtime.readPending = false -- Allow next wakeup to queue step 2
+          if type(ui.runtime.requestRebuild) == "function" then
+            ui.runtime.requestRebuild()
+          end
+        end,
+        errorHandler = function()
+          if not ui.runtime then return end
+          ui.connState = 0
+          ui.loading = false
+          ui.runtime.readPending = false
+          if type(ui.runtime.requestRebuild) == "function" then
+            ui.runtime.requestRebuild()
+          end
+        end
+      })
+    elseif ui.connState == 3 then
+      -- Step 2: Write actual target
+      queue:add({
+        command = FwdProgApi.writeCommand,
+        payload = FwdProgApi.buildWritePayload({ target = ui.escTarget or 0 }),
+        isWrite = true,
+        simulatorResponse = {},
+        processReply = function()
+          if not ui.runtime then return end
+          ui.connState = 4
+          ui.connTimer = nowSeconds()
+          ui.runtime.readPending = false -- Allow next wakeup to queue read
+          if type(ui.runtime.requestRebuild) == "function" then
+            ui.runtime.requestRebuild()
+          end
+        end,
+        errorHandler = function()
+          if not ui.runtime then return end
+          ui.connState = 0
+          ui.loading = false
+          ui.runtime.readPending = false
+          if type(ui.runtime.requestRebuild) == "function" then
+            ui.runtime.requestRebuild()
+          end
+        end
+      })
+    elseif ui.connState == 5 then
+      queueAm32ReadActual(queue)
+    else
+      -- Waiting for timer in wakeup
+      ui.runtime.readPending = false
+    end
+  else
+    queueAm32ReadActual(queue)
+  end
 
   return true, nil
 end
@@ -200,6 +278,7 @@ local function queueAm32Write(requestRebuild)
 
   queue:add({
     command = EscParametersAm32Api.writeCommand,
+    timeout = 15,
     payload = EscParametersAm32Api.buildWritePayload(writeData),
     isWrite = true,
     processReply = function(self, buf)
@@ -243,6 +322,34 @@ local function loadFromSession()
   return false
 end
 
+local function queueMotorConfigRead()
+  ensureDeps()
+  local MotorConfigApi = loadModule("tasks/msp/api/motor_config.lua")
+  if not MotorConfigApi then return end
+
+  local mspState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue then return end
+
+  queue:add({
+    command = MotorConfigApi.readCommand,
+    isWrite = false,
+    simulatorResponse = { 10, 10, 10, 5, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 },
+    processReply = function(self, buf)
+      local parsed = MotorConfigApi.parse(buf)
+      if parsed and parsed.motor_count_blheli then
+        local count = tonumber(parsed.motor_count_blheli) or 1
+        ui.motorCount = count
+        local session = getSession()
+        if session then session.esc4WayMotorCount = count end
+        if type(ui.runtime.requestRebuild) == "function" then
+          ui.runtime.requestRebuild()
+        end
+      end
+    end
+  })
+end
+
 local function ensureLoaded()
   if ui.loaded then return end
 
@@ -256,6 +363,17 @@ local function ensureLoaded()
   ui.loading = false
   ui.saving = false
   ui.runtime.readPending = false
+  if ui.escTarget == nil then
+    ui.escTarget = 0
+  end
+
+  local session = getSession()
+  if session and session.esc4WayMotorCount then
+    ui.motorCount = session.esc4WayMotorCount
+  else
+    ui.motorCount = nil
+    queueMotorConfigRead()
+  end
 
   -- For ESC tools, always show safety warning and read configuration from flight controller on page entry.
   ui.loaded = true
@@ -305,6 +423,19 @@ function M.wakeup(ctx)
       ui.runtime.requestRebuild()
     end
   end
+
+  -- 4way target switch delay timing
+  if ui.connState == 2 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 2.5 then
+      ui.connState = 3
+      queueAm32Read(false)
+    end
+  elseif ui.connState == 4 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 5.0 then
+      ui.connState = 5
+      queueAm32Read(false)
+    end
+  end
 end
 
 function M.getHeaderActions()
@@ -331,6 +462,8 @@ end
 
 function M.onReload(ctx)
   ui.dirty = false
+  ui.connState = 0
+  ui.connTimer = nil
   queueAm32Read(false)
   return true
 end
@@ -373,12 +506,33 @@ function M.build(ctx)
     Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
+  local hasMultipleEscs = (ui.motorCount == nil) or (ui.motorCount >= 2)
+  if hasMultipleEscs then
+    local escOptions = {
+      { value = 0, label = "ESC 1" },
+      { value = 1, label = "ESC 2" }
+    }
+    local escTargetVal = ui.escTarget or 0
+    local rowH = Controls.appendComboSelect(children, x, cursorY, w, "ESC Target", escOptions, escTargetVal, function(val)
+      local targetVal = tonumber(val) or 0
+      if ui.escTarget ~= targetVal then
+        ui.escTarget = targetVal
+        ui.connState = 0
+        ui.connTimer = nil
+        ui.loaded = false
+        ui.dirty = false
+        queueAm32Read(false)
+      end
+    end)
+    cursorY = cursorY + rowH
+  end
+
   local sectionOptions = {
     { value = 1, label = "Basic" },
     { value = 2, label = "Advanced" },
     { value = 3, label = "Limits" }
   }
-  local rowH = Controls.appendComboSelect(children, x, cursorY, w, "Section", sectionOptions, ui.currentSection, function(val)
+  rowH = Controls.appendComboSelect(children, x, cursorY, w, "Section", sectionOptions, ui.currentSection, function(val)
     ui.currentSection = val
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
@@ -699,6 +853,9 @@ function M.build(ctx)
 end
 
 function M.onClose()
+  ui.connState = nil
+  ui.connTimer = nil
+  ui.escTarget = nil
   if Common and type(Common.resetPageState) == "function" then
     Common.resetPageState(ui, {
       resetLoaded = true,

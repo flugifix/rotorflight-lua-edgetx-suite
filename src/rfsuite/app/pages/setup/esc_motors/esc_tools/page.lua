@@ -15,6 +15,30 @@ local GridLayout = nil
 local Tiles = nil
 local DisplayProfile = nil
 local ConfirmDialog = nil
+local MspRuntime = nil
+
+local ui = {
+  detectedProto = nil,
+  protoCheckPending = false
+}
+
+local MFG_PROTOCOL_MAP = {
+  am32 = 1,
+  blheli_s = 1,
+  bluejay = 1,
+  hw5 = 3,
+  scorp = 4,
+  omp = 6,
+  ztw = 7,
+  yge = 9,
+  flrtr = 10,
+  xdfly = 12
+}
+
+local function getSession()
+  local root = _G and _G.rfsuite
+  return root and root.session or nil
+end
 
 local MFG_INDEX = {
   { folder = "am32",     name = "AM32",      image = "icon.png" },
@@ -36,6 +60,7 @@ local function ensureDeps()
   if not Tiles then Tiles = loadModule("ui/tiles.lua") end
   if not DisplayProfile then DisplayProfile = loadModule("core/display_profile.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
 end
 
 local function pageText(i18n, key, fallback)
@@ -77,16 +102,59 @@ local function computeTileSize(cardW, cardH, cfg)
   return size
 end
 
+local function queueSensorConfigRead(ctx)
+  ensureDeps()
+  local SensorConfigApi = loadModule("tasks/msp/api/esc_sensor_config.lua")
+  if not SensorConfigApi then return end
+
+  local mspState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue then return end
+
+  queue:add({
+    command = SensorConfigApi.readCommand,
+    isWrite = false,
+    simulatorResponse = { 1, 0, 0, 0, 0, 0 }, -- Protocol = 1 (BLHELI32) in simulator
+    processReply = function(self, buf)
+      local parsed = SensorConfigApi.parse(buf)
+      if parsed and parsed.protocol then
+        local proto = tonumber(parsed.protocol) or 0
+        ui.detectedProto = proto
+        local session = getSession()
+        if session then session.esc4WayDetectedProto = proto end
+        if ctx and type(ctx.requestRebuild) == "function" then
+          ctx.requestRebuild()
+        end
+      end
+    end
+  })
+end
+
+local function resolveProtoFromSession()
+  local session = getSession()
+  if session and session.esc4WayDetectedProto then
+    ui.detectedProto = session.esc4WayDetectedProto
+    return true
+  end
+  return false
+end
+
 function M.onLoad()
   ensureDeps()
+  resolveProtoFromSession()
 end
 
 function M.onActivate()
   ensureDeps()
+  resolveProtoFromSession()
 end
 
 function M.wakeup(ctx)
   ensureDeps()
+  if ui.detectedProto == nil and not ui.protoCheckPending then
+    ui.protoCheckPending = true
+    queueSensorConfigRead(ctx)
+  end
 end
 
 function M.getHeaderActions()
@@ -120,12 +188,20 @@ function M.build(ctx)
   
   local gridItems = {}
   for i, mfg in ipairs(MFG_INDEX) do
+    local isEnabled = true
+    if ui.detectedProto ~= nil and ui.detectedProto > 0 then
+      local mfgProto = MFG_PROTOCOL_MAP[mfg.folder]
+      if mfgProto ~= nil and mfgProto ~= ui.detectedProto then
+        isEnabled = false
+      end
+    end
+
     gridItems[i] = {
       id = mfg.folder,
       data = {
         text = mfg.name,
         icon = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/setup/esc_motors/esc_tools/escmfg/" .. mfg.folder .. "/" .. mfg.image,
-        enabled = true
+        enabled = isEnabled
       }
     }
   end
@@ -147,6 +223,7 @@ function M.build(ctx)
     local tileY    = card.y + math.floor((card.h - tileSize) / 2)
 
     local function getPressHandler()
+      if not card.data.enabled then return nil end
       return function()
         local targetPage = "setup_esc_motors_esc_tool_run_page"
         if card.id == "am32" then
@@ -192,12 +269,15 @@ function M.build(ctx)
 end
 
 function M.onClose()
+  ui.detectedProto = nil
+  ui.protoCheckPending = false
   Common = nil
   t = nil
   GridLayout = nil
   Tiles = nil
   DisplayProfile = nil
   ConfirmDialog = nil
+  MspRuntime = nil
 end
 
 return M
