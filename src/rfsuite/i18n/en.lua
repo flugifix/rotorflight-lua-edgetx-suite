@@ -917,7 +917,9 @@ return {
         loading_rpm = "Loading RPM configuration...",
         saving_rpm = "Saving RPM configuration...",
         safety_warning_title = "Safety Warning",
-        remove_blades_warning = "Please remove main and tail blades before configuring the ESC!"
+        remove_blades_warning = "Please remove main and tail blades before configuring the ESC!",
+        loading_data = "Loading ESC parameters...",
+        saving_data = "Saving ESC parameters..."
       },
       setup_radio_config = {
         title = "Radio Config",

@@ -249,6 +249,37 @@ local function queueAm32Read(isAutoReload)
   return true, nil
 end
 
+local function queuePostSaveReset(target, nextState)
+  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
+  if not FwdProgApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+    return
+  end
+  local mspState = MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue then return end
+
+  queue:add({
+    command = FwdProgApi.writeCommand,
+    payload = FwdProgApi.buildWritePayload({ target = target }),
+    isWrite = true,
+    simulatorResponse = {},
+    processReply = function()
+      ui.connState = nextState
+      ui.connTimer = nowSeconds()
+      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end,
+    errorHandler = function()
+      ui.connState = 5
+      ui.saving = false
+      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
+end
+
 local function queueAm32Write(requestRebuild)
   if not MspRuntime or not EscParametersAm32Api or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
@@ -282,8 +313,9 @@ local function queueAm32Write(requestRebuild)
     payload = EscParametersAm32Api.buildWritePayload(writeData),
     isWrite = true,
     processReply = function(self, buf)
-      ui.saving = false
       ui.dirty = false
+      ui.connState = 6
+      ui.connTimer = nowSeconds()
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
@@ -322,30 +354,59 @@ local function loadFromSession()
   return false
 end
 
+local function log(msg, level)
+  local Log = loadModule("lib/log.lua")
+  if Log and type(Log.emit) == "function" then
+    Log.emit("rfsuite.am32", msg, level or "debug", true)
+  end
+end
+
+local motorConfigRetryCount = 0
+
 local function queueMotorConfigRead()
   ensureDeps()
   local MotorConfigApi = loadModule("tasks/msp/api/motor_config.lua")
-  if not MotorConfigApi then return end
+  if not MotorConfigApi then
+    log("queueMotorConfigRead: MotorConfigApi module missing", "warn")
+    return
+  end
 
   local mspState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState()
   local queue = mspState and mspState.queue
-  if not queue then return end
+  if not queue then
+    log("queueMotorConfigRead: msp queue missing", "warn")
+    return
+  end
 
+  log("queueMotorConfigRead: queueing motor config read (cmd 131)")
   queue:add({
-    command = MotorConfigApi.readCommand,
+    command = MotorConfigApi.command,
     isWrite = false,
     simulatorResponse = { 10, 10, 10, 5, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 },
     processReply = function(self, buf)
+      log("queueMotorConfigRead processReply: buf_len=" .. tostring(buf and #buf or 0))
       local parsed = MotorConfigApi.parse(buf)
-      if parsed and parsed.motor_count_blheli then
+      if parsed and parsed.motor_count_blheli and parsed.motor_count_blheli > 0 then
+        log("queueMotorConfigRead parsed: motor_count_blheli=" .. tostring(parsed.motor_count_blheli) .. ", use_dshot_telemetry=" .. tostring(parsed.use_dshot_telemetry))
         local count = tonumber(parsed.motor_count_blheli) or 1
         ui.motorCount = count
         local session = getSession()
         if session then session.esc4WayMotorCount = count end
-        if type(ui.runtime.requestRebuild) == "function" then
+        if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
           ui.runtime.requestRebuild()
         end
+      else
+        log("queueMotorConfigRead: empty buffer or parse failure", "warn")
+        if (buf == nil or #buf == 0) and motorConfigRetryCount < 3 then
+          motorConfigRetryCount = motorConfigRetryCount + 1
+          log("queueMotorConfigRead: scheduling retry " .. tostring(motorConfigRetryCount) .. "/3 on next wakeup", "info")
+          ui.motorConfigRetryPending = true
+          ui.motorConfigRetryTimer = nowSeconds()
+        end
       end
+    end,
+    errorHandler = function()
+      log("queueMotorConfigRead: MSP read command 131 failed", "warn")
     end
   })
 end
@@ -424,7 +485,7 @@ function M.wakeup(ctx)
     end
   end
 
-  -- 4way target switch delay timing
+  -- 4way target switch delay timing and post-save cycle
   if ui.connState == 2 and ui.connTimer then
     if nowSeconds() - ui.connTimer >= 2.5 then
       ui.connState = 3
@@ -434,6 +495,30 @@ function M.wakeup(ctx)
     if nowSeconds() - ui.connTimer >= 5.0 then
       ui.connState = 5
       queueAm32Read(false)
+    end
+  elseif ui.connState == 6 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 1.0 then
+      ui.connState = 7
+      queuePostSaveReset(100, 8)
+    end
+  elseif ui.connState == 8 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 1.0 then
+      ui.connState = 9
+      queuePostSaveReset(ui.escTarget or 0, 10)
+    end
+  elseif ui.connState == 10 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 0.5 then
+      ui.connState = 5
+      ui.saving = false
+      queueAm32Read(true) -- Re-read settings from ESC
+    end
+  end
+
+  if ui.motorConfigRetryPending and ui.motorConfigRetryTimer then
+    if nowSeconds() - ui.motorConfigRetryTimer >= 0.5 then
+      ui.motorConfigRetryPending = false
+      ui.motorConfigRetryTimer = nil
+      queueMotorConfigRead()
     end
   end
 end
@@ -853,9 +938,29 @@ function M.build(ctx)
 end
 
 function M.onClose()
+  -- Release ESC (target 100) on page close to restore normal receiver-to-ESC signals
+  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
+  if FwdProgApi and MspRuntime and type(MspRuntime.getState) == "function" then
+    local mspState = MspRuntime.getState()
+    local queue = mspState and mspState.queue
+    if queue then
+      queue:add({
+        command = FwdProgApi.writeCommand,
+        payload = FwdProgApi.buildWritePayload({ target = 100 }),
+        isWrite = true,
+        simulatorResponse = {},
+        processReply = function() end,
+        errorHandler = function() end
+      })
+    end
+  end
+
   ui.connState = nil
   ui.connTimer = nil
   ui.escTarget = nil
+  ui.motorCount = nil
+  ui.motorConfigRetryPending = nil
+  ui.motorConfigRetryTimer = nil
   if Common and type(Common.resetPageState) == "function" then
     Common.resetPageState(ui, {
       resetLoaded = true,

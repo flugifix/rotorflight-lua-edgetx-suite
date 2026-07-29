@@ -239,7 +239,7 @@ local function requestAttitude(queue, now)
     processReply = function(self, buf)
       parseAttitude(buf)
       ui.pendingAttitude = false
-      if type(ui.runtime.requestRebuild) == "function" then
+      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
     end,
@@ -303,27 +303,27 @@ local function queueAlignmentRead(isAutoReload)
             saveToSession()
           end
 
-          ui.runtime.readPending = false
+          if ui.runtime then ui.runtime.readPending = false end
           ui.loading = false
           ui.dirty = false
           ui.progress = 100
-          if type(ui.runtime.requestRebuild) == "function" then
+          if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
             ui.runtime.requestRebuild()
           end
         end,
         errorHandler = function()
-          ui.runtime.readPending = false
+          if ui.runtime then ui.runtime.readPending = false end
           ui.loading = false
-          if type(ui.runtime.requestRebuild) == "function" then
+          if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
             ui.runtime.requestRebuild()
           end
         end
       })
     end,
     errorHandler = function()
-      ui.runtime.readPending = false
+      if ui.runtime then ui.runtime.readPending = false end
       ui.loading = false
-      if type(ui.runtime.requestRebuild) == "function" then
+      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
     end

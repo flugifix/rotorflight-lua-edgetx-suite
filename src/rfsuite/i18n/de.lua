@@ -917,7 +917,9 @@ return {
         loading_rpm = "Lade RPM-Konfiguration...",
         saving_rpm = "Speichere RPM-Konfiguration...",
         safety_warning_title = "Sicherheitswarnung",
-        remove_blades_warning = "Bitte entfernen Sie Haupt- und Heckrotorblätter vor der ESC-Konfiguration!"
+        remove_blades_warning = "Bitte entfernen Sie Haupt- und Heckrotorblätter vor der ESC-Konfiguration!",
+        loading_data = "Lade Regler-Parameter...",
+        saving_data = "Speichere Regler-Parameter..."
       },
       setup_radio_config = {
         title = "Fernsteuerung",
