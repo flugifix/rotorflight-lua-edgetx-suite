@@ -25,9 +25,6 @@ local Audio = nil
 local Sensors = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
-local CLOSE_MIN_TICKS = 3
-local CLOSE_MAX_TICKS = 8
-local CLOSE_GC_STEP = 400
 
 local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
@@ -1777,7 +1774,6 @@ function M.run(event, touchState)
       
       if state.closeTicks == 0 then
         -- Tick 1: Do the heavy cleanup tasks now that the screen is drawn
-        state.closeMemStart = (type(collectgarbage) == "function") and (collectgarbage("count") or 0) or nil
         state.pendingBuildUI = false
         state.pendingGcAfterBuild = false
         state.pendingSaveAction = nil
@@ -1799,27 +1795,15 @@ function M.run(event, touchState)
           end
           state.mspAttached = false
         end
+        state.shouldExit = true
       end
 
       state.closeTicks = state.closeTicks + 1
       
-      -- Tick 2+: Do garbage collection steps
-      if collectgarbage and state.closeTicks > 1 then
-        collectgarbage("step", CLOSE_GC_STEP)
-      end
-      
-      local memNow = (type(collectgarbage) == "function") and (collectgarbage("count") or 0) or nil
-      local memStart = tonumber(state.closeMemStart)
-      local gcReachedTarget = type(memNow) == "number" and type(memStart) == "number" and memStart > 0 and memNow <= (memStart * 0.92)
-      
-      if state.closeTicks >= CLOSE_MAX_TICKS or (state.closeTicks >= CLOSE_MIN_TICKS and gcReachedTarget) then
-        state.shouldExit = true
-      end
-      
-      -- Skip all other background tasks while closing
+      -- Skip all other background tasks and exit immediately
       if state.shouldExit then
         if state.mspAttached and MspRuntime and type(MspRuntime.detach) == "function" then
-          MspRuntime.detach("tool")
+          pcall(MspRuntime.detach, "tool")
           state.mspAttached = false
         end
         return 2
