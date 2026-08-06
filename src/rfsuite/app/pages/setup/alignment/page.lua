@@ -151,6 +151,9 @@ local function loadFromSession()
   ui.display.roll_degrees = saved.roll_degrees or 0
   ui.display.pitch_degrees = saved.pitch_degrees or 0
   ui.display.yaw_degrees = saved.yaw_degrees or 0
+  ui.loaded_roll_degrees = saved.loaded_roll_degrees or saved.roll_degrees or 0
+  ui.loaded_pitch_degrees = saved.loaded_pitch_degrees or saved.pitch_degrees or 0
+  ui.loaded_yaw_degrees = saved.loaded_yaw_degrees or saved.yaw_degrees or 0
   ui.display.gyro_1_alignment = saved.gyro_1_alignment or 0
   ui.display.gyro_2_alignment = saved.gyro_2_alignment or 0
   ui.display.mag_alignment = saved.mag_alignment or 0
@@ -163,6 +166,9 @@ local function saveToSession()
     roll_degrees = ui.display.roll_degrees,
     pitch_degrees = ui.display.pitch_degrees,
     yaw_degrees = ui.display.yaw_degrees,
+    loaded_roll_degrees = ui.loaded_roll_degrees,
+    loaded_pitch_degrees = ui.loaded_pitch_degrees,
+    loaded_yaw_degrees = ui.loaded_yaw_degrees,
     gyro_1_alignment = ui.display.gyro_1_alignment,
     gyro_2_alignment = ui.display.gyro_2_alignment,
     mag_alignment = ui.display.mag_alignment
@@ -170,7 +176,8 @@ local function saveToSession()
 end
 
 local function recenterYawView()
-  ui.viewYawOffset = (tonumber(ui.live.yaw) or 0) + (tonumber(ui.display.yaw_degrees) or 0)
+  local loadedYaw = ui.loaded_yaw_degrees or 0
+  ui.viewYawOffset = (tonumber(ui.live.yaw) or 0) - loadedYaw + (tonumber(ui.display.yaw_degrees) or 0)
 end
 
 local function parseAttitude(buf)
@@ -278,9 +285,15 @@ local function queueAlignmentRead(isAutoReload)
     processReply = function(self, buf)
       local parsed = BoardAlignmentApi.parse(buf)
       if parsed then
-        ui.display.roll_degrees = toSigned16(parsed.roll_degrees)
-        ui.display.pitch_degrees = toSigned16(parsed.pitch_degrees)
-        ui.display.yaw_degrees = toSigned16(parsed.yaw_degrees)
+        local roll = toSigned16(parsed.roll_degrees)
+        local pitch = toSigned16(parsed.pitch_degrees)
+        local yaw = toSigned16(parsed.yaw_degrees)
+        ui.display.roll_degrees = roll
+        ui.display.pitch_degrees = pitch
+        ui.display.yaw_degrees = yaw
+        ui.loaded_roll_degrees = roll
+        ui.loaded_pitch_degrees = pitch
+        ui.loaded_yaw_degrees = yaw
         saveToSession()
       end
 
@@ -626,24 +639,29 @@ function M.build(ctx)
   local fieldW = w - leftPad - rightPad
   local rowH = 40
 
+  -- Row 1: Roll, Nick, Yaw
+  local editW = 68 -- 68px wide text fields so -180° never wraps
+  local labelW = 40 -- 40px wide labels for Roll, Nick, Gier so they never wrap
+
   local slotX1 = x + leftPad
-  local slotX2 = slotX1 + 94 + gap
-  local slotX3 = slotX2 + 98 + gap
-  local slotX4 = slotX3 + 94 + gap
+  local controlW = labelW + editW
+
+  local slotX2 = slotX1 + controlW + gap
+  local slotX3 = slotX2 + controlW + gap
 
   -- Slot 1: Roll
   children[#children + 1] = {
     type = "label",
     x = slotX1, y = y + 9,
-    w = 38,
+    w = labelW,
     text = pageText(i18n, "roll", "Roll"),
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
   }
   children[#children + 1] = {
     type = "numberEdit",
-    x = slotX1 + 38, y = y,
-    w = 56, h = rowH,
+    x = slotX1 + labelW, y = y,
+    w = editW, h = rowH,
     min = -180, max = 360,
     active = function() return not ui.liveViewEnabled end,
     get = function() return ui.display.roll_degrees end,
@@ -655,19 +673,19 @@ function M.build(ctx)
     display = function(v) return tostring(v or 0) .. "°" end
   }
 
-  -- Slot 2: Pitch
+  -- Slot 2: Pitch (Nick)
   children[#children + 1] = {
     type = "label",
     x = slotX2, y = y + 9,
-    w = 42,
+    w = labelW,
     text = pageText(i18n, "pitch", "Pitch"),
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
   }
   children[#children + 1] = {
     type = "numberEdit",
-    x = slotX2 + 42, y = y,
-    w = 56, h = rowH,
+    x = slotX2 + labelW, y = y,
+    w = editW, h = rowH,
     min = -180, max = 360,
     active = function() return not ui.liveViewEnabled end,
     get = function() return ui.display.pitch_degrees end,
@@ -679,19 +697,19 @@ function M.build(ctx)
     display = function(v) return tostring(v or 0) .. "°" end
   }
 
-  -- Slot 3: Yaw
+  -- Slot 3: Yaw (Gier)
   children[#children + 1] = {
     type = "label",
     x = slotX3, y = y + 9,
-    w = 38,
+    w = labelW,
     text = pageText(i18n, "yaw", "Yaw"),
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
   }
   children[#children + 1] = {
     type = "numberEdit",
-    x = slotX3 + 38, y = y,
-    w = 56, h = rowH,
+    x = slotX3 + labelW, y = y,
+    w = editW, h = rowH,
     min = -180, max = 360,
     active = function() return not ui.liveViewEnabled end,
     get = function() return ui.display.yaw_degrees end,
@@ -703,16 +721,32 @@ function M.build(ctx)
     display = function(v) return tostring(v or 0) .. "°" end
   }
 
+  -- Divider line below first row of fields
+  children[#children + 1] = {
+    type = "rectangle",
+    x = x, y = y + 46,
+    w = w, h = 1,
+    color = GREY_DEFAULT,
+    filled = true
+  }
+
+  -- Row 2: Mag and Buttons (aligned on controlY = y + 50)
+  local controlY = y + 50
+  local controlH = 34
+
   -- Slot 4: Mag
+  local magLabelW = 38
+  local magEditW = 160
+
   children[#children + 1] = {
     type = "label",
-    x = slotX4, y = y + 9,
-    w = 38,
+    x = x + leftPad, y = controlY + 6,
+    w = magLabelW,
     text = pageText(i18n, "mag", "Mag"),
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
   }
-  
+
   local magAlignChoicesValues = {}
   for i, val in ipairs(magAlignChoices) do
     magAlignChoicesValues[i] = pageText(i18n, val[1], val[1])
@@ -720,8 +754,8 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "choice",
-    x = slotX4 + 38, y = y,
-    w = 180, h = rowH,
+    x = x + leftPad + magLabelW, y = controlY,
+    w = magEditW, h = controlH,
     title = pageText(i18n, "mag", "Mag"),
     values = magAlignChoicesValues,
     active = function() return not ui.liveViewEnabled end,
@@ -735,18 +769,10 @@ function M.build(ctx)
     end
   }
 
-  -- Divider line below top row
-  children[#children + 1] = {
-    type = "rectangle",
-    x = x, y = y + 46,
-    w = w, h = 1,
-    color = GREY_DEFAULT,
-    filled = true
-  }
-
-  -- Control buttons
-  local controlY = y + 50
-  local controlH = 34
+  -- Buttons
+  local btnStart = x + leftPad + magLabelW + magEditW + gap * 2
+  local remainingW = w - btnStart - rightPad
+  local btnW = floor((remainingW - gap) / 2)
 
   local liveBtnText = pageText(i18n, "live_view", "Live View")
   if ui.liveViewEnabled then
@@ -757,8 +783,8 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "button",
-    x = x + 8, y = controlY,
-    w = 180, h = controlH,
+    x = btnStart, y = controlY,
+    w = btnW, h = controlH,
     text = liveBtnText,
     press = function()
       if ui.liveViewEnabled then
@@ -783,8 +809,8 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "button",
-    x = x + 188, y = controlY,
-    w = 180, h = controlH,
+    x = btnStart + btnW + gap, y = controlY,
+    w = btnW, h = controlH,
     text = pageText(i18n, "refresh_visual", "Refresh"),
     active = function() return not ui.liveViewEnabled end,
     press = function()
@@ -876,8 +902,10 @@ function M.build(ctx)
       font = SMLSIZE
     }
 
-    local pitchVal = ui.live.pitch + ui.display.pitch_degrees
-    local rollVal = ui.live.roll + ui.display.roll_degrees
+    local loadedRoll = ui.loaded_roll_degrees or 0
+    local loadedPitch = ui.loaded_pitch_degrees or 0
+    local pitchVal = ui.live.pitch - loadedPitch + ui.display.pitch_degrees
+    local rollVal = ui.live.roll - loadedRoll + ui.display.roll_degrees
 
     local primary = pageText(i18n, "nose_level", "Nose Level")
     if pitchVal > 3.5 then
@@ -926,9 +954,17 @@ function M.build(ctx)
   local my = splitY + floor(splitH * 0.52)
   local scale = max(8, min(rightW, splitH) * 0.22)
   
-  local pitchR = rad(-(ui.live.pitch + ui.display.pitch_degrees))
-  local yawR = rad(-((ui.live.yaw + ui.display.yaw_degrees) - ui.viewYawOffset))
-  local rollR = rad(-(ui.live.roll + ui.display.roll_degrees))
+  local loadedRoll = ui.loaded_roll_degrees or 0
+  local loadedPitch = ui.loaded_pitch_degrees or 0
+  local loadedYaw = ui.loaded_yaw_degrees or 0
+
+  local pitchVal = ui.live.pitch - loadedPitch + ui.display.pitch_degrees
+  local rollVal = ui.live.roll - loadedRoll + ui.display.roll_degrees
+  local yawVal = ui.live.yaw - loadedYaw + ui.display.yaw_degrees
+
+  local pitchR = rad(-pitchVal)
+  local yawR = rad(-(yawVal - ui.viewYawOffset))
+  local rollR = rad(-rollVal)
 
   local cx = cos(pitchR)
   local sx = sin(pitchR)
@@ -1072,6 +1108,10 @@ function M.onSave(ctx)
     return false
   end
 
+  ui.loaded_roll_degrees = ui.display.roll_degrees
+  ui.loaded_pitch_degrees = ui.display.pitch_degrees
+  ui.loaded_yaw_degrees = ui.display.yaw_degrees
+  saveToSession()
   ui.dirty = false
   if lvgl and lvgl.alert then
     lvgl.alert({
