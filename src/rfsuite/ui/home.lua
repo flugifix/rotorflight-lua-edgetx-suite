@@ -115,6 +115,32 @@ local function ensureEvents()
   end
 end
 
+local function isModelArmed()
+  ensureEvents()
+  if not Sensors or type(Sensors.getValue) ~= "function" then
+    return false
+  end
+  local value = Sensors.getValue("armflags")
+  if value ~= nil then
+    if type(value) == "number" then
+      if type(bit32) == "table" and type(bit32.btest) == "function" then
+        return bit32.btest(value, 1)
+      end
+      return value ~= 0
+    end
+    if type(value) == "boolean" then
+      return value
+    end
+    if type(value) == "string" then
+      local n = tonumber(value)
+      if type(n) == "number" then
+        return n ~= 0
+      end
+    end
+  end
+  return false
+end
+
 local Log = nil
 if Log == nil then
   Log = loadModule("lib/log.lua") or false
@@ -883,6 +909,16 @@ local function maybeRefreshInfoPageFromSession()
 end
 
 local function onReload()
+  if isModelArmed() then
+    if lvgl and lvgl.alert then
+      lvgl.alert({
+        title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
+        message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
+      })
+    end
+    return
+  end
+
   local page = getActivePageModule()
 
   if page and page.onReload then
@@ -974,6 +1010,16 @@ local function onReload()
 end
 
 local function onSave()
+  if isModelArmed() then
+    if lvgl and lvgl.alert then
+      lvgl.alert({
+        title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
+        message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
+      })
+    end
+    return
+  end
+
   local page = getActivePageModule()
   if page and page.onSave then
     closeHelpDialogIfOpen()
@@ -1091,6 +1137,15 @@ local function getCardPressHandler(cardId)
     if (state.suppressPressFrames or 0) > 0 then
       return
     end
+    if isModelArmed() then
+      if lvgl and lvgl.alert then
+        lvgl.alert({
+          title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
+          message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
+        })
+      end
+      return
+    end
     if state.menu and (not state.menu.isRoot()) then
       state.loadingMenuId = cardId
       scheduleBuildUI(false)
@@ -1105,6 +1160,15 @@ local function getRootCardPressHandler(sectionId, cardId)
   if state.cardHandlers[key] then return state.cardHandlers[key] end
   local fn = function()
     if (state.suppressPressFrames or 0) > 0 then
+      return
+    end
+    if isModelArmed() then
+      if lvgl and lvgl.alert then
+        lvgl.alert({
+          title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
+          message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
+        })
+      end
       return
     end
     if state.menu and state.menu.isRoot() then
@@ -1122,6 +1186,39 @@ function M.buildUI()
   if lvgl == nil then return end
 
   ensureBuildDeps()
+
+  local isArmed = isModelArmed()
+  if isArmed then
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    local title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed"
+    local msg = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
+    local color = COLOR_THEME_WARNING or COLOR_THEME_PRIMARY2
+    lvgl.build({
+      {
+        type = "rectangle",
+        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        color = COLOR_THEME_PRIMARY3,
+        filled = true
+      },
+      {
+        type = "label",
+        x = 0, y = (LCD_H or 240) / 2 - 30, w = LCD_W or 320,
+        text = title,
+        color = color,
+        align = CENTER,
+        font = MIDSIZE
+      },
+      {
+        type = "label",
+        x = 20, y = (LCD_H or 240) / 2, w = (LCD_W or 320) - 40,
+        text = msg,
+        color = COLOR_THEME_PRIMARY2,
+        align = CENTER,
+        font = SMLSIZE
+      }
+    })
+    return
+  end
 
   if state.initialLoad then
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
@@ -1599,6 +1696,26 @@ function M.run(event, touchState)
     local now = getTime and getTime() or 0
     local transitionedMenuThisTick = false
 
+    local armed = isModelArmed()
+    if armed ~= state.lastModelArmedState then
+      state.lastModelArmedState = armed
+      if armed then
+        -- Clear MSP queue to abort any pending MSP operations immediately
+        ensureMspRuntime()
+        if MspRuntime and type(MspRuntime.getState) == "function" then
+          local mspState = MspRuntime.getState()
+          if mspState and mspState.queue and type(mspState.queue.clear) == "function" then
+            pcall(mspState.queue.clear, mspState.queue)
+          end
+        end
+      end
+      scheduleBuildUI(false)
+    end
+
+    if armed then
+      state.lastInputTick = now
+    end
+
     if not state.mspAttached then
       ensureMspRuntime()
       if MspRuntime and type(MspRuntime.attach) == "function" then
@@ -1791,33 +1908,35 @@ function M.run(event, touchState)
       end
     end
 
-    if (not transitionedMenuThisTick) and (not mspSpeedPageActive) and MspRuntime and type(MspRuntime.tick) == "function" then
-      if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then
-        state.mspLastTick = now
-        MspRuntime.tick()
-        -- Let the events manager observe MSP state transitions (connect/disconnect)
-        ensureEvents()
-        if Events and type(Events.wakeup) == "function" then
-          pcall(Events.wakeup)
+    if not armed then
+      if (not transitionedMenuThisTick) and (not mspSpeedPageActive) and MspRuntime and type(MspRuntime.tick) == "function" then
+        if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then
+          state.mspLastTick = now
+          MspRuntime.tick()
+          -- Let the events manager observe MSP state transitions (connect/disconnect)
+          ensureEvents()
+          if Events and type(Events.wakeup) == "function" then
+            pcall(Events.wakeup)
+          end
         end
       end
-    end
 
-    if not transitionedMenuThisTick then
-      local activePage = getActivePageModule()
-      local wakeupFn = activePage and (activePage.wakeup or activePage.onWake)
-      if type(wakeupFn) == "function" then
-        local ok, err = pcall(wakeupFn, {
-          i18n = state.i18n,
-          preferences = state.preferences,
-          menu = state.menu,
-          manifest = state.manifest,
-          requestRebuild = function() scheduleBuildUI(false) end
-        })
-        if not ok then
-          pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error", true)
-          if type(serialWrite) == "function" then
-            pcall(serialWrite, "[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err) .. "\n")
+      if not transitionedMenuThisTick then
+        local activePage = getActivePageModule()
+        local wakeupFn = activePage and (activePage.wakeup or activePage.onWake)
+        if type(wakeupFn) == "function" then
+          local ok, err = pcall(wakeupFn, {
+            i18n = state.i18n,
+            preferences = state.preferences,
+            menu = state.menu,
+            manifest = state.manifest,
+            requestRebuild = function() scheduleBuildUI(false) end
+          })
+          if not ok then
+            pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error", true)
+            if type(serialWrite) == "function" then
+              pcall(serialWrite, "[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err) .. "\n")
+            end
           end
         end
       end

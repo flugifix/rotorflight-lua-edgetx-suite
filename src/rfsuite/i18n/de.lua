@@ -4,6 +4,8 @@ return {
     saving = "Speichere...",
     saving_settings = "Einstellungen werden angewendet",
     closing_rfsuite = "RFSuite wird beendet...",
+    model_armed_title = "Modell Armed",
+    model_armed_warning = "Modell ist ARMED! Bitte disarmen.",
     header_system = "System",
     header_configuration = "Konfiguration",
     modules = {

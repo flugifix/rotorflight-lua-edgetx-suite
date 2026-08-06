@@ -4,7 +4,7 @@ local SYSTEM_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/
 local USER_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite.user/dashboard/"
 local AUDIO_LOG_FORCE = false
 local SPLASH_READY_HOLD_SECONDS = 1.0
-local SPLASH_SOFT_TIMEOUT_SECONDS = 15.0
+local SPLASH_SOFT_TIMEOUT_SECONDS = 25.0
 
 local function scriptExists(path)
   if type(path) ~= "string" or path == "" then return false end
