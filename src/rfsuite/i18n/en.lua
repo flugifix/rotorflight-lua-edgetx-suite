@@ -695,6 +695,7 @@ return {
         fuel_callout_25 = "Every 25%",
         fuel_callout_50 = "Every 50%",
         battery_profile = "Battery Capacity",
+        initial_fuel = "Initial Fuel Announcement",
         model_announcement = "Model Announcement",
         help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
         saved_title = "Saved",

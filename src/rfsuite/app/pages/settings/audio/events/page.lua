@@ -27,6 +27,7 @@ local CONFIG_SCHEMA = {
   { key = "fuel_haptic_below_zero", type = "bool", default = false },
   { key = "battery_profile",   type = "bool", default = true  },
   { key = "model_announcement",type = "bool", default = false },
+  { key = "initial_fuel",      type = "bool", default = true  },
 }
 
 -- Build ui.config defaults from schema
@@ -312,6 +313,7 @@ local SECTIONS = {
     titleFallback = "Akku",
     items = {
       { key = "battery_profile", labelKey = "battery_profile", labelFallback = "Akku-Kapazitaet" },
+      { key = "initial_fuel", labelKey = "initial_fuel", labelFallback = "Initialer Kraftstoff" },
     },
   },
   {

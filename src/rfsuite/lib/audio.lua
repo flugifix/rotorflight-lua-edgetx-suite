@@ -536,6 +536,7 @@ function Audio.resetConnectionState(audioState)
   audioState.initialized = false
   audioState.modelAnnounced = false
   audioState.batteryCapacityAnnounced = false
+  audioState.initialFuelAnnounced = false
   audioState.nextAllowedAt = 0
 
   if type(audioState.lastValues) == "table" then
@@ -847,7 +848,8 @@ function Audio.process(self, opts)
             for i = 1, #thresholds do
               local threshold = thresholds[i]
               if currentRounded <= threshold and lastCallout > threshold then
-                if tryPlayEventFile(audioState, now, "stat/alerts/fuel.wav", opts) then
+                local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
+                if tryPlayEventFile(audioState, now, calloutSound, opts) then
                   if type(playNumber) == "function" then
                     emitLog(opts, "fuel callout playNumber -> " .. tostring(threshold), "info")
                     local ok, err = pcall(playNumber, threshold, unitPercent())
@@ -872,6 +874,25 @@ function Audio.process(self, opts)
     audioState.lowFuelRepeatCount = 0
     audioState.lastFuelCallout = nil
     audioState.fuelSeenPositive = false
+  end
+
+  local initialFuelEnabled = prefEnabled(events, "initial_fuel", true)
+  if initialFuelEnabled and audioState.initialized and not audioState.initialFuelAnnounced then
+    local fuel = tonumber(self.state and self.state.fuel)
+    if type(fuel) == "number" then
+      local now = nowSeconds()
+      if now >= (audioState.nextAllowedAt or 0) then
+        local isElectricModel = resolveSmartfuelModel(self)
+        local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
+        if tryPlayEventFile(audioState, now, calloutSound, opts) then
+          if type(playNumber) == "function" then
+            local ok, err = pcall(playNumber, fuel, unitPercent())
+            if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+          end
+          audioState.initialFuelAnnounced = true
+        end
+      end
+    end
   end
 
   if not audioState.initialized then

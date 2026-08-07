@@ -69,6 +69,7 @@ local function defaultPreferences()
       fuel_alerts = true,
       battery_profile = true,
       model_announcement = false,
+      initial_fuel = true,
     },
     audio_switches = {
       flight_mode_switch = false,

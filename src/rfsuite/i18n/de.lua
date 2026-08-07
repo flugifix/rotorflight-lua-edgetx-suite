@@ -695,6 +695,7 @@ return {
           fuel_callout_25 = "Alle 25%",
           fuel_callout_50 = "Alle 50%",
         battery_profile = "Akku-Kapazitaet",
+        initial_fuel = "Initiale Ansage Kraftstoff",
         model_announcement = "Modellansage",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
         saved_title = "Gespeichert",
