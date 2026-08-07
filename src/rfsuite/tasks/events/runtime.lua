@@ -165,8 +165,10 @@ function Events.wakeup()
     -- Determine context: widget/tool/both
     local context = Env and Env.get() or "tool"
 
+    local armed = mspState and mspState.lastArmed == true
+
     local onconnectActive = false
-    if state.linkStableUp then
+    if state.linkStableUp and not armed then
       local onconnect = ensureEventRunner("onconnect")
       if onconnect then
         if type(onconnect.active) == "function" then
@@ -182,7 +184,8 @@ function Events.wakeup()
     end
 
     -- Defer telemetry_bg until onconnect tasks are done to avoid blocking the Lua VM during startup
-    if state.linkStableUp and not onconnectActive then
+    -- Also run telemetry_bg when armed so CRSF custom frames are parsed to keep telemetry active and update disarm state
+    if state.linkStableUp and (not onconnectActive or armed) then
       local telemetry_bg = ensureEventRunner("telemetry_bg")
       if telemetry_bg and type(telemetry_bg.wakeup) == "function" then
         local ok, err = pcall(telemetry_bg.wakeup)
@@ -193,7 +196,6 @@ function Events.wakeup()
     end
 
     -- arm/ disarm transitions: detect changes and call corresponding runners
-    local armed = mspState and mspState.lastArmed == true
     if state.lastArmed == nil then
       state.lastArmed = armed
     end

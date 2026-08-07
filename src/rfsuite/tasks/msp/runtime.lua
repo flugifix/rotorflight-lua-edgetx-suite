@@ -587,7 +587,12 @@ function Runtime.tick()
       state.queue:clear()
       log("MSP paused while ARMED", "info")
     end
-    return true
+    state.queue:clear()
+  else
+    if state.lastArmed == true then
+      state.lastArmed = false
+      log("MSP resumed after DISARM", "info")
+    end
   end
 
   if state.unsupportedApi then
@@ -598,14 +603,11 @@ function Runtime.tick()
     return false
   end
 
-  if state.lastArmed == true then
-    state.lastArmed = false
-    log("MSP resumed after DISARM", "info")
-  end
-
   -- Core startup reads (API version + UID).
-  enqueueVersionReads(now)
-  enqueueUidRead(now)
+  if not armed then
+    enqueueVersionReads(now)
+    enqueueUidRead(now)
+  end
 
   state.queue:processQueue(now)
   publish()

@@ -1199,10 +1199,6 @@ function M.buildUI()
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
     local title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed"
     local msg = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-    local btnText = "Close"
-    if state.i18n and type(state.i18n.t) == "function" then
-      btnText = state.i18n.t("app.actions.close") or "Close"
-    end
     local color = COLOR_THEME_WARNING or COLOR_THEME_PRIMARY2
 
     local children = {
@@ -1214,7 +1210,7 @@ function M.buildUI()
       },
       {
         type = "label",
-        x = 0, y = (LCD_H or 240) / 2 - 40, w = LCD_W or 320,
+        x = 0, y = (LCD_H or 240) / 2 - 30, w = LCD_W or 320,
         text = title,
         color = color,
         align = CENTER,
@@ -1222,18 +1218,11 @@ function M.buildUI()
       },
       {
         type = "label",
-        x = 20, y = (LCD_H or 240) / 2 - 10, w = (LCD_W or 320) - 40,
+        x = 20, y = (LCD_H or 240) / 2, w = (LCD_W or 320) - 40,
         text = msg,
         color = COLOR_THEME_PRIMARY2,
         align = CENTER,
         font = SMLSIZE
-      },
-      {
-        type = "button",
-        x = (LCD_W or 320) / 2 - 60, y = (LCD_H or 240) / 2 + 30,
-        w = 120, h = 34,
-        text = btnText,
-        press = onBack
       }
     }
 
@@ -1927,12 +1916,10 @@ function M.run(event, touchState)
       if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then
         state.mspLastTick = now
         MspRuntime.tick()
-        -- Only tick events if not armed to prevent onconnect tasks from loading FBL config
-        if not armed then
-          ensureEvents()
-          if Events and type(Events.wakeup) == "function" then
-            pcall(Events.wakeup)
-          end
+        -- Let events process (telemetry, arm state transitions, etc.)
+        ensureEvents()
+        if Events and type(Events.wakeup) == "function" then
+          pcall(Events.wakeup)
         end
       end
     end
