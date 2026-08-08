@@ -3,4 +3,5 @@ simulator/*
 dist/*
 build/*
 tmp/*
+scratch/*
 
