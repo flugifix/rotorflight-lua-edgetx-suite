@@ -5,11 +5,16 @@ local function loadModule(path)
 end
 
 local function logToFile(msg)
-  local f = io.open("/SCRIPTS/TOOLS/rfsuite.user/exit_debug.log", "a")
-  if f then
-    local t = getTime and getTime() or 0
-    io.write(f, "[" .. tostring(t) .. "] " .. tostring(msg) .. "\n")
-    io.close(f)
+  local prefs = state.preferences
+  local general = prefs and prefs.general
+  local debugLevel = general and general.debug_level
+  if debugLevel == "debug" or debugLevel == "info" then
+    local f = io.open("/SCRIPTS/TOOLS/rfsuite.user/exit_debug.log", "a")
+    if f then
+      local t = getTime and getTime() or 0
+      io.write(f, "[" .. tostring(t) .. "] " .. tostring(msg) .. "\n")
+      io.close(f)
+    end
   end
 end
 
