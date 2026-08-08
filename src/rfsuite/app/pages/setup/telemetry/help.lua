@@ -1,10 +1,5 @@
-local M = {}
-
-function M.registerPage(ctx)
-	local msg = {
-		message = "@i18n(app.pages.setup.telemetry.help_message)@"
+return function(ctx)
+	return {
+		message = "@i18n(app.pages.setup_telemetry.help_message)@"
 	}
-	return msg
 end
-
-return M

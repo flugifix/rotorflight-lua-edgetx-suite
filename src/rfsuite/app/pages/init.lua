@@ -90,7 +90,7 @@ local loadedByPagePath = {}
 local iconByMenuId = {}
 local pagePathByMenuId = {}
 local cacheOrder = {}
-local MAX_CACHED_PAGE_MODULES = 8
+local MAX_CACHED_PAGE_MODULES = 2
 local closePageModule
 
 local function isDynamicDashboardSettingsPage(menuId)
@@ -247,10 +247,6 @@ function registry.releaseAll(ctx)
     if closePageModule(menuId, ctx) then
       released = true
     end
-  end
-
-  if released and collectgarbage then
-    collectgarbage("collect")
   end
 
   return released

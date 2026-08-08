@@ -2,12 +2,29 @@ param(
     [ValidateSet('simulator', 'radio')]
     [string]$Target = 'simulator',
 
-    [string]$TargetRoot
+    [string]$TargetRoot,
+
+    [string]$Language
 )
 
 $ErrorActionPreference = 'Stop'
 
 $workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+
+if ([string]::IsNullOrWhiteSpace($Language)) {
+    $settingsPath = Join-Path $workspaceRoot '.vscode\settings.json'
+    if (Test-Path $settingsPath) {
+        try {
+            $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
+            if ($settings.'rfsuite.deploy.language') {
+                $Language = $settings.'rfsuite.deploy.language'
+            }
+        } catch {}
+    }
+}
+if ([string]::IsNullOrWhiteSpace($Language)) {
+    $Language = 'de'
+}
 $sourceRoot = Join-Path $workspaceRoot 'src'
 $sourceCore = Join-Path $sourceRoot 'rfsuite'
 $sourceAudioRoot = Join-Path $sourceCore 'audio'
@@ -148,9 +165,14 @@ if (Test-Path $targetCore) {
     Remove-Item -Path $targetCore -Recurse -Force
 }
 New-Item -ItemType Directory -Path $targetCore -Force | Out-Null
-Get-ChildItem -Path $sourceCore -Force | Where-Object { $_.Name -ne 'audio' } | ForEach-Object {
+Get-ChildItem -Path $sourceCore -Force | Where-Object { $_.Name -ne 'audio' -and $_.Name -ne 'i18n' } | ForEach-Object {
     Copy-Item -Path $_.FullName -Destination $targetCore -Recurse -Force
 }
+
+# Copy only i18n/init.lua to the target Core since translations are inlined and de.lua/en.lua are no longer needed
+$targetI18nDir = Join-Path $targetCore 'i18n'
+New-Item -ItemType Directory -Path $targetI18nDir -Force | Out-Null
+Copy-Item -Path (Join-Path $sourceCore 'i18n\init.lua') -Destination (Join-Path $targetI18nDir 'init.lua') -Force
 Get-ChildItem -Path $targetCore -Filter '*.luac' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
 Copy-Item -Path $sourceToolEntrypoint -Destination $targetToolEntrypoint -Force
@@ -285,9 +307,18 @@ foreach ($wav in @('beep.wav', 'multibeep.wav', 'warn.wav', 'alarm.wav')) {
 
 New-ThemeIndexFile -TargetCoreDir $targetCore -TargetUserDir $targetUserRoot
 
+# Run translation pre-compiler and resolver to inline the language strings
+Write-Host "Running i18n pre-compiler and resolver for language: $Language"
+python (Join-Path $workspaceRoot '.vscode\scripts\precompile_i18n.py') --root $toolsRoot
+python (Join-Path $workspaceRoot '.vscode\scripts\precompile_i18n.py') --root $targetWidgetRoot
+
+python (Join-Path $workspaceRoot '.vscode\scripts\resolve_i18n_tags.py') --json (Join-Path $sourceCore "i18n\$Language.lua") --root $toolsRoot
+python (Join-Path $workspaceRoot '.vscode\scripts\resolve_i18n_tags.py') --json (Join-Path $sourceCore "i18n\$Language.lua") --root $targetWidgetRoot
+
 Write-Host "RFSuite demo deployed to:"
 Write-Host "  Target mode:     $Target"
 Write-Host "  Target root:     $TargetRoot"
+Write-Host "  Language:        $Language"
 Write-Host "  Tool entrypoint: $targetToolEntrypoint"
 Write-Host "  Core package:    $targetCore"
 Write-Host "  User data:       $targetUserRoot"

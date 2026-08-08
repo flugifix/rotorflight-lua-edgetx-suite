@@ -19,19 +19,7 @@ local function normalizeLanguage(value)
 end
 
 function M.resolveSystemLanguage(defaultLang)
-  local fallback = normalizeLanguage(defaultLang) or "en"
-
-  -- Try to get from internal preferences
-  local root = _G and _G.rfsuite
-  local prefs = root and root.preferences
-  local general = prefs and prefs.general
-  local configured = normalizeLanguage(general and general.language)
-
-  if configured then
-    return configured
-  end
-
-  return fallback
+  return "@i18n_language@"
 end
 
 function M.resolveAudioFolder(defaultFolder)

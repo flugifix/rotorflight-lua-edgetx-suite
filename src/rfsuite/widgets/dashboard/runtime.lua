@@ -263,23 +263,8 @@ local function reloadPreferencesIfNeeded(self, force)
 
   local prefs = loadPreferences()
   if type(prefs) == "table" then
-    local prevLang = self.preferences and self.preferences.general and self.preferences.general.language
-    local newLang = prefs.general and prefs.general.language
-    if prevLang ~= newLang then
-      self.built = false
-    end
     self.preferences = prefs
     publishPreferencesToGlobal(prefs)
-    
-    -- Update i18n context when language changes
-    if I18nModule and prevLang ~= newLang then
-      if self.i18n and type(self.i18n.setLocale) == "function" then
-        pcall(self.i18n.setLocale, newLang)
-      else
-        local ok, ctx = pcall(I18nModule.new, newLang)
-        if ok and type(ctx) == "table" then self.i18n = ctx end
-      end
-    end
     
     -- Expose i18n on the runtime state so theme renderers can access it
     if self.i18n then
@@ -1010,9 +995,19 @@ function Runtime.new(zone, options)
     mspLastTick = 0
   }
 
-  -- Initialize i18n context for the widget using loaded preferences
+  -- Initialize i18n context for the widget using system locale
   if I18nModule and type(I18nModule.new) == "function" then
-    local locale = (prefs and prefs.general and prefs.general.language) or nil
+    local locale = nil
+    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", "t")
+    if chunk then
+      local ok, localeMod = pcall(chunk)
+      if ok and type(localeMod) == "table" and type(localeMod.resolveSystemLanguage) == "function" then
+        local okResolve, resolved = pcall(localeMod.resolveSystemLanguage, "en")
+        if okResolve and type(resolved) == "string" and resolved ~= "" then
+          locale = resolved
+        end
+      end
+    end
     local ok, ctx = pcall(I18nModule.new, locale)
     if ok and type(ctx) == "table" then
       widget.i18n = ctx

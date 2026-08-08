@@ -4,6 +4,15 @@ local function loadModule(path)
   return chunk()
 end
 
+local function logToFile(msg)
+  local f = io.open("/SCRIPTS/TOOLS/rfsuite.user/exit_debug.log", "a")
+  if f then
+    local t = getTime and getTime() or 0
+    io.write(f, "[" .. tostring(t) .. "] " .. tostring(msg) .. "\n")
+    io.close(f)
+  end
+end
+
 local GridLayout = nil
 local I18n = nil
 local DisplayProfile = nil
@@ -446,6 +455,7 @@ end
 -- ── Handlers ─────────────────────────────────────────────────────────────────
 
 local function onBack(source, ev)
+  logToFile("onBack called source=" .. tostring(source) .. " ev=" .. tostring(ev))
   local fromEvent = source == "event"
 
   if state.backGestureActive then
@@ -482,7 +492,7 @@ local function onBack(source, ev)
     if fromEvent then
       state.suppressBackFrames = 6
     end
-    scheduleBuildUI(false)
+    scheduleBuildUI(true)
     return
   end
   state.isClosing = true
@@ -618,15 +628,7 @@ closeHelpDialogIfOpen = function()
 end
 
 local function applyLocaleFromPreferences()
-  local lang = nil
-  local general = state.preferences and state.preferences.general
-  if type(general) == "table" then
-    lang = general.language
-  end
-
-  if state.i18n and type(state.i18n.setLocale) == "function" then
-    pcall(state.i18n.setLocale, lang or "en")
-  end
+  -- No longer needed, active language is hardcoded at compile time.
 end
 
 local function getMspUnsupportedDialogModule()
@@ -1766,6 +1768,7 @@ function M.run(event, touchState)
 
     if state.isClosing then
       if not state.closeTicks then
+        logToFile("Closing sequence started (Tick 0).")
         state.closeTicks = 0
         -- Tick 0: ONLY build the UI overlay. Do NOT do any cleanup or GC yet.
         -- This ensures the Lua VM yields immediately and EdgeTX can draw the screen.
@@ -1794,6 +1797,7 @@ function M.run(event, touchState)
       
       if state.closeTicks == 0 then
         -- Tick 1: Do the heavy cleanup tasks now that the screen is drawn
+        logToFile("Closing sequence Tick 1. Starting cleanup.")
         state.pendingBuildUI = false
         state.pendingGcAfterBuild = false
         state.pendingSaveAction = nil
@@ -1802,19 +1806,69 @@ function M.run(event, touchState)
         state.pendingMenuBack = false
         state.loadingMenuId = nil
         closeHelpDialogIfOpen()
-        if state.activePageMenuId and PageRegistry and type(PageRegistry.release) == "function" then
+        
+        -- Release all pages in the registry to free their resources
+        if PageRegistry and type(PageRegistry.releaseAll) == "function" then
+          logToFile("Releasing all pages in registry.")
+          pcall(PageRegistry.releaseAll, buildPageContext())
+        elseif state.activePageMenuId and PageRegistry and type(PageRegistry.release) == "function" then
+          logToFile("Releasing active page: " .. tostring(state.activePageMenuId))
           pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
-          state.activePageMenuId = nil
         end
+        state.activePageMenuId = nil
+        
         if Events and type(Events.reset) == "function" then
+          logToFile("Resetting events.")
           pcall(Events.reset)
         end
         if state.mspAttached then
           if MspRuntime and type(MspRuntime.detach) == "function" then
+            logToFile("Detaching MSP.")
             pcall(MspRuntime.detach, "tool")
           end
           state.mspAttached = false
         end
+        
+        -- Clear chunk cache to allow all compiled functions to be garbage collected
+        if _G.rfsuite and _G.rfsuite.utils and type(_G.rfsuite.utils.clearChunkCache) == "function" then
+          logToFile("Clearing compiled chunk cache.")
+          pcall(_G.rfsuite.utils.clearChunkCache)
+        end
+        
+        -- Release references to libraries to allow them to be GC'd
+        GridLayout = nil
+        I18n = nil
+        DisplayProfile = nil
+        manifest = nil
+        MenuRegistry = nil
+        PageRegistry = nil
+        HelpRegistryFactory = nil
+        HelpRegistry = nil
+        Tiles = nil
+        Header = nil
+        HelpView = nil
+        PreferencesSafe = nil
+        Version = nil
+        MspRuntime = nil
+        EepromWriteApi = nil
+        Log = nil
+        Events = nil
+        Audio = nil
+        Sensors = nil
+        
+        -- Clear the global table so everything becomes unreachable
+        _G.rfsuite = nil
+        
+        -- Clear local state fields to break references to heavy tables
+        state.i18n = nil
+        state.menu = nil
+        state.preferences = nil
+        state.children = nil
+        state.cards = nil
+        state.telemetryState = nil
+        state.audioState = nil
+        state.cardHandlers = nil
+
         state.shouldExit = true
       end
 
@@ -1822,6 +1876,7 @@ function M.run(event, touchState)
       
       -- Skip all other background tasks and exit immediately
       if state.shouldExit then
+        logToFile("Closing sequence returning 2 to EdgeTX.")
         if state.mspAttached and MspRuntime and type(MspRuntime.detach) == "function" then
           pcall(MspRuntime.detach, "tool")
           state.mspAttached = false
@@ -1862,7 +1917,7 @@ function M.run(event, touchState)
       state.focusIndex = 0
       state.pendingMenuOpen = nil
       transitionedMenuThisTick = true
-      scheduleBuildUI(false)
+      scheduleBuildUI(true)
     end
 
     if state.pendingMenuBack and not state.isClosing then
@@ -1871,7 +1926,7 @@ function M.run(event, touchState)
       end
       state.pendingMenuBack = false
       transitionedMenuThisTick = true
-      scheduleBuildUI(false)
+      scheduleBuildUI(true)
     end
 
     local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
