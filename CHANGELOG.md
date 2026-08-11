@@ -2,7 +2,7 @@
 
 All notable changes to the RFSuite project since 2026-07-29.
 
-## [0.0.2] - 2026-08-08
+## [0.0.2] - 2026-08-11
 
 ### Features
 - **Compile-time Translation Inlining**: Introduced static translation inlining at compile time, simplified settings, and bumped version to 0.0.2.
