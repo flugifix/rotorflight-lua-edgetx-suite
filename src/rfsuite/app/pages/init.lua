@@ -68,6 +68,7 @@ local entries = {
   setup_esc_motors_esc_tools_am32_page = definePage("setup/esc_motors/esc_tools/escmfg/am32"),
   setup_esc_motors_esc_tools_blheli_s_page = definePage("setup/esc_motors/esc_tools/escmfg/blheli_s"),
   setup_esc_motors_esc_tools_bluejay_page = definePage("setup/esc_motors/esc_tools/escmfg/bluejay"),
+  setup_esc_motors_esc_tools_flrtr_page = definePage("setup/esc_motors/esc_tools/escmfg/flrtr"),
   setup_esc_motors_esc_tool_run_page = definePage("setup/esc_motors/esc_tools/run"),
   setup_governor_general_page = definePage("setup/governor/general"),
   setup_governor_time_page = definePage("setup/governor/time"),

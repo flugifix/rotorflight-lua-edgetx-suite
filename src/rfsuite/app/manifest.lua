@@ -214,7 +214,7 @@ local manifest = {
         { id = "am32", title = "AM32", menuId = "setup_esc_motors_esc_tools_am32_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/am32/icon.png", row = 1, col = 1 },
         { id = "blheli_s", title = "BLHeli_S", menuId = "setup_esc_motors_esc_tools_blheli_s_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/blheli_s/icon.png", row = 1, col = 2 },
         { id = "bluejay", title = "Bluejay", menuId = "setup_esc_motors_esc_tools_bluejay_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/bluejay/icon.png", row = 1, col = 3 },
-        { id = "flrtr", title = "Flyrotor", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/flrtr/icon.png", row = 1, col = 4 },
+        { id = "flrtr", title = "Flyrotor", menuId = "setup_esc_motors_esc_tools_flrtr_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/flrtr/icon.png", row = 1, col = 4 },
         { id = "hw5", title = "Hobbywing V5", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/hw5/icon.png", row = 1, col = 5 },
         { id = "omp", title = "OMP", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/omp/icon.png", row = 2, col = 1 },
         { id = "scorp", title = "Scorpion", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/scorp/icon.png", row = 2, col = 2 },
@@ -498,6 +498,10 @@ local manifest = {
     },
     setup_esc_motors_esc_tools_bluejay_page = {
       title = "Bluejay Configurator",
+      pages = {}
+    },
+    setup_esc_motors_esc_tools_flrtr_page = {
+      title = "Flyrotor Configurator",
       pages = {}
     },
     setup_esc_motors_esc_tool_run_page = {

@@ -98,8 +98,8 @@ local function bytes_to_string(buf, pos, len)
     local chars = {}
     for i = 0, len - 1 do chars[#chars+1] = string.char(tonumber(buf[pos + i]) or 0) end
     local s = table.concat(chars)
-    s = s:gsub("%z+$", "")
-    s = s:gsub("%s+$", "")
+    s = string.gsub(s, "%z+$", "")
+    s = string.gsub(s, "%s+$", "")
     return s
 end
 
@@ -117,7 +117,7 @@ end
 local function pack_string(s, len)
     s = s or ""
     local out = {}
-    for i = 1, len do out[#out+1] = s:byte(i) or 0 end
+    for i = 1, len do out[#out+1] = string.byte(s, i) or 0 end
     return out
 end
 
@@ -137,7 +137,7 @@ function Api.parse(buf)
             pos = pos + len
         elseif typ == "S8" then
             out[name] = read_signed(buf, pos, len, big); pos = pos + len
-        elseif typ:sub(1,1) == "S" then
+        elseif string.sub(typ, 1, 1) == "S" then
             out[name] = read_signed(buf, pos, len, big); pos = pos + len
         else
             out[name] = read_unsigned(buf, pos, len, big); pos = pos + len
