@@ -228,6 +228,8 @@ function M.build(ctx)
         local targetPage = "setup_esc_motors_esc_tool_run_page"
         if card.id == "am32" then
           targetPage = "setup_esc_motors_esc_tools_am32_page"
+        elseif card.id == "blheli_s" then
+          targetPage = "setup_esc_motors_esc_tools_blheli_s_page"
         end
 
         local warningTitle = pageText(i18n, "safety_warning_title", "Safety Warning")
