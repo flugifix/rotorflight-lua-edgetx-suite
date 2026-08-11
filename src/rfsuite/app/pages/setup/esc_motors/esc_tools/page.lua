@@ -230,6 +230,8 @@ function M.build(ctx)
           targetPage = "setup_esc_motors_esc_tools_am32_page"
         elseif card.id == "blheli_s" then
           targetPage = "setup_esc_motors_esc_tools_blheli_s_page"
+        elseif card.id == "bluejay" then
+          targetPage = "setup_esc_motors_esc_tools_bluejay_page"
         end
 
         local warningTitle = pageText(i18n, "safety_warning_title", "Safety Warning")
