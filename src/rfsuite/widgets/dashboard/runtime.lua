@@ -735,7 +735,6 @@ end
 local function readTelemetry(state)
   if not (Sensors and type(Sensors.getValue) == "function") then return end
   local changed = false
-  -- Cache sensor values to avoid duplicate calls
   local cache = {}
   local function getSensor(name)
     if cache[name] == nil then cache[name] = Sensors.getValue(name) end
@@ -750,22 +749,7 @@ local function readTelemetry(state)
   end
 
   setField("rpm", getSensor("rpm"))
-  local linkValue = getSensor("link")
-  if type(linkValue) ~= "number" or linkValue <= 0 then
-    -- Prefer direct radio telemetry names used by ELRS and common Tx stacks.
-    linkValue = readFirstNumber({ "RQly", "LQ", "Link", "link_quality", "1RSS", "2RSS" }, nil)
-  end
-  if type(linkValue) ~= "number" or linkValue <= 0 then
-    local lqCandidates = { "RQly", "LQ", "link_quality", "1RSS", "2RSS" }
-    for i = 1, #lqCandidates do
-      local candidate = getSensor(lqCandidates[i])
-      if type(candidate) == "number" and candidate > 0 then
-        linkValue = candidate
-        break
-      end
-    end
-  end
-  setField("lq", linkValue)
+  setField("lq", getSensor("link"))
   setField("profile", roundInt(getSensor("pid_profile") or state.profile, state.profile or 1))
   setField("rateProfile", roundInt(getSensor("rate_profile") or state.rateProfile, state.rateProfile or 1))
   setField("batteryProfile", roundInt(getSensor("battery_profile") or state.batteryProfile, state.batteryProfile or 1))
@@ -1362,6 +1346,9 @@ function Runtime.new(zone, options)
 
       lvgl.build(children)
       self.built = true
+      if type(collectgarbage) == "function" then
+        collectgarbage("collect")
+      end
     end
   end
 

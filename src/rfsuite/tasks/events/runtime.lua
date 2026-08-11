@@ -98,6 +98,9 @@ local function publishConnected(val)
         end
       end
     end
+    if type(collectgarbage) == "function" then
+      collectgarbage("collect")
+    end
   end
 end
 
@@ -171,13 +174,25 @@ function Events.wakeup()
     if state.linkStableUp and not armed then
       local onconnect = ensureEventRunner("onconnect")
       if onconnect then
+        local wasActive = false
         if type(onconnect.active) == "function" then
-          onconnectActive = onconnect.active()
+          wasActive = onconnect.active()
         end
         if type(onconnect.wakeup) == "function" then
           local ok, err = pcall(onconnect.wakeup, { context = context })
           if not ok and Log and type(Log.emit) == "function" then
             pcall(Log.emit, "rfsuite.events", "onconnect.wakeup error: " .. tostring(err), "error", true)
+          end
+        end
+        if type(onconnect.active) == "function" then
+          onconnectActive = onconnect.active()
+        end
+        if wasActive and not onconnectActive then
+          if Log and type(Log.emit) == "function" then
+            pcall(Log.emit, "rfsuite.events", "onconnect tasks finished, running GC", "info", true)
+          end
+          if type(collectgarbage) == "function" then
+            collectgarbage("collect")
           end
         end
       end
