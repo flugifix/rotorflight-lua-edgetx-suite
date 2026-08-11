@@ -56,6 +56,7 @@ local ui = {
   baseTitle = nil,
   inOverride = false,
   selectedServoIndex = 0, -- 0-indexed for editing, defaults to 0
+  originalServos = nil,
   config = {
     servos = {}
   },
@@ -112,6 +113,25 @@ local function getRcConfig(session)
   return session.setup_servos_pwm
 end
 
+local function backupOriginalServos()
+  if ui.originalServos then return end
+  ui.originalServos = {}
+  for i, s in pairs(ui.config.servos) do
+    ui.originalServos[i] = {
+      mid = s.mid,
+      min = s.min,
+      max = s.max,
+      scaleNeg = s.scaleNeg,
+      scalePos = s.scalePos,
+      rate = s.rate,
+      speed = s.speed,
+      flags = s.flags,
+      reverse = s.reverse,
+      geometry = s.geometry
+    }
+  end
+end
+
 local function loadFromSession()
   local session = getSession()
   local rcConfig = getRcConfig(session)
@@ -124,6 +144,9 @@ local function loadFromSession()
 
   if type(rcConfig.servos) == "table" then
     ui.config.servos = rcConfig.servos
+    if not ui.originalServos and next(ui.config.servos) ~= nil then
+      backupOriginalServos()
+    end
   end
   if type(rcConfig.apiData) == "table" then
     ui.apiData = rcConfig.apiData
@@ -202,13 +225,13 @@ local function setOverride(enabled)
   end
 end
 
-local function triggerLiveWrite()
+local function triggerLiveWrite(explicitIdx)
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then return end
   local mspState = MspRuntime.getState()
   local queue = mspState and mspState.queue
   if not queue or type(queue.add) ~= "function" then return end
 
-  local servoIdx = ui.selectedServoIndex
+  local servoIdx = explicitIdx or ui.selectedServoIndex
   if not servoIdx then return end
 
   local config = ui.config.servos and ui.config.servos[servoIdx]
@@ -260,6 +283,46 @@ local function triggerLiveWrite()
       isWrite = true,
       processReply = function() end
     })
+  end
+end
+
+local function rollbackChanges()
+  if not ui.originalServos then return end
+
+  local changed = false
+  for i, orig in pairs(ui.originalServos) do
+    local current = ui.config.servos[i]
+    if current then
+      if current.mid ~= orig.mid or
+         current.min ~= orig.min or
+         current.max ~= orig.max or
+         current.scaleNeg ~= orig.scaleNeg or
+         current.scalePos ~= orig.scalePos or
+         current.rate ~= orig.rate or
+         current.speed ~= orig.speed or
+         current.flags ~= orig.flags or
+         current.reverse ~= orig.reverse or
+         current.geometry ~= orig.geometry then
+
+         current.mid = orig.mid
+         current.min = orig.min
+         current.max = orig.max
+         current.scaleNeg = orig.scaleNeg
+         current.scalePos = orig.scalePos
+         current.rate = orig.rate
+         current.speed = orig.speed
+         current.flags = orig.flags
+         current.reverse = orig.reverse
+         current.geometry = orig.geometry
+
+         triggerLiveWrite(i)
+         changed = true
+      end
+    end
+  end
+
+  if changed then
+    saveToSession()
   end
 end
 
@@ -380,6 +443,7 @@ local function queueServosRead(isAutoReload)
 
                       ui.config.servos[i] = s
                     end
+                    backupOriginalServos()
                   end
 
                   saveToSession()
@@ -875,11 +939,14 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
-  local session = getSession()
-  if session then
-    loadFromSession()
-    ui.dirty = false
-    queueServosRead(false)
+  if ui.inOverride then
+    setOverride(false)
+    ui.inOverride = false
+  end
+  rollbackChanges()
+  ui.dirty = false
+  if type(ui.runtime.requestRebuild) == "function" then
+    ui.runtime.requestRebuild()
   end
   return true
 end
@@ -927,6 +994,10 @@ function M.onClose()
   if ui.inOverride then
     setOverride(false)
     ui.inOverride = false
+  end
+  if ui.dirty then
+    rollbackChanges()
+    ui.dirty = false
   end
   if Common and type(Common.resetPageState) == "function" then
     Common.resetPageState(ui, {

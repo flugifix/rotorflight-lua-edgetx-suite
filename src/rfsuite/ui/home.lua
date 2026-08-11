@@ -4,8 +4,10 @@ local function loadModule(path)
   return chunk()
 end
 
+local state
+
 local function logToFile(msg)
-  local prefs = state.preferences
+  local prefs = state and state.preferences
   local general = prefs and prefs.general
   local debugLevel = general and general.debug_level
   if debugLevel == "debug" or debugLevel == "info" then
@@ -265,7 +267,7 @@ local function wipeTable(t)
   for k in pairs(t) do t[k] = nil end
 end
 
-local state = {
+state = {
   shouldExit   = false,
   cards        = {},
   i18n         = nil,
@@ -1801,7 +1803,7 @@ function M.run(event, touchState)
       end
       
       if state.closeTicks == 0 then
-        -- Tick 1: Do the heavy cleanup tasks now that the screen is drawn
+        -- Tick 1: Do page releases and event resets (this queues any override resets)
         logToFile("Closing sequence Tick 1. Starting cleanup.")
         state.pendingBuildUI = false
         state.pendingGcAfterBuild = false
@@ -1812,7 +1814,7 @@ function M.run(event, touchState)
         state.loadingMenuId = nil
         closeHelpDialogIfOpen()
         
-        -- Release all pages in the registry to free their resources
+        -- Release all pages in the registry to free their resources (queues override/rollback resets)
         if PageRegistry and type(PageRegistry.releaseAll) == "function" then
           logToFile("Releasing all pages in registry.")
           pcall(PageRegistry.releaseAll, buildPageContext())
@@ -1826,9 +1828,18 @@ function M.run(event, touchState)
           logToFile("Resetting events.")
           pcall(Events.reset)
         end
+      end
+
+      -- Run MSP ticks to process the queued packets during shutdown (ticks 1 to 15)
+      if state.closeTicks <= 15 then
+        if MspRuntime and type(MspRuntime.tick) == "function" then
+          pcall(MspRuntime.tick)
+        end
+      elseif not state.shouldExit then
+        -- Tick 16: Finalize library cleanup and detach MSP
+        logToFile("Closing sequence finalizing. Detaching MSP.")
         if state.mspAttached then
           if MspRuntime and type(MspRuntime.detach) == "function" then
-            logToFile("Detaching MSP.")
             pcall(MspRuntime.detach, "tool")
           end
           state.mspAttached = false
