@@ -1,0 +1,904 @@
+local M = {}
+
+local function loadModule(path)
+  local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
+  local chunk = loadScript(fullPath, "t")
+  if type(chunk) ~= "function" then return nil end
+  local ok, mod = pcall(chunk)
+  if not ok then return nil end
+  return mod
+end
+
+local Common = nil
+local Controls = nil
+local MspRuntime = nil
+local EscParametersHw5Api = nil
+local LoadingOverlay = nil
+local ConfirmDialog = nil
+local Hw5Profile = nil
+local t = nil
+
+local ui = {
+  loaded = false,
+  dirty = false,
+  config = {
+    -- Basic (Section 1)
+    flight_mode = 0,
+    rotation = 0,
+    bec_voltage = 0,
+    lipo_cell_count = 0,
+    volt_cutoff_type = 0,
+    cutoff_voltage = 3,
+
+    -- Advanced (Section 2)
+    gov_p_gain = 6,
+    gov_i_gain = 5,
+    startup_time = 11,
+    restart_time = 1,
+    auto_restart = 25,
+    timing = 24,
+    startup_power = 2,
+    active_freewheel = 0,
+    brake_type = 0,
+    brake_force = 0
+  },
+  currentSection = 1,
+  parsedCache = nil,
+  runtime = {
+    readPending = false,
+    requestRebuild = nil,
+    lastSessionSignature = nil
+  },
+  loading = false,
+  saving = false,
+  progress = 0
+}
+
+local function getSession()
+  local root = _G and _G.rfsuite
+  return root and root.session or nil
+end
+
+local function ensureDeps()
+  if not Common then Common = loadModule("app/pages/settings/common.lua") end
+  if not Controls then Controls = loadModule("ui/controls.lua") end
+  if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
+  if not EscParametersHw5Api then EscParametersHw5Api = loadModule("tasks/msp/api/esc_parameters_hw5.lua") end
+  if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
+  if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  if not Hw5Profile then Hw5Profile = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/hw5/profile.lua") end
+  if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
+
+  if type(ui.runtime) ~= "table" then
+    ui.runtime = {
+      readPending = false,
+      requestRebuild = nil,
+      lastSessionSignature = nil
+    }
+  end
+end
+
+local function pageText(i18n, key, fallback)
+  if t then
+    local translated = t(i18n, key, fallback)
+    if translated ~= nil and translated ~= "" and translated ~= key then
+      return translated
+    end
+  end
+  return fallback
+end
+
+local function nowSeconds()
+  if type(getTime) == "function" then
+    local ok, ticks = pcall(getTime)
+    if ok and type(ticks) == "number" then
+      return ticks / 100
+    end
+  end
+  return 0
+end
+
+local function logMsg(msg, level)
+  local Log = loadModule("lib/log.lua")
+  if Log and type(Log.emit) == "function" then
+    Log.emit("rfsuite.hw5", msg, level or "debug", true)
+  end
+end
+
+local function queueHw5ReadActual(queue)
+  queue:add({
+    command = EscParametersHw5Api.command,
+    timeout = 15,
+    simulatorResponse = EscParametersHw5Api.simulatorResponse,
+    processReply = function(self, buf)
+      local parsed = EscParametersHw5Api.parse(buf)
+      if parsed then
+        for k, v in pairs(ui.config) do
+          if parsed[k] ~= nil then
+            ui.config[k] = parsed[k]
+          end
+        end
+
+        ui.parsedCache = parsed
+
+        local session = getSession()
+        if session then
+          session.setup_esc_motors_esc_tools_hw5 = {
+            config = {},
+            parsedCache = ui.parsedCache
+          }
+          for k, v in pairs(ui.config) do
+            session.setup_esc_motors_esc_tools_hw5.config[k] = v
+          end
+        end
+      end
+
+      ui.runtime.readPending = false
+      ui.loading = false
+      ui.dirty = false
+      ui.progress = 100
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end,
+    errorHandler = function()
+      ui.runtime.readPending = false
+      ui.loading = false
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
+end
+
+local function queueHw5Read(isAutoReload)
+  if not MspRuntime or not EscParametersHw5Api or type(MspRuntime.getState) ~= "function" then
+    return false, "msp_runtime_unavailable"
+  end
+
+  local mspState = MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue or type(queue.add) ~= "function" then
+    return false, "msp_queue_unavailable"
+  end
+
+  if ui.runtime.readPending then return true, nil end
+
+  ui.runtime.readPending = true
+  if not isAutoReload then
+    ui.loading = true
+    ui.progress = 0
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+
+  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
+  if FwdProgApi then
+    if not ui.connState or ui.connState == 0 then
+      ui.connState = 1
+      queue:add({
+        command = FwdProgApi.writeCommand,
+        payload = FwdProgApi.buildWritePayload({ target = 100 }),
+        isWrite = true,
+        simulatorResponse = {},
+        processReply = function()
+          if not ui.runtime then return end
+          ui.connState = 2
+          ui.connTimer = nowSeconds()
+          ui.runtime.readPending = false
+          if type(ui.runtime.requestRebuild) == "function" then
+            ui.runtime.requestRebuild()
+          end
+        end,
+        errorHandler = function()
+          if not ui.runtime then return end
+          ui.connState = 0
+          ui.loading = false
+          ui.runtime.readPending = false
+          if type(ui.runtime.requestRebuild) == "function" then
+            ui.runtime.requestRebuild()
+          end
+        end
+      })
+    elseif ui.connState == 3 then
+      queue:add({
+        command = FwdProgApi.writeCommand,
+        payload = FwdProgApi.buildWritePayload({ target = ui.escTarget or 0 }),
+        isWrite = true,
+        simulatorResponse = {},
+        processReply = function()
+          if not ui.runtime then return end
+          ui.connState = 4
+          ui.connTimer = nowSeconds()
+          ui.runtime.readPending = false
+          if type(ui.runtime.requestRebuild) == "function" then
+            ui.runtime.requestRebuild()
+          end
+        end,
+        errorHandler = function()
+          if not ui.runtime then return end
+          ui.connState = 0
+          ui.loading = false
+          ui.runtime.readPending = false
+          if type(ui.runtime.requestRebuild) == "function" then
+            ui.runtime.requestRebuild()
+          end
+        end
+      })
+    elseif ui.connState == 5 then
+      queueHw5ReadActual(queue)
+    else
+      ui.runtime.readPending = false
+    end
+  else
+    queueHw5ReadActual(queue)
+  end
+
+  return true, nil
+end
+
+local function queuePostSaveReset(target, nextState)
+  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
+  if not FwdProgApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+    return
+  end
+  local mspState = MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue then return end
+
+  queue:add({
+    command = FwdProgApi.writeCommand,
+    payload = FwdProgApi.buildWritePayload({ target = target }),
+    isWrite = true,
+    simulatorResponse = {},
+    processReply = function()
+      ui.connState = nextState
+      ui.connTimer = nowSeconds()
+      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end,
+    errorHandler = function()
+      ui.connState = 5
+      ui.saving = false
+      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
+end
+
+local function queueHw5Write(requestRebuild)
+  if not MspRuntime or not EscParametersHw5Api or type(MspRuntime.getState) ~= "function" then
+    return false, "msp_runtime_unavailable"
+  end
+
+  local mspState = MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue or type(queue.add) ~= "function" then
+    return false, "msp_queue_unavailable"
+  end
+
+  local writeData = {}
+  if ui.parsedCache then
+    for k, v in pairs(ui.parsedCache) do
+      writeData[k] = v
+    end
+  end
+
+  for k, v in pairs(ui.config) do
+    writeData[k] = v
+  end
+
+  ui.saving = true
+  if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
+    ui.runtime.requestRebuild()
+  end
+
+  queue:add({
+    command = EscParametersHw5Api.writeCommand,
+    timeout = 15,
+    payload = EscParametersHw5Api.buildWritePayload(writeData),
+    isWrite = true,
+    processReply = function(self, buf)
+      ui.dirty = false
+      ui.connState = 6
+      ui.connTimer = nowSeconds()
+      if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end,
+    errorHandler = function()
+      ui.saving = false
+      if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
+
+  return true, nil
+end
+
+local function buildSessionSignature()
+  local s = tostring(ui.currentSection)
+  for k, v in pairs(ui.config) do
+    s = s .. ";" .. k .. "=" .. tostring(v)
+  end
+  return s
+end
+
+local function loadFromSession()
+  local session = getSession()
+  local cached = session and session.setup_esc_motors_esc_tools_hw5 or nil
+  if type(cached) == "table" and type(cached.config) == "table" then
+    for k, v in pairs(ui.config) do
+      if cached.config[k] ~= nil then
+        ui.config[k] = cached.config[k]
+      end
+    end
+    ui.parsedCache = cached.parsedCache
+    return true
+  end
+  return false
+end
+
+local motorConfigRetryCount = 0
+
+local function queueMotorConfigRead()
+  ensureDeps()
+  local MotorConfigApi = loadModule("tasks/msp/api/motor_config.lua")
+  if not MotorConfigApi then
+    logMsg("queueMotorConfigRead: MotorConfigApi module missing", "warn")
+    return
+  end
+
+  local mspState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue then
+    logMsg("queueMotorConfigRead: msp queue missing", "warn")
+    return
+  end
+
+  logMsg("queueMotorConfigRead: queueing motor config read (cmd 131)")
+  queue:add({
+    command = MotorConfigApi.command,
+    isWrite = false,
+    simulatorResponse = { 10, 10, 10, 5, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 },
+    processReply = function(self, buf)
+      logMsg("queueMotorConfigRead processReply: buf_len=" .. tostring(buf and #buf or 0))
+      local parsed = MotorConfigApi.parse(buf)
+      if parsed and parsed.motor_count_blheli and parsed.motor_count_blheli > 0 then
+        logMsg("queueMotorConfigRead parsed: motor_count_blheli=" .. tostring(parsed.motor_count_blheli) .. ", use_dshot_telemetry=" .. tostring(parsed.use_dshot_telemetry))
+        local count = tonumber(parsed.motor_count_blheli) or 1
+        ui.motorCount = count
+        local session = getSession()
+        if session then session.esc4WayMotorCount = count end
+        if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
+          ui.runtime.requestRebuild()
+        end
+      else
+        logMsg("queueMotorConfigRead: empty buffer or parse failure", "warn")
+        if (buf == nil or #buf == 0) and motorConfigRetryCount < 3 then
+          motorConfigRetryCount = motorConfigRetryCount + 1
+          logMsg("queueMotorConfigRead: scheduling retry " .. tostring(motorConfigRetryCount) .. "/3 on next wakeup", "info")
+          ui.motorConfigRetryPending = true
+          ui.motorConfigRetryTimer = nowSeconds()
+        end
+      end
+    end,
+    errorHandler = function()
+      logMsg("queueMotorConfigRead: MSP read command 131 failed", "warn")
+    end
+  })
+end
+
+local function ensureLoaded()
+  if ui.loaded then return end
+
+  if not ui.runtime then
+    ui.runtime = {
+      readPending = false,
+      requestRebuild = nil,
+      lastSessionSignature = nil
+    }
+  end
+  ui.loading = false
+  ui.saving = false
+  ui.runtime.readPending = false
+  if ui.escTarget == nil then
+    ui.escTarget = 0
+  end
+
+  local session = getSession()
+  if session and session.esc4WayMotorCount then
+    ui.motorCount = session.esc4WayMotorCount
+  else
+    ui.motorCount = nil
+    queueMotorConfigRead()
+  end
+
+  ui.loaded = true
+  ui.dirty = false
+  ui.runtime.lastSessionSignature = buildSessionSignature()
+  
+  local warningTitle = pageText(nil, "safety_warning_title", "Safety Warning")
+  local warningMsg = pageText(nil, "remove_blades_warning", "Please remove main and tail blades before configuring the ESC!")
+
+  if lvgl then
+    if type(lvgl.message) == "function" then
+      pcall(lvgl.message, {
+        title = warningTitle,
+        message = warningMsg
+      })
+    elseif type(lvgl.alert) == "function" then
+      pcall(lvgl.alert, {
+        title = warningTitle,
+        message = warningMsg
+      })
+    end
+  end
+  queueHw5Read(false)
+end
+
+function M.onLoad()
+  ensureDeps()
+  ensureLoaded()
+end
+
+function M.onActivate()
+  ensureDeps()
+  ensureLoaded()
+end
+
+function M.wakeup(ctx)
+  ensureDeps()
+  ensureLoaded()
+  
+  ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
+  ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
+
+  local signature = buildSessionSignature()
+  if signature ~= ui.runtime.lastSessionSignature then
+    ui.runtime.lastSessionSignature = signature
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+
+  -- 4way target switch delay timing and post-save cycle
+  if ui.connState == 2 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 2.5 then
+      ui.connState = 3
+      queueHw5Read(false)
+    end
+  elseif ui.connState == 4 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 5.0 then
+      ui.connState = 5
+      queueHw5Read(false)
+    end
+  elseif ui.connState == 6 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 1.0 then
+      ui.connState = 7
+      queuePostSaveReset(100, 8)
+    end
+  elseif ui.connState == 8 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 1.0 then
+      ui.connState = 9
+      queuePostSaveReset(ui.escTarget or 0, 10)
+    end
+  elseif ui.connState == 10 and ui.connTimer then
+    if nowSeconds() - ui.connTimer >= 0.5 then
+      ui.connState = 5
+      ui.saving = false
+      queueHw5Read(true)
+    end
+  end
+
+  if ui.motorConfigRetryPending and ui.motorConfigRetryTimer then
+    if nowSeconds() - ui.motorConfigRetryTimer >= 0.5 then
+      ui.motorConfigRetryPending = false
+      ui.motorConfigRetryTimer = nil
+      queueMotorConfigRead()
+    end
+  end
+end
+
+function M.getHeaderActions()
+  return {
+    save = true,
+    reload = true,
+    menu = true
+  }
+end
+
+function M.onSave(ctx)
+  local ok, err = queueHw5Write(ctx and ctx.requestRebuild)
+  if not ok then
+    if lvgl and lvgl.alert then
+      lvgl.alert({
+        title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
+        message = tostring(err or "MSP write failed")
+      })
+    end
+    return false
+  end
+  return true
+end
+
+function M.onReload(ctx)
+  ui.dirty = false
+  ui.connState = 0
+  ui.connTimer = nil
+  queueHw5Read(false)
+  return true
+end
+
+-- Helper to check if a field is allowed by the profile
+local function isFieldAllowed(apikey, pageKey)
+  if not Hw5Profile then return true end
+  local profile = Hw5Profile.getProfile()
+  if not profile or not profile.pages then return true end
+  local allowedList = profile.pages[pageKey]
+  if not allowedList then return true end
+  for _, name in ipairs(allowedList) do
+    if name == apikey then return true end
+  end
+  return false
+end
+
+-- Helper to convert string list from profile to ComboSelect options format
+local function getFieldOptions(apikey, fallbackList)
+  if not Hw5Profile then return fallbackList or {} end
+  local profile = Hw5Profile.getProfile()
+  local tables = profile and profile.tables or {}
+  local list = tables[apikey]
+  if not list then
+    -- Fallback to profile default tables
+    local defaultProfile = Hw5Profile.default or {}
+    local defaultTables = defaultProfile.tables or {}
+    list = defaultTables[apikey]
+  end
+
+  if not list then
+    return fallbackList or {}
+  end
+
+  local options = {}
+  for i, label in ipairs(list) do
+    options[i] = { value = i - 1, label = label }
+  end
+  return options
+end
+
+function M.build(ctx)
+  ensureDeps()
+  ensureLoaded()
+
+  ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
+  ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
+
+  local children = ctx.children
+  local x = ctx.x
+  local y = ctx.y
+  local w = ctx.w
+  local h = ctx.h
+  local i18n = ctx.i18n
+
+  local title = "Hobbywing V5 Configurator"
+  if type(ui.runtime.syncHeaderTitle) == "function" then
+    ui.runtime.syncHeaderTitle(title, M.getHeaderActions())
+  end
+
+  if ui.loading or ui.saving then
+    local titleText = ui.loading and pageText(i18n, "loading", "Loading") or pageText(i18n, "saving", "Saving")
+    local msgText = ui.loading and pageText(i18n, "loading_data", "Loading ESC parameters...") or pageText(i18n, "saving_data", "Saving ESC parameters...")
+    if LoadingOverlay and type(LoadingOverlay.append) == "function" then
+      LoadingOverlay.append(children, {
+        x = x, y = y, w = w, h = h,
+        title = titleText,
+        message = msgText,
+        progress = ui.progress / 100
+      })
+    end
+    return
+  end
+
+  local cursorY = y
+  if Controls and type(Controls.appendStaticSectionHeader) == "function" then
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+  end
+
+  local rowH
+  local hasMultipleEscs = (ui.motorCount == nil) or (ui.motorCount >= 2)
+  if hasMultipleEscs then
+    local escOptions = {
+      { value = 0, label = "ESC 1" },
+      { value = 1, label = "ESC 2" }
+    }
+    local escTargetVal = ui.escTarget or 0
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, "ESC Target", escOptions, escTargetVal, function(val)
+      local targetVal = tonumber(val) or 0
+      if ui.escTarget ~= targetVal then
+        ui.escTarget = targetVal
+        ui.connState = 0
+        ui.connTimer = nil
+        ui.loaded = false
+        ui.dirty = false
+        queueHw5Read(false)
+      end
+    end)
+    cursorY = cursorY + rowH
+  end
+
+  local sectionOptions = {
+    { value = 1, label = "Basic" },
+    { value = 2, label = "Advanced" }
+  }
+  rowH = Controls.appendComboSelect(children, x, cursorY, w, "Section", sectionOptions, ui.currentSection, function(val)
+    ui.currentSection = val
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end)
+  cursorY = cursorY + rowH
+
+  local function markDirty()
+    ui.dirty = true
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+
+  if ui.currentSection == 1 then
+    -- Basic Settings
+    if isFieldAllowed("flight_mode", "basic") then
+      local fmOpts = {
+        { value = 0, label = "Fixed-wing" },
+        { value = 1, label = "Heli (Linear Throttle)" },
+        { value = 2, label = "Heli (Elf Gov)" },
+        { value = 3, label = "Heli (Store Gov)" }
+      }
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Flight Mode", fmOpts, ui.config.flight_mode, function(val)
+        ui.config.flight_mode = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("rotation", "basic") then
+      local rotOpts = getFieldOptions("rotation", {
+        { value = 0, label = "CW" },
+        { value = 1, label = "CCW" }
+      })
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Rotation", rotOpts, ui.config.rotation, function(val)
+        ui.config.rotation = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("bec_voltage", "basic") then
+      local becOpts = getFieldOptions("bec_voltage")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "BEC Voltage", becOpts, ui.config.bec_voltage, function(val)
+        ui.config.bec_voltage = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("lipo_cell_count", "basic") then
+      local lipoOpts = getFieldOptions("lipo_cell_count")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Lipo Cells", lipoOpts, ui.config.lipo_cell_count, function(val)
+        ui.config.lipo_cell_count = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("volt_cutoff_type", "basic") then
+      local cutoffTypeOpts = {
+        { value = 0, label = "Soft Cutoff" },
+        { value = 1, label = "Hard Cutoff" }
+      }
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Cutoff Type", cutoffTypeOpts, ui.config.volt_cutoff_type, function(val)
+        ui.config.volt_cutoff_type = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("cutoff_voltage", "basic") then
+      local cutoffVoltsOpts = getFieldOptions("cutoff_voltage")
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Cutoff Voltage", cutoffVoltsOpts, ui.config.cutoff_voltage, function(val)
+        ui.config.cutoff_voltage = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+  elseif ui.currentSection == 2 then
+    -- Advanced Settings
+    if isFieldAllowed("gov_p_gain", "advanced") then
+      rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor P Gain", {
+        min = 0, max = 9, step = 1,
+        get = function() return ui.config.gov_p_gain end,
+        set = function(val)
+          ui.config.gov_p_gain = val
+          markDirty()
+        end
+      })
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("gov_i_gain", "advanced") then
+      rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor I Gain", {
+        min = 0, max = 9, step = 1,
+        get = function() return ui.config.gov_i_gain end,
+        set = function(val)
+          ui.config.gov_i_gain = val
+          markDirty()
+        end
+      })
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("startup_time", "advanced") then
+      rowH = Controls.appendNumberField(children, x, cursorY, w, "Startup Time", {
+        min = 4, max = 25, step = 1, suffix = "s",
+        get = function() return ui.config.startup_time end,
+        set = function(val)
+          ui.config.startup_time = val
+          markDirty()
+        end
+      })
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("auto_restart", "advanced") then
+      rowH = Controls.appendNumberField(children, x, cursorY, w, "Auto Restart Time", {
+        min = 0, max = 90, step = 1, suffix = "s",
+        get = function() return ui.config.auto_restart end,
+        set = function(val)
+          ui.config.auto_restart = val
+          markDirty()
+        end
+      })
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("restart_time", "advanced") then
+      local restartOpts = {
+        { value = 0, label = "1s" },
+        { value = 1, label = "1.5s" },
+        { value = 2, label = "2s" },
+        { value = 3, label = "2.5s" },
+        { value = 4, label = "3s" }
+      }
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Restart Time", restartOpts, ui.config.restart_time, function(val)
+        ui.config.restart_time = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("timing", "advanced") then
+      rowH = Controls.appendNumberField(children, x, cursorY, w, "Motor Timing", {
+        min = 0, max = 30, step = 1, suffix = "deg",
+        get = function() return ui.config.timing end,
+        set = function(val)
+          ui.config.timing = val
+          markDirty()
+        end
+      })
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("startup_power", "advanced") then
+      local powerOpts = {
+        { value = 0, label = "1" },
+        { value = 1, label = "2" },
+        { value = 2, label = "3" },
+        { value = 3, label = "4" },
+        { value = 4, label = "5" },
+        { value = 5, label = "6" },
+        { value = 6, label = "7" }
+      }
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Startup Power", powerOpts, ui.config.startup_power, function(val)
+        ui.config.startup_power = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("active_freewheel", "advanced") then
+      local afOpts = {
+        { value = 0, label = "Disabled" },
+        { value = 1, label = "Enabled" }
+      }
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Active Freewheel", afOpts, ui.config.active_freewheel, function(val)
+        ui.config.active_freewheel = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("brake_type", "advanced") then
+      local brakeOpts = getFieldOptions("brake_type", {
+        { value = 0, label = "Disabled" },
+        { value = 1, label = "Normal" },
+        { value = 2, label = "Proportional" },
+        { value = 3, label = "Reverse" }
+      })
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Brake Type", brakeOpts, ui.config.brake_type, function(val)
+        ui.config.brake_type = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("brake_force", "advanced") then
+      rowH = Controls.appendNumberField(children, x, cursorY, w, "Brake Force", {
+        min = 0, max = 100, step = 1, suffix = "%",
+        get = function() return ui.config.brake_force end,
+        set = function(val)
+          ui.config.brake_force = val
+          markDirty()
+        end
+      })
+      cursorY = cursorY + rowH
+    end
+  end
+
+  if ui.dirty then
+    children[#children + 1] = {
+      type = "label",
+      x = x + 16, y = cursorY + 10,
+      text = pageText(i18n, "unsaved_changes", "Unsaved changes"),
+      color = COLOR_THEME_SECONDARY1,
+      font = SMLSIZE
+    }
+  end
+end
+
+function M.onClose()
+  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
+  if FwdProgApi and MspRuntime and type(MspRuntime.getState) == "function" then
+    local mspState = MspRuntime.getState()
+    local queue = mspState and mspState.queue
+    if queue then
+      queue:add({
+        command = FwdProgApi.writeCommand,
+        payload = FwdProgApi.buildWritePayload({ target = 100 }),
+        isWrite = true,
+        simulatorResponse = {},
+        processReply = function() end,
+        errorHandler = function() end
+      })
+    end
+  end
+
+  ui.connState = nil
+  ui.connTimer = nil
+  ui.escTarget = nil
+  ui.motorCount = nil
+  ui.motorConfigRetryPending = nil
+  ui.motorConfigRetryTimer = nil
+  if Common and type(Common.resetPageState) == "function" then
+    Common.resetPageState(ui, {
+      resetLoaded = true,
+      resetDirty = true
+    })
+  end
+  Common = nil
+  Controls = nil
+  MspRuntime = nil
+  EscParametersHw5Api = nil
+  LoadingOverlay = nil
+  ConfirmDialog = nil
+  Hw5Profile = nil
+  t = nil
+end
+
+return M
