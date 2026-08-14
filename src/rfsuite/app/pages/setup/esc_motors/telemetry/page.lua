@@ -218,6 +218,7 @@ local function queueTelemetryWrite(requestRebuild)
                   local session = getSession()
                   if session then
                     session.setup_esc_motors_telemetry = nil
+                    session.esc4WayDetectedProto = ui.config.protocol
                   end
                   if type(requestRebuild) == "function" then
                     requestRebuild()
@@ -236,6 +237,7 @@ local function queueTelemetryWrite(requestRebuild)
               local session = getSession()
               if session then
                 session.setup_esc_motors_telemetry = nil
+                session.esc4WayDetectedProto = ui.config.protocol
               end
               if type(requestRebuild) == "function" then
                 requestRebuild()

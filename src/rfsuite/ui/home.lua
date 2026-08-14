@@ -886,17 +886,73 @@ end
 local function updateRuntimeMenuConditions()
   if not state.menu then return end
 
+  local root = _G and _G.rfsuite
+  local session = root and root.session
+
   local wasConnected = state.fblConnected == true
   local nextFblConnected = readFblConnected()
   if state.fblConnected ~= nextFblConnected then
     state.fblConnected = nextFblConnected
     state.menu.setCondition("fblConnected", nextFblConnected)
-    if wasConnected and not nextFblConnected then
-      if Audio and type(Audio.resetConnectionState) == "function" then
-        Audio.resetConnectionState(state.audioState)
+    if not nextFblConnected then
+      if session then
+        session.esc4WayDetectedProto = nil
       end
-      returnToRootOnDisconnect()
+      if wasConnected then
+        if Audio and type(Audio.resetConnectionState) == "function" then
+          Audio.resetConnectionState(state.audioState)
+        end
+        returnToRootOnDisconnect()
+      end
     end
+    scheduleBuildUI(false)
+  end
+
+  local currentMenuId = state.menu.getCurrentMenuId()
+  if currentMenuId ~= "esc_tools_menu" then
+    state.escProtoCheckPending = false
+  end
+
+  if currentMenuId == "esc_tools_menu" and session and session.esc4WayDetectedProto == nil and not state.escProtoCheckPending then
+    state.escProtoCheckPending = true
+    local ok, SensorConfigApi = pcall(function()
+      return assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/esc_sensor_config.lua", "t"))()
+    end)
+    local msp = root and root.tasks and root.tasks.msp
+    local queue = msp and msp.getState and msp.getState().queue
+    if ok and queue and SensorConfigApi then
+      queue:add({
+        command = SensorConfigApi.command,
+        isWrite = false,
+        simulatorResponse = { 1, 0, 200, 0, 0, 15, 0, 0, 0, 30, 0, 0, 0, 0 },
+        processReply = function(self, buf)
+          state.escProtoCheckPending = false
+          local parsed = SensorConfigApi.parse(buf)
+          if parsed and parsed.protocol then
+            local proto = tonumber(parsed.protocol) or 0
+            session.esc4WayDetectedProto = proto
+          end
+        end,
+        errorHandler = function()
+          state.escProtoCheckPending = false
+        end
+      })
+    else
+      state.escProtoCheckPending = false
+    end
+  end
+
+  local initialVersion = state.menu._conditionsVersion
+  local proto = session and session.esc4WayDetectedProto
+  local protocols = {1, 3, 4, 6, 7, 9, 10, 12}
+  for _, p in ipairs(protocols) do
+    local isEnabled = false
+    if proto ~= nil then
+      isEnabled = (proto == p)
+    end
+    state.menu.setCondition("escProto" .. p, isEnabled)
+  end
+  if state.menu._conditionsVersion ~= initialVersion then
     scheduleBuildUI(false)
   end
 end

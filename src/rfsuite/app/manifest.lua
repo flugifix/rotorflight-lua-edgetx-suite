@@ -211,16 +211,16 @@ local manifest = {
     esc_tools_menu = {
       title = "@i18n(app.modules.esc_motors.esc_tools)@",
       pages = {
-        { id = "am32", title = "AM32", menuId = "setup_esc_motors_esc_tools_am32_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/am32/icon.png", row = 1, col = 1 },
-        { id = "blheli_s", title = "BLHeli_S", menuId = "setup_esc_motors_esc_tools_blheli_s_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/blheli_s/icon.png", row = 1, col = 2 },
-        { id = "bluejay", title = "Bluejay", menuId = "setup_esc_motors_esc_tools_bluejay_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/bluejay/icon.png", row = 1, col = 3 },
-        { id = "flrtr", title = "Flyrotor", menuId = "setup_esc_motors_esc_tools_flrtr_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/flrtr/icon.png", row = 1, col = 4 },
-        { id = "hw5", title = "Hobbywing V5", menuId = "setup_esc_motors_esc_tools_hw5_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/hw5/icon.png", row = 1, col = 5 },
-        { id = "omp", title = "OMP", menuId = "setup_esc_motors_esc_tools_omp_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/omp/icon.png", row = 2, col = 1 },
-        { id = "scorp", title = "Scorpion", menuId = "setup_esc_motors_esc_tools_scorp_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/scorp/icon.png", row = 2, col = 2 },
-        { id = "xdfly", title = "XDFly", menuId = "setup_esc_motors_esc_tools_xdfly_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/xdfly/icon.png", row = 2, col = 3 },
-        { id = "yge", title = "YGE", menuId = "setup_esc_motors_esc_tools_yge_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/yge/icon.png", row = 2, col = 4 },
-        { id = "ztw", title = "ZTW", menuId = "setup_esc_motors_esc_tools_ztw_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/ztw/icon.png", row = 2, col = 5 }
+        { id = "am32", title = "AM32", menuId = "setup_esc_motors_esc_tools_am32_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/am32/icon.png", row = 1, col = 1, enabledWhen = "escProto1" },
+        { id = "blheli_s", title = "BLHeli_S", menuId = "setup_esc_motors_esc_tools_blheli_s_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/blheli_s/icon.png", row = 1, col = 2, enabledWhen = "escProto1" },
+        { id = "bluejay", title = "Bluejay", menuId = "setup_esc_motors_esc_tools_bluejay_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/bluejay/icon.png", row = 1, col = 3, enabledWhen = "escProto1" },
+        { id = "flrtr", title = "Flyrotor", menuId = "setup_esc_motors_esc_tools_flrtr_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/flrtr/icon.png", row = 1, col = 4, enabledWhen = "escProto10" },
+        { id = "hw5", title = "Hobbywing V5", menuId = "setup_esc_motors_esc_tools_hw5_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/hw5/icon.png", row = 1, col = 5, enabledWhen = "escProto3" },
+        { id = "omp", title = "OMP", menuId = "setup_esc_motors_esc_tools_omp_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/omp/icon.png", row = 2, col = 1, enabledWhen = "escProto6" },
+        { id = "scorp", title = "Scorpion", menuId = "setup_esc_motors_esc_tools_scorp_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/scorp/icon.png", row = 2, col = 2, enabledWhen = "escProto4" },
+        { id = "xdfly", title = "XDFly", menuId = "setup_esc_motors_esc_tools_xdfly_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/xdfly/icon.png", row = 2, col = 3, enabledWhen = "escProto12" },
+        { id = "yge", title = "YGE", menuId = "setup_esc_motors_esc_tools_yge_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/yge/icon.png", row = 2, col = 4, enabledWhen = "escProto9" },
+        { id = "ztw", title = "ZTW", menuId = "setup_esc_motors_esc_tools_ztw_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/ztw/icon.png", row = 2, col = 5, enabledWhen = "escProto7" }
       }
     },
     governor_menu = {
