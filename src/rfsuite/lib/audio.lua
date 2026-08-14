@@ -845,22 +845,24 @@ function Audio.process(self, opts)
             audioState.lastFuelCallout = currentRounded
           else
             local thresholds = fuelThresholdList(events.fuel_callout_percent)
+            local lowestCrossed = nil
             for i = 1, #thresholds do
               local threshold = thresholds[i]
               if currentRounded <= threshold and lastCallout > threshold then
-                local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
-                if tryPlayEventFile(audioState, now, calloutSound, opts) then
-                  if type(playNumber) == "function" then
-                    emitLog(opts, "fuel callout playNumber -> " .. tostring(threshold), "info")
-                    local ok, err = pcall(playNumber, threshold, unitPercent())
-                    if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
-                  end
-                  audioState.lastFuelCallout = threshold
-                end
-                break
+                lowestCrossed = threshold
               end
             end
-            if currentRounded > lastCallout then
+            if lowestCrossed then
+              local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
+              if tryPlayEventFile(audioState, now, calloutSound, opts) then
+                if type(playNumber) == "function" then
+                  emitLog(opts, "fuel callout playNumber -> " .. tostring(lowestCrossed), "info")
+                  local ok, err = pcall(playNumber, lowestCrossed, unitPercent())
+                  if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+                end
+              end
+              audioState.lastFuelCallout = currentRounded
+            elseif currentRounded > lastCallout then
               audioState.lastFuelCallout = currentRounded
             end
           end
