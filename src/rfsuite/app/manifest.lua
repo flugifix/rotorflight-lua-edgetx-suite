@@ -220,7 +220,7 @@ local manifest = {
         { id = "scorp", title = "Scorpion", menuId = "setup_esc_motors_esc_tools_scorp_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/scorp/icon.png", row = 2, col = 2 },
         { id = "xdfly", title = "XDFly", menuId = "setup_esc_motors_esc_tools_xdfly_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/xdfly/icon.png", row = 2, col = 3 },
         { id = "yge", title = "YGE", menuId = "setup_esc_motors_esc_tools_yge_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/yge/icon.png", row = 2, col = 4 },
-        { id = "ztw", title = "ZTW", menuId = "setup_esc_motors_esc_tool_run_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/ztw/icon.png", row = 2, col = 5 }
+        { id = "ztw", title = "ZTW", menuId = "setup_esc_motors_esc_tools_ztw_page", icon = "@pages/setup/esc_motors/esc_tools/escmfg/ztw/icon.png", row = 2, col = 5 }
       }
     },
     governor_menu = {
@@ -522,6 +522,10 @@ local manifest = {
     },
     setup_esc_motors_esc_tools_yge_page = {
       title = "YGE Configurator",
+      pages = {}
+    },
+    setup_esc_motors_esc_tools_ztw_page = {
+      title = "ZTW Configurator",
       pages = {}
     },
     setup_esc_motors_esc_tool_run_page = {
