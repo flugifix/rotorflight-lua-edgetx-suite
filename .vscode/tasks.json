@@ -1,0 +1,217 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "RFSuite: Deploy to Simulator",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\.vscode\\scripts\\deploy-rfsuite-demo.ps1"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Deploy to Radio",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\.vscode\\scripts\\deploy-rfsuite-demo.ps1",
+        "-Target",
+        "radio"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Build Radio Install ZIP",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\.vscode\\scripts\\build-rfsuite-radio-zip.ps1"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Start EdgeTX Simulator (TX16S MK3)",
+      "type": "process",
+      "command": "${config:rfsuite.simulatorPath}",
+      "args": [
+        "--radio",
+        "edgetx-tx16smk3",
+        "--start-with",
+        "sd",
+        "--sd-path",
+        "${workspaceFolder}\\simulator"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Deploy + Start Simulator (TX16S MK3)",
+      "dependsOn": [
+        "RFSuite: Deploy to Simulator",
+        "RFSuite: Start EdgeTX Simulator (TX16S MK3)"
+      ],
+      "dependsOrder": "sequence",
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "RFSuite: Start EdgeTX Simulator (TX16S)",
+      "type": "process",
+      "command": "${config:rfsuite.simulatorPath}",
+      "args": [
+        "--radio",
+        "edgetx-tx16s",
+        "--start-with",
+        "sd",
+        "--sd-path",
+        "${workspaceFolder}\\simulator"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Deploy + Start Simulator (TX16S)",
+      "dependsOn": [
+        "RFSuite: Deploy to Simulator",
+        "RFSuite: Start EdgeTX Simulator (TX16S)"
+      ],
+      "dependsOrder": "sequence",
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "RFSuite: Start EdgeTX Simulator (TX15)",
+      "type": "process",
+      "command": "${config:rfsuite.simulatorPath}",
+      "args": [
+        "--radio",
+        "edgetx-tx15",
+        "--start-with",
+        "sd",
+        "--sd-path",
+        "${workspaceFolder}\\simulator"
+      ],
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "RFSuite: Deploy + Start Simulator (TX15)",
+      "dependsOn": [
+        "RFSuite: Deploy to Simulator",
+        "RFSuite: Start EdgeTX Simulator (TX15)"
+      ],
+      "dependsOrder": "sequence",
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "Sensors: Build Tool",
+      "type": "shell",
+      "command": "cmd.exe",
+      "args": [
+        "/c",
+        "${workspaceFolder}\\bin\\sensors\\src\\make.cmd"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "Sensors: Run Tool",
+      "type": "process",
+      "command": "${workspaceFolder}\\bin\\sensors\\sensors.exe",
+      "options": {
+        "cwd": "${workspaceFolder}\\bin\\sensors",
+        "env": {
+          "RFSUITE_SIMULATOR_PATH": "${env:RFSUITE_SIMULATOR_PATH}",
+          "EDGETX_SIMULATOR_PATH": "${env:EDGETX_SIMULATOR_PATH}"
+        }
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
+    },
+    {
+      "label": "Sensors: Build + Run Tool",
+      "dependsOn": [
+        "Sensors: Build Tool",
+        "Sensors: Run Tool"
+      ],
+      "dependsOrder": "sequence",
+      "group": "build",
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    }
+  ]
+}

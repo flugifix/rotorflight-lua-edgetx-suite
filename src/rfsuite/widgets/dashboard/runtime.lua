@@ -1,0 +1,1364 @@
+local Runtime = {}
+
+local SYSTEM_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/"
+local USER_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite.user/dashboard/"
+local AUDIO_LOG_FORCE = false
+local SPLASH_READY_HOLD_SECONDS = 1.0
+local SPLASH_SOFT_TIMEOUT_SECONDS = 25.0
+
+local function scriptExists(path)
+  if type(path) ~= "string" or path == "" then return false end
+  local f = io.open(path, "r")
+  if not f then return false end
+  io.close(f)
+  return true
+end
+
+local function loadModuleChunk(basePath)
+  if type(loadScript) ~= "function" then return nil end
+
+  local luaPath = basePath .. ".lua"
+  if scriptExists(luaPath) then
+    local chunk = loadScript(luaPath, "t")
+    if type(chunk) == "function" then return chunk end
+  end
+
+  local luacPath = basePath .. ".luac"
+  if scriptExists(luacPath) then
+    local chunk = loadScript(luacPath)
+    if type(chunk) == "function" then return chunk end
+  end
+
+  return nil
+end
+
+local loadLogModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/log")
+local Log = nil
+if type(loadLogModule) == "function" then
+  local ok, mod = pcall(loadLogModule)
+  if ok and type(mod) == "table" then
+    Log = mod
+  end
+end
+
+local loadPreferencesModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/preferences")
+local PreferencesModule = nil
+if type(loadPreferencesModule) == "function" then
+  local ok, mod = pcall(loadPreferencesModule)
+  if ok and type(mod) == "table" and type(mod.load) == "function" then
+    PreferencesModule = mod
+  end
+end
+
+local loadDashboardAudioModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/audio")
+local DashboardAudio = nil
+if type(loadDashboardAudioModule) == "function" then
+  local ok, mod = pcall(loadDashboardAudioModule)
+  if ok and type(mod) == "table" and type(mod.process) == "function" then
+    DashboardAudio = mod
+  end
+end
+
+local loadDashboardSplashModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/splash")
+local DashboardSplash = nil
+if type(loadDashboardSplashModule) == "function" then
+  local ok, mod = pcall(loadDashboardSplashModule)
+  if ok and type(mod) == "table" and type(mod.build) == "function" then
+    DashboardSplash = mod
+  end
+end
+
+local loadMspRuntimeModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/runtime")
+local MspRuntime = nil
+if type(loadMspRuntimeModule) == "function" then
+  local ok, mod = pcall(loadMspRuntimeModule)
+  if ok and type(mod) == "table" then
+    MspRuntime = mod
+  end
+end
+
+local loadI18nModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/i18n/init")
+local I18nModule = nil
+if type(loadI18nModule) == "function" then
+  local ok, mod = pcall(loadI18nModule)
+  if ok and type(mod) == "table" then
+    I18nModule = mod
+  end
+end
+
+local loadSensorsModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors")
+local Sensors = nil
+if type(loadSensorsModule) == "function" then
+  local ok, mod = pcall(loadSensorsModule)
+  if ok and type(mod) == "table" then Sensors = mod end
+end
+
+local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
+local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
+local THROTTLE_INFLIGHT_THRESHOLD = 35
+local THROTTLE_INFLIGHT_THRESHOLD_DIRECT = 8
+local RPM_INFLIGHT_THRESHOLD_DIRECT = 500
+local CURRENT_INFLIGHT_THRESHOLD_DIRECT = 8
+
+local utils = {}
+
+local function isTruthy(value)
+  return value == true or value == 1 or value == "1" or value == "true"
+end
+
+local function shouldLogAudio(self)
+  if AUDIO_LOG_FORCE then return true end
+  local prefs = self and self.preferences
+  local general = prefs and prefs.general
+  return isTruthy(general and general.developer_tools)
+end
+
+function utils.log(self, msg, level)
+  if Log and type(Log.emit) == "function" then
+    Log.emit("rfsuite.audio", msg, level, shouldLogAudio(self))
+  end
+end
+
+local function audioLog(self, msg, level)
+  utils.log(self, msg, level)
+end
+
+local function widgetLog(self, msg, level)
+  if Log and type(Log.emit) == "function" then
+    Log.emit("rfsuite.widget", msg, level or "debug", true)
+  end
+end
+
+local function nowSeconds()
+  if getTime then
+    local ok, value = pcall(getTime)
+    if ok and type(value) == "number" then
+      return value / 100
+    end
+  end
+
+  if os and type(os.clock) == "function" then
+    return os.clock()
+  end
+
+  return 0
+end
+
+local function readValue(name, fallback)
+  if not getValue then return fallback end
+  local ok, value = pcall(getValue, name)
+  if not ok or value == nil then return fallback end
+  return value
+end
+
+local function processAudioEvents(self)
+  if DashboardAudio and type(DashboardAudio.process) == "function" then
+    local modelName = nil
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+      modelName = _G.rfsuite.session.modelName
+    end
+    self.modelName = modelName
+    DashboardAudio.process(self, {
+      log = function(msg, level)
+        audioLog(self, msg, level)
+      end
+    })
+    return
+  end
+
+  if self and self.audioState and not self.audioState.initialized then
+    self.audioState.initialized = true
+  end
+end
+
+local loadEventsModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/events/runtime")
+local EventsRuntime = nil
+if type(loadEventsModule) == "function" then
+  local ok, mod = pcall(loadEventsModule)
+  if ok and type(mod) == "table" then
+    EventsRuntime = mod
+  end
+end
+
+local function tickMspRuntime(self)
+  if not MspRuntime then
+    return
+  end
+
+  if not self.mspAttached and type(MspRuntime.attach) == "function" then
+    MspRuntime.attach("dashboard-widget")
+    self.mspAttached = true
+  end
+
+  if type(MspRuntime.tick) ~= "function" then
+    return
+  end
+
+  MspRuntime.tick()
+  
+  if EventsRuntime and type(EventsRuntime.wakeup) == "function" then
+    pcall(EventsRuntime.wakeup)
+  end
+end
+
+local function buildConnectionSplash(zone, statusLine, title)
+  if DashboardSplash and type(DashboardSplash.build) == "function" then
+    return DashboardSplash.build(zone, statusLine, title)
+  end
+
+  local w = (zone and zone.w) or LCD_W or 320
+  local h = (zone and zone.h) or LCD_H or 172
+  return {
+    {
+      type = "rectangle",
+      x = 0,
+      y = 0,
+      w = w,
+      h = h,
+      color = COLOR_THEME_PRIMARY2,
+      filled = true
+    }
+  }
+end
+
+local function loadPreferences()
+  if not PreferencesModule or type(PreferencesModule.load) ~= "function" then
+    return nil
+  end
+  local loadedOk, prefs = pcall(PreferencesModule.load)
+  if not loadedOk or type(prefs) ~= "table" then
+    return nil
+  end
+  return prefs
+end
+
+local function publishPreferencesToGlobal(prefs)
+  if type(_G) ~= "table" then return end
+  _G.rfsuite = _G.rfsuite or {}
+  _G.rfsuite.preferences = prefs or {}
+end
+
+local function reloadPreferencesIfNeeded(self, force)
+  local now = nowSeconds()
+
+  local signalReload = false
+  if not force then
+    if type(model) == "table" and type(model.getGlobalVariable) == "function" then
+      -- Signaling mechanism: GV9 (index 8) for FM8 (index 8) set to 1 by the Tool
+      local ok, val = pcall(model.getGlobalVariable, 8, 8)
+      if ok and val == 1 then
+        signalReload = true
+      end
+    end
+  end
+
+  if not force and not signalReload then
+    return
+  end
+
+  -- Safety: Do not reload files while ARMED to prevent CPU spikes or sensor lost
+  if self.state.armed then
+    return
+  end
+
+  local prefs = loadPreferences()
+  if type(prefs) == "table" then
+    self.preferences = prefs
+    publishPreferencesToGlobal(prefs)
+    
+    -- Expose i18n on the runtime state so theme renderers can access it
+    if self.i18n then
+      if type(self.state) ~= "table" then self.state = {} end
+      self.state.i18n = self.i18n
+    end
+
+    -- Reset signal if we successfully reloaded based on a trigger
+    if signalReload and type(model) == "table" and type(model.setGlobalVariable) == "function" then
+      pcall(model.setGlobalVariable, 8, 8, 0)
+    end
+  end
+
+  self.preferencesLastLoadedAt = now
+end
+
+local function updateConnectionState(self)
+  local runtimeState = nil
+  local mspProgress = nil
+  if MspRuntime and type(MspRuntime.getState) == "function" then
+    runtimeState = MspRuntime.getState()
+  elseif Rf2Runtime and type(Rf2Runtime.getState) == "function" then
+    runtimeState = Rf2Runtime.getState()
+  end
+  if MspRuntime and type(MspRuntime.getProgress) == "function" then
+    mspProgress = MspRuntime.getProgress()
+  end
+  local connected = type(runtimeState) == "table" and runtimeState.lastConnected == true
+  local hasVoltage = type(self.state.voltage) == "number" and self.state.voltage > 0
+  local hasFuel = type(self.state.fuel) == "number" and self.state.fuel >= 0
+  local hasLq = type(self.state.lq) == "number" and self.state.lq ~= 0
+  local hasRss1 = type(self.state.rss1) == "number" and self.state.rss1 ~= 0
+  local hasRss2 = type(self.state.rss2) == "number" and self.state.rss2 ~= 0
+  local batteryReady = hasVoltage or hasFuel
+  local rfReady = hasLq or hasRss1 or hasRss2
+  
+  local tasksDone = true
+  if mspProgress and type(mspProgress.total) == "number" and type(mspProgress.done) == "number" then
+    tasksDone = (mspProgress.done >= mspProgress.total)
+  end
+
+  local onconnectActive = false
+  local onconnectProgress = nil
+  local onconnectPendingTaskName = nil
+  if EventsRuntime and type(EventsRuntime.isOnconnectActive) == "function" then
+    onconnectActive = EventsRuntime.isOnconnectActive()
+  end
+  if EventsRuntime and type(EventsRuntime.getOnconnectProgress) == "function" then
+    onconnectProgress = EventsRuntime.getOnconnectProgress()
+  end
+  if EventsRuntime and type(EventsRuntime.getOnconnectPendingTaskName) == "function" then
+    onconnectPendingTaskName = EventsRuntime.getOnconnectPendingTaskName()
+  end
+
+  local onconnectDone = false
+  if onconnectProgress and type(onconnectProgress.total) == "number" and type(onconnectProgress.done) == "number" then
+    onconnectDone = (onconnectProgress.total > 0 and onconnectProgress.done >= onconnectProgress.total)
+  end
+
+  if onconnectActive and not onconnectDone then
+    tasksDone = false
+  end
+  
+  local rawReady = connected and batteryReady and rfReady and tasksDone
+  local now = nowSeconds()
+
+  if connected and not rawReady then
+    if not self.pendingSince then
+      self.pendingSince = now
+    end
+  else
+    self.pendingSince = nil
+  end
+
+  if rawReady then
+    if not self.readySince then
+      self.readySince = now
+    end
+  else
+    self.readySince = nil
+  end
+
+  local softTimeoutReady = connected and self.pendingSince ~= nil and (now - self.pendingSince) >= SPLASH_SOFT_TIMEOUT_SECONDS
+  local ready = (rawReady and self.readySince ~= nil and (now - self.readySince) >= SPLASH_READY_HOLD_SECONDS) or softTimeoutReady
+  local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
+
+  local statusLine = nil
+  if not connected then
+    statusLine = (t and t("widgets.dashboard.waiting_for_msp_link")) or "Waiting for MSP link"
+    self.batteryDialogState = "pending"
+  elseif not tasksDone then
+    local pDone = 0
+    local pTotal = 0
+    local showNumbers = false
+    if onconnectProgress and onconnectProgress.total > 0 then
+      pDone = onconnectProgress.done or 0
+      pTotal = onconnectProgress.total or 0
+      showNumbers = true
+    end
+    local loadingTasksStr = (t and t("widgets.dashboard.loading_tasks")) or "Loading data..."
+    if showNumbers then
+      statusLine = loadingTasksStr .. " (" .. tostring(pDone) .. "/" .. tostring(pTotal) .. ")"
+    else
+      statusLine = loadingTasksStr
+    end
+    if onconnectPendingTaskName and onconnectPendingTaskName ~= "" then
+      statusLine = statusLine .. " [" .. tostring(onconnectPendingTaskName) .. "]"
+    end
+  elseif not rfReady then
+    statusLine = (t and t("widgets.dashboard.waiting_for_receiver_telemetry")) or "Waiting for receiver telemetry (1RSS/2RSS)"
+  elseif not batteryReady then
+    statusLine = (t and t("widgets.dashboard.waiting_for_battery_telemetry")) or "Waiting for battery telemetry"
+  elseif not ready then
+    statusLine = (t and t("widgets.dashboard.connected_starting")) or "Connected, starting dashboard..."
+  elseif softTimeoutReady then
+    statusLine = "Connected with partial telemetry"
+  end
+
+  if self.connectionReady ~= ready then
+    self.connectionReady = ready
+    self.built = false
+    self.renderKey = nil
+    if ready then
+      widgetLog(self, "FBL connected and telemetry initialized", "info")
+      if softTimeoutReady then
+        widgetLog(self, "Splash soft-timeout reached; continuing without full startup prerequisites", "warn")
+      end
+      -- Force reload preferences when connection ready to ensure we have the latest model settings
+      reloadPreferencesIfNeeded(self, true)
+    else
+      widgetLog(self, "FBL not ready yet", "info")
+      if self.audioState then
+        self.audioState.initialized = false
+        self.audioState.modelAnnounced = false
+      end
+    end
+  end
+
+  self.state.fblConnected = connected
+  self.state.connectionReady = ready
+  return ready, statusLine
+end
+
+local function readFirstNumber(names, fallback)
+  if type(names) ~= "table" then
+    return fallback
+  end
+
+  for i = 1, #names do
+    local value = readValue(names[i], nil)
+    if type(value) == "number" then
+      return value
+    end
+    if type(value) == "string" then
+      local numeric = tonumber(value)
+      if type(numeric) == "number" then
+        return numeric
+      end
+    end
+  end
+
+  return fallback
+end
+
+local function roundInt(value, fallback)
+  if type(value) ~= "number" then
+    return fallback
+  end
+  return math.floor(value + 0.5)
+end
+
+local function normalizeCellVoltage(value, fallback)
+  local v = tonumber(value)
+  if type(v) ~= "number" or v <= 0 then
+    return fallback
+  end
+  -- Accept common storage encodings:
+  -- volts (4.2), decivolts (42), centivolts (420), millivolts (4200).
+  if v > 1000 then
+    v = v / 1000
+  elseif v > 100 then
+    v = v / 100
+  elseif v > 10 then
+    v = v / 10
+  end
+  if v <= 0 then
+    return fallback
+  end
+  return v
+end
+
+local function updateDerivedFlightState(state)
+  local now = nowSeconds()
+  local lastTick = state.lastTickAt or now
+  local delta = now - lastTick
+  if delta < 0 or delta > 5 then
+    delta = 0
+  end
+  state.lastTickAt = now
+
+  local wasArmed = state.wasArmed == true
+  local isArmed = state.armed == true
+
+  if isArmed and not wasArmed then
+    state.currentFlightSeconds = 0
+    state.currentFlightMinVoltage = nil
+    state.currentFlightMinLq = nil
+    state.currentFlightMaxThrottlePercent = nil
+    state.currentFlightMaxRpm = nil
+    state.currentFlightMinRpm = nil
+    state.currentFlightMaxCurrent = nil
+    state.currentFlightMinCurrent = nil
+    state.currentFlightMaxWatts = nil
+    state.currentFlightMaxAltitude = nil
+    state.currentFlightMaxEscTemp = nil
+    state.currentFlightMaxMcuTemp = nil
+    state.currentFlightMinFuel = nil
+    state.hadArmedFlight = true
+  end
+
+  if isArmed then
+    state.currentFlightSeconds = (state.currentFlightSeconds or 0) + delta
+    state.totalFlightSeconds = (state.totalFlightSeconds or 0) + delta
+
+    if type(state.throttlePercent) == "number" then
+      local currentMaxThrottle = state.currentFlightMaxThrottlePercent
+      if currentMaxThrottle == nil or state.throttlePercent > currentMaxThrottle then
+        state.currentFlightMaxThrottlePercent = state.throttlePercent
+      end
+    end
+
+    if type(state.rpm) == "number" then
+      local currentMaxRpm = state.currentFlightMaxRpm
+      if currentMaxRpm == nil or state.rpm > currentMaxRpm then
+        state.currentFlightMaxRpm = state.rpm
+      end
+
+      if state.rpm > 0 then
+        local currentMinRpm = state.currentFlightMinRpm
+        if currentMinRpm == nil or state.rpm < currentMinRpm then
+          state.currentFlightMinRpm = state.rpm
+        end
+      end
+    end
+
+    if type(state.current) == "number" then
+      local currentMaxCurrent = state.currentFlightMaxCurrent
+      if currentMaxCurrent == nil or state.current > currentMaxCurrent then
+        state.currentFlightMaxCurrent = state.current
+      end
+
+      local currentMinCurrent = state.currentFlightMinCurrent
+      if currentMinCurrent == nil or state.current < currentMinCurrent then
+        state.currentFlightMinCurrent = state.current
+      end
+    end
+
+    if type(state.watts) == "number" then
+      local currentMaxWatts = state.currentFlightMaxWatts
+      if currentMaxWatts == nil or state.watts > currentMaxWatts then
+        state.currentFlightMaxWatts = state.watts
+      end
+    end
+
+    if type(state.altitude) == "number" then
+      local currentMaxAltitude = state.currentFlightMaxAltitude
+      if currentMaxAltitude == nil or state.altitude > currentMaxAltitude then
+        state.currentFlightMaxAltitude = state.altitude
+      end
+    end
+
+    if type(state.escTemp) == "number" then
+      local currentMaxEscTemp = state.currentFlightMaxEscTemp
+      if currentMaxEscTemp == nil or state.escTemp > currentMaxEscTemp then
+        state.currentFlightMaxEscTemp = state.escTemp
+      end
+    end
+
+    if type(state.mcuTemp) == "number" then
+      local currentMaxMcuTemp = state.currentFlightMaxMcuTemp
+      if currentMaxMcuTemp == nil or state.mcuTemp > currentMaxMcuTemp then
+        state.currentFlightMaxMcuTemp = state.mcuTemp
+      end
+    end
+
+    if state.fuelTelemetrySeen == true and type(state.fuel) == "number" then
+      local currentMinFuel = state.currentFlightMinFuel
+      if currentMinFuel == nil or state.fuel < currentMinFuel then
+        state.currentFlightMinFuel = state.fuel
+      end
+    end
+
+    if type(state.voltage) == "number" and state.voltage > 0 then
+      local currentMinVoltage = state.currentFlightMinVoltage
+      if currentMinVoltage == nil or state.voltage < currentMinVoltage then
+        state.currentFlightMinVoltage = state.voltage
+      end
+    end
+
+    if type(state.lq) == "number" and state.lq > 0 then
+      local currentMinLq = state.currentFlightMinLq
+      if currentMinLq == nil or state.lq < currentMinLq then
+        state.currentFlightMinLq = state.lq
+      end
+    end
+  elseif wasArmed then
+    state.lastFlightSeconds = state.currentFlightSeconds or 0
+    if (state.currentFlightSeconds or 0) >= 1 then
+      state.flights = (state.flights or 0) + 1
+    end
+    state.lastDisarmAt = now
+    state.hadArmedFlight = true
+    state.lastFlightMaxThrottlePercent = state.currentFlightMaxThrottlePercent
+    state.lastFlightMaxRpm = state.currentFlightMaxRpm
+    state.lastFlightMinRpm = state.currentFlightMinRpm
+    state.lastFlightMaxCurrent = state.currentFlightMaxCurrent
+    state.lastFlightMinCurrent = state.currentFlightMinCurrent
+    state.lastFlightMaxWatts = state.currentFlightMaxWatts
+    state.lastFlightMaxAltitude = state.currentFlightMaxAltitude
+    state.lastFlightMaxEscTemp = state.currentFlightMaxEscTemp
+    state.lastFlightMaxMcuTemp = state.currentFlightMaxMcuTemp
+    state.lastFlightMinFuel = state.currentFlightMinFuel
+    state.lastMinVoltage = state.currentFlightMinVoltage
+    state.lastMinLq = state.currentFlightMinLq
+    state.currentFlightSeconds = 0
+    state.currentFlightMinVoltage = nil
+    state.currentFlightMinLq = nil
+    state.fuelTelemetrySeen = false
+    state.currentFlightMaxThrottlePercent = nil
+    state.currentFlightMaxRpm = nil
+    state.currentFlightMinRpm = nil
+    state.currentFlightMaxCurrent = nil
+    state.currentFlightMinCurrent = nil
+    state.currentFlightMaxWatts = nil
+    state.currentFlightMaxAltitude = nil
+    state.currentFlightMaxEscTemp = nil
+    state.currentFlightMaxMcuTemp = nil
+    state.currentFlightMinFuel = nil
+  end
+
+  if isArmed then
+    state.flightSeconds = state.currentFlightSeconds or 0
+  else
+    state.flightSeconds = state.lastFlightSeconds or 0
+  end
+
+  state.prevArmed = wasArmed
+  state.wasArmed = isArmed
+end
+
+local function loadDashboardLib()
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/app/pages/settings/dashboard/lib.lua", "t")
+  if not chunk then return nil end
+  local ok, lib = pcall(chunk)
+  if not ok or type(lib) ~= "table" then return nil end
+  return lib
+end
+
+local function loadDashboardEngine()
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/engine.lua", "t")
+  if not chunk then return nil end
+  local ok, engine = pcall(chunk)
+  if not ok or type(engine) ~= "table" then return nil end
+  return engine
+end
+
+local function parseThemePath(raw)
+  if type(raw) ~= "string" or raw == "" then
+    return "system", "default"
+  end
+  local slash = string.find(raw, "/", 1, true)
+  if not slash then
+    return "system", "default"
+  end
+  local source = string.sub(raw, 1, slash - 1)
+  local folder = string.sub(raw, slash + 1)
+  if source == "" or folder == "" then
+    return "system", "default"
+  end
+  return source, folder
+end
+
+local function loadThemeInit(themePath)
+  local source, folder = parseThemePath(themePath)
+  local base = source == "user" and USER_THEME_BASE or SYSTEM_THEME_BASE
+  local initChunk = loadScript(base .. folder .. "/init.lua", "t")
+  if not initChunk then return nil, base, folder end
+  local ok, initTable = pcall(initChunk)
+  if not ok or type(initTable) ~= "table" then return nil, base, folder end
+  return initTable, base, folder
+end
+
+local function loadThemeModuleForState(themePath, flightMode)
+  local initTable, base, folder = loadThemeInit(themePath)
+  local stateKey = (flightMode == "inflight" or flightMode == "postflight") and flightMode or "preflight"
+
+  local stateScript = nil
+  if initTable and type(initTable[stateKey]) == "string" and initTable[stateKey] ~= "" then
+    stateScript = initTable[stateKey]
+  end
+
+  local scriptPath = nil
+  if stateScript then
+    scriptPath = base .. folder .. "/" .. stateScript
+  else
+    scriptPath = base .. folder .. "/widget.lua"
+  end
+
+  local chunk = loadScript(scriptPath, "t")
+  if chunk then
+    local ok, theme = pcall(chunk)
+    if ok and type(theme) == "table" and (
+      type(theme.build) == "function" or
+      type(theme.layout) == "table" or
+      type(theme.boxes) == "table" or
+      type(theme.boxes) == "function"
+    ) then
+      return theme
+    end
+  end
+
+  local fallbackChunk = loadScript(SYSTEM_THEME_BASE .. "default/widget.lua", "t")
+  if not fallbackChunk then return nil end
+  local ok, theme = pcall(fallbackChunk)
+  if ok and type(theme) == "table" and (
+    type(theme.build) == "function" or
+    type(theme.layout) == "table" or
+    type(theme.boxes) == "table" or
+    type(theme.boxes) == "function"
+  ) then
+    return theme
+  end
+  return nil
+end
+
+local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
+  local modelDashboard = modelPrefs and modelPrefs.dashboard or {}
+  local modelOverride = modelDashboard.model_override == true or dashboard.model_override == true
+  local key = "theme_preflight"
+  local modelKey = "model_theme_preflight"
+
+  if flightMode == "inflight" then
+    key = "theme_inflight"
+    modelKey = "model_theme_inflight"
+  elseif flightMode == "postflight" then
+    key = "theme_postflight"
+    modelKey = "model_theme_postflight"
+  end
+
+  local modelValue = modelOverride and modelDashboard[modelKey] or nil
+  -- fallback to global dashboard if it happens to be set there for backward compat
+  if not modelValue or modelValue == "" or modelValue == "nil" then
+    modelValue = modelOverride and dashboard and dashboard[modelKey] or nil
+  end
+
+  if modelValue and modelValue ~= "" and modelValue ~= "nil" then
+    return modelValue
+  end
+
+  local globalValue = dashboard and dashboard[key] or nil
+  if globalValue and globalValue ~= "" then
+    return globalValue
+  end
+
+  return "system/default"
+end
+
+local function readTelemetry(state)
+  if not (Sensors and type(Sensors.getValue) == "function") then return end
+  local changed = false
+  local cache = {}
+  local function getSensor(name)
+    if cache[name] == nil then cache[name] = Sensors.getValue(name) end
+    return cache[name]
+  end
+
+  local function setField(field, value)
+    if value ~= nil and value ~= state[field] then
+      state[field] = value
+      changed = true
+    end
+  end
+
+  setField("rpm", getSensor("rpm"))
+  setField("lq", getSensor("link"))
+  setField("profile", roundInt(getSensor("pid_profile") or state.profile, state.profile or 1))
+  setField("rateProfile", roundInt(getSensor("rate_profile") or state.rateProfile, state.rateProfile or 1))
+  setField("batteryProfile", roundInt(getSensor("battery_profile") or state.batteryProfile, state.batteryProfile or 1))
+  setField("armFlags", roundInt(getSensor("armflags") or state.armFlags, state.armFlags or 0))
+  local armDisableFlagsValue = getSensor("armdisableflags")
+  if type(armDisableFlagsValue) == "number" then
+    setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
+  end
+  setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
+  setField("mcuTemp", roundInt(getSensor("temp_mcu") or state.mcuTemp, state.mcuTemp or 0))
+  setField("escTemp", roundInt(getSensor("temp_esc") or state.escTemp, state.escTemp or 0))
+  setField("bec_voltage", getSensor("bec_voltage") or state.bec_voltage)
+  setField("throttlePercent", roundInt(getSensor("throttle_percent") or state.throttlePercent, state.throttlePercent or 0))
+  local currentValue = getSensor("current")
+  local voltageValue = getSensor("voltage")
+  local wattsValue = getSensor("watts")
+  if type(wattsValue) ~= "number" and type(currentValue) == "number" and type(voltageValue) == "number" then
+    wattsValue = voltageValue * currentValue
+  end
+
+  setField("current", currentValue or state.current)
+  setField("watts", wattsValue or state.watts)
+  setField("altitude", getSensor("altitude") or state.altitude)
+  setField("consumedMah", getSensor("smartconsumption") or state.consumedMah)
+
+  local fuel = getSensor("smartfuel") or getSensor("fuel")
+  if type(fuel) == "number" then
+    local f = fuel
+    if f < 0 then f = 0 end
+    if f > 100 then f = 100 end
+    state.fuelTelemetrySeen = true
+    setField("fuel", f)
+  end
+
+  if type(voltageValue) == "number" then
+    setField("voltage", voltageValue)
+  end
+
+  local batteryCellCountValue = getSensor("battery_cell_count")
+  if type(batteryCellCountValue) == "number" and batteryCellCountValue > 0 then
+    setField("batteryCellCount", roundInt(batteryCellCountValue, state.batteryCellCount or 0))
+  elseif type(voltageValue) == "number" and voltageValue > 0 then
+    -- Try to infer cell count from battery config's max cell voltage
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
+
+    local inferredCells = math.max(1, math.floor((voltageValue / maxCellVoltage) + 0.5))
+    local existingCells = tonumber(state.batteryCellCount)
+    if not existingCells or existingCells <= 0 then
+      setField("batteryCellCount", inferredCells)
+    else
+      local perCell = voltageValue / existingCells
+      -- Reconnect-safe: replace stale cell count if implied per-cell voltage is implausible.
+      if perCell < 2.5 or perCell > 4.5 then
+        setField("batteryCellCount", inferredCells)
+      end
+    end
+  end
+
+  local armState = getSensor("armflags")
+  if type(armState) == "number" and bit32 then
+    setField("armed", bit32.btest(armState, 1))
+  elseif type(armState) == "number" then
+    setField("armed", armState ~= 0)
+  end
+
+  local rss1 = readFirstNumber(RSS1_SOURCES, state.rss1)
+  setField("rss1", rss1)
+  local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
+  setField("rss2", rss2)
+
+  if changed then updateDerivedFlightState(state) end
+end
+
+local function computeFlightMode(state)
+  local isArmed = state.armed == true
+  local wasArmed = state.prevArmed == true
+
+  -- Match Ethos behavior: after arming, stay in preflight until governor becomes active
+  -- (or throttle rises above a safety threshold).
+  if isArmed and not wasArmed then
+    state.hadInflightFlight = false
+    return "preflight"
+  end
+
+  if isArmed then
+    local governor = tonumber(state.governor)
+    local throttle = tonumber(state.throttlePercent) or 0
+    local rpm = tonumber(state.rpm) or 0
+    local current = tonumber(state.current) or 0
+    local governorActive = (type(governor) == "number" and governor >= 4 and governor <= 8)
+    local governorDisabled = (governor == 100 or governor == 0)
+    local directModeActive = governorDisabled
+      and (
+        rpm >= RPM_INFLIGHT_THRESHOLD_DIRECT
+        or current >= CURRENT_INFLIGHT_THRESHOLD_DIRECT
+        or throttle >= THROTTLE_INFLIGHT_THRESHOLD_DIRECT
+      )
+    if governorActive or throttle > THROTTLE_INFLIGHT_THRESHOLD or directModeActive then
+      state.hadInflightFlight = true
+    end
+
+    -- Once we reached inflight in this armed session, stay inflight until disarm.
+    if state.hadInflightFlight == true then
+      return "inflight"
+    end
+
+    return "preflight"
+  end
+
+  if state.hadInflightFlight == true then
+    return "postflight"
+  end
+
+  return "preflight"
+end
+
+function Runtime.new(zone, options)
+  local dashboardLib = loadDashboardLib()
+  local dashboardEngine = loadDashboardEngine()
+  local prefs = loadPreferences() or {}
+  publishPreferencesToGlobal(prefs)
+  local dashboard = (prefs and prefs.dashboard) or {}
+
+  local widget = {
+    zone = zone,
+    options = options,
+    dashboardLib = dashboardLib,
+    dashboardEngine = dashboardEngine,
+    preferences = prefs,
+    preferencesLastLoadedAt = 0,
+    themePath = "system/default",
+    flightMode = "preflight",
+    theme = nil,
+    built = false,
+    renderKey = nil,
+    boxSources = {},
+    state = {
+      armed = false,
+      hadArmedFlight = false,
+      hadInflightFlight = false,
+      prevArmed = false,
+      wasArmed = false,
+      fblConnected = false,
+      connectionReady = false,
+      rpm = 0,
+      profile = 1,
+      rateProfile = 1,
+      batteryProfile = 1,
+      armFlags = 0,
+      armDisableFlags = 0,
+      governor = 0,
+      throttlePercent = 0,
+      mcuTemp = 0,
+      escTemp = 0,
+      bec_voltage = 0,
+      current = 0,
+      watts = 0,
+      altitude = 0,
+      consumedMah = 0,
+      currentFlightMaxThrottlePercent = nil,
+      currentFlightMaxRpm = nil,
+      currentFlightMinRpm = nil,
+      currentFlightMaxCurrent = nil,
+      currentFlightMinCurrent = nil,
+      currentFlightMaxWatts = nil,
+      currentFlightMaxAltitude = nil,
+      currentFlightMaxEscTemp = nil,
+      currentFlightMaxMcuTemp = nil,
+      currentFlightMinFuel = nil,
+      flights = 0,
+      lq = 0,
+      rss1 = 0,
+      rss2 = 0,
+      fuel = 0,
+      voltage = 0,
+      batteryCellCount = 0,
+      flightSeconds = 0,
+      lastFlightSeconds = 0,
+      totalFlightSeconds = 0,
+      fuelTelemetrySeen = false,
+      lastMinVoltage = nil,
+      lastMinLq = nil,
+      lastFlightMinCurrent = nil,
+      lastFlightMaxCurrent = nil,
+      lastFlightMaxThrottlePercent = nil,
+      lastFlightMaxRpm = nil,
+      lastFlightMinRpm = nil,
+      lastFlightMaxWatts = nil,
+      lastFlightMaxAltitude = nil,
+      lastFlightMaxEscTemp = nil,
+      lastFlightMaxMcuTemp = nil,
+      lastFlightMinFuel = nil,
+      lastDisarmAt = nil,
+      themeConfig = { v_min = 18.0, v_max = 25.2 }
+    },
+    audioState = {
+      initialized = false,
+      nextAllowedAt = 0,
+      modelAnnounced = false,
+      lastFuelCallout = nil,
+      lowFuelActive = false,
+      lowFuelLastAt = 0,
+      lowFuelRepeatCount = 0,
+      lastValues = {
+        arming_flags = nil,
+        governor_state = nil,
+        pid_profile = nil,
+        rate_profile = nil,
+        battery_profile = nil
+      },
+      pendingValues = {
+        pid_profile = nil,
+        rate_profile = nil,
+        battery_profile = nil
+      },
+      lastEnabled = {
+        governor_state = nil
+      }
+    },
+    connectionReady = false,
+    lastFblConnected = false,
+    statusLine = "Waiting for MSP link",
+    readySince = nil,
+    mspAttached = false,
+    mspLastTick = 0
+  }
+
+  -- Initialize i18n context for the widget using system locale
+  if I18nModule and type(I18nModule.new) == "function" then
+    local locale = nil
+    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", "t")
+    if chunk then
+      local ok, localeMod = pcall(chunk)
+      if ok and type(localeMod) == "table" and type(localeMod.resolveSystemLanguage) == "function" then
+        local okResolve, resolved = pcall(localeMod.resolveSystemLanguage, "en")
+        if okResolve and type(resolved) == "string" and resolved ~= "" then
+          locale = resolved
+        end
+      end
+    end
+    local ok, ctx = pcall(I18nModule.new, locale)
+    if ok and type(ctx) == "table" then
+      widget.i18n = ctx
+    end
+  end
+  -- ensure renderers can access the same i18n via state
+  if widget.i18n then
+    widget.state.i18n = widget.i18n
+  end
+
+  local function resolveVoltageCellCount(state)
+    local cells = tonumber(state and state.batteryCellCount)
+    if cells and cells > 0 then
+      return math.floor(cells + 0.5)
+    end
+
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+    local sessionCells = tonumber(batteryConfig and batteryConfig.batteryCellCount)
+    if sessionCells and sessionCells > 0 then
+      return math.floor(sessionCells + 0.5)
+    end
+
+    local voltage = tonumber(state and state.voltage)
+    local maxCellVoltage = tonumber(batteryConfig and batteryConfig.vbatmaxcellvoltage) or 4.2
+    if type(voltage) == "number" and voltage > 0 and maxCellVoltage > 0 then
+      return math.max(1, math.floor((voltage / maxCellVoltage) + 0.5))
+    end
+
+    return nil
+  end
+
+  local function updateVoltageThemeConfig(self)
+    local function applyThemeConfig(nextConfig)
+      local prev = self.state.themeConfig or {}
+      local prevMin = tonumber(prev.v_min)
+      local prevMax = tonumber(prev.v_max)
+      local nextMin = tonumber(nextConfig and nextConfig.v_min)
+      local nextMax = tonumber(nextConfig and nextConfig.v_max)
+
+      self.state.themeConfig = nextConfig
+
+      local changed = (
+        type(prevMin) ~= "number" or type(prevMax) ~= "number" or
+        type(nextMin) ~= "number" or type(nextMax) ~= "number" or
+        math.abs(prevMin - nextMin) > 0.01 or math.abs(prevMax - nextMax) > 0.01
+      )
+      if changed then
+        self.built = false
+        self.renderKey = nil
+        self._cachedRenderKey = nil
+      end
+    end
+
+    local function logVoltageThemeDecision(reason, cells, inMin, inMax, outMin, outMax)
+      if not shouldLogAudio(self) then return end
+      local key = table.concat({
+        tostring(reason or "?"),
+        tostring(cells or "x"),
+        tostring(inMin or "x"),
+        tostring(inMax or "x"),
+        tostring(outMin or "x"),
+        tostring(outMax or "x")
+      }, "|")
+      if self._lastVoltageThemeDebugKey == key then return end
+      self._lastVoltageThemeDebugKey = key
+      widgetLog(
+        self,
+        "voltage theme normalize reason=" .. tostring(reason)
+          .. " cells=" .. tostring(cells)
+          .. " in=" .. tostring(inMin) .. "/" .. tostring(inMax)
+          .. " out=" .. tostring(outMin) .. "/" .. tostring(outMax),
+        "debug"
+      )
+    end
+
+    local currentConfig = self.state.themeConfig or {}
+    local nextConfig = {
+      v_min = tonumber(currentConfig.v_min) or 18.0,
+      v_max = tonumber(currentConfig.v_max) or 25.2
+    }
+
+    local defaultMin = 18.0
+    local defaultMax = 25.2
+    local cells = resolveVoltageCellCount(self.state)
+    if not cells or cells <= 0 then
+      applyThemeConfig(nextConfig)
+      logVoltageThemeDecision("no-cells", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+      return
+    end
+
+    local isExactDefault = math.abs(nextConfig.v_min - defaultMin) <= 0.01 and math.abs(nextConfig.v_max - defaultMax) <= 0.01
+    local perCellMin = nextConfig.v_min / cells
+    local perCellMax = nextConfig.v_max / cells
+    -- Reconnect-safe: if configured bounds are implausible for detected cell count,
+    -- treat them as stale defaults and re-derive from battery config.
+    local looksInvalidForCells = (
+      perCellMin < 2.0 or perCellMin > 5.0 or
+      perCellMax < 3.0 or perCellMax > 5.2 or
+      perCellMax <= perCellMin
+    )
+    if (not isExactDefault) and (not looksInvalidForCells) then
+      applyThemeConfig(nextConfig)
+      logVoltageThemeDecision("keep", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+      return
+    end
+
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+    local minCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmincellvoltage, 3.3)
+    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
+
+    nextConfig.v_min = cells * minCellVoltage
+    nextConfig.v_max = cells * maxCellVoltage
+    applyThemeConfig(nextConfig)
+    logVoltageThemeDecision("normalize", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+  end
+
+  local function reloadActiveTheme(self)
+    local modelPrefs = nil
+    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
+      modelPrefs = _G.rfsuite.session.modelPreferences
+    end
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, self.flightMode)
+    local nextConfig = { v_min = 18.0, v_max = 25.2 }
+    if self.dashboardLib and self.dashboardLib.getThemeConfig then
+      nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, nextConfig, modelPrefs)
+    end
+
+    self.themePath = selectedTheme
+    self.state.themeConfig = nextConfig
+    updateVoltageThemeConfig(self)
+    self.theme = loadThemeModuleForState(selectedTheme, self.flightMode)
+    self.built = false
+    self.renderKey = nil
+
+    local sources = {}
+    if self.theme then
+      local parsedBoxes = nil
+      if type(self.theme.boxes) == "function" then
+        local ok, b = pcall(self.theme.boxes, nil, self.state)
+        if ok and type(b) == "table" then parsedBoxes = b end
+      elseif type(self.theme.boxes) == "table" then
+        parsedBoxes = self.theme.boxes
+      end
+      if parsedBoxes then
+        local seen = {}
+        for i = 1, #parsedBoxes do
+          local box = parsedBoxes[i]
+          local src = box and box.source
+          if type(src) ~= "string" and box and box.type == "text" and box.subtype == "governor" then
+            src = "governor"
+          end
+          if type(src) == "string" and not seen[src] then
+            seen[src] = true
+            sources[#sources + 1] = src
+          end
+        end
+      end
+    end
+    self.boxSources = sources
+  end
+
+  local function performBackgroundWork(self)
+    local now = nowSeconds()
+    if self._lastWorkTick == now then return self.connectionReady end
+    self._lastWorkTick = now
+
+    if not self._lastLogicTick then self._lastLogicTick = 0 end
+    if (now - self._lastLogicTick) < 0.1 then return self.connectionReady end
+    self._lastLogicTick = now
+
+    -- Set event context to 'widget' before events wakeup
+    if type(_G) == "table" then
+      _G.rfsuite = _G.rfsuite or {}
+      _G.rfsuite.session = _G.rfsuite.session or {}
+      _G.rfsuite.session.event_context = "widget"
+    end
+    tickMspRuntime(self)
+    
+    reloadPreferencesIfNeeded(self, false)
+    self.state.zoneW = self.zone and self.zone.w or 0
+    self.state.zoneH = self.zone and self.zone.h or 0
+    local wasFblConnected = self.lastFblConnected == true
+    local ready, statusLine = updateConnectionState(self)
+    local isFblConnected = self.state.fblConnected == true
+    
+    -- Preserve postflight statistics when disconnected:
+    -- Skip telemetry updates when we had an inflight flight and connection is lost,
+    -- so that lastFlightMaxCurrent, lastMinVoltage, consumedMah etc. remain visible.
+    -- Use hadInflightFlight instead of flightMode, because flightMode can jump to preflight
+    -- when sensors go offline, while hadInflightFlight stays true until next session.
+    local isPostflightOffline = (self.state.hadInflightFlight == true) and not isFblConnected
+    if not isPostflightOffline then
+      readTelemetry(self.state)
+    end
+    
+    -- Update session values if available (from MSP)
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+      if type(_G.rfsuite.session.flightcount) == "number" then
+        self.state.flights = _G.rfsuite.session.flightcount
+      end
+      if type(_G.rfsuite.session.dataflash) == "table" then
+        self.state.dataflash = _G.rfsuite.session.dataflash
+      end
+      if type(_G.rfsuite.session.battery_config) == "table" then
+        self.state.battery_config = _G.rfsuite.session.battery_config
+      end
+    end
+    updateVoltageThemeConfig(self)
+    if isFblConnected and not wasFblConnected then
+      -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
+      self.state.hadArmedFlight = false
+      self.state.hadInflightFlight = false
+      self.state.prevArmed = false
+      self.state.wasArmed = false
+      self.state.armed = false
+      self.state.batteryCellCount = 0
+      self.state.currentFlightSeconds = 0
+      self.state.lastFlightSeconds = 0
+      self.state.flightSeconds = 0
+      self.state.lastDisarmAt = nil
+      self.flightMode = "preflight"
+      self.theme = nil
+      self.built = false
+      self.renderKey = nil
+      self._cachedRenderKey = nil
+      -- Recalculate voltage theme config now that batteryCellCount is reset to 0
+      -- This ensures gauge bounds are computed fresh, not with stale cell count from previous session
+      updateVoltageThemeConfig(self)
+      widgetLog(self, "FBL reconnect edge: reset dashboard session state", "info")
+    end
+    self.lastFblConnected = isFblConnected
+
+    local nextMode = computeFlightMode(self.state)
+    if statusLine ~= nil then self.statusLine = statusLine end
+
+    if ready then
+      processAudioEvents(self)
+    end
+
+    local modelPrefs = nil
+    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
+      modelPrefs = _G.rfsuite.session.modelPreferences
+    end
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, nextMode)
+
+    if nextMode ~= self.flightMode then
+      self.flightMode = nextMode
+      reloadActiveTheme(self)
+    elseif selectedTheme ~= self.themePath then
+      reloadActiveTheme(self)
+    elseif not self.theme then
+      reloadActiveTheme(self)
+    end
+    
+    -- Clear event_context immediately after all widget background logic
+    if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+      _G.rfsuite.session.event_context = nil
+    end
+
+    return ready
+  end
+
+  function widget.update(self, newOptions)
+    self.options = newOptions
+    self.built = false
+  end
+
+
+  function widget.refresh(self, event, touchState)
+    -- Route touch/key events to LVGL engine when active (e.g. fullscreen)
+    if lvgl and type(lvgl.onEvent) == "function" and event ~= nil then
+       -- On some EdgeTX versions, touchState coordinates are global.
+       -- We need to ensure LVGL knows the widget's offset if it doesn't handle it.
+       -- However, in Fullscreen, offset is usually 0,0.
+       lvgl.onEvent(event, touchState)
+    end
+
+    local ready = performBackgroundWork(self)
+
+
+    if not ready and self.flightMode ~= "postflight" then
+      local statusLine = self.statusLine or "Please wait..."
+      local splashKey = "splash|" .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
+      if self.renderKey ~= splashKey then
+        self.renderKey = splashKey
+        self.built = false
+      end
+
+      if not self.built then
+        local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
+        local title = (t and t("widgets.dashboard.connecting_fbl")) or "Connecting FBL..."
+        lvgl.clear()
+        lvgl.build(buildConnectionSplash(self.zone, statusLine, title))
+        self.built = true
+      end
+      return
+    end
+
+    if not self.theme then return end
+
+    -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
+    local isInteractive = (event ~= nil)
+    local nextRenderKey = nil
+    if isInteractive then
+      nextRenderKey = "fullscreen_menu"
+    else
+      -- Throttle dashboard rendering to max 2Hz (0.5s) to save CPU
+      if not self._lastUIRefresh then self._lastUIRefresh = 0 end
+      local now = nowSeconds()
+      if (now - self._lastUIRefresh) >= 0.5 then
+        self._lastUIRefresh = now
+        local newKey = nil
+        if type(self.theme.renderKey) == "function" then
+          newKey = self.theme.renderKey(self.zone, self.state)
+        elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
+          newKey = self.dashboardEngine.renderKey(self.state, self.boxSources)
+        end
+        self._cachedRenderKey = newKey
+      end
+      nextRenderKey = self._cachedRenderKey
+    end
+
+    if nextRenderKey ~= self.renderKey then
+      self.renderKey = nextRenderKey
+      self.built = false
+      -- Ausführung auf den nächsten Tick verschieben, um das CPU Limit beim Zeichnen zu umgehen
+      return
+    end
+
+    if not self.built then
+      lvgl.clear()
+      local children = {}
+      
+      if isInteractive then
+         local menuChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/fullscreen_menu")
+         if menuChunk then
+           local ok, menu = pcall(menuChunk)
+           if ok and type(menu) == "table" and type(menu.build) == "function" then
+             menu.build(children, self)
+           end
+         end
+      else
+         if type(self.theme.build) == "function" then
+           children = self.theme.build(self.zone, self.state)
+         elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
+           children = self.dashboardEngine.build(self.zone, self.state, self.theme)
+         end
+         if type(children) ~= "table" then return end
+      end
+
+      lvgl.build(children)
+      self.built = true
+      if type(collectgarbage) == "function" then
+        collectgarbage("collect")
+      end
+    end
+  end
+
+  function widget.background(self)
+    performBackgroundWork(self)
+    return 0
+  end
+
+  reloadActiveTheme(widget)
+  return widget
+end
+
+return Runtime

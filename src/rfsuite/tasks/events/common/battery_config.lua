@@ -1,0 +1,80 @@
+-- Shared task: battery_config auslesen
+local M = {}
+
+local done = false
+local requestSent = false
+local batteryConfigApi = nil
+local Log = nil
+
+local function loadModule(path)
+  local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
+  local chunk = loadScript(fullPath, "t")
+  if type(chunk) ~= "function" then return nil end
+  local ok, mod = pcall(chunk)
+  if not ok then return nil end
+  return mod
+end
+
+function M.wakeup(args)
+  if Log == nil then
+    Log = loadModule("lib/log.lua") or false
+  end
+
+  if done then return end
+
+  local root = _G and _G.rfsuite
+  if type(root) ~= "table" then return end
+  local session = root.session
+  if type(session) ~= "table" then return end
+
+  if requestSent then return end
+  requestSent = true
+
+  -- MSP battery_config API laden
+  if not batteryConfigApi then
+    batteryConfigApi = loadModule("tasks/msp/api/battery_config.lua")
+  end
+  local msp = loadModule("tasks/msp/runtime.lua")
+  if not msp or not batteryConfigApi then return end
+
+  local mspState = type(msp.getState) == "function" and msp.getState()
+  if not mspState or not mspState.queue then
+    done = true
+    return
+  end
+
+  if type(Log) == "table" and type(Log.emit) == "function" then
+    pcall(Log.emit, "rfsuite.tasks.battery", "MSP request for battery_config (cmd=" .. tostring(batteryConfigApi.command) .. ") via queue", "debug", true)
+  end
+
+  mspState.queue:add({
+    command = batteryConfigApi.command,
+    simulatorResponse = batteryConfigApi.simulatorResponse,
+    timeout = 5.0,
+    processReply = function(self, buf)
+      local data = batteryConfigApi.parse(buf)
+      if data then
+        session.battery_config = data
+      end
+      done = true
+      if type(Log) == "table" and type(Log.emit) == "function" then
+        pcall(Log.emit, "rfsuite.tasks.battery", "battery_config received", "debug", true)
+      end
+    end,
+    errorHandler = function()
+      done = true
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.battery", "battery_config read failed", "warn", true) end
+    end
+  })
+end
+
+function M.isComplete()
+  return done
+end
+
+function M.reset()
+  done = false
+  requestSent = false
+end
+
+return M
