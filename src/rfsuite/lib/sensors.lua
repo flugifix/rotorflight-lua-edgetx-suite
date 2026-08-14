@@ -51,7 +51,7 @@ local debugEnabled = false
 local loggedSimulatorState = false
 local loggedSources = {}
 local simValueCache = {}
-local SIM_SOURCE_RELOAD_SECONDS = 15.0
+local SIM_SOURCE_RELOAD_SECONDS = 0.5
 
 local function nowSeconds()
   if type(getTime) == "function" then
@@ -142,8 +142,8 @@ local function readSimSensorFile(name, source)
         -- Source-Reload deutlich drosseln, um Telemetrie-Flapping im Simulator zu vermeiden.
         if (now - cached.t) > SIM_SOURCE_RELOAD_SECONDS then
           -- Drosselung: Maximal ein Skript-Reload pro Tick, um CPU-Spitzen zu vermeiden
-          if _G.__rfsuite_sim_last_reload ~= now then
-            _G.__rfsuite_sim_last_reload = now
+          if Sensors.sim_last_reload ~= now then
+            Sensors.sim_last_reload = now
             local chunk = loadScript(filePath, "t")
             if chunk then
               cached.chunk = chunk
@@ -198,10 +198,10 @@ local function readSimSensorFile(name, source)
 
   -- 2. Kandidatenliste aufbauen
   -- Drosselung: Nur ein intensiver Suchlauf nach fehlenden Dateien pro Tick, um CPU-Limit zu vermeiden
-  if _G.__rfsuite_sim_last_search == now then
+  if Sensors.sim_last_search == now then
     return nil
   end
-  _G.__rfsuite_sim_last_search = now
+  Sensors.sim_last_search = now
 
   local candidates = {}
   local seenCands = {}

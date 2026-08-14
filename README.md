@@ -1,6 +1,6 @@
-# RFSuite for EdgeTX (Prototype)
+# RFSuite for EdgeTX
 
-This workspace contains a first implementation step for an EdgeTX LVGL-based RFSuite UI.
+This workspace contains the EdgeTX LVGL-based RFSuite UI.
 
 ## Current scope
 
@@ -13,7 +13,7 @@ This workspace contains a first implementation step for an EdgeTX LVGL-based RFS
   - Breadcrumb text in the blue header area.
   - Main card area (grid-based buttons) with icons.
   - Footer chip area (flow-based layout buttons).
-- Dynamic menu registry prototype (section/page based cards).
+- Dynamic menu registry (section/page based cards).
 - Basic i18n runtime for `de` and `en`.
 
 ## Entrypoint

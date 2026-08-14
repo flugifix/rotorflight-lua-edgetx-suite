@@ -2114,8 +2114,7 @@ function M.run(event, touchState)
           state = state.telemetryState,
           modelName = modelName
         }
-        -- Audio.process is deactivated in the tool to avoid redundant and varying telemetry announcements.
-        -- Audio.process(audioContext, { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
+        Audio.process(audioContext, { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
       else
         if Audio and type(Audio.resetConnectionState) == "function" then
           Audio.resetConnectionState(state.audioState)
