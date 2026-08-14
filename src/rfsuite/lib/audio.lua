@@ -795,7 +795,7 @@ function Audio.process(self, opts)
       end
 
       local isElectricModel, modelType, cellCount, hasCapacity = resolveSmartfuelModel(self)
-      local emptyFuelSound = isElectricModel and "lowbat.wav" or "stat/alerts/lowfuel.wav"
+      local emptyFuelSound = isElectricModel and "stat/alerts/lowbat.wav" or "stat/alerts/lowfuel.wav"
       if audioState.smartfuelModelType ~= modelType
         or audioState.smartfuelCellCount ~= cellCount
         or audioState.smartfuelHasCapacity ~= hasCapacity
