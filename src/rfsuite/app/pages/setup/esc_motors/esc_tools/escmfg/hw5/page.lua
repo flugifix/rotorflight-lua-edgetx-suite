@@ -123,6 +123,11 @@ local function queueHw5ReadActual(queue)
 
         local session = getSession()
         if session then
+          session.escDetails = {
+            version = parsed.hardware_version,
+            model = parsed.esc_type,
+            firmware = parsed.firmware_version
+          }
           session.setup_esc_motors_esc_tools_hw5 = {
             config = {},
             parsedCache = ui.parsedCache
@@ -321,11 +326,7 @@ local function queueHw5Write(requestRebuild)
 end
 
 local function buildSessionSignature()
-  local s = tostring(ui.currentSection)
-  for k, v in pairs(ui.config) do
-    s = s .. ";" .. k .. "=" .. tostring(v)
-  end
-  return s
+  return tostring(ui.currentSection)
 end
 
 local function loadFromSession()

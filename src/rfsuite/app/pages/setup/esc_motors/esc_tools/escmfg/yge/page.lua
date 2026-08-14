@@ -347,11 +347,7 @@ local function queueYgeWrite(requestRebuild)
 end
 
 local function buildSessionSignature()
-  local s = tostring(ui.currentSection)
-  for k, v in pairs(ui.config) do
-    s = s .. ";" .. k .. "=" .. tostring(v)
-  end
-  return s
+  return tostring(ui.currentSection)
 end
 
 local function loadFromSession()
@@ -367,6 +363,20 @@ local function loadFromSession()
     return true
   end
   return false
+end
+
+local function supports12vBec()
+  local typeId = ui.parsedCache and ui.parsedCache.esc_type
+  if not typeId then return false end
+  local hvt12vTypes = {
+    [8272] = true, -- YGE 205 HVT
+    [8273] = true, -- YGE 205 HVT BEC
+    [5712] = true, -- YGE 165 HVT
+    [4179] = true, -- YGE Aureus 105v2
+    [5027] = true, -- YGE Aureus 135v2
+    [5459] = true  -- YGE Saphir 155v2
+  }
+  return hvt12vTypes[typeId] == true
 end
 
 local motorConfigRetryCount = 0
@@ -636,9 +646,6 @@ function M.build(ctx)
 
   local function markDirty()
     ui.dirty = true
-    if type(ui.runtime.requestRebuild) == "function" then
-      ui.runtime.requestRebuild()
-    end
   end
 
   if ui.currentSection == 1 then
@@ -668,12 +675,22 @@ function M.build(ctx)
     end)
     cursorY = cursorY + rowH
 
+    local maxVal = 84
+    if supports12vBec() then
+      maxVal = 120
+    end
+
     rowH = Controls.appendNumberField(children, x, cursorY, w, "BEC Voltage", {
-      min = 55, max = 84, step = 1,
+      min = 55, max = maxVal, step = 1,
       display = function(val) return string.format("%.1fV", val / 10) end,
       get = function() return ui.config.lv_bec_voltage end,
       set = function(val)
         ui.config.lv_bec_voltage = val
+        if val == 120 then
+          ui.config.flags_bec12v = 1
+        else
+          ui.config.flags_bec12v = 0
+        end
         markDirty()
       end
     })

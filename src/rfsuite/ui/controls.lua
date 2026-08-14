@@ -333,6 +333,9 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
       local nextVal = (tonumber(val) or math.floor(minVal / stepVal)) * stepVal
       if nextVal < minVal then nextVal = minVal end
       if nextVal > maxVal then nextVal = maxVal end
+      if getter() == nextVal then
+        return
+      end
       setter(nextVal)
     end,
     display = function(val)
@@ -448,6 +451,9 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
       local idx = tonumber(nextIndex) or selectedIndex
       if idx < 1 then idx = 1 end
       if idx > #options then idx = #options end
+      if idx == selectedIndex then
+        return
+      end
       selectedIndex = idx
       local opt = options[idx]
       if opt and onSelect then

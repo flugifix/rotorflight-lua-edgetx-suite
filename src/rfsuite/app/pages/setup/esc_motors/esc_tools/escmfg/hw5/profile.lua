@@ -171,7 +171,7 @@ local PROFILES = {
 
 local function trim(text)
     if type(text) ~= "string" then return nil end
-    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+    return (string.gsub(string.gsub(text, "^%s+", ""), "%s+$", ""))
 end
 
 local function buildLookup(list)
@@ -201,16 +201,16 @@ local function getProfileKey()
     local firmware = string.upper(trim(escDetails.firmware) or "")
     local versionUpper = string.upper(version)
 
-    if version ~= "default" and (model:find("OPTO", 1, true) or firmware:find("OPTO", 1, true)) then
+    if version ~= "default" and (string.find(model, "OPTO", 1, true) or string.find(firmware, "OPTO", 1, true)) then
         return version .. "_PL_OPTO"
     end
 
     if not PROFILES[version] then
-        if versionUpper:find("HW1132", 1, true) then
+        if string.find(versionUpper, "HW1132", 1, true) then
             return "HW1132_V100456NB"
-        elseif versionUpper:find("HW1128", 1, true) then
+        elseif string.find(versionUpper, "HW1128", 1, true) then
             return "HW1128_V100456NB"
-        elseif versionUpper:find("HW1121", 1, true) then
+        elseif string.find(versionUpper, "HW1121", 1, true) then
             return "HW1121_V100456NB"
         end
     end

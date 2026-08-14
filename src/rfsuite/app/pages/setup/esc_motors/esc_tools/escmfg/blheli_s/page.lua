@@ -321,11 +321,7 @@ local function queueBlheliWrite(requestRebuild)
 end
 
 local function buildSessionSignature()
-  local s = tostring(ui.currentSection)
-  for k, v in pairs(ui.config) do
-    s = s .. ";" .. k .. "=" .. tostring(v)
-  end
-  return s
+  return tostring(ui.currentSection)
 end
 
 local function loadFromSession()
