@@ -1036,6 +1036,121 @@ class RFSuiteUpdaterApp:
             flags=re.IGNORECASE
         )
 
+        def _coerce_atom(s: str):
+            try:
+                return int(s)
+            except ValueError:
+                try:
+                    return float(s)
+                except ValueError:
+                    if s.lower() in ('true', 'false'):
+                        return s.lower() == 'true'
+                    return s
+
+        def _parse_chain(chain: str):
+            if not chain:
+                return []
+            out = []
+            for seg in filter(None, chain.split(':')):
+                m = re.match(r'([a-z_][a-z0-9_]*)\s*(?:\((.*)\))?$', seg, flags=re.IGNORECASE)
+                if not m:
+                    continue
+                name, argstr = m.group(1).lower(), (m.group(2) or '').strip()
+                args = []
+                if argstr:
+                    import shlex
+                    parts = []
+                    current = ''
+                    depth = 0
+                    for ch in argstr:
+                        if ch == '(':
+                            depth += 1
+                            current += ch
+                        elif ch == ')':
+                            depth = max(0, depth - 1)
+                            current += ch
+                        elif ch == ',' and depth == 0:
+                            parts.append(current.strip())
+                            current = ''
+                        else:
+                            current += ch
+                    if current.strip():
+                        parts.append(current.strip())
+                    for p in parts:
+                        parsed = shlex.split(p) if p else []
+                        if len(parsed) == 1:
+                            args.append(_coerce_atom(parsed[0]))
+                        elif len(parsed) == 0:
+                            args.append('')
+                        else:
+                            args.append(_coerce_atom(' '.join(parsed)))
+                out.append((name, args, {}))
+            return out
+
+        def _upperfirst(s: str) -> str:
+            return s[:1].upper() + s[1:].lower() if s else s
+
+        def _truncate(s: str, n: int, ellipsis: Optional[str] = None) -> str:
+            if n < 0: 
+                return s
+            if len(s) <= n:
+                return s
+            if ellipsis:
+                if n <= len(ellipsis):
+                    return ellipsis[:n]
+                return s[: n - len(ellipsis)] + ellipsis
+            return s[:n]
+
+        def _collapse_ws(s: str) -> str:
+            return re.sub(r'\s+', ' ', s).strip()
+
+        def _slice(s: str, start: int, end: Optional[int] = None) -> str:
+            return s[start:end]
+
+        def _ensure_char(c: str) -> str:
+            return c[0] if isinstance(c, str) and c else ' '
+
+        transforms = {
+            'upper': lambda s: s.upper(),
+            'lower': lambda s: s.lower(),
+            'upperfirst': _upperfirst,
+            'capitalize': lambda s: s[:1].upper() + s[1:],
+            'title': lambda s: s.title(),
+            'swapcase': lambda s: s.swapcase(),
+            'trim': lambda s: s.strip(),
+            'ltrim': lambda s: s.lstrip(),
+            'rtrim': lambda s: s.rstrip(),
+            'collapse_ws': _collapse_ws,
+            'truncate': lambda s, n, ellipsis=None: _truncate(s, int(n), ellipsis),
+            'slice': _slice,
+            'padleft': lambda s, width, char=' ': s.rjust(int(width), _ensure_char(char)),
+            'padright': lambda s, width, char=' ': s.ljust(int(width), _ensure_char(char)),
+            'center': lambda s, width, char=' ': s.center(int(width), _ensure_char(char)),
+            'replace': lambda s, old, new, count=None: s.replace(str(old), str(new), int(count) if count is not None else -1),
+            'remove': lambda s, pattern: re.sub(str(pattern), '', s),
+            'keep': lambda s, pattern: ' '.join(re.findall(str(pattern), s)),
+            'strip_prefix': lambda s, p: s[len(p):] if s.startswith(str(p)) else s,
+            'strip_suffix': lambda s, p: s[:-len(p)] if len(p) and s.endswith(str(p)) else s,
+            'prefix': lambda s, p: str(p) + s,
+            'suffix': lambda s, p: s + str(p),
+            'escape_html': lambda s: html.escape(s, quote=True),
+            'escape_json': lambda s: s.replace('\\', '\\\\').replace('"', r'\"'),
+        }
+
+        def _apply_pipeline(s: str, basic_mod: Optional[str], chain: str) -> str:
+            if basic_mod:
+                fn = transforms.get(basic_mod.lower())
+                if fn:
+                    s = fn(s)
+            for name, args, _ in _parse_chain(chain):
+                fn = transforms.get(name)
+                if fn:
+                    try:
+                        s = fn(s, *args)
+                    except Exception:
+                        pass
+            return s
+
         def _resolve_key(tree: dict, dotted: str):
             node = tree
             for part in dotted.split('.'):
@@ -1051,6 +1166,98 @@ class RFSuiteUpdaterApp:
             if node is None:
                 return None
             return str(node)
+
+        def _get_esc_fallback(key: str) -> Optional[str]:
+            parts = key.split('.')
+            if len(parts) < 6:
+                return None
+            param = parts[5]
+            lookup = {
+                "beacondelay": "Beacon Delay",
+                "beaconstrength": "Beacon Strength",
+                "beepstrength": "Beep Strength",
+                "brakeonstop": "Brake On Stop",
+                "demagcompensation": "Demag Compensation",
+                "motordirection": "Motor Direction",
+                "motortiming": "Motor Timing",
+                "temperatureprotection": "Temperature Protection",
+                "ppmcenterthrottle": "PPM Center Throttle",
+                "ppmmaxthrottle": "PPM Max Throttle",
+                "ppmminthrottle": "PPM Min Throttle",
+                "startuppower": "Startup Power",
+                "waitingforesc": "Waiting for ESC...",
+                "brakingmode": "Braking Mode",
+                "brakingstrength": "Braking Strength",
+                "dithering": "Dithering",
+                "forceedtarm": "Force DShot Arm",
+                "ledcontrol": "LED Control",
+                "lowrpmpowerprotection": "Low RPM Power Protection",
+                "maxstartuppower": "Max Startup Power",
+                "minstartuppower": "Min Startup Power",
+                "powerrating": "Power Rating",
+                "pwmfrequency": "PWM Frequency",
+                "rampuppower": "Rampup Power",
+                "rampupstartpower": "Rampup Start Power",
+                "startupbeep": "Startup Beep",
+                "threshold48to24": "Threshold 48 to 24",
+                "threshold96to48": "Threshold 96 to 48",
+                "extra_msg_save": "Save successful"
+            }
+            if param in lookup:
+                return lookup[param]
+            if '_' in param:
+                return ' '.join(w.capitalize() for w in param.split('_'))
+            return param.capitalize()
+
+        esc_fallbacks = {
+            "app.modules.esc_tools.mfg.blheli_s.name": "BLHeli_S",
+            "app.modules.esc_tools.mfg.bluejay.name": "Bluejay",
+            "app.modules.esc_tools.mfg.flrtr.name": "Flyrotor",
+            "app.modules.esc_tools.mfg.hw5.name": "Hobbywing",
+            "app.modules.esc_tools.mfg.omp.name": "OMP",
+            "app.modules.esc_tools.mfg.scorp.name": "Scorpion",
+            "app.modules.esc_tools.mfg.xdfly.name": "XDFly",
+            "app.modules.esc_tools.mfg.yge.name": "YGE",
+            "app.modules.esc_tools.mfg.ztw.name": "ZTW",
+            "app.modules.esc_tools.mfg.blheli_s.waitingforesc": "Waiting for ESC...",
+            "app.modules.esc_tools.mfg.bluejay.waitingforesc": "Waiting for ESC...",
+            "app.modules.esc_tools.mfg.blheli_s.basic": "Basic",
+            "app.modules.esc_tools.mfg.blheli_s.advanced": "Advanced",
+            "app.modules.esc_tools.mfg.blheli_s.input": "Input",
+            "app.modules.esc_tools.mfg.bluejay.beacon": "Beacon",
+            "app.modules.esc_tools.mfg.bluejay.brake": "Brake",
+            "app.modules.esc_tools.mfg.bluejay.general": "General",
+            "app.modules.esc_tools.mfg.bluejay.other": "Other",
+            "app.modules.esc_tools.mfg.flrtr.advanced": "Advanced",
+            "app.modules.esc_tools.mfg.flrtr.basic": "Basic",
+            "app.modules.esc_tools.mfg.flrtr.governor": "Governor",
+            "app.modules.esc_tools.mfg.flrtr.other": "Other",
+            "app.modules.esc_tools.mfg.hw5.advanced": "Advanced",
+            "app.modules.esc_tools.mfg.hw5.basic": "Basic",
+            "app.modules.esc_tools.mfg.hw5.rotation": "Rotation",
+            "app.modules.esc_tools.mfg.omp.advanced": "Advanced",
+            "app.modules.esc_tools.mfg.omp.basic": "Basic",
+            "app.modules.esc_tools.mfg.omp.governor": "Governor",
+            "app.modules.esc_tools.mfg.scorp.advanced": "Advanced",
+            "app.modules.esc_tools.mfg.scorp.basic": "Basic",
+            "app.modules.esc_tools.mfg.scorp.limits": "Limits",
+            "app.modules.esc_tools.mfg.xdfly.advanced": "Advanced",
+            "app.modules.esc_tools.mfg.xdfly.basic": "Basic",
+            "app.modules.esc_tools.mfg.xdfly.governor": "Governor",
+            "app.modules.esc_tools.mfg.yge.advanced": "Advanced",
+            "app.modules.esc_tools.mfg.yge.basic": "Basic",
+            "app.modules.esc_tools.mfg.yge.other": "Other",
+            "app.modules.esc_tools.mfg.ztw.advanced": "Advanced",
+            "app.modules.esc_tools.mfg.ztw.basic": "Basic",
+            "app.modules.esc_tools.mfg.ztw.governor": "Governor",
+            "api.ESC_PARAMETERS_HW5.tbl_disabled": "Disabled",
+            "api.ESC_PARAMETERS_HW5.tbl_autocalculate": "Auto-Calculate",
+            "api.ESC_PARAMETERS_HW5.tbl_normal": "Normal",
+            "api.ESC_PARAMETERS_HW5.tbl_reverse": "Reverse",
+            "api.ESC_PARAMETERS_HW5.tbl_cw": "CW",
+            "api.ESC_PARAMETERS_HW5.tbl_ccw": "CCW",
+            "api.ESC_PARAMETERS_HW5.tbl_proportional": "Proportional",
+        }
 
         def _sub_tag(m):
             key = m.group(1).strip()
@@ -1080,17 +1287,18 @@ class RFSuiteUpdaterApp:
                 resolved = _resolve_key(fallback, key)
 
             if resolved is None:
-                if inline_fallback is not None:
+                esc_fb = _get_esc_fallback(key)
+                if esc_fb is not None:
+                    resolved = esc_fb
+                elif key in esc_fallbacks:
+                    resolved = esc_fallbacks[key]
+                elif inline_fallback is not None:
                     resolved = inline_fallback
                 else:
                     return m.group(0)
 
-            # Apply modifier
-            if basic_mod:
-                if basic_mod.lower() == 'upper':
-                    resolved = resolved.upper()
-                elif basic_mod.lower() == 'lower':
-                    resolved = resolved.lower()
+            # Apply transform pipeline
+            resolved = _apply_pipeline(str(resolved), basic_mod, chain)
 
             # Sanitize for Lua string insertion
             resolved = resolved.replace("\r\n", "\n").replace("\r", "\n")
@@ -1121,44 +1329,69 @@ class RFSuiteUpdaterApp:
                     except Exception:
                         pass
 
-    def _load_lua_i18n_table(self, path: str) -> dict:
+    def _load_lua_i18n_table(self, path_str: str) -> dict:
         """Parses a Lua return { ... } dictionary into Python dict."""
-        if not path or not os.path.isfile(path):
+        if not path_str or not os.path.isfile(path_str):
             return {}
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            import codecs
+            with open(path_str, 'r', encoding='utf-8', errors='replace') as f:
                 lines = f.readlines()
+                
             json_str = ""
             for line in lines:
                 line = re.sub(r'--.*$', '', line)
                 stripped = line.strip()
                 if not stripped:
                     continue
+                    
                 if stripped == "return {":
                     json_str += "{\n"
                     continue
+                    
                 m = re.match(r'^(?:\[\s*["\']([a-zA-Z0-9_]+)["\']\s*\]|([a-zA-Z0-9_]+))\s*=\s*\{\s*$', stripped)
                 if m:
                     key = m.group(1) or m.group(2)
                     json_str += f'"{key}": {{\n'
                     continue
+                    
                 m = re.match(r'^(?:\[\s*["\']([a-zA-Z0-9_]+)["\']\s*\]|([a-zA-Z0-9_]+))\s*=\s*(.*?),?$', stripped)
                 if m:
                     key = m.group(1) or m.group(2)
                     val = m.group(3).strip()
-                    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                    
+                    # If val is a table on a single line, e.g. { name = "Flight Tuning" }
+                    if val.startswith('{') and val.endswith('}'):
+                        val_content = val[1:-1].strip()
+                        int_m = re.match(r'^(?:\[\s*["\']([a-zA-Z0-9_]+)["\']\s*\]|([a-zA-Z0-9_]+))\s*=\s*["\'](.*?)["\']$', val_content)
+                        if int_m:
+                            int_key = int_m.group(1) or int_m.group(2)
+                            val = f'{{"{int_key}": "{int_m.group(3)}"}}'
+                    elif (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
                         inner = val[1:-1]
-                        val = json.dumps(inner, ensure_ascii=False)
+                        raw_bytes = inner.encode('utf-8', errors='replace')
+                        try:
+                            decoded_bytes, _ = codecs.escape_decode(raw_bytes)
+                            val_str = decoded_bytes.decode('utf-8', errors='replace')
+                        except Exception:
+                            val_str = inner
+                        val = json.dumps(val_str, ensure_ascii=False)
+                        
                     json_str += f'"{key}": {val},\n'
                     continue
+                    
                 if stripped == "}" or stripped == "}," or stripped == "};":
                     json_str += "},\n"
                     continue
+                    
                 json_str += line
+
             json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
             json_str = re.sub(r',\s*$', '', json_str)
+            
             return json.loads(json_str)
-        except Exception:
+        except Exception as e:
+            self.log(f"Notice: Lua i18n parsing error on {path_str}: {e}")
             return {}
 
     def _generate_theme_index(self, target_core_dir: str, target_user_dir: str):
