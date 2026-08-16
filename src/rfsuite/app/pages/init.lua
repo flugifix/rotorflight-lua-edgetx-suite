@@ -90,7 +90,8 @@ local entries = {
   diagnostics_validate_sensors_page = definePage("tools/diagnostics/validate_sensors"),
   diagnostics_smartfuel_page = definePage("tools/diagnostics/smartfuel"),
   diagnostics_session_logs_page = definePage("tools/diagnostics/session_logs"),
-  diagnostics_info_page = definePage("tools/diagnostics/info")
+  diagnostics_info_page = definePage("tools/diagnostics/info"),
+  logs_page = definePage("logs")
 }
 
 local registry = {}
