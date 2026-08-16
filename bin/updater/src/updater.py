@@ -878,17 +878,288 @@ class RFSuiteUpdaterApp:
         # Generate theme index
         self._generate_theme_index(staging_core, staging_user)
 
-        # Precompile and resolve i18n
-        py_precompile = os.path.join(repo_root, ".vscode", "scripts", "precompile_i18n.py")
-        py_resolve = os.path.join(repo_root, ".vscode", "scripts", "resolve_i18n_tags.py")
+        # Precompile and resolve i18n in-process without spawning subprocesses
         lang_file = os.path.join(src_core, "i18n", f"{lang}.lua")
+        fallback_file = os.path.join(src_core, "i18n", "en.lua")
+        
+        self.log(f"Precompiling i18n tags for {lang}...")
+        self._precompile_i18n_dir(staging_tools)
+        self._precompile_i18n_dir(staging_widgets)
 
-        import subprocess
-        if os.path.isfile(py_precompile) and os.path.isfile(py_resolve) and os.path.isfile(lang_file):
-            subprocess.run([sys.executable, py_precompile, "--root", staging_tools], check=True)
-            subprocess.run([sys.executable, py_precompile, "--root", staging_widgets], check=True)
-            subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
-            subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
+        if os.path.isfile(lang_file):
+            self.log(f"Resolving translations with {lang}.lua...")
+            self._resolve_i18n_dir(staging_tools, lang_file, fallback_file if lang != "en" else None, lang)
+            self._resolve_i18n_dir(staging_widgets, lang_file, fallback_file if lang != "en" else None, lang)
+
+    def _precompile_i18n_dir(self, root_dir: str):
+        """In-process i18n precompilation converting UI text macros to @i18n(...)@ tags."""
+        for root, _, files in os.walk(root_dir):
+            for file in files:
+                if not file.endswith(".lua"):
+                    continue
+                file_path = os.path.join(root, file)
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read()
+                except Exception:
+                    continue
+
+                changed = False
+
+                def encode_fallback(s):
+                    return s.replace('|', '__PIPE__').replace(')', '__RPAREN__').replace('(', '__LPAREN__').replace(',', '__COMMA__').replace('@', '__AT__')
+
+                # 1. Find pageT / Common.pageT prefix
+                m_prefix = re.search(r'(?:pageT|Common\.pageT)\s*\(\s*["\']([^"\']+)["\']\s*\)', content)
+                prefix = m_prefix.group(1) if m_prefix else None
+
+                if not prefix:
+                    m_keyprefix = re.search(r'keyPrefix\s*=\s*["\']([^"\']+)["\']', content)
+                    if m_keyprefix:
+                        prefix = m_keyprefix.group(1)
+                        if prefix.startswith("app.pages."):
+                            prefix = prefix[10:]
+
+                if prefix:
+                    full_prefix = f"app.pages.{prefix}"
+                    pattern = r'\b(?:pageText|t)\s*\(\s*(?:i18n|nil)\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\2)?\s*\)'
+                    def sub_pagetext(m):
+                        k = m.group(1)
+                        if m.group(3) is not None:
+                            fb = encode_fallback(m.group(3))
+                            return f'"@i18n({full_prefix}.{k}|{fb})@"'
+                        return f'"@i18n({full_prefix}.{k})@"'
+                    new_content, count = re.subn(pattern, sub_pagetext, content)
+                    if count > 0:
+                        content = new_content
+                        changed = True
+
+                    def sub_commont(m):
+                        page_key = m.group(1)
+                        k = m.group(2)
+                        if m.group(4) is not None:
+                            fb = encode_fallback(m.group(4))
+                            return f'"@i18n(app.pages.{page_key}.{k}|{fb})@"'
+                        return f'"@i18n(app.pages.{page_key}.{k})@"'
+                    pattern_common = r'\bCommon\.t\s*\(\s*i18n\s*,\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\3)?\s*\)'
+                    new_content, count = re.subn(pattern_common, sub_commont, content)
+                    if count > 0:
+                        content = new_content
+                        changed = True
+
+                    m_fallback = re.search(r'fallback\s*=\s*\{(.*?)\}', content, re.DOTALL)
+                    if m_fallback:
+                        fallback_block = m_fallback.group(1)
+                        strings = re.findall(r'(["\'])(.*?)\1', fallback_block)
+                        new_block = fallback_block
+                        for idx, (quote, string) in enumerate(strings):
+                            fb = encode_fallback(string)
+                            tag = f'"@i18n({full_prefix}.help_p{idx+1}|{fb})@"'
+                            new_block = new_block.replace(f'{quote}{string}{quote}', tag, 1)
+                        content = content.replace(fallback_block, new_block, 1)
+                        changed = True
+
+                if file == "header.lua":
+                    pattern_header = r'\bt\s*\(\s*["\']([^"\']+)["\']\s*,\s*(["\'])(.*?)\2\s*\)'
+                    def sub_header(m):
+                        k = m.group(1)
+                        fb = encode_fallback(m.group(3))
+                        return f'"@i18n(app.actions.{k}|{fb})@"'
+                    new_content, count = re.subn(pattern_header, sub_header, content)
+                    if count > 0:
+                        content = new_content
+                        changed = True
+
+                pattern_widget_t_and_t = r'\(?\s*\(?\s*\bt\s+and\s+t\s*\(\s*["\']([^"\']+)["\']\s*\)\s*\)?\s*\)?\s*or\s*(["\'])(.*?)\2'
+                def sub_widget_t_and_t(m):
+                    k = m.group(1)
+                    fb = encode_fallback(m.group(3))
+                    return f'"@i18n({k}|{fb})@"'
+                new_content, count = re.subn(pattern_widget_t_and_t, sub_widget_t_and_t, content)
+                if count > 0:
+                    content = new_content
+                    changed = True
+
+                pattern_widget_t = r'\bt\s*\(\s*["\'](widgets\.dashboard\.[^"\']+)["\']\s*,\s*(["\'])(.*?)\2\s*\)'
+                def sub_widget_t(m):
+                    k = m.group(1)
+                    fb = encode_fallback(m.group(3))
+                    return f'"@i18n({k}|{fb})@"'
+                new_content, count = re.subn(pattern_widget_t, sub_widget_t, content)
+                if count > 0:
+                    content = new_content
+                    changed = True
+
+                pattern_i18n_full = r'\b(?:[a-zA-Z0-9_]+\.)?i18n\s+and\s+(?:[a-zA-Z0-9_]+\.)?i18n\.t\s+and\s+(?:[a-zA-Z0-9_]+\.)?i18n\.t\s*\(\s*["\']([^"\']+)["\']\s*\)\s*or\s*(["\'])(.*?)\2'
+                def sub_i18n_full(m):
+                    k = m.group(1)
+                    fb = encode_fallback(m.group(3))
+                    return f'"@i18n({k}|{fb})@"'
+                new_content, count = re.subn(pattern_i18n_full, sub_i18n_full, content)
+                if count > 0:
+                    content = new_content
+                    changed = True
+
+                pattern_i18n_t = r'\b(?:[a-zA-Z0-9_]+\.)?i18n\.t\s*\(\s*["\']([^"\']+)["\']\s*\)'
+                new_content, count = re.subn(pattern_i18n_t, lambda m: f'"@i18n({m.group(1)})@"', content)
+                if count > 0:
+                    content = new_content
+                    changed = True
+
+                if file == "splash.lua":
+                    new_content, count = re.subn(r'["\']Please wait for telemetry["\']', r'"@i18n(widgets.dashboard.please_wait_for_telemetry)@"', content)
+                    if count > 0:
+                        content = new_content
+                        changed = True
+
+                if file == "runtime.lua":
+                    new_content, count = re.subn(r'self\.statusLine\s+or\s+["\']Please wait\.\.\.["\']', r'self.statusLine or "@i18n(widgets.dashboard.please_wait_for_telemetry)@"', content)
+                    if count > 0:
+                        content = new_content
+                        changed = True
+
+                if changed:
+                    try:
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            f.write(content)
+                    except Exception:
+                        pass
+
+    def _resolve_i18n_dir(self, root_dir: str, lang_lua_path: str, fallback_lua_path: Optional[str], lang_code: str):
+        """In-process resolution of @i18n(...)@ tags using the Lua language table."""
+        translations = self._load_lua_i18n_table(lang_lua_path)
+        fallback = self._load_lua_i18n_table(fallback_lua_path) if fallback_lua_path and os.path.isfile(fallback_lua_path) else None
+
+        tag_regex = re.compile(
+            r'@i18n\(\s*([^)@,]+?)\s*(?:,\s*(upper|lower))?\s*\)'
+            r'((?::[a-z_]+(?:\([^@]*?\))?)*)@',
+            flags=re.IGNORECASE
+        )
+
+        def _resolve_key(tree: dict, dotted: str):
+            node = tree
+            for part in dotted.split('.'):
+                if not isinstance(node, dict) or part not in node:
+                    return None
+                node = node[part]
+            if isinstance(node, dict):
+                if 'translation' in node and isinstance(node['translation'], (str, int, float)):
+                    return str(node['translation'])
+                if 'english' in node and isinstance(node['english'], (str, int, float)):
+                    return str(node['english'])
+                return None
+            if node is None:
+                return None
+            return str(node)
+
+        def _sub_tag(m):
+            key = m.group(1).strip()
+            basic_mod = m.group(2)
+            chain = m.group(3) or ''
+
+            inline_fallback = None
+            if '|' in key:
+                key, inline_fallback = key.split('|', 1)
+                inline_fallback = (inline_fallback
+                                   .replace('__PIPE__', '|')
+                                   .replace('__RPAREN__', ')')
+                                   .replace('__LPAREN__', '(')
+                                   .replace('__COMMA__', ',')
+                                   .replace('__AT__', '@'))
+
+            # Aliases
+            if key.startswith("app.pages.setup_controls."):
+                key = "app.modules.controls." + key[len("app.pages.setup_controls."):]
+            elif key == "app.modules.esc_tools.name":
+                key = "app.modules.esc_motors.esc_tools"
+            elif key == "widgets.governor.THR-OFF":
+                key = "widgets.governor.THROFF"
+
+            resolved = _resolve_key(translations, key) if translations else None
+            if resolved is None and fallback:
+                resolved = _resolve_key(fallback, key)
+
+            if resolved is None:
+                if inline_fallback is not None:
+                    resolved = inline_fallback
+                else:
+                    return m.group(0)
+
+            # Apply modifier
+            if basic_mod:
+                if basic_mod.lower() == 'upper':
+                    resolved = resolved.upper()
+                elif basic_mod.lower() == 'lower':
+                    resolved = resolved.lower()
+
+            # Sanitize for Lua string insertion
+            resolved = resolved.replace("\r\n", "\n").replace("\r", "\n")
+            resolved = resolved.replace("\n", r"\n")
+            resolved = resolved.replace('"', r'\"')
+            return resolved
+
+        for root, _, files in os.walk(root_dir):
+            for file in files:
+                if not file.endswith(".lua"):
+                    continue
+                fpath = os.path.join(root, file)
+                try:
+                    with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
+                        text = f.read()
+                except Exception:
+                    continue
+
+                new_text, count = tag_regex.subn(_sub_tag, text)
+                if "@i18n_language@" in new_text:
+                    new_text = new_text.replace("@i18n_language@", lang_code)
+                    count += 1
+
+                if count > 0:
+                    try:
+                        with open(fpath, 'w', encoding='utf-8') as f:
+                            f.write(new_text)
+                    except Exception:
+                        pass
+
+    def _load_lua_i18n_table(self, path: str) -> dict:
+        """Parses a Lua return { ... } dictionary into Python dict."""
+        if not path or not os.path.isfile(path):
+            return {}
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            json_str = ""
+            for line in lines:
+                line = re.sub(r'--.*$', '', line)
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped == "return {":
+                    json_str += "{\n"
+                    continue
+                m = re.match(r'^(?:\[\s*["\']([a-zA-Z0-9_]+)["\']\s*\]|([a-zA-Z0-9_]+))\s*=\s*\{\s*$', stripped)
+                if m:
+                    key = m.group(1) or m.group(2)
+                    json_str += f'"{key}": {{\n'
+                    continue
+                m = re.match(r'^(?:\[\s*["\']([a-zA-Z0-9_]+)["\']\s*\]|([a-zA-Z0-9_]+))\s*=\s*(.*?),?$', stripped)
+                if m:
+                    key = m.group(1) or m.group(2)
+                    val = m.group(3).strip()
+                    if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                        inner = val[1:-1]
+                        val = json.dumps(inner, ensure_ascii=False)
+                    json_str += f'"{key}": {val},\n'
+                    continue
+                if stripped == "}" or stripped == "}," or stripped == "};":
+                    json_str += "},\n"
+                    continue
+                json_str += line
+            json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+            json_str = re.sub(r',\s*$', '', json_str)
+            return json.loads(json_str)
+        except Exception:
+            return {}
 
     def _generate_theme_index(self, target_core_dir: str, target_user_dir: str):
         entries = []
