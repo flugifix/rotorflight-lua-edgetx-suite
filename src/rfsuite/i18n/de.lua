@@ -898,6 +898,11 @@ return {
         handover_throttle = "Übergabegas %",
         throttle_hold_timeout = "Gas-Hold Timeout",
         time = "Hochlaufzeit",
+        startup_time = "Startzeit",
+        spoolup_time = "Spoolup-Zeit",
+        spooldown_time = "Spooldown-Zeit",
+        tracking_time = "Nachführzeit",
+        recovery_time = "Erholungszeit",
         filters = "Filter",
         curves = "Bypass-Kurve",
         loading = "Lade Governor-Konfiguration...",
@@ -912,7 +917,13 @@ return {
         help_p3 = "Leerlaufgas: Minimale Gas-Ausgabe im geschärften Zustand.",
         help_p4 = "Autorotationsgas: Gas-Ausgabe während des Autorotations-Bailouts.",
         help_p5 = "Übergabegas %: Schwellenwert für die Übergabe an die Governor-Regelung.",
-        help_p6 = "Gas-Hold Timeout: Wartezeit vor dem Entschärfen bei gesetztem Throttle-Hold."
+        help_p6 = "Gas-Hold Timeout: Wartezeit vor dem Entschärfen bei gesetztem Throttle-Hold.",
+        help_time_title = "Governor - Hochlaufzeit",
+        help_time_p1 = "Startzeit: Zeit zum Erreichen der Mindestdrehzahl aus dem Stillstand.",
+        help_time_p2 = "Spoolup-Zeit: Hochlaufzeit zwischen Drehzahlen bzw. zur Solldrehzahl.",
+        help_time_p3 = "Spooldown-Zeit: Zeit zum Abbremsen bei Drehzahlreduzierung.",
+        help_time_p4 = "Nachführzeit: Reaktionszeit des Governors bei Drehzahlanpassungen.",
+        help_time_p5 = "Erholungszeit: Schnelle Hochlaufzeit (Bailout) aus der Autorotation."
       },
       setup_esc_motors = {
         title_throttle = "Gas",

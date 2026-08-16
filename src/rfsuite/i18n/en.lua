@@ -898,6 +898,11 @@ return {
         handover_throttle = "Handover throttle%",
         throttle_hold_timeout = "Throttle hold timeout",
         time = "Ramp Time",
+        startup_time = "Startup time",
+        spoolup_time = "Spoolup time",
+        spooldown_time = "Spooldown time",
+        tracking_time = "Tracking time",
+        recovery_time = "Recovery time",
         filters = "Filters",
         curves = "Bypass Curve",
         loading = "Loading governor configuration...",
@@ -912,7 +917,13 @@ return {
         help_p3 = "Idle throttle: Minimum throttle output while armed.",
         help_p4 = "Auto throttle: Throttle output during autorotation bailout.",
         help_p5 = "Handover throttle%: Throttle threshold for governor control handover.",
-        help_p6 = "Throttle hold timeout: Timeout before disarming from throttle hold."
+        help_p6 = "Throttle hold timeout: Timeout before disarming from throttle hold.",
+        help_time_title = "Governor - Ramp Time",
+        help_time_p1 = "Startup time: Time to reach minimum operating RPM from stop.",
+        help_time_p2 = "Spoolup time: Time to ramp between headspeeds or to target headspeed.",
+        help_time_p3 = "Spooldown time: Time to decelerate when lowering headspeed.",
+        help_time_p4 = "Tracking time: Speed of governor reaction to headspeed adjustments.",
+        help_time_p5 = "Recovery time: Bailout spoolup time from autorotation."
       },
       setup_esc_motors = {
         title_throttle = "Throttle",
