@@ -904,6 +904,11 @@ return {
         tracking_time = "Nachführzeit",
         recovery_time = "Erholungszeit",
         filters = "Filter",
+        gov_rpm_filter = "Drehzahl-Filtergrenzfrq",
+        gov_pwr_filter = "Spannungsfilter Grenzwert",
+        gov_tta_filter = "TTA-Bandbreite",
+        gov_ff_filter = "Vorkomp. Bandbreite",
+        gov_d_filter = "D-Term Grenzwert",
         curves = "Bypass-Kurve",
         loading = "Lade Governor-Konfiguration...",
         saving = "Speichere Governor-Konfiguration...",
@@ -923,7 +928,13 @@ return {
         help_time_p2 = "Spoolup-Zeit: Hochlaufzeit zwischen Drehzahlen bzw. zur Solldrehzahl.",
         help_time_p3 = "Spooldown-Zeit: Zeit zum Abbremsen bei Drehzahlreduzierung.",
         help_time_p4 = "Nachführzeit: Reaktionszeit des Governors bei Drehzahlanpassungen.",
-        help_time_p5 = "Erholungszeit: Schnelle Hochlaufzeit (Bailout) aus der Autorotation."
+        help_time_p5 = "Erholungszeit: Schnelle Hochlaufzeit (Bailout) aus der Autorotation.",
+        help_filters_title = "Governor - Filter",
+        help_filters_p1 = "Drehzahl-Filtergrenzfrq: Tiefpassfilter-Frequenz für das RPM-Telemetriesignal.",
+        help_filters_p2 = "Spannungsfilter Grenzwert: Tiefpassfilter-Frequenz für die Akkuspannungs-Kompensation.",
+        help_filters_p3 = "TTA-Bandbreite: Bandbreitenfilter für Tail Torque Assist.",
+        help_filters_p4 = "Vorkomp. Bandbreite: Bandbreitenfilter für Kollektiv- und Zyklisch-Vorkompensation.",
+        help_filters_p5 = "D-Term Grenzwert: Tiefpassfilter-Grenzfrequenz für den Governor D-Term."
       },
       setup_esc_motors = {
         title_throttle = "Gas",

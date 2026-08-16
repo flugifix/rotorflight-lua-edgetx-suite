@@ -904,6 +904,11 @@ return {
         tracking_time = "Tracking time",
         recovery_time = "Recovery time",
         filters = "Filters",
+        gov_rpm_filter = "Headspeed Filter Cutoff",
+        gov_pwr_filter = "Voltage Filter Cutoff",
+        gov_tta_filter = "TTA Bandwidth",
+        gov_ff_filter = "Precomp Bandwidth",
+        gov_d_filter = "D-Term Cutoff",
         curves = "Bypass Curve",
         loading = "Loading governor configuration...",
         saving = "Saving governor configuration...",
@@ -923,7 +928,13 @@ return {
         help_time_p2 = "Spoolup time: Time to ramp between headspeeds or to target headspeed.",
         help_time_p3 = "Spooldown time: Time to decelerate when lowering headspeed.",
         help_time_p4 = "Tracking time: Speed of governor reaction to headspeed adjustments.",
-        help_time_p5 = "Recovery time: Bailout spoolup time from autorotation."
+        help_time_p5 = "Recovery time: Bailout spoolup time from autorotation.",
+        help_filters_title = "Governor - Filters",
+        help_filters_p1 = "Headspeed Filter Cutoff: Lowpass filter frequency for the RPM telemetry signal.",
+        help_filters_p2 = "Voltage Filter Cutoff: Lowpass filter frequency for battery voltage compensation.",
+        help_filters_p3 = "TTA Bandwidth: Bandwidth filter frequency for Tail Torque Assist.",
+        help_filters_p4 = "Precomp Bandwidth: Bandwidth filter frequency for collective and cyclic precompensation.",
+        help_filters_p5 = "D-Term Cutoff: Lowpass filter cutoff frequency for governor D-term."
       },
       setup_esc_motors = {
         title_throttle = "Throttle",
