@@ -476,7 +476,6 @@ def replace_tags_in_text(text: str, translations: dict, stats: dict, fallback_tr
                                .replace('__AT__', '@'))
 
         ALIASES = {
-            "app.pages.setup_governor.": "app.modules.governor.",
             "app.pages.setup_controls.": "app.modules.controls.",
             "app.modules.esc_tools.name": "app.modules.esc_motors.esc_tools",
             "widgets.governor.THR-OFF": "widgets.governor.THROFF",
