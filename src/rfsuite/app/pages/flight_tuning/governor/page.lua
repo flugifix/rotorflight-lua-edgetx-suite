@@ -147,14 +147,14 @@ local function ensureDeps()
 	end
 end
 
-local function pageText(i18n, key, fallback)
+local function pageText(i18n, key)
 	if t then
-		local translated = t(i18n, key, fallback)
+		local translated = t(i18n, key)
 		if translated ~= nil and translated ~= "" and translated ~= key then
 			return translated
 		end
 	end
-	return fallback
+	return key
 end
 
 local function getGovConfig(session)
@@ -459,6 +459,32 @@ local function appendCompactNumberField(children, x, y, w, labelText, opts)
 	return rowH + 1
 end
 
+local function getGovGroupTitle(i18n, key)
+	if key == "basic_setup" then return pageText(i18n, "basic_setup") end
+	if key == "gains" then return pageText(i18n, "gains") end
+	if key == "precomp" then return pageText(i18n, "precomp") end
+	if key == "tail_torque_assist" then return pageText(i18n, "tail_torque_assist") end
+	return key
+end
+
+local function getGovRowTitle(i18n, key)
+	if key == "full_headspeed" then return pageText(i18n, "full_headspeed") end
+	if key == "min_throttle" then return pageText(i18n, "min_throttle") end
+	if key == "max_throttle" then return pageText(i18n, "max_throttle") end
+	if key == "gain" then return pageText(i18n, "gain") end
+	if key == "p" then return pageText(i18n, "p") end
+	if key == "i" then return pageText(i18n, "i") end
+	if key == "d" then return pageText(i18n, "d") end
+	if key == "f" then return pageText(i18n, "f") end
+	if key == "yaw" then return pageText(i18n, "yaw") end
+	if key == "cyc" then return pageText(i18n, "cyc") end
+	if key == "col" then return pageText(i18n, "col") end
+	if key == "tta_gain" then return pageText(i18n, "tta_gain") end
+	if key == "tta_limit" then return pageText(i18n, "tta_limit") end
+	if key == "limit" then return pageText(i18n, "limit") end
+	return key
+end
+
 local function appendHorizontalFields(children, x, y, w, labelText, rows, i18n)
 	local metrics = Controls.computeGridMetrics(w, #rows, { labelMin = 100, labelRatio = 0.25 })
 	local labelW = metrics.labelW
@@ -466,7 +492,7 @@ local function appendHorizontalFields(children, x, y, w, labelText, rows, i18n)
 	local cellW = metrics.cellW
 	
 	local rowH = 76
-	local headerY = y - 4
+	local headerY = y + 4
 	local itemY = y + 26
 	local groupLabelY = y + 38
 
@@ -497,7 +523,7 @@ local function appendHorizontalFields(children, x, y, w, labelText, rows, i18n)
 			x = cellX,
 			y = headerY,
 			w = cellW,
-			text = string.upper(pageText(i18n, row.labelKey, row.labelKey)),
+			text = string.upper(getGovRowTitle(i18n, row.labelKey)),
 			color = COLOR_THEME_PRIMARY1,
 			font = SMLSIZE,
 			align = CENTER
@@ -578,13 +604,13 @@ function M.onSave(ctx)
 	if lvgl and lvgl.alert then
 		if okMsp then
 			lvgl.alert({
-				title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-				message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
+				title = pageText(ctx and ctx.i18n, "saved_title"),
+				message = pageText(ctx and ctx.i18n, "saved_message")
 			})
 		else
 			lvgl.alert({
-				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
-				message = pageText(ctx and ctx.i18n, "saved_local_only_message", "Saved locally; FC write pending") .. (errMsp and (": " .. tostring(errMsp)) or "")
+				title = pageText(ctx and ctx.i18n, "warning_title"),
+				message = pageText(ctx and ctx.i18n, "saved_local_only_message") .. (errMsp and (": " .. tostring(errMsp)) or "")
 			})
 		end
 	end
@@ -648,7 +674,7 @@ function M.build(ctx)
 	local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 50
 	local cursorY = y
 	if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-		local headingTitle = string.format("%s #%d - %s", pageText(i18n, "title", "Governor"), profileDisplay, govModeName)
+		local headingTitle = string.format("%s #%d - %s", pageText(i18n, "title"), profileDisplay, govModeName)
 		Controls.appendStaticSectionHeader(children, x, cursorY, w, headingTitle)
 		cursorY = cursorY + sectionHeaderH
 	end
@@ -659,7 +685,7 @@ function M.build(ctx)
 			x = x,
 			y = cursorY + 20,
 			w = w,
-			text = pageText(i18n, "disabled_message", "Rotorflight governor is not enabled"),
+			text = pageText(i18n, "disabled_message"),
 			color = COLOR_THEME_WARNING,
 			align = CENTER
 		}
@@ -684,7 +710,7 @@ function M.build(ctx)
 						x = x,
 						y = cursorY + 8,
 						w = w,
-						text = pageText(i18n, group.key, group.key),
+						text = getGovGroupTitle(i18n, group.key),
 						color = COLOR_THEME_PRIMARY2,
 						font = SMLSIZE
 					}
@@ -692,7 +718,7 @@ function M.build(ctx)
 				end
 
 				if group.horizontal then
-					cursorY = cursorY + appendHorizontalFields(children, x, cursorY, w, pageText(i18n, group.key, group.key), group.rows, i18n)
+					cursorY = cursorY + appendHorizontalFields(children, x, cursorY, w, getGovGroupTitle(i18n, group.key), group.rows, i18n)
 				else
 					for j = 1, #group.rows do
 						local row = group.rows[j]
@@ -713,7 +739,7 @@ function M.build(ctx)
 								x,
 								cursorY,
 								w,
-								pageText(i18n, row.labelKey, row.labelKey),
+								getGovRowTitle(i18n, row.labelKey),
 								{
 									get = function() return ui.config[row.field] or limits.min end,
 									set = getFieldSetter(row.field, row.altField),
@@ -737,8 +763,8 @@ function M.build(ctx)
 			y = ctx.y,
 			w = ctx.w,
 			h = ctx.h,
-			title = pageText(i18n, "loading_title", "Loading"),
-			message = pageText(i18n, "loading_message", "Reading Governor"),
+			title = pageText(i18n, "loading_title"),
+			message = pageText(i18n, "loading_message"),
 			progress = ui.progress
 		})
 	end

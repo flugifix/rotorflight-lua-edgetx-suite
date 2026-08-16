@@ -9,16 +9,16 @@ end
 
 return function(ctx)
   local Common = loadModule("app/pages/settings/common.lua")
-  local t = Common and Common.pageT("flight_tuning_rates_advanced_cyclic_behaviour") or function(_, k) return k end
-  local i18n = ctx.i18n
+  local t = Common and Common.pageT("setup_governor") or function(_, k) return k end
+  local i18n = ctx and ctx.i18n
 
   local parts = {
-    t(i18n, "help_p1"),
-    t(i18n, "help_p2")
+    t(i18n, "help_curves_p1"),
+    t(i18n, "help_curves_p2")
   }
 
   return {
-    title = t(i18n, "help_title"),
+    title = t(i18n, "help_curves_title"),
     message = table.concat(parts, "\n\n")
   }
 end

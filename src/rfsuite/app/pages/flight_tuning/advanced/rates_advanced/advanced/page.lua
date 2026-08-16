@@ -79,14 +79,14 @@ local function ensureDeps()
   end
 end
 
-local function pageText(i18n, key, fallback)
+local function pageText(i18n, key)
   if t then
-    local translated = t(i18n, key, fallback)
+    local translated = t(i18n, key)
     if translated ~= nil and translated ~= "" and translated ~= key then
       return translated
     end
   end
-  return fallback
+  return key
 end
 
 local function getRcConfig(session)
@@ -362,6 +362,25 @@ local function getLayoutProfile(w, h)
   return profile
 end
 
+local function getDynamicsColumnTitle(i18n, key)
+  if key == "roll" then return pageText(i18n, "roll") end
+  if key == "pitch" then return pageText(i18n, "pitch") end
+  if key == "yaw" then return pageText(i18n, "yaw") end
+  if key == "col" then return pageText(i18n, "col") end
+  return key
+end
+
+local function getDynamicsRowTitle(i18n, key)
+  if key == "response_time" then return pageText(i18n, "response_time") end
+  if key == "acc_limit" then return pageText(i18n, "acc_limit") end
+  if key == "setpoint_boost_gain" then return pageText(i18n, "setpoint_boost_gain") end
+  if key == "setpoint_boost_cutoff" then return pageText(i18n, "setpoint_boost_cutoff") end
+  if key == "dyn_ceiling_gain" then return pageText(i18n, "dyn_ceiling_gain") end
+  if key == "dyn_deadband_gain" then return pageText(i18n, "dyn_deadband_gain") end
+  if key == "dyn_deadband_filter" then return pageText(i18n, "dyn_deadband_filter") end
+  return key
+end
+
 local function drawColumnHeader(children, x, y, w, i18n, layout, cols)
   local labelW, gap, cellW = getGridMetrics(w, #cols)
   local headerFont = (layout and layout.headerFont) or MIDSIZE
@@ -381,7 +400,7 @@ local function drawColumnHeader(children, x, y, w, i18n, layout, cols)
 
   for i = 1, #cols do
     local cellX = x + labelW + ((i - 1) * (cellW + gap))
-    local headerText = string.upper(pageText(i18n, cols[i], string.upper(cols[i])))
+    local headerText = string.upper(getDynamicsColumnTitle(i18n, cols[i]))
     children[#children + 1] = {
       type = "label",
       x = cellX,
@@ -427,7 +446,7 @@ local function drawGrid(children, x, y, w, i18n, layoutParams, rowsConfig)
     local rowDef = rowsConfig[i]
     local rowKey = rowDef.key
     local fieldIdx = rowDef.idx
-    local labelText = pageText(i18n, rowKey, rowKey)
+    local labelText = getDynamicsRowTitle(i18n, rowKey)
 
     children[#children + 1] = {
       type = "label",
@@ -532,8 +551,8 @@ function M.build(ctx)
   if ui.loading then
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
-      title = pageText(i18n, "loading_title", "Loading"),
-      message = pageText(i18n, "loading_message", "Reading Dynamics"),
+      title = pageText(i18n, "loading_title"),
+      message = pageText(i18n, "loading_message"),
       progress = ui.progress / 100
     })
     return

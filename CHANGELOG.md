@@ -2,6 +2,34 @@
 
 All notable changes to the RFSuite project since 2026-07-29.
 
+## [0.1.0] - 2026-08-16
+
+### Features
+- **Telemetry Flight Logs & Dashboard (`diagnostics/flight_logs`)**:
+  - Implemented flight log browser and analytical dashboard to inspect EdgeTX CSV log files directly on the radio.
+  - Added statistics calculations including min/max/average cell voltages, battery capacity consumption, RPM, temperatures, and flight durations.
+  - Added interactive `LoadingOverlay` with non-blocking incremental parsing and proactive memory cleanup to keep the UI responsive on large CSV files.
+- **RFSuite EdgeTX Updater Tool & CI**:
+  - Added standalone and integrated EdgeTX Updater tool for automatic online and local updating of RFSuite packages.
+  - Automated detection of available languages from repository branches and release tags.
+  - Added multi-language CI build workflows and packaging scripts.
+- **Governor Setup Pages**:
+  - Ported Governor General setup page (`governor/general`).
+  - Ported Governor Ramp Time configuration (`governor/ramps`).
+  - Ported Governor Filters setup page (`governor/filters`).
+  - Ported Governor Bypass Curve configuration (`governor/bypass`).
+- **Dynamic ESC Sensor Detection**:
+  - Added background `esc_sensor_config` task triggered on connection to query and identify active ESC telemetry protocol.
+- **Manufacturer ESC Tools Integration**:
+  - Ported and integrated full ESC configuration suites for Bluejay, BLHeli_S, Flyrotor, Hobbywing V5, OMP, Scorpion, XD-Fly, YGE, and ZTW.
+
+### Localization (i18n)
+- Localized flight tuning pages (PIDs, Rates, Governor, Rates Advanced) in German and English with fallback cleanup.
+
+### Bug Fixes & Performance
+- **Telemetry CSV Parsing Accuracy**: Improved header validation, outlier filtering (e.g. 0 RPM spikes), and memory efficiency during log analysis.
+- **Reconnect Performance**: Resolved telemetry reconnect slowdowns and memory buildup using proactive garbage collection and cached LQ checks.
+
 ## [0.0.2] - 2026-08-14
 
 ### Features

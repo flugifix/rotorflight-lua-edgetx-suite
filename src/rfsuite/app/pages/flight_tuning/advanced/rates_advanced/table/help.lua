@@ -9,14 +9,16 @@ end
 
 return function(ctx)
   local Common = loadModule("app/pages/settings/common.lua")
-  local t = Common and Common.pageT("flight_tuning_rates") or function(_, _, fb) return fb end
-  local i18n = ctx.i18n
+  local t = Common and Common.pageT("flight_tuning_rates") or function(_, k) return k end
+  local i18n = ctx and ctx.i18n
 
-  local help_p1 = t(i18n, "table_help_p1", "Rates type: Choose the rate type you prefer flying with. Raceflight and Actual are the most straightforward.")
-  local help_p2 = t(i18n, "table_help_p2", "Dynamics: Applied regardless of rates type. Typically left on defaults but can be adjusted to smooth heli movements, like with scale helis.")
+  local parts = {
+    t(i18n, "table_help_p1"),
+    t(i18n, "table_help_p2")
+  }
 
   return {
-    title = t(i18n, "rate_table", "Rate Table"),
-    message = help_p1 .. "\n\n" .. help_p2
+    title = t(i18n, "rate_table"),
+    message = table.concat(parts, "\n\n")
   }
 end

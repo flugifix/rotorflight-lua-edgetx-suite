@@ -167,14 +167,14 @@ local function ensureDeps()
   end
 end
 
-local function pageText(i18n, key, fallback)
+local function pageText(i18n, key)
   if t then
-    local translated = t(i18n, key, fallback)
+    local translated = t(i18n, key)
     if translated ~= nil and translated ~= "" and translated ~= key then
       return translated
     end
   end
-  return fallback
+  return key
 end
 
 local function getRcConfig(session)
@@ -482,6 +482,39 @@ local function getLayoutProfile(w, h)
   return profile
 end
 
+local function getColumnTitle(i18n, key)
+  if key == "rc_rate" then return pageText(i18n, "rc_rate") end
+  if key == "rate" then return pageText(i18n, "rate") end
+  if key == "expo" then return pageText(i18n, "expo") end
+  if key == "superrate" then return pageText(i18n, "superrate") end
+  if key == "acroplus" then return pageText(i18n, "acroplus") end
+  if key == "rc_curve" then return pageText(i18n, "rc_curve") end
+  if key == "center_sensitivity" then return pageText(i18n, "center_sensitivity") end
+  if key == "max_rate" then return pageText(i18n, "max_rate") end
+  if key == "shape" then return pageText(i18n, "shape") end
+  return key
+end
+
+local function getRowTitle(i18n, key)
+  if key == "roll" then return pageText(i18n, "roll") end
+  if key == "pitch" then return pageText(i18n, "pitch") end
+  if key == "yaw" then return pageText(i18n, "yaw") end
+  if key == "collective" then return pageText(i18n, "collective") end
+  if key == "cyclic" then return pageText(i18n, "cyclic") end
+  return key
+end
+
+local function getRatesTypeName(i18n, key)
+  if key == "none" then return pageText(i18n, "none") end
+  if key == "betaflight" then return pageText(i18n, "betaflight") end
+  if key == "raceflight" then return pageText(i18n, "raceflight") end
+  if key == "kiss" then return pageText(i18n, "kiss") end
+  if key == "actual" then return pageText(i18n, "actual") end
+  if key == "quick" then return pageText(i18n, "quick") end
+  if key == "rotorflight" then return pageText(i18n, "rotorflight") end
+  return key
+end
+
 local function drawColumnHeader(children, x, y, w, i18n, layout, cols)
   local labelW, gap, cellW = getGridMetrics(w, #cols)
   local headerFont = (layout and layout.headerFont) or MIDSIZE
@@ -501,7 +534,7 @@ local function drawColumnHeader(children, x, y, w, i18n, layout, cols)
 
   for i = 1, #cols do
     local cellX = x + labelW + ((i - 1) * (cellW + gap))
-    local headerText = string.upper(pageText(i18n, cols[i], string.upper(cols[i])))
+    local headerText = string.upper(getColumnTitle(i18n, cols[i]))
     children[#children + 1] = {
       type = "label",
       x = cellX,
@@ -528,7 +561,7 @@ local function drawGrid(children, x, y, w, i18n, layoutParams, tableDef, rowsCon
     local rowKey = rowDef.key
     local fieldIdx = rowDef.idx
     local linkedIdx = rowDef.linkedIdx
-    local labelText = pageText(i18n, rowKey, rowKey)
+    local labelText = getRowTitle(i18n, rowKey)
 
     children[#children + 1] = {
       type = "label",
@@ -662,8 +695,8 @@ function M.build(ctx)
     if LoadingOverlay then
       LoadingOverlay.append(children, {
         x = x, y = y, w = w, h = h,
-        title = pageText(i18n, "loading_title", "Loading"),
-        message = pageText(i18n, "loading_message", "Reading Rates"),
+        title = pageText(i18n, "loading_title"),
+        message = pageText(i18n, "loading_message"),
         progress = ui.progress
       })
     end
@@ -697,8 +730,8 @@ function M.build(ctx)
   local rowsConfig = isPolar and ROWS_POLAR or ROWS_STANDARD
   
   -- Update title
-  local typeName = pageText(i18n, tableDef.nameKey, string.upper(tableDef.nameKey))
-  ui.baseTitle = typeName .. " " .. pageText(i18n, "title", "Rates")
+  local typeName = getRatesTypeName(i18n, tableDef.nameKey)
+  ui.baseTitle = typeName .. " " .. pageText(i18n, "title")
 
   if ui.runtime and type(ui.runtime.syncHeaderTitle) == "function" then
     ui.runtime.syncHeaderTitle(ui.baseTitle, M.getHeaderActions())
@@ -708,7 +741,7 @@ function M.build(ctx)
   local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 50
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    local headingTitle = string.format("%s #%d - %s", pageText(i18n, "title", "Rates"), profileDisplay, typeName)
+    local headingTitle = string.format("%s #%d - %s", pageText(i18n, "title"), profileDisplay, typeName)
     Controls.appendStaticSectionHeader(children, x, cursorY, w, headingTitle)
     cursorY = cursorY + sectionHeaderH
   end

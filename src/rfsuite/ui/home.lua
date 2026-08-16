@@ -479,6 +479,25 @@ local function onBack(source, ev)
     return
   end
 
+  local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+  if currentMenuId then
+    ensurePageRegistry()
+    local pageModule = PageRegistry and PageRegistry.get and PageRegistry.get(currentMenuId) or nil
+    if pageModule and type(pageModule.onBack) == "function" then
+      local handled = pageModule.onBack({
+        requestRebuild = function() scheduleBuildUI(true) end,
+        i18n = state.i18n
+      })
+      if handled == true then
+        if fromEvent then
+          state.suppressBackFrames = 6
+        end
+        scheduleBuildUI(true)
+        return
+      end
+    end
+  end
+
   if state.menu and not state.menu.isRoot() then
     local didGoBack = false
     local newMenuId = nil

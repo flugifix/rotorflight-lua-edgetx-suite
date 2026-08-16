@@ -9,18 +9,20 @@ end
 
 return function(ctx)
 	local Common = loadModule("app/pages/settings/common.lua")
-	local t = Common and Common.pageT("flight_tuning_governor") or function(_, _, fb) return fb end
-	local i18n = ctx.i18n
+	local t = Common and Common.pageT("flight_tuning_governor") or function(_, k) return k end
+	local i18n = ctx and ctx.i18n
 
-	local message = t(i18n, "help_p1", "Full headspeed: Headspeed target when at 100% throttle input.") .. "\n\n" ..
-		t(i18n, "help_p2", "Master gain: How hard the governor works to hold the RPM.") .. "\n\n" ..
-		t(i18n, "help_p3", "Gains: Fine tuning of the governor.") .. "\n\n" ..
-		t(i18n, "help_p4", "Precomp: Governor precomp gain for yaw, cyclic, and collective inputs.") .. "\n\n" ..
-		t(i18n, "help_p5", "Max throttle: The maximum throttle % the governor is allowed to use.") .. "\n\n" ..
-		t(i18n, "help_p6", "Tail Torque Assist: For motorized tails. Gain and limit of headspeed increase when using main rotor torque for yaw assist.")
+	local parts = {
+		t(i18n, "help_p1"),
+		t(i18n, "help_p2"),
+		t(i18n, "help_p3"),
+		t(i18n, "help_p4"),
+		t(i18n, "help_p5"),
+		t(i18n, "help_p6")
+	}
 
 	return {
-		title = t(i18n, "title", "Governor"),
-		message = message
+		title = t(i18n, "help_title"),
+		message = table.concat(parts, "\n\n")
 	}
 end

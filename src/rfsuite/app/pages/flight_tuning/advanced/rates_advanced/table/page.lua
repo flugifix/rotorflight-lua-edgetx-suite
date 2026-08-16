@@ -126,14 +126,25 @@ local function ensureDeps()
   end
 end
 
-local function pageText(i18n, key, fallback)
+local function pageText(i18n, key)
   if t then
-    local translated = t(i18n, key, fallback)
+    local translated = t(i18n, key)
     if translated ~= nil and translated ~= "" and translated ~= key then
       return translated
     end
   end
-  return fallback
+  return key
+end
+
+local function getRatesTypeName(i18n, key)
+  if key == "none" then return pageText(i18n, "none") end
+  if key == "betaflight" then return pageText(i18n, "betaflight") end
+  if key == "raceflight" then return pageText(i18n, "raceflight") end
+  if key == "kiss" then return pageText(i18n, "kiss") end
+  if key == "actual" then return pageText(i18n, "actual") end
+  if key == "quick" then return pageText(i18n, "quick") end
+  if key == "rotorflight" then return pageText(i18n, "rotorflight") end
+  return key
 end
 
 local function getRcConfig(session)
@@ -346,8 +357,8 @@ function M.build(ctx)
   if ui.loading then
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
-      title = pageText(i18n, "loading_title", "Loading"),
-      message = pageText(i18n, "loading_message", "Reading Rates"),
+      title = pageText(i18n, "loading_title"),
+      message = pageText(i18n, "loading_message"),
       progress = ui.progress / 100
     })
     return
@@ -370,13 +381,14 @@ function M.build(ctx)
   -- Help context
   ctx.ratesType = ui.config.rates_type or 6
   
+  local ratesKeys = { "none", "betaflight", "raceflight", "kiss", "actual", "quick", "rotorflight" }
   local ratesOptions = {}
   for i = 0, 6 do
-    ratesOptions[#ratesOptions + 1] = { label = RATE_TABLE_NAMES[i], value = i }
+    ratesOptions[#ratesOptions + 1] = { label = getRatesTypeName(i18n, ratesKeys[i + 1]), value = i }
   end
 
   cursorY = cursorY + 10
-  Controls.appendComboSelect(children, x, cursorY, w, pageText(i18n, "rates_type", "Rates Type"), ratesOptions, ui.config.rates_type or 6, function(value)
+  Controls.appendComboSelect(children, x, cursorY, w, pageText(i18n, "rates_type"), ratesOptions, ui.config.rates_type or 6, function(value)
     if ui.config.rates_type == value then return end
     ui.config.rates_type = value
     ui.runtime.resetRates = true
@@ -392,8 +404,8 @@ function M.onSave(ctx)
     local ConfirmDialog = loadModule("ui/confirm_dialog.lua")
     if ConfirmDialog and type(ConfirmDialog.show) == "function" then
       ConfirmDialog.show({
-        title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
-        message = pageText(ctx and ctx.i18n, "msg_reset_to_defaults", "Rate type changed. Values will be reset to defaults."),
+        title = pageText(ctx and ctx.i18n, "warning_title"),
+        message = pageText(ctx and ctx.i18n, "msg_reset_to_defaults"),
         onConfirm = function()
           queueRcWrite()
         end

@@ -27,7 +27,7 @@ local manifest = {
       title = "@i18n(app.header_system)@",
       pages = {
         { id = "tools", title = "@i18n(app.modules.tools.name)@", menuId = "tools_menu", icon = "@pages/tools/icon.png" },
-        { id = "logs", title = "@i18n(app.modules.logs.name)@", icon = "@pages/logs/icon.png", enabled = false },
+        { id = "logs", title = "@i18n(app.modules.logs.name)@", menuId = "logs_page", icon = "@pages/logs/icon.png" },
         { id = "settings", title = "@i18n(app.modules.settings.name)@", menuId = "settings_admin", icon = "@pages/settings/icon.png" },
         { id = "developer", title = "@i18n(app.modules.developer.name)@", menuId = "developer_menu", icon = "@pages/developer/icon.png", enabledWhen = "developerTools", hideWhenDisabled = true }
       }
@@ -554,6 +554,10 @@ local manifest = {
     },
     tools_copy_profiles_page = {
       title = "@i18n(app.modules.copyprofiles.name)@",
+      pages = {}
+    },
+    logs_page = {
+      title = "@i18n(app.modules.logs.name)@",
       pages = {}
     }
   }

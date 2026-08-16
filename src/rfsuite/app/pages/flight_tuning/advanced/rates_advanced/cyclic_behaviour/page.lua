@@ -79,14 +79,14 @@ local function ensureDeps()
   end
 end
 
-local function pageText(i18n, key, fallback)
+local function pageText(i18n, key)
   if t then
-    local translated = t(i18n, key, fallback)
+    local translated = t(i18n, key)
     if translated ~= nil and translated ~= "" and translated ~= key then
       return translated
     end
   end
-  return fallback
+  return key
 end
 
 local function getRcConfig(session)
@@ -289,8 +289,8 @@ function M.build(ctx)
   if ui.loading then
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
-      title = pageText(i18n, "loading_title", "Loading"),
-      message = pageText(i18n, "loading_message", "Reading Cyclic Behaviour"),
+      title = pageText(i18n, "loading_title"),
+      message = pageText(i18n, "loading_message"),
       progress = ui.progress / 100
     })
     return
@@ -314,7 +314,7 @@ function M.build(ctx)
 
   -- 1) Polar Coordinates Switch
   local polarValue = (tonumber(ui.config.cyclic_polarity) or 0) == 1
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "cyclic_polarity", "Polar coordinates"), polarValue, function(nextBool)
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "cyclic_polarity"), polarValue, function(nextBool)
     ui.config.cyclic_polarity = nextBool and 1 or 0
     ui.dirty = true
   end)
@@ -322,7 +322,7 @@ function M.build(ctx)
   -- 2) Cyclic Ring Switch
   local ringValue = tonumber(ui.config.cyclic_ring) or 0
   local ringEnabled = ringValue > 0
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "cyclic_ring", "Cyclic ring"), ringEnabled, function(nextBool)
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "cyclic_ring"), ringEnabled, function(nextBool)
     if nextBool then
       if (tonumber(ui.config.cyclic_ring) or 0) <= 0 then
         ui.config.cyclic_ring = CYCLIC_RING_DEFAULT
@@ -338,7 +338,7 @@ function M.build(ctx)
 
   -- 3) Cyclic Ring % Number Field (only if Ring is enabled)
   if ringEnabled then
-    cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "cyclic_ring_value", "Cyclic ring %"), {
+    cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "cyclic_ring_value"), {
       min = 50,
       max = 250,
       step = 1,
