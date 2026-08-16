@@ -934,7 +934,11 @@ return {
         help_filters_p2 = "Voltage Filter Cutoff: Lowpass filter frequency for battery voltage compensation.",
         help_filters_p3 = "TTA Bandwidth: Bandwidth filter frequency for Tail Torque Assist.",
         help_filters_p4 = "Precomp Bandwidth: Bandwidth filter frequency for collective and cyclic precompensation.",
-        help_filters_p5 = "D-Term Cutoff: Lowpass filter cutoff frequency for governor D-term."
+        help_filters_p5 = "D-Term Cutoff: Lowpass filter cutoff frequency for governor D-term.",
+        refresh_graph = "Refresh Graph",
+        help_curves_title = "Governor - Bypass Curve",
+        help_curves_p1 = "Governor Bypass Curve: 9-point throttle curve mapping input throttle percentage (0% to 100%) to governor throttle output.",
+        help_curves_p2 = "Adjust the 9 points below and click 'Refresh Graph' to update the curve display."
       },
       setup_esc_motors = {
         title_throttle = "Throttle",

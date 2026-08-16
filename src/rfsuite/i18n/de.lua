@@ -934,7 +934,11 @@ return {
         help_filters_p2 = "Spannungsfilter Grenzwert: Tiefpassfilter-Frequenz für die Akkuspannungs-Kompensation.",
         help_filters_p3 = "TTA-Bandbreite: Bandbreitenfilter für Tail Torque Assist.",
         help_filters_p4 = "Vorkomp. Bandbreite: Bandbreitenfilter für Kollektiv- und Zyklisch-Vorkompensation.",
-        help_filters_p5 = "D-Term Grenzwert: Tiefpassfilter-Grenzfrequenz für den Governor D-Term."
+        help_filters_p5 = "D-Term Grenzwert: Tiefpassfilter-Grenzfrequenz für den Governor D-Term.",
+        refresh_graph = "Grafik aktualisieren",
+        help_curves_title = "Governor - Bypass-Kurve",
+        help_curves_p1 = "Governor Bypass-Kurve: 9-Punkt-Gaskurve zur Zuordnung des Eingangs-Gaswertes (0% bis 100%) auf die Governor-Gasausgabe.",
+        help_curves_p2 = "Passen Sie die 9 Stützpunkte unten an und tippen Sie auf 'Grafik aktualisieren', um die Kurvenanzeige zu aktualisieren."
       },
       setup_esc_motors = {
         title_throttle = "Gas",
