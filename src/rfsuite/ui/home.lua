@@ -1,4 +1,7 @@
 local function loadModule(path)
+  if _G.rfsuite and _G.rfsuite.require then
+    return _G.rfsuite.require(path)
+  end
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
   local chunk = assert(loadScript(fullPath, "t"))
   return chunk()
@@ -661,18 +664,8 @@ local function getMspUnsupportedDialogModule()
   if mspUnsupportedDialogLoadTried then
     return mspUnsupportedDialogModule
   end
-
   mspUnsupportedDialogLoadTried = true
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/ui/msp_unsupported_dialog.lua", "t")
-  if type(chunk) ~= "function" then
-    return nil
-  end
-
-  local ok, mod = pcall(chunk)
-  if ok and type(mod) == "table" and type(mod.show) == "function" then
-    mspUnsupportedDialogModule = mod
-  end
-
+  mspUnsupportedDialogModule = loadModule("ui/msp_unsupported_dialog.lua")
   return mspUnsupportedDialogModule
 end
 
@@ -683,14 +676,7 @@ local function getConfirmDialogModule()
     return confirmDialogModule
   end
   confirmDialogLoadTried = true
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/ui/confirm_dialog.lua", "t")
-  if type(chunk) ~= "function" then
-    return nil
-  end
-  local ok, mod = pcall(chunk)
-  if ok and type(mod) == "table" and type(mod.show) == "function" then
-    confirmDialogModule = mod
-  end
+  confirmDialogModule = loadModule("ui/confirm_dialog.lua")
   return confirmDialogModule
 end
 

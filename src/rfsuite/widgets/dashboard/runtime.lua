@@ -14,84 +14,30 @@ local function scriptExists(path)
   return true
 end
 
-local function loadModuleChunk(basePath)
-  if type(loadScript) ~= "function" then return nil end
-
-  local luaPath = basePath .. ".lua"
-  if scriptExists(luaPath) then
-    local chunk = loadScript(luaPath, "t")
-    if type(chunk) == "function" then return chunk end
+local requireModule = (_G.rfsuite and _G.rfsuite.require)
+if not requireModule then
+  local rChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", "t")
+  if rChunk then
+    requireModule = rChunk()
   end
-
-  local luacPath = basePath .. ".luac"
-  if scriptExists(luacPath) then
-    local chunk = loadScript(luacPath)
-    if type(chunk) == "function" then return chunk end
+end
+requireModule = requireModule or function(path)
+  local fullPath = string.sub(path, 1, 1) == "/" and path or ("/SCRIPTS/TOOLS/rfsuite-core/" .. path)
+  local chunk = loadScript(fullPath, "t")
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then return mod end
   end
-
   return nil
 end
 
-local loadLogModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/log")
-local Log = nil
-if type(loadLogModule) == "function" then
-  local ok, mod = pcall(loadLogModule)
-  if ok and type(mod) == "table" then
-    Log = mod
-  end
-end
-
-local loadPreferencesModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/preferences")
-local PreferencesModule = nil
-if type(loadPreferencesModule) == "function" then
-  local ok, mod = pcall(loadPreferencesModule)
-  if ok and type(mod) == "table" and type(mod.load) == "function" then
-    PreferencesModule = mod
-  end
-end
-
-local loadDashboardAudioModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/audio")
-local DashboardAudio = nil
-if type(loadDashboardAudioModule) == "function" then
-  local ok, mod = pcall(loadDashboardAudioModule)
-  if ok and type(mod) == "table" and type(mod.process) == "function" then
-    DashboardAudio = mod
-  end
-end
-
-local loadDashboardSplashModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/splash")
-local DashboardSplash = nil
-if type(loadDashboardSplashModule) == "function" then
-  local ok, mod = pcall(loadDashboardSplashModule)
-  if ok and type(mod) == "table" and type(mod.build) == "function" then
-    DashboardSplash = mod
-  end
-end
-
-local loadMspRuntimeModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/runtime")
-local MspRuntime = nil
-if type(loadMspRuntimeModule) == "function" then
-  local ok, mod = pcall(loadMspRuntimeModule)
-  if ok and type(mod) == "table" then
-    MspRuntime = mod
-  end
-end
-
-local loadI18nModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/i18n/init")
-local I18nModule = nil
-if type(loadI18nModule) == "function" then
-  local ok, mod = pcall(loadI18nModule)
-  if ok and type(mod) == "table" then
-    I18nModule = mod
-  end
-end
-
-local loadSensorsModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors")
-local Sensors = nil
-if type(loadSensorsModule) == "function" then
-  local ok, mod = pcall(loadSensorsModule)
-  if ok and type(mod) == "table" then Sensors = mod end
-end
+local Log = requireModule("lib/log.lua")
+local PreferencesModule = requireModule("lib/preferences.lua")
+local DashboardAudio = requireModule("lib/audio.lua")
+local DashboardSplash = requireModule("widgets/dashboard/splash.lua")
+local MspRuntime = requireModule("tasks/msp/runtime.lua")
+local I18nModule = requireModule("i18n/init.lua")
+local Sensors = requireModule("lib/sensors.lua")
 
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
 local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
@@ -171,14 +117,7 @@ local function processAudioEvents(self)
   end
 end
 
-local loadEventsModule = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/tasks/events/runtime")
-local EventsRuntime = nil
-if type(loadEventsModule) == "function" then
-  local ok, mod = pcall(loadEventsModule)
-  if ok and type(mod) == "table" then
-    EventsRuntime = mod
-  end
-end
+local EventsRuntime = requireModule("tasks/events/runtime.lua")
 
 local function tickMspRuntime(self)
   if not MspRuntime then
@@ -1328,20 +1267,17 @@ function Runtime.new(zone, options)
       local children = {}
       
       if isInteractive then
-         local menuChunk = loadModuleChunk("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/fullscreen_menu")
-         if menuChunk then
-           local ok, menu = pcall(menuChunk)
-           if ok and type(menu) == "table" and type(menu.build) == "function" then
-             menu.build(children, self)
-           end
-         end
+        local menu = requireModule("widgets/dashboard/fullscreen_menu.lua")
+        if menu and type(menu.build) == "function" then
+          menu.build(children, self)
+        end
       else
-         if type(self.theme.build) == "function" then
-           children = self.theme.build(self.zone, self.state)
-         elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
-           children = self.dashboardEngine.build(self.zone, self.state, self.theme)
-         end
-         if type(children) ~= "table" then return end
+        if type(self.theme.build) == "function" then
+          children = self.theme.build(self.zone, self.state)
+        elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
+          children = self.dashboardEngine.build(self.zone, self.state, self.theme)
+        end
+        if type(children) ~= "table" then return end
       end
 
       lvgl.build(children)
