@@ -282,12 +282,12 @@ function Queue:processQueue(now)
     self.common.processTxQ()
   end
 
-  local pollOk, cmd, buf, err = pcall(function()
-    if self.common and type(self.common.pollReply) == "function" then
-      return self.common.pollReply()
-    end
-    return nil, nil, nil
-  end)
+  local pollOk, cmd, buf, err
+  if self.common and type(self.common.pollReply) == "function" then
+    pollOk, cmd, buf, err = pcall(self.common.pollReply)
+  else
+    pollOk = true
+  end
 
   if not pollOk then
     self.log(formatMspState(msg) .. " poll error", "warn")

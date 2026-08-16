@@ -45,7 +45,6 @@ local Sensors = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
 
-local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
 
 local M = {}
@@ -919,13 +918,10 @@ local function updateRuntimeMenuConditions()
   end
 
   if currentMenuId == "esc_tools_menu" and session and session.esc4WayDetectedProto == nil and not state.escProtoCheckPending then
-    state.escProtoCheckPending = true
-    local ok, SensorConfigApi = pcall(function()
-      return assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/esc_sensor_config.lua", "t"))()
-    end)
+    local SensorConfigApi = loadModule("tasks/msp/api/esc_sensor_config.lua")
     local msp = root and root.tasks and root.tasks.msp
     local queue = msp and msp.getState and msp.getState().queue
-    if ok and queue and SensorConfigApi then
+    if queue and SensorConfigApi then
       queue:add({
         command = SensorConfigApi.command,
         isWrite = false,
@@ -1478,7 +1474,7 @@ function M.buildUI()
   -- ── End help view ────────────────────────────────────────────────────────────
 
   if state.menu.isRoot() then
-    local groups    = state.menu.getRootGroups(ICON_ROOT)
+    local groups    = state.menu.getRootGroups()
     local flatCards = Tiles.flattenRootCards(groups)
     -- Never alias cached root card tables into state.cards because submenu grid
     -- layout reuses state.cards as mutable output and would overwrite root data.
@@ -1571,7 +1567,7 @@ function M.buildUI()
         requestRebuild = function() scheduleBuildUI(false) end
       })
     else
-      local gridItems = state.menu.getCards(ICON_ROOT)
+      local gridItems = state.menu.getCards()
       local computedCols = Tiles.computeColumns(contentW, profile.menuMinCardWidth, profile.menuMaxColumns)
       local columns   = computedCols
       local layoutItems, rows = toWrappedItems(gridItems, columns)

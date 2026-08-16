@@ -50,18 +50,16 @@ function M.wakeup()
 
     local dialog = loadModule("ui/msp_unsupported_dialog.lua")
     if dialog and type(dialog.show) == "function" then
-      pcall(function()
-        dialog.show({
-          title = title,
-          message = msg,
-          version = tostring(session.apiVersion or "?"),
-          onFallback = function(t, m)
-            if type(Log) == "table" and type(Log.emit) == "function" then
-              pcall(Log.emit, "rfsuite.tasks.apiversion", "Unsupported MSP API: " .. tostring(session.apiVersion), "warn", true)
-            end
+      pcall(dialog.show, {
+        title = title,
+        message = msg,
+        version = tostring(session.apiVersion or "?"),
+        onFallback = function(t, m)
+          if type(Log) == "table" and type(Log.emit) == "function" then
+            pcall(Log.emit, "rfsuite.tasks.apiversion", "Unsupported MSP API: " .. tostring(session.apiVersion), "warn", true)
           end
-        })
-      end)
+        end
+      })
     end
   end
 

@@ -36,9 +36,7 @@ local function ensureEventRunner(name)
   if type(cached) == "table" then return cached end
   if cached == false then return nil end
 
-  local ok, mod = pcall(function()
-    return loadModule("tasks/events/" .. name .. "/tasks.lua")
-  end)
+  local ok, mod = pcall(loadModule, "tasks/events/" .. name .. "/tasks.lua")
   if not ok or type(mod) ~= "table" then
     if Log and type(Log.emit) == "function" then
       pcall(Log.emit, "rfsuite.events", "no runner for events/" .. tostring(name), "debug", true)

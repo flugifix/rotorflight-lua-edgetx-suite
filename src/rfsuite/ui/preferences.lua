@@ -97,9 +97,7 @@ function PreferencesSafe.new(loadModuleFn)
     if module == false then return nil end
     if module ~= nil   then return module end
 
-    local ok, result = pcall(function()
-      return loadModuleFn("lib/preferences.lua")
-    end)
+    local ok, result = pcall(loadModuleFn, "lib/preferences.lua")
     if ok and type(result) == "table" then
       module = result
       return module

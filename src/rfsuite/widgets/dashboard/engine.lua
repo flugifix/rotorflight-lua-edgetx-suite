@@ -197,21 +197,7 @@ function Engine.build(zone, state, theme)
   return nodes
 end
 
-local function hashNum(h, num)
-  local n = math.floor((num or 0) + 0.5)
-  return (h * 31 + n) % 2147483647
-end
-
-local function hashStr(h, str)
-  if type(str) ~= "string" then return h end
-  for i = 1, #str do
-    h = (h * 31 + string.byte(str, i)) % 2147483647
-  end
-  return h
-end
-
 function Engine.renderKey(state, boxSources)
-  local h = 2166136261
   local voltage = Utils.toNumber(state and state.voltage, 0)
   local lq = Utils.toNumber(state and state.lq, 0)
   local fuel = Utils.toNumber(state and state.fuel, 0)
@@ -225,18 +211,20 @@ function Engine.renderKey(state, boxSources)
   local themeMax = Utils.toNumber(state and state.themeConfig and state.themeConfig.v_max, 0)
   local armFlags = Utils.toNumber(state and state.armFlags, 0)
 
-  h = hashNum(h, lq)
-  h = hashNum(h, fuel)
-  h = hashNum(h, rpm)
-  h = hashNum(h, flight)
-  h = hashNum(h, total)
-  h = hashNum(h, voltage * 10)
-  h = hashNum(h, bb_used)
-  h = hashNum(h, bb_total)
-  h = hashNum(h, cells)
-  h = hashNum(h, themeMin * 10)
-  h = hashNum(h, themeMax * 10)
-  h = hashNum(h, armFlags)
+  local k = string.format("%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
+    math.floor(lq + 0.5),
+    math.floor(fuel + 0.5),
+    math.floor(rpm + 0.5),
+    math.floor(flight + 0.5),
+    math.floor(total + 0.5),
+    math.floor(voltage * 10 + 0.5),
+    math.floor(bb_used + 0.5),
+    math.floor(bb_total + 0.5),
+    math.floor(cells + 0.5),
+    math.floor(themeMin * 10 + 0.5),
+    math.floor(themeMax * 10 + 0.5),
+    math.floor(armFlags + 0.5)
+  )
 
   if boxSources and state then
     for i = 1, #boxSources do
@@ -248,19 +236,20 @@ function Engine.renderKey(state, boxSources)
       elseif source == "rate_profile" then v = state.rateProfile
       elseif source == "battery_profile" then v = state.batteryProfile
       elseif source == "governor" then
-        h = hashNum(h, state.governor or 0)
-        h = hashNum(h, state.armDisableFlags or 0)
+        v = tostring(state.governor or "x") .. ":" .. tostring(state.armDisableFlags or "x")
       else
         v = state[source]
       end
       if type(v) == "number" then
-        h = hashNum(h, v * 10)
+        k = k .. "|" .. tostring(math.floor(v * 10 + 0.5))
       elseif type(v) == "string" then
-        h = hashStr(h, v)
+        k = k .. "|" .. v
+      else
+        k = k .. "|x"
       end
     end
   end
-  return h
+  return k
 end
 
 return Engine
