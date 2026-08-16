@@ -11,6 +11,9 @@ end
 local Events = {}
 
 local function loadModule(path)
+  if _G.rfsuite and _G.rfsuite.require then
+    return _G.rfsuite.require(path)
+  end
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
   local chunk = loadScript(fullPath, "t")
   if type(chunk) ~= "function" then return nil end

@@ -1,3 +1,16 @@
+# 0.1.1
+
+### Bug Fixes & Improvements
+- **ESC Forward Programming & MSP Communication**:
+  - Removed 4-Way Interface (`4wif_esc_fwd_prog`, MSP 244 target=100) from non-4WIF ESC manufacturers (XD-Fly, OMP, ZTW, Hobbywing Platinum V5, YGE, Scorpion, Flyrotor), eliminating motor beeping and communication timeouts.
+  - Corrected header byte layout (`esc_version` before `esc_model`) in `esc_parameters_xdfly.lua`, `esc_parameters_omp.lua`, and `esc_parameters_ztw.lua`.
+  - Fixed Governor P & I Gain active field mask indices for XD-Fly, OMP, and ZTW.
+- **Dynamic On-Connect ESC Telemetry Detection**:
+  - Added background OnConnect task `esc_sensor_config.lua` (with tool-only execution context) to query and dynamically enable active ESC tiles in the tools menu.
+- **Audio & Telemetry Reliability**:
+  - Restored `Audio.process` execution in configuration tool for announcements.
+  - Fast-tracked simulator sensor reloads (0.5s interval).
+
 # 0.1.0
 
 ### Features

@@ -7,6 +7,9 @@ _G.rfsuite.utils.clearChunkCache = function()
   for k in pairs(chunkCache) do
     chunkCache[k] = nil
   end
+  if _G.rfsuite and _G.rfsuite.clearAllModules then
+    _G.rfsuite.clearAllModules()
+  end
   _G.loadScript = originalLoadScript
 end
 
@@ -20,6 +23,12 @@ _G.loadScript = function(path, mode)
     chunkCache[path] = chunk
   end
   return chunk, err
+end
+
+-- Initialize module require memoizer
+local requireChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", "t")
+if requireChunk then
+  requireChunk()
 end
 
 local chunk = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/ui/home.lua", "t"))

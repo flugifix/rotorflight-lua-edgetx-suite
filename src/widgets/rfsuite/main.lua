@@ -13,6 +13,10 @@ if lvgl == nil then
 end
 
 local function create(zone, options)
+  local requireChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", "t")
+  if requireChunk then
+    requireChunk()
+  end
   local factory = assert(loadScript("/WIDGETS/rfsuite/app.lua", "t"))
   return factory(zone, options)
 end

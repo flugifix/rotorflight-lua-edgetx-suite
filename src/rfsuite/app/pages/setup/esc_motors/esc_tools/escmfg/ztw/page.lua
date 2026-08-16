@@ -183,100 +183,8 @@ local function queueZtwRead(isAutoReload)
     end
   end
 
-  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
-  if FwdProgApi then
-    if not ui.connState or ui.connState == 0 then
-      ui.connState = 1
-      queue:add({
-        command = FwdProgApi.writeCommand,
-        payload = FwdProgApi.buildWritePayload({ target = 100 }),
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function()
-          if not ui.runtime then return end
-          ui.connState = 2
-          ui.connTimer = nowSeconds()
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end,
-        errorHandler = function()
-          if not ui.runtime then return end
-          ui.connState = 0
-          ui.loading = false
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end
-      })
-    elseif ui.connState == 3 then
-      queue:add({
-        command = FwdProgApi.writeCommand,
-        payload = FwdProgApi.buildWritePayload({ target = ui.escTarget or 0 }),
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function()
-          if not ui.runtime then return end
-          ui.connState = 4
-          ui.connTimer = nowSeconds()
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end,
-        errorHandler = function()
-          if not ui.runtime then return end
-          ui.connState = 0
-          ui.loading = false
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end
-      })
-    elseif ui.connState == 5 then
-      queueZtwReadActual(queue)
-    else
-      ui.runtime.readPending = false
-    end
-  else
-    queueZtwReadActual(queue)
-  end
-
+  queueZtwReadActual(queue)
   return true, nil
-end
-
-local function queuePostSaveReset(target, nextState)
-  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
-  if not FwdProgApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
-    return
-  end
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue then return end
-
-  queue:add({
-    command = FwdProgApi.writeCommand,
-    payload = FwdProgApi.buildWritePayload({ target = target }),
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      ui.connState = nextState
-      ui.connTimer = nowSeconds()
-      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
-    end,
-    errorHandler = function()
-      ui.connState = 5
-      ui.saving = false
-      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
-    end
-  })
 end
 
 local function queueZtwWrite(requestRebuild)
@@ -313,8 +221,8 @@ local function queueZtwWrite(requestRebuild)
     isWrite = true,
     processReply = function(self, buf)
       ui.dirty = false
-      ui.connState = 6
-      ui.connTimer = nowSeconds()
+      ui.saving = false
+      ui.progress = 100
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
@@ -473,35 +381,6 @@ function M.wakeup(ctx)
     end
   end
 
-  -- 4way target switch delay timing and post-save cycle
-  if ui.connState == 2 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 2.5 then
-      ui.connState = 3
-      queueZtwRead(false)
-    end
-  elseif ui.connState == 4 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 5.0 then
-      ui.connState = 5
-      queueZtwRead(false)
-    end
-  elseif ui.connState == 6 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 1.0 then
-      ui.connState = 7
-      queuePostSaveReset(100, 8)
-    end
-  elseif ui.connState == 8 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 1.0 then
-      ui.connState = 9
-      queuePostSaveReset(ui.escTarget or 0, 10)
-    end
-  elseif ui.connState == 10 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 0.5 then
-      ui.connState = 5
-      ui.saving = false
-      queueZtwRead(true)
-    end
-  end
-
   if ui.motorConfigRetryPending and ui.motorConfigRetryTimer then
     if nowSeconds() - ui.motorConfigRetryTimer >= 0.5 then
       ui.motorConfigRetryPending = false
@@ -535,8 +414,6 @@ end
 
 function M.onReload(ctx)
   ui.dirty = false
-  ui.connState = 0
-  ui.connTimer = nil
   queueZtwRead(false)
   return true
 end
@@ -833,7 +710,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldActive(6) then
+    if isFieldActive(7) then
       rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor P Gain", {
         min = 1, max = 10, step = 1,
         get = function() return ui.config.gov_p end,
@@ -845,7 +722,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldActive(7) then
+    if isFieldActive(8) then
       rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor I Gain", {
         min = 1, max = 10, step = 1,
         get = function() return ui.config.gov_i end,
@@ -882,24 +759,6 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
-  if FwdProgApi and MspRuntime and type(MspRuntime.getState) == "function" then
-    local mspState = MspRuntime.getState()
-    local queue = mspState and mspState.queue
-    if queue then
-      queue:add({
-        command = FwdProgApi.writeCommand,
-        payload = FwdProgApi.buildWritePayload({ target = 100 }),
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function() end,
-        errorHandler = function() end
-      })
-    end
-  end
-
-  ui.connState = nil
-  ui.connTimer = nil
   ui.escTarget = nil
   ui.motorCount = nil
   ui.motorConfigRetryPending = nil

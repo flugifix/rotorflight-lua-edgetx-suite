@@ -1,8 +1,20 @@
 local Engine = {}
 
-local Common = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/default/common.lua", "t"))()
-local Utils = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/common.lua", "t"))()
-local Sensors = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors.lua", "t"))()
+local requireModule = (_G.rfsuite and _G.rfsuite.require)
+if not requireModule then
+  local rChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", "t")
+  if rChunk then
+    requireModule = rChunk()
+  end
+end
+requireModule = requireModule or function(path)
+  local fullPath = string.sub(path, 1, 1) == "/" and path or ("/SCRIPTS/TOOLS/rfsuite-core/" .. path)
+  return assert(loadScript(fullPath, "t"))()
+end
+
+local Common = requireModule("widgets/dashboard/themes/default/common.lua")
+local Utils = requireModule("widgets/dashboard/objects/common.lua")
+local Sensors = requireModule("lib/sensors.lua")
 
 local OBJECTS_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/"
 local objectWrappers = {}
@@ -19,14 +31,8 @@ local function loadObjectWrapper(typ)
     return objectWrappers[typ]
   end
 
-  local chunk = loadScript(OBJECTS_BASE .. typ .. ".lua", "t")
-  if not chunk then
-    objectWrappers[typ] = false
-    return nil
-  end
-
-  local ok, wrapper = pcall(chunk)
-  if not ok or type(wrapper) ~= "table" then
+  local wrapper = requireModule("widgets/dashboard/objects/" .. typ .. ".lua")
+  if not wrapper or type(wrapper) ~= "table" then
     objectWrappers[typ] = false
     return nil
   end
@@ -154,16 +160,7 @@ function Engine.build(zone, state, theme)
     end
   end
 
-  local maxMainRects = #rects
-  local maxHeaderRects = 9999
-  if isSimulator() then
-    -- Simulator has a stricter per-refresh instruction budget than TX16.
-    -- Render a reduced subset to keep the widget alive in desktop simulation.
-    maxMainRects = math.min(maxMainRects, 14)
-    maxHeaderRects = 4
-  end
-
-  for i = 1, maxMainRects do
+  for i = 1, #rects do
     renderBox(nodes, rects[i], state)
   end
 
@@ -192,8 +189,7 @@ function Engine.build(zone, state, theme)
         }
       end
     end
-    local headerLimit = math.min(#headerRects, maxHeaderRects)
-    for i = 1, headerLimit do
+    for i = 1, #headerRects do
       renderBox(nodes, headerRects[i], state)
     end
   end
@@ -201,7 +197,21 @@ function Engine.build(zone, state, theme)
   return nodes
 end
 
+local function hashNum(h, num)
+  local n = math.floor((num or 0) + 0.5)
+  return (h * 31 + n) % 2147483647
+end
+
+local function hashStr(h, str)
+  if type(str) ~= "string" then return h end
+  for i = 1, #str do
+    h = (h * 31 + string.byte(str, i)) % 2147483647
+  end
+  return h
+end
+
 function Engine.renderKey(state, boxSources)
+  local h = 2166136261
   local voltage = Utils.toNumber(state and state.voltage, 0)
   local lq = Utils.toNumber(state and state.lq, 0)
   local fuel = Utils.toNumber(state and state.fuel, 0)
@@ -214,47 +224,43 @@ function Engine.renderKey(state, boxSources)
   local themeMin = Utils.toNumber(state and state.themeConfig and state.themeConfig.v_min, 0)
   local themeMax = Utils.toNumber(state and state.themeConfig and state.themeConfig.v_max, 0)
   local armFlags = Utils.toNumber(state and state.armFlags, 0)
-  local parts = {
-    tostring(math.floor(lq + 0.5)),
-    tostring(math.floor(fuel + 0.5)),
-    tostring(math.floor(rpm + 0.5)),
-    tostring(math.floor(flight + 0.5)),
-    tostring(math.floor(total + 0.5)),
-    tostring(math.floor(voltage * 10 + 0.5)),
-    tostring(bb_used),
-    tostring(bb_total),
-    tostring(math.floor(cells + 0.5)),
-    tostring(math.floor(themeMin * 10 + 0.5)),
-    tostring(math.floor(themeMax * 10 + 0.5)),
-    tostring(math.floor(armFlags + 0.5))
-  }
+
+  h = hashNum(h, lq)
+  h = hashNum(h, fuel)
+  h = hashNum(h, rpm)
+  h = hashNum(h, flight)
+  h = hashNum(h, total)
+  h = hashNum(h, voltage * 10)
+  h = hashNum(h, bb_used)
+  h = hashNum(h, bb_total)
+  h = hashNum(h, cells)
+  h = hashNum(h, themeMin * 10)
+  h = hashNum(h, themeMax * 10)
+  h = hashNum(h, armFlags)
+
   if boxSources and state then
     for i = 1, #boxSources do
       local source = boxSources[i]
       local v = nil
-      -- Zuerst im State suchen (wird in readTelemetry aktualisiert)
       if source == "esc_temp" then v = state.escTemp
       elseif source == "mcu_temp" then v = state.mcuTemp
       elseif source == "pid_profile" then v = state.profile
       elseif source == "rate_profile" then v = state.rateProfile
       elseif source == "battery_profile" then v = state.batteryProfile
       elseif source == "governor" then
-        v = tostring(state.governor or "x") .. ":" .. tostring(state.armDisableFlags or "x")
+        h = hashNum(h, state.governor or 0)
+        h = hashNum(h, state.armDisableFlags or 0)
       else
-        -- Fallback auf Sensors, aber gedrosselt oder nur wenn absolut nötig
-        -- In der Regel sollten alle wichtigen Dashboard-Quellen im State sein
         v = state[source]
       end
       if type(v) == "number" then
-        parts[#parts + 1] = tostring(math.floor(v * 10 + 0.5))
+        h = hashNum(h, v * 10)
       elseif type(v) == "string" then
-        parts[#parts + 1] = v
-      else
-        parts[#parts + 1] = "x"
+        h = hashStr(h, v)
       end
     end
   end
-  return table.concat(parts, "|")
+  return h
 end
 
 return Engine

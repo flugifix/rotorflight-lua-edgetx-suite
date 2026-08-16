@@ -1,32 +1,21 @@
 local Wrapper = {}
 
-local function loadModule(path, globalKey)
-  if globalKey and _G[globalKey] then return _G[globalKey] end
-  
-  local chunk = loadScript(path, "t")
-  if not chunk then return nil end
-  
-  local ok, mod = pcall(chunk)
-  if ok and type(mod) == "table" then
-    if globalKey then _G[globalKey] = mod end
-    return mod
+local requireModule = (_G.rfsuite and _G.rfsuite.require) or function(path)
+  local fullPath = string.sub(path, 1, 1) == "/" and path or ("/SCRIPTS/TOOLS/rfsuite-core/" .. path)
+  local chunk = loadScript(fullPath, "t")
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then return mod end
   end
   return nil
 end
 
-local function getUtils()
-  return loadModule("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/common.lua", "__rfsuiteObjectsCommonModule")
-end
+local utils = requireModule("widgets/dashboard/objects/common.lua")
+local themeCommon = requireModule("widgets/dashboard/themes/default/common.lua")
 
-local function getThemeCommon()
-  return loadModule("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/default/common.lua", "__rfsuiteThemeDefaultCommonModule")
-end
-
-local folder = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/text/"
+local folder = "widgets/dashboard/objects/text/"
 local renders = {}
 local missingRenders = {}
-local cachedUtils = nil
-local cachedThemeCommon = nil
 
 local function getRender(subtype)
   local key = subtype or "telemetry"
@@ -38,8 +27,8 @@ local function getRender(subtype)
     missingRenders[key] = true
     return nil
   end
-  
-  local mod = loadModule(folder .. key .. ".lua", "__rfsuite_text_render_" .. key)
+
+  local mod = requireModule(folder .. key .. ".lua")
   if mod then
     renders[key] = mod
     return mod
@@ -49,29 +38,31 @@ local function getRender(subtype)
 end
 
 function Wrapper.render(nodes, rect, box, state)
-  local utils = cachedUtils or getUtils()
-  if utils then
-    cachedUtils = utils
+  if not utils then
+    utils = requireModule("widgets/dashboard/objects/common.lua")
   end
+  if not utils then return end
 
-  local themeCommon = cachedThemeCommon or getThemeCommon()
-  if themeCommon then
-    cachedThemeCommon = themeCommon
-  end
-
-  if not utils or not themeCommon then return end
-  
   utils.drawContainer(nodes, rect, box, state)
-  
+
   local render = getRender(box and box.subtype)
   if render and type(render.render) == "function" then
-    local ok, err = pcall(render.render, nodes, rect, box, state, themeCommon, utils)
-    if not ok then
-      if type(err) == "string" and string.find(err, "CPU limit", 1, true) then
-        return
-      end
-      error(err)
+    if not themeCommon then
+      themeCommon = requireModule("widgets/dashboard/themes/default/common.lua")
     end
+    if themeCommon then
+      render.render(nodes, rect, box, state, themeCommon, utils)
+    end
+  else
+    local title = box and box.title or ""
+    local val = box and box.value or "--"
+    local color = (box and box.textcolor) or (themeCommon and themeCommon.resolveThemeColor("textcolor", box and box.textcolor)) or WHITE
+    local align = (box and box.valuealign) or (box and box.titlealign) or CENTER
+    local font = (box and box.font) or MIDSIZE
+    if type(font) == "function" then
+      font = font(box, state)
+    end
+    utils.pushLabel(nodes, rect.x + 4, utils.defaultValueY(rect, box), rect.w - 8, tostring(val), color, align, font)
   end
 end
 
