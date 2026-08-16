@@ -265,7 +265,7 @@ class RFSuiteUpdaterApp:
         lbl_lang.pack(side="left")
 
         self.lang_combo = ttk.Combobox(lang_row, textvariable=self.selected_language, state="readonly", width=15)
-        self.lang_combo["values"] = ["de", "en", "fr", "it", "es", "cz"]
+        self.lang_combo["values"] = self._get_fallback_languages()
         self.lang_combo.pack(side="left", padx=(0, 10))
 
         prerelease_chk = ttk.Checkbutton(
@@ -560,35 +560,73 @@ class RFSuiteUpdaterApp:
         else:
             self.selected_release_tag.set("")
 
+    def _get_fallback_languages(self) -> List[str]:
+        """Scans the local repository i18n directory if available, or returns default languages."""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        repo_root = os.path.abspath(os.path.join(script_dir, "..", "..", ".."))
+        i18n_dir = os.path.join(repo_root, "src", "rfsuite", "i18n")
+        if os.path.isdir(i18n_dir):
+            langs = [f[:-4].lower() for f in os.listdir(i18n_dir) if f.endswith(".lua") and f != "init.lua"]
+            if langs:
+                return sorted(list(set(langs)))
+        return ["de", "en"]
+
+    def _detect_languages_for_selection(self, rel: Optional[Dict]) -> List[str]:
+        """Automatically detects available languages for the selected branch, release, or local build."""
+        if not rel:
+            return self._get_fallback_languages()
+
+        # 1. From local dist build or release assets
+        assets = rel.get("assets", [])
+        if assets:
+            languages_found = []
+            for asset in assets:
+                name = asset.get("name", "")
+                m = re.search(r"[-_]([a-z]{2})\.zip$", name, re.IGNORECASE)
+                if m:
+                    languages_found.append(m.group(1).lower())
+            if languages_found:
+                return sorted(list(set(languages_found)))
+
+        # 2. From GitHub branch: query GitHub contents API for src/rfsuite/i18n
+        if rel.get("is_branch"):
+            branch_name = rel.get("branch_name", "master")
+            repo = self.selected_repo.get().strip() or DEFAULT_REPO
+            try:
+                contents_url = f"https://api.github.com/repos/{repo}/contents/src/rfsuite/i18n?ref={branch_name}"
+                req = urllib.request.Request(contents_url, headers={"User-Agent": "RFSuite-EdgeTX-Updater"})
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    items = json.loads(resp.read().decode("utf-8"))
+                    if isinstance(items, list):
+                        langs = [
+                            f["name"][:-4].lower() 
+                            for f in items 
+                            if f.get("name", "").endswith(".lua") and f.get("name") != "init.lua"
+                        ]
+                        if langs:
+                            return sorted(list(set(langs)))
+            except Exception as e:
+                self.log(f"Notice: Detecting branch languages via API ({branch_name}): {e}")
+
+        # 3. Fallback to local files in repo
+        return self._get_fallback_languages()
+
     def _on_release_selected(self, _event):
         sel = self.selected_release_tag.get().strip()
         if not sel:
             return
         
         rel = next((r for r in self.releases_data if r.get("tag_name") == sel), None)
-        if not rel:
-            return
-
-        if rel.get("is_branch"):
-            # Branches support all standard languages via runtime i18n compilation
-            self.lang_combo["values"] = ["de", "en", "fr", "it", "es", "cz"]
-            return
-
-        # Check available language zip assets for releases
-        assets = rel.get("assets", [])
-        languages_found = []
-        for asset in assets:
-            name = asset.get("name", "")
-            m = re.search(r"_([a-z]{2})\.zip$", name)
-            if m:
-                languages_found.append(m.group(1))
-
-        if languages_found:
-            self.lang_combo["values"] = sorted(list(set(languages_found)))
-            if self.selected_language.get() not in languages_found:
-                self.selected_language.set(languages_found[0])
-        else:
-            self.lang_combo["values"] = ["de", "en", "fr", "it", "es", "cz"]
+        available_langs = self._detect_languages_for_selection(rel)
+        
+        self.lang_combo["values"] = available_langs
+        if self.selected_language.get() not in available_langs:
+            if "de" in available_langs:
+                self.selected_language.set("de")
+            elif "en" in available_langs:
+                self.selected_language.set("en")
+            elif available_langs:
+                self.selected_language.set(available_langs[0])
 
     def start_install_async(self):
         target_root = self.selected_drive.get().strip()

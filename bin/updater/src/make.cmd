@@ -13,8 +13,9 @@ echo [2/5] Compiling updater.py to standalone EXE...
 python -m PyInstaller --onefile updater.py --name updater --windowed --icon=updater.ico || goto :error
 
 echo [3/5] Moving updater.exe into parent folder...
+taskkill /f /im updater.exe >nul 2>&1
 if exist ..\updater.exe (
-    del ..\updater.exe
+    del /f /q ..\updater.exe >nul 2>&1
 )
 move /Y dist\updater.exe ..\updater.exe >nul
 
