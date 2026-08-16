@@ -3,7 +3,7 @@ local Api = {
   command = 123,      -- MSP_API_CMD_READ
   writeCommand = 216, -- MSP_API_CMD_WRITE
   simulatorResponse = {
-    0,       -- protocol
+    1,       -- protocol (1 = AM32/BLHeli/Bluejay)
     0,       -- half_duplex
     200, 0,  -- update_hz (U16)
     0, 15,   -- current_offset (U16)
