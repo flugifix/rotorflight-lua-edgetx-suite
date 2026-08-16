@@ -1,3 +1,21 @@
+# 0.1.2
+
+### Performance & Memory Optimizations
+- **Module & Singleton Memoization (`require.lua`)**:
+  - Implemented centralized `rfsuite.require` module loader with bytecode and instance memoization to eliminate redundant disk reads and Lua compilations.
+  - Integrated memoization into Tools entrypoint, telemetry widgets, background tasks, and dashboard runtime.
+- **Dashboard Startup Pacing & Instruction Budget**:
+  - Preloaded and memoized all dashboard object wrappers and subrenderers (`text`, `image`, `time`, `gauge`).
+  - Removed artificial 14-box cap in simulator, allowing full layouts to render smoothly.
+- **Garbage Collection & GC-Churn Reduction**:
+  - Streamlined `Engine.renderKey` dirty-checking to eliminate intermediate table arrays and string allocations during refresh cycles.
+  - Guarded debug log string concatenations in hot telemetry polling paths.
+  - Eliminated anonymous closure allocations in repetitive MSP polling loops (`msp/queue.lua`) and background event runners.
+- **SD Card I/O Reduction & Asset Cleanup**:
+  - Removed redundant `io.open`/`close` probes in `help_registry.lua`.
+  - Added in-memory path caches for audio WAV events and model images to avoid repeated file system checks.
+  - Cleaned up obsolete legacy root icons from `src/rfsuite/assets/icons/`.
+
 # 0.1.1
 
 ### Bug Fixes & Improvements

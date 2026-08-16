@@ -6,13 +6,6 @@ local AUDIO_LOG_FORCE = false
 local SPLASH_READY_HOLD_SECONDS = 1.0
 local SPLASH_SOFT_TIMEOUT_SECONDS = 25.0
 
-local function scriptExists(path)
-  if type(path) ~= "string" or path == "" then return false end
-  local f = io.open(path, "r")
-  if not f then return false end
-  io.close(f)
-  return true
-end
 
 local requireModule = (_G.rfsuite and _G.rfsuite.require)
 if not requireModule then

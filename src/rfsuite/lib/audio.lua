@@ -221,7 +221,13 @@ local function getLocaleModule()
   return nil
 end
 
+local resolvedEventPaths = {}
+
 local function resolveEventPath(relativePath)
+  if resolvedEventPaths[relativePath] ~= nil then
+    return resolvedEventPaths[relativePath] or nil
+  end
+
   local locale = (getLocaleModule() and type(getLocaleModule().resolveSystemLanguage) == "function") and getLocaleModule().resolveSystemLanguage("en") or AUDIO_DEFAULT_FALLBACK
   
   -- 1. Try namespaced folder (Rotorflight standard)
@@ -229,6 +235,7 @@ local function resolveEventPath(relativePath)
   local f = io.open(rfPath, "r")
   if f then
     io.close(f)
+    resolvedEventPaths[relativePath] = rfPath
     return rfPath
   end
 
@@ -237,10 +244,12 @@ local function resolveEventPath(relativePath)
   f = io.open(localePath, "r")
   if f then
     io.close(f)
+    resolvedEventPaths[relativePath] = localePath
     return localePath
   end
 
   -- 3. If file not found in any locale, return nil to indicate failure
+  resolvedEventPaths[relativePath] = false
   return nil
 end
 
