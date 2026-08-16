@@ -25,7 +25,7 @@ def get_suite_version():
         m_pat = re.search(r"M\.PATCH\s*=\s*(\d+)", content)
         if m_maj and m_min and m_pat:
             return f"{m_maj.group(1)}.{m_min.group(1)}.{m_pat.group(1)}"
-    return "0.0.2"
+    return "0.1.0"
 
 
 def get_available_languages():
