@@ -396,6 +396,23 @@ local function getLayoutProfile(w, h)
 	return profile
 end
 
+local function getColumnTitle(i18n, key)
+	if key == "p" then return pageText(i18n, "p") end
+	if key == "i" then return pageText(i18n, "i") end
+	if key == "d" then return pageText(i18n, "d") end
+	if key == "f" then return pageText(i18n, "f") end
+	if key == "o" then return pageText(i18n, "o") end
+	if key == "b" then return pageText(i18n, "b") end
+	return string.upper(key)
+end
+
+local function getRowTitle(i18n, key)
+	if key == "roll" then return pageText(i18n, "roll") end
+	if key == "pitch" then return pageText(i18n, "pitch") end
+	if key == "yaw" then return pageText(i18n, "yaw") end
+	return key
+end
+
 local function drawColumnHeader(children, x, y, w, i18n, layout)
 	local labelW, gap, cellW = getGridMetrics(w)
 	local headerFont = (layout and layout.headerFont) or MIDSIZE
@@ -415,7 +432,7 @@ local function drawColumnHeader(children, x, y, w, i18n, layout)
 
 	for i = 1, #COLUMNS do
 		local cellX = x + labelW + ((i - 1) * (cellW + gap))
-		local headerText = string.upper(pageText(i18n, COLUMNS[i], string.upper(COLUMNS[i])))
+		local headerText = getColumnTitle(i18n, COLUMNS[i])
 		children[#children + 1] = {
 			type = "label",
 			x = cellX,
@@ -443,7 +460,7 @@ local function addGroup(children, x, y, w, i18n, group, layout)
 		x = x,
 		y = y + rowLabelY,
 		w = labelW - 8,
-		text = pageText(i18n, group.labelKey, group.key),
+		text = getRowTitle(i18n, group.key),
 		color = COLOR_THEME_PRIMARY1,
 		font = rowLabelFont
 	}
@@ -517,13 +534,13 @@ function M.onSave(ctx)
 	if lvgl and lvgl.alert then
 		if okMsp then
 			lvgl.alert({
-				title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-				message = pageText(ctx and ctx.i18n, "saved_message", "PID tuning saved")
+				title = pageText(ctx and ctx.i18n, "saved_title"),
+				message = pageText(ctx and ctx.i18n, "saved_message")
 			})
 		else
 			lvgl.alert({
-				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
-				message = pageText(ctx and ctx.i18n, "saved_local_only_message", "Saved locally; FC write pending") .. (errMsp and (": " .. tostring(errMsp)) or "")
+				title = pageText(ctx and ctx.i18n, "warning_title"),
+				message = pageText(ctx and ctx.i18n, "saved_local_only_message") .. (errMsp and (": " .. tostring(errMsp)) or "")
 			})
 		end
 	end
@@ -591,8 +608,8 @@ function M.build(ctx)
 			y = y,
 			w = w,
 			h = h,
-			title = pageText(i18n, "loading_title", "Loading"),
-			message = pageText(i18n, "loading_message", "Reading PID tuning"),
+			title = pageText(i18n, "loading_title"),
+			message = pageText(i18n, "loading_message"),
 			progress = ui.progress
 		})
 	end
