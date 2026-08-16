@@ -11,6 +11,7 @@ end
 
 local Common = nil
 local Controls = nil
+local LoadingOverlay = nil
 local t = nil
 
 local state = {
@@ -19,12 +20,14 @@ local state = {
   selectedModel = nil,
   logsList = {},
   summary = nil,
+  loading = false,
   requestRebuild = nil
 }
 
 local function ensureDeps()
   if not Common then Common = loadModule("app/pages/settings/common.lua") end
   if not Controls then Controls = loadModule("ui/controls.lua") end
+  if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not t then t = Common and Common.pageT("logs") or nil end
 end
 
@@ -68,6 +71,63 @@ local function safeCollectEntries(listBasePath)
   return entries
 end
 
+local function extractFileInfo(filename, fullPath, parentFolder)
+  local date = string.match(filename, "(%d%d%d%d%-%d%d%-%d%d)")
+  local time = nil
+
+  -- Pattern: YYYY-MM-DD-HHMMSS or YYYY-MM-DD_HHMMSS
+  local h1, m1, s1 = string.match(filename, "%d%d%d%d%-%d%d%-%d%d[_-]?(%d%d)(%d%d)(%d%d)")
+  if h1 and m1 and s1 then
+    time = h1 .. ":" .. m1 .. ":" .. s1
+  else
+    -- Pattern: YYYY-MM-DD_HH-MM-SS or YYYY-MM-DD-HH-MM-SS
+    local h2, m2, s2 = string.match(filename, "%d%d%d%d%-%d%d%-%d%d[_-](%d%d)%-(%d%d)%-(%d%d)")
+    if h2 and m2 and s2 then
+      time = h2 .. ":" .. m2 .. ":" .. s2
+    end
+  end
+
+  local model = string.match(filename, "^(.-)%-%d%d%d%d")
+  if not model or model == "" then
+    model = (parentFolder and parentFolder ~= "" and parentFolder ~= "telemetry" and parentFolder ~= "rfsuite" and parentFolder ~= "LOGS") and parentFolder or "Default"
+  end
+
+  -- Fallback: peek first lines if date/time not in filename
+  if not date or not time then
+    local f = io.open(fullPath, "r")
+    if f then
+      local firstChunk = io.read(f, 512)
+      io.close(f)
+      if firstChunk then
+        local l1, l2 = string.match(firstChunk, "([^\r\n]+)[\r\n]+([^\r\n]+)")
+        if l2 then
+          local d, tm = string.match(l2, "^(.-),(.-),")
+          if d and string.match(d, "^%d%d%d%d%-%d%d%-%d%d$") then
+            date = d
+          end
+          if tm then
+            local tClean = string.match(tm, "^(%d%d:%d%d:%d%d)")
+            if tClean then time = tClean end
+          end
+        end
+      end
+    end
+  end
+
+  date = date or "Unknown"
+  time = time or ""
+  local sortKey = date .. "_" .. string.gsub(time, ":", "") .. "_" .. filename
+
+  return {
+    file = filename,
+    path = fullPath,
+    model = model,
+    date = date,
+    time = time,
+    sortKey = sortKey
+  }
+end
+
 local function scanLogFiles()
   local found = {}
   local searchPaths = {
@@ -83,15 +143,7 @@ local function scanLogFiles()
       local entry = topEntries[i]
       if string.match(entry, "%.csv$") then
         local fullPath = basePath .. "/" .. entry
-        local date, time = string.match(entry, "(%d%d%d%d%-%d%d%-%d%d)_(%d%d%-%d%d%-%d%d)")
-        found[#found + 1] = {
-          file = entry,
-          path = fullPath,
-          model = "Default",
-          date = date or "Unknown",
-          time = time and string.gsub(time, "%-", ":") or "",
-          sortKey = (date or "") .. "_" .. (time or "") .. "_" .. entry
-        }
+        found[#found + 1] = extractFileInfo(entry, fullPath, "")
       elseif not string.match(entry, "%.%w+$") then
         -- Subdirectory (e.g. Model name)
         local modelDir = basePath .. "/" .. entry
@@ -100,15 +152,7 @@ local function scanLogFiles()
           local subFile = subEntries[j]
           if string.match(subFile, "%.csv$") then
             local fullPath = modelDir .. "/" .. subFile
-            local date, time = string.match(subFile, "(%d%d%d%d%-%d%d%-%d%d)_(%d%d%-%d%d%-%d%d)")
-            found[#found + 1] = {
-              file = subFile,
-              path = fullPath,
-              model = entry,
-              date = date or "Unknown",
-              time = time and string.gsub(time, "%-", ":") or "",
-              sortKey = (date or "") .. "_" .. (time or "") .. "_" .. subFile
-            }
+            found[#found + 1] = extractFileInfo(subFile, fullPath, entry)
           end
         end
       end
@@ -124,154 +168,222 @@ local function parseTelemetryCsv(filePath)
   local f = io.open(filePath, "r")
   if not f then return nil end
 
-  local content = ""
-  while true do
-    local chunk = io.read(f, 4096)
-    if not chunk or chunk == "" then break end
-    content = content .. chunk
-    if #content > 500000 then break end
-  end
-  io.close(f)
+  local headerLine = nil
+  local dateCol, timeCol = nil, nil
+  local vbatCol, currCol, capaCol = nil, nil, nil
+  local hspdCol, esctCol, thrCol, armCol = nil, nil, nil
 
-  if content == "" then return nil end
-
-  local lines = {}
-  local header = nil
-  for line in string.gmatch(content, "[^\r\n]+") do
-    if line and line ~= "" then
-      if not header and string.match(line, "%a") then
-        header = line
-      else
-        lines[#lines + 1] = line
-      end
-    end
-  end
-
-  if #lines == 0 then return nil end
-
-  -- Identify columns
-  local vIdx, cIdx, rIdx, tIdx, thrIdx = 1, 2, 3, 4, 5
-  if header then
-    local lowerHeader = string.lower(header)
+  local function parseHeader(hStr)
     local colIdx = 1
-    for col in string.gmatch(lowerHeader, "([^,]+)") do
-      local trimmed = string.gsub(col, "^%s+", "")
-      trimmed = string.gsub(trimmed, "%s+$", "")
-      if string.find(trimmed, "volt") or string.find(trimmed, "vfas") or string.find(trimmed, "bat") then
-        vIdx = colIdx
-      elseif string.find(trimmed, "curr") or string.find(trimmed, "amp") or string.find(trimmed, "strom") then
-        cIdx = colIdx
-      elseif string.find(trimmed, "rpm") or string.find(trimmed, "head") or string.find(trimmed, "drehzahl") then
-        rIdx = colIdx
-      elseif string.find(trimmed, "temp") or string.find(trimmed, "esc_t") or string.find(trimmed, "grad") then
-        tIdx = colIdx
-      elseif string.find(trimmed, "thr") or string.find(trimmed, "gas") then
-        thrIdx = colIdx
+    for col in string.gmatch(hStr .. ",", "([^,]*),") do
+      local trimmed = string.lower(string.gsub(string.gsub(col, "^%s+", ""), "%s+$", ""))
+      if trimmed == "date" then
+        dateCol = colIdx
+      elseif trimmed == "time" then
+        timeCol = colIdx
+      elseif trimmed == "vbat(v)" or trimmed == "vbat" or trimmed == "vfas" or trimmed == "voltage" then
+        vbatCol = colIdx
+      elseif trimmed == "curr(a)" or trimmed == "curr" or trimmed == "current" or trimmed == "amp" then
+        currCol = colIdx
+      elseif trimmed == "capa(mah)" or trimmed == "capa" or trimmed == "capacity" or trimmed == "smcp(mah)" then
+        capaCol = colIdx
+      elseif trimmed == "hspd(rpm)" or trimmed == "hspd" or trimmed == "rpm" or trimmed == "headspeed" then
+        hspdCol = colIdx
+      elseif string.find(trimmed, "esct") or string.find(trimmed, "esc_t") or string.find(trimmed, "temp_esc") or trimmed == "temp" then
+        esctCol = colIdx
+      elseif trimmed == "thr(%)" or trimmed == "thr%" or trimmed == "throttle%" or trimmed == "throttle_percent" then
+        thrCol = colIdx
+      elseif trimmed == "armd" or trimmed == "arm" then
+        armCol = colIdx
       end
       colIdx = colIdx + 1
     end
+    -- Fallbacks
+    if not vbatCol then vbatCol = 1 end
+    if not currCol then currCol = 2 end
+    if not hspdCol then hspdCol = 3 end
+    if not esctCol then esctCol = 4 end
+    if not thrCol then thrCol = 5 end
   end
 
   local function splitRow(rowStr)
     local cols = {}
     for item in string.gmatch(rowStr .. ",", "([^,]*),") do
-      cols[#cols + 1] = tonumber(item) or 0
+      cols[#cols + 1] = item
     end
     return cols
   end
 
-  local voltages = {}
-  local currents = {}
-  local rpms = {}
-  local temps = {}
-  local throttles = {}
-
-  for i = 1, #lines do
-    local row = splitRow(lines[i])
-    if #row >= 2 then
-      voltages[#voltages + 1] = row[vIdx] or 0
-      currents[#currents + 1] = row[cIdx] or 0
-      rpms[#rpms + 1] = row[rIdx] or 0
-      temps[#temps + 1] = row[tIdx] or 0
-      throttles[#throttles + 1] = row[thrIdx] or 0
+  local function parseTimeSec(tStr)
+    if not tStr then return nil end
+    local h, m, s, ms = string.match(tStr, "(%d+):(%d+):(%d+)%.?(%d*)")
+    if h and m and s then
+      local sec = tonumber(h) * 3600 + tonumber(m) * 60 + tonumber(s)
+      if ms and ms ~= "" then
+        sec = sec + (tonumber("0." .. ms) or 0)
+      end
+      return sec
     end
+    return nil
   end
 
-  local sampleCount = #voltages
-  if sampleCount == 0 then return nil end
-
-  -- Compute stats
-  local vStart = voltages[1] or 0
-  local vEnd = voltages[sampleCount] or vStart
-  local vMin = vStart
-  local vMax = vStart
-  for i = 1, sampleCount do
-    local v = voltages[i]
-    if v > 0 then
-      if v < vMin or vMin == 0 then vMin = v end
-      if v > vMax then vMax = v end
-    end
-  end
-
+  local startTimeSec = nil
+  local endTimeSec = nil
+  local vStart = nil
+  local vMin = nil
+  local vMax = nil
+  local vEnd = nil
   local cPeak = 0
   local cSum = 0
-  for i = 1, sampleCount do
-    local c = currents[i]
-    if c > cPeak then cPeak = c end
-    cSum = cSum + c
-  end
-  local cAvg = sampleCount > 0 and (cSum / sampleCount) or 0
-  local mah = (cSum / 3600) * 1000
-
+  local cSamples = 0
+  local lastCapa = nil
   local rMax = 0
-  local rMin = 0
-  local rSum = 0
-  local rActiveCount = 0
-  for i = 1, sampleCount do
-    local r = rpms[i]
-    if r > rMax then rMax = r end
-    if r > 500 then
-      if rMin == 0 or r < rMin then rMin = r end
-      rSum = rSum + r
-      rActiveCount = rActiveCount + 1
+  local rMinFlight = nil
+  local tStart = nil
+  local tMax = nil
+  local thrMax = 0
+  local totalSamples = 0
+
+  local buffer = ""
+  while true do
+    local chunk = io.read(f, 2048)
+    if not chunk or chunk == "" then
+      if buffer ~= "" then
+        chunk = "\n"
+      else
+        break
+      end
+    end
+    buffer = buffer .. chunk
+
+    while true do
+      local nl = string.find(buffer, "\n")
+      if not nl then break end
+      local line = string.sub(buffer, 1, nl - 1)
+      buffer = string.sub(buffer, nl + 1)
+
+      line = string.gsub(line, "\r", "")
+      if line ~= "" then
+        if not headerLine then
+          if string.match(line, "%a") then
+            headerLine = line
+            parseHeader(line)
+          end
+        else
+          local cols = splitRow(line)
+          totalSamples = totalSamples + 1
+
+          -- Time
+          if timeCol and cols[timeCol] then
+            local tSec = parseTimeSec(cols[timeCol])
+            if tSec then
+              if not startTimeSec then startTimeSec = tSec end
+              endTimeSec = tSec
+            end
+          end
+
+          -- Voltage
+          if vbatCol and cols[vbatCol] then
+            local v = tonumber(cols[vbatCol])
+            if v and v > 2.0 then
+              if not vStart then vStart = v end
+              if not vMin or v < vMin then vMin = v end
+              if not vMax or v > vMax then vMax = v end
+              vEnd = v
+            end
+          end
+
+          -- Current
+          if currCol and cols[currCol] then
+            local c = tonumber(cols[currCol])
+            if c and c >= 0 then
+              if c > cPeak then cPeak = c end
+              cSum = cSum + c
+              cSamples = cSamples + 1
+            end
+          end
+
+          -- Capacity (from FC telemetry Capa(mAh) or SmCp(mAh))
+          if capaCol and cols[capaCol] then
+            local cap = tonumber(cols[capaCol])
+            if cap and cap > 0 then
+              lastCapa = cap
+            end
+          end
+
+          -- ESC Temp
+          if esctCol and cols[esctCol] then
+            local tmp = tonumber(cols[esctCol])
+            if tmp and tmp > 0 then
+              if not tStart then tStart = tmp end
+              if not tMax or tmp > tMax then tMax = tmp end
+            end
+          end
+
+          -- Throttle %
+          if thrCol and cols[thrCol] then
+            local thr = tonumber(cols[thrCol])
+            if thr and thr >= 0 and thr <= 100 then
+              if thr > thrMax then thrMax = thr end
+            end
+          end
+
+          -- RPM (only evaluate when motor is actively driving the head, ignoring spool-down / autorotation)
+          if hspdCol and cols[hspdCol] then
+            local r = tonumber(cols[hspdCol])
+            if r and r > 0 then
+              local cVal = currCol and tonumber(cols[currCol]) or 0
+              local thrVal = thrCol and tonumber(cols[thrCol]) or 0
+              local armVal = armCol and tonumber(cols[armCol]) or 1
+
+              local isPowered = (armVal > 0) and ((thrVal >= 25) or (cVal >= 1.5))
+              if isPowered then
+                if r > rMax then rMax = r end
+                if r > 1000 then
+                  if not rMinFlight or r < rMinFlight then
+                    rMinFlight = r
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
     end
   end
-  local rAvg = rActiveCount > 0 and (rSum / rActiveCount) or 0
+  io.close(f)
 
-  local tStart = temps[1] or 0
-  local tMax = tStart
-  for i = 1, sampleCount do
-    local tmp = temps[i]
-    if tmp > tMax then tMax = tmp end
+  if totalSamples == 0 then return nil end
+
+  local durationSec = 0
+  if startTimeSec and endTimeSec and endTimeSec >= startTimeSec then
+    durationSec = math.floor(endTimeSec - startTimeSec)
+  else
+    durationSec = math.floor(totalSamples / 10)
   end
 
-  local thrMax = 0
-  for i = 1, sampleCount do
-    local thr = throttles[i]
-    if thr > thrMax then thrMax = thr end
-  end
-
-  local durationSec = sampleCount
   local durationMin = math.floor(durationSec / 60)
   local durationRemSec = durationSec % 60
   local durationStr = string.format("%02d:%02d min", durationMin, durationRemSec)
 
+  local cAvg = cSamples > 0 and (cSum / cSamples) or 0
+  local consumedMah = lastCapa or ((cSum / (cSamples > 0 and cSamples or 1)) * (durationSec / 3600) * 1000)
+
   return {
-    sampleCount = sampleCount,
+    sampleCount = totalSamples,
     durationStr = durationStr,
-    vStart = vStart,
-    vMin = vMin,
-    vMax = vMax,
-    vEnd = vEnd,
-    vSag = (vStart > vMin) and (vStart - vMin) or 0,
+    vStart = vStart or 0,
+    vMin = vMin or (vStart or 0),
+    vMax = vMax or (vStart or 0),
+    vEnd = vEnd or (vStart or 0),
+    vSag = ((vStart or 0) > (vMin or 0)) and ((vStart or 0) - (vMin or 0)) or 0,
     cPeak = cPeak,
     cAvg = cAvg,
-    mah = mah,
+    mah = consumedMah,
     rMax = rMax,
-    rMin = rMin,
-    rAvg = rAvg,
-    tStart = tStart,
-    tMax = tMax,
+    rMin = rMinFlight or 0,
+    tStart = tStart or 0,
+    tMax = tMax or (tStart or 0),
     thrMax = thrMax
   }
 end
@@ -292,11 +404,34 @@ function M.onHelp(ctx)
   return { title = "Logs", message = "" }
 end
 
+function M.wakeup(ctx)
+  ensureDeps()
+  if type(ctx) == "table" and type(ctx.requestRebuild) == "function" then
+    state.requestRebuild = ctx.requestRebuild
+  end
+
+  if state.loading and state.selectedFilePath then
+    state.loadingFrames = (state.loadingFrames or 0) + 1
+    if state.loadingFrames >= 2 then
+      state.summary = parseTelemetryCsv(state.selectedFilePath)
+      collectgarbage("collect")
+      state.loading = false
+      state.loadingFrames = 0
+      if state.requestRebuild then
+        state.requestRebuild()
+      end
+    end
+  end
+end
+
 function M.onReload(ctx)
   scanLogFiles()
   state.selectedFile = nil
   state.selectedFilePath = nil
   state.summary = nil
+  state.loading = false
+  state.loadingFrames = 0
+  collectgarbage("collect")
   if type(ctx) == "table" and type(ctx.requestRebuild) == "function" then
     ctx.requestRebuild()
   end
@@ -309,6 +444,9 @@ function M.onBack(ctx)
     state.selectedFilePath = nil
     state.selectedModel = nil
     state.summary = nil
+    state.loading = false
+    state.loadingFrames = 0
+    collectgarbage("collect")
     return true
   end
   return false
@@ -326,6 +464,20 @@ function M.build(ctx)
   local i18n = ctx.i18n
 
   local cursorY = y
+
+  -- If loading overlay is active
+  if state.loading and LoadingOverlay then
+    LoadingOverlay.append(children, {
+      x = x,
+      y = y,
+      w = w,
+      h = h,
+      title = pageText(i18n, "loading_title"),
+      message = pageText(i18n, "loading_message"),
+      progress = 0.5
+    })
+    return
+  end
 
   -- If a log file is selected, show summary dashboard
   if state.selectedFile and state.selectedFilePath then
@@ -468,10 +620,10 @@ function M.build(ctx)
       x = x + labelColW + 15,
       y = cursorY + 10,
       w = w - labelColW - 27,
-      text = string.format("%s: %d rpm   |   %s: %d rpm   |   %s: %d rpm",
+      text = string.format("%s: %d rpm   |   %s: %d rpm (%s)",
         pageText(i18n, "max"), math.floor(summary.rMax),
-        pageText(i18n, "avg"), math.floor(summary.rAvg),
-        pageText(i18n, "min"), math.floor(summary.rMin)),
+        pageText(i18n, "min"), math.floor(summary.rMin),
+        pageText(i18n, "in_flight")),
       color = COLOR_WHITE,
       font = SMLSIZE
     }
@@ -570,7 +722,7 @@ function M.build(ctx)
     local item = state.logsList[i]
     local itemY = cursorY
 
-    -- Date and Time with ample width
+    -- Date and Time
     children[#children + 1] = {
       type = "label",
       x = x + 10,
@@ -592,7 +744,7 @@ function M.build(ctx)
       font = SMLSIZE
     }
 
-    -- View button (wider to avoid cutting off "Anzeigen")
+    -- View button
     local btnW = 100
     local btnH = 30
     local btnX = x + w - btnW - 10
@@ -608,6 +760,8 @@ function M.build(ctx)
         state.selectedFilePath = item.path
         state.selectedModel = item.model
         state.summary = nil
+        state.loading = true
+        state.loadingFrames = 0
         if state.requestRebuild then
           state.requestRebuild()
         end
@@ -633,7 +787,11 @@ function M.onClose()
   state.selectedFilePath = nil
   state.selectedModel = nil
   state.summary = nil
+  state.loading = false
+  state.loadingFrames = 0
   state.logsList = {}
+  LoadingOverlay = nil
+  collectgarbage("collect")
 end
 
 return M
