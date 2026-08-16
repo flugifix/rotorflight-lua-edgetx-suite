@@ -4,4 +4,7 @@ dist/*
 build/*
 tmp/*
 scratch/*
+__pycache__/
+*.pyc
+*.spec
 
