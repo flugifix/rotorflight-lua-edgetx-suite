@@ -1,8 +1,17 @@
 # 0.1.3
 
 ### Bug Fixes & Improvements
+- **Dashboard & @SRB-RC Theme**:
+  - Fixed runtime crash after FBL initialization caused by single-argument `lcd.RGB` call in `@srb-rc` theme and safeguarded color conversion helpers in `common.lua` and `gauge.lua`.
+  - Removed obsolete full-screen placeholder boxes in `@srb-rc` (`preflight.lua`, `inflight.lua`, `postflight.lua`) that caused unintended `"--"` text labels across the display.
+  - Adjusted Postflight grid layout from 7 rows to 3 rows to eliminate the bottom background gap and utilize 100% of the screen height.
+  - Corrected theme fallback loader in `runtime.lua` to properly fall back to the active flight mode's default theme script instead of non-existent `widget.lua`.
 - **Scorpion ESC Parameter Writing**:
   - Completed MSP 218 payload structure for Scorpion ESC (added missing `stick_max` and `stick_zero` fields to form full 84-byte payload) and named `serial_number`/`firmware_version` fields correctly to fix parameter save failures.
+- **ELRS Link & Telemetry**:
+  - Fixed ELRS packet rate parsing, RF link synchronization, and telemetry reload handling.
+- **Deployment & Tooling**:
+  - Supported configurable deployment language via VS Code settings (`rfsuite.deploy.language`) and build tasks.
 
 # 0.1.2
 
