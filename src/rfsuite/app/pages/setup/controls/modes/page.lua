@@ -319,11 +319,9 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local rawExtra = slot and ui.modeRangesExtra[slot] or nil
   if not rawRange or not rawExtra or not rawRange.range then return 0 end
 
-  local rowH = 130
+  local rowH = 106
   local rightPadding = 10
   local gap = 6
-  local ctrlH = 50
-  local inputH = 62
 
   -- Line 1: "Range X", Live Value, "Set" Button
   local wSet = 60
@@ -367,8 +365,8 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   -- Set button
   children[#children + 1] = {
     type = "button",
-    x = xSet, y = y + 6,
-    w = wSet, h = inputH,
+    x = xSet, y = y + 4,
+    w = wSet,
     text = pageText(i18n, "set", "Set"),
     press = function()
       onPressSetRange(slot, rawRange, i18n)
@@ -388,7 +386,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local xLogic = xStart - gap - wLogic
   local xAux = xLogic - gap - wAux
 
-  local line2Y = y + 60
+  local line2Y = y + 54
 
   -- AUX Choice
   local auxOptions = buildAuxOptions(i18n)
@@ -400,7 +398,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "choice",
     x = xAux, y = line2Y,
-    w = wAux, h = inputH,
+    w = wAux,
     title = pageText(i18n, "mode", "Mode"),
     values = auxValues,
     get = function()
@@ -416,9 +414,6 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
         rawRange.auxChannelIndex = clamp(val - 2, 0, AUX_CHANNEL_COUNT_FALLBACK - 1)
       end
       ui.dirty = true
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
     end
   }
 
@@ -427,7 +422,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "choice",
     x = xLogic, y = line2Y,
-    w = wLogic, h = inputH,
+    w = wLogic,
     title = pageText(i18n, "mode", "Mode"),
     values = logicValues,
     get = function()
@@ -437,9 +432,6 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
       local val = tonumber(value) or 1
       rawExtra.modeLogic = clamp(val - 1, 0, 1)
       ui.dirty = true
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
     end
   }
 
@@ -447,7 +439,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "numberEdit",
     x = xStart, y = line2Y,
-    w = wNum, h = inputH,
+    w = wNum,
     min = math.floor(RANGE_MIN / RANGE_STEP),
     max = math.floor(RANGE_MAX / RANGE_STEP),
     get = function()
@@ -461,9 +453,6 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
         rawRange.range["end"] = rawRange.range.start
       end
       ui.dirty = true
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
     end,
     display = function(val)
       local shown = (tonumber(val) or math.floor(RANGE_MIN / RANGE_STEP)) * RANGE_STEP
@@ -475,7 +464,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "numberEdit",
     x = xEnd, y = line2Y,
-    w = wNum, h = inputH,
+    w = wNum,
     min = math.floor(RANGE_MIN / RANGE_STEP),
     max = math.floor(RANGE_MAX / RANGE_STEP),
     get = function()
@@ -489,9 +478,6 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
         rawRange.range.start = rawRange.range["end"]
       end
       ui.dirty = true
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
     end,
     display = function(val)
       local shown = (tonumber(val) or math.floor(RANGE_MAX / RANGE_STEP)) * RANGE_STEP
@@ -503,7 +489,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   children[#children + 1] = {
     type = "button",
     x = xDel, y = line2Y,
-    w = wDel, h = inputH,
+    w = wDel,
     text = "X",
     press = function()
       removeRangeSlot(slot)
@@ -518,7 +504,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
     color = GREY_DEFAULT, filled = true
   }
 
-  return rowH + 1
+  return rowH + 14
 end
 
 local function buildSessionSignature()
@@ -990,13 +976,12 @@ function M.build(ctx)
   -- Action bar
   local rightPadding = 10
   local buttonW = math.floor(w * 0.24)
-  local buttonH = 32
-  local lineH = 40
+  local lineH = 50
 
   local activeStr = pageText(i18n, "active_ranges", "Active ranges") .. ": " .. tostring(#ranges) .. " / " .. tostring(#ui.modeRanges)
   children[#children + 1] = {
     type = "label",
-    x = x + 10, y = cursorY + 10,
+    x = x + 10, y = cursorY + 12,
     text = activeStr,
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
@@ -1005,7 +990,7 @@ function M.build(ctx)
   if ui.dirty then
     children[#children + 1] = {
       type = "label",
-      x = x + 200, y = cursorY + 10,
+      x = x + 200, y = cursorY + 12,
       text = pageText(i18n, "unsaved_changes", "Unsaved changes"),
       color = COLOR_THEME_SECONDARY1,
       font = SMLSIZE
@@ -1015,7 +1000,7 @@ function M.build(ctx)
   children[#children + 1] = {
     type = "button",
     x = x + w - buttonW - rightPadding, y = cursorY + 4,
-    w = buttonW, h = buttonH,
+    w = buttonW,
     text = "+ Add",
     press = function()
       addRangeToSelectedMode(i18n)
@@ -1029,7 +1014,7 @@ function M.build(ctx)
     w = w, h = 1,
     color = GREY_DEFAULT, filled = true
   }
-  cursorY = cursorY + 8
+  cursorY = cursorY + 12
 
   if #ranges == 0 then
     children[#children + 1] = {

@@ -4,6 +4,13 @@
 - **Blackbox Status Page**:
   - Fixed a nil index error (`attempt to index a nil value (upvalue 'SdcardSummaryApi')`) occurring when navigating away or closing the Blackbox status page while MSP summary queries are in flight.
   - Safeguarded asynchronous MSP response callbacks against page unloads and nil module references.
+- **Controls & Modes Setup (`setup/controls/modes`)**:
+  - Standardized control heights for range inputs and action buttons (`+ Add`, `Set`, `X`, AUX/Logic choices, Min/Max numbers) to match the standard widget height used in the Rates and PIDs tables.
+  - Fixed focus loss when editing numbers or dropdowns by removing premature full-page rebuild calls from value setters.
+  - Expanded row heights and inter-row spacing to prevent separator lines from intersecting input controls.
+- **Controls & Failsafe Setup (`setup/controls/failsafe`)**:
+  - Standardized mode choice and failsafe pulse value inputs to native framework widget dimensions.
+  - Adjusted row height to `56 px` with centered vertical offsets to ensure clean visual separation and avoid divider line clipping.
 
 # 0.1.3
 
