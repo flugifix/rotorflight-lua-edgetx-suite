@@ -15,6 +15,8 @@
   - Removed redundant `io.open`/`close` probes in `help_registry.lua`.
   - Added in-memory path caches for audio WAV events and model images to avoid repeated file system checks.
   - Cleaned up obsolete legacy root icons from `src/rfsuite/assets/icons/`.
+- **Scorpion ESC Parameter Writing**:
+  - Completed MSP 218 payload structure for Scorpion ESC (added missing `stick_max` and `stick_zero` fields to form full 84-byte payload) and named `serial_number`/`firmware_version` fields correctly to fix parameter save failures.
 
 # 0.1.1
 
