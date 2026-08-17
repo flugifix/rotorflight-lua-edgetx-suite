@@ -32,8 +32,8 @@ def process_file(file_path):
     if prefix:
         full_prefix = f"app.pages.{prefix}"
         
-        # Replace pageText(i18n, "key", "fallback") or pageText(i18n, "key") or t(i18n, "key", "fallback") or t(i18n, "key") with "@i18n(full_prefix.key|fallback)@" or "@i18n(full_prefix.key)@"
-        pattern = r'\b(?:pageText|t)\s*\(\s*(?:i18n|nil)\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\2)?\s*\)'
+        # Replace pageText(i18n, "key", "fallback") or pageText(ctx.i18n, "key", "fallback") or t(i18n, "key", "fallback") or t(ctx.i18n, "key")
+        pattern = r'\b(?:pageText|t)\s*\(\s*(?:(?:[a-zA-Z0-9_.]+\.)?i18n|nil)\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\2)?\s*\)'
         def sub_pagetext(m):
             key = m.group(1)
             if m.group(3) is not None:
@@ -45,6 +45,29 @@ def process_file(file_path):
             content = new_content
             changed = True
             
+        # Support titleKey = "key", titleFallback = "fallback"
+        pattern_title = r'\btitleKey\s*=\s*["\']([^"\']+)["\']\s*,\s*titleFallback\s*=\s*(["\'])(.*?)\2'
+        def sub_title(m):
+            key = m.group(1)
+            fallback = encode_fallback(m.group(3))
+            return f'titleKey = "{key}", titleFallback = "@i18n({full_prefix}.{key}|{fallback})@"'
+        new_content, count = re.subn(pattern_title, sub_title, content)
+        if count > 0:
+            content = new_content
+            changed = True
+
+        # Support labelKey = "key", labelFallback = "fallback" or fallback = "fallback"
+        pattern_label = r'\blabelKey\s*=\s*["\']([^"\']+)["\']\s*,\s*(labelFallback|fallback)\s*=\s*(["\'])(.*?)\3'
+        def sub_label(m):
+            key = m.group(1)
+            prop = m.group(2)
+            fallback = encode_fallback(m.group(4))
+            return f'labelKey = "{key}", {prop} = "@i18n({full_prefix}.{key}|{fallback})@"'
+        new_content, count = re.subn(pattern_label, sub_label, content)
+        if count > 0:
+            content = new_content
+            changed = True
+
         # Also support: Common.t(i18n, "pageKey", "key", "fallback") or Common.t(i18n, "pageKey", "key")
         def sub_commont(m):
             page_key = m.group(1)
@@ -53,7 +76,7 @@ def process_file(file_path):
                 fallback = encode_fallback(m.group(4))
                 return f'"@i18n(app.pages.{page_key}.{key}|{fallback})@"'
             return f'"@i18n(app.pages.{page_key}.{key})@"'
-        pattern_common = r'\bCommon\.t\s*\(\s*i18n\s*,\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\3)?\s*\)'
+        pattern_common = r'\bCommon\.t\s*\(\s*(?:(?:[a-zA-Z0-9_.]+\.)?i18n|nil)\s*,\s*["\']([^"\']+)["\']\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\3)?\s*\)'
         new_content, count = re.subn(pattern_common, sub_commont, content)
         if count > 0:
             content = new_content

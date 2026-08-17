@@ -300,15 +300,15 @@ local function tryPlayEventFile(audioState, now, relativePath, opts)
 end
 
 local function fuelThresholdList(selection)
-  local sel = tonumber(selection) or 0
+  local sel = tonumber(selection) or 10
   if sel == 0 then return { 100, 10 } end
+  if sel == 5 then return { 100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5 } end
   if sel == 10 then return { 100, 90, 80, 70, 60, 50, 40, 30, 20, 10 } end
   if sel == 20 then return { 100, 80, 60, 40, 20, 10 } end
   if sel == 25 then return { 100, 75, 50, 25, 10 } end
   if sel == 50 then return { 100, 50, 10 } end
-  if sel == 5 then return { 50, 5 } end
   if sel > 0 then return { sel } end
-  return { 10 }
+  return { 100, 90, 80, 70, 60, 50, 40, 30, 20, 10 }
 end
 
 local function resolveSmartfuelModel(self)

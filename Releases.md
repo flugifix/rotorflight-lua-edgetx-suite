@@ -12,13 +12,15 @@
   - Corrected theme fallback loader in `runtime.lua` to properly fall back to the active flight mode's default theme script instead of non-existent `widget.lua`.
 - **Save Progress & Localization**:
   - Fixed translation inlining for the save progress dialog (`app.saving` -> "Speichere...", `app.saving_settings` -> "Einstellungen werden angewendet").
-  - Enhanced the `precompile_i18n.py` build script to capture and inline dynamic `tr()` helper functions during deployment and packaging.
+  - Fixed English language package deployment by standardizing internal code fallbacks to English across settings pages (`settings_general`, `settings_audio_events`, `settings_audio_switches`, `settings_audio_timer`, `settings_localization`).
+  - Enhanced the `precompile_i18n.py` build script to capture and inline dynamic `tr()` helper functions, `ctx.i18n` lookups, and section/item table definitions (`titleKey`/`titleFallback`, `labelKey`/`labelFallback`) during deployment and packaging.
 - **Scorpion ESC Parameter Writing**:
   - Completed MSP 218 payload structure for Scorpion ESC (added missing `stick_max` and `stick_zero` fields to form full 84-byte payload) and named `serial_number`/`firmware_version` fields correctly to fix parameter save failures.
 - **ELRS Link & Telemetry**:
   - Fixed ELRS packet rate parsing, RF link synchronization, and telemetry reload handling.
 - **Audio & Telemetry**:
   - Aligned fuel audio callout behavior in the RFSuite tool with the dashboard widget by prioritizing Smart Fuel (`SmFt` / `smartfuel`) telemetry over standard fuel (`Bat%` / `fuel`) and adding `smartfuel = "SmFt"` to sensor aliases.
+  - Renamed fuel callout option "Default (Only at 10%)" to "Only at 10%" ("Nur bei 10%") in audio event settings for clearer option distinction.
 - **Deployment & Tooling**:
   - Supported configurable deployment language via VS Code settings (`rfsuite.deploy.language`) and build tasks.
 

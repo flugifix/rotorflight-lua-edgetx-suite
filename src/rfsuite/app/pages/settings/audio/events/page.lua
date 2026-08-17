@@ -135,7 +135,7 @@ end
 
 local function getFuelCalloutOptions(i18n)
   return {
-    { value = 0, label = t(i18n, "fuel_callout_default", "Default (Only at 10%)") },
+    { value = 0, label = t(i18n, "fuel_callout_only_10", "Only at 10%") },
     { value = 5, label = t(i18n, "fuel_callout_5", "Every 5%") },
     { value = 10, label = t(i18n, "fuel_callout_10", "Every 10%") },
     { value = 20, label = t(i18n, "fuel_callout_20", "Every 20%") },
@@ -249,79 +249,79 @@ local SECTIONS = {
   {
     key = "arming",
     titleKey = "section_arming",
-    titleFallback = "Arming-Flags",
+    titleFallback = "Arming Flags",
     items = {
-      { key = "arming_flags", labelKey = "arming_flags", labelFallback = "Arming-Flags" },
+      { key = "arming_flags", labelKey = "arming_flags", labelFallback = "Arming Flags" },
     },
   },
   {
     key = "governor",
     titleKey = "section_governor",
-    titleFallback = "Governor-Status",
+    titleFallback = "Governor State",
     items = {
-      { key = "governor_state", labelKey = "governor_state", labelFallback = "Governor-Status" },
+      { key = "governor_state", labelKey = "governor_state", labelFallback = "Governor State" },
     },
   },
   {
     key = "voltage",
     titleKey = "section_voltage",
-    titleFallback = "Spannung",
+    titleFallback = "Voltage",
     items = {
-      { key = "voltage_alert", labelKey = "voltage_alert", labelFallback = "Spannung" },
+      { key = "voltage_alert", labelKey = "voltage_alert", labelFallback = "Voltage" },
     },
   },
   {
     key = "profiles",
     titleKey = "section_profiles",
-    titleFallback = "PID/Raten-Profil",
+    titleFallback = "PID/Rate Profile",
     items = {
-      { key = "pid_profile",  labelKey = "pid_profile",  labelFallback = "PID-Profil" },
-      { key = "rate_profile", labelKey = "rate_profile", labelFallback = "Raten-Profil" },
+      { key = "pid_profile",  labelKey = "pid_profile",  labelFallback = "PID Profile" },
+      { key = "rate_profile", labelKey = "rate_profile", labelFallback = "Rate Profile" },
     },
   },
   {
     key = "esc",
     titleKey = "section_esc",
-    titleFallback = "ESC-Temperatur",
+    titleFallback = "ESC Temperature",
     items = {
-      { kind = "bool", key = "esc_temperature", labelKey = "esc_temperature", labelFallback = "ESC-Temperatur" },
-      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Schwellwert (deg)", min = 60, max = 300, suffix = "°" },
+      { kind = "bool", key = "esc_temperature", labelKey = "esc_temperature", labelFallback = "ESC Temperature" },
+      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", min = 60, max = 300, suffix = "°" },
     },
   },
   {
     key = "adjustment",
     titleKey = "section_adjustment",
-    titleFallback = "Einstellungsansagen",
+    titleFallback = "Adjustment Announcements",
     items = {
-      { key = "adjustment_events", labelKey = "adjustment_events", labelFallback = "Einstellungsansagen" },
+      { key = "adjustment_events", labelKey = "adjustment_events", labelFallback = "Adjustment Announcements" },
     },
   },
   {
     key = "fuel",
     titleKey = "section_fuel",
-    titleFallback = "Kraftstoff",
+    titleFallback = "Fuel",
     items = {
-      { kind = "bool", key = "fuel_alerts", labelKey = "fuel_alerts", labelFallback = "Kraftstoff" },
-      { kind = "choice", key = "fuel_callout_percent", labelKey = "fuel_callout_percent", labelFallback = "Ansage %" },
-      { kind = "number", key = "fuel_repeat_below_zero", labelKey = "fuel_repeat_below_zero", labelFallback = "Wiederholungen unter 0%", min = 1, max = 10, suffix = "x" },
-      { kind = "bool", key = "fuel_haptic_below_zero", labelKey = "fuel_haptic_below_zero", labelFallback = "Haptisch unter 0%" },
+      { kind = "bool", key = "fuel_alerts", labelKey = "fuel_alerts", labelFallback = "Fuel" },
+      { kind = "choice", key = "fuel_callout_percent", labelKey = "fuel_callout_percent", labelFallback = "Callout %" },
+      { kind = "number", key = "fuel_repeat_below_zero", labelKey = "fuel_repeat_below_zero", labelFallback = "Repeats below 0%", min = 1, max = 10, suffix = "x" },
+      { kind = "bool", key = "fuel_haptic_below_zero", labelKey = "fuel_haptic_below_zero", labelFallback = "Haptic below 0%" },
     },
   },
   {
     key = "battery",
     titleKey = "section_battery",
-    titleFallback = "Akku",
+    titleFallback = "Battery",
     items = {
-      { key = "battery_profile", labelKey = "battery_profile", labelFallback = "Akku-Kapazitaet" },
-      { key = "initial_fuel", labelKey = "initial_fuel", labelFallback = "Initialer Kraftstoff" },
+      { key = "battery_profile", labelKey = "battery_profile", labelFallback = "Battery Capacity" },
+      { key = "initial_fuel", labelKey = "initial_fuel", labelFallback = "Initial Fuel Announcement" },
     },
   },
   {
     key = "other",
     titleKey = "section_other",
-    titleFallback = "Sonstiges",
+    titleFallback = "Other",
     items = {
-      { key = "model_announcement", labelKey = "model_announcement", labelFallback = "Modellansage" },
+      { key = "model_announcement", labelKey = "model_announcement", labelFallback = "Model Announcement" },
     },
   },
 }
@@ -389,7 +389,7 @@ function M.onSave(ctx)
       pcall(Log.emit, "rfsuite", "onSave: savePreferences failed: " .. tostring(err or "?"), "error", true)
     end
     if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Fehler"), message = t(ctx.i18n, "save_error_message", "Speichern fehlgeschlagen") .. ": " .. tostring(err or "io") })
+      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
     return false
   end
