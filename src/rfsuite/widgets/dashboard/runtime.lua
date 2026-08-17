@@ -367,7 +367,9 @@ local function updateConnectionState(self)
       reloadPreferencesIfNeeded(self, true)
     else
       widgetLog(self, "FBL not ready yet", "info")
-      if self.audioState then
+      if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
+        DashboardAudio.resetConnectionState(self.audioState)
+      elseif self.audioState then
         self.audioState.initialized = false
         self.audioState.modelAnnounced = false
       end
@@ -1223,15 +1225,25 @@ function Runtime.new(zone, options)
       self.state.lastFlightSeconds = 0
       self.state.flightSeconds = 0
       self.state.lastDisarmAt = nil
+      self.state.profile = nil
+      self.state.rateProfile = nil
+      self.state.batteryProfile = nil
       self.flightMode = "preflight"
       self.theme = nil
       self.built = false
       self.renderKey = nil
       self._cachedRenderKey = nil
+      if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
+        DashboardAudio.resetConnectionState(self.audioState)
+      end
       -- Recalculate voltage theme config now that batteryCellCount is reset to 0
       -- This ensures gauge bounds are computed fresh, not with stale cell count from previous session
       updateVoltageThemeConfig(self)
       widgetLog(self, "FBL reconnect edge: reset dashboard session state", "info")
+    elseif not isFblConnected and wasFblConnected then
+      if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
+        DashboardAudio.resetConnectionState(self.audioState)
+      end
     end
     self.lastFblConnected = isFblConnected
 

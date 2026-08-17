@@ -2133,6 +2133,11 @@ function M.run(event, touchState)
           state.audioState.initialized = false
           state.audioState.modelAnnounced = false
         end
+        state.telemetryState.profile = nil
+        state.telemetryState.rateProfile = nil
+        state.telemetryState.batteryProfile = nil
+        state.telemetryState.voltage = nil
+        state.telemetryState.fuel = nil
       end
     end
 

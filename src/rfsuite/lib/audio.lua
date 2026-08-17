@@ -358,17 +358,31 @@ local function getModelName()
   return name
 end
 
+local function resolveModelName(modelName)
+  if type(modelName) == "string" and modelName ~= "" then
+    return modelName
+  end
+  if type(model) == "table" and type(model.getInfo) == "function" then
+    local ok, info = pcall(model.getInfo)
+    if ok and type(info) == "table" and type(info.name) == "string" and info.name ~= "" then
+      return info.name
+    end
+  end
+  return nil
+end
+
 local function announceModelName(audioState, modelName, opts)
-  if not modelName or type(modelName) ~= "string" or modelName == "" then return end
+  local name = resolveModelName(modelName)
+  if not name or type(name) ~= "string" or name == "" then return end
 
   local candidates = {
-    "/SOUNDS/" .. modelName .. ".wav",
-    "/SOUNDS/" .. string.gsub(modelName, " ", "_") .. ".wav",
-    "SOUNDS/" .. modelName .. ".wav",
-    "SOUNDS/" .. string.gsub(modelName, " ", "_") .. ".wav"
+    "/SOUNDS/" .. name .. ".wav",
+    "/SOUNDS/" .. string.gsub(name, " ", "_") .. ".wav",
+    "SOUNDS/" .. name .. ".wav",
+    "SOUNDS/" .. string.gsub(name, " ", "_") .. ".wav"
   }
 
-  -- Als angekündigt markieren, um endlose Fehler loops zu vermeiden
+  -- Als angekuendigt markieren, um endlose Fehler loops zu vermeiden
   audioState.modelAnnounced = true
 
   for i = 1, #candidates do
@@ -547,13 +561,40 @@ function Audio.resetConnectionState(audioState)
   audioState.batteryCapacityAnnounced = false
   audioState.initialFuelAnnounced = false
   audioState.nextAllowedAt = 0
+  audioState.nextProcessAt = 0
+  audioState.fuelSeenPositive = false
+  audioState.lowFuelActive = false
+  audioState.lowFuelLastAt = 0
+  audioState.lowFuelRepeatCount = 0
+  audioState.lastFuelCallout = nil
+  audioState.smartfuelModelType = nil
+  audioState.smartfuelCellCount = nil
+  audioState.smartfuelHasCapacity = nil
+  audioState.smartfuelIsElectric = nil
+  audioState.smartfuelEmptySound = nil
 
   if type(audioState.lastValues) == "table" then
-    audioState.lastValues.battery_profile = nil
+    for k in pairs(audioState.lastValues) do
+      audioState.lastValues[k] = nil
+    end
+  else
+    audioState.lastValues = {}
   end
 
   if type(audioState.pendingValues) == "table" then
-    audioState.pendingValues.battery_profile = nil
+    for k in pairs(audioState.pendingValues) do
+      audioState.pendingValues[k] = nil
+    end
+  else
+    audioState.pendingValues = {}
+  end
+
+  if type(audioState.lastAlertAt) == "table" then
+    audioState.lastAlertAt.voltage = 0
+    audioState.lastAlertAt.esc_temperature = 0
+    audioState.lastAlertAt.bec_voltage = 0
+    audioState.lastAlertAt.rx_voltage = 0
+    audioState.lastAlertAt.flight_time = 0
   end
 end
 
