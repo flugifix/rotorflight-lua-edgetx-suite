@@ -618,7 +618,11 @@ local function loadThemeModuleForState(themePath, flightMode)
     end
   end
 
-  local fallbackChunk = loadScript(SYSTEM_THEME_BASE .. "default/widget.lua", "t")
+  local fallbackPath = SYSTEM_THEME_BASE .. "default/" .. stateKey .. ".lua"
+  local fallbackChunk = loadScript(fallbackPath, "t")
+  if not fallbackChunk then
+    fallbackChunk = loadScript(SYSTEM_THEME_BASE .. "default/preflight.lua", "t")
+  end
   if not fallbackChunk then return nil end
   local ok, theme = pcall(fallbackChunk)
   if ok and type(theme) == "table" and (

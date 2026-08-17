@@ -14,7 +14,11 @@ local titleCache = {}
 
 local function rgb(hex, fallback)
   if lcd and type(lcd.RGB) == "function" then
-    return lcd.RGB(hex)
+    local r = math.floor(hex / 65536) % 256
+    local g = math.floor(hex / 256) % 256
+    local b = hex % 256
+    local ok, col = pcall(lcd.RGB, r, g, b)
+    if ok and col then return col end
   end
   return fallback
 end
