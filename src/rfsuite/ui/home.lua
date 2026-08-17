@@ -2091,7 +2091,11 @@ function M.run(event, touchState)
       
       local lq = Sensors and Sensors.getValue("link") or 0
       local vbat = Sensors and Sensors.getValue("voltage") or 0
-      local fuel = Sensors and Sensors.getValue("fuel") or -1
+      local fuel = Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")) or -1
+
+      if type(fuel) == "number" and fuel >= 0 then
+        if fuel > 100 then fuel = 100 end
+      end
 
       if Sensors then
         state.telemetryState.profile = Sensors.getValue("pid_profile") or state.telemetryState.profile

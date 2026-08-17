@@ -17,6 +17,8 @@
   - Completed MSP 218 payload structure for Scorpion ESC (added missing `stick_max` and `stick_zero` fields to form full 84-byte payload) and named `serial_number`/`firmware_version` fields correctly to fix parameter save failures.
 - **ELRS Link & Telemetry**:
   - Fixed ELRS packet rate parsing, RF link synchronization, and telemetry reload handling.
+- **Audio & Telemetry**:
+  - Aligned fuel audio callout behavior in the RFSuite tool with the dashboard widget by prioritizing Smart Fuel (`SmFt` / `smartfuel`) telemetry over standard fuel (`Bat%` / `fuel`) and adding `smartfuel = "SmFt"` to sensor aliases.
 - **Deployment & Tooling**:
   - Supported configurable deployment language via VS Code settings (`rfsuite.deploy.language`) and build tasks.
 
