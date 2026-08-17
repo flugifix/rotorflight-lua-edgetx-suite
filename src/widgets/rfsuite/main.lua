@@ -44,7 +44,59 @@ local function update(widget, options)
   end
 end
 
+local function logGv(msg)
+  local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
+  if fLog then
+    local t = (getTime and getTime()) or 0
+    io.write(fLog, string.format("[%.2f][Widget.main] %s\n", t / 100, tostring(msg)))
+    io.close(fLog)
+  end
+  if print then pcall(print, "[Widget.main] " .. tostring(msg)) end
+end
+
+local function shouldReloadWidget(widget)
+  local reload = false
+  local reason = ""
+  if _G.rfsuite_reload_flag and _G.rfsuite_reload_flag ~= widget._lastSeenReloadFlag then
+    reason = "reload_flag(" .. tostring(widget._lastSeenReloadFlag) .. "->" .. tostring(_G.rfsuite_reload_flag) .. ")"
+    widget._lastSeenReloadFlag = _G.rfsuite_reload_flag
+    reload = true
+  end
+  if type(model) == "table" and type(model.getGlobalVariable) == "function" then
+    for _, fm in ipairs({0, 8}) do
+      local ok, val = pcall(model.getGlobalVariable, 8, fm)
+      if ok and val == 1 then
+        pcall(model.setGlobalVariable, 8, fm, 0)
+        reason = reason .. " GV9_FM" .. tostring(fm) .. "=1"
+        reload = true
+      end
+    end
+  end
+  if reload then
+    logGv("Reload triggered: " .. reason)
+  end
+  return reload
+end
+
 local function refresh(widget, event, touchState)
+  if _G.rfsuite_tool_active then
+    return
+  end
+
+  if widget and shouldReloadWidget(widget) then
+    widget._cpuBackoffUntil = 0
+    logGv("Calling widget.reload()")
+    if type(widget.reload) == "function" then
+      pcall(widget.reload, widget, true)
+    else
+      widget.built = false
+      widget.theme = nil
+      widget.themePath = nil
+      widget.renderKey = nil
+      widget._cachedRenderKey = nil
+    end
+  end
+
   if widget and widget.refresh then
     local now = nowSeconds()
     local backoffUntil = tonumber(widget._cpuBackoffUntil) or 0

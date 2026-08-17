@@ -16,9 +16,10 @@ local FIELD_SPEC = {
     {"escinfo_29","U8"}, {"escinfo_30","U8"}, {"escinfo_31","U8"}, {"escinfo_32","U8"},
     {"esc_mode","U16"}, {"bec_voltage","U16"}, {"rotation","U16"}, {"telemetry_protocol","U16"},
     {"protection_delay","U16"}, {"min_voltage","U16"}, {"max_temperature","U16"}, {"max_current","U16"},
-    {"cutoff_handling","U16"}, {"max_used","U16"}, {"motor_startup_sound","U16"}, {"padding_1","U16"},
-    {"padding_2","U16"}, {"padding_3","U16"}, {"soft_start_time","U16"}, {"runup_time","U16"},
-    {"bailout","U16"}, {"gov_proportional","U32"}, {"gov_integral","U32"}
+    {"cutoff_handling","U16"}, {"max_used","U16"}, {"motor_startup_sound","U16"}, {"serial_number","U32"},
+    {"firmware_version","U16"}, {"soft_start_time","U16"}, {"runup_time","U16"},
+    {"bailout","U16"}, {"gov_proportional","U32"}, {"gov_integral","U32"},
+    {"stick_max","U32"}, {"stick_zero","U32"}
 }
 
 local SIM_RESPONSE = {
@@ -26,7 +27,7 @@ local SIM_RESPONSE = {
     128, -- esc_command
     84,114,105,98,117,110,117,115,32,69,83,67,45,54,83,45,56,48,65,0,0,0,0,0,0,0,0,0,0,0,4,0,
     3,0, 3,0, 1,0, 3,0, 136,19, 22,3, 16,39, 64,31, 136,19, 0,0, 1,0, 7,2, 0,6, 63,0, 160,15, 64,31, 208,7,
-    100,0,0,0, 200,0,0,0
+    100,0,0,0, 200,0,0,0, 1,0,0,0, 200,250,0,0
 }
 
 local TYPE_LEN = {U8=1,S8=1,U16=2,S16=2,U24=3,U32=4,U64=8,U120=15,U128=16}

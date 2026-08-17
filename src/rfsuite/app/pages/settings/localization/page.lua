@@ -106,11 +106,11 @@ function M.onSave(ctx)
   local ok, err = ctx.savePreferences()
   if ok then
     if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "saved_title", "Gespeichert"), message = t(ctx.i18n, "saved_message", "Einstellungen gespeichert") })
+      lvgl.alert({ title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
     end
   else
     if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Fehler"), message = t(ctx.i18n, "save_error_message", "Speichern fehlgeschlagen") .. ": " .. tostring(err or "io") })
+      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
   end
 end
@@ -128,7 +128,7 @@ function M.build(ctx)
 
   cursorY = cursorY + Controls.appendComboSelect(
     children, x, cursorY, w,
-    t(i18n, "temperature_unit", "Temperatureinheit"),
+    t(i18n, "temperature_unit", "Temperature Unit"),
     getTempOptions(i18n),
     ui.config.temperature_unit,
     function(val)
@@ -138,7 +138,7 @@ function M.build(ctx)
 
   cursorY = cursorY + Controls.appendComboSelect(
     children, x, cursorY, w,
-    t(i18n, "altitude_unit", "Hoeheneinheit"),
+    t(i18n, "altitude_unit", "Altitude Unit"),
     getAltOptions(i18n),
     ui.config.altitude_unit,
     function(val)

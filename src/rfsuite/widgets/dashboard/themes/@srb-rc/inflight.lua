@@ -1,5 +1,14 @@
 local Theme = {}
-local OLIVE = (lcd and lcd.RGB and lcd.RGB(0x808000)) or YELLOW
+
+local function rgb(r, g, b, fallback)
+  if lcd and type(lcd.RGB) == "function" then
+    local ok, col = pcall(lcd.RGB, r, g, b)
+    if ok and col then return col end
+  end
+  return fallback
+end
+
+local OLIVE = rgb(128, 128, 0, YELLOW)
 
 local function loadSrbCommon()
   if type(_G) == "table" and type(_G.__rfsuiteThemeSrbCommonModule) == "table" then
@@ -37,8 +46,6 @@ end
 Theme.layout = { cols = 13, rows = 10, padding = 1 }
 
 Theme.boxes = {
-  { col = 1, row = 1, colspan = 13, rowspan = 10, type = "text", subtype = "text", title = "", bgcolor = BLACK },
-
   { col = 1, row = 1, colspan = 4, rowspan = 3, type = "text", subtype = "governor", title = "@i18n(widgets.dashboard.governor):upper()@", titlepos = "top", titlealign = CENTER, titlefont = SMLSIZE, font = DBLSIZE, textcolor = WHITE, titlecolor = WHITE, warningcolor = WHITE, activecolor = WHITE, bgcolor = OLIVE },
 
   { col = 1, row = 4, colspan = 2, rowspan = 3, type = "text", subtype = "telemetry", source = "pid_profile", title = "@i18n(widgets.dashboard.profile):upper()@", titlepos = "top", transform = "floor", titlefont = SMLSIZE, font = DBLSIZE, textcolor = WHITE, titlecolor = WHITE, bgcolor = BLACK },

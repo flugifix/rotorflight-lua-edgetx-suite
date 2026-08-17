@@ -97,14 +97,14 @@ local function ensureLoaded(prefs)
   local defaultPath = DashboardLib.getDefaultThemePath(ui.themes)
   local src = (prefs and prefs.dashboard) or {}
 
-  local modelSrc = src
+  local modelSrc = nil
   if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and type(_G.rfsuite.session.modelPreferences) == "table" then
     if _G.rfsuite.session.modelPreferences.dashboard then
       modelSrc = _G.rfsuite.session.modelPreferences.dashboard
     end
   end
 
-  local modelOverride = src.model_override == true
+  local modelOverride = false
   if type(modelSrc) == "table" and modelSrc.model_override ~= nil then
     modelOverride = modelSrc.model_override == true
   end
@@ -113,9 +113,9 @@ local function ensureLoaded(prefs)
   ui.config.theme_inflight = src.theme_inflight or defaultPath
   ui.config.theme_postflight = src.theme_postflight or defaultPath
   ui.config.model_override = modelOverride
-  ui.config.model_theme_preflight = modelSrc.model_theme_preflight or "nil"
-  ui.config.model_theme_inflight = modelSrc.model_theme_inflight or "nil"
-  ui.config.model_theme_postflight = modelSrc.model_theme_postflight or "nil"
+  ui.config.model_theme_preflight = (modelSrc and modelSrc.model_theme_preflight) or "nil"
+  ui.config.model_theme_inflight = (modelSrc and modelSrc.model_theme_inflight) or "nil"
+  ui.config.model_theme_postflight = (modelSrc and modelSrc.model_theme_postflight) or "nil"
 
   ui.loaded = true
 end
@@ -157,7 +157,11 @@ local function saveToPreferences(prefs)
   prefs.dashboard.theme_preflight = ui.config.theme_preflight
   prefs.dashboard.theme_inflight = ui.config.theme_inflight
   prefs.dashboard.theme_postflight = ui.config.theme_postflight
-  prefs.dashboard.model_override = ui.config.model_override == true
+  -- Ensure legacy model_override keys are not stored in global preferences
+  prefs.dashboard.model_override = nil
+  prefs.dashboard.model_theme_preflight = nil
+  prefs.dashboard.model_theme_inflight = nil
+  prefs.dashboard.model_theme_postflight = nil
 
   if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
     local session = _G.rfsuite.session

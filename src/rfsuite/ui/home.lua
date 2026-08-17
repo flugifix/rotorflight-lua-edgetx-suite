@@ -1326,9 +1326,8 @@ function M.buildUI()
   end
 
   if state.pendingSaveAction then
-    local tr = state.i18n and state.i18n.t
-    local title = tr and tr("app.saving") or "Saving..."
-    local message = tr and tr("app.saving_settings") or "Applying settings"
+    local title = state.i18n and state.i18n.t and state.i18n.t("app.saving") or "Saving..."
+    local message = state.i18n and state.i18n.t and state.i18n.t("app.saving_settings") or "Applying settings"
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
     local lyt = {
       {
@@ -1641,6 +1640,7 @@ end
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
 function M.init()
+  _G.rfsuite_tool_active = true
   ensureInitDeps()
 
   ensurePreferencesSafe()
@@ -1954,6 +1954,12 @@ function M.run(event, touchState)
           pcall(MspRuntime.detach, "tool")
           state.mspAttached = false
         end
+        _G.rfsuite_tool_active = false
+        _G.rfsuite_reload_flag = (_G.rfsuite_reload_flag or 0) + 1
+        if type(model) == "table" and type(model.setGlobalVariable) == "function" then
+          pcall(model.setGlobalVariable, 8, 0, 1)
+          pcall(model.setGlobalVariable, 8, 8, 1)
+        end
         return 2
       end
       return 0
@@ -2085,7 +2091,11 @@ function M.run(event, touchState)
       
       local lq = Sensors and Sensors.getValue("link") or 0
       local vbat = Sensors and Sensors.getValue("voltage") or 0
-      local fuel = Sensors and Sensors.getValue("fuel") or -1
+      local fuel = Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")) or -1
+
+      if type(fuel) == "number" and fuel >= 0 then
+        if fuel > 100 then fuel = 100 end
+      end
 
       if Sensors then
         state.telemetryState.profile = Sensors.getValue("pid_profile") or state.telemetryState.profile
@@ -2123,6 +2133,11 @@ function M.run(event, touchState)
           state.audioState.initialized = false
           state.audioState.modelAnnounced = false
         end
+        state.telemetryState.profile = nil
+        state.telemetryState.rateProfile = nil
+        state.telemetryState.batteryProfile = nil
+        state.telemetryState.voltage = nil
+        state.telemetryState.fuel = nil
       end
     end
 
@@ -2140,6 +2155,12 @@ function M.run(event, touchState)
     if state.mspAttached and MspRuntime and type(MspRuntime.detach) == "function" then
       MspRuntime.detach("tool")
       state.mspAttached = false
+    end
+    _G.rfsuite_tool_active = false
+    _G.rfsuite_reload_flag = (_G.rfsuite_reload_flag or 0) + 1
+    if type(model) == "table" and type(model.setGlobalVariable) == "function" then
+      pcall(model.setGlobalVariable, 8, 0, 1)
+      pcall(model.setGlobalVariable, 8, 8, 1)
     end
     return 2
   end

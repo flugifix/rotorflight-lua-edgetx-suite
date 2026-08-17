@@ -36,8 +36,6 @@ end
 Theme.layout = { cols = 13, rows = 10, padding = 1, showstats = false }
 
 Theme.boxes = {
-  { col = 1, row = 1, colspan = 13, rowspan = 10, type = "text", subtype = "text", title = "", bgcolor = BLACK },
-
   { col = 1, row = 1, colspan = 4, rowspan = 3, type = "text", subtype = "telemetry", source = "model_name", title = "@i18n(widgets.dashboard.craft_name):upper()@", titlepos = "top", titlealign = CENTER, titlefont = SMLSIZE, font = DBLSIZE, textcolor = "orange", titlecolor = WHITE, bgcolor = BLACK },
 
   { col = 1, row = 4, colspan = 2, rowspan = 3, type = "text", subtype = "telemetry", source = "pid_profile", title = "@i18n(widgets.dashboard.profile):upper()@", titlepos = "top", transform = "floor", titlefont = SMLSIZE, font = DBLSIZE, textcolor = WHITE, titlecolor = WHITE, bgcolor = BLACK },

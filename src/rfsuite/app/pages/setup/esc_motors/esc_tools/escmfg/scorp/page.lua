@@ -199,6 +199,7 @@ local function queueScorpionWrite(requestRebuild)
     writeData[k] = v
   end
 
+  writeData.esc_signature = writeData.esc_signature or (EscParametersScorpionApi and EscParametersScorpionApi.mspSignature) or 0x53
   writeData.esc_command = 0 -- Required by Scorpion ESC write specification
 
   ui.saving = true

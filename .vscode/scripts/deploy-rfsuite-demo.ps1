@@ -11,7 +11,8 @@ $ErrorActionPreference = 'Stop'
 
 $workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
-if ([string]::IsNullOrWhiteSpace($Language)) {
+if ([string]::IsNullOrWhiteSpace($Language) -or ($Language -like '${config:*')) {
+    $Language = $null
     $settingsPath = Join-Path $workspaceRoot '.vscode\settings.json'
     if (Test-Path $settingsPath) {
         try {
@@ -22,8 +23,8 @@ if ([string]::IsNullOrWhiteSpace($Language)) {
         } catch {}
     }
 }
-if ([string]::IsNullOrWhiteSpace($Language)) {
-    $Language = 'de'
+if ([string]::IsNullOrWhiteSpace($Language) -or ($Language -like '${config:*')) {
+    $Language = 'en'
 }
 $sourceRoot = Join-Path $workspaceRoot 'src'
 $sourceCore = Join-Path $sourceRoot 'rfsuite'

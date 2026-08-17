@@ -97,38 +97,38 @@ local SECTIONS = {
   {
     key = "core",
     titleKey = "section_core",
-    titleFallback = "Hauptschalter",
+    titleFallback = "Core Switches",
     items = {
-      { key = "flight_mode_switch", labelKey = "flight_mode_switch", labelFallback = "Flugmodus-Schalter" },
+      { key = "flight_mode_switch", labelKey = "flight_mode_switch", labelFallback = "Flight Mode Switch" },
       { key = "arm_disarm_switch",  labelKey = "arm_disarm_switch",  labelFallback = "Arm/Disarm" },
     },
   },
   {
     key = "modes",
     titleKey = "section_modes",
-    titleFallback = "Flugmodi",
+    titleFallback = "Flight Modes",
     items = {
-      { key = "stabilize_mode_switch", labelKey = "stabilize_mode_switch", labelFallback = "Stabilisierungsmodus" },
-      { key = "acro_mode_switch",      labelKey = "acro_mode_switch",      labelFallback = "Acro-Modus" },
+      { key = "stabilize_mode_switch", labelKey = "stabilize_mode_switch", labelFallback = "Stabilize Mode" },
+      { key = "acro_mode_switch",      labelKey = "acro_mode_switch",      labelFallback = "Acro Mode" },
     },
   },
   {
     key = "hold",
     titleKey = "section_hold",
-    titleFallback = "Hold-Funktionen",
+    titleFallback = "Hold Functions",
     items = {
-      { key = "altitude_hold_switch",  labelKey = "altitude_hold_switch",  labelFallback = "Hoehenhaltung" },
-      { key = "position_hold_switch",  labelKey = "position_hold_switch",  labelFallback = "Positionshaltung" },
-      { key = "return_to_home_switch", labelKey = "return_to_home_switch", labelFallback = "Rueckkehr nach Hause" },
+      { key = "altitude_hold_switch",  labelKey = "altitude_hold_switch",  labelFallback = "Altitude Hold" },
+      { key = "position_hold_switch",  labelKey = "position_hold_switch",  labelFallback = "Position Hold" },
+      { key = "return_to_home_switch", labelKey = "return_to_home_switch", labelFallback = "Return to Home" },
     },
   },
   {
     key = "extras",
     titleKey = "section_extras",
-    titleFallback = "Sonstiges",
+    titleFallback = "Extras",
     items = {
-      { key = "channel_6_switch", labelKey = "channel_6_switch", labelFallback = "Kanal 6" },
-      { key = "switch_feedback",  labelKey = "switch_feedback",  labelFallback = "Schalter-Rueckmeldung" },
+      { key = "channel_6_switch", labelKey = "channel_6_switch", labelFallback = "Channel 6" },
+      { key = "switch_feedback",  labelKey = "switch_feedback",  labelFallback = "Switch Feedback" },
     },
   },
 }
@@ -164,7 +164,7 @@ function M.onSave(ctx)
     return true
   else
     if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Fehler"), message = t(ctx.i18n, "save_error_message", "Speichern fehlgeschlagen") .. ": " .. tostring(err or "io") })
+      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
     return true
   end

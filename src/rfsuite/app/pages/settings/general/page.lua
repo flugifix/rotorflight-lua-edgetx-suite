@@ -122,9 +122,9 @@ end
 -- Signature: (cursorY, children, x, w, i18n, requestRebuild) -> newCursorY
 
 local SAFETY_ITEMS = {
-  { key = "save_confirm",                 labelKey = "save_confirm",                 fallback = "Bestätigen beim Speichern" },
-  { key = "save_armed_warning",           labelKey = "save_armed_warning",           fallback = "Warnung beim Speichern (armed)" },
-  { key = "reload_confirm",               labelKey = "reload_confirm",               fallback = "Bestätigen beim Neuladen" },
+  { key = "save_confirm",                 labelKey = "save_confirm",                 fallback = "Confirm on Save" },
+  { key = "save_armed_warning",           labelKey = "save_armed_warning",           fallback = "Show Disarm-to-Save Warning" },
+  { key = "reload_confirm",               labelKey = "reload_confirm",               fallback = "Confirm on Reload" },
 }
 
 local function buildSafety(cursorY, children, x, w, i18n)
@@ -141,7 +141,7 @@ end
 
 local function buildIntegration(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "sync_model_name", "Modellname synchronisieren"),
+    t(i18n, "sync_model_name", "Synchronize Model Name"),
     ui.runtime.getBoolGetter("syncname"),
     ui.runtime.getBoolSetter("syncname")
   )
@@ -151,7 +151,7 @@ end
 
 local function buildDevelopment(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "developer_tools", "Entwickler Tools"),
+    t(i18n, "developer_tools", "Developer Tools"),
     ui.runtime.getBoolGetter("developer_tools"),
     ui.runtime.getBoolSetter("developer_tools")
   )
@@ -162,9 +162,9 @@ end
 -- Add new sections here — one entry, one builder function above, done.
 
 local SECTIONS = {
-  { key = "safety",      titleKey = "section_safety",      titleFallback = "Sicherheit & Prompts", build = buildSafety      },
-  { key = "integration", titleKey = "section_integration", titleFallback = "Integration",         build = buildIntegration },
-  { key = "development", titleKey = "section_development", titleFallback = "Entwicklung",         build = buildDevelopment },
+  { key = "safety",      titleKey = "section_safety",      titleFallback = "Safety & Prompts", build = buildSafety      },
+  { key = "integration", titleKey = "section_integration", titleFallback = "Integration",      build = buildIntegration },
+  { key = "development", titleKey = "section_development", titleFallback = "Development",      build = buildDevelopment },
 }
 
 -- ─── Module API ──────────────────────────────────────────────────────────────
@@ -198,11 +198,11 @@ function M.onSave(ctx)
       ctx.menu.setCondition("developerTools", ui.config.developer_tools == true)
     end
     if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "saved_title", "Gespeichert"), message = t(ctx.i18n, "saved_message", "Einstellungen gespeichert") })
+      lvgl.alert({ title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
     end
   else
     if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Fehler"), message = t(ctx.i18n, "save_error_message", "Speichern fehlgeschlagen") .. ": " .. tostring(err or "io") })
+      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
   end
 end

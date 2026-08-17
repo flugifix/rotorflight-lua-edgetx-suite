@@ -10,7 +10,9 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\.vscode\\scripts\\deploy-rfsuite-demo.ps1"
+        "${workspaceFolder}\\.vscode\\scripts\\deploy-rfsuite-demo.ps1",
+        "-Language",
+        "${config:rfsuite.deploy.language}"
       ],
       "group": "build",
       "problemMatcher": [],
@@ -34,7 +36,9 @@
         "-File",
         "${workspaceFolder}\\.vscode\\scripts\\deploy-rfsuite-demo.ps1",
         "-Target",
-        "radio"
+        "radio",
+        "-Language",
+        "${config:rfsuite.deploy.language}"
       ],
       "group": "build",
       "problemMatcher": [],

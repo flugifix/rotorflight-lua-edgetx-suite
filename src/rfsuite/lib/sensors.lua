@@ -304,6 +304,7 @@ Sensors.aliases = {
   rpm = "Hspd",
   link = "RQly",
   fuel = "Bat%",
+  smartfuel = "SmFt",
   smartconsumption = "SmCp",
   consumption = "Capa",
   current = "Curr",

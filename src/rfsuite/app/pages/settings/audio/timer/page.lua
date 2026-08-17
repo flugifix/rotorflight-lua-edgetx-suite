@@ -97,38 +97,38 @@ local SECTIONS = {
   {
     key = "timer_alerts",
     titleKey = "section_timer_alerts",
-    titleFallback = "Timer-Alarme",
+    titleFallback = "Timer Alerts",
     items = {
-      { key = "timer1_alerts", labelKey = "timer1_alerts", labelFallback = "Timer 1 Alarme" },
-      { key = "timer2_alerts", labelKey = "timer2_alerts", labelFallback = "Timer 2 Alarme" },
-      { key = "timer3_alerts", labelKey = "timer3_alerts", labelFallback = "Timer 3 Alarme" },
+      { key = "timer1_alerts", labelKey = "timer1_alerts", labelFallback = "Timer 1 Alerts" },
+      { key = "timer2_alerts", labelKey = "timer2_alerts", labelFallback = "Timer 2 Alerts" },
+      { key = "timer3_alerts", labelKey = "timer3_alerts", labelFallback = "Timer 3 Alerts" },
     },
   },
   {
     key = "flight",
     titleKey = "section_flight",
-    titleFallback = "Flugzeit",
+    titleFallback = "Flight Time",
     items = {
-      { key = "flight_time_alert", labelKey = "flight_time_alert", labelFallback = "Flugzeit-Warnung" },
-      { key = "battery_timer",     labelKey = "battery_timer",     labelFallback = "Akku-Timer" },
-      { key = "armed_timer",       labelKey = "armed_timer",       labelFallback = "Armed-Zeit" },
+      { key = "flight_time_alert", labelKey = "flight_time_alert", labelFallback = "Flight Time Alert" },
+      { key = "battery_timer",     labelKey = "battery_timer",     labelFallback = "Battery Timer" },
+      { key = "armed_timer",       labelKey = "armed_timer",       labelFallback = "Armed Time" },
     },
   },
   {
     key = "counting",
     titleKey = "section_counting",
-    titleFallback = "Zaehlen",
+    titleFallback = "Counting",
     items = {
-      { key = "count_down_timer", labelKey = "count_down_timer", labelFallback = "Countdown-Timer" },
-      { key = "count_up_timer",   labelKey = "count_up_timer",   labelFallback = "Hochzaehler-Timer" },
+      { key = "count_down_timer", labelKey = "count_down_timer", labelFallback = "Countdown Timer" },
+      { key = "count_up_timer",   labelKey = "count_up_timer",   labelFallback = "Countup Timer" },
     },
   },
   {
     key = "sound",
     titleKey = "section_sound",
-    titleFallback = "Klang",
+    titleFallback = "Sound",
     items = {
-      { key = "timer_bell_sound", labelKey = "timer_bell_sound", labelFallback = "Glockensound bei Timer" },
+      { key = "timer_bell_sound", labelKey = "timer_bell_sound", labelFallback = "Timer Bell Sound" },
     },
   },
 }
@@ -164,7 +164,7 @@ function M.onSave(ctx)
     return true
   else
     if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Fehler"), message = t(ctx.i18n, "save_error_message", "Speichern fehlgeschlagen") .. ": " .. tostring(err or "io") })
+      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
     return true
   end
