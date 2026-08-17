@@ -170,16 +170,32 @@ local function publishPreferencesToGlobal(prefs)
   _G.rfsuite.preferences = prefs or {}
 end
 
+local function logGv(msg)
+  local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
+  if fLog then
+    local t = (getTime and getTime()) or 0
+    io.write(fLog, string.format("[%.2f][Runtime] %s\n", t / 100, tostring(msg)))
+    io.close(fLog)
+  end
+  if print then pcall(print, "[Runtime] " .. tostring(msg)) end
+end
+
 local function reloadPreferencesIfNeeded(self, force)
   local now = nowSeconds()
 
   local signalReload = false
   if not force then
+    if _G.rfsuite_reload_flag and _G.rfsuite_reload_flag ~= self._lastSeenReloadFlag then
+      self._lastSeenReloadFlag = _G.rfsuite_reload_flag
+      signalReload = true
+    end
     if type(model) == "table" and type(model.getGlobalVariable) == "function" then
-      -- Signaling mechanism: GV9 (index 8) for FM8 (index 8) set to 1 by the Tool
-      local ok, val = pcall(model.getGlobalVariable, 8, 8)
-      if ok and val == 1 then
-        signalReload = true
+      for _, fm in ipairs({0, 8}) do
+        local ok, val = pcall(model.getGlobalVariable, 8, fm)
+        if ok and val == 1 then
+          pcall(model.setGlobalVariable, 8, fm, 0)
+          signalReload = true
+        end
       end
     end
   end
@@ -193,6 +209,8 @@ local function reloadPreferencesIfNeeded(self, force)
     return
   end
 
+  logGv("reloadPreferencesIfNeeded executing (force=" .. tostring(force) .. " signal=" .. tostring(signalReload) .. ")")
+
   local prefs = loadPreferences()
   if type(prefs) == "table" then
     self.preferences = prefs
@@ -204,10 +222,31 @@ local function reloadPreferencesIfNeeded(self, force)
       self.state.i18n = self.i18n
     end
 
-    -- Reset signal if we successfully reloaded based on a trigger
-    if signalReload and type(model) == "table" and type(model.setGlobalVariable) == "function" then
-      pcall(model.setGlobalVariable, 8, 8, 0)
+    -- Reload model-specific preferences from disk if MCU ID is available
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    if session and session.mcu_id then
+      local MP = requireModule("lib/model_preferences.lua")
+      if MP and type(MP.loadByMcuId) == "function" then
+        local mPrefs, mPath = MP.loadByMcuId(session.mcu_id)
+        if mPrefs then
+          session.modelPreferences = mPrefs
+          session.modelPreferencesFile = mPath
+          self.modelPreferences = mPrefs
+          logGv("Loaded model prefs from disk: " .. tostring(mPath))
+        end
+      end
+    else
+      logGv("No session.mcu_id available during reloadPreferencesIfNeeded")
     end
+
+    -- Invalidate current theme and force immediate reload
+    self.theme = nil
+    self.themePath = nil
+    self.built = false
+    self.renderKey = nil
+    self._cachedRenderKey = nil
+    self.lastModelPreferences = nil
+    self._lastUIRefresh = 0
   end
 
   self.preferencesLastLoadedAt = now
@@ -638,7 +677,7 @@ end
 
 local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
   local modelDashboard = modelPrefs and modelPrefs.dashboard or {}
-  local modelOverride = modelDashboard.model_override == true or dashboard.model_override == true
+  local modelOverride = modelDashboard.model_override == true
   local key = "theme_preflight"
   local modelKey = "model_theme_preflight"
 
@@ -650,22 +689,43 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
     modelKey = "model_theme_postflight"
   end
 
-  local modelValue = modelOverride and modelDashboard[modelKey] or nil
-  -- fallback to global dashboard if it happens to be set there for backward compat
-  if not modelValue or modelValue == "" or modelValue == "nil" then
-    modelValue = modelOverride and dashboard and dashboard[modelKey] or nil
+  local chosen = nil
+  local reason = nil
+  if modelOverride then
+    local modelValue = modelDashboard[modelKey]
+    if modelValue and modelValue ~= "" and modelValue ~= "nil" then
+      chosen = modelValue
+      reason = "model_" .. modelKey
+    else
+      local modelPreflight = modelDashboard["model_theme_preflight"]
+      if modelPreflight and modelPreflight ~= "" and modelPreflight ~= "nil" then
+        chosen = modelPreflight
+        reason = "model_preflight_fallback"
+      end
+    end
   end
 
-  if modelValue and modelValue ~= "" and modelValue ~= "nil" then
-    return modelValue
+  if not chosen then
+    local globalValue = dashboard and dashboard[key] or nil
+    if globalValue and globalValue ~= "" then
+      chosen = globalValue
+      reason = "global_" .. key
+    else
+      local globalPreflight = dashboard and dashboard["theme_preflight"] or nil
+      if globalPreflight and globalPreflight ~= "" then
+        chosen = globalPreflight
+        reason = "global_preflight_fallback"
+      else
+        chosen = "system/default"
+        reason = "default_fallback"
+      end
+    end
   end
 
-  local globalValue = dashboard and dashboard[key] or nil
-  if globalValue and globalValue ~= "" then
-    return globalValue
-  end
+  logGv(string.format("resolveTheme: mode=%s, modelOverride=%s, modelPreflight=%s, globalPreflight=%s => chosen=%s (%s)",
+    tostring(flightMode), tostring(modelOverride), tostring(modelDashboard.model_theme_preflight), tostring(dashboard and dashboard.theme_preflight), tostring(chosen), tostring(reason)))
 
-  return "system/default"
+  return chosen
 end
 
 local function readTelemetry(state)
@@ -1005,10 +1065,19 @@ function Runtime.new(zone, options)
     end
 
     local currentConfig = self.state.themeConfig or {}
-    local nextConfig = {
-      v_min = tonumber(currentConfig.v_min) or 18.0,
-      v_max = tonumber(currentConfig.v_max) or 25.2
-    }
+    local nextConfig = {}
+    for k, v in pairs(currentConfig) do
+      nextConfig[k] = v
+    end
+    nextConfig.v_min = tonumber(currentConfig.v_min) or 18.0
+    nextConfig.v_max = tonumber(currentConfig.v_max) or 25.2
+
+    -- If the user configured custom voltage values (in model or global preferences), respect them!
+    if currentConfig._customVoltage == true then
+      applyThemeConfig(nextConfig)
+      logVoltageThemeDecision("custom-config", nil, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+      return
+    end
 
     local defaultMin = 18.0
     local defaultMax = 25.2
@@ -1047,15 +1116,17 @@ function Runtime.new(zone, options)
   end
 
   local function reloadActiveTheme(self)
-    local modelPrefs = nil
-    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
-      modelPrefs = _G.rfsuite.session.modelPreferences
-    end
+    local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
     local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, self.flightMode)
-    local nextConfig = { v_min = 18.0, v_max = 25.2 }
+    local nextConfig = {}
     if self.dashboardLib and self.dashboardLib.getThemeConfig then
-      nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, nextConfig, modelPrefs)
+      nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, {}, modelPrefs)
     end
+
+    local hasCustomVoltage = (nextConfig.v_min ~= nil or nextConfig.v_max ~= nil)
+    nextConfig.v_min = tonumber(nextConfig.v_min) or 18.0
+    nextConfig.v_max = tonumber(nextConfig.v_max) or 25.2
+    nextConfig._customVoltage = hasCustomVoltage
 
     self.themePath = selectedTheme
     self.state.themeConfig = nextConfig
@@ -1063,6 +1134,8 @@ function Runtime.new(zone, options)
     self.theme = loadThemeModuleForState(selectedTheme, self.flightMode)
     self.built = false
     self.renderKey = nil
+
+    logGv(string.format("reloadActiveTheme: flightMode=%s, selectedTheme=%s, loadedTheme=%s, v_min=%.1f, v_max=%.1f, customV=%s", tostring(self.flightMode), tostring(selectedTheme), tostring(self.theme ~= nil), nextConfig.v_min, nextConfig.v_max, tostring(hasCustomVoltage)))
 
     local sources = {}
     if self.theme then
@@ -1169,16 +1242,16 @@ function Runtime.new(zone, options)
       processAudioEvents(self)
     end
 
-    local modelPrefs = nil
-    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
-      modelPrefs = _G.rfsuite.session.modelPreferences
-    end
+    local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
     local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, nextMode)
+
+    local modelPrefsChanged = (modelPrefs ~= self.lastModelPreferences)
+    self.lastModelPreferences = modelPrefs
 
     if nextMode ~= self.flightMode then
       self.flightMode = nextMode
       reloadActiveTheme(self)
-    elseif selectedTheme ~= self.themePath then
+    elseif selectedTheme ~= self.themePath or modelPrefsChanged then
       reloadActiveTheme(self)
     elseif not self.theme then
       reloadActiveTheme(self)
@@ -1195,6 +1268,16 @@ function Runtime.new(zone, options)
   function widget.update(self, newOptions)
     self.options = newOptions
     self.built = false
+  end
+
+  function widget.reload(self, force)
+    logGv("widget.reload called with force=" .. tostring(force))
+    reloadPreferencesIfNeeded(self, force ~= false)
+    reloadActiveTheme(self)
+    self.built = false
+    self.renderKey = nil
+    self._cachedRenderKey = nil
+    self._lastUIRefresh = 0
   end
 
 
@@ -1260,7 +1343,6 @@ function Runtime.new(zone, options)
     end
 
     if not self.built then
-      lvgl.clear()
       local children = {}
       
       if isInteractive then
@@ -1277,8 +1359,10 @@ function Runtime.new(zone, options)
         if type(children) ~= "table" then return end
       end
 
+      lvgl.clear()
       lvgl.build(children)
       self.built = true
+      logGv(string.format("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children))
       if type(collectgarbage) == "function" then
         collectgarbage("collect")
       end

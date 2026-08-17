@@ -118,6 +118,28 @@ def process_file(file_path):
         content = new_content
         changed = True
 
+    # Pattern: tr and tr("key") or "fallback"
+    pattern_tr_or = r'\btr\s+and\s+tr\s*\(\s*["\']([^"\']+)["\']\s*\)\s*or\s*(["\'])(.*?)\2'
+    def sub_tr_or(m):
+        key = m.group(1)
+        fallback = encode_fallback(m.group(3))
+        return f'"@i18n({key}|{fallback})@"'
+    new_content, count = re.subn(pattern_tr_or, sub_tr_or, content)
+    if count > 0:
+        content = new_content
+        changed = True
+
+    # Pattern: tr("key", "fallback")
+    pattern_tr_call = r'\btr\s*\(\s*["\']([a-zA-Z0-9_]+\.[a-zA-Z0-9_\.]+)["\']\s*,\s*(["\'])(.*?)\2\s*\)'
+    def sub_tr_call(m):
+        key = m.group(1)
+        fallback = encode_fallback(m.group(3))
+        return f'"@i18n({key}|{fallback})@"'
+    new_content, count = re.subn(pattern_tr_call, sub_tr_call, content)
+    if count > 0:
+        content = new_content
+        changed = True
+
     # Pattern: i18n.t("key")
     pattern_i18n_t = r'\b(?:[a-zA-Z0-9_]+\.)?i18n\.t\s*\(\s*["\']([^"\']+)["\']\s*\)'
     new_content, count = re.subn(pattern_i18n_t, lambda m: f'"@i18n({m.group(1)})@"', content)
