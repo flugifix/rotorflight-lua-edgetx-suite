@@ -1,3 +1,10 @@
+# 0.1.4
+
+### Bug Fixes & Improvements
+- **Blackbox Status Page**:
+  - Fixed a nil index error (`attempt to index a nil value (upvalue 'SdcardSummaryApi')`) occurring when navigating away or closing the Blackbox status page while MSP summary queries are in flight.
+  - Safeguarded asynchronous MSP response callbacks against page unloads and nil module references.
+
 # 0.1.3
 
 ### Bug Fixes & Improvements

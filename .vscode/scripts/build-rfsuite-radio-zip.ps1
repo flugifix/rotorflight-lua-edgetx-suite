@@ -40,7 +40,7 @@ if (-not [string]::IsNullOrWhiteSpace($Language)) {
 # Determine base ZIP name without extension
 if ([string]::IsNullOrWhiteSpace($ZipName)) {
     $versionFile = Join-Path $workspaceRoot 'src\rfsuite\lib\version.lua'
-    $version = "0.1.3"
+    $version = "0.1.4"
     if (Test-Path $versionFile) {
         $content = Get-Content $versionFile -Raw
         $major = [regex]::Match($content, 'M\.MAJOR\s*=\s*(\d+)').Groups[1].Value
