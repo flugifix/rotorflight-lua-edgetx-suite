@@ -357,14 +357,14 @@ function M.build(ctx)
   local gap = 10
   local modeW = 160
   local valueW = 130
-  local rowH = 62
+  local rowH = 56
 
   local valueX = w - rightMargin - valueW
   local modeX = valueX - gap - modeW
   local titleW = modeX - leftMargin - gap
 
   local labelYOffset = math.floor((rowH - 20) / 2)
-  local comboYOffset = math.floor((rowH - 36) / 2) + (-2)
+  local controlYOffset = 7
 
   local modeOptions = {
     { label = pageText(i18n, "mode_auto", "Auto"), value = 0 },
@@ -400,8 +400,8 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type  = "choice",
-      x = x + modeX, y = cursorY + comboYOffset,
-      w = modeW, h = 36,
+      x = x + modeX, y = cursorY + controlYOffset,
+      w = modeW,
       title = chName,
       values = values,
       get = function()
@@ -432,8 +432,8 @@ function M.build(ctx)
     local isEnabled = (ch.mode == 2) -- Active only when Set (2)
     children[#children + 1] = {
       type = "numberEdit",
-      x = x + valueX, y = cursorY + comboYOffset,
-      w = valueW, h = 36,
+      x = x + valueX, y = cursorY + controlYOffset,
+      w = valueW,
       min = math.floor(875 / 5),
       max = math.ceil(2125 / 5),
       active = function()
@@ -465,12 +465,12 @@ function M.build(ctx)
     -- 4. Separator Line
     children[#children + 1] = {
       type   = "rectangle",
-      x = x, y = cursorY + rowH - 1,
+      x = x, y = cursorY + rowH,
       w = w, h = 1,
       color  = GREY_DEFAULT, filled = true
     }
 
-    cursorY = cursorY + rowH
+    cursorY = cursorY + rowH + 1
   end
 
   if ui.dirty then

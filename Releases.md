@@ -1,3 +1,25 @@
+# 0.1.4
+
+### Bug Fixes & Improvements
+- **Blackbox Status Page**:
+  - Fixed a nil index error (`attempt to index a nil value (upvalue 'SdcardSummaryApi')`) occurring when navigating away or closing the Blackbox status page while MSP summary queries are in flight.
+  - Safeguarded asynchronous MSP response callbacks against page unloads and nil module references.
+- **Controls & Modes Setup (`setup/controls/modes`)**:
+  - Standardized control heights for range inputs and action buttons (`+ Add`, `Set`, `X`, AUX/Logic choices, Min/Max numbers) to match the standard widget height used in the Rates and PIDs tables.
+  - Fixed focus loss when editing numbers or dropdowns by removing premature full-page rebuild calls from value setters.
+  - Expanded row heights and inter-row spacing to prevent separator lines from intersecting input controls.
+- **Controls & Failsafe Setup (`setup/controls/failsafe`)**:
+  - Standardized mode choice and failsafe pulse value inputs to native framework widget dimensions.
+  - Adjusted row height to `56 px` with centered vertical offsets to ensure clean visual separation and avoid divider line clipping.
+- **Hobbywing Platinum V5 ESC Configuration (`setup/esc_motors/esc_tools/hw5`)**:
+  - Fixed MSP parameter parsing and write serialization by implementing dynamic `itemBytes` profile layouts (`DEFAULT_LAYOUT`, `HW1132_LAYOUT`, `HW1128_LAYOUT`, `OPTO_LAYOUT`) matching Rotorflight firmware specifications.
+  - Fixed shifted and corrupted field values on OPTO ESCs (130A HV, 200A HV, 260A HV) caused by omitted BEC voltage field in OPTO telemetry payloads.
+  - Corrected raw offset translation for `startup_time` (`value = raw + 4`) on reading and writing.
+  - Fixed inverted `Active Freewheel` option mapping (`0 = Enabled`, `1 = Disabled`).
+  - Added support for `response_time` setting (1–10) on compatible ESC models (e.g. HW1132).
+  - Improved ESC model string decoding in `init.lua` to read full 31-byte model identification.
+  - Corrected profile detection and layout field filtering in `profile.lua`.
+
 # 0.1.3
 
 ### Bug Fixes & Improvements

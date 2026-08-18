@@ -7,7 +7,6 @@ local toolName = "Hobbywing V5"
 local mspHeaderBytes = 2
 
 local function getText(buffer, st, en)
-
     local tt = {}
     for i = st, en do
         local v = buffer[i]
@@ -17,11 +16,10 @@ local function getText(buffer, st, en)
     return table.concat(tt)
 end
 
-local function getEscModel(buffer) return getText(buffer, 35, 50) end
+local function getEscModel(buffer) return getText(buffer, 35, 65) end
 
 local function getEscVersion(buffer) return getText(buffer, 19, 34) end
 
 local function getEscFirmware(buffer) return getText(buffer, 3, 18) end
 
 return {mspapi = "ESC_PARAMETERS_HW5", toolName = toolName, escSensorProtocolId = 3, powerCycle = false, getEscModel = getEscModel, getEscVersion = getEscVersion, getEscFirmware = getEscFirmware, mspHeaderBytes = mspHeaderBytes}
-
