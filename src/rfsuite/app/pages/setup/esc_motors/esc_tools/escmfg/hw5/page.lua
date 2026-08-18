@@ -27,18 +27,20 @@ local ui = {
     rotation = 0,
     bec_voltage = 0,
     lipo_cell_count = 0,
+    cutoff_type = 0,
     volt_cutoff_type = 0,
     cutoff_voltage = 3,
 
     -- Advanced (Section 2)
     gov_p_gain = 6,
     gov_i_gain = 5,
-    startup_time = 11,
+    startup_time = 15,
     restart_time = 1,
     auto_restart = 25,
     timing = 24,
     startup_power = 2,
     active_freewheel = 0,
+    response_time = 0,
     brake_type = 0,
     brake_force = 0
   },
@@ -125,7 +127,7 @@ local function queueHw5ReadActual(queue)
         if session then
           session.escDetails = {
             version = parsed.hardware_version,
-            model = parsed.esc_type,
+            model = (parsed.esc_type2 or "") .. " " .. (parsed.esc_type or ""),
             firmware = parsed.firmware_version
           }
           session.setup_esc_motors_esc_tools_hw5 = {
@@ -412,28 +414,18 @@ function M.onReload(ctx)
   return true
 end
 
--- Helper to check if a field is allowed by the profile
-local function isFieldAllowed(apikey, pageKey)
+local function isFieldAllowed(apikey, sectionKey)
   if not Hw5Profile then return true end
-  local profile = Hw5Profile.getProfile()
-  if not profile or not profile.pages then return true end
-  local allowedList = profile.pages[pageKey]
-  if not allowedList then return true end
-  for _, name in ipairs(allowedList) do
-    if name == apikey then return true end
-  end
-  return false
+  return Hw5Profile.isFieldAllowed(apikey)
 end
 
--- Helper to convert string list from profile to ComboSelect options format
 local function getFieldOptions(apikey, fallbackList)
   if not Hw5Profile then return fallbackList or {} end
   local profile = Hw5Profile.getProfile()
   local tables = profile and profile.tables or {}
   local list = tables[apikey]
   if not list then
-    -- Fallback to profile default tables
-    local defaultProfile = Hw5Profile.default or {}
+    local defaultProfile = Hw5Profile.PROFILES and Hw5Profile.PROFILES.default or {}
     local defaultTables = defaultProfile.tables or {}
     list = defaultTables[apikey]
   end
@@ -484,7 +476,11 @@ function M.build(ctx)
 
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
+    local headerTitle = title
+    if ui.parsedCache and ui.parsedCache.model_name and ui.parsedCache.model_name ~= "" then
+      headerTitle = ui.parsedCache.model_name
+    end
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
@@ -531,7 +527,7 @@ function M.build(ctx)
 
   if ui.currentSection == 1 then
     -- Basic Settings
-    if isFieldAllowed("flight_mode", "basic") then
+    if isFieldAllowed("flight_mode") then
       local fmOpts = {
         { value = 0, label = "Fixed-wing" },
         { value = 1, label = "Heli (Linear Throttle)" },
@@ -545,7 +541,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("rotation", "basic") then
+    if isFieldAllowed("rotation") then
       local rotOpts = getFieldOptions("rotation", {
         { value = 0, label = "CW" },
         { value = 1, label = "CCW" }
@@ -557,7 +553,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("bec_voltage", "basic") then
+    if isFieldAllowed("bec_voltage") then
       local becOpts = getFieldOptions("bec_voltage")
       rowH = Controls.appendComboSelect(children, x, cursorY, w, "BEC Voltage", becOpts, ui.config.bec_voltage, function(val)
         ui.config.bec_voltage = val
@@ -566,7 +562,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("lipo_cell_count", "basic") then
+    if isFieldAllowed("lipo_cell_count") then
       local lipoOpts = getFieldOptions("lipo_cell_count")
       rowH = Controls.appendComboSelect(children, x, cursorY, w, "Lipo Cells", lipoOpts, ui.config.lipo_cell_count, function(val)
         ui.config.lipo_cell_count = val
@@ -575,19 +571,20 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("volt_cutoff_type", "basic") then
+    if isFieldAllowed("cutoff_type") then
       local cutoffTypeOpts = {
         { value = 0, label = "Soft Cutoff" },
         { value = 1, label = "Hard Cutoff" }
       }
-      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Cutoff Type", cutoffTypeOpts, ui.config.volt_cutoff_type, function(val)
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Cutoff Type", cutoffTypeOpts, ui.config.cutoff_type or ui.config.volt_cutoff_type or 0, function(val)
+        ui.config.cutoff_type = val
         ui.config.volt_cutoff_type = val
         markDirty()
       end)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("cutoff_voltage", "basic") then
+    if isFieldAllowed("cutoff_voltage") then
       local cutoffVoltsOpts = getFieldOptions("cutoff_voltage")
       rowH = Controls.appendComboSelect(children, x, cursorY, w, "Cutoff Voltage", cutoffVoltsOpts, ui.config.cutoff_voltage, function(val)
         ui.config.cutoff_voltage = val
@@ -598,7 +595,7 @@ function M.build(ctx)
 
   elseif ui.currentSection == 2 then
     -- Advanced Settings
-    if isFieldAllowed("gov_p_gain", "advanced") then
+    if isFieldAllowed("gov_p_gain") then
       rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor P Gain", {
         min = 0, max = 9, step = 1,
         get = function() return ui.config.gov_p_gain end,
@@ -610,7 +607,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("gov_i_gain", "advanced") then
+    if isFieldAllowed("gov_i_gain") then
       rowH = Controls.appendNumberField(children, x, cursorY, w, "Governor I Gain", {
         min = 0, max = 9, step = 1,
         get = function() return ui.config.gov_i_gain end,
@@ -622,7 +619,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("startup_time", "advanced") then
+    if isFieldAllowed("startup_time") then
       rowH = Controls.appendNumberField(children, x, cursorY, w, "Startup Time", {
         min = 4, max = 25, step = 1, suffix = "s",
         get = function() return ui.config.startup_time end,
@@ -634,7 +631,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("auto_restart", "advanced") then
+    if isFieldAllowed("auto_restart") then
       rowH = Controls.appendNumberField(children, x, cursorY, w, "Auto Restart Time", {
         min = 0, max = 90, step = 1, suffix = "s",
         get = function() return ui.config.auto_restart end,
@@ -646,7 +643,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("restart_time", "advanced") then
+    if isFieldAllowed("restart_time") then
       local restartOpts = {
         { value = 0, label = "1s" },
         { value = 1, label = "1.5s" },
@@ -661,7 +658,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("timing", "advanced") then
+    if isFieldAllowed("timing") then
       rowH = Controls.appendNumberField(children, x, cursorY, w, "Motor Timing", {
         min = 0, max = 30, step = 1, suffix = "deg",
         get = function() return ui.config.timing end,
@@ -673,7 +670,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("startup_power", "advanced") then
+    if isFieldAllowed("startup_power") then
       local powerOpts = {
         { value = 0, label = "1" },
         { value = 1, label = "2" },
@@ -690,10 +687,10 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("active_freewheel", "advanced") then
+    if isFieldAllowed("active_freewheel") then
       local afOpts = {
-        { value = 0, label = "Disabled" },
-        { value = 1, label = "Enabled" }
+        { value = 0, label = "Enabled" },
+        { value = 1, label = "Disabled" }
       }
       rowH = Controls.appendComboSelect(children, x, cursorY, w, "Active Freewheel", afOpts, ui.config.active_freewheel, function(val)
         ui.config.active_freewheel = val
@@ -702,7 +699,27 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("brake_type", "advanced") then
+    if isFieldAllowed("response_time") then
+      local respOpts = getFieldOptions("response_time", {
+        { value = 0, label = "1" },
+        { value = 1, label = "2" },
+        { value = 2, label = "3" },
+        { value = 3, label = "4" },
+        { value = 4, label = "5" },
+        { value = 5, label = "6" },
+        { value = 6, label = "7" },
+        { value = 7, label = "8" },
+        { value = 8, label = "9" },
+        { value = 9, label = "10" }
+      })
+      rowH = Controls.appendComboSelect(children, x, cursorY, w, "Response Time", respOpts, ui.config.response_time, function(val)
+        ui.config.response_time = val
+        markDirty()
+      end)
+      cursorY = cursorY + rowH
+    end
+
+    if isFieldAllowed("brake_type") then
       local brakeOpts = getFieldOptions("brake_type", {
         { value = 0, label = "Disabled" },
         { value = 1, label = "Normal" },
@@ -716,7 +733,7 @@ function M.build(ctx)
       cursorY = cursorY + rowH
     end
 
-    if isFieldAllowed("brake_force", "advanced") then
+    if isFieldAllowed("brake_force") then
       rowH = Controls.appendNumberField(children, x, cursorY, w, "Brake Force", {
         min = 0, max = 100, step = 1, suffix = "%",
         get = function() return ui.config.brake_force end,
