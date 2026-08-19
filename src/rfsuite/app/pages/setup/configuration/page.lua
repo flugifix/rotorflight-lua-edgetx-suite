@@ -222,7 +222,42 @@ local function queueRcRead(isAutoReload)
   return true, nil
 end
 
-local function queueRcWrite()
+--- Reports the outcome of a save exactly once, whichever step reaches an end first.
+--
+-- Every step's errorHandler leads here, and the queue fires the handlers of the steps that were
+-- still waiting when one of them gave up -- so without the guard a single failure would raise
+-- one dialog per remaining step.
+local function saveOutcome(i18n)
+  local reported = false
+  return {
+    ok = function()
+      if reported then return end
+      reported = true
+      ui.dirty = false
+      if lvgl and lvgl.message then
+        lvgl.message({
+          title = pageText(i18n, "saved_title", "Saved"),
+          message = pageText(i18n, "saved_message", "Configuration settings saved")
+        })
+      end
+    end,
+    failed = function(step)
+      if reported then return end
+      reported = true
+      -- The page still holds changes the flight controller did not confirm, so it must not go
+      -- on looking saved.
+      ui.dirty = true
+      if lvgl and lvgl.message then
+        lvgl.message({
+          title = pageText(i18n, "save_error_title", "Error"),
+          message = tostring(step)
+        })
+      end
+    end
+  }
+end
+
+local function queueRcWrite(i18n)
   if not MspRuntime or not NameApi or not AdvancedConfigApi or not FeatureConfigApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -232,6 +267,8 @@ local function queueRcWrite()
   if not queue or type(queue.add) ~= "function" then
     return false, "msp_queue_unavailable"
   end
+
+  local outcome = saveOutcome(i18n)
 
   local namePayload = NameApi.buildWritePayload({ name = ui.config.name })
   local advPayload = AdvancedConfigApi.buildWritePayload({
@@ -268,6 +305,7 @@ local function queueRcWrite()
                   payload = {},
                   isWrite = true,
                   processReply = function()
+                    outcome.ok()
                     -- Step 5: Write REBOOT
                     local rebootApi = loadModule("tasks/msp/api/reboot.lua")
                     if rebootApi then
@@ -276,21 +314,21 @@ local function queueRcWrite()
                         payload = rebootApi.buildWritePayload({ rebootMode = 0 }),
                         isWrite = true,
                         processReply = function() end,
-                        errorHandler = function() end
+                        errorHandler = function() outcome.failed("REBOOT") end
                       })
                     end
                   end,
-                  errorHandler = function() end
+                  errorHandler = function() outcome.failed("MSP_EEPROM_WRITE") end
                 })
               end
             end,
-            errorHandler = function() end
+            errorHandler = function() outcome.failed("MSP_SET_FEATURE_CONFIG") end
           })
         end,
-        errorHandler = function() end
+        errorHandler = function() outcome.failed("MSP_SET_ADVANCED_CONFIG") end
       })
     end,
-    errorHandler = function() end
+    errorHandler = function() outcome.failed("MSP_SET_NAME") end
   })
 
   return true, nil
@@ -509,7 +547,7 @@ function M.build(ctx)
 end
 
 function M.onSave(ctx)
-  local ok, err = queueRcWrite()
+  local ok, err = queueRcWrite(ctx and ctx.i18n)
   if not ok then
     if lvgl and lvgl.message then
       lvgl.message({
@@ -520,13 +558,11 @@ function M.onSave(ctx)
     return false
   end
 
-  ui.dirty = false
-  if lvgl and lvgl.message then
-    lvgl.message({
-      title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-      message = pageText(ctx and ctx.i18n, "saved_message", "Configuration settings saved")
-    })
-  end
+  -- Nothing has been written yet: queueRcWrite has QUEUED the first message and no reply has
+  -- come back. Clearing the dirty flag and announcing success here says something this function
+  -- cannot know -- and when a step fails it is never contradicted, so the page goes on looking
+  -- saved while the flight controller holds the old values. Both are reported from the chain
+  -- itself now, once, by whichever step reaches an end first.
   return true
 end
 
