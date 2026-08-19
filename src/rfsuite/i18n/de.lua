@@ -2,6 +2,7 @@ return {
   app = {
     loading = "Lade...",
     saving = "Speichere...",
+    erasing = "Lösche...",
     saving_settings = "Einstellungen werden angewendet",
     closing_rfsuite = "RFSuite wird beendet...",
     model_armed_title = "Modell Armed",

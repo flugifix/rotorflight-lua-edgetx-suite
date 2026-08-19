@@ -450,7 +450,7 @@ function M.build(ctx)
   local i18n = ctx.i18n
 
   if ui.loading or ui.saving then
-    local titleText = ui.loading and pageText(i18n, "loading_logging", "Loading") or pageText(i18n, "saving_logging", "Saving")
+    local titleText = ui.loading and "@i18n(app.loading)@" or "@i18n(app.saving)@"
     local msgText = ui.loading and pageText(i18n, "loading_logging", "Loading blackbox logging...") or pageText(i18n, "saving_logging", "Saving blackbox logging...")
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,

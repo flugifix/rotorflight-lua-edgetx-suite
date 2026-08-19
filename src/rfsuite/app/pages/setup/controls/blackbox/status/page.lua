@@ -429,7 +429,7 @@ function M.build(ctx)
   local i18n = ctx.i18n
 
   if ui.loading or ui.saving then
-    local titleText = ui.loading and pageText(i18n, "loading_status", "Loading") or pageText(i18n, "erasing_dataflash", "Erasing")
+    local titleText = ui.loading and "@i18n(app.loading)@" or "@i18n(app.erasing)@"
     local msgText = ui.loading and pageText(i18n, "loading_status", "Loading blackbox status...") or pageText(i18n, "erasing_dataflash", "Erasing dataflash...")
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,

@@ -2,6 +2,7 @@ return {
   app = {
     loading = "Loading...",
     saving = "Saving...",
+    erasing = "Erasing...",
     saving_settings = "Applying settings",
     closing_rfsuite = "Closing RFSuite...",
     model_armed_title = "Model Armed",

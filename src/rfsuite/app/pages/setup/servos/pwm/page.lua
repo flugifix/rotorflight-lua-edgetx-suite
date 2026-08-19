@@ -660,7 +660,7 @@ function M.build(ctx)
   if ui.loading then
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
-      title = pageText(i18n, "loading", "Loading"),
+      title = "@i18n(app.loading)@",
       message = pageText(i18n, "loading", "Reading servos configuration..."),
       progress = ui.progress / 100
     })
