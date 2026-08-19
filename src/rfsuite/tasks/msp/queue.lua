@@ -231,8 +231,15 @@ end
 -- With a client id only that client's messages go and the rest keep their place in the FIFO.
 -- That is what lets one caller give up, or go away, without taking work with it that belongs to
 -- a caller which had nothing to do with the failure.
-function Queue:clear(clientId)
+--
+-- opts.keepWrites leaves that client's writes where they are and drops only its reads. A read is
+-- wanted because something is on screen to show it, so it stops being wanted the moment that
+-- something is gone; a write is a change the pilot asked the flight controller to make, and it
+-- stays wanted whether or not anybody is still looking. Dropping one silently would report a
+-- save that never left the radio.
+function Queue:clear(clientId, opts)
   local handlers = {}
+  local keepWrites = type(opts) == "table" and opts.keepWrites == true
 
   if clientId == nil then
     if self.currentMessage and type(self.currentMessage.errorHandler) == "function" then
@@ -261,7 +268,8 @@ function Queue:clear(clientId)
   else
     -- The message being transmitted is only abandoned when it is this client's. Its chunks are
     -- dropped with it, or the next message would send what is left of them.
-    if self.currentMessage and self.currentMessage.client == clientId then
+    if self.currentMessage and self.currentMessage.client == clientId
+      and not (keepWrites and isWriteMessage(self.currentMessage)) then
       if type(self.currentMessage.errorHandler) == "function" then
         handlers[#handlers + 1] = self.currentMessage.errorHandler
       end
@@ -281,7 +289,7 @@ function Queue:clear(clientId)
     while qcount(self.queue) > 0 do
       local msg = qpop(self.queue)
       if msg then
-        if msg.client == clientId then
+        if msg.client == clientId and not (keepWrites and isWriteMessage(msg)) then
           if type(msg.errorHandler) == "function" then
             handlers[#handlers + 1] = msg.errorHandler
           end

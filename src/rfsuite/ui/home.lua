@@ -79,6 +79,19 @@ local function ensureMspRuntime()
   end
 end
 
+-- Who the MSP queue files a request under while no page is open. It is the id this script
+-- attaches to the runtime with, so that whatever the host itself queues goes when the host does.
+local TOOL_MSP_CLIENT = "tool"
+
+-- One client per page, because that is the unit that appears and disappears: everything a page
+-- queued stops being wanted the moment the page is gone, and nothing else in the queue does.
+local function mspClientForMenu(menuId)
+  if menuId == nil then
+    return TOOL_MSP_CLIENT
+  end
+  return "page:" .. tostring(menuId)
+end
+
 local function ensureEepromWriteApi()
   if not EepromWriteApi then
     EepromWriteApi = loadModule("tasks/msp/api/eeprom_write.lua")
@@ -505,11 +518,27 @@ local function syncActivePageModule()
     return
   end
 
+  -- Take the outgoing page's reads back before it is released. Every one of them carries a
+  -- processReply that closes over the widgets this rebuild is about to destroy, so a reply that
+  -- arrives after the release runs against a tree that no longer exists. This happens first
+  -- because the release itself queues work -- the override and rollback resets -- and that work
+  -- must not be dropped again as part of the page it belongs to.
+  ensureMspRuntime()
+  if state.activePageMenuId ~= nil and MspRuntime and type(MspRuntime.dropClientReads) == "function" then
+    pcall(MspRuntime.dropClientReads, mspClientForMenu(state.activePageMenuId))
+  end
+
   if state.activePageMenuId and PageRegistry and PageRegistry.release then
     PageRegistry.release(state.activePageMenuId, buildPageContext())
   end
 
   state.activePageMenuId = currentMenuId
+
+  -- From here everything queued belongs to the page that is up, without the page saying so: the
+  -- pages hold the queue itself and none of them names a client.
+  if MspRuntime and type(MspRuntime.setDefaultClient) == "function" then
+    pcall(MspRuntime.setDefaultClient, mspClientForMenu(currentMenuId))
+  end
 end
 
 -- ── Handlers ─────────────────────────────────────────────────────────────────
@@ -1974,6 +2003,13 @@ function M.run(event, touchState)
         state.pendingMenuOpen = nil
         closeHelpDialogIfOpen()
         
+        -- Same as on a page change, and for the same reason: the page on screen loses its reads
+        -- before it is released, so none of them can come back to a torn-down tree. Its writes
+        -- stay -- the shutdown ticks below are there to get exactly those out.
+        if state.activePageMenuId ~= nil and MspRuntime and type(MspRuntime.dropClientReads) == "function" then
+          pcall(MspRuntime.dropClientReads, mspClientForMenu(state.activePageMenuId))
+        end
+
         -- Release all pages in the registry to free their resources (queues override/rollback resets)
         if PageRegistry and type(PageRegistry.releaseAll) == "function" then
           logToFile("Releasing all pages in registry.")
@@ -1983,6 +2019,9 @@ function M.run(event, touchState)
           pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
         end
         state.activePageMenuId = nil
+        if MspRuntime and type(MspRuntime.setDefaultClient) == "function" then
+          pcall(MspRuntime.setDefaultClient, TOOL_MSP_CLIENT)
+        end
         
         if Events and type(Events.reset) == "function" then
           logToFile("Resetting events.")

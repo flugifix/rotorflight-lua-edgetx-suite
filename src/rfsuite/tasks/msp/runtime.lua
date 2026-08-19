@@ -557,6 +557,42 @@ local function initIfNeeded()
   return true
 end
 
+--- Name the client that a request is filed under when its caller does not name one.
+--
+-- The pages reach the queue through getState() and queue their reads directly, and not one of
+-- them says who it is. Rather than every call site having to be changed, the host names the
+-- caller once when the screen changes: whatever is queued from then on belongs to the page that
+-- is up, and clearing that client is enough to take its work back.
+--
+-- Brings the runtime up, because the queue it writes to does not exist before that.
+function Runtime.setDefaultClient(clientId)
+  if not initIfNeeded() then
+    return false
+  end
+  if not state.queue then
+    return false
+  end
+  state.queue.defaultClient = tostring(clientId or "default")
+  return true
+end
+
+--- Drop a client's queued reads and leave its writes alone.
+--
+-- For a page that is being torn down. Its reads exist to fill widgets that are about to be
+-- destroyed, and a reply arriving afterwards runs a processReply that closes over them. Its
+-- writes are a different thing: those are changes asked of the flight controller, and they are
+-- still wanted when nobody is looking at the page that asked for them.
+function Runtime.dropClientReads(clientId)
+  if clientId == nil then
+    return false
+  end
+  if not state.queue or type(state.queue.clear) ~= "function" then
+    return false
+  end
+  state.queue:clear(tostring(clientId), { keepWrites = true })
+  return true
+end
+
 function Runtime.attach(clientId)
   local id = tostring(clientId or "unknown")
   state.clients[id] = true
