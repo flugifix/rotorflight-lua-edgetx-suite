@@ -4,6 +4,10 @@ end
 
 local Runtime = {}
 
+-- The runtime's own reads are filed under a client of their own, so that a page giving up, or
+-- closing, cannot take the link's version and identity reads down with it.
+local HOUSEKEEPING_CLIENT = "msp-runtime"
+
 local function loadModule(path)
   if _G.rfsuite and _G.rfsuite.require then
     return _G.rfsuite.require(path)
@@ -364,6 +368,7 @@ local function enqueueVersionReads(now)
   end
   state.pendingVersionRead = false
   state.queue:add({
+    client = HOUSEKEEPING_CLIENT,
     command = ApiVersionApi.command,
     simulatorResponse = ApiVersionApi.simulatorResponse,
     timeout = 5.0,
@@ -403,6 +408,7 @@ local function enqueueVersionReads(now)
   })
 
   state.queue:add({
+    client = HOUSEKEEPING_CLIENT,
     command = FcVersionApi.command,
     simulatorResponse = FcVersionApi.simulatorResponse,
     timeout = 5.0,
@@ -439,6 +445,7 @@ local function enqueueUidRead(now)
 
   state.pendingUidRead = false
   state.queue:add({
+    client = HOUSEKEEPING_CLIENT,
     command = UidApi.command,
     simulatorResponse = UidApi.simulatorResponse,
     timeout = 5.0,
@@ -557,7 +564,14 @@ end
 
 function Runtime.detach(clientId)
   local id = tostring(clientId or "unknown")
+  local wasAttached = state.clients[id] == true
   state.clients[id] = nil
+  -- A client that has gone is not there to be told about its requests any more, and its reply
+  -- handlers close over state it is in the middle of tearing down. Its queued work goes with
+  -- it; work belonging to anything still attached keeps its place in the queue.
+  if wasAttached and state.queue and type(state.queue.clear) == "function" then
+    state.queue:clear(id)
+  end
 end
 
 function Runtime.tick()

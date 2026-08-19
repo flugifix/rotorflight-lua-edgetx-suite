@@ -184,6 +184,10 @@ function Queue.new(common, opts)
   self._simDetectDone = opts.isSimulator == true
   self._simDetected = opts.isSimulator == true
 
+  -- The owner a message is filed under when its caller does not name one, so that everything
+  -- already queueing against this object keeps working untouched.
+  self.defaultClient = opts.client or "default"
+
   return self
 end
 
@@ -207,32 +211,81 @@ function Queue:add(message)
       message.__cachedBuf = buf
     end
   end
+  -- Every message records who queued it. The queue is a single FIFO because the transmit side
+  -- is one slot, not because the work in it is related: the runtime's own housekeeping reads,
+  -- the page on screen and any diagnostics page share it. Until now nothing in a message said
+  -- which of them it belonged to, so the queue could not drop one caller's work without
+  -- dropping everybody's.
+  -- It is only filled in when the caller left it empty, so a caller that already tags its
+  -- messages keeps its own value.
+  message.client = message.client or self.defaultClient
   qpush(self.queue, message)
   return self
 end
 
-function Queue:clear()
+--- Drop queued work and report it to whoever queued it.
+--
+-- With no argument everything goes, exactly as before: a disconnect, an unsupported API version
+-- or an arm event invalidate every request in flight whoever it belongs to.
+--
+-- With a client id only that client's messages go and the rest keep their place in the FIFO.
+-- That is what lets one caller give up, or go away, without taking work with it that belongs to
+-- a caller which had nothing to do with the failure.
+function Queue:clear(clientId)
   local handlers = {}
-  
-  if self.currentMessage and type(self.currentMessage.errorHandler) == "function" then
-    handlers[#handlers + 1] = self.currentMessage.errorHandler
-  end
-  
-  while qcount(self.queue) > 0 do
-    local msg = qpop(self.queue)
-    if msg and type(msg.errorHandler) == "function" then
-      handlers[#handlers + 1] = msg.errorHandler
+
+  if clientId == nil then
+    if self.currentMessage and type(self.currentMessage.errorHandler) == "function" then
+      handlers[#handlers + 1] = self.currentMessage.errorHandler
     end
-  end
-  
-  qreset(self.queue)
-  self.currentMessage = nil
-  self.currentMessageStartTime = nil
-  self.lastTimeCommandSent = nil
-  self.retryCount = 0
-  self._nextMessageAt = 0
-  if self.common and self.common.clearTxBuf then
-    self.common.clearTxBuf()
+
+    while qcount(self.queue) > 0 do
+      local msg = qpop(self.queue)
+      if msg and type(msg.errorHandler) == "function" then
+        handlers[#handlers + 1] = msg.errorHandler
+      end
+    end
+
+    qreset(self.queue)
+    self.currentMessage = nil
+    self.currentMessageStartTime = nil
+    self.lastTimeCommandSent = nil
+    self.retryCount = 0
+    self._nextMessageAt = 0
+    if self.common and self.common.clearTxBuf then
+      self.common.clearTxBuf()
+    end
+  else
+    -- The message being transmitted is only abandoned when it is this client's. Its chunks are
+    -- dropped with it, or the next message would send what is left of them.
+    if self.currentMessage and self.currentMessage.client == clientId then
+      if type(self.currentMessage.errorHandler) == "function" then
+        handlers[#handlers + 1] = self.currentMessage.errorHandler
+      end
+      self.currentMessage = nil
+      self.currentMessageStartTime = nil
+      self.lastTimeCommandSent = nil
+      self.retryCount = 0
+      if self.common and self.common.clearTxBuf then
+        self.common.clearTxBuf()
+      end
+    end
+
+    local kept = newQueue()
+    while qcount(self.queue) > 0 do
+      local msg = qpop(self.queue)
+      if msg then
+        if msg.client == clientId then
+          if type(msg.errorHandler) == "function" then
+            handlers[#handlers + 1] = msg.errorHandler
+          end
+        else
+          qpush(kept, msg)
+        end
+      end
+    end
+    qreset(self.queue)
+    self.queue = kept
   end
 
   for i = 1, #handlers do
@@ -422,7 +475,21 @@ function Queue:processQueue(now)
       msg.setErrorHandler(msg)
     end
     self.log(formatMspState(msg) .. " max retries", "warn")
-    self:clear()
+    -- Only the message that ran out of retries is given up. Clearing the whole queue here ran
+    -- the errorHandler of every other message waiting -- and this one's a second time, since it
+    -- has just been called above -- so a single unanswered command took down work belonging to
+    -- callers that had nothing to do with it. The timeout branch below already abandons just
+    -- the current message and carries on; this now does the same. The transmit buffer is still
+    -- cleared, because the chunks of a message being abandoned must not be left for the next.
+    self.currentMessage = nil
+    self.currentMessageStartTime = nil
+    self.lastTimeCommandSent = nil
+    if self.common and self.common.clearTxBuf then
+      self.common.clearTxBuf()
+    end
+    if self.interMessageDelay > 0 then
+      self._nextMessageAt = now + self.interMessageDelay
+    end
     return
   end
 
