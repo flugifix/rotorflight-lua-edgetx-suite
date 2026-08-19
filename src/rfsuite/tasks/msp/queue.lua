@@ -357,15 +357,8 @@ function Queue:processQueue(now)
   if success then
     msg.buf = buf
     local cache = getCache()
-    if cache then
-      if isWriteMessage(msg) then
-        -- The tool has just changed something on the board. Which read that invalidates is not
-        -- worked out here: a write carries its own command number (11 against 10 for the craft
-        -- name) and the pairing lives in the api/ modules. A save is rare; the whole cache goes.
-        cache.clear()
-      else
-        cache.put(msg.command, buf)
-      end
+    if cache and not isWriteMessage(msg) then
+      cache.put(msg.command, buf)
     end
     if type(msg.processReply) == "function" then
       msg.__retryCount = self.retryCount
@@ -393,6 +386,17 @@ function Queue:processQueue(now)
     local okSend = self.common and type(self.common.sendRequest) == "function"
       and self.common.sendRequest(msg.command, payload, { write = isWriteMessage(msg) })
     if okSend then
+      if isWriteMessage(msg) then
+        -- The moment a mutation leaves the radio, anything held may be stale -- so the cache is
+        -- dropped on the SEND and not on the acknowledgement. A write whose reply is missed is
+        -- still a write the board may have stored, and hanging this on success left a page
+        -- showing pre-write values after a Save that had gone out five times.
+        -- Which read a write invalidates is not worked out here either: the write carries its
+        -- own command number (11 against 10 for the craft name) and the pairing lives in the
+        -- api/ modules. A save is rare; the whole cache goes.
+        local cache = getCache()
+        if cache then cache.clear() end
+      end
       self.lastTimeCommandSent = now
       self.currentMessageStartTime = now -- Timeout-Fenster für jeden Retry neu setzen
       self.retryCount = self.retryCount + 1
