@@ -466,7 +466,16 @@ function Queue:processQueue(now)
   end
 
   -- Only give up after all retries have been versucht
-  if self.retryCount > self.maxRetries then
+  -- ... and not before the last of them has had a reply window of its own. Without the second
+  -- condition the final attempt is transmitted and declared failed inside the same processQueue
+  -- call: the send block above raises retryCount past maxRetries, this test sees the new value
+  -- immediately, and the message is abandoned before the flight controller could physically have
+  -- answered. So the last retry is not a retry -- it is a send whose reply is never waited for,
+  -- and a link that answers slowly loses the one attempt that would have succeeded.
+  -- The timeout branch below already waits for the window in exactly this way.
+  if self.retryCount > self.maxRetries
+    and (self.currentMessageStartTime == nil
+         or (now - self.currentMessageStartTime) > timeoutSeconds) then
     msg.__retryCount = self.retryCount
     if type(msg.errorHandler) == "function" then
       msg.errorHandler(msg, "max_retries")
