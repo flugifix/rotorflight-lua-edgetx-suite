@@ -14,6 +14,21 @@ local function nowSeconds()
   return 0
 end
 
+local Cache = nil
+
+local function getCache()
+  if Cache == nil then
+    if _G.rfsuite and _G.rfsuite.require then
+      Cache = _G.rfsuite.require("tasks/msp/cache.lua") or false
+    else
+      local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/cache.lua", "t")
+      local ok, mod = pcall(chunk)
+      Cache = (ok and type(mod) == "table") and mod or false
+    end
+  end
+  return Cache or nil
+end
+
 local DEFAULT_RETRY_BACKOFF_SECONDS = 1.0
 local DEFAULT_TIMEOUT_SECONDS = 2.0
 local DEFAULT_COMMAND_INTERVAL_SECONDS = 0.25
@@ -180,6 +195,18 @@ function Queue:add(message)
   if message == nil then
     return self
   end
+  -- A read whose answer is still valid is served without a round-trip. The reply is NOT
+  -- delivered here: processQueue hands it over on a later tick, exactly where a reply off the
+  -- wire is handed over, so the order and the timing a page sees do not change. Delivering it
+  -- from inside add() would run processReply while the caller is still setting the page up --
+  -- and every multi-read page nests its next read inside that callback.
+  if message.command and not isWriteMessage(message) then
+    local cache = getCache()
+    local buf = cache and cache.get(message.command) or nil
+    if buf then
+      message.__cachedBuf = buf
+    end
+  end
   qpush(self.queue, message)
   return self
 end
@@ -246,6 +273,26 @@ function Queue:processQueue(now)
   local msg = self.currentMessage
   if not msg then return end
 
+  -- A read that add() found in the cache is completed here and never sent. Same shape as the
+  -- success path below: processReply gets the buffer, the slot is released, the inter-message
+  -- delay still applies. Nothing is put back in the cache -- it came from there.
+  if msg.__cachedBuf then
+    local buf = msg.__cachedBuf
+    msg.__cachedBuf = nil
+    msg.buf = buf
+    msg.__retryCount = 0
+    if type(msg.processReply) == "function" then
+      msg.processReply(msg, buf)
+    end
+    self.currentMessage = nil
+    self.currentMessageStartTime = nil
+    self.lastTimeCommandSent = nil
+    if self.interMessageDelay > 0 then
+      self._nextMessageAt = now + self.interMessageDelay
+    end
+    return
+  end
+
   local retryDelay = tonumber(msg.retryBackoff) or tonumber(msg.retryDelay) or self.retryBackoff
   local timeoutSeconds = tonumber(msg.timeout) or self.timeout
   local commandInterval = tonumber(msg.commandInterval) or self.commandInterval
@@ -309,6 +356,17 @@ function Queue:processQueue(now)
 
   if success then
     msg.buf = buf
+    local cache = getCache()
+    if cache then
+      if isWriteMessage(msg) then
+        -- The tool has just changed something on the board. Which read that invalidates is not
+        -- worked out here: a write carries its own command number (11 against 10 for the craft
+        -- name) and the pairing lives in the api/ modules. A save is rare; the whole cache goes.
+        cache.clear()
+      else
+        cache.put(msg.command, buf)
+      end
+    end
     if type(msg.processReply) == "function" then
       msg.__retryCount = self.retryCount
       msg.processReply(msg, msg.buf)

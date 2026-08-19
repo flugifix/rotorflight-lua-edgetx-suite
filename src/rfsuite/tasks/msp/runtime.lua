@@ -476,6 +476,12 @@ local function doDisconnect(now, reason)
   if state.queue and type(state.queue.clear) == "function" then
     state.queue:clear()
   end
+  -- Nothing read from the previous link may answer for the next one: a reconnect can be the
+  -- same board after a reboot, a different profile, or a different board entirely.
+  local cache = loadModule("tasks/msp/cache.lua")
+  if type(cache) == "table" and type(cache.clear) == "function" then
+    cache.clear()
+  end
   state.pendingVersionRead = true
   state.pendingUidRead = true
   state.versionReadCompleted = false
