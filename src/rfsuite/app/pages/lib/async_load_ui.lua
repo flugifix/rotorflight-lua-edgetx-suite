@@ -81,8 +81,8 @@ function M.showErrorDialog(state, i18n, tfn)
     if ok then shown = true end
   end
 
-  if not shown and lvgl and type(lvgl.alert) == "function" then
-    pcall(lvgl.alert, {
+  if not shown and lvgl and type(lvgl.message) == "function" then
+    pcall(lvgl.message, {
       title = title,
       message = message
     })

@@ -629,8 +629,8 @@ local function onStar()
     return
   end
 
-  if lvgl and lvgl.alert and state.i18n then
-    lvgl.alert({
+  if lvgl and lvgl.message and state.i18n then
+    lvgl.message({
       title = state.i18n.t("app.help.title"),
       message = "Star action is reserved for standard functions."
     })
@@ -983,8 +983,8 @@ end
 
 local function onReload()
   if isModelArmed() then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
         message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
       })
@@ -1039,7 +1039,7 @@ local function onReload()
 
       pcall(Log.emit, "rfsuite", "onReload invoked; reloadPref=true", "debug", true)
       if lvgl then
-        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.message)), "debug", true)
       else
         pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
       end
@@ -1074,8 +1074,8 @@ local function onReload()
     return
   end
 
-  if lvgl and lvgl.alert then
-    lvgl.alert({
+  if lvgl and lvgl.message then
+    lvgl.message({
       title = "Reload",
       message = "Reload from FBL is not wired yet."
     })
@@ -1084,8 +1084,8 @@ end
 
 local function onSave()
   if isModelArmed() then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
         message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
       })
@@ -1111,8 +1111,8 @@ local function onSave()
 
         if not ok then
           pcall(Log.emit, "rfsuite", "page.onSave failed: " .. tostring(shouldRebuild), "error", true)
-          if lvgl and lvgl.alert then
-            lvgl.alert({
+          if lvgl and lvgl.message then
+            lvgl.message({
               title = "Save",
               message = tostring(shouldRebuild)
             })
@@ -1127,8 +1127,8 @@ local function onSave()
         local okEeprom, errEeprom = queueEepromWriteIfNeeded(page)
         if not okEeprom then
           pcall(Log.emit, "rfsuite", "EEPROM write queue failed: " .. tostring(errEeprom), "warn", true)
-          if lvgl and lvgl.alert then
-            lvgl.alert({
+          if lvgl and lvgl.message then
+            lvgl.message({
               title = "Save",
               message = "Saved, but EEPROM write is pending: " .. tostring(errEeprom)
             })
@@ -1161,7 +1161,7 @@ local function onSave()
 
       pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug", true)
       if lvgl then
-        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.message)), "debug", true)
       else
         pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
       end
@@ -1196,8 +1196,8 @@ local function onSave()
     return
   end
 
-  if lvgl and lvgl.alert then
-    lvgl.alert({
+  if lvgl and lvgl.message then
+    lvgl.message({
       title = "Save",
       message = "Save to FBL is not wired yet."
     })
@@ -1211,8 +1211,8 @@ local function getCardPressHandler(cardId)
       return
     end
     if isModelArmed() then
-      if lvgl and lvgl.alert then
-        lvgl.alert({
+      if lvgl and lvgl.message then
+        lvgl.message({
           title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
           message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
         })
@@ -1236,8 +1236,8 @@ local function getRootCardPressHandler(sectionId, cardId)
       return
     end
     if isModelArmed() then
-      if lvgl and lvgl.alert then
-        lvgl.alert({
+      if lvgl and lvgl.message then
+        lvgl.message({
           title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
           message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
         })

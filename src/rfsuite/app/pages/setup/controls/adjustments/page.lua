@@ -392,8 +392,8 @@ end
 
 local function getChannelUsForRangeSet(channelIndex, autoTable, slot, i18n)
   if autoTable and autoTable[slot] then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(i18n, "title", "Adjustments"),
         message = pageText(i18n, "msg_auto_detect_lock_first", "Auto-detect is active for this row. Toggle to lock AUX first.")
       })
@@ -403,8 +403,8 @@ local function getChannelUsForRangeSet(channelIndex, autoTable, slot, i18n)
 
   local us = getAuxPulseUs(channelIndex or 0)
   if not us then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(i18n, "title", "Adjustments"),
         message = pageText(i18n, "msg_live_channel_unavailable", "Live channel value unavailable.")
       })
@@ -676,8 +676,8 @@ local function queueAdjustmentsWrite(requestRebuild)
     if type(requestRebuild) == "function" then
       requestRebuild()
     end
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = "Error",
         message = tostring(reason or "Save failed")
       })
@@ -703,8 +703,8 @@ local function queueAdjustmentsWrite(requestRebuild)
             if type(requestRebuild) == "function" then
               requestRebuild()
             end
-            if lvgl and lvgl.alert then
-              lvgl.alert({
+            if lvgl and lvgl.message then
+              lvgl.message({
                 title = "Saved",
                 message = "Adjustment configuration saved"
               })
@@ -1633,8 +1633,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueAdjustmentsWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

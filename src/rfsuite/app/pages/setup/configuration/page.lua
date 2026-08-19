@@ -511,8 +511,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueRcWrite()
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })
@@ -521,8 +521,8 @@ function M.onSave(ctx)
   end
 
   ui.dirty = false
-  if lvgl and lvgl.alert then
-    lvgl.alert({
+  if lvgl and lvgl.message then
+    lvgl.message({
       title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
       message = pageText(ctx and ctx.i18n, "saved_message", "Configuration settings saved")
     })

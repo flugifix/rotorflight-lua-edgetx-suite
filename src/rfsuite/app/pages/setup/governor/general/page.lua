@@ -201,8 +201,8 @@ local function queueGovWrite(requestRebuild, ctx)
               session.governor_config = writeData
               session.governorMode = writeData.gov_mode
             end
-            if lvgl and lvgl.alert then
-              lvgl.alert({
+            if lvgl and lvgl.message then
+              lvgl.message({
                 title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
                 message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
               })
@@ -227,8 +227,8 @@ local function queueGovWrite(requestRebuild, ctx)
           session.governor_config = writeData
           session.governorMode = writeData.gov_mode
         end
-        if lvgl and lvgl.alert then
-          lvgl.alert({
+        if lvgl and lvgl.message then
+          lvgl.message({
             title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
             message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
           })
@@ -494,8 +494,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueGovWrite(ctx and ctx.requestRebuild, ctx)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

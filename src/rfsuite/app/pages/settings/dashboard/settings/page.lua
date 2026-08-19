@@ -184,8 +184,8 @@ function M.onSave(ctx)
         return true
       end
       local ok, err = ctx.savePreferences()
-      if not ok and lvgl and lvgl.alert then
-        lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
+      if not ok and lvgl and lvgl.message then
+        lvgl.message({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
       end
       return true
     end

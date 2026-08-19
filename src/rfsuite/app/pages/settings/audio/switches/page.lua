@@ -163,8 +163,8 @@ function M.onSave(ctx)
   if ok then
     return true
   else
-    if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
+    if lvgl and lvgl.message then
+      lvgl.message({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
     return true
   end

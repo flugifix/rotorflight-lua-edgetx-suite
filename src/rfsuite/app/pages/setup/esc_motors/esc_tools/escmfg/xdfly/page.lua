@@ -346,11 +346,6 @@ local function ensureLoaded()
         title = warningTitle,
         message = warningMsg
       })
-    elseif type(lvgl.alert) == "function" then
-      pcall(lvgl.alert, {
-        title = warningTitle,
-        message = warningMsg
-      })
     end
   end
   queueXdflyRead(false)
@@ -401,8 +396,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueXdflyWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

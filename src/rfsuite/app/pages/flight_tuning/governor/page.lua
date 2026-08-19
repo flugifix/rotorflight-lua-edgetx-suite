@@ -601,14 +601,14 @@ function M.onSave(ctx)
 	local errMsp = nil
 	okMsp, errMsp = queueGovWrite(session)
 
-	if lvgl and lvgl.alert then
+	if lvgl and lvgl.message then
 		if okMsp then
-			lvgl.alert({
+			lvgl.message({
 				title = pageText(ctx and ctx.i18n, "saved_title"),
 				message = pageText(ctx and ctx.i18n, "saved_message")
 			})
 		else
-			lvgl.alert({
+			lvgl.message({
 				title = pageText(ctx and ctx.i18n, "warning_title"),
 				message = pageText(ctx and ctx.i18n, "saved_local_only_message") .. (errMsp and (": " .. tostring(errMsp)) or "")
 			})
