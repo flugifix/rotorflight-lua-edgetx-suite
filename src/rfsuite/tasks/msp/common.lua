@@ -88,6 +88,19 @@ local function new(protocol)
   local function mspProcessTxQ()
     if #mspTxBuf == 0 then return false end
 
+    -- Where this chunk starts. `transport.mspSend` hands the frame to a ONE-SLOT uplink buffer
+    -- that answers false while it is still occupied, and a chunk that was refused was never
+    -- sent -- so the index must not move past it. Without this a request longer than one chunk
+    -- loses its tail: the flight controller assembles nothing, answers nothing, and the whole
+    -- message is retried from the beginning after the timeout.
+    local chunkIdx = mspTxIdx
+    local chunkCRC = mspTxCRC
+    -- ... and the sequence, which buildStatusByte advances as a side effect of being called.
+    -- A re-sent chunk has to carry the sequence it was built with: the receiver drops the whole
+    -- request when the numbers skip, so restoring the index without the sequence turns a lost
+    -- chunk into a lost message just the same.
+    local chunkSeq = mspSeq
+
     local payload = {}
     payload[1] = buildStatusByte(mspTxIdx == 1)
 
@@ -107,14 +120,23 @@ local function new(protocol)
         for j = i + 1, maxTxBufferSize do
           payload[j] = 0
         end
-        transport.mspSend(payload)
+        if not transport.mspSend(payload) then
+          mspTxIdx = chunkIdx
+          mspTxCRC = chunkCRC
+          mspSeq = chunkSeq
+          return true
+        end
         clearArray(mspTxBuf)
         mspTxIdx = 1
         mspTxCRC = 0
         return false
       end
 
-      transport.mspSend(payload)
+      if not transport.mspSend(payload) then
+        mspTxIdx = chunkIdx
+        mspTxCRC = chunkCRC
+        mspSeq = chunkSeq
+      end
       return true
     end
 
@@ -122,7 +144,13 @@ local function new(protocol)
       payload[j] = payload[j] or 0
     end
 
-    transport.mspSend(payload)
+    if not transport.mspSend(payload) then
+      mspTxIdx = chunkIdx
+      mspTxCRC = chunkCRC
+      mspSeq = chunkSeq
+      return true
+    end
+
     if mspTxIdx > #mspTxBuf then
       clearArray(mspTxBuf)
       mspTxIdx = 1
