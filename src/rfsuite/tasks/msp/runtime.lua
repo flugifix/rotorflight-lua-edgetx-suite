@@ -137,8 +137,27 @@ local function ensureRootState()
   _G.rfsuite.diagnostics = _G.rfsuite.diagnostics or {}
 end
 
+-- The request facade is loaded once, on the first publish, and never again whether it loaded or
+-- not. It is loaded here rather than at the top of this file because it loads this module in
+-- turn: by the time anything publishes, both are past their own chunk and the lookup is a table
+-- read.
+local serviceLoadAttempted = false
+
+local function publishService()
+  if serviceLoadAttempted then
+    return
+  end
+  serviceLoadAttempted = true
+
+  local Service = loadModule("tasks/msp/service.lua")
+  if type(Service) == "table" then
+    _G.rfsuite.msp = Service
+  end
+end
+
 local function publish()
   ensureRootState()
+  publishService()
   local session = _G.rfsuite.session
   local diagnostics = _G.rfsuite.diagnostics
 
@@ -609,6 +628,36 @@ function Runtime.detach(clientId)
   if wasAttached and state.queue and type(state.queue.clear) == "function" then
     state.queue:clear(id)
   end
+end
+
+--- Put a message on the queue without handing out the queue itself.
+--
+-- Callers inside this package reach the queue through getState(), which returns the live state
+-- table and everything in it. That is more than a caller outside the package should be given,
+-- and more than one inside needs: queueing is the whole of what they do with it.
+--
+-- Returns false when the runtime could not be brought up, so a caller can tell "not sent" from
+-- "sent and unanswered" instead of waiting for a reply that was never asked for.
+function Runtime.enqueue(message)
+  if type(message) ~= "table" then
+    return false
+  end
+  if not initIfNeeded() then
+    return false
+  end
+  if not state.queue or type(state.queue.add) ~= "function" then
+    return false
+  end
+  state.queue:add(message)
+  return true
+end
+
+--- Drop one queued message, named by its client and the id that client gave it.
+function Runtime.cancel(clientId, requestId)
+  if not state.queue or type(state.queue.cancel) ~= "function" then
+    return false
+  end
+  return state.queue:cancel(clientId, requestId) == true
 end
 
 function Runtime.tick()

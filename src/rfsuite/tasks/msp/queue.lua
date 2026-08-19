@@ -307,6 +307,65 @@ function Queue:clear(clientId, opts)
   end
 end
 
+--- Drop one message, named by the client that queued it and the id it was given.
+--
+-- Clearing by client is the right tool when a caller goes away; it is the wrong one when a
+-- caller is still there and has changed its mind about a single request -- a page that has
+-- moved on from the read it started, for instance. Both arguments are required, so one client
+-- cannot cancel another's work by guessing an id.
+--
+-- Returns true when something was dropped. A message already being transmitted is abandoned
+-- like any other, and its chunks go with it, or the next message would send what is left of
+-- them.
+function Queue:cancel(clientId, requestId)
+  if clientId == nil or requestId == nil then
+    return false
+  end
+
+  local handler = nil
+  local found = false
+
+  local current = self.currentMessage
+  if current and current.client == clientId and current.requestId == requestId then
+    found = true
+    if type(current.errorHandler) == "function" then
+      handler = current.errorHandler
+    end
+    self.currentMessage = nil
+    self.currentMessageStartTime = nil
+    self.lastTimeCommandSent = nil
+    self.retryCount = 0
+    if self.common and self.common.clearTxBuf then
+      self.common.clearTxBuf()
+    end
+    if self.common and self.common.clearRxBuf then
+      self.common.clearRxBuf()
+    end
+  end
+
+  local kept = newQueue()
+  while qcount(self.queue) > 0 do
+    local msg = qpop(self.queue)
+    if msg then
+      if msg.client == clientId and msg.requestId == requestId then
+        found = true
+        if type(msg.errorHandler) == "function" then
+          handler = msg.errorHandler
+        end
+      else
+        qpush(kept, msg)
+      end
+    end
+  end
+  qreset(self.queue)
+  self.queue = kept
+
+  if handler then
+    pcall(handler, nil, "cancelled")
+  end
+  return found
+end
+
 function Queue:processQueue(now)
   now = tonumber(now) or nowSeconds()
   local simulatorMode = self.isSimulator == true
