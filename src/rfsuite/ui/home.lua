@@ -868,9 +868,7 @@ local function returnToRootOnDisconnect()
   end
 
   closeHelpDialogIfOpen()
-  state.loadingMenuId = nil
   state.pendingMenuOpen = nil
-  state.pendingMenuBack = false
 
   local stepped = false
   while state.menu and (not state.menu.isRoot()) do
@@ -1220,8 +1218,12 @@ local function getCardPressHandler(cardId)
       return
     end
     if state.menu and (not state.menu.isRoot()) then
-      state.loadingMenuId = cardId
-      scheduleBuildUI(false)
+      -- Parking the target is the whole press: run() opens pendingMenuOpen and schedules the
+      -- rebuild itself, so nothing is scheduled here and the next thing drawn is the target's
+      -- own first frame -- a menu, or a page with the loading overlay the page paints while it
+      -- reads. A frame in front of that one is a second scene rebuild whose only content is a
+      -- notice the frame after it replaces.
+      state.pendingMenuOpen = cardId
     end
   end
   state.cardHandlers[cardId] = fn
@@ -1245,8 +1247,7 @@ local function getRootCardPressHandler(sectionId, cardId)
       return
     end
     if state.menu and state.menu.isRoot() then
-      state.loadingMenuId = { section = sectionId, card = cardId }
-      scheduleBuildUI(false)
+      state.pendingMenuOpen = { section = sectionId, card = cardId }
     end
   end
   state.cardHandlers[key] = fn
@@ -1348,35 +1349,6 @@ function M.buildUI()
     })
     lvgl.build(lyt)
     state.saveOverlayVisible = true
-    return
-  end
-
-
-  if state.loadingMenuId then
-    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
-    local tr = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
-    lvgl.build({
-      {
-        type = "rectangle",
-        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
-        color = COLOR_THEME_PRIMARY3,
-        filled = true
-      },
-      {
-        type = "label",
-        x = 0, y = (LCD_H or 240) / 2 - 10, w = LCD_W or 320,
-        text = tr,
-        color = COLOR_THEME_PRIMARY2,
-        align = CENTER,
-        font = MIDSIZE
-      }
-    })
-    if state.loadingMenuId == "back" then
-      state.pendingMenuBack = true
-    else
-      state.pendingMenuOpen = state.loadingMenuId
-    end
-    state.loadingMenuId = nil
     return
   end
 
@@ -1684,8 +1656,6 @@ function M.init()
   state.pendingSaveAction = nil
   state.saveOverlayVisible = false
   state.pendingMenuOpen = nil
-  state.pendingMenuBack = false
-  state.loadingMenuId = nil
   state.isClosing = false
   state.closeTicks = nil
   state.closeMemStart = nil
@@ -1867,8 +1837,6 @@ function M.run(event, touchState)
         state.pendingSaveAction = nil
         state.saveOverlayVisible = false
         state.pendingMenuOpen = nil
-        state.pendingMenuBack = false
-        state.loadingMenuId = nil
         closeHelpDialogIfOpen()
         
         -- Release all pages in the registry to free their resources (queues override/rollback resets)
@@ -1995,15 +1963,6 @@ function M.run(event, touchState)
       end
       state.focusIndex = 0
       state.pendingMenuOpen = nil
-      transitionedMenuThisTick = true
-      scheduleBuildUI(true)
-    end
-
-    if state.pendingMenuBack and not state.isClosing then
-      if state.menu and state.menu.goBack() then
-        state.focusIndex = 0
-      end
-      state.pendingMenuBack = false
       transitionedMenuThisTick = true
       scheduleBuildUI(true)
     end
