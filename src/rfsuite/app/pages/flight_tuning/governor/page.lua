@@ -604,13 +604,13 @@ function M.onSave(ctx)
 	if lvgl and lvgl.message then
 		if okMsp then
 			lvgl.message({
-				title = pageText(ctx and ctx.i18n, "saved_title"),
-				message = pageText(ctx and ctx.i18n, "saved_message")
+				title = pageText(ctx and ctx.i18n, "saved_title", "@i18n(app.pages.flight_tuning_governor.saved_title)@"),
+				message = pageText(ctx and ctx.i18n, "saved_message", "@i18n(app.pages.flight_tuning_governor.saved_message)@")
 			})
 		else
 			lvgl.message({
-				title = pageText(ctx and ctx.i18n, "warning_title"),
-				message = pageText(ctx and ctx.i18n, "saved_local_only_message") .. (errMsp and (": " .. tostring(errMsp)) or "")
+				title = pageText(ctx and ctx.i18n, "warning_title", "@i18n(app.pages.flight_tuning_governor.warning_title)@"),
+				message = pageText(ctx and ctx.i18n, "saved_local_only_message", "@i18n(app.pages.flight_tuning_governor.saved_local_only_message)@") .. (errMsp and (": " .. tostring(errMsp)) or "")
 			})
 		end
 	end

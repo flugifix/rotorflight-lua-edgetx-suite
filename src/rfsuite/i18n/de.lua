@@ -328,6 +328,7 @@ return {
         rates_type = "Drehraten-Type",
         rate_table = "Rate-Tabelle",
         msg_reset_to_defaults = "Rate-Typ geändert. Werte werden auf Standardwerte zurückgesetzt.",
+        warning_title = "Warnung",
         table_help_p1 = "Raten-Typ: Wählen Sie den Rate-Typ aus, mit dem Sie fliegen möchten. Raceflight und Actual sind die einfachsten.",
         table_help_p2 = "Dynamik: Wird unabhängig vom Rate-Typ angewendet. Anpassen, um Heli-Bewegungen weicher zu machen, z. B. für Scale-Helis.",
         roll = "Roll",
@@ -789,7 +790,9 @@ return {
         loading_title = "Laden",
         loading_message = "Lese PID-Tuning",
         saved_title = "Gespeichert",
-        saved_message = "PID-Tuning gespeichert"
+        saved_message = "PID-Tuning gespeichert",
+        warning_title = "Warnung",
+        saved_local_only_message = "Lokal gespeichert; FC-Schreibvorgang ausstehend",
       },
       setup_power_battery = {
         section_profiles = "Profile",

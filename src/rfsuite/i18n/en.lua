@@ -328,6 +328,7 @@ return {
         rates_type = "Rates Type",
         rate_table = "Rate Table",
         msg_reset_to_defaults = "Rate type changed. Values will be reset to defaults.",
+        warning_title = "Warning",
         table_help_p1 = "Rates type: Choose the rate type you prefer flying with. Raceflight and Actual are the most straightforward.",
         table_help_p2 = "Dynamics: Applied regardless of rates type. Typically left on defaults but can be adjusted to smooth heli movements, like with scale helis.",
         roll = "Roll",
@@ -789,7 +790,9 @@ return {
         loading_title = "Loading",
         loading_message = "Reading PID tuning",
         saved_title = "Saved",
-        saved_message = "PID tuning saved"
+        saved_message = "PID tuning saved",
+        warning_title = "Warning",
+        saved_local_only_message = "Saved locally; FC write pending",
       },
       setup_power_battery = {
         section_profiles = "Profiles",
