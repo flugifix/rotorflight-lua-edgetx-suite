@@ -64,13 +64,18 @@ function M.append(children, opts)
     font = SMLSIZE
   }
 
+  -- The track, and it needs a colour of its own. GREY_DEFAULT is exported to Lua only when
+  -- LCD_DEPTH > 1 and COLORLCD is NOT defined (radio/src/lua/api_general.cpp), so on every
+  -- radio this overlay can run on it is nil -- and a rectangle with no colour is drawn in
+  -- COLOR_THEME_SECONDARY1, which is what the filled part uses. Track and fill were therefore
+  -- the same colour, and the bar read as full from the first frame to the last.
   children[#children + 1] = {
     type = "rectangle",
     x = barX,
     y = barY,
     w = barW,
     h = barH,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true
   }
 
