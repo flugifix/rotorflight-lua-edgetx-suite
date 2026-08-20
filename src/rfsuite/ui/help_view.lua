@@ -1,11 +1,17 @@
 local HelpView = {}
 
-local function safeTextSize(text)
-  local fn = lcd and lcd.getTextSize
+-- EdgeTX's call is `lcd.sizeText(text [, flags])` and it takes the font flags, so the answer is
+-- for the font the text will be drawn in. There is no `lcd.getTextSize` -- the name this used to
+-- ask for does not exist on any EdgeTX build -- so every measurement here fell through to the
+-- estimate below: eight pixels per BYTE, which over-counts every character outside ASCII, and a
+-- line height that ignores the font entirely.
+local function safeTextSize(text, font)
+  local fn = lcd and lcd.sizeText
   if type(fn) == "function" then
-    local ok, w, h = pcall(fn, text)
-    if ok then
-      return tonumber(w) or 0, tonumber(h) or 0
+    local ok, w, h = pcall(fn, tostring(text or ""), font)
+    w, h = tonumber(w), tonumber(h)
+    if ok and w and h and h > 0 then
+      return w, h
     end
   end
 
@@ -33,17 +39,17 @@ local function splitLines(text)
   return lines
 end
 
-local function estimateWrappedTextHeight(text, width)
+local function estimateWrappedTextHeight(text, width, font)
   local lines = splitLines(text)
   if #lines == 0 then
     return 0
   end
 
-  local _, lineH = safeTextSize("Ag")
+  local _, lineH = safeTextSize("Ag", font)
   lineH = tonumber(lineH) or 16
   if lineH < 12 then lineH = 12 end
 
-  local spaceW = safeTextSize(" ")
+  local spaceW = safeTextSize(" ", font)
   if not spaceW or spaceW <= 0 then
     spaceW = 4
   end
@@ -56,7 +62,7 @@ local function estimateWrappedTextHeight(text, width)
 
     for word in string.gmatch(paragraph, "%S+") do
       local candidate = currentLine == "" and word or (currentLine .. " " .. word)
-      local candidateW = safeTextSize(candidate)
+      local candidateW = safeTextSize(candidate, font)
       if candidateW > width and currentLine ~= "" then
         paragraphLines = paragraphLines + 1
         currentLine = word
@@ -116,7 +122,9 @@ function HelpView.build(ctx)
   local bodyH = math.max(30, bodyBottom - bodyTop)
   local bodyText = tostring(message or "")
   local bodyTextW = math.max(40, contentW - 20)
-  local bodyTextH = estimateWrappedTextHeight(bodyText, bodyTextW)
+  -- SMLSIZE is the font the body label below is drawn in; measuring in any other one would
+  -- describe a different block of text.
+  local bodyTextH = estimateWrappedTextHeight(bodyText, bodyTextW, SMLSIZE)
 
   local layout = {
     {
