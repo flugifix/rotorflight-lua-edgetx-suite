@@ -69,35 +69,49 @@ local function logGv(fmt, ...)
   if print then pcall(print, "[Widget.main] " .. msg) end
 end
 
+--- The global preference file's size and mtime, as one string.
+--
+-- The same state comparison the dashboard runtime makes, kept here rather than shared:
+-- this file is loaded for every widget at boot and deliberately pulls in nothing. It
+-- watches only the global file, because the per-model one's path is not known here --
+-- the runtime watches both, and it is the half that does the reloading.
+local PREFERENCES_FILE = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
+local PREFS_STAT_INTERVAL = 1.0
+
+local function preferencesStamp()
+  if type(fstat) ~= "function" then return nil end
+  local okg, g = pcall(fstat, PREFERENCES_FILE)
+  if okg and type(g) == "table" then
+    return tostring(g.size) .. ":" .. tostring(g.time)
+  end
+  return nil
+end
+
 local function shouldReloadWidget(widget)
-  local reload = false
-  local reason = ""
-  if _G.rfsuite_reload_flag and _G.rfsuite_reload_flag ~= widget._lastSeenReloadFlag then
-    reason = "reload_flag(" .. tostring(widget._lastSeenReloadFlag) .. "->" .. tostring(_G.rfsuite_reload_flag) .. ")"
-    widget._lastSeenReloadFlag = _G.rfsuite_reload_flag
-    reload = true
+  local now = nowSeconds()
+  if (now - (widget._lastPrefsStatAt or 0)) < PREFS_STAT_INTERVAL then
+    return false
   end
-  if type(model) == "table" and type(model.getGlobalVariable) == "function" then
-    for _, fm in ipairs({0, 8}) do
-      local ok, val = pcall(model.getGlobalVariable, 8, fm)
-      if ok and val == 1 then
-        pcall(model.setGlobalVariable, 8, fm, 0)
-        reason = reason .. " GV9_FM" .. tostring(fm) .. "=1"
-        reload = true
-      end
-    end
+  widget._lastPrefsStatAt = now
+
+  local stamp = preferencesStamp()
+  if stamp == nil then
+    return false
   end
-  if reload then
-    logGv("Reload triggered: %s", reason)
+  if widget._lastPrefsStamp == nil then
+    -- First look: a baseline, never a reload.
+    widget._lastPrefsStamp = stamp
+    return false
   end
-  return reload
+  if stamp == widget._lastPrefsStamp then
+    return false
+  end
+  widget._lastPrefsStamp = stamp
+  logGv("Reload triggered: preferences.ini changed (%s)", stamp)
+  return true
 end
 
 local function refresh(widget, event, touchState)
-  if _G.rfsuite_tool_active then
-    return
-  end
-
   if widget and shouldReloadWidget(widget) then
     widget._cpuBackoffUntil = 0
     logGv("Calling widget.reload()")

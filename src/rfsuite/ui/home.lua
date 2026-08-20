@@ -1887,7 +1887,6 @@ end
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
 function M.init()
-  _G.rfsuite_tool_active = true
   ensureInitDeps()
 
   ensurePreferencesSafe()
@@ -2216,12 +2215,6 @@ function M.run(event, touchState)
           pcall(MspRuntime.detach, "tool")
           state.mspAttached = false
         end
-        _G.rfsuite_tool_active = false
-        _G.rfsuite_reload_flag = (_G.rfsuite_reload_flag or 0) + 1
-        if type(model) == "table" and type(model.setGlobalVariable) == "function" then
-          pcall(model.setGlobalVariable, 8, 0, 1)
-          pcall(model.setGlobalVariable, 8, 8, 1)
-        end
         return 2
       end
       return 0
@@ -2442,12 +2435,6 @@ function M.run(event, touchState)
     if state.mspAttached and MspRuntime and type(MspRuntime.detach) == "function" then
       MspRuntime.detach("tool")
       state.mspAttached = false
-    end
-    _G.rfsuite_tool_active = false
-    _G.rfsuite_reload_flag = (_G.rfsuite_reload_flag or 0) + 1
-    if type(model) == "table" and type(model.setGlobalVariable) == "function" then
-      pcall(model.setGlobalVariable, 8, 0, 1)
-      pcall(model.setGlobalVariable, 8, 8, 1)
     end
     return 2
   end

@@ -292,40 +292,7 @@ function M.saveByMcuId(mcuId, prefs)
     if okTouch then
       local okSave, saveErr = saveIni(path, data)
       if okSave then
-        _G.rfsuite_reload_flag = (_G.rfsuite_reload_flag or 0) + 1
-
-        local function logGv(msg)
-          -- Gated the way the tool gates its own file logger in ui/home.lua. Ungated,
-          -- every save opens, appends to and closes a second file on the SD card, and
-          -- there is nothing in the tool that turns it off. Absent preferences read as
-          -- off: before preferences are loaded there is nothing to say a trace was wanted.
-          local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
-          local general = prefs and prefs.general
-          local debugLevel = general and general.debug_level
-          if debugLevel ~= "debug" and debugLevel ~= "info" then return end
-
-          local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
-          if fLog then
-            local t = (getTime and getTime()) or 0
-            io.write(fLog, string.format("[%.2f][ModelPrefs.save] %s\n", t / 100, tostring(msg)))
-            io.close(fLog)
-          end
-          if print then pcall(print, "[ModelPrefs.save] " .. tostring(msg)) end
-        end
-
-        logGv("Saved model ini: " .. tostring(path) .. ". type(model)=" .. type(model))
-
-        -- Signal the widget to reload preferences using EdgeTX Global Variables
-        -- GV9 (index 8) for FM0 (index 0) and FM8 (index 8) set to 1
-        if type(model) == "table" and type(model.setGlobalVariable) == "function" then
-          local ok0, res0 = pcall(model.setGlobalVariable, 8, 0, 1)
-          local ok8, res8 = pcall(model.setGlobalVariable, 8, 8, 1)
-          local r0 = (type(model.getGlobalVariable) == "function") and select(2, pcall(model.getGlobalVariable, 8, 0))
-          local r8 = (type(model.getGlobalVariable) == "function") and select(2, pcall(model.getGlobalVariable, 8, 8))
-          logGv(string.format("Set GV9: FM0 ok=%s val=%s (readback=%s), FM8 ok=%s val=%s (readback=%s)", tostring(ok0), tostring(res0), tostring(r0), tostring(ok8), tostring(res8), tostring(r8)))
-        else
-          logGv("model.setGlobalVariable is NOT available!")
-        end
+        -- No signal is sent. Writing this file IS the event -- see lib/preferences.lua.
         return true
       end
       lastErr = saveErr or "io"

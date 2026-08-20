@@ -164,6 +164,11 @@ local function loadPreferences()
   return prefs
 end
 
+--- The files the tool writes when a preference changes, and how often they are looked at.
+-- One second is the rate the old signal was polled at, so nothing gets slower here.
+local PREFERENCES_FILE = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
+local PREFS_STAT_INTERVAL = 1.0
+
 local function publishPreferencesToGlobal(prefs)
   if type(_G) ~= "table" then return end
   _G.rfsuite = _G.rfsuite or {}
@@ -196,22 +201,51 @@ local function logGv(fmt, ...)
   if print then pcall(print, "[Runtime] " .. msg) end
 end
 
+--- What the preference files look like right now: size and mtime, as one string.
+--
+-- `fstat` is a global in this firmware and returns { size, attrib, time }. Comparing that
+-- is a STATE comparison rather than a signal, and the difference is the whole point: a
+-- signal is consumed by whoever reads it first, a state is not.
+--
+-- FAT stores mtime at two-second granularity and depends on the RTC, so two writes inside
+-- one second can share a timestamp. That is why the size is part of the stamp.
+local function preferencesStamp(modelPath)
+  if type(fstat) ~= "function" then return nil end
+  local out = ""
+  local okg, g = pcall(fstat, PREFERENCES_FILE)
+  if okg and type(g) == "table" then
+    out = tostring(g.size) .. ":" .. tostring(g.time)
+  end
+  if modelPath then
+    local okm, m = pcall(fstat, modelPath)
+    if okm and type(m) == "table" then
+      out = out .. "|" .. tostring(m.size) .. ":" .. tostring(m.time)
+    end
+  end
+  return out
+end
+
 local function reloadPreferencesIfNeeded(self, force)
   local now = nowSeconds()
 
+  -- The stamp that a completed reload will adopt. Held back on purpose -- see the armed
+  -- guard below.
+  local pendingStamp = nil
   local signalReload = false
-  if not force then
-    if _G.rfsuite_reload_flag and _G.rfsuite_reload_flag ~= self._lastSeenReloadFlag then
-      self._lastSeenReloadFlag = _G.rfsuite_reload_flag
-      signalReload = true
-    end
-    if type(model) == "table" and type(model.getGlobalVariable) == "function" then
-      for _, fm in ipairs({0, 8}) do
-        local ok, val = pcall(model.getGlobalVariable, 8, fm)
-        if ok and val == 1 then
-          pcall(model.setGlobalVariable, 8, fm, 0)
-          signalReload = true
-        end
+  if not force and (now - (self._lastPrefsStatAt or 0)) >= PREFS_STAT_INTERVAL then
+    self._lastPrefsStatAt = now
+    -- The per-model file's path lives on the session rather than on `self` -- the same
+    -- shape this file already uses to reach `modelPreferences` twice further down.
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    local stamp = preferencesStamp(session and session.modelPreferencesFile)
+    if stamp then
+      if self._lastPrefsStamp == nil then
+        -- First look. The preferences in hand were loaded from these very files, so this
+        -- is a baseline and never a reload.
+        self._lastPrefsStamp = stamp
+      elseif stamp ~= self._lastPrefsStamp then
+        signalReload = true
+        pendingStamp = stamp
       end
     end
   end
@@ -221,11 +255,17 @@ local function reloadPreferencesIfNeeded(self, force)
   end
 
   -- Safety: Do not reload files while ARMED to prevent CPU spikes or sensor lost
+  --
+  -- Returning here does NOT lose the change: `pendingStamp` is not adopted, so the next
+  -- pass after disarming sees the same difference and reloads then. With the old signal
+  -- the flag had already been read and reset above this guard, so a save made while armed
+  -- was gone with nothing left to re-signal it.
   if self.state.armed then
     return
   end
 
   logGv("reloadPreferencesIfNeeded executing (force=%s signal=%s)", tostring(force), tostring(signalReload))
+  if pendingStamp then self._lastPrefsStamp = pendingStamp end
 
   local prefs = loadPreferences()
   if type(prefs) == "table" then
