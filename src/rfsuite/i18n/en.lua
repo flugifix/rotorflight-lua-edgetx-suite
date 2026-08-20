@@ -1490,7 +1490,9 @@ return {
         mag_y = "Mag Y",
         mag_z = "Mag Z",
         stream = "Live Stream",
-        help_message = "Displays live sensor data from the flight controller in a graph."
+        help_message = "Displays live sensor data from the flight controller in a graph.",
+        loading_title = "Loading",
+        loading_message = "Reading sensors..."
       },
       diagnostics_fblstatus = {
         date = "Date",
@@ -1589,7 +1591,9 @@ return {
         status_probe_requested = "Probe requested",
         status_sync_requested = "Sync requested: ",
         mode_native = "Native",
-        mode_custom = "Custom"
+        mode_custom = "Custom",
+        loading_title = "Loading",
+        loading_message = "Reading link configuration..."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",

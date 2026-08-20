@@ -1490,7 +1490,9 @@ return {
         mag_y = "Mag Y",
         mag_z = "Mag Z",
         stream = "Echtzeit-Stream",
-        help_message = "Zeigt Live-Sensordaten des Flight Controllers in einem Graphen an."
+        help_message = "Zeigt Live-Sensordaten des Flight Controllers in einem Graphen an.",
+        loading_title = "Laden",
+        loading_message = "Lese Sensoren..."
       },
       diagnostics_fblstatus = {
         date = "Datum",
@@ -1589,7 +1591,9 @@ return {
         status_probe_requested = "Prüfung angefordert",
         status_sync_requested = "Abgleich angefordert: ",
         mode_native = "Nativ",
-        mode_custom = "Benutzerdefiniert"
+        mode_custom = "Benutzerdefiniert",
+        loading_title = "Laden",
+        loading_message = "Lese Link-Konfiguration..."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",
