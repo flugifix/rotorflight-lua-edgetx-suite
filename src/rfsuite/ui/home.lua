@@ -236,11 +236,38 @@ local function ensureHelpRegistry()
 end
 
 local LoadingOverlay = nil
+local SavePipeline = nil
 
 --- What the start is waiting for, by the onconnect runner's own task name.
 -- The runner reports the pending task as the manifest id; these are the same ids, with a text
 -- the pilot can read. An id with no entry falls back to the generic notice rather than putting
 -- an internal name on screen.
+--- What a save is doing, for the phases that have no step count of their own.
+-- The writes and the EEPROM commit are counted, so they name the step being written; everything
+-- after the commit is a wait on the flight controller and is named rather than counted.
+local SAVE_TEXT = {
+  rebooting    = "@i18n(app.save.rebooting)@",
+  waiting      = "@i18n(app.save.waiting)@",
+  reconnecting = "@i18n(app.save.reconnecting)@",
+  reading_back = "@i18n(app.save.reading_back)@",
+  saved_title  = "@i18n(app.save.saved_title)@",
+  dismiss      = "@i18n(app.save.dismiss)@",
+  done_message = "@i18n(app.save.done_message)@",
+  timeout_title   = "@i18n(app.save.timeout_title)@",
+  timeout_message = "@i18n(app.save.timeout_message)@",
+  failed_title    = "@i18n(app.save.failed_title)@",
+  failed_message  = "@i18n(app.save.failed_message)@",
+}
+
+local SAVE_PHASE_TEXT = {
+  preflight = "rebooting",
+  reboot    = "rebooting",
+  probe     = "waiting",
+  onconnect = "reconnecting",
+  verify    = "reading_back",
+  reload    = "reading_back",
+}
+
 local ONCONNECT_TEXT = {
   apiversion        = "@i18n(app.onconnect.apiversion)@",
   uid               = "@i18n(app.onconnect.uid)@",
@@ -270,6 +297,9 @@ local function ensureBuildDeps()
   end
   if not LoadingOverlay then
     LoadingOverlay = loadModule("ui/loading_overlay.lua")
+  end
+  if not SavePipeline then
+    SavePipeline = loadModule("tasks/msp/save_pipeline.lua")
   end
 end
 
@@ -358,6 +388,7 @@ state = {
   pendingGcAfterBuild = false,
   pendingSaveAction = nil,
   saveOverlayVisible = false,
+  lastSaveSnapshot = nil,
   mspAttached = false,
   mspLastTick = 0,
   fblConnected = false,
@@ -551,6 +582,33 @@ local function onBack(source, ev)
     return
   end
   state.backGestureActive = true
+
+  -- A save that reboots holds the page: the values are on their way to a flight controller that
+  -- is about to restart, and leaving would put a page on screen showing what it read before.
+  -- Once the settings are in EEPROM there is nothing left to protect, so from that moment the
+  -- same press dismisses the overlay and the pipeline carries on without a screen.
+  -- A save that has just reported itself is not holding the page -- it is holding a notice, and
+  -- the press that would leave the page reads it instead.
+  if SavePipeline and type(SavePipeline.hasOutcome) == "function" and SavePipeline.hasOutcome() then
+    SavePipeline.dismiss()
+    if fromEvent then
+      state.suppressBackFrames = 6
+    end
+    scheduleBuildUI(false)
+    return
+  end
+
+  if SavePipeline and type(SavePipeline.blocksNavigation) == "function"
+    and SavePipeline.blocksNavigation() then
+    if SavePipeline.isDismissible() then
+      SavePipeline.dismiss()
+      if fromEvent then
+        state.suppressBackFrames = 6
+      end
+      scheduleBuildUI(false)
+    end
+    return
+  end
 
   if state.helpContent then
     closeHelpDialogIfOpen()
@@ -1490,9 +1548,54 @@ function M.buildUI()
     return
   end
 
-  if state.pendingSaveAction then
+  local saveProgress = SavePipeline and type(SavePipeline.getProgress) == "function"
+    and SavePipeline.getProgress() or nil
+
+  if state.pendingSaveAction or saveProgress then
     local title = state.i18n and state.i18n.t and state.i18n.t("app.saving") or "Saving..."
     local message = state.i18n and state.i18n.t and state.i18n.t("app.saving_settings") or "Applying settings"
+    local progress = 0.35
+    local action = nil
+
+    -- Until the save reaches the flight controller the notice says only that something is being
+    -- applied, which is all a queued chain can honestly say. A pipeline reports which step it is
+    -- on, and stays on screen for the phases the old notice never covered: the restart, the wait
+    -- for the board to answer and the read-back.
+    if saveProgress then
+      local phaseKey = SAVE_PHASE_TEXT[saveProgress.phase]
+      message = saveProgress.label or (phaseKey and SAVE_TEXT[phaseKey]) or message
+      progress = saveProgress.indeterminate and 1 or (saveProgress.fraction or 0)
+      if saveProgress.saved then
+        title = SAVE_TEXT.saved_title
+      end
+      -- A finished save reports itself HERE, in the box that has been reporting all along. A
+      -- native dialog for it would be drawn over this one from inside the reply handler, so
+      -- this box could not be repainted away first -- and while such a dialog stands the tool's
+      -- run() does not run at all.
+      if saveProgress.terminal then
+        local result = saveProgress.result or {}
+        if saveProgress.status == "timeout" and result.saved then
+          title = SAVE_TEXT.timeout_title
+          message = SAVE_TEXT.timeout_message
+        elseif saveProgress.status ~= "done" then
+          title = SAVE_TEXT.failed_title
+          message = SAVE_TEXT.failed_message
+        else
+          title = SAVE_TEXT.saved_title
+          message = SAVE_TEXT.done_message
+        end
+      end
+      if saveProgress.dismissible then
+        action = {
+          text = SAVE_TEXT.dismiss,
+          press = function()
+            SavePipeline.dismiss()
+            scheduleBuildUI(false)
+          end
+        }
+      end
+    end
+
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
     local lyt = {
       {
@@ -1509,7 +1612,8 @@ function M.buildUI()
       h = LCD_H or 240,
       title = title,
       message = message,
-      progress = 0.35
+      progress = progress,
+      action = action
     })
     lvgl.build(lyt)
     state.saveOverlayVisible = true
@@ -2125,8 +2229,30 @@ function M.run(event, touchState)
       if not ok then
         pcall(Log.emit, "rfsuite", "pendingSaveAction failed: " .. tostring(err), "error", true)
       end
+      -- A page that only queues its writes is finished here and the notice goes; a page that
+      -- started the pipeline is not, and the notice stays up for the phases that follow.
+      if SavePipeline and type(SavePipeline.isActive) == "function" and SavePipeline.isActive() then
+        state.saveOverlayVisible = true
+      end
       -- Ensure the save overlay is replaced even when page.onSave returns false.
       scheduleBuildUI(false)
+    end
+
+    -- The pipeline's reply-driven steps advance themselves; this drives the phases that wait on
+    -- time -- the bound on a flight controller that does not come back, and the bound on the
+    -- connect chain. Repaint on what is DISPLAYED rather than on every tick, the same rule the
+    -- start screen follows, or an unchanged notice would be rebuilt at tick rate.
+    if SavePipeline and type(SavePipeline.wakeup) == "function" and not state.isClosing then
+      SavePipeline.wakeup()
+      local saveProgress = SavePipeline.getProgress()
+      local snapshot = saveProgress and (tostring(saveProgress.phase) .. "/"
+        .. tostring(saveProgress.done) .. "/" .. tostring(saveProgress.label) .. "/"
+        .. tostring(saveProgress.dismissible)) or nil
+      if snapshot ~= state.lastSaveSnapshot then
+        state.lastSaveSnapshot = snapshot
+        state.saveOverlayVisible = snapshot ~= nil
+        scheduleBuildUI(false)
+      end
     end
 
     if state.pendingMenuOpen and not state.isClosing then

@@ -476,9 +476,15 @@ function Queue:processQueue(now)
     return
   end
 
+  -- completeAfterAttempt says the message completes on SILENCE once it has been sent that many
+  -- times. The two fields above cannot express it: both require an error reply to have arrived,
+  -- and a command whose whole effect is that the board stops answering never sends one. This
+  -- replaces the hardcoded `msg.command == 68` that stood here, which put one caller's protocol
+  -- knowledge -- the reboot -- inside the generic success test, and pinned it to a fixed retry
+  -- count that has no relation to the transport's own maxRetries.
   local success = (cmd == msg.command and not err)
     or (cmd == msg.command and err and msg.completeOnErrorReplyAttempt and self.retryCount >= msg.completeOnErrorReplyAttempt)
-    or (msg.command == 68 and self.retryCount == 2)
+    or (msg.completeAfterAttempt and self.retryCount >= msg.completeAfterAttempt)
 
   if success then
     msg.buf = buf

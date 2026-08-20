@@ -20,8 +20,10 @@ function M.append(children, opts)
   local message = tostring(opts.message or "")
   local progress = clamp01(opts.progress)
 
+  local action = type(opts.action) == "table" and opts.action or nil
+
   local boxW = math.min(420, math.max(220, w - 40))
-  local boxH = 154
+  local boxH = action and 208 or 154
   local boxX = x + math.floor((w - boxW) / 2)
   local boxY = y + math.floor((h - boxH) / 2) - 64
   if boxY < y + 8 then
@@ -88,6 +90,23 @@ function M.append(children, opts)
       h = barH - 4,
       color = COLOR_THEME_SECONDARY1,
       filled = true
+    }
+  end
+
+  -- An optional way out of the notice. A loading box normally has none, because there is
+  -- nothing to decide while something is being read; a caller that CAN be left early -- a save
+  -- whose settings are already stored, waiting on a flight controller that may never come back
+  -- -- passes one, and it is drawn here so the box geometry stays in one place.
+  if action then
+    local btnW = math.min(180, boxW - 32)
+    children[#children + 1] = {
+      type = "button",
+      x = boxX + math.floor((boxW - btnW) / 2),
+      y = barY + barH + 14,
+      w = btnW,
+      h = 32,
+      text = tostring(action.text or "OK"),
+      press = type(action.press) == "function" and action.press or function() end
     }
   end
 end

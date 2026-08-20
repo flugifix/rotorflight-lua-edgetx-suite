@@ -18,6 +18,19 @@ return {
       dataflash_summary = "Reading dataflash status"
     },
     saving_settings = "Applying settings",
+    save = {
+      rebooting = "Restarting the flight controller...",
+      waiting = "Waiting for the flight controller...",
+      reconnecting = "Reconnecting...",
+      reading_back = "Reading the settings back...",
+      saved_title = "Saved",
+      dismiss = "Continue",
+      timeout_title = "Saved",
+      timeout_message = "Settings saved. The flight controller has not come back yet.",
+      done_message = "Settings saved.",
+      failed_title = "Not saved",
+      failed_message = "The flight controller did not confirm the settings."
+    },
     closing_rfsuite = "Closing RFSuite...",
     model_armed_title = "Model Armed",
     model_armed_warning = "Model is ARMED! Please disarm.",

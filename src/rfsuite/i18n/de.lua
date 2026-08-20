@@ -18,6 +18,19 @@ return {
       dataflash_summary = "Lese Dataflash-Status"
     },
     saving_settings = "Einstellungen werden angewendet",
+    save = {
+      rebooting = "Flugcontroller startet neu...",
+      waiting = "Warte auf den Flugcontroller...",
+      reconnecting = "Verbinde erneut...",
+      reading_back = "Einstellungen werden zurückgelesen...",
+      saved_title = "Gespeichert",
+      dismiss = "Weiter",
+      timeout_title = "Gespeichert",
+      timeout_message = "Einstellungen gespeichert. Der Flugcontroller ist noch nicht zurück.",
+      done_message = "Einstellungen gespeichert.",
+      failed_title = "Nicht gespeichert",
+      failed_message = "Der Flugcontroller hat die Einstellungen nicht bestätigt."
+    },
     closing_rfsuite = "RFSuite wird beendet...",
     model_armed_title = "Modell Armed",
     model_armed_warning = "Modell ist ARMED! Bitte disarmen.",

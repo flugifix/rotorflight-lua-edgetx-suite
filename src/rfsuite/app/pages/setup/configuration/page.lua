@@ -17,6 +17,7 @@ local AdvancedConfigApi = nil
 local FeatureConfigApi = nil
 local StatusApi = nil
 local LoadingOverlay = nil
+local SavePipeline = nil
 local t = nil
 
 local FEATURE_BIT_GPS = 7
@@ -222,116 +223,63 @@ local function queueRcRead(isAutoReload)
   return true, nil
 end
 
---- Reports the outcome of a save exactly once, whichever step reaches an end first.
---
--- Every step's errorHandler leads here, and the queue fires the handlers of the steps that were
--- still waiting when one of them gave up -- so without the guard a single failure would raise
--- one dialog per remaining step.
-local function saveOutcome(i18n)
-  local reported = false
-  return {
-    ok = function()
-      if reported then return end
-      reported = true
-      ui.dirty = false
-      if lvgl and lvgl.message then
-        lvgl.message({
-          title = pageText(i18n, "saved_title", "Saved"),
-          message = pageText(i18n, "saved_message", "Configuration settings saved")
-        })
-      end
-    end,
-    failed = function(step)
-      if reported then return end
-      reported = true
-      -- The page still holds changes the flight controller did not confirm, so it must not go
-      -- on looking saved.
-      ui.dirty = true
-      if lvgl and lvgl.message then
-        lvgl.message({
-          title = pageText(i18n, "save_error_title", "Error"),
-          message = tostring(step)
-        })
-      end
-    end
-  }
-end
-
-local function queueRcWrite(i18n)
-  if not MspRuntime or not NameApi or not AdvancedConfigApi or not FeatureConfigApi or type(MspRuntime.getState) ~= "function" then
+local function queueRcWrite(_i18n)
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not NameApi or not AdvancedConfigApi or not FeatureConfigApi then
     return false, "msp_runtime_unavailable"
   end
 
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  local outcome = saveOutcome(i18n)
-
-  local namePayload = NameApi.buildWritePayload({ name = ui.config.name })
-  local advPayload = AdvancedConfigApi.buildWritePayload({
-    gyro_sync_denom_compat = ui.config.gyro_sync_denom_compat or 1,
-    pid_process_denom = ui.config.pid_process_denom
-  })
-  local featurePayload = FeatureConfigApi.buildWritePayload({
-    enabledFeatures = ui.config.enabledFeatures
-  })
-
-  -- Step 1: Write NAME
-  queue:add({
-    command = NameApi.writeCommand,
-    payload = namePayload,
-    isWrite = true,
-    processReply = function()
-      -- Step 2: Write ADVANCED_CONFIG
-      queue:add({
+  -- The five nested queue:add calls that stood here queued NAME, ADVANCED_CONFIG,
+  -- FEATURE_CONFIG, the EEPROM commit and the reboot, each from the previous step's
+  -- processReply, and the reboot's processReply was empty: the chain ended the moment the
+  -- restart was sent. What the page wanted is described here instead, and the pipeline owns the
+  -- rest -- including the part that never existed, which is waiting for the board to come back
+  -- and reading the settings again afterwards.
+  return SavePipeline.start({
+    pageId = "setup_configuration",
+    steps = {
+      {
+        label = "MSP_SET_NAME",
+        command = NameApi.writeCommand,
+        payload = NameApi.buildWritePayload({ name = ui.config.name })
+      },
+      {
+        label = "MSP_SET_ADVANCED_CONFIG",
         command = AdvancedConfigApi.writeCommand,
-        payload = advPayload,
-        isWrite = true,
-        processReply = function()
-          -- Step 3: Write FEATURE_CONFIG
-          queue:add({
-            command = FeatureConfigApi.writeCommand,
-            payload = featurePayload,
-            isWrite = true,
-            processReply = function()
-              -- Step 4: Write EEPROM
-              local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-              if eepromApi then
-                queue:add({
-                  command = eepromApi.command,
-                  payload = {},
-                  isWrite = true,
-                  processReply = function()
-                    outcome.ok()
-                    -- Step 5: Write REBOOT
-                    local rebootApi = loadModule("tasks/msp/api/reboot.lua")
-                    if rebootApi then
-                      queue:add({
-                        command = rebootApi.writeCommand,
-                        payload = rebootApi.buildWritePayload({ rebootMode = 0 }),
-                        isWrite = true,
-                        processReply = function() end,
-                        errorHandler = function() outcome.failed("REBOOT") end
-                      })
-                    end
-                  end,
-                  errorHandler = function() outcome.failed("MSP_EEPROM_WRITE") end
-                })
-              end
-            end,
-            errorHandler = function() outcome.failed("MSP_SET_FEATURE_CONFIG") end
-          })
-        end,
-        errorHandler = function() outcome.failed("MSP_SET_ADVANCED_CONFIG") end
-      })
+        payload = AdvancedConfigApi.buildWritePayload({
+          gyro_sync_denom_compat = ui.config.gyro_sync_denom_compat or 1,
+          pid_process_denom = ui.config.pid_process_denom
+        })
+      },
+      {
+        label = "MSP_SET_FEATURE_CONFIG",
+        command = FeatureConfigApi.writeCommand,
+        payload = FeatureConfigApi.buildWritePayload({
+          enabledFeatures = ui.config.enabledFeatures
+        })
+      }
+    },
+    reboot = true,
+    invalidateSessionKeys = { "setup_configuration" },
+    -- The settings are in EEPROM here, which is the moment the page stops being dirty. The
+    -- dialog waits: raising a native modal now would suspend the tool's run() -- and with it the
+    -- MSP tick the rest of this pipeline needs -- in the middle of the restart.
+    onSaved = function()
+      ui.dirty = false
     end,
-    errorHandler = function() outcome.failed("MSP_SET_NAME") end
+    onDone = function(result)
+      -- The outcome is drawn by the overlay that has been reporting this save all along. It
+      -- used to be a native dialog raised from here -- which is inside the reply handler, so
+      -- the overlay underneath could not be repainted away before it appeared, and while it
+      -- stood the tool's run() did not run.
+      if result.status ~= "done" then
+        ui.dirty = true
+      end
+      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
-
-  return true, nil
 end
 
 local function buildSessionSignature()
@@ -429,6 +377,11 @@ end
 function M.onActivate()
   ensureDeps()
   ensureLoaded()
+  -- A save whose overlay was dismissed finished without a screen. Its outcome was held back
+  -- rather than raised over whatever page the user went to; claim it now.
+  if SavePipeline and type(SavePipeline.takeResult) == "function" then
+    SavePipeline.takeResult("setup_configuration")
+  end
 end
 
 function M.wakeup(ctx)
