@@ -1388,12 +1388,27 @@ function M.buildUI()
     local screenW = LCD_W or 320
     local screenH = LCD_H or 240
 
+    -- The logo, in the same box the widget's own connection splash gives it
+    -- (widgets/dashboard/splash.lua): the arithmetic below is that file's, applied to the
+    -- full screen instead of a widget zone. Reusing it rather than choosing new numbers
+    -- keeps the tool's start and the widget's splash the same picture, and the caps are
+    -- what stop a 400x84 image from filling a large screen.
+    local logoW = math.max(112, math.min(math.floor(screenW * 0.80), 240))
+    local logoH = math.max(36, math.min(math.floor(screenH * 0.32), 68))
+    local logoX = math.floor((screenW - logoW) * 0.5)
+    local logoY = math.max(6, math.floor(screenH * 0.10))
+
     local children = {
       {
         type = "rectangle",
         x = 0, y = 0, w = screenW, h = screenH,
         color = COLOR_THEME_PRIMARY3,
         filled = true
+      },
+      {
+        type = "image",
+        x = logoX, y = logoY, w = logoW, h = logoH,
+        file = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png"
       },
       {
         type = "label",
