@@ -166,9 +166,14 @@ local function isModelArmed()
   return false
 end
 
+-- A no-op stand-in rather than false. Every call site below is `pcall(Log.emit, ...)`, and Lua
+-- evaluates the argument list before pcall runs -- so indexing a false Log raises outside the
+-- very pcall that was written to contain it.
+local NO_LOG = { emit = function() end }
+
 local Log = nil
 if Log == nil then
-  Log = loadModule("lib/log.lua") or false
+  Log = loadModule("lib/log.lua") or NO_LOG
 end
 
 local function ensurePageRegistry()
@@ -2000,7 +2005,10 @@ function M.run(event, touchState)
 
       -- Finish initial load when MSP is stable and all tasks are done.
       -- If the FBL is offline, we enter the menu after a short timeout (2s).
-      local mspState = MspRuntime.getState()
+      local mspState = nil
+      if MspRuntime and type(MspRuntime.getState) == "function" then
+        mspState = MspRuntime.getState()
+      end
       local isConnected = mspState and mspState.lastConnected == true
       local timeoutReached = (now - state.lastInputTick) > 200
 
