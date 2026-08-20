@@ -947,6 +947,9 @@ local function updateRuntimeMenuConditions()
           state.escProtoCheckPending = false
         end
       })
+      -- The three assignments above are all resets. Without this one the guard on the `if`
+      -- is never false, so the probe is queued again on every pass through this function.
+      state.escProtoCheckPending = true
     else
       state.escProtoCheckPending = false
     end
