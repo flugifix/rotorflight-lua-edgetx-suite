@@ -645,11 +645,17 @@ getActivePageModule = function()
   return PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[menuId]
 end
 
-closeHelpDialogIfOpen = function()
+-- Closes the dialog object only and leaves the help CONTENT in place: buildUI needs it for
+-- the repaint it is performing. Every real dismissal uses closeHelpDialogIfOpen instead.
+local function closeHelpDialogHandle()
   if state.helpDialog and type(state.helpDialog.close) == "function" then
     pcall(state.helpDialog.close, state.helpDialog)
   end
   state.helpDialog = nil
+end
+
+closeHelpDialogIfOpen = function()
+  closeHelpDialogHandle()
   state.helpContent = nil
   state.helpPageTitle = nil
   state.helpPageSubtitle = nil
@@ -1397,7 +1403,7 @@ function M.buildUI()
     local helpTitle = state.helpPageTitle or pageTitle
     local helpSubtitle = state.helpPageSubtitle
     ensureHelpView()
-    closeHelpDialogIfOpen()
+    closeHelpDialogHandle()
     if HelpView and type(HelpView.open) == "function" then
       local opened = HelpView.open({
         i18n = state.i18n,
