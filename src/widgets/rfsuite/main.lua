@@ -45,6 +45,15 @@ local function update(widget, options)
 end
 
 local function logGv(msg)
+  -- Same gate as the dashboard runtime's copy of this function. Ungated, every call opens,
+  -- appends to and closes a file on the SD card. The callers here are the reload path rather
+  -- than a per-frame one, so it costs less than the other copy -- but it is the same defect
+  -- and it is not switchable either.
+  local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
+  local general = prefs and prefs.general
+  local debugLevel = general and general.debug_level
+  if debugLevel ~= "debug" and debugLevel ~= "info" then return end
+
   local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
   if fLog then
     local t = (getTime and getTime()) or 0
