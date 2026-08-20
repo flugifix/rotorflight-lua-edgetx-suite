@@ -15,9 +15,16 @@ local Common = nil
 --   type "bool"   → stored/restored as boolean, default must be true/false
 --   type "number" → stored/restored via tonumber(), default must be a number
 
+-- The schema is what is loaded, defaulted and SAVED. A control the page draws whose key is not
+-- in here is read from nothing, written to nothing and lost when the page closes -- which is
+-- what happened to `save_confirm`: it is in SAFETY_ITEMS below, so it is drawn and it can be
+-- toggled, and neither `copyFromPrefs` nor `onSave` ever touched it, because both walk this
+-- table. The comment those two carry -- "no manual field list" -- is true of them and was not
+-- true of the page, because the page had a second list.
 local CONFIG_SCHEMA = {
   { key = "iconsize",                     type = "number", default = 2     },
   { key = "syncname",                     type = "bool",   default = false  },
+  { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
   { key = "developer_tools",              type = "bool",   default = false  },
