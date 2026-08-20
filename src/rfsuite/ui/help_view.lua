@@ -99,6 +99,13 @@ function HelpView.build(ctx)
     end
   end
 
+  -- The caller names the page the help belongs to; fall back to the generic caption only
+  -- when it supplies nothing. Written in the form the package-time resolver recognises.
+  local headerTitle = title
+  if headerTitle == "" then
+    headerTitle = i18n and i18n.t and i18n.t("app.help.title") or "Help"
+  end
+
   local helpBtnW = 190
   local helpBtnH = 44
   local helpBtnX = math.floor((LCD_W - helpBtnW) / 2)
@@ -150,7 +157,7 @@ function HelpView.build(ctx)
       x = 82,
       y = 5,
       w = math.max(40, contentW - 90),
-      text = "Hilfe",
+      text = headerTitle,
       color = COLOR_THEME_PRIMARY1,
       font = MIDSIZE
     },
