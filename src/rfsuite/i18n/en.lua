@@ -1751,6 +1751,7 @@ return {
         samples = "Samples",
         file_size = "Size",
         no_logs_found = "No telemetry logs found in /LOGS/.",
+        scanning_message = "Searching /LOGS/ for telemetry logs...",
         loading_title = "Loading",
         loading_message = "Reading telemetry log...\nPlease wait, this may take a few seconds depending on file size.",
         back_to_list = "Back to list",

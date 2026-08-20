@@ -21,6 +21,9 @@ local state = {
   logsList = {},
   summary = nil,
   loading = false,
+  -- The directory walk is deferred rather than run inside M.build; see the wakeup below.
+  scanPending = false,
+  scanned = false,
   requestRebuild = nil
 }
 
@@ -410,6 +413,22 @@ function M.wakeup(ctx)
     state.requestRebuild = ctx.requestRebuild
   end
 
+  -- The scan walks three directory trees and opens every candidate to read its header. Done
+  -- inside M.build, that happens with nothing on the screen: the host paints no frame in front
+  -- of a page, so the tool simply stands still until the walk is over. Deferring it by one
+  -- wakeup lets the build that asked for it draw the notice first -- the same shape this page
+  -- already uses for parsing a selected log.
+  if state.scanPending then
+    state.scanPending = false
+    scanLogFiles()
+    state.scanned = true
+    state.loading = false
+    state.loadingFrames = 0
+    if state.requestRebuild then
+      state.requestRebuild()
+    end
+  end
+
   if state.loading and state.selectedFilePath then
     state.loadingFrames = (state.loadingFrames or 0) + 1
     if state.loadingFrames >= 2 then
@@ -425,7 +444,8 @@ function M.wakeup(ctx)
 end
 
 function M.onReload(ctx)
-  scanLogFiles()
+  state.scanned = false
+  state.scanPending = false
   state.selectedFile = nil
   state.selectedFilePath = nil
   state.summary = nil
@@ -675,8 +695,35 @@ function M.build(ctx)
   end
 
   -- List Mode: show available telemetry logs
-  if #state.logsList == 0 then
+  if not state.scanned then
+    -- `state.loading` belongs to the CSV parse and drives a branch above this one with its own
+    -- message, so the scan gets a flag of its own. The notice is drawn on every build until the
+    -- wakeup has run, not only on the one that asks for it.
+    if not state.scanPending then
+      state.scanPending = true
+      if state.requestRebuild then
+        state.requestRebuild()
+      end
+    end
+
+    if LoadingOverlay then
+      LoadingOverlay.append(children, {
+        x = x,
+        y = y,
+        w = w,
+        h = h,
+        title = pageText(i18n, "loading_title"),
+        message = pageText(i18n, "scanning_message"),
+        progress = 0.3
+      })
+      return
+    end
+
+    -- No overlay module: nothing can be said, so do what this page did before rather than
+    -- leave the list empty.
+    state.scanPending = false
     scanLogFiles()
+    state.scanned = true
   end
 
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
@@ -707,7 +754,7 @@ function M.build(ctx)
       h = btnH,
       text = pageText(i18n, "refresh"),
       press = function()
-        scanLogFiles()
+        state.scanned = false
         if state.requestRebuild then
           state.requestRebuild()
         end
@@ -783,6 +830,8 @@ function M.build(ctx)
 end
 
 function M.onClose()
+  state.scanned = false
+  state.scanPending = false
   state.selectedFile = nil
   state.selectedFilePath = nil
   state.selectedModel = nil
