@@ -188,6 +188,13 @@ local function queueScorpionWrite(requestRebuild)
     return false, "msp_queue_unavailable"
   end
 
+  -- A Scorpion write is the whole 84-byte block, not the changed fields, so it can only be
+  -- built from a block that was read. Without one, every field the page does not itself
+  -- carry would be packed as zero and written to the ESC.
+  if not ui.parsedCache then
+    return false, "esc_not_read"
+  end
+
   local writeData = {}
   if ui.parsedCache then
     for k, v in pairs(ui.parsedCache) do
