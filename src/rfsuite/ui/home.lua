@@ -2143,4 +2143,9 @@ function M.run(event, touchState)
   return 0
 end
 
-return { init = M.init, run = M.run, useLvgl = true }
+-- `requestRebuild` is the same schedule-and-repaint-later mechanism this file uses
+-- internally, exposed so an embedding host can ask for a repaint after it has cleared the
+-- LVGL tree itself. A host that clears the tree without it leaves the page blank, because
+-- nothing in `run` notices that the objects it built are gone. The rebuild still happens at
+-- the same point in `run` as every other one, so it cannot land in the middle of a build.
+return { init = M.init, run = M.run, useLvgl = true, requestRebuild = scheduleBuildUI }
