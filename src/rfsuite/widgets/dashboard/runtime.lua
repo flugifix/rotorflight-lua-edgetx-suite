@@ -171,6 +171,15 @@ local function publishPreferencesToGlobal(prefs)
 end
 
 local function logGv(msg)
+  -- Gated the way the tool gates its own file logger. Ungated, every call here opens,
+  -- appends to and closes a file on the SD card -- and the callers are on the widget's
+  -- refresh and background passes rather than on anything the pilot did, so it runs for
+  -- the whole flight on every model that carries the widget.
+  local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
+  local general = prefs and prefs.general
+  local debugLevel = general and general.debug_level
+  if debugLevel ~= "debug" and debugLevel ~= "info" then return end
+
   local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
   if fLog then
     local t = (getTime and getTime()) or 0
