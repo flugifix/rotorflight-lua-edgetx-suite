@@ -255,6 +255,9 @@ function Queue:clear(clientId)
     if self.common and self.common.clearTxBuf then
       self.common.clearTxBuf()
     end
+    if self.common and self.common.clearRxBuf then
+      self.common.clearRxBuf()
+    end
   else
     -- The message being transmitted is only abandoned when it is this client's. Its chunks are
     -- dropped with it, or the next message would send what is left of them.
@@ -268,6 +271,9 @@ function Queue:clear(clientId)
       self.retryCount = 0
       if self.common and self.common.clearTxBuf then
         self.common.clearTxBuf()
+      end
+      if self.common and self.common.clearRxBuf then
+        self.common.clearRxBuf()
       end
     end
 
@@ -495,6 +501,9 @@ function Queue:processQueue(now)
     self.lastTimeCommandSent = nil
     if self.common and self.common.clearTxBuf then
       self.common.clearTxBuf()
+    end
+    if self.common and self.common.clearRxBuf then
+      self.common.clearRxBuf()
     end
     if self.interMessageDelay > 0 then
       self._nextMessageAt = now + self.interMessageDelay

@@ -530,6 +530,7 @@ local function initIfNeeded()
       processTxQ = function() end,
       pollReply = function() return nil end,
       clearTxBuf = function() end,
+      clearRxBuf = function() end,
     }
   end
 

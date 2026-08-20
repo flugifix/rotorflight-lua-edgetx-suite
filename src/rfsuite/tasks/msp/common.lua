@@ -343,11 +343,27 @@ local function new(protocol)
     mspTxCRC = 0
   end
 
+  -- Drop a half-finished reassembly. Chunks of a reply whose request has been abandoned keep
+  -- arriving; with the receive state left as it is they are still accepted, still complete,
+  -- and still report the command id of the request that is gone -- so the completion is
+  -- handed to whatever asks for that same command next.
+  local function mspClearRxBuf()
+    clearArray(mspRxBuf)
+    mspRxSize = 0
+    mspRxCRC = 0
+    mspRxReq = 0
+    mspRxError = false
+    mspStarted = false
+    mspRemoteSeq = 0
+    mspLastReq = 0
+  end
+
   return {
     sendRequest = mspSendRequest,
     processTxQ = mspProcessTxQ,
     pollReply = mspPollReply,
     clearTxBuf = mspClearTxBuf,
+    clearRxBuf = mspClearRxBuf,
     setProtocolVersion = function(v)
       local n = tonumber(v)
       mspVersion = (n == 2) and 2 or 1
