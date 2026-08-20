@@ -224,6 +224,24 @@ end
 
 local LoadingOverlay = nil
 
+--- What the start is waiting for, by the onconnect runner's own task name.
+-- The runner reports the pending task as the manifest id; these are the same ids, with a text
+-- the pilot can read. An id with no entry falls back to the generic notice rather than putting
+-- an internal name on screen.
+local ONCONNECT_TEXT = {
+  apiversion        = "@i18n(app.onconnect.apiversion)@",
+  uid               = "@i18n(app.onconnect.uid)@",
+  rtc               = "@i18n(app.onconnect.rtc)@",
+  battery_config    = "@i18n(app.onconnect.battery_config)@",
+  governor_config   = "@i18n(app.onconnect.governor_config)@",
+  esc_sensor_config = "@i18n(app.onconnect.esc_sensor_config)@",
+  smartfuel_config  = "@i18n(app.onconnect.smartfuel_config)@",
+  name              = "@i18n(app.onconnect.name)@",
+  telemetry         = "@i18n(app.onconnect.telemetry)@",
+  flight_stats      = "@i18n(app.onconnect.flight_stats)@",
+  dataflash_summary = "@i18n(app.onconnect.dataflash_summary)@"
+}
+
 local function ensureBuildDeps()
   if not GridLayout then
     GridLayout = loadModule("layouts/grid.lua")
@@ -1354,24 +1372,77 @@ function M.buildUI()
   end
 
   if state.initialLoad then
+    -- The run loop already counts this start: it reads done/total off the onconnect runner and
+    -- repaints whenever that number changes. The frame it repainted carried none of it, so every
+    -- one of those repaints produced a screen identical to the one before it. Draw what is being
+    -- counted -- on the start's own full-screen background, in the shape this file already uses
+    -- for a full-screen notice: a centred title over a centred message. The offsets are wider
+    -- than the armed screen's because a third element follows them and MIDSIZE at h/2 - 30 puts
+    -- the title's descenders on the message's ascenders. The page overlays' box is not reused
+    -- here: that is a box drawn OVER a page, and there is no page yet.
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
-    local tr = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
-    lvgl.build({
+    local title = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
+    local message = ONCONNECT_TEXT[state.startTaskName or ""] or
+                    (state.i18n and state.i18n.t and state.i18n.t("app.connecting")) or
+                    "Connecting"
+    local screenW = LCD_W or 320
+    local screenH = LCD_H or 240
+
+    local children = {
       {
         type = "rectangle",
-        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        x = 0, y = 0, w = screenW, h = screenH,
         color = COLOR_THEME_PRIMARY3,
         filled = true
       },
       {
         type = "label",
-        x = 0, y = (LCD_H or 240) / 2 - 10, w = LCD_W or 320,
-        text = tr,
+        x = 0, y = screenH / 2 - 44, w = screenW,
+        text = title,
         color = COLOR_THEME_PRIMARY2,
         align = CENTER,
         font = MIDSIZE
+      },
+      {
+        type = "label",
+        x = 20, y = screenH / 2 - 4, w = screenW - 40,
+        text = message,
+        color = COLOR_THEME_PRIMARY2,
+        align = CENTER,
+        font = SMLSIZE
       }
-    })
+    }
+
+    -- The bar is drawn only once there is something to count. Before the onconnect runner has
+    -- loaded its manifest there is no denominator, and an empty trough would claim a measurement
+    -- that has not started. The track is the theme's inactive colour rather than its accent, so
+    -- that an empty bar cannot be mistaken for a full one -- the failure the page overlay's own
+    -- track had until this series.
+    local total = state.startTotal or 0
+    if total > 0 then
+      local barW = math.min(420, math.max(200, screenW - 120))
+      local barH = 12
+      local barX = math.floor((screenW - barW) / 2)
+      local barY = math.floor(screenH / 2) + 26
+      local fillW = math.floor((barW - 4) * math.min(1, (state.startDone or 0) / total) + 0.5)
+
+      children[#children + 1] = {
+        type = "rectangle",
+        x = barX, y = barY, w = barW, h = barH,
+        color = COLOR_THEME_DISABLED,
+        filled = true
+      }
+      if fillW > 0 then
+        children[#children + 1] = {
+          type = "rectangle",
+          x = barX + 2, y = barY + 2, w = fillW, h = barH - 4,
+          color = COLOR_THEME_SECONDARY2,
+          filled = true
+        }
+      end
+    end
+
+    lvgl.build(children)
     return
   end
 
@@ -2035,7 +2106,16 @@ function M.run(event, touchState)
         pTotal = mspProgress.total or 0
       end
 
-      local snapshot = tostring(pDone) .. "/" .. tostring(pTotal)
+      local taskName = Events and Events.getOnconnectPendingTaskName and
+                       Events.getOnconnectPendingTaskName() or nil
+
+      state.startDone = pDone
+      state.startTotal = pTotal
+      state.startTaskName = taskName
+
+      -- Repaint when what is DISPLAYED changes, which is the count and the task name -- not the
+      -- count alone, or the frame naming a task would go stale within its own step.
+      local snapshot = tostring(pDone) .. "/" .. tostring(pTotal) .. "/" .. tostring(taskName)
       if snapshot ~= state.lastProgressSnapshot then
         state.lastProgressSnapshot = snapshot
         scheduleBuildUI(false)
