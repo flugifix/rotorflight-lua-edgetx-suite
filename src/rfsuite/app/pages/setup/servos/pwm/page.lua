@@ -374,8 +374,8 @@ local function queueServosRead(isAutoReload)
         simulatorResponse = StatusApi.simulatorResponse,
         processReply = function(self, buf)
           local parsed = StatusApi.parse(buf)
-          if parsed then
-            ui.servoCount = parsed.servo_count or 0
+          if parsed and parsed.parsed then
+            ui.servoCount = parsed.parsed.servo_count or 0
           end
 
           ui.progress = 50
