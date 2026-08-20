@@ -40,6 +40,11 @@ function M.append(children, opts)
 
   local action = type(opts.action) == "table" and opts.action or nil
 
+  -- A box that reports no progress. A notice waiting to be acknowledged has none to
+  -- report, and a bar sitting at zero or at full under it says something untrue; without
+  -- one the box is the same shape, one row shorter.
+  local showBar = opts.bar ~= false
+
   local boxW = math.min(420, math.max(220, w - 40))
   local innerW = boxW - 28
 
@@ -56,7 +61,8 @@ function M.append(children, opts)
   end
   local extra = (titleLines - 1) * titleLineH
 
-  local boxH = (action and 208 or 154) + extra
+  local barBlock = showBar and 0 or -32
+  local boxH = (action and 208 or 154) + extra + barBlock
   local boxX = x + math.floor((w - boxW) / 2)
   local boxY = y + math.floor((h - boxH) / 2) - 64
   if boxY < y + 8 then
@@ -104,26 +110,28 @@ function M.append(children, opts)
   -- radio this overlay can run on it is nil -- and a rectangle with no colour is drawn in
   -- COLOR_THEME_SECONDARY1, which is what the filled part uses. Track and fill were therefore
   -- the same colour, and the bar read as full from the first frame to the last.
-  children[#children + 1] = {
-    type = "rectangle",
-    x = barX,
-    y = barY,
-    w = barW,
-    h = barH,
-    color = COLOR_THEME_SECONDARY2,
-    filled = true
-  }
-
-  if fillW > 0 then
+  if showBar then
     children[#children + 1] = {
       type = "rectangle",
-      x = barX + 2,
-      y = barY + 2,
-      w = fillW,
-      h = barH - 4,
-      color = COLOR_THEME_SECONDARY1,
+      x = barX,
+      y = barY,
+      w = barW,
+      h = barH,
+      color = COLOR_THEME_SECONDARY2,
       filled = true
     }
+
+    if fillW > 0 then
+      children[#children + 1] = {
+        type = "rectangle",
+        x = barX + 2,
+        y = barY + 2,
+        w = fillW,
+        h = barH - 4,
+        color = COLOR_THEME_SECONDARY1,
+        filled = true
+      }
+    end
   end
 
   -- An optional way out of the notice. A loading box normally has none, because there is
@@ -135,13 +143,34 @@ function M.append(children, opts)
     children[#children + 1] = {
       type = "button",
       x = boxX + math.floor((boxW - btnW) / 2),
-      y = barY + barH + 14,
+      y = showBar and (barY + barH + 14) or barY,
       w = btnW,
       h = 32,
       text = tostring(action.text or "OK"),
       press = type(action.press) == "function" and action.press or function() end
     }
   end
+end
+
+-- A notice the pilot has to acknowledge: the same box, without a progress bar it has no
+-- progress to put in, and with exactly one button. This exists so that nothing in the
+-- tool has to reach for lvgl.message, which is a native modal outside the tool's own
+-- run loop -- while one stands, run() is not reached, and which key or touch closes it
+-- depends on whether anything focusable was created after it in the same build.
+function M.appendNotice(children, opts)
+  if type(opts) ~= "table" then return end
+
+  local press = type(opts.press) == "function" and opts.press or function() end
+  M.append(children, {
+    x = opts.x,
+    y = opts.y,
+    w = opts.w,
+    h = opts.h,
+    title = opts.title,
+    message = opts.message,
+    bar = false,
+    action = { text = opts.buttonText or "OK", press = press }
+  })
 end
 
 return M

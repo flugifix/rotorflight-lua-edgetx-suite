@@ -60,38 +60,49 @@ function M.isTimedOut(state, nowSec)
   return (tonumber(nowSec) or 0) - started >= timeoutSec
 end
 
-function M.showErrorDialog(state, i18n, tfn)
+-- The load failed and the pilot has to be told. This used to be a native lvgl.message,
+-- which is a modal outside the tool's own run loop: while one stands, run() is not
+-- reached, and whether a hardware key closes it depends on whether anything focusable was
+-- created after it in the same build -- so a dialog raised mid-build can only be closed by
+-- touch. It is now the tool's own notice box with one acknowledging button, which is drawn
+-- into the page's own child list and needs no special case anywhere.
+--
+-- The caller supplies the geometry it is drawing into, because only the caller knows it.
+function M.appendErrorNotice(children, opts, state, i18n, tfn)
+  if type(children) ~= "table" or type(opts) ~= "table" or type(state) ~= "table" then
+    return false
+  end
+
   local message = state.errorMessage
   if type(message) ~= "string" or message == "" then
-    return
-  end
-  if state.errorDialogShown == message then
-    return
+    return false
   end
 
-  local title = tfn(i18n, "loading_failed", "Loading failed")
-  local shown = false
-
-  if lvgl and type(lvgl.message) == "function" then
-    local ok = pcall(lvgl.message, {
-      title = title,
-      text = message,
-      message = message
-    })
-    if ok then shown = true end
+  local overlay = opts.overlay
+  if type(overlay) ~= "table" or type(overlay.appendNotice) ~= "function" then
+    return false
   end
 
-  if not shown and lvgl and type(lvgl.message) == "function" then
-    pcall(lvgl.message, {
-      title = title,
-      message = message
-    })
-    shown = true
-  end
+  overlay.appendNotice(children, {
+    x = opts.x,
+    y = opts.y,
+    w = opts.w,
+    h = opts.h,
+    title = tfn(i18n, "loading_failed", "Loading failed"),
+    message = message,
+    -- "OK" rather than a lookup: no page bundle in the tree carries a key for it, so a
+    -- lookup here would only be a lookup that fails.
+    buttonText = "OK",
+    press = function()
+      state.errorMessage = nil
+      state.errorDialogShown = nil
+      if type(opts.requestRebuild) == "function" then
+        opts.requestRebuild()
+      end
+    end
+  })
 
-  if shown then
-    state.errorDialogShown = message
-  end
+  return true
 end
 
 function M.reset(state)

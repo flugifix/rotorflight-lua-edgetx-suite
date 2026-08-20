@@ -633,7 +633,14 @@ function M.build(ctx)
       progress = state.progress
     })
   elseif state.errorMessage and state.errorMessage ~= "" then
-    AsyncLoadUi.showErrorDialog(state, i18n, t)
+    AsyncLoadUi.appendErrorNotice(children, {
+      x = x,
+      y = y,
+      w = w,
+      h = h,
+      overlay = LoadingOverlay,
+      requestRebuild = state.rebuild
+    }, state, i18n, t)
   end
 end
 
