@@ -203,9 +203,28 @@ function MenuRegistry.new(manifest, i18n, options)
     local resolved = ""
 
     if entry.titleKey then
-      resolved = i18n.t(entry.titleKey)
+      -- Two things this has to survive. `i18n` is optional -- MenuRegistry.new takes it as an
+      -- argument and the locale helper above already guards it -- and `ctx.t` ends at
+      -- `return fallback or key`, so a lookup that finds nothing hands the key straight back.
+      -- A packaged install carries no locale table at all, which makes that the normal case
+      -- rather than the exceptional one: an entry with a titleKey would put its own key on the
+      -- menu. No entry in the tree sets one today, so this is a trap for the first that does.
+      local key = entry.titleKey
+      local value = nil
+      if i18n and i18n.t then
+        value = i18n.t(key, entry.titleFallback)
+      end
+      if type(value) == "string" and value ~= "" and value ~= key then
+        resolved = value
+      else
+        resolved = entry.titleFallback or entry.title or ""
+      end
     elseif entry.title then
-      resolved = i18n.resolve(entry.title)
+      if i18n and i18n.resolve then
+        resolved = i18n.resolve(entry.title)
+      else
+        resolved = entry.title
+      end
     end
 
     self._titleCache[entry] = resolved or ""
