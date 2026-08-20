@@ -15,6 +15,18 @@ local function loadModule(path)
   return mod
 end
 
+-- getTime() is hundredths of a second since boot and is always available; the os
+-- library is not opened by the Lua state at all, so os.clock() alone leaves `now`
+-- at 0 and every elapsed-time test below reads as "no time has passed".
+local function nowSeconds()
+  if type(getTime) == "function" then
+    local ok, v = pcall(getTime)
+    if ok and type(v) == "number" then return v / 100 end
+  end
+  if type(os) == "table" and type(os.clock) == "function" then return os.clock() end
+  return 0
+end
+
 function M.new(category)
   local runner = {}
   local BASE_PATH = "tasks/events/" .. category .. "/tasks/"
@@ -174,7 +186,7 @@ function M.new(category)
       return
     end
 
-    local now = (type(os) == "table" and type(os.clock) == "function") and os.clock() or 0
+    local now = nowSeconds()
 
     if task.nextEligibleAt and task.nextEligibleAt > now then return end
 
