@@ -105,10 +105,15 @@ local function logMsg(msg, level)
   end
 end
 
-local function queueScorpionReadActual(queue)
+-- `retryOnError` is set only for the read that FOLLOWS a write. The firmware invalidates
+-- its parameter cache on a successful commit and answers both the read and the next write
+-- with an error until a fresh readback from the ESC has been cached, so that first refusal
+-- is a wait rather than a failure. The queue already knows how to wait for one.
+local function queueScorpionReadActual(queue, retryOnError)
   queue:add({
     command = EscParametersScorpionApi.command,
     timeout = 15,
+    retryOnErrorReply = retryOnError or nil,
     simulatorResponse = EscParametersScorpionApi.simulatorResponse,
     processReply = function(self, buf)
       local parsed = EscParametersScorpionApi.parse(buf)
@@ -151,7 +156,7 @@ local function queueScorpionReadActual(queue)
   })
 end
 
-local function queueScorpionRead(isAutoReload)
+local function queueScorpionRead(isAutoReload, retryOnError)
   if not MspRuntime or not EscParametersScorpionApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -173,7 +178,7 @@ local function queueScorpionRead(isAutoReload)
     end
   end
 
-  queueScorpionReadActual(queue)
+  queueScorpionReadActual(queue, retryOnError)
   return true, nil
 end
 
@@ -226,6 +231,11 @@ local function queueScorpionWrite(requestRebuild)
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
+      -- Read back what was just written. Two reasons, and the second is the one that is
+      -- easy to miss: the values on screen are now unconfirmed, AND the flight
+      -- controller cannot accept another write until it has re-cached the parameters
+      -- from the ESC. This read is what makes it do that.
+      queueScorpionRead(true, true)
     end,
     errorHandler = function()
       ui.saving = false

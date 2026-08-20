@@ -107,10 +107,15 @@ local function logMsg(msg, level)
   end
 end
 
-local function queueHw5ReadActual(queue)
+-- `retryOnError` is set only for the read that FOLLOWS a write. The firmware invalidates
+-- its parameter cache on a successful commit and answers both the read and the next write
+-- with an error until a fresh readback from the ESC has been cached, so that first refusal
+-- is a wait rather than a failure. The queue already knows how to wait for one.
+local function queueHw5ReadActual(queue, retryOnError)
   queue:add({
     command = EscParametersHw5Api.command,
     timeout = 15,
+    retryOnErrorReply = retryOnError or nil,
     simulatorResponse = EscParametersHw5Api.simulatorResponse,
     processReply = function(self, buf)
       local parsed = EscParametersHw5Api.parse(buf)
@@ -158,7 +163,7 @@ local function queueHw5ReadActual(queue)
   })
 end
 
-local function queueHw5Read(isAutoReload)
+local function queueHw5Read(isAutoReload, retryOnError)
   if not MspRuntime or not EscParametersHw5Api or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -180,7 +185,7 @@ local function queueHw5Read(isAutoReload)
     end
   end
 
-  queueHw5ReadActual(queue)
+  queueHw5ReadActual(queue, retryOnError)
   return true, nil
 end
 
@@ -223,6 +228,11 @@ local function queueHw5Write(requestRebuild)
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
+      -- Read back what was just written. Two reasons, and the second is the one that is
+      -- easy to miss: the values on screen are now unconfirmed, AND the flight
+      -- controller cannot accept another write until it has re-cached the parameters
+      -- from the ESC. This read is what makes it do that.
+      queueHw5Read(true, true)
     end,
     errorHandler = function()
       ui.saving = false
