@@ -170,6 +170,34 @@ end
 -- evaluates the argument list before pcall runs -- so indexing a false Log raises outside the
 -- very pcall that was written to contain it.
 local NO_LOG = { emit = function() end }
+-- Whether the armed state cannot be established AT ALL, as opposed to being established as
+-- disarmed. isModelArmed answers the question the screen needs -- "paint the warning?" -- and
+-- answers false for three different reasons: not armed, no sensor, no link. That is the right
+-- default for a warning, which must not stand permanently on a radio that cannot know. It is
+-- the wrong default in front of a WRITE, where "cannot tell" is not "safe to proceed".
+--
+-- Deliberately narrow. A missing sensor module is a broken tool and not this question; a link
+-- that is down cannot carry the write either, so the save fails on its own terms. What is left
+-- is the case worth asking about: the link is up, the module is there, and the flight
+-- controller does not report the arming flags -- no bridge, or no slot for them among its
+-- forty telemetry sensors.
+local function armedStateIsUncertain()
+  ensureEvents()
+  if not Sensors or type(Sensors.getValue) ~= "function" then
+    return false
+  end
+  if Sensors.getValue("armflags") ~= nil then
+    return false
+  end
+  local isSim = type(Sensors.isSimulator) == "function" and Sensors.isSimulator() or false
+  if not isSim and type(getRSSI) == "function" then
+    local ok, rssi = pcall(getRSSI)
+    if ok and type(rssi) == "number" and rssi <= 0 then
+      return false
+    end
+  end
+  return true
+end
 
 local Log = nil
 if Log == nil then
@@ -1157,7 +1185,11 @@ local function onSave()
 
     -- Check preference and show confirm dialog if enabled.
     local savePref = state.preferences and state.preferences.general and state.preferences.general.save_confirm
-    if savePref == true and lvgl then
+    -- The confirmation is a preference, except when the armed state cannot be read: then it is
+    -- asked whatever the preference says, because the alternative is writing to a flight
+    -- controller that may be armed without anybody having been told the check did not run.
+    local armedUnknown = armedStateIsUncertain()
+    if (savePref == true or armedUnknown) and lvgl then
       local function tr(key, fallback)
         if state and state.i18n and type(state.i18n.t) == "function" then
           local ok, val = pcall(state.i18n.t, key)
@@ -1170,6 +1202,9 @@ local function onSave()
 
       local title = tr("app.pages.settings_general.save_confirm", "Confirm on Save")
       local message = tr("app.dialogs.confirm_save", "Save changes?")
+      if armedUnknown then
+        message = tr("app.dialogs.confirm_save_arm_unknown", "Cannot read the arming state. Disarmed?")
+      end
 
       pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug", true)
       if lvgl then

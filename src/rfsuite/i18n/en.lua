@@ -177,7 +177,8 @@ return {
       yes = "Yes",
       no = "No",
       confirm_save = "Do you want to save the changes?",
-      confirm_reload = "Do you want to reload and discard unsaved changes?"
+      confirm_reload = "Do you want to reload and discard unsaved changes?",
+      confirm_save_arm_unknown = "Cannot read the arming state. Is the model disarmed?"
     },
     help = {
       title = "Help",

@@ -177,7 +177,8 @@ return {
       yes = "Ja",
       no = "Nein",
       confirm_save = "Möchtest du die Änderungen speichern?",
-      confirm_reload = "Möchtest du neu laden und ungespeicherte Änderungen verwerfen?"
+      confirm_reload = "Möchtest du neu laden und ungespeicherte Änderungen verwerfen?",
+      confirm_save_arm_unknown = "Armierungsstatus nicht lesbar. Modell entschaerft?"
     },
     help = {
       title = "Hilfe",
