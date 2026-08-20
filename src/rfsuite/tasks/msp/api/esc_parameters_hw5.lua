@@ -159,6 +159,27 @@ local function pack_string(s, len)
     return out
 end
 
+-- The device-info block has to go back BYTE-IDENTICAL, and the string round trip cannot do
+-- that: bytes_to_string drops every 0x00 and trims trailing whitespace, pack_string pads with
+-- 0x00. A space-padded field therefore comes back NUL-padded, and an embedded 0x00 shifts the
+-- whole field left. So the bytes are kept as they arrived and written back unchanged.
+local function raw_bytes(buf, pos, len)
+    local out = {}
+    for i = 0, len - 1 do
+        out[#out + 1] = (tonumber(buf[pos + i]) or 0) & 0xFF
+    end
+    return out
+end
+
+-- The bytes as they were read where the block was read, and the encoded string otherwise.
+local function string_bytes(data, name, len)
+    local raw = data.raw_strings and data.raw_strings[name]
+    if type(raw) == "table" and #raw == len then
+        return raw
+    end
+    return pack_string(data[name] or "", len)
+end
+
 Api.selectProfile = selectProfile
 Api.VALUE_FIELDS = VALUE_FIELDS
 Api.DEFAULT_LAYOUT = DEFAULT_LAYOUT
@@ -206,6 +227,12 @@ function Api.parse(buf)
         hardware_version = bytes_to_string(buf, 19, 16),
         esc_type2 = bytes_to_string(buf, 35, 16),
         esc_type = bytes_to_string(buf, 51, 15),
+        raw_strings = {
+            firmware_version = raw_bytes(buf, 3, 16),
+            hardware_version = raw_bytes(buf, 19, 16),
+            esc_type2        = raw_bytes(buf, 35, 16),
+            esc_type         = raw_bytes(buf, 51, 15),
+        },
     }
     out.model_name = trim((out.esc_type2 or "") .. " " .. (out.esc_type or ""))
 
@@ -271,16 +298,16 @@ function Api.buildWritePayload(data)
     payload[1] = (tonumber(data.esc_signature) or 253) & 0xFF
     payload[2] = (tonumber(data.command) or 0) & 0xFF
 
-    local fwBytes = pack_string(data.firmware_version or "", 16)
+    local fwBytes = string_bytes(data, "firmware_version", 16)
     for _, b in ipairs(fwBytes) do payload[#payload + 1] = b end
 
-    local hwBytes = pack_string(data.hardware_version or "", 16)
+    local hwBytes = string_bytes(data, "hardware_version", 16)
     for _, b in ipairs(hwBytes) do payload[#payload + 1] = b end
 
-    local t2Bytes = pack_string(data.esc_type2 or "", 16)
+    local t2Bytes = string_bytes(data, "esc_type2", 16)
     for _, b in ipairs(t2Bytes) do payload[#payload + 1] = b end
 
-    local t1Bytes = pack_string(data.esc_type or "", 15)
+    local t1Bytes = string_bytes(data, "esc_type", 15)
     for _, b in ipairs(t1Bytes) do payload[#payload + 1] = b end
 
     for i = 1, 16 do
