@@ -148,11 +148,27 @@ end
 
 local function scanLogFiles()
   local found = {}
+  -- The search paths NEST, and each one is walked both at its top level and one directory down.
+  -- A file lying directly in /LOGS/rfsuite/telemetry is therefore reached twice: once as a
+  -- top-level .csv of the first path, and once as a .csv inside the `telemetry` subdirectory of
+  -- the second. Nothing downstream removes it -- `extractFileInfo` builds a fresh record each
+  -- time and the sort has no uniqueness step -- so that file appears twice in the list, as two
+  -- adjacent identical rows (the sort key is the same). A file inside a model folder, or one
+  -- directly in /LOGS, is reached once.
+  --
+  -- The full path is what identifies a log, so that is what is remembered.
+  local seen = {}
   local searchPaths = {
     "/LOGS/rfsuite/telemetry",
     "/LOGS/rfsuite",
     "/LOGS"
   }
+
+  local function collect(fileName, fullPath, parentFolder)
+    if seen[fullPath] then return end
+    seen[fullPath] = true
+    found[#found + 1] = extractFileInfo(fileName, fullPath, parentFolder)
+  end
 
   for s = 1, #searchPaths do
     local basePath = searchPaths[s]
@@ -160,8 +176,7 @@ local function scanLogFiles()
     for i = 1, #topEntries do
       local entry = topEntries[i]
       if string.match(entry, "%.csv$") then
-        local fullPath = basePath .. "/" .. entry
-        found[#found + 1] = extractFileInfo(entry, fullPath, "")
+        collect(entry, basePath .. "/" .. entry, "")
       elseif not string.match(entry, "%.%w+$") then
         -- Subdirectory (e.g. Model name)
         local modelDir = basePath .. "/" .. entry
@@ -169,8 +184,7 @@ local function scanLogFiles()
         for j = 1, #subEntries do
           local subFile = subEntries[j]
           if string.match(subFile, "%.csv$") then
-            local fullPath = modelDir .. "/" .. subFile
-            found[#found + 1] = extractFileInfo(subFile, fullPath, entry)
+            collect(subFile, modelDir .. "/" .. subFile, entry)
           end
         end
       end
