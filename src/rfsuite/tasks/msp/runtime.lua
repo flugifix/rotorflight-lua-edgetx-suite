@@ -485,14 +485,26 @@ local function enqueueUidRead(now)
   return true
 end
 
-local function doDisconnect(now, reason)
+-- `keepLink` is for a refusal rather than a loss: everything a disconnect does to the runtime's
+-- own state still happens, but the link is NOT reported as gone.
+--
+-- Reporting it as gone while it is up is what made the unsupported-API path cycle. `tick`
+-- compares `isConnected()` against `lastConnected`, so setting the latter to false on a live
+-- link makes the very next tick a fresh CONNECT edge -- and that edge resets `unsupportedApi`,
+-- `unsupportedApiLogged` and `_disconnectHandled`, i.e. exactly the three latches this path
+-- depends on. The version is then read again, parses fine, is refused again, and the whole thing
+-- repeats at MSP round-trip period with a queue clear and a warning every lap. Backoff cannot
+-- catch it either: the read SUCCEEDS, so `processReply` zeroes the failure counters first.
+local function doDisconnect(now, reason, keepLink)
   -- Make disconnect idempotent to avoid log spam when called repeatedly.
   if state._disconnectHandled then
     return
   end
   state._disconnectHandled = true
   -- Ensure runtime reflects disconnected state.
-  state.lastConnected = false
+  if not keepLink then
+    state.lastConnected = false
+  end
 
   if type(reason) == "string" and reason ~= "" then
     log("MSP link disconnected (" .. tostring(reason) .. ")", "info")
@@ -681,6 +693,8 @@ function Runtime.tick()
       state.pendingVersionRead = true
       state.pendingUidRead = true
     else
+      -- A real loss of the link. `lastConnected` is already false from the line above, so the
+      -- refusal form is not wanted here.
       doDisconnect(now, state.unsupportedApi and "unsupported API" or nil)
     end
   end
@@ -705,10 +719,9 @@ function Runtime.tick()
   end
 
   if state.unsupportedApi then
-    -- If API unsupported and we still consider the link connected, treat as disconnected.
-    if state.lastConnected == true then
-      doDisconnect(now, "unsupported API")
-    end
+    -- Refuse to use this board, and say so once. The link is left reported as it is: it has not
+    -- gone anywhere, and claiming it has is what used to restart the negotiation every tick.
+    doDisconnect(now, "unsupported API", true)
     return false
   end
 
@@ -722,8 +735,8 @@ function Runtime.tick()
   publish()
   -- If the version read cleared/marked unsupported during processing, ensure we
   -- treat the runtime as disconnected so callers see a consistent state.
-  if state.unsupportedApi and state.lastConnected == true then
-    doDisconnect(now, "unsupported API")
+  if state.unsupportedApi then
+    doDisconnect(now, "unsupported API", true)
     return false
   end
 
