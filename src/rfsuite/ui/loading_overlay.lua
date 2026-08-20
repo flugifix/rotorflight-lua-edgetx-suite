@@ -7,6 +7,24 @@ local function clamp01(v)
   return n
 end
 
+-- The measured width and line height of a string in one font. `lcd.sizeText(text, flags)` is
+-- the EdgeTX name and it takes the font flags, so the answer is for the font the label is
+-- actually drawn in; it is not gated on a drawing context, so it may be called while the child
+-- list is being built. The fallback is deliberately crude and only has to be safe on a build
+-- that does not offer the call at all.
+local function textSize(text, font, fallbackCharW, fallbackLineH)
+  local fn = lcd and lcd.sizeText
+  if type(fn) == "function" then
+    local ok, tw, th = pcall(fn, tostring(text or ""), font)
+    tw, th = tonumber(tw), tonumber(th)
+    if ok and tw and th and th > 0 then
+      return tw, th
+    end
+  end
+
+  return #tostring(text or "") * fallbackCharW, fallbackLineH
+end
+
 function M.append(children, opts)
   if type(children) ~= "table" or type(opts) ~= "table" then return end
 
@@ -23,7 +41,22 @@ function M.append(children, opts)
   local action = type(opts.action) == "table" and opts.action or nil
 
   local boxW = math.min(420, math.max(220, w - 40))
-  local boxH = action and 208 or 154
+  local innerW = boxW - 28
+
+  -- The title is drawn in MIDSIZE into `innerW` and wraps when it does not fit, while
+  -- everything under it sat at a fixed offset from the top of the box -- so a title of two
+  -- lines was drawn ON the message. Each extra line now moves the message, the bar and the
+  -- button down by one line height and makes the box that much taller. A one-line title, which
+  -- is what every caller in the tree passes, leaves `extra` at 0 and reproduces the geometry
+  -- this file had before, arithmetic for arithmetic.
+  local titleW, titleLineH = textSize(title, MIDSIZE, 12, 24)
+  local titleLines = 1
+  if innerW > 0 and titleW > innerW then
+    titleLines = math.ceil(titleW / innerW)
+  end
+  local extra = (titleLines - 1) * titleLineH
+
+  local boxH = (action and 208 or 154) + extra
   local boxX = x + math.floor((w - boxW) / 2)
   local boxY = y + math.floor((h - boxH) / 2) - 64
   if boxY < y + 8 then
@@ -31,7 +64,7 @@ function M.append(children, opts)
   end
 
   local barX = boxX + 16
-  local barY = boxY + 110
+  local barY = boxY + 110 + extra
   local barW = boxW - 32
   local barH = 16
   local fillW = math.floor((barW - 4) * progress + 0.5)
@@ -50,7 +83,7 @@ function M.append(children, opts)
     type = "label",
     x = boxX + 14,
     y = boxY + 10,
-    w = boxW - 28,
+    w = innerW,
     text = title,
     color = COLOR_THEME_PRIMARY1,
     font = MIDSIZE
@@ -59,8 +92,8 @@ function M.append(children, opts)
   children[#children + 1] = {
     type = "label",
     x = boxX + 14,
-    y = boxY + 42,
-    w = boxW - 28,
+    y = boxY + 42 + extra,
+    w = innerW,
     text = message,
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
