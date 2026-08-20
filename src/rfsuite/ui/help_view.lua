@@ -90,14 +90,7 @@ function HelpView.build(ctx)
   local state = ctx.state
   local requestRebuild = ctx.requestRebuild
 
-  local closeLabel = "Close"
-  if i18n and i18n.t then
-    local key = "app.actions.close"
-    local translated = i18n.t(key)
-    if translated and translated ~= "" and translated ~= key then
-      closeLabel = translated
-    end
-  end
+  local closeLabel = i18n and i18n.t and i18n.t("app.actions.close") or "Close"
 
   -- The caller names the page the help belongs to; fall back to the generic caption only
   -- when it supplies nothing. Written in the form the package-time resolver recognises.
