@@ -44,23 +44,29 @@ local function update(widget, options)
   end
 end
 
-local function logGv(msg)
+local function logGv(fmt, ...)
   -- Same gate as the dashboard runtime's copy of this function. Ungated, every call opens,
   -- appends to and closes a file on the SD card. The callers here are the reload path rather
   -- than a per-frame one, so it costs less than the other copy -- but it is the same defect
   -- and it is not switchable either.
+  --
+  -- Variadic for the same reason as the other copy, and kept in the same shape as it: with
+  -- the test inside the function, a caller pays for a message the gate then drops.
   local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
   local general = prefs and prefs.general
   local debugLevel = general and general.debug_level
   if debugLevel ~= "debug" and debugLevel ~= "info" then return end
 
+  local msg = tostring(fmt)
+  if select("#", ...) > 0 then msg = string.format(msg, ...) end
+
   local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
   if fLog then
     local t = (getTime and getTime()) or 0
-    io.write(fLog, string.format("[%.2f][Widget.main] %s\n", t / 100, tostring(msg)))
+    io.write(fLog, string.format("[%.2f][Widget.main] %s\n", t / 100, msg))
     io.close(fLog)
   end
-  if print then pcall(print, "[Widget.main] " .. tostring(msg)) end
+  if print then pcall(print, "[Widget.main] " .. msg) end
 end
 
 local function shouldReloadWidget(widget)
@@ -82,7 +88,7 @@ local function shouldReloadWidget(widget)
     end
   end
   if reload then
-    logGv("Reload triggered: " .. reason)
+    logGv("Reload triggered: %s", reason)
   end
   return reload
 end

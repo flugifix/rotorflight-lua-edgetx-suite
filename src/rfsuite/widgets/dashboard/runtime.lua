@@ -170,23 +170,30 @@ local function publishPreferencesToGlobal(prefs)
   _G.rfsuite.preferences = prefs or {}
 end
 
-local function logGv(msg)
+local function logGv(fmt, ...)
   -- Gated the way the tool gates its own file logger. Ungated, every call here opens,
   -- appends to and closes a file on the SD card -- and the callers are on the widget's
   -- refresh and background passes rather than on anything the pilot did, so it runs for
   -- the whole flight on every model that carries the widget.
+  --
+  -- The message is assembled HERE, after the gate, rather than by the caller: with the
+  -- test inside the function the callers still paid for a string that was then dropped,
+  -- and one of them sits on the unconditional path of every background pass.
   local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
   local general = prefs and prefs.general
   local debugLevel = general and general.debug_level
   if debugLevel ~= "debug" and debugLevel ~= "info" then return end
 
+  local msg = tostring(fmt)
+  if select("#", ...) > 0 then msg = string.format(msg, ...) end
+
   local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
   if fLog then
     local t = (getTime and getTime()) or 0
-    io.write(fLog, string.format("[%.2f][Runtime] %s\n", t / 100, tostring(msg)))
+    io.write(fLog, string.format("[%.2f][Runtime] %s\n", t / 100, msg))
     io.close(fLog)
   end
-  if print then pcall(print, "[Runtime] " .. tostring(msg)) end
+  if print then pcall(print, "[Runtime] " .. msg) end
 end
 
 local function reloadPreferencesIfNeeded(self, force)
@@ -218,7 +225,7 @@ local function reloadPreferencesIfNeeded(self, force)
     return
   end
 
-  logGv("reloadPreferencesIfNeeded executing (force=" .. tostring(force) .. " signal=" .. tostring(signalReload) .. ")")
+  logGv("reloadPreferencesIfNeeded executing (force=%s signal=%s)", tostring(force), tostring(signalReload))
 
   local prefs = loadPreferences()
   if type(prefs) == "table" then
@@ -241,7 +248,7 @@ local function reloadPreferencesIfNeeded(self, force)
           session.modelPreferences = mPrefs
           session.modelPreferencesFile = mPath
           self.modelPreferences = mPrefs
-          logGv("Loaded model prefs from disk: " .. tostring(mPath))
+          logGv("Loaded model prefs from disk: %s", tostring(mPath))
         end
       end
     else
@@ -733,8 +740,9 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
     end
   end
 
-  logGv(string.format("resolveTheme: mode=%s, modelOverride=%s, modelPreflight=%s, globalPreflight=%s => chosen=%s (%s)",
-    tostring(flightMode), tostring(modelOverride), tostring(modelDashboard.model_theme_preflight), tostring(dashboard and dashboard.theme_preflight), tostring(chosen), tostring(reason)))
+  logGv("resolveTheme: mode=%s, modelOverride=%s, modelPreflight=%s, globalPreflight=%s => chosen=%s (%s)",
+    tostring(flightMode), tostring(modelOverride), tostring(modelDashboard.model_theme_preflight),
+    tostring(dashboard and dashboard.theme_preflight), tostring(chosen), tostring(reason))
 
   return chosen
 end
@@ -1146,7 +1154,9 @@ function Runtime.new(zone, options)
     self.built = false
     self.renderKey = nil
 
-    logGv(string.format("reloadActiveTheme: flightMode=%s, selectedTheme=%s, loadedTheme=%s, v_min=%.1f, v_max=%.1f, customV=%s", tostring(self.flightMode), tostring(selectedTheme), tostring(self.theme ~= nil), nextConfig.v_min, nextConfig.v_max, tostring(hasCustomVoltage)))
+    logGv("reloadActiveTheme: flightMode=%s, selectedTheme=%s, loadedTheme=%s, v_min=%.1f, v_max=%.1f, customV=%s",
+      tostring(self.flightMode), tostring(selectedTheme), tostring(self.theme ~= nil),
+      nextConfig.v_min, nextConfig.v_max, tostring(hasCustomVoltage))
 
     local sources = {}
     if self.theme then
@@ -1292,7 +1302,7 @@ function Runtime.new(zone, options)
   end
 
   function widget.reload(self, force)
-    logGv("widget.reload called with force=" .. tostring(force))
+    logGv("widget.reload called with force=%s", tostring(force))
     reloadPreferencesIfNeeded(self, force ~= false)
     reloadActiveTheme(self)
     self.built = false
@@ -1383,7 +1393,7 @@ function Runtime.new(zone, options)
       lvgl.clear()
       lvgl.build(children)
       self.built = true
-      logGv(string.format("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children))
+      logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children)
       if type(collectgarbage) == "function" then
         collectgarbage("collect")
       end
