@@ -51,22 +51,32 @@ local RFMD_MAP = {
   [102] = { mode = "X150", band = "900MHz" }
 }
 
-local ROW_KEYS = {
-  "version",
-  "edgetx_version",
-  "rf_version",
-  "fc_version",
-  "fbl_uid",
-  "variant",
-  "board_info",
-  "build_info",
-  "rf_mode",
-  "rf_band",
-  "packet_rate",
-  "msp_version",
-  "msp_transport",
-  "supported_versions",
-  "simulation"
+-- The prefix every key on this page hangs under. It is spelled out here rather than built
+-- inside the lookup, because .vscode/scripts/precompile_i18n.py reads it off this assignment
+-- and uses it to resolve the calls below at package time -- which is the only time this tree
+-- can be localised, since a packaged install carries i18n/init.lua and no locale table.
+local keyPrefix = "app.pages.diagnostics_info"
+
+-- One row per line of the page: the value to look up, the key its label lives under, and the
+-- English label. The label was previously looked up under a key held in a variable, so the
+-- packager could not see it and the lookup stayed a runtime one -- which on a packaged card
+-- resolves to nothing. `labelKey`/`labelFallback` is the shape the packager does rewrite.
+local ROWS = {
+  { key = "version",            labelKey = "version",            labelFallback = "Version" },
+  { key = "edgetx_version",     labelKey = "edgetx_version",     labelFallback = "EdgeTX Version" },
+  { key = "rf_version",         labelKey = "rf_version",         labelFallback = "Rotorflight Version" },
+  { key = "fc_version",         labelKey = "fc_version",         labelFallback = "FC Version" },
+  { key = "fbl_uid",            labelKey = "fbl_uid",            labelFallback = "FBL Serial" },
+  { key = "variant",            labelKey = "variant",            labelFallback = "Variant" },
+  { key = "board_info",         labelKey = "board_info",         labelFallback = "Board Info" },
+  { key = "build_info",         labelKey = "build_info",         labelFallback = "Build Info" },
+  { key = "rf_mode",            labelKey = "rf_mode",            labelFallback = "RF Mode" },
+  { key = "rf_band",            labelKey = "rf_band",            labelFallback = "RF Band" },
+  { key = "packet_rate",        labelKey = "packet_rate",        labelFallback = "Packet Ratio" },
+  { key = "msp_version",        labelKey = "msp_version",        labelFallback = "MSP Version" },
+  { key = "msp_transport",      labelKey = "msp_transport",      labelFallback = "MSP Transport" },
+  { key = "supported_versions", labelKey = "supported_versions", labelFallback = "Supported MSP API" },
+  { key = "simulation",         labelKey = "simulation",         labelFallback = "Simulation" }
 }
 
 local state = {
@@ -145,7 +155,11 @@ end
 
 local function t(i18n, key, fallback)
   if i18n and i18n.t then
-    return i18n.t("app.pages.diagnostics_info." .. key)
+    local full = keyPrefix .. "." .. key
+    local val = i18n.t(full, fallback)
+    if val ~= nil and val ~= full then
+      return val
+    end
   end
   return fallback
 end
@@ -564,10 +578,11 @@ function M.build(ctx)
   local valueX = x + labelW
   local valueW = w - labelW
 
-  for i = 1, #ROW_KEYS do
-    local key = ROW_KEYS[i]
+  for i = 1, #ROWS do
+    local row = ROWS[i]
+    local key = row.key
     local thisY = rowY + (i - 1) * rowH
-    local labelText = t(i18n, key, key)
+    local labelText = t(i18n, row.labelKey, row.labelFallback)
     local valueText = values[key] or "-"
 
     children[#children + 1] = {
