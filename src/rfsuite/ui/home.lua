@@ -2059,7 +2059,7 @@ function M.run(event, touchState)
     maybeRefreshInfoPageFromSession()
 
     -- Audio Feedback Polling (gedrosselt auf ca. 5Hz)
-    if Audio and type(Audio.process) == "function" and (now - state.lastAudioTick) > 0.2 then
+    if Audio and type(Audio.process) == "function" and (now - state.lastAudioTick) >= 20 then
       state.lastAudioTick = now
       
       local lq = Sensors and Sensors.getValue("link") or 0
