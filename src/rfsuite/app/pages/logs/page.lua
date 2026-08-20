@@ -34,6 +34,21 @@ local function ensureDeps()
   if not t then t = Common and Common.pageT("logs") or nil end
 end
 
+-- `lcd.sizeText(text, flags)` answers for the font the label is drawn in and carries no
+-- drawing-context guard, so it may be called while the child list is being built. The fallback
+-- is only there for a build that does not offer the call.
+local function textSize(text, font)
+  local fn = lcd and lcd.sizeText
+  if type(fn) == "function" then
+    local ok, tw, th = pcall(fn, tostring(text or ""), font)
+    tw, th = tonumber(tw), tonumber(th)
+    if ok and tw and th and th > 0 then
+      return tw, th
+    end
+  end
+  return #tostring(text or "") * 7, 16
+end
+
 local function pageText(i18n, key)
   if t then
     local translated = t(i18n, key)
@@ -763,11 +778,38 @@ function M.build(ctx)
     return
   end
 
-  -- Render log files list
-  local rowH = 44
+  -- Render log files list.
+  --
+  -- The row was a fixed 44 px and the model-and-file label was given `w - 305` whatever the
+  -- screen is. On a 480-wide radio that is about 175 px, and `[GooSky S2 Ultra] flight19.csv`
+  -- needs more -- so the label wrapped, its second line was drawn across the separator and into
+  -- the row below, and the list read as though two renders were on top of each other. The rows
+  -- are in order; it is one row's tail sitting in the next row's band.
+  --
+  -- So the row height follows its own text: measured in the font the label is drawn in, clamped
+  -- so that a pathological name cannot take the whole screen. A label that fits on one line
+  -- leaves the row at 44 px exactly as before, so this changes nothing on a screen wide enough
+  -- for the labels it is showing.
+  --
+  -- That is deliberately NOT a claim that the list is correct on a wide screen. A separate
+  -- report has entries drawn over each other at 800 x 480, where every label is a single line
+  -- and no wrapping is involved -- so something else can misplace a row as well. Whatever that
+  -- is, it is not this, and it is not fixed here.
+  local ROW_MIN_H = 44
+  local ROW_MAX_LINES = 3
+  local labelW = math.max(40, w - 305)
+  local _, labelLineH = textSize("Ag", SMLSIZE)
   for i = 1, #state.logsList do
     local item = state.logsList[i]
     local itemY = cursorY
+
+    local labelText = string.format("[%s] %s", item.model, item.file)
+    local labelTextW = textSize(labelText, SMLSIZE)
+    local labelLines = 1
+    if labelTextW > labelW then
+      labelLines = math.min(ROW_MAX_LINES, math.ceil(labelTextW / labelW))
+    end
+    local rowH = math.max(ROW_MIN_H, 22 + labelLines * labelLineH)
 
     -- Date and Time
     children[#children + 1] = {
@@ -785,8 +827,8 @@ function M.build(ctx)
       type = "label",
       x = x + 190,
       y = itemY + 11,
-      w = w - 305,
-      text = string.format("[%s] %s", item.model, item.file),
+      w = labelW,
+      text = labelText,
       color = GREY_DEFAULT,
       font = SMLSIZE
     }
