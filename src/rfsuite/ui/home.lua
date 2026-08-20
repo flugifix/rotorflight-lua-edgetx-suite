@@ -543,6 +543,13 @@ local function scheduleBuildUI(withGc)
   end
 end
 
+-- The `requestRebuild` handed to a page, a dialog or the help view is always one of
+-- these two calls. Written inline at six sites, a closure was built every time the
+-- table around it was: once per scene build at five of them, and once per frame at
+-- the sixth, which is the active page's wakeup in `M.run`.
+local function requestRebuild() scheduleBuildUI(false) end
+local function requestRebuildWithGc() scheduleBuildUI(true) end
+
 local function syncActivePageModule()
   local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
   if state.activePageMenuId == currentMenuId then
@@ -625,7 +632,7 @@ local function onBack(source, ev)
     local pageModule = PageRegistry and PageRegistry.get and PageRegistry.get(currentMenuId) or nil
     if pageModule and type(pageModule.onBack) == "function" then
       local handled = pageModule.onBack({
-        requestRebuild = function() scheduleBuildUI(true) end,
+        requestRebuild = requestRebuildWithGc,
         i18n = state.i18n
       })
       if handled == true then
@@ -1251,7 +1258,7 @@ local function onSave()
           menu = state.menu,
           savePreferences = performSave,
           refresh = M.buildUI,
-          requestRebuild = function() scheduleBuildUI(false) end
+          requestRebuild = requestRebuild
         })
 
         if not ok then
@@ -1678,7 +1685,7 @@ function M.buildUI()
         subtitle = helpSubtitle,
         icon = APP_ICON,
         onBack = onBack,
-        requestRebuild = function() scheduleBuildUI(false) end,
+        requestRebuild = requestRebuild,
         header = Header,
         headerLayout = profile.header,
         state = state
@@ -1699,7 +1706,7 @@ function M.buildUI()
       subtitle = helpSubtitle,
       icon = APP_ICON,
       onBack = onBack,
-      requestRebuild = function() scheduleBuildUI(false) end,
+      requestRebuild = requestRebuild,
       header = Header,
       headerLayout = profile.header,
       state = state
@@ -1803,7 +1810,7 @@ function M.buildUI()
           end
           openPageHelpDialog(message, resolvedTitle, resolvedSubtitle)
         end,
-        requestRebuild = function() scheduleBuildUI(false) end
+        requestRebuild = requestRebuild
       })
     else
       local gridItems = state.menu.getCards()
@@ -1939,76 +1946,85 @@ function M.init()
   M.buildUI()
 end
 
-function M.run(event, touchState)
-  local function isEvent(ev, ...)
-    for i = 1, select("#", ...) do
-      local c = select(i, ...)
-      if c and ev == c then return true end
-    end
+-- Hoisted out of `M.run`. EdgeTX drives `run()` from the standalone window's event
+-- check, so anything declared inside it is built again on every refresh. None of the
+-- three captures anything from that call and none of them changes while the script
+-- runs, so file scope is where they belong.
+local function isEvent(ev, ...)
+  for i = 1, select("#", ...) do
+    local c = select(i, ...)
+    if c and ev == c then return true end
+  end
+  return false
+end
+
+-- Read once instead of per call. The globals a radio exports do not change while the
+-- script runs, and a nil entry is skipped by the type tests below exactly as before.
+local BACK_KEY_CANDIDATES = {
+  _G.KEY_EXIT,
+  _G.KEY_RTN,
+  _G.KEY_RETURN,
+  _G.KEY_ESC
+}
+
+local BACK_EVENT_GENERATORS = {
+  _G.EVT_KEY_BREAK,
+  _G.EVT_KEY_FIRST,
+  _G.EVT_KEY_LONG
+}
+
+local function isGeneratedBackEvent(ev)
+  if type(ev) ~= "number" or ev == 0 then
     return false
   end
 
-  local function isGeneratedBackEvent(ev)
-    if type(ev) ~= "number" or ev == 0 then
-      return false
-    end
+  -- Observed on some radios/pages: RTN can arrive as raw generated event 1537.
+  if ev == 1537 then
+    return true
+  end
 
-    -- Observed on some radios/pages: RTN can arrive as raw generated event 1537.
-    if ev == 1537 then
-      return true
-    end
+  local keyCandidates = BACK_KEY_CANDIDATES
+  local generators = BACK_EVENT_GENERATORS
 
-    local keyCandidates = {
-      _G.KEY_EXIT,
-      _G.KEY_RTN,
-      _G.KEY_RETURN,
-      _G.KEY_ESC
-    }
-
-    local generators = {
-      _G.EVT_KEY_BREAK,
-      _G.EVT_KEY_FIRST,
-      _G.EVT_KEY_LONG
-    }
-
-    for gi = 1, #generators do
-      local gen = generators[gi]
-      if type(gen) == "function" then
-        for ki = 1, #keyCandidates do
-          local key = keyCandidates[ki]
-          if type(key) == "number" then
-            local ok, generated = pcall(gen, key)
-            if ok and generated == ev then
-              return true
-            end
+  for gi = 1, #generators do
+    local gen = generators[gi]
+    if type(gen) == "function" then
+      for ki = 1, #keyCandidates do
+        local key = keyCandidates[ki]
+        if type(key) == "number" then
+          local ok, generated = pcall(gen, key)
+          if ok and generated == ev then
+            return true
           end
         end
       end
     end
-
-    return false
   end
 
-  local function isBackEvent(ev)
-    if isEvent(
-      ev,
-      EVT_VIRTUAL_EXIT,
-      EVT_VIRTUAL_EXIT_BREAK,
-      EVT_VIRTUAL_EXIT_FIRST,
-      EVT_VIRTUAL_EXIT_LONG,
-      EVT_EXIT_BREAK,
-      EVT_EXIT_FIRST,
-      EVT_EXIT_LONG,
-      EVT_RTN_BREAK,
-      EVT_RTN_FIRST,
-      EVT_RTN_LONG
-    ) then
-      return true
-    end
+  return false
+end
 
-    return isGeneratedBackEvent(ev)
+local function isBackEvent(ev)
+  if isEvent(
+    ev,
+    EVT_VIRTUAL_EXIT,
+    EVT_VIRTUAL_EXIT_BREAK,
+    EVT_VIRTUAL_EXIT_FIRST,
+    EVT_VIRTUAL_EXIT_LONG,
+    EVT_EXIT_BREAK,
+    EVT_EXIT_FIRST,
+    EVT_EXIT_LONG,
+    EVT_RTN_BREAK,
+    EVT_RTN_FIRST,
+    EVT_RTN_LONG
+  ) then
+    return true
   end
 
+  return isGeneratedBackEvent(ev)
+end
+
+function M.run(event, touchState)
   if lvgl == nil then
     lcd.drawText(10, 10, "LVGL support required (EdgeTX 2.11+)", WHITE)
   end
@@ -2339,7 +2355,7 @@ function M.run(event, touchState)
             preferences = state.preferences,
             menu = state.menu,
             manifest = state.manifest,
-            requestRebuild = function() scheduleBuildUI(false) end
+            requestRebuild = requestRebuild
           })
           if not ok then
             pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error", true)
