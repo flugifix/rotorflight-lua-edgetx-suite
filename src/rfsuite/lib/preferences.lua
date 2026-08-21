@@ -111,6 +111,12 @@ function M.getPath()
   return PREF_PATH
 end
 
+-- The one place the defaults are declared. Callers that need them without touching the
+-- card -- ui/preferences.lua is one -- ask for them here rather than keeping a copy.
+function M.defaults()
+  return defaultPreferences()
+end
+
 local function loadFileAsString(path)
   local f = io.open(path, "r")
   if not f then
