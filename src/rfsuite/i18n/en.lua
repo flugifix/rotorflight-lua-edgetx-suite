@@ -1678,6 +1678,7 @@ return {
         model_override = "Model Override",
         model_disabled = "Disabled",
         no_themes_found = "No dashboard themes found",
+        model_override_unavailable = "Connect a flight controller to store a per-model theme",
         value_theme_preflight = "DEFAULT",
         value_theme_inflight = "DEFAULT",
         value_theme_postflight = "DEFAULT",

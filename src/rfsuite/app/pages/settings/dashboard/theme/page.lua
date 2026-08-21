@@ -152,6 +152,14 @@ local function setModelThemeFromId(key, id)
   end
 end
 
+-- Per-model preferences are keyed by the flight controller's MCU id, so the
+-- model override can only be stored while a flight controller is connected.
+local function hasModelStore()
+  if type(_G) ~= "table" or not _G.rfsuite then return false end
+  if type(_G.rfsuite.session) ~= "table" then return false end
+  return _G.rfsuite.session.mcu_id ~= nil
+end
+
 local function saveToPreferences(prefs)
   if not prefs.dashboard then prefs.dashboard = {} end
   prefs.dashboard.theme_preflight = ui.config.theme_preflight
@@ -289,10 +297,27 @@ function M.build(ctx)
     t(i18n, "section_dashboard_theme_model", "Model Override"), true, function() end)
   cursorY = cursorY + Controls.SECTION_H
 
+  local modelStoreReady = hasModelStore()
+  local modelStoreActive = function() return modelStoreReady end
+
+  if not modelStoreReady then
+    children[#children + 1] = {
+      type = "label",
+      x = x,
+      y = cursorY,
+      w = w,
+      text = t(i18n, "model_override_unavailable", "Connect a flight controller to store a per-model theme"),
+      color = COLOR_THEME_PRIMARY1,
+      font = SMLSIZE
+    }
+    cursorY = cursorY + 24
+  end
+
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "model_override", "Model Override"),
     ui.runtime.getBoolGetter("model_override"),
-    ui.runtime.getBoolSetter("model_override")
+    ui.runtime.getBoolSetter("model_override"),
+    modelStoreActive
   )
 
   if ui.config.model_override == true then
@@ -301,7 +326,8 @@ function M.build(ctx)
       t(i18n, "theme_preflight", "Theme Preflight"),
       modelOptions,
       getModelThemeId(ui.config.model_theme_preflight),
-      function(id) setModelThemeFromId("model_theme_preflight", id) end
+      function(id) setModelThemeFromId("model_theme_preflight", id) end,
+      { active = modelStoreActive }
     )
 
     cursorY = cursorY + Controls.appendComboSelect(
@@ -309,7 +335,8 @@ function M.build(ctx)
       t(i18n, "theme_inflight", "Theme Inflight"),
       modelOptions,
       getModelThemeId(ui.config.model_theme_inflight),
-      function(id) setModelThemeFromId("model_theme_inflight", id) end
+      function(id) setModelThemeFromId("model_theme_inflight", id) end,
+      { active = modelStoreActive }
     )
 
     cursorY = cursorY + Controls.appendComboSelect(
@@ -317,7 +344,8 @@ function M.build(ctx)
       t(i18n, "theme_postflight", "Theme Postflight"),
       modelOptions,
       getModelThemeId(ui.config.model_theme_postflight),
-      function(id) setModelThemeFromId("model_theme_postflight", id) end
+      function(id) setModelThemeFromId("model_theme_postflight", id) end,
+      { active = modelStoreActive }
     )
   end
 end

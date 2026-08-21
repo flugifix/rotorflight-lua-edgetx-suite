@@ -1706,6 +1706,7 @@ return {
         model_override = "Modell-Override",
         model_disabled = "Deaktiviert",
         no_themes_found = "Keine Dashboard-Designs gefunden",
+        model_override_unavailable = "Fuer ein modellspezifisches Design muss ein Flugcontroller verbunden sein",
         value_theme_preflight = "STANDARD",
         value_theme_inflight = "STANDARD",
         value_theme_postflight = "STANDARD",
