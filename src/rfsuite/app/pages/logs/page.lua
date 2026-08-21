@@ -74,6 +74,31 @@ local function charBoundary(text, n)
   return 0
 end
 
+-- The longest prefix of `text`, in bytes, that fits `maxW` px in `font`: never longer than
+-- `text` less one character, never shorter than `minN`, and always on a character boundary.
+--
+-- A prefix does not get narrower as it grows, so the prefixes that fit are exactly the short
+-- ones and the break point is the single edge between the two runs. Bisecting for that edge
+-- asks the font about six substrings where walking the string backwards asked about one per
+-- character -- and on a list of three hundred logs that difference is the page build.
+local function fittingPrefix(text, font, maxW, minN)
+  local best = minN
+  local lo, hi = minN, #text - 1
+  while lo <= hi do
+    local mid = math.floor((lo + hi) / 2)
+    local n = charBoundary(text, mid)
+    if textSize(string.sub(text, 1, n), font) <= maxW then
+      if n > best then
+        best = n
+      end
+      lo = mid + 1
+    else
+      hi = mid - 1
+    end
+  end
+  return best
+end
+
 -- Cut `text` so that it, plus a trailing ellipsis, fits `maxW` px in `font`. A text that
 -- already fits is returned untouched.
 local function fitToWidth(text, font, maxW)
@@ -87,17 +112,11 @@ local function fitToWidth(text, font, maxW)
     return ELLIPSIS
   end
 
-  local n = #text
-  while n > 0 do
-    n = charBoundary(text, n - 1)
-    local cut = string.sub(text, 1, n)
-    if textSize(cut, font) <= room then
-      -- Trailing dots and spaces would read as part of the ellipsis, so drop them first.
-      return (string.gsub(cut, "[%.%s]+$", "")) .. ELLIPSIS
-    end
-  end
-
-  return ELLIPSIS
+  -- A cut of nothing at all always fits, `room` being positive here, so the search cannot
+  -- come back empty-handed and the ellipsis on its own is what a zero-length cut produces.
+  local cut = string.sub(text, 1, fittingPrefix(text, font, room, 0))
+  -- Trailing dots and spaces would read as part of the ellipsis, so drop them first.
+  return (string.gsub(cut, "[%.%s]+$", "")) .. ELLIPSIS
 end
 
 -- The characters the engine is willing to break a line after, as a Lua set: space, and the
@@ -117,16 +136,9 @@ local function takeLine(s, font, maxW)
     return s, ""
   end
 
-  local n = #s
-  while n > 1 do
-    n = charBoundary(s, n - 1)
-    if textSize(string.sub(s, 1, n), font) <= maxW then
-      break
-    end
-  end
-  if n < 1 then
-    n = 1
-  end
+  -- One character is kept whatever it measures: a line that took nothing would leave the
+  -- caller with the same string to break again, and the loop would not end.
+  local n = fittingPrefix(s, font, maxW, 1)
 
   local head = string.sub(s, 1, n)
   local _, brk = string.find(head, "^.*" .. BREAK_SET)
