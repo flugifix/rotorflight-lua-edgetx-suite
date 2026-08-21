@@ -171,6 +171,9 @@ local function saveToPreferences(prefs)
   prefs.dashboard.model_theme_inflight = nil
   prefs.dashboard.model_theme_postflight = nil
 
+  -- Nothing per-model to write is a success; anything attempted has to report.
+  local modelOk, modelErr = true, nil
+
   if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
     local session = _G.rfsuite.session
     if session.mcu_id then
@@ -184,15 +187,18 @@ local function saveToPreferences(prefs)
       mDashboard.model_theme_postflight = ui.config.model_theme_postflight
 
       -- Save model preferences using ModelPreferences module
+      modelOk, modelErr = false, "model_preferences"
       local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
       if type(loadMod) == "function" then
-        local ok, MP = pcall(loadMod)
-        if ok and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
-          MP.saveByMcuId(session.mcu_id, session.modelPreferences)
+        local loaded, MP = pcall(loadMod)
+        if loaded and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
+          modelOk, modelErr = MP.saveByMcuId(session.mcu_id, session.modelPreferences)
         end
       end
     end
   end
+
+  return modelOk ~= false, modelErr
 end
 
 function M.getHeaderActions()
@@ -215,13 +221,27 @@ function M.onReload(ctx)
   return true
 end
 
+local function reportSaveError(ctx, err)
+  if not lvgl then return end
+  local dialog = {
+    title = t(ctx.i18n, "save_error_title", "Error"),
+    message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io")
+  }
+  if type(lvgl.message) == "function" then
+    pcall(lvgl.message, dialog)
+  end
+end
+
 function M.onSave(ctx)
   ensureDeps()
-  saveToPreferences(ctx.preferences)
+  -- The page saves into two stores. Both have to be believed before the save
+  -- is reported as done, and a failure in either one has to be shown.
+  local modelOk, modelErr = saveToPreferences(ctx.preferences)
   local ok, err = ctx.savePreferences()
-  if ok then
-  elseif lvgl and lvgl.message then
-    lvgl.message({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
+  if not ok then
+    reportSaveError(ctx, err)
+  elseif not modelOk then
+    reportSaveError(ctx, modelErr)
   end
   return true
 end
