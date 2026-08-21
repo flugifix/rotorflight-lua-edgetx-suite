@@ -482,7 +482,7 @@ function M.onClose()
     setmetatable(ui.runtime, nil)
   end
   Common.resetPageState(ui, {
-    tablesToWipe = { "sections", "runtime" }
+    tablesToWipe = { "runtime" }
   })
   ui.runtimeBase = nil
   Controls = nil

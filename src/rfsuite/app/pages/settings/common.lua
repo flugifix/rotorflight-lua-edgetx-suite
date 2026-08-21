@@ -159,6 +159,9 @@ function M.resetPageState(ui, opts)
   end
   ui.runtime = nil
 
+  -- Only list tables that build() re-creates. registry.release() runs this hook
+  -- and then keeps the module in its cache, so a table that is emptied here and
+  -- filled in at load time stays empty for the rest of the session.
   local tablesToWipe = opts.tablesToWipe
   if type(tablesToWipe) == "table" then
     for i = 1, #tablesToWipe do
