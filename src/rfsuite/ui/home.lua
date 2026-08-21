@@ -1970,7 +1970,11 @@ function M.init()
   state.menu       = MenuRegistry.new(manifest, state.i18n, {
     conditions = {
       developerTools = prefs.general and prefs.general.developer_tools == true,
-      fblConnected = false
+      fblConnected = false,
+      -- Declared here rather than left to the first run() tick, so that the build M.init()
+      -- does below already asks the registry a question it can answer. run() owns the value
+      -- from its first pass on.
+      modelArmed = false
     },
     apiVersionProvider = function()
       local root = _G and _G.rfsuite
@@ -2105,6 +2109,11 @@ function M.run(event, touchState)
     local armed = isModelArmed()
     if armed ~= state.lastModelArmedState then
       state.lastModelArmedState = armed
+      -- The registry is the one place that already knows why an entry is or is not
+      -- available, and it invalidates its own card caches when a condition moves. Feeding
+      -- the armed state in here costs no new update path: the scheduleBuildUI below is the
+      -- redraw this transition already asked for.
+      state.menu.setCondition("modelArmed", armed)
       if armed then
         -- Clear MSP queue to abort any pending MSP operations immediately
         ensureMspRuntime()
