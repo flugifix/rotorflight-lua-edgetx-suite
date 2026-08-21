@@ -741,23 +741,19 @@ local GRAPH_MIN_CHART_H = 60
 
 --- How much room a page really has, from its content origin down.
 --
--- `h` in the build context is the whole screen, and the children are placed in the page's BODY,
--- which starts below the header EdgeTX builds for every Lua page. A layout that takes `h` for
--- its own budget therefore hangs its last row off the bottom edge, and nothing complains --
--- the page scrolls.
+-- `h` in the build context is the height of the page BODY, not of the screen: `ui/home.lua`
+-- hands a page module `pageBodyHeight()`, which is `LCD_H` less the header EdgeTX builds for
+-- every Lua page. `LvglWidgetPage` parents the children to `page->getBody()`, a window at
+-- {0, MENU_HEADER_HEIGHT, LCD_W, LCD_H - MENU_HEADER_HEIGHT} (lua_lvgl_widget.cpp), so `h` is
+-- already the bottom edge these children may reach.
 --
--- The header height is `EdgeTxStyles::MENU_HEADER_HEIGHT`, 45 px scaled by the layout factor
--- for the screen width: 36 at 320, 45 at 480, 62 at 800. It is not published to a page module,
--- so it is restated here rather than derived from something that only looks like it.
-local function pageHeaderHeight()
-  local screenW = LCD_W or 480
-  if screenW >= 800 then return 62 end
-  if screenW <= 320 then return 36 end
-  return 45
-end
-
-local function contentBudget(y, screenH)
-  local usable = (screenH - pageHeaderHeight()) - y - 8
+-- Taking the header off a second time here would only shorten the plot, and nothing would
+-- complain, because the page scrolls either way.
+--
+-- The 8 px is the bottom margin. `chartRect` spends the rest on the fixed rows, so the last
+-- control row ends `GRAPH_GAP` above the budget and stops 14 px clear of the body.
+local function contentBudget(y, bodyH)
+  local usable = bodyH - y - 8
   if usable < 160 then usable = 160 end
   return usable
 end
