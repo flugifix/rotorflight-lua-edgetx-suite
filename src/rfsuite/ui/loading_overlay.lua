@@ -73,8 +73,40 @@ function M.append(children, opts)
   local titleStep = math.max(32, titleLineH)
   local titleShift = titleStep - 32
 
+  -- The message is given a fixed 68 px between its own top and whatever comes next -- one
+  -- SMLSIZE line plus the gap this box is drawn with -- and one line is not what every
+  -- caller passes. app/pages/logs/page.lua passes the message from i18n/en.lua that carries
+  -- an explicit newline and a second sentence wider than the box, so the label is broken
+  -- into three lines on the large font set and the last one reached into the progress bar;
+  -- the ESC pages' safety warning is two lines on every set but the standard one. The label
+  -- has a width and no height, so LVGL sizes it to its own text with LV_LABEL_LONG_WRAP,
+  -- which breaks on a newline and on the width -- count both, the same way the title is
+  -- counted above, and grow the box by the amount those lines do not fit in. Most of the
+  -- multi-line cases still fit, and those must not move. The width count is deliberately the
+  -- cheap one: it divides instead of walking word boundaries, so a line that breaks early at
+  -- a long word can be under-counted.
+  local _, messageLineH = textSize("", SMLSIZE, 6, 14)
+  local messageLines = 0
+  -- `string.gmatch(s, ...)`, not `s:gmatch(...)`. Indexing a string needs the string
+  -- metatable, and this tree does not rely on it having one: every other split here goes
+  -- through the library form.
+  for line in string.gmatch(message .. "\n", "([^\n]*)\n") do
+    local lineW = textSize(line, SMLSIZE, 6, 14)
+    if innerW > 0 and lineW > innerW then
+      messageLines = messageLines + math.ceil(lineW / innerW)
+    else
+      messageLines = messageLines + 1
+    end
+  end
+  -- The room the layout gives the message: from its own top to the top of the bar, which is
+  -- where the button goes when there is no bar. Written as the difference of the two offsets
+  -- this file already uses rather than as a number, so it stays correct if either moves.
+  local messageTop = 10 + titleStep + extra
+  local messageRoom = (110 + extra + titleShift) - messageTop
+  local messageShift = math.max(0, messageLines * messageLineH - messageRoom)
+
   local barBlock = showBar and 0 or -32
-  local boxH = (action and 208 or 154) + extra + barBlock + titleShift
+  local boxH = (action and 208 or 154) + extra + barBlock + titleShift + messageShift
   local boxX = x + math.floor((w - boxW) / 2)
   local boxY = y + math.floor((h - boxH) / 2) - 64
   if boxY < y + 8 then
@@ -82,7 +114,7 @@ function M.append(children, opts)
   end
 
   local barX = boxX + 16
-  local barY = boxY + 110 + extra + titleShift
+  local barY = boxY + 110 + extra + titleShift + messageShift
   local barW = boxW - 32
   local barH = 16
   local fillW = math.floor((barW - 4) * progress + 0.5)
@@ -110,7 +142,7 @@ function M.append(children, opts)
   children[#children + 1] = {
     type = "label",
     x = boxX + 14,
-    y = boxY + 10 + titleStep + extra,
+    y = boxY + messageTop,
     w = innerW,
     text = message,
     color = COLOR_THEME_PRIMARY1,
