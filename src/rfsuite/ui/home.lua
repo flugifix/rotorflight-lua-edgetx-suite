@@ -337,6 +337,30 @@ local function computeTileSize(cardW, cardH, cfg)
   return size
 end
 
+-- The height a page module may actually lay out in.
+--
+-- `lvgl.build` gives a "page" element a header of its own and parents the children to
+-- page->getBody(), a window at {0, MENU_HEADER_HEIGHT, LCD_W, LCD_H - MENU_HEADER_HEIGHT}
+-- (lua_lvgl_widget.cpp). Handing a page module LCD_H therefore overstates its room by exactly
+-- that header, and nothing complains because the page scrolls.
+--
+-- EdgeTxStyles::MENU_HEADER_HEIGHT is LAYOUT_SCALE(45) and is not exposed to Lua, so the value
+-- is restated here. LAYOUT_SCALE is the identity outside landscape, where it gives 36 at
+-- LCD_W 320 and 62 at 800 (etx_lv_theme.h) -- a portrait radio 320 wide still gets 45.
+local function pageBodyHeight()
+  local screenW = LCD_W or 480
+  local screenH = LCD_H or 320
+  local headerH = 45
+  if screenW > screenH then
+    if screenW == 320 then
+      headerH = 36
+    elseif screenW == 800 then
+      headerH = 62
+    end
+  end
+  return screenH - headerH
+end
+
 local function toWrappedItems(items, cols)
   local wrapped = {}
   local c = 1
@@ -1797,7 +1821,7 @@ function M.buildUI()
         x = contentX,
         y = contentY,
         w = contentW,
-        h = LCD_H,
+        h = pageBodyHeight(),
         i18n = state.i18n,
         preferences = state.preferences,
         menu = state.menu,
