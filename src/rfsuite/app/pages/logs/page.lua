@@ -741,13 +741,23 @@ local GRAPH_MIN_CHART_H = 60
 
 --- How much room a page really has, from its content origin down.
 --
--- `h` in the build context is the whole screen, and the children are placed inside the page
--- window, which starts below its own title bar. A layout that takes `h` therefore hangs its
--- last row off the bottom edge -- which nothing complains about, because the page scrolls.
--- The bar is not published to a page module, so it is allowed for as a proportion of the
--- screen: measured at 800 x 480, where it is 68 px against the 77 this returns.
+-- `h` in the build context is the whole screen, and the children are placed in the page's BODY,
+-- which starts below the header EdgeTX builds for every Lua page. A layout that takes `h` for
+-- its own budget therefore hangs its last row off the bottom edge, and nothing complains --
+-- the page scrolls.
+--
+-- The header height is `EdgeTxStyles::MENU_HEADER_HEIGHT`, 45 px scaled by the layout factor
+-- for the screen width: 36 at 320, 45 at 480, 62 at 800. It is not published to a page module,
+-- so it is restated here rather than derived from something that only looks like it.
+local function pageHeaderHeight()
+  local screenW = LCD_W or 480
+  if screenW >= 800 then return 62 end
+  if screenW <= 320 then return 36 end
+  return 45
+end
+
 local function contentBudget(y, screenH)
-  local usable = screenH - math.floor(screenH * 0.16) - y - 8
+  local usable = (screenH - pageHeaderHeight()) - y - 8
   if usable < 160 then usable = 160 end
   return usable
 end
