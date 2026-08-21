@@ -25,6 +25,11 @@ local BASE = {
   tileMin = 70,
   tileMax = 104,
   groupGapBottom = 12,
+  -- One SMLSIZE line plus padding: the strip ui/home.lua puts above the content while the
+  -- craft is armed. About 0.6 of the header button height, and never below 24 px, which is
+  -- what a touch target needs. Per resolution and read off each one -- the header row does
+  -- not scale between them either.
+  armedBannerH = 24,
   header = {
     rightPad = 12,
     memW = 110,
@@ -50,6 +55,7 @@ local PRESETS = {
     tileMin = 66,
     tileMax = 100,
     groupGapBottom = 10,
+    armedBannerH = 24,
     header = {
       memW = 110,
       topButtonH = 34,
@@ -73,6 +79,7 @@ local PRESETS = {
     tileMin = 80,
     tileMax = 112,
     groupGapBottom = 16,
+    armedBannerH = 27,
     header = {
       rightPad = 20,
       memW = 126,

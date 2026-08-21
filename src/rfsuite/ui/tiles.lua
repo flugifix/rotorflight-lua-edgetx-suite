@@ -31,7 +31,7 @@ end
 -- The line height of one font, measured. `lcd.sizeText(text, flags)` answers for the font the
 -- label is drawn in and is not gated on a drawing context, so it may be called while the child
 -- list is being built. The fallback only has to be safe on a build that does not offer the call.
-local function lineHeight(font, fallback)
+function Tiles.lineHeight(font, fallback)
   local fn = lcd and lcd.sizeText
   if type(fn) == "function" then
     local ok, _, th = pcall(fn, "0", font)
@@ -49,12 +49,16 @@ local BADGE_INSET = 3
 -- one, on top of the disabled grey rather than instead of it: a tile a pilot cannot press
 -- because nothing answered on MSP and a tile locked because the craft is flying are two
 -- different answers to "why can I not press this", and they stay two different pictures.
-local function appendBadge(children, x, y, size, text)
+local function appendCornerBadge(children, x, y, size, text)
   local diameter = math.max(14, math.floor(size * 0.22))
   local radius = math.floor(diameter / 2)
-  local cx = x + size - BADGE_INSET - radius
-  local cy = y + BADGE_INSET + radius
+  Tiles.appendBadge(children, x + size - BADGE_INSET - radius, y + BADGE_INSET + radius, radius, text)
+end
 
+-- The badge itself, placed by its CENTRE. Public because the same mark is drawn twice -- once
+-- per locked tile, and once at the left of the armed strip ui/home.lua puts above the content
+-- -- and two drawings of one badge would drift apart.
+function Tiles.appendBadge(children, cx, cy, radius, text)
   -- `circle` takes its CENTRE in x/y, unlike every other element in this file:
   -- LvglWidgetRoundObject::setPos subtracts the radius before placing the object
   -- (lua/lua_lvgl_widget.cpp), and LvglWidgetCircle::build sets width and height from it.
@@ -65,7 +69,7 @@ local function appendBadge(children, x, y, size, text)
     filled = true
   }
 
-  local textH = lineHeight(SMLSIZE, 14)
+  local textH = Tiles.lineHeight(SMLSIZE, 14)
   children[#children + 1] = {
     type  = "label",
     x = cx - radius, y = cy - math.floor(textH / 2),
@@ -144,7 +148,7 @@ function Tiles.append(children, x, y, size, iconFile, text, focused, pressHandle
 
   -- Last, so it is the topmost child and nothing above draws over it.
   if type(badge) == "string" and badge ~= "" then
-    appendBadge(children, x, y, size, badge)
+    appendCornerBadge(children, x, y, size, badge)
   end
 end
 

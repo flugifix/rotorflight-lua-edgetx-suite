@@ -287,6 +287,10 @@ local ONCONNECT_TEXT = {
 -- renderer and is handed the resolved text rather than a locale of its own.
 local ARMED_BADGE_TEXT = "@i18n(app.model_armed_badge)@"
 
+-- The one line the strip carries. It says what the state is and what it costs, because the
+-- tool stays usable around it -- it is a status, not a demand.
+local ARMED_BANNER_TEXT = "@i18n(app.model_armed_banner)@"
+
 local function ensureBuildDeps()
   if not GridLayout then
     GridLayout = loadModule("layouts/grid.lua")
@@ -1427,15 +1431,6 @@ local function getCardPressHandler(cardId)
     if (state.suppressPressFrames or 0) > 0 then
       return
     end
-    if isModelArmed() then
-      if lvgl and lvgl.message then
-        lvgl.message({
-          title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
-          message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-        })
-      end
-      return
-    end
     if state.menu and (not state.menu.isRoot()) then
       -- Parking the target is the whole press: run() opens pendingMenuOpen and schedules the
       -- rebuild itself, so nothing is scheduled here and the next thing drawn is the target's
@@ -1456,21 +1451,47 @@ local function getRootCardPressHandler(sectionId, cardId)
     if (state.suppressPressFrames or 0) > 0 then
       return
     end
-    if isModelArmed() then
-      if lvgl and lvgl.message then
-        lvgl.message({
-          title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
-          message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-        })
-      end
-      return
-    end
     if state.menu and state.menu.isRoot() then
       state.pendingMenuOpen = { section = sectionId, card = cardId }
     end
   end
   state.cardHandlers[key] = fn
   return fn
+end
+
+-- A strip across the top of the page body, drawn on root, on a menu and on a page for as long
+-- as the craft is armed. The content below it is moved down by exactly this height rather than
+-- being drawn under it: a warning that covers a value is worse than no warning at all.
+--
+-- The colours are the firmware's own full-screen alert idiom -- WARNING as the background with
+-- the message in PRIMARY1 (libui/fullscreen_dialog.cpp). The pairing this replaces was the
+-- other way round, WARNING text on PRIMARY3, which computes about 2.2:1 off the default theme
+-- table and is below every legibility floor there is.
+local function appendArmedBanner(children, x, y, w, h, text)
+  children[#children + 1] = {
+    type = "rectangle",
+    x = x, y = y, w = w, h = h,
+    color = COLOR_THEME_WARNING or COLOR_THEME_SECONDARY1,
+    filled = true
+  }
+
+  local radius = math.max(6, math.floor(h * 0.30))
+  local pad = math.max(4, math.floor(h * 0.20))
+  local cx = x + pad + radius
+  local cy = y + math.floor(h / 2)
+  Tiles.appendBadge(children, cx, cy, radius, ARMED_BADGE_TEXT)
+
+  local textX = cx + radius + pad
+  local textH = Tiles.lineHeight(SMLSIZE, 14)
+  children[#children + 1] = {
+    type  = "label",
+    x = textX,
+    y = y + math.floor((h - textH) / 2),
+    w = math.max(0, (x + w) - textX - pad),
+    text  = text,
+    color = COLOR_THEME_PRIMARY1,
+    font  = SMLSIZE
+  }
 end
 
 -- ── Main UI build ─────────────────────────────────────────────────────────────
@@ -1481,47 +1502,6 @@ function M.buildUI()
   ensureBuildDeps()
 
   local isArmed = isModelArmed()
-  if isArmed then
-    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
-    local title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed"
-    local msg = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-    local color = COLOR_THEME_WARNING or COLOR_THEME_PRIMARY2
-
-    local children = {
-      {
-        type = "rectangle",
-        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
-        color = COLOR_THEME_PRIMARY3,
-        filled = true
-      },
-      {
-        type = "label",
-        x = 0, y = (LCD_H or 240) / 2 - 30, w = LCD_W or 320,
-        text = title,
-        color = color,
-        align = CENTER,
-        font = MIDSIZE
-      },
-      {
-        type = "label",
-        x = 20, y = (LCD_H or 240) / 2, w = (LCD_W or 320) - 40,
-        text = msg,
-        color = COLOR_THEME_PRIMARY2,
-        align = CENTER,
-        font = SMLSIZE
-      }
-    }
-
-    lvgl.build({
-      {
-        type     = "page",
-        title    = title,
-        back     = onBack,
-        children = children
-      }
-    })
-    return
-  end
 
   if state.initialLoad then
     -- The run loop already counts this start: it reads done/total off the onconnect runner and
@@ -1737,7 +1717,10 @@ function M.buildUI()
   wipeTable(children)
 
   local contentX = contentPad
-  local contentY = tileGap
+  -- The strip sits flush under the page header and the content starts one gap below it, so
+  -- everything the view already laid out is moved down by exactly the strip's own height.
+  local bannerH = isArmed and (profile.armedBannerH or 24) or 0
+  local contentY = tileGap + bannerH
   local contentW = LCD_W - contentPad * 2
 
   -- ── Help view (no lvgl.dialog – avoids LVGL lifecycle crashes) ───────────────
@@ -1792,6 +1775,10 @@ function M.buildUI()
     return
   end
   -- ── End help view ────────────────────────────────────────────────────────────
+
+  if bannerH > 0 then
+    appendArmedBanner(children, contentX, 0, contentW, bannerH, ARMED_BANNER_TEXT)
+  end
 
   if state.menu.isRoot() then
     local groups    = state.menu.getRootGroups()
@@ -1872,7 +1859,7 @@ function M.buildUI()
         x = contentX,
         y = contentY,
         w = contentW,
-        h = pageBodyHeight(),
+        h = pageBodyHeight() - bannerH,
         i18n = state.i18n,
         preferences = state.preferences,
         menu = state.menu,
