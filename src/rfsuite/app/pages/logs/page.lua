@@ -739,6 +739,19 @@ local GRAPH_CTRL_H  = 34
 local GRAPH_GAP     = 6
 local GRAPH_MIN_CHART_H = 60
 
+--- How much room a page really has, from its content origin down.
+--
+-- `h` in the build context is the whole screen, and the children are placed inside the page
+-- window, which starts below its own title bar. A layout that takes `h` therefore hangs its
+-- last row off the bottom edge -- which nothing complains about, because the page scrolls.
+-- The bar is not published to a page module, so it is allowed for as a proportion of the
+-- screen: measured at 800 x 480, where it is 68 px against the 77 this returns.
+local function contentBudget(y, screenH)
+  local usable = screenH - math.floor(screenH * 0.16) - y - 8
+  if usable < 160 then usable = 160 end
+  return usable
+end
+
 local function rebuild()
   if state.requestRebuild then state.requestRebuild() end
 end
@@ -904,12 +917,13 @@ local function buildChart(children, x, y, w, availH, i18n)
     align = RIGHT
   }
 
+  -- The time axis, and the only edge the plot needs: a full frame drawn unfilled is not
+  -- distinguishable from the page behind it at this theme's contrast.
   children[#children + 1] = {
     type = "rectangle",
-    x = chartX, y = chartY, w = chartW, h = chartH,
+    x = chartX, y = chartY + chartH, w = chartW, h = 1,
     color = COLOR_THEME_DISABLED,
-    filled = false,
-    thickness = 1
+    filled = true
   }
 
   -- Vertical grid lines are rectangles rather than line objects: a one-pixel
@@ -1109,7 +1123,7 @@ function M.build(ctx)
 
   -- The plot of the selected log, on top of its statistics.
   if state.view == "graph" and Graph then
-    buildGraphView(children, x, cursorY, w, math.max(160, h - cursorY - 6), i18n)
+    buildGraphView(children, x, cursorY, w, contentBudget(cursorY, h), i18n)
     return
   end
 
