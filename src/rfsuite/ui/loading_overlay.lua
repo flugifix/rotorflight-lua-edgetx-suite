@@ -61,8 +61,20 @@ function M.append(children, opts)
   end
   local extra = (titleLines - 1) * titleLineH
 
+  -- And the FIRST title line needs its own line height too. The message started a fixed 32 px
+  -- below the top of the title, and 32 px is less than the MIDSIZE line height on the large
+  -- font set: radio/src/fonts/CMakeLists.txt compiles fonts/lvgl/lrg for an 800 px target and
+  -- its lv_font_en_L.c is generated at 33 ppem with .line_height = 42 (.base_line = 9), so the
+  -- title's line box ran 10 px into the message's there -- and the default title has a
+  -- descender to put in that overlap. `titleLineH` above is already the number to use: it is
+  -- lv_font_get_line_height() of that font. The 32 px stays as the lower bound, so the font
+  -- sets whose MIDSIZE already fits keep the spacing this box was drawn with -- lvgl/std
+  -- declares 29 and lvgl/sml declares 23 -- and only the large set moves.
+  local titleStep = math.max(32, titleLineH)
+  local titleShift = titleStep - 32
+
   local barBlock = showBar and 0 or -32
-  local boxH = (action and 208 or 154) + extra + barBlock
+  local boxH = (action and 208 or 154) + extra + barBlock + titleShift
   local boxX = x + math.floor((w - boxW) / 2)
   local boxY = y + math.floor((h - boxH) / 2) - 64
   if boxY < y + 8 then
@@ -70,7 +82,7 @@ function M.append(children, opts)
   end
 
   local barX = boxX + 16
-  local barY = boxY + 110 + extra
+  local barY = boxY + 110 + extra + titleShift
   local barW = boxW - 32
   local barH = 16
   local fillW = math.floor((barW - 4) * progress + 0.5)
@@ -98,7 +110,7 @@ function M.append(children, opts)
   children[#children + 1] = {
     type = "label",
     x = boxX + 14,
-    y = boxY + 42 + extra,
+    y = boxY + 10 + titleStep + extra,
     w = innerW,
     text = message,
     color = COLOR_THEME_PRIMARY1,
