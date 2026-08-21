@@ -49,6 +49,69 @@ local function textSize(text, font)
   return #tostring(text or "") * 7, 16
 end
 
+local ELLIPSIS = "..."
+
+-- The largest cut length at or below `n` that does not fall inside a multi-byte character, so
+-- that shortening a file name can never leave half a sequence behind.
+local function charBoundary(text, n)
+  while n > 0 do
+    local b = string.byte(text, n + 1)
+    if not b or b < 0x80 or b >= 0xC0 then return n end
+    n = n - 1
+  end
+  return 0
+end
+
+-- Cut `text` so that it, plus a trailing ellipsis, fits `maxW` px in `font`. A text that
+-- already fits is returned untouched.
+local function fitToWidth(text, font, maxW)
+  text = tostring(text or "")
+  if maxW <= 0 or textSize(text, font) <= maxW then
+    return text
+  end
+
+  local room = maxW - textSize(ELLIPSIS, font)
+  if room <= 0 then
+    return ELLIPSIS
+  end
+
+  local n = #text
+  while n > 0 do
+    n = charBoundary(text, n - 1)
+    local cut = string.sub(text, 1, n)
+    if textSize(cut, font) <= room then
+      -- Trailing dots and spaces would read as part of the ellipsis, so drop them first.
+      return (string.gsub(cut, "[%.%s]+$", "")) .. ELLIPSIS
+    end
+  end
+
+  return ELLIPSIS
+end
+
+-- The heading of the flight summary, in the width the heading actually has.
+--
+-- Controls.appendStaticSectionHeader gives its label no `w`, so LVGL sizes the label to its own
+-- text: a heading wider than the header neither wraps nor is clipped, it runs past the right
+-- edge of the page and leaves the page body scrolling sideways.
+--
+-- Two steps, in this order. extractFileInfo takes the model out of the file name itself when
+-- the name carries one ("^(.-)%-%d%d%d%d"), and for those -- which is every log the tool
+-- writes -- "<model> - <file>" prints the model twice and spends the width on the half that is
+-- already there. So drop the prefix, but only when the name really does begin with it: a model
+-- that came from the parent folder instead is not in the name, and is the only place that says
+-- which helicopter this was.
+--
+-- What is left is then measured in the font the header draws in and cut to fit. Dropping the
+-- duplicate is enough on its own at 480 px and wider; the cut is what a narrow screen needs.
+local function summaryTitle(model, file, maxW)
+  model = tostring(model or "")
+  local title = tostring(file or "")
+  if model ~= "" and string.sub(title, 1, #model) ~= model then
+    title = model .. " - " .. title
+  end
+  return fitToWidth(title, MIDSIZE, maxW)
+end
+
 local function pageText(i18n, key)
   if t then
     local translated = t(i18n, key)
@@ -543,7 +606,7 @@ function M.build(ctx)
       state.summary = summary
     end
 
-    local titleText = string.format("%s - %s", state.selectedModel or "Log", state.selectedFile)
+    local titleText = summaryTitle(state.selectedModel or "Log", state.selectedFile, w)
     if Controls and type(Controls.appendStaticSectionHeader) == "function" then
       Controls.appendStaticSectionHeader(children, x, cursorY, w, titleText)
       cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
