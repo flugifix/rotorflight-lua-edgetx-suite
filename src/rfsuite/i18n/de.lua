@@ -656,9 +656,6 @@ return {
         value_widget_spacing = "MITTEL",
         value_refresh_rate = "10Hz"
       },
-      settings_dashboard_settings = {
-        section_default_voltage = "Standard-Theme-Spannung"
-      },
       settings_activelook = {
         section_activelook = "ActiveLook",
         style = "Stil",
