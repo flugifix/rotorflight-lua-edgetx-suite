@@ -209,17 +209,38 @@ end
 --
 -- FAT stores mtime at two-second granularity and depends on the RTC, so two writes inside
 -- one second can share a timestamp. That is why the size is part of the stamp.
+-- `fstat` returns the modification time as a TABLE -- year, mon, day, hour, min, sec and more
+-- (radio/src/lua/api_filesystem.cpp) -- not as a number. `tostring()` on it is therefore a table
+-- ADDRESS, which is different on every call, so a stamp built that way never equals the previous
+-- one and a comparison against it reports a change every single time.
+--
+-- The fields are what identify the file, so the fields are what the stamp is built from. FAT
+-- stores seconds in two-second steps, which bounds how close together two writes can be and
+-- still be told apart; the size is exact and carries the rest.
+local function stampOf(info)
+  if type(info) ~= "table" then return nil end
+  local t = info.time
+  if type(t) ~= "table" then
+    -- Not the documented shape. Whatever it is, it is at least not an address.
+    return tostring(info.size) .. ":" .. tostring(t)
+  end
+  return string.format("%s:%s-%s-%s.%s.%s.%s",
+    tostring(info.size), tostring(t.year), tostring(t.mon), tostring(t.day),
+    tostring(t.hour), tostring(t.min), tostring(t.sec))
+end
+
 local function preferencesStamp(modelPath)
   if type(fstat) ~= "function" then return nil end
   local out = ""
   local okg, g = pcall(fstat, PREFERENCES_FILE)
-  if okg and type(g) == "table" then
-    out = tostring(g.size) .. ":" .. tostring(g.time)
+  if okg then
+    out = stampOf(g) or ""
   end
   if modelPath then
     local okm, m = pcall(fstat, modelPath)
-    if okm and type(m) == "table" then
-      out = out .. "|" .. tostring(m.size) .. ":" .. tostring(m.time)
+    if okm then
+      local ms = stampOf(m)
+      if ms then out = out .. "|" .. ms end
     end
   end
   return out
