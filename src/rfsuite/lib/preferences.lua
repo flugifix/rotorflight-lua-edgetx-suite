@@ -50,6 +50,7 @@ local function defaultPreferences()
       reload_confirm               = true,
       -- integration
       syncname                     = false,
+      syncparams                   = false,
       -- development
       developer_tools              = false,
       continuous_memory_log        = false,

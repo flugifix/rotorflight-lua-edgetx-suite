@@ -12,4 +12,5 @@ return {
   { name = "name", context = "both" },
   -- After `name`, which is what fills session.modelName.
   { name = "model_name_sync", context = "both" },
+  { name = "model_params_sync", context = "both" },
 }

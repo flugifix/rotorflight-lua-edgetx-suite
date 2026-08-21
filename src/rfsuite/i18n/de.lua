@@ -604,6 +604,7 @@ return {
         language_en = "Englisch",
         language_de = "Deutsch",
         sync_model_name = "Modellname synchronisieren",
+        sync_model_params = "Modellparameter synchronisieren",
         save_confirm = "Bestätigen beim Speichern",
         save_armed_warning = "Warnung 'Bitte disarmen zum Speichern'",
         reload_confirm = "Bestätigen beim Neuladen",

@@ -25,6 +25,7 @@ local CONFIG_SCHEMA = {
   { key = "iconsize",                     type = "number", default = 2     },
   { key = "syncname",                     type = "bool",   default = false  },
   { key = "save_confirm",                 type = "bool",   default = true   },
+  { key = "syncparams",                   type = "bool",   default = false  },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
   { key = "developer_tools",              type = "bool",   default = false  },
@@ -151,6 +152,12 @@ local function buildIntegration(cursorY, children, x, w, i18n)
     t(i18n, "sync_model_name", "Synchronize Model Name"),
     ui.runtime.getBoolGetter("syncname"),
     ui.runtime.getBoolSetter("syncname")
+  )
+
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    t(i18n, "sync_model_params", "Synchronize Model Parameters"),
+    ui.runtime.getBoolGetter("syncparams"),
+    ui.runtime.getBoolSetter("syncparams")
   )
 
   return cursorY

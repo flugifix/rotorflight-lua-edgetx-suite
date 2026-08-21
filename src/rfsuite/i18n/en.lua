@@ -604,6 +604,7 @@ return {
         language_en = "English",
         language_de = "German",
         sync_model_name = "Synchronize Model Name",
+        sync_model_params = "Synchronize Model Parameters",
         save_confirm = "Confirm on Save",
         save_armed_warning = "Show Disarm-to-Save Warning",
         reload_confirm = "Confirm on Reload",
