@@ -223,8 +223,8 @@ function M.onSave(ctx)
 		return false
 	end
 
-	if lvgl and lvgl.message then
-		lvgl.message({
+	if ctx and type(ctx.reportSave) == "function" then
+		ctx.reportSave({
 			title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
 			message = pageText(ctx and ctx.i18n, "saved_message", "Power preferences saved")
 		})

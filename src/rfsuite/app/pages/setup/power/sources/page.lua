@@ -314,14 +314,14 @@ function M.onSave(ctx)
 		end
 	end
 
-	if lvgl and lvgl.message then
+	if ctx and type(ctx.reportSave) == "function" then
 		if okMsp then
-			lvgl.message({
+			ctx.reportSave({
 				title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
 				message = pageText(ctx and ctx.i18n, "saved_message", "Power sources saved")
 			})
 		else
-			lvgl.message({
+			ctx.reportSave({
 				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
 				message = pageText(ctx and ctx.i18n, "saved_local_only_message", "Saved locally; FC write pending")
 			})

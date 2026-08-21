@@ -807,8 +807,8 @@ function M.onSave(ctx)
   end
 
   ui.dirty = false
-  if lvgl and lvgl.message then
-    lvgl.message({
+  if ctx and type(ctx.reportSave) == "function" then
+    ctx.reportSave({
       title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
       message = pageText(ctx and ctx.i18n, "saved_message", "Swashplate geometry settings saved")
     })

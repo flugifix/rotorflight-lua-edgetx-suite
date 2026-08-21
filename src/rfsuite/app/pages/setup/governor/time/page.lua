@@ -196,8 +196,8 @@ local function queueGovWrite(requestRebuild, ctx)
               session.governor_config = writeData
               session.governorMode = writeData.gov_mode
             end
-            if lvgl and lvgl.message then
-              lvgl.message({
+            if ctx and type(ctx.reportSave) == "function" then
+              ctx.reportSave({
                 title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
                 message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
               })
@@ -222,8 +222,8 @@ local function queueGovWrite(requestRebuild, ctx)
           session.governor_config = writeData
           session.governorMode = writeData.gov_mode
         end
-        if lvgl and lvgl.message then
-          lvgl.message({
+        if ctx and type(ctx.reportSave) == "function" then
+          ctx.reportSave({
             title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
             message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
           })

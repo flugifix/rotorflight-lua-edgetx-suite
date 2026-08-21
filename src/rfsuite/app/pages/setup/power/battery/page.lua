@@ -489,24 +489,24 @@ function M.onSave(ctx)
 		end
 	end
 
-	if lvgl and lvgl.message then
+	if ctx and type(ctx.reportSave) == "function" then
 		if okMsp and okPrefs then
-			lvgl.message({
+			ctx.reportSave({
 				title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
 				message = pageText(ctx and ctx.i18n, "saved_message", "Battery settings saved")
 			})
 		elseif okMsp and not okPrefs then
-			lvgl.message({
+			ctx.reportSave({
 				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
 				message = "Battery values sent to FC. Model prefs save failed: " .. tostring(errPrefs or "io")
 			})
 		elseif (not okMsp) and okPrefs then
-			lvgl.message({
+			ctx.reportSave({
 				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
 				message = pageText(ctx and ctx.i18n, "saved_local_only_message", "Saved locally; FC write pending")
 			})
 		else
-			lvgl.message({
+			ctx.reportSave({
 				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
 				message = "FC write pending and model prefs save failed: " .. tostring(errPrefs or "io")
 			})

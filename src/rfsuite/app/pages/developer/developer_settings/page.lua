@@ -179,8 +179,8 @@ function M.onSave(ctx)
 
   local ok, err = ctx.savePreferences()
   if ok then
-    if lvgl and lvgl.message then
-      lvgl.message({ title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Developer settings saved") })
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({ title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Developer settings saved") })
     end
   else
     if lvgl and lvgl.message then
