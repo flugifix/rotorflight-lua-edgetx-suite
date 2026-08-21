@@ -225,7 +225,10 @@ local function parseTelemetryCsv(filePath)
         esctCol = colIdx
       elseif trimmed == "thr(%)" or trimmed == "thr%" or trimmed == "throttle%" or trimmed == "throttle_percent" then
         thrCol = colIdx
-      elseif trimmed == "armd" or trimmed == "arm" then
+      elseif trimmed == "arm" then
+        -- Only the ARM sensor. ARMD is the arming *disable* flag mask (0x1203 in
+        -- lib/rf2tlm_sensors.lua): it reads 0 while the model is armed, so taking it for
+        -- the arm flag closes the RPM gate for the whole flight.
         armCol = colIdx
       end
       colIdx = colIdx + 1
@@ -368,7 +371,11 @@ local function parseTelemetryCsv(filePath)
               local thrVal = thrCol and tonumber(cols[thrCol]) or 0
               local armVal = armCol and tonumber(cols[armCol]) or 1
 
-              local isPowered = (armVal > 0) and ((thrVal >= 25) or (cVal >= 1.5))
+              -- ARM is a bit field: bit 0 is ARMED, bit 1 only records that the model was
+              -- armed at some point, so it stays set after a disarm. lib/audio.lua tests
+              -- the same bit.
+              local isArmed = (math.floor(armVal) % 2) == 1
+              local isPowered = isArmed and ((thrVal >= 25) or (cVal >= 1.5))
               if isPowered then
                 if r > rMax then rMax = r end
                 if r > 1000 then
