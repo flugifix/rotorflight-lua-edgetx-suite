@@ -12,6 +12,17 @@ local function u16_from_bytes(lo, hi)
   return ((hi & 0xFF) << 8) | (lo & 0xFF)
 end
 
+-- The parameter values are int16_t on the flight controller, so the top bit is a sign and not a
+-- magnitude. Read unsigned, a value of -1 arrives as 65535 and anything acting on it acts on a
+-- number the pilot never set.
+local function s16_from_bytes(lo, hi)
+  local v = u16_from_bytes(lo, hi)
+  if v >= 0x8000 then
+    return v - 0x10000
+  end
+  return v
+end
+
 local function bytes_from_u16(v)
   v = math.floor(tonumber(v) or 0) & 0xFFFF
   return v & 0xFF, (v >> 8) & 0xFF
@@ -24,11 +35,11 @@ function Api.parse(buf)
   local out = {}
   out.model_id = tonumber(buf[i]); i = i + 1
   out.model_param1_type = tonumber(buf[i]); i = i + 1
-  out.model_param1_value = u16_from_bytes(buf[i], buf[i+1]); i = i + 2
+  out.model_param1_value = s16_from_bytes(buf[i], buf[i+1]); i = i + 2
   out.model_param2_type = tonumber(buf[i]); i = i + 1
-  out.model_param2_value = u16_from_bytes(buf[i], buf[i+1]); i = i + 2
+  out.model_param2_value = s16_from_bytes(buf[i], buf[i+1]); i = i + 2
   out.model_param3_type = tonumber(buf[i]); i = i + 1
-  out.model_param3_value = u16_from_bytes(buf[i], buf[i+1]); i = i + 2
+  out.model_param3_value = s16_from_bytes(buf[i], buf[i+1]); i = i + 2
   return out
 end
 
