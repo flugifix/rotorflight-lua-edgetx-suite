@@ -172,6 +172,15 @@ function M.save(prefs)
   _G.rfsuite_reload_flag = (_G.rfsuite_reload_flag or 0) + 1
 
   local function logGv(msg)
+    -- Gated the way the tool gates its own file logger in ui/home.lua. Ungated, every
+    -- save opens, appends to and closes a second file on the SD card, and there is
+    -- nothing in the tool that turns it off. Absent preferences read as off: before
+    -- preferences are loaded there is nothing to say that a trace was wanted.
+    local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
+    local general = prefs and prefs.general
+    local debugLevel = general and general.debug_level
+    if debugLevel ~= "debug" and debugLevel ~= "info" then return end
+
     local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
     if fLog then
       local t = (getTime and getTime()) or 0
