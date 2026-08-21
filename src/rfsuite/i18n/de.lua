@@ -1850,6 +1850,12 @@ return {
       SPOOLUP = "HOCHLAUF",
       THROFF = "GAS-AUS",
       UNKNOWN = "UNBEKANNT"
+    },
+    service = {
+      title = "SERVICE",
+      waiting_for_link = "Warte auf MSP-Verbindung",
+      loading = "Lade Daten...",
+      connected = "Verbunden"
     }
   }
 }

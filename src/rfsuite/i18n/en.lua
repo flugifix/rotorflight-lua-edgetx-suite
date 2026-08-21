@@ -1849,6 +1849,12 @@ return {
       SPOOLUP = "SPOOLUP",
       THROFF = "THR-OFF",
       UNKNOWN = "UNKNOWN"
+    },
+    service = {
+      title = "SERVICE",
+      waiting_for_link = "Waiting for MSP link",
+      loading = "Loading data...",
+      connected = "Connected"
     }
   }
 }

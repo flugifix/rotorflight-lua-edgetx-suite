@@ -112,13 +112,13 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
     try:
         src_root = os.path.join(WORKSPACE_ROOT, "src")
         src_core = os.path.join(src_root, "rfsuite")
-        src_widgets = os.path.join(src_root, "widgets", "rfsuite")
+        src_widgets = os.path.join(src_root, "widgets")
         src_user = os.path.join(src_root, "rfsuite.user")
         src_audio = os.path.join(src_core, "audio")
 
         staging_tools = os.path.join(temp_dir, "SCRIPTS", "TOOLS")
         staging_core = os.path.join(staging_tools, "rfsuite-core")
-        staging_widgets = os.path.join(temp_dir, "WIDGETS", "rfsuite")
+        staging_widgets = os.path.join(temp_dir, "WIDGETS")
         staging_sounds = os.path.join(temp_dir, "SOUNDS", "rf")
         staging_user = os.path.join(staging_tools, "rfsuite.user")
 
@@ -149,9 +149,13 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
         if os.path.isdir(src_user):
             shutil.copytree(src_user, staging_user, dirs_exist_ok=True)
 
-        # Copy widgets
+        # Copy widgets. EdgeTX discovers one widget per directory under /WIDGETS, so every
+        # directory under src/widgets is staged under its own name rather than one fixed one.
         if os.path.isdir(src_widgets):
-            shutil.copytree(src_widgets, staging_widgets, dirs_exist_ok=True)
+            for widget_dir in sorted(os.listdir(src_widgets)):
+                s = os.path.join(src_widgets, widget_dir)
+                if os.path.isdir(s):
+                    shutil.copytree(s, os.path.join(staging_widgets, widget_dir), dirs_exist_ok=True)
 
         # Copy sounds
         if os.path.isdir(src_audio):
