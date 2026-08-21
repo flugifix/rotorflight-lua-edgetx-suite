@@ -2,6 +2,10 @@ local M = {}
 
 local PREF_PATH = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
 
+-- How much is asked for per io.read() call. It is a chunk size, not a limit: the reader
+-- below keeps going until the file ends.
+local READ_CHUNK = 2048
+
 local function trim(s)
   local asString = tostring(s or "")
   asString = string.gsub(asString, "^%s+", "")
@@ -113,10 +117,20 @@ local function loadFileAsString(path)
     return nil
   end
 
-  local content = io.read(f, 2048)
+  -- io.read() hands back at most the number of bytes asked for and "" once the file is
+  -- exhausted, so a single call stops wherever that count lands. Stopping there is not
+  -- merely a short read: M.save() writes the whole table back, so everything the parser
+  -- never saw is dropped from the file by the next save.
+  local parts = {}
+  while true do
+    local chunk = io.read(f, READ_CHUNK)
+    if chunk == nil or chunk == "" then break end
+    parts[#parts + 1] = chunk
+  end
   io.close(f)
 
-  if content == nil or content == "" then
+  local content = table.concat(parts)
+  if content == "" then
     return nil
   end
 
