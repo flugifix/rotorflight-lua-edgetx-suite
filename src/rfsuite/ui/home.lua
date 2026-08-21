@@ -411,6 +411,7 @@ state = {
   pendingBuildUI = false,
   pendingGcAfterBuild = false,
   pendingSaveAction = nil,
+  saveOutcome = nil,
   saveOverlayVisible = false,
   lastSaveSnapshot = nil,
   mspAttached = false,
@@ -620,6 +621,18 @@ local function onBack(source, ev)
   -- same press dismisses the overlay and the pipeline carries on without a screen.
   -- A save that has just reported itself is not holding the page -- it is holding a notice, and
   -- the press that would leave the page reads it instead.
+  -- A save with no pipeline reports into the same notice, and the press that would leave the
+  -- page reads that notice away instead.
+  if state.saveOutcome then
+    state.saveOutcome = nil
+    state.saveOverlayVisible = false
+    if fromEvent then
+      state.suppressBackFrames = 6
+    end
+    scheduleBuildUI(false)
+    return
+  end
+
   if SavePipeline and type(SavePipeline.hasOutcome) == "function" and SavePipeline.hasOutcome() then
     SavePipeline.dismiss()
     if fromEvent then
@@ -1258,6 +1271,20 @@ local function onReload()
   end
 end
 
+-- A page that has no pipeline still saves behind the notice, so its outcome belongs in the
+-- notice as well. Raising a dialog for it puts a second box on top of a first one that cannot
+-- be repainted away, because the report is made from inside the save the notice is announcing --
+-- and while a native modal stands the tool's run() does not run at all.
+local function reportSaveOutcome(outcome)
+  if type(outcome) ~= "table" then return end
+  local title = outcome.title
+  local message = outcome.message
+  if type(title) ~= "string" and type(message) ~= "string" then return end
+  state.saveOutcome = { title = title, message = message }
+  state.saveOverlayVisible = true
+  scheduleBuildUI(false)
+end
+
 local function onSave()
   if isModelArmed() then
     if lvgl and lvgl.message then
@@ -1275,6 +1302,7 @@ local function onSave()
 
     -- Runs save in the next tick so the save overlay can render first.
     local function queuePageSave()
+      state.saveOutcome = nil
       state.pendingSaveAction = function()
         local ok, shouldRebuild = pcall(page.onSave, {
           i18n = state.i18n,
@@ -1282,7 +1310,8 @@ local function onSave()
           menu = state.menu,
           savePreferences = performSave,
           refresh = M.buildUI,
-          requestRebuild = requestRebuild
+          requestRebuild = requestRebuild,
+          reportSave = reportSaveOutcome
         })
 
         if not ok then
@@ -1582,7 +1611,7 @@ function M.buildUI()
   local saveProgress = SavePipeline and type(SavePipeline.getProgress) == "function"
     and SavePipeline.getProgress() or nil
 
-  if state.pendingSaveAction or saveProgress then
+  if state.pendingSaveAction or saveProgress or state.saveOutcome then
     local title = state.i18n and state.i18n.t and state.i18n.t("app.saving") or "Saving..."
     local message = state.i18n and state.i18n.t and state.i18n.t("app.saving_settings") or "Applying settings"
     local progress = 0.35
@@ -1625,6 +1654,22 @@ function M.buildUI()
           end
         }
       end
+    end
+
+    -- A page with no pipeline is finished the moment its onSave returns, so there is no bar
+    -- left to fill: the notice carries the result and the way out of it instead.
+    if state.saveOutcome and not saveProgress then
+      title = state.saveOutcome.title or title
+      message = state.saveOutcome.message or message
+      progress = 1
+      action = {
+        text = SAVE_TEXT.dismiss,
+        press = function()
+          state.saveOutcome = nil
+          state.saveOverlayVisible = false
+          scheduleBuildUI(false)
+        end
+      }
     end
 
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
@@ -1952,6 +1997,7 @@ function M.init()
   state.pendingBuildUI = false
   state.pendingGcAfterBuild = false
   state.pendingSaveAction = nil
+  state.saveOutcome = nil
   state.saveOverlayVisible = false
   state.pendingMenuOpen = nil
   state.isClosing = false
@@ -2142,6 +2188,7 @@ function M.run(event, touchState)
         state.pendingBuildUI = false
         state.pendingGcAfterBuild = false
         state.pendingSaveAction = nil
+        state.saveOutcome = nil
         state.saveOverlayVisible = false
         state.pendingMenuOpen = nil
         closeHelpDialogIfOpen()
@@ -2265,6 +2312,11 @@ function M.run(event, touchState)
       -- A page that only queues its writes is finished here and the notice goes; a page that
       -- started the pipeline is not, and the notice stays up for the phases that follow.
       if SavePipeline and type(SavePipeline.isActive) == "function" and SavePipeline.isActive() then
+        state.saveOverlayVisible = true
+      end
+      -- A page that reported an outcome is finished, but the notice is not: it is now the box
+      -- carrying the result, and it stands until the pilot reads it away.
+      if state.saveOutcome then
         state.saveOverlayVisible = true
       end
       -- Ensure the save overlay is replaced even when page.onSave returns false.
