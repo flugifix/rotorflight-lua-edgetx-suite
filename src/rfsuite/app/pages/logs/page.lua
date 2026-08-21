@@ -88,6 +88,80 @@ local function fitToWidth(text, font, maxW)
   return ELLIPSIS
 end
 
+-- The characters the engine is willing to break a line after, as a Lua set: space, and the
+-- punctuation that lets `Model-2026-08-10-100706.csv` be split at all. Breaking at the same
+-- places is what keeps a label reading as it did before it was broken here.
+local BREAK_SET = "[ ,%.;:%-_%)%]}]"
+
+-- One line of `s` that fits `maxW` px in `font`, and what is left over.
+--
+-- The break is taken after the last break character that still fits, so a word is not split
+-- when it need not be; a word too long for a line on its own is broken inside it, at a
+-- character boundary, because there is nowhere else to break it. A break at a space drops the
+-- space, which is not drawn at the end of a line either way; every other break keeps its
+-- character on the line it ends.
+local function takeLine(s, font, maxW)
+  if textSize(s, font) <= maxW then
+    return s, ""
+  end
+
+  local n = #s
+  while n > 1 do
+    n = charBoundary(s, n - 1)
+    if textSize(string.sub(s, 1, n), font) <= maxW then
+      break
+    end
+  end
+  if n < 1 then
+    n = 1
+  end
+
+  local head = string.sub(s, 1, n)
+  local _, brk = string.find(head, "^.*" .. BREAK_SET)
+  if brk then
+    if string.byte(head, brk) == 32 then
+      if brk > 1 then
+        return string.sub(s, 1, brk - 1), (string.gsub(string.sub(s, brk + 1), "^ +", ""))
+      end
+    else
+      return string.sub(s, 1, brk), string.sub(s, brk + 1)
+    end
+  end
+  return head, string.sub(s, n + 1)
+end
+
+-- `text` broken into at most `maxLines` lines of `maxW` px in `font`.
+--
+-- What does not fit is cut on the last line rather than carried past it, so a text laid out
+-- this way can never be taller than the room it was given.
+local function wrapToWidth(text, font, maxW, maxLines)
+  local lines = {}
+  local rest = tostring(text or "")
+
+  while rest ~= "" do
+    if #lines + 1 >= maxLines and textSize(rest, font) > maxW then
+      local room = maxW - textSize(ELLIPSIS, font)
+      if room <= 0 then
+        room = maxW
+      end
+      lines[#lines + 1] = takeLine(rest, font, room) .. ELLIPSIS
+      break
+    end
+
+    local line
+    line, rest = takeLine(rest, font, maxW)
+    if line == "" then
+      break
+    end
+    lines[#lines + 1] = line
+  end
+
+  if #lines == 0 then
+    lines[1] = ""
+  end
+  return lines
+end
+
 -- The heading of the flight summary, in the width the heading actually has.
 --
 -- Controls.appendStaticSectionHeader gives its label no `w`, so LVGL sizes the label to its own
@@ -879,6 +953,16 @@ function M.build(ctx)
   -- report has entries drawn over each other at 800 x 480, where every label is a single line
   -- and no wrapping is involved -- so something else can misplace a row as well. Whatever that
   -- is, it is not this, and it is not fixed here.
+  --
+  -- The height the row gets is the height of the text as it is BROKEN, not as it is measured
+  -- in one piece. `ceil(width / room)` is a lower bound on the line count -- the engine breaks
+  -- at word boundaries and leaves the end of a line unused -- and the clamp then made the
+  -- shortfall permanent: `[Goblin Kraken 700 Competition] Goblin Kraken 700
+  -- Competition-2026-08-10-100706.csv` needs four lines at 480 px, was handed a three-line row
+  -- and drew its fourth across the separator. So the break is done here rather than guessed
+  -- at, and the label is handed over with the breaks already in it: the count the row is
+  -- measured with is then the count that is drawn, and a text that would need more lines than
+  -- the row may have is cut on the last one instead of running past it.
   local ROW_MIN_H = 44
   local ROW_MAX_LINES = 3
   local labelW = math.max(40, w - 305)
@@ -887,13 +971,10 @@ function M.build(ctx)
     local item = state.logsList[i]
     local itemY = cursorY
 
-    local labelText = string.format("[%s] %s", item.model, item.file)
-    local labelTextW = textSize(labelText, SMLSIZE)
-    local labelLines = 1
-    if labelTextW > labelW then
-      labelLines = math.min(ROW_MAX_LINES, math.ceil(labelTextW / labelW))
-    end
-    local rowH = math.max(ROW_MIN_H, 22 + labelLines * labelLineH)
+    local labelLines = wrapToWidth(string.format("[%s] %s", item.model, item.file),
+                                   SMLSIZE, labelW, ROW_MAX_LINES)
+    local labelText = table.concat(labelLines, "\n")
+    local rowH = math.max(ROW_MIN_H, 22 + #labelLines * labelLineH)
 
     -- Date and Time
     children[#children + 1] = {
