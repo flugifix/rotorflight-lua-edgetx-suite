@@ -51,6 +51,7 @@ return {
       general = { name = "Allgemein" },
       configuration = { name = "Konfiguration" },
       radio_config = { name = "Sender-Setup" },
+      model = { name = "Modell" },
       telemetry = { name = "Telemetry" },
       accelerometer = { name = "Accelerometer" },
       alignment = { name = "Ausrichtung" },
@@ -596,6 +597,20 @@ return {
         tbl_on = "Ein",
         tbl_rp = "RP",
         tbl_rpy = "RPY"
+      },
+      setup_model = {
+        section_params = "Modellparameter",
+        section_features = "Funktionen am Sender",
+        param_none = "Keiner",
+        param_timer = "Timer",
+        param_type = "Parameter %d Typ",
+        param_value = "Parameter %d Wert",
+        flag_set_name = "Modellnamen am Sender setzen",
+        flag_tell_capacity = "Restkapazität ansagen",
+        flags_unsupported = "Dieser Flight Controller meldet keine Modell-Flags",
+        loading_title = "Modellkonfiguration",
+        loading_message = "Wird vom Flight Controller gelesen",
+        help_message = "Einstellungen, die der Flight Controller für dieses Modell speichert: drei Parameter, die er beim Verbinden auf Timer oder globale Variablen des Senders anwendet, und die Sender-Funktionen, die er anfordert."
       },
       settings_general = {
         section_display = "Anzeige",

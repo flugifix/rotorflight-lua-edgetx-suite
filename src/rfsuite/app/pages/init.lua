@@ -23,6 +23,7 @@ local entries = {
   settings_audio_timer_page = definePage("settings/audio/timer"),
   setup_configuration_page = definePage("setup/configuration"),
   setup_radio_config_page = definePage("setup/radio_config"),
+  setup_model_page = definePage("setup/model"),
   setup_power_battery_page = definePage("setup/power/battery"),
   setup_power_alerts_page = definePage("setup/power/alerts"),
   setup_power_sources_page = definePage("setup/power/sources"),

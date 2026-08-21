@@ -51,6 +51,7 @@ return {
       general = { name = "General" },
       configuration = { name = "Configuration" },
       radio_config = { name = "Radio Config" },
+      model = { name = "Model" },
       telemetry = { name = "Telemetry" },
       accelerometer = { name = "Accelerometer" },
       alignment = { name = "Alignment" },
@@ -596,6 +597,20 @@ return {
         tbl_on = "On",
         tbl_rp = "RP",
         tbl_rpy = "RPY"
+      },
+      setup_model = {
+        section_params = "Model Parameters",
+        section_features = "Radio Features",
+        param_none = "None",
+        param_timer = "Timer",
+        param_type = "Parameter %d Type",
+        param_value = "Parameter %d Value",
+        flag_set_name = "Set Model Name on the Radio",
+        flag_tell_capacity = "Announce Remaining Capacity",
+        flags_unsupported = "This flight controller does not report model flags",
+        loading_title = "Model Configuration",
+        loading_message = "Reading from the flight controller",
+        help_message = "Settings the flight controller stores for this model: three parameters it applies to the radio's timers or global variables on connect, and the radio-side features it asks for."
       },
       settings_general = {
         section_display = "Display",
