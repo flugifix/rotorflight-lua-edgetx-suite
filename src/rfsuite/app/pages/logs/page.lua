@@ -63,6 +63,19 @@ end
 
 local ELLIPSIS = "..."
 
+-- The ellipsis is the one string every cut and every overlong label measures, and it is the
+-- same three characters every time. Ask each font about it once instead of once per row.
+local ellipsisW = {}
+local function ellipsisWidth(font)
+  local key = font or 0
+  local width = ellipsisW[key]
+  if not width then
+    width = textSize(ELLIPSIS, font)
+    ellipsisW[key] = width
+  end
+  return width
+end
+
 -- The largest cut length at or below `n` that does not fall inside a multi-byte character, so
 -- that shortening a file name can never leave half a sequence behind.
 local function charBoundary(text, n)
@@ -107,7 +120,7 @@ local function fitToWidth(text, font, maxW)
     return text
   end
 
-  local room = maxW - textSize(ELLIPSIS, font)
+  local room = maxW - ellipsisWidth(font)
   if room <= 0 then
     return ELLIPSIS
   end
@@ -131,8 +144,11 @@ local BREAK_SET = "[ ,%.;:%-_%)%]}]"
 -- character boundary, because there is nowhere else to break it. A break at a space drops the
 -- space, which is not drawn at the end of a line either way; every other break keeps its
 -- character on the line it ends.
-local function takeLine(s, font, maxW)
-  if textSize(s, font) <= maxW then
+--
+-- `sw` is the width of `s` where the caller has already had it measured; leaving it out costs
+-- one more measurement of a string the font has just been asked about.
+local function takeLine(s, font, maxW, sw)
+  if (sw or textSize(s, font)) <= maxW then
     return s, ""
   end
 
@@ -163,17 +179,22 @@ local function wrapToWidth(text, font, maxW, maxLines)
   local rest = tostring(text or "")
 
   while rest ~= "" do
-    if #lines + 1 >= maxLines and textSize(rest, font) > maxW then
-      local room = maxW - textSize(ELLIPSIS, font)
+    -- One measurement of `rest` serves both the test below and the break after it. Measuring
+    -- it here rather than inside the test costs nothing: takeLine needs the same number for
+    -- the same string either way.
+    local restW = textSize(rest, font)
+
+    if #lines + 1 >= maxLines and restW > maxW then
+      local room = maxW - ellipsisWidth(font)
       if room <= 0 then
         room = maxW
       end
-      lines[#lines + 1] = takeLine(rest, font, room) .. ELLIPSIS
+      lines[#lines + 1] = takeLine(rest, font, room, restW) .. ELLIPSIS
       break
     end
 
     local line
-    line, rest = takeLine(rest, font, maxW)
+    line, rest = takeLine(rest, font, maxW, restW)
     if line == "" then
       break
     end
