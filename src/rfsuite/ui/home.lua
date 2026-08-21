@@ -282,6 +282,11 @@ local ONCONNECT_TEXT = {
   dataflash_summary = "@i18n(app.onconnect.dataflash_summary)@"
 }
 
+-- The glyph on a tile the armed state has locked. It goes through i18n like every other
+-- string on screen, even though both locales carry the same mark: ui/tiles.lua is a pure
+-- renderer and is handed the resolved text rather than a locale of its own.
+local ARMED_BADGE_TEXT = "@i18n(app.model_armed_badge)@"
+
 local function ensureBuildDeps()
   if not GridLayout then
     GridLayout = loadModule("layouts/grid.lua")
@@ -1844,7 +1849,8 @@ function M.buildUI()
           card.data.icon, card.data.text,
           flatIndex == state.focusIndex,
           getRootCardPressHandler(group.id, card.id),
-          card.data.enabled
+          card.data.enabled,
+          card.data.lockedByArm and ARMED_BADGE_TEXT or nil
         )
 
         local bottom = tileY + tileSize
@@ -1907,7 +1913,8 @@ function M.buildUI()
           card.data.icon, card.data.text,
           i == state.focusIndex,
           getCardPressHandler(card.id),
-          card.data.enabled
+          card.data.enabled,
+          card.data.lockedByArm and ARMED_BADGE_TEXT or nil
         )
       end
     end

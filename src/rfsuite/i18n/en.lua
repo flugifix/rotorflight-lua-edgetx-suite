@@ -33,6 +33,7 @@ return {
     },
     closing_rfsuite = "Closing RFSuite...",
     model_armed_title = "Model Armed",
+    model_armed_badge = "!",
     model_armed_warning = "Model is ARMED! Please disarm.",
     header_system = "System",
     header_configuration = "Configuration",
