@@ -291,6 +291,11 @@ local ARMED_BADGE_TEXT = "@i18n(app.model_armed_badge)@"
 -- tool stays usable around it -- it is a status, not a demand.
 local ARMED_BANNER_TEXT = "@i18n(app.model_armed_banner)@"
 
+-- What the backstop behind the disabled Save and Reload buttons says. Unchanged wording: it
+-- is the same refusal it always was, in the tool's own box instead of a native modal.
+local ARMED_NOTICE_TITLE = "@i18n(app.model_armed_title)@"
+local ARMED_NOTICE_MESSAGE = "@i18n(app.model_armed_warning)@"
+
 local function ensureBuildDeps()
   if not GridLayout then
     GridLayout = loadModule("layouts/grid.lua")
@@ -422,6 +427,7 @@ state = {
   pendingSaveAction = nil,
   saveOutcome = nil,
   saveOverlayVisible = false,
+  armedNoticeVisible = false,
   lastSaveSnapshot = nil,
   mspAttached = false,
   mspLastTick = 0,
@@ -1179,14 +1185,19 @@ local function maybeRefreshInfoPageFromSession()
   end
 end
 
+-- The backstop behind the disabled Save and Reload buttons: a path that reaches either of
+-- them while the craft is armed is refused, and says so. Drawn as the tool's own notice box
+-- rather than raised as an `lvgl.message`, which is a native MessageDialog with no focusable
+-- child of its own -- its key path exists only while its LVGL group is empty, and while one
+-- stands this script's run() is not reached at all.
+local function showArmedNotice()
+  state.armedNoticeVisible = true
+  scheduleBuildUI(false)
+end
+
 local function onReload()
   if isModelArmed() then
-    if lvgl and lvgl.message then
-      lvgl.message({
-        title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
-        message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-      })
-    end
+    showArmedNotice()
     return
   end
 
@@ -1296,12 +1307,7 @@ end
 
 local function onSave()
   if isModelArmed() then
-    if lvgl and lvgl.message then
-      lvgl.message({
-        title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
-        message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-      })
-    end
+    showArmedNotice()
     return
   end
 
@@ -1681,6 +1687,32 @@ function M.buildUI()
     return
   end
 
+  if state.armedNoticeVisible then
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    local lyt = {
+      {
+        type = "rectangle",
+        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        color = COLOR_THEME_PRIMARY3,
+        filled = true
+      }
+    }
+    LoadingOverlay.appendNotice(lyt, {
+      x = 0,
+      y = 0,
+      w = LCD_W or 320,
+      h = LCD_H or 240,
+      title = ARMED_NOTICE_TITLE,
+      message = ARMED_NOTICE_MESSAGE,
+      press = function()
+        state.armedNoticeVisible = false
+        scheduleBuildUI(false)
+      end
+    })
+    lvgl.build(lyt)
+    return
+  end
+
   syncActivePageModule()
 
   local profile = DisplayProfile.current()
@@ -1711,6 +1743,14 @@ function M.buildUI()
     PageRegistry  = PageRegistry,
     HelpRegistry  = HelpRegistry
   })
+
+  -- Both actions end at the MSP queue, which the runtime clears on every tick while armed, so
+  -- neither could do anything but fail. Rendered disabled rather than merely inert: ui/header.lua
+  -- reports that through `active`, which also takes the button out of the encoder focus group.
+  if isArmed then
+    actions.save = false
+    actions.reload = false
+  end
 
   -- Clear and reuse the children table to reduce garbage collection
   local children = state.children
@@ -1997,6 +2037,7 @@ function M.init()
   state.pendingSaveAction = nil
   state.saveOutcome = nil
   state.saveOverlayVisible = false
+  state.armedNoticeVisible = false
   state.pendingMenuOpen = nil
   state.isClosing = false
   state.closeTicks = nil
@@ -2108,6 +2149,10 @@ function M.run(event, touchState)
       -- the armed state in here costs no new update path: the scheduleBuildUI below is the
       -- redraw this transition already asked for.
       state.menu.setCondition("modelArmed", armed)
+      if not armed then
+        -- The refusal has outlived its reason; it must not stand over the tool after a disarm.
+        state.armedNoticeVisible = false
+      end
       if armed then
         -- Clear MSP queue to abort any pending MSP operations immediately
         ensureMspRuntime()
