@@ -708,12 +708,29 @@ local function openGraph()
   return true
 end
 
-local GRAPH_ERROR_KEY = {
-  open = "graph_err_open",
-  empty = "graph_err_empty",
-  not_telemetry = "graph_err_not_telemetry",
-  no_data = "graph_err_no_data"
-}
+-- i18n is resolved when the package is built, and the card carries no locale table at all, so
+-- a lookup whose key is a variable cannot be resolved on the radio -- it reaches the screen as
+-- the key itself. Every text this file picks by name is therefore looked up through a literal
+-- here and chosen out of the resulting table.
+local function graphErrorText(i18n, err)
+  local texts = {
+    open = pageText(i18n, "graph_err_open"),
+    empty = pageText(i18n, "graph_err_empty"),
+    not_telemetry = pageText(i18n, "graph_err_not_telemetry"),
+    no_data = pageText(i18n, "graph_err_no_data")
+  }
+  return texts[err] or texts.open
+end
+
+local function templateText(i18n, key)
+  local texts = {
+    tpl_power = pageText(i18n, "tpl_power"),
+    tpl_battery = pageText(i18n, "tpl_battery"),
+    tpl_link = pageText(i18n, "tpl_link"),
+    tpl_governor = pageText(i18n, "tpl_governor")
+  }
+  return texts[key] or key
+end
 
 local GRAPH_INFO_H  = 20
 local GRAPH_AXIS_H  = 18
@@ -763,7 +780,7 @@ local function buildCurvePicker(children, x, y, w, i18n)
         y = cursorY,
         w = btnW,
         h = GRAPH_CTRL_H,
-        text = pageText(i18n, tpl.key),
+        text = templateText(i18n, tpl.key),
         press = function()
           state.slots = {}
           for j = 1, #tpl.cols do state.slots[j] = tpl.cols[j] end
@@ -851,17 +868,19 @@ local function buildCurvePicker(children, x, y, w, i18n)
   }
 end
 
-local function buildChart(children, x, y, w, availH, i18n)
-  local chartX = x + 2
-  local chartW = w - 4
-  local chartY = y + GRAPH_INFO_H + GRAPH_GAP
+-- The plot area, in absolute page pixels. It is computed for every view of the graph and not
+-- only for the chart: how wide the chart will be decides how many buckets a column is reduced
+-- to, so the engine has to know it BEFORE a column can be chosen. Deriving it inside the chart
+-- branch meant the chooser could never leave itself -- the branch it had to reach first was the
+-- one that would have supplied the number.
+local function chartRect(x, y, w, availH)
   local chartH = availH - (GRAPH_INFO_H + GRAPH_AXIS_H + GRAPH_READ_H + GRAPH_CTRL_H + GRAPH_GAP * 4)
   if chartH < GRAPH_MIN_CHART_H then chartH = GRAPH_MIN_CHART_H end
+  return x + 2, y + GRAPH_INFO_H + GRAPH_GAP, w - 4, chartH
+end
 
-  -- The engine keeps its buckets at the width it was last told about, so the
-  -- geometry is handed over before anything is read out of it. A change starts a
-  -- re-read; the points already held are drawn meanwhile.
-  Graph.setGeometry(chartX, chartY, chartW, chartH)
+local function buildChart(children, x, y, w, availH, i18n)
+  local chartX, chartY, chartW, chartH = chartRect(x, y, w, availH)
 
   local winT0, winT1, sessT0 = Graph.getWindow()
   local windowText = Graph.formatOffset(winT0 - sessT0) .. " - " .. Graph.formatOffset(winT1 - sessT0)
@@ -1018,6 +1037,10 @@ local function buildChart(children, x, y, w, availH, i18n)
 end
 
 local function buildGraphView(children, x, y, w, availH, i18n)
+  -- Told once per build, before anything is asked of the engine. A change drops its cached
+  -- windows and starts the current one again; the points it still holds are drawn meanwhile.
+  Graph.setGeometry(chartRect(x, y, w, availH))
+
   local err = Graph.getError()
   if err ~= nil then
     local headH = 0
@@ -1028,7 +1051,7 @@ local function buildGraphView(children, x, y, w, availH, i18n)
     children[#children + 1] = {
       type = "label",
       x = x + 10, y = y + headH + 20, w = w - 20,
-      text = pageText(i18n, GRAPH_ERROR_KEY[err] or "graph_err_open"),
+      text = graphErrorText(i18n, err),
       color = COLOR_THEME_WARNING,
       align = CENTER
     }
