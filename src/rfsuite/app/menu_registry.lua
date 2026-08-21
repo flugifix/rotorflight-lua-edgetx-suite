@@ -156,8 +156,26 @@ function MenuRegistry.new(manifest, i18n, options)
     end
   end
 
+  -- Whether the armed state is a reason this entry is unavailable. Kept apart from
+  -- isEntryEnabled because "disabled" has more than one cause and the card has to be able to
+  -- say which: a tile greyed because no flight controller answered is a different message to
+  -- the pilot than a tile locked because the craft is in the air.
+  local function isEntryLockedByArm(entry)
+    if type(entry) ~= "table" then
+      return false
+    end
+    return entry.lockedWhileArmed == true and self.conditions.modelArmed == true
+  end
+
   local function isEntryEnabled(entry)
     if type(entry) ~= "table" then
+      return false
+    end
+
+    -- AND-ed with whatever the entry already carries, and checked first because it is the
+    -- one reason that outranks the others: entering such an entry can put MSP on the wire,
+    -- and every pushed MSP frame is sent instead of an RC channels frame for that slot.
+    if isEntryLockedByArm(entry) then
       return false
     end
 
@@ -364,7 +382,8 @@ function MenuRegistry.new(manifest, i18n, options)
             text = resolveTitle(p),
             icon = resolveIconPath(iconRoot, p.icon, p.menuId),
             isMenu = p.menuId ~= nil,
-            enabled = enabled
+            enabled = enabled,
+            lockedByArm = isEntryLockedByArm(p)
           }
         }
         end
@@ -533,7 +552,8 @@ function MenuRegistry.new(manifest, i18n, options)
           text = resolveTitle(p),
           icon = resolveIconPath(iconRoot, p.icon, p.menuId),
           isMenu = p.menuId ~= nil,
-          enabled = enabled
+          enabled = enabled,
+          lockedByArm = isEntryLockedByArm(p)
         }
       }
       end
