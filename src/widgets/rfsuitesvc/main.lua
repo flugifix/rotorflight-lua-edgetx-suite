@@ -17,7 +17,7 @@ local function create(zone, options)
   if requireChunk then
     requireChunk()
   end
-  local factory = assert(loadScript("/WIDGETS/rfsuiteservice/app.lua", "t"))
+  local factory = assert(loadScript("/WIDGETS/rfsuitesvc/app.lua", "t"))
   return factory(zone, options)
 end
 
