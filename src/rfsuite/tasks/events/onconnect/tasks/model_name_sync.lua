@@ -50,8 +50,33 @@ local function isTruthy(value)
   return value == true or value == 1 or value == "1" or value == "true"
 end
 
+-- WHO decides, and it is not always the radio.
+--
+-- From MSP API 12.09 the flight controller carries a MODEL_SET_NAME bit in its pilot config
+-- (`src/main/pg/pilot.h`), and that bit is the answer: the craft says whether it wants the
+-- radio's model named after it, so the same helicopter behaves the same way on any transmitter.
+-- The `model_params_sync` task reads the message one step earlier and parks it in the session.
+--
+-- Below 12.09 there is no such field -- `model_flags` is nil rather than zero, which is why the
+-- API wrapper is careful to keep those apart -- and the radio-side setting is then the only
+-- thing that can decide. It stays, as the fallback it now is.
 local function syncEnabled()
   local root = _G and _G.rfsuite
+  local session = type(root) == "table" and root.session or nil
+  local pilot = type(session) == "table" and session.pilotConfig or nil
+  local flags = type(pilot) == "table" and pilot.model_flags or nil
+
+  if flags ~= nil then
+    local Api = loadModule("tasks/msp/api/pilot_config.lua")
+    if type(Api) == "table" and type(Api.flagSet) == "function" then
+      local wanted = Api.flagSet(flags, Api.FLAG_SET_NAME)
+      if wanted ~= nil then
+        log("MODEL_SET_NAME from the flight controller: " .. tostring(wanted), "debug")
+        return wanted
+      end
+    end
+  end
+
   local prefs = type(root) == "table" and root.preferences or nil
   local general = type(prefs) == "table" and prefs.general or nil
   return isTruthy(general and general.syncname)

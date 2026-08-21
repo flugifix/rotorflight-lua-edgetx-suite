@@ -43,6 +43,14 @@ local function isTruthy(value)
   return value == true or value == 1 or value == "1" or value == "true"
 end
 
+-- Does this board's MSP_PILOT_CONFIG carry the flags word at all? Only 12.09 and later.
+local function boardHasFlags()
+  local root = _G and _G.rfsuite
+  local s = type(root) == "table" and root.session or nil
+  local v = tonumber(s and s.apiVersion)
+  return v ~= nil and v >= 12.09
+end
+
 local function syncEnabled()
   local root = _G and _G.rfsuite
   local prefs = type(root) == "table" and root.preferences or nil
@@ -103,7 +111,12 @@ function M.wakeup()
   local session = type(root) == "table" and root.session or nil
   if type(session) ~= "table" then return end
 
-  if not syncEnabled() then
+  -- The READ is not gated on the setting, and the APPLY is. From MSP API 12.09 the reply also
+  -- carries the model flags, and one of them decides whether the name task runs at all -- so a
+  -- radio-side switch being off must not suppress the read that another consumer depends on.
+  -- Below 12.09 there are no flags in the message and nobody but this task wants it, so the
+  -- read is skipped there when the setting is off, and no connect pays for nothing.
+  if not syncEnabled() and not boardHasFlags() then
     done = true
     return
   end
@@ -133,9 +146,17 @@ function M.wakeup()
     processReply = function(self, buf)
       local data = PilotConfigApi.parse(buf)
       if type(data) == "table" then
-        applyParameter(data.model_param1_type, data.model_param1_value)
-        applyParameter(data.model_param2_type, data.model_param2_value)
-        applyParameter(data.model_param3_type, data.model_param3_value)
+        -- Parked for the tasks that run after this one. `model_flags` is nil below API 12.09,
+        -- and a consumer must be able to tell that from both bits being off.
+        local root = _G and _G.rfsuite
+        if type(root) == "table" and type(root.session) == "table" then
+          root.session.pilotConfig = data
+        end
+        if syncEnabled() then
+          applyParameter(data.model_param1_type, data.model_param1_value)
+          applyParameter(data.model_param2_type, data.model_param2_value)
+          applyParameter(data.model_param3_type, data.model_param3_value)
+        end
       end
       done = true
     end,
@@ -153,6 +174,10 @@ end
 function M.reset()
   done = false
   requestSent = false
+  local root = _G and _G.rfsuite
+  if type(root) == "table" and type(root.session) == "table" then
+    root.session.pilotConfig = nil
+  end
 end
 
 return M
