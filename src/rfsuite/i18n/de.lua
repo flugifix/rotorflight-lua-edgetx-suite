@@ -1765,7 +1765,27 @@ return {
         refresh = "Liste aktualisieren",
         help_p1 = "Telemetrie-Logs: Zeigt Flugstatistiken von Flügen auf der SD-Karte der Fernsteuerung an.",
         help_p2 = "Speicherort: Logdateien werden aus /LOGS/ und /LOGS/rfsuite/telemetry/ geladen.",
-        help_p3 = "Übersichtskarten: Zeigt Minimal-, Maximal- und Durchschnittswerte für Akkuspannung, Strom, Drehzahl und Reglertemperatur."
+        help_p3 = "Übersichtskarten: Zeigt Minimal-, Maximal- und Durchschnittswerte für Akkuspannung, Strom, Drehzahl und Reglertemperatur.",
+        help_p4 = "Diagramm: Zeichnet bis zu vier Telemetriespalten des gewählten Logs über die Flugzeit, mit Zoom, Blättern und einer Cursor-Anzeige.",
+        graph_open = "Diagramm",
+        graph_title = "Diagramm",
+        graph_select = "Sensoren wählen",
+        graph_curve = "Kurve",
+        graph_none = "Keiner",
+        graph_flight = "Flug",
+        graph_show = "Anzeigen",
+        graph_full = "Ganz",
+        graph_curves = "Sensoren",
+        graph_scanning = "Telemetrie-Log wird indiziert...\nDie Datei wird einmal ganz gelesen, damit Zoomen und Blättern es nicht müssen.",
+        graph_no_columns = "Dieses Log enthält keine darstellbaren Spalten.",
+        graph_err_open = "Die Logdatei kann nicht geöffnet werden.",
+        graph_err_empty = "Die Logdatei ist leer.",
+        graph_err_not_telemetry = "Kein EdgeTX-Telemetrielog: keine Spalten Date und Time.",
+        graph_err_no_data = "Die Logdatei enthält keine Datenzeilen.",
+        tpl_power = "Leistung",
+        tpl_battery = "Akku",
+        tpl_link = "Funk",
+        tpl_governor = "Governor"
       }
     }
   },

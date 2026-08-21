@@ -12,7 +12,13 @@ end
 local Common = nil
 local Controls = nil
 local LoadingOverlay = nil
+local Graph = nil
 local t = nil
+
+-- The plotting engine walks the file in small units and is only useful once a log
+-- has been chosen, so it stays unloaded until the graph is opened and is dropped
+-- again on close. Every other view of this page costs nothing for it.
+local GRAPH_TICKS_PER_WAKEUP = 6
 
 local state = {
   selectedFile = nil,
@@ -24,7 +30,13 @@ local state = {
   -- The directory walk is deferred rather than run inside M.build; see the wakeup below.
   scanPending = false,
   scanned = false,
-  requestRebuild = nil
+  requestRebuild = nil,
+  -- The file list and the statistics of a selected log are told apart by
+  -- selectedFile, as before. "graph" is the third view on top of those, and
+  -- pickCurves puts it into its column chooser.
+  view = nil,
+  pickCurves = false,
+  slots = {}
 }
 
 local function ensureDeps()
@@ -184,6 +196,17 @@ local function summaryTitle(model, file, maxW)
     title = model .. " - " .. title
   end
   return fitToWidth(title, MIDSIZE, maxW)
+end
+
+local function closeGraph()
+  if Graph then
+    Graph.close()
+    Graph = nil
+  end
+  state.view = nil
+  state.pickCurves = false
+  state.slots = {}
+  collectgarbage("collect")
 end
 
 local function pageText(i18n, key)
@@ -614,11 +637,30 @@ function M.wakeup(ctx)
       end
     end
   end
+
+  -- The graph's file work happens here rather than in its build, so the notice
+  -- the build drew is on the screen while the log is being walked. A few units
+  -- per wakeup rather than one: the unit is sized so that it cannot stall a
+  -- frame, and a long log would otherwise take longer to index than to read.
+  if Graph and Graph.isBusy() then
+    local redraw = false
+    for _ = 1, GRAPH_TICKS_PER_WAKEUP do
+      if Graph.tick() then
+        redraw = true
+        break
+      end
+      if not Graph.isBusy() then break end
+    end
+    if redraw and state.requestRebuild then
+      state.requestRebuild()
+    end
+  end
 end
 
 function M.onReload(ctx)
   state.scanned = false
   state.scanPending = false
+  closeGraph()
   state.selectedFile = nil
   state.selectedFilePath = nil
   state.summary = nil
@@ -632,6 +674,17 @@ function M.onReload(ctx)
 end
 
 function M.onBack(ctx)
+  -- Back walks the views it came through: chooser to plot, plot to statistics,
+  -- statistics to the file list, and only then out of the page.
+  if state.view == "graph" then
+    if state.pickCurves and Graph and #Graph.getCurves() > 0 then
+      state.pickCurves = false
+      return true
+    end
+    closeGraph()
+    return true
+  end
+
   if state.selectedFile ~= nil then
     state.selectedFile = nil
     state.selectedFilePath = nil
@@ -643,6 +696,365 @@ function M.onBack(ctx)
     return true
   end
   return false
+end
+
+local function openGraph()
+  if not Graph then Graph = loadModule("app/pages/logs/graph.lua") end
+  if not Graph then return false end
+  state.view = "graph"
+  state.pickCurves = false
+  state.slots = {}
+  Graph.open(state.selectedFilePath)
+  return true
+end
+
+local GRAPH_ERROR_KEY = {
+  open = "graph_err_open",
+  empty = "graph_err_empty",
+  not_telemetry = "graph_err_not_telemetry",
+  no_data = "graph_err_no_data"
+}
+
+local GRAPH_INFO_H  = 20
+local GRAPH_AXIS_H  = 18
+local GRAPH_READ_H  = 24
+local GRAPH_CTRL_H  = 34
+local GRAPH_GAP     = 6
+local GRAPH_MIN_CHART_H = 60
+
+local function rebuild()
+  if state.requestRebuild then state.requestRebuild() end
+end
+
+-- The column chooser: the presets this log can serve, the flight to look at when
+-- the file holds more than one, and one slot per curve. Slots rather than a list
+-- of every column, because a telemetry log has well over a hundred of them and a
+-- row each would be a page nobody can scroll.
+local function buildCurvePicker(children, x, y, w, i18n)
+  local cursorY = y
+
+  -- The chooser is built out of the shared controls and has no fallback shape:
+  -- without them there is no way to offer a hundred columns on one screen.
+  if not (Controls and type(Controls.appendComboSelect) == "function") then
+    children[#children + 1] = {
+      type = "label",
+      x = x + 10, y = y + 20, w = w - 20,
+      text = pageText(i18n, "graph_no_columns"),
+      color = COLOR_THEME_WARNING,
+      align = CENTER
+    }
+    return
+  end
+
+  if Controls and type(Controls.appendStaticSectionHeader) == "function" then
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, pageText(i18n, "graph_select"))
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+  end
+
+  local templates = Graph.getTemplates()
+  if #templates > 0 then
+    local n = #templates
+    local btnW = math.floor((w - (n - 1) * GRAPH_GAP) / n)
+    for i = 1, n do
+      local tpl = templates[i]
+      children[#children + 1] = {
+        type = "button",
+        x = x + (i - 1) * (btnW + GRAPH_GAP),
+        y = cursorY,
+        w = btnW,
+        h = GRAPH_CTRL_H,
+        text = pageText(i18n, tpl.key),
+        press = function()
+          state.slots = {}
+          for j = 1, #tpl.cols do state.slots[j] = tpl.cols[j] end
+          Graph.applyColumns(tpl.cols)
+          state.pickCurves = false
+          rebuild()
+        end
+      }
+    end
+    cursorY = cursorY + GRAPH_CTRL_H + GRAPH_GAP * 2
+  end
+
+  local sessions = Graph.getSessions()
+  if #sessions > 1 then
+    local options = {}
+    for i = 1, #sessions do
+      local s = sessions[i]
+      options[i] = {
+        value = i,
+        label = string.format("%d  (%s)", i, Graph.formatOffset(s.t1 - s.t0))
+      }
+    end
+    cursorY = cursorY + Controls.appendComboSelect(
+      children, x, cursorY, w, pageText(i18n, "graph_flight"),
+      options, Graph.getSessionIndex(),
+      function(v)
+        Graph.selectSession(v)
+        rebuild()
+      end)
+  end
+
+  local columns = Graph.getColumns()
+  if #columns == 0 then
+    children[#children + 1] = {
+      type = "label",
+      x = x + 10, y = cursorY + 20, w = w - 20,
+      text = pageText(i18n, "graph_no_columns"),
+      color = COLOR_THEME_WARNING,
+      align = CENTER
+    }
+    return
+  end
+
+  local options = { { value = 0, label = pageText(i18n, "graph_none") } }
+  for i = 1, #columns do
+    local c = columns[i]
+    local label = c.name
+    if c.unit ~= nil and c.unit ~= "" then label = label .. " (" .. c.unit .. ")" end
+    options[#options + 1] = { value = c.col, label = label }
+  end
+
+  local curveLabel = pageText(i18n, "graph_curve")
+  for k = 1, Graph.MAX_CURVES do
+    local slot = k
+    cursorY = cursorY + Controls.appendComboSelect(
+      children, x, cursorY, w, curveLabel .. " " .. slot,
+      options, state.slots[slot] or 0,
+      function(v)
+        if v == 0 then state.slots[slot] = nil else state.slots[slot] = v end
+        rebuild()
+      end)
+  end
+
+  local chosen = {}
+  for k = 1, Graph.MAX_CURVES do
+    if state.slots[k] then chosen[#chosen + 1] = state.slots[k] end
+  end
+
+  local btnW = 200
+  if btnW > w then btnW = w end
+  children[#children + 1] = {
+    type = "button",
+    x = x + math.floor((w - btnW) / 2),
+    y = cursorY + GRAPH_GAP,
+    w = btnW,
+    h = GRAPH_CTRL_H,
+    text = pageText(i18n, "graph_show"),
+    active = function() return #chosen > 0 end,
+    press = function()
+      if #chosen == 0 then return end
+      Graph.applyColumns(chosen)
+      state.pickCurves = false
+      rebuild()
+    end
+  }
+end
+
+local function buildChart(children, x, y, w, availH, i18n)
+  local chartX = x + 2
+  local chartW = w - 4
+  local chartY = y + GRAPH_INFO_H + GRAPH_GAP
+  local chartH = availH - (GRAPH_INFO_H + GRAPH_AXIS_H + GRAPH_READ_H + GRAPH_CTRL_H + GRAPH_GAP * 4)
+  if chartH < GRAPH_MIN_CHART_H then chartH = GRAPH_MIN_CHART_H end
+
+  -- The engine keeps its buckets at the width it was last told about, so the
+  -- geometry is handed over before anything is read out of it. A change starts a
+  -- re-read; the points already held are drawn meanwhile.
+  Graph.setGeometry(chartX, chartY, chartW, chartH)
+
+  local winT0, winT1, sessT0 = Graph.getWindow()
+  local windowText = Graph.formatOffset(winT0 - sessT0) .. " - " .. Graph.formatOffset(winT1 - sessT0)
+  if Graph.isBusy() then
+    windowText = windowText .. "   " .. tostring(math.floor(Graph.getProgress() * 100)) .. " %"
+  end
+
+  children[#children + 1] = {
+    type = "label",
+    x = x, y = y, w = math.floor(w * 0.55),
+    text = tostring(state.selectedFile or ""),
+    color = COLOR_THEME_PRIMARY1,
+    font = SMLSIZE
+  }
+  children[#children + 1] = {
+    type = "label",
+    x = x + math.floor(w * 0.55), y = y, w = w - math.floor(w * 0.55),
+    text = windowText,
+    color = COLOR_THEME_PRIMARY1,
+    font = SMLSIZE,
+    align = RIGHT
+  }
+
+  children[#children + 1] = {
+    type = "rectangle",
+    x = chartX, y = chartY, w = chartW, h = chartH,
+    color = COLOR_THEME_DISABLED,
+    filled = false,
+    thickness = 1
+  }
+
+  -- Vertical grid lines are rectangles rather than line objects: a one-pixel
+  -- column needs no point list, and the axis label belongs to the same step.
+  local grid = Graph.getGrid()
+  for i = 1, #grid do
+    local g = grid[i]
+    children[#children + 1] = {
+      type = "rectangle",
+      x = g.x, y = chartY + 1, w = 1, h = chartH - 2,
+      color = COLOR_THEME_DISABLED,
+      filled = true
+    }
+    children[#children + 1] = {
+      type = "label",
+      x = math.max(x, g.x - 18), y = chartY + chartH + 2, w = 40,
+      text = g.label,
+      color = COLOR_THEME_DISABLED,
+      font = SMLSIZE
+    }
+  end
+
+  local curves = Graph.getCurves()
+  for k = 1, #curves do
+    if not Graph.isCurveEmpty(k) then
+      children[#children + 1] = {
+        type = "line",
+        x = 0, y = 0, w = 0, h = 0,
+        pts = Graph.getPoints(k),
+        color = Graph.getCurveColor(k),
+        thickness = 1
+      }
+    end
+  end
+
+  local cursorX = Graph.getCursorX()
+  if cursorX >= chartX and cursorX <= chartX + chartW then
+    children[#children + 1] = {
+      type = "rectangle",
+      x = cursorX, y = chartY + 1, w = 1, h = chartH - 2,
+      color = COLOR_THEME_FOCUS,
+      filled = true
+    }
+  end
+
+  -- Readout row: the cursor keys, the time it stands at, and what each curve
+  -- reaches there.
+  local readY = chartY + chartH + GRAPH_AXIS_H + GRAPH_GAP
+  local stepW = 30
+  children[#children + 1] = {
+    type = "button",
+    x = x, y = readY, w = stepW, h = GRAPH_READ_H,
+    text = "<",
+    press = function()
+      Graph.moveCursor(-1)
+      rebuild()
+    end
+  }
+  children[#children + 1] = {
+    type = "button",
+    x = x + stepW + 4, y = readY, w = stepW, h = GRAPH_READ_H,
+    text = ">",
+    press = function()
+      Graph.moveCursor(1)
+      rebuild()
+    end
+  }
+
+  local readX = x + 2 * (stepW + 4) + GRAPH_GAP
+  local timeW = 52
+  children[#children + 1] = {
+    type = "label",
+    x = readX, y = readY + 3, w = timeW,
+    text = Graph.getCursorTimeText() or "-",
+    color = COLOR_THEME_PRIMARY1,
+    font = SMLSIZE
+  }
+
+  local readout = Graph.getReadout()
+  local valuesX = readX + timeW + GRAPH_GAP
+  local valuesW = math.max(40, (x + w) - valuesX)
+  local slotW = math.floor(valuesW / Graph.MAX_CURVES)
+  for k = 1, #readout do
+    local r = readout[k]
+    local text = r.name .. " -"
+    if r.value ~= nil then
+      text = string.format("%s %g%s", r.name, r.value, r.unit or "")
+    end
+    children[#children + 1] = {
+      type = "label",
+      x = valuesX + (k - 1) * slotW, y = readY + 3, w = slotW,
+      text = text,
+      color = Graph.getCurveColor(k),
+      font = SMLSIZE
+    }
+  end
+
+  -- Window controls. A drag would be the obvious gesture and is not available:
+  -- the page these children live in scrolls, and it takes the gesture first.
+  local ctrlY = readY + GRAPH_READ_H + GRAPH_GAP
+  local labels = {
+    { text = "-", press = function() Graph.zoom(-1) rebuild() end },
+    { text = "+", press = function() Graph.zoom(1) rebuild() end },
+    { text = pageText(i18n, "graph_full"), press = function() Graph.zoomFull() rebuild() end },
+    { text = "<<", press = function() Graph.pan(-1) rebuild() end },
+    { text = ">>", press = function() Graph.pan(1) rebuild() end },
+    { text = pageText(i18n, "graph_curves"), press = function()
+        state.pickCurves = true
+        rebuild()
+      end }
+  }
+  local n = #labels
+  local btnW = math.floor((w - (n - 1) * GRAPH_GAP) / n)
+  for i = 1, n do
+    children[#children + 1] = {
+      type = "button",
+      x = x + (i - 1) * (btnW + GRAPH_GAP),
+      y = ctrlY,
+      w = btnW,
+      h = GRAPH_CTRL_H,
+      text = labels[i].text,
+      press = labels[i].press
+    }
+  end
+end
+
+local function buildGraphView(children, x, y, w, availH, i18n)
+  local err = Graph.getError()
+  if err ~= nil then
+    local headH = 0
+    if Controls and type(Controls.appendStaticSectionHeader) == "function" then
+      Controls.appendStaticSectionHeader(children, x, y, w, pageText(i18n, "graph_title"))
+      headH = Controls.STATIC_SECTION_H or 50
+    end
+    children[#children + 1] = {
+      type = "label",
+      x = x + 10, y = y + headH + 20, w = w - 20,
+      text = pageText(i18n, GRAPH_ERROR_KEY[err] or "graph_err_open"),
+      color = COLOR_THEME_WARNING,
+      align = CENTER
+    }
+    return
+  end
+
+  -- Nothing can be chosen before the index exists, so the scan is the one wait
+  -- this view reports with the overlay the rest of the tool uses.
+  if #Graph.getCurves() == 0 and Graph.isBusy() then
+    if LoadingOverlay then
+      LoadingOverlay.append(children, {
+        x = x, y = y, w = w, h = availH,
+        title = pageText(i18n, "loading_title"),
+        message = pageText(i18n, "graph_scanning"),
+        progress = Graph.getProgress()
+      })
+    end
+    return
+  end
+
+  if state.pickCurves or #Graph.getCurves() == 0 then
+    buildCurvePicker(children, x, y, w, i18n)
+    return
+  end
+
+  buildChart(children, x, y, w, availH, i18n)
 end
 
 function M.build(ctx)
@@ -669,6 +1081,12 @@ function M.build(ctx)
       message = pageText(i18n, "loading_message"),
       progress = 0.5
     })
+    return
+  end
+
+  -- The plot of the selected log, on top of its statistics.
+  if state.view == "graph" and Graph then
+    buildGraphView(children, x, cursorY, w, math.max(160, h - cursorY - 6), i18n)
     return
   end
 
@@ -864,6 +1282,23 @@ function M.build(ctx)
       filled = true
     }
 
+    -- The statistics answer what the flight came to; the plot answers when. It is
+    -- opened from here rather than from the list, so the log is chosen once.
+    local graphBtnW = 200
+    if graphBtnW > w then graphBtnW = w end
+    children[#children + 1] = {
+      type = "button",
+      x = x + math.floor((w - graphBtnW) / 2),
+      y = cursorY + 12,
+      w = graphBtnW,
+      h = 36,
+      text = pageText(i18n, "graph_open"),
+      press = function()
+        openGraph()
+        if state.requestRebuild then state.requestRebuild() end
+      end
+    }
+
     return
   end
 
@@ -1039,6 +1474,7 @@ end
 function M.onClose()
   state.scanned = false
   state.scanPending = false
+  closeGraph()
   state.selectedFile = nil
   state.selectedFilePath = nil
   state.selectedModel = nil

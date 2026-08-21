@@ -1764,7 +1764,27 @@ return {
         refresh = "Refresh list",
         help_p1 = "Telemetry Logs: Displays flight statistics recorded on your radio SD card.",
         help_p2 = "Log Location: Logs are loaded from /LOGS/ and /LOGS/rfsuite/telemetry/.",
-        help_p3 = "Summary Cards: Shows Min, Max, and Average values for Battery Voltage, Current, Headspeed, and ESC Temperature."
+        help_p3 = "Summary Cards: Shows Min, Max, and Average values for Battery Voltage, Current, Headspeed, and ESC Temperature.",
+        help_p4 = "Graph: Plots up to four telemetry columns of the selected log against flight time, with zoom, paging and a cursor readout.",
+        graph_open = "Graph",
+        graph_title = "Graph",
+        graph_select = "Select Sensors",
+        graph_curve = "Curve",
+        graph_none = "None",
+        graph_flight = "Flight",
+        graph_show = "Show",
+        graph_full = "Full",
+        graph_curves = "Sensors",
+        graph_scanning = "Indexing telemetry log...\nThis reads the whole file once so that zooming and paging do not have to.",
+        graph_no_columns = "This log carries no plottable columns.",
+        graph_err_open = "Cannot open the log file.",
+        graph_err_empty = "The log file is empty.",
+        graph_err_not_telemetry = "Not an EdgeTX telemetry log: no Date and Time columns.",
+        graph_err_no_data = "The log file carries no data rows.",
+        tpl_power = "Power",
+        tpl_battery = "Battery",
+        tpl_link = "Link",
+        tpl_governor = "Governor"
       }
     }
   },
