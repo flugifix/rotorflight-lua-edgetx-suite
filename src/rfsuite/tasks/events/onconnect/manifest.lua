@@ -10,4 +10,6 @@ return {
   { name = "esc_sensor_config", context = "tool" },
   { name = "smartfuel_config", context = "both" },
   { name = "name", context = "both" },
+  -- After `name`, which is what fills session.modelName.
+  { name = "model_name_sync", context = "both" },
 }
