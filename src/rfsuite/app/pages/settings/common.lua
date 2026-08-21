@@ -35,8 +35,16 @@ function M.createFormRuntime(ui)
     boolSetters = {}
   }
 
+  -- A page may draw different controls depending on the value that has just
+  -- changed, so every change has to be able to ask for a repaint. ui.dirty
+  -- records that the page has been edited; it must not also act as a one-shot
+  -- guard in front of the rebuild request. That is what left the three
+  -- per-model combos of settings/dashboard/theme/page.lua on screen after the
+  -- Model Override switch that gates them had been turned back off: the first
+  -- change of a visit rebuilt, no later one did, and the page has no wakeup
+  -- hook to catch it afterwards. Asking is cheap - ui/home.lua only raises a
+  -- pending flag and coalesces it into at most one build per frame.
   local function markDirty()
-    if ui.dirty then return end
     ui.dirty = true
     local rebuild = runtime.requestRebuild
     if rebuild then rebuild() end
