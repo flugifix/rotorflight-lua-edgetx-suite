@@ -551,6 +551,18 @@ local function announceBatteryCapacityEvent(self, opts)
   audioState.batteryCapacityAnnounced = true
 end
 
+--- Play one file out of the audio pack, by its path below `SOUNDS/rf/<locale>/`.
+--
+-- Exported because the locale fallback lives here and should live in exactly one place. The
+-- adjustment teller runs on the telemetry pass, where none of the rest of this module is
+-- reachable, and a second copy of `resolveEventPath` is the thing worth avoiding.
+--
+-- Returns true when a file was found and handed to playFile.
+function Audio.playEventFile(relativePath, opts)
+  if type(relativePath) ~= "string" or relativePath == "" then return false end
+  return playResolvedEventFile(relativePath, opts) == true
+end
+
 function Audio.resetConnectionState(audioState)
   if type(audioState) ~= "table" then
     return

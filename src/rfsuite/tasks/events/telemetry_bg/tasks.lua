@@ -2,6 +2,7 @@ local M = {}
 
 local RFSensors = nil
 local Smart = nil
+local Adjustments = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -122,6 +123,9 @@ function M.wakeup()
     if not Smart then
         Smart = loadModule("tasks/events/telemetry_bg/smart.lua")
     end
+    if not Adjustments then
+        Adjustments = loadModule("tasks/events/telemetry_bg/adjustments.lua")
+    end
     
     local limit = 15
     local processed = 0
@@ -131,6 +135,12 @@ function M.wakeup()
 
     if Smart and type(Smart.wakeup) == "function" then
         Smart.wakeup()
+    end
+
+    -- After the decode, never before it: what the teller reads is what the loop above has just
+    -- published, so the other order would announce one pass behind.
+    if Adjustments and type(Adjustments.wakeup) == "function" then
+        Adjustments.wakeup()
     end
 end
 
@@ -143,6 +153,9 @@ function M.reset()
     lastCounterAt = 0
     if Smart and type(Smart.reset) == "function" then
         Smart.reset()
+    end
+    if Adjustments and type(Adjustments.reset) == "function" then
+        Adjustments.reset()
     end
 end
 
