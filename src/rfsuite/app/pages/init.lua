@@ -16,6 +16,7 @@ local entries = {
   settings_dashboard_settings_page = definePage("settings/dashboard/settings"),
   --settings_activelook_page = definePage("settings/activelook"),
   settings_localization_page = definePage("settings/localization"),
+  settings_service_page = definePage("settings/service"),
   settings_audio_page = definePage("settings/audio"),
   settings_audio_events_page = definePage("settings/audio/events"),
   settings_audio_switches_page = definePage("settings/audio/switches"),
