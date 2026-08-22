@@ -18,7 +18,9 @@ _G.loadScript = function(path, mode)
   if cached then
     return cached
   end
-  local chunk, err = originalLoadScript(path, mode)
+  -- lib/require.lua publishes the load mode the whole suite uses; until it has been
+  -- loaded, the mode the caller asked for still applies.
+  local chunk, err = originalLoadScript(path, _G.rfsuite.loadMode or mode)
   if chunk then
     chunkCache[path] = chunk
   end
