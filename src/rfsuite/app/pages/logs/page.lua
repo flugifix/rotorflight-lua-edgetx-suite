@@ -15,9 +15,10 @@ local LoadingOverlay = nil
 local Graph = nil
 local t = nil
 
--- The plotting engine walks the file in small units and is only useful once a log
--- has been chosen, so it stays unloaded until the graph is opened and is dropped
--- again on close. Every other view of this page costs nothing for it.
+-- The engine walks a log in small units, and it is what reads a log for BOTH views: the
+-- flight statistics are accumulated by the same pass that indexes the file for the plot.
+-- So it is loaded once a log has been chosen -- not once the plot has been -- and dropped
+-- again when the page closes. The file list costs nothing for it.
 local GRAPH_TICKS_PER_WAKEUP = 6
 
 local state = {
@@ -27,6 +28,9 @@ local state = {
   logsList = {},
   summary = nil,
   loading = false,
+  -- `loading` says a log is being read; `reading` says the engine has been given it and is
+  -- walking it, which is what tells the wakeup to spend units rather than to start again.
+  reading = false,
   -- The directory walk is deferred rather than run inside M.build; see the wakeup below.
   scanPending = false,
   scanned = false,
@@ -389,236 +393,6 @@ local function scanLogFiles()
   return found
 end
 
-local function parseTelemetryCsv(filePath)
-  local f = io.open(filePath, "r")
-  if not f then return nil end
-
-  local headerLine = nil
-  local dateCol, timeCol = nil, nil
-  local vbatCol, currCol, capaCol = nil, nil, nil
-  local hspdCol, esctCol, thrCol, armCol = nil, nil, nil
-
-  local function parseHeader(hStr)
-    local colIdx = 1
-    for col in string.gmatch(hStr .. ",", "([^,]*),") do
-      local trimmed = string.lower(string.gsub(string.gsub(col, "^%s+", ""), "%s+$", ""))
-      if trimmed == "date" then
-        dateCol = colIdx
-      elseif trimmed == "time" then
-        timeCol = colIdx
-      elseif trimmed == "vbat(v)" or trimmed == "vbat" or trimmed == "vfas" or trimmed == "voltage" then
-        vbatCol = colIdx
-      elseif trimmed == "curr(a)" or trimmed == "curr" or trimmed == "current" or trimmed == "amp" then
-        currCol = colIdx
-      elseif trimmed == "capa(mah)" or trimmed == "capa" or trimmed == "capacity" or trimmed == "smcp(mah)" then
-        capaCol = colIdx
-      elseif trimmed == "hspd(rpm)" or trimmed == "hspd" or trimmed == "rpm" or trimmed == "headspeed" then
-        hspdCol = colIdx
-      elseif string.find(trimmed, "esct") or string.find(trimmed, "esc_t") or string.find(trimmed, "temp_esc") or trimmed == "temp" then
-        esctCol = colIdx
-      elseif trimmed == "thr(%)" or trimmed == "thr%" or trimmed == "throttle%" or trimmed == "throttle_percent" then
-        thrCol = colIdx
-      elseif trimmed == "arm" then
-        -- Only the ARM sensor. ARMD is the arming *disable* flag mask (0x1203 in
-        -- lib/rf2tlm_sensors.lua): it reads 0 while the model is armed, so taking it for
-        -- the arm flag closes the RPM gate for the whole flight.
-        armCol = colIdx
-      end
-      colIdx = colIdx + 1
-    end
-    -- Fallbacks
-    if not vbatCol then vbatCol = 1 end
-    if not currCol then currCol = 2 end
-    if not hspdCol then hspdCol = 3 end
-    if not esctCol then esctCol = 4 end
-    if not thrCol then thrCol = 5 end
-  end
-
-  local function splitRow(rowStr)
-    local cols = {}
-    for item in string.gmatch(rowStr .. ",", "([^,]*),") do
-      cols[#cols + 1] = item
-    end
-    return cols
-  end
-
-  local function parseTimeSec(tStr)
-    if not tStr then return nil end
-    local h, m, s, ms = string.match(tStr, "(%d+):(%d+):(%d+)%.?(%d*)")
-    if h and m and s then
-      local sec = tonumber(h) * 3600 + tonumber(m) * 60 + tonumber(s)
-      if ms and ms ~= "" then
-        sec = sec + (tonumber("0." .. ms) or 0)
-      end
-      return sec
-    end
-    return nil
-  end
-
-  local startTimeSec = nil
-  local endTimeSec = nil
-  local vStart = nil
-  local vMin = nil
-  local vMax = nil
-  local vEnd = nil
-  local cPeak = 0
-  local cSum = 0
-  local cSamples = 0
-  local lastCapa = nil
-  local rMax = 0
-  local rMinFlight = nil
-  local tStart = nil
-  local tMax = nil
-  local thrMax = 0
-  local totalSamples = 0
-
-  local buffer = ""
-  while true do
-    local chunk = io.read(f, 2048)
-    if not chunk or chunk == "" then
-      if buffer ~= "" then
-        chunk = "\n"
-      else
-        break
-      end
-    end
-    buffer = buffer .. chunk
-
-    while true do
-      local nl = string.find(buffer, "\n")
-      if not nl then break end
-      local line = string.sub(buffer, 1, nl - 1)
-      buffer = string.sub(buffer, nl + 1)
-
-      line = string.gsub(line, "\r", "")
-      if line ~= "" then
-        if not headerLine then
-          if string.match(line, "%a") then
-            headerLine = line
-            parseHeader(line)
-          end
-        else
-          local cols = splitRow(line)
-          totalSamples = totalSamples + 1
-
-          -- Time
-          if timeCol and cols[timeCol] then
-            local tSec = parseTimeSec(cols[timeCol])
-            if tSec then
-              if not startTimeSec then startTimeSec = tSec end
-              endTimeSec = tSec
-            end
-          end
-
-          -- Voltage
-          if vbatCol and cols[vbatCol] then
-            local v = tonumber(cols[vbatCol])
-            if v and v > 2.0 then
-              if not vStart then vStart = v end
-              if not vMin or v < vMin then vMin = v end
-              if not vMax or v > vMax then vMax = v end
-              vEnd = v
-            end
-          end
-
-          -- Current
-          if currCol and cols[currCol] then
-            local c = tonumber(cols[currCol])
-            if c and c >= 0 then
-              if c > cPeak then cPeak = c end
-              cSum = cSum + c
-              cSamples = cSamples + 1
-            end
-          end
-
-          -- Capacity (from FC telemetry Capa(mAh) or SmCp(mAh))
-          if capaCol and cols[capaCol] then
-            local cap = tonumber(cols[capaCol])
-            if cap and cap > 0 then
-              lastCapa = cap
-            end
-          end
-
-          -- ESC Temp
-          if esctCol and cols[esctCol] then
-            local tmp = tonumber(cols[esctCol])
-            if tmp and tmp > 0 then
-              if not tStart then tStart = tmp end
-              if not tMax or tmp > tMax then tMax = tmp end
-            end
-          end
-
-          -- Throttle %
-          if thrCol and cols[thrCol] then
-            local thr = tonumber(cols[thrCol])
-            if thr and thr >= 0 and thr <= 100 then
-              if thr > thrMax then thrMax = thr end
-            end
-          end
-
-          -- RPM (only evaluate when motor is actively driving the head, ignoring spool-down / autorotation)
-          if hspdCol and cols[hspdCol] then
-            local r = tonumber(cols[hspdCol])
-            if r and r > 0 then
-              local cVal = currCol and tonumber(cols[currCol]) or 0
-              local thrVal = thrCol and tonumber(cols[thrCol]) or 0
-              local armVal = armCol and tonumber(cols[armCol]) or 1
-
-              -- ARM is a bit field: bit 0 is ARMED, bit 1 only records that the model was
-              -- armed at some point, so it stays set after a disarm. lib/audio.lua tests
-              -- the same bit.
-              local isArmed = (math.floor(armVal) % 2) == 1
-              local isPowered = isArmed and ((thrVal >= 25) or (cVal >= 1.5))
-              if isPowered then
-                if r > rMax then rMax = r end
-                if r > 1000 then
-                  if not rMinFlight or r < rMinFlight then
-                    rMinFlight = r
-                  end
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-  io.close(f)
-
-  if totalSamples == 0 then return nil end
-
-  local durationSec = 0
-  if startTimeSec and endTimeSec and endTimeSec >= startTimeSec then
-    durationSec = math.floor(endTimeSec - startTimeSec)
-  else
-    durationSec = math.floor(totalSamples / 10)
-  end
-
-  local durationMin = math.floor(durationSec / 60)
-  local durationRemSec = durationSec % 60
-  local durationStr = string.format("%02d:%02d min", durationMin, durationRemSec)
-
-  local cAvg = cSamples > 0 and (cSum / cSamples) or 0
-  local consumedMah = lastCapa or ((cSum / (cSamples > 0 and cSamples or 1)) * (durationSec / 3600) * 1000)
-
-  return {
-    sampleCount = totalSamples,
-    durationStr = durationStr,
-    vStart = vStart or 0,
-    vMin = vMin or (vStart or 0),
-    vMax = vMax or (vStart or 0),
-    vEnd = vEnd or (vStart or 0),
-    vSag = ((vStart or 0) > (vMin or 0)) and ((vStart or 0) - (vMin or 0)) or 0,
-    cPeak = cPeak,
-    cAvg = cAvg,
-    mah = consumedMah,
-    rMax = rMax,
-    rMin = rMinFlight or 0,
-    tStart = tStart or 0,
-    tMax = tMax or (tStart or 0),
-    thrMax = thrMax
-  }
-end
 
 function M.getHeaderActions()
   return {
@@ -652,21 +426,45 @@ function M.wakeup(ctx)
     scanLogFiles()
     state.scanned = true
     state.loading = false
-    state.loadingFrames = 0
     if state.requestRebuild then
       state.requestRebuild()
     end
   end
 
+  -- Reading the selected log. The whole file has to be walked to answer the flight summary,
+  -- and a long one is megabytes: done in a single call it stands the tool still for as long
+  -- as the walk takes, because a script gets no time slice it can be interrupted in. So the
+  -- engine walks it a fixed number of lines at a time and this is where those units are
+  -- spent -- with the notice the build drew already on the screen, and its bar following the
+  -- position in the file rather than a constant.
+  --
+  -- The pass that answers the summary is the same one that indexes the file for the plot, so
+  -- opening the plot afterwards reads nothing again.
   if state.loading and state.selectedFilePath then
-    state.loadingFrames = (state.loadingFrames or 0) + 1
-    if state.loadingFrames >= 2 then
-      state.summary = parseTelemetryCsv(state.selectedFilePath)
-      collectgarbage("collect")
+    if not Graph then Graph = loadModule("app/pages/logs/graph.lua") end
+    if not Graph then
       state.loading = false
-      state.loadingFrames = 0
-      if state.requestRebuild then
-        state.requestRebuild()
+      state.summary = nil
+      if state.requestRebuild then state.requestRebuild() end
+    else
+      if not state.reading then
+        state.reading = true
+        Graph.open(state.selectedFilePath, { stats = true })
+      end
+
+      for _ = 1, GRAPH_TICKS_PER_WAKEUP do
+        if Graph.tick() then break end
+        if not Graph.isBusy() then break end
+      end
+
+      if not Graph.isBusy() then
+        state.summary = Graph.getSummary()
+        state.loading = false
+        state.reading = false
+        collectgarbage("collect")
+        if state.requestRebuild then
+          state.requestRebuild()
+        end
       end
     end
   end
@@ -698,7 +496,7 @@ function M.onReload(ctx)
   state.selectedFilePath = nil
   state.summary = nil
   state.loading = false
-  state.loadingFrames = 0
+  state.reading = false
   collectgarbage("collect")
   if type(ctx) == "table" and type(ctx.requestRebuild) == "function" then
     ctx.requestRebuild()
@@ -724,7 +522,8 @@ function M.onBack(ctx)
     state.selectedModel = nil
     state.summary = nil
     state.loading = false
-    state.loadingFrames = 0
+    state.reading = false
+    closeGraph()
     collectgarbage("collect")
     return true
   end
@@ -737,7 +536,9 @@ local function openGraph()
   state.view = "graph"
   state.pickCurves = false
   state.slots = {}
-  Graph.open(state.selectedFilePath)
+  -- The statistics view has just had this file walked, and the walk built the index the plot
+  -- needs. Opening it again here is what the engine recognises and answers without reading.
+  Graph.open(state.selectedFilePath, { stats = true })
   return true
 end
 
@@ -1146,7 +947,8 @@ function M.build(ctx)
 
   local cursorY = y
 
-  -- If loading overlay is active
+  -- If loading overlay is active. The bar is the engine's position in the file, so it stands
+  -- for how much of the log has been read rather than for the fact that something is going on.
   if state.loading and LoadingOverlay then
     LoadingOverlay.append(children, {
       x = x,
@@ -1155,7 +957,7 @@ function M.build(ctx)
       h = h,
       title = pageText(i18n, "loading_title"),
       message = pageText(i18n, "loading_message"),
-      progress = 0.5
+      progress = (Graph and state.reading) and Graph.getProgress() or 0
     })
     return
   end
@@ -1166,13 +968,14 @@ function M.build(ctx)
     return
   end
 
-  -- If a log file is selected, show summary dashboard
+  -- If a log file is selected, show summary dashboard.
+  --
+  -- The file is never read from here. A build cannot be interrupted, so reading a log in one
+  -- would be the stall the notice above exists to avoid; the wakeup does the walk and this
+  -- draws whatever it has finished. A summary that is still nil at this point is a log the
+  -- walk could not make sense of, which is the case the message below is for.
   if state.selectedFile and state.selectedFilePath then
     local summary = state.summary
-    if not summary then
-      summary = parseTelemetryCsv(state.selectedFilePath)
-      state.summary = summary
-    end
 
     local titleText = summaryTitle(state.selectedModel or "Log", state.selectedFile, w)
     if Controls and type(Controls.appendStaticSectionHeader) == "function" then
@@ -1526,7 +1329,7 @@ function M.build(ctx)
         state.selectedModel = item.model
         state.summary = nil
         state.loading = true
-        state.loadingFrames = 0
+        state.reading = false
         if state.requestRebuild then
           state.requestRebuild()
         end
@@ -1556,7 +1359,7 @@ function M.onClose()
   state.selectedModel = nil
   state.summary = nil
   state.loading = false
-  state.loadingFrames = 0
+  state.reading = false
   state.logsList = {}
   LoadingOverlay = nil
   collectgarbage("collect")
