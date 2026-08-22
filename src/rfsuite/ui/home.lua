@@ -442,6 +442,14 @@ state = {
     lowFuelActive = false,
     lowFuelLastAt = 0,
     lowFuelRepeatCount = 0,
+    -- This table is rebuilt every time the tool is started, which is not the same thing as
+    -- the craft having reconnected. The fuel level and the battery capacity are announced
+    -- once per connection, so without these two the pilot hears both again on every open,
+    -- with nothing on the craft having changed. Each flag is consumed once, by the first
+    -- reading that would otherwise have been announced, and a genuine reconnect later in the
+    -- same session speaks as it always did.
+    seedInitialFuel = true,
+    seedBatteryCapacity = true,
     -- lastAlertAt wird nicht mehr hier initialisiert, sondern nur noch lazy in Audio
     lastValues = { arming_flags = nil, governor_state = nil, pid_profile = nil, rate_profile = nil, battery_profile = nil },
     pendingValues = { pid_profile = nil, rate_profile = nil, battery_profile = nil },
