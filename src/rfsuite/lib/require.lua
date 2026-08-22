@@ -11,12 +11,12 @@ _G.rfsuite.modules = _G.rfsuite.modules or {}
 
 -- Load mode for every script the suite loads.
 --
--- EdgeTX compiles a source file to a .luac next to it whenever it loads one that is newer
--- than its bytecode, and it reads that bytecode back only when the mode allows binary ("b").
--- Every call site in the suite asks for "t", so each source is compiled and written out once
--- and the .luac is then never loaded again: the cost of the write without the benefit of the
--- cache. "x" turns the write off.
-_G.rfsuite.loadMode = "tx"
+-- "b" is what lets EdgeTX read back the .luac beside a source once that bytecode is the newer
+-- of the two, which is the point of having compiled it at all; "t" is the fallback for a
+-- source that has no bytecode yet, and compiling it writes the .luac for the next start.
+-- lib/precompile.lua fills the tree in at start time so that first compile does not fall on
+-- the first page that happens to need it.
+_G.rfsuite.loadMode = "bt"
 
 local modules = _G.rfsuite.modules
 

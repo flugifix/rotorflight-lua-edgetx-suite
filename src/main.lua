@@ -27,6 +27,11 @@ _G.loadScript = function(path, mode)
   return chunk, err
 end
 
+-- The wrapper above holds on to every chunk it loads, which is what makes a second visit to
+-- a page cheap. A bulk pass over the tree wants the opposite and is given the loader that
+-- does not cache (see lib/precompile.lua).
+_G.rfsuite.utils.loadScriptUncached = originalLoadScript
+
 -- Initialize module require memoizer
 local requireChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", "t")
 if requireChunk then
