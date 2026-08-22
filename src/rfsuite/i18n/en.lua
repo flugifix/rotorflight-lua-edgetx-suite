@@ -1158,6 +1158,7 @@ return {
         loading = "Loading adjustment ranges...",
         saving = "Saving adjustment ranges...",
         unsaved_changes = "Unsaved changes",
+        read_failed = "Could not read the adjustments from the flight controller",
         fn_none = "None",
         fn_rate_profile = "Rate Profile",
         fn_pid_profile = "PID Profile",

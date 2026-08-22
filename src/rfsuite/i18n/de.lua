@@ -1158,6 +1158,7 @@ return {
         loading = "Einstellbereiche laden...",
         saving = "Einstellbereiche speichern...",
         unsaved_changes = "Ungespeicherte Aenderungen",
+        read_failed = "Einstellbereiche konnten nicht vom Flugregler gelesen werden",
         fn_none = "Keine",
         fn_rate_profile = "Rate-Profil",
         fn_pid_profile = "PID-Profil",

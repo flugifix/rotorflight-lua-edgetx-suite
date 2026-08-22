@@ -128,6 +128,7 @@ local ui = {
   functionIds = {},
   slotLoaded = {},
   awaitingApiVersion = false,
+  readError = false,
   dirtySlots = {},
   autoDetectEnaSlots = {},
   autoDetectAdjSlots = {},
@@ -642,10 +643,14 @@ local function startLoad(requestRebuild)
   ui.slotLoaded = {}
   local paged = hasPagedReads()
 
+  -- A read that did not answer leaves whatever the page already held and says so. Replacing
+  -- the table with defaults would render an I/O error as a flight controller with no
+  -- adjustment configured, which is indistinguishable from the real thing.
   local function failed(reason)
     ui.runtime.readPending = false
     ui.loading = false
     ui.progress = 0
+    ui.readError = true
     local rebuildFn = requestRebuild or ui.runtime.requestRebuild
     if type(rebuildFn) == "function" then
       rebuildFn()
@@ -659,6 +664,7 @@ local function startLoad(requestRebuild)
     ui.progress = 100
     ui.loaded = true
     ui.awaitingApiVersion = false
+    ui.readError = false
     local rebuildFn = requestRebuild or ui.runtime.requestRebuild
     if type(rebuildFn) == "function" then rebuildFn() end
   end
@@ -672,21 +678,30 @@ local function startLoad(requestRebuild)
       simulatorResponse = GetAdjFuncsApi.simulatorResponse,
       processReply = function(self2, buf2)
         local parsedObj2 = GetAdjFuncsApi.parse(buf2)
-        if parsedObj2 and parsedObj2.adjustment_function_ids then
-          ui.functionIds = parsedObj2.adjustment_function_ids
-          for i = 1, 42 do
-            if not ui.adjustmentRanges[i] then
-              ui.adjustmentRanges[i] = newDefaultAdjustmentRange()
-            end
-            ui.adjustmentRanges[i].adjFunction = tonumber(ui.functionIds[i]) or 0
-          end
-          ui.showFunctionNames = true
+        if not (parsedObj2 and parsedObj2.adjustment_function_ids) then
+          failed("adjustment_function_ids")
+          return
         end
+        ui.functionIds = parsedObj2.adjustment_function_ids
+        for i = 1, 42 do
+          if not ui.adjustmentRanges[i] then
+            ui.adjustmentRanges[i] = newDefaultAdjustmentRange()
+          end
+          ui.adjustmentRanges[i].adjFunction = tonumber(ui.functionIds[i]) or 0
+        end
+        ui.showFunctionNames = true
         ui.progress = 60
         if type(requestRebuild) == "function" then requestRebuild() end
 
-        if not queueSlotRead(ui.selectedRangeIndex, requestRebuild, finishLoad) then
-          finishLoad()
+        local started = queueSlotRead(ui.selectedRangeIndex, requestRebuild, function(ok)
+          if ok then
+            finishLoad()
+          else
+            failed("adjustment_range")
+          end
+        end)
+        if not started then
+          failed("adjustment_range")
         end
       end,
       errorHandler = failed
@@ -703,13 +718,15 @@ local function startLoad(requestRebuild)
       simulatorResponse = AdjustmentRangesApi.simulatorResponse,
       processReply = function(self2, buf2)
         local parsedObj2 = AdjustmentRangesApi.parse(buf2)
-        if parsedObj2 and parsedObj2.adjustment_ranges then
-          ui.adjustmentRanges = {}
-          for i = 1, 42 do
-            local raw = parsedObj2.adjustment_ranges[i]
-            ui.adjustmentRanges[i] = sanitizeAdjustmentRange(raw or {})
-            ui.slotLoaded[i] = true
-          end
+        if not (parsedObj2 and parsedObj2.adjustment_ranges) then
+          failed("adjustment_ranges")
+          return
+        end
+        ui.adjustmentRanges = {}
+        for i = 1, 42 do
+          local raw = parsedObj2.adjustment_ranges[i]
+          ui.adjustmentRanges[i] = sanitizeAdjustmentRange(raw or {})
+          ui.slotLoaded[i] = true
         end
         ui.progress = 60
         if type(requestRebuild) == "function" then requestRebuild() end
@@ -1016,6 +1033,7 @@ local function ensureLoaded()
     ui.adjustmentRanges[i] = newDefaultAdjustmentRange()
   end
   ui.slotLoaded = {}
+  ui.readError = false
   ui.dirtySlots = {}
   ui.autoDetectEnaSlots = {}
   ui.autoDetectAdjSlots = {}
@@ -1133,6 +1151,11 @@ function M.build(ctx)
     end
   end
   local activeStr = pageText(i18n, "active_ranges", "Active ranges") .. ": " .. tostring(activeCount) .. " / 42"
+  local activeColor = COLOR_THEME_PRIMARY1
+  if ui.readError then
+    activeStr = pageText(i18n, "read_failed", "Could not read the adjustments from the flight controller")
+    activeColor = COLOR_THEME_SECONDARY1
+  end
 
   local enaUs = nil
   local adjRange = ui.adjustmentRanges[ui.selectedRangeIndex]
@@ -1156,7 +1179,7 @@ function M.build(ctx)
     type = "label",
     x = x + 10, y = cursorY + 10,
     text = activeStr,
-    color = COLOR_THEME_PRIMARY1,
+    color = activeColor,
     font = SMLSIZE
   }
 
@@ -1203,8 +1226,9 @@ function M.build(ctx)
       -- is POSSIBLE -- neither standing in for the other.
       if hasPagedReads() and not ui.slotLoaded[val] then
         ui.loading = true
-        queueSlotRead(val, ui.runtime.requestRebuild, function()
+        queueSlotRead(val, ui.runtime.requestRebuild, function(ok)
           ui.loading = false
+          ui.readError = not ok
           if type(ui.runtime.requestRebuild) == "function" then
             ui.runtime.requestRebuild()
           end
@@ -1215,6 +1239,11 @@ function M.build(ctx)
       end
     end
   )
+
+  -- Everything below is the selected slot's own record, so it is drawn only once that
+  -- record has been read. Editing what a failed read left behind would write defaults to the
+  -- flight controller on the next save.
+  if not ui.slotLoaded[ui.selectedRangeIndex] then return end
 
   -- 2) Type Dropdown
   local typeOptions = {
