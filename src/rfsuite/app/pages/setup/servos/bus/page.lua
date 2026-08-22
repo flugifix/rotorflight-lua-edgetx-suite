@@ -200,6 +200,43 @@ local function setOverride(enabled)
   end
 end
 
+--- The firmware speaks about servos in TWO index spaces, and this page addresses both.
+---
+--- `servoParams()` is indexed 0 .. MAX_SUPPORTED_SERVOS-1, with the bus servos starting at
+--- BUS_SERVO_OFFSET. MSP_SET_SERVO_CENTER and MSP_GET_SERVO_CONFIG take that index.
+---
+--- MSP_SERVO_CONFIGURATIONS and MSP_SET_SERVO_CONFIGURATION take a PACKED index instead: the
+--- configured PWM servos first, then all BUS_SERVO_CHANNELS bus servos, with the unconfigured
+--- PWM slots between them skipped. So bus servo n is packed index (pwm count + n), not
+--- (BUS_SERVO_OFFSET + n) -- the two agree only on a board that configures all eight PWM
+--- outputs as servos.
+---
+--- Everything this page holds in `ui.config.servos` is keyed by the RAW index, and the packed
+--- index is derived at the one place that needs it.
+local BUS_SERVO_CHANNELS = 18
+local BUS_SERVO_OFFSET = 8
+
+--- How many PWM servos the flight controller has. MSP_STATUS reports the PACKED total, i.e.
+--- getServoCount() + BUS_SERVO_CHANNELS whenever bus servos are configured, so the PWM count is
+--- the difference.
+local function pwmServoCount()
+  local total = tonumber(ui.servoCount) or 0
+  if ui.servoBusEnabled == true and total > BUS_SERVO_CHANNELS then
+    return total - BUS_SERVO_CHANNELS
+  end
+  return total
+end
+
+--- The raw servoParams index of this page's servo n.
+local function rawServoIndex(busIdx)
+  return BUS_SERVO_OFFSET + busIdx
+end
+
+--- The packed index of this page's servo n, for the two commands that speak that space.
+local function packedServoIndex(busIdx)
+  return pwmServoCount() + busIdx
+end
+
 local function triggerLiveWrite()
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then return end
   local mspState = MspRuntime.getState()
@@ -209,7 +246,7 @@ local function triggerLiveWrite()
   local servoIdx = ui.selectedServoIndex
   if not servoIdx then return end
 
-  local config = ui.config.servos and ui.config.servos[servoIdx + 8]
+  local config = ui.config.servos and ui.config.servos[rawServoIndex(servoIdx)]
   if not config then return end
 
   local mid = math.floor(config.mid or 1500)
@@ -218,7 +255,8 @@ local function triggerLiveWrite()
   local apiVersion = session and session.apiVersion
   local isIndexed = ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(apiVersion, {12, 0, 9})
 
-  local writeIndex = servoIdx + 8
+  -- MSP_SET_SERVO_CENTER takes the RAW servoParams index, unlike the configuration write below.
+  local writeIndex = rawServoIndex(servoIdx)
 
   if isIndexed then
     local lo = mid % 256
@@ -378,7 +416,13 @@ local function queueServosRead(isAutoReload)
                         s.geometry = 0
                       end
 
-                      ui.config.servos[i] = s
+                      -- The reply is PACKED; this table is keyed by the raw index.
+                      local pwm = pwmServoCount()
+                      if i < pwm then
+                        ui.config.servos[i] = s
+                      else
+                        ui.config.servos[BUS_SERVO_OFFSET + (i - pwm)] = s
+                      end
                     end
                   end
 
@@ -442,7 +486,7 @@ local function queueServoWrite(servoIdx)
     return false, "msp_queue_unavailable"
   end
 
-  local config = ui.config.servos and ui.config.servos[servoIdx + 8]
+  local config = ui.config.servos and ui.config.servos[rawServoIndex(servoIdx)]
   if not config then return false, "config_unavailable" end
 
   local mid = math.floor(config.mid or 1500)
@@ -465,7 +509,8 @@ local function queueServoWrite(servoIdx)
     flags = 3
   end
 
-  local writeIndex = servoIdx + 8
+  -- MSP_SET_SERVO_CONFIGURATION takes the PACKED index, unlike the centre write above.
+  local writeIndex = packedServoIndex(servoIdx)
 
   local payload = {}
   writeU8(payload, writeIndex)
@@ -620,6 +665,9 @@ function M.build(ctx)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
+  -- Sixteen, not BUS_SERVO_CHANNELS: the firmware's 18 is an SBUS frame's 16 proportional
+  -- channels plus its 2 digital ones, and whether a servo belongs on those two is not a
+  -- question this change answers. Left as it was.
   local busServoCount = 16
   local servoOptions = {}
   for i = 1, busServoCount do
@@ -653,7 +701,7 @@ function M.build(ctx)
 
   local idx = ui.selectedServoIndex
   -- BUS configs are mapped to absolute indices 8 to 23
-  local s = ui.config.servos[idx + 8] or { mid = 1500, min = -500, max = 500, scaleNeg = 500, scalePos = 500, speed = 0, reverse = 0, geometry = 0 }
+  local s = ui.config.servos[rawServoIndex(idx)] or { mid = 1500, min = -500, max = 500, scaleNeg = 500, scalePos = 500, speed = 0, reverse = 0, geometry = 0 }
 
   -- 2) Center
   cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
