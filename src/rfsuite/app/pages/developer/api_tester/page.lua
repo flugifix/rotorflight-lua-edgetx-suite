@@ -294,7 +294,7 @@ local function enqueueApiRead(apiName)
     return false
   end
 
-  local isEsc = (command == 217 or apiName:sub(1, 15) == "esc_parameters_")
+  local isEsc = (command == 217 or string.sub(apiName, 1, 15) == "esc_parameters_")
 
   if (not isEsc or not ui.connState or ui.connState == 0) and type(queue.clear) == "function" then
     queue:clear()
