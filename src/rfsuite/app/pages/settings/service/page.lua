@@ -132,6 +132,7 @@ function M.onSave(ctx)
   if ok then
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({
+        ok = true,
         title = t(ctx.i18n, "saved_title", "Saved"),
         message = t(ctx.i18n, "saved_message", "Settings saved")
       })

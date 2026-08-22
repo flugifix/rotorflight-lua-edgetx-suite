@@ -106,7 +106,7 @@ function M.onSave(ctx)
   local ok, err = ctx.savePreferences()
   if ok then
     if ctx and type(ctx.reportSave) == "function" then
-      ctx.reportSave({ title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
+      ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
     end
   else
     if ctx and type(ctx.reportSave) == "function" then

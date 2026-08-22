@@ -259,6 +259,13 @@ local SAVE_TEXT = {
   failed_message  = "@i18n(app.save.failed_message)@",
 }
 
+-- getTime() ticks, at 10 ms each. How long a notice reporting a SUCCESSFUL save stays up
+-- before it clears itself; the button it already draws stays as the earlier way out. A page
+-- says a save succeeded by passing `ok = true` to reportSave -- absent, the notice stands,
+-- which is what a failure, a warning and a refusal all need. Kept level with the pipeline's
+-- own OUTCOME_LINGER_SECONDS so a save reports for the same length of time either way.
+local SAVE_OUTCOME_LINGER_TICKS = 200
+
 local SAVE_PHASE_TEXT = {
   preflight = "rebooting",
   reboot    = "rebooting",
@@ -1334,6 +1341,12 @@ local function reportSaveOutcome(outcome)
   local message = outcome.message
   if type(title) ~= "string" and type(message) ~= "string" then return end
   state.saveOutcome = { title = title, message = message }
+  -- A save that worked has nothing to be acknowledged, so its notice gets a moment to be read
+  -- and then goes; anything else stands until it is read away. The page decides which it is,
+  -- because only the page knows whether the write it just made reached anything.
+  if outcome.ok == true then
+    state.saveOutcome.clearAt = (getTime and getTime() or 0) + SAVE_OUTCOME_LINGER_TICKS
+  end
   state.saveOverlayVisible = true
   scheduleBuildUI(false)
 end
@@ -2405,6 +2418,15 @@ function M.run(event, touchState)
         state.saveOverlayVisible = true
       end
       -- Ensure the save overlay is replaced even when page.onSave returns false.
+      scheduleBuildUI(false)
+    end
+
+    -- A reported save that carried a linger has it counted here rather than by the page, which
+    -- is gone by the time it runs out.
+    if state.saveOutcome and state.saveOutcome.clearAt and not state.isClosing
+      and (getTime and getTime() or 0) >= state.saveOutcome.clearAt then
+      state.saveOutcome = nil
+      state.saveOverlayVisible = false
       scheduleBuildUI(false)
     end
 

@@ -58,6 +58,13 @@ local PROBE_INTERVAL_SECONDS = 0.5
 -- for the rest of the session.
 local STEP_TIMEOUT_SECONDS = 30
 
+-- How long a SUCCESSFUL outcome stays on the notice before the notice clears itself. A save
+-- that worked needs no acknowledgement -- the box says so and goes, and the button it already
+-- draws stays as the earlier way out. A save that FAILED or timed out is never cleared here:
+-- it stands until it is read, because an outcome that vanishes on its own leaves a failed
+-- save looking exactly like a successful one.
+local OUTCOME_LINGER_SECONDS = 2
+
 local PHASE = {
   WRITE     = "write",
   COMMIT    = "commit",
@@ -169,6 +176,9 @@ local function finish(status, extra)
   -- while it stands the tool's run() -- and with it the MSP tick -- does not run. The overlay is
   -- already on screen, already says what the save is doing, and answers touch.
   S.outcome = { status = status, result = result }
+  if status == "done" then
+    S.outcome.clearAt = nowSeconds() + OUTCOME_LINGER_SECONDS
+  end
   if type(desc.onDone) == "function" then
     pcall(desc.onDone, result)
   end
@@ -408,6 +418,11 @@ end
 
 --- Drive the phases that wait on time rather than on a reply. Called from the run loop.
 function M.wakeup()
+  -- The outcome is not part of a run -- finish() clears S.run before it stores one -- so this
+  -- has to happen ahead of the guard below, or a successful save's notice would never expire.
+  if S.outcome and S.outcome.clearAt and nowSeconds() >= S.outcome.clearAt then
+    S.outcome = nil
+  end
   if not S.run then return end
   -- The run state is shared and the module handles above are NOT: they are upvalues of THIS
   -- instance, and there is more than one. A page starts the save through its own copy, loaded

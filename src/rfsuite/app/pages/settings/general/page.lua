@@ -192,7 +192,7 @@ function M.onSave(ctx)
       ctx.menu.setCondition("developerTools", ui.config.developer_tools == true)
     end
     if ctx and type(ctx.reportSave) == "function" then
-      ctx.reportSave({ title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
+      ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
     end
   else
     if ctx and type(ctx.reportSave) == "function" then

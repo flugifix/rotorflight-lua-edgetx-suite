@@ -492,6 +492,7 @@ function M.onSave(ctx)
 	if ctx and type(ctx.reportSave) == "function" then
 		if okMsp and okPrefs then
 			ctx.reportSave({
+				ok = true,
 				title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
 				message = pageText(ctx and ctx.i18n, "saved_message", "Battery settings saved")
 			})

@@ -202,6 +202,7 @@ local function queueGovWrite(requestRebuild, ctx)
             end
             if ctx and type(ctx.reportSave) == "function" then
               ctx.reportSave({
+                ok = true,
                 title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
                 message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
               })
@@ -228,6 +229,7 @@ local function queueGovWrite(requestRebuild, ctx)
         end
         if ctx and type(ctx.reportSave) == "function" then
           ctx.reportSave({
+            ok = true,
             title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
             message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
           })

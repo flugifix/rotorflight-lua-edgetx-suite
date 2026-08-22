@@ -604,6 +604,7 @@ function M.onSave(ctx)
 	if ctx and type(ctx.reportSave) == "function" then
 		if okMsp then
 			ctx.reportSave({
+				ok = true,
 				title = pageText(ctx and ctx.i18n, "saved_title", "@i18n(app.pages.flight_tuning_governor.saved_title)@"),
 				message = pageText(ctx and ctx.i18n, "saved_message", "@i18n(app.pages.flight_tuning_governor.saved_message)@")
 			})

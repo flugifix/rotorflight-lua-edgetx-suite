@@ -415,7 +415,7 @@ function M.onSave(ctx)
 		if okMsp and okPrefs then
 			local savedTitle = pageText(ctx and ctx.i18n, "saved_title", "Saved")
 			local savedMessage = pageText(ctx and ctx.i18n, "saved_message", "SmartFuel settings saved")
-			ctx.reportSave({ title = savedTitle, message = savedMessage })
+			ctx.reportSave({ ok = true, title = savedTitle, message = savedMessage })
 		elseif okMsp and not okPrefs then
 			ctx.reportSave({ title = "Warning", message = "SmartFuel values sent to FC. Model prefs save failed: " .. tostring(errPrefs or "io") })
 		elseif (not okMsp) and okPrefs then
