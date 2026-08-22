@@ -1473,13 +1473,16 @@ function Runtime.new(zone, options)
         if type(children) ~= "table" then return end
       end
 
+      -- No forced full collection here. This block runs whenever the render key changes, i.e.
+      -- whenever a displayed telemetry value moves, and every widget on the radio shares one
+      -- Lua state -- so a full collect walks every other widget's live set as well. The
+      -- firmware already runs an incremental collection on that state on every GUI pass.
+      -- GEMINI.md asks for an explicit collect after large I/O or JSON work; a repaint is
+      -- neither.
       lvgl.clear()
       lvgl.build(children)
       self.built = true
       logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children)
-      if type(collectgarbage) == "function" then
-        collectgarbage("collect")
-      end
     end
   end
 
