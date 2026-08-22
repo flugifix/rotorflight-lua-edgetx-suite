@@ -494,8 +494,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueGovWrite(ctx and ctx.requestRebuild, ctx)
   if not ok then
-    if lvgl and lvgl.message then
-      lvgl.message({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

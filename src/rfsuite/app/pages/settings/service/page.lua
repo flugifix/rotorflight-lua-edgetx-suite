@@ -137,8 +137,8 @@ function M.onSave(ctx)
       })
     end
   else
-    if lvgl and lvgl.message then
-      lvgl.message({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = t(ctx.i18n, "save_error_title", "Error"),
         message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io")
       })

@@ -503,8 +503,8 @@ function M.onSave(ctx)
 
   local selected = collectSelectedSensors()
   if #selected > 40 then
-    if lvgl and lvgl.message then
-      lvgl.message({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = pageText(ctx and ctx.i18n, "too_many_sensors", "No more than 40 telemetry sensors can be enabled.")
       })
@@ -515,8 +515,8 @@ function M.onSave(ctx)
   local payload = buildWritePayload(selected)
   local ok, err = queueTelemetryWrite(payload)
   if not ok then
-    if lvgl and lvgl.message then
-      lvgl.message({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })
