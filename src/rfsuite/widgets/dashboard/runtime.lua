@@ -830,21 +830,34 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
   return chosen
 end
 
+-- Hoisted out of readTelemetry, which runs on every background pass: the per-pass cache and the
+-- two helpers below were rebuilt each time, and they are almost everything the pass allocates.
+-- The cache is emptied in place rather than replaced, and it keeps the original rule that a nil
+-- reading is read again within the same pass.
+--
+-- Module state is safe here because a pass runs to completion without yielding, so readTelemetry
+-- is never entered again while it is running.
+local sensorCache = {}
+local telemetryTarget = nil
+local telemetryChanged = false
+
+local function getSensor(name)
+  if sensorCache[name] == nil then sensorCache[name] = Sensors.getValue(name) end
+  return sensorCache[name]
+end
+
+local function setField(field, value)
+  if value ~= nil and value ~= telemetryTarget[field] then
+    telemetryTarget[field] = value
+    telemetryChanged = true
+  end
+end
+
 local function readTelemetry(state)
   if not (Sensors and type(Sensors.getValue) == "function") then return end
-  local changed = false
-  local cache = {}
-  local function getSensor(name)
-    if cache[name] == nil then cache[name] = Sensors.getValue(name) end
-    return cache[name]
-  end
-
-  local function setField(field, value)
-    if value ~= nil and value ~= state[field] then
-      state[field] = value
-      changed = true
-    end
-  end
+  telemetryTarget = state
+  telemetryChanged = false
+  for name in pairs(sensorCache) do sensorCache[name] = nil end
 
   setField("rpm", getSensor("rpm"))
   setField("lq", getSensor("link"))
@@ -920,7 +933,7 @@ local function readTelemetry(state)
   local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   setField("rss2", rss2)
 
-  if changed then updateDerivedFlightState(state) end
+  if telemetryChanged then updateDerivedFlightState(state) end
 end
 
 local function computeFlightMode(state)
