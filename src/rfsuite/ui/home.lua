@@ -1185,6 +1185,28 @@ local function maybeRefreshInfoPageFromSession()
   end
 end
 
+-- Drop everything the MSP layer is still holding from an earlier read.
+--
+-- The response cache answers a re-read from the last reply while its key still holds, and its
+-- keys are the connection and the live profile. Two events move the value on the board without
+-- moving either key, so they are named here rather than left to the key to catch:
+--
+--   a Reload   the pilot asked for what the board holds NOW, and was told that unsaved changes
+--              would be discarded to get it. A reload that serves the value it already had is
+--              not a reload, whatever it saves in round trips.
+--   a disarm   an in-flight adjustment changes gains, rates and governor values on the flight
+--              controller with nothing written from here, and this tool is not on screen while
+--              it happens. So the first read after a flight has to reach the board.
+--
+-- Everything else the cache holds is dropped by the two rules it already has: a disconnect,
+-- and any write this tool issues.
+local function dropMspResponseCache()
+  local ok, cache = pcall(loadModule, "tasks/msp/cache.lua")
+  if ok and type(cache) == "table" and type(cache.clear) == "function" then
+    pcall(cache.clear)
+  end
+end
+
 -- The backstop behind the disabled Save and Reload buttons: a path that reaches either of
 -- them while the craft is armed is refused, and says so. Drawn as the tool's own notice box
 -- rather than raised as an `lvgl.message`, which is a native MessageDialog with no focusable
@@ -1214,6 +1236,9 @@ local function onReload()
     closeHelpDialogIfOpen()
 
     local function doPageReload()
+      -- Before the page re-reads, not after: every route into a reload ends here, and the
+      -- page issues its requests inside onReload below.
+      dropMspResponseCache()
       -- Keep preferences in-memory for reload to avoid repeated disk loads and table churn.
       _G.rfsuite.preferences = state.preferences
       local shouldRebuild = page.onReload({
@@ -2152,6 +2177,10 @@ function M.run(event, touchState)
       if not armed then
         -- The refusal has outlived its reason; it must not stand over the tool after a disarm.
         state.armedNoticeVisible = false
+        -- And no cached reply has outlived the flight that just ended: an in-flight
+        -- adjustment can have moved any of them, and this is the edge the cache's own keys
+        -- cannot see. It costs no new update path -- the transition is already handled here.
+        dropMspResponseCache()
       end
       if armed then
         -- Clear MSP queue to abort any pending MSP operations immediately
