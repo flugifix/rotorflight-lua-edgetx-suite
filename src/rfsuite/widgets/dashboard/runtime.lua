@@ -754,7 +754,24 @@ local function loadThemeModuleForState(themePath, flightMode)
   return nil
 end
 
+-- Shared stand-in for "no global dashboard section", so that the absence of one is a stable
+-- value rather than a fresh table on every call. Without it the memo below can never hit.
+local EMPTY_DASHBOARD = {}
+
+-- The answer depends on three things that change rarely: the flight mode, the global dashboard
+-- preferences and the model's own. Both preference tables are replaced wholesale when their
+-- file is reloaded, so table identity is a generation marker -- the same one the background
+-- pass already uses to decide whether the model preferences have changed. Without this memo the
+-- resolver runs on every background pass, and so does the log line at the end of it.
+local themePathMemo = {}
+
 local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
+  if themePathMemo.dashboard == dashboard
+    and themePathMemo.modelPrefs == modelPrefs
+    and themePathMemo.flightMode == flightMode then
+    return themePathMemo.chosen
+  end
+
   local modelDashboard = modelPrefs and modelPrefs.dashboard or {}
   local modelOverride = modelDashboard.model_override == true
   local key = "theme_preflight"
@@ -804,6 +821,11 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
   logGv("resolveTheme: mode=%s, modelOverride=%s, modelPreflight=%s, globalPreflight=%s => chosen=%s (%s)",
     tostring(flightMode), tostring(modelOverride), tostring(modelDashboard.model_theme_preflight),
     tostring(dashboard and dashboard.theme_preflight), tostring(chosen), tostring(reason))
+
+  themePathMemo.dashboard = dashboard
+  themePathMemo.modelPrefs = modelPrefs
+  themePathMemo.flightMode = flightMode
+  themePathMemo.chosen = chosen
 
   return chosen
 end
@@ -1197,7 +1219,7 @@ function Runtime.new(zone, options)
 
   local function reloadActiveTheme(self)
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, self.flightMode)
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, self.flightMode)
     local nextConfig = {}
     if self.dashboardLib and self.dashboardLib.getThemeConfig then
       nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, {}, modelPrefs)
@@ -1335,7 +1357,7 @@ function Runtime.new(zone, options)
     end
 
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, nextMode)
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, nextMode)
 
     local modelPrefsChanged = (modelPrefs ~= self.lastModelPreferences)
     self.lastModelPreferences = modelPrefs
