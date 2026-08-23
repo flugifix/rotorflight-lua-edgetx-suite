@@ -225,8 +225,8 @@ end
 
 local function onPressSetRange(slot, rawRange, i18n)
   if ui.autoDetectSlots[slot] then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(i18n, "title", "Modes"),
         message = pageText(i18n, "msg_auto_detect_lock_first", "Auto-detect is active for this row. Toggle to lock AUX first.")
       })
@@ -236,8 +236,8 @@ local function onPressSetRange(slot, rawRange, i18n)
 
   local us = getAuxPulseUs(rawRange.auxChannelIndex or 0)
   if not us then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(i18n, "title", "Modes"),
         message = pageText(i18n, "msg_live_channel_unavailable", "Live channel value unavailable.")
       })
@@ -286,8 +286,8 @@ local function addRangeToSelectedMode(i18n)
   end
 
   if not freeSlot then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(i18n, "title", "Modes"),
         message = pageText(i18n, "msg_no_free_slots", "No free mode slots remain. Delete an existing range first.")
       })
@@ -685,8 +685,8 @@ local function queueModesWrite(requestRebuild)
     if type(requestRebuild) == "function" then
       requestRebuild()
     end
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = "Error",
         message = tostring(reason or "Save failed")
       })
@@ -710,8 +710,8 @@ local function queueModesWrite(requestRebuild)
             if type(requestRebuild) == "function" then
               requestRebuild()
             end
-            if lvgl and lvgl.alert then
-              lvgl.alert({
+            if lvgl and lvgl.message then
+              lvgl.message({
                 title = "Saved",
                 message = "Mode configuration saved"
               })
@@ -923,7 +923,7 @@ function M.build(ctx)
   local i18n = ctx.i18n
 
   if ui.loading or ui.saving then
-    local titleText = ui.loading and pageText(i18n, "loading_config", "Loading") or pageText(i18n, "saving_config", "Saving")
+    local titleText = ui.loading and "@i18n(app.loading)@" or "@i18n(app.saving)@"
     local msgText = ui.loading and pageText(i18n, "loading", "Loading mode data...") or pageText(i18n, "saving_config", "Saving mode configuration...")
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
@@ -1035,8 +1035,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueModesWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

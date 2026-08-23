@@ -10,6 +10,7 @@ local function loadModule(path)
 end
 
 local Controls = nil
+local SavePipeline = nil
 local Common = nil
 local MspRuntime = nil
 local SerialConfigApi = nil
@@ -397,71 +398,46 @@ local function queuePortsRead(isAutoReload)
 end
 
 local function queuePortsWrite()
-  if not MspRuntime or not SerialConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not SerialConfigApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   applyReceiverGuardToWorkingCopy()
 
-  local index = 1
-  local total = #ui.portsWorking
-
-  local function writeNext()
-    if index > total then
-      -- Step 2: Write EEPROM
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            -- Step 3: Reboot FC
-            local rebootApi = loadModule("tasks/msp/api/reboot.lua")
-            if rebootApi then
-              queue:add({
-                command = rebootApi.writeCommand,
-                payload = rebootApi.buildWritePayload({ rebootMode = 0 }),
-                isWrite = true,
-                simulatorResponse = {},
-                processReply = function() end,
-                errorHandler = function() end
-              })
-            end
-          end,
-          errorHandler = function() end
-        })
-      end
-      return
-    end
-
-    local port = ui.portsWorking[index]
-    local payload = SerialConfigApi.buildWritePayload(port)
-
-    queue:add({
+  -- One write per port, as before. What was a recursive writeNext() queueing the next port from
+  -- the previous one's processReply is a list of steps here, so the same order costs no
+  -- recursion and the EEPROM commit is not buried three closures deep.
+  local steps = {}
+  for i = 1, #ui.portsWorking do
+    steps[#steps + 1] = {
+      label = "MSP_SET_CF_SERIAL_CONFIG",
       command = SerialConfigApi.writeCommand,
-      payload = payload,
-      isWrite = true,
-      simulatorResponse = {},
-      processReply = function()
-        index = index + 1
-        writeNext()
-      end,
-      errorHandler = function()
-        -- Proceed to next even if fail
-      end
-    })
+      payload = SerialConfigApi.buildWritePayload(ui.portsWorking[i])
+    }
   end
 
-  writeNext()
-  return true, nil
+  -- Behaviour change worth naming: a port write that failed used to run an errorHandler whose
+  -- comment says it proceeds to the next port and whose body is empty, so the chain simply
+  -- stopped -- no further port, no EEPROM commit, no reboot and nothing on screen. The pipeline
+  -- ends the save on a failed step and says which one.
+  return SavePipeline.start({
+    pageId = "setup_ports",
+    steps = steps,
+    reboot = true,
+    invalidateSessionKeys = { "setup_ports" },
+    onSaved = function()
+      ui.dirty = false
+    end,
+    onDone = function(result)
+      if result.status ~= "done" then
+        ui.dirty = true
+      end
+      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
+  })
 end
 
 local function buildSessionSignature()
@@ -629,6 +605,11 @@ end
 function M.onActivate()
   ensureDeps()
   ensureLoaded()
+  -- A save whose overlay was dismissed finished without a screen. Its outcome was held
+  -- back rather than raised over whatever page the user went to; claim it now.
+  if SavePipeline and type(SavePipeline.takeResult) == "function" then
+    SavePipeline.takeResult("setup_ports")
+  end
 end
 
 function M.wakeup(ctx)
@@ -717,8 +698,8 @@ end
 function M.onSave(ctx)
   local ok, err = queuePortsWrite()
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })
@@ -726,13 +707,12 @@ function M.onSave(ctx)
     return false
   end
 
-  ui.dirty = false
-  if lvgl and lvgl.alert then
-    lvgl.alert({
-      title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-      message = pageText(ctx and ctx.i18n, "saved_message", "Ports configuration saved")
-    })
-  end
+  -- Nothing is announced here. This function has only QUEUED the save: the writes, the commit
+  -- and -- on this page -- the restart are all still ahead of it, and a dialog saying the
+  -- settings are saved would be a claim it cannot make. It was also drawn on TOP of the
+  -- overlay that reports the save, from a place where that overlay could not be repainted away
+  -- first, and while a native dialog stands the tool's run() does not run at all. The pipeline
+  -- reports the outcome in the overlay, once, when it knows it.
   return true
 end
 

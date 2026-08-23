@@ -388,8 +388,8 @@ function M.onSave(ctx)
     if okLog and type(Log) == "table" and type(Log.emit) == "function" then
       pcall(Log.emit, "rfsuite", "onSave: savePreferences failed: " .. tostring(err or "?"), "error", true)
     end
-    if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
     return false
   end
@@ -482,7 +482,7 @@ function M.onClose()
     setmetatable(ui.runtime, nil)
   end
   Common.resetPageState(ui, {
-    tablesToWipe = { "sections", "runtime" }
+    tablesToWipe = { "runtime" }
   })
   ui.runtimeBase = nil
   Controls = nil

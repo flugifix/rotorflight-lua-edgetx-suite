@@ -5,6 +5,10 @@ local USER_ROOTS = {
   "SCRIPTS:/TOOLS/rfsuite.user"
 }
 
+-- How much is asked for per io.read() call. It is a chunk size, not a limit: the reader
+-- below keeps going until the file ends.
+local READ_CHUNK = 2048
+
 local function trim(s)
   local asString = tostring(s or "")
   asString = string.gsub(asString, "^%s+", "")
@@ -80,10 +84,20 @@ local function loadFileAsString(path)
   local f = io.open(path, "r")
   if not f then return nil end
 
-  local content = io.read(f, 2048)
+  -- io.read() hands back at most the number of bytes asked for and "" once the file is
+  -- exhausted, so a single call stops wherever that count lands. Stopping there is not
+  -- merely a short read: saveIni() writes the whole table back, so everything the parser
+  -- never saw is dropped from the file by the next save.
+  local parts = {}
+  while true do
+    local chunk = io.read(f, READ_CHUNK)
+    if chunk == nil or chunk == "" then break end
+    parts[#parts + 1] = chunk
+  end
   io.close(f)
 
-  if content == nil or content == "" then return nil end
+  local content = table.concat(parts)
+  if content == "" then return nil end
   return content
 end
 
@@ -292,31 +306,7 @@ function M.saveByMcuId(mcuId, prefs)
     if okTouch then
       local okSave, saveErr = saveIni(path, data)
       if okSave then
-        _G.rfsuite_reload_flag = (_G.rfsuite_reload_flag or 0) + 1
-
-        local function logGv(msg)
-          local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
-          if fLog then
-            local t = (getTime and getTime()) or 0
-            io.write(fLog, string.format("[%.2f][ModelPrefs.save] %s\n", t / 100, tostring(msg)))
-            io.close(fLog)
-          end
-          if print then pcall(print, "[ModelPrefs.save] " .. tostring(msg)) end
-        end
-
-        logGv("Saved model ini: " .. tostring(path) .. ". type(model)=" .. type(model))
-
-        -- Signal the widget to reload preferences using EdgeTX Global Variables
-        -- GV9 (index 8) for FM0 (index 0) and FM8 (index 8) set to 1
-        if type(model) == "table" and type(model.setGlobalVariable) == "function" then
-          local ok0, res0 = pcall(model.setGlobalVariable, 8, 0, 1)
-          local ok8, res8 = pcall(model.setGlobalVariable, 8, 8, 1)
-          local r0 = (type(model.getGlobalVariable) == "function") and select(2, pcall(model.getGlobalVariable, 8, 0))
-          local r8 = (type(model.getGlobalVariable) == "function") and select(2, pcall(model.getGlobalVariable, 8, 8))
-          logGv(string.format("Set GV9: FM0 ok=%s val=%s (readback=%s), FM8 ok=%s val=%s (readback=%s)", tostring(ok0), tostring(res0), tostring(r0), tostring(ok8), tostring(res8), tostring(r8)))
-        else
-          logGv("model.setGlobalVariable is NOT available!")
-        end
+        -- No signal is sent. Writing this file IS the event -- see lib/preferences.lua.
         return true
       end
       lastErr = saveErr or "io"

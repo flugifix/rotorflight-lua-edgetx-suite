@@ -411,17 +411,17 @@ function M.onSave(ctx)
 
 	local okMsp, errMsp = queueSmartfuelWrite(session)
 
-	if lvgl and lvgl.alert then
+	if ctx and type(ctx.reportSave) == "function" then
 		if okMsp and okPrefs then
 			local savedTitle = pageText(ctx and ctx.i18n, "saved_title", "Saved")
 			local savedMessage = pageText(ctx and ctx.i18n, "saved_message", "SmartFuel settings saved")
-			lvgl.alert({ title = savedTitle, message = savedMessage })
+			ctx.reportSave({ ok = true, title = savedTitle, message = savedMessage })
 		elseif okMsp and not okPrefs then
-			lvgl.alert({ title = "Warning", message = "SmartFuel values sent to FC. Model prefs save failed: " .. tostring(errPrefs or "io") })
+			ctx.reportSave({ title = "Warning", message = "SmartFuel values sent to FC. Model prefs save failed: " .. tostring(errPrefs or "io") })
 		elseif (not okMsp) and okPrefs then
-			lvgl.alert({ title = "Warning", message = "Saved local SmartFuel values. FC write pending: " .. tostring(errMsp or "msp") })
+			ctx.reportSave({ title = "Warning", message = "Saved local SmartFuel values. FC write pending: " .. tostring(errMsp or "msp") })
 		else
-			lvgl.alert({ title = "Warning", message = "FC write pending and model prefs save failed: " .. tostring(errPrefs or "io") })
+			ctx.reportSave({ title = "Warning", message = "FC write pending and model prefs save failed: " .. tostring(errPrefs or "io") })
 		end
 	end
 

@@ -28,6 +28,14 @@ def process_file(file_path):
             # Remove the "app.pages." from keyPrefix if it's there
             if prefix.startswith("app.pages."):
                 prefix = prefix[10:]
+
+    # 2b. A page built by Common.buildSimplePage names its own key as the second argument,
+    # so it needs neither a pageT call nor a keyPrefix local to be resolvable. Without this
+    # such a page produces no marker at all and ships its English fallbacks in every locale.
+    if not prefix:
+        m_simple = re.search(r'buildSimplePage\s*\(\s*[^,]+,\s*["\']([^"\']+)["\']', content)
+        if m_simple:
+            prefix = m_simple.group(1)
                 
     if prefix:
         full_prefix = f"app.pages.{prefix}"
@@ -68,6 +76,20 @@ def process_file(file_path):
             content = new_content
             changed = True
 
+        # Support valueKey = "key", valueFallback = "fallback" -- the other half of the
+        # row that labelKey/labelFallback above covers. A settings row carries both, and
+        # resolving only the label leaves every value in English.
+        pattern_value = r'\bvalueKey\s*=\s*["\']([^"\']+)["\']\s*,\s*(valueFallback|fallback)\s*=\s*(["\'])(.*?)\3'
+        def sub_value(m):
+            key = m.group(1)
+            prop = m.group(2)
+            fallback = encode_fallback(m.group(4))
+            return f'valueKey = "{key}", {prop} = "@i18n({full_prefix}.{key}|{fallback})@"'
+        new_content, count = re.subn(pattern_value, sub_value, content)
+        if count > 0:
+            content = new_content
+            changed = True
+
         # Also support: Common.t(i18n, "pageKey", "key", "fallback") or Common.t(i18n, "pageKey", "key")
         def sub_commont(m):
             page_key = m.group(1)
@@ -94,6 +116,21 @@ def process_file(file_path):
                 new_block = new_block.replace(f'{quote}{string}{quote}', tag, 1)
             content = content.replace(fallback_block, new_block, 1)
             changed = True
+
+    # 3b. The section header of a simple settings page. It is passed POSITIONALLY --
+    # buildSimplePage(ctx, "pageKey", "sectionKey", "Fallback", rows) -- so none of the
+    # key = value patterns above can see it, and it stayed English in every locale.
+    pattern_section = (r'(\bbuildSimplePage\s*\(\s*[^,]+,\s*)(["\'])([^"\']+)\2(\s*,\s*)'
+                       r'(["\'])([^"\']+)\5(\s*,\s*)(["\'])(.*?)\8')
+    def sub_section(m):
+        page_key, section_key = m.group(3), m.group(6)
+        fallback = encode_fallback(m.group(9))
+        return (f'{m.group(1)}"{page_key}"{m.group(4)}"{section_key}"{m.group(7)}'
+                f'"@i18n(app.pages.{page_key}.{section_key}|{fallback})@"')
+    new_content, count = re.subn(pattern_section, sub_section, content)
+    if count > 0:
+        content = new_content
+        changed = True
 
     # 4. Header buttons in header.lua
     if file_path.name == "header.lua":

@@ -114,6 +114,28 @@ function Events.reset()
   _G.rfsuite.session.modelName = nil
 end
 
+--- Make the connect tasks run again, and nothing else.
+--
+-- After a reboot the tasks are all still marked complete, so the work they do at connect --
+-- sending the clock among it -- is not redone unless something resets them. The only place
+-- that resets a runner today is publishConnected(false), which is reached from the link
+-- detector: a reboot short enough not to hold the link down for DISCONNECT_STABLE_SECONDS
+-- never gets there. Events.reset() looks like the way to force it and is not -- it clears the
+-- link state directly, without touching a single runner.
+--
+-- This resets the connect runner alone. It leaves session state, the link detector and every
+-- other category untouched, and it is idempotent: if the detector did notice the reboot and
+-- already reset the runner, calling it again costs one pass over a queue that is going to be
+-- rerun anyway.
+function Events.rerunOnconnect()
+  local onconnect = ensureEventRunner("onconnect")
+  if onconnect and type(onconnect.reset) == "function" then
+    pcall(onconnect.reset)
+    return true
+  end
+  return false
+end
+
 function Events.isOnconnectActive()
   local onconnect = ensureEventRunner("onconnect")
   if onconnect and type(onconnect.active) == "function" then

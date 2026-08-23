@@ -15,9 +15,15 @@ local Common = nil
 --   type "bool"   → stored/restored as boolean, default must be true/false
 --   type "number" → stored/restored via tonumber(), default must be a number
 
+-- The schema is what is loaded, defaulted and SAVED. A control the page draws whose key is not
+-- in here is read from nothing, written to nothing and lost when the page closes -- which is
+-- what happened to `save_confirm`: it is in SAFETY_ITEMS below, so it is drawn and it can be
+-- toggled, and neither `copyFromPrefs` nor `onSave` ever touched it, because both walk this
+-- table. The comment those two carry -- "no manual field list" -- is true of them and was not
+-- true of the page, because the page had a second list.
 local CONFIG_SCHEMA = {
   { key = "iconsize",                     type = "number", default = 2     },
-  { key = "syncname",                     type = "bool",   default = false  },
+  { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
   { key = "developer_tools",              type = "bool",   default = false  },
@@ -38,7 +44,6 @@ local ui = {
   loaded = false,
   sections = {
     safety      = true,
-    integration = false,
     development = false,
   },
   config = buildDefaultConfig()
@@ -139,16 +144,6 @@ local function buildSafety(cursorY, children, x, w, i18n)
   return cursorY
 end
 
-local function buildIntegration(cursorY, children, x, w, i18n)
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "sync_model_name", "Synchronize Model Name"),
-    ui.runtime.getBoolGetter("syncname"),
-    ui.runtime.getBoolSetter("syncname")
-  )
-
-  return cursorY
-end
-
 local function buildDevelopment(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "developer_tools", "Developer Tools"),
@@ -163,7 +158,6 @@ end
 
 local SECTIONS = {
   { key = "safety",      titleKey = "section_safety",      titleFallback = "Safety & Prompts", build = buildSafety      },
-  { key = "integration", titleKey = "section_integration", titleFallback = "Integration",      build = buildIntegration },
   { key = "development", titleKey = "section_development", titleFallback = "Development",      build = buildDevelopment },
 }
 
@@ -197,12 +191,12 @@ function M.onSave(ctx)
     if ctx.menu and ctx.menu.setCondition then
       ctx.menu.setCondition("developerTools", ui.config.developer_tools == true)
     end
-    if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
     end
   else
-    if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
   end
 end
@@ -235,9 +229,7 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  Common.resetPageState(ui, {
-    tablesToWipe = { "sections" }
-  })
+  Common.resetPageState(ui)
   Controls = nil
   Common = nil
   t = nil

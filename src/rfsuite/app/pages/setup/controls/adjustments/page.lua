@@ -14,6 +14,7 @@ local Common = nil
 local MspRuntime = nil
 local RxMapApi = nil
 local AdjustmentRangesApi = nil
+local GetAdjRangeApi = nil
 local GetAdjFuncsApi = nil
 local SetAdjustmentRangeApi = nil
 local LoadingOverlay = nil
@@ -125,6 +126,9 @@ local ui = {
   selectedRangeIndex = 1,
   showFunctionNames = false,
   functionIds = {},
+  slotLoaded = {},
+  awaitingApiVersion = false,
+  readError = false,
   dirtySlots = {},
   autoDetectEnaSlots = {},
   autoDetectAdjSlots = {},
@@ -146,6 +150,7 @@ local function ensureDeps()
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not RxMapApi then RxMapApi = loadModule("tasks/msp/api/rx_map.lua") end
   if not AdjustmentRangesApi then AdjustmentRangesApi = loadModule("tasks/msp/api/adjustment_ranges.lua") end
+  if not GetAdjRangeApi then GetAdjRangeApi = loadModule("tasks/msp/api/get_adjustment_range.lua") end
   if not GetAdjFuncsApi then GetAdjFuncsApi = loadModule("tasks/msp/api/get_adjustment_function_ids.lua") end
   if not SetAdjustmentRangeApi then SetAdjustmentRangeApi = loadModule("tasks/msp/api/set_adjustment_range.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
@@ -392,8 +397,8 @@ end
 
 local function getChannelUsForRangeSet(channelIndex, autoTable, slot, i18n)
   if autoTable and autoTable[slot] then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(i18n, "title", "Adjustments"),
         message = pageText(i18n, "msg_auto_detect_lock_first", "Auto-detect is active for this row. Toggle to lock AUX first.")
       })
@@ -403,8 +408,8 @@ local function getChannelUsForRangeSet(channelIndex, autoTable, slot, i18n)
 
   local us = getAuxPulseUs(channelIndex or 0)
   if not us then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = pageText(i18n, "title", "Adjustments"),
         message = pageText(i18n, "msg_live_channel_unavailable", "Live channel value unavailable.")
       })
@@ -530,13 +535,99 @@ local function newDefaultAdjustmentRange()
   }
 end
 
+--- Which route this firmware offers for the adjustment table.
+---
+--- MSP_GET_ADJUSTMENT_RANGE (156) and MSP_GET_ADJUSTMENT_FUNCTION_IDS (167) arrived together in
+--- API 12.09. Below it neither exists, and MSP_ADJUSTMENT_RANGES (52) is the only read there is.
+--- Every place that has to know which commands exist asks here, so the two routes are separated
+--- once rather than at each call.
+local PAGED_READ_API = {12, 0, 9}
+
+local function hasPagedReads()
+  return apiVersionIsAtLeast(PAGED_READ_API)
+end
+
+--- Reads one slot's record with MSP_GET_ADJUSTMENT_RANGE (156).
+---
+--- 156 and MSP_GET_ADJUSTMENT_FUNCTION_IDS (167) are the paged accessors for the adjustment
+--- table, and they cost 14 and 42 bytes. The whole-table MSP_ADJUSTMENT_RANGES (52) costs
+--- MAX_ADJUSTMENT_RANGE_COUNT * 14 = 588, while the shared telemetry response buffer the CRSF
+--- path serialises into is MSP_TLM_OUTBUF_SIZE = 320 bytes and the serialiser has no bound
+--- check -- so asking for it makes the flight controller write past the end of a static buffer.
+--- Over USB that command is safe, because there the buffer is much larger, which is why the
+--- Configurator uses it.
+local function queueSlotRead(slotIndex, requestRebuild, onDone)
+  local function done(ok)
+    if type(onDone) == "function" then onDone(ok) end
+  end
+
+  -- The module's own precondition, stated here rather than left to the caller: below API 12.09
+  -- this command does not exist and must not be sent, whoever asks.
+  if not hasPagedReads() then
+    done(false)
+    return false
+  end
+
+  slotIndex = tonumber(slotIndex)
+  if not slotIndex or slotIndex < 1 or slotIndex > 42 then
+    done(false)
+    return false
+  end
+
+  if not GetAdjRangeApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
+    done(false)
+    return false
+  end
+
+  local mspState = MspRuntime.getState()
+  local queue = mspState and mspState.queue
+  if not queue or type(queue.add) ~= "function" then
+    done(false)
+    return false
+  end
+
+  queue:add({
+    command = GetAdjRangeApi.command,
+    payload = { slotIndex - 1 },
+    isWrite = false,
+    simulatorResponse = GetAdjRangeApi.simulatorResponse,
+    processReply = function(self, buf)
+      local parsed = GetAdjRangeApi.parse(buf)
+      local record = parsed and parsed.adjustment_range
+      if record then
+        ui.adjustmentRanges[slotIndex] = sanitizeAdjustmentRange(record)
+        ui.slotLoaded[slotIndex] = true
+      end
+      if type(requestRebuild) == "function" then requestRebuild() end
+      done(record ~= nil)
+    end,
+    errorHandler = function()
+      done(false)
+    end
+  })
+
+  return true
+end
+
 local function startLoad(requestRebuild)
   if ui.runtime.readPending then return false end
+
+  local rebuild = requestRebuild or ui.runtime.requestRebuild
+
+  -- The API version decides which commands can answer the table, so nothing is asked for before
+  -- it is known. An unanswered connect sequence is not an old flight controller: leave the page
+  -- unloaded and let the next pass try again.
+  local currentSession = getSession()
+  local apiVersion = currentSession and currentSession.apiVersion
+  ui.awaitingApiVersion = not apiVersion or apiVersion == "" or tostring(apiVersion) == "0"
+  if ui.awaitingApiVersion then
+    return false
+  end
+
   ui.runtime.readPending = true
   ui.loading = true
   ui.progress = 0
 
-  local rebuild = requestRebuild or ui.runtime.requestRebuild
   if type(rebuild) == "function" then
     rebuild()
   end
@@ -549,10 +640,17 @@ local function startLoad(requestRebuild)
     return false
   end
 
+  ui.slotLoaded = {}
+  local paged = hasPagedReads()
+
+  -- A read that did not answer leaves whatever the page already held and says so. Replacing
+  -- the table with defaults would render an I/O error as a flight controller with no
+  -- adjustment configured, which is indistinguishable from the real thing.
   local function failed(reason)
     ui.runtime.readPending = false
     ui.loading = false
     ui.progress = 0
+    ui.readError = true
     local rebuildFn = requestRebuild or ui.runtime.requestRebuild
     if type(rebuildFn) == "function" then
       rebuildFn()
@@ -565,11 +663,80 @@ local function startLoad(requestRebuild)
     ui.dirty = false
     ui.progress = 100
     ui.loaded = true
+    ui.awaitingApiVersion = false
+    ui.readError = false
     local rebuildFn = requestRebuild or ui.runtime.requestRebuild
     if type(rebuildFn) == "function" then rebuildFn() end
   end
 
-  -- Step 1: Read RX_MAP (command 94) to know mapping of AUX1, AUX2, AUX3
+  -- Step 2a, from API 12.09: the function of every slot in one 42-byte reply, and then the
+  -- selected slot's own record. Every other slot is read when it is selected, so the whole
+  -- table never has to cross this transport at all.
+  local function readPaged()
+    queue:add({
+      command = GetAdjFuncsApi.command,
+      simulatorResponse = GetAdjFuncsApi.simulatorResponse,
+      processReply = function(self2, buf2)
+        local parsedObj2 = GetAdjFuncsApi.parse(buf2)
+        if not (parsedObj2 and parsedObj2.adjustment_function_ids) then
+          failed("adjustment_function_ids")
+          return
+        end
+        ui.functionIds = parsedObj2.adjustment_function_ids
+        for i = 1, 42 do
+          if not ui.adjustmentRanges[i] then
+            ui.adjustmentRanges[i] = newDefaultAdjustmentRange()
+          end
+          ui.adjustmentRanges[i].adjFunction = tonumber(ui.functionIds[i]) or 0
+        end
+        ui.showFunctionNames = true
+        ui.progress = 60
+        if type(requestRebuild) == "function" then requestRebuild() end
+
+        local started = queueSlotRead(ui.selectedRangeIndex, requestRebuild, function(ok)
+          if ok then
+            finishLoad()
+          else
+            failed("adjustment_range")
+          end
+        end)
+        if not started then
+          failed("adjustment_range")
+        end
+      end,
+      errorHandler = failed
+    })
+  end
+
+  -- Step 2b, below API 12.09: neither paged command exists on those firmwares, so the
+  -- whole-table read is the only one there is and it is kept for them. It is the read this page
+  -- used everywhere before, unchanged, and the flight controller answers it the way it always
+  -- did -- which is why it is confined to the versions that offer no alternative.
+  local function readWholeTable()
+    queue:add({
+      command = AdjustmentRangesApi.command,
+      simulatorResponse = AdjustmentRangesApi.simulatorResponse,
+      processReply = function(self2, buf2)
+        local parsedObj2 = AdjustmentRangesApi.parse(buf2)
+        if not (parsedObj2 and parsedObj2.adjustment_ranges) then
+          failed("adjustment_ranges")
+          return
+        end
+        ui.adjustmentRanges = {}
+        for i = 1, 42 do
+          local raw = parsedObj2.adjustment_ranges[i]
+          ui.adjustmentRanges[i] = sanitizeAdjustmentRange(raw or {})
+          ui.slotLoaded[i] = true
+        end
+        ui.progress = 60
+        if type(requestRebuild) == "function" then requestRebuild() end
+        finishLoad()
+      end,
+      errorHandler = failed
+    })
+  end
+
+  -- Step 1: Read RX_MAP to know mapping of AUX1, AUX2, AUX3
   queue:add({
     command = RxMapApi.command,
     simulatorResponse = RxMapApi.simulatorResponse,
@@ -586,51 +753,12 @@ local function startLoad(requestRebuild)
       ui.progress = 30
       if type(requestRebuild) == "function" then requestRebuild() end
 
-      -- Step 2: Read ADJUSTMENT_RANGES (command 52)
-      queue:add({
-        command = AdjustmentRangesApi.command,
-        simulatorResponse = AdjustmentRangesApi.simulatorResponse,
-        processReply = function(self2, buf2)
-          local parsedObj2 = AdjustmentRangesApi.parse(buf2)
-          if parsedObj2 and parsedObj2.adjustment_ranges then
-            ui.adjustmentRanges = {}
-            for i = 1, 42 do
-              local raw = parsedObj2.adjustment_ranges[i]
-              ui.adjustmentRanges[i] = sanitizeAdjustmentRange(raw or {})
-            end
-          end
-          ui.progress = 60
-          if type(requestRebuild) == "function" then requestRebuild() end
-
-          -- Step 3: Read GET_ADJUSTMENT_FUNCTION_IDS if version supports it
-          if apiVersionIsAtLeast({12, 0, 9}) then
-            queue:add({
-              command = GetAdjFuncsApi.command,
-              simulatorResponse = GetAdjFuncsApi.simulatorResponse,
-              processReply = function(self3, buf3)
-                local parsedObj3 = GetAdjFuncsApi.parse(buf3)
-                if parsedObj3 and parsedObj3.adjustment_function_ids then
-                  ui.functionIds = parsedObj3.adjustment_function_ids
-                  for i = 1, 42 do
-                    local fnId = tonumber(ui.functionIds[i]) or 0
-                    if ui.adjustmentRanges[i] then
-                      ui.adjustmentRanges[i].adjFunction = fnId
-                    end
-                  end
-                  ui.showFunctionNames = true
-                end
-                finishLoad()
-              end,
-              errorHandler = function()
-                finishLoad()
-              end
-            })
-          else
-            finishLoad()
-          end
-        end,
-        errorHandler = failed
-      })
+      -- Step 2: the table itself, by whichever route this API version has
+      if paged then
+        readPaged()
+      else
+        readWholeTable()
+      end
     end,
     errorHandler = failed
   })
@@ -676,8 +804,8 @@ local function queueAdjustmentsWrite(requestRebuild)
     if type(requestRebuild) == "function" then
       requestRebuild()
     end
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if lvgl and lvgl.message then
+      lvgl.message({
         title = "Error",
         message = tostring(reason or "Save failed")
       })
@@ -703,8 +831,8 @@ local function queueAdjustmentsWrite(requestRebuild)
             if type(requestRebuild) == "function" then
               requestRebuild()
             end
-            if lvgl and lvgl.alert then
-              lvgl.alert({
+            if lvgl and lvgl.message then
+              lvgl.message({
                 title = "Saved",
                 message = "Adjustment configuration saved"
               })
@@ -904,6 +1032,8 @@ local function ensureLoaded()
   for i = 1, 42 do
     ui.adjustmentRanges[i] = newDefaultAdjustmentRange()
   end
+  ui.slotLoaded = {}
+  ui.readError = false
   ui.dirtySlots = {}
   ui.autoDetectEnaSlots = {}
   ui.autoDetectAdjSlots = {}
@@ -953,6 +1083,13 @@ function M.wakeup(ctx)
     ensureLoaded()
   end
 
+  -- The API version may arrive after the page opened, and the load cannot start without it.
+  -- Retrying is confined to that case, so a read that failed for any other reason is not
+  -- re-issued on every pass.
+  if ui.awaitingApiVersion and not ui.runtime.readPending then
+    startLoad(ui.runtime.requestRebuild)
+  end
+
   local now = nowSeconds()
   if now - lastCheckTime >= 0.15 then
     lastCheckTime = now
@@ -984,7 +1121,7 @@ function M.build(ctx)
   local i18n = ctx.i18n
 
   if ui.loading or ui.saving then
-    local titleText = ui.loading and pageText(i18n, "loading", "Loading") or pageText(i18n, "saving", "Saving")
+    local titleText = ui.loading and "@i18n(app.loading)@" or "@i18n(app.saving)@"
     local msgText = ui.loading and pageText(i18n, "loading", "Loading adjustment ranges...") or pageText(i18n, "saving", "Saving adjustment ranges...")
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
@@ -1014,6 +1151,11 @@ function M.build(ctx)
     end
   end
   local activeStr = pageText(i18n, "active_ranges", "Active ranges") .. ": " .. tostring(activeCount) .. " / 42"
+  local activeColor = COLOR_THEME_PRIMARY1
+  if ui.readError then
+    activeStr = pageText(i18n, "read_failed", "Could not read the adjustments from the flight controller")
+    activeColor = COLOR_THEME_SECONDARY1
+  end
 
   local enaUs = nil
   local adjRange = ui.adjustmentRanges[ui.selectedRangeIndex]
@@ -1037,7 +1179,7 @@ function M.build(ctx)
     type = "label",
     x = x + 10, y = cursorY + 10,
     text = activeStr,
-    color = COLOR_THEME_PRIMARY1,
+    color = activeColor,
     font = SMLSIZE
   }
 
@@ -1079,11 +1221,29 @@ function M.build(ctx)
     ui.selectedRangeIndex,
     function(val)
       ui.selectedRangeIndex = val
+      -- Only the paged route leaves a slot unread; the whole-table route brought all 42 at
+      -- once. So the question is when a read is NEEDED, and the module above answers when one
+      -- is POSSIBLE -- neither standing in for the other.
+      if hasPagedReads() and not ui.slotLoaded[val] then
+        ui.loading = true
+        queueSlotRead(val, ui.runtime.requestRebuild, function(ok)
+          ui.loading = false
+          ui.readError = not ok
+          if type(ui.runtime.requestRebuild) == "function" then
+            ui.runtime.requestRebuild()
+          end
+        end)
+      end
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
     end
   )
+
+  -- Everything below is the selected slot's own record, so it is drawn only once that
+  -- record has been read. Editing what a failed read left behind would write defaults to the
+  -- flight controller on the next save.
+  if not ui.slotLoaded[ui.selectedRangeIndex] then return end
 
   -- 2) Type Dropdown
   local typeOptions = {
@@ -1633,8 +1793,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueAdjustmentsWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })
@@ -1678,6 +1838,7 @@ function M.onClose()
   MspRuntime = nil
   RxMapApi = nil
   AdjustmentRangesApi = nil
+  GetAdjRangeApi = nil
   GetAdjFuncsApi = nil
   SetAdjustmentRangeApi = nil
   LoadingOverlay = nil

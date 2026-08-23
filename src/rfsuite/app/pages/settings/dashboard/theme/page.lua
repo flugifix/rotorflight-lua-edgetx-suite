@@ -152,6 +152,14 @@ local function setModelThemeFromId(key, id)
   end
 end
 
+-- Per-model preferences are keyed by the flight controller's MCU id, so the
+-- model override can only be stored while a flight controller is connected.
+local function hasModelStore()
+  if type(_G) ~= "table" or not _G.rfsuite then return false end
+  if type(_G.rfsuite.session) ~= "table" then return false end
+  return _G.rfsuite.session.mcu_id ~= nil
+end
+
 local function saveToPreferences(prefs)
   if not prefs.dashboard then prefs.dashboard = {} end
   prefs.dashboard.theme_preflight = ui.config.theme_preflight
@@ -162,6 +170,9 @@ local function saveToPreferences(prefs)
   prefs.dashboard.model_theme_preflight = nil
   prefs.dashboard.model_theme_inflight = nil
   prefs.dashboard.model_theme_postflight = nil
+
+  -- Nothing per-model to write is a success; anything attempted has to report.
+  local modelOk, modelErr = true, nil
 
   if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
     local session = _G.rfsuite.session
@@ -176,15 +187,18 @@ local function saveToPreferences(prefs)
       mDashboard.model_theme_postflight = ui.config.model_theme_postflight
 
       -- Save model preferences using ModelPreferences module
+      modelOk, modelErr = false, "model_preferences"
       local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
       if type(loadMod) == "function" then
-        local ok, MP = pcall(loadMod)
-        if ok and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
-          MP.saveByMcuId(session.mcu_id, session.modelPreferences)
+        local loaded, MP = pcall(loadMod)
+        if loaded and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
+          modelOk, modelErr = MP.saveByMcuId(session.mcu_id, session.modelPreferences)
         end
       end
     end
   end
+
+  return modelOk ~= false, modelErr
 end
 
 function M.getHeaderActions()
@@ -207,13 +221,27 @@ function M.onReload(ctx)
   return true
 end
 
+local function reportSaveError(ctx, err)
+  if not lvgl then return end
+  local dialog = {
+    title = t(ctx.i18n, "save_error_title", "Error"),
+    message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io")
+  }
+  if type(lvgl.message) == "function" then
+    pcall(lvgl.message, dialog)
+  end
+end
+
 function M.onSave(ctx)
   ensureDeps()
-  saveToPreferences(ctx.preferences)
+  -- The page saves into two stores. Both have to be believed before the save
+  -- is reported as done, and a failure in either one has to be shown.
+  local modelOk, modelErr = saveToPreferences(ctx.preferences)
   local ok, err = ctx.savePreferences()
-  if ok then
-  elseif lvgl and lvgl.alert then
-    lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
+  if not ok then
+    reportSaveError(ctx, err)
+  elseif not modelOk then
+    reportSaveError(ctx, modelErr)
   end
   return true
 end
@@ -289,10 +317,27 @@ function M.build(ctx)
     t(i18n, "section_dashboard_theme_model", "Model Override"), true, function() end)
   cursorY = cursorY + Controls.SECTION_H
 
+  local modelStoreReady = hasModelStore()
+  local modelStoreActive = function() return modelStoreReady end
+
+  if not modelStoreReady then
+    children[#children + 1] = {
+      type = "label",
+      x = x,
+      y = cursorY,
+      w = w,
+      text = t(i18n, "model_override_unavailable", "Connect a flight controller to store a per-model theme"),
+      color = COLOR_THEME_PRIMARY1,
+      font = SMLSIZE
+    }
+    cursorY = cursorY + 24
+  end
+
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "model_override", "Model Override"),
     ui.runtime.getBoolGetter("model_override"),
-    ui.runtime.getBoolSetter("model_override")
+    ui.runtime.getBoolSetter("model_override"),
+    modelStoreActive
   )
 
   if ui.config.model_override == true then
@@ -301,7 +346,8 @@ function M.build(ctx)
       t(i18n, "theme_preflight", "Theme Preflight"),
       modelOptions,
       getModelThemeId(ui.config.model_theme_preflight),
-      function(id) setModelThemeFromId("model_theme_preflight", id) end
+      function(id) setModelThemeFromId("model_theme_preflight", id) end,
+      { active = modelStoreActive }
     )
 
     cursorY = cursorY + Controls.appendComboSelect(
@@ -309,7 +355,8 @@ function M.build(ctx)
       t(i18n, "theme_inflight", "Theme Inflight"),
       modelOptions,
       getModelThemeId(ui.config.model_theme_inflight),
-      function(id) setModelThemeFromId("model_theme_inflight", id) end
+      function(id) setModelThemeFromId("model_theme_inflight", id) end,
+      { active = modelStoreActive }
     )
 
     cursorY = cursorY + Controls.appendComboSelect(
@@ -317,7 +364,8 @@ function M.build(ctx)
       t(i18n, "theme_postflight", "Theme Postflight"),
       modelOptions,
       getModelThemeId(ui.config.model_theme_postflight),
-      function(id) setModelThemeFromId("model_theme_postflight", id) end
+      function(id) setModelThemeFromId("model_theme_postflight", id) end,
+      { active = modelStoreActive }
     )
   end
 end

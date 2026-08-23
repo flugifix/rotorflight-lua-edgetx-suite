@@ -2,9 +2,39 @@ return {
   app = {
     loading = "Lade...",
     saving = "Speichere...",
+    erasing = "Lösche...",
+    connecting = "Verbinde",
+    onconnect = {
+      apiversion = "Lese API-Version",
+      uid = "Lese Seriennummer",
+      rtc = "Stelle die Uhr",
+      battery_config = "Lese Akku-Konfiguration",
+      governor_config = "Lese Governor-Konfiguration",
+      esc_sensor_config = "Lese ESC-Telemetrie-Konfiguration",
+      smartfuel_config = "Lese SmartFuel-Konfiguration",
+      name = "Lese Modellnamen",
+      telemetry = "Lese Telemetrie-Konfiguration",
+      flight_stats = "Lese Flugstatistik",
+      dataflash_summary = "Lese Dataflash-Status"
+    },
     saving_settings = "Einstellungen werden angewendet",
+    save = {
+      rebooting = "Flugcontroller startet neu...",
+      waiting = "Warte auf den Flugcontroller...",
+      reconnecting = "Verbinde erneut...",
+      reading_back = "Einstellungen werden zurückgelesen...",
+      saved_title = "Gespeichert",
+      dismiss = "Weiter",
+      timeout_title = "Gespeichert",
+      timeout_message = "Einstellungen gespeichert. Der Flugcontroller ist noch nicht zurück.",
+      done_message = "Einstellungen gespeichert.",
+      failed_title = "Nicht gespeichert",
+      failed_message = "Der Flugcontroller hat die Einstellungen nicht bestätigt."
+    },
     closing_rfsuite = "RFSuite wird beendet...",
     model_armed_title = "Modell Armed",
+    model_armed_badge = "!",
+    model_armed_banner = "Modell ist ARMED - Einstellungen gesperrt",
     model_armed_warning = "Modell ist ARMED! Bitte disarmen.",
     header_system = "System",
     header_configuration = "Konfiguration",
@@ -21,6 +51,7 @@ return {
       general = { name = "Allgemein" },
       configuration = { name = "Konfiguration" },
       radio_config = { name = "Sender-Setup" },
+      model = { name = "Modell" },
       telemetry = { name = "Telemetry" },
       accelerometer = { name = "Accelerometer" },
       alignment = { name = "Ausrichtung" },
@@ -74,6 +105,7 @@ return {
       dashboard = { name = "Dashboard" },
       activelook = { name = "ActiveLook" },
       localization = { name = "Lokalisierung" },
+      service = { name = "RFSuite Service" },
       dashboard_theme = { name = "Design" },
       dashboard_settings = { name = "Einstellungen" },
       profile = { name = "Profil" },
@@ -176,7 +208,8 @@ return {
       yes = "Ja",
       no = "Nein",
       confirm_save = "Möchtest du die Änderungen speichern?",
-      confirm_reload = "Möchtest du neu laden und ungespeicherte Änderungen verwerfen?"
+      confirm_reload = "Möchtest du neu laden und ungespeicherte Änderungen verwerfen?",
+      confirm_save_arm_unknown = "Armierungsstatus nicht lesbar. Modell entschaerft?"
     },
     help = {
       title = "Hilfe",
@@ -328,6 +361,7 @@ return {
         rates_type = "Drehraten-Type",
         rate_table = "Rate-Tabelle",
         msg_reset_to_defaults = "Rate-Typ geändert. Werte werden auf Standardwerte zurückgesetzt.",
+        warning_title = "Warnung",
         table_help_p1 = "Raten-Typ: Wählen Sie den Rate-Typ aus, mit dem Sie fliegen möchten. Raceflight und Actual sind die einfachsten.",
         table_help_p2 = "Dynamik: Wird unabhängig vom Rate-Typ angewendet. Anpassen, um Heli-Bewegungen weicher zu machen, z. B. für Scale-Helis.",
         roll = "Roll",
@@ -564,16 +598,28 @@ return {
         tbl_rp = "RP",
         tbl_rpy = "RPY"
       },
+      setup_model = {
+        section_params = "Modellparameter",
+        section_features = "Funktionen am Sender",
+        param_none = "Keiner",
+        param_timer = "Timer",
+        param_type = "Parameter %d Typ",
+        param_value = "Parameter %d Wert",
+        flag_set_name = "Modellnamen am Sender setzen",
+        flag_tell_capacity = "Restkapazität ansagen",
+        flags_unsupported = "Dieser Flight Controller meldet keine Modell-Flags",
+        loading_title = "Modellkonfiguration",
+        loading_message = "Wird vom Flight Controller gelesen",
+        help_message = "Einstellungen, die der Flight Controller für dieses Modell speichert: drei Parameter, die er beim Verbinden auf Timer oder globale Variablen des Senders anwendet, und die Sender-Funktionen, die er anfordert."
+      },
       settings_general = {
         section_display = "Anzeige",
         section_safety = "Sicherheit & Prompts",
         section_localization = "Lokalisierung",
-        section_integration = "Integration",
         section_development = "Entwicklung",
         language = "Sprache",
         language_en = "Englisch",
         language_de = "Deutsch",
-        sync_model_name = "Modellname synchronisieren",
         save_confirm = "Bestätigen beim Speichern",
         save_armed_warning = "Warnung 'Bitte disarmen zum Speichern'",
         reload_confirm = "Bestätigen beim Neuladen",
@@ -594,6 +640,16 @@ return {
         value_progress_mode = "SOFORT SCHLIESSEN",
         value_dashbar_autoclose = "10s",
         help_message = "Konfiguriere Sicherheitsabfragen, Integrationsoptionen und Entwickler-Sichtbarkeit in den allgemeinen Einstellungen.",
+        saved_title = "Gespeichert",
+        saved_message = "Einstellungen gespeichert",
+        save_error_title = "Fehler",
+        save_error_message = "Speichern fehlgeschlagen"
+      },
+      settings_service = {
+        section_model = "Modellabgleich",
+        sync_model_name = "Modellname synchronisieren",
+        sync_model_params = "Modellparameter synchronisieren",
+        help_message = "Legt fest, was der Hintergrunddienst tut, solange er Verbindung zum Flight Controller hat.",
         saved_title = "Gespeichert",
         saved_message = "Einstellungen gespeichert",
         save_error_title = "Fehler",
@@ -625,9 +681,6 @@ return {
         value_show_labels = "EIN",
         value_widget_spacing = "MITTEL",
         value_refresh_rate = "10Hz"
-      },
-      settings_dashboard_settings = {
-        section_default_voltage = "Standard-Theme-Spannung"
       },
       settings_activelook = {
         section_activelook = "ActiveLook",
@@ -789,7 +842,9 @@ return {
         loading_title = "Laden",
         loading_message = "Lese PID-Tuning",
         saved_title = "Gespeichert",
-        saved_message = "PID-Tuning gespeichert"
+        saved_message = "PID-Tuning gespeichert",
+        warning_title = "Warnung",
+        saved_local_only_message = "Lokal gespeichert; FC-Schreibvorgang ausstehend",
       },
       setup_power_battery = {
         section_profiles = "Profile",
@@ -1103,6 +1158,7 @@ return {
         loading = "Einstellbereiche laden...",
         saving = "Einstellbereiche speichern...",
         unsaved_changes = "Ungespeicherte Aenderungen",
+        read_failed = "Einstellbereiche konnten nicht vom Flugregler gelesen werden",
         fn_none = "Keine",
         fn_rate_profile = "Rate-Profil",
         fn_pid_profile = "PID-Profil",
@@ -1458,7 +1514,9 @@ return {
         mag_y = "Mag Y",
         mag_z = "Mag Z",
         stream = "Echtzeit-Stream",
-        help_message = "Zeigt Live-Sensordaten des Flight Controllers in einem Graphen an."
+        help_message = "Zeigt Live-Sensordaten des Flight Controllers in einem Graphen an.",
+        loading_title = "Laden",
+        loading_message = "Lese Sensoren..."
       },
       diagnostics_fblstatus = {
         date = "Datum",
@@ -1557,7 +1615,9 @@ return {
         status_probe_requested = "Prüfung angefordert",
         status_sync_requested = "Abgleich angefordert: ",
         mode_native = "Nativ",
-        mode_custom = "Benutzerdefiniert"
+        mode_custom = "Benutzerdefiniert",
+        loading_title = "Laden",
+        loading_message = "Lese Link-Konfiguration..."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",
@@ -1673,6 +1733,7 @@ return {
         model_override = "Modell-Override",
         model_disabled = "Deaktiviert",
         no_themes_found = "Keine Dashboard-Designs gefunden",
+        model_override_unavailable = "Fuer ein modellspezifisches Design muss ein Flugcontroller verbunden sein",
         value_theme_preflight = "STANDARD",
         value_theme_inflight = "STANDARD",
         value_theme_postflight = "STANDARD",
@@ -1720,6 +1781,7 @@ return {
         samples = "Messpunkte",
         file_size = "Größe",
         no_logs_found = "Keine Telemetrie-Logs in /LOGS/ gefunden.",
+        scanning_message = "Suche Telemetrie-Logs in /LOGS/...",
         loading_title = "Laden",
         loading_message = "Lese Telemetrie-Log...\nBitte warten, dies kann je nach Dateigröße einige Sekunden dauern.",
         back_to_list = "Zurück zur Liste",
@@ -1727,7 +1789,27 @@ return {
         refresh = "Liste aktualisieren",
         help_p1 = "Telemetrie-Logs: Zeigt Flugstatistiken von Flügen auf der SD-Karte der Fernsteuerung an.",
         help_p2 = "Speicherort: Logdateien werden aus /LOGS/ und /LOGS/rfsuite/telemetry/ geladen.",
-        help_p3 = "Übersichtskarten: Zeigt Minimal-, Maximal- und Durchschnittswerte für Akkuspannung, Strom, Drehzahl und Reglertemperatur."
+        help_p3 = "Übersichtskarten: Zeigt Minimal-, Maximal- und Durchschnittswerte für Akkuspannung, Strom, Drehzahl und Reglertemperatur.",
+        help_p4 = "Diagramm: Zeichnet bis zu vier Telemetriespalten des gewählten Logs über die Flugzeit, mit Zoom, Blättern und einer Cursor-Anzeige.",
+        graph_open = "Diagramm",
+        graph_title = "Diagramm",
+        graph_select = "Sensoren wählen",
+        graph_curve = "Kurve",
+        graph_none = "Keiner",
+        graph_flight = "Flug",
+        graph_show = "Anzeigen",
+        graph_full = "Ganz",
+        graph_curves = "Sensoren",
+        graph_scanning = "Telemetrie-Log wird indiziert...\nDie Datei wird einmal ganz gelesen, damit Zoomen und Blättern es nicht müssen.",
+        graph_no_columns = "Dieses Log enthält keine darstellbaren Spalten.",
+        graph_err_open = "Die Logdatei kann nicht geöffnet werden.",
+        graph_err_empty = "Die Logdatei ist leer.",
+        graph_err_not_telemetry = "Kein EdgeTX-Telemetrielog: keine Spalten Date und Time.",
+        graph_err_no_data = "Die Logdatei enthält keine Datenzeilen.",
+        tpl_power = "Leistung",
+        tpl_battery = "Akku",
+        tpl_link = "Funk",
+        tpl_governor = "Governor"
       }
     }
   },
@@ -1815,6 +1897,12 @@ return {
       SPOOLUP = "HOCHLAUF",
       THROFF = "GAS-AUS",
       UNKNOWN = "UNBEKANNT"
+    },
+    service = {
+      title = "SERVICE",
+      waiting_for_link = "Warte auf MSP-Verbindung",
+      loading = "Lade Daten...",
+      connected = "Verbunden"
     }
   }
 }

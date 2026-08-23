@@ -375,7 +375,14 @@ function Sensors.isSimulator()
 end
 
 -- Resolve alias to 4-char sensor name
-function Sensors.resolveName(source)
+-- Memoised: the answer depends only on the source string and on Sensors.map / Sensors.aliases,
+-- both of which are written once as literals and only read afterwards --
+-- and getValue resolves a name on every read -- about twenty-five of them per background pass of
+-- the dashboard widget. `false` records a name that resolves to nothing, so a miss is answered
+-- from the table instead of running the pattern again.
+local resolvedNames = {}
+
+local function resolveNameUncached(source)
   if type(source) ~= "string" then return nil end
   local baseSource, suffix = string.match(source, "^(.-)([+-])$")
   if baseSource and suffix then
@@ -393,6 +400,18 @@ function Sensors.resolveName(source)
     return source
   end
   return nil
+end
+
+function Sensors.resolveName(source)
+  if type(source) ~= "string" then return nil end
+  local memo = resolvedNames[source]
+  if memo ~= nil then
+    if memo == false then return nil end
+    return memo
+  end
+  local resolved = resolveNameUncached(source)
+  resolvedNames[source] = (resolved == nil) and false or resolved
+  return resolved
 end
 
 -- Get sensor metadata by 4-char name or alias

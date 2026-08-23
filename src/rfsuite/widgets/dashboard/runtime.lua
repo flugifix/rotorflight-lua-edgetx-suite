@@ -164,38 +164,109 @@ local function loadPreferences()
   return prefs
 end
 
+--- The files the tool writes when a preference changes, and how often they are looked at.
+-- One second is the rate the old signal was polled at, so nothing gets slower here.
+local PREFERENCES_FILE = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
+local PREFS_STAT_INTERVAL = 1.0
+
 local function publishPreferencesToGlobal(prefs)
   if type(_G) ~= "table" then return end
   _G.rfsuite = _G.rfsuite or {}
   _G.rfsuite.preferences = prefs or {}
 end
 
-local function logGv(msg)
+local function logGv(fmt, ...)
+  -- Gated the way the tool gates its own file logger. Ungated, every call here opens,
+  -- appends to and closes a file on the SD card -- and the callers are on the widget's
+  -- refresh and background passes rather than on anything the pilot did, so it runs for
+  -- the whole flight on every model that carries the widget.
+  --
+  -- The message is assembled HERE, after the gate, rather than by the caller: with the
+  -- test inside the function the callers still paid for a string that was then dropped,
+  -- and one of them sits on the unconditional path of every background pass.
+  local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
+  local general = prefs and prefs.general
+  local debugLevel = general and general.debug_level
+  if debugLevel ~= "debug" and debugLevel ~= "info" then return end
+
+  local msg = tostring(fmt)
+  if select("#", ...) > 0 then msg = string.format(msg, ...) end
+
   local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
   if fLog then
     local t = (getTime and getTime()) or 0
-    io.write(fLog, string.format("[%.2f][Runtime] %s\n", t / 100, tostring(msg)))
+    io.write(fLog, string.format("[%.2f][Runtime] %s\n", t / 100, msg))
     io.close(fLog)
   end
-  if print then pcall(print, "[Runtime] " .. tostring(msg)) end
+  if print then pcall(print, "[Runtime] " .. msg) end
+end
+
+--- What the preference files look like right now: size and mtime, as one string.
+--
+-- `fstat` is a global in this firmware and returns { size, attrib, time }. Comparing that
+-- is a STATE comparison rather than a signal, and the difference is the whole point: a
+-- signal is consumed by whoever reads it first, a state is not.
+--
+-- FAT stores mtime at two-second granularity and depends on the RTC, so two writes inside
+-- one second can share a timestamp. That is why the size is part of the stamp.
+-- `fstat` returns the modification time as a TABLE -- year, mon, day, hour, min, sec and more
+-- (radio/src/lua/api_filesystem.cpp) -- not as a number. `tostring()` on it is therefore a table
+-- ADDRESS, which is different on every call, so a stamp built that way never equals the previous
+-- one and a comparison against it reports a change every single time.
+--
+-- The fields are what identify the file, so the fields are what the stamp is built from. FAT
+-- stores seconds in two-second steps, which bounds how close together two writes can be and
+-- still be told apart; the size is exact and carries the rest.
+local function stampOf(info)
+  if type(info) ~= "table" then return nil end
+  local t = info.time
+  if type(t) ~= "table" then
+    -- Not the documented shape. Whatever it is, it is at least not an address.
+    return tostring(info.size) .. ":" .. tostring(t)
+  end
+  return string.format("%s:%s-%s-%s.%s.%s.%s",
+    tostring(info.size), tostring(t.year), tostring(t.mon), tostring(t.day),
+    tostring(t.hour), tostring(t.min), tostring(t.sec))
+end
+
+local function preferencesStamp(modelPath)
+  if type(fstat) ~= "function" then return nil end
+  local out = ""
+  local okg, g = pcall(fstat, PREFERENCES_FILE)
+  if okg then
+    out = stampOf(g) or ""
+  end
+  if modelPath then
+    local okm, m = pcall(fstat, modelPath)
+    if okm then
+      local ms = stampOf(m)
+      if ms then out = out .. "|" .. ms end
+    end
+  end
+  return out
 end
 
 local function reloadPreferencesIfNeeded(self, force)
   local now = nowSeconds()
 
+  -- The stamp that a completed reload will adopt. Held back on purpose -- see the armed
+  -- guard below.
+  local pendingStamp = nil
   local signalReload = false
-  if not force then
-    if _G.rfsuite_reload_flag and _G.rfsuite_reload_flag ~= self._lastSeenReloadFlag then
-      self._lastSeenReloadFlag = _G.rfsuite_reload_flag
-      signalReload = true
-    end
-    if type(model) == "table" and type(model.getGlobalVariable) == "function" then
-      for _, fm in ipairs({0, 8}) do
-        local ok, val = pcall(model.getGlobalVariable, 8, fm)
-        if ok and val == 1 then
-          pcall(model.setGlobalVariable, 8, fm, 0)
-          signalReload = true
-        end
+  if not force and (now - (self._lastPrefsStatAt or 0)) >= PREFS_STAT_INTERVAL then
+    self._lastPrefsStatAt = now
+    -- The per-model file's path lives on the session rather than on `self` -- the same
+    -- shape this file already uses to reach `modelPreferences` twice further down.
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    local stamp = preferencesStamp(session and session.modelPreferencesFile)
+    if stamp then
+      if self._lastPrefsStamp == nil then
+        -- First look. The preferences in hand were loaded from these very files, so this
+        -- is a baseline and never a reload.
+        self._lastPrefsStamp = stamp
+      elseif stamp ~= self._lastPrefsStamp then
+        signalReload = true
+        pendingStamp = stamp
       end
     end
   end
@@ -205,11 +276,17 @@ local function reloadPreferencesIfNeeded(self, force)
   end
 
   -- Safety: Do not reload files while ARMED to prevent CPU spikes or sensor lost
+  --
+  -- Returning here does NOT lose the change: `pendingStamp` is not adopted, so the next
+  -- pass after disarming sees the same difference and reloads then. With the old signal
+  -- the flag had already been read and reset above this guard, so a save made while armed
+  -- was gone with nothing left to re-signal it.
   if self.state.armed then
     return
   end
 
-  logGv("reloadPreferencesIfNeeded executing (force=" .. tostring(force) .. " signal=" .. tostring(signalReload) .. ")")
+  logGv("reloadPreferencesIfNeeded executing (force=%s signal=%s)", tostring(force), tostring(signalReload))
+  if pendingStamp then self._lastPrefsStamp = pendingStamp end
 
   local prefs = loadPreferences()
   if type(prefs) == "table" then
@@ -232,7 +309,7 @@ local function reloadPreferencesIfNeeded(self, force)
           session.modelPreferences = mPrefs
           session.modelPreferencesFile = mPath
           self.modelPreferences = mPrefs
-          logGv("Loaded model prefs from disk: " .. tostring(mPath))
+          logGv("Loaded model prefs from disk: %s", tostring(mPath))
         end
       end
     else
@@ -677,7 +754,24 @@ local function loadThemeModuleForState(themePath, flightMode)
   return nil
 end
 
+-- Shared stand-in for "no global dashboard section", so that the absence of one is a stable
+-- value rather than a fresh table on every call. Without it the memo below can never hit.
+local EMPTY_DASHBOARD = {}
+
+-- The answer depends on three things that change rarely: the flight mode, the global dashboard
+-- preferences and the model's own. Both preference tables are replaced wholesale when their
+-- file is reloaded, so table identity is a generation marker -- the same one the background
+-- pass already uses to decide whether the model preferences have changed. Without this memo the
+-- resolver runs on every background pass, and so does the log line at the end of it.
+local themePathMemo = {}
+
 local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
+  if themePathMemo.dashboard == dashboard
+    and themePathMemo.modelPrefs == modelPrefs
+    and themePathMemo.flightMode == flightMode then
+    return themePathMemo.chosen
+  end
+
   local modelDashboard = modelPrefs and modelPrefs.dashboard or {}
   local modelOverride = modelDashboard.model_override == true
   local key = "theme_preflight"
@@ -724,27 +818,46 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
     end
   end
 
-  logGv(string.format("resolveTheme: mode=%s, modelOverride=%s, modelPreflight=%s, globalPreflight=%s => chosen=%s (%s)",
-    tostring(flightMode), tostring(modelOverride), tostring(modelDashboard.model_theme_preflight), tostring(dashboard and dashboard.theme_preflight), tostring(chosen), tostring(reason)))
+  logGv("resolveTheme: mode=%s, modelOverride=%s, modelPreflight=%s, globalPreflight=%s => chosen=%s (%s)",
+    tostring(flightMode), tostring(modelOverride), tostring(modelDashboard.model_theme_preflight),
+    tostring(dashboard and dashboard.theme_preflight), tostring(chosen), tostring(reason))
+
+  themePathMemo.dashboard = dashboard
+  themePathMemo.modelPrefs = modelPrefs
+  themePathMemo.flightMode = flightMode
+  themePathMemo.chosen = chosen
 
   return chosen
 end
 
+-- Hoisted out of readTelemetry, which runs on every background pass: the per-pass cache and the
+-- two helpers below were rebuilt each time, and they are almost everything the pass allocates.
+-- The cache is emptied in place rather than replaced, and it keeps the original rule that a nil
+-- reading is read again within the same pass.
+--
+-- Module state is safe here because a pass runs to completion without yielding, so readTelemetry
+-- is never entered again while it is running.
+local sensorCache = {}
+local telemetryTarget = nil
+local telemetryChanged = false
+
+local function getSensor(name)
+  if sensorCache[name] == nil then sensorCache[name] = Sensors.getValue(name) end
+  return sensorCache[name]
+end
+
+local function setField(field, value)
+  if value ~= nil and value ~= telemetryTarget[field] then
+    telemetryTarget[field] = value
+    telemetryChanged = true
+  end
+end
+
 local function readTelemetry(state)
   if not (Sensors and type(Sensors.getValue) == "function") then return end
-  local changed = false
-  local cache = {}
-  local function getSensor(name)
-    if cache[name] == nil then cache[name] = Sensors.getValue(name) end
-    return cache[name]
-  end
-
-  local function setField(field, value)
-    if value ~= nil and value ~= state[field] then
-      state[field] = value
-      changed = true
-    end
-  end
+  telemetryTarget = state
+  telemetryChanged = false
+  for name in pairs(sensorCache) do sensorCache[name] = nil end
 
   setField("rpm", getSensor("rpm"))
   setField("lq", getSensor("link"))
@@ -820,7 +933,7 @@ local function readTelemetry(state)
   local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   setField("rss2", rss2)
 
-  if changed then updateDerivedFlightState(state) end
+  if telemetryChanged then updateDerivedFlightState(state) end
 end
 
 local function computeFlightMode(state)
@@ -1119,7 +1232,7 @@ function Runtime.new(zone, options)
 
   local function reloadActiveTheme(self)
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, self.flightMode)
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, self.flightMode)
     local nextConfig = {}
     if self.dashboardLib and self.dashboardLib.getThemeConfig then
       nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, {}, modelPrefs)
@@ -1137,7 +1250,9 @@ function Runtime.new(zone, options)
     self.built = false
     self.renderKey = nil
 
-    logGv(string.format("reloadActiveTheme: flightMode=%s, selectedTheme=%s, loadedTheme=%s, v_min=%.1f, v_max=%.1f, customV=%s", tostring(self.flightMode), tostring(selectedTheme), tostring(self.theme ~= nil), nextConfig.v_min, nextConfig.v_max, tostring(hasCustomVoltage)))
+    logGv("reloadActiveTheme: flightMode=%s, selectedTheme=%s, loadedTheme=%s, v_min=%.1f, v_max=%.1f, customV=%s",
+      tostring(self.flightMode), tostring(selectedTheme), tostring(self.theme ~= nil),
+      nextConfig.v_min, nextConfig.v_max, tostring(hasCustomVoltage))
 
     local sources = {}
     if self.theme then
@@ -1255,7 +1370,7 @@ function Runtime.new(zone, options)
     end
 
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or {}, modelPrefs, nextMode)
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, nextMode)
 
     local modelPrefsChanged = (modelPrefs ~= self.lastModelPreferences)
     self.lastModelPreferences = modelPrefs
@@ -1283,7 +1398,7 @@ function Runtime.new(zone, options)
   end
 
   function widget.reload(self, force)
-    logGv("widget.reload called with force=" .. tostring(force))
+    logGv("widget.reload called with force=%s", tostring(force))
     reloadPreferencesIfNeeded(self, force ~= false)
     reloadActiveTheme(self)
     self.built = false
@@ -1371,13 +1486,16 @@ function Runtime.new(zone, options)
         if type(children) ~= "table" then return end
       end
 
+      -- No forced full collection here. This block runs whenever the render key changes, i.e.
+      -- whenever a displayed telemetry value moves, and every widget on the radio shares one
+      -- Lua state -- so a full collect walks every other widget's live set as well. The
+      -- firmware already runs an incremental collection on that state on every GUI pass.
+      -- GEMINI.md asks for an explicit collect after large I/O or JSON work; a repaint is
+      -- neither.
       lvgl.clear()
       lvgl.build(children)
       self.built = true
-      logGv(string.format("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children))
-      if type(collectgarbage) == "function" then
-        collectgarbage("collect")
-      end
+      logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children)
     end
   end
 

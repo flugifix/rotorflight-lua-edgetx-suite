@@ -404,8 +404,8 @@ function M.onSave(ctx)
     local ConfirmDialog = loadModule("ui/confirm_dialog.lua")
     if ConfirmDialog and type(ConfirmDialog.show) == "function" then
       ConfirmDialog.show({
-        title = pageText(ctx and ctx.i18n, "warning_title"),
-        message = pageText(ctx and ctx.i18n, "msg_reset_to_defaults"),
+        title = pageText(ctx and ctx.i18n, "warning_title", "@i18n(app.pages.flight_tuning_rates.warning_title)@"),
+        message = pageText(ctx and ctx.i18n, "msg_reset_to_defaults", "@i18n(app.pages.flight_tuning_rates.msg_reset_to_defaults)@"),
         onConfirm = function()
           queueRcWrite()
         end

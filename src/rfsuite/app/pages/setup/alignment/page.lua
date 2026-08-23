@@ -10,6 +10,7 @@ local function loadModule(path)
 end
 
 local Controls = nil
+local SavePipeline = nil
 local Common = nil
 local MspRuntime = nil
 local BoardAlignmentApi = nil
@@ -346,74 +347,50 @@ local function queueAlignmentRead(isAutoReload)
 end
 
 local function queueAlignmentWrite()
-  if not MspRuntime or not BoardAlignmentApi or not SensorAlignmentApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not BoardAlignmentApi or not SensorAlignmentApi then
     return false, "msp_runtime_unavailable"
   end
 
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
-  end
-
-  local boardPayload = BoardAlignmentApi.buildWritePayload({
-    roll_degrees = toU16(ui.display.roll_degrees),
-    pitch_degrees = toU16(ui.display.pitch_degrees),
-    yaw_degrees = toU16(ui.display.yaw_degrees)
-  })
-  local sensorPayload = SensorAlignmentApi.buildWritePayload({
-    gyro_1_alignment = ui.display.gyro_1_alignment,
-    gyro_2_alignment = ui.display.gyro_2_alignment,
-    mag_alignment = ui.display.mag_alignment
-  })
-
-  -- Step 1: Write BOARD_ALIGNMENT_CONFIG
-  queue:add({
-    command = BoardAlignmentApi.writeCommand,
-    payload = boardPayload,
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      -- Step 2: Write SENSOR_ALIGNMENT
-      queue:add({
+  -- The four nested queue:add calls that stood here ended with an empty processReply on the
+  -- reboot and an empty errorHandler on every step, so a failed alignment write was silent and
+  -- nothing waited for the board. The pipeline owns the process and reports its outcome.
+  return SavePipeline.start({
+    pageId = "setup_alignment",
+    steps = {
+      {
+        label = "MSP_SET_BOARD_ALIGNMENT_CONFIG",
+        command = BoardAlignmentApi.writeCommand,
+        payload = BoardAlignmentApi.buildWritePayload({
+          roll_degrees = toU16(ui.display.roll_degrees),
+          pitch_degrees = toU16(ui.display.pitch_degrees),
+          yaw_degrees = toU16(ui.display.yaw_degrees)
+        })
+      },
+      {
+        label = "MSP_SET_SENSOR_ALIGNMENT",
         command = SensorAlignmentApi.writeCommand,
-        payload = sensorPayload,
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function()
-          -- Step 3: Write EEPROM
-          local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-          if eepromApi then
-            queue:add({
-              command = eepromApi.writeCommand,
-              payload = {},
-              isWrite = true,
-              simulatorResponse = {},
-              processReply = function()
-                -- Step 4: Reboot
-                local rebootApi = loadModule("tasks/msp/api/reboot.lua")
-                if rebootApi then
-                  queue:add({
-                    command = rebootApi.writeCommand,
-                    payload = rebootApi.buildWritePayload({ rebootMode = 0 }),
-                    isWrite = true,
-                    simulatorResponse = {},
-                    processReply = function() end,
-                    errorHandler = function() end
-                  })
-                end
-              end,
-              errorHandler = function() end
-            })
-          end
-        end,
-        errorHandler = function() end
-      })
+        payload = SensorAlignmentApi.buildWritePayload({
+          gyro_1_alignment = ui.display.gyro_1_alignment,
+          gyro_2_alignment = ui.display.gyro_2_alignment,
+          mag_alignment = ui.display.mag_alignment
+        })
+      }
+    },
+    reboot = true,
+    invalidateSessionKeys = { "setup_alignment" },
+    onSaved = function()
+      ui.dirty = false
     end,
-    errorHandler = function() end
+    onDone = function(result)
+      if result.status ~= "done" then
+        ui.dirty = true
+      end
+      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end
   })
-
-  return true, nil
 end
 
 local function rotatePoint(x, y, z, cx, sx, cy, sy, cz, sz)
@@ -553,6 +530,11 @@ end
 function M.onActivate()
   ensureDeps()
   ensureLoaded()
+  -- A save whose overlay was dismissed finished without a screen. Its outcome was held
+  -- back rather than raised over whatever page the user went to; claim it now.
+  if SavePipeline and type(SavePipeline.takeResult) == "function" then
+    SavePipeline.takeResult("setup_alignment")
+  end
 end
 
 function M.wakeup(ctx)
@@ -1099,8 +1081,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueAlignmentWrite()
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })
@@ -1112,13 +1094,12 @@ function M.onSave(ctx)
   ui.loaded_pitch_degrees = ui.display.pitch_degrees
   ui.loaded_yaw_degrees = ui.display.yaw_degrees
   saveToSession()
-  ui.dirty = false
-  if lvgl and lvgl.alert then
-    lvgl.alert({
-      title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-      message = pageText(ctx and ctx.i18n, "saved_message", "Alignment offsets saved to FBL")
-    })
-  end
+  -- Nothing is announced here. This function has only QUEUED the save: the writes, the commit
+  -- and -- on this page -- the restart are all still ahead of it, and a dialog saying the
+  -- settings are saved would be a claim it cannot make. It was also drawn on TOP of the
+  -- overlay that reports the save, from a place where that overlay could not be repainted away
+  -- first, and while a native dialog stands the tool's run() does not run at all. The pipeline
+  -- reports the outcome in the overlay, once, when it knows it.
   return true
 end
 

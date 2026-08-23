@@ -178,8 +178,8 @@ local HELP_BTN_GAP    = 6
 Controls.NUMBER_H = NUMBER_H
 
 local function showHelpAlert(helpText, helpTitle)
-  if not (lvgl and lvgl.alert) then return end
-  lvgl.alert({
+  if not (lvgl and lvgl.message) then return end
+  lvgl.message({
     title = helpTitle or "Help",
     message = tostring(helpText or "")
   })

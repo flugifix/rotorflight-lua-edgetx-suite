@@ -105,10 +105,15 @@ local function logMsg(msg, level)
   end
 end
 
-local function queueScorpionReadActual(queue)
+-- `retryOnError` is set only for the read that FOLLOWS a write. The firmware invalidates
+-- its parameter cache on a successful commit and answers both the read and the next write
+-- with an error until a fresh readback from the ESC has been cached, so that first refusal
+-- is a wait rather than a failure. The queue already knows how to wait for one.
+local function queueScorpionReadActual(queue, retryOnError)
   queue:add({
     command = EscParametersScorpionApi.command,
     timeout = 15,
+    retryOnErrorReply = retryOnError or nil,
     simulatorResponse = EscParametersScorpionApi.simulatorResponse,
     processReply = function(self, buf)
       local parsed = EscParametersScorpionApi.parse(buf)
@@ -151,7 +156,7 @@ local function queueScorpionReadActual(queue)
   })
 end
 
-local function queueScorpionRead(isAutoReload)
+local function queueScorpionRead(isAutoReload, retryOnError)
   if not MspRuntime or not EscParametersScorpionApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -173,7 +178,7 @@ local function queueScorpionRead(isAutoReload)
     end
   end
 
-  queueScorpionReadActual(queue)
+  queueScorpionReadActual(queue, retryOnError)
   return true, nil
 end
 
@@ -186,6 +191,13 @@ local function queueScorpionWrite(requestRebuild)
   local queue = mspState and mspState.queue
   if not queue or type(queue.add) ~= "function" then
     return false, "msp_queue_unavailable"
+  end
+
+  -- A Scorpion write is the whole 84-byte block, not the changed fields, so it can only be
+  -- built from a block that was read. Without one, every field the page does not itself
+  -- carry would be packed as zero and written to the ESC.
+  if not ui.parsedCache then
+    return false, "esc_not_read"
   end
 
   local writeData = {}
@@ -219,6 +231,11 @@ local function queueScorpionWrite(requestRebuild)
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
+      -- Read back what was just written. Two reasons, and the second is the one that is
+      -- easy to miss: the values on screen are now unconfirmed, AND the flight
+      -- controller cannot accept another write until it has re-cached the parameters
+      -- from the ESC. This read is what makes it do that.
+      queueScorpionRead(true, true)
     end,
     errorHandler = function()
       ui.saving = false
@@ -329,22 +346,16 @@ local function ensureLoaded()
   ui.dirty = false
   ui.runtime.lastSessionSignature = buildSessionSignature()
   
-  local warningTitle = pageText(nil, "safety_warning_title", "Safety Warning")
-  local warningMsg = pageText(nil, "remove_blades_warning", "Please remove main and tail blades before configuring the ESC!")
-
-  if lvgl then
-    if type(lvgl.message) == "function" then
-      pcall(lvgl.message, {
-        title = warningTitle,
-        message = warningMsg
-      })
-    elseif type(lvgl.alert) == "function" then
-      pcall(lvgl.alert, {
-        title = warningTitle,
-        message = warningMsg
-      })
-    end
-  end
+  -- The safety warning is raised from HERE, which is inside the page build. A native
+  -- lvgl.message raised there cannot be closed by a hardware key: Layer::push gives the
+  -- dialog an empty LVGL group, but the same build goes on creating this page's objects
+  -- afterwards and they land in it, so EXIT is delivered to a widget behind the modal. It
+  -- is now the tool's own notice box, drawn into the page's own child list and dismissed
+  -- by its own button -- which also keeps the tool's run loop reachable while it stands.
+  ui.notice = {
+    title = pageText(nil, "safety_warning_title", "Safety Warning"),
+    message = pageText(nil, "remove_blades_warning", "Please remove main and tail blades before configuring the ESC!")
+  }
   queueScorpionRead(false)
 end
 
@@ -393,8 +404,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueScorpionWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })
@@ -427,6 +438,21 @@ function M.build(ctx)
   local title = "Scorpion Configurator"
   if type(ui.runtime.syncHeaderTitle) == "function" then
     ui.runtime.syncHeaderTitle(title, M.getHeaderActions())
+  end
+
+  if ui.notice and LoadingOverlay and type(LoadingOverlay.appendNotice) == "function" then
+    LoadingOverlay.appendNotice(children, {
+      x = x, y = y, w = w, h = h,
+      title = ui.notice.title,
+      message = ui.notice.message,
+      press = function()
+        ui.notice = nil
+        if type(ui.runtime.requestRebuild) == "function" then
+          ui.runtime.requestRebuild()
+        end
+      end
+    })
+    return
   end
 
   if ui.loading or ui.saving then

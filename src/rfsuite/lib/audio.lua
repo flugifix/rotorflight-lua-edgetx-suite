@@ -513,6 +513,19 @@ local function announceBatteryCapacityEvent(self, opts)
     return
   end
 
+  -- The battery configuration arrives over MSP, so it cannot be here on the first pass, and
+  -- by the time it is `initialized` is already true. `lastValues.battery_profile` is still
+  -- nil at that point, which makes a value that has just ARRIVED indistinguishable from one
+  -- the pilot has CHANGED. A caller whose audio state is built fresh for reasons of its own,
+  -- rather than because the craft reconnected, sets this flag so the first configuration it
+  -- sees is recorded instead of announced. It clears itself, so a later reconnect announces.
+  if audioState.seedBatteryCapacity then
+    audioState.seedBatteryCapacity = nil
+    audioState.lastValues.battery_profile = profile
+    audioState.batteryCapacityAnnounced = true
+    return
+  end
+
   local now = nowSeconds()
   if now < (audioState.nextAllowedAt or 0) then
     return
@@ -549,6 +562,18 @@ local function announceBatteryCapacityEvent(self, opts)
 
   audioState.lastValues.battery_profile = profile
   audioState.batteryCapacityAnnounced = true
+end
+
+--- Play one file out of the audio pack, by its path below `SOUNDS/rf/<locale>/`.
+--
+-- Exported because the locale fallback lives here and should live in exactly one place. The
+-- adjustment teller runs on the telemetry pass, where none of the rest of this module is
+-- reachable, and a second copy of `resolveEventPath` is the thing worth avoiding.
+--
+-- Returns true when a file was found and handed to playFile.
+function Audio.playEventFile(relativePath, opts)
+  if type(relativePath) ~= "string" or relativePath == "" then return false end
+  return playResolvedEventFile(relativePath, opts) == true
 end
 
 function Audio.resetConnectionState(audioState)
@@ -931,7 +956,13 @@ function Audio.process(self, opts)
   local initialFuelEnabled = prefEnabled(events, "initial_fuel", true)
   if initialFuelEnabled and audioState.initialized and not audioState.initialFuelAnnounced then
     local fuel = tonumber(self.state and self.state.fuel)
-    if type(fuel) == "number" then
+    -- Same reason as the battery capacity above: this announcement is meant once per
+    -- connection, and a caller that rebuilds its audio state for its own reasons has not
+    -- reconnected. The flag clears itself, so a real reconnect still speaks.
+    if type(fuel) == "number" and audioState.seedInitialFuel then
+      audioState.seedInitialFuel = nil
+      audioState.initialFuelAnnounced = true
+    elseif type(fuel) == "number" then
       local now = nowSeconds()
       if now >= (audioState.nextAllowedAt or 0) then
         local isElectricModel = resolveSmartfuelModel(self)

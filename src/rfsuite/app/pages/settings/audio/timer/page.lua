@@ -163,8 +163,8 @@ function M.onSave(ctx)
   if ok then
     return true
   else
-    if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
     return true
   end
@@ -204,9 +204,7 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  Common.resetPageState(ui, {
-    tablesToWipe = { "sections" }
-  })
+  Common.resetPageState(ui)
   Controls = nil
   Common = nil
   t = nil

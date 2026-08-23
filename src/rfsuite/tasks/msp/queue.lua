@@ -14,6 +14,21 @@ local function nowSeconds()
   return 0
 end
 
+local Cache = nil
+
+local function getCache()
+  if Cache == nil then
+    if _G.rfsuite and _G.rfsuite.require then
+      Cache = _G.rfsuite.require("tasks/msp/cache.lua") or false
+    else
+      local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/cache.lua", "t")
+      local ok, mod = pcall(chunk)
+      Cache = (ok and type(mod) == "table") and mod or false
+    end
+  end
+  return Cache or nil
+end
+
 local DEFAULT_RETRY_BACKOFF_SECONDS = 1.0
 local DEFAULT_TIMEOUT_SECONDS = 2.0
 local DEFAULT_COMMAND_INTERVAL_SECONDS = 0.25
@@ -169,6 +184,10 @@ function Queue.new(common, opts)
   self._simDetectDone = opts.isSimulator == true
   self._simDetected = opts.isSimulator == true
 
+  -- The owner a message is filed under when its caller does not name one, so that everything
+  -- already queueing against this object keeps working untouched.
+  self.defaultClient = opts.client or "default"
+
   return self
 end
 
@@ -180,37 +199,171 @@ function Queue:add(message)
   if message == nil then
     return self
   end
+  -- A read whose answer is still valid is served without a round-trip. The reply is NOT
+  -- delivered here: processQueue hands it over on a later tick, exactly where a reply off the
+  -- wire is handed over, so the order and the timing a page sees do not change. Delivering it
+  -- from inside add() would run processReply while the caller is still setting the page up --
+  -- and every multi-read page nests its next read inside that callback.
+  if message.command and not isWriteMessage(message) then
+    local cache = getCache()
+    local buf = cache and cache.get(message.command) or nil
+    if buf then
+      message.__cachedBuf = buf
+    end
+  end
+  -- Every message records who queued it. The queue is a single FIFO because the transmit side
+  -- is one slot, not because the work in it is related: the runtime's own housekeeping reads,
+  -- the page on screen and any diagnostics page share it. Until now nothing in a message said
+  -- which of them it belonged to, so the queue could not drop one caller's work without
+  -- dropping everybody's.
+  -- It is only filled in when the caller left it empty, so a caller that already tags its
+  -- messages keeps its own value.
+  message.client = message.client or self.defaultClient
   qpush(self.queue, message)
   return self
 end
 
-function Queue:clear()
+--- Drop queued work and report it to whoever queued it.
+--
+-- With no argument everything goes, exactly as before: a disconnect, an unsupported API version
+-- or an arm event invalidate every request in flight whoever it belongs to.
+--
+-- With a client id only that client's messages go and the rest keep their place in the FIFO.
+-- That is what lets one caller give up, or go away, without taking work with it that belongs to
+-- a caller which had nothing to do with the failure.
+--
+-- opts.keepWrites leaves that client's writes where they are and drops only its reads. A read is
+-- wanted because something is on screen to show it, so it stops being wanted the moment that
+-- something is gone; a write is a change the pilot asked the flight controller to make, and it
+-- stays wanted whether or not anybody is still looking. Dropping one silently would report a
+-- save that never left the radio.
+function Queue:clear(clientId, opts)
   local handlers = {}
-  
-  if self.currentMessage and type(self.currentMessage.errorHandler) == "function" then
-    handlers[#handlers + 1] = self.currentMessage.errorHandler
-  end
-  
-  while qcount(self.queue) > 0 do
-    local msg = qpop(self.queue)
-    if msg and type(msg.errorHandler) == "function" then
-      handlers[#handlers + 1] = msg.errorHandler
+  local keepWrites = type(opts) == "table" and opts.keepWrites == true
+
+  if clientId == nil then
+    if self.currentMessage and type(self.currentMessage.errorHandler) == "function" then
+      handlers[#handlers + 1] = self.currentMessage.errorHandler
     end
-  end
-  
-  qreset(self.queue)
-  self.currentMessage = nil
-  self.currentMessageStartTime = nil
-  self.lastTimeCommandSent = nil
-  self.retryCount = 0
-  self._nextMessageAt = 0
-  if self.common and self.common.clearTxBuf then
-    self.common.clearTxBuf()
+
+    while qcount(self.queue) > 0 do
+      local msg = qpop(self.queue)
+      if msg and type(msg.errorHandler) == "function" then
+        handlers[#handlers + 1] = msg.errorHandler
+      end
+    end
+
+    qreset(self.queue)
+    self.currentMessage = nil
+    self.currentMessageStartTime = nil
+    self.lastTimeCommandSent = nil
+    self.retryCount = 0
+    self._nextMessageAt = 0
+    if self.common and self.common.clearTxBuf then
+      self.common.clearTxBuf()
+    end
+    if self.common and self.common.clearRxBuf then
+      self.common.clearRxBuf()
+    end
+  else
+    -- The message being transmitted is only abandoned when it is this client's. Its chunks are
+    -- dropped with it, or the next message would send what is left of them.
+    if self.currentMessage and self.currentMessage.client == clientId
+      and not (keepWrites and isWriteMessage(self.currentMessage)) then
+      if type(self.currentMessage.errorHandler) == "function" then
+        handlers[#handlers + 1] = self.currentMessage.errorHandler
+      end
+      self.currentMessage = nil
+      self.currentMessageStartTime = nil
+      self.lastTimeCommandSent = nil
+      self.retryCount = 0
+      if self.common and self.common.clearTxBuf then
+        self.common.clearTxBuf()
+      end
+      if self.common and self.common.clearRxBuf then
+        self.common.clearRxBuf()
+      end
+    end
+
+    local kept = newQueue()
+    while qcount(self.queue) > 0 do
+      local msg = qpop(self.queue)
+      if msg then
+        if msg.client == clientId and not (keepWrites and isWriteMessage(msg)) then
+          if type(msg.errorHandler) == "function" then
+            handlers[#handlers + 1] = msg.errorHandler
+          end
+        else
+          qpush(kept, msg)
+        end
+      end
+    end
+    qreset(self.queue)
+    self.queue = kept
   end
 
   for i = 1, #handlers do
     pcall(handlers[i])
   end
+end
+
+--- Drop one message, named by the client that queued it and the id it was given.
+--
+-- Clearing by client is the right tool when a caller goes away; it is the wrong one when a
+-- caller is still there and has changed its mind about a single request -- a page that has
+-- moved on from the read it started, for instance. Both arguments are required, so one client
+-- cannot cancel another's work by guessing an id.
+--
+-- Returns true when something was dropped. A message already being transmitted is abandoned
+-- like any other, and its chunks go with it, or the next message would send what is left of
+-- them.
+function Queue:cancel(clientId, requestId)
+  if clientId == nil or requestId == nil then
+    return false
+  end
+
+  local handler = nil
+  local found = false
+
+  local current = self.currentMessage
+  if current and current.client == clientId and current.requestId == requestId then
+    found = true
+    if type(current.errorHandler) == "function" then
+      handler = current.errorHandler
+    end
+    self.currentMessage = nil
+    self.currentMessageStartTime = nil
+    self.lastTimeCommandSent = nil
+    self.retryCount = 0
+    if self.common and self.common.clearTxBuf then
+      self.common.clearTxBuf()
+    end
+    if self.common and self.common.clearRxBuf then
+      self.common.clearRxBuf()
+    end
+  end
+
+  local kept = newQueue()
+  while qcount(self.queue) > 0 do
+    local msg = qpop(self.queue)
+    if msg then
+      if msg.client == clientId and msg.requestId == requestId then
+        found = true
+        if type(msg.errorHandler) == "function" then
+          handler = msg.errorHandler
+        end
+      else
+        qpush(kept, msg)
+      end
+    end
+  end
+  qreset(self.queue)
+  self.queue = kept
+
+  if handler then
+    pcall(handler, nil, "cancelled")
+  end
+  return found
 end
 
 function Queue:processQueue(now)
@@ -245,6 +398,26 @@ function Queue:processQueue(now)
 
   local msg = self.currentMessage
   if not msg then return end
+
+  -- A read that add() found in the cache is completed here and never sent. Same shape as the
+  -- success path below: processReply gets the buffer, the slot is released, the inter-message
+  -- delay still applies. Nothing is put back in the cache -- it came from there.
+  if msg.__cachedBuf then
+    local buf = msg.__cachedBuf
+    msg.__cachedBuf = nil
+    msg.buf = buf
+    msg.__retryCount = 0
+    if type(msg.processReply) == "function" then
+      msg.processReply(msg, buf)
+    end
+    self.currentMessage = nil
+    self.currentMessageStartTime = nil
+    self.lastTimeCommandSent = nil
+    if self.interMessageDelay > 0 then
+      self._nextMessageAt = now + self.interMessageDelay
+    end
+    return
+  end
 
   local retryDelay = tonumber(msg.retryBackoff) or tonumber(msg.retryDelay) or self.retryBackoff
   local timeoutSeconds = tonumber(msg.timeout) or self.timeout
@@ -303,12 +476,22 @@ function Queue:processQueue(now)
     return
   end
 
+  -- completeAfterAttempt says the message completes on SILENCE once it has been sent that many
+  -- times. The two fields above cannot express it: both require an error reply to have arrived,
+  -- and a command whose whole effect is that the board stops answering never sends one. This
+  -- replaces the hardcoded `msg.command == 68` that stood here, which put one caller's protocol
+  -- knowledge -- the reboot -- inside the generic success test, and pinned it to a fixed retry
+  -- count that has no relation to the transport's own maxRetries.
   local success = (cmd == msg.command and not err)
     or (cmd == msg.command and err and msg.completeOnErrorReplyAttempt and self.retryCount >= msg.completeOnErrorReplyAttempt)
-    or (msg.command == 68 and self.retryCount == 2)
+    or (msg.completeAfterAttempt and self.retryCount >= msg.completeAfterAttempt)
 
   if success then
     msg.buf = buf
+    local cache = getCache()
+    if cache and not isWriteMessage(msg) then
+      cache.put(msg.command, buf)
+    end
     if type(msg.processReply) == "function" then
       msg.__retryCount = self.retryCount
       msg.processReply(msg, msg.buf)
@@ -335,6 +518,17 @@ function Queue:processQueue(now)
     local okSend = self.common and type(self.common.sendRequest) == "function"
       and self.common.sendRequest(msg.command, payload, { write = isWriteMessage(msg) })
     if okSend then
+      if isWriteMessage(msg) then
+        -- The moment a mutation leaves the radio, anything held may be stale -- so the cache is
+        -- dropped on the SEND and not on the acknowledgement. A write whose reply is missed is
+        -- still a write the board may have stored, and hanging this on success left a page
+        -- showing pre-write values after a Save that had gone out five times.
+        -- Which read a write invalidates is not worked out here either: the write carries its
+        -- own command number (11 against 10 for the craft name) and the pairing lives in the
+        -- api/ modules. A save is rare; the whole cache goes.
+        local cache = getCache()
+        if cache then cache.clear() end
+      end
       self.lastTimeCommandSent = now
       self.currentMessageStartTime = now -- Timeout-Fenster für jeden Retry neu setzen
       self.retryCount = self.retryCount + 1
@@ -351,7 +545,16 @@ function Queue:processQueue(now)
   end
 
   -- Only give up after all retries have been versucht
-  if self.retryCount > self.maxRetries then
+  -- ... and not before the last of them has had a reply window of its own. Without the second
+  -- condition the final attempt is transmitted and declared failed inside the same processQueue
+  -- call: the send block above raises retryCount past maxRetries, this test sees the new value
+  -- immediately, and the message is abandoned before the flight controller could physically have
+  -- answered. So the last retry is not a retry -- it is a send whose reply is never waited for,
+  -- and a link that answers slowly loses the one attempt that would have succeeded.
+  -- The timeout branch below already waits for the window in exactly this way.
+  if self.retryCount > self.maxRetries
+    and (self.currentMessageStartTime == nil
+         or (now - self.currentMessageStartTime) > timeoutSeconds) then
     msg.__retryCount = self.retryCount
     if type(msg.errorHandler) == "function" then
       msg.errorHandler(msg, "max_retries")
@@ -360,7 +563,24 @@ function Queue:processQueue(now)
       msg.setErrorHandler(msg)
     end
     self.log(formatMspState(msg) .. " max retries", "warn")
-    self:clear()
+    -- Only the message that ran out of retries is given up. Clearing the whole queue here ran
+    -- the errorHandler of every other message waiting -- and this one's a second time, since it
+    -- has just been called above -- so a single unanswered command took down work belonging to
+    -- callers that had nothing to do with it. The timeout branch below already abandons just
+    -- the current message and carries on; this now does the same. The transmit buffer is still
+    -- cleared, because the chunks of a message being abandoned must not be left for the next.
+    self.currentMessage = nil
+    self.currentMessageStartTime = nil
+    self.lastTimeCommandSent = nil
+    if self.common and self.common.clearTxBuf then
+      self.common.clearTxBuf()
+    end
+    if self.common and self.common.clearRxBuf then
+      self.common.clearRxBuf()
+    end
+    if self.interMessageDelay > 0 then
+      self._nextMessageAt = now + self.interMessageDelay
+    end
     return
   end
 

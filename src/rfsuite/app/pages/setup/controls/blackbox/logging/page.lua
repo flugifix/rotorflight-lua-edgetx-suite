@@ -450,7 +450,7 @@ function M.build(ctx)
   local i18n = ctx.i18n
 
   if ui.loading or ui.saving then
-    local titleText = ui.loading and pageText(i18n, "loading_logging", "Loading") or pageText(i18n, "saving_logging", "Saving")
+    local titleText = ui.loading and "@i18n(app.loading)@" or "@i18n(app.saving)@"
     local msgText = ui.loading and pageText(i18n, "loading_logging", "Loading blackbox logging...") or pageText(i18n, "saving_logging", "Saving blackbox logging...")
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
@@ -512,8 +512,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueBlackboxWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

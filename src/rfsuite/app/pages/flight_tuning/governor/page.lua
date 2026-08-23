@@ -601,16 +601,17 @@ function M.onSave(ctx)
 	local errMsp = nil
 	okMsp, errMsp = queueGovWrite(session)
 
-	if lvgl and lvgl.alert then
+	if ctx and type(ctx.reportSave) == "function" then
 		if okMsp then
-			lvgl.alert({
-				title = pageText(ctx and ctx.i18n, "saved_title"),
-				message = pageText(ctx and ctx.i18n, "saved_message")
+			ctx.reportSave({
+				ok = true,
+				title = pageText(ctx and ctx.i18n, "saved_title", "@i18n(app.pages.flight_tuning_governor.saved_title)@"),
+				message = pageText(ctx and ctx.i18n, "saved_message", "@i18n(app.pages.flight_tuning_governor.saved_message)@")
 			})
 		else
-			lvgl.alert({
-				title = pageText(ctx and ctx.i18n, "warning_title"),
-				message = pageText(ctx and ctx.i18n, "saved_local_only_message") .. (errMsp and (": " .. tostring(errMsp)) or "")
+			ctx.reportSave({
+				title = pageText(ctx and ctx.i18n, "warning_title", "@i18n(app.pages.flight_tuning_governor.warning_title)@"),
+				message = pageText(ctx and ctx.i18n, "saved_local_only_message", "@i18n(app.pages.flight_tuning_governor.saved_local_only_message)@") .. (errMsp and (": " .. tostring(errMsp)) or "")
 			})
 		end
 	end

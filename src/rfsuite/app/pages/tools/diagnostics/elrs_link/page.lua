@@ -43,6 +43,8 @@ local function nowSeconds()
   return 0
 end
 
+local LoadingOverlay = nil
+
 local function ensureDeps()
   if not Common then Common = loadModule("app/pages/settings/common.lua") end
   if not ElrsTask then 
@@ -52,6 +54,7 @@ local function ensureDeps()
     end
   end
   if not t then t = Common and Common.pageT("diagnostics_elrs_link") or nil end
+  if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
 end
 
 local function pageText(i18n, key, fallback)
@@ -103,6 +106,7 @@ local function requestTelemetryConfig(force)
         log("requestTelemetryConfig: successfully populated session config")
       end
       state.fetchingConfig = false
+      state.answered = true
       if type(state.requestRebuild) == "function" then state.requestRebuild() end
     end,
     errorHandler = function()
@@ -238,6 +242,21 @@ function M.build(ctx)
   local x = ctx.x
   local y = ctx.y
   local w = ctx.w
+
+  -- Until the first reply lands there is nothing to draw but zeroes, and the host paints no
+  -- frame in front of a page -- so without this the page simply appears empty and the pilot
+  -- cannot tell a slow read from a page that has no data. Only the FIRST read is covered:
+  -- the page re-reads on demand, and an overlay on every re-read would flash.
+  if not state.answered and state.fetchingConfig and LoadingOverlay
+     and type(LoadingOverlay.append) == "function" then
+    LoadingOverlay.append(children, {
+      x = x, y = y, w = w, h = ctx.h,
+      title = pageText(i18n, "loading_title", "Loading"),
+      message = pageText(i18n, "loading_message", "Reading link configuration..."),
+      progress = 0.3
+    })
+    return
+  end
   local rowY = y + 6
   local rowH = 44
   local labelW = math.floor(w * 0.35)
@@ -368,6 +387,8 @@ function M.closePage()
   state.lastRefreshAt = 0
   state.i18n = nil
   state.fetchingConfig = false
+  state.answered = false
+  LoadingOverlay = nil
   Common = nil
   ElrsTask = nil
   t = nil

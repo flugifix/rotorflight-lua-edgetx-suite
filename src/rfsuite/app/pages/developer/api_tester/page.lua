@@ -294,7 +294,7 @@ local function enqueueApiRead(apiName)
     return false
   end
 
-  local isEsc = (command == 217 or apiName:sub(1, 15) == "esc_parameters_")
+  local isEsc = (command == 217 or string.sub(apiName, 1, 15) == "esc_parameters_")
 
   if (not isEsc or not ui.connState or ui.connState == 0) and type(queue.clear) == "function" then
     queue:clear()
@@ -766,8 +766,15 @@ function M.build(ctx)
       message = message,
       progress = ui.progress
     })
-  elseif ui.errorMessage and ui.errorMessage ~= "" and AsyncLoadUi and type(AsyncLoadUi.showErrorDialog) == "function" then
-    AsyncLoadUi.showErrorDialog(ui, i18n, t)
+  elseif ui.errorMessage and ui.errorMessage ~= "" and AsyncLoadUi and type(AsyncLoadUi.appendErrorNotice) == "function" then
+    AsyncLoadUi.appendErrorNotice(children, {
+      x = x,
+      y = y,
+      w = w,
+      h = ctx.h,
+      overlay = LoadingOverlay,
+      requestRebuild = ctx and ctx.requestRebuild
+    }, ui, i18n, t)
   end
 end
 

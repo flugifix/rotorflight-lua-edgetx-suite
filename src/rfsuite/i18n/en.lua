@@ -2,9 +2,39 @@ return {
   app = {
     loading = "Loading...",
     saving = "Saving...",
+    erasing = "Erasing...",
+    connecting = "Connecting",
+    onconnect = {
+      apiversion = "Reading API version",
+      uid = "Reading serial number",
+      rtc = "Setting the clock",
+      battery_config = "Reading battery configuration",
+      governor_config = "Reading governor configuration",
+      esc_sensor_config = "Reading ESC telemetry configuration",
+      smartfuel_config = "Reading SmartFuel configuration",
+      name = "Reading craft name",
+      telemetry = "Reading telemetry configuration",
+      flight_stats = "Reading flight statistics",
+      dataflash_summary = "Reading dataflash status"
+    },
     saving_settings = "Applying settings",
+    save = {
+      rebooting = "Restarting the flight controller...",
+      waiting = "Waiting for the flight controller...",
+      reconnecting = "Reconnecting...",
+      reading_back = "Reading the settings back...",
+      saved_title = "Saved",
+      dismiss = "Continue",
+      timeout_title = "Saved",
+      timeout_message = "Settings saved. The flight controller has not come back yet.",
+      done_message = "Settings saved.",
+      failed_title = "Not saved",
+      failed_message = "The flight controller did not confirm the settings."
+    },
     closing_rfsuite = "Closing RFSuite...",
     model_armed_title = "Model Armed",
+    model_armed_badge = "!",
+    model_armed_banner = "Model is ARMED - settings locked",
     model_armed_warning = "Model is ARMED! Please disarm.",
     header_system = "System",
     header_configuration = "Configuration",
@@ -21,6 +51,7 @@ return {
       general = { name = "General" },
       configuration = { name = "Configuration" },
       radio_config = { name = "Radio Config" },
+      model = { name = "Model" },
       telemetry = { name = "Telemetry" },
       accelerometer = { name = "Accelerometer" },
       alignment = { name = "Alignment" },
@@ -74,6 +105,7 @@ return {
       dashboard = { name = "Dashboard" },
       activelook = { name = "ActiveLook" },
       localization = { name = "Localization" },
+      service = { name = "RFSuite Service" },
       dashboard_theme = { name = "Design" },
       dashboard_settings = { name = "Settings" },
       profile = { name = "Profile" },
@@ -176,7 +208,8 @@ return {
       yes = "Yes",
       no = "No",
       confirm_save = "Do you want to save the changes?",
-      confirm_reload = "Do you want to reload and discard unsaved changes?"
+      confirm_reload = "Do you want to reload and discard unsaved changes?",
+      confirm_save_arm_unknown = "Cannot read the arming state. Is the model disarmed?"
     },
     help = {
       title = "Help",
@@ -328,6 +361,7 @@ return {
         rates_type = "Rates Type",
         rate_table = "Rate Table",
         msg_reset_to_defaults = "Rate type changed. Values will be reset to defaults.",
+        warning_title = "Warning",
         table_help_p1 = "Rates type: Choose the rate type you prefer flying with. Raceflight and Actual are the most straightforward.",
         table_help_p2 = "Dynamics: Applied regardless of rates type. Typically left on defaults but can be adjusted to smooth heli movements, like with scale helis.",
         roll = "Roll",
@@ -564,16 +598,28 @@ return {
         tbl_rp = "RP",
         tbl_rpy = "RPY"
       },
+      setup_model = {
+        section_params = "Model Parameters",
+        section_features = "Radio Features",
+        param_none = "None",
+        param_timer = "Timer",
+        param_type = "Parameter %d Type",
+        param_value = "Parameter %d Value",
+        flag_set_name = "Set Model Name on the Radio",
+        flag_tell_capacity = "Announce Remaining Capacity",
+        flags_unsupported = "This flight controller does not report model flags",
+        loading_title = "Model Configuration",
+        loading_message = "Reading from the flight controller",
+        help_message = "Settings the flight controller stores for this model: three parameters it applies to the radio's timers or global variables on connect, and the radio-side features it asks for."
+      },
       settings_general = {
         section_display = "Display",
         section_safety = "Safety & Prompts",
         section_localization = "Localization",
-        section_integration = "Integration",
         section_development = "Development",
         language = "Language",
         language_en = "English",
         language_de = "German",
-        sync_model_name = "Synchronize Model Name",
         save_confirm = "Confirm on Save",
         save_armed_warning = "Show Disarm-to-Save Warning",
         reload_confirm = "Confirm on Reload",
@@ -594,6 +640,16 @@ return {
         value_progress_mode = "CLOSE IMMEDIATELY",
         value_dashbar_autoclose = "10s",
         help_message = "Configure safety prompts, integration options, and developer visibility in general settings.",
+        saved_title = "Saved",
+        saved_message = "Settings saved",
+        save_error_title = "Error",
+        save_error_message = "Save failed"
+      },
+      settings_service = {
+        section_model = "Model Synchronization",
+        sync_model_name = "Synchronize Model Name",
+        sync_model_params = "Synchronize Model Parameters",
+        help_message = "Configure what the background service does while it has a link to the flight controller.",
         saved_title = "Saved",
         saved_message = "Settings saved",
         save_error_title = "Error",
@@ -625,9 +681,6 @@ return {
         value_show_labels = "ON",
         value_widget_spacing = "MEDIUM",
         value_refresh_rate = "10Hz"
-      },
-      settings_dashboard_settings = {
-        section_default_voltage = "Default Theme Voltage"
       },
       settings_activelook = {
         section_activelook = "ActiveLook",
@@ -789,7 +842,9 @@ return {
         loading_title = "Loading",
         loading_message = "Reading PID tuning",
         saved_title = "Saved",
-        saved_message = "PID tuning saved"
+        saved_message = "PID tuning saved",
+        warning_title = "Warning",
+        saved_local_only_message = "Saved locally; FC write pending",
       },
       setup_power_battery = {
         section_profiles = "Profiles",
@@ -1103,6 +1158,7 @@ return {
         loading = "Loading adjustment ranges...",
         saving = "Saving adjustment ranges...",
         unsaved_changes = "Unsaved changes",
+        read_failed = "Could not read the adjustments from the flight controller",
         fn_none = "None",
         fn_rate_profile = "Rate Profile",
         fn_pid_profile = "PID Profile",
@@ -1458,7 +1514,9 @@ return {
         mag_y = "Mag Y",
         mag_z = "Mag Z",
         stream = "Live Stream",
-        help_message = "Displays live sensor data from the flight controller in a graph."
+        help_message = "Displays live sensor data from the flight controller in a graph.",
+        loading_title = "Loading",
+        loading_message = "Reading sensors..."
       },
       diagnostics_fblstatus = {
         date = "Date",
@@ -1557,7 +1615,9 @@ return {
         status_probe_requested = "Probe requested",
         status_sync_requested = "Sync requested: ",
         mode_native = "Native",
-        mode_custom = "Custom"
+        mode_custom = "Custom",
+        loading_title = "Loading",
+        loading_message = "Reading link configuration..."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",
@@ -1645,6 +1705,7 @@ return {
         model_override = "Model Override",
         model_disabled = "Disabled",
         no_themes_found = "No dashboard themes found",
+        model_override_unavailable = "Connect a flight controller to store a per-model theme",
         value_theme_preflight = "DEFAULT",
         value_theme_inflight = "DEFAULT",
         value_theme_postflight = "DEFAULT",
@@ -1719,6 +1780,7 @@ return {
         samples = "Samples",
         file_size = "Size",
         no_logs_found = "No telemetry logs found in /LOGS/.",
+        scanning_message = "Searching /LOGS/ for telemetry logs...",
         loading_title = "Loading",
         loading_message = "Reading telemetry log...\nPlease wait, this may take a few seconds depending on file size.",
         back_to_list = "Back to list",
@@ -1726,7 +1788,27 @@ return {
         refresh = "Refresh list",
         help_p1 = "Telemetry Logs: Displays flight statistics recorded on your radio SD card.",
         help_p2 = "Log Location: Logs are loaded from /LOGS/ and /LOGS/rfsuite/telemetry/.",
-        help_p3 = "Summary Cards: Shows Min, Max, and Average values for Battery Voltage, Current, Headspeed, and ESC Temperature."
+        help_p3 = "Summary Cards: Shows Min, Max, and Average values for Battery Voltage, Current, Headspeed, and ESC Temperature.",
+        help_p4 = "Graph: Plots up to four telemetry columns of the selected log against flight time, with zoom, paging and a cursor readout.",
+        graph_open = "Graph",
+        graph_title = "Graph",
+        graph_select = "Select Sensors",
+        graph_curve = "Curve",
+        graph_none = "None",
+        graph_flight = "Flight",
+        graph_show = "Show",
+        graph_full = "Full",
+        graph_curves = "Sensors",
+        graph_scanning = "Indexing telemetry log...\nThis reads the whole file once so that zooming and paging do not have to.",
+        graph_no_columns = "This log carries no plottable columns.",
+        graph_err_open = "Cannot open the log file.",
+        graph_err_empty = "The log file is empty.",
+        graph_err_not_telemetry = "Not an EdgeTX telemetry log: no Date and Time columns.",
+        graph_err_no_data = "The log file carries no data rows.",
+        tpl_power = "Power",
+        tpl_battery = "Battery",
+        tpl_link = "Link",
+        tpl_governor = "Governor"
       }
     }
   },
@@ -1814,6 +1896,12 @@ return {
       SPOOLUP = "SPOOLUP",
       THROFF = "THR-OFF",
       UNKNOWN = "UNKNOWN"
+    },
+    service = {
+      title = "SERVICE",
+      waiting_for_link = "Waiting for MSP link",
+      loading = "Loading data...",
+      connected = "Connected"
     }
   }
 }

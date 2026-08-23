@@ -48,9 +48,36 @@ local function resolveGrid(layout)
   return cols, rows, padding
 end
 
+-- A rect's geometry depends on exactly these four fields of a box; everything else a box
+-- carries is read back from `rect.box` at render time. A theme whose `boxes` is a function
+-- returns a fresh table on every build, so comparing the table itself can never match and the
+-- whole grid is recomputed on every repaint even though nothing about the layout moved.
+local function sameGridGeometry(cached, boxes)
+  if cached == boxes then return true end
+  if type(cached) ~= "table" or type(boxes) ~= "table" then return false end
+  if #cached ~= #boxes then return false end
+  for i = 1, #boxes do
+    local a, b = cached[i], boxes[i]
+    if type(a) ~= "table" or type(b) ~= "table" then return false end
+    if a.col ~= b.col or a.row ~= b.row or a.colspan ~= b.colspan or a.rowspan ~= b.rowspan then
+      return false
+    end
+  end
+  return true
+end
+
+-- Reused rects keep their arithmetic and take the current box objects, so a box whose colour,
+-- source, title or any other non-geometry field changed still renders from its own table.
+local function rebindGridRects(rects, boxes)
+  for i = 1, #rects do
+    rects[i].box = boxes[i]
+  end
+  return rects
+end
+
 local function canReuseGridRects(cache, zone, boxes, cols, rows, padding)
   return cache
-    and cache.boxes == boxes
+    and sameGridGeometry(cache.boxes, boxes)
     and cache.zoneX == zone.x
     and cache.zoneY == zone.y
     and cache.zoneW == zone.w
@@ -142,7 +169,8 @@ function Engine.build(zone, state, theme)
 
   local rects = nil
   if canReuseGridRects(engineCache and engineCache.main, zone, boxes, cols, rows, padding) then
-    rects = engineCache.main.rects
+    rects = rebindGridRects(engineCache.main.rects, boxes)
+    engineCache.main.boxes = boxes
   else
     rects = buildGridRects(zone, boxes, cols, rows, padding)
     if engineCache then
@@ -172,7 +200,8 @@ function Engine.build(zone, state, theme)
     local hCols, hRows, hPadding = resolveGrid(headerLayout)
     local headerRects = nil
     if canReuseGridRects(engineCache and engineCache.header, headerZone, headerBoxes, hCols, hRows, hPadding) then
-      headerRects = engineCache.header.rects
+      headerRects = rebindGridRects(engineCache.header.rects, headerBoxes)
+      engineCache.header.boxes = headerBoxes
     else
       headerRects = buildGridRects(headerZone, headerBoxes, hCols, hRows, hPadding)
       if engineCache then

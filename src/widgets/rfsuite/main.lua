@@ -44,45 +44,74 @@ local function update(widget, options)
   end
 end
 
-local function logGv(msg)
+local function logGv(fmt, ...)
+  -- Same gate as the dashboard runtime's copy of this function. Ungated, every call opens,
+  -- appends to and closes a file on the SD card. The callers here are the reload path rather
+  -- than a per-frame one, so it costs less than the other copy -- but it is the same defect
+  -- and it is not switchable either.
+  --
+  -- Variadic for the same reason as the other copy, and kept in the same shape as it: with
+  -- the test inside the function, a caller pays for a message the gate then drops.
+  local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
+  local general = prefs and prefs.general
+  local debugLevel = general and general.debug_level
+  if debugLevel ~= "debug" and debugLevel ~= "info" then return end
+
+  local msg = tostring(fmt)
+  if select("#", ...) > 0 then msg = string.format(msg, ...) end
+
   local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
   if fLog then
     local t = (getTime and getTime()) or 0
-    io.write(fLog, string.format("[%.2f][Widget.main] %s\n", t / 100, tostring(msg)))
+    io.write(fLog, string.format("[%.2f][Widget.main] %s\n", t / 100, msg))
     io.close(fLog)
   end
-  if print then pcall(print, "[Widget.main] " .. tostring(msg)) end
+  if print then pcall(print, "[Widget.main] " .. msg) end
+end
+
+--- The global preference file's size and mtime, as one string.
+--
+-- The same state comparison the dashboard runtime makes, kept here rather than shared:
+-- this file is loaded for every widget at boot and deliberately pulls in nothing. It
+-- watches only the global file, because the per-model one's path is not known here --
+-- the runtime watches both, and it is the half that does the reloading.
+local PREFERENCES_FILE = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
+local PREFS_STAT_INTERVAL = 1.0
+
+local function preferencesStamp()
+  if type(fstat) ~= "function" then return nil end
+  local okg, g = pcall(fstat, PREFERENCES_FILE)
+  if okg and type(g) == "table" then
+    return tostring(g.size) .. ":" .. tostring(g.time)
+  end
+  return nil
 end
 
 local function shouldReloadWidget(widget)
-  local reload = false
-  local reason = ""
-  if _G.rfsuite_reload_flag and _G.rfsuite_reload_flag ~= widget._lastSeenReloadFlag then
-    reason = "reload_flag(" .. tostring(widget._lastSeenReloadFlag) .. "->" .. tostring(_G.rfsuite_reload_flag) .. ")"
-    widget._lastSeenReloadFlag = _G.rfsuite_reload_flag
-    reload = true
+  local now = nowSeconds()
+  if (now - (widget._lastPrefsStatAt or 0)) < PREFS_STAT_INTERVAL then
+    return false
   end
-  if type(model) == "table" and type(model.getGlobalVariable) == "function" then
-    for _, fm in ipairs({0, 8}) do
-      local ok, val = pcall(model.getGlobalVariable, 8, fm)
-      if ok and val == 1 then
-        pcall(model.setGlobalVariable, 8, fm, 0)
-        reason = reason .. " GV9_FM" .. tostring(fm) .. "=1"
-        reload = true
-      end
-    end
+  widget._lastPrefsStatAt = now
+
+  local stamp = preferencesStamp()
+  if stamp == nil then
+    return false
   end
-  if reload then
-    logGv("Reload triggered: " .. reason)
+  if widget._lastPrefsStamp == nil then
+    -- First look: a baseline, never a reload.
+    widget._lastPrefsStamp = stamp
+    return false
   end
-  return reload
+  if stamp == widget._lastPrefsStamp then
+    return false
+  end
+  widget._lastPrefsStamp = stamp
+  logGv("Reload triggered: preferences.ini changed (%s)", stamp)
+  return true
 end
 
 local function refresh(widget, event, touchState)
-  if _G.rfsuite_tool_active then
-    return
-  end
-
   if widget and shouldReloadWidget(widget) then
     widget._cpuBackoffUntil = 0
     logGv("Calling widget.reload()")
