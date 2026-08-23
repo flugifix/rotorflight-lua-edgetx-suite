@@ -310,11 +310,40 @@ New-ThemeIndexFile -TargetCoreDir $targetCore -TargetUserDir $targetUserRoot
 
 # Run translation pre-compiler and resolver to inline the language strings
 Write-Host "Running i18n pre-compiler and resolver for language: $Language"
-python (Join-Path $workspaceRoot '.vscode\scripts\precompile_i18n.py') --root $toolsRoot
-python (Join-Path $workspaceRoot '.vscode\scripts\precompile_i18n.py') --root $targetWidgetRoot
 
-python (Join-Path $workspaceRoot '.vscode\scripts\resolve_i18n_tags.py') --json (Join-Path $sourceCore "i18n\$Language.lua") --root $toolsRoot
-python (Join-Path $workspaceRoot '.vscode\scripts\resolve_i18n_tags.py') --json (Join-Path $sourceCore "i18n\$Language.lua") --root $targetWidgetRoot
+$pythonCmd = 'python'
+if (-not (Get-Command $pythonCmd -ErrorAction SilentlyContinue)) {
+    if (Get-Command 'python3' -ErrorAction SilentlyContinue) {
+        $pythonCmd = 'python3'
+    } elseif (Get-Command 'py' -ErrorAction SilentlyContinue) {
+        $pythonCmd = 'py'
+    } else {
+        $pathsToTry = @(
+            "$env:LOCALAPPDATA\Microsoft\WindowsApps\python.exe",
+            "$env:LOCALAPPDATA\Microsoft\WindowsApps\python3.exe",
+            "C:\msys64\ucrt64\bin\python.exe",
+            "C:\msys64\usr\bin\python.exe",
+            "C:\Python312\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Python310\python.exe",
+            "C:\Program Files\Python312\python.exe",
+            "C:\Program Files\Python311\python.exe",
+            "C:\Program Files\Python310\python.exe"
+        )
+        foreach ($p in $pathsToTry) {
+            if (Test-Path $p) {
+                $pythonCmd = $p
+                break
+            }
+        }
+    }
+}
+
+& $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\precompile_i18n.py') --root $toolsRoot
+& $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\precompile_i18n.py') --root $targetWidgetRoot
+
+& $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\resolve_i18n_tags.py') --json (Join-Path $sourceCore "i18n\$Language.lua") --root $toolsRoot
+& $pythonCmd (Join-Path $workspaceRoot '.vscode\scripts\resolve_i18n_tags.py') --json (Join-Path $sourceCore "i18n\$Language.lua") --root $targetWidgetRoot
 
 Write-Host "RFSuite demo deployed to:"
 Write-Host "  Target mode:     $Target"
