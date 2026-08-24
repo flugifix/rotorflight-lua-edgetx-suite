@@ -87,6 +87,38 @@ local function log(msg, level)
   end
 end
 
+-- The transport does not load the log module itself -- it takes what it needs through the
+-- options table, the same way it takes `common` -- so the three below are injected beside
+-- `log` in the constructor at the bottom of this file.
+--
+-- `logf` differs from `log` in where the string is built: `log` takes a finished one, so its
+-- caller concatenates whether or not anything is emitted. On the send path that happens on
+-- every request and every retry, at `debug_level = off`, on every radio.
+local function logf(level, fmt, ...)
+  if not Log then
+    Log = loadModule("lib/log.lua")
+  end
+  if Log and type(Log.emitf) == "function" then
+    Log.emitf("rfsuite.msp", level, fmt, ...)
+  end
+end
+
+-- For the sites where GATHERING the arguments is the cost, which is what a hex dump of a
+-- response buffer is. They ask first and build second.
+local function logWanted(level)
+  if not Log then
+    Log = loadModule("lib/log.lua")
+  end
+  return Log ~= nil and type(Log.wanted) == "function" and Log.wanted(level) == true
+end
+
+local function logHex(buf, limit)
+  if Log and type(Log.hex) == "function" then
+    return Log.hex(buf, limit)
+  end
+  return "-"
+end
+
 local function ensureBaseDeps()
   if not DetectProtocol then
     DetectProtocol = loadModule("tasks/msp/protocols.lua")
@@ -574,6 +606,9 @@ local function initIfNeeded()
 
   state.queue = QueueModule.new(common, {
     log = log,
+    logf = logf,
+    wanted = logWanted,
+    hex = logHex,
     isSimulator = state.isSimulator,
     maxRetries = state.protocol == "crsf" and 5 or 3,
     commandInterval = state.protocol == "crsf" and 0.15 or 0.25,

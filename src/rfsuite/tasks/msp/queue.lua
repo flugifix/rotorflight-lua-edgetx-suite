@@ -108,10 +108,13 @@ local function isWriteMessage(msg)
   return msg.write == true or (type(msg.payload) == "table" and #msg.payload > 0)
 end
 
-local function formatMspState(msg)
-  if not msg then return "MSP" end
-  local rw = isWriteMessage(msg) and "WRITE" or "READ"
-  return "MSP " .. rw .. " cmd=" .. tostring(msg.command)
+-- A response buffer reaches this file as a byte table on one transport and as a string on
+-- another, and a length that silently answers 0 for one of them is worse than no length.
+local function bufLen(buf)
+  local t = type(buf)
+  if t == "string" then return #buf end
+  if t == "table" then return #buf end
+  return 0
 end
 
 local function detectSimulatorRuntime()
@@ -164,6 +167,13 @@ function Queue.new(common, opts)
 
   self.common = common
   self.log = opts.log or function() end
+  -- Beside `log`, and injected for the same reason it is: this file loads no log module.
+  -- `logf` formats on the far side of the level gate, `wanted` answers whether building an
+  -- argument is worth it at all, and `hex` renders a payload. All three no-op when absent, so a
+  -- caller that constructs a queue without them behaves exactly as before.
+  self.logf = opts.logf or function() end
+  self.wanted = opts.wanted or function() return false end
+  self.hex = opts.hex or function() return "-" end
   self.isSimulator = opts.isSimulator == true
 
   self.queue = newQueue()
@@ -220,6 +230,12 @@ function Queue:add(message)
   -- messages keeps its own value.
   message.client = message.client or self.defaultClient
   qpush(self.queue, message)
+  self.logf("debug", "queued cmd=%s rw=%s client=%s from=%s depth=%d",
+    tostring(message.command),
+    isWriteMessage(message) and "W" or "R",
+    tostring(message.client),
+    message.__cachedBuf and "cache" or "wire",
+    qcount(self.queue))
   return self
 end
 
@@ -240,6 +256,12 @@ end
 function Queue:clear(clientId, opts)
   local handlers = {}
   local keepWrites = type(opts) == "table" and opts.keepWrites == true
+  -- What was in flight and what was queued when the clear arrived, said BEFORE anything is
+  -- dropped. Read afterwards this is the difference between "the board never answered" and
+  -- "something else took the request away" -- and those two look identical from a page, which
+  -- is how a Save that was destroyed by a queue-wide clear once read as a Save that failed.
+  local depthBefore = qcount(self.queue)
+  local inFlight = self.currentMessage and self.currentMessage.command or nil
 
   if clientId == nil then
     if self.currentMessage and type(self.currentMessage.errorHandler) == "function" then
@@ -301,6 +323,12 @@ function Queue:clear(clientId, opts)
     qreset(self.queue)
     self.queue = kept
   end
+
+  -- warn, not debug: a clear is never routine from the point of view of whatever was queued.
+  -- Every one of those handlers is somebody being told their request will not be answered.
+  self.logf("warn", "queue cleared client=%s keepWrites=%s inflight=%s depth=%d->%d dropped=%d",
+    clientId == nil and "ALL" or tostring(clientId), tostring(keepWrites),
+    inFlight and tostring(inFlight) or "-", depthBefore, qcount(self.queue), #handlers)
 
   for i = 1, #handlers do
     pcall(handlers[i])
@@ -407,6 +435,16 @@ function Queue:processQueue(now)
     msg.__cachedBuf = nil
     msg.buf = buf
     msg.__retryCount = 0
+    -- Said as `cache`, and never as a reply: this buffer did not go out and nothing came back
+    -- for it. A trace that reported it as wire traffic would record a stale answer as a fresh
+    -- one, which is the one thing a payload trace must not do.
+    if self.wanted("trace") then
+      self.logf("trace", "rx cmd=%s src=cache len=%s client=%s %s",
+        tostring(msg.command), tostring(bufLen(buf)), tostring(msg.client), self.hex(buf))
+    else
+      self.logf("debug", "rx cmd=%s src=cache len=%s client=%s",
+        tostring(msg.command), tostring(bufLen(buf)), tostring(msg.client))
+    end
     if type(msg.processReply) == "function" then
       msg.processReply(msg, buf)
     end
@@ -425,7 +463,8 @@ function Queue:processQueue(now)
 
   if simulatorMode then
     if not msg.simulatorResponse then
-      self.log("No simulator response for cmd " .. tostring(msg.command), "warn")
+      self.logf("warn", "no simulator response cmd=%s client=%s",
+        tostring(msg.command), tostring(msg.client))
       self.currentMessage = nil
       self.currentMessageStartTime = nil
       self.lastTimeCommandSent = nil
@@ -463,7 +502,7 @@ function Queue:processQueue(now)
   end
 
   if not pollOk then
-    self.log(formatMspState(msg) .. " poll error", "warn")
+    self.logf("warn", "poll error cmd=%s client=%s", tostring(msg.command), tostring(msg.client))
     return
   end
 
@@ -488,6 +527,17 @@ function Queue:processQueue(now)
 
   if success then
     msg.buf = buf
+    -- `src=wire` is the counterpart of the `src=cache` line above, and the pair is the point:
+    -- read on its own, neither says whether the bytes came off the transport or out of a table.
+    local elapsed = msg.__sentAt and (now - msg.__sentAt) or -1
+    if self.wanted("trace") then
+      self.logf("trace", "rx cmd=%s src=wire len=%s client=%s attempt=%d dt=%.2f err=%s %s",
+        tostring(cmd), tostring(bufLen(buf)), tostring(msg.client), self.retryCount, elapsed,
+        tostring(err), self.hex(buf))
+    else
+      self.logf("debug", "rx cmd=%s src=wire len=%s client=%s attempt=%d dt=%.2f",
+        tostring(cmd), tostring(bufLen(buf)), tostring(msg.client), self.retryCount, elapsed)
+    end
     local cache = getCache()
     if cache and not isWriteMessage(msg) then
       cache.put(msg.command, buf)
@@ -532,10 +582,18 @@ function Queue:processQueue(now)
       self.lastTimeCommandSent = now
       self.currentMessageStartTime = now -- Timeout-Fenster für jeden Retry neu setzen
       self.retryCount = self.retryCount + 1
-      if self.retryCount > 1 then
-        self.log(formatMspState(msg) .. " retry=" .. tostring(self.retryCount) .. "/" .. tostring(self.maxRetries + 1), "debug")
+      -- When this message FIRST went out, kept apart from currentMessageStartTime, which every
+      -- retry resets. The reply line reports the distance from here, so a slow answer and a
+      -- fast answer to a fourth attempt do not read alike.
+      msg.__sentAt = msg.__sentAt or now
+      if self.wanted("trace") then
+        self.logf("trace", "tx cmd=%s rw=%s client=%s attempt=%d/%d len=%s %s",
+          tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
+          self.retryCount, self.maxRetries + 1, tostring(bufLen(payload)), self.hex(payload))
       else
-        self.log(formatMspState(msg) .. " send", "debug")
+        self.logf("debug", "tx cmd=%s rw=%s client=%s attempt=%d/%d len=%s",
+          tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
+          self.retryCount, self.maxRetries + 1, tostring(bufLen(payload)))
       end
 
       if self.common and type(self.common.processTxQ) == "function" then
@@ -562,7 +620,8 @@ function Queue:processQueue(now)
     if type(msg.setErrorHandler) == "function" then
       msg.setErrorHandler(msg)
     end
-    self.log(formatMspState(msg) .. " max retries", "warn")
+    self.logf("warn", "max retries cmd=%s rw=%s client=%s attempts=%d",
+      tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client), self.retryCount)
     -- Only the message that ran out of retries is given up. Clearing the whole queue here ran
     -- the errorHandler of every other message waiting -- and this one's a second time, since it
     -- has just been called above -- so a single unanswered command took down work belonging to
@@ -597,7 +656,9 @@ function Queue:processQueue(now)
     if type(msg.setErrorHandler) == "function" then
       msg.setErrorHandler(msg)
     end
-    self.log(formatMspState(msg) .. " timeout", "warn")
+    self.logf("warn", "timeout cmd=%s rw=%s client=%s attempt=%d/%d",
+      tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
+      self.retryCount, self.maxRetries + 1)
     self.currentMessage = nil
     self.currentMessageStartTime = nil
     self.lastTimeCommandSent = nil
