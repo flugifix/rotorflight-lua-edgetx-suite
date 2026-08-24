@@ -113,7 +113,18 @@ function Log.emit(tag, msg, level, enabled)
 
   local t = tag or "rfsuite"
   local lvl = level or "debug"
-  local line = "[" .. tostring(t) .. "][" .. tostring(lvl) .. "] " .. tostring(msg)
+
+  -- The history entry already carries a timestamp and session_logs/page.lua renders it, but
+  -- the console and serial line was built without one, so the same message could be read with
+  -- a time on the radio and without a time everywhere else. Same clock and same format as that
+  -- page, and left out when the clock is unavailable, which is what the page does too.
+  local now = getTime and getTime() or 0
+  local stamp = ""
+  if now > 0 then
+    stamp = "[" .. string.format("%0.1f", now / 100) .. "]"
+  end
+
+  local line = "[" .. tostring(t) .. "][" .. tostring(lvl) .. "]" .. stamp .. " " .. tostring(msg)
 
   if emitConsole and type(print) == "function" then
     print(line)
