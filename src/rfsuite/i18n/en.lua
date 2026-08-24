@@ -1685,6 +1685,8 @@ return {
         section_logging = "Logging",
         debug_level = "Debug Level",
         debug_level_off = "OFF",
+        debug_level_error = "ERROR",
+        debug_level_warn = "WARN",
         debug_level_info = "INFO",
         debug_level_debug = "DEBUG",
         continuous_memory_log = "Continuous Memory Log",

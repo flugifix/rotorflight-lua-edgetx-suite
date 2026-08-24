@@ -8,6 +8,7 @@ end
 
 local Controls = nil
 local Common = nil
+local Log = nil
 
 local CONFIG_SCHEMA = {
   { key = "debug_level", type = "string", default = "off" },
@@ -16,7 +17,17 @@ local CONFIG_SCHEMA = {
   { key = "enable_serial_debug", type = "bool", default = false }
 }
 
-local DEBUG_LEVEL_VALUES = { "off", "info", "debug" }
+-- Mirrors the ladder in lib/log.lua and is replaced by it in ensureDeps(). It is kept as a
+-- literal only so this page still builds if the log module cannot be loaded; log.lua holds the
+-- definition, and the values below are the order the selector offers them in.
+local DEBUG_LEVEL_VALUES = { "off", "error", "warn", "info", "debug" }
+
+local function isKnownDebugLevel(value)
+  for _, name in ipairs(DEBUG_LEVEL_VALUES) do
+    if name == value then return true end
+  end
+  return false
+end
 
 local function buildDefaultConfig()
   local cfg = {}
@@ -44,6 +55,14 @@ local function ensureDeps()
   end
   if not Controls then
     Controls = loadModule("ui/controls.lua")
+  end
+  if Log == nil then
+    -- pcall because loadModule asserts, and a missing log module must not take the page down.
+    local ok, mod = pcall(loadModule, "lib/log.lua")
+    Log = (ok and mod) or false
+    if Log and type(Log.LEVELS) == "table" and #Log.LEVELS > 0 then
+      DEBUG_LEVEL_VALUES = Log.LEVELS
+    end
   end
   if not ui.runtime then
     ui.runtime = Common.createFormRuntime(ui)
@@ -75,8 +94,7 @@ local function copyFromPrefs(prefs)
     end
   end
 
-  local current = ui.config.debug_level
-  if current ~= "off" and current ~= "info" and current ~= "debug" then
+  if not isKnownDebugLevel(ui.config.debug_level) then
     ui.config.debug_level = "off"
   end
 end
@@ -111,11 +129,14 @@ local function getValueSetter(key)
 end
 
 local function buildDebugLevelOptions(i18n)
-  return {
-    { value = "off",   label = t(i18n, "debug_level_off", "OFF") },
-    { value = "info",  label = t(i18n, "debug_level_info", "INFO") },
-    { value = "debug", label = t(i18n, "debug_level_debug", "DEBUG") }
-  }
+  local options = {}
+  for _, name in ipairs(DEBUG_LEVEL_VALUES) do
+    options[#options + 1] = {
+      value = name,
+      label = t(i18n, "debug_level_" .. name, string.upper(name))
+    }
+  end
+  return options
 end
 
 local function buildLogging(cursorY, children, x, w, i18n)

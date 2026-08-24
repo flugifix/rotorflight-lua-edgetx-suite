@@ -4,21 +4,28 @@ local function isTruthy(value)
   return value == true or value == 1 or value == "1" or value == "true"
 end
 
+-- The severity ladder, ordered from quietest to most verbose. This table is the single
+-- definition of it: the rank comparison below and the Debug Level selector on the developer
+-- settings page both derive from it, so a level is added in one place instead of several.
+--
+-- The names are the ones GEMINI.md documents for Log.emit and the ones
+-- app/pages/tools/diagnostics/session_logs/page.lua gives a colour of its own.
+local LEVELS = { "off", "error", "warn", "info", "debug" }
+
+local RANK = {}
+for index, name in ipairs(LEVELS) do
+  RANK[name] = index - 1
+end
+
 local function normalizeLevel(value)
   local text = string.lower(tostring(value or "debug"))
-  if text == "off" then return "off" end
-  if text == "info" then return "info" end
-  if text == "debug" then return "debug" end
-  if text == "warn" or text == "warning" then return "warn" end
-  if text == "error" then return "error" end
+  if text == "warning" then return "warn" end
+  if RANK[text] then return text end
   return "debug"
 end
 
 local function debugLevelRank(level)
-  local normalized = normalizeLevel(level)
-  if normalized == "off" then return 0 end
-  if normalized == "error" or normalized == "warn" or normalized == "info" then return 1 end
-  return 2
+  return RANK[normalizeLevel(level)]
 end
 
 local function configuredDebugLevel()
@@ -29,14 +36,15 @@ local function configuredDebugLevel()
   if value == nil then
     return "off"
   end
-  local normalized = normalizeLevel(value)
-  if normalized == "warn" or normalized == "error" then
-    return "info"
-  end
-  if normalized ~= "off" and normalized ~= "info" and normalized ~= "debug" then
+  local text = string.lower(tostring(value))
+  if text == "warning" then text = "warn" end
+  -- A value this build does not know stays off. normalizeLevel falls back to "debug", which is
+  -- right for a message whose level is mistyped and wrong for the switch deciding whether
+  -- anything is written at all -- there it would turn an unreadable setting into the loudest one.
+  if RANK[text] == nil then
     return "off"
   end
-  return normalized
+  return text
 end
 
 local function shouldEmitByLevel(messageLevel)
@@ -115,6 +123,10 @@ function Log.emit(tag, msg, level, enabled)
     pcall(serialWrite, line .. "\n")
   end
 end
+
+-- Exported so the Debug Level selector on the developer settings page can offer exactly the
+-- levels this module understands, instead of carrying a second list that drifts away from it.
+Log.LEVELS = LEVELS
 
 if type(_G) == "table" then
   _G.rfsuite = _G.rfsuite or {}
