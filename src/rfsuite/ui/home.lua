@@ -217,6 +217,39 @@ if Log == nil then
   Log = loadModule("lib/log.lua") or NO_LOG
 end
 
+-- The card sink is loaded on first use rather than here: with the option off, which is how it
+-- ships, the chunk is never read off the card and the cost of asking is one table lookup.
+-- lib/log_sink.lua makes the same check itself, so a caller cannot be wrong about it -- this
+-- one only decides whether the module is worth loading.
+local LogSink = nil
+local logSinkTried = false
+
+local function cardLogEnabled()
+  local general = state and state.preferences and state.preferences.general
+  return type(general) == "table" and general.log_to_card == true
+end
+
+local function sink()
+  if not cardLogEnabled() then return nil end
+  if not LogSink and not logSinkTried then
+    logSinkTried = true
+    LogSink = loadModule("lib/log_sink.lua")
+    if LogSink and type(LogSink.configure) == "function" then
+      LogSink.configure("tool")
+    end
+  end
+  return LogSink
+end
+
+-- What was being started. Written to a file of its own that is closed again immediately, so it
+-- is on the card even when the call it names never returns.
+local function logStep(label, force)
+  local s = sink()
+  if s and type(s.step) == "function" then
+    pcall(s.step, label, force)
+  end
+end
+
 local function ensurePageRegistry()
   if not PageRegistry then
     PageRegistry = loadModule("app/pages/init.lua")
@@ -1553,6 +1586,12 @@ function M.buildUI()
 
   ensureBuildDeps()
 
+  -- Before the build, not after it. A build that allocates more than the LVGL pool can give it
+  -- does not come back, so a line written afterwards is the one line that would never appear --
+  -- and it is the one naming the screen that could not be built.
+  local buildingMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+  logStep("build menu=" .. tostring(buildingMenuId))
+
   local isArmed = isModelArmed()
 
   if state.initialLoad then
@@ -2188,6 +2227,15 @@ function M.run(event, touchState)
     local transitionedMenuThisTick = false
 
     local armed = isModelArmed()
+
+    -- The card sink advances here and nowhere else in this state: it is the one place per pass
+    -- that runs whatever is on screen. It decides for itself whether anything is written, and
+    -- the armed state only lengthens its interval.
+    local cardSink = sink()
+    if cardSink and type(cardSink.tick) == "function" then
+      pcall(cardSink.tick, armed)
+    end
+
     if armed ~= state.lastModelArmedState then
       state.lastModelArmedState = armed
       -- The registry is the one place that already knows why an entry is or is not
@@ -2254,6 +2302,7 @@ function M.run(event, touchState)
     if state.isClosing then
       if not state.closeTicks then
         logToFile("Closing sequence started (Tick 0).")
+        logStep("closing tick 0", true)
         state.closeTicks = 0
         -- Tick 0: ONLY build the UI overlay. Do NOT do any cleanup or GC yet.
         -- This ensures the Lua VM yields immediately and EdgeTX can draw the screen.
@@ -2283,6 +2332,7 @@ function M.run(event, touchState)
       if state.closeTicks == 0 then
         -- Tick 1: Do page releases and event resets (this queues any override resets)
         logToFile("Closing sequence Tick 1. Starting cleanup.")
+        logStep("closing tick 1: cleanup", true)
         state.pendingBuildUI = false
         state.pendingGcAfterBuild = false
         state.pendingSaveAction = nil
@@ -2325,6 +2375,7 @@ function M.run(event, touchState)
       elseif not state.shouldExit then
         -- Tick 16: Finalize library cleanup and detach MSP
         logToFile("Closing sequence finalizing. Detaching MSP.")
+        logStep("closing: detaching MSP", true)
         if state.mspAttached then
           if MspRuntime and type(MspRuntime.detach) == "function" then
             pcall(MspRuntime.detach, "tool")
@@ -2380,6 +2431,7 @@ function M.run(event, touchState)
       -- Skip all other background tasks and exit immediately
       if state.shouldExit then
         logToFile("Closing sequence returning 2 to EdgeTX.")
+        logStep("closing: returning to the radio", true)
         if state.mspAttached and MspRuntime and type(MspRuntime.detach) == "function" then
           pcall(MspRuntime.detach, "tool")
           state.mspAttached = false
@@ -2618,6 +2670,11 @@ function M.run(event, touchState)
     if state.mspAttached and MspRuntime and type(MspRuntime.detach) == "function" then
       MspRuntime.detach("tool")
       state.mspAttached = false
+    end
+    -- An orderly exit is the one case where the tail is not lost, so take it.
+    local exitSink = sink()
+    if exitSink and type(exitSink.shutdown) == "function" then
+      pcall(exitSink.shutdown)
     end
     return 2
   end
