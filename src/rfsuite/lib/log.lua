@@ -10,7 +10,9 @@ end
 --
 -- The names are the ones GEMINI.md documents for Log.emit and the ones
 -- app/pages/tools/diagnostics/session_logs/page.lua gives a colour of its own.
-local LEVELS = { "off", "error", "warn", "info", "debug" }
+-- `trace` sits below `debug` and is the level the payload dumps hang on. It is separate rather
+-- than folded into `debug` so that `debug` stays exactly as loud as it has always been.
+local LEVELS = { "off", "error", "warn", "info", "debug", "trace" }
 
 local RANK = {}
 for index, name in ipairs(LEVELS) do
@@ -72,6 +74,31 @@ if type(_G) == "table" then
   _G.rfsuite.log_history_seq = _G.rfsuite.log_history_seq or 0
 end
 
+-- The ring is a SCREEN budget, not a buffer budget: app/pages/tools/diagnostics/session_logs is
+-- its consumer, and 60 entries of 100 characters is what that page can show. Anything writing
+-- the log to a card is a different consumer with a different one -- a payload dump is longer
+-- than MAX_MSG_LEN by itself, and a trace fills sixty entries in well under a second. So a sink
+-- is given a list of its own, untruncated and far longer, and the ring is left exactly as that
+-- page expects to find it.
+local SINK_MAX = 2000
+local sinkActive = false
+
+local function addToSink(tag, msg, level)
+  local sink = _G.rfsuite.log_sink
+  if type(sink) ~= "table" then return end
+
+  sink[#sink + 1] = {
+    tag = tostring(tag or "rfsuite"),
+    msg = tostring(msg or ""),
+    level = tostring(level or "debug"),
+    time = getTime and getTime() or 0
+  }
+  if #sink > SINK_MAX then
+    table.remove(sink, 1)
+  end
+  _G.rfsuite.log_sink_seq = (_G.rfsuite.log_sink_seq or 0) + 1
+end
+
 local function addToHistory(tag, msg, level)
   local t = tostring(tag or "rfsuite")
   local lvl = tostring(level or "debug")
@@ -99,9 +126,20 @@ end
 function Log.emit(tag, msg, level, enabled)
   local emitByLevel = shouldEmitByLevel(level)
   
-  -- Always buffer important logs (info/warn/error) or if debug is enabled
-  if emitByLevel or normalizeLevel(level) ~= "debug" then
+  -- Always buffer important logs (info/warn/error) or if debug is enabled.
+  --
+  -- Written as a rank comparison rather than as "anything that is not debug": with `trace` below
+  -- `debug`, the old test was true for a trace line as well, which would have put every payload
+  -- dump into the ring at every setting -- `off` included -- and flooded the page the ring
+  -- exists for. The behaviour for the five levels that existed before is identical.
+  if emitByLevel or debugLevelRank(level) <= RANK.info then
     addToHistory(tag, msg, level)
+  end
+
+  -- A sink writing to the card is a second consumer with a different budget, and it takes the
+  -- message UNTRUNCATED. See addToSink.
+  if sinkActive and emitByLevel then
+    addToSink(tag, msg, level)
   end
 
   local emitConsole = isTruthy(enabled) and emitByLevel
@@ -138,6 +176,75 @@ end
 -- Exported so the Debug Level selector on the developer settings page can offer exactly the
 -- levels this module understands, instead of carrying a second list that drifts away from it.
 Log.LEVELS = LEVELS
+
+--- Would a message at this level be emitted right now?
+--
+-- For call sites where BUILDING the message is the expensive part -- a hex dump of a response
+-- buffer is a few hundred characters that `emitf` below would still have to be handed. Those
+-- sites ask first and build second.
+function Log.wanted(level)
+  return shouldEmitByLevel(level)
+end
+
+--- Emit, formatting only if the level passes.
+--
+-- The difference from Log.emit is where the string is built. `Log.emit(tag, a .. b .. c, ...)`
+-- concatenates before the call, so the caller pays for a message the gate then drops -- and on
+-- the MSP path that is a send and a retry apart, at `debug_level = off`, on every radio. Here
+-- the caller hands over the pieces and string.format runs only on the far side of the gate.
+function Log.emitf(tag, level, fmt, ...)
+  if not shouldEmitByLevel(level) then
+    -- The ring still wants the important levels, gate or no gate. Formatting one of those is
+    -- not the cost this function exists to avoid: they are rare by definition.
+    if debugLevelRank(level) <= RANK.info then
+      local ok, text = pcall(string.format, fmt, ...)
+      Log.emit(tag, ok and text or tostring(fmt), level, false)
+    end
+    return
+  end
+
+  local ok, text = pcall(string.format, fmt, ...)
+  Log.emit(tag, ok and text or tostring(fmt), level, true)
+end
+
+--- A buffer as hex, for a payload line. Bounded, and it says when it truncated.
+--
+-- Only ever called behind Log.wanted: this allocates in proportion to the buffer and there is
+-- no point paying for it on a card that is not tracing.
+function Log.hex(buf, limit)
+  if type(buf) ~= "string" then
+    if type(buf) == "table" then
+      local parts = {}
+      local n = math.min(#buf, limit or #buf)
+      for i = 1, n do parts[i] = string.format("%02X", (tonumber(buf[i]) or 0) % 256) end
+      local text = table.concat(parts, " ")
+      if #buf > n then text = text .. string.format(" ...(%d more)", #buf - n) end
+      return text
+    end
+    return "-"
+  end
+
+  local n = #buf
+  local take = limit and math.min(n, limit) or n
+  local parts = {}
+  for i = 1, take do parts[i] = string.format("%02X", string.byte(buf, i)) end
+  local text = table.concat(parts, " ")
+  if take < n then text = text .. string.format(" ...(%d more)", n - take) end
+  return text
+end
+
+--- Tell the logger a card sink is taking lines, so it starts filling the sink's own list.
+function Log.attachSink()
+  _G.rfsuite.log_sink = _G.rfsuite.log_sink or {}
+  _G.rfsuite.log_sink_seq = _G.rfsuite.log_sink_seq or 0
+  sinkActive = true
+end
+
+--- Stop filling it, and drop what is in it: nothing is going to read it.
+function Log.detachSink()
+  sinkActive = false
+  _G.rfsuite.log_sink = nil
+end
 
 if type(_G) == "table" then
   _G.rfsuite = _G.rfsuite or {}

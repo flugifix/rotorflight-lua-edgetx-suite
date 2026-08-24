@@ -1689,6 +1689,7 @@ return {
         debug_level_warn = "WARN",
         debug_level_info = "INFO",
         debug_level_debug = "DEBUG",
+        debug_level_trace = "TRACE",
         continuous_memory_log = "Continuous Memory Log",
         show_header_memory = "Show Header Memory",
         enable_serial_debug = "Enable Serial Debug",
