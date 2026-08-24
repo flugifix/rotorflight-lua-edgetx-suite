@@ -202,6 +202,18 @@ function M.new(category)
     end
 
     if type(module.wakeup) == "function" then
+      -- Said BEFORE the call, and into the step file as well as the log. The runner reports
+      -- tasks it has finished; a task that never finishes is reported by nothing, and the
+      -- connect chain is where a start with a flight controller attached spends its time. The
+      -- step file is closed immediately, so it survives a wakeup that does not come back.
+      if Log and type(Log.emitf) == "function" then
+        pcall(Log.emitf, "rfsuite.tasks." .. category, "debug", "start task %s attempt=%s",
+          tostring(task.name), tostring(task.attempts or 1))
+      end
+      local step = _G.rfsuite and _G.rfsuite.logStep
+      if type(step) == "function" then
+        pcall(step, "task " .. category .. ":" .. tostring(task.name))
+      end
       pcall(module.wakeup, args)
     end
 

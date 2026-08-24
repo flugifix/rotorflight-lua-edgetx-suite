@@ -2112,10 +2112,22 @@ function M.init()
   local prefs = loadPreferencesSafe()
   state.preferences = prefs
   _G.rfsuite.preferences = prefs
+
+  -- The earliest point at which anything can be written, because the option lives in the file
+  -- that was just read. Everything before this line -- the module loads and the preference read
+  -- itself -- is invisible by construction and no option could change that.
+  --
+  -- What it does reach back over is the log ring: attaching seeds the sink from it, so the lines
+  -- emitted while the modules above were loading go out with the first flush. A start that hangs
+  -- after this point leaves the step file naming the stage it stopped in.
+  logStep("init: preferences read", true)
+
   local locale = resolveLocaleFromSystem()
   state.i18n       = I18n.new(locale)
+  logStep("init: locale " .. tostring(locale), true)
   _G.rfsuite.savePreferences = performSave
   state.manifest = manifest
+  logStep("init: menu registry", true)
   state.menu       = MenuRegistry.new(manifest, state.i18n, {
     conditions = {
       developerTools = prefs.general and prefs.general.developer_tools == true,
@@ -2173,7 +2185,9 @@ function M.init()
   if Precompile then
     Precompile.start(Version and Version.VERSION or nil)
   end
+  logStep("init: first build", true)
   M.buildUI()
+  logStep("init: done", true)
 end
 
 -- Hoisted out of `M.run`. EdgeTX drives `run()` from the standalone window's event

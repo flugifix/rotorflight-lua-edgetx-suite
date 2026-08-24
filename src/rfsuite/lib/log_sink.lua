@@ -375,4 +375,15 @@ function Sink.shutdown()
   endSession()
 end
 
+-- Published so any file can leave a step without taking a dependency on this module, the same
+-- way lib/log.lua publishes itself. The step file is the only thing that survives a call which
+-- never returns, so the places that most need to write one -- a task being started, a page being
+-- built -- are exactly the leaf files that should not be loading modules.
+if type(_G) == "table" then
+  _G.rfsuite = _G.rfsuite or {}
+  _G.rfsuite.logStep = function(label, force)
+    return Sink.step(label, force)
+  end
+end
+
 return Sink
