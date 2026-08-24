@@ -9,6 +9,15 @@ local BASE_PATH = "/SCRIPTS/TOOLS/rfsuite-core/"
 _G.rfsuite = _G.rfsuite or {}
 _G.rfsuite.modules = _G.rfsuite.modules or {}
 
+-- Load mode for every script the suite loads.
+--
+-- "b" is what lets EdgeTX read back the .luac beside a source once that bytecode is the newer
+-- of the two, which is the point of having compiled it at all; "t" is the fallback for a
+-- source that has no bytecode yet, and compiling it writes the .luac for the next start.
+-- lib/precompile.lua fills the tree in at start time so that first compile does not fall on
+-- the first page that happens to need it.
+_G.rfsuite.loadMode = "bt"
+
 local modules = _G.rfsuite.modules
 
 local function normalizePath(path)
@@ -32,7 +41,7 @@ local function requireModule(path, forceReload)
     return modules[fullPath]
   end
 
-  local chunk, err = loadScript(fullPath, "t")
+  local chunk, err = loadScript(fullPath, _G.rfsuite.loadMode)
   if not chunk then
     if type(err) == "string" then
       print("[require] Failed to load " .. tostring(fullPath) .. ": " .. err)

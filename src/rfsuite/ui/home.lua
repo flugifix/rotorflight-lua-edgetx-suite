@@ -42,6 +42,7 @@ local Log = nil
 local Events = nil
 local Audio = nil
 local Sensors = nil
+local Precompile = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
 
@@ -70,6 +71,12 @@ end
 local function ensureVersion()
   if not Version then
     Version = loadModule("lib/version.lua")
+  end
+end
+
+local function ensurePrecompile()
+  if not Precompile then
+    Precompile = loadModule("lib/precompile.lua")
   end
 end
 
@@ -1566,6 +1573,14 @@ function M.buildUI()
     -- here: that is a box drawn OVER a page, and there is no page yet.
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
     local title = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
+
+    -- The compile count rides along with the label that is already there, so a start that has
+    -- files to compile says so instead of looking stuck. No string of its own to translate.
+    local compileDone = state.precompileDone or 0
+    local compileTotal = state.precompileTotal or 0
+    if compileTotal > 0 and compileDone < compileTotal then
+      title = title .. " " .. tostring(compileDone) .. "/" .. tostring(compileTotal)
+    end
     local message = ONCONNECT_TEXT[state.startTaskName or ""] or
                     (state.i18n and state.i18n.t and state.i18n.t("app.connecting")) or
                     "Connecting"
@@ -2097,6 +2112,13 @@ function M.init()
   state.mspAttached = false
   state.initialLoad = true
   state.lastProgressSnapshot = ""
+  state.precompileDone = 0
+  state.precompileTotal = 0
+  ensureVersion()
+  ensurePrecompile()
+  if Precompile then
+    Precompile.start(Version and Version.VERSION or nil)
+  end
   M.buildUI()
 end
 
@@ -2485,9 +2507,19 @@ function M.run(event, touchState)
       state.startTotal = pTotal
       state.startTaskName = taskName
 
-      -- Repaint when what is DISPLAYED changes, which is the count and the task name -- not the
-      -- count alone, or the frame naming a task would go stale within its own step.
-      local snapshot = tostring(pDone) .. "/" .. tostring(pTotal) .. "/" .. tostring(taskName)
+      local compileDone, compileTotal, compileFinished = 0, 0, true
+      if Precompile then
+        Precompile.step()
+        compileDone, compileTotal, compileFinished = Precompile.getProgress()
+      end
+      state.precompileDone = compileDone
+      state.precompileTotal = compileTotal
+
+      -- Repaint when what is DISPLAYED changes, which is the count, the task name and the
+      -- compile count -- not the count alone, or the frame naming a task would go stale
+      -- within its own step.
+      local snapshot = tostring(pDone) .. "/" .. tostring(pTotal) .. "/" .. tostring(taskName) ..
+                       " " .. tostring(compileDone) .. "/" .. tostring(compileTotal)
       if snapshot ~= state.lastProgressSnapshot then
         state.lastProgressSnapshot = snapshot
         scheduleBuildUI(false)
@@ -2502,8 +2534,12 @@ function M.run(event, touchState)
       local isConnected = mspState and mspState.lastConnected == true
       local timeoutReached = (now - state.lastInputTick) > 200
 
-      if (isConnected and mspProgress and mspProgress.done >= mspProgress.total and not Events.isOnconnectActive())
-         or (not isConnected and timeoutReached) then
+      local mspSettled = (isConnected and mspProgress and mspProgress.done >= mspProgress.total and not Events.isOnconnectActive())
+                         or (not isConnected and timeoutReached)
+
+      -- Hold the start screen until the compiling is through, which is the point of doing it
+      -- here rather than on the first page that happens to need a file.
+      if mspSettled and compileFinished then
         state.initialLoad = false
         scheduleBuildUI(false)
       end
