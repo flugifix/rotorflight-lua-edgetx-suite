@@ -1720,6 +1720,7 @@ return {
         continuous_memory_log = "Kontinuierliches Speicher-Log",
         show_header_memory = "Speicheranzeige in Kopfzeile",
         enable_serial_debug = "Serielles Debug aktivieren",
+        log_to_card = "Sitzungslog auf Karte",
         help_message = "Konfiguriere Logging- und Debug-Optionen fuer die Entwicklungsdiagnose.",
         saved_title = "Gespeichert",
         saved_message = "Entwickler-Einstellungen gespeichert",

@@ -1692,6 +1692,7 @@ return {
         continuous_memory_log = "Continuous Memory Log",
         show_header_memory = "Show Header Memory",
         enable_serial_debug = "Enable Serial Debug",
+        log_to_card = "Log Session To Card",
         help_message = "Configure logging and debugging options for development diagnostics.",
         saved_title = "Saved",
         saved_message = "Developer settings saved",

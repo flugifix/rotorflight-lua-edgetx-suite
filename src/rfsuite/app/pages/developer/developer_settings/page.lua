@@ -14,7 +14,8 @@ local CONFIG_SCHEMA = {
   { key = "debug_level", type = "string", default = "off" },
   { key = "continuous_memory_log", type = "bool", default = false },
   { key = "show_header_memory", type = "bool", default = false },
-  { key = "enable_serial_debug", type = "bool", default = false }
+  { key = "enable_serial_debug", type = "bool", default = false },
+  { key = "log_to_card", type = "bool", default = false }
 }
 
 -- Mirrors the ladder in lib/log.lua and is replaced by it in ensureDeps(). It is kept as a
@@ -163,6 +164,12 @@ local function buildLogging(cursorY, children, x, w, i18n)
     t(i18n, "enable_serial_debug", "Enable Serial Debug"),
     ui.runtime.getBoolGetter("enable_serial_debug"),
     ui.runtime.getBoolSetter("enable_serial_debug")
+  )
+
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    t(i18n, "log_to_card", "Log Session To Card"),
+    ui.runtime.getBoolGetter("log_to_card"),
+    ui.runtime.getBoolSetter("log_to_card")
   )
   return cursorY
 end
