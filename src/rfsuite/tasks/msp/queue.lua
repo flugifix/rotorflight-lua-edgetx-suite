@@ -476,6 +476,18 @@ function Queue:processQueue(now)
       self.retryCount = self.retryCount + 1
       msg.__retryCount = self.retryCount
       msg.buf = msg.simulatorResponse
+      -- The third source, and it is tagged for the same reason `cache` is. This buffer is the
+      -- api module's own simulatorResponse constant: nothing was sent and no board answered. A
+      -- line calling it a reply would say the transport works on a card where the transport was
+      -- never used.
+      if self.wanted("trace") then
+        self.logf("trace", "rx cmd=%s src=sim len=%s client=%s %s",
+          tostring(msg.command), tostring(bufLen(msg.buf)), tostring(msg.client),
+          self.hex(msg.buf))
+      else
+        self.logf("debug", "rx cmd=%s src=sim len=%s client=%s",
+          tostring(msg.command), tostring(bufLen(msg.buf)), tostring(msg.client))
+      end
       if type(msg.processReply) == "function" then
         msg.processReply(msg, msg.buf)
       end
