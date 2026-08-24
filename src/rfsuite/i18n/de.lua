@@ -1713,6 +1713,8 @@ return {
         section_logging = "Protokollierung",
         debug_level = "Debug-Level",
         debug_level_off = "AUS",
+        debug_level_error = "FEHLER",
+        debug_level_warn = "WARNUNG",
         debug_level_info = "INFO",
         debug_level_debug = "DEBUG",
         continuous_memory_log = "Kontinuierliches Speicher-Log",
