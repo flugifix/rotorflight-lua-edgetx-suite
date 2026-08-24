@@ -31,6 +31,10 @@ local DashboardSplash = requireModule("widgets/dashboard/splash.lua")
 local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")
 local Sensors = requireModule("lib/sensors.lua")
+local LogSink = requireModule("lib/log_sink.lua")
+if LogSink and type(LogSink.configure) == "function" then
+  LogSink.configure("widget")
+end
 
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
 local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
@@ -112,7 +116,33 @@ end
 
 local EventsRuntime = requireModule("tasks/events/runtime.lua")
 
+-- Both widgets run in one Lua state and share the one ring in it, so exactly one of them may
+-- write it out -- two writers would append to the same file from two places and interleave.
+-- widgets/service/runtime.lua is the better owner, because its background() runs while it is off
+-- screen, and it announces itself to the MSP runtime under this name when it attaches. Where it
+-- is not on the model there is nobody to defer to and this runtime writes instead.
+local function serviceWidgetOwnsTheSink()
+  if not MspRuntime or type(MspRuntime.getState) ~= "function" then return false end
+  local runtimeState = MspRuntime.getState()
+  if type(runtimeState) ~= "table" or type(runtimeState.clients) ~= "table" then return false end
+  return runtimeState.clients["service-widget"] == true
+end
+
+local function tickCardSink(self)
+  if not LogSink or type(LogSink.tick) ~= "function" then return end
+  if serviceWidgetOwnsTheSink() then return end
+
+  local armed = false
+  if MspRuntime and type(MspRuntime.getState) == "function" then
+    local runtimeState = MspRuntime.getState()
+    armed = type(runtimeState) == "table" and runtimeState.lastArmed == true
+  end
+  pcall(LogSink.tick, armed)
+end
+
 local function tickMspRuntime(self)
+  tickCardSink(self)
+
   if not MspRuntime then
     return
   end

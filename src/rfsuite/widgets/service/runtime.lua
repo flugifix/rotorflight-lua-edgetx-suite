@@ -39,6 +39,12 @@ local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local EventsRuntime = requireModule("tasks/events/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")
 local PreferencesModule = requireModule("lib/preferences.lua")
+local LogSink = requireModule("lib/log_sink.lua")
+if LogSink and type(LogSink.configure) == "function" then
+  -- This state's ring and this state's files. The tool holds a ring of its own and names its
+  -- own pair, so neither state appends to a file the other one has open.
+  LogSink.configure("widget")
+end
 
 -- Tasks read their settings from rfsuite.preferences, and that table is per Lua state: the tool
 -- publishes it in the script state and the dashboard widget in the widget state. Without a
@@ -100,6 +106,14 @@ local function tickRuntimes(self)
   self._lastLogicTick = now
 
   refreshPreferences(self, false)
+
+  -- This widget owns the card sink for the widget state. It is the better owner of the two that
+  -- run here: background() keeps calling this while it is off screen, so the ring keeps reaching
+  -- the card when the dashboard is not the page being looked at. The dashboard runtime writes
+  -- only where this widget is not on the model, and finds that out from the client list below.
+  if LogSink and type(LogSink.tick) == "function" then
+    pcall(LogSink.tick, isArmed())
+  end
 
   if not MspRuntime then return end
 
