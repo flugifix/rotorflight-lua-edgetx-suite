@@ -80,7 +80,13 @@ end
 -- than MAX_MSG_LEN by itself, and a trace fills sixty entries in well under a second. So a sink
 -- is given a list of its own, untruncated and far longer, and the ring is left exactly as that
 -- page expects to find it.
-local SINK_MAX = 2000
+-- An OVERFLOW GUARD, not a working size. The sink drains this list on every write, so what it
+-- normally holds is one flush interval -- a few seconds. The cap only decides how much may pile
+-- up if writing stops, and it is deliberately far smaller than it looks like it could be:
+-- measured in the same units the radio reports, a retained entry of a payload line costs about
+-- 340 bytes, so a thousand of them is a third of a megabyte. On a small radio the whole Lua
+-- budget is of that order, and a diagnostic that eats it is the problem it was built to find.
+local SINK_MAX = 400
 
 -- Whether a sink is taking lines is the EXISTENCE of the list, and not a flag in this file.
 --
@@ -105,9 +111,12 @@ local function addToSink(tag, msg, level)
     time = getTime and getTime() or 0
   }
   if #sink > SINK_MAX then
+    -- The cap is an overflow guard, not a working size: the sink empties this list every time it
+    -- writes, so in normal running it holds one flush interval's worth. Dropping the oldest is
+    -- still real data loss and is counted, so the file can say a gap happened.
     table.remove(sink, 1)
+    _G.rfsuite.log_sink_lost = (_G.rfsuite.log_sink_lost or 0) + 1
   end
-  _G.rfsuite.log_sink_seq = (_G.rfsuite.log_sink_seq or 0) + 1
 end
 
 local function addToHistory(tag, msg, level)
@@ -264,12 +273,13 @@ function Log.attachSink()
     for i = 1, #history do sink[i] = history[i] end
   end
   _G.rfsuite.log_sink = sink
-  _G.rfsuite.log_sink_seq = #sink
+  _G.rfsuite.log_sink_lost = 0
 end
 
 --- Stop filling it, and drop what is in it: nothing is going to read it.
 function Log.detachSink()
   _G.rfsuite.log_sink = nil
+  _G.rfsuite.log_sink_lost = nil
 end
 
 if type(_G) == "table" then
