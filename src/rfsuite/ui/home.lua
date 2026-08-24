@@ -248,6 +248,15 @@ local function sink()
   return LogSink
 end
 
+-- Navigation, in the log rather than only on the screen. The tool's whole job is to move
+-- between menus and pages, and until now almost none of that left a trace: a report that "it
+-- hung after I opened X" could not be checked against what the tool thought it had opened.
+local function logf(level, fmt, ...)
+  if Log and type(Log.emitf) == "function" then
+    Log.emitf("rfsuite.ui", level, fmt, ...)
+  end
+end
+
 -- What was being started. Written to a file of its own that is closed again immediately, so it
 -- is on the card even when the call it names never returns.
 local function logStep(label, force)
@@ -665,6 +674,7 @@ local function syncActivePageModule()
     PageRegistry.release(state.activePageMenuId, buildPageContext())
   end
 
+  logf("debug", "page %s -> %s", tostring(state.activePageMenuId), tostring(currentMenuId))
   state.activePageMenuId = currentMenuId
 
   -- From here everything queued belongs to the page that is up, without the page saying so: the
@@ -678,6 +688,8 @@ end
 
 local function onBack(source, ev)
   logToFile("onBack called source=" .. tostring(source) .. " ev=" .. tostring(ev))
+  logf("debug", "back source=%s ev=%s at=%s", tostring(source), tostring(ev),
+    tostring(state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId()))
   local fromEvent = source == "event"
 
   if state.backGestureActive then
@@ -1524,6 +1536,8 @@ local function getCardPressHandler(cardId)
       return
     end
     if state.menu and (not state.menu.isRoot()) then
+      logf("debug", "press card=%s from=%s", tostring(cardId),
+        tostring(state.menu.getCurrentMenuId and state.menu.getCurrentMenuId()))
       -- Parking the target is the whole press: run() opens pendingMenuOpen and schedules the
       -- rebuild itself, so nothing is scheduled here and the next thing drawn is the target's
       -- own first frame -- a menu, or a page with the loading overlay the page paints while it
@@ -1544,6 +1558,7 @@ local function getRootCardPressHandler(sectionId, cardId)
       return
     end
     if state.menu and state.menu.isRoot() then
+      logf("debug", "press root section=%s card=%s", tostring(sectionId), tostring(cardId))
       state.pendingMenuOpen = { section = sectionId, card = cardId }
     end
   end
@@ -2522,9 +2537,15 @@ function M.run(event, touchState)
     end
 
     if state.pendingMenuOpen and not state.isClosing then
+      -- The press parks a target and this is where it is taken, a tick later. A press with no
+      -- open after it is the shape of a menu step that stalls, and the two lines apart are what
+      -- tell that apart from a press that never registered.
       if type(state.pendingMenuOpen) == "table" then
+        logf("debug", "open root section=%s card=%s", tostring(state.pendingMenuOpen.section),
+          tostring(state.pendingMenuOpen.card))
         state.menu.openRootEntry(state.pendingMenuOpen.section, state.pendingMenuOpen.card)
       else
+        logf("debug", "open entry=%s", tostring(state.pendingMenuOpen))
         state.menu.openEntry(state.pendingMenuOpen)
       end
       state.focusIndex = 0

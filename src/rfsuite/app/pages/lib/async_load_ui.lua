@@ -1,5 +1,18 @@
 local M = {}
 
+-- Reached through the global the log module publishes rather than loaded here: this is a leaf
+-- helper with no dependencies of its own and it should keep none. Absent logger, absent lines.
+--
+-- Which page a load belongs to is not known in this file -- the state table is built by begin()
+-- and carries no id -- so these lines are read next to the `page ... -> ...` line that
+-- ui/home.lua writes immediately before the page starts loading.
+local function logf(level, fmt, ...)
+  local Log = type(_G) == "table" and _G.rfsuite and _G.rfsuite.Log
+  if type(Log) == "table" and type(Log.emitf) == "function" then
+    pcall(Log.emitf, "rfsuite.page", level, fmt, ...)
+  end
+end
+
 local function clamp01(v)
   local n = tonumber(v) or 0
   if n < 0 then return 0 end
@@ -16,6 +29,7 @@ function M.begin(state, nowSec, totalSteps, showOverlay)
   state.progress = 0
   state.errorMessage = nil
   state.errorDialogShown = nil
+  logf("debug", "load begin steps=%d overlay=%s", state.total, tostring(state.showLoadingOverlay))
 end
 
 function M.stepDone(state)
@@ -30,6 +44,7 @@ function M.stepDone(state)
   if total > 0 and state.done >= total then
     state.loading = false
     state.showLoadingOverlay = false
+    logf("debug", "load done steps=%d", total)
     return true
   end
 
@@ -38,6 +53,11 @@ end
 
 function M.fail(state, i18n, tfn, reason)
   local total = tonumber(state.total) or 0
+  -- warn, and with the reason: this is the path that puts "Loading failed" on the screen, and
+  -- until now the reason went into a label and nowhere else -- so a page that failed to load
+  -- left the same record as one that never tried.
+  logf("warn", "load FAILED after %d/%d step(s) reason=%s",
+    tonumber(state.done) or 0, total, tostring(reason))
   state.done = total
   state.progress = 1
   state.loading = false

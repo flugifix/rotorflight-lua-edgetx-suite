@@ -101,6 +101,14 @@ local function logLine(msg, level)
   end
 end
 
+-- Formats on the far side of the level gate; see lib/log.lua. Used for the lines below that
+-- carry several values, so that a card at the shipped setting builds none of them.
+local function logf(level, fmt, ...)
+  if type(Log) == "table" and type(Log.emitf) == "function" then
+    pcall(Log.emitf, "rfsuite.save", level, fmt, ...)
+  end
+end
+
 local function getQueue()
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then return nil end
   local mspState = MspRuntime.getState()
@@ -160,7 +168,13 @@ local function finish(status, extra)
   local desc = S.run.desc
   local wasDismissed = S.run.dismissed == true
   S.run = nil
-  logLine("pipeline " .. status .. " for " .. tostring(desc.pageId))
+  -- info rather than debug: whether a save reached the board is not a detail, and this is the
+  -- one line that says it. `saved` is the pipeline's own verdict, `reboot`/`rebootProven` say
+  -- whether the board was asked to restart and whether it was seen to.
+  logf("info", "pipeline %s page=%s saved=%s reboot=%s proven=%s rtc=%s step=%s phase=%s",
+    tostring(status), tostring(desc.pageId), tostring(result.saved), tostring(result.reboot),
+    tostring(result.rebootProven), tostring(result.rtcVerified),
+    tostring(result.step), tostring(result.phase))
 
   -- A caller that is still on screen is told at once. One whose overlay was dismissed is not:
   -- its report would land on whatever page the user moved to, so it is held until that page is
@@ -194,8 +208,16 @@ end
 
 --- Enter a phase and restart its backstop.
 local function enter(phase)
+  -- One choke point for every transition in this file, so instrumenting it here reports the
+  -- whole pipeline rather than the handful of places somebody remembered to write a line in.
+  -- The elapsed time is the previous phase's, which is what tells a wait apart from a stall.
+  local now = nowSeconds()
+  logf("debug", "phase %s -> %s after %.2fs page=%s",
+    tostring(S.run.phase or "-"), tostring(phase),
+    S.run.phaseStarted and (now - S.run.phaseStarted) or 0,
+    tostring(S.run.desc and S.run.desc.pageId))
   S.run.phase = phase
-  S.run.phaseStarted = nowSeconds()
+  S.run.phaseStarted = now
 end
 
 local function invalidateSessionKeys()
@@ -369,18 +391,27 @@ end
 
 --- Begin a save. Returns false and a reason when the pipeline refuses to start one.
 function M.start(desc)
+  -- Every refusal below says so. A save that never started is what a pilot reports as "it did
+  -- not save", and until now the five paths out of this function were silent -- so the record
+  -- of a refused save and the record of a save that failed on the wire looked the same:
+  -- nothing at all.
   if type(desc) ~= "table" or type(desc.steps) ~= "table" then
+    logf("warn", "refused reason=descriptor")
     return false, "descriptor"
   end
   if S.run then
+    logf("warn", "refused reason=busy page=%s running=%s", tostring(desc.pageId),
+      tostring(S.run.desc and S.run.desc.pageId))
     return false, "busy"
   end
   if not ensureDeps() then
+    logf("warn", "refused reason=msp_runtime_unavailable page=%s", tostring(desc.pageId))
     return false, "msp_runtime_unavailable"
   end
 
   local queue, mspState = getQueue()
   if not queue then
+    logf("warn", "refused reason=msp_queue_unavailable page=%s", tostring(desc.pageId))
     return false, "msp_queue_unavailable"
   end
 
@@ -388,6 +419,7 @@ function M.start(desc)
   -- EEPROM write with an error, so a save started here would report a failure the pilot cannot
   -- act on. Refuse it in one place instead of in none.
   if mspState and mspState.lastArmed == true then
+    logf("warn", "refused reason=armed page=%s", tostring(desc.pageId))
     return false, "armed"
   end
 
@@ -410,8 +442,8 @@ function M.start(desc)
   S.pending[desc.pageId or ""] = nil
   S.outcome = nil
 
-  logLine("start " .. tostring(desc.pageId) .. " steps=" .. tostring(#desc.steps)
-    .. " reboot=" .. tostring(reboot))
+  logf("info", "start page=%s steps=%d reboot=%s client=%s",
+    tostring(desc.pageId), #desc.steps, tostring(reboot), tostring(S.run.client))
   queueStep(1)
   return true
 end
