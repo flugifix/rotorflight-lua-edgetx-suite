@@ -56,6 +56,7 @@ local function defaultPreferences()
       continuous_memory_log        = false,
       show_header_memory           = false,
       enable_serial_debug          = false,
+      log_to_card                  = false,
       debug_level                  = "off",
     },
     localizations = {
