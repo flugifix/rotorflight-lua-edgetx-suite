@@ -81,11 +81,22 @@ end
 -- is given a list of its own, untruncated and far longer, and the ring is left exactly as that
 -- page expects to find it.
 local SINK_MAX = 2000
-local sinkActive = false
+
+-- Whether a sink is taking lines is the EXISTENCE of the list, and not a flag in this file.
+--
+-- Several places load this module with a raw loadScript rather than through lib/require.lua --
+-- tasks/events/common/runner.lua is one -- so more than one copy of it can be live in a single
+-- Lua state, each with its own upvalues. A flag kept here is therefore true in the copy that
+-- attached and false in every other, while the list itself sits in _G and is shared: the
+-- symptom is a log that carries some subsystems and silently drops the rest.
+local function sinkList()
+  local sink = _G.rfsuite.log_sink
+  return type(sink) == "table" and sink or nil
+end
 
 local function addToSink(tag, msg, level)
-  local sink = _G.rfsuite.log_sink
-  if type(sink) ~= "table" then return end
+  local sink = sinkList()
+  if not sink then return end
 
   sink[#sink + 1] = {
     tag = tostring(tag or "rfsuite"),
@@ -144,7 +155,7 @@ function Log.emit(tag, msg, level, enabled)
   -- because the important levels reach the ring through the second half of that test and
   -- nothing else is emitted at all. The sink takes what the ring takes, and more when a level
   -- is chosen.
-  if sinkActive and (emitByLevel or debugLevelRank(level) <= RANK.info) then
+  if sinkList() and (emitByLevel or debugLevelRank(level) <= RANK.info) then
     addToSink(tag, msg, level)
   end
 
@@ -254,12 +265,10 @@ function Log.attachSink()
   end
   _G.rfsuite.log_sink = sink
   _G.rfsuite.log_sink_seq = #sink
-  sinkActive = true
 end
 
 --- Stop filling it, and drop what is in it: nothing is going to read it.
 function Log.detachSink()
-  sinkActive = false
   _G.rfsuite.log_sink = nil
 end
 
