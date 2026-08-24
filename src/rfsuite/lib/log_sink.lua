@@ -158,14 +158,13 @@ local function startSession()
   local slot = nextSlot(name)
   local path = DIR .. "/" .. name .. "_" .. tostring(slot) .. ".log"
 
-  -- The slot may still hold an older session. Truncate once here; every write after this one
-  -- appends, so the file is never rewritten as a whole.
-  if not writeFile(path, "w", headerLine(name, slot)) then
-    return false
-  end
-
   state = {
     path = path,
+    -- The header is HELD rather than written. A Lua state that has nothing to say should leave
+    -- no file behind: an empty one is noise on the card, it costs a rotation slot, and it makes
+    -- a pilot ask why a state they did not think was running has a log of its own. The first
+    -- thing that actually has to be written opens the file and puts this at the top of it.
+    pendingHeader = headerLine(name, slot),
     stepPath = DIR .. "/" .. name .. "_step.txt",
     lastSeq = seenSeq,
     lines = 0,
@@ -224,11 +223,23 @@ local function pendingText()
   return table.concat(parts), #parts, seq
 end
 
+-- Create the file, with the held header at its top, the first time anything has to go into it.
+-- `w` truncates, which is what a reused rotation slot needs.
+local function openIfNeeded()
+  if not state.pendingHeader then return true end
+  if not writeFile(state.path, "w", state.pendingHeader) then
+    return false
+  end
+  state.pendingHeader = nil
+  return true
+end
+
 local function flush()
   if state.capped then return end
 
   local text, count, seq = pendingText()
   if not text then return end
+  if not openIfNeeded() then return end
 
   if state.lines + count > MAX_FILE_LINES then
     -- Stop rather than truncate in place: a file that keeps its beginning and says where it
@@ -317,6 +328,8 @@ end
 function Sink.fault(context, err)
   if not ensureSession() then return end
   Sink.step("fault: " .. tostring(context), true)
+  -- A fault is reason enough to create the file even if nothing else has been written yet.
+  if not openIfNeeded() then return end
 
   local text, _, seq = pendingText()
   local line = string.format("[%0.1f][rfsuite.fault][error] %s: %s\n",
