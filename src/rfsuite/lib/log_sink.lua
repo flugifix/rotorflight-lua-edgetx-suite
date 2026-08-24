@@ -60,11 +60,21 @@ local function isEnabled()
   return type(general) == "table" and general.log_to_card == true
 end
 
+local function logModule()
+  if type(_G) ~= "table" or type(_G.rfsuite) ~= "table" then return nil end
+  local mod = _G.rfsuite.Log
+  return type(mod) == "table" and mod or nil
+end
+
+-- The list this drains is the logger's SINK list, not the ring behind the Session Logs page.
+-- The ring is that page's budget -- sixty entries capped at a hundred characters -- and a
+-- payload line is longer than the cap by itself, while a trace fills sixty entries in well
+-- under a second. lib/log.lua fills the sink list only while one is attached, untruncated.
 local function ring()
   if type(_G) ~= "table" or type(_G.rfsuite) ~= "table" then return nil, 0 end
-  local history = _G.rfsuite.log_history
-  if type(history) ~= "table" then return nil, 0 end
-  return history, tonumber(_G.rfsuite.log_history_seq) or 0
+  local list = _G.rfsuite.log_sink
+  if type(list) ~= "table" then return nil, 0 end
+  return list, tonumber(_G.rfsuite.log_sink_seq) or 0
 end
 
 -- Everything that touches the card goes through these two, so a card that is missing, full or
@@ -145,14 +155,20 @@ end
 
 local state = nil
 
--- Survives the session, because a session can end and another begin inside one Lua state: the
--- option is a preference and a preference can be switched off and on again. Starting from zero
--- every time would write the ring out twice; starting from the ring's current end -- which this
--- did until a test caught it -- throws away everything that was logged BEFORE the option was
--- first read, and on a start that is the whole of it.
-local seenSeq = 0
+-- The watermark starts at zero and needs no carrying between sessions. The list this drains is
+-- created by Log.attachSink and dropped by Log.detachSink, so a second session in the same Lua
+-- state gets a fresh one -- and attachSink seeds it from the ring, so the lines that were
+-- emitted before anybody attached are in it rather than lost. An earlier version of this kept a
+-- watermark across sessions for that reason; with a list of its own there is nothing to carry.
 
 local function startSession()
+  -- Ask the logger to start filling the sink list BEFORE the watermark below is taken, or the
+  -- first lines of the session are counted as pending without ever having been stored.
+  local Log = logModule()
+  if Log and type(Log.attachSink) == "function" then
+    Log.attachSink()
+  end
+
   ensureDir()
   local name = Sink.name or "state"
   local slot = nextSlot(name)
@@ -166,7 +182,6 @@ local function startSession()
     -- thing that actually has to be written opens the file and puts this at the top of it.
     pendingHeader = headerLine(name, slot),
     stepPath = DIR .. "/" .. name .. "_step.txt",
-    lastSeq = seenSeq,
     lines = 0,
     capped = false,
     lastFlush = nowSeconds(),
@@ -181,8 +196,13 @@ local function startSession()
 end
 
 local function endSession()
-  if state then seenSeq = state.lastSeq end
   state = nil
+  -- Nothing is going to read it now, and a list that keeps filling with nobody draining it is
+  -- the diagnostic becoming the problem.
+  local Log = logModule()
+  if Log and type(Log.detachSink) == "function" then
+    Log.detachSink()
+  end
 end
 
 -- Take everything the ring has gained since the last call and hand it back as one string.
@@ -193,34 +213,48 @@ end
 -- so it is counted and it goes into the file.
 -- The watermark is NOT advanced here. A write that fails must not take the lines with it, so
 -- the caller commits it once the bytes are on the card.
+-- Everything the logger has buffered since the last write, as one string -- and the list is NOT
+-- emptied here. The caller clears it once the bytes are on the card, so a write that fails
+-- leaves the lines where they are instead of taking them with it.
+--
+-- Draining rather than keeping a watermark is what bounds the memory: the list holds one flush
+-- interval, not a cap's worth. Measured, a retained entry of a payload line is about 340 bytes,
+-- so keeping two thousand of them would have been two thirds of a small radio's whole Lua
+-- budget -- for lines that had already been written.
 local function pendingText()
-  local history, seq = ring()
-  if not history then return nil end
+  local list = ring()
+  if not list then return nil end
 
-  local pending = seq - state.lastSeq
-  if pending <= 0 then return nil end
-
-  local held = #history
-  local take = pending
-  local lost = 0
-  if take > held then
-    lost = take - held
-    take = held
-  end
+  local held = #list
+  local lost = tonumber(_G.rfsuite.log_sink_lost) or 0
+  if held == 0 and lost == 0 then return nil end
 
   local parts = {}
   if lost > 0 then
-    parts[#parts + 1] = string.format("[----][rfsuite.log][warn] %d line(s) lost (ring overflow before flush)\n", lost)
+    parts[#parts + 1] = string.format("[----][rfsuite.log][warn] %d line(s) lost (buffer overflow before flush)\n", lost)
   end
-  for index = held - take + 1, held do
-    local entry = history[index]
+  for index = 1, held do
+    local entry = list[index]
     if type(entry) == "table" then
       parts[#parts + 1] = formatEntry(entry)
     end
   end
 
   if #parts == 0 then return nil end
-  return table.concat(parts), #parts, seq
+  return table.concat(parts), #parts, held
+end
+
+--- Called only once the bytes are on the card: drop what was written, and only that much.
+--
+-- `written` is the count this flush took. Anything the logger appended while the write was in
+-- progress keeps its place, which is why this removes from the front rather than emptying.
+local function commit(written)
+  local list = ring()
+  if not list then return end
+  for _ = 1, math.min(written or 0, #list) do
+    table.remove(list, 1)
+  end
+  _G.rfsuite.log_sink_lost = 0
 end
 
 -- Create the file, with the held header at its top, the first time anything has to go into it.
@@ -245,14 +279,14 @@ local function flush()
     -- Stop rather than truncate in place: a file that keeps its beginning and says where it
     -- stopped can be read, one that silently drops its middle cannot.
     if writeFile(state.path, "a", text .. "[----][rfsuite.log][warn] session file cap reached, logging to card stopped\n") then
-      state.lastSeq = seq
+      commit(seq)
     end
     state.capped = true
     return
   end
 
   if writeFile(state.path, "a", text) then
-    state.lastSeq = seq
+    commit(seq)
     state.lines = state.lines + count
   end
 end
@@ -343,7 +377,7 @@ function Sink.fault(context, err)
   local line = string.format("[%0.1f][rfsuite.fault][error] %s: %s\n",
     nowSeconds(), tostring(context), tostring(err))
   if writeFile(state.path, "a", (text or "") .. line) and seq then
-    state.lastSeq = seq
+    commit(seq)
   end
 end
 
@@ -352,6 +386,17 @@ function Sink.shutdown()
   if not state then return end
   flush()
   endSession()
+end
+
+-- Published so any file can leave a step without taking a dependency on this module, the same
+-- way lib/log.lua publishes itself. The step file is the only thing that survives a call which
+-- never returns, so the places that most need to write one -- a task being started, a page being
+-- built -- are exactly the leaf files that should not be loading modules.
+if type(_G) == "table" then
+  _G.rfsuite = _G.rfsuite or {}
+  _G.rfsuite.logStep = function(label, force, key)
+    return Sink.step(label, force, key)
+  end
 end
 
 return Sink

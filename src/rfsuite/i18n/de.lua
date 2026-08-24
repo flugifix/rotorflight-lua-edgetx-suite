@@ -1717,6 +1717,7 @@ return {
         debug_level_warn = "WARNUNG",
         debug_level_info = "INFO",
         debug_level_debug = "DEBUG",
+        debug_level_trace = "TRACE",
         continuous_memory_log = "Kontinuierliches Speicher-Log",
         show_header_memory = "Speicheranzeige in Kopfzeile",
         enable_serial_debug = "Serielles Debug aktivieren",
