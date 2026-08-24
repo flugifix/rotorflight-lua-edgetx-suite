@@ -60,11 +60,21 @@ local function isEnabled()
   return type(general) == "table" and general.log_to_card == true
 end
 
+local function logModule()
+  if type(_G) ~= "table" or type(_G.rfsuite) ~= "table" then return nil end
+  local mod = _G.rfsuite.Log
+  return type(mod) == "table" and mod or nil
+end
+
+-- The list this drains is the logger's SINK list, not the ring behind the Session Logs page.
+-- The ring is that page's budget -- sixty entries capped at a hundred characters -- and a
+-- payload line is longer than the cap by itself, while a trace fills sixty entries in well
+-- under a second. lib/log.lua fills the sink list only while one is attached, untruncated.
 local function ring()
   if type(_G) ~= "table" or type(_G.rfsuite) ~= "table" then return nil, 0 end
-  local history = _G.rfsuite.log_history
-  if type(history) ~= "table" then return nil, 0 end
-  return history, tonumber(_G.rfsuite.log_history_seq) or 0
+  local list = _G.rfsuite.log_sink
+  if type(list) ~= "table" then return nil, 0 end
+  return list, tonumber(_G.rfsuite.log_sink_seq) or 0
 end
 
 -- Everything that touches the card goes through these two, so a card that is missing, full or
@@ -145,14 +155,20 @@ end
 
 local state = nil
 
--- Survives the session, because a session can end and another begin inside one Lua state: the
--- option is a preference and a preference can be switched off and on again. Starting from zero
--- every time would write the ring out twice; starting from the ring's current end -- which this
--- did until a test caught it -- throws away everything that was logged BEFORE the option was
--- first read, and on a start that is the whole of it.
-local seenSeq = 0
+-- The watermark starts at zero and needs no carrying between sessions. The list this drains is
+-- created by Log.attachSink and dropped by Log.detachSink, so a second session in the same Lua
+-- state gets a fresh one -- and attachSink seeds it from the ring, so the lines that were
+-- emitted before anybody attached are in it rather than lost. An earlier version of this kept a
+-- watermark across sessions for that reason; with a list of its own there is nothing to carry.
 
 local function startSession()
+  -- Ask the logger to start filling the sink list BEFORE the watermark below is taken, or the
+  -- first lines of the session are counted as pending without ever having been stored.
+  local Log = logModule()
+  if Log and type(Log.attachSink) == "function" then
+    Log.attachSink()
+  end
+
   ensureDir()
   local name = Sink.name or "state"
   local slot = nextSlot(name)
@@ -166,7 +182,7 @@ local function startSession()
     -- thing that actually has to be written opens the file and puts this at the top of it.
     pendingHeader = headerLine(name, slot),
     stepPath = DIR .. "/" .. name .. "_step.txt",
-    lastSeq = seenSeq,
+    lastSeq = 0,
     lines = 0,
     capped = false,
     lastFlush = nowSeconds(),
@@ -181,8 +197,13 @@ local function startSession()
 end
 
 local function endSession()
-  if state then seenSeq = state.lastSeq end
   state = nil
+  -- Nothing is going to read it now, and a list that keeps filling with nobody draining it is
+  -- the diagnostic becoming the problem.
+  local Log = logModule()
+  if Log and type(Log.detachSink) == "function" then
+    Log.detachSink()
+  end
 end
 
 -- Take everything the ring has gained since the last call and hand it back as one string.

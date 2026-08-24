@@ -138,7 +138,13 @@ function Log.emit(tag, msg, level, enabled)
 
   -- A sink writing to the card is a second consumer with a different budget, and it takes the
   -- message UNTRUNCATED. See addToSink.
-  if sinkActive and emitByLevel then
+  --
+  -- The same test as the ring above, deliberately: gating this on emitByLevel alone would mean
+  -- that at `debug_level = off` -- the state every radio ships in -- a card log came out empty,
+  -- because the important levels reach the ring through the second half of that test and
+  -- nothing else is emitted at all. The sink takes what the ring takes, and more when a level
+  -- is chosen.
+  if sinkActive and (emitByLevel or debugLevelRank(level) <= RANK.info) then
     addToSink(tag, msg, level)
   end
 
@@ -234,9 +240,20 @@ function Log.hex(buf, limit)
 end
 
 --- Tell the logger a card sink is taking lines, so it starts filling the sink's own list.
+--
+-- The list is SEEDED from the ring rather than started empty. Whatever the ring holds at this
+-- moment is the part of the session that happened before anybody attached -- and on a start
+-- that is the whole start-up sequence, which is when it is worth the most. Those seeded entries
+-- carry the ring's truncation because that is where they were kept; everything after this call
+-- does not.
 function Log.attachSink()
-  _G.rfsuite.log_sink = _G.rfsuite.log_sink or {}
-  _G.rfsuite.log_sink_seq = _G.rfsuite.log_sink_seq or 0
+  local sink = {}
+  local history = _G.rfsuite.log_history
+  if type(history) == "table" then
+    for i = 1, #history do sink[i] = history[i] end
+  end
+  _G.rfsuite.log_sink = sink
+  _G.rfsuite.log_sink_seq = #sink
   sinkActive = true
 end
 
