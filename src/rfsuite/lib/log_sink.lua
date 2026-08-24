@@ -381,8 +381,8 @@ end
 -- built -- are exactly the leaf files that should not be loading modules.
 if type(_G) == "table" then
   _G.rfsuite = _G.rfsuite or {}
-  _G.rfsuite.logStep = function(label, force)
-    return Sink.step(label, force)
+  _G.rfsuite.logStep = function(label, force, key)
+    return Sink.step(label, force, key)
   end
 end
 

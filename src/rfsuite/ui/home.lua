@@ -259,10 +259,10 @@ end
 
 -- What was being started. Written to a file of its own that is closed again immediately, so it
 -- is on the card even when the call it names never returns.
-local function logStep(label, force)
+local function logStep(label, force, key)
   local s = sink()
   if s and type(s.step) == "function" then
-    pcall(s.step, label, force)
+    pcall(s.step, label, force, key)
   end
 end
 
