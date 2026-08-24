@@ -296,18 +296,26 @@ end
 -- This is the half that survives a stop with no return: the session file's pending lines are
 -- still in memory when the state freezes, this line is on the card. Keep the label short and
 -- keep it a fact -- it is read next to a radio that is not responding.
-function Sink.step(label, force)
+--- `key` groups steps that are the SAME KIND for throttling purposes, and defaults to the label.
+--
+-- It exists because "a label that differs is news" is defeated by any label carrying a counter:
+-- a progress line like `precompile 47/312` is new on every single call, so the interval never
+-- applies and the file is rewritten as fast as the caller loops. Measured on a card: 870 writes
+-- in a minute, which is the shape of exactly the defect this feature must not become. A caller
+-- with a counter passes a constant key, keeps the count in the label, and is throttled like
+-- anything else -- the file still says where the pass is, just not more often than the interval.
+function Sink.step(label, force, key)
   if not ensureSession() then return end
 
   local text = tostring(label)
+  local group = tostring(key or text)
   local now = nowSeconds()
-  -- The interval throttles a screen that repaints itself, not the arrival of a new step: a
-  -- label that differs from the last one is news and is written whatever the clock says.
-  if not force and text == state.lastLabel and (now - state.lastStep) < STEP_MIN_INTERVAL then
+  -- The interval throttles a caller repeating itself, not the arrival of a new KIND of step.
+  if not force and group == state.lastKey and (now - state.lastStep) < STEP_MIN_INTERVAL then
     return
   end
   state.lastStep = now
-  state.lastLabel = text
+  state.lastKey = group
   state.stepCount = state.stepCount + 1
 
   local memKb = 0
