@@ -1357,13 +1357,6 @@ local function onReload()
         if ok and res == true then return end
       end
 
-      if type(lvgl.confirm) == "function" then
-        local ok, res = pcall(lvgl.confirm, { title = title, message = message })
-        pcall(Log.emit, "rfsuite", "called lvgl.confirm; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
-        if ok and res == true then doPageReload() end
-        return
-      end
-
       -- Fallback: no confirm UI available — proceed with reload.
       pcall(Log.emit, "rfsuite", "no confirm API available; performing reload fallback", "debug", true)
       doPageReload()
@@ -1501,13 +1494,6 @@ local function onSave()
           onFallback = queuePageSave
         })
         if ok and res == true then return end
-      end
-
-      if type(lvgl.confirm) == "function" then
-        local ok, res = pcall(lvgl.confirm, { title = title, message = message })
-        pcall(Log.emit, "rfsuite", "called lvgl.confirm; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
-        if ok and res == true then queuePageSave() end
-        return
       end
 
       -- Fallback: no confirm API available — proceed with save.

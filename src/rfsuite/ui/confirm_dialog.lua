@@ -69,8 +69,10 @@ function M.show(ctx)
       doCancel()
       return true
     end
-    if ok and res == nil and type(onFallback) == "function" then
-      pcall(onFallback, title, message)
+    -- lvgl.confirm is asynchronous: the binding registers the callbacks and returns
+    -- nothing, so a nil result means the dialog is up, not that it could not be shown.
+    -- The answer arrives through doConfirm/doCancel.
+    if ok then
       return true
     end
   end
