@@ -459,9 +459,9 @@ local function ensureLoaded()
 end
 
 local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n)
-  local rowH = 52
-  local labelY = y + 16
-  local comboY = y + 6
+  local rowH = (Controls and Controls.ROW_H) or 50
+  local labelY = y + math.floor((rowH - 20) / 2)
+  local comboY = y + math.floor((rowH - 40) / 2)
   local dividerY = y + rowH
 
   local gap = 6
@@ -502,7 +502,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
   children[#children + 1] = {
     type  = "choice",
     x = xFunc, y = comboY,
-    w = wFunc, h = 36,
+    w = wFunc,
     title = pageText(i18n, "title", "Ports"),
     values = functionFieldValues,
     active = function() return not port.receiver_locked end,
@@ -563,7 +563,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
   children[#children + 1] = {
     type  = "choice",
     x = xBaud, y = comboY,
-    w = wBaud, h = 36,
+    w = wBaud,
     title = pageText(i18n, "title", "Ports"),
     values = baudFieldValues,
     active = function() return not port.receiver_locked end,

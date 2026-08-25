@@ -420,14 +420,12 @@ function M.build(ctx)
 
   -- ── 2. Refresh Button ─────────────────────────────────────────────────────
   local btnW = math.min(260, w - 40)
-  local btnH = 36
   local btnX = x + math.floor((w - btnW) / 2)
   children[#children + 1] = {
     type = "button",
     x = btnX,
     y = cursorY,
     w = btnW,
-    h = btnH,
     text = pageText(i18n, "refresh_graph", "Refresh Graph"),
     press = function()
       if type(ui.runtime.requestRebuild) == "function" then
@@ -436,13 +434,13 @@ function M.build(ctx)
     end
   }
 
-  cursorY = cursorY + btnH + 10
+  cursorY = cursorY + 40 + 10
 
   -- ── 3. 9 Throttle Points Inputs ───────────────────────────────────────────
   local gap = 4
   local fieldW = math.floor((gw - (gap * (FIELD_COUNT - 1))) / FIELD_COUNT)
   local labelH = 18
-  local editH = 38
+  local editH = 50
 
   for i = 1, FIELD_COUNT do
     local cellX = gx + (i - 1) * (fieldW + gap)

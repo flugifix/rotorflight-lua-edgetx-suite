@@ -289,9 +289,9 @@ local function drawColumnHeader(children, x, y, w, i18n)
 end
 
 local function appendBandwidthRow(children, x, y, w, i18n, labelText, key0, key1, key2, spec)
-  local rowH = 52
-  local labelY = y + 16
-  local cellTop = y + 4
+  local rowH = (Controls and Controls.ROW_H) or 50
+  local labelY = y + math.floor((rowH - 20) / 2)
+  local cellTop = y + math.floor((rowH - 40) / 2)
 
   local labelW, gap, cellW = getGridMetrics(w)
 
@@ -319,7 +319,6 @@ local function appendBandwidthRow(children, x, y, w, i18n, labelText, key0, key1
       x = cellX,
       y = cellTop,
       w = cellW,
-      h = 44,
       min = math.floor(rawMin / stepSize),
       max = math.ceil(rawMax / stepSize),
       active = function() return true end,

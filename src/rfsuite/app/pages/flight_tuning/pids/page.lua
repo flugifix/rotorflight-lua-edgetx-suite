@@ -384,7 +384,7 @@ local function getLayoutProfile(w, h)
 	elseif w < 560 then
 		profile.headerFont = SMLSIZE
 		profile.headerTextY = 0
-		headerLineY = 24
+		profile.headerLineY = 24
 		profile.headerH = 30
 		profile.rowFont = SMLSIZE
 		profile.rowH = 40

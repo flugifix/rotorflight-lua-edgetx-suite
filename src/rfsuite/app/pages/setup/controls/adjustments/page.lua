@@ -1278,6 +1278,10 @@ function M.build(ctx)
   )
 
   -- 3) Enable Channel Row (choice + live + set)
+  local rowH = (Controls and Controls.ROW_H) or (Controls and Controls.NUMBER_ROW_H) or 50
+  local controlY_offset = math.floor((rowH - 40) / 2)
+  local labelY_offset = math.floor((rowH - 20) / 2)
+
   local enaRowY = cursorY
   local rightPadding = 10
   local gap = 6
@@ -1292,7 +1296,7 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "label",
-    x = x + 10, y = enaRowY + 21,
+    x = x + 10, y = enaRowY + labelY_offset,
     w = labelW - 10,
     text = pageText(i18n, "enable_channel", "Enable Channel"),
     color = COLOR_THEME_PRIMARY1,
@@ -1312,8 +1316,8 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "choice",
-    x = choiceX, y = enaRowY + 13,
-    w = choiceW, h = 36,
+    x = choiceX, y = enaRowY + controlY_offset,
+    w = choiceW,
     title = pageText(i18n, "enable_channel", "Enable Channel"),
     values = auxOptions,
     get = getSelectedEnaIndex,
@@ -1352,7 +1356,7 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "label",
-    x = liveX, y = enaRowY + 21,
+    x = liveX, y = enaRowY + labelY_offset,
     w = liveW,
     text = liveText_ena,
     color = COLOR_THEME_SECONDARY1,
@@ -1362,8 +1366,8 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "button",
-    x = btnX, y = enaRowY + 6,
-    w = btnW, h = 50,
+    x = btnX, y = enaRowY + controlY_offset,
+    w = btnW,
     text = pageText(i18n, "set", "Set"),
     press = function()
       if adjRange.enaChannel == 255 then
@@ -1381,11 +1385,11 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "rectangle",
-    x = x, y = enaRowY + 62,
+    x = x, y = enaRowY + rowH,
     w = w, h = 1,
     color = GREY_DEFAULT, filled = true
   }
-  cursorY = cursorY + 63
+  cursorY = cursorY + rowH + 1
 
   -- 4) Enable Range Row
   local rangeRowY = cursorY
@@ -1396,7 +1400,7 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "label",
-    x = x + 10, y = rangeRowY + 21,
+    x = x + 10, y = rangeRowY + labelY_offset,
     w = inputStartX - x - 20,
     text = pageText(i18n, "enable_range", "Enable Range"),
     color = COLOR_THEME_PRIMARY1,
@@ -1405,8 +1409,8 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "numberEdit",
-    x = inputStartX, y = rangeRowY + 6,
-    w = inputW, h = 50,
+    x = inputStartX, y = rangeRowY + controlY_offset,
+    w = inputW,
     min = math.floor(RANGE_MIN / RANGE_STEP),
     max = math.floor(RANGE_MAX / RANGE_STEP),
     get = function()
@@ -1427,8 +1431,8 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "numberEdit",
-    x = inputEndX, y = rangeRowY + 6,
-    w = inputW, h = 50,
+    x = inputEndX, y = rangeRowY + controlY_offset,
+    w = inputW,
     min = math.floor(RANGE_MIN / RANGE_STEP),
     max = math.floor(RANGE_MAX / RANGE_STEP),
     get = function()
@@ -1449,11 +1453,11 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "rectangle",
-    x = x, y = rangeRowY + 62,
+    x = x, y = rangeRowY + rowH,
     w = w, h = 1,
     color = GREY_DEFAULT, filled = true
   }
-  cursorY = cursorY + 63
+  cursorY = cursorY + rowH + 1
 
   -- 5) Mapped/Stepped Fields
   local adjType = getAdjustmentType(adjRange)
@@ -1466,7 +1470,7 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "label",
-      x = x + 10, y = valChRowY + 21,
+      x = x + 10, y = valChRowY + labelY_offset,
       w = labelW - 10,
       text = pageText(i18n, "value_channel", "Value Channel"),
       color = COLOR_THEME_PRIMARY1,
@@ -1480,8 +1484,8 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "choice",
-      x = choiceX_val, y = valChRowY + 13,
-      w = choiceW_val, h = 36,
+      x = choiceX_val, y = valChRowY + controlY_offset,
+      w = choiceW_val,
       title = pageText(i18n, "value_channel", "Value Channel"),
       values = adjAuxOptions,
       get = function()
@@ -1516,7 +1520,7 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "label",
-      x = liveX_val, y = valChRowY + 21,
+      x = liveX_val, y = valChRowY + labelY_offset,
       w = liveW,
       text = adjLiveText,
       color = COLOR_THEME_SECONDARY1,
@@ -1526,11 +1530,11 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "rectangle",
-      x = x, y = valChRowY + 62,
+      x = x, y = valChRowY + rowH,
       w = w, h = 1,
       color = GREY_DEFAULT, filled = true
     }
-    cursorY = cursorY + 63
+    cursorY = cursorY + rowH + 1
 
     -- If stepped type, show Step Size
     if adjType == 2 then
@@ -1560,7 +1564,7 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "label",
-      x = x + 10, y = r1RowY + 21,
+      x = x + 10, y = r1RowY + labelY_offset,
       w = r1StartX - x - 20,
       text = r1Label,
       color = COLOR_THEME_PRIMARY1,
@@ -1569,8 +1573,8 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "numberEdit",
-      x = r1StartX, y = r1RowY + 6,
-      w = inputW, h = 50,
+      x = r1StartX, y = r1RowY + controlY_offset,
+      w = inputW,
       min = math.floor(RANGE_MIN / RANGE_STEP),
       max = math.floor(RANGE_MAX / RANGE_STEP),
       get = function()
@@ -1588,8 +1592,8 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "numberEdit",
-      x = r1EndX, y = r1RowY + 6,
-      w = inputW, h = 50,
+      x = r1EndX, y = r1RowY + controlY_offset,
+      w = inputW,
       min = math.floor(RANGE_MIN / RANGE_STEP),
       max = math.floor(RANGE_MAX / RANGE_STEP),
       get = function()
@@ -1607,8 +1611,8 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "button",
-      x = btnX_r1, y = r1RowY + 6,
-      w = btnW, h = 50,
+      x = btnX_r1, y = r1RowY + controlY_offset,
+      w = btnW,
       text = pageText(i18n, "set", "Set"),
       press = function()
         local us = getChannelUsForRangeSet(adjRange.adjChannel, ui.autoDetectAdjSlots, ui.selectedRangeIndex, i18n)
@@ -1623,11 +1627,11 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "rectangle",
-      x = x, y = r1RowY + 62,
+      x = x, y = r1RowY + rowH,
       w = w, h = 1,
       color = GREY_DEFAULT, filled = true
     }
-    cursorY = cursorY + 63
+    cursorY = cursorY + rowH + 1
 
     -- If stepped type, show Increase Range Row
     if adjType == 2 then
@@ -1636,7 +1640,7 @@ function M.build(ctx)
 
       children[#children + 1] = {
         type = "label",
-        x = x + 10, y = r2RowY + 21,
+        x = x + 10, y = r2RowY + labelY_offset,
         w = r1StartX - x - 20,
         text = r2Label,
         color = COLOR_THEME_PRIMARY1,
@@ -1645,8 +1649,8 @@ function M.build(ctx)
 
       children[#children + 1] = {
         type = "numberEdit",
-        x = r1StartX, y = r2RowY + 6,
-        w = inputW, h = 50,
+        x = r1StartX, y = r2RowY + controlY_offset,
+        w = inputW,
         min = math.floor(RANGE_MIN / RANGE_STEP),
         max = math.floor(RANGE_MAX / RANGE_STEP),
         get = function()
@@ -1664,8 +1668,8 @@ function M.build(ctx)
 
       children[#children + 1] = {
         type = "numberEdit",
-        x = r1EndX, y = r2RowY + 6,
-        w = inputW, h = 50,
+        x = r1EndX, y = r2RowY + controlY_offset,
+        w = inputW,
         min = math.floor(RANGE_MIN / RANGE_STEP),
         max = math.floor(RANGE_MAX / RANGE_STEP),
         get = function()
@@ -1683,8 +1687,8 @@ function M.build(ctx)
 
       children[#children + 1] = {
         type = "button",
-        x = btnX_r1, y = r2RowY + 6,
-        w = btnW, h = 50,
+        x = btnX_r1, y = r2RowY + controlY_offset,
+        w = btnW,
         text = pageText(i18n, "set", "Set"),
         press = function()
           local us = getChannelUsForRangeSet(adjRange.adjChannel, ui.autoDetectAdjSlots, ui.selectedRangeIndex, i18n)
@@ -1699,11 +1703,11 @@ function M.build(ctx)
 
       children[#children + 1] = {
         type = "rectangle",
-        x = x, y = r2RowY + 62,
+        x = x, y = r2RowY + rowH,
         w = w, h = 1,
         color = GREY_DEFAULT, filled = true
       }
-      cursorY = cursorY + 63
+      cursorY = cursorY + rowH + 1
     end
 
     -- Function Dropdown
@@ -1733,7 +1737,7 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "label",
-      x = x + 10, y = vRangeRowY + 21,
+      x = x + 10, y = vRangeRowY + labelY_offset,
       w = inputStartX - x - 20,
       text = pageText(i18n, "value_range", "Value Range"),
       color = COLOR_THEME_PRIMARY1,
@@ -1742,8 +1746,8 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "numberEdit",
-      x = inputStartX, y = vRangeRowY + 6,
-      w = inputW, h = 50,
+      x = inputStartX, y = vRangeRowY + controlY_offset,
+      w = inputW,
       min = valMin,
       max = valMax,
       get = function()
@@ -1762,8 +1766,8 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "numberEdit",
-      x = inputEndX, y = vRangeRowY + 6,
-      w = inputW, h = 50,
+      x = inputEndX, y = vRangeRowY + controlY_offset,
+      w = inputW,
       min = valMin,
       max = valMax,
       get = function()
@@ -1782,11 +1786,11 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type = "rectangle",
-      x = x, y = vRangeRowY + 62,
+      x = x, y = vRangeRowY + rowH,
       w = w, h = 1,
       color = GREY_DEFAULT, filled = true
     }
-    cursorY = cursorY + 63
+    cursorY = cursorY + rowH + 1
   end
 end
 

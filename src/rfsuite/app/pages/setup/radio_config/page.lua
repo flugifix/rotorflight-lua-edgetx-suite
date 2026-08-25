@@ -247,9 +247,9 @@ local function ensureLoaded()
 end
 
 local function appendDoubleFieldRow(children, x, y, w, rowLabelText, field1, field2)
-  local rowH = 52
-  local labelY = y + 16
-  local cellTop = y + 4
+  local rowH = (Controls and Controls.ROW_H) or (Controls and Controls.NUMBER_ROW_H) or 50
+  local labelY = y + math.floor((rowH - 20) / 2)
+  local cellTop = y + math.floor((rowH - 40) / 2)
   local dividerY = y + rowH
 
   local mainW    = math.floor(w * 0.31)
@@ -289,7 +289,6 @@ local function appendDoubleFieldRow(children, x, y, w, rowLabelText, field1, fie
       x = xEdit1,
       y = cellTop,
       w = editW1,
-      h = 44,
       min = field1.min,
       max = field1.max,
       active = function() return field1.active ~= false end,
@@ -323,7 +322,6 @@ local function appendDoubleFieldRow(children, x, y, w, rowLabelText, field1, fie
       x = xEdit2,
       y = cellTop,
       w = editW2,
-      h = 44,
       min = field2.min,
       max = field2.max,
       active = function() return field2.active ~= false end,
