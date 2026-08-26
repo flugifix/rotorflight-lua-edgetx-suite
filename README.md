@@ -89,7 +89,6 @@ This path must point to the root of the mounted radio storage, not to `SCRIPTS` 
 
 - `SCRIPTS/TOOLS/rfsuite.lua`
 - `SCRIPTS/TOOLS/rfsuite-core/`
-- `SCRIPTS/TOOLS/rfsuite.user/preferences.ini` if it does not exist yet
 - `WIDGETS/rfsuite/`
 - `SOUNDS/rfsuite/`
 
