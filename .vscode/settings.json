@@ -1,5 +1,4 @@
 {
-    "rfsuite.deploy.language": "en",
     "python-envs.pythonProjects": [
         {
             "path": ".",

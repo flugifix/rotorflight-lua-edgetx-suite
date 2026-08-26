@@ -22,6 +22,29 @@ if ([string]::IsNullOrWhiteSpace($Language) -or ($Language -like '${config:*')) 
             }
         } catch {}
     }
+    if ([string]::IsNullOrWhiteSpace($Language)) {
+        $userSettingsCandidates = @(
+            $(if ($env:APPDATA) { Join-Path $env:APPDATA 'Code\User\settings.json' }),
+            $(if ($env:APPDATA) { Join-Path $env:APPDATA 'Code - Insiders\User\settings.json' }),
+            $(if ($env:APPDATA) { Join-Path $env:APPDATA 'VSCodium\User\settings.json' }),
+            $(if ($env:HOME) { Join-Path $env:HOME 'Library/Application Support/Code/User/settings.json' }),
+            $(if ($env:HOME) { Join-Path $env:HOME 'Library/Application Support/VSCodium/User/settings.json' }),
+            $(if ($env:HOME) { Join-Path $env:HOME '.config/Code/User/settings.json' }),
+            $(if ($env:HOME) { Join-Path $env:HOME '.config/VSCodium/User/settings.json' }),
+            $(if ($env:USERPROFILE) { Join-Path $env:USERPROFILE '.config\Code\User\settings.json' })
+        )
+        foreach ($uPath in $userSettingsCandidates) {
+            if ($uPath -and (Test-Path $uPath)) {
+                try {
+                    $uSettings = Get-Content -Path $uPath -Raw | ConvertFrom-Json
+                    if ($uSettings.'rfsuite.deploy.language') {
+                        $Language = $uSettings.'rfsuite.deploy.language'
+                        break
+                    }
+                } catch {}
+            }
+        }
+    }
 }
 if ([string]::IsNullOrWhiteSpace($Language) -or ($Language -like '${config:*')) {
     $Language = 'en'
