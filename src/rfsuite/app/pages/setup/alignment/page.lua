@@ -619,9 +619,9 @@ function M.build(ctx)
   local rightPad = 8
   local gap = 6
   local fieldW = w - leftPad - rightPad
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY1 = y + math.floor((rowH - 20) / 2)
-  local cellTop1 = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY1 = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop1 = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
   -- Row 1: Roll, Nick, Yaw
   local editW = 68 -- 68px wide text fields so -180° never wraps
@@ -715,8 +715,8 @@ function M.build(ctx)
   }
 
   -- Row 2: Mag and Buttons (aligned on controlY)
-  local controlY = y + rowH + math.floor((rowH - 40) / 2)
-  local labelY2 = y + rowH + math.floor((rowH - 20) / 2)
+  local controlY = (Controls and Controls.controlY and Controls.controlY(y + rowH, rowH)) or (y + rowH + math.floor((rowH - 32) / 2))
+  local labelY2 = (Controls and Controls.labelY and Controls.labelY(y + rowH, rowH)) or (y + rowH + math.floor((rowH - 21) / 2))
 
   -- Slot 4: Mag
   local magLabelW = 38
@@ -818,11 +818,12 @@ function M.build(ctx)
   -- Split layout start
   local splitY = y + 2 * rowH + 4
   -- Use actual screen height remaining to strictly prevent scrollbars
+  local pageBodyH = (lvgl and lvgl.PAGE_BODY_HEIGHT)
   local headerH = 48
   if LCD_H and LCD_H > 300 then
     headerH = 64
   end
-  local availH = (h and h > 0) and h or ((LCD_H - headerH) - y)
+  local availH = (h and h > 0) and h or (pageBodyH and (pageBodyH - y)) or ((LCD_H - headerH) - y)
   local splitH = max(50, availH - (2 * rowH) - 8)
   local leftW = floor(w * 0.40)
   local rightW = w - leftW - 4

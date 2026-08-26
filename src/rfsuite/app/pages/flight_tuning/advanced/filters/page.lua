@@ -225,9 +225,9 @@ local function isAtLeastVersion(req)
 end
 
 local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, spec1, customLabelW)
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
   local editW1   = math.floor(w * 0.14)
   local labelW1  = customLabelW or ((label1 and label1 ~= "") and math.floor(w * 0.28) or math.floor(w * 0.11))
@@ -305,9 +305,9 @@ local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, 
 end
 
 local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spec1, label2, key2, spec2, customLabelW)
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   
   local editW   = math.floor(w * 0.14)
   local labelW  = customLabelW or math.floor(w * 0.11)
@@ -430,9 +430,9 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
 end
 
 local function appendSingleChoiceRow(children, x, y, w, labelText, key, options)
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
   local comboW = math.floor(w * 0.22)
   local comboX = x + w - comboW - 10

@@ -247,9 +247,9 @@ local function ensureLoaded()
 end
 
 local function appendDoubleFieldRow(children, x, y, w, rowLabelText, field1, field2)
-  local rowH = (Controls and Controls.ROW_H) or (Controls and Controls.NUMBER_ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   local dividerY = y + rowH
 
   local mainW    = math.floor(w * 0.31)

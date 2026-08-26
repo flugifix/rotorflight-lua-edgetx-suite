@@ -1278,9 +1278,9 @@ function M.build(ctx)
   )
 
   -- 3) Enable Channel Row (choice + live + set)
-  local rowH = (Controls and Controls.ROW_H) or (Controls and Controls.NUMBER_ROW_H) or 50
-  local controlY_offset = math.floor((rowH - 40) / 2)
-  local labelY_offset = math.floor((rowH - 20) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local controlY_offset = (Controls and Controls.controlY and Controls.controlY(0, rowH)) or math.floor((rowH - 32) / 2)
+  local labelY_offset = (Controls and Controls.labelY and Controls.labelY(0, rowH)) or math.floor((rowH - 21) / 2)
 
   local enaRowY = cursorY
   local rightPadding = 10

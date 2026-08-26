@@ -489,8 +489,8 @@ function M.build(ctx)
   local rowH = (Controls and Controls.ROW_H) or 64
   local buttonW = 130
   local comboW = 130
-  local ctrlY = cursorY + math.floor((rowH - 40) / 2)
-  local labelY = cursorY + math.floor((rowH - 20) / 2)
+  local ctrlY = (Controls and Controls.controlY and Controls.controlY(cursorY, rowH)) or (cursorY + math.floor((rowH - 32) / 2))
+  local labelY = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2))
 
   children[#children + 1] = {
     type = "label",

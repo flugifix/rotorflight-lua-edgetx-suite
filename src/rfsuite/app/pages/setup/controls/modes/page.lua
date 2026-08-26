@@ -319,9 +319,9 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local rawExtra = slot and ui.modeRangesExtra[slot] or nil
   if not rawRange or not rawExtra or not rawRange.range then return 0 end
 
-  local singleRowH = (Controls and Controls.ROW_H) or 50
-  local labelY1 = y + math.floor((singleRowH - 20) / 2)
-  local controlY1 = y + math.floor((singleRowH - 40) / 2)
+  local singleRowH = (Controls and Controls.ROW_H) or 64
+  local labelY1 = (Controls and Controls.labelY and Controls.labelY(y, singleRowH)) or (y + math.floor((singleRowH - 21) / 2))
+  local controlY1 = (Controls and Controls.controlY and Controls.controlY(y, singleRowH)) or (y + math.floor((singleRowH - 32) / 2))
   local rightPadding = 10
   local gap = 6
 
@@ -389,14 +389,10 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local xAux = xLogic - gap - wAux
 
   local line2Y = y + singleRowH
-  local controlY2 = line2Y + math.floor((singleRowH - 40) / 2)
+  local controlY2 = (Controls and Controls.controlY and Controls.controlY(line2Y, singleRowH)) or (line2Y + math.floor((singleRowH - 32) / 2))
 
   -- AUX Choice
   local auxOptions = buildAuxOptions(i18n)
-  local auxValues = {}
-  for idx, label in ipairs(auxOptions) do
-    auxValues[idx] = label
-  end
 
   children[#children + 1] = {
     type = "choice",
@@ -980,8 +976,8 @@ function M.build(ctx)
   local rightPadding = 10
   local buttonW = math.floor(w * 0.24)
   local rowH = (Controls and Controls.ROW_H) or 64
-  local labelY = cursorY + math.floor((rowH - 20) / 2)
-  local btnY = cursorY + math.floor((rowH - 40) / 2)
+  local labelY = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2))
+  local btnY = (Controls and Controls.controlY and Controls.controlY(cursorY, rowH)) or (cursorY + math.floor((rowH - 32) / 2))
 
   local activeStr = pageText(i18n, "active_ranges", "Active ranges") .. ": " .. tostring(#ranges) .. " / " .. tostring(#ui.modeRanges)
   children[#children + 1] = {
@@ -1023,7 +1019,7 @@ function M.build(ctx)
   if #ranges == 0 then
     children[#children + 1] = {
       type = "label",
-      x = x + 10, y = cursorY + math.floor((rowH - 20) / 2),
+      x = x + 10, y = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2)),
       text = pageText(i18n, "no_ranges", "No ranges configured for this mode."),
       color = COLOR_THEME_PRIMARY1,
       font = SMLSIZE

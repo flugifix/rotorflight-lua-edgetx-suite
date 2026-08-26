@@ -396,9 +396,9 @@ local function applyConfigToSession(session)
 end
 
 local function appendCompactNumberField(children, x, y, w, labelText, opts)
-	local rowH = (Controls and Controls.ROW_H) or 50
-	local labelY = y + math.floor((rowH - 20) / 2)
-	local itemY = y + math.floor((rowH - 40) / 2)
+	local rowH = (Controls and Controls.ROW_H) or 64
+	local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+	local itemY = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 	local fieldW = 172
 	local fieldX = x + w - fieldW - 10
 	

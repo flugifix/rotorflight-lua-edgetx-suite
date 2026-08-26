@@ -264,9 +264,9 @@ end
 
 
 local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, spec1)
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
   local editW1   = math.floor(w * 0.14)
   local labelW1  = math.floor(w * 0.22)
@@ -341,9 +341,9 @@ local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, 
 end
 
 local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spec1, label2, key2, spec2)
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   
   local editW   = math.floor(w * 0.14)
   local labelW  = math.floor(w * 0.11)
@@ -466,9 +466,9 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
 end
 
 local function appendTripleFieldRow(children, x, y, w, i18n, labelText, key0, spec0, key1, spec1, key2, spec2)
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
   -- Calculate the exact same startX as appendDualFieldRow to keep alignment consistent
   local editW   = math.floor(w * 0.14)
@@ -578,9 +578,9 @@ local function appendTripleFieldRow(children, x, y, w, i18n, labelText, key0, sp
 end
 
 local function appendSingleChoiceRow(children, x, y, w, labelText, key, options)
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
   local comboW = math.floor(w * 0.22)
   local comboX = x + w - comboW - 10

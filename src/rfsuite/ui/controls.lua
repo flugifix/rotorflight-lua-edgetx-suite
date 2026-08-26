@@ -2,13 +2,33 @@
 -- Reusable UX control components for LVGL declarative UI.
 --
 -- All functions append LVGL widget entries to a children table.
--- Row height is ROW_H (44 px). Callers advance cursorY by ROW_H + 1.
-
 local Controls = {}
 
 local ROW_H          = 64  -- total row height (the +1 divider is included in each function)
-local NUMBER_ROW_H   = ROW_H  -- backward compatibility alias
 local HORIZONTAL_ROW_H = 78  -- total row height for horizontal multi-field rows with stacked headers
+
+local function getNativeCtrlH()
+  if lvgl and lvgl.UI_ELEMENT_HEIGHT then
+    return lvgl.UI_ELEMENT_HEIGHT
+  end
+  local w = _G.LCD_W or 480
+  if w >= 760 then return 44 end
+  if w <= 320 then return 26 end
+  return 32
+end
+
+local function getNativeFontH()
+  if lvgl and lvgl.LCD_SCALE then
+    return math.floor(21 * lvgl.LCD_SCALE)
+  end
+  local w = _G.LCD_W or 480
+  if w >= 760 then return 29 end
+  if w <= 320 then return 17 end
+  return 21
+end
+
+local CTRL_H = getNativeCtrlH()
+local LABEL_H = getNativeFontH()
 
 -- ── SectionHeader ─────────────────────────────────────────────────────────────
 -- Collapsible accordion section title with a blue bottom bar (like tile highlight).
@@ -26,11 +46,25 @@ local SECTION_ARROW_W      = 30
 local SECTION_ARROW_H      = 30
 local STATIC_SECTION_H     = 50
 
+Controls.CTRL_H = CTRL_H
+Controls.LABEL_H = LABEL_H
+Controls.NUMBER_H = CTRL_H
 Controls.SECTION_H = SECTION_H
 Controls.STATIC_SECTION_H = STATIC_SECTION_H
 Controls.ROW_H = ROW_H
-Controls.NUMBER_ROW_H = NUMBER_ROW_H
 Controls.HORIZONTAL_ROW_H = HORIZONTAL_ROW_H
+
+function Controls.controlY(y, rowH, ctrlH)
+  ctrlH = ctrlH or Controls.CTRL_H
+  rowH = rowH or Controls.ROW_H
+  return y + math.floor((rowH - ctrlH) / 2)
+end
+
+function Controls.labelY(y, rowH, labelH)
+  labelH = labelH or Controls.LABEL_H
+  rowH = rowH or Controls.ROW_H
+  return y + math.floor((rowH - labelH) / 2)
+end
 
 local function clampInt(v, lo, hi)
   v = math.floor((tonumber(v) or lo) + 0.5)
@@ -186,7 +220,12 @@ end
 
 function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
                                      onToggle, active, opts)
-  opts = (type(opts) == "table" and opts) or (type(active) == "table" and active) or {}
+  if type(active) == "table" and opts == nil then
+    opts = active
+    active = opts.active
+  else
+    opts = opts or {}
+  end
   local getValue
   local setValue
   if type(value) == "function" then
@@ -202,9 +241,9 @@ function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
   local barW   = TOGGLE_W
   local barX   = x + w - barW - 15
   local trackX = barX
-  local rowH   = opts.rowH or Controls.ROW_H or ROW_H
-  local trackY = y + math.floor((rowH - 40) / 2)
-  local labelY = y + math.floor((rowH - 20) / 2)
+  local rowH   = opts.rowH or Controls.ROW_H
+  local trackY = Controls.controlY(y, rowH)
+  local labelY = Controls.labelY(y, rowH)
 
   children[#children + 1] = {
     type  = "label",
@@ -300,9 +339,9 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
   if hasHelp then
     fieldX = fieldX - HELP_BTN_W - HELP_BTN_GAP
   end
-  local rowH = opts.rowH or Controls.NUMBER_ROW_H or Controls.ROW_H or ROW_H
-  local fieldY = y + math.floor((rowH - 40) / 2)
-  local labelY = y + math.floor((rowH - 20) / 2)
+  local rowH = opts.rowH or Controls.ROW_H
+  local fieldY = Controls.controlY(y, rowH)
+  local labelY = Controls.labelY(y, rowH)
 
   children[#children + 1] = {
     type  = "label",
@@ -388,11 +427,7 @@ end
 --   onSelect      – called with (value) when an option is chosen
 
 local COMBO_OPTION_H = 44
-local TEXT_H         = 40
-local TEXT_ROW_H     = ROW_H
 
-Controls.TEXT_H = TEXT_H
-Controls.TEXT_ROW_H = TEXT_ROW_H
 Controls.COMBO_ROW_H    = ROW_H + 1
 Controls.COMBO_OPTION_H = COMBO_OPTION_H
 
@@ -401,7 +436,7 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
 
   opts = opts or {}
 
-  local rowH = opts.rowH or Controls.ROW_H or ROW_H
+  local rowH = opts.rowH or Controls.ROW_H
   local comboW = 172
   if comboW > w then comboW = w end
   local helpText = opts.helpText
@@ -411,8 +446,8 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
   if hasHelp then
     comboX = comboX - HELP_BTN_W - HELP_BTN_GAP
   end
-  local comboY = y + math.floor((rowH - 40) / 2)
-  local labelY = y + math.floor((rowH - 20) / 2)
+  local comboY = Controls.controlY(y, rowH)
+  local labelY = Controls.labelY(y, rowH)
 
   local values = {}
   local selectedIndex = 1
@@ -495,14 +530,14 @@ end
 
 function Controls.appendTextField(children, x, y, w, labelText, opts)
   opts = opts or {}
-  local rowH = opts.rowH or Controls.ROW_H or ROW_H
-  local labelY = y + math.floor((rowH - 20) / 2)
+  local rowH = opts.rowH or Controls.ROW_H
+  local labelY = Controls.labelY(y, rowH)
 
   local editW = 172
   if editW > w then editW = w end
   local editX = x + w - editW - 10
   local labelW = editX - x - 8
-  local editY = y + math.floor((rowH - 40) / 2)
+  local editY = Controls.controlY(y, rowH)
 
   local getter = opts.get or function() return "" end
   local setter = opts.set or function() end

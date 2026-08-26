@@ -357,15 +357,13 @@ function M.build(ctx)
   local gap = 10
   local modeW = 160
   local valueW = 130
-  local rowH = (Controls and Controls.ROW_H) or (Controls and Controls.NUMBER_ROW_H) or 50
-  local controlH = 40
-
+  local rowH = (Controls and Controls.ROW_H) or 64
   local valueX = w - rightMargin - valueW
   local modeX = valueX - gap - modeW
   local titleW = modeX - leftMargin - gap
 
-  local labelYOffset = math.floor((rowH - 20) / 2)
-  local controlYOffset = math.floor((rowH - controlH) / 2)
+  local labelYOffset = (Controls and Controls.labelY and Controls.labelY(0, rowH)) or math.floor((rowH - 21) / 2)
+  local controlYOffset = (Controls and Controls.controlY and Controls.controlY(0, rowH)) or math.floor((rowH - 32) / 2)
 
   local modeOptions = {
     { label = pageText(i18n, "mode_auto", "Auto"), value = 0 },

@@ -420,6 +420,7 @@ function M.build(ctx)
 
   -- ── 2. Refresh Button ─────────────────────────────────────────────────────
   local btnW = math.min(260, w - 40)
+  local btnH = (lvgl and lvgl.UI_ELEMENT_HEIGHT) or (Controls and Controls.CTRL_H) or 32
   local btnX = x + math.floor((w - btnW) / 2)
   children[#children + 1] = {
     type = "button",
@@ -434,13 +435,13 @@ function M.build(ctx)
     end
   }
 
-  cursorY = cursorY + 40 + 10
+  cursorY = cursorY + btnH + 10
 
   -- ── 3. 9 Throttle Points Inputs ───────────────────────────────────────────
   local gap = 4
   local fieldW = math.floor((gw - (gap * (FIELD_COUNT - 1))) / FIELD_COUNT)
-  local labelH = 18
-  local editH = 50
+  local labelH = (Controls and Controls.LABEL_H) or (lvgl and lvgl.LCD_SCALE and math.floor(21 * lvgl.LCD_SCALE)) or 18
+  local editH = (lvgl and lvgl.UI_ELEMENT_HEIGHT) or (Controls and Controls.CTRL_H) or 32
 
   for i = 1, FIELD_COUNT do
     local cellX = gx + (i - 1) * (fieldW + gap)
@@ -480,7 +481,7 @@ function M.build(ctx)
     }
   end
 
-  cursorY = cursorY + labelH + editH + 14
+  cursorY = cursorY + labelH + 6 + editH + 14
 
   if ui.dirty then
     children[#children + 1] = {

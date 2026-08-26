@@ -289,9 +289,9 @@ local function drawColumnHeader(children, x, y, w, i18n)
 end
 
 local function appendBandwidthRow(children, x, y, w, i18n, labelText, key0, key1, key2, spec)
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
   local labelW, gap, cellW = getGridMetrics(w)
 

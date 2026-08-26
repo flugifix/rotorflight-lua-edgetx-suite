@@ -251,9 +251,9 @@ local function formatValue(val, spec)
 end
 
 local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spec1, label2, key2, spec2)
-  local rowH = (Controls and Controls.ROW_H) or 50
-  local labelY = y + math.floor((rowH - 20) / 2)
-  local cellTop = y + math.floor((rowH - 40) / 2)
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   
   local mainW    = math.floor(w * 0.31)
   local labelW1  = math.floor(w * 0.19)
