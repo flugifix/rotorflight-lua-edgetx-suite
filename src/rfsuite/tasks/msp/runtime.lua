@@ -778,6 +778,30 @@ function Runtime.tick()
   return true
 end
 
+--- Give the queue a second turn inside the same host pass, after its callers have filled it.
+--
+-- Every host ticks this runtime FIRST and wakes the event runners after it, so a request an
+-- onconnect task enqueues is not looked at until the next pass. The connect chain is a dozen
+-- round trips run strictly one after another, so that is a whole host tick lost per reply on
+-- the one path a start waits for.
+--
+-- This is the queue half of tick() and nothing else -- no link detection, no arm handling, no
+-- version re-negotiation and no enqueueing of its own -- so running it a second time in a pass
+-- cannot move any state that tick() owns. It refuses on exactly the conditions under which
+-- tick() would not have reached processQueue either, and it never initialises the runtime: a
+-- host that has not ticked yet has nothing queued to pump.
+function Runtime.pump()
+  if not state.initialized or not state.available then return false end
+  if not state.queue or type(state.queue.processQueue) ~= "function" then return false end
+  if state.lastConnected ~= true then return false end
+  if state.lastArmed == true then return false end
+  if state.unsupportedApi then return false end
+
+  state.queue:processQueue(nowSeconds())
+  publish()
+  return true
+end
+
 function Runtime.getState()
   return state
 end

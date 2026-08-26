@@ -161,6 +161,13 @@ local function tickMspRuntime(self)
   if EventsRuntime and type(EventsRuntime.wakeup) == "function" then
     pcall(EventsRuntime.wakeup)
   end
+
+  -- The wakeup above is what FILLS the queue while the connect chain runs. Without a second
+  -- turn here every request it enqueues waits for the next host tick before it is even looked
+  -- at, which on a chain of a dozen serial round trips is a dozen ticks of pure waiting.
+  if type(MspRuntime.pump) == "function" then
+    MspRuntime.pump()
+  end
 end
 
 local function buildConnectionSplash(zone, statusLine, title)

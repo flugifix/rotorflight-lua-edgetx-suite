@@ -2627,6 +2627,12 @@ function M.run(event, touchState)
         if Events and type(Events.wakeup) == "function" then
           pcall(Events.wakeup)
         end
+        -- The wakeup above is what fills the queue while the connect chain runs. Without a
+        -- second turn here every request it enqueues waits for the next tick of this block
+        -- before it is looked at.
+        if type(MspRuntime.pump) == "function" then
+          MspRuntime.pump()
+        end
       end
     end
 
