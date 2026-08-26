@@ -5,24 +5,34 @@
 -- Runs after the `name` task in the manifest, which is what fills session.modelName.
 --
 -- The rename is TEMPORARY: the name the model had is remembered before it is overwritten and
--- restored at disconnect, so a pilot who flies one model with a craft plugged in does not find
--- it permanently renamed afterwards. The name is remembered in two places on purpose. The
--- module-local is what the in-session restore uses, so that path can never depend on a store
--- being reachable; the per-model preference file is the backstop for the one case the local
--- cannot cover -- the radio switched off while still connected, where nothing gets to run a
--- disconnect at all.
+-- restored when the craft goes away, so a pilot who flies one model with a craft plugged in does
+-- not find it permanently renamed afterwards. The name is remembered in two places on purpose.
+-- The module-local is what the in-session restore uses, so that path can never depend on a store
+-- being reachable; `lib/model_name_store.lua` is the backstop for the cases the local cannot
+-- cover, and it is a separate file because it has to be readable with nothing connected.
+--
+-- Restoring is NOT this task's job, and cannot be. M.reset() below reads as the disconnect hook
+-- and is not reached: the runner drops a task's module the moment isComplete() returns true
+-- (`releaseTaskModule(task, false)`), and the disconnect path, `resetQueuesAndState()`, opens with
+-- `if not task.module then return end` -- so it returns before it can call the reset it came for.
+-- This task completes on its first pass, every time, so that is every time. The module-local
+-- below goes the same way: a second connect loads a fresh module and inherits nothing.
+--
+-- So the restore is a STATE rather than an event. The events runtime puts the name back from the
+-- store on a tick that has established there is no craft, which covers the completed-task case
+-- above, a link that drops while nothing happens to be looking, and a cold start.
 
 local M = {}
 
 local done = false
 local Log = nil
 local ModelPreferences = nil
+local NameStore = nil
 
--- Where the previous name is kept in the per-model store. The store merges its defaults into
--- whatever is on disk without dropping anything it does not declare, so this section needs no
--- entry in defaultModelPreferences() to survive a load.
-local STORE_SECTION = "model"
-local STORE_KEY = "previous_name"
+-- Where the previous name was kept before it moved to a store of its own. Read once at rename
+-- time so a rename already in effect across an update is not stranded; never written.
+local LEGACY_SECTION = "model"
+local LEGACY_KEY = "previous_name"
 
 --: The name this model had before the craft name was written over it, for as long as the link
 --: lasts. `nil` means nothing has been renamed and there is nothing to put back.
@@ -87,29 +97,50 @@ local function session()
   return type(root) == "table" and root.session or nil
 end
 
--- The store, and both halves are best-effort: a model whose flight controller has not reported
--- its id yet has nowhere to keep this, and that is a reason to skip the backstop rather than to
--- skip the feature.
-local function storeGet()
+local function store()
+  if NameStore == nil then
+    NameStore = loadModule("lib/model_name_store.lua") or false
+  end
+  if type(NameStore) == "table" then return NameStore end
+  return nil
+end
+
+-- What the per-board file still holds from before the store moved, and the reason it is only
+-- read here. Its record is addressed by the flight controller's MCU id, so it is reachable
+-- exactly while a craft is connected -- which is when a rename happens and never when a restore
+-- is needed. Reading it at rename time carries an in-flight rename over an update; there is
+-- nothing to write back to it.
+local function legacyPrevious()
   local s = session()
   local prefs = s and s.modelPreferences
-  local section = type(prefs) == "table" and prefs[STORE_SECTION] or nil
-  local name = type(section) == "table" and section[STORE_KEY] or nil
+  local section = type(prefs) == "table" and prefs[LEGACY_SECTION] or nil
+  local name = type(section) == "table" and section[LEGACY_KEY] or nil
   if type(name) == "string" and name ~= "" then return name end
   return nil
 end
 
-local function storeSet(name)
+local function legacyClear()
   local s = session()
   local prefs = s and s.modelPreferences
-  if type(prefs) ~= "table" or type(s.mcu_id) ~= "string" or s.mcu_id == "" then return end
-  if type(prefs[STORE_SECTION]) ~= "table" then prefs[STORE_SECTION] = {} end
-  prefs[STORE_SECTION][STORE_KEY] = name or ""
+  local section = type(prefs) == "table" and prefs[LEGACY_SECTION] or nil
+  if type(section) ~= "table" or section[LEGACY_KEY] == nil then return end
+  if type(s.mcu_id) ~= "string" or s.mcu_id == "" then return end
+  section[LEGACY_KEY] = ""
   if ModelPreferences == nil then
     ModelPreferences = loadModule("lib/model_preferences.lua") or false
   end
   if type(ModelPreferences) == "table" and type(ModelPreferences.saveByMcuId) == "function" then
     pcall(ModelPreferences.saveByMcuId, s.mcu_id, prefs)
+  end
+end
+
+local function storeSet(name)
+  local s = store()
+  if not s then return end
+  if name == nil or name == "" then
+    pcall(s.forget)
+  else
+    pcall(s.remember, name)
   end
 end
 
@@ -150,11 +181,26 @@ function M.wakeup()
   local ok, info = pcall(model.getInfo)
   if not ok or type(info) ~= "table" then return end
 
-  -- A name already in the store is a rename that never got its restore -- the radio was switched
-  -- off while connected. It, and not what the model is called right now, is what this model is
-  -- really called; taking the current name here would write the craft name in as the original
-  -- and lose the pilot's own for good.
-  previousName = storeGet() or info.name
+  -- A name already in the store is a rename that never got its restore. It, and not what the
+  -- model is called right now, is what this model is really called; taking the current name here
+  -- would write the craft name in as the original and lose the pilot's own for good.
+  --
+  -- The per-board file is consulted only where the store has nothing, and it is MIGRATED rather
+  -- than merely read: left in place it would answer for a later rename too, long after the name
+  -- it holds stopped being this model's own. The write comes before the clear, so a store that
+  -- refuses leaves the old record standing rather than dropping the name between the two.
+  previousName = nil
+  local s = store()
+  if s then previousName = s.pending() end
+  if previousName == nil then
+    local legacy = legacyPrevious()
+    if legacy ~= nil then
+      previousName = legacy
+      storeSet(legacy)
+      legacyClear()
+    end
+  end
+  previousName = previousName or info.name
 
   if info.name == craftName then
     log("model is already called " .. tostring(craftName), "debug")
@@ -178,24 +224,38 @@ function M.isComplete()
   return done
 end
 
--- `reset` is the disconnect hook: `publishConnected(false)` calls it on every runner, and it
--- sets `session.isConnected` false BEFORE that loop. It is not ONLY the disconnect hook, which
--- is the part worth guarding -- `Events.rerunOnconnect()` calls it too, after a reboot, with the
--- link up and coming back. Restoring there would make the name flap. So the restore is gated on
--- the session, which is the one thing that tells the two apart.
+-- `reset` looks like the disconnect hook and is kept as one, but nothing here may depend on it
+-- being called: see the note at the top of the file -- a task that has reported itself complete
+-- has had its module dropped, and the disconnect path returns on that before it reaches this.
+-- What makes the restore happen is the events runtime, on a tick with no craft. This stays
+-- because it is correct where it does run, and because it is the cheaper path when it does.
+--
+-- The guard is still needed for the case that is NOT a disconnect: `Events.rerunOnconnect()`
+-- reaches the same reset after a reboot, with the link up and coming back, and restoring there
+-- would make the name flap. The session is the one thing that tells the two apart.
 function M.reset()
   done = false
 
   local s = session()
   if s and s.isConnected == true then return end
 
-  local restore = previousName or storeGet()
-  if restore == nil then return end
+  if previousName ~= nil then
+    local written = setModelName(previousName)
+    log("model name put back: " .. tostring(previousName) .. " (ok=" .. tostring(written) .. ")", "info")
+    previousName = nil
+    storeSet(nil)
+    return
+  end
 
-  local written = setModelName(restore)
-  log("model name put back: " .. tostring(restore) .. " (ok=" .. tostring(written) .. ")", "info")
-  previousName = nil
-  storeSet(nil)
+  -- Nothing in this Lua state, which is the ordinary case for whichever of the tool and the
+  -- widgets did not do the rename. The store crosses that boundary; it also answers after a
+  -- restart, and it is the same call the events runtime makes on a tick with no craft.
+  local s = store()
+  if not s then return end
+  local ok, restored = pcall(s.restore)
+  if ok and restored then
+    log("model name put back from the store: " .. tostring(restored), "info")
+  end
 end
 
 return M

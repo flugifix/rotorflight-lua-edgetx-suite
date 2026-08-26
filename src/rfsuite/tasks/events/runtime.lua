@@ -25,6 +25,7 @@ end
 local MspRuntime = nil
 local Log = nil
 local Env = nil
+local ModelNameStore = nil
 
 -- Per-category task runners cache will be stored at `_G.rfsuite.tasks.events`
 local function ensureEventRunner(name)
@@ -102,6 +103,33 @@ local function publishConnected(val)
     if type(collectgarbage) == "function" then
       collectgarbage("collect")
     end
+  end
+end
+
+-- Put a model name back that the disconnect hook never got to.
+--
+-- `model_name_sync` restores from its own reset, and that reset is reached only through
+-- publishConnected(false) -- i.e. only where something was ticking at the moment the link went.
+-- Nothing is ticking when the radio is switched off with a craft still connected, so the model
+-- comes back up wearing the craft's name and no event is ever going to say so. The reading side
+-- therefore cannot be an event: it is a STATE, checked on a tick that has established there is no
+-- craft, which a cold start reaches on its first pass.
+--
+-- The cost on that tick is one boolean. The store answers hasAny() from a flag after its first
+-- call, and everything past it -- reading the model, writing to it, touching the card -- happens
+-- only where a rename is actually outstanding.
+local function restorePendingModelName()
+  if ModelNameStore == nil then
+    ModelNameStore = loadModule("lib/model_name_store.lua") or false
+  end
+  if type(ModelNameStore) ~= "table" then return end
+
+  local okAny, any = pcall(ModelNameStore.hasAny)
+  if not okAny or not any then return end
+
+  local ok, restored = pcall(ModelNameStore.restore)
+  if ok and restored and Log and type(Log.emit) == "function" then
+    pcall(Log.emit, "rfsuite.events", "model name put back: " .. tostring(restored), "info", true)
   end
 end
 
@@ -183,6 +211,7 @@ function Events.wakeup()
       state.linkStableUp = false
       publishConnected(false)
     end
+    restorePendingModelName()
   end
   -- Trigger per-category runners
   do
