@@ -426,7 +426,17 @@ local function updateConnectionState(self)
   end
 
   local softTimeoutReady = connected and self.pendingSince ~= nil and (now - self.pendingSince) >= SPLASH_SOFT_TIMEOUT_SECONDS
-  local ready = (rawReady and self.readySince ~= nil and (now - self.readySince) >= SPLASH_READY_HOLD_SECONDS) or softTimeoutReady
+  -- The hold steadies a gate that flickers, and a flicker is a gate that has been open and has
+  -- shut again. The FIRST time the conditions come true after the widget starts is not that:
+  -- they have been false since boot and are now true. Spending the hold there costs a second of
+  -- splash at the one moment the screen is being waited for.
+  --
+  -- `everReady` is therefore set where the gate CLOSES after having been open, and not where it
+  -- opens. Set on the opening, the very next pass would weigh the full hold against a
+  -- `readySince` one pass old and shut the gate again for the rest of it -- the dashboard would
+  -- appear for one frame, vanish, and come back a second later.
+  local holdSeconds = self.everReady and SPLASH_READY_HOLD_SECONDS or 0
+  local ready = (rawReady and self.readySince ~= nil and (now - self.readySince) >= holdSeconds) or softTimeoutReady
   local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
 
   local statusLine = nil
@@ -462,6 +472,7 @@ local function updateConnectionState(self)
   end
 
   if self.connectionReady ~= ready then
+    local wasReady = self.connectionReady == true
     self.connectionReady = ready
     self.built = false
     self.renderKey = nil
@@ -473,6 +484,8 @@ local function updateConnectionState(self)
       -- Force reload preferences when connection ready to ensure we have the latest model settings
       reloadPreferencesIfNeeded(self, true)
     else
+      -- Open, and shut again: from here on there is something to steady and the hold is paid.
+      if wasReady then self.everReady = true end
       widgetLog(self, "FBL not ready yet", "info")
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
