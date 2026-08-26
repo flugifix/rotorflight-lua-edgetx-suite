@@ -111,6 +111,43 @@ local function wanted(w, entry)
   return selection[entry.channel] == true
 end
 
+-- The prelude, and it belongs to the RUN rather than to the opening screen.
+--
+-- It establishes the channel selection every later screen reads, and starts the four board reads
+-- every completion criterion is derived from. The opening procedure used to own it, which held
+-- only while the path was walked in order -- and the comment inside already named the failure it
+-- would take: a structure that exists only when one particular procedure ran. The overview makes
+-- that real, because a pilot opening one procedure straight from the list never passes the
+-- opening at all. So the runner calls this once on load, and the opening screen refreshes it.
+local function prime(w)
+  local data = w.data
+  -- The selection is established HERE and not in the layout procedure, because the layout
+  -- procedure is one of the things the quick pass passes over once the board already satisfies
+  -- it -- and every channel screen after it reads this table.
+  if data.wanted == nil then
+    data.wanted = {}
+    for _, entry in ipairs(w.radio.CHANNELS) do
+      data.wanted[entry.channel] = (entry.tier == "required" or entry.tier == "recommended")
+    end
+  end
+  data.modeRanges = nil
+  data.boxIds = nil
+  data.boxNames = nil
+  data.rxMap = nil
+  w.msp.read("rx_map", function(parsed) data.rxMap = parsed w.rebuild() end)
+  w.msp.read("boxids", function(parsed)
+    data.boxIds = parsed and parsed.box_ids or nil w.rebuild()
+  end)
+  w.msp.read("boxnames", function(parsed)
+    data.boxNames = parsed and parsed.box_names or nil w.rebuild()
+  end)
+  w.msp.read("mode_ranges", function(parsed)
+    data.modeRanges = parsed and parsed.mode_ranges or nil w.rebuild()
+  end)
+end
+
+procs.prime = prime
+
 -- ---------------------------------------------------------------------------------------------
 -- Opening. Not a procedure: it has no completion criterion of its own and nothing to skip, so it
 -- is not counted in the section's progress either.
@@ -121,44 +158,15 @@ procs[#procs + 1] = {
   section = "radio",
   counted = false,
   title = function(i18n) return t(i18n, "step_intro", "About") end,
-  enter = function(w)
-    local data = w.data
-    -- The selection is established HERE and not in the layout procedure, because the
-    -- layout procedure is one of the things the quick pass passes over once the board
-    -- already satisfies it -- and every channel screen after it reads this table. A
-    -- structure that only exists when an optional procedure ran is a structure that is
-    -- absent exactly on the second run.
-    if data.wanted == nil then
-      data.wanted = {}
-      for _, entry in ipairs(w.radio.CHANNELS) do
-        data.wanted[entry.channel] = (entry.tier == "required" or entry.tier == "recommended")
-      end
-    end
-    data.modeRanges = nil
-    data.boxIds = nil
-    data.boxNames = nil
-    data.rxMap = nil
-    w.msp.read("rx_map", function(parsed) data.rxMap = parsed w.rebuild() end)
-    w.msp.read("boxids", function(parsed)
-      data.boxIds = parsed and parsed.box_ids or nil w.rebuild()
-    end)
-    w.msp.read("boxnames", function(parsed)
-      data.boxNames = parsed and parsed.box_names or nil w.rebuild()
-    end)
-    w.msp.read("mode_ranges", function(parsed)
-      data.modeRanges = parsed and parsed.mode_ranges or nil w.rebuild()
-    end)
-  end,
+  enter = function(w) prime(w) end,
   screens = {
     {
       id = "about",
       nextLabel = function(i18n) return t(i18n, "begin", "Begin") end,
       build = function(w, ctx, area)
         local children, i18n, y = ctx.children, ctx.i18n, area.y
-        w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p1", "This assistant sets the transmitter model up for the flight controller and configures the flight controller to match it."))
-        y = y + 62
-        w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p2", "The transmitter setup is needed once per model and survives a change of flight controller. Every flight controller must be set to that layout once."))
-        y = y + 80
+        y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p1", "This assistant sets the transmitter model up for the flight controller and configures the flight controller to match it.")) + 10
+        y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p2", "The transmitter setup is needed once per model and survives a change of flight controller. Every flight controller must be set to that layout once.")) + 10
         w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p3", "This part covers the radio and the basics on the board. Drivetrain, servos and mechanics are separate procedures."))
       end
     },
@@ -233,8 +241,7 @@ procs[#procs + 1] = {
       id = "pick",
       build = function(w, ctx, area)
         local children, i18n, y = ctx.children, ctx.i18n, area.y
-        w.paragraph(children, area.x, y, area.w, t(i18n, "layout_intro", "The four sticks are laid out in the next step. Choose what else this run lays out."))
-        y = y + 36
+        y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "layout_intro", "The four sticks are laid out in the next step. Choose what else this run lays out.")) + 8
 
         for _, entry in ipairs(w.radio.CHANNELS) do
           local name = "CH" .. tostring(entry.channel) .. "  " .. channelName(i18n, entry.key)
@@ -300,8 +307,7 @@ procs[#procs + 1] = {
       build = function(w, ctx, area)
         local children, i18n, y = ctx.children, ctx.i18n, area.y
 
-        w.paragraph(children, area.x, y, area.w, t(i18n, "sticks_intro", "The four sticks are laid out for the flight controller: roll, pitch, collective, yaw."))
-        y = y + 34
+        y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "sticks_intro", "The four sticks are laid out for the flight controller: roll, pitch, collective, yaw.")) + 8
 
         for _, info in ipairs(w.data.sticks or {}) do
           local entry = info.entry
@@ -616,13 +622,55 @@ local function makeChannelProcedure(channel, order)
           return
         end
 
-        -- One field, because the radio's own picker returns a POSITION: which switch and which
-        -- state collapse into the answer the pilot already knows from their transmitter. Filtered
-        -- to physical switches, and it starts EMPTY -- there is no defensible default for a
+        -- One field either way, and it starts EMPTY -- there is no defensible default for a
         -- safety function, and a pre-filled form is how a pilot ends up with one they never chose.
         local pickerW = 150
         w.label(children, area.x, y + 9, area.w - pickerW - 8,
           pickerName(i18n, entry.key), SMLSIZE, COLOR_THEME_PRIMARY1)
+
+        -- Two picker kinds for two channel kinds. Where the function sits AT a position -- arming,
+        -- the throttle hold, rescue -- the radio's own picker is exactly right: which switch and
+        -- which state collapse into the one answer the pilot already knows from their transmitter.
+        --
+        -- Where the channel carries a VALUE across the whole travel there is no position to name,
+        -- because all three are in use, one per profile. Asked with the position picker the pilot
+        -- had to pick one of three answers that all mean the same thing, and `proc.enter` then
+        -- normalised two of them away with `firstPositionOf`. So that channel gets a list of
+        -- SWITCHES, filtered to the ones that can carry it.
+        if entry.needsPositions then
+          local switches = w.radio.switches(entry.needsPositions)
+          w.mark(y + w.ROW_H)
+
+          if #switches == 0 then
+            w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
+              t(i18n, "no_switch_for_profiles",
+                "This radio has no three-position switch, so it cannot carry one profile per position."))
+            return
+          end
+
+          local values = { t(i18n, "pick_empty", "-") }
+          for _, sw in ipairs(switches) do values[#values + 1] = sw.name end
+
+          children[#children + 1] = {
+            type = "choice",
+            x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
+            title = pickerName(i18n, entry.key),
+            values = values,
+            get = function()
+              local picked = w.radio.firstPositionOf(w.data.picked[channel] or 0)
+              for index, sw in ipairs(switches) do
+                if sw.swsrc == picked then return index + 1 end
+              end
+              return 1
+            end,
+            set = function(value)
+              local sw = switches[(tonumber(value) or 1) - 1]
+              w.data.picked[channel] = sw and sw.swsrc or 0
+            end
+          }
+          return
+        end
+
         children[#children + 1] = {
           type = "switch",
           x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
@@ -633,14 +681,7 @@ local function makeChannelProcedure(channel, order)
           -- would throw the focus back to the first row after every choice.
           set = function(value) w.data.picked[channel] = tonumber(value) or 0 end
         }
-        y = y + w.ROW_H
-
-        local picked = w.data.picked[channel]
-        if entry.needsPositions and picked and picked ~= 0
-           and (w.radio.switchPositionCount(picked) or 0) < entry.needsPositions then
-          w.paragraph(children, area.x, y + 6, area.w,
-            t(i18n, "needs_three", "This channel needs a three-position switch, one position per profile."))
-        end
+        w.mark(y + w.ROW_H)
       end
     }
   }

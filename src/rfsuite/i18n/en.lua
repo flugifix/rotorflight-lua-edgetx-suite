@@ -1145,7 +1145,6 @@ return {
         action_create = "Set up",
         action_leave = "Leave alone",
         leave_note = "This channel is left as it is. The flight controller is not told about it either.",
-        needs_three = "This channel needs a three-position switch, one position per profile.",
         note_profiles = "profiles 1-3",
         marker_asserted = "asserted",
         marker_skipped = "you said so",
@@ -1158,7 +1157,17 @@ return {
         sticks_intro = "The four sticks are laid out for the flight controller: roll, pitch, collective, yaw.",
         sticks_write = "Set up",
         sticks_writing = "Laying out the sticks",
-        finding_no_input = "no input"
+        finding_no_input = "no input",
+        overview_intro = "Each part runs on its own. Open one, or continue where the machine says the work stops.",
+        overview_open = "Open",
+        overview_continue = "Continue",
+        overview_close = "Close",
+        status_done = "done",
+        status_open = "open",
+        status_skipped = "you said so",
+        status_unknown = "not derivable",
+        pick_empty = "-",
+        no_switch_for_profiles = "This radio has no three-position switch, so it cannot carry one profile per position."
       },
       setup_accelerometer = {
         title = "Accelerometer",

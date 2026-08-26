@@ -46,6 +46,9 @@ local BASE = "app/pages/setup_wizard/"
 
 local ui = {
   loaded = false,
+  -- "overview" is where the assistant opens and where a back press lands. "run" is a procedure.
+  view = "overview",
+  contentBottom = nil,
   procIndex = 1,
   screenIndex = 1,
   procedures = nil,
@@ -159,6 +162,7 @@ local function sectionPosition(proc)
 end
 
 local function enterCurrent()
+  if ui.view ~= "run" then return end
   local proc = wiz.procedure()
   local screen = wiz.screen()
   if not proc or not screen then return end
@@ -178,6 +182,7 @@ function wiz.goToProcedure(index, screenIndex)
   if not ui.procedures then return end
   if index < 1 then index = 1 end
   if index > #ui.procedures then index = #ui.procedures end
+  ui.view = "run"
   ui.procIndex = index
   ui.screenIndex = screenIndex or 1
   ui.entered = nil
@@ -225,7 +230,14 @@ function wiz.advance()
   wiz.advanceUnconditional()
 end
 
+function wiz.showOverview()
+  ui.view = "overview"
+  ui.busy = nil
+  wiz.rebuild()
+end
+
 function wiz.back()
+  if ui.view ~= "run" then return end
   if ui.screenIndex > 1 then
     ui.screenIndex = ui.screenIndex - 1
     ui.entered = nil
@@ -233,11 +245,10 @@ function wiz.back()
     wiz.rebuild()
     return
   end
-  if ui.procIndex > 1 then
-    local index = ui.procIndex - 1
-    local proc = ui.procedures[index]
-    wiz.goToProcedure(index, proc and proc.screens and #proc.screens or 1)
-  end
+  -- The first screen of a procedure steps OUT to the overview rather than into the tail of the
+  -- previous one. The procedure is the unit; walking backwards across the boundary presents the
+  -- path as one long form, and it is what left the assistant with no exit at its own first screen.
+  wiz.showOverview()
 end
 
 function wiz.isLast()
@@ -246,16 +257,60 @@ function wiz.isLast()
   return ui.procIndex >= #ui.procedures and ui.screenIndex >= #(proc.screens or {})
 end
 
--- Layout. The row height and the two reserved bands are the whole of the no-scroll rule in code: a
--- screen is given the space that is left and must not ask for more.
+-- Layout. The row height and the two reserved bands are what the no-scroll rule comes to in code:
+-- a screen is given the space that is left and should not ask for more.
 local ROW_H = 34
-local HEADER_H = 40
 local FOOTER_H = 42
 -- The page is a scrolling container and the height it reports runs past the visible area, so a
 -- footer placed at that height alone is drawn half off the screen. Measured on a 800x480 build.
 local FOOTER_MARGIN = 16
 
+-- The header is drawn by `Controls.appendStaticSectionHeader`, whose blue bar sits at
+-- STATIC_SECTION_H - 6. Reserving 40 for a band that is 50 tall put the first body row across
+-- that bar, so the height is taken from the control instead of restated here.
+local function headerHeight()
+  return (Controls and Controls.STATIC_SECTION_H) or 50
+end
+
 wiz.ROW_H = ROW_H
+
+-- How far down anything has been drawn, so the footer can be put BELOW the content rather than on
+-- top of it.
+--
+-- The bands above were sized on a 800x480 radio, which gives a page body of 418 px. A 480x320 one
+-- gives 275, and several screens here are taller than that on their own -- the channel list is
+-- eight rows before its explanation. Pinning the footer to the bottom of the visible area then
+-- draws the buttons over the rows, and since the whole page scrolls as one the pilot cannot
+-- separate them by scrolling. So the footer floats down to meet the content and the container
+-- scrolls to reach it; nothing is ever covered, on any screen size.
+function wiz.mark(bottom)
+  bottom = tonumber(bottom)
+  if bottom == nil then return end
+  if ui.contentBottom == nil or bottom > ui.contentBottom then ui.contentBottom = bottom end
+end
+
+-- Everything a screen appended, measured off the declarations themselves.
+--
+-- `wiz.row` and the rest report where they end, but a screen may append a widget directly or go
+-- through `Controls`, and those never reach the cursor above -- which is how the channel list,
+-- eight `appendRadioSwitch` rows deep, still ended up under the footer after the cursor was
+-- fixed. Reading the children back needs no cooperation from the screen at all.
+local function markAppended(children, from)
+  for index = from + 1, #children do
+    local child = children[index]
+    if type(child) == "table" and tonumber(child.y) ~= nil then
+      -- A label declares no height; the paragraph helper measures its own and marks it exactly,
+      -- so a nominal line is enough to keep a bare label from being read as zero-height.
+      wiz.mark(tonumber(child.y) + (tonumber(child.h) or 20))
+    end
+  end
+end
+
+local function footerPosition(y, h)
+  local pinned = y + h - FOOTER_H - FOOTER_MARGIN
+  if ui.contentBottom ~= nil and ui.contentBottom + 10 > pinned then return ui.contentBottom + 10 end
+  return pinned
+end
 
 local function label(children, x, y, w, text, font, colour)
   children[#children + 1] = {
@@ -285,6 +340,7 @@ function wiz.row(children, x, y, w, name, value, marker)
     x = x, y = y + ROW_H - 1, w = w, h = 1,
     color = GREY_DEFAULT, filled = true
   }
+  wiz.mark(y + ROW_H)
   return ROW_H
 end
 
@@ -325,18 +381,30 @@ function wiz.findingRow(children, x, y, w, name, value, actions)
     x = x, y = y + ROW_H - 1, w = w, h = 1,
     color = GREY_DEFAULT, filled = true
   }
+  wiz.mark(y + ROW_H)
   return ROW_H
 end
 
+-- Returns the height the text actually takes, which is the only answer a caller can advance by.
+-- This used to return 0 and every caller guessed instead -- 34, 36, 62, 80 -- and each of those
+-- numbers is a measurement of one radio at one width. The same sentence is one line at 800 px and
+-- three at 480, so on the narrower screen the guess put the next row across the text.
 function wiz.paragraph(children, x, y, w, text)
+  text = tostring(text or "")
   children[#children + 1] = {
     type = "label",
     x = x, y = y, w = w,
-    text = tostring(text or ""),
+    text = text,
     font = SMLSIZE,
     color = COLOR_THEME_PRIMARY1
   }
-  return 0
+  local height = 0
+  if Controls and type(Controls.estimateWrappedTextHeight) == "function" then
+    height = tonumber(Controls.estimateWrappedTextHeight(text, w, SMLSIZE)) or 0
+  end
+  if height <= 0 then height = 20 end
+  wiz.mark(y + height)
+  return height
 end
 
 local function buildFooter(children, ctx, x, y, w)
@@ -395,11 +463,97 @@ local function buildFooter(children, ctx, x, y, w)
     press = function()
       if wiz.isLast() then
         if Store then Store.setResume(nil) Store.flush() end
+        -- The end of the path still CLOSES the page. Whether this part wants a closing screen is
+        -- an open question and not one to answer in passing: the overview is an entry and a way
+        -- back, not a finish line.
         if type(ui.requestClose) == "function" then ui.requestClose() end
         return
       end
       wiz.advance()
     end
+  }
+end
+
+-- What one procedure says about itself on the overview. Derived on every build, never stored --
+-- a procedure the machine cannot answer for says so rather than claiming either side of it.
+local function statusOf(i18n, proc)
+  if wiz.isSkipped(proc) then return pageText(i18n, "status_skipped", "you said so") end
+  local value = wiz.isComplete(proc)
+  if value == true then return pageText(i18n, "status_done", "done") end
+  if value == false then return pageText(i18n, "status_open", "open") end
+  return pageText(i18n, "status_unknown", "not derivable")
+end
+
+-- The overview, and it is what the assistant opens on.
+--
+-- Every procedure is launchable on its own -- that is the whole reason the unit is a procedure and
+-- not a wizard step, and the pilot changing one thing months later arrives here instead of walking
+-- a path they have already run. It is also where a back press from a procedure lands, so there is
+-- always an exit one press away.
+--
+-- The sections are headings here, not navigation: the list is flat and every row is reachable.
+local function buildOverview(ctx, x, y, w)
+  local children, i18n = ctx.children, ctx.i18n
+
+  if Controls and type(Controls.appendStaticSectionHeader) == "function" then
+    Controls.appendStaticSectionHeader(children, x, y, w, pageText(i18n, "title", "Setup Assistant"))
+  end
+
+  local cursor = y + headerHeight() + 6
+  cursor = cursor + wiz.paragraph(children, x, cursor, w,
+    pageText(i18n, "overview_intro",
+      "Each part runs on its own. Open one, or continue where the machine says the work stops.")) + 10
+
+  local section = nil
+  for index, proc in ipairs(ui.procedures or {}) do
+    if proc.counted ~= false then
+      if proc.section ~= section then
+        -- Air before a heading, but not above the first one: without it the second section title
+        -- is drawn flush on the divider of the row above and reads as part of that row.
+        if section ~= nil then cursor = cursor + 10 end
+        section = proc.section
+        local name = (section == "board")
+          and pageText(i18n, "section_board", "Flight controller")
+          or pageText(i18n, "section_radio", "Radio")
+        label(children, x, cursor, w, name, SMLSIZE, COLOR_THEME_SECONDARY1)
+        cursor = cursor + 24
+        wiz.mark(cursor)
+      end
+
+      local title = type(proc.title) == "function" and proc.title(i18n) or tostring(proc.id)
+      local target = index
+      cursor = cursor + wiz.findingRow(children, x, cursor, w, title, statusOf(i18n, proc), {
+        { text = pageText(i18n, "overview_open", "Open"),
+          press = function() wiz.goToProcedure(target, 1) end }
+      })
+    end
+  end
+
+  return cursor
+end
+
+local function buildOverviewFooter(children, ctx, x, y, w)
+  local i18n = ctx.i18n
+  local gap = 8
+  local btnW = math.floor((w - gap) / 2)
+
+  children[#children + 1] = {
+    type = "button",
+    x = x, y = y, w = btnW, h = FOOTER_H - 6,
+    text = pageText(i18n, "overview_close", "Close"),
+    press = function()
+      if Store then Store.flush() end
+      if type(ui.requestClose) == "function" then ui.requestClose() end
+    end
+  }
+
+  -- Continue, not Start: the first open procedure IS where a first run begins, so one button
+  -- serves both and there is no mode to pick.
+  children[#children + 1] = {
+    type = "button",
+    x = x + btnW + gap, y = y, w = btnW, h = FOOTER_H - 6,
+    text = pageText(i18n, "overview_continue", "Continue"),
+    press = function() wiz.goToProcedure(nextOpenIndex(1), 1) end
   }
 end
 
@@ -420,17 +574,24 @@ local function ensureLoaded()
   local procedures = {}
   local radioProcs = loadModule(BASE .. "proc_radio.lua")
   local boardProcs = loadModule(BASE .. "proc_board.lua")
+  local prime = nil
   if type(radioProcs) == "table" then
     for _, proc in ipairs(radioProcs) do procedures[#procedures + 1] = proc end
+    if type(radioProcs.prime) == "function" then prime = radioProcs.prime end
   end
   if type(boardProcs) == "table" then
     for _, proc in ipairs(boardProcs) do procedures[#procedures + 1] = proc end
   end
   ui.procedures = procedures
+  ui.view = "overview"
   ui.procIndex = 1
   ui.screenIndex = 1
   ui.entered = nil
   ui.loaded = true
+  -- Before anything is entered, because the overview derives a status for every procedure and a
+  -- pilot may open any one of them first. What a procedure reads must not depend on the route
+  -- taken to it.
+  if prime then prime(wiz) end
   enterCurrent()
 end
 
@@ -466,6 +627,9 @@ function M.wakeup(ctx)
     wiz.i18n = ctx.i18n
   end
   enterCurrent()
+  -- The overview runs no procedure, so no procedure's poll runs behind it. Without this the
+  -- channel-chain screen would keep asking the board for live channels from a list it is not on.
+  if ui.view ~= "run" then return end
   local proc = wiz.procedure()
   local screen = wiz.screen()
   if proc and type(proc.wakeup) == "function" then proc.wakeup(wiz) end
@@ -504,6 +668,16 @@ function M.build(ctx)
     return
   end
 
+  ui.contentBottom = nil
+
+  if ui.view ~= "run" then
+    local before = #children
+    buildOverview(ctx, x, y, w)
+    markAppended(children, before)
+    buildOverviewFooter(children, ctx, x, footerPosition(y, h), w)
+    return
+  end
+
   local proc = wiz.procedure()
   local screen = wiz.screen()
 
@@ -522,15 +696,17 @@ function M.build(ctx)
     Controls.appendStaticSectionHeader(children, x, y, w, heading)
   end
 
-  local bodyY = y + HEADER_H + 6
-  local bodyH = h - HEADER_H - FOOTER_H - FOOTER_MARGIN - 12
+  local bodyY = y + headerHeight() + 6
+  local bodyH = h - headerHeight() - FOOTER_H - FOOTER_MARGIN - 12
   if bodyH < ROW_H then bodyH = ROW_H end
 
   if screen and type(screen.build) == "function" then
+    local before = #children
     screen.build(wiz, ctx, { x = x, y = bodyY, w = w, h = bodyH })
+    markAppended(children, before)
   end
 
-  buildFooter(children, ctx, x, y + h - FOOTER_H - FOOTER_MARGIN, w)
+  buildFooter(children, ctx, x, footerPosition(y, h), w)
 end
 
 function M.onHelp(ctx)
@@ -540,15 +716,19 @@ function M.onHelp(ctx)
 end
 
 function M.onBack(ctx)
+  -- `ui/home.lua` reads a `true` here as "the page consumed the press, stay on it" and anything
+  -- else as "leave the page". This returned the opposite of both: a step back inside the assistant
+  -- ALSO left the page, and the first screen -- which is where a pilot who has walked back ends up
+  -- -- answered `true` and swallowed every press. That is why there was no way out.
+  --
   -- Leaving to correct something elsewhere is a designed route rather than an abort, so no
-  -- confirmation is raised here. The cursor is kept; what it does NOT do is assert anything -- on
-  -- re-entry every procedure is derived again, so a repair made outside the assistant is noticed
-  -- with nobody telling it.
-  if ui.procIndex > 1 or ui.screenIndex > 1 then
+  -- confirmation is raised. Nothing is asserted on the way out either: on re-entry every procedure
+  -- is derived again, so a repair made outside the assistant is noticed with nobody telling it.
+  if ui.view == "run" then
     wiz.back()
-    return false
+    return true
   end
-  return true
+  return false
 end
 
 function M.allowMemAutoRefresh()
@@ -565,6 +745,8 @@ function M.onClose()
   ui.data = nil
   ui.busy = nil
   ui.entered = nil
+  ui.view = "overview"
+  ui.contentBottom = nil
   ui.loaded = false
   Common = nil
   Controls = nil

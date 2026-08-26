@@ -1145,7 +1145,6 @@ return {
         action_create = "Einrichten",
         action_leave = "So lassen",
         leave_note = "Dieser Kanal bleibt, wie er ist. Der Flugregler erfährt ebenfalls nichts davon.",
-        needs_three = "Dieser Kanal braucht einen Dreistellungsschalter, eine Stellung je Profil.",
         note_profiles = "Profile 1-3",
         marker_asserted = "zugesagt",
         marker_skipped = "von dir gesetzt",
@@ -1158,7 +1157,17 @@ return {
         sticks_intro = "Die vier Knüppel werden für den Flugregler belegt: Rollen, Nicken, Pitch, Gieren.",
         sticks_write = "Einrichten",
         sticks_writing = "Lege die Knüppel.",
-        finding_no_input = "kein Input"
+        finding_no_input = "kein Input",
+        overview_intro = "Jeder Teil läuft einzeln. Öffne einen, oder mach dort weiter, wo die Maschine die Arbeit offen sieht.",
+        overview_open = "Öffnen",
+        overview_continue = "Weiter",
+        overview_close = "Schließen",
+        status_done = "erledigt",
+        status_open = "offen",
+        status_skipped = "von dir gesetzt",
+        status_unknown = "nicht ableitbar",
+        pick_empty = "-",
+        no_switch_for_profiles = "Dieser Sender hat keinen Dreistellungsschalter, kann also nicht ein Profil je Stellung tragen."
       },
       setup_accelerometer = {
         title = "Beschleunigungssensor",

@@ -71,8 +71,7 @@ procs[#procs + 1] = {
         local children, i18n, y = ctx.children, ctx.i18n, area.y
         local state = w.data.name or {}
 
-        w.paragraph(children, area.x, y, area.w, t(i18n, "name_intro", "The name the flight controller reports. The suite can name the transmitter model after it."))
-        y = y + 40
+        y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "name_intro", "The name the flight controller reports. The suite can name the transmitter model after it.")) + 8
 
         if not state.loaded then
           w.row(children, area.x, y, area.w, t(i18n, "field_name", "Craft name"), t(i18n, "state_reading", "reading..."), nil)
@@ -137,8 +136,7 @@ procs[#procs + 1] = {
         local children, i18n, y = ctx.children, ctx.i18n, area.y
         local state = w.data.alignment or {}
 
-        w.paragraph(children, area.x, y, area.w, t(i18n, "alignment_intro", "Needed before the calibration: the flight controller mounted in the machine, and the machine level."))
-        y = y + 40
+        y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "alignment_intro", "Needed before the calibration: the flight controller mounted in the machine, and the machine level.")) + 8
 
         if not state.loaded then
           w.row(children, area.x, y, area.w, t(i18n, "field_orientation", "Orientation"), t(i18n, "state_reading", "reading..."), nil)
@@ -208,8 +206,7 @@ procs[#procs + 1] = {
           return
         end
 
-        w.paragraph(children, area.x, y, area.w, t(i18n, "accel_intro", "Flight controller mounted in the machine, machine level. Calibrating on a workbench calibrates the workbench."))
-        y = y + 52
+        y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "accel_intro", "Flight controller mounted in the machine, machine level. Calibrating on a workbench calibrates the workbench.")) + 8
 
         local marker = t(i18n, "marker_open", "not run")
         if state.done then marker = t(i18n, "marker_done", "done") end

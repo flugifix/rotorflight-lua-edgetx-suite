@@ -230,6 +230,30 @@ function M.switchSource(swsrc)
   return nil, base
 end
 
+-- The physical switches this radio has, one entry per SWITCH rather than per position.
+--
+-- A channel that carries a VALUE across the whole travel -- the profile channel is the one -- is
+-- answered by naming a switch: all three of its positions are spoken for, one per profile. The
+-- radio's own picker only ever returns a position, so asking with it offers three spellings of
+-- the same answer and then discards two of them. `minPositions` filters to switches that can
+-- actually carry the function, which leaves nothing for a "this needs three positions" complaint
+-- to be about.
+local MAX_SWITCHES = 32
+
+function M.switches(minPositions)
+  minPositions = tonumber(minPositions) or 2
+  local list = {}
+  for number = 0, MAX_SWITCHES - 1 do
+    local first = SWSRC_FIRST_SWITCH + number * POSITIONS_PER_SWITCH
+    local count = M.switchPositionCount(first)
+    local name = count and M.switchBaseName(first) or nil
+    if name ~= nil and count >= minPositions then
+      list[#list + 1] = { swsrc = first, name = name, positions = count }
+    end
+  end
+  return list
+end
+
 -- How many positions this switch actually has. A two-position switch has no middle, so it
 -- never rests at centre and its windows are the two ends alone.
 function M.switchPositionCount(swsrc)
