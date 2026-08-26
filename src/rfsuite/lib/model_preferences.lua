@@ -173,14 +173,23 @@ local function getToolsRoot(userRoot)
   return string.gsub(userRoot or "", "/rfsuite%.user$", "")
 end
 
+-- mkdir() is a bare global of the firmware's filesystem library, not a member of os. The
+-- previous guard here tested os.mkdir and could never pass -- this Lua has no os table at
+-- all -- so no directory was ever created and a store whose parent was missing simply failed
+-- to write. The shape follows app/pages/logs/graph.lua, which tests fstat() the same way.
+-- mkdir() creates one level at a time, so the tools root goes first.
+local function makeDir(path)
+  if type(mkdir) ~= "function" then return end
+  if type(path) ~= "string" or path == "" then return end
+  pcall(mkdir, path)
+end
+
 local function ensureDirs(userRoot)
-  if type(os) == "table" and type(os.mkdir) == "function" then
-    local toolsRoot = getToolsRoot(userRoot)
-    if toolsRoot ~= "" then
-      pcall(os.mkdir, toolsRoot)
-    end
-    pcall(os.mkdir, userRoot)
+  local toolsRoot = getToolsRoot(userRoot)
+  if toolsRoot ~= "" then
+    makeDir(toolsRoot)
   end
+  makeDir(userRoot)
 end
 
 local function buildPathForRoot(userRoot, safeId)

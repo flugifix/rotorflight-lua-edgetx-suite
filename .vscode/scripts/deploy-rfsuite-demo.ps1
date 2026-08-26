@@ -118,7 +118,6 @@ $sourceCore = Join-Path $sourceRoot 'rfsuite'
 $sourceAudioRoot = Join-Path $sourceCore 'audio'
 $sourceToolEntrypoint = Join-Path $sourceRoot 'main.lua'
 $sourceWidgetRoot = Join-Path $sourceRoot 'widgets\rfsuite'
-$sourceUserRoot = Join-Path $sourceRoot 'rfsuite.user'
 
 function Test-LikelyRadioRoot {
     param([Parameter(Mandatory = $true)][string]$Root)
@@ -229,10 +228,6 @@ if (-not (Test-Path $sourceAudioRoot)) {
     throw "Audio source folder not found: $sourceAudioRoot"
 }
 
-if (-not (Test-Path $sourceUserRoot)) {
-    throw "User source folder not found: $sourceUserRoot"
-}
-
 if (-not (Test-Path $toolsRoot)) {
     New-Item -ItemType Directory -Path $toolsRoot -Force | Out-Null
 }
@@ -265,13 +260,9 @@ Get-ChildItem -Path $targetCore -Filter '*.luac' -Recurse -ErrorAction SilentlyC
 
 Copy-Item -Path $sourceToolEntrypoint -Destination $targetToolEntrypoint -Force
 
+# No preference file is deployed: the suite writes its own store on first save.
 if (-not (Test-Path $targetUserRoot)) {
     New-Item -ItemType Directory -Path $targetUserRoot -Force | Out-Null
-}
-
-$targetPreferencesFile = Join-Path $targetUserRoot 'preferences.ini'
-if (-not (Test-Path $targetPreferencesFile)) {
-    Copy-Item -Path (Join-Path $sourceUserRoot 'preferences.ini') -Destination $targetPreferencesFile -Force
 }
 
 function Get-ThemeMetadata {

@@ -176,7 +176,35 @@ end
 
 -- Writes ALL sections and keys from prefs to the INI file.
 -- No field list to maintain — adding a key to prefs automatically persists it.
+
+-- The install carries no directory entries, so /SCRIPTS/TOOLS/rfsuite.user exists on a card
+-- only because a file was unpacked into it, and io.open(path, "w") does not create a missing
+-- parent. Without this, the first save on such a card fails and every setting the pilot
+-- changed is lost with it.
+--
+-- mkdir() is a bare global of the firmware's filesystem library, not a member of os: there is
+-- no os table in this Lua at all, so a guard on os.mkdir can never be true. The shape follows
+-- app/pages/logs/graph.lua, which tests fstat() the same way. mkdir() creates one level at a
+-- time, so the tools root goes first.
+local function makeDir(path)
+  if type(mkdir) ~= "function" then return end
+  if type(path) ~= "string" or path == "" then return end
+  pcall(mkdir, path)
+end
+
+local function ensureUserDir()
+  local userRoot = string.match(PREF_PATH, "^(.*)/[^/]+$")
+  if not userRoot then return end
+  local toolsRoot = string.gsub(userRoot, "/rfsuite%.user$", "")
+  if toolsRoot ~= "" and toolsRoot ~= userRoot then
+    makeDir(toolsRoot)
+  end
+  makeDir(userRoot)
+end
+
 function M.save(prefs)
+  ensureUserDir()
+
   local f, err = io.open(PREF_PATH, "w")
   if not f then return false, err end
 
