@@ -111,8 +111,10 @@ end
 
 local function appendRadioWideNote(children, x, cursorY, w, i18n)
   children[#children + 1] = {
-    type = "label", x = x, y = cursorY, w = w,
+    type = "label", x = x + 10, y = cursorY, w = w - 10,
     text = pageText(i18n, "radio_wide", "Stored on this radio, for every model"),
+    color = COLOR_THEME_SECONDARY1,
+    font = SMLSIZE,
   }
   return cursorY + 20
 end
@@ -300,9 +302,11 @@ local function buildFeatures(cursorY, children, x, w, i18n)
   cursorY = appendRadioWideNote(children, x, cursorY, w, i18n)
 
   children[#children + 1] = {
-    type = "label", x = x, y = cursorY, w = w,
+    type = "label", x = x + 10, y = cursorY, w = w - 10,
     text = pageText(i18n, "flags_unsupported",
-                    "This flight controller does not report model flags"),
+                    "No model flags on this firmware: no capacity announcement"),
+    color = COLOR_THEME_SECONDARY1,
+    font = SMLSIZE,
   }
   return cursorY + 24
 end
@@ -329,8 +333,11 @@ end
 
 function M.onReload(ctx)
   ensureDeps()
-  -- The board is re-read; the radio's own preferences are not, because a reload is about what the
-  -- craft says and re-reading them would throw away an edit the pilot has not saved yet.
+  -- Both stores go back to what is stored, because that is what a reload is for: a switch touched
+  -- by mistake is put back here the same way a board-side field is, and an unsaved preference edit
+  -- is dropped on close anyway, so keeping one across a reload only made the two disagree.
+  prefs.loaded = false
+  prefs.dirty = false
   loadPrefs(ctx and ctx.preferences)
   ui.loaded = false
   queueRead()
@@ -352,12 +359,18 @@ function M.onSave(ctx)
       ctx.preferences.general.syncparams = prefs.syncparams
     end
     if type(ctx.savePreferences) == "function" then
-      local ok = pcall(ctx.savePreferences)
-      if ok then prefs.dirty = false end
+      -- It reports a file it could not write by RETURNING `false, err` rather than by raising, so
+      -- the pcall status on its own would call an unwritten file saved and clear the flag that is
+      -- still holding the edit.
+      local called, ok = pcall(ctx.savePreferences)
+      if called and ok then prefs.dirty = false end
     end
   end
 
-  queueWrite()
+  -- The board is written only when something of the board's changed. A save that moved nothing
+  -- but a radio preference has nothing to send; sending anyway costs an EEPROM commit, and on a
+  -- craft that has gone away it fails over a setting that was stored fine.
+  if ui.dirty then queueWrite() end
 end
 
 function M.build(ctx)
