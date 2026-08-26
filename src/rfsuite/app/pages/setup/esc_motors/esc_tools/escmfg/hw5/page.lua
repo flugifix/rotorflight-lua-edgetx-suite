@@ -539,9 +539,6 @@ function M.build(ctx)
 
   local function markDirty()
     ui.dirty = true
-    if type(ui.runtime.requestRebuild) == "function" then
-      ui.runtime.requestRebuild()
-    end
   end
 
   if ui.currentSection == 1 then
