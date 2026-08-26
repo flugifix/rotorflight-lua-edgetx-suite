@@ -24,7 +24,6 @@ local function loadModule(path)
 end
 
 local Common = loadModule("app/pages/settings/common.lua")
-local Controls = loadModule("ui/controls.lua")
 local M_MSP = loadModule("app/pages/setup_wizard/msp.lua")
 local t = Common and Common.pageT("setup_wizard") or function(_, _, fb) return fb end
 
@@ -249,7 +248,7 @@ procs[#procs + 1] = {
             y = y + w.row(children, area.x, y, area.w, name, tierName(i18n, entry.tier), nil)
           else
             local channel = entry.channel
-            y = y + Controls.appendRadioSwitch(children, area.x, y, area.w, name,
+            y = y + w.toggleRow(children, area.x, y, area.w, name,
               function() return w.data.wanted[channel] == true end,
               function(value) w.data.wanted[channel] = value end)
           end
@@ -494,6 +493,14 @@ local function makeChannelProcedure(channel, order)
     if count == nil then return nil end
     if count == 0 then return false end
 
+    -- The LAYOUT is part of being done, not only the value. A switch written straight into the
+    -- mixer line produces the same microseconds and is not this setup: the input list stays
+    -- empty, so the transmitter shows nothing where the configuration belongs, and neither list
+    -- carries a name. What has to be right is the end state.
+    local footing = w.radio.channelFooting(entry)
+    if footing == nil then return nil end
+    if footing == false then return false end
+
     if role and role.kind == "throttle" then return throttleComplete(w, channel) end
 
     if role and role.kind == "condition" then
@@ -527,17 +534,29 @@ local function makeChannelProcedure(channel, order)
     local info = w.radio.describeChannel(channel)
     data.found[channel] = info
 
-    -- Where a mix is already there the switch is read out of it, but WHICH of its positions carries
-    -- the function is not in the mix at all -- a mix maps every position. So the found switch is
-    -- proposed and the position stays the pilot's answer.
-    if data.picked[channel] == nil and info and info.state == "derived" and info.source then
-      for swsrc = 1, MAX_SWITCH_POSITIONS do
-        local source = w.radio.switchSource(swsrc)
-        if source ~= nil and source == info.source then
-          data.picked[channel] = w.radio.firstPositionOf(swsrc)
+    -- What is already on the channel is proposed, and the two halves of it are not equally
+    -- knowable. A mix maps EVERY position of its switch, so which position carries the function
+    -- is not in it -- except on the throttle channel, where the hold line is gated by exactly
+    -- that position and the answer is therefore exact rather than proposed.
+    if data.picked[channel] == nil and info then
+      local picked = nil
+      for _, mix in ipairs(info.lines or {}) do
+        local gate = tonumber(mix.switch) or 0
+        if gate ~= 0 then
+          picked = gate
           break
         end
       end
+      if picked == nil and info.source then
+        for swsrc = 1, MAX_SWITCH_POSITIONS do
+          local source = w.radio.switchSource(swsrc)
+          if source ~= nil and source == info.source then
+            picked = w.radio.firstPositionOf(swsrc)
+            break
+          end
+        end
+      end
+      data.picked[channel] = picked
     end
 
     local entry = entryFor(w, channel)
@@ -625,8 +644,8 @@ local function makeChannelProcedure(channel, order)
         -- One field either way, and it starts EMPTY -- there is no defensible default for a
         -- safety function, and a pre-filled form is how a pilot ends up with one they never chose.
         local pickerW = 150
-        w.label(children, area.x, y + 9, area.w - pickerW - 8,
-          pickerName(i18n, entry.key), SMLSIZE, COLOR_THEME_PRIMARY1)
+        w.label(children, area.x, y + math.floor((w.ROW_H - 18) / 2), area.w - pickerW - 8,
+          pickerName(i18n, entry.key), w.font, COLOR_THEME_PRIMARY1)
 
         -- Two picker kinds for two channel kinds. Where the function sits AT a position -- arming,
         -- the throttle hold, rescue -- the radio's own picker is exactly right: which switch and
@@ -639,7 +658,6 @@ local function makeChannelProcedure(channel, order)
         -- SWITCHES, filtered to the ones that can carry it.
         if entry.needsPositions then
           local switches = w.radio.switches(entry.needsPositions)
-          w.mark(y + w.ROW_H)
 
           if #switches == 0 then
             w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
@@ -681,7 +699,6 @@ local function makeChannelProcedure(channel, order)
           -- would throw the focus back to the first row after every choice.
           set = function(value) w.data.picked[channel] = tonumber(value) or 0 end
         }
-        w.mark(y + w.ROW_H)
       end
     }
   }
@@ -828,7 +845,8 @@ procs[#procs + 1] = {
           local marker = t(i18n, "marker_ready", "ready")
           if actionBlocked(action) then marker = t(i18n, "marker_blocked", "blocked") end
           y = y + w.row(children, area.x, y, area.w,
-            "CH" .. tostring(action.entry.channel), target, marker)
+            "CH" .. tostring(action.entry.channel) .. " " .. tostring(action.entry.channelName or ""),
+            target, marker)
         end
 
         if w.data.writeError then
@@ -860,9 +878,9 @@ procs[#procs + 1] = {
           if not actionBlocked(action) then
             local ok, err
             if action.role.kind == "throttle" then
-              ok, err = w.radio.writeThrottleChannel(action.entry.channel, action.swsrc)
+              ok, err = w.radio.writeThrottleChannel(action.entry, action.swsrc)
             else
-              ok, err = w.radio.writeConditionChannel(action.entry.channel, action.swsrc)
+              ok, err = w.radio.writeConditionChannel(action.entry, action.swsrc)
             end
             if not ok then
               w.data.writeError = err or "model"

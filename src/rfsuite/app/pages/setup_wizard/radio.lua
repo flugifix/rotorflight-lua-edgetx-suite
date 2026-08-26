@@ -50,24 +50,39 @@ M.STICKS = {
 -- `tier` has four values and the fourth is not decoration: *required*, *recommended*, *optional*
 -- and **unavailable** -- a channel the assistant knows about and cannot deliver today. Marking
 -- such a channel *recommended* would promise something the run does not keep.
+-- `input`, `inputName` and `channelName` are the layout itself rather than decoration on it. The
+-- source belongs in the INPUT and the mixer line carries nothing but that input: writing the
+-- switch straight into the mixer line produces the identical channel value and is not the same
+-- setup, because it leaves the input list empty and the transmitter then shows nothing at the
+-- place the configuration belongs to. A layout whose channels are called CH5..CH8 is one nobody
+-- can check by looking, either.
+--
+-- The two name lengths differ and neither is generous: a colour radio stores four characters for
+-- an input name and six for a channel name. These are chosen to fit rather than to be truncated
+-- by the radio afterwards, because a truncated name would never again equal what the completion
+-- criterion compares it against.
 M.CHANNELS = {
   {
-    channel = 5, key = "arm", tier = "required",
+    channel = 5, input = 4, key = "arm", tier = "required",
+    inputName = "Arm", channelName = "Arming",
     roles = { { kind = "condition", box = "ARM" } }
   },
   {
-    channel = 6, key = "throttle", tier = "required",
+    channel = 6, input = 5, key = "throttle", tier = "required",
+    inputName = "Thr", channelName = "Thr",
     roles = { { kind = "throttle" } }
   },
   {
     -- Profile selection is not a mode box: it is two adjustment slots, the rate profile and the
     -- pid profile, driven continuously from one three-position switch onto 1..3.
-    channel = 7, key = "profile", tier = "recommended",
+    channel = 7, input = 6, key = "profile", tier = "recommended",
+    inputName = "Prof", channelName = "Prof",
     needsPositions = 3,
     roles = { { kind = "adjustment", functions = { 1, 2 }, min = 1, max = 3 } }
   },
   {
-    channel = 8, key = "rescue", tier = "recommended",
+    channel = 8, input = 7, key = "rescue", tier = "recommended",
+    inputName = "Resc", channelName = "Rescue",
     roles = { { kind = "condition", box = "RESCUE" } }
   }
 }
@@ -334,7 +349,47 @@ function M.describeChannel(channel)
     info.sourceName = callGlobal("getSourceName", info.source)
     info.weight = tonumber(first.weight)
   end
+
+  -- Follow the input, because that is where this assistant puts the source. A layout it wrote
+  -- itself has the mixer line pointing at an input and the switch one step further in, so a
+  -- reader that stops at the mixer line cannot recognise its own work on a second run -- and the
+  -- pilot would be asked again for a switch that is already there.
+  local viaInput = info.source ~= nil and M.inputIndexOfSource(info.source) or nil
+  if viaInput ~= nil then
+    info.viaInput = viaInput
+    local line = M.getInput(viaInput, 0)
+    if line then
+      info.source = tonumber(line.source)
+      info.sourceName = callGlobal("getSourceName", info.source)
+      info.inputName = line.inputName
+    end
+  end
   return info
+end
+
+-- Is this channel laid out the way this assistant lays one out?
+--
+-- It answers the SHAPE and deliberately not which switch: which switch is the pilot's answer and
+-- is not knowable before they give it. `nil` where the model cannot be read at all, so a missing
+-- API is never reported as a channel that is merely wrong.
+function M.channelFooting(entry)
+  if type(entry) ~= "table" or entry.input == nil then return nil end
+  local mixSource = M.inputSource(entry.input)
+  local count = M.mixesCount(entry.channel)
+  local inputLines = M.inputCount(entry.input)
+  if mixSource == nil or count == nil or inputLines == nil then return nil end
+  if inputLines == 0 or count == 0 then return false end
+
+  for index = 0, count - 1 do
+    local mix = M.getMix(entry.channel, index)
+    if mix == nil or tonumber(mix.source) ~= mixSource then return false end
+  end
+
+  local line = M.getInput(entry.input, 0)
+  if line == nil or line.inputName ~= entry.inputName then return false end
+  local output = M.getOutput(entry.channel)
+  if output == nil or output.name ~= entry.channelName then return false end
+  return true
 end
 
 -- Writing. Nothing here is called until the pilot has seen the whole list on one screen and
@@ -354,16 +409,58 @@ end
 local MULTIPLEX_ADD = 0
 local MULTIPLEX_REPLACE = 2
 
+-- Lay the INPUT out for a channel this assistant owns: the picked switch becomes the input's
+-- source and the input carries its name. Returns the mix source every line of that channel then
+-- has to use.
+--
+-- Nothing of an existing input is carried across. The stick version does carry the curve, because
+-- there it may be re-laying an input the pilot has tuned for that same stick; here the input is
+-- being given a switch it did not have, and a curve left over from whatever was on it before
+-- would be applied to that switch.
+local function writeChannelInput(entry, swsrc)
+  local insertInput = modelApi("insertInput")
+  local deleteInput = modelApi("deleteInput")
+  if not insertInput or not deleteInput then return nil, "no_model_api" end
+  if entry.input == nil then return nil, "no_input" end
+
+  local source = M.switchSource(swsrc)
+  if source == nil then return nil, "no_source" end
+  local mixSource = M.inputSource(entry.input)
+  if mixSource == nil then return nil, "no_input_source" end
+
+  local line = {
+    name = "",
+    inputName = entry.inputName,
+    source = source,
+    weight = 100,
+    offset = 0,
+    switch = 0,
+    curveType = 0,
+    curveValue = 0,
+    scale = 0,
+    side = 3,
+    trimSource = 0,
+    flightModes = 0
+  }
+
+  local count = M.inputCount(entry.input) or 0
+  for _ = 1, count do
+    if not pcall(deleteInput, entry.input, 0) then return nil, "clear_input_failed" end
+  end
+  if not pcall(insertInput, entry.input, 0, line) then return nil, "insert_input_failed" end
+  return mixSource
+end
+
 -- A condition channel: the picked switch drives the channel over its full travel, so each of
 -- its positions lands on a value the window either contains or does not.
-function M.writeConditionChannel(channel, swsrc)
+function M.writeConditionChannel(entry, swsrc)
   local insert = modelApi("insertMix")
   if not insert then return false, "no_model_api" end
-  local source = M.switchSource(swsrc)
-  if source == nil then return false, "no_source" end
-  if not M.clearChannel(channel) then return false, "clear_failed" end
-  local ok = pcall(insert, channel - 1, 0, {
-    source = source,
+  local mixSource, err = writeChannelInput(entry, swsrc)
+  if mixSource == nil then return false, err end
+  if not M.clearChannel(entry.channel) then return false, "clear_failed" end
+  local ok = pcall(insert, entry.channel - 1, 0, {
+    source = mixSource,
     weight = 100,
     offset = 0,
     switch = 0,
@@ -373,6 +470,7 @@ function M.writeConditionChannel(channel, swsrc)
     flightModes = 0
   })
   if not ok then return false, "insert_failed" end
+  M.setChannelName(entry.channel, entry.channelName)
   return true
 end
 
@@ -383,15 +481,17 @@ end
 -- the hold line overrides it wherever the hold position is present. Until that replacement
 -- happens the motor is off in every switch position, which is the correct state for an
 -- assistant the pilot may leave at any point.
-function M.writeThrottleChannel(channel, swsrc)
+function M.writeThrottleChannel(entry, swsrc)
   local insert = modelApi("insertMix")
   if not insert then return false, "no_model_api" end
-  local source = M.switchSource(swsrc)
-  if source == nil then return false, "no_source" end
-  if not M.clearChannel(channel) then return false, "clear_failed" end
+  local mixSource, err = writeChannelInput(entry, swsrc)
+  if mixSource == nil then return false, err end
+  if not M.clearChannel(entry.channel) then return false, "clear_failed" end
 
-  local ok = pcall(insert, channel - 1, 0, {
-    source = source,
+  -- Both lines take the input, and the hold line's own gate stays the picked POSITION: what gates
+  -- a line and what feeds it are two different fields, and only the second one moves to the input.
+  local ok = pcall(insert, entry.channel - 1, 0, {
+    source = mixSource,
     weight = 0,
     offset = -100,
     switch = 0,
@@ -402,8 +502,8 @@ function M.writeThrottleChannel(channel, swsrc)
   })
   if not ok then return false, "insert_failed" end
 
-  ok = pcall(insert, channel - 1, 1, {
-    source = source,
+  ok = pcall(insert, entry.channel - 1, 1, {
+    source = mixSource,
     weight = 0,
     offset = -100,
     switch = swsrc,
@@ -413,6 +513,7 @@ function M.writeThrottleChannel(channel, swsrc)
     flightModes = 0
   })
   if not ok then return false, "insert_failed" end
+  M.setChannelName(entry.channel, entry.channelName)
   return true
 end
 
@@ -445,14 +546,18 @@ local MAX_INPUTS_SCAN = 31
 -- occupy, rather than by inverting the arithmetic -- `id - 1` is only an input index while it IS
 -- one, and asking `getInputsCount` about an index past the end answers something rather than
 -- refusing. Reading that answer as "yes, an input" rejected every stick on the first attempt.
-local function isInputSource(id)
+function M.inputIndexOfSource(id)
   id = tonumber(id)
-  if id == nil then return false end
+  if id == nil then return nil end
   for index = 0, MAX_INPUTS_SCAN do
     local count = M.inputCount(index)
-    if count ~= nil and count > 0 and M.inputSource(index) == id then return true end
+    if count ~= nil and count > 0 and M.inputSource(index) == id then return index end
   end
-  return false
+  return nil
+end
+
+local function isInputSource(id)
+  return M.inputIndexOfSource(id) ~= nil
 end
 
 -- The source id of a control, resolved through the RADIO'S OWN mapping rather than through a name.

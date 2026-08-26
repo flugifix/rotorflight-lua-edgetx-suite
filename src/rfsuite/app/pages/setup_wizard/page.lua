@@ -51,6 +51,11 @@ local ui = {
   contentBottom = nil,
   procIndex = 1,
   screenIndex = 1,
+  -- Which page of the current screen, and how many there are. A screen does not know it has
+  -- pages: the runner cuts it, so no screen can forget the rule.
+  pageIndex = 1,
+  pageCount = 1,
+  overflowed = false,
   procedures = nil,
   busy = nil,
   data = nil,
@@ -185,6 +190,7 @@ function wiz.goToProcedure(index, screenIndex)
   ui.view = "run"
   ui.procIndex = index
   ui.screenIndex = screenIndex or 1
+  ui.pageIndex = 1
   ui.entered = nil
   ui.busy = nil
   enterCurrent()
@@ -207,9 +213,15 @@ end
 wiz.nextOpenIndex = nextOpenIndex
 
 function wiz.advanceUnconditional()
+  if ui.pageIndex < (ui.pageCount or 1) then
+    ui.pageIndex = ui.pageIndex + 1
+    wiz.rebuild()
+    return
+  end
   local proc = wiz.procedure()
   if proc and proc.screens and ui.screenIndex < #proc.screens then
     ui.screenIndex = ui.screenIndex + 1
+    ui.pageIndex = 1
     ui.entered = nil
     enterCurrent()
     wiz.rebuild()
@@ -219,6 +231,13 @@ function wiz.advanceUnconditional()
 end
 
 function wiz.advance()
+  -- A screen's own action belongs to the LAST page of it. Paging is reading, not answering, and
+  -- a write fired while the pilot is still paging through the form would be made from a screen
+  -- they have not finished seeing.
+  if ui.pageIndex < (ui.pageCount or 1) then
+    wiz.advanceUnconditional()
+    return
+  end
   local screen = wiz.screen()
   if screen and type(screen.advance) == "function" then
     screen.advance(wiz, function(ok)
@@ -232,14 +251,30 @@ end
 
 function wiz.showOverview()
   ui.view = "overview"
+  ui.pageIndex = 1
   ui.busy = nil
   wiz.rebuild()
 end
 
 function wiz.back()
-  if ui.view ~= "run" then return end
+  if ui.view ~= "run" then
+    if ui.pageIndex > 1 then
+      ui.pageIndex = ui.pageIndex - 1
+      wiz.rebuild()
+    end
+    return
+  end
+  if ui.pageIndex > 1 then
+    ui.pageIndex = ui.pageIndex - 1
+    wiz.rebuild()
+    return
+  end
   if ui.screenIndex > 1 then
     ui.screenIndex = ui.screenIndex - 1
+    -- Negative means "the last page of it", resolved once the build knows how many there are.
+    -- Stepping back to the TOP of the screen before would skip past everything the pilot has
+    -- just paged through to get here.
+    ui.pageIndex = -1
     ui.entered = nil
     enterCurrent()
     wiz.rebuild()
@@ -254,12 +289,13 @@ end
 function wiz.isLast()
   local proc = wiz.procedure()
   if ui.procedures == nil or proc == nil then return false end
-  return ui.procIndex >= #ui.procedures and ui.screenIndex >= #(proc.screens or {})
+  return ui.procIndex >= #ui.procedures
+    and ui.screenIndex >= #(proc.screens or {})
+    and ui.pageIndex >= (ui.pageCount or 1)
 end
 
 -- Layout. The row height and the two reserved bands are what the no-scroll rule comes to in code:
 -- a screen is given the space that is left and should not ask for more.
-local ROW_H = 34
 local FOOTER_H = 42
 -- The page is a scrolling container and the height it reports runs past the visible area, so a
 -- footer placed at that height alone is drawn half off the screen. Measured on a 800x480 build.
@@ -272,44 +308,147 @@ local function headerHeight()
   return (Controls and Controls.STATIC_SECTION_H) or 50
 end
 
-wiz.ROW_H = ROW_H
-
--- How far down anything has been drawn, so the footer can be put BELOW the content rather than on
--- top of it.
+-- Type size and row height, taken from the page the radio actually gives.
 --
--- The bands above were sized on a 800x480 radio, which gives a page body of 418 px. A 480x320 one
--- gives 275, and several screens here are taller than that on their own -- the channel list is
--- eight rows before its explanation. Pinning the footer to the bottom of the visible area then
--- draws the buttons over the rows, and since the whole page scrolls as one the pilot cannot
--- separate them by scrolling. So the footer floats down to meet the content and the container
--- scrolls to reach it; nothing is ever covered, on any screen size.
-function wiz.mark(bottom)
-  bottom = tonumber(bottom)
-  if bottom == nil then return end
-  if ui.contentBottom == nil or bottom > ui.contentBottom then ui.contentBottom = bottom end
+-- EdgeTX ships three font sets and chooses one by the radio's own asset size: the 320-wide set,
+-- the 800-wide set, and one for everything between. So the SAME `SMLSIZE` is a 14 pixel line on
+-- one radio, 17 on the next and 23 on the third, while the page it has to fit into runs the other
+-- way -- 204 pixels of body on the smallest and 418 on the largest. Left alone, that difference
+-- is not cosmetic: it is how many screens the pilot walks.
+--
+-- So the two tightest pages drop one type size. That is a COMPROMISE and is written down as one:
+-- the alternative is cutting a six-row screen into three, and three screens of two rows read
+-- worse than six rows in a smaller face. The largest radio is left exactly as it was.
+local function density()
+  local width, height = (LCD_W or 480), (LCD_H or 240)
+  if width >= 760 then return SMLSIZE, 34 end
+  if height >= 300 then return SMLSIZE, 32 end
+  -- TINSIZE is the colour-radio font one step below SMLSIZE. A build without it falls back
+  -- rather than drawing nothing.
+  return (TINSIZE or SMLSIZE), 28
 end
 
--- Everything a screen appended, measured off the declarations themselves.
+wiz.font = SMLSIZE
+wiz.ROW_H = 34
+
+-- How tall one element is.
 --
--- `wiz.row` and the rest report where they end, but a screen may append a widget directly or go
--- through `Controls`, and those never reach the cursor above -- which is how the channel list,
--- eight `appendRadioSwitch` rows deep, still ended up under the footer after the cursor was
--- fixed. Reading the children back needs no cooperation from the screen at all.
-local function markAppended(children, from)
-  for index = from + 1, #children do
-    local child = children[index]
-    if type(child) == "table" and tonumber(child.y) ~= nil then
-      -- A label declares no height; the paragraph helper measures its own and marks it exactly,
-      -- so a nominal line is enough to keep a bare label from being read as zero-height.
-      wiz.mark(tonumber(child.y) + (tonumber(child.h) or 20))
+-- Everything that has a height declares one. A label does not, and it must not be given one:
+-- EdgeTX turns a label into `setSize(w, h)` on a real object, so a height computed here would
+-- FIX the label at a size the radio's own font may exceed, and the text would be clipped. So the
+-- height of a label is measured instead, with the same estimator the paragraph helper advances
+-- its own cursor by -- which is what keeps the two answers from drifting apart.
+local function childExtent(child)
+  if type(child) ~= "table" then return nil end
+  local top = tonumber(child.y)
+  if top == nil then return nil end
+  local height = tonumber(child.h)
+  if height == nil and child.type == "label" and Controls
+    and type(Controls.estimateWrappedTextHeight) == "function" then
+    height = tonumber(Controls.estimateWrappedTextHeight(child.text, child.w, child.font))
+  end
+  if height == nil or height <= 0 then height = 20 end
+  return top, top + height
+end
+
+-- Where a page may end: a line no element crosses.
+--
+-- This is the no-scroll rule, in code. It was written down at length, argued against a screen
+-- size, and never implemented -- and what a rule with no enforcement gets is a screen that
+-- ignores it invisibly, because the person writing that screen is looking at the one radio where
+-- the consequence does not appear. The candidates are the bottoms of the elements themselves: an
+-- element that ends at `y` is the last one whole above it.
+local function nextCut(items, start, height)
+  local limit = start + height
+  local best, lowest = nil, nil
+  for _, item in ipairs(items) do
+    if item.bottom > start then
+      if lowest == nil or item.bottom < lowest then lowest = item.bottom end
+      if item.bottom <= limit then
+        local crosses = false
+        for _, other in ipairs(items) do
+          if other.top < item.bottom and other.bottom > item.bottom then
+            crosses = true
+            break
+          end
+        end
+        if not crosses and (best == nil or item.bottom > best) then best = item.bottom end
+      end
     end
   end
+  if best ~= nil then return best, false end
+  -- Nothing fits. One element is taller than a whole page, and no cut repairs that -- it goes on
+  -- a page of its own and that page overflows. The remedy is a shorter sentence or a split the
+  -- screen makes itself, so this is reported by the footer floating rather than pretended away.
+  return lowest, true
+end
+
+-- Cut a built screen into pages. Returns the boundaries, so page k holds every element whose top
+-- is at or after `cuts[k]` and before `cuts[k + 1]`.
+local function paginate(items, top, height)
+  local cuts = { top }
+  if height < 1 then height = 1 end
+  local guard = 0
+  while guard < 64 do
+    guard = guard + 1
+    local start = cuts[#cuts]
+    local cut, overflow = nextCut(items, start, height)
+    if cut == nil then break end
+    cuts[#cuts + 1] = cut
+    if overflow then ui.overflowed = true end
+  end
+  return cuts
 end
 
 local function footerPosition(y, h)
   local pinned = y + h - FOOTER_H - FOOTER_MARGIN
   if ui.contentBottom ~= nil and ui.contentBottom + 10 > pinned then return ui.contentBottom + 10 end
   return pinned
+end
+
+-- Build into a scratch table, cut it, and emit one page into the real one.
+--
+-- The screen is built exactly once and its elements are then moved, rather than being asked to
+-- lay themselves out per page: a screen that had to know which page it was on would be free to
+-- get that wrong, and every screen would have to be taught the rule separately.
+local function emitPage(ctx, build, top, height)
+  local scratch = {}
+  local real = ctx.children
+  ctx.children = scratch
+  -- Caught only to put the real table back, and then raised again. Swallowing it here would turn
+  -- a screen that throws into a screen that is merely EMPTY, which is the harder of the two to
+  -- notice and the one that reads as a layout decision.
+  local ok, err = pcall(build, ctx)
+  ctx.children = real
+  if not ok then error(err, 0) end
+
+  local items = {}
+  for _, child in ipairs(scratch) do
+    local childTop, childBottom = childExtent(child)
+    if childTop ~= nil then
+      items[#items + 1] = { child = child, top = childTop, bottom = childBottom }
+    end
+  end
+
+  local cuts = paginate(items, top, height)
+  local count = math.max(1, #cuts - 1)
+  ui.pageCount = count
+  -- A step back from the front of a screen lands on the END of the one before it, which is where
+  -- the pilot left off reading. Resolved here because only the build knows how many pages there
+  -- are.
+  if ui.pageIndex < 1 then ui.pageIndex = count end
+  if ui.pageIndex > count then ui.pageIndex = count end
+
+  local from = cuts[ui.pageIndex] or top
+  local to = cuts[ui.pageIndex + 1]
+  for _, item in ipairs(items) do
+    if item.top >= from and (to == nil or item.top < to) then
+      item.child.y = item.child.y - from + top
+      real[#real + 1] = item.child
+      local bottom = item.bottom - from + top
+      if ui.contentBottom == nil or bottom > ui.contentBottom then ui.contentBottom = bottom end
+    end
+  end
 end
 
 local function label(children, x, y, w, text, font, colour)
@@ -328,20 +467,57 @@ wiz.label = label
 -- and a marker. The marker is a word rather than a colour alone, because a derived result and one
 -- the pilot asserted must not look the same.
 function wiz.row(children, x, y, w, name, value, marker)
-  local markerW = 74
+  local rowH = wiz.ROW_H
+  local markerW = math.floor(w * 0.20)
+  if markerW > 74 then markerW = 74 end
+  if markerW < 44 then markerW = 44 end
   local nameW = math.floor((w - markerW) * 0.45)
-  label(children, x, y + 8, nameW, name, SMLSIZE, COLOR_THEME_PRIMARY1)
-  label(children, x + nameW + 4, y + 8, w - markerW - nameW - 8, value, SMLSIZE, COLOR_THEME_PRIMARY1)
+  local textY = y + math.floor((rowH - 18) / 2)
+  label(children, x, textY, nameW, name, wiz.font, COLOR_THEME_PRIMARY1)
+  label(children, x + nameW + 4, textY, w - markerW - nameW - 8, value, wiz.font, COLOR_THEME_PRIMARY1)
   if marker ~= nil then
-    label(children, x + w - markerW, y + 8, markerW, marker, SMLSIZE, COLOR_THEME_PRIMARY1)
+    label(children, x + w - markerW, textY, markerW, marker, wiz.font, COLOR_THEME_PRIMARY1)
   end
   children[#children + 1] = {
     type = "rectangle",
-    x = x, y = y + ROW_H - 1, w = w, h = 1,
+    x = x, y = y + rowH - 1, w = w, h = 1,
     color = GREY_DEFAULT, filled = true
   }
-  wiz.mark(y + ROW_H)
-  return ROW_H
+  return rowH
+end
+
+-- A row the pilot can tick. The same shape as a finding row, at the assistant's own height --
+-- the settings helper builds a 62 pixel row, which is right on a settings form and is most of a
+-- small radio's page when a list of them is the screen.
+function wiz.toggleRow(children, x, y, w, name, get, set)
+  local rowH = wiz.ROW_H
+  local toggleW, toggleH = 64, math.min(26, rowH - 6)
+  local toggleX = x + w - toggleW
+  label(children, x, y + math.floor((rowH - 18) / 2), toggleX - x - 8, name, wiz.font, COLOR_THEME_PRIMARY1)
+  children[#children + 1] = {
+    type = "toggle",
+    x = toggleX, y = y + math.floor((rowH - toggleH) / 2), w = toggleW, h = toggleH,
+    get = function() return get() == true end,
+    -- Some EdgeTX builds call a toggle's setter with no payload at all, so the value is derived
+    -- from what it holds rather than from what arrived.
+    set = function(value)
+      local next
+      if value == nil then next = not (get() == true)
+      elseif type(value) == "boolean" then next = value
+      elseif type(value) == "number" then next = value ~= 0
+      elseif type(value) == "string" then
+        local lower = string.lower(value)
+        next = lower == "1" or lower == "true" or lower == "on"
+      else next = not (get() == true) end
+      if next ~= (get() == true) then set(next) end
+    end
+  }
+  children[#children + 1] = {
+    type = "rectangle",
+    x = x, y = y + rowH - 1, w = w, h = 1,
+    color = GREY_DEFAULT, filled = true
+  }
+  return rowH
 end
 
 -- A finding with its own actions. The buttons are EQUALLY WEIGHTED on purpose: *no mix* with a
@@ -359,9 +535,11 @@ function wiz.findingRow(children, x, y, w, name, value, actions)
   local buttonsW = count * btnW + (count > 0 and (count - 1) * gap or 0)
   local textW = w - buttonsW - 8
   local nameW = math.floor(textW * 0.5)
+  local rowH = wiz.ROW_H
+  local textY = y + math.floor((rowH - 18) / 2)
 
-  label(children, x, y + 9, nameW, name, SMLSIZE, COLOR_THEME_PRIMARY1)
-  label(children, x + nameW + 4, y + 9, textW - nameW - 4, value, SMLSIZE, COLOR_THEME_PRIMARY1)
+  label(children, x, textY, nameW, name, wiz.font, COLOR_THEME_PRIMARY1)
+  label(children, x + nameW + 4, textY, textW - nameW - 4, value, wiz.font, COLOR_THEME_PRIMARY1)
 
   for i, action in ipairs(actions or {}) do
     children[#children + 1] = {
@@ -369,7 +547,7 @@ function wiz.findingRow(children, x, y, w, name, value, actions)
       x = x + w - buttonsW + (i - 1) * (btnW + gap),
       y = y + 2,
       w = btnW,
-      h = ROW_H - 6,
+      h = rowH - 6,
       text = action.text,
       active = action.active,
       press = action.press
@@ -378,11 +556,10 @@ function wiz.findingRow(children, x, y, w, name, value, actions)
 
   children[#children + 1] = {
     type = "rectangle",
-    x = x, y = y + ROW_H - 1, w = w, h = 1,
+    x = x, y = y + rowH - 1, w = w, h = 1,
     color = GREY_DEFAULT, filled = true
   }
-  wiz.mark(y + ROW_H)
-  return ROW_H
+  return rowH
 end
 
 -- Returns the height the text actually takes, which is the only answer a caller can advance by.
@@ -395,15 +572,14 @@ function wiz.paragraph(children, x, y, w, text)
     type = "label",
     x = x, y = y, w = w,
     text = text,
-    font = SMLSIZE,
+    font = wiz.font,
     color = COLOR_THEME_PRIMARY1
   }
   local height = 0
   if Controls and type(Controls.estimateWrappedTextHeight) == "function" then
-    height = tonumber(Controls.estimateWrappedTextHeight(text, w, SMLSIZE)) or 0
+    height = tonumber(Controls.estimateWrappedTextHeight(text, w, wiz.font)) or 0
   end
   if height <= 0 then height = 20 end
-  wiz.mark(y + height)
   return height
 end
 
@@ -424,7 +600,7 @@ local function buildFooter(children, ctx, x, y, w)
     type = "button",
     x = x, y = y, w = btnW, h = FOOTER_H - 6,
     text = pageText(i18n, "back", "Back"),
-    active = function() return ui.procIndex > 1 or ui.screenIndex > 1 end,
+    active = function() return ui.procIndex > 1 or ui.screenIndex > 1 or ui.pageIndex > 1 end,
     press = function() wiz.back() end
   }
 
@@ -454,6 +630,10 @@ local function buildFooter(children, ctx, x, y, w)
     x = x + column * (btnW + gap), y = y, w = btnW, h = FOOTER_H - 6,
     text = nextLabel,
     active = function()
+      -- The gate belongs to the screen, so it holds at the point the screen is LEFT. While the
+      -- pilot is still paging through it, forward is paging rather than answering, and a screen
+      -- whose field sits on page two would otherwise be impossible to reach at all.
+      if ui.pageIndex < (ui.pageCount or 1) then return true end
       local current = wiz.screen()
       if current and type(current.canAdvance) == "function" then
         return current.canAdvance(wiz) ~= false
@@ -492,14 +672,10 @@ end
 -- always an exit one press away.
 --
 -- The sections are headings here, not navigation: the list is flat and every row is reachable.
-local function buildOverview(ctx, x, y, w)
+local function buildOverview(ctx, x, top, w)
   local children, i18n = ctx.children, ctx.i18n
 
-  if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, y, w, pageText(i18n, "title", "Setup Assistant"))
-  end
-
-  local cursor = y + headerHeight() + 6
+  local cursor = top
   cursor = cursor + wiz.paragraph(children, x, cursor, w,
     pageText(i18n, "overview_intro",
       "Each part runs on its own. Open one, or continue where the machine says the work stops.")) + 10
@@ -515,9 +691,8 @@ local function buildOverview(ctx, x, y, w)
         local name = (section == "board")
           and pageText(i18n, "section_board", "Flight controller")
           or pageText(i18n, "section_radio", "Radio")
-        label(children, x, cursor, w, name, SMLSIZE, COLOR_THEME_SECONDARY1)
+        label(children, x, cursor, w, name, wiz.font, COLOR_THEME_SECONDARY1)
         cursor = cursor + 24
-        wiz.mark(cursor)
       end
 
       local title = type(proc.title) == "function" and proc.title(i18n) or tostring(proc.id)
@@ -560,7 +735,26 @@ end
 local function sectionTitle(i18n, proc)
   if not proc then return pageText(i18n, "title", "Setup Assistant") end
   if proc.section == "board" then return pageText(i18n, "section_board", "Flight controller") end
-  return pageText(i18n, "section_radio", "Radio")
+  if proc.section == "radio" then return pageText(i18n, "section_radio", "Radio") end
+  return pageText(i18n, "title", "Setup Assistant")
+end
+
+-- The header, written after the body but drawn above it: it names which page of the screen this
+-- is, and that is only known once the body has been cut.
+local function insertHeader(children, at, x, y, w, title)
+  if not (Controls and type(Controls.appendStaticSectionHeader) == "function") then return end
+  local scratch = {}
+  Controls.appendStaticSectionHeader(scratch, x, y, w, title)
+  for index = #scratch, 1, -1 do table.insert(children, at + 1, scratch[index]) end
+end
+
+-- The page marker, and it is only there when there is more than one. A screen that fits carries
+-- no counter, so the marker means "there is more of this screen" rather than being decoration
+-- the pilot has to learn to ignore.
+local function withPageMarker(heading)
+  local count = ui.pageCount or 1
+  if count <= 1 then return heading end
+  return heading .. "   " .. tostring(ui.pageIndex) .. "/" .. tostring(count)
 end
 
 local function ensureLoaded()
@@ -581,6 +775,10 @@ local function ensureLoaded()
   end
   if type(boardProcs) == "table" then
     for _, proc in ipairs(boardProcs) do procedures[#procedures + 1] = proc end
+  end
+  local closeProcs = loadModule(BASE .. "proc_close.lua")
+  if type(closeProcs) == "table" then
+    for _, proc in ipairs(closeProcs) do procedures[#procedures + 1] = proc end
   end
   ui.procedures = procedures
   ui.view = "overview"
@@ -658,6 +856,11 @@ function M.build(ctx)
   local x, y, w, h = ctx.x, ctx.y, ctx.w, ctx.h
   local i18n = ctx.i18n
 
+  -- Read on every build rather than once at load: the page module outlives a rebuild and the
+  -- geometry is what everything below is measured against, so taking it from anywhere but here
+  -- is how a number measured on one radio gets frozen into all of them.
+  wiz.font, wiz.ROW_H = density()
+
   if ui.busy then
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
@@ -669,17 +872,35 @@ function M.build(ctx)
   end
 
   ui.contentBottom = nil
+  ui.overflowed = false
+
+  local bodyY = y + headerHeight() + 6
+  local bodyH = h - headerHeight() - FOOTER_H - FOOTER_MARGIN - 12
+  if bodyH < wiz.ROW_H then bodyH = wiz.ROW_H end
+
+  -- The header is written AFTER the body, because it names which page of the screen this is and
+  -- that is only known once the body has been cut. Its own position does not depend on the body,
+  -- so the order on screen is unaffected.
+  local headerAt = #children
 
   if ui.view ~= "run" then
-    local before = #children
-    buildOverview(ctx, x, y, w)
-    markAppended(children, before)
+    emitPage(ctx, function(inner) buildOverview(inner, x, bodyY, w) end, bodyY, bodyH)
+    insertHeader(children, headerAt, x, y, w,
+      withPageMarker(pageText(i18n, "title", "Setup Assistant")))
     buildOverviewFooter(children, ctx, x, footerPosition(y, h), w)
     return
   end
 
   local proc = wiz.procedure()
   local screen = wiz.screen()
+
+  if screen and type(screen.build) == "function" then
+    emitPage(ctx, function(inner)
+      screen.build(wiz, inner, { x = x, y = bodyY, w = w, h = bodyH })
+    end, bodyY, bodyH)
+  else
+    ui.pageCount = 1
+  end
 
   -- The heading is the section and the procedure, with the position INSIDE the section. There is
   -- deliberately no counter over the whole path: the procedures are the unit, the sections are
@@ -692,19 +913,7 @@ function M.build(ctx)
     if at then heading = heading .. "   " .. tostring(at) .. "/" .. tostring(total) end
   end
 
-  if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, y, w, heading)
-  end
-
-  local bodyY = y + headerHeight() + 6
-  local bodyH = h - headerHeight() - FOOTER_H - FOOTER_MARGIN - 12
-  if bodyH < ROW_H then bodyH = ROW_H end
-
-  if screen and type(screen.build) == "function" then
-    local before = #children
-    screen.build(wiz, ctx, { x = x, y = bodyY, w = w, h = bodyH })
-    markAppended(children, before)
-  end
+  insertHeader(children, headerAt, x, y, w, withPageMarker(heading))
 
   buildFooter(children, ctx, x, footerPosition(y, h), w)
 end

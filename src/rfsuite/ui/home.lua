@@ -694,6 +694,44 @@ end
 
 -- ── Handlers ─────────────────────────────────────────────────────────────────
 
+-- Leave the page that is open and go back up the menu.
+--
+-- This is the tail of the back handler below, lifted out so it has a second caller: a page that
+-- offers its own way out. Without it a page can only be left with the key, because the ctx it is
+-- built with carries a rebuild and no exit -- so a button that means "close this" has nothing to
+-- call and does nothing at all, which is what the setup assistant's own Close button did.
+local function leaveCurrentPage(fromEvent)
+  -- The back debounce is stamped HERE rather than at the call site, because this is now the one
+  -- exit both the key and a page's own Close button take. Stamped on both paths: a press that
+  -- closes the tool has to arm it exactly as a press that steps up a level does.
+  local now = (type(getTime) == "function" and getTime()) or 0
+  if not (state.menu and not state.menu.isRoot()) then
+    state.lastBackTick = now
+    state.isClosing = true
+    return
+  end
+
+  local didGoBack = false
+  if state.menu.goBack and state.menu.goBack() then
+    didGoBack = true
+    state.focusIndex = 0
+  end
+
+  if not didGoBack and state.menu.getActiveSection and state.menu.setActiveSection then
+    local section = state.menu.getActiveSection()
+    if section and section.id then
+      state.menu.setActiveSection(section.id)
+      state.focusIndex = 0
+    end
+  end
+
+  if fromEvent then
+    state.suppressBackFrames = 6
+  end
+  state.lastBackTick = now
+  scheduleBuildUI(true)
+end
+
 local function onBack(source, ev)
   logToFile("onBack called source=" .. tostring(source) .. " ev=" .. tostring(ev))
   logf("debug", "back source=%s ev=%s at=%s", tostring(source), tostring(ev),
@@ -783,32 +821,7 @@ local function onBack(source, ev)
     end
   end
 
-  if state.menu and not state.menu.isRoot() then
-    local didGoBack = false
-    local newMenuId = nil
-    if state.menu.goBack and state.menu.goBack() then
-      didGoBack = true
-      state.focusIndex = 0
-      newMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
-    end
-
-    if not didGoBack and state.menu.getActiveSection and state.menu.setActiveSection then
-      local section = state.menu.getActiveSection()
-      if section and section.id then
-        state.menu.setActiveSection(section.id)
-        state.focusIndex = 0
-        newMenuId = state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
-      end
-    end
-    if fromEvent then
-      state.suppressBackFrames = 6
-    end
-    state.lastBackTick = now
-    scheduleBuildUI(true)
-    return
-  end
-  state.lastBackTick = now
-  state.isClosing = true
+  leaveCurrentPage(fromEvent)
 end
 
 local function onHelp()
@@ -2042,6 +2055,10 @@ function M.buildUI()
         preferences = state.preferences,
         menu = state.menu,
         manifest = state.manifest,
+        -- A page that offers its own way out -- a wizard that has reached its end, a tool that is
+        -- finished -- needs the same route the back key takes. Passing it here rather than having
+        -- the page reach into the menu keeps the navigation in one place.
+        requestClose = function() leaveCurrentPage(false) end,
         openHelp = function(message, title, subtitle)
           local resolvedTitle = title or pageTitle
           local resolvedSubtitle = subtitle
