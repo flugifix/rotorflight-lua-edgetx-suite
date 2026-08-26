@@ -703,7 +703,7 @@ function M.build(ctx)
   children[#children + 1] = {
     type = "label",
     x = buttonX,
-    y = ctrlY + math.floor((40 - 20) / 2),
+    y = (Controls and Controls.labelY and Controls.labelY(ctrlY, Controls.CTRL_H)) or (ctrlY + math.floor((32 - 21) / 2)),
     w = buttonW,
     text = t(i18n, "btn_test", "Test"),
     color = WHITE,

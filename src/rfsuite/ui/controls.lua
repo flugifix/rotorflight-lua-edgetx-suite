@@ -19,7 +19,7 @@ end
 
 local function getNativeFontH()
   if lvgl and lvgl.LCD_SCALE then
-    return math.floor(21 * lvgl.LCD_SCALE)
+    return math.floor(21 * lvgl.LCD_SCALE + 0.5)
   end
   local w = _G.LCD_W or 480
   if w >= 760 then return 29 end
@@ -48,7 +48,6 @@ local STATIC_SECTION_H     = 50
 
 Controls.CTRL_H = CTRL_H
 Controls.LABEL_H = LABEL_H
-Controls.NUMBER_H = CTRL_H
 Controls.SECTION_H = SECTION_H
 Controls.STATIC_SECTION_H = STATIC_SECTION_H
 Controls.ROW_H = ROW_H
