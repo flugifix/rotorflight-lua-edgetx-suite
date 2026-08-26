@@ -136,12 +136,14 @@ end
 
 local function storeSet(name)
   local s = store()
-  if not s then return end
+  if not s then return false end
+  local ok, written
   if name == nil or name == "" then
-    pcall(s.forget)
+    ok, written = pcall(s.forget)
   else
-    pcall(s.remember, name)
+    ok, written = pcall(s.remember, name)
   end
+  return ok and written == true
 end
 
 local function setModelName(name)
@@ -196,8 +198,7 @@ function M.wakeup()
     local legacy = legacyPrevious()
     if legacy ~= nil then
       previousName = legacy
-      storeSet(legacy)
-      legacyClear()
+      if storeSet(legacy) then legacyClear() end
     end
   end
   previousName = previousName or info.name
@@ -250,9 +251,9 @@ function M.reset()
   -- Nothing in this Lua state, which is the ordinary case for whichever of the tool and the
   -- widgets did not do the rename. The store crosses that boundary; it also answers after a
   -- restart, and it is the same call the events runtime makes on a tick with no craft.
-  local s = store()
-  if not s then return end
-  local ok, restored = pcall(s.restore)
+  local nameStore = store()
+  if not nameStore then return end
+  local ok, restored = pcall(nameStore.restore)
   if ok and restored then
     log("model name put back from the store: " .. tostring(restored), "info")
   end

@@ -60,6 +60,7 @@ local function nowSeconds()
     local ok, v = pcall(getTime)
     if ok and type(v) == "number" then return v / 100 end
   end
+  if type(os) == "table" and type(os.clock) == "function" then return os.clock() end
   return 0
 end
 
@@ -165,6 +166,17 @@ local function currentModelFile()
   local fileName = info.filename
   if type(fileName) ~= "string" or fileName == "" then return nil end
   return fileName, info
+end
+
+--- Drop what was read from the card, so the next call reads it again.
+--
+-- Each Lua state holds its own copy and the file is all they share, so a state's answer is only
+-- as good as the moment it last read it. Cheap: it costs one file read on the next call, and the
+-- caller decides when that is worth paying.
+function M.invalidate()
+  entries = nil
+  anyEntries = false
+  nextLookupAt = 0
 end
 
 --- Is there anything at all to put back, for any model?
