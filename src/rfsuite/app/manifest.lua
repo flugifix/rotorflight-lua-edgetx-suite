@@ -316,7 +316,6 @@ local manifest = {
         { id = "dashboard", title = "@i18n(app.modules.dashboard.name)@", menuId = "settings_dashboard_menu", icon = "@pages/settings/dashboard/icon.png" },
         { id = "localization", title = "@i18n(app.modules.localization.name)@", menuId = "settings_localization_page" },
         { id = "audio", title = "@i18n(app.modules.audio.name)@", menuId = "settings_audio_page" },
-        { id = "service", title = "@i18n(app.modules.service.name)@", menuId = "settings_service_page" },
         { id = "shortcuts", title = "@i18n(app.modules.shortcuts.name)@", menuId = "settings_shortcuts_page", enabled = false, hideWhenDisabled = true }
         --{ id = "activelook", title = "@i18n(app.modules.activelook.name)@", menuId = "settings_activelook_page", enabled = false, hideWhenDisabled = true }      
       }
@@ -355,10 +354,6 @@ local manifest = {
     },
     settings_localization_page = {
       title = "@i18n(app.modules.localization.name)@",
-      pages = {}
-    },
-    settings_service_page = {
-      title = "@i18n(app.modules.service.name)@",
       pages = {}
     },
     settings_audio_page = {
