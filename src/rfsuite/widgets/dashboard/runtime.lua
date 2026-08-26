@@ -4,6 +4,16 @@ local SYSTEM_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/
 local USER_THEME_BASE = "/SCRIPTS/TOOLS/rfsuite.user/dashboard/"
 local AUDIO_LOG_FORCE = false
 local SPLASH_READY_HOLD_SECONDS = 1.0
+-- The steady-state pass rate, and the faster one used only while a start is in progress.
+--
+-- Everything the widget does per pass is behind this gate, and during the connect chain that
+-- includes advancing the chain itself: one task per pass, one queue turn per pass, a dozen
+-- round trips end to end. There the pass rate IS the start duration. Once the dashboard is up
+-- nothing is left that a faster pass would finish sooner -- the repaint is throttled to 2 Hz
+-- of its own accord -- and this runs in the Lua state every widget on the radio shares, so the
+-- steady-state rate is left exactly where it was.
+local LOGIC_TICK_SECONDS = 0.1
+local LOGIC_TICK_STARTING_SECONDS = 0.05
 local SPLASH_SOFT_TIMEOUT_SECONDS = 25.0
 
 
@@ -1317,7 +1327,12 @@ function Runtime.new(zone, options)
     self._lastWorkTick = now
 
     if not self._lastLogicTick then self._lastLogicTick = 0 end
-    if (now - self._lastLogicTick) < 0.1 then return self.connectionReady end
+    -- A start, and not merely "not ready": with no flight controller present the gate below is
+    -- false for as long as the radio is on, and paying the faster rate for that would be the
+    -- whole steady state of a bench radio.
+    local starting = (self.state.fblConnected == true) and (self.connectionReady ~= true)
+    local logicTick = starting and LOGIC_TICK_STARTING_SECONDS or LOGIC_TICK_SECONDS
+    if (now - self._lastLogicTick) < logicTick then return self.connectionReady end
     self._lastLogicTick = now
 
     -- Set event context to 'widget' before events wakeup
