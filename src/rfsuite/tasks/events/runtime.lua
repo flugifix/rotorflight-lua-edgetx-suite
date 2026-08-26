@@ -25,6 +25,7 @@ end
 local MspRuntime = nil
 local Log = nil
 local Env = nil
+local ModelNameStore = nil
 
 -- Per-category task runners cache will be stored at `_G.rfsuite.tasks.events`
 local function ensureEventRunner(name)
@@ -79,6 +80,14 @@ local function ensureSession()
   _G.rfsuite.session = _G.rfsuite.session or {}
 end
 
+local function modelNameStore()
+  if ModelNameStore == nil then
+    ModelNameStore = loadModule("lib/model_name_store.lua") or false
+  end
+  if type(ModelNameStore) ~= "table" then return nil end
+  return ModelNameStore
+end
+
 local function publishConnected(val)
   ensureSession()
   local session = _G.rfsuite.session
@@ -86,6 +95,16 @@ local function publishConnected(val)
   session.isConnected = val
   if val == false then
     session.flightcount = 0
+    -- The tool and each widget are separate Lua states holding their own copy of what the card
+    -- said, and the state that renames is usually not the state that puts the name back. One
+    -- that first read the file while it was still empty would answer "nothing to do" for the
+    -- rest of its life, including for a record another state wrote in the meantime. The link
+    -- going down is the one moment where re-reading it is both cheap and certain to be worth it,
+    -- and it comes before the runner resets below, which read the store themselves.
+    local nameStore = modelNameStore()
+    if nameStore and type(nameStore.invalidate) == "function" then
+      pcall(nameStore.invalidate)
+    end
   end
   if Log and type(Log.emit) == "function" then
     pcall(Log.emit, "rfsuite.events", "session.isConnected=" .. tostring(val), "info", true)
@@ -102,6 +121,31 @@ local function publishConnected(val)
     if type(collectgarbage) == "function" then
       collectgarbage("collect")
     end
+  end
+end
+
+-- Put a model name back that the disconnect hook never got to.
+--
+-- `model_name_sync` restores from its own reset, and that reset is reached only through
+-- publishConnected(false) -- i.e. only where something was ticking at the moment the link went.
+-- Nothing is ticking when the radio is switched off with a craft still connected, so the model
+-- comes back up wearing the craft's name and no event is ever going to say so. The reading side
+-- therefore cannot be an event: it is a STATE, checked on a tick that has established there is no
+-- craft, which a cold start reaches on its first pass.
+--
+-- The cost on that tick is one boolean. The store answers hasAny() from a flag after its first
+-- call, and everything past it -- reading the model, writing to it, touching the card -- happens
+-- only where a rename is actually outstanding.
+local function restorePendingModelName()
+  local nameStore = modelNameStore()
+  if not nameStore then return end
+
+  local okAny, any = pcall(nameStore.hasAny)
+  if not okAny or not any then return end
+
+  local ok, restored = pcall(nameStore.restore)
+  if ok and restored and Log and type(Log.emit) == "function" then
+    pcall(Log.emit, "rfsuite.events", "model name put back: " .. tostring(restored), "info", true)
   end
 end
 
@@ -182,6 +226,14 @@ function Events.wakeup()
     if state.linkStableUp and (t - state.linkDownSince) >= DISCONNECT_STABLE_SECONDS then
       state.linkStableUp = false
       publishConnected(false)
+    end
+    -- Only once the link is HELD to be down. The two seconds above exist because a brief
+    -- telemetry dropout is not a disconnect, and a restore inside one would rename the model in
+    -- flight and spend the record -- while linkStableUp never changed, so the returning link
+    -- publishes no connect and nothing writes the craft name back for the rest of the flight. A
+    -- cold start is unaffected: linkStableUp starts false, so the first pass still restores.
+    if not state.linkStableUp then
+      restorePendingModelName()
     end
   end
   -- Trigger per-category runners
