@@ -18,6 +18,7 @@ local entries = {
   settings_localization_page = definePage("settings/localization"),
   settings_audio_page = definePage("settings/audio"),
   settings_audio_events_page = definePage("settings/audio/events"),
+  setup_wizard_page = definePage("setup_wizard"),
   setup_configuration_page = definePage("setup/configuration"),
   setup_radio_config_page = definePage("setup/radio_config"),
   setup_model_page = definePage("setup/model"),
