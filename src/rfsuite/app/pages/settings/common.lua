@@ -213,14 +213,19 @@ function M.appendSectionHeader(children, x, y, w, title)
   }
 end
 
-function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow)
+function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow, rowH)
+  rowH = rowH or 44
+  local ctrlH = (lvgl and lvgl.UI_ELEMENT_HEIGHT) or 32
+  local fontH = (lvgl and lvgl.LCD_SCALE and math.floor(21 * lvgl.LCD_SCALE)) or 21
+  local labelY = y + math.floor((rowH - fontH) / 2)
+  local ctrlY = y + math.floor((rowH - ctrlH) / 2)
   local valueW = math.floor(w * 0.50)
   local valueX = x + w - valueW
 
   children[#children + 1] = {
     type = "label",
     x = x,
-    y = y + 10,
+    y = labelY,
     w = valueX - x - 8,
     text = labelText,
     color = WHITE,
@@ -230,9 +235,9 @@ function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow)
   children[#children + 1] = {
     type = "rectangle",
     x = valueX,
-    y = y,
+    y = ctrlY,
     w = valueW,
-    h = 40,
+    h = ctrlH,
     color = GREY_DEFAULT,
     filled = true
   }
@@ -241,7 +246,7 @@ function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow)
   children[#children + 1] = {
     type = "label",
     x = valueX + 6,
-    y = y + 10,
+    y = labelY,
     w = valueLabelW,
     text = valueText,
     color = WHITE,
@@ -253,7 +258,7 @@ function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow)
     children[#children + 1] = {
       type = "label",
       x = valueX + valueW - 20,
-      y = y + 10,
+      y = labelY,
       w = 14,
       text = "v",
       color = WHITE,
@@ -265,7 +270,7 @@ function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow)
   children[#children + 1] = {
     type = "rectangle",
     x = x,
-    y = y + 40,
+    y = y + rowH - 1,
     w = w,
     h = 1,
     color = GREY_DEFAULT,
@@ -283,12 +288,13 @@ function M.buildSimplePage(ctx, pageKey, sectionKey, sectionFallback, rows)
   M.appendSectionHeader(children, x, y, w, M.t(i18n, pageKey, sectionKey, sectionFallback))
 
   local rowY = y + 46
+  local rowH = 44
   for i = 1, #rows do
     local row = rows[i]
-    local yOffset = (i - 1) * 44
+    local yOffset = (i - 1) * rowH
     local label = M.t(i18n, pageKey, row.labelKey, row.labelFallback)
     local value = M.t(i18n, pageKey, row.valueKey, row.valueFallback)
-    M.appendSettingsRow(children, x, rowY + yOffset, w, label, value, row.withArrow ~= false)
+    M.appendSettingsRow(children, x, rowY + yOffset, w, label, value, row.withArrow ~= false, rowH)
   end
 end
 

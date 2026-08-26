@@ -378,10 +378,10 @@ function M.getHeaderActions()
 end
 
 local function appendStatusRow(children, x, y, w, label, value)
-  local rowH = 62
+  local rowH = (Controls and Controls.ROW_H) or 64
   local leftMargin = 15
   local rightMargin = 15
-  local labelY = y + math.floor((rowH - 20) / 2)
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
 
   -- Left Label
   children[#children + 1] = {
@@ -406,12 +406,12 @@ local function appendStatusRow(children, x, y, w, label, value)
   -- Divider Line
   children[#children + 1] = {
     type   = "rectangle",
-    x = x, y = y + rowH - 1,
+    x = x, y = y + rowH,
     w = w, h = 1,
     color  = GREY_DEFAULT, filled = true
   }
 
-  return rowH
+  return rowH + 1
 end
 
 function M.build(ctx)

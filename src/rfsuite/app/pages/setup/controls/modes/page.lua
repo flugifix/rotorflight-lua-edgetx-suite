@@ -319,7 +319,9 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local rawExtra = slot and ui.modeRangesExtra[slot] or nil
   if not rawRange or not rawExtra or not rawRange.range then return 0 end
 
-  local rowH = 106
+  local singleRowH = (Controls and Controls.ROW_H) or 64
+  local labelY1 = (Controls and Controls.labelY and Controls.labelY(y, singleRowH)) or (y + math.floor((singleRowH - 21) / 2))
+  local controlY1 = (Controls and Controls.controlY and Controls.controlY(y, singleRowH)) or (y + math.floor((singleRowH - 32) / 2))
   local rightPadding = 10
   local gap = 6
 
@@ -332,7 +334,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   -- Range Label
   children[#children + 1] = {
     type = "label",
-    x = x + 10, y = y + 10,
+    x = x + 10, y = labelY1,
     text = pageText(i18n, "range", "Range") .. " " .. tostring(rangeIndex),
     color = COLOR_THEME_PRIMARY1,
     font = MIDSIZE
@@ -354,7 +356,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
 
   children[#children + 1] = {
     type = "label",
-    x = xLive, y = y + 10,
+    x = xLive, y = labelY1,
     w = wLive,
     text = liveText,
     color = COLOR_THEME_SECONDARY1,
@@ -365,7 +367,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   -- Set button
   children[#children + 1] = {
     type = "button",
-    x = xSet, y = y + 4,
+    x = xSet, y = controlY1,
     w = wSet,
     text = pageText(i18n, "set", "Set"),
     press = function()
@@ -386,21 +388,18 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local xLogic = xStart - gap - wLogic
   local xAux = xLogic - gap - wAux
 
-  local line2Y = y + 54
+  local line2Y = y + singleRowH
+  local controlY2 = (Controls and Controls.controlY and Controls.controlY(line2Y, singleRowH)) or (line2Y + math.floor((singleRowH - 32) / 2))
 
   -- AUX Choice
   local auxOptions = buildAuxOptions(i18n)
-  local auxValues = {}
-  for idx, label in ipairs(auxOptions) do
-    auxValues[idx] = label
-  end
 
   children[#children + 1] = {
     type = "choice",
-    x = xAux, y = line2Y,
+    x = xAux, y = controlY2,
     w = wAux,
     title = pageText(i18n, "mode", "Mode"),
-    values = auxValues,
+    values = auxOptions,
     get = function()
       if ui.autoDetectSlots[slot] then return 1 end
       return clamp((rawRange.auxChannelIndex or 0) + 2, 2, #auxOptions)
@@ -421,7 +420,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local logicValues = { "OR", "AND" }
   children[#children + 1] = {
     type = "choice",
-    x = xLogic, y = line2Y,
+    x = xLogic, y = controlY2,
     w = wLogic,
     title = pageText(i18n, "mode", "Mode"),
     values = logicValues,
@@ -438,7 +437,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   -- Start value field
   children[#children + 1] = {
     type = "numberEdit",
-    x = xStart, y = line2Y,
+    x = xStart, y = controlY2,
     w = wNum,
     min = math.floor(RANGE_MIN / RANGE_STEP),
     max = math.floor(RANGE_MAX / RANGE_STEP),
@@ -463,7 +462,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   -- End value field
   children[#children + 1] = {
     type = "numberEdit",
-    x = xEnd, y = line2Y,
+    x = xEnd, y = controlY2,
     w = wNum,
     min = math.floor(RANGE_MIN / RANGE_STEP),
     max = math.floor(RANGE_MAX / RANGE_STEP),
@@ -488,7 +487,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   -- Delete button
   children[#children + 1] = {
     type = "button",
-    x = xDel, y = line2Y,
+    x = xDel, y = controlY2,
     w = wDel,
     text = "X",
     press = function()
@@ -499,12 +498,12 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   -- Row divider
   children[#children + 1] = {
     type = "rectangle",
-    x = x, y = y + rowH,
+    x = x, y = line2Y + singleRowH,
     w = w, h = 1,
     color = GREY_DEFAULT, filled = true
   }
 
-  return rowH + 14
+  return (singleRowH * 2) + 1
 end
 
 local function buildSessionSignature()
@@ -976,12 +975,14 @@ function M.build(ctx)
   -- Action bar
   local rightPadding = 10
   local buttonW = math.floor(w * 0.24)
-  local lineH = 50
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2))
+  local btnY = (Controls and Controls.controlY and Controls.controlY(cursorY, rowH)) or (cursorY + math.floor((rowH - 32) / 2))
 
   local activeStr = pageText(i18n, "active_ranges", "Active ranges") .. ": " .. tostring(#ranges) .. " / " .. tostring(#ui.modeRanges)
   children[#children + 1] = {
     type = "label",
-    x = x + 10, y = cursorY + 12,
+    x = x + 10, y = labelY,
     text = activeStr,
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
@@ -990,7 +991,7 @@ function M.build(ctx)
   if ui.dirty then
     children[#children + 1] = {
       type = "label",
-      x = x + 200, y = cursorY + 12,
+      x = x + 200, y = labelY,
       text = pageText(i18n, "unsaved_changes", "Unsaved changes"),
       color = COLOR_THEME_SECONDARY1,
       font = SMLSIZE
@@ -999,7 +1000,7 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "button",
-    x = x + w - buttonW - rightPadding, y = cursorY + 4,
+    x = x + w - buttonW - rightPadding, y = btnY,
     w = buttonW,
     text = "+ Add",
     press = function()
@@ -1007,19 +1008,18 @@ function M.build(ctx)
     end
   }
 
-  cursorY = cursorY + lineH
   children[#children + 1] = {
     type = "rectangle",
-    x = x, y = cursorY,
+    x = x, y = cursorY + rowH,
     w = w, h = 1,
     color = GREY_DEFAULT, filled = true
   }
-  cursorY = cursorY + 12
+  cursorY = cursorY + rowH + 1
 
   if #ranges == 0 then
     children[#children + 1] = {
       type = "label",
-      x = x + 10, y = cursorY + 10,
+      x = x + 10, y = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2)),
       text = pageText(i18n, "no_ranges", "No ranges configured for this mode."),
       color = COLOR_THEME_PRIMARY1,
       font = SMLSIZE

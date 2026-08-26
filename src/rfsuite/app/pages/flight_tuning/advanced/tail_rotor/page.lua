@@ -343,9 +343,9 @@ local function formatValue(val, spec)
 end
 
 local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spec1, label2, key2, spec2)
-  local rowH = 52
-  local labelY = y + 16
-  local cellTop = y + 4
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   
   local mainW    = math.floor(w * 0.31)
   local labelW1  = math.floor(w * 0.19)
@@ -388,7 +388,6 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
     x = xEdit1,
     y = cellTop,
     w = editW1,
-    h = 44,
     min = math.floor(rawMin / stepSize),
     max = math.ceil(rawMax / stepSize),
     active = function() return activeA end,
@@ -440,7 +439,6 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
       x = xEdit2,
       y = cellTop,
       w = editW2,
-      h = 44,
       min = math.floor(rawMinB / stepSizeB),
       max = math.ceil(rawMaxB / stepSizeB),
       active = function() return activeB end,

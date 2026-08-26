@@ -396,9 +396,9 @@ local function applyConfigToSession(session)
 end
 
 local function appendCompactNumberField(children, x, y, w, labelText, opts)
-	local rowH = 52
-	local labelY = y + 16
-	local itemY = y + 4
+	local rowH = (Controls and Controls.ROW_H) or 64
+	local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+	local itemY = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 	local fieldW = 172
 	local fieldX = x + w - fieldW - 10
 	
@@ -425,7 +425,6 @@ local function appendCompactNumberField(children, x, y, w, labelText, opts)
 		x = fieldX,
 		y = itemY,
 		w = fieldW,
-		h = 44,
 		min = math.floor(minVal / stepVal),
 		max = math.floor(maxVal / stepVal),
 		active = function() return isActive end,
@@ -491,10 +490,10 @@ local function appendHorizontalFields(children, x, y, w, labelText, rows, i18n)
 	local gap = metrics.gap
 	local cellW = metrics.cellW
 	
-	local rowH = 76
+	local rowH = (Controls and Controls.HORIZONTAL_ROW_H) or 78
 	local headerY = y + 4
 	local itemY = y + 26
-	local groupLabelY = y + 38
+	local groupLabelY = itemY + math.floor((40 - 20) / 2)
 
 	children[#children + 1] = {
 		type = "label",
@@ -534,7 +533,6 @@ local function appendHorizontalFields(children, x, y, w, labelText, rows, i18n)
 			x = cellX,
 			y = itemY,
 			w = cellW,
-			h = 44,
 			min = math.floor(limits.min / (limits.step or 1)),
 			max = math.floor(limits.max / (limits.step or 1)),
 			active = function() return isActive end,

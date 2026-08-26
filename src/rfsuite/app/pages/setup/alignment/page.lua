@@ -619,7 +619,9 @@ function M.build(ctx)
   local rightPad = 8
   local gap = 6
   local fieldW = w - leftPad - rightPad
-  local rowH = 40
+  local rowH = (Controls and Controls.ROW_H) or 64
+  local labelY1 = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop1 = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
   -- Row 1: Roll, Nick, Yaw
   local editW = 68 -- 68px wide text fields so -180° never wraps
@@ -634,7 +636,7 @@ function M.build(ctx)
   -- Slot 1: Roll
   children[#children + 1] = {
     type = "label",
-    x = slotX1, y = y + 9,
+    x = slotX1, y = labelY1,
     w = labelW,
     text = pageText(i18n, "roll", "Roll"),
     color = COLOR_THEME_PRIMARY1,
@@ -642,8 +644,8 @@ function M.build(ctx)
   }
   children[#children + 1] = {
     type = "numberEdit",
-    x = slotX1 + labelW, y = y,
-    w = editW, h = rowH,
+    x = slotX1 + labelW, y = cellTop1,
+    w = editW,
     min = -180, max = 360,
     active = function() return not ui.liveViewEnabled end,
     get = function() return ui.display.roll_degrees end,
@@ -658,7 +660,7 @@ function M.build(ctx)
   -- Slot 2: Pitch (Nick)
   children[#children + 1] = {
     type = "label",
-    x = slotX2, y = y + 9,
+    x = slotX2, y = labelY1,
     w = labelW,
     text = pageText(i18n, "pitch", "Pitch"),
     color = COLOR_THEME_PRIMARY1,
@@ -666,8 +668,8 @@ function M.build(ctx)
   }
   children[#children + 1] = {
     type = "numberEdit",
-    x = slotX2 + labelW, y = y,
-    w = editW, h = rowH,
+    x = slotX2 + labelW, y = cellTop1,
+    w = editW,
     min = -180, max = 360,
     active = function() return not ui.liveViewEnabled end,
     get = function() return ui.display.pitch_degrees end,
@@ -682,7 +684,7 @@ function M.build(ctx)
   -- Slot 3: Yaw (Gier)
   children[#children + 1] = {
     type = "label",
-    x = slotX3, y = y + 9,
+    x = slotX3, y = labelY1,
     w = labelW,
     text = pageText(i18n, "yaw", "Yaw"),
     color = COLOR_THEME_PRIMARY1,
@@ -690,8 +692,8 @@ function M.build(ctx)
   }
   children[#children + 1] = {
     type = "numberEdit",
-    x = slotX3 + labelW, y = y,
-    w = editW, h = rowH,
+    x = slotX3 + labelW, y = cellTop1,
+    w = editW,
     min = -180, max = 360,
     active = function() return not ui.liveViewEnabled end,
     get = function() return ui.display.yaw_degrees end,
@@ -706,15 +708,15 @@ function M.build(ctx)
   -- Divider line below first row of fields
   children[#children + 1] = {
     type = "rectangle",
-    x = x, y = y + 46,
+    x = x, y = y + rowH,
     w = w, h = 1,
     color = GREY_DEFAULT,
     filled = true
   }
 
-  -- Row 2: Mag and Buttons (aligned on controlY = y + 50)
-  local controlY = y + 50
-  local controlH = 34
+  -- Row 2: Mag and Buttons (aligned on controlY)
+  local controlY = (Controls and Controls.controlY and Controls.controlY(y + rowH, rowH)) or (y + rowH + math.floor((rowH - 32) / 2))
+  local labelY2 = (Controls and Controls.labelY and Controls.labelY(y + rowH, rowH)) or (y + rowH + math.floor((rowH - 21) / 2))
 
   -- Slot 4: Mag
   local magLabelW = 38
@@ -722,7 +724,7 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "label",
-    x = x + leftPad, y = controlY + 6,
+    x = x + leftPad, y = labelY2,
     w = magLabelW,
     text = pageText(i18n, "mag", "Mag"),
     color = COLOR_THEME_PRIMARY1,
@@ -737,7 +739,7 @@ function M.build(ctx)
   children[#children + 1] = {
     type = "choice",
     x = x + leftPad + magLabelW, y = controlY,
-    w = magEditW, h = controlH,
+    w = magEditW,
     title = pageText(i18n, "mag", "Mag"),
     values = magAlignChoicesValues,
     active = function() return not ui.liveViewEnabled end,
@@ -766,7 +768,7 @@ function M.build(ctx)
   children[#children + 1] = {
     type = "button",
     x = btnStart, y = controlY,
-    w = btnW, h = controlH,
+    w = btnW,
     text = liveBtnText,
     press = function()
       if ui.liveViewEnabled then
@@ -792,7 +794,7 @@ function M.build(ctx)
   children[#children + 1] = {
     type = "button",
     x = btnStart + btnW + gap, y = controlY,
-    w = btnW, h = controlH,
+    w = btnW,
     text = pageText(i18n, "refresh_visual", "Refresh"),
     active = function() return not ui.liveViewEnabled end,
     press = function()
@@ -804,15 +806,25 @@ function M.build(ctx)
     end
   }
 
+  -- Divider line below second row of fields
+  children[#children + 1] = {
+    type = "rectangle",
+    x = x, y = y + 2 * rowH,
+    w = w, h = 1,
+    color = GREY_DEFAULT,
+    filled = true
+  }
+
   -- Split layout start
-  local splitY = y + 90
+  local splitY = y + 2 * rowH + 4
   -- Use actual screen height remaining to strictly prevent scrollbars
+  local pageBodyH = (lvgl and lvgl.PAGE_BODY_HEIGHT)
   local headerH = 48
-  if LCD_H > 300 then
+  if LCD_H and LCD_H > 300 then
     headerH = 64
   end
-  local availH = (LCD_H - headerH) - y
-  local splitH = availH - 90 - 4
+  local availH = (h and h > 0) and h or (pageBodyH and (pageBodyH - y)) or ((LCD_H - headerH) - y)
+  local splitH = max(50, availH - (2 * rowH) - 8)
   local leftW = floor(w * 0.40)
   local rightW = w - leftW - 4
   local rightX = x + leftW + 4
@@ -836,8 +848,8 @@ function M.build(ctx)
   
   children[#children + 1] = {
     type = "label",
-    x = x + 8, y = splitY + 4,
-    w = leftW - 12,
+    x = x + 6, y = splitY + 2,
+    w = leftW - 10,
     text = liveText,
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
@@ -846,8 +858,8 @@ function M.build(ctx)
   local offsetText = string.format(pageText(i18n, "offset_fmt", "Offset R:%d  P:%d  Y:%d  Mag:%d"), ui.display.roll_degrees, ui.display.pitch_degrees, ui.display.yaw_degrees, ui.display.mag_alignment)
   children[#children + 1] = {
     type = "label",
-    x = x + 8, y = splitY + 20,
-    w = leftW - 12,
+    x = x + 6, y = splitY + 18,
+    w = leftW - 10,
     text = offsetText,
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
@@ -856,29 +868,29 @@ function M.build(ctx)
   local viewYawText = string.format(pageText(i18n, "view_yaw_fmt", "View Yaw:%0.1f"), ui.viewYawOffset)
   children[#children + 1] = {
     type = "label",
-    x = x + 8, y = splitY + 36,
-    w = leftW - 12,
+    x = x + 6, y = splitY + 34,
+    w = leftW - 10,
     text = viewYawText,
     color = COLOR_THEME_PRIMARY1,
     font = SMLSIZE
   }
 
   -- Nose Direction Box
-  local boxY = splitY + 54
-  local boxH = splitH - 58
-  if boxH > 40 then
+  local boxY = splitY + 50
+  local boxH = splitH - 52
+  if boxH > 28 then
     children[#children + 1] = {
       type = "rectangle",
-      x = x + 8, y = boxY,
-      w = leftW - 16, h = boxH,
+      x = x + 6, y = boxY,
+      w = leftW - 12, h = boxH,
       color = GREY_DEFAULT,
       filled = false
     }
     
     children[#children + 1] = {
       type = "label",
-      x = x + 12, y = boxY + 4,
-      w = leftW - 24,
+      x = x + 10, y = boxY + 2,
+      w = leftW - 20,
       text = pageText(i18n, "nose_direction", "Nose Direction"),
       color = COLOR_THEME_PRIMARY1,
       font = SMLSIZE
@@ -903,21 +915,34 @@ function M.build(ctx)
       secondary = pageText(i18n, "leaning_left", "Leaning Left")
     end
 
-    children[#children + 1] = {
-      type = "label",
-      x = x + 12, y = boxY + 20,
-      w = leftW - 24,
-      text = primary,
-      color = COLOR_THEME_SECONDARY1 or YELLOW,
-      font = SMLSIZE
-    }
-    if secondary ~= "" then
+    if boxH >= 52 and secondary ~= "" then
       children[#children + 1] = {
         type = "label",
-        x = x + 12, y = boxY + 40,
-        w = leftW - 24,
+        x = x + 10, y = boxY + 18,
+        w = leftW - 20,
+        text = primary,
+        color = COLOR_THEME_SECONDARY1 or YELLOW,
+        font = SMLSIZE
+      }
+      children[#children + 1] = {
+        type = "label",
+        x = x + 10, y = boxY + 34,
+        w = leftW - 20,
         text = secondary,
         color = COLOR_THEME_PRIMARY1,
+        font = SMLSIZE
+      }
+    else
+      local combinedText = primary
+      if secondary ~= "" then
+        combinedText = primary .. ", " .. secondary
+      end
+      children[#children + 1] = {
+        type = "label",
+        x = x + 10, y = boxY + 16,
+        w = leftW - 20,
+        text = combinedText,
+        color = COLOR_THEME_SECONDARY1 or YELLOW,
         font = SMLSIZE
       }
     end
@@ -933,8 +958,8 @@ function M.build(ctx)
   }
 
   local mx = rightX + floor(rightW * 0.5)
-  local my = splitY + floor(splitH * 0.52)
-  local scale = max(8, min(rightW, splitH) * 0.22)
+  local my = splitY + floor(splitH * 0.5)
+  local scale = max(6, min(rightW, splitH) * 0.22)
   
   local loadedRoll = ui.loaded_roll_degrees or 0
   local loadedPitch = ui.loaded_pitch_degrees or 0
