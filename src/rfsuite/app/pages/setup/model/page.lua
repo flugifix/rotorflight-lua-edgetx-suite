@@ -57,6 +57,22 @@ local function newRuntime()
   return { readPending = false, requestRebuild = nil }
 end
 
+-- The two radio-side preferences this page now also owns, and why they are here.
+--
+-- Both decide whether something the BOARD carries is applied to the radio, so they belong beside
+-- what they act on rather than in a settings page of their own. The name is the sharper case:
+-- from MSP API 12.09 the craft carries a MODEL_SET_NAME bit and the preference is not consulted
+-- at all, so one control has to stand for both mechanisms and pick by what the board reported.
+--
+-- They are radio-WIDE, unlike everything else on this page. That is not something to hide behind
+-- a per-model heading, so each says so where it is drawn.
+local prefs = {
+  loaded = false,
+  dirty = false,
+  syncname = false,
+  syncparams = false,
+}
+
 local ui = {
   loaded = false,
   dirty = false,
@@ -68,6 +84,38 @@ local ui = {
   sections = { params = true, features = true },
   runtime = newRuntime(),
 }
+
+local function prefBool(value)
+  return value == true or value == "true" or value == 1 or value == "1"
+end
+
+local function loadPrefs(preferences)
+  if prefs.loaded then return end
+  local general = (preferences and preferences.general) or {}
+  prefs.syncname = prefBool(general.syncname)
+  prefs.syncparams = prefBool(general.syncparams)
+  prefs.loaded = true
+end
+
+-- A switch over one of them. The setter marks its own dirty flag, because the save has two
+-- destinations and only one of them should be written when only the other changed.
+local function prefSwitch(children, x, cursorY, w, label, key)
+  return Controls.appendRadioSwitch(children, x, cursorY, w, label,
+    function() return prefs[key] == true end,
+    function(on)
+      if prefs[key] == on then return end
+      prefs[key] = on
+      prefs.dirty = true
+    end)
+end
+
+local function appendRadioWideNote(children, x, cursorY, w, i18n)
+  children[#children + 1] = {
+    type = "label", x = x, y = cursorY, w = w,
+    text = pageText(i18n, "radio_wide", "Stored on this radio, for every model"),
+  }
+  return cursorY + 20
+end
 
 for i = 1, PARAM_SLOTS do
   ui.config["model_param" .. i .. "_type"] = 0
@@ -201,38 +249,62 @@ local function buildParams(cursorY, children, x, w, i18n)
       { min = -32000, max = 32000, step = 1, get = getValue, set = setValue,
         enabled = function() return getType() ~= 0 end })
   end
+
+  -- Whether the radio applies them at all. There is no MODEL_SET_PARAMS bit -- the flags word
+  -- governs the name and the capacity announcement only -- so this one is the radio's decision on
+  -- every firmware, and it has no version to branch on.
+  cursorY = cursorY + prefSwitch(children, x, cursorY, w,
+    pageText(i18n, "sync_params", "Synchronize Model Parameters"), "syncparams")
+  cursorY = appendRadioWideNote(children, x, cursorY, w, i18n)
+
   return cursorY
 end
 
+local function flagSwitch(children, x, cursorY, w, label, bit)
+  return Controls.appendRadioSwitch(children, x, cursorY, w, label,
+    function() return PilotConfigApi.flagSet(ui.config.model_flags, bit) == true end,
+    function(on)
+      local next_ = PilotConfigApi.withFlag(ui.config.model_flags, bit, on)
+      if next_ == ui.config.model_flags then return end
+      ui.config.model_flags = next_
+      ui.dirty = true
+    end)
+end
+
+-- ONE control for the model name, and which store it writes is decided by what the board sent.
+--
+-- From MSP API 12.09 the craft carries the decision, and `model_name_sync` reads that bit first;
+-- below it the field is not in the message at all and the radio preference is the only thing that
+-- can decide. A pilot should not have to know which of those he is looking at, and above all the
+-- two must never both be offered -- one of them would then be answering a question the other had
+-- already settled. `model_flags` is nil exactly when the board did not report the word, which is
+-- the same test the task itself branches on.
+--
+-- The capacity announcement has no radio-side counterpart, so it appears only where the board can
+-- carry it.
 local function buildFeatures(cursorY, children, x, w, i18n)
-  local flags = ui.config.model_flags
-  if flags == nil then
-    children[#children + 1] = {
-      type = "label", x = x, y = cursorY, w = w,
-      text = pageText(i18n, "flags_unsupported",
-                      "This flight controller does not report model flags"),
-    }
-    return cursorY + 24
+  local boardDecides = ui.config.model_flags ~= nil
+
+  if boardDecides then
+    cursorY = cursorY + flagSwitch(children, x, cursorY, w,
+      pageText(i18n, "flag_set_name", "Set Model Name on the Radio"),
+      PilotConfigApi.FLAG_SET_NAME)
+    cursorY = cursorY + flagSwitch(children, x, cursorY, w,
+      pageText(i18n, "flag_tell_capacity", "Announce Remaining Capacity"),
+      PilotConfigApi.FLAG_TELL_CAPACITY)
+    return cursorY
   end
 
-  local rows = {
-    { bit = PilotConfigApi.FLAG_SET_NAME, key = "flag_set_name",
-      fallback = "Set Model Name on the Radio" },
-    { bit = PilotConfigApi.FLAG_TELL_CAPACITY, key = "flag_tell_capacity",
-      fallback = "Announce Remaining Capacity" },
+  cursorY = cursorY + prefSwitch(children, x, cursorY, w,
+    pageText(i18n, "flag_set_name", "Set Model Name on the Radio"), "syncname")
+  cursorY = appendRadioWideNote(children, x, cursorY, w, i18n)
+
+  children[#children + 1] = {
+    type = "label", x = x, y = cursorY, w = w,
+    text = pageText(i18n, "flags_unsupported",
+                    "This flight controller does not report model flags"),
   }
-  for _, row in ipairs(rows) do
-    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-      pageText(i18n, row.key, row.fallback),
-      function() return PilotConfigApi.flagSet(ui.config.model_flags, row.bit) == true end,
-      function(on)
-        local next_ = PilotConfigApi.withFlag(ui.config.model_flags, row.bit, on)
-        if next_ == ui.config.model_flags then return end
-        ui.config.model_flags = next_
-        ui.dirty = true
-      end)
-  end
-  return cursorY
+  return cursorY + 24
 end
 
 local SECTIONS = {
@@ -247,26 +319,50 @@ function M.getHeaderActions()
   return { save = true, reload = true, help = true }
 end
 
-function M.wakeup()
+function M.wakeup(ctx)
   ensureDeps()
+  loadPrefs(ctx and ctx.preferences)
   if not ui.loaded and not ui.runtime.readPending then
     queueRead()
   end
 end
 
-function M.onReload()
+function M.onReload(ctx)
   ensureDeps()
+  -- The board is re-read; the radio's own preferences are not, because a reload is about what the
+  -- craft says and re-reading them would throw away an edit the pilot has not saved yet.
+  loadPrefs(ctx and ctx.preferences)
   ui.loaded = false
   queueRead()
 end
 
-function M.onSave()
+-- Two destinations, and each is written only when it changed.
+--
+-- The radio's file goes first: it is local, it cannot fail for a reason the pilot can fix from
+-- here, and doing it first means a flight controller that has gone away does not also cost him the
+-- setting he just made. They are independent stores and neither is a step of the other, so there
+-- is nothing to roll back if the second one fails.
+function M.onSave(ctx)
   ensureDeps()
+
+  if prefs.dirty and ctx then
+    if type(ctx.preferences) == "table" then
+      if type(ctx.preferences.general) ~= "table" then ctx.preferences.general = {} end
+      ctx.preferences.general.syncname = prefs.syncname
+      ctx.preferences.general.syncparams = prefs.syncparams
+    end
+    if type(ctx.savePreferences) == "function" then
+      local ok = pcall(ctx.savePreferences)
+      if ok then prefs.dirty = false end
+    end
+  end
+
   queueWrite()
 end
 
 function M.build(ctx)
   ensureDeps()
+  loadPrefs(ctx and ctx.preferences)
   local children = ctx.children
   local x, w = ctx.x, ctx.w
   local i18n = ctx.i18n
@@ -307,6 +403,10 @@ function M.onClose()
   ui.loaded = false
   ui.runtime = newRuntime()
   ui.form = nil
+  -- Reload from the file next time. An unsaved edit is dropped on close here exactly as the
+  -- board-side fields are, so the two halves of this page behave the same way.
+  prefs.loaded = false
+  prefs.dirty = false
   Controls = nil
   Common = nil
   MspRuntime = nil

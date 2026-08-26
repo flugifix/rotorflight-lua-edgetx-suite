@@ -105,7 +105,6 @@ return {
       dashboard = { name = "Dashboard" },
       activelook = { name = "ActiveLook" },
       localization = { name = "Lokalisierung" },
-      service = { name = "RFSuite Service" },
       dashboard_theme = { name = "Design" },
       dashboard_settings = { name = "Einstellungen" },
       profile = { name = "Profil" },
@@ -605,12 +604,14 @@ return {
         param_timer = "Timer",
         param_type = "Parameter %d Typ",
         param_value = "Parameter %d Wert",
+        sync_params = "Modellparameter synchronisieren",
+        radio_wide = "Am Sender gespeichert, für alle Modelle",
         flag_set_name = "Modellnamen am Sender setzen",
         flag_tell_capacity = "Restkapazität ansagen",
         flags_unsupported = "Dieser Flight Controller meldet keine Modell-Flags",
         loading_title = "Modellkonfiguration",
         loading_message = "Wird vom Flight Controller gelesen",
-        help_message = "Einstellungen, die der Flight Controller für dieses Modell speichert: drei Parameter, die er beim Verbinden auf Timer oder globale Variablen des Senders anwendet, und die Sender-Funktionen, die er anfordert."
+        help_message = "Einstellungen, die der Flight Controller für dieses Modell speichert: drei Parameter, die er beim Verbinden auf Timer oder globale Variablen des Senders anwendet, und die Sender-Funktionen, die er anfordert. Ob sie angewendet werden, wird ebenfalls hier entschieden. Ab RF 2.3 trägt der Heli die Entscheidung über den Modellnamen selbst; auf älterer Firmware der Sender, und der Schalter gilt dann für alle Modelle dieses Senders."
       },
       settings_general = {
         section_display = "Anzeige",
@@ -640,16 +641,6 @@ return {
         value_progress_mode = "SOFORT SCHLIESSEN",
         value_dashbar_autoclose = "10s",
         help_message = "Konfiguriere Sicherheitsabfragen, Integrationsoptionen und Entwickler-Sichtbarkeit in den allgemeinen Einstellungen.",
-        saved_title = "Gespeichert",
-        saved_message = "Einstellungen gespeichert",
-        save_error_title = "Fehler",
-        save_error_message = "Speichern fehlgeschlagen"
-      },
-      settings_service = {
-        section_model = "Modellabgleich",
-        sync_model_name = "Modellname synchronisieren",
-        sync_model_params = "Modellparameter synchronisieren",
-        help_message = "Legt fest, was der Hintergrunddienst tut, solange er Verbindung zum Flight Controller hat.",
         saved_title = "Gespeichert",
         saved_message = "Einstellungen gespeichert",
         save_error_title = "Fehler",

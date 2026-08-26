@@ -105,7 +105,6 @@ return {
       dashboard = { name = "Dashboard" },
       activelook = { name = "ActiveLook" },
       localization = { name = "Localization" },
-      service = { name = "RFSuite Service" },
       dashboard_theme = { name = "Design" },
       dashboard_settings = { name = "Settings" },
       profile = { name = "Profile" },
@@ -605,12 +604,14 @@ return {
         param_timer = "Timer",
         param_type = "Parameter %d Type",
         param_value = "Parameter %d Value",
+        sync_params = "Synchronize Model Parameters",
+        radio_wide = "Stored on this radio, for every model",
         flag_set_name = "Set Model Name on the Radio",
         flag_tell_capacity = "Announce Remaining Capacity",
         flags_unsupported = "This flight controller does not report model flags",
         loading_title = "Model Configuration",
         loading_message = "Reading from the flight controller",
-        help_message = "Settings the flight controller stores for this model: three parameters it applies to the radio's timers or global variables on connect, and the radio-side features it asks for."
+        help_message = "Settings the flight controller stores for this model: three parameters it applies to the radio's timers or global variables on connect, and the radio-side features it asks for. Whether those are applied is decided here too. From RF 2.3 the craft itself carries the model-name decision; on older firmware the radio does, and the switch then applies to every model on this radio."
       },
       settings_general = {
         section_display = "Display",
@@ -640,16 +641,6 @@ return {
         value_progress_mode = "CLOSE IMMEDIATELY",
         value_dashbar_autoclose = "10s",
         help_message = "Configure safety prompts, integration options, and developer visibility in general settings.",
-        saved_title = "Saved",
-        saved_message = "Settings saved",
-        save_error_title = "Error",
-        save_error_message = "Save failed"
-      },
-      settings_service = {
-        section_model = "Model Synchronization",
-        sync_model_name = "Synchronize Model Name",
-        sync_model_params = "Synchronize Model Parameters",
-        help_message = "Configure what the background service does while it has a link to the flight controller.",
         saved_title = "Saved",
         saved_message = "Settings saved",
         save_error_title = "Error",
