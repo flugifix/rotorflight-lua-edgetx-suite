@@ -372,7 +372,12 @@ local function updateConnectionState(self)
   end
   local connected = type(runtimeState) == "table" and runtimeState.lastConnected == true
   local hasVoltage = type(self.state.voltage) == "number" and self.state.voltage > 0
-  local hasFuel = type(self.state.fuel) == "number" and self.state.fuel >= 0
+  -- The FLAG and not the value. readTelemetry sets `fuelTelemetrySeen` only once a fuel or
+  -- smartfuel sensor has actually produced a number, while `state.fuel` is initialised to 0 in
+  -- the widget's default state. Read off the value, the test was `0 >= 0` from the first pass,
+  -- so `batteryReady` below was satisfied before any telemetry had arrived and the
+  -- "waiting for battery telemetry" status line could never be reached.
+  local hasFuel = self.state.fuelTelemetrySeen == true
   local hasLq = type(self.state.lq) == "number" and self.state.lq ~= 0
   local hasRss1 = type(self.state.rss1) == "number" and self.state.rss1 ~= 0
   local hasRss2 = type(self.state.rss2) == "number" and self.state.rss2 ~= 0
