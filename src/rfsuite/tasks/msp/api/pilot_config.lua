@@ -3,11 +3,18 @@
 local Api = {
   command = 12,
   writeCommand = 13,
-  -- Fourteen bytes: model_id, three (type, int16 value) parameters, and the model_flags word.
-  -- The eleven that stood here were the ten of the pre-12.09 struct plus one stray, so the
-  -- flags could not be exercised in the simulator at all -- a page reading them would have got
-  -- the short-buffer branch on every simulated read and shown the flags as absent.
-  simulatorResponse = {3, 0, 44, 1, 0, 20, 0, 20, 0, 0, 30, 1, 0, 0, 0}
+  -- Fourteen bytes: model_id, three (type, int16 value) parameters, and the model_flags word --
+  -- exactly what buildWritePayload emits for the same struct when there are flags to send.
+  --
+  -- It has been fifteen. The eleven that stood here originally were the ten of the pre-12.09
+  -- struct plus one stray zero; appending the four flag bytes to that carried the stray along,
+  -- and every byte after model_param3_type came out shifted. The last byte was never read, the
+  -- third parameter's value read 0 instead of 7680 -- this file's own default for it -- and the
+  -- flags word was assembled from (30, 1, 0, 0) instead of (1, 0, 0, 0). That is 286: bits with
+  -- no meaning in the firmware, MODEL_TELL_CAPACITY set and MODEL_SET_NAME CLEAR. So the model
+  -- name never synchronised on the simulator, which is the one thing this fixture exists to
+  -- make testable.
+  simulatorResponse = {3, 0, 44, 1, 0, 20, 0, 20, 0, 30, 1, 0, 0, 0}
 }
 
 -- The two model_flags bits, from the firmware's own `src/main/pg/pilot.h`:
