@@ -428,7 +428,16 @@ local function updateConnectionState(self)
     tasksDone = false
   end
   
-  local rawReady = connected and batteryReady and rfReady and tasksDone
+  -- What has to be true before the dashboard is DRAWN, and it deliberately no longer includes
+  -- the connect chain. Every value those tasks fill has a themed fallback -- the flight count
+  -- starts at 0, the dataflash bar is guarded on `state.dataflash`, and the cell count is
+  -- inferred from the pack voltage until `battery_config` arrives -- so the chain decides how
+  -- COMPLETE the dashboard is, not whether it can be shown. It is a strictly serial run of a
+  -- dozen MSP round trips, and behind this gate it was the whole screen's critical path.
+  --
+  -- `tasksDone` is still computed: it names the pending task in the status line below, and
+  -- `startupComplete` keeps the audio on exactly the condition it had before.
+  local rawReady = connected and batteryReady and rfReady
   local now = nowSeconds()
 
   if connected and not rawReady then
@@ -520,6 +529,11 @@ local function updateConnectionState(self)
 
   self.state.fblConnected = connected
   self.state.connectionReady = ready
+  -- Kept apart from `ready` on purpose. Drawing may start before the connect chain has run;
+  -- announcing the model may not, because the announcement needs the name that chain reads.
+  -- This is the condition `ready` itself carried before the chain left the gate above, soft
+  -- timeout included, so the audio path sees no change at all.
+  self.startupComplete = ready and (tasksDone or softTimeoutReady)
   return ready, statusLine
 end
 
@@ -1435,7 +1449,7 @@ function Runtime.new(zone, options)
     local nextMode = computeFlightMode(self.state)
     if statusLine ~= nil then self.statusLine = statusLine end
 
-    if ready then
+    if self.startupComplete then
       processAudioEvents(self)
     end
 
