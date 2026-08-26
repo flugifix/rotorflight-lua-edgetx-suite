@@ -11,20 +11,107 @@ $ErrorActionPreference = 'Stop'
 
 $workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 
-if ([string]::IsNullOrWhiteSpace($Language) -or ($Language -like '${config:*')) {
-    $Language = $null
-    $settingsPath = Join-Path $workspaceRoot '.vscode\settings.json'
-    if (Test-Path $settingsPath) {
+$languageSource = 'default (en)'
+
+function Get-LanguageFromSettingsFile {
+    param([string]$FilePath)
+
+    if (-not (Test-Path $FilePath)) { return $null }
+    try {
+        $content = Get-Content -Path $FilePath -Raw -ErrorAction Stop
+        if ([string]::IsNullOrWhiteSpace($content)) { return $null }
+
+        # 1. Try native JSON parsing
         try {
-            $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-            if ($settings.'rfsuite.deploy.language') {
-                $Language = $settings.'rfsuite.deploy.language'
+            $json = $content | ConvertFrom-Json
+            if ($json.'rfsuite.deploy.language') {
+                return [string]$json.'rfsuite.deploy.language'
             }
         } catch {}
-    }
+
+        # 2. Fallback regex parsing (supports JSONC, comments, trailing commas)
+        $match = [regex]::Match($content, '["'']rfsuite\.deploy\.language["'']\s*:\s*["'']([^"'']+)["'']')
+        if ($match.Success) {
+            return $match.Groups[1].Value.Trim()
+        }
+    } catch {}
+
+    return $null
 }
+
+if ([string]::IsNullOrWhiteSpace($Language) -or ($Language -like '${config:*')) {
+    $Language = $null
+
+    # 1. Check workspace settings (.vscode/settings.json)
+    $wsSettings = Join-Path $workspaceRoot '.vscode\settings.json'
+    $found = Get-LanguageFromSettingsFile -FilePath $wsSettings
+    if ($found) {
+        $Language = $found
+        $languageSource = "workspace settings ($wsSettings)"
+    }
+
+    # 2. Check workspace files (*.code-workspace in workspace root or parent)
+    if ([string]::IsNullOrWhiteSpace($Language)) {
+        $codeWorkspaces = @(
+            Get-ChildItem -Path $workspaceRoot -Filter '*.code-workspace' -File -ErrorAction SilentlyContinue
+            Get-ChildItem -Path (Join-Path $workspaceRoot '..') -Filter '*.code-workspace' -File -ErrorAction SilentlyContinue
+        )
+        foreach ($cw in $codeWorkspaces) {
+            $found = Get-LanguageFromSettingsFile -FilePath $cw.FullName
+            if ($found) {
+                $Language = $found
+                $languageSource = "workspace file ($($cw.FullName))"
+                break
+            }
+        }
+    }
+
+    # 3. Check VS Code / VSCodium User settings & Profiles across platforms
+    if ([string]::IsNullOrWhiteSpace($Language)) {
+        $userDirs = @(
+            $(if ($env:APPDATA) { Join-Path $env:APPDATA 'Code\User' }),
+            $(if ($env:APPDATA) { Join-Path $env:APPDATA 'Code - Insiders\User' }),
+            $(if ($env:APPDATA) { Join-Path $env:APPDATA 'VSCodium\User' }),
+            $(if ($env:HOME) { Join-Path $env:HOME 'Library/Application Support/Code/User' }),
+            $(if ($env:HOME) { Join-Path $env:HOME 'Library/Application Support/Code - Insiders/User' }),
+            $(if ($env:HOME) { Join-Path $env:HOME 'Library/Application Support/VSCodium/User' }),
+            $(if ($env:HOME) { Join-Path $env:HOME '.config/Code/User' }),
+            $(if ($env:HOME) { Join-Path $env:HOME '.config/Code - Insiders/User' }),
+            $(if ($env:HOME) { Join-Path $env:HOME '.config/VSCodium/User' }),
+            $(if ($env:USERPROFILE) { Join-Path $env:USERPROFILE '.config\Code\User' })
+        )
+        foreach ($uDir in $userDirs) {
+            if (-not $uDir -or -not (Test-Path $uDir)) { continue }
+
+            # Check primary user settings.json
+            $uPath = Join-Path $uDir 'settings.json'
+            $found = Get-LanguageFromSettingsFile -FilePath $uPath
+            if ($found) {
+                $Language = $found
+                $languageSource = "user settings ($uPath)"
+                break
+            }
+
+            # Check all profile settings.json
+            $profileSettings = Get-ChildItem -Path (Join-Path $uDir 'profiles') -Filter 'settings.json' -Recurse -File -ErrorAction SilentlyContinue
+            foreach ($ps in $profileSettings) {
+                $found = Get-LanguageFromSettingsFile -FilePath $ps.FullName
+                if ($found) {
+                    $Language = $found
+                    $languageSource = "profile settings ($($ps.FullName))"
+                    break
+                }
+            }
+            if (-not [string]::IsNullOrWhiteSpace($Language)) { break }
+        }
+    }
+} else {
+    $languageSource = 'command-line argument'
+}
+
 if ([string]::IsNullOrWhiteSpace($Language) -or ($Language -like '${config:*')) {
     $Language = 'en'
+    $languageSource = 'default fallback (en)'
 }
 $sourceRoot = Join-Path $workspaceRoot 'src'
 $sourceCore = Join-Path $sourceRoot 'rfsuite'
@@ -309,7 +396,7 @@ foreach ($wav in @('beep.wav', 'multibeep.wav', 'warn.wav', 'alarm.wav')) {
 New-ThemeIndexFile -TargetCoreDir $targetCore -TargetUserDir $targetUserRoot
 
 # Run translation pre-compiler and resolver to inline the language strings
-Write-Host "Running i18n pre-compiler and resolver for language: $Language"
+Write-Host "Running i18n pre-compiler and resolver for language: $Language (source: $languageSource)"
 
 $pythonCmd = 'python'
 if (-not (Get-Command $pythonCmd -ErrorAction SilentlyContinue)) {
@@ -348,7 +435,7 @@ if (-not (Get-Command $pythonCmd -ErrorAction SilentlyContinue)) {
 Write-Host "RFSuite demo deployed to:"
 Write-Host "  Target mode:     $Target"
 Write-Host "  Target root:     $TargetRoot"
-Write-Host "  Language:        $Language"
+Write-Host "  Language:        $Language ($languageSource)"
 Write-Host "  Tool entrypoint: $targetToolEntrypoint"
 Write-Host "  Core package:    $targetCore"
 Write-Host "  User data:       $targetUserRoot"
