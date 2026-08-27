@@ -911,18 +911,19 @@ local function makeChannelProcedure(channel, order)
         end
 
         local isWanted = wanted(w, entry)
-        -- Neither button is greyed out. Disabling the one that matches the current decision made
-        -- the row read as broken -- on a channel the run already wants, *Set up* is dark on every
-        -- visit and there is nothing on the screen saying why. What the decision IS belongs in
-        -- words underneath, and both buttons stay pressable so either can be taken back.
-        y = y + w.findingRow(children, area.x, y, area.w,
-          "CH" .. tostring(channel), state,
-          {
-            { text = t(i18n, "action_create", "Set up"),
-              press = function() w.data.wanted[channel] = true w.rebuild() end },
-            { text = t(i18n, "action_leave", "Leave alone"),
-              press = function() w.data.wanted[channel] = false w.rebuild() end }
-          })
+        -- One control, and it is the SAME one the layout screen offers for the same decision two
+        -- screens earlier. The pair of buttons here asked that question a second way: a button
+        -- that already holds the current answer does nothing visible when pressed, which is
+        -- exactly what a pilot reported -- pressed it, saw nothing, concluded the screen was
+        -- broken. A toggle moves when it is pressed, and it frames neither state as the defect,
+        -- which is what the pair was chosen for in the first place.
+        y = y + w.findingToggle(children, area.x, y, area.w,
+          "CH" .. tostring(channel) .. "  " .. channelName(i18n, entry.key), state,
+          function() return wanted(w, entry) end,
+          function(value)
+            w.data.wanted[channel] = value
+            w.rebuild()
+          end)
 
         if not isWanted then
           w.paragraph(children, area.x, y + 6, area.w,
@@ -934,10 +935,10 @@ local function makeChannelProcedure(channel, order)
         -- screen has to say so: *Set up* clears whatever is on the channel and writes the layout
         -- from the switch below. Without this line a pilot looking at *source unclear* has no way
         -- to know that the way out is right in front of them.
-        local note = t(i18n, "setup_note", "Will be set up. \"Leave alone\" keeps this channel unchanged.")
+        local note = t(i18n, "setup_note", "Switched on, this channel is laid out from the switch below. Switched off, nothing on it is touched.")
         if info and (info.count or 0) > 0 then
           note = t(i18n, "setup_note_replace",
-            "Will be set up: the mixer lines on this channel are replaced by the switch below. \"Leave alone\" keeps them.")
+            "Switched on, the mixer lines already on this channel are replaced by the switch below. Switched off, they are kept.")
         end
         y = y + 6 + w.paragraph(children, area.x, y + 6, area.w, note)
 

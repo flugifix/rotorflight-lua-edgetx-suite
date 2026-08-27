@@ -214,7 +214,10 @@ local function enterCurrent()
   end
 end
 
-function wiz.goToProcedure(index, screenIndex)
+-- `pageIndex` may be -1, meaning "the last page of that screen", which the build resolves once it
+-- knows how many there are. Stepping BACK into a screen has to land at its end, where the pilot
+-- left off reading, and that is not knowable from here.
+function wiz.goToProcedure(index, screenIndex, pageIndex)
   if not ui.procedures then return end
   -- A scoped entry can run out of procedures where the whole path never does, so "nowhere to go"
   -- is a real answer here and lands on the list rather than on procedure one.
@@ -224,7 +227,8 @@ function wiz.goToProcedure(index, screenIndex)
   ui.view = "run"
   ui.procIndex = index
   ui.screenIndex = screenIndex or 1
-  ui.pageIndex = 1
+  if ui.screenIndex < 1 then ui.screenIndex = 1 end
+  ui.pageIndex = pageIndex or 1
   ui.entered = nil
   ui.busy = nil
   enterCurrent()
@@ -237,6 +241,14 @@ local function inScope(proc)
   if proc == nil then return false end
   if ui.scope == nil then return true end
   return proc.section == ui.scope
+end
+
+local function previousScopedIndex(from)
+  local list = ui.procedures or {}
+  for index = from, 1, -1 do
+    if inScope(list[index]) then return index end
+  end
+  return nil
 end
 
 local function lastScopedIndex()
@@ -332,10 +344,24 @@ function wiz.back()
     wiz.rebuild()
     return
   end
-  -- The first screen of a procedure steps OUT to the overview rather than into the tail of the
-  -- previous one. The procedure is the unit; walking backwards across the boundary presents the
-  -- path as one long form, and it is what left the assistant with no exit at its own first screen.
-  wiz.showOverview()
+  -- CORRECTED, from a radio: the first screen of a procedure steps into the TAIL of the previous
+  -- one, and only the first procedure of all steps out to the overview.
+  --
+  -- It used to leave for the overview at every procedure boundary. The reasoning was that the
+  -- procedure is the unit and that walking backwards across the boundary presents the path as one
+  -- long form -- and what it produced was a pilot who noticed a wrong switch one step later and
+  -- could not get back to it. The overview does list every procedure and would have taken him
+  -- there, but nothing said so, and a way back that has to be deduced is not one.
+  --
+  -- The exit that reasoning was really protecting is untouched: keep pressing back and the first
+  -- procedure still hands over to the overview, which is where Close lives.
+  local previous = previousScopedIndex(ui.procIndex - 1)
+  if previous == nil then
+    wiz.showOverview()
+    return
+  end
+  local proc = ui.procedures[previous]
+  wiz.goToProcedure(previous, #(proc.screens or {}), -1)
 end
 
 function wiz.isLast()
@@ -669,6 +695,50 @@ function wiz.findingRow(children, x, y, w, name, value, actions)
     }
   end
 
+  children[#children + 1] = {
+    type = "rectangle",
+    x = x, y = y + rowH - 1, w = w, h = 1,
+    color = GREY_DEFAULT, filled = true
+  }
+  return rowH
+end
+
+-- A finding whose answer is a TOGGLE rather than a pair of buttons.
+--
+-- The pair was two equally weighted actions, which was right about the QUESTION -- a channel with
+-- no mix is not a defect on a board the pilot has just replaced -- and wrong about the control. A
+-- button that is already the current answer does nothing visible when pressed, so the pilot pressed
+-- it and reasonably concluded the screen was broken. And the very same decision is offered two
+-- screens earlier as a toggle, so the assistant asked one question with two different controls.
+--
+-- The toggle keeps the neutrality the pair was chosen for -- neither state is framed as the
+-- defect -- and it moves when it is pressed.
+function wiz.findingToggle(children, x, y, w, name, value, get, set)
+  local rowH = wiz.ROW_H
+  local toggleW, toggleH = 64, math.min(26, rowH - 6)
+  local toggleX = x + w - toggleW
+  local textW = toggleX - x - 8
+  local nameW = math.floor(textW * 0.42)
+  local textY = y + math.floor((rowH - 18) / 2)
+
+  label(children, x, textY, nameW, name, wiz.font, COLOR_THEME_PRIMARY1)
+  label(children, x + nameW + 4, textY, textW - nameW - 4, value, wiz.font, COLOR_THEME_PRIMARY1)
+
+  children[#children + 1] = {
+    type = "toggle",
+    x = toggleX, y = y + math.floor((rowH - toggleH) / 2), w = toggleW, h = toggleH,
+    get = function() return get() == true end,
+    -- Some EdgeTX builds call a toggle's setter with no payload at all, so the value is derived
+    -- from what it holds rather than from what arrived.
+    set = function(nextValue)
+      local wanted
+      if nextValue == nil then wanted = not (get() == true)
+      elseif type(nextValue) == "boolean" then wanted = nextValue
+      elseif type(nextValue) == "number" then wanted = nextValue ~= 0
+      else wanted = not (get() == true) end
+      if wanted ~= (get() == true) then set(wanted) end
+    end
+  }
   children[#children + 1] = {
     type = "rectangle",
     x = x, y = y + rowH - 1, w = w, h = 1,
