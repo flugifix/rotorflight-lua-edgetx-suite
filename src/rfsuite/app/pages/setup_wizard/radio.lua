@@ -278,6 +278,28 @@ function M.switches(minPositions)
   return list
 end
 
+-- The switch a mix SOURCE stands for, and it is the other half of the radio's own source picker.
+--
+-- That picker answers with a source id -- one entry per SWITCH rather than one per position, which
+-- is the shape a channel carrying a value across the whole travel actually needs -- and the id it
+-- returns is exactly what goes into the input. Everything else on this path is expressed in switch
+-- POSITIONS, so the two have to meet somewhere, and this is it.
+--
+-- Walked rather than computed. The first id of the switch block is not a constant Lua is ever
+-- told, and deriving it from one radio's numbering would be a guess that happens to hold there.
+function M.switchFromSource(id)
+  id = tonumber(id)
+  if id == nil or id == 0 then return nil end
+  for number = 0, MAX_SWITCHES - 1 do
+    local first = SWSRC_FIRST_SWITCH + number * POSITIONS_PER_SWITCH
+    local source = M.switchSource(first)
+    if source ~= nil and source == id then
+      return first, M.switchBaseName(first), M.switchPositionCount(first)
+    end
+  end
+  return nil
+end
+
 -- How many positions this switch actually has. A two-position switch has no middle, so it
 -- never rests at centre and its windows are the two ends alone.
 function M.switchPositionCount(swsrc)

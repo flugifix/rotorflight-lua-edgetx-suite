@@ -57,10 +57,17 @@ local CHAIN_MOVE_US = 150
 local CHAIN_LOW_US = 1100
 local CHAIN_HIGH_US = 1900
 
--- What a channel at full deflection spans, and therefore what 100 percent means on this screen.
--- The percentage is of the TRAVEL the board is given, not of anything the radio thinks it sent:
--- both numbers it is computed from arrive over the wire from the flight controller.
-local CHAIN_FULL_SPAN_US = 2012 - 988
+-- The configurator's own scale for a channel reading: 1500 microseconds is zero, and every five
+-- microseconds either side is one percent. Written out here rather than left as arithmetic at the
+-- call site, because the point of it is that the number on this screen and the number on the
+-- configurator's channel page are the same number.
+local function usToPercent(us)
+  us = tonumber(us)
+  if us == nil then return "?" end
+  local value = math.floor((us - 1500) / 5 + 0.5)
+  if value > 0 then return "+" .. tostring(value) end
+  return tostring(value)
+end
 
 -- Adjustment functions, from the firmware's own enumeration. One slot each.
 local ADJ_RATE_PROFILE = 1
@@ -210,7 +217,17 @@ procs[#procs + 1] = {
         local children, i18n, y = ctx.children, ctx.i18n, area.y
         y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p1", "This assistant sets the transmitter model up for the flight controller and configures the flight controller to match it.")) + 10
         y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p2", "The transmitter setup is needed once per model and survives a change of flight controller. Every flight controller must be set to that layout once.")) + 10
-        w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p3", "This part covers the radio and the basics on the board. Drivetrain, servos and mechanics are separate procedures."))
+        y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p3", "This part covers the radio and the basics on the board. Drivetrain, servos and mechanics are separate procedures.")) + 10
+
+        -- The one physical precondition of the whole path, and it is on the FIRST screen because
+        -- it cannot be met once the run has started.
+        --
+        -- Everything here writes channel ranges and mixer lines while the pilot moves switches,
+        -- and one procedure calibrates the accelerometer. None of that is safe with a motor that
+        -- can spin or servos that can drive against their linkage: the assistant deliberately
+        -- leaves intermediate states behind that are harmless ON THE BENCH, and harmless is not
+        -- the same as harmless with power on the output side.
+        w.paragraph(children, area.x, y, area.w, t(i18n, "intro_safety", "Before you start: the flight controller must not be connected to the servos or the motor yet. This path writes and moves things that are only safe with the output side unplugged."))
       end
     },
     {
@@ -256,6 +273,151 @@ procs[#procs + 1] = {
         -- which on a first run is the first one.
         if w.store then w.store.setSeen() end
         done(true)
+      end
+    }
+  }
+}
+
+-- ---------------------------------------------------------------------------------------------
+-- 0b -- the board's channel map, and it comes FIRST because everything after it is derived
+-- through it.
+--
+-- Rotorflight has FIVE primary functions, not four: roll, pitch, yaw, collective and throttle are
+-- all control channels, and the aux block starts after them. Which WIRE channel carries which of
+-- them is `RC_MAP` on the board, and the configurator's four presets are nothing but prepared
+-- arrays of it -- index is the function, value is the channel, and their own comment says the
+-- array is transposed.
+--
+-- The one this layout is built on is ELRS. Decoded, it is exactly the layout the assistant writes
+-- on the radio side: roll, pitch, collective, yaw on one to four, **arming on five**, throttle on
+-- six, and the profile and rescue channels on seven and eight.
+--
+-- WHY IT IS A PROCEDURE AND NOT AN ASSUMPTION: with the board left at its factory map, channel
+-- five is the THROTTLE input and is not an aux channel at all. Every aux slot the assistant
+-- derives is then one out, and the arming range -- which has no aux slot to land on -- is silently
+-- not written. The screen said *ready* for everything else, because everything else does resolve.
+-- Reported from a radio, and reproducible from the two tables alone.
+-- ---------------------------------------------------------------------------------------------
+
+-- Index is the function, in the order the board's own accessor names them; the value is the wire
+-- channel, zero-based, as the board stores it.
+local RX_MAP_FIELDS = { "aileron", "elevator", "rudder", "collective", "throttle", "aux1", "aux2", "aux3" }
+local RX_MAP_ELRS = { 0, 1, 3, 2, 5, 4, 6, 7 }
+
+local function rxMapValues(w)
+  local raw = w.data.rxMap
+  local map = type(raw) == "table" and (raw.parsed or raw) or nil
+  if type(map) ~= "table" then return nil end
+  local values = {}
+  for index, name in ipairs(RX_MAP_FIELDS) do
+    local value = tonumber(map[name])
+    if value == nil then return nil end
+    values[index] = value
+  end
+  return values
+end
+
+local function rxMapMatches(w)
+  local values = rxMapValues(w)
+  if values == nil then return nil end
+  for index, want in ipairs(RX_MAP_ELRS) do
+    if values[index] ~= want then return false end
+  end
+  return true
+end
+
+-- The map as the pilot reads it: which wire channel each function sits on, one-based.
+local function rxMapText(values)
+  if values == nil then return nil end
+  local parts = {}
+  for index = 1, #values do parts[index] = tostring(values[index] + 1) end
+  return table.concat(parts, " ")
+end
+
+procs[#procs + 1] = {
+  id = "rxmap",
+  section = "radio",
+  title = function(i18n) return t(i18n, "step_rxmap", "Channel map") end,
+  -- Skippable like every other procedure here, and that is deliberate even though everything
+  -- after it depends on this map. A step that cannot be passed is a wall, and this one rests on a
+  -- READ: a board that does not answer the map accessor would strand the pilot on the first
+  -- screen with no way forward and nothing to do about it. The derived criterion keeps saying the
+  -- map is wrong, on the overview and on every later run, which is the honest pressure.
+  skippable = true,
+  isComplete = function(w) return rxMapMatches(w) end,
+  enter = function(w) w.data.rxMapError = nil end,
+  screens = {
+    {
+      id = "map",
+      build = function(w, ctx, area)
+        local children, i18n, y = ctx.children, ctx.i18n, area.y
+
+        y = y + w.paragraph(children, area.x, y, area.w,
+          t(i18n, "rxmap_intro", "The board has to be told which channel carries which function. This layout is the ELRS order, and every step after this one depends on it.")) + 6
+
+        local values = rxMapValues(w)
+        local match = rxMapMatches(w)
+
+        y = y + w.row(children, area.x, y, area.w,
+          t(i18n, "rxmap_board", "On the board"),
+          rxMapText(values) or t(i18n, "state_reading", "reading..."),
+          match == true and t(i18n, "marker_ok", "ok") or nil)
+
+        y = y + w.row(children, area.x, y, area.w,
+          t(i18n, "rxmap_wanted", "ELRS order"),
+          rxMapText(RX_MAP_ELRS),
+          match == false and t(i18n, "marker_will_change", "target") or nil)
+
+        if w.data.rxMapError then
+          w.paragraph(children, area.x, y + 6, area.w,
+            t(i18n, "write_failed", "The write did not complete.") .. " " .. tostring(w.data.rxMapError))
+        end
+      end,
+      nextLabel = function(i18n) return t(i18n, "rxmap_write", "Set map") end,
+      advance = function(w, done)
+        if rxMapMatches(w) == true then
+          done(true)
+          return
+        end
+        -- Cannot be READ is not the same as differs, and it must not be treated as one: writing a
+        -- map because the board did not answer would be writing on no evidence at all.
+        if rxMapValues(w) == nil then
+          w.data.rxMapError = "no_reply"
+          done(true)
+          return
+        end
+        local api = w.msp.api("rx_map")
+        if api == nil or type(api.buildWritePayload) ~= "function" then
+          w.data.rxMapError = "unavailable"
+          done(false)
+          return
+        end
+
+        local data = {}
+        for index, name in ipairs(RX_MAP_FIELDS) do data[name] = RX_MAP_ELRS[index] end
+
+        w.setBusy(t(w.i18n, "writing_title", "Writing"), t(w.i18n, "rxmap_writing", "Writing the channel map"))
+        Wlog.emit("info", "rxmap: writing ELRS order %s", rxMapText(RX_MAP_ELRS))
+        w.msp.sequence({
+          function(nextStep)
+            w.msp.write(api.writeCommand, api.buildWritePayload(data),
+              function(ok, err) nextStep(ok, err) end)
+          end,
+          function(nextStep) w.msp.commit(function(ok, err) nextStep(ok, err) end) end
+        }, function(ok, err)
+          Wlog.emit(ok and "info" or "error", "rxmap: board -> %s", ok and "ok" or tostring(err))
+          if not ok then
+            w.data.rxMapError = err or "msp"
+            done(false)
+            return
+          end
+          -- Read back rather than assume: every aux slot after this is derived from what the
+          -- board now holds, not from what was sent to it.
+          w.msp.read("rx_map", function(parsed)
+            w.data.rxMap = parsed
+            done(rxMapMatches(w) == true)
+          end)
+        end)
       end
     }
   }
@@ -481,13 +643,12 @@ procs[#procs + 1] = {
                 if chain.replied then return "-" end
                 return t(i18n, "state_reading", "reading...")
               end
-              -- How much of the travel the BOARD is given, which is the question the screen is
-              -- really asking. The span is measured against what a channel at full deflection
-              -- produces, so 100 means the board sees everything the stick can do.
-              local reach = math.floor(((axis.max - axis.min) / CHAIN_FULL_SPAN_US) * 100 + 0.5)
-              if reach < 0 then reach = 0 end
-              if reach > 999 then reach = 999 end
-              return tostring(axis.min) .. ".." .. tostring(axis.max) .. "  " .. tostring(reach) .. "%"
+              -- The two ends SEPARATELY, in the scale the configurator uses for the same
+              -- reading: 1500 microseconds is zero and every five above or below it is one
+              -- percent, so full deflection is about -100 and +100 there as well. One combined
+              -- span number hides the case that matters -- a stick that reaches one end and
+              -- falls short at the other reads as a healthy 80 percent and is not.
+              return tostring(usToPercent(axis.min)) .. " / " .. tostring(usToPercent(axis.max))
             end,
             -- Three states, because *arrives* and *arrives in full* are different findings and a
             -- screen that collapses them tells the pilot the chain is good when half of it is.
@@ -621,10 +782,6 @@ local function makeChannelProcedure(channel, order)
     local data = w.data
     data.picked = data.picked or {}
     data.found = data.found or {}
-    -- Where every switch rests is measured against a baseline, and the baseline is taken on
-    -- arrival rather than kept: a switch thrown while the pilot was somewhere else is not an
-    -- answer to a question that was not on screen.
-    if type(data.watch) == "table" then data.watch[channel] = nil end
     local info = w.radio.describeChannel(channel)
     data.found[channel] = info
 
@@ -691,43 +848,6 @@ local function makeChannelProcedure(channel, order)
   proc.screens = {
     {
       id = "assign",
-      -- The switch is named by MOVING it, on the channels whose picker is a plain list.
-      --
-      -- Where the answer is a position the radio's own picker already listens to the hardware.
-      -- Where the answer is the whole switch -- the profile channel, because all three of its
-      -- positions are spoken for -- the field is a list of names, and a list does not notice a
-      -- switch being thrown. That left the one picker in the assistant that cannot be answered
-      -- the way every other one can.
-      --
-      -- Nothing is rebuilt here: the field reads its value through a function, so it follows the
-      -- selection on the next refresh, and a rebuild under the pilot's finger is what costs the
-      -- press they are in the middle of making.
-      wakeup = function(w)
-        local entry = entryFor(w, channel)
-        if entry == nil or entry.needsPositions == nil then return end
-        if not wanted(w, entry) then return end
-
-        w.data.watch = w.data.watch or {}
-        local watch = w.data.watch[channel]
-        local first = watch == nil
-        -- The candidate list is built ONCE. Asking the radio for it costs a name lookup per
-        -- position of every switch it has, and this runs on every tick of the page.
-        if first then
-          watch = { switches = w.radio.switches(entry.needsPositions), at = {} }
-          w.data.watch[channel] = watch
-        end
-
-        for _, sw in ipairs(watch.switches) do
-          local now = w.radio.activePosition(sw.swsrc)
-          -- The first pass only records where everything rests. Without it every switch not
-          -- resting at its first position would read as one that had just been moved, and the
-          -- last one scanned would win a race the pilot never entered.
-          if not first and now ~= nil and watch.at[sw.swsrc] ~= nil and now ~= watch.at[sw.swsrc] then
-            w.data.picked[channel] = sw.swsrc
-          end
-          watch.at[sw.swsrc] = now
-        end
-      end,
       canAdvance = function(w)
         local entry = entryFor(w, channel)
         if entry == nil or not wanted(w, entry) then return true end
@@ -812,35 +932,43 @@ local function makeChannelProcedure(channel, order)
         -- normalised two of them away with `firstPositionOf`. So that channel gets a list of
         -- SWITCHES, filtered to the ones that can carry it.
         if entry.needsPositions then
-          local switches = w.radio.switches(entry.needsPositions)
-
-          if #switches == 0 then
-            w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
-              t(i18n, "no_switch_for_profiles",
-                "This radio has no three-position switch, so it cannot carry one profile per position."))
-            return
-          end
-
-          local values = { t(i18n, "pick_empty", "-") }
-          for _, sw in ipairs(switches) do values[#values + 1] = sw.name end
-
+          -- The radio's OWN source picker, filtered to switches.
+          --
+          -- This channel's answer is a whole switch rather than one of its positions -- all three
+          -- are spoken for, one per profile -- and EdgeTX has a control for exactly that: the
+          -- source picker lists one entry per switch, with the radio's own switch filter in its
+          -- menu, and it is answered the way every other picker on this radio is answered. A list
+          -- of names built here was a second-best imitation of it, and it behaved like one.
+          --
+          -- What it returns is the mix SOURCE, which is the very thing that goes into the input.
+          -- Everything else here is expressed in switch positions, so the two are translated at
+          -- this boundary and nowhere else.
           children[#children + 1] = {
-            type = "choice",
+            type = "source",
             x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
             title = pickerName(i18n, entry.key),
-            values = values,
+            filter = (SRC_SWITCH or 0xFFFFFFFF),
             get = function()
-              local picked = w.radio.firstPositionOf(w.data.picked[channel] or 0)
-              for index, sw in ipairs(switches) do
-                if sw.swsrc == picked then return index + 1 end
-              end
-              return 1
+              local picked = w.data.picked and w.data.picked[channel]
+              if picked == nil or picked == 0 then return 0 end
+              return w.radio.switchSource(picked) or 0
             end,
             set = function(value)
-              local sw = switches[(tonumber(value) or 1) - 1]
-              w.data.picked[channel] = sw and sw.swsrc or 0
+              local first = w.radio.switchFromSource(value)
+              w.data.picked[channel] = first or 0
             end
           }
+
+          -- The picker cannot be filtered to switches with enough positions -- the radio offers
+          -- them all -- so the shortfall is said in words rather than left as a Next that will
+          -- not press. Nothing is refused here; the gate on the step already does that.
+          local picked = w.data.picked and w.data.picked[channel]
+          if picked ~= nil and picked ~= 0
+             and (w.radio.switchPositionCount(picked) or 0) < entry.needsPositions then
+            w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
+              t(i18n, "pick_needs_three",
+                "This switch has two positions. The profile channel needs three, one per profile. Pick a three-position switch."))
+          end
           return
         end
 
@@ -1134,7 +1262,15 @@ procs[#procs + 1] = {
       end,
       build = function(w, ctx, area)
         local children, i18n, y = ctx.children, ctx.i18n, area.y
-        local verify = w.data.verify or {}
+
+        -- What this screen claims, in words, because the marker alone was read as a riddle.
+        --
+        -- *Arrives* meant "the number in the middle column came from the flight controller" --
+        -- which is the whole proof and says none of it. The row now names the aux slot the board
+        -- sees the channel on, and the marker says what the board would DO at the position the
+        -- switch is resting in right now.
+        y = y + w.paragraph(children, area.x, y, area.w,
+          t(i18n, "verify_intro", "These values come back from the flight controller, so the channel reaches it. On / off is what it would do at the switch position you are holding now.")) + 6
 
         -- The read-back must not require ENTERING the state it verifies. What has to be proven is
         -- that the switch reaches the channel and the board sees it on the right aux slot, and
@@ -1147,20 +1283,28 @@ procs[#procs + 1] = {
             if entry.aux ~= nil and type(live.channels) == "table" then
               local us = tonumber(live.channels[5 + entry.aux + 1])
               if us ~= nil then
-                local marker = t(i18n, "marker_arrives", "arrives")
+                -- Two words, and they are about the FUNCTION rather than about the wire. The wire
+                -- is proven by there being a number here at all, which the line above says once.
+                local marker = t(i18n, "marker_off", "off")
                 if entry.window and us >= entry.window.start and us <= entry.window["end"] then
-                  marker = t(i18n, "marker_in_window", "in window")
+                  marker = t(i18n, "marker_on", "on")
                 end
-                return tostring(us), marker
+                return tostring(us) .. " us", marker
               end
             elseif entry.role and entry.role.kind == "throttle" then
               return t(i18n, "note_motor_off", "motor off in every position"),
-                     t(i18n, "marker_written", "written")
+                     t(i18n, "marker_off", "off")
             end
             return "-", t(i18n, "marker_waiting", "waiting")
           end
-          y = y + w.row(children, area.x, y, area.w,
-            "CH" .. tostring(action.entry.channel),
+          -- The aux slot belongs in the NAME. It is the half of the claim the pilot cannot see
+          -- anywhere else: which slot the board reads this channel on, which is the thing the
+          -- whole procedure exists to make agree.
+          local label = "CH" .. tostring(action.entry.channel)
+          if action.aux ~= nil then
+            label = label .. " " .. string.format(t(i18n, "verify_aux", "-> AUX%d"), action.aux + 1)
+          end
+          y = y + w.row(children, area.x, y, area.w, label,
             function() local value = state() return value end,
             function() local _, marker = state() return marker end)
         end
@@ -1242,6 +1386,42 @@ local function modulePair()
          link.packetRateLabel, link.telemetryRatioLabel
 end
 
+-- One picker over a field the module itself described. Returns the height it took, or 0 where the
+-- walk has not produced that field -- a module that does not offer it gets no row rather than an
+-- empty one.
+local function linkChoice(w, children, area, y, kind, label, task)
+  local field = (kind == "rate") and task.getRateField() or task.getRatioField()
+  if type(field) ~= "table" or type(field.options) ~= "table" or #field.options == 0 then
+    return 0
+  end
+
+  local pickerW = 150
+  w.label(children, area.x, y + math.floor((w.ROW_H - 18) / 2), area.w - pickerW - 8,
+    label, w.font, COLOR_THEME_PRIMARY1)
+
+  children[#children + 1] = {
+    type = "choice",
+    x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
+    title = label,
+    values = field.options,
+    -- The module counts its options from zero and the control from one, and the offset lives
+    -- here rather than in the task: what goes over the wire is the module's own index.
+    get = function()
+      local current = (kind == "rate") and task.getRateField() or task.getRatioField()
+      local index = current and tonumber(current.selectedIndex) or 0
+      return index + 1
+    end,
+    set = function(value)
+      local index = (tonumber(value) or 1) - 1
+      local current = (kind == "rate") and task.getRateField() or task.getRatioField()
+      if current == nil or tonumber(current.selectedIndex) == index then return end
+      task.selectOption(kind, index)
+      w.rebuild()
+    end
+  }
+  return w.ROW_H
+end
+
 procs[#procs + 1] = {
   id = "link",
   section = "radio",
@@ -1308,8 +1488,9 @@ procs[#procs + 1] = {
           return
         end
 
-        y = y + w.paragraph(children, area.x, y, area.w,
-          t(i18n, "link_intro", "The board does not measure the link, it is told what it is. Where the two disagree, telemetry is either starved or held back.")) + 6
+        -- WHY this matters is in the help, not on the screen. The rule the help file already
+        -- states: every explanatory line taken out of a body is a control row gained, and this
+        -- screen carries five of them plus two pickers.
 
         local statusKey, statusDefault = task.getStatus()
         y = y + w.findingRow(children, area.x, y, area.w,
@@ -1343,6 +1524,18 @@ procs[#procs + 1] = {
         end
         y = y + w.row(children, area.x, y, area.w, t(i18n, "link_module", "Transmitter module"), moduleText, nil)
 
+        -- And the pilot may simply SAY what the link should run at.
+        --
+        -- The two sync buttons below answer "which side wins", which is not the same question as
+        -- "what do I want" -- and the option lists these pickers offer are the MODULE's own, read
+        -- off it during the walk rather than written down here. A rate this firmware does not
+        -- offer therefore cannot be picked, which is the only way a list like this stays true
+        -- across module versions.
+        y = y + linkChoice(w, children, area, y, "rate",
+          t(i18n, "link_pick_rate", "Packet rate"), task)
+        y = y + linkChoice(w, children, area, y, "ratio",
+          t(i18n, "link_pick_ratio", "Telemetry ratio"), task)
+
         -- The two directions are one finding with two equally weighted actions, for the same
         -- reason every finding on this path is: which side is right is the PILOT's answer. A
         -- module set deliberately to a slow rate for range is not a board that needs correcting,
@@ -1375,8 +1568,15 @@ procs[#procs + 1] = {
               end }
           })
 
-        w.paragraph(children, area.x, y + 6, area.w,
-          t(i18n, "link_note", "Set module writes the transmitter to what the board expects. Set board writes the board to what the transmitter runs."))
+        -- What the two buttons do is in the HELP, not on the screen, and that is the second
+        -- attempt rather than the first choice.
+        --
+        -- Measured on the narrow radios: below the row the sentence landed on the next page, and
+        -- moved above the row it landed on the previous one -- the cutter packs whatever fits and
+        -- a gap between two elements is where it prefers to cut. A grouping flag was written to
+        -- forbid that cut and did not take effect; rather than ship a mechanism that does not do
+        -- its job, it is out again and the sentence is where it costs no height at all. The help
+        -- is one press and the button labels say their direction on their own.
       end
     }
   }

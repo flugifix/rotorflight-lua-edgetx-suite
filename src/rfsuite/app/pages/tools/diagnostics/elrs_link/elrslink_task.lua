@@ -760,6 +760,39 @@ function M.start(mode)
     return true
 end
 
+-- What the walk found, so a caller can offer the CHOICE rather than only the two syncs.
+--
+-- Both sync modes answer the question "which side wins"; neither lets the pilot say what the link
+-- should actually run at, and the option list needed for that is already here -- it was read off
+-- the module and then used only to compare. Returned as-is rather than copied: the caller reads
+-- it, and the walk owns it.
+function M.getRateField() return rateField end
+function M.getRatioField() return ratioField end
+
+-- Write ONE option of one field, without the comparison the sync modes make.
+--
+-- The same queue and the same state the sync modes use, so the write is paced, reported and
+-- completed identically -- the difference is only that the value comes from the pilot instead of
+-- from the other side of the link. `index` is the module's own zero-based option index, which is
+-- what the parameter frame carries.
+function M.selectOption(kind, index)
+    local field = (kind == "rate") and rateField or ratioField
+    if type(field) ~= "table" or type(index) ~= "number" then return false end
+
+    local label = field.options and field.options[index + 1] or nil
+    clearPendingWrites()
+    pendingWriteCount = 1
+    pendingWrites[1] = { fieldKind = kind, fieldId = field.id, fieldName = field.name,
+                         value = index, label = label }
+
+    manualSyncMode = SYNC_MODE_OFF
+    taskComplete = false
+    state = "write"
+    nextActionAt = 0
+    setStatus("status_writing_elrs", "Writing ELRS...")
+    return true
+end
+
 function M.getStatus() return statusI18nKey, statusText end
 function M.isRunning() return not taskComplete end
 function M.getMode() return manualSyncMode end
