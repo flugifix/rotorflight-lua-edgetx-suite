@@ -93,7 +93,8 @@ return {
         throttle = "Gas",
         telemetry = "Telemetrie",
         rpm = "Drehzahl",
-        esc_tools = "ESC-Werkzeuge"
+        esc_tools = "ESC-Werkzeuge",
+        motor_override = "Motor-Override"
       },
       power = { name = "Power" },
       battery = { name = "Batterie" },
@@ -1038,7 +1039,18 @@ return {
         safety_warning_title = "Sicherheitswarnung",
         remove_blades_warning = "Bitte entfernen Sie Haupt- und Heckrotorblätter vor der ESC-Konfiguration!",
         loading_data = "Lade Regler-Parameter...",
-        saving_data = "Speichere Regler-Parameter..."
+        saving_data = "Speichere Regler-Parameter...",
+        title_motor_override = "Motor-Override",
+        motor = "Motor",
+        motor_override_note = "Blätter ab und Modell gesichert. Der Motor dreht, sobald das Gas die Null verlässt.",
+        motor_override_enable = "Motor-Override aktivieren",
+        motor_override_enable_msg = "Der Flugcontroller steuert den Motor direkt an. Entfernen Sie die Blätter, sichern Sie das Modell und treten Sie zurück.",
+        motor_override_disable = "Motor-Override deaktivieren",
+        motor_override_disable_msg = "Gibt den Motor an den Flugcontroller zurück.",
+        motor_override_throttle = "Gas",
+        loading_motor_override = "Lese Motor-Override...",
+        help_title_motor_override = "Motor-Override-Hilfe",
+        help_p1_motor_override = "Steuert einen Motor direkt an, mit abgenommenen Blättern, um seine Drehrichtung zu prüfen oder einem Regler den Gasbereich beizubringen. Der Flugcontroller verweigert das Override im scharfen Zustand und stoppt den Motor eine Sekunde nach dem letzten Befehl; das Verlassen dieser Seite stoppt ihn also."
       },
       setup_radio_config = {
         title = "Fernsteuerung",
