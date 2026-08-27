@@ -214,9 +214,9 @@ function M.appendSectionHeader(children, x, y, w, title)
 end
 
 function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow, rowH)
-  rowH = rowH or 44
   local ctrlH = (lvgl and lvgl.UI_ELEMENT_HEIGHT) or 32
-  local fontH = (lvgl and lvgl.LCD_SCALE and math.floor(21 * lvgl.LCD_SCALE)) or 21
+  rowH = rowH or math.max(44, ctrlH + 12)
+  local fontH = (lvgl and lvgl.LCD_SCALE and math.floor(21 * lvgl.LCD_SCALE + 0.5)) or 21
   local labelY = y + math.floor((rowH - fontH) / 2)
   local ctrlY = y + math.floor((rowH - ctrlH) / 2)
   local valueW = math.floor(w * 0.50)
@@ -288,7 +288,8 @@ function M.buildSimplePage(ctx, pageKey, sectionKey, sectionFallback, rows)
   M.appendSectionHeader(children, x, y, w, M.t(i18n, pageKey, sectionKey, sectionFallback))
 
   local rowY = y + 46
-  local rowH = 44
+  local ctrlH = (lvgl and lvgl.UI_ELEMENT_HEIGHT) or 32
+  local rowH = math.max(44, ctrlH + 12)
   for i = 1, #rows do
     local row = rows[i]
     local yOffset = (i - 1) * rowH

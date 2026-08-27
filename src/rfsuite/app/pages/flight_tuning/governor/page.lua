@@ -493,7 +493,7 @@ local function appendHorizontalFields(children, x, y, w, labelText, rows, i18n)
 	local rowH = (Controls and Controls.HORIZONTAL_ROW_H) or 78
 	local headerY = y + 4
 	local itemY = y + 26
-	local groupLabelY = itemY + math.floor((40 - 20) / 2)
+	local groupLabelY = Controls.labelY(itemY, Controls.CTRL_H)
 
 	children[#children + 1] = {
 		type = "label",
