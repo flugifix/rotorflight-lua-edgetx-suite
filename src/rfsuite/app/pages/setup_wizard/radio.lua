@@ -23,10 +23,9 @@ M.BASELINE = {
   [8] = "rescue"
 }
 
--- The four sticks, as the radio numbers them, against the wire channel the baseline puts them
--- on. `defaultChannel` answers with the channel THIS radio believes a stick belongs on, which
--- is the second signal every mapping check needs: a check that only watches for movement
--- attributes whatever moved to whatever it asked for.
+-- The four controls, in the firmware's own numbering, against the wire channel the baseline puts
+-- them on. The numbering is the one the firmware's stick sources use, so a reply that arrives
+-- ordered by function meets this table without a label in between.
 M.STICKS = {
   { stick = 3, channel = 1, key = "aileron" },
   { stick = 1, channel = 2, key = "elevator" },
@@ -105,16 +104,23 @@ end
 -- carries RETA, and this layout is roll, pitch, collective, yaw -- so on a fresh model two of the
 -- four inputs have the wrong source and the assistant is what puts them right.
 --
--- `stick` is a FUNCTION, not a label: 0 yaw, 1 pitch, 2 collective, 3 roll, in the numbering the
--- radio's own `defaultChannel` speaks. The names beside it are what the pilot will read and
--- nothing is resolved from them -- `Ail` is EdgeTX's default label for one physical stick in one
--- stick mode, and on a radio set up differently it means another stick or does not exist. What
--- has to come out right is the RESULT: roll on channel one, whatever it is called here.
+-- `stick` is a FUNCTION, not a label: 0 yaw, 1 pitch, 2 collective, 3 roll, which is the order
+-- the firmware's own stick sources are in. The names beside it are what the pilot will read and
+-- nothing is resolved from them -- `Ail` is a label the pilot may edit, and on a radio set up
+-- differently it means another stick or does not exist. What has to come out right is the
+-- RESULT: roll on channel one, whatever it is called here.
+--
+-- `field` is the name the FIRMWARE knows a control by, and it is deliberately not one of the
+-- names beside it. EdgeTX generates it from the target's own hardware description and its own
+-- documentation says so in as many words: the names `getFieldInfo` takes are not the names shown
+-- on the radio's menus. So it is neither the label the pilot edits nor one that moves when the
+-- stick mode changes -- which is exactly what the two name columns here ARE, and why nothing is
+-- ever resolved through them.
 M.STICK_INPUTS = {
-  { input = 0, channel = 1, stick = 3, inputName = "Ail", channelName = "Ail" },
-  { input = 1, channel = 2, stick = 1, inputName = "Ele", channelName = "Ele" },
-  { input = 2, channel = 3, stick = 2, inputName = "Col", channelName = "Col" },
-  { input = 3, channel = 4, stick = 0, inputName = "Rud", channelName = "Rud" }
+  { input = 0, channel = 1, stick = 3, field = "ail", inputName = "Ail", channelName = "Ail" },
+  { input = 1, channel = 2, stick = 1, field = "ele", inputName = "Ele", channelName = "Ele" },
+  { input = 2, channel = 3, stick = 2, field = "thr", inputName = "Col", channelName = "Col" },
+  { input = 3, channel = 4, stick = 0, field = "rud", inputName = "Rud", channelName = "Rud" }
 }
 
 local function callGlobal(name, ...)
@@ -177,14 +183,6 @@ function M.getOutput(channel)
   local ok, out = pcall(fn, channel - 1)
   if not ok or type(out) ~= "table" then return nil end
   return out
-end
-
--- Which wire channel this radio puts a stick on, 1-based, or nil where the radio does not
--- answer for it.
-function M.stickChannel(stick)
-  local value = tonumber(callGlobal("defaultChannel", stick))
-  if value == nil then return nil end
-  return value + 1
 end
 
 -- A switch position, as the radio's own picker returns it. Positions are grouped three to a
@@ -560,25 +558,34 @@ local function isInputSource(id)
   return M.inputIndexOfSource(id) ~= nil
 end
 
--- The source id of a control, resolved through the RADIO'S OWN mapping rather than through a name.
+-- The source id of a control, asked of the RADIO and of nothing else.
 --
--- `defaultChannel(f)` answers which channel this radio puts function `f` on by default, and on a
--- model whose inputs are still in that order the input at that channel carries exactly that
--- control. So the pair gives function -> source id with no label anywhere in the chain, which is
--- what makes it survive a different stick mode or a renamed analog.
+-- The firmware's stick sources are SEMANTIC: reading one applies the stick mode itself, so the id
+-- that stands for roll is the same id whatever mode the radio is in, and there is nothing here to
+-- correct for. `getFieldInfo` hands that id over against a name the firmware generated from the
+-- target description -- see `field` on the table above.
 --
--- It is read ONCE, before anything is written, because the first write destroys the arrangement it
--- reads from.
+-- CORRECTED. This used to go through the MODEL: it asked which channel a function sits on by
+-- default and then read the source out of the input sitting at that channel. That is only true
+-- while the inputs are still in the radio's own default order, and on a model already laid out
+-- for a flight controller they are not -- the two orders differ by exactly the roll/yaw pair. So
+-- every lookup landed one input away and the assistant wrote roll and yaw into each other's
+-- inputs. Measured on a transmitter model that was correct before the run and wrong after it, and
+-- invisible until then because the run that established this step used a factory-fresh model,
+-- where the two orders agree.
+--
+-- The general form is worth keeping: a question about the RADIO must not be answered out of the
+-- MODEL, because the model is the thing being changed.
 function M.controlSources()
   local found = {}
   for _, entry in ipairs(M.STICK_INPUTS) do
-    local channel = M.stickChannel(entry.stick)
-    if channel ~= nil then
-      local input = M.getInput(channel - 1, 0)
-      local source = input and tonumber(input.source) or nil
-      if source ~= nil and not isInputSource(source) then
-        found[entry.stick] = source
-      end
+    local info = callGlobal("getFieldInfo", entry.field)
+    local id = type(info) == "table" and tonumber(info.id) or nil
+    -- Used only where the radio agrees the source exists, and never where it resolves to an
+    -- INPUT -- that is the shape the old derivation produced, and an input feeding itself is
+    -- what it looked like on the screen.
+    if id ~= nil and not isInputSource(id) and callGlobal("getSourceName", id) ~= nil then
+      found[entry.stick] = id
     end
   end
   return found
