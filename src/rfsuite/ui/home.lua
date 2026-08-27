@@ -1614,16 +1614,25 @@ function M.buildUI()
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
     local title = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
 
-    -- The compile count rides along with the label that is already there, so a start that has
-    -- files to compile says so instead of looking stuck. No string of its own to translate.
+    -- Two things are counted while this screen stands, and only one of them can own the bar.
+    -- The compile pass runs first, happens only after an install or a version change, and is by
+    -- far the longer of the two, so it takes the bar for as long as it lasts and names itself in
+    -- the message line. It used to ride along as a bare "47/312" behind the title, which counts
+    -- files that mean nothing to whoever is holding the radio and leaves the message reading
+    -- "Connecting" while nothing is being connected -- the pair of them reads as a stall rather
+    -- than as work.
     local compileDone = state.precompileDone or 0
     local compileTotal = state.precompileTotal or 0
-    if compileTotal > 0 and compileDone < compileTotal then
-      title = title .. " " .. tostring(compileDone) .. "/" .. tostring(compileTotal)
+    local preparing = compileTotal > 0 and compileDone < compileTotal
+
+    local message
+    if preparing then
+      message = state.i18n and state.i18n.t and state.i18n.t("app.preparing") or "Preparing suite"
+    else
+      message = ONCONNECT_TEXT[state.startTaskName or ""] or
+                (state.i18n and state.i18n.t and state.i18n.t("app.connecting")) or
+                "Connecting"
     end
-    local message = ONCONNECT_TEXT[state.startTaskName or ""] or
-                    (state.i18n and state.i18n.t and state.i18n.t("app.connecting")) or
-                    "Connecting"
     local screenW = LCD_W or 320
     local screenH = LCD_H or 240
 
@@ -1672,13 +1681,18 @@ function M.buildUI()
     -- that has not started. The track is the theme's inactive colour rather than its accent, so
     -- that an empty bar cannot be mistaken for a full one -- the failure the page overlay's own
     -- track had until this series.
-    local total = state.startTotal or 0
+    --
+    -- The compile pass fills the same bar while it is the phase being shown. Its denominator
+    -- grows for as long as the tree is still being walked, but nothing is compiled before the
+    -- walk is through, so the numerator is zero throughout it and the fill never runs backwards.
+    local done = preparing and compileDone or (state.startDone or 0)
+    local total = preparing and compileTotal or (state.startTotal or 0)
     if total > 0 then
       local barW = math.min(420, math.max(200, screenW - 120))
       local barH = 12
       local barX = math.floor((screenW - barW) / 2)
       local barY = math.floor(screenH / 2) + 26
-      local fillW = math.floor((barW - 4) * math.min(1, (state.startDone or 0) / total) + 0.5)
+      local fillW = math.floor((barW - 4) * math.min(1, done / total) + 0.5)
 
       children[#children + 1] = {
         type = "rectangle",

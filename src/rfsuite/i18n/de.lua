@@ -4,6 +4,7 @@ return {
     saving = "Speichere...",
     erasing = "Lösche...",
     connecting = "Verbinde",
+    preparing = "Bereite Suite vor",
     onconnect = {
       apiversion = "Lese API-Version",
       uid = "Lese Seriennummer",
