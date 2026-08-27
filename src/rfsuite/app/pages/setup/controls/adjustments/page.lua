@@ -766,7 +766,7 @@ local function startLoad(requestRebuild)
   return true
 end
 
-local function queueAdjustmentsWrite(requestRebuild)
+local function queueAdjustmentsWrite(requestRebuild, i18n)
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -806,8 +806,8 @@ local function queueAdjustmentsWrite(requestRebuild)
     end
     if lvgl and lvgl.message then
       lvgl.message({
-        title = "Error",
-        message = tostring(reason or "Save failed")
+        title = pageText(i18n, "save_error_title", "Error"),
+        message = tostring(reason or pageText(i18n, "save_error_message", "Save failed"))
       })
     end
   end
@@ -833,8 +833,8 @@ local function queueAdjustmentsWrite(requestRebuild)
             end
             if lvgl and lvgl.message then
               lvgl.message({
-                title = "Saved",
-                message = "Adjustment configuration saved"
+                title = pageText(i18n, "saved_title", "Saved"),
+                message = pageText(i18n, "saved_message", "Adjustment configuration saved")
               })
             end
           end,
@@ -1795,12 +1795,12 @@ function M.build(ctx)
 end
 
 function M.onSave(ctx)
-  local ok, err = queueAdjustmentsWrite(ctx and ctx.requestRebuild)
+  local ok, err = queueAdjustmentsWrite(ctx and ctx.requestRebuild, ctx and ctx.i18n)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
-        message = tostring(err or "MSP write failed")
+        message = tostring(err or pageText(ctx and ctx.i18n, "save_error_message", "Save failed"))
       })
     end
     return false

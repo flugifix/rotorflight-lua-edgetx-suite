@@ -306,6 +306,7 @@ local SAVE_TEXT = {
   timeout_message = "@i18n(app.save.timeout_message)@",
   failed_title    = "@i18n(app.save.failed_title)@",
   failed_message  = "@i18n(app.save.failed_message)@",
+  eeprom_pending  = "@i18n(app.save.eeprom_pending)@",
 }
 
 -- getTime() ticks, at 10 ms each. How long a notice reporting a SUCCESSFUL save stays up
@@ -1424,7 +1425,7 @@ local function onSave()
           pcall(Log.emit, "rfsuite", "page.onSave failed: " .. tostring(shouldRebuild), "error", true)
           if lvgl and lvgl.message then
             lvgl.message({
-              title = "Save",
+              title = SAVE_TEXT.failed_title,
               message = tostring(shouldRebuild)
             })
           end
@@ -1440,8 +1441,8 @@ local function onSave()
           pcall(Log.emit, "rfsuite", "EEPROM write queue failed: " .. tostring(errEeprom), "warn", true)
           if lvgl and lvgl.message then
             lvgl.message({
-              title = "Save",
-              message = "Saved, but EEPROM write is pending: " .. tostring(errEeprom)
+              title = SAVE_TEXT.saved_title,
+              message = SAVE_TEXT.eeprom_pending .. " " .. tostring(errEeprom)
             })
           end
         end
