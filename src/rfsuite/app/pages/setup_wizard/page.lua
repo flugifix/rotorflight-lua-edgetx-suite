@@ -304,7 +304,14 @@ function wiz.advance()
   end
   local screen = wiz.screen()
   if screen and type(screen.advance) == "function" then
+    -- Both ends of the press, because only the pair is readable. A screen that refuses to advance
+    -- looks exactly like a screen whose button does nothing, and the difference between them is
+    -- the `ok` below -- which was invisible until a walk sat on one screen pressing forward.
+    Wlog.emit("debug", "advance %s/%s", tostring(wiz.procedure() and wiz.procedure().id),
+      tostring(screen.id))
     screen.advance(wiz, function(ok)
+      Wlog.emit("debug", "advance %s/%s -> %s", tostring(wiz.procedure() and wiz.procedure().id),
+        tostring(screen.id), tostring(ok))
       wiz.clearBusy()
       if ok ~= false then wiz.advanceUnconditional() end
     end)

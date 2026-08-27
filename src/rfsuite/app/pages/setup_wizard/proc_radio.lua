@@ -1105,12 +1105,23 @@ local function stepOf(us)
   return step
 end
 
+-- Every channel the run WANTS gets a row here, including one with no switch behind it.
+--
+-- It used to build a row only where a switch had been picked, so a required channel the pilot
+-- skipped -- or never reached -- simply was not on the write screen. No row, no marker, no
+-- complaint: the screen listed what it was about to do and the missing channel was not part of
+-- that list, which is indistinguishable from a screen that has nothing to say about it. A pilot
+-- reported the throttle channel's mixer as never created, and this is how a channel goes missing
+-- without anything going wrong.
+--
+-- A row that says *blocked* is the whole fix. The write loop already skips a blocked action, so
+-- nothing about what is written changes -- only what is SHOWN.
 local function plannedActions(w)
   local actions = {}
   for _, entry in ipairs(w.radio.CHANNELS) do
     if wanted(w, entry) then
       local swsrc = w.data.picked and w.data.picked[entry.channel]
-      if swsrc ~= nil and swsrc ~= 0 then
+      do
         local role = w.radio.firstRole(entry)
         local action = {
           entry = entry,
@@ -1153,6 +1164,9 @@ end
 local function actionBlocked(action)
   local role = action.role
   if role == nil then return true end
+  -- No switch, nothing to write. This is the case that used to be absent from the list rather
+  -- than blocked in it.
+  if action.swsrc == nil or action.swsrc == 0 then return true end
   -- Both surfaces index the same array in the firmware, so both take the same bound, and
   -- neither write path enforces it. A field past the end is not refused and not clamped;
   -- it is stored and then read out of bounds on every evaluation.
@@ -1201,6 +1215,9 @@ procs[#procs + 1] = {
 
         for _, action in ipairs(w.data.actions or {}) do
           local target = tostring(action.switchName or "?")
+          if action.swsrc == nil or action.swsrc == 0 then
+            target = t(i18n, "no_switch", "no switch chosen")
+          end
           local role = action.role
           if role and role.kind == "throttle" then
             target = target .. "  " .. t(i18n, "note_motor_off", "motor off in every position")

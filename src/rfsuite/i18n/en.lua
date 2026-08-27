@@ -1120,6 +1120,7 @@ return {
         marker_in_window = "in window",
         marker_waiting = "waiting",
         marker_ready = "ready",
+        no_switch = "no switch chosen",
         marker_blocked = "blocked",
         marker_written = "written",
         marker_open = "not run",

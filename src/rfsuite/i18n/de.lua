@@ -1120,6 +1120,7 @@ return {
         marker_in_window = "im Fenster",
         marker_waiting = "warte",
         marker_ready = "bereit",
+        no_switch = "kein Schalter gewählt",
         marker_blocked = "blockiert",
         marker_written = "geschrieben",
         marker_open = "nicht gelaufen",
