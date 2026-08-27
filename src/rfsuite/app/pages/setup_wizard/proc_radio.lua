@@ -976,7 +976,12 @@ local function makeChannelProcedure(channel, order)
           children[#children + 1] = {
             type = "source",
             x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
-            title = pickerName(i18n, entry.key),
+            -- NO `title`. The source picker does not have one: `LvglWidgetChoice` inherits
+            -- `LvglTitleParam` and `LvglWidgetSourcePicker` does not, so the property falls
+            -- through to the base and the build raises *Invalid property 'title'* on the radio.
+            -- It came across unnoticed when this field stopped being a choice, and neither the
+            -- gate nor the layout bench can see it -- the one is a compiler and the other never
+            -- reaches a real LVGL object.
             filter = (SRC_SWITCH or 0xFFFFFFFF),
             get = function()
               local picked = w.data.picked and w.data.picked[channel]
@@ -1032,7 +1037,7 @@ local function makeChannelProcedure(channel, order)
           children[#children + 1] = {
             type = "source",
             x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
-            title = t(i18n, "pick_governor", "Governor via"),
+            -- No `title` here either; see the note on the profile channel's picker.
             filter = (SRC_SWITCH or 0xFFFFFFFF),
             get = function()
               local picked = w.data.pickedGov[channel]
