@@ -61,8 +61,28 @@ local ui = {
   data = nil,
   requestRebuild = nil,
   requestClose = nil,
-  entered = nil
+  entered = nil,
+  -- Which section this entry point owns, or `nil` for the whole path. The assistant is reachable
+  -- from more than one place in the menu and a section entry is NOT a second assistant: the same
+  -- procedures, the same criteria, the same store -- only the list and the walk are bounded.
+  scope = nil
 }
+
+-- The menu entry the pilot came in through decides the scope. It is read off the menu rather than
+-- stored, because the page module outlives a visit and the next one may arrive through a
+-- different entry.
+local SCOPE_BY_MENU = {
+  setup_wizard_radio_page = "radio",
+  setup_wizard_board_page = "board"
+}
+
+local function applyScope(ctx)
+  local menu = type(ctx) == "table" and ctx.menu or nil
+  if type(menu) ~= "table" or type(menu.getCurrentMenuId) ~= "function" then return end
+  local ok, menuId = pcall(menu.getCurrentMenuId)
+  if not ok then return end
+  ui.scope = SCOPE_BY_MENU[menuId]
+end
 
 local function pageText(i18n, key, fallback)
   if t then
@@ -185,6 +205,9 @@ end
 
 function wiz.goToProcedure(index, screenIndex)
   if not ui.procedures then return end
+  -- A scoped entry can run out of procedures where the whole path never does, so "nowhere to go"
+  -- is a real answer here and lands on the list rather than on procedure one.
+  if index == nil then wiz.showOverview() return end
   if index < 1 then index = 1 end
   if index > #ui.procedures then index = #ui.procedures end
   ui.view = "run"
@@ -197,6 +220,22 @@ function wiz.goToProcedure(index, screenIndex)
   wiz.rebuild()
 end
 
+-- Does this procedure belong to the entry point the pilot came in through? Everything that walks
+-- or lists the path asks this, and nothing else knows about the scope.
+local function inScope(proc)
+  if proc == nil then return false end
+  if ui.scope == nil then return true end
+  return proc.section == ui.scope
+end
+
+local function lastScopedIndex()
+  local list = ui.procedures or {}
+  for index = #list, 1, -1 do
+    if inScope(list[index]) then return index end
+  end
+  return nil
+end
+
 -- Forward through the path, passing over what the machine says is done and what the pilot said to
 -- leave. That IS the quick pass -- there is no mode to switch on, and a first-time run passes over
 -- nothing because nothing is satisfied yet.
@@ -204,10 +243,12 @@ local function nextOpenIndex(from)
   local list = ui.procedures or {}
   for index = from, #list do
     local proc = list[index]
-    if proc.counted == false then return index end
-    if wiz.isComplete(proc) ~= true and not wiz.isSkipped(proc) then return index end
+    if inScope(proc) then
+      if proc.counted == false then return index end
+      if wiz.isComplete(proc) ~= true and not wiz.isSkipped(proc) then return index end
+    end
   end
-  return #list
+  return lastScopedIndex()
 end
 
 wiz.nextOpenIndex = nextOpenIndex
@@ -289,7 +330,9 @@ end
 function wiz.isLast()
   local proc = wiz.procedure()
   if ui.procedures == nil or proc == nil then return false end
-  return ui.procIndex >= #ui.procedures
+  local last = lastScopedIndex()
+  if last == nil then return false end
+  return ui.procIndex >= last
     and ui.screenIndex >= #(proc.screens or {})
     and ui.pageIndex >= (ui.pageCount or 1)
 end
@@ -682,7 +725,7 @@ local function buildOverview(ctx, x, top, w)
 
   local section = nil
   for index, proc in ipairs(ui.procedures or {}) do
-    if proc.counted ~= false then
+    if proc.counted ~= false and inScope(proc) then
       if proc.section ~= section then
         -- Air before a heading, but not above the first one: without it the second section title
         -- is drawn flush on the divider of the row above and reads as part of that row.
@@ -818,6 +861,7 @@ end
 
 function M.wakeup(ctx)
   ensureDeps()
+  applyScope(ctx)
   ensureLoaded()
   if type(ctx) == "table" then
     if type(ctx.requestRebuild) == "function" then ui.requestRebuild = ctx.requestRebuild end
@@ -846,6 +890,7 @@ end
 
 function M.build(ctx)
   ensureDeps()
+  applyScope(ctx)
   ensureLoaded()
 
   ui.requestRebuild = ctx and ctx.requestRebuild or nil
@@ -957,6 +1002,7 @@ function M.onClose()
   ui.view = "overview"
   ui.contentBottom = nil
   ui.loaded = false
+  ui.scope = nil
   Common = nil
   Controls = nil
   LoadingOverlay = nil

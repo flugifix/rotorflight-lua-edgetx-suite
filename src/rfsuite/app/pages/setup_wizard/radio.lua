@@ -191,6 +191,17 @@ end
 local SWSRC_FIRST_SWITCH = 1
 local POSITIONS_PER_SWITCH = 3
 
+-- Trim, as an input carries it. The firmware stores it inverted against what Lua reads and
+-- writes, so the value a script sees is the one the radio's own input editor shows: 0 is the
+-- trim of the input's own stick, and -1 is no trim at all. Anything below -1 names another
+-- stick's trim.
+--
+-- Every input this assistant lays out gets -1. A flight controller holds the model itself and a
+-- trim under it moves the neutral the controller was calibrated against, so a trim that is one
+-- click off is a craft that flies away from centre and a stick position that no longer means
+-- what the board was told it means.
+M.TRIM_OFF = -1
+
 M.POSITION_UP = 0
 M.POSITION_MIDDLE = 1
 M.POSITION_DOWN = 2
@@ -278,6 +289,22 @@ function M.switchPositionCount(swsrc)
   end
   if count == 0 then return nil end
   return count
+end
+
+-- Which position this switch is resting in right now, as an offset from its first. The firmware
+-- answers per POSITION and not per switch, so the three are asked in turn and the one that is
+-- true is the answer. `nil` where the radio does not answer for this switch at all.
+--
+-- It is what lets a pilot name a switch by moving it. The radio's own picker already does that
+-- for a position; a channel that needs the whole switch is asked with a plain list, and a list
+-- does not listen to the hardware unless something makes it.
+function M.activePosition(swsrc)
+  local first = M.firstPositionOf(swsrc)
+  if first == nil then return nil end
+  for offset = 0, POSITIONS_PER_SWITCH - 1 do
+    if callGlobal("getSwitchValue", first + offset) == true then return offset end
+  end
+  return nil
 end
 
 -- What a switch position produces on a channel the assistant wrote itself: full deflection at
@@ -385,6 +412,7 @@ function M.channelFooting(entry)
 
   local line = M.getInput(entry.input, 0)
   if line == nil or line.inputName ~= entry.inputName then return false end
+  if tonumber(line.trimSource) ~= M.TRIM_OFF then return false end
   local output = M.getOutput(entry.channel)
   if output == nil or output.name ~= entry.channelName then return false end
   return true
@@ -437,7 +465,7 @@ local function writeChannelInput(entry, swsrc)
     curveValue = 0,
     scale = 0,
     side = 3,
-    trimSource = 0,
+    trimSource = M.TRIM_OFF,
     flightModes = 0
   }
 
@@ -520,14 +548,19 @@ end
 -- is derived rather than looked up by name because an input's NAME is something the pilot edits,
 -- and a source resolved from a name would move when they rename it.
 --
--- The derivation carries its own control: the answer is only used when the radio agrees that the
--- source exists. Where it does not, nothing is written.
+-- The bound is the control, and it is deliberately NOT a check that the radio knows the source.
+-- The firmware only reports an input source as available while that input carries at least one
+-- line, so asking for the source of an EMPTY input answers nothing -- which is precisely the
+-- state every channel is in before this assistant lays it out. Using that as the control refused
+-- the write on exactly the models the assistant exists for, and reported it as a channel that
+-- could not be read rather than as one that is not there yet.
 local MIXSRC_FIRST_INPUT = 1
+local MAX_INPUTS = 32
 
 function M.inputSource(inputIndex)
-  local id = MIXSRC_FIRST_INPUT + (tonumber(inputIndex) or 0)
-  if callGlobal("getSourceName", id) == nil then return nil end
-  return id
+  inputIndex = tonumber(inputIndex)
+  if inputIndex == nil or inputIndex < 0 or inputIndex >= MAX_INPUTS then return nil end
+  return MIXSRC_FIRST_INPUT + inputIndex
 end
 
 -- Is this source id one of the INPUTS? The input block is the first one, so input n is id n + 1,
@@ -647,7 +680,12 @@ function M.describeStick(entry, cache)
   info.channelNameNow = output and output.name or nil
   info.nameOk = (info.inputName == entry.inputName and info.channelNameNow == entry.channelName)
 
-  info.ok = info.sourceOk and info.mixOk and info.nameOk
+  -- And so is the trim, for the same reason: a stick input left on its own trim is not the layout
+  -- this assistant writes, and a criterion that ignores it would report a model as done while the
+  -- trims are still live under the flight controller.
+  info.trimOk = (first ~= nil and tonumber(first.trimSource) == M.TRIM_OFF)
+
+  info.ok = info.sourceOk and info.mixOk and info.nameOk and info.trimOk
   return info
 end
 
@@ -680,7 +718,9 @@ function M.writeStick(entry, cache)
     curveValue = existing and existing.curveValue or 0,
     scale = existing and existing.scale or 0,
     side = existing and existing.side or 3,
-    trimSource = existing and existing.trimSource or 0,
+    -- The one field of an existing input that is NOT carried across. The rest is the pilot's
+    -- tuning of that stick and survives; the trim is a setting this layout has an opinion about.
+    trimSource = M.TRIM_OFF,
     flightModes = 0
   }
 

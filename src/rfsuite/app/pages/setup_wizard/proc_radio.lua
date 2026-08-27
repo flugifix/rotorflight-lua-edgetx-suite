@@ -27,12 +27,33 @@ local Common = loadModule("app/pages/settings/common.lua")
 local M_MSP = loadModule("app/pages/setup_wizard/msp.lua")
 local t = Common and Common.pageT("setup_wizard") or function(_, _, fb) return fb end
 
+-- The link procedure drives the suite's own ELRS task and shows the status it reports, so it
+-- reads that task's translations rather than restating them. The key there is a VARIABLE -- the
+-- task decides which state it is in -- which is why this one lookup does not follow the literal
+-- key rule the rest of this file does; the task supplies its own English default beside it, and
+-- that default is what a locale without the key falls back to.
+local tLink = Common and Common.pageT("diagnostics_elrs_link") or function(_, _, fb) return fb end
+
 local procs = {}
 
 local SW_SWITCH = 1
 local SW_NONE = 1 << 20
 local MAX_SWITCH_POSITIONS = 96
 local CHAIN_MOVE_US = 150
+
+-- Where the ends of a stick have to arrive for the chain to be more than merely wired.
+--
+-- `CHAIN_MOVE_US` alone answers *does this stick reach the board at all* and nothing more: a
+-- channel whose travel is cut in half by a weight, a curve or an output limit passes it while
+-- delivering four fifths of what the board is set up to expect. The flight controller reads its
+-- own endpoints at roughly 1000 and 2000 microseconds, so a stick that stops short is a stick
+-- whose full deflection the craft never sees -- and nothing else on this path would ever say so.
+--
+-- The band is deliberately wider than the nominal ends. It is a check for a stick that falls
+-- SHORT, not a calibration, and a hundred microseconds of tolerance at each end keeps a correctly
+-- set up radio from being told it is wrong.
+local CHAIN_LOW_US = 1100
+local CHAIN_HIGH_US = 1900
 
 -- Adjustment functions, from the firmware's own enumeration. One slot each.
 local ADJ_RATE_PROFILE = 1
@@ -87,6 +108,22 @@ local function pickerName(i18n, key)
   if key == "profile" then return t(i18n, "pick_profile", "Profile switch") end
   if key == "rescue" then return t(i18n, "pick_rescue", "Rescue at") end
   return key
+end
+
+-- A sentence that belongs to one channel and to nothing else. Not decoration: on the arming
+-- channel the choice of switch has a right answer the pilot cannot read off the picker, and on
+-- the profile channel what the switch will do is three flight modes rather than the one thing
+-- its name says.
+local function channelHint(i18n, key)
+  if key == "arm" then
+    return t(i18n, "hint_arm",
+      "A two-position switch is the better choice here: armed or not, with no middle position.")
+  end
+  if key == "profile" then
+    return t(i18n, "hint_profile",
+      "This switch selects three flight modes: the PID profile and the rate profile change together, one per position.")
+  end
+  return nil
 end
 
 local function tierName(i18n, tier)
@@ -177,8 +214,13 @@ procs[#procs + 1] = {
 
         -- Naming the model IS the disclosure and the whole of the consent, because a write can
         -- only ever land in the model the pilot has open: Lua registers no way to select another.
+        --
+        -- The marker is one short word for two reasons. It has a column of its own that is at
+        -- most a few dozen pixels wide, so a phrase wraps onto a second line and pushes the rest
+        -- of the screen down; and what happens to this model is that its SETTINGS are written,
+        -- not that its name is. A marker reading *changed* beside a name says the opposite.
         y = y + w.row(children, area.x, y, area.w,
-          t(i18n, "field_model", "Model"), pilotModelName(), t(i18n, "marker_will_change", "changed"))
+          t(i18n, "field_model", "Model"), pilotModelName(), t(i18n, "marker_will_change", "target"))
 
         y = y + w.row(children, area.x, y, area.w,
           t(i18n, "field_firmware", "Firmware"), tostring(session and session.fcVersion or "?"), nil)
@@ -387,6 +429,13 @@ procs[#procs + 1] = {
                 axis.seen = true
                 changed = true
               end
+              -- Two answers, not one. *Seen* is the wire; *full* is the travel, and only the
+              -- second one says the board is given the whole of what the stick can do.
+              if not axis.full and axis.min ~= nil and axis.max ~= nil
+                 and axis.min <= CHAIN_LOW_US and axis.max >= CHAIN_HIGH_US then
+                axis.full = true
+                changed = true
+              end
             end
           end
           if changed then w.rebuild() end
@@ -396,6 +445,9 @@ procs[#procs + 1] = {
         local children, i18n, y = ctx.children, ctx.i18n, area.y
         local chain = w.data.chain or { axes = {} }
 
+        y = y + w.paragraph(children, area.x, y, area.w,
+          t(i18n, "chain_intro", "Move each stick to both ends. The numbers are what arrives at the flight controller.")) + 6
+
         for _, entry in ipairs(w.radio.STICK_INPUTS) do
           local axis = chain.axes[entry.stick] or {}
           local value = "-"
@@ -404,8 +456,14 @@ procs[#procs + 1] = {
           elseif not chain.replied then
             value = t(i18n, "state_reading", "reading...")
           end
+          -- Three states, because *arrives* and *arrives in full* are different findings and a
+          -- screen that collapses them tells the pilot the chain is good when half of it is.
           local marker = t(i18n, "marker_move", "move it")
-          if axis.seen then marker = t(i18n, "marker_arrives", "arrives") end
+          if axis.full then
+            marker = t(i18n, "marker_arrives", "arrives")
+          elseif axis.seen then
+            marker = t(i18n, "marker_short", "short")
+          end
           y = y + w.row(children, area.x, y, area.w,
             "CH" .. tostring(entry.channel) .. "  " .. entry.channelName, value, marker)
         end
@@ -531,6 +589,10 @@ local function makeChannelProcedure(channel, order)
     local data = w.data
     data.picked = data.picked or {}
     data.found = data.found or {}
+    -- Where every switch rests is measured against a baseline, and the baseline is taken on
+    -- arrival rather than kept: a switch thrown while the pilot was somewhere else is not an
+    -- answer to a question that was not on screen.
+    if type(data.watch) == "table" then data.watch[channel] = nil end
     local info = w.radio.describeChannel(channel)
     data.found[channel] = info
 
@@ -597,6 +659,43 @@ local function makeChannelProcedure(channel, order)
   proc.screens = {
     {
       id = "assign",
+      -- The switch is named by MOVING it, on the channels whose picker is a plain list.
+      --
+      -- Where the answer is a position the radio's own picker already listens to the hardware.
+      -- Where the answer is the whole switch -- the profile channel, because all three of its
+      -- positions are spoken for -- the field is a list of names, and a list does not notice a
+      -- switch being thrown. That left the one picker in the assistant that cannot be answered
+      -- the way every other one can.
+      --
+      -- Nothing is rebuilt here: the field reads its value through a function, so it follows the
+      -- selection on the next refresh, and a rebuild under the pilot's finger is what costs the
+      -- press they are in the middle of making.
+      wakeup = function(w)
+        local entry = entryFor(w, channel)
+        if entry == nil or entry.needsPositions == nil then return end
+        if not wanted(w, entry) then return end
+
+        w.data.watch = w.data.watch or {}
+        local watch = w.data.watch[channel]
+        local first = watch == nil
+        -- The candidate list is built ONCE. Asking the radio for it costs a name lookup per
+        -- position of every switch it has, and this runs on every tick of the page.
+        if first then
+          watch = { switches = w.radio.switches(entry.needsPositions), at = {} }
+          w.data.watch[channel] = watch
+        end
+
+        for _, sw in ipairs(watch.switches) do
+          local now = w.radio.activePosition(sw.swsrc)
+          -- The first pass only records where everything rests. Without it every switch not
+          -- resting at its first position would read as one that had just been moved, and the
+          -- last one scanned would win a race the pilot never entered.
+          if not first and now ~= nil and watch.at[sw.swsrc] ~= nil and now ~= watch.at[sw.swsrc] then
+            w.data.picked[channel] = sw.swsrc
+          end
+          watch.at[sw.swsrc] = now
+        end
+      end,
       canAdvance = function(w)
         local entry = entryFor(w, channel)
         if entry == nil or not wanted(w, entry) then return true end
@@ -616,22 +715,30 @@ local function makeChannelProcedure(channel, order)
         -- The finding, with two actions of equal weight. "No mix" is not a defect on a board the
         -- pilot has just replaced under a transmitter they set up years ago, and a screen with one
         -- button has already decided that it is.
+        -- What is on the channel, and what "unclear" is allowed to leave out. A finding the pilot
+        -- cannot act on is not a finding: where the mixer cannot be read back, the row still says
+        -- how many lines are there and what the first one is fed from, because that is what makes
+        -- the difference between *something is here* and *this is what is here*.
         local state = t(i18n, "finding_no_mix", "no mix")
         if info and info.state == "derived" then
           state = t(i18n, "finding_found", "mix found") .. " " .. tostring(info.sourceName or "")
         elseif info and info.state == "found" then
-          state = t(i18n, "finding_complex", "mix found, not derived")
+          state = t(i18n, "finding_complex", "mix present, source unclear")
+            .. " (" .. tostring(info.count or 0) .. ")"
+          if info.sourceName then state = state .. " " .. tostring(info.sourceName) end
         end
 
         local isWanted = wanted(w, entry)
+        -- Neither button is greyed out. Disabling the one that matches the current decision made
+        -- the row read as broken -- on a channel the run already wants, *Set up* is dark on every
+        -- visit and there is nothing on the screen saying why. What the decision IS belongs in
+        -- words underneath, and both buttons stay pressable so either can be taken back.
         y = y + w.findingRow(children, area.x, y, area.w,
           "CH" .. tostring(channel), state,
           {
             { text = t(i18n, "action_create", "Set up"),
-              active = function() return not isWanted end,
               press = function() w.data.wanted[channel] = true w.rebuild() end },
             { text = t(i18n, "action_leave", "Leave alone"),
-              active = function() return isWanted end,
               press = function() w.data.wanted[channel] = false w.rebuild() end }
           })
 
@@ -639,6 +746,22 @@ local function makeChannelProcedure(channel, order)
           w.paragraph(children, area.x, y + 6, area.w,
             t(i18n, "leave_note", "This channel is left as it is. The flight controller is not told about it either."))
           return
+        end
+
+        -- Correcting a channel the assistant cannot read IS the point of the button, and the
+        -- screen has to say so: *Set up* clears whatever is on the channel and writes the layout
+        -- from the switch below. Without this line a pilot looking at *source unclear* has no way
+        -- to know that the way out is right in front of them.
+        local note = t(i18n, "setup_note", "Will be set up. \"Leave alone\" keeps this channel unchanged.")
+        if info and (info.count or 0) > 0 then
+          note = t(i18n, "setup_note_replace",
+            "Will be set up: the mixer lines on this channel are replaced by the switch below. \"Leave alone\" keeps them.")
+        end
+        y = y + 6 + w.paragraph(children, area.x, y + 6, area.w, note)
+
+        local hint = channelHint(i18n, entry.key)
+        if hint then
+          y = y + 4 + w.paragraph(children, area.x, y + 4, area.w, hint)
         end
 
         -- One field either way, and it starts EMPTY -- there is no defensible default for a
@@ -1005,5 +1128,225 @@ procs[#procs + 1] = {
     }
   }
 }
+
+-- ---------------------------------------------------------------------------------------------
+-- 8 -- the transmitter link, and it is the strongest case on this path for the assistant existing
+-- at all: BOTH sides of this setting are on one screen here and nowhere else.
+--
+-- The flight controller does not measure the link. It carries a DECLARATION of it --
+-- `crsf_telemetry_link_rate` and `_link_ratio` -- and paces every telemetry frame it emits out of
+-- a token bucket computed from that pair. Declared faster than the link runs and the board
+-- schedules more than the link drains: backlog, dropped frames, values that are stale rather than
+-- absent. Declared slower and the bandwidth is simply left unused. Both read as *telemetry is
+-- laggy* and neither is an error anywhere.
+--
+-- Nothing here is new machinery. The suite already walks the module's parameter tree, classifies
+-- the packet rate and telemetry ratio fields by name, and writes either side to match the other;
+-- and `lib/crsf.lua` multiplexes the frames, so this conversation and the MSP one do not eat each
+-- other's replies. This procedure drives that task and shows what it found.
+--
+-- ON ARMING, deliberately: every frame pushed to the module replaces one RC channel frame for
+-- that cycle, so this must not run while the craft is armed. That is not re-tested here -- the
+-- assistant's own menu entry is `lockedWhileArmed`, which is the suite's mechanism for it, and a
+-- second, weaker test beside it would answer *not armed* for three different reasons.
+-- ---------------------------------------------------------------------------------------------
+
+local ELRS_TASK_PATH = "app/pages/tools/diagnostics/elrs_link/elrslink_task.lua"
+
+local function linkTask(w)
+  if w.data.linkTask == nil then
+    w.data.linkTask = loadModule(ELRS_TASK_PATH) or false
+  end
+  if w.data.linkTask == false then return nil end
+  return w.data.linkTask
+end
+
+local function linkIsCrsf()
+  local session = sessionOf()
+  return session ~= nil and session.telemetryType == "crsf"
+end
+
+-- The board's own copy of the pair, and the buffer a write back to it needs. Both live on the
+-- session because the task reads them from there; this is the same read the diagnostics page
+-- makes, made from here so that a pilot who never opens that page still gets an answer.
+local function readTelemetryConfig(w)
+  local session = sessionOf()
+  if session == nil then return end
+  if w.data.linkConfigAsked == true then return end
+  w.data.linkConfigAsked = true
+  w.msp.read("telemetry_config", function(parsed)
+    if type(parsed) == "table" then
+      session.crsfTelemetryConfig = {
+        mode = parsed.crsf_telemetry_mode,
+        linkRate = parsed.crsf_telemetry_link_rate,
+        linkRatio = parsed.crsf_telemetry_link_ratio
+      }
+      session.telemetryConfigBuffer = parsed.buffer
+    end
+    w.rebuild()
+  end)
+end
+
+local function boardPair()
+  local session = sessionOf()
+  local fc = session and session.crsfTelemetryConfig
+  if type(fc) ~= "table" then return nil end
+  return tonumber(fc.linkRate), tonumber(fc.linkRatio), tonumber(fc.mode)
+end
+
+local function modulePair()
+  local session = sessionOf()
+  local link = session and session.elrsLinkConfig
+  if type(link) ~= "table" then return nil end
+  return tonumber(link.packetRate), tonumber(link.telemetryRatio),
+         link.packetRateLabel, link.telemetryRatioLabel
+end
+
+procs[#procs + 1] = {
+  id = "link",
+  section = "radio",
+  title = function(i18n) return t(i18n, "step_link", "Link") end,
+  -- Skippable, and it has to be: a radio that is not on CRSF has no question here at all, and
+  -- neither has one whose module does not answer the parameter walk.
+  skippable = true,
+  isComplete = function(w)
+    if not linkIsCrsf() then return nil end
+    local fcRate, fcRatio = boardPair()
+    local modRate, modRatio = modulePair()
+    if fcRate == nil or fcRatio == nil or modRate == nil or modRatio == nil then return nil end
+    return fcRate == modRate and fcRatio == modRatio
+  end,
+  enter = function(w)
+    if not linkIsCrsf() then return end
+    readTelemetryConfig(w)
+    -- The walk is a READ, so it starts by itself: a pilot arriving here has already asked the
+    -- question this screen answers, and an empty screen with a button on it asks them to ask
+    -- twice. Every WRITE below still costs a press.
+    local task = linkTask(w)
+    if task and w.data.linkProbed ~= true then
+      w.data.linkProbed = true
+      task.start(task.MODE_PROBE)
+    end
+  end,
+  screens = {
+    {
+      id = "pair",
+      wakeup = function(w)
+        local task = linkTask(w)
+        if task == nil then return end
+        if task.isRunning() then task.wakeup() end
+        -- Repaint on a CHANGE and on nothing else. This runs at the page's own rate, and a
+        -- rebuild on every tick destroys the buttons under the pilot's finger.
+        local statusKey = task.getStatus()
+        local modRate, modRatio = modulePair()
+        local fcRate, fcRatio = boardPair()
+        local key = table.concat({
+          tostring(statusKey), tostring(modRate), tostring(modRatio),
+          tostring(fcRate), tostring(fcRatio), tostring(task.isRunning())
+        }, "|")
+        if w.data.linkSignature ~= key then
+          w.data.linkSignature = key
+          w.rebuild()
+        end
+      end,
+      build = function(w, ctx, area)
+        local children, i18n, y = ctx.children, ctx.i18n, area.y
+
+        if not linkIsCrsf() then
+          w.paragraph(children, area.x, y, area.w,
+            t(i18n, "link_needs_crsf", "This step needs a CRSF link. None of it applies to another telemetry protocol."))
+          return
+        end
+
+        local task = linkTask(w)
+        if task == nil then
+          w.paragraph(children, area.x, y, area.w,
+            t(i18n, "link_unavailable", "The module probe is not available in this build."))
+          return
+        end
+
+        y = y + w.paragraph(children, area.x, y, area.w,
+          t(i18n, "link_intro", "The board does not measure the link, it is told what it is. Where the two disagree, telemetry is either starved or held back.")) + 6
+
+        local statusKey, statusDefault = task.getStatus()
+        y = y + w.findingRow(children, area.x, y, area.w,
+          t(i18n, "link_status", "Probe"), tLink(i18n, statusKey, statusDefault),
+          {
+            { text = t(i18n, "link_probe", "Read"),
+              active = function() return not task.isRunning() end,
+              press = function()
+                w.data.linkConfigAsked = nil
+                readTelemetryConfig(w)
+                task.start(task.MODE_PROBE)
+                w.rebuild()
+              end }
+          })
+
+        local fcRate, fcRatio, fcMode = boardPair()
+        local modRate, modRatio, modRateLabel, modRatioLabel = modulePair()
+        local unknown = t(i18n, "link_unknown", "not read yet")
+
+        local boardText = unknown
+        if fcRate ~= nil and fcRatio ~= nil then
+          boardText = tostring(fcRate) .. " Hz  1:" .. tostring(fcRatio)
+          if fcMode == 0 then boardText = boardText .. "  " .. t(i18n, "link_mode_native", "native") end
+        end
+        y = y + w.row(children, area.x, y, area.w, t(i18n, "link_board", "Flight controller"), boardText, nil)
+
+        local moduleText = unknown
+        if modRate ~= nil and modRatio ~= nil then
+          moduleText = tostring(modRateLabel or (tostring(modRate) .. " Hz")) .. "  " ..
+            tostring(modRatioLabel or ("1:" .. tostring(modRatio)))
+        end
+        y = y + w.row(children, area.x, y, area.w, t(i18n, "link_module", "Transmitter module"), moduleText, nil)
+
+        -- The two directions are one finding with two equally weighted actions, for the same
+        -- reason every finding on this path is: which side is right is the PILOT's answer. A
+        -- module set deliberately to a slow rate for range is not a board that needs correcting,
+        -- and a board configured for the link the craft actually flies on is not a module that
+        -- needs it.
+        local readable = (fcRate ~= nil and fcRatio ~= nil and modRate ~= nil and modRatio ~= nil)
+        local verdict = unknown
+        if readable then
+          if fcRate == modRate and fcRatio == modRatio then
+            verdict = t(i18n, "link_agree", "agree")
+          else
+            verdict = t(i18n, "link_differ", "differ")
+          end
+        end
+
+        y = y + w.findingRow(children, area.x, y, area.w,
+          t(i18n, "link_match", "Match"), verdict,
+          {
+            { text = t(i18n, "link_set_module", "Set module"),
+              active = function() return readable and not task.isRunning() end,
+              press = function()
+                task.start(task.MODE_ROTORFLIGHT_TO_ELRS)
+                w.rebuild()
+              end },
+            { text = t(i18n, "link_set_board", "Set board"),
+              active = function() return readable and not task.isRunning() end,
+              press = function()
+                task.start(task.MODE_ELRS_TO_ROTORFLIGHT)
+                w.rebuild()
+              end }
+          })
+
+        w.paragraph(children, area.x, y + 6, area.w,
+          t(i18n, "link_note", "Set module writes the transmitter to what the board expects. Set board writes the board to what the transmitter runs."))
+      end
+    }
+  }
+}
+
+-- ---------------------------------------------------------------------------------------------
+-- NOT here, and the reason is the assistant's own entry gate: choosing between the internal and
+-- the external module and switching one ON. `model.setModule` can do both -- it takes the module
+-- type and goes through the firmware's own `setModuleType` -- but the moment such a write lands,
+-- the link to this flight controller is gone, and a module the pilot has just enabled is bound to
+-- nothing. The assistant is reachable only WITH a flight controller connected, which is exactly
+-- the state in which that choice must not be made. It belongs to a procedure that runs before
+-- there is a link, and that is a different entry point rather than a screen missing from this one.
+-- ---------------------------------------------------------------------------------------------
 
 return procs

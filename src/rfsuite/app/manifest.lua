@@ -20,7 +20,7 @@ local manifest = {
       pages = {
         { id = "flight_tuning", title = "@i18n(app.modules.flight_tuning.name)@", menuId = "flight_tuning_menu", icon = "@pages/flight_tuning/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
         { id = "setup", title = "@i18n(app.modules.setup.name)@", menuId = "setup_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
-        { id = "setup_wizard", title = "@i18n(app.modules.setup_wizard.name)@", menuId = "setup_wizard_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true }
+        { id = "wizards", title = "@i18n(app.modules.wizards.name)@", menuId = "wizards_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true }
       }
     },
     {
@@ -284,8 +284,36 @@ local manifest = {
       title = "@i18n(app.modules.governor.name)@",
       pages = {}
     },
-    setup_wizard_page = {
+    -- The assistants, as a group. A guided run is a different kind of thing from a settings page
+    -- and there will be more than one of them -- the switches, the tail, the swashplate are each
+    -- a procedure a pilot comes back to on its own -- so they get a place of their own rather
+    -- than a row beside the pages they drive.
+    wizards_menu = {
+      title = "@i18n(app.modules.wizards.name)@",
+      pages = {
+        { id = "setup_wizard", title = "@i18n(app.modules.setup_wizard.name)@", menuId = "setup_wizard_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true }
+      }
+    },
+    -- The whole run and its parts, side by side. The parts are not shortcuts into a walk: each
+    -- opens the same assistant bounded to one section, with the same criteria and the same list.
+    setup_wizard_menu = {
       title = "@i18n(app.modules.setup_wizard.name)@",
+      pages = {
+        { id = "all", title = "@i18n(app.modules.setup_wizard.all)@", menuId = "setup_wizard_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
+        { id = "radio", title = "@i18n(app.modules.setup_wizard.radio)@", menuId = "setup_wizard_radio_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
+        { id = "board", title = "@i18n(app.modules.setup_wizard.board)@", menuId = "setup_wizard_board_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true }
+      }
+    },
+    setup_wizard_page = {
+      title = "@i18n(app.modules.setup_wizard.all)@",
+      pages = {}
+    },
+    setup_wizard_radio_page = {
+      title = "@i18n(app.modules.setup_wizard.radio)@",
+      pages = {}
+    },
+    setup_wizard_board_page = {
+      title = "@i18n(app.modules.setup_wizard.board)@",
       pages = {}
     },
     setup_configuration_page = {
