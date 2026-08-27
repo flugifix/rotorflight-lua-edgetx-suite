@@ -137,6 +137,10 @@ local function channelHint(i18n, key)
     return t(i18n, "hint_profile",
       "This switch selects three flight modes: the PID profile and the rate profile change together, one per position.")
   end
+  if key == "throttle" then
+    return t(i18n, "note_gov_later",
+      "The governor switch is settled now. What its positions produce is the drivetrain section's, and until then the motor is off in every position.")
+  end
   return nil
 end
 
@@ -720,6 +724,21 @@ local function throttleComplete(w, channel)
     if (tonumber(mix.weight) or 0) ~= 0 then return false end
     if (tonumber(mix.offset) or 0) > -100 then return false end
   end
+
+  -- And where the pilot named a governor switch, the base line has to be carrying it. Left out of
+  -- the criterion the channel would report itself done with the governor half missing -- the same
+  -- mistake the naming already cost this branch once: what has to be right is the end state.
+  local entry = entryFor(w, channel)
+  local wantGov = w.data.pickedGov and w.data.pickedGov[channel]
+  if entry ~= nil and entry.govInput ~= nil and wantGov ~= nil and wantGov ~= 0 then
+    local govSource = w.radio.inputSource(entry.govInput)
+    local base = info.lines[1]
+    if govSource == nil or base == nil then return nil end
+    if tonumber(base.source) ~= govSource then return false end
+    local line = w.radio.getInput(entry.govInput, 0)
+    if line == nil then return false end
+    if tonumber(line.source) ~= w.radio.switchSource(wantGov) then return false end
+  end
   return true
 end
 
@@ -781,7 +800,18 @@ local function makeChannelProcedure(channel, order)
   proc.enter = function(w)
     local data = w.data
     data.picked = data.picked or {}
+    data.pickedGov = data.pickedGov or {}
     data.found = data.found or {}
+
+    -- A governor already in the model is proposed back, the same way the hold is: the switch is
+    -- the source of the channel's second input, so a second run does not ask again for something
+    -- that is already there.
+    local govEntry = entryFor(w, channel)
+    if govEntry ~= nil and govEntry.govInput ~= nil and data.pickedGov[channel] == nil then
+      local line = w.radio.getInput(govEntry.govInput, 0)
+      local source = line and tonumber(line.source) or nil
+      if source ~= nil then data.pickedGov[channel] = w.radio.switchFromSource(source) end
+    end
     local info = w.radio.describeChannel(channel)
     data.found[channel] = info
 
@@ -982,6 +1012,54 @@ local function makeChannelProcedure(channel, order)
           -- would throw the focus back to the first row after every choice.
           set = function(value) w.data.picked[channel] = tonumber(value) or 0 end
         }
+        y = y + w.ROW_H
+
+        -- The SECOND switch of this channel, and the only channel on the path that has one.
+        --
+        -- It is a whole switch rather than a position, because its positions carry VALUES later --
+        -- off, spool, flight -- so the answer is the switch, the same shape the profile channel
+        -- needs and the same control the radio offers for it.
+        --
+        -- What is written for it now is structure only: the switch becomes the source of an input
+        -- of its own and that input feeds this channel's base line, with every line still forced
+        -- to the floor. The motor is off in every position until the drivetrain section knows the
+        -- governor mode -- which is what makes this a decision the radio section can FINISH,
+        -- rather than one it collects and leaves lying somewhere to go stale.
+        if entry.govInput ~= nil then
+          w.data.pickedGov = w.data.pickedGov or {}
+          w.label(children, area.x, y + math.floor((w.ROW_H - 18) / 2), area.w - pickerW - 8,
+            t(i18n, "pick_governor", "Governor via"), w.font, COLOR_THEME_PRIMARY1)
+          children[#children + 1] = {
+            type = "source",
+            x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
+            title = t(i18n, "pick_governor", "Governor via"),
+            filter = (SRC_SWITCH or 0xFFFFFFFF),
+            get = function()
+              local picked = w.data.pickedGov[channel]
+              if picked == nil or picked == 0 then return 0 end
+              return w.radio.switchSource(picked) or 0
+            end,
+            set = function(value)
+              w.data.pickedGov[channel] = w.radio.switchFromSource(value) or 0
+            end
+          }
+          y = y + w.ROW_H
+
+          -- The starvation check the concept asks for, and it is on POSITIONS rather than on
+          -- which switch. The hold line overrides, so every position it covers is lost to the
+          -- governor: one switch for both leaves the governor with what the hold does not take,
+          -- and on a two-position switch that is nothing at all.
+          local hold = w.data.picked[channel]
+          local gov = w.data.pickedGov[channel]
+          if hold ~= nil and hold ~= 0 and gov ~= nil and gov ~= 0
+             and w.radio.firstPositionOf(hold) == w.radio.firstPositionOf(gov) then
+            local spare = (w.radio.switchPositionCount(gov) or 0) - 1
+            if spare < 2 then
+              w.paragraph(children, area.x, y + 4, area.w,
+                t(i18n, "gov_starved", "One switch for both, and the hold takes a position from it. Give the governor its own switch, or use one with three positions."))
+            end
+          end
+        end
       end
     }
   }
@@ -1032,6 +1110,7 @@ local function plannedActions(w)
           entry = entry,
           role = role,
           swsrc = swsrc,
+          govSwsrc = w.data.pickedGov and w.data.pickedGov[entry.channel] or nil,
           switchName = w.radio.switchPositionName(swsrc),
           aux = w.msp.wireChannelToAux(entry.channel, w.data.rxMap)
         }
@@ -1167,7 +1246,7 @@ procs[#procs + 1] = {
           if not actionBlocked(action) then
             local ok, err
             if action.role.kind == "throttle" then
-              ok, err = w.radio.writeThrottleChannel(action.entry, action.swsrc)
+              ok, err = w.radio.writeThrottleChannel(action.entry, action.swsrc, action.govSwsrc)
             else
               ok, err = w.radio.writeConditionChannel(action.entry, action.swsrc)
             end

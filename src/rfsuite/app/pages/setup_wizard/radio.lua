@@ -67,8 +67,17 @@ M.CHANNELS = {
     roles = { { kind = "condition", box = "ARM" } }
   },
   {
+    -- The one channel that carries TWO switches, and the first place the "a channel may need
+    -- several switches" note becomes code rather than a caution.
+    --
+    -- The hold sits in this channel's own input. The governor switch gets an input of ITS own --
+    -- an input holds one source, and these are two -- and that input feeds the channel's base
+    -- line, which is the placeholder the drivetrain section later raises off the floor. Inputs
+    -- eight and nine are spoken for by the two channels this path does not build yet, so the
+    -- governor takes the one after them.
     channel = 6, input = 5, key = "throttle", tier = "required",
     inputName = "Thr", channelName = "Thr",
+    govInput = 10, govInputName = "Gov",
     roles = { { kind = "throttle" } }
   },
   {
@@ -427,9 +436,16 @@ function M.channelFooting(entry)
   if mixSource == nil or count == nil or inputLines == nil then return nil end
   if inputLines == 0 or count == 0 then return false end
 
+  -- Every line takes this channel's own input, EXCEPT where the channel carries a second switch
+  -- in an input of its own -- the throttle channel and its governor. Demanding one source for
+  -- every line would report that channel as never laid out, which is the shape of a rule applied
+  -- past the case it was written for.
+  local govSource = entry.govInput ~= nil and M.inputSource(entry.govInput) or nil
   for index = 0, count - 1 do
     local mix = M.getMix(entry.channel, index)
-    if mix == nil or tonumber(mix.source) ~= mixSource then return false end
+    if mix == nil then return false end
+    local source = tonumber(mix.source)
+    if source ~= mixSource and not (govSource ~= nil and source == govSource) then return false end
   end
 
   local line = M.getInput(entry.input, 0)
@@ -529,17 +545,33 @@ end
 -- the hold line overrides it wherever the hold position is present. Until that replacement
 -- happens the motor is off in every switch position, which is the correct state for an
 -- assistant the pilot may leave at any point.
-function M.writeThrottleChannel(entry, swsrc)
+function M.writeThrottleChannel(entry, swsrc, govSwsrc)
   local insert = modelApi("insertMix")
   if not insert then return false, "no_model_api" end
   local mixSource, err = writeChannelInput(entry, swsrc)
   if mixSource == nil then return false, err end
+
+  -- The governor switch, where the pilot named one, goes into an input of its own and that input
+  -- feeds the BASE line. Nothing about the value changes with it: every line stays at the floor
+  -- until the drivetrain section knows the governor mode, so the motor is off in every position
+  -- either way. What this writes is the STRUCTURE, in the model, where it can be read back like
+  -- everything else here -- rather than in a store, which is the form this was refused in.
+  local baseSource = mixSource
+  if govSwsrc ~= nil and govSwsrc ~= 0 and entry.govInput ~= nil then
+    local govSource, govErr = writeChannelInput({
+      input = entry.govInput, inputName = entry.govInputName, channel = entry.channel
+    }, govSwsrc)
+    if govSource == nil then return false, govErr end
+    baseSource = govSource
+  end
+
   if not M.clearChannel(entry.channel) then return false, "clear_failed" end
 
-  -- Both lines take the input, and the hold line's own gate stays the picked POSITION: what gates
-  -- a line and what feeds it are two different fields, and only the second one moves to the input.
+  -- Two lines, and what gates a line and what feeds it are two different fields. The base carries
+  -- the governor where there is one; the second line is the one the picked position gates, and it
+  -- overrides, so the hold can never be lost to whatever the base grows into.
   local ok = pcall(insert, entry.channel - 1, 0, {
-    source = mixSource,
+    source = baseSource,
     weight = 0,
     offset = -100,
     switch = 0,
