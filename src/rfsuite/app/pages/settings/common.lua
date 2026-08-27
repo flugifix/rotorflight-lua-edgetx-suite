@@ -216,7 +216,7 @@ end
 function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow, rowH)
   local ctrlH = (lvgl and lvgl.UI_ELEMENT_HEIGHT) or 32
   rowH = rowH or math.max(44, ctrlH + 12)
-  local fontH = (Controls and Controls.LABEL_H) or (lvgl and lvgl.LCD_SCALE and math.floor(21 * lvgl.LCD_SCALE + 0.5)) or 21
+  local fontH = (lvgl and lvgl.LCD_SCALE and math.floor(21 * lvgl.LCD_SCALE + 0.5)) or 21
   local labelY = y + math.floor((rowH - fontH) / 2)
   local ctrlY = y + math.floor((rowH - ctrlH) / 2)
   local valueW = math.floor(w * 0.50)
