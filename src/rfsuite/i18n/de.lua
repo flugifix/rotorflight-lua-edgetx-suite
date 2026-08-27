@@ -29,7 +29,8 @@ return {
       timeout_message = "Einstellungen gespeichert. Der Flugcontroller ist noch nicht zurück.",
       done_message = "Einstellungen gespeichert.",
       failed_title = "Nicht gespeichert",
-      failed_message = "Der Flugcontroller hat die Einstellungen nicht bestätigt."
+      failed_message = "Der Flugcontroller hat die Einstellungen nicht bestätigt.",
+      eeprom_pending = "Gespeichert, aber der EEPROM-Schreibvorgang steht noch aus:"
     },
     closing_rfsuite = "RFSuite wird beendet...",
     model_armed_title = "Modell Armed",
@@ -1149,6 +1150,10 @@ return {
         loading = "Einstellbereiche laden...",
         saving = "Einstellbereiche speichern...",
         unsaved_changes = "Ungespeicherte Aenderungen",
+        saved_title = "Gespeichert",
+        saved_message = "Anpassungskonfiguration gespeichert",
+        save_error_title = "Fehler",
+        save_error_message = "Speichern fehlgeschlagen",
         read_failed = "Einstellbereiche konnten nicht vom Flugregler gelesen werden",
         fn_none = "Keine",
         fn_rate_profile = "Rate-Profil",

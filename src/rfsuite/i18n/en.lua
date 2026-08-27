@@ -29,7 +29,8 @@ return {
       timeout_message = "Settings saved. The flight controller has not come back yet.",
       done_message = "Settings saved.",
       failed_title = "Not saved",
-      failed_message = "The flight controller did not confirm the settings."
+      failed_message = "The flight controller did not confirm the settings.",
+      eeprom_pending = "Saved, but the EEPROM write is pending:"
     },
     closing_rfsuite = "Closing RFSuite...",
     model_armed_title = "Model Armed",
@@ -1149,6 +1150,10 @@ return {
         loading = "Loading adjustment ranges...",
         saving = "Saving adjustment ranges...",
         unsaved_changes = "Unsaved changes",
+        saved_title = "Saved",
+        saved_message = "Adjustment configuration saved",
+        save_error_title = "Error",
+        save_error_message = "Save failed",
         read_failed = "Could not read the adjustments from the flight controller",
         fn_none = "None",
         fn_rate_profile = "Rate Profile",
