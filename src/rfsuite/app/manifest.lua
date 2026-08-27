@@ -206,7 +206,8 @@ local manifest = {
         { id = "throttle", title = "@i18n(app.modules.esc_motors.throttle)@", menuId = "setup_esc_motors_throttle_page", icon = "@pages/setup/esc_motors/throttle/icon.png", row = 1, col = 1, lockedWhileArmed = true },
         { id = "telemetry", title = "@i18n(app.modules.esc_motors.telemetry)@", menuId = "setup_esc_motors_telemetry_page", icon = "@pages/setup/esc_motors/telemetry/icon.png", row = 1, col = 2, lockedWhileArmed = true },
         { id = "rpm", title = "@i18n(app.modules.esc_motors.rpm)@", menuId = "setup_esc_motors_rpm_page", icon = "@pages/setup/esc_motors/rpm/icon.png", row = 1, col = 3, lockedWhileArmed = true },
-        { id = "esc_tools", title = "@i18n(app.modules.esc_motors.esc_tools)@", menuId = "esc_tools_menu", icon = "@pages/setup/esc_motors/esc_tools/icon.png", row = 1, col = 4, lockedWhileArmed = true }
+        { id = "esc_tools", title = "@i18n(app.modules.esc_motors.esc_tools)@", menuId = "esc_tools_menu", icon = "@pages/setup/esc_motors/esc_tools/icon.png", row = 1, col = 4, lockedWhileArmed = true },
+        { id = "motor_override", title = "@i18n(app.modules.esc_motors.motor_override)@", menuId = "setup_esc_motors_motor_override_page", icon = "@pages/setup/esc_motors/motor_override/icon.png", row = 1, col = 5, minApiVersion = { 12, 0, 9 }, lockedWhileArmed = true }
       }
     },
     esc_tools_menu = {
@@ -487,6 +488,10 @@ local manifest = {
     },
     setup_esc_motors_rpm_page = {
       title = "@i18n(app.modules.esc_motors.rpm)@",
+      pages = {}
+    },
+    setup_esc_motors_motor_override_page = {
+      title = "@i18n(app.modules.esc_motors.motor_override)@",
       pages = {}
     },
     setup_esc_motors_esc_tools_page = {

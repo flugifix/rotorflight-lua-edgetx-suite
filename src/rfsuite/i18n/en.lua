@@ -95,7 +95,8 @@ return {
         throttle = "Throttle",
         telemetry = "Telemetry",
         rpm = "RPM",
-        esc_tools = "ESC Tools"
+        esc_tools = "ESC Tools",
+        motor_override = "Motor Override"
       },
       power = { name = "Power" },
       battery = { name = "Battery" },
@@ -1040,7 +1041,18 @@ return {
         safety_warning_title = "Safety Warning",
         remove_blades_warning = "Please remove main and tail blades before configuring the ESC!",
         loading_data = "Loading ESC parameters...",
-        saving_data = "Saving ESC parameters..."
+        saving_data = "Saving ESC parameters...",
+        title_motor_override = "Motor Override",
+        motor = "Motor",
+        motor_override_note = "Blades off and the craft secured. The motor turns as soon as the throttle leaves zero.",
+        motor_override_enable = "Enable motor override",
+        motor_override_enable_msg = "The flight controller drives the motor directly. Remove the blades, secure the craft and stand clear.",
+        motor_override_disable = "Disable motor override",
+        motor_override_disable_msg = "Return control of the motor to the flight controller.",
+        motor_override_throttle = "Throttle",
+        loading_motor_override = "Reading motor override...",
+        help_title_motor_override = "Motor Override Help",
+        help_p1_motor_override = "Drive one motor directly, blades off, to check its direction or to teach an ESC its throttle range. The flight controller refuses the override while armed and stops the motor a second after the last command, so leaving this page stops it."
       },
       setup_radio_config = {
         title = "Radio Config",
