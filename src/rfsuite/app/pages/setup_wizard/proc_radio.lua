@@ -25,6 +25,8 @@ end
 
 local Common = loadModule("app/pages/settings/common.lua")
 local M_MSP = loadModule("app/pages/setup_wizard/msp.lua")
+local Wlog = loadModule("app/pages/setup_wizard/log.lua") or
+  { emit = function() end, wanted = function() return false end, changed = function() return false end }
 local t = Common and Common.pageT("setup_wizard") or function(_, _, fb) return fb end
 
 -- The link procedure drives the suite's own ELRS task and shows the status it reports, so it
@@ -54,6 +56,11 @@ local CHAIN_MOVE_US = 150
 -- set up radio from being told it is wrong.
 local CHAIN_LOW_US = 1100
 local CHAIN_HIGH_US = 1900
+
+-- What a channel at full deflection spans, and therefore what 100 percent means on this screen.
+-- The percentage is of the TRAVEL the board is given, not of anything the radio thinks it sent:
+-- both numbers it is computed from arrive over the wire from the flight controller.
+local CHAIN_FULL_SPAN_US = 2012 - 988
 
 -- Adjustment functions, from the firmware's own enumeration. One slot each.
 local ADJ_RATE_PROFILE = 1
@@ -383,8 +390,11 @@ procs[#procs + 1] = {
         end
 
         w.setBusy(t(w.i18n, "writing_title", "Writing"), t(w.i18n, "sticks_writing", "Laying out the sticks"))
+        Wlog.emit("info", "sticks: writing %d input(s)", #pending)
         for _, entry in ipairs(pending) do
           local ok, err = w.radio.writeStick(entry, w.data.controls)
+          Wlog.emit(ok and "info" or "error", "sticks: input %d ch%d -> %s",
+            entry.input, entry.channel, ok and "ok" or tostring(err))
           if not ok then
             w.data.sticksError = err or "model"
             done(false)
@@ -402,6 +412,13 @@ procs[#procs + 1] = {
     },
     {
       id = "chain",
+      -- NOTHING here rebuilds the scene, and that is the point of it.
+      --
+      -- This screen is the one the pilot holds a stick on, so its values change on nearly every
+      -- reply -- which made "repaint only on a change" repaint on nearly every reply, about five
+      -- times a second, tearing the whole scene down and building it again each time. The rows are
+      -- fed by functions instead: the firmware evaluates a label's text on every refresh, so the
+      -- screen is built once and the numbers move by themselves.
       wakeup = function(w)
         local chain = w.data.chain
         if not chain or chain.pending then return end
@@ -412,10 +429,6 @@ procs[#procs + 1] = {
         w.msp.read("rc", function(parsed)
           chain.pending = false
           if type(parsed) ~= "table" then return end
-          -- Repaint only where something CHANGED. A poll that rebuilds the page on every reply
-          -- destroys and recreates the controls several times a second, and a press that straddles
-          -- one of those rebuilds is lost.
-          local changed = not chain.replied
           chain.replied = true
           for _, stick in ipairs(w.radio.STICKS) do
             local value = tonumber(parsed[stick.key])
@@ -423,49 +436,68 @@ procs[#procs + 1] = {
             -- meet without a label in between.
             local axis = chain.axes[({ aileron = 3, elevator = 1, collective = 2, rudder = 0 })[stick.key]]
             if value ~= nil and axis then
-              if axis.min == nil or value < axis.min then axis.min = value changed = true end
-              if axis.max == nil or value > axis.max then axis.max = value changed = true end
+              if axis.min == nil or value < axis.min then axis.min = value end
+              if axis.max == nil or value > axis.max then axis.max = value end
               if not axis.seen and axis.min and axis.max and (axis.max - axis.min) >= CHAIN_MOVE_US then
                 axis.seen = true
-                changed = true
+                Wlog.emit("debug", "chain: %s arrives, %d..%d", tostring(stick.key), axis.min, axis.max)
               end
               -- Two answers, not one. *Seen* is the wire; *full* is the travel, and only the
               -- second one says the board is given the whole of what the stick can do.
               if not axis.full and axis.min ~= nil and axis.max ~= nil
                  and axis.min <= CHAIN_LOW_US and axis.max >= CHAIN_HIGH_US then
                 axis.full = true
-                changed = true
+                Wlog.emit("debug", "chain: %s full travel, %d..%d", tostring(stick.key), axis.min, axis.max)
               end
             end
           end
-          if changed then w.rebuild() end
+          if Wlog.wanted("trace") then
+            local parts = {}
+            for _, entry in ipairs(w.radio.STICK_INPUTS) do
+              local axis = chain.axes[entry.stick] or {}
+              parts[#parts + 1] = string.format("ch%d %s..%s", entry.channel,
+                tostring(axis.min or "-"), tostring(axis.max or "-"))
+            end
+            Wlog.emit("trace", "chain sample: %s", table.concat(parts, "  "))
+          end
         end)
       end,
       build = function(w, ctx, area)
         local children, i18n, y = ctx.children, ctx.i18n, area.y
-        local chain = w.data.chain or { axes = {} }
 
-        y = y + w.paragraph(children, area.x, y, area.w,
-          t(i18n, "chain_intro", "Move each stick to both ends. The numbers are what arrives at the flight controller.")) + 6
-
+        -- No explanation paragraph, deliberately. The four rows ARE the instruction -- each one
+        -- says *move it* until it stops saying it -- and a sentence above them cost a row of
+        -- height, which on the smaller radios pushed the fourth stick onto a second page. A pilot
+        -- cannot move a stick they cannot see move.
         for _, entry in ipairs(w.radio.STICK_INPUTS) do
-          local axis = chain.axes[entry.stick] or {}
-          local value = "-"
-          if axis.min ~= nil and axis.max ~= nil then
-            value = tostring(axis.min) .. " .. " .. tostring(axis.max)
-          elseif not chain.replied then
-            value = t(i18n, "state_reading", "reading...")
-          end
-          -- Three states, because *arrives* and *arrives in full* are different findings and a
-          -- screen that collapses them tells the pilot the chain is good when half of it is.
-          local marker = t(i18n, "marker_move", "move it")
-          if axis.full then
-            marker = t(i18n, "marker_arrives", "arrives")
-          elseif axis.seen then
-            marker = t(i18n, "marker_short", "short")
-          end
+          local stick = entry.stick
           y = y + w.row(children, area.x, y, area.w,
-            "CH" .. tostring(entry.channel) .. "  " .. entry.channelName, value, marker)
+            "CH" .. tostring(entry.channel) .. "  " .. entry.channelName,
+            -- Read on every refresh, so the screen is built once and the numbers move themselves.
+            function()
+              local chain = w.data.chain or { axes = {} }
+              local axis = chain.axes[stick] or {}
+              if axis.min == nil or axis.max == nil then
+                if chain.replied then return "-" end
+                return t(i18n, "state_reading", "reading...")
+              end
+              -- How much of the travel the BOARD is given, which is the question the screen is
+              -- really asking. The span is measured against what a channel at full deflection
+              -- produces, so 100 means the board sees everything the stick can do.
+              local reach = math.floor(((axis.max - axis.min) / CHAIN_FULL_SPAN_US) * 100 + 0.5)
+              if reach < 0 then reach = 0 end
+              if reach > 999 then reach = 999 end
+              return tostring(axis.min) .. ".." .. tostring(axis.max) .. "  " .. tostring(reach) .. "%"
+            end,
+            -- Three states, because *arrives* and *arrives in full* are different findings and a
+            -- screen that collapses them tells the pilot the chain is good when half of it is.
+            function()
+              local chain = w.data.chain or { axes = {} }
+              local axis = chain.axes[stick] or {}
+              if axis.full then return t(i18n, "marker_arrives", "arrives") end
+              if axis.seen then return t(i18n, "marker_short", "short") end
+              return t(i18n, "marker_move", "move it")
+            end)
         end
       end
     }
@@ -994,6 +1026,12 @@ procs[#procs + 1] = {
         end
 
         w.setBusy(t(w.i18n, "writing_title", "Writing"), t(w.i18n, "writing_message", "Writing the model and the flight controller"))
+        for _, action in ipairs(actions) do
+          Wlog.emit("info", "commit: ch%d %s switch=%s aux=%s %s",
+            action.entry.channel, tostring(action.role and action.role.kind),
+            tostring(action.switchName), tostring(action.aux),
+            actionBlocked(action) and "BLOCKED" or "ready")
+        end
 
         -- The radio half first, and as one act. Nothing is committed to the board until every
         -- mixer line of the set is in place.
@@ -1005,6 +1043,8 @@ procs[#procs + 1] = {
             else
               ok, err = w.radio.writeConditionChannel(action.entry, action.swsrc)
             end
+            Wlog.emit(ok and "info" or "error", "commit: ch%d model -> %s",
+              action.entry.channel, ok and "ok" or tostring(err))
             if not ok then
               w.data.writeError = err or "model"
               done(false)
@@ -1052,7 +1092,9 @@ procs[#procs + 1] = {
         end
         queue[#queue + 1] = function(nextStep) w.msp.commit(function(ok, err) nextStep(ok, err) end) end
 
+        Wlog.emit("info", "commit: %d board write(s) queued", #queue)
         w.msp.sequence(queue, function(ok, err)
+          Wlog.emit(ok and "info" or "error", "commit: board -> %s", ok and "ok" or tostring(err))
           if not ok then
             w.data.writeError = err or "msp"
             done(false)
@@ -1083,18 +1125,11 @@ procs[#procs + 1] = {
         w.msp.read("rc", function(parsed)
           verify.pending = false
           if type(parsed) ~= "table" then return end
-          local changed = not verify.replied
           verify.replied = true
-          local previous = verify.channels
-          if type(previous) ~= "table" then
-            changed = true
-          else
-            for i = 1, 18 do
-              if previous[i] ~= (parsed.channels and parsed.channels[i]) then changed = true break end
-            end
-          end
+          -- No rebuild, for the same reason as the stick screen: this is a LIVE read, so "repaint
+          -- on a change" means repaint on nearly every reply, five times a second, with the whole
+          -- scene torn down each time. The rows below read themselves instead.
           verify.channels = parsed.channels
-          if changed then w.rebuild() end
         end)
       end,
       build = function(w, ctx, area)
@@ -1106,23 +1141,28 @@ procs[#procs + 1] = {
         -- that holds in every switch position -- so the value is watched wherever the switch is,
         -- and the position that would arm is computed rather than entered.
         for _, action in ipairs(w.data.actions or {}) do
-          local value = "-"
-          local marker = t(i18n, "marker_waiting", "waiting")
-          if action.aux ~= nil and type(verify.channels) == "table" then
-            local us = tonumber(verify.channels[5 + action.aux + 1])
-            if us ~= nil then
-              value = tostring(us)
-              marker = t(i18n, "marker_arrives", "arrives")
-              if action.window and us >= action.window.start and us <= action.window["end"] then
-                marker = t(i18n, "marker_in_window", "in window")
+          local entry = action
+          local function state()
+            local live = w.data.verify or {}
+            if entry.aux ~= nil and type(live.channels) == "table" then
+              local us = tonumber(live.channels[5 + entry.aux + 1])
+              if us ~= nil then
+                local marker = t(i18n, "marker_arrives", "arrives")
+                if entry.window and us >= entry.window.start and us <= entry.window["end"] then
+                  marker = t(i18n, "marker_in_window", "in window")
+                end
+                return tostring(us), marker
               end
+            elseif entry.role and entry.role.kind == "throttle" then
+              return t(i18n, "note_motor_off", "motor off in every position"),
+                     t(i18n, "marker_written", "written")
             end
-          elseif action.role and action.role.kind == "throttle" then
-            value = t(i18n, "note_motor_off", "motor off in every position")
-            marker = t(i18n, "marker_written", "written")
+            return "-", t(i18n, "marker_waiting", "waiting")
           end
           y = y + w.row(children, area.x, y, area.w,
-            "CH" .. tostring(action.entry.channel), value, marker)
+            "CH" .. tostring(action.entry.channel),
+            function() local value = state() return value end,
+            function() local _, marker = state() return marker end)
         end
       end
     }
@@ -1246,6 +1286,9 @@ procs[#procs + 1] = {
         }, "|")
         if w.data.linkSignature ~= key then
           w.data.linkSignature = key
+          Wlog.emit("debug", "link: %s  module %s/%s  board %s/%s",
+            tostring(statusKey), tostring(modRate), tostring(modRatio),
+            tostring(fcRate), tostring(fcRatio))
           w.rebuild()
         end
       end,

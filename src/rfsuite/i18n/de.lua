@@ -1186,7 +1186,6 @@ return {
         status_open = "offen",
         status_skipped = "von dir gesetzt",
         status_unknown = "nicht ableitbar",
-        chain_intro = "Bewege jeden Knüppel bis an beide Anschläge. Die Zahlen sind, was am Flugregler ankommt.",
         setup_note_replace = "Wird eingerichtet: die Mischerzeilen auf diesem Kanal werden durch den Schalter unten ersetzt. \"So lassen\" behält sie.",
         step_link = "Funkstrecke",
         link_needs_crsf = "Dieser Schritt braucht eine CRSF-Verbindung. Nichts davon gilt für ein anderes Telemetrieprotokoll.",

@@ -1186,7 +1186,6 @@ return {
         status_open = "open",
         status_skipped = "you said so",
         status_unknown = "not derivable",
-        chain_intro = "Move each stick to both ends. The numbers are what arrives at the flight controller.",
         setup_note_replace = "Will be set up: the mixer lines on this channel are replaced by the switch below. \"Leave alone\" keeps them.",
         step_link = "Link",
         link_needs_crsf = "This step needs a CRSF link. None of it applies to another telemetry protocol.",

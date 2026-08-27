@@ -18,6 +18,9 @@ end
 
 M.loadModule = loadModule
 
+local Wlog = loadModule("app/pages/setup_wizard/log.lua") or
+  { emit = function() end, wanted = function() return false end, changed = function() return false end }
+
 local apiCache = {}
 
 -- API modules are loaded on first use and kept for the life of the page, because a step is
@@ -59,15 +62,30 @@ function M.read(name, onDone)
     return false
   end
 
+  Wlog.emit("trace", "msp read %s (cmd %s)", name, tostring(api.command))
   q:add({
     command = api.command,
     simulatorResponse = api.simulatorResponse,
     processReply = function(_, buf)
       local parsed = nil
       if type(api.parse) == "function" then parsed = api.parse(buf) end
+      -- An answer after a silence closes the warning above, so a run that recovered does not read
+      -- as one that never did.
+      Wlog.forget("noreply:" .. tostring(name))
+      Wlog.emit("trace", "msp read %s -> %d byte(s), parsed %s",
+        name, buf and #buf or 0, tostring(parsed ~= nil))
       if onDone then onDone(parsed, nil) end
     end,
     errorHandler = function()
+      -- An unanswered read is the shape every stall on this page has taken, and it is invisible
+      -- from the screen: the row simply keeps saying it is reading. So the FIRST one is a warning
+      -- and the rest are trace -- one screen here polls the live channels five times a second, and
+      -- a board that has stopped answering would otherwise write five warnings a second into a
+      -- ring buffer that is meant to still hold what happened before it.
+      if not Wlog.changed("warn", "noreply:" .. tostring(name), true,
+        "msp read %s -> no reply", name) then
+        Wlog.emit("trace", "msp read %s -> no reply", name)
+      end
       if onDone then onDone(nil, "no_reply") end
     end
   })

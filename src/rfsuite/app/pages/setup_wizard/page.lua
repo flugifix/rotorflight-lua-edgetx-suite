@@ -42,6 +42,11 @@ local Radio = nil
 local Store = nil
 local t = nil
 
+-- Said about itself, because until now it said nothing. A pilot reporting that the assistant
+-- stopped responding could only describe the screen it stopped on, which is the state before
+-- whatever happened rather than a record of it. The stub keeps every call site free of a nil test.
+local Wlog = { emit = function() end, wanted = function() return false end, changed = function() return false end }
+
 local BASE = "app/pages/setup_wizard/"
 
 local ui = {
@@ -101,6 +106,10 @@ local function ensureDeps()
   if not Msp then Msp = loadModule(BASE .. "msp.lua") end
   if not Radio then Radio = loadModule(BASE .. "radio.lua") end
   if not Store then Store = loadModule(BASE .. "store.lua") end
+  if Wlog.emit == nil or Wlog.loaded ~= true then
+    local mod = loadModule(BASE .. "log.lua")
+    if type(mod) == "table" then Wlog = mod Wlog.loaded = true end
+  end
   if not t then t = Common and Common.pageT("setup_wizard") or nil end
 end
 
@@ -194,6 +203,8 @@ local function enterCurrent()
   local mark = tostring(proc.id) .. "/" .. tostring(screen.id or ui.screenIndex)
   if ui.entered ~= mark then
     ui.entered = mark
+    Wlog.emit("debug", "enter %s (section %s, screen %s)",
+      tostring(proc.id), tostring(proc.section), tostring(screen.id or ui.screenIndex))
     if ui.screenIndex == 1 and type(proc.enter) == "function" then proc.enter(wiz) end
     if type(screen.enter) == "function" then screen.enter(wiz) end
     if proc.counted ~= false and Store then
@@ -339,16 +350,51 @@ end
 
 -- Layout. The row height and the two reserved bands are what the no-scroll rule comes to in code:
 -- a screen is given the space that is left and should not ask for more.
-local FOOTER_H = 42
--- The page is a scrolling container and the height it reports runs past the visible area, so a
--- footer placed at that height alone is drawn half off the screen. Measured on a 800x480 build.
+-- The footer follows the page, for the same reason the type size does.
+--
+-- Fixed at 42 it is 42 pixels on every radio, and the radios do not have the same page: on the
+-- narrow ones the header, the footer and its margin together take more than half of what the
+-- assistant is given -- 120 of 227 measured -- and what is left is three rows. A four-row list
+-- was then cut in half, which is the runner obeying the no-scroll rule and is still a stick the
+-- pilot cannot watch while they move it.
+--
+-- The margin does NOT scale with it. It is not spacing: it compensates for the page reporting a
+-- height that runs past the visible area, and the one measurement behind it was taken on a single
+-- radio. Shrinking a compensation on the geometries it was never measured on is how the clipped
+-- footer comes back.
 local FOOTER_MARGIN = 16
 
--- The header is drawn by `Controls.appendStaticSectionHeader`, whose blue bar sits at
--- STATIC_SECTION_H - 6. Reserving 40 for a band that is 50 tall put the first body row across
--- that bar, so the height is taken from the control instead of restated here.
+local function footerHeight()
+  local width, height = (LCD_W or 480), (LCD_H or 240)
+  if width >= 760 then return 42 end
+  if height >= 300 then return 40 end
+  return 34
+end
+
+local FOOTER_H = footerHeight()
+
+-- The heading, and the assistant draws its own.
+--
+-- The suite's shared section header is a fixed 50 pixel band carrying one line of MIDSIZE text.
+-- That is right on a settings form, where the page below it is a list the pilot scrolls. It is
+-- not right here: on a 272 pixel radio those 50 pixels are a fifth of the whole page, and this
+-- page may not scroll -- what does not fit is cut into a second page the pilot has to walk to.
+-- Header, footer and margin together took 120 of 227 there, and what was left held three rows.
+--
+-- So the band follows the page the way the type size and the footer already do, and the widest
+-- radio keeps exactly what it had. The two elements are the shared control's own -- a title and
+-- the rule under it -- so nothing about the house look changes; only the space it claims does.
+-- Editing the shared control instead would resize the header under every page in the tree.
+local function headerMetrics()
+  local width, height = (LCD_W or 480), (LCD_H or 240)
+  if width >= 760 then return 50, MIDSIZE end
+  if height >= 300 then return 42, MIDSIZE end
+  return 34, (SMLSIZE or MIDSIZE)
+end
+
 local function headerHeight()
-  return (Controls and Controls.STATIC_SECTION_H) or 50
+  local band = headerMetrics()
+  return band
 end
 
 -- Type size and row height, taken from the page the radio actually gives.
@@ -368,7 +414,7 @@ local function density()
   if height >= 300 then return SMLSIZE, 32 end
   -- TINSIZE is the colour-radio font one step below SMLSIZE. A build without it falls back
   -- rather than drawing nothing.
-  return (TINSIZE or SMLSIZE), 28
+  return (TINSIZE or SMLSIZE), 26
 end
 
 wiz.font = SMLSIZE
@@ -381,6 +427,20 @@ wiz.ROW_H = 34
 -- FIX the label at a size the radio's own font may exceed, and the text would be clipped. So the
 -- height of a label is measured instead, with the same estimator the paragraph helper advances
 -- its own cursor by -- which is what keeps the two answers from drifting apart.
+-- A label's text may be a function, and this is the one place that must not forget it. Measuring
+-- `tostring(a function)` measures the closure's ADDRESS -- about twenty characters, which in a
+-- marker column seventy pixels wide wraps to three lines. The screen then reports itself as too
+-- tall and the runner cuts it into pages that nothing needed: measured the moment the live rows
+-- were introduced, on the four-row stick screen, which was split in half on both narrow radios
+-- while its four rows occupied half the page.
+local function textOfChild(child)
+  local text = child.text
+  if type(text) ~= "function" then return text end
+  local ok, value = pcall(text)
+  if ok then return value end
+  return ""
+end
+
 local function childExtent(child)
   if type(child) ~= "table" then return nil end
   local top = tonumber(child.y)
@@ -388,7 +448,7 @@ local function childExtent(child)
   local height = tonumber(child.h)
   if height == nil and child.type == "label" and Controls
     and type(Controls.estimateWrappedTextHeight) == "function" then
-    height = tonumber(Controls.estimateWrappedTextHeight(child.text, child.w, child.font))
+    height = tonumber(Controls.estimateWrappedTextHeight(textOfChild(child), child.w, child.font))
   end
   if height == nil or height <= 0 then height = 20 end
   return top, top + height
@@ -494,11 +554,19 @@ local function emitPage(ctx, build, top, height)
   end
 end
 
+-- A label, and its text may be a FUNCTION.
+--
+-- That is not a convenience. The firmware evaluates a label's text on every refresh when it is
+-- given one -- the same mechanism the buttons' `active` and the fields' `get` already use -- so a
+-- value that changes several times a second can be shown without rebuilding the scene for it. The
+-- alternative, which is what the live screens did, is a full rebuild per change: on a screen the
+-- pilot is holding a stick on, that is a scene torn down and built again about five times a
+-- second, and every control on it destroyed under their finger.
 local function label(children, x, y, w, text, font, colour)
   children[#children + 1] = {
     type = "label",
     x = x, y = y, w = w,
-    text = tostring(text or ""),
+    text = (type(text) == "function") and text or tostring(text or ""),
     font = font,
     color = colour
   }
@@ -509,6 +577,10 @@ wiz.label = label
 -- One finding, as every check in this assistant renders it: what was looked at, what was found,
 -- and a marker. The marker is a word rather than a colour alone, because a derived result and one
 -- the pilot asserted must not look the same.
+--
+-- `value` and `marker` may each be a function, and a LIVE row is the reason: a row fed from a poll
+-- then updates itself and the screen around it is built once. The row's height does not depend on
+-- either of them, so a function here cannot change how the screen is cut into pages.
 function wiz.row(children, x, y, w, name, value, marker)
   local rowH = wiz.ROW_H
   local markerW = math.floor(w * 0.20)
@@ -702,6 +774,11 @@ end
 local function statusOf(i18n, proc)
   if wiz.isSkipped(proc) then return pageText(i18n, "status_skipped", "you said so") end
   local value = wiz.isComplete(proc)
+  -- Asked on every build of the overview, so only a MOVE is worth a line. `nil` is a third answer
+  -- and not a missing one: it means the machine has not answered yet, and watching it turn into
+  -- true or false is most of what reading a run afterwards consists of.
+  Wlog.changed("debug", "complete:" .. tostring(proc.id), value,
+    "criterion %s -> %s", tostring(proc.id), tostring(value))
   if value == true then return pageText(i18n, "status_done", "done") end
   if value == false then return pageText(i18n, "status_open", "open") end
   return pageText(i18n, "status_unknown", "not derivable")
@@ -785,9 +862,21 @@ end
 -- The header, written after the body but drawn above it: it names which page of the screen this
 -- is, and that is only known once the body has been cut.
 local function insertHeader(children, at, x, y, w, title)
-  if not (Controls and type(Controls.appendStaticSectionHeader) == "function") then return end
-  local scratch = {}
-  Controls.appendStaticSectionHeader(scratch, x, y, w, title)
+  local band, font = headerMetrics()
+  local scratch = {
+    {
+      type = "label",
+      x = x, y = y + 2, w = w,
+      text = tostring(title or ""),
+      color = COLOR_THEME_PRIMARY1,
+      font = font
+    },
+    {
+      type = "rectangle",
+      x = x, y = y + band - 6, w = w, h = 3,
+      color = COLOR_THEME_SECONDARY1, filled = true
+    }
+  }
   for index = #scratch, 1, -1 do table.insert(children, at + 1, scratch[index]) end
 end
 
@@ -906,6 +995,14 @@ function M.build(ctx)
   -- is how a number measured on one radio gets frozen into all of them.
   wiz.font, wiz.ROW_H = density()
 
+  -- The geometry, once, and it is not only a debug line: what this page is actually given is the
+  -- single number every layout question here turns on, and it has never been recorded from a
+  -- radio. Emitted through the change filter so a page that is rebuilt a hundred times says it
+  -- once, and at debug because the answer is worth having without switching tracing on.
+  Wlog.changed("debug", "geometry", tostring(w) .. "x" .. tostring(h) .. "/" .. tostring(wiz.ROW_H),
+    "geometry: page %dx%d at %d,%d  row %d  header %d  footer %d",
+    w, h, x, y, wiz.ROW_H, headerHeight(), FOOTER_H + FOOTER_MARGIN)
+
   if ui.busy then
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
@@ -933,6 +1030,11 @@ function M.build(ctx)
     insertHeader(children, headerAt, x, y, w,
       withPageMarker(pageText(i18n, "title", "Setup Assistant")))
     buildOverviewFooter(children, ctx, x, footerPosition(y, h), w)
+    if Wlog.wanted("trace") then
+      Wlog.emit("trace", "build overview page %d/%d  body %d  bottom %s  %d child(ren)%s",
+        ui.pageIndex, ui.pageCount or 1, bodyH, tostring(ui.contentBottom),
+        #children, ui.overflowed and "  OVERFLOW" or "")
+    end
     return
   end
 
@@ -961,6 +1063,16 @@ function M.build(ctx)
   insertHeader(children, headerAt, x, y, w, withPageMarker(heading))
 
   buildFooter(children, ctx, x, footerPosition(y, h), w)
+
+  -- The last line before a freeze is the diagnosis, so this is the one that has to be cheap enough
+  -- to leave on: it names the screen, which page of it, and how far down the content actually
+  -- reached against the space it was given.
+  if Wlog.wanted("trace") then
+    Wlog.emit("trace", "build %s/%s page %d/%d  body %d  bottom %s  %d child(ren)%s",
+      tostring(proc and proc.id), tostring(screen and screen.id),
+      ui.pageIndex, ui.pageCount or 1, bodyH, tostring(ui.contentBottom),
+      #children, ui.overflowed and "  OVERFLOW" or "")
+  end
 end
 
 function M.onHelp(ctx)
