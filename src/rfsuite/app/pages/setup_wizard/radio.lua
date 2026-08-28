@@ -83,7 +83,10 @@ M.CHANNELS = {
   {
     -- Profile selection is not a mode box: it is two adjustment slots, the rate profile and the
     -- pid profile, driven continuously from one three-position switch onto 1..3.
-    channel = 7, input = 6, key = "profile", tier = "recommended",
+    -- Required rather than recommended, by the pilot's ruling: the three flight modes are not an
+    -- extra. A required channel is settled once and carried out, which is also why its own screen
+    -- no longer offers a way to switch it back off.
+    channel = 7, input = 6, key = "profile", tier = "required",
     inputName = "Prof", channelName = "Prof",
     needsPositions = 3,
     roles = { { kind = "adjustment", functions = { 1, 2 }, min = 1, max = 3 } }

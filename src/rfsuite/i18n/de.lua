@@ -1126,6 +1126,7 @@ return {
         marker_open = "nicht gelaufen",
         marker_done = "erledigt",
         marker_failed = "fehlgeschlagen",
+        marker_required = "Pflicht",
         marker_derived = "gelesen",
         note_motor_off = "Motor in jeder Stellung aus",
         writing_title = "Schreibe",

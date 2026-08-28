@@ -911,19 +911,39 @@ local function makeChannelProcedure(channel, order)
         end
 
         local isWanted = wanted(w, entry)
+
+        -- A required channel is not asked about twice.
+        --
+        -- The layout screen shows it as a fixed row with the word `required` and offers no choice.
+        -- This screen then offered the same decision again as a control that could answer it the
+        -- other way -- so an answer that was forbidden two screens earlier was available here, and
+        -- the run could be left with a channel the layout had called required and this screen had
+        -- switched off. The row carries the same word instead, and the way out of a channel the
+        -- pilot wants to do themselves is the procedure's own skip, which is a different statement.
+        local required = entry.tier == "required" 
         -- One control, and it is the SAME one the layout screen offers for the same decision two
         -- screens earlier. The pair of buttons here asked that question a second way: a button
         -- that already holds the current answer does nothing visible when pressed, which is
         -- exactly what a pilot reported -- pressed it, saw nothing, concluded the screen was
         -- broken. A toggle moves when it is pressed, and it frames neither state as the defect,
         -- which is what the pair was chosen for in the first place.
-        y = y + w.findingToggle(children, area.x, y, area.w,
-          "CH" .. tostring(channel) .. "  " .. channelName(i18n, entry.key), state,
-          function() return wanted(w, entry) end,
-          function(value)
-            w.data.wanted[channel] = value
-            w.rebuild()
-          end)
+        local rowName = "CH" .. tostring(channel) .. "  " .. channelName(i18n, entry.key)
+        if required then
+          -- A SHORT word, and it is a different string from the layout screen's on purpose. That
+          -- screen carries the tier in the value column, which is wide; here it goes in the marker
+          -- column, which is a fifth of the row and capped at 74 px -- seven characters in the
+          -- largest of the three font sets. `erforderlich` needs 119 there, so it would be drawn
+          -- over the value beside it.
+          y = y + w.row(children, area.x, y, area.w, rowName, state,
+            t(i18n, "marker_required", "fixed"))
+        else
+          y = y + w.findingToggle(children, area.x, y, area.w, rowName, state,
+            function() return wanted(w, entry) end,
+            function(value)
+              w.data.wanted[channel] = value
+              w.rebuild()
+            end)
+        end
 
         if not isWanted then
           w.paragraph(children, area.x, y + 6, area.w,

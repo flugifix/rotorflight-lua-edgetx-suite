@@ -170,10 +170,22 @@ end
 -- What the opening screen reports, and it is the same walk the quick pass runs on. A procedure
 -- whose criterion the machine cannot answer counts as OPEN -- the safe direction, because it
 -- offers work rather than hiding it.
+-- Does this procedure belong to the entry point the pilot came in through? Everything that walks,
+-- lists or counts the path asks this, and nothing else knows about the scope.
+--
+-- It sits above `wiz.walk` rather than beside its other callers because the counter needs it: the
+-- opening screen reported every procedure in the suite through an entry that lists nine of them,
+-- so the list and the number above it disagreed with nobody able to explain the difference.
+local function inScope(proc)
+  if proc == nil then return false end
+  if ui.scope == nil then return true end
+  return proc.section == ui.scope
+end
+
 function wiz.walk()
   local open, total = 0, 0
   for _, proc in ipairs(ui.procedures or {}) do
-    if proc.counted ~= false then
+    if proc.counted ~= false and inScope(proc) then
       total = total + 1
       if wiz.isComplete(proc) ~= true and not wiz.isSkipped(proc) then open = open + 1 end
     end
@@ -233,14 +245,6 @@ function wiz.goToProcedure(index, screenIndex, pageIndex)
   ui.busy = nil
   enterCurrent()
   wiz.rebuild()
-end
-
--- Does this procedure belong to the entry point the pilot came in through? Everything that walks
--- or lists the path asks this, and nothing else knows about the scope.
-local function inScope(proc)
-  if proc == nil then return false end
-  if ui.scope == nil then return true end
-  return proc.section == ui.scope
 end
 
 local function previousScopedIndex(from)
@@ -421,7 +425,10 @@ local FOOTER_H = footerHeight()
 local function headerMetrics()
   local width, height = (LCD_W or 480), (LCD_H or 240)
   if width >= 760 then return 50, MIDSIZE end
-  if height >= 300 then return 42, MIDSIZE end
+  -- One size below the widest radio, and it is the body's own size rather than a step above it.
+  -- Reported from a transmitter: the heading was the loudest thing on a screen whose point is the
+  -- text underneath. The band follows the type down, so the list gains the difference.
+  if height >= 300 then return 36, (SMLSIZE or MIDSIZE) end
   return 34, (SMLSIZE or MIDSIZE)
 end
 
@@ -533,6 +540,33 @@ local function paginate(items, top, height)
     cuts[#cuts + 1] = cut
     if overflow then ui.overflowed = true end
   end
+
+  -- A page has to hold something that can be read or pressed. A row draws a one pixel divider at
+  -- its own bottom edge, so a screen whose last row ends exactly on the limit was cut once more
+  -- BEHIND that line: two pages, the second carrying the hairline and nothing else, with the same
+  -- footer repeated under it. The pilot pressed the button, the screen changed to an empty one,
+  -- and the button had to be pressed again.
+  --
+  -- Merged back rather than special-cased per screen, because the same shape turned up on the
+  -- stick layout and on the read-back. The hairline is then drawn a pixel into the footer margin,
+  -- which is the slack that margin exists for.
+  -- Page k spans `cuts[k]` to `cuts[k + 1]`, so the LAST entry is an end boundary and never a
+  -- page start: testing it as one found nothing after it every time and folded away pages that
+  -- were full. What is tested is the span of the final page, and folding it means dropping the
+  -- boundary in front of it rather than the one behind it.
+  while #cuts > 2 do
+    local from, to = cuts[#cuts - 1], cuts[#cuts]
+    local carries = false
+    for _, item in ipairs(items) do
+      if item.top >= from and item.top < to and item.child.type ~= "rectangle" then
+        carries = true
+        break
+      end
+    end
+    if carries then break end
+    table.remove(cuts, #cuts - 1)
+  end
+
   return cuts
 end
 

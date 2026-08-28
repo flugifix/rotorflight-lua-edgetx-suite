@@ -1126,6 +1126,7 @@ return {
         marker_open = "not run",
         marker_done = "done",
         marker_failed = "failed",
+        marker_required = "fixed",
         marker_derived = "read",
         note_motor_off = "motor off in every position",
         writing_title = "Writing",
