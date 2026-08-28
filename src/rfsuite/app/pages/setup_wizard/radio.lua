@@ -62,7 +62,11 @@ M.STICKS = {
 -- criterion compares it against.
 M.CHANNELS = {
   {
+    -- A whole switch, and a two-position one. The pilot names the switch; which of its positions
+    -- turns the function on is settled by the rule rather than asked, and the channel is built so
+    -- that the rule holds whatever the switch's polarity is.
     channel = 5, input = 4, key = "arm", tier = "required",
+    switchOnly = true, exactPositions = 2,
     inputName = "Arm", channelName = "Arming",
     roles = { { kind = "condition", box = "ARM" } }
   },
@@ -93,6 +97,7 @@ M.CHANNELS = {
   },
   {
     channel = 8, input = 7, key = "rescue", tier = "recommended",
+    switchOnly = true, exactPositions = 2,
     inputName = "Resc", channelName = "Rescue",
     roles = { { kind = "condition", box = "RESCUE" } }
   }
@@ -382,12 +387,19 @@ end
 -- The value window a mode box gets for a picked position: wide enough to hold the position
 -- against switch and receiver tolerance, narrow enough that no other position of the same
 -- switch falls inside it.
+-- ALWAYS the upper band, and that is a rule rather than a reading.
+--
+-- It used to answer per position -- the top for an up position, the bottom for a down one -- which
+-- is correct only if the picked position produces a matching value on the channel. Nothing checked
+-- that, and nothing in the model records it. Measured on a real flight controller: a plain chain
+-- from switch to input to channel at weight +100 throughout, the assistant's own picked position,
+-- and the board reporting the function OFF there and ON at the other end.
+--
+-- So the window is fixed and the CHANNEL is built to match it -- see `writeConditionChannel`. The
+-- two now agree by construction, and a switch wired either way round produces the same result.
 function M.windowFor(swsrc)
-  local position = M.switchPosition(swsrc)
-  if position == nil then return nil end
-  if position == M.POSITION_MIDDLE then return { start = 1350, ["end"] = 1650 } end
-  if position == M.POSITION_UP then return { start = 1700, ["end"] = 2100 } end
-  return { start = 900, ["end"] = 1300 }
+  if M.switchPosition(swsrc) == nil then return nil end
+  return { start = 1700, ["end"] = 2100 }
 end
 
 -- Reading a channel back out of the model. A single-line mix with a constant weight, no offset,
@@ -533,9 +545,14 @@ local function writeChannelInput(entry, swsrc)
   return mixSource
 end
 
--- A condition channel: the picked switch drives the channel over its full travel, so each of
--- its positions lands on a value the window either contains or does not.
-function M.writeConditionChannel(entry, swsrc)
+-- A channel that carries the switch's FULL TRAVEL, one value per position.
+--
+-- The profile channel is the only one, and it is not a condition: its three positions map onto
+-- three profiles through an adjustment, so what has to reach the board is the travel and not a
+-- two-state high or low. It kept this shape while the condition channels moved off it, and it is
+-- separated here because sharing the write is what took it along with them -- caught by the
+-- layout script, which counts what a walk leaves in the model.
+function M.writeTravelChannel(entry, swsrc)
   local insert = modelApi("insertMix")
   if not insert then return false, "no_model_api" end
   local mixSource, err = writeChannelInput(entry, swsrc)
@@ -552,6 +569,55 @@ function M.writeConditionChannel(entry, swsrc)
     flightModes = 0
   })
   if not ok then return false, "insert_failed" end
+  M.setChannelName(entry.channel, entry.channelName)
+  return true
+end
+
+-- A condition channel: the picked position turns the function on, and the channel is built so
+-- that it reads at the top of the travel there and at the bottom everywhere else.
+function M.writeConditionChannel(entry, swsrc)
+  local insert = modelApi("insertMix")
+  if not insert then return false, "no_model_api" end
+  local mixSource, err = writeChannelInput(entry, swsrc)
+  if mixSource == nil then return false, err end
+  if not M.clearChannel(entry.channel) then return false, "clear_failed" end
+
+  -- The value is CONSTRUCTED, not passed through.
+  --
+  -- One line used to carry the switch at full weight, so what the channel read depended on which
+  -- way that switch is wired -- and the assistant simply assumed the picked position was the one
+  -- that reads high. It writes the board a window on the strength of that assumption, and on a
+  -- real flight controller the assumption was wrong: the function was reported off at the position
+  -- the pilot had named and on at the other.
+  --
+  -- Two lines instead. A floor that is always on, and a line gated by the picked position that
+  -- replaces it with the top of the travel. The channel then sits at the top AT that position and
+  -- at the bottom everywhere else -- for any switch, either polarity, any of its positions -- and
+  -- the fixed upper window `windowFor` hands the board is right by construction.
+  local ok = pcall(insert, entry.channel - 1, 0, {
+    source = mixSource,
+    weight = 0,
+    offset = -100,
+    switch = 0,
+    multiplex = MULTIPLEX_ADD,
+    curveType = 0,
+    curveValue = 0,
+    flightModes = 0
+  })
+  if not ok then return false, "insert_failed" end
+
+  ok = pcall(insert, entry.channel - 1, 1, {
+    source = mixSource,
+    weight = 0,
+    offset = 100,
+    switch = swsrc,
+    multiplex = MULTIPLEX_REPLACE,
+    curveType = 0,
+    curveValue = 0,
+    flightModes = 0
+  })
+  if not ok then return false, "insert_failed" end
+
   M.setChannelName(entry.channel, entry.channelName)
   return true
 end

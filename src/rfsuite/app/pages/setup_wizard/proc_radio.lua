@@ -156,7 +156,7 @@ end
 local function channelHint(i18n, key)
   if key == "arm" then
     return t(i18n, "hint_arm",
-      "A two-position switch is the better choice here: armed or not, with no middle position.")
+      "A two-position switch: armed or not, with no middle position.")
   end
   if key == "profile" then
     return t(i18n, "hint_profile",
@@ -879,7 +879,14 @@ local function makeChannelProcedure(channel, order)
           break
         end
       end
-      if picked == nil and info.source then
+      -- And where the mix records no gate, NOTHING is proposed.
+      --
+      -- This used to search for the switch behind the mix source and offer its first position --
+      -- an answer to a question the mix does not hold. A plain one-to-one carries a switch and not
+      -- which of its positions means on, so the proposal was a guess wearing the pilot's own
+      -- earlier answer. The field stays empty instead, which is what it already does for a channel
+      -- with nothing on it, and for the same reason: a safety function has no defensible default.
+      if picked == nil and info.source and entry ~= nil and not entry.switchOnly then
         for swsrc = 1, MAX_SWITCH_POSITIONS do
           local source = w.radio.switchSource(swsrc)
           if source ~= nil and source == info.source then
@@ -934,9 +941,9 @@ local function makeChannelProcedure(channel, order)
         if entry == nil or not wanted(w, entry) then return true end
         local picked = w.data.picked and w.data.picked[channel]
         if picked == nil or picked == 0 then return false end
-        if entry.needsPositions and (w.radio.switchPositionCount(picked) or 0) < entry.needsPositions then
-          return false
-        end
+        local positions = w.radio.switchPositionCount(picked) or 0
+        if entry.needsPositions and positions < entry.needsPositions then return false end
+        if entry.exactPositions and positions ~= entry.exactPositions then return false end
         return true
       end,
       build = function(w, ctx, area)
@@ -1047,7 +1054,7 @@ local function makeChannelProcedure(channel, order)
         -- had to pick one of three answers that all mean the same thing, and `proc.enter` then
         -- normalised two of them away with `firstPositionOf`. So that channel gets a list of
         -- SWITCHES, filtered to the ones that can carry it.
-        if entry.needsPositions then
+        if entry.needsPositions or entry.switchOnly then
           -- The radio's OWN source picker, filtered to switches.
           --
           -- This channel's answer is a whole switch rather than one of its positions -- all three
@@ -1075,6 +1082,9 @@ local function makeChannelProcedure(channel, order)
               return w.radio.switchSource(picked) or 0
             end,
             set = function(value)
+              -- The FIRST position of the switch, which EdgeTX numbers zero and calls up. For a
+              -- condition channel that is the position the rule turns the function on at, and the
+              -- channel is built so that it reads high there whatever the switch's polarity is.
               local first = w.radio.switchFromSource(value)
               w.data.picked[channel] = first or 0
             end
@@ -1084,11 +1094,21 @@ local function makeChannelProcedure(channel, order)
           -- them all -- so the shortfall is said in words rather than left as a Next that will
           -- not press. Nothing is refused here; the gate on the step already does that.
           local picked = w.data.picked and w.data.picked[channel]
-          if picked ~= nil and picked ~= 0
-             and (w.radio.switchPositionCount(picked) or 0) < entry.needsPositions then
+          local positions = picked ~= nil and picked ~= 0
+            and (w.radio.switchPositionCount(picked) or 0) or nil
+          if positions ~= nil and entry.needsPositions and positions < entry.needsPositions then
             w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
               t(i18n, "pick_needs_three",
                 "This switch has two positions. The profile channel needs three, one per profile. Pick a three-position switch."))
+          end
+          -- Two positions and no more, on the channels that carry a mode. It is a simplification
+          -- rather than a limit the machine imposes: with the channel constructed the way it now
+          -- is, a middle position would work. The pilot's ruling is that this assistant is for a
+          -- first setup, and a first setup gets one answer, not three.
+          if positions ~= nil and entry.exactPositions and positions ~= entry.exactPositions then
+            w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
+              t(i18n, "pick_needs_two",
+                "This switch has more than two positions. This channel takes a two-position switch: on, or not."))
           end
           return
         end
@@ -1353,10 +1373,15 @@ procs[#procs + 1] = {
         for _, action in ipairs(actions) do
           if not actionBlocked(action) then
             local ok, err
+            -- Three kinds, three constructions. It used to be two, with everything that was not
+            -- the throttle taking the condition write -- which quietly took the PROFILE channel
+            -- with it the moment that write stopped passing the switch straight through.
             if action.role.kind == "throttle" then
               ok, err = w.radio.writeThrottleChannel(action.entry, action.swsrc, action.govSwsrc)
-            else
+            elseif action.role.kind == "condition" then
               ok, err = w.radio.writeConditionChannel(action.entry, action.swsrc)
+            else
+              ok, err = w.radio.writeTravelChannel(action.entry, action.swsrc)
             end
             Wlog.emit(ok and "info" or "error", "commit: ch%d model -> %s",
               action.entry.channel, ok and "ok" or tostring(err))
