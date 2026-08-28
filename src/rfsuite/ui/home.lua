@@ -471,6 +471,7 @@ state = {
   suppressPressFrames = 0,
   suppressBackFrames = 0,
   backGestureActive = false,
+  lastBackTick = 0,
   memBucket    = nil,
   memLastTick  = 0,
   memPeakKb    = 0,
@@ -691,6 +692,18 @@ local function onBack(source, ev)
   logToFile("onBack called source=" .. tostring(source) .. " ev=" .. tostring(ev))
   logf("debug", "back source=%s ev=%s at=%s", tostring(source), tostring(ev),
     tostring(state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId()))
+
+  if state.isClosing then
+    return
+  end
+
+  local now = (type(getTime) == "function" and getTime()) or (type(os) == "table" and type(os.clock) == "function" and math.floor(os.clock() * 100)) or 0
+  if now > 0 and (state.lastBackTick or 0) > 0 and (now - state.lastBackTick) < 35 and (now - state.lastBackTick) >= 0 then
+    logf("debug", "back dropped by debounce (dt=%d ticks)", now - state.lastBackTick)
+    return
+  end
+  state.lastBackTick = now
+
   local fromEvent = source == "event"
 
   if state.backGestureActive then
@@ -2155,6 +2168,8 @@ function M.init()
   state.ignoreNextPageKey = false
   state.suppressPressFrames = 0
   state.suppressBackFrames = 0
+  state.backGestureActive = false
+  state.lastBackTick = 0
   state.focusIndex = 0
   state.activePageMenuId = nil
   state.helpContent = nil
