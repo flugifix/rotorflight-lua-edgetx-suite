@@ -319,7 +319,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local rawExtra = slot and ui.modeRangesExtra[slot] or nil
   if not rawRange or not rawExtra or not rawRange.range then return 0 end
 
-  local singleRowH = (Controls and Controls.ROW_H) or 64
+  local singleRowH = (Controls and Controls.ROW_H) or 48
   local labelY1 = (Controls and Controls.labelY and Controls.labelY(y, singleRowH)) or (y + math.floor((singleRowH - 21) / 2))
   local controlY1 = (Controls and Controls.controlY and Controls.controlY(y, singleRowH)) or (y + math.floor((singleRowH - 32) / 2))
   local rightPadding = 10
@@ -975,7 +975,7 @@ function M.build(ctx)
   -- Action bar
   local rightPadding = 10
   local buttonW = math.floor(w * 0.24)
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 48
   local labelY = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2))
   local btnY = (Controls and Controls.controlY and Controls.controlY(cursorY, rowH)) or (cursorY + math.floor((rowH - 32) / 2))
 

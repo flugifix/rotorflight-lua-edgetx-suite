@@ -459,7 +459,7 @@ local function ensureLoaded()
 end
 
 local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n)
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 48
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local comboY = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   local dividerY = y + rowH

@@ -619,7 +619,7 @@ function M.build(ctx)
   local rightPad = 8
   local gap = 6
   local fieldW = w - leftPad - rightPad
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 48
   local labelY1 = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop1 = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 

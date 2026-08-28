@@ -448,23 +448,23 @@ local function getLayoutProfile(w, h)
   local profile = {
     headerFont = SMLSIZE,
     headerTextY = 0,
-    headerLineY = 36,
-    headerH = 40,
+    headerLineY = 24,
+    headerH = 30,
     rowFont = SMLSIZE,
-    rowH = 44,
-    rowLabelY = 8,
-    cellTop = 4,
+    rowH = 42,
+    rowLabelY = 10,
+    cellTop = 5,
     afterHeaderGap = 6
   }
 
   if w >= 700 then
     profile.headerFont = SMLSIZE
-    profile.headerTextY = 2
-    profile.headerLineY = 40
+    profile.headerTextY = 4
+    profile.headerLineY = 38
     profile.headerH = 44
     profile.rowFont = SMLSIZE
-    profile.rowH = 46
-    profile.rowLabelY = 10
+    profile.rowH = 56
+    profile.rowLabelY = 13
     profile.cellTop = 6
     profile.afterHeaderGap = 6
   elseif w < 560 then
@@ -473,9 +473,9 @@ local function getLayoutProfile(w, h)
     profile.headerLineY = 24
     profile.headerH = 30
     profile.rowFont = SMLSIZE
-    profile.rowH = 40
+    profile.rowH = 42
     profile.rowLabelY = 10
-    profile.cellTop = 4
+    profile.cellTop = 5
     profile.afterHeaderGap = 6
   end
 

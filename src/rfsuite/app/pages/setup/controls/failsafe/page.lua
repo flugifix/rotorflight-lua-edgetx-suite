@@ -353,11 +353,11 @@ function M.build(ctx)
   end
 
   local rightMargin = 10
-  local leftMargin = 15
-  local gap = 10
-  local modeW = 160
-  local valueW = 130
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local leftMargin = 10
+  local gap = 8
+  local modeW = math.floor(w * 0.32)
+  local valueW = math.floor(w * 0.24)
+  local rowH = (Controls and Controls.ROW_H) or 48
   local valueX = w - rightMargin - valueW
   local modeX = valueX - gap - modeW
   local titleW = modeX - leftMargin - gap

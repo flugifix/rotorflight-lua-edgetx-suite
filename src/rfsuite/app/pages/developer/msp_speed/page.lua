@@ -486,7 +486,7 @@ function M.build(ctx)
   Controls.appendStaticSectionHeader(children, x, y, w, t(i18n, "section_test", "MSP Speed Test"))
 
   local cursorY = y + Controls.STATIC_SECTION_H
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 48
   local buttonW = 130
   local comboW = 130
   local ctrlY = (Controls and Controls.controlY and Controls.controlY(cursorY, rowH)) or (cursorY + math.floor((rowH - 32) / 2))

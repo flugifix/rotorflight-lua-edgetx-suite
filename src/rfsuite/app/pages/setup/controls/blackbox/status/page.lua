@@ -378,7 +378,7 @@ function M.getHeaderActions()
 end
 
 local function appendStatusRow(children, x, y, w, label, value)
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 48
   local leftMargin = 15
   local rightMargin = 15
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))

@@ -642,7 +642,7 @@ function M.build(ctx)
   Controls.appendStaticSectionHeader(children, x, y, w, t(i18n, "section_test", "API Tester"))
 
   local cursorY = y + Controls.STATIC_SECTION_H
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 48
   local buttonW = 130
   local comboW = 220
   local rightPad = 10

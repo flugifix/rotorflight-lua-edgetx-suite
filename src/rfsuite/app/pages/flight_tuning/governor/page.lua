@@ -396,7 +396,7 @@ local function applyConfigToSession(session)
 end
 
 local function appendCompactNumberField(children, x, y, w, labelText, opts)
-	local rowH = (Controls and Controls.ROW_H) or 64
+	local rowH = (Controls and Controls.ROW_H) or 48
 	local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
 	local itemY = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 	local fieldW = 172
@@ -490,9 +490,9 @@ local function appendHorizontalFields(children, x, y, w, labelText, rows, i18n)
 	local gap = metrics.gap
 	local cellW = metrics.cellW
 	
-	local rowH = (Controls and Controls.HORIZONTAL_ROW_H) or 78
-	local headerY = y + 4
-	local itemY = y + 26
+	local rowH = (Controls and Controls.HORIZONTAL_ROW_H) or 64
+	local headerY = y + 2
+	local itemY = y + (rowH >= 70 and 26 or 22)
 	local groupLabelY = Controls.labelY(itemY, Controls.CTRL_H)
 
 	children[#children + 1] = {

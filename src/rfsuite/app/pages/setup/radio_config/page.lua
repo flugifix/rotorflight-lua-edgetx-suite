@@ -247,14 +247,14 @@ local function ensureLoaded()
 end
 
 local function appendDoubleFieldRow(children, x, y, w, rowLabelText, field1, field2)
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 48
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   local dividerY = y + rowH
 
-  local mainW    = math.floor(w * 0.31)
-  local labelW1  = math.floor(w * 0.19)
-  local editW1   = math.floor(w * 0.14)
+  local mainW    = math.floor(w * 0.22)
+  local labelW1  = math.floor(w * 0.16)
+  local editW1   = math.floor(w * 0.19)
   local labelGap = 6
 
   -- Left row label
@@ -302,9 +302,9 @@ local function appendDoubleFieldRow(children, x, y, w, rowLabelText, field1, fie
 
   -- Column 2
   if field2 then
-    local labelW2 = math.floor(w * 0.20)
-    local editW2  = math.floor(w * 0.14)
-    local xLabel2 = xEdit1 + editW1 + 5
+    local labelW2 = math.floor(w * 0.16)
+    local editW2  = math.floor(w * 0.19)
+    local xLabel2 = xEdit1 + editW1 + 8
     local xEdit2  = xLabel2 + labelW2
 
     children[#children + 1] = {
