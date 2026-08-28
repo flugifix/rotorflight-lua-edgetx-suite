@@ -94,6 +94,17 @@ def generate_theme_index(target_core_dir, target_user_dir):
         f.write("\n".join(lines))
 
 
+def copy_tree(src, dst):
+    os.makedirs(dst, exist_ok=True)
+    for item in os.listdir(src):
+        s_item = os.path.join(src, item)
+        d_item = os.path.join(dst, item)
+        if os.path.isdir(s_item):
+            copy_tree(s_item, d_item)
+        else:
+            shutil.copy2(s_item, d_item)
+
+
 def copy_audio_pack(lang, src_audio, dst_audio):
     src_pack = os.path.join(src_audio, lang, "default")
     if not os.path.isdir(src_pack):
@@ -104,7 +115,7 @@ def copy_audio_pack(lang, src_audio, dst_audio):
         src_sub = os.path.join(src_pack, sub)
         if os.path.isdir(src_sub):
             dst_sub = os.path.join(dst_audio, sub)
-            shutil.copytree(src_sub, dst_sub, dirs_exist_ok=True)
+            copy_tree(src_sub, dst_sub)
 
 
 def build_package_for_language(lang, version, output_dir, artifact_name=None):
@@ -134,7 +145,7 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
             s = os.path.join(src_core, item)
             d = os.path.join(staging_core, item)
             if os.path.isdir(s):
-                shutil.copytree(s, d, dirs_exist_ok=True)
+                copy_tree(s, d)
             else:
                 shutil.copy2(s, d)
 
@@ -147,7 +158,7 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
 
         # Copy user default config
         if os.path.isdir(src_user):
-            shutil.copytree(src_user, staging_user, dirs_exist_ok=True)
+            copy_tree(src_user, staging_user)
 
         # Copy widgets. EdgeTX discovers one widget per directory under /WIDGETS, so every
         # directory under src/widgets is staged under its own name rather than one fixed one.
@@ -155,7 +166,7 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
             for widget_dir in sorted(os.listdir(src_widgets)):
                 s = os.path.join(src_widgets, widget_dir)
                 if os.path.isdir(s):
-                    shutil.copytree(s, os.path.join(staging_widgets, widget_dir), dirs_exist_ok=True)
+                    copy_tree(s, os.path.join(staging_widgets, widget_dir))
 
         # Copy sounds
         if os.path.isdir(src_audio):
@@ -175,10 +186,11 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
         lang_file = os.path.join(src_core, "i18n", f"{lang}.lua")
 
         if os.path.isfile(py_precompile) and os.path.isfile(py_resolve) and os.path.isfile(lang_file):
-            subprocess.run([sys.executable, py_precompile, "--root", staging_tools], check=True)
-            subprocess.run([sys.executable, py_precompile, "--root", staging_widgets], check=True)
-            subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
-            subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
+            python_bin = shutil.which("python3") or shutil.which("python") or sys.executable
+            subprocess.run([python_bin, py_precompile, "--root", staging_tools], check=True)
+            subprocess.run([python_bin, py_precompile, "--root", staging_widgets], check=True)
+            subprocess.run([python_bin, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
+            subprocess.run([python_bin, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
 
         # Create output ZIP
         os.makedirs(output_dir, exist_ok=True)

@@ -73,30 +73,13 @@ local function loadModule(path)
   return mod
 end
 
---- Which profile a reply belongs to, or nil when that cannot be established.
---
--- Nil rather than a default, and the distinction is the whole point: this value is a CACHE
--- KEY. A default is a key that never moves, so a reply stored under it stays "valid" across a
--- profile switch and is then served for the wrong profile. Neither source is guaranteed: the
--- telemetry sensor exists only if the pilot configured that slot, and nothing in the tree
--- assigns the session field. An unknown profile therefore costs a round trip -- Cache.get and
--- Cache.put both treat a nil key as not cacheable -- instead of costing a wrong answer.
-local function liveProfile(sensorName, sessionField)
-  if Sensors == nil then
-    Sensors = loadModule("lib/sensors.lua") or false
+local Profile = nil
+
+local function ensureProfileDep()
+  if Profile == nil then
+    Profile = loadModule("lib/profile.lua") or false
   end
-  if Sensors and type(Sensors.getValue) == "function" then
-    local raw = tonumber(Sensors.getValue(sensorName))
-    if raw and raw > 0 then
-      return math.floor(raw)
-    end
-  end
-  local session = getSession()
-  local active = tonumber(session and session[sessionField])
-  if active ~= nil then
-    return math.floor(active) + 1
-  end
-  return nil
+  return (Profile ~= false and Profile) or nil
 end
 
 --- The key that makes a cached answer to `command` still valid, or nil when it is not cached.
@@ -105,13 +88,14 @@ function Cache.keyFor(command)
   if kind == nil then
     return nil
   end
+  local profileHelper = ensureProfileDep()
   if kind == PID_PROFILE then
-    local profile = liveProfile("pid_profile", "activeProfile")
+    local profile = profileHelper and profileHelper.getActivePidProfile()
     if profile == nil then return nil end
     return PID_PROFILE .. "=" .. tostring(profile)
   end
   if kind == RATE_PROFILE then
-    local profile = liveProfile("rate_profile", "activeRateProfile")
+    local profile = profileHelper and profileHelper.getActiveRateProfile()
     if profile == nil then return nil end
     return RATE_PROFILE .. "=" .. tostring(profile)
   end

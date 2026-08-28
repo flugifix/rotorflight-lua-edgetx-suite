@@ -66,6 +66,11 @@ local function pageText(i18n, key, fallback)
   return fallback
 end
 
+local function getSession()
+  local root = _G and _G.rfsuite
+  return root and root.session or nil
+end
+
 local function syncFromSensors()
   ensureDeps()
   if not Sensors then return false end
@@ -79,6 +84,8 @@ local function syncFromSensors()
     local pIdx = p - 1
     if pIdx ~= state.pidProfileIndex then
       state.pidProfileIndex = pIdx
+      local session = getSession()
+      if session then session.activeProfile = pIdx end
       if not state.isEditing and not state.isSaving and state.cooldownUntil == 0 then
         state.uiPidProfileIndex = pIdx
         changed = true
@@ -90,6 +97,8 @@ local function syncFromSensors()
     local rIdx = r - 1
     if rIdx ~= state.rateProfileIndex then
       state.rateProfileIndex = rIdx
+      local session = getSession()
+      if session then session.activeRateProfile = rIdx end
       if not state.isEditing and not state.isSaving and state.cooldownUntil == 0 then
         state.uiRateProfileIndex = rIdx
         changed = true
@@ -131,6 +140,14 @@ local function requestInitialData()
         state.uiPidProfileIndex = state.pidProfileIndex
         state.uiRateProfileIndex = state.rateProfileIndex
         state.loaded = true
+        local session = getSession()
+        if session then
+          session.activeProfile = parsed.current_pid_profile_index
+          session.activeRateProfile = parsed.current_control_rate_profile_index
+          session.pid_profile_count = parsed.pid_profile_count
+          session.control_rate_profile_count = parsed.control_rate_profile_count
+          session.status = parsed
+        end
         logMsg("Initial state loaded: PID=" .. tostring(state.pidProfileIndex+1) .. " Rate=" .. tostring(state.rateProfileIndex+1))
         if type(state.requestRebuild) == "function" then state.requestRebuild() end
       end
@@ -198,6 +215,11 @@ function M.onSave(ctx)
           -- Sync internal baseline
           state.pidProfileIndex = state.uiPidProfileIndex
           state.rateProfileIndex = state.uiRateProfileIndex
+          local session = getSession()
+          if session then
+            session.activeProfile = state.uiPidProfileIndex
+            session.activeRateProfile = state.uiRateProfileIndex
+          end
           
           -- Request 101 once to confirm FC state
           requestInitialData()

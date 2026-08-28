@@ -3,6 +3,7 @@ return {
   "apiversion",
   "uid",
   "rtc",
+  { name = "status", context = "both" },
   { name = "flight_stats", context = "widget" },
   { name = "dataflash_summary", context = "widget" },
   { name = "battery_config", context = "both" },

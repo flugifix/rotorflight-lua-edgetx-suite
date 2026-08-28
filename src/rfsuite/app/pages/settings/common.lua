@@ -123,12 +123,44 @@ function M.createFormRuntime(ui)
   return runtime
 end
 
+local Profile = nil
+
+local function loadProfile()
+  if Profile == nil then
+    if _G.rfsuite and _G.rfsuite.require then
+      Profile = _G.rfsuite.require("lib/profile.lua") or false
+    else
+      local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/profile.lua", "t")
+      if type(chunk) == "function" then
+        local ok, mod = pcall(chunk)
+        Profile = (ok and mod) or false
+      else
+        Profile = false
+      end
+    end
+  end
+  return (Profile ~= false and Profile) or nil
+end
+
 function M.createProfileAwareRuntime(options)
   options = options or {}
 
+  local profileGetter = options.profileGetter
+  if not profileGetter then
+    local profileType = options.profileType or "pid"
+    local profileHelper = loadProfile()
+    if profileHelper then
+      if profileType == "rate" or profileType == "rate_profile" then
+        profileGetter = function() return profileHelper.getActiveRateProfile(1) end
+      else
+        profileGetter = function() return profileHelper.getActivePidProfile(1) end
+      end
+    end
+  end
+
   local runtime = {
     requestRebuild = nil,
-    profileGetter = options.profileGetter,
+    profileGetter = profileGetter,
     lastProfile = nil
   }
 

@@ -74,7 +74,7 @@ CLI examples
   # Apply replacements in-place:
   python resolve_i18n_tags.py --json scripts/rfsuite/i18n/en.json --root src
 """
-#!/usr/bin/env python3
+from __future__ import annotations
 import argparse, json, re, sys, os
 from pathlib import Path
 import shlex

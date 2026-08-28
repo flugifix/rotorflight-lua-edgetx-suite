@@ -15,6 +15,7 @@ local MspRuntime = nil
 local PidTuningApi = nil
 local LoadingOverlay = nil
 local Sensors = nil
+local Profile = nil
 local t = nil
 local getSession = nil
 
@@ -98,25 +99,10 @@ local function ensureDeps()
 	if not PidTuningApi then PidTuningApi = loadModule("tasks/msp/api/pid_tuning.lua") end
 	if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
 	if not Sensors then Sensors = loadModule("lib/sensors.lua") end
+	if not Profile then Profile = loadModule("lib/profile.lua") end
 	if not t then t = Common and Common.pageT("flight_tuning_pids") or nil end
 	if Common and not ui.runtimeBase then
-		ui.runtimeBase = Common.createProfileAwareRuntime({
-			profileGetter = function()
-				local sensorProfile = nil
-				if Sensors and type(Sensors.getValue) == "function" then
-					sensorProfile = tonumber(Sensors.getValue("pid_profile"))
-				end
-				if sensorProfile and sensorProfile > 0 then
-					return math.floor(sensorProfile)
-				end
-				local session = getSession()
-				local activeProfile = session and session.activeProfile
-				if activeProfile ~= nil then
-					return math.floor(tonumber(activeProfile) or 0) + 1
-				end
-				return nil
-			end
-		})
+		ui.runtimeBase = Common.createProfileAwareRuntime({ profileType = "pid" })
 		if type(ui.runtime) ~= "table" then
 			ui.runtime = newRuntime()
 		end
@@ -173,16 +159,12 @@ local function getFieldSetter(fieldName)
 	return setter
 end
 
+local function getLiveProfile()
+	return Profile and Profile.getActivePidProfile(1) or 1
+end
+
 local function buildSessionSignature()
-	local profile = nil
-	if Sensors and type(Sensors.getValue) == "function" then
-		profile = tonumber(Sensors.getValue("pid_profile"))
-	end
-	if profile == nil or profile <= 0 then
-		local session = getSession()
-		profile = math.floor(tonumber(session and session.activeProfile) or 0) + 1
-	end
-	return tostring(profile)
+	return tostring(getLiveProfile())
 end
 
 local function loadFromSession()
@@ -206,21 +188,6 @@ local function getBaseTitle()
 		title = "PIDs"
 	end
 	return title
-end
-
-local function getCurrentProfileDisplay()
-	if Sensors and type(Sensors.getValue) == "function" then
-		local raw = tonumber(Sensors.getValue("pid_profile"))
-		if raw and raw > 0 then
-			return math.floor(raw)
-		end
-	end
-	local session = getSession()
-	local activeProfile = tonumber(session and session.activeProfile)
-	if activeProfile ~= nil then
-		return math.floor(activeProfile) + 1
-	end
-	return nil
 end
 
 local function queuePidRead()
@@ -583,7 +550,7 @@ function M.build(ctx)
 	local w = ctx.w
 	local h = ctx.h or 200
 	local i18n = ctx.i18n
-	local profileDisplay = getCurrentProfileDisplay() or 1
+	local profileDisplay = getLiveProfile()
 	local layout = getLayoutProfile(w, h)
 
 	if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then
