@@ -194,7 +194,13 @@ local function finish(status, extra)
     S.outcome.clearAt = nowSeconds() + OUTCOME_LINGER_SECONDS
   end
   if type(desc.onDone) == "function" then
-    pcall(desc.onDone, result)
+    -- The callback belongs to the page, not to the pipeline, so a fault in it must not take the
+    -- save down with it -- but discarding the pcall result leaves it invisible everywhere: it
+    -- raises no dialog, and the outcome line above still reads "done". Report it and carry on.
+    local ok, err = pcall(desc.onDone, result)
+    if not ok then
+      logf("warn", "onDone failed page=%s err=%s", tostring(desc.pageId), tostring(err))
+    end
   end
 end
 
@@ -314,7 +320,12 @@ end
 local function afterCommit()
   S.run.saved = true
   if type(S.run.desc.onSaved) == "function" then
-    pcall(S.run.desc.onSaved)
+    -- Read before the call: the callback runs while S.run is still live and may end the run.
+    local pageId = S.run.desc.pageId
+    local ok, err = pcall(S.run.desc.onSaved)
+    if not ok then
+      logf("warn", "onSaved failed page=%s err=%s", tostring(pageId), tostring(err))
+    end
   end
 
   if not S.run.reboot then
@@ -613,7 +624,10 @@ function M.takeResult(pageId)
   if type(entry) ~= "table" then return nil end
   S.pending[key] = nil
   if type(entry.onDone) == "function" then
-    pcall(entry.onDone, entry.result)
+    local ok, err = pcall(entry.onDone, entry.result)
+    if not ok then
+      logf("warn", "pending onDone failed page=%s err=%s", tostring(key), tostring(err))
+    end
   end
   return entry.result
 end
