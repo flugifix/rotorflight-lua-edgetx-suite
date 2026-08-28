@@ -15,6 +15,7 @@ local MspRuntime = nil
 local EscParametersScorpionApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
+local ScorpInit = nil
 local t = nil
 
 local ui = {
@@ -45,6 +46,9 @@ local ui = {
   },
   currentSection = 1,
   parsedCache = nil,
+  escModel = nil,
+  escVersion = nil,
+  escFirmware = nil,
   runtime = {
     readPending = false,
     requestRebuild = nil,
@@ -67,6 +71,7 @@ local function ensureDeps()
   if not EscParametersScorpionApi then EscParametersScorpionApi = loadModule("tasks/msp/api/esc_parameters_scorpion.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  if not ScorpInit then ScorpInit = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/scorp/init.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -126,11 +131,27 @@ local function queueScorpionReadActual(queue, retryOnError)
 
         ui.parsedCache = parsed
 
+        local escModel = ScorpInit and type(ScorpInit.getEscModel) == "function" and ScorpInit.getEscModel(buf) or nil
+        local escVersion = ScorpInit and type(ScorpInit.getEscVersion) == "function" and ScorpInit.getEscVersion(buf) or nil
+        local escFirmware = ScorpInit and type(ScorpInit.getEscFirmware) == "function" and ScorpInit.getEscFirmware(buf) or nil
+
+        ui.escModel = escModel
+        ui.escVersion = escVersion
+        ui.escFirmware = escFirmware
+
         local session = getSession()
         if session then
+          session.escDetails = {
+            model = escModel,
+            version = escVersion,
+            firmware = escFirmware
+          }
           session.setup_esc_motors_esc_tools_scorp = {
             config = {},
-            parsedCache = ui.parsedCache
+            parsedCache = ui.parsedCache,
+            escModel = escModel,
+            escVersion = escVersion,
+            escFirmware = escFirmware
           }
           for k, v in pairs(ui.config) do
             session.setup_esc_motors_esc_tools_scorp.config[k] = v
@@ -262,6 +283,9 @@ local function loadFromSession()
       end
     end
     ui.parsedCache = cached.parsedCache
+    ui.escModel = cached.escModel
+    ui.escVersion = cached.escVersion
+    ui.escFirmware = cached.escFirmware
     return true
   end
   return false
@@ -471,7 +495,11 @@ function M.build(ctx)
 
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
+    local headerTitle = title
+    if ui.escModel and ui.escModel ~= "" then
+      headerTitle = ui.escModel
+    end
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
@@ -733,6 +761,7 @@ function M.onClose()
   EscParametersScorpionApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
+  ScorpInit = nil
   t = nil
 end
 

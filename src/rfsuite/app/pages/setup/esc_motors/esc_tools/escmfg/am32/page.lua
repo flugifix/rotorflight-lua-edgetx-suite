@@ -15,6 +15,7 @@ local MspRuntime = nil
 local EscParametersAm32Api = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
+local Am32Init = nil
 local t = nil
 
 local ui = {
@@ -60,6 +61,9 @@ local ui = {
   },
   currentSection = 1,
   parsedCache = nil,
+  escModel = nil,
+  escVersion = nil,
+  escFirmware = nil,
   runtime = {
     readPending = false,
     requestRebuild = nil,
@@ -82,6 +86,7 @@ local function ensureDeps()
   if not EscParametersAm32Api then EscParametersAm32Api = loadModule("tasks/msp/api/esc_parameters_am32.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  if not Am32Init then Am32Init = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/am32/init.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -129,11 +134,27 @@ local function queueAm32ReadActual(queue)
 
         ui.parsedCache = parsed
 
+        local escModel = Am32Init and type(Am32Init.getEscModel) == "function" and Am32Init.getEscModel(buf) or nil
+        local escVersion = Am32Init and type(Am32Init.getEscVersion) == "function" and Am32Init.getEscVersion(buf) or nil
+        local escFirmware = Am32Init and type(Am32Init.getEscFirmware) == "function" and Am32Init.getEscFirmware(buf) or nil
+
+        ui.escModel = escModel
+        ui.escVersion = escVersion
+        ui.escFirmware = escFirmware
+
         local session = getSession()
         if session then
+          session.escDetails = {
+            model = escModel,
+            version = escVersion,
+            firmware = escFirmware
+          }
           session.setup_esc_motors_esc_tools_am32 = {
             config = {},
-            parsedCache = ui.parsedCache
+            parsedCache = ui.parsedCache,
+            escModel = escModel,
+            escVersion = escVersion,
+            escFirmware = escFirmware
           }
           for k, v in pairs(ui.config) do
             session.setup_esc_motors_esc_tools_am32.config[k] = v
@@ -345,6 +366,9 @@ local function loadFromSession()
       end
     end
     ui.parsedCache = cached.parsedCache
+    ui.escModel = cached.escModel
+    ui.escVersion = cached.escVersion
+    ui.escFirmware = cached.escFirmware
     return true
   end
   return false
@@ -593,7 +617,11 @@ function M.build(ctx)
 
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
+    local headerTitle = title
+    if ui.escModel and ui.escModel ~= "" then
+      headerTitle = ui.escModel
+    end
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
   local hasMultipleEscs = (ui.motorCount == nil) or (ui.motorCount >= 2)
@@ -977,6 +1005,7 @@ function M.onClose()
   EscParametersAm32Api = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
+  Am32Init = nil
   t = nil
 end
 

@@ -49,6 +49,9 @@ local ui = {
   currentSection = 1,
   parsedCache = nil,
   activeFields = nil,
+  escModel = nil,
+  escVersion = nil,
+  escFirmware = nil,
   runtime = {
     readPending = false,
     requestRebuild = nil,
@@ -126,16 +129,32 @@ local function queueOmpReadActual(queue)
 
         ui.parsedCache = parsed
 
+        local escModel = OmpInit and type(OmpInit.getEscModel) == "function" and OmpInit.getEscModel(buf) or nil
+        local escVersion = OmpInit and type(OmpInit.getEscVersion) == "function" and OmpInit.getEscVersion(buf) or nil
+        local escFirmware = OmpInit and type(OmpInit.getEscFirmware) == "function" and OmpInit.getEscFirmware(buf) or nil
+
+        ui.escModel = escModel
+        ui.escVersion = escVersion
+        ui.escFirmware = escFirmware
+
         if OmpInit and type(OmpInit.getActiveFields) == "function" then
           ui.activeFields = OmpInit.getActiveFields(buf)
         end
 
         local session = getSession()
         if session then
+          session.escDetails = {
+            model = escModel,
+            version = escVersion,
+            firmware = escFirmware
+          }
           session.setup_esc_motors_esc_tools_omp = {
             config = {},
             parsedCache = ui.parsedCache,
-            activeFields = ui.activeFields
+            activeFields = ui.activeFields,
+            escModel = escModel,
+            escVersion = escVersion,
+            escFirmware = escFirmware
           }
           for k, v in pairs(ui.config) do
             session.setup_esc_motors_esc_tools_omp.config[k] = v
@@ -253,6 +272,9 @@ local function loadFromSession()
     end
     ui.parsedCache = cached.parsedCache
     ui.activeFields = cached.activeFields
+    ui.escModel = cached.escModel
+    ui.escVersion = cached.escVersion
+    ui.escFirmware = cached.escFirmware
     return true
   end
   return false
@@ -469,7 +491,11 @@ function M.build(ctx)
 
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
+    local headerTitle = title
+    if ui.escModel and ui.escModel ~= "" then
+      headerTitle = ui.escModel
+    end
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
