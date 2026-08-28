@@ -15,6 +15,7 @@ local MspRuntime = nil
 local EscParametersYgeApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
+local YgeInit = nil
 local t = nil
 
 local ui = {
@@ -73,6 +74,9 @@ local function ensureDeps()
   if not EscParametersYgeApi then EscParametersYgeApi = loadModule("tasks/msp/api/esc_parameters_yge.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  -- The model table, which this page used to keep a second copy of. Loaded the way the omp,
+  -- xdfly and ztw pages already load their own init module.
+  if not YgeInit then YgeInit = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/yge/init.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -275,16 +279,10 @@ end
 
 local function supports12vBec()
   local typeId = ui.parsedCache and ui.parsedCache.esc_type
-  if not typeId then return false end
-  local hvt12vTypes = {
-    [8272] = true, -- YGE 205 HVT
-    [8273] = true, -- YGE 205 HVT BEC
-    [5712] = true, -- YGE 165 HVT
-    [4179] = true, -- YGE Aureus 105v2
-    [5027] = true, -- YGE Aureus 135v2
-    [5459] = true  -- YGE Saphir 155v2
-  }
-  return hvt12vTypes[typeId] == true
+  if not typeId or not YgeInit then return false end
+  local models = YgeInit.escModels
+  local model = type(models) == "table" and models[typeId] or nil
+  return model ~= nil and model.bec12v == true
 end
 
 local motorConfigRetryCount = 0
@@ -795,6 +793,7 @@ function M.onClose()
   EscParametersYgeApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
+  YgeInit = nil
   t = nil
 end
 
