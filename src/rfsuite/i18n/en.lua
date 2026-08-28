@@ -5,6 +5,7 @@ return {
     erasing = "Erasing...",
     connecting = "Connecting",
     preparing = "Preparing suite",
+    unknown_value = "Unknown (%s)",
     onconnect = {
       apiversion = "Reading API version",
       uid = "Reading serial number",

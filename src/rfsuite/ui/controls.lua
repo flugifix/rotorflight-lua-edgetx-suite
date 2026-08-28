@@ -449,17 +449,31 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
   local labelY = Controls.labelY(y, rowH)
 
   local values = {}
-  local selectedIndex = 1
+  local selectedIndex = nil
   for i, opt in ipairs(options) do
     values[i] = tostring(opt.label or "")
     if opt.value == selectedValue then
       selectedIndex = i
     end
   end
+
+  -- A value the list does not contain used to leave selectedIndex at 1, so a board reporting
+  -- something this build has no label for was drawn exactly like a board reporting the first
+  -- option -- and there was nothing on the screen to tell the two apart. Show the raw value
+  -- instead, in an entry appended past the end of `options`: the combo then says what was read,
+  -- and the guard in `set` below keeps that entry from ever being chosen or handed to onSelect.
+  local unknownIndex = nil
+  if selectedIndex == nil and selectedValue ~= nil and #values > 0 then
+    unknownIndex = #values + 1
+    values[unknownIndex] = string.format("@i18n(app.unknown_value)@", tostring(selectedValue))
+    selectedIndex = unknownIndex
+  end
+
   if #values == 0 then
     values[1] = ""
     selectedIndex = 1
   end
+  selectedIndex = selectedIndex or 1
 
   -- Left label (same style as radio rows)
   children[#children + 1] = {
@@ -485,6 +499,11 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
     set = function(nextIndex)
       local idx = tonumber(nextIndex) or selectedIndex
       if idx < 1 then idx = 1 end
+      -- The placeholder is not one of the options. Selecting it is a no-op rather than a clamp
+      -- onto the last real entry, which would write a value the pilot never chose.
+      if unknownIndex and idx == unknownIndex then
+        return
+      end
       if idx > #options then idx = #options end
       if idx == selectedIndex then
         return
