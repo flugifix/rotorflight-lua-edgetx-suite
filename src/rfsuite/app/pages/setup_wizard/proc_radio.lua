@@ -128,6 +128,31 @@ end
 -- channel the choice of switch has a right answer the pilot cannot read off the picker, and on
 -- the profile channel what the switch will do is three flight modes rather than the one thing
 -- its name says.
+-- What this channel's chosen position DOES, in one sentence.
+--
+-- What stood here was one sentence for all four channels, describing the on-off control rather
+-- than the channel -- and it opened with *switched on* / *switched off*, which the pilot read as
+-- the switch on their own transmitter, the only switch the rest of the screen talks about. Twice,
+-- from two different screens. So a replacement must never open with a word that could belong to
+-- the pilot's switch, and it says what the position means rather than what the control does.
+--
+-- The profile channel gets none: the hint below it already explains the channel completely.
+local function channelNote(i18n, key)
+  if key == "arm" then
+    return t(i18n, "note_ch_arm",
+      "At this switch position the flight controller is armed.")
+  end
+  if key == "throttle" then
+    return t(i18n, "note_ch_throttle",
+      "Choose which switch stops the motor and which switch drives the governor.")
+  end
+  if key == "rescue" then
+    return t(i18n, "note_ch_rescue",
+      "At this switch position the flight controller triggers rescue. In every other position it is off.")
+  end
+  return nil
+end
+
 local function channelHint(i18n, key)
   if key == "arm" then
     return t(i18n, "hint_arm",
@@ -139,7 +164,7 @@ local function channelHint(i18n, key)
   end
   if key == "throttle" then
     return t(i18n, "note_gov_later",
-      "The governor switch is settled now. What its positions produce is the drivetrain section's, and until then the motor is off in every position.")
+      "The drivetrain section sets the final values. Until then the output side stays unplugged.")
   end
   return nil
 end
@@ -525,17 +550,27 @@ procs[#procs + 1] = {
 
         for _, info in ipairs(w.data.sticks or {}) do
           local entry = info.entry
-          local value = tostring(info.sourceName or t(i18n, "finding_no_input", "no input"))
-          local marker
+          local source = tostring(info.sourceName or t(i18n, "finding_no_input", "no input"))
+
+          -- Three columns and one comparison. The left names the FUNCTION, so the target no longer
+          -- appears twice in a row that then read as a duplicate. The middle puts what is there
+          -- next to what it becomes, which is the only pair the pilot is actually comparing. The
+          -- marker goes back to being a marker: it says whether this row is acted on, so a row
+          -- with nothing to do is quiet instead of as loud as the rest.
+          --
+          -- `->` is two ASCII characters on purpose; an arrow glyph is not in every EdgeTX font.
+          local value, marker
           if info.ok then
+            value = source
             marker = t(i18n, "marker_ok", "ok")
           else
-            -- What it will become, not what is wrong with it. The pilot is being shown a plan,
-            -- and a plan reads forwards.
-            marker = entry.channelName
+            value = source .. " -> " .. entry.channelName
+            marker = t(i18n, "marker_change", "change")
           end
+
           y = y + w.row(children, area.x, y, area.w,
-            "CH" .. tostring(entry.channel) .. "  " .. entry.channelName, value, marker)
+            "CH" .. tostring(entry.channel) .. "  " .. channelName(i18n, entry.key),
+            value, marker)
         end
 
         if w.data.sticksError then
@@ -955,12 +990,23 @@ local function makeChannelProcedure(channel, order)
         -- screen has to say so: *Set up* clears whatever is on the channel and writes the layout
         -- from the switch below. Without this line a pilot looking at *source unclear* has no way
         -- to know that the way out is right in front of them.
-        local note = t(i18n, "setup_note", "Switched on, this channel is laid out from the switch below. Switched off, nothing on it is touched.")
-        if info and (info.count or 0) > 0 then
-          note = t(i18n, "setup_note_replace",
-            "Switched on, the mixer lines already on this channel are replaced by the switch below. Switched off, they are kept.")
+        local note = channelNote(i18n, entry.key)
+        if note then
+          y = y + 6 + w.paragraph(children, area.x, y + 6, area.w, note)
         end
-        y = y + 6 + w.paragraph(children, area.x, y + 6, area.w, note)
+
+        -- The one sentence that survives from the old generic pair, and only where it is true:
+        -- that setting this channel up REPLACES what is already on it. It exists because a screen
+        -- reporting a state the assistant cannot read must also name the way out of it.
+        -- Only while there is still something to replace. Kept unconditionally it reappeared
+        -- after the write -- the channel then carries mixer lines, ours -- and warned about
+        -- replacing them on every later visit, which cost the screen a page it did not have.
+        if info and (info.count or 0) > 0
+          and (proc.isComplete == nil or proc.isComplete(w) ~= true) then
+          y = y + 6 + w.paragraph(children, area.x, y + 6, area.w,
+            t(i18n, "setup_note_replace",
+              "Setting this channel up replaces the mixer lines already on it."))
+        end
 
         local hint = channelHint(i18n, entry.key)
         if hint then
@@ -969,7 +1015,10 @@ local function makeChannelProcedure(channel, order)
 
         -- One field either way, and it starts EMPTY -- there is no defensible default for a
         -- safety function, and a pre-filled form is how a pilot ends up with one they never chose.
-        local pickerW = 150
+        -- Fixed at 150 the label beside it was left 150 px on the narrowest page, which is not
+        -- enough for a field name that says what the position is for. The picker itself only ever
+        -- shows a switch name, so it is the half that can give.
+        local pickerW = math.min(150, math.floor(area.w * 0.42))
         w.label(children, area.x, y + math.floor((w.ROW_H - 18) / 2), area.w - pickerW - 8,
           pickerName(i18n, entry.key), w.font, COLOR_THEME_PRIMARY1)
 
@@ -1517,7 +1566,7 @@ local function linkChoice(w, children, area, y, kind, label, task)
     return 0
   end
 
-  local pickerW = 150
+  local pickerW = math.min(150, math.floor(area.w * 0.42))
   w.label(children, area.x, y + math.floor((w.ROW_H - 18) / 2), area.w - pickerW - 8,
     label, w.font, COLOR_THEME_PRIMARY1)
 

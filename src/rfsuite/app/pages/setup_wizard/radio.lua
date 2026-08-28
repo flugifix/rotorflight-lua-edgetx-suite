@@ -128,11 +128,19 @@ end
 -- on the radio's menus. So it is neither the label the pilot edits nor one that moves when the
 -- stick mode changes -- which is exactly what the two name columns here ARE, and why nothing is
 -- ever resolved through them.
+--
+-- `key` is the FUNCTION, in the pilot's own language, and it is what the screen shows on the left.
+-- The name that is written into the model stands on the right as the target, and having the target
+-- in both columns is what made the row read as a duplicate: `CH1 Ail ... Rud ... Ail`.
 M.STICK_INPUTS = {
-  { input = 0, channel = 1, stick = 3, field = "ail", inputName = "Ail", channelName = "Ail" },
-  { input = 1, channel = 2, stick = 1, field = "ele", inputName = "Ele", channelName = "Ele" },
-  { input = 2, channel = 3, stick = 2, field = "thr", inputName = "Col", channelName = "Col" },
-  { input = 3, channel = 4, stick = 0, field = "rud", inputName = "Rud", channelName = "Rud" }
+  { input = 0, channel = 1, stick = 3, field = "ail", key = "aileron",
+    inputName = "Ail", channelName = "Ail" },
+  { input = 1, channel = 2, stick = 1, field = "ele", key = "elevator",
+    inputName = "Ele", channelName = "Ele" },
+  { input = 2, channel = 3, stick = 2, field = "thr", key = "collective",
+    inputName = "Col", channelName = "Col" },
+  { input = 3, channel = 4, stick = 0, field = "rud", key = "rudder",
+    inputName = "Rud", channelName = "Rud" }
 }
 
 local function callGlobal(name, ...)
