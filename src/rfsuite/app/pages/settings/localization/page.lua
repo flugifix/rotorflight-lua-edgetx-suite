@@ -28,6 +28,7 @@ end
 
 local ui = {
   loaded    = false,
+  dirty     = false,
   config    = buildDefaultConfig(),
 }
 
@@ -94,6 +95,7 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
+  ui.dirty = false
 end
 
 function M.onSave(ctx)
@@ -105,6 +107,7 @@ function M.onSave(ctx)
   end
   local ok, err = ctx.savePreferences()
   if ok then
+    ui.dirty = false
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
     end
@@ -131,9 +134,7 @@ function M.build(ctx)
     t(i18n, "temperature_unit", "Temperature Unit"),
     getTempOptions(i18n),
     ui.config.temperature_unit,
-    function(val)
-      ui.config.temperature_unit = val
-    end
+    ui.runtime.getValueSetter("temperature_unit")
   )
 
   cursorY = cursorY + Controls.appendComboSelect(
@@ -141,9 +142,7 @@ function M.build(ctx)
     t(i18n, "altitude_unit", "Altitude Unit"),
     getAltOptions(i18n),
     ui.config.altitude_unit,
-    function(val)
-      ui.config.altitude_unit = val
-    end
+    ui.runtime.getValueSetter("altitude_unit")
   )
 end
 

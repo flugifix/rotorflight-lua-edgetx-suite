@@ -37,6 +37,7 @@ end
 
 local ui = {
   loaded = false,
+  dirty = false,
   sections = {
     timer_alerts = true,
     flight = true,
@@ -147,6 +148,7 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
+  ui.dirty = false
   return true
 end
 
@@ -161,6 +163,7 @@ function M.onSave(ctx)
 
   local ok, err = ctx.savePreferences()
   if ok then
+    ui.dirty = false
     return true
   else
     if ctx and type(ctx.reportSave) == "function" then

@@ -42,6 +42,7 @@ end
 
 local ui = {
   loaded = false,
+  dirty = false,
   sections = {
     safety      = true,
     development = false,
@@ -175,6 +176,7 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
+  ui.dirty = false
 end
 
 function M.onSave(ctx)
@@ -188,6 +190,7 @@ function M.onSave(ctx)
 
   local ok, err = ctx.savePreferences()
   if ok then
+    ui.dirty = false
     if ctx.menu and ctx.menu.setCondition then
       ctx.menu.setCondition("developerTools", ui.config.developer_tools == true)
     end
