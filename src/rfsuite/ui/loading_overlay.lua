@@ -25,6 +25,35 @@ local function textSize(text, font, fallbackCharW, fallbackLineH)
   return #tostring(text or "") * fallbackCharW, fallbackLineH
 end
 
+--- The longest prefix of `text` that still counts as `lines` lines, with an ellipsis on it.
+--
+-- Bisected rather than walked: `count` measures a whole string, and calling it once per
+-- character on a long stack trace is the kind of loop this tool has a budget for. The cut is
+-- moved back off a UTF-8 continuation byte, so a truncated string cannot end in half a
+-- character on a locale that has any.
+local ELLIPSIS = "..."
+
+local function truncateToLines(text, lines, count)
+  local best = ELLIPSIS
+  local lo, hi = 0, #text
+  while lo <= hi do
+    local mid = math.floor((lo + hi) / 2)
+    local cut = mid
+    while cut > 0 do
+      local b = string.byte(text, cut + 1)
+      if b and b >= 0x80 and b < 0xC0 then cut = cut - 1 else break end
+    end
+    local candidate = string.sub(text, 1, cut) .. ELLIPSIS
+    if count(candidate) <= lines then
+      best = candidate
+      lo = mid + 1
+    else
+      hi = mid - 1
+    end
+  end
+  return best
+end
+
 function M.append(children, opts)
   if type(children) ~= "table" or type(opts) ~= "table" then return end
 
@@ -82,31 +111,69 @@ function M.append(children, opts)
   -- has a width and no height, so LVGL sizes it to its own text with LV_LABEL_LONG_WRAP,
   -- which breaks on a newline and on the width -- count both, the same way the title is
   -- counted above, and grow the box by the amount those lines do not fit in. Most of the
-  -- multi-line cases still fit, and those must not move. The width count is deliberately the
-  -- cheap one: it divides instead of walking word boundaries, so a line that breaks early at
-  -- a long word can be under-counted.
+  -- multi-line cases still fit, and those do not move.
   local _, messageLineH = textSize("", SMLSIZE, 6, 14)
-  local messageLines = 0
   -- `string.gmatch(s, ...)`, not `s:gmatch(...)`. Indexing a string needs the string
   -- metatable, and this tree does not rely on it having one: every other split here goes
   -- through the library form.
-  for line in string.gmatch(message .. "\n", "([^\n]*)\n") do
-    local lineW = textSize(line, SMLSIZE, 6, 14)
-    if innerW > 0 and lineW > innerW then
-      messageLines = messageLines + math.ceil(lineW / innerW)
-    else
-      messageLines = messageLines + 1
+  --
+  -- The words are walked rather than the width divided. A division answers "how many line
+  -- widths of text is this", and LV_LABEL_LONG_WRAP breaks at word boundaries -- so every line
+  -- that breaks early at a long word leaves slack the division does not see, and the count comes
+  -- out LOW. It was low enough on a runtime error string to put the button on top of the text.
+  -- A word wider than the line is broken inside the word, which the inner loop follows.
+  local spaceW = textSize(" ", SMLSIZE, 6, 14)
+  local function countMessageLines(text)
+    local n = 0
+    for line in string.gmatch(text .. "\n", "([^\n]*)\n") do
+      n = n + 1
+      local used = 0
+      for word in string.gmatch(line, "%S+") do
+        local wordW = textSize(word, SMLSIZE, 6, 14)
+        local add = used > 0 and spaceW + wordW or wordW
+        if used > 0 and used + add > innerW then
+          n = n + 1
+          used = wordW
+        else
+          used = used + add
+        end
+        while innerW > 0 and used > innerW do
+          n = n + 1
+          used = used - innerW
+        end
+      end
     end
+    return n
   end
+  local messageLines = countMessageLines(message)
   -- The room the layout gives the message: from its own top to the top of the bar, which is
   -- where the button goes when there is no bar. Written as the difference of the two offsets
   -- this file already uses rather than as a number, so it stays correct if either moves.
   local messageTop = 10 + titleStep + extra
   local messageRoom = (110 + extra + titleShift) - messageTop
-  local messageShift = math.max(0, messageLines * messageLineH - messageRoom)
-
   local barBlock = showBar and 0 or -32
-  local boxH = (action and 208 or 154) + extra + barBlock + titleShift + messageShift
+  local baseBoxH = (action and 208 or 154) + extra + barBlock + titleShift
+
+  -- A message has no length of its own to rely on: a runtime error string is whatever was
+  -- raised. The box grows by every line that does not fit in `messageRoom`, so past a certain
+  -- length it grows off the bottom of the screen and takes the acknowledging button with it --
+  -- and a modal whose only button is off-screen cannot be dismissed at all. Cap what is DRAWN
+  -- instead. Nothing is lost by it: whoever raises one of these has already written the full
+  -- text to the card log, so the short form here is a summary rather than the only copy.
+  local maxLines = (h >= 400) and 6 or 3
+  -- And never more lines than the box can grow by while still fitting on the screen, whatever
+  -- the cap above says: the geometry is the hard constraint, the cap is the readable one.
+  local roomForLines = math.floor((messageRoom + math.max(0, h - 16 - baseBoxH)) / messageLineH)
+  if maxLines > roomForLines then maxLines = roomForLines end
+  if maxLines < 1 then maxLines = 1 end
+
+  if messageLines > maxLines then
+    message = truncateToLines(message, maxLines, countMessageLines)
+    messageLines = countMessageLines(message)
+  end
+
+  local messageShift = math.max(0, messageLines * messageLineH - messageRoom)
+  local boxH = baseBoxH + messageShift
   local boxX = x + math.floor((w - boxW) / 2)
   local boxY = y + math.floor((h - boxH) / 2) - 64
   if boxY < y + 8 then
