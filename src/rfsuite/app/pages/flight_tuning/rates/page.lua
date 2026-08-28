@@ -459,24 +459,24 @@ local function getLayoutProfile(w, h)
 
   if w >= 700 then
     profile.headerFont = SMLSIZE
-    profile.headerTextY = 4
-    profile.headerLineY = 38
-    profile.headerH = 44
+    profile.headerTextY = 2
+    profile.headerLineY = 32
+    profile.headerH = 38
     profile.rowFont = SMLSIZE
-    profile.rowH = 56
-    profile.rowLabelY = 13
-    profile.cellTop = 6
+    profile.rowH = 50
+    profile.rowLabelY = 10
+    profile.cellTop = 3
     profile.afterHeaderGap = 6
   elseif w < 560 then
     profile.headerFont = SMLSIZE
     profile.headerTextY = 0
-    profile.headerLineY = 24
-    profile.headerH = 30
+    profile.headerLineY = 22
+    profile.headerH = 26
     profile.rowFont = SMLSIZE
-    profile.rowH = 42
-    profile.rowLabelY = 10
-    profile.cellTop = 5
-    profile.afterHeaderGap = 6
+    profile.rowH = 40
+    profile.rowLabelY = 9
+    profile.cellTop = 4
+    profile.afterHeaderGap = 4
   end
 
   return profile
@@ -738,7 +738,7 @@ function M.build(ctx)
   end
 
   local profileDisplay = getCurrentProfileDisplay() or 1
-  local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 50
+  local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 38
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     local headingTitle = string.format("%s #%d - %s", pageText(i18n, "title"), profileDisplay, typeName)

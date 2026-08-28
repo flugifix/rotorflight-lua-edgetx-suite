@@ -1,4 +1,4 @@
-local M = {}
+﻿local M = {}
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -500,7 +500,7 @@ function M.build(ctx)
       headerTitle = ui.parsedCache.model_name
     end
     Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
   end
 
   local rowH

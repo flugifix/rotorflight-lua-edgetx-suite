@@ -225,14 +225,14 @@ local function isAtLeastVersion(req)
 end
 
 local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, spec1, customLabelW)
-  local rowH = (Controls and Controls.ROW_H) or 48
+  local rowH = (Controls and Controls.ROW_H) or 40
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
-  local editW1   = math.floor(w * 0.18)
-  local labelW1  = customLabelW or ((label1 and label1 ~= "") and math.floor(w * 0.26) or math.floor(w * 0.12))
+  local editW1   = math.floor(w * 0.24)
+  local labelW1  = customLabelW or ((label1 and label1 ~= "") and math.floor(w * 0.24) or math.floor(w * 0.14))
   local margin   = 10
-  local labelGap = 6
+  local labelGap = 4
   
   local xEdit1  = x + w - editW1 - margin
   local xLabel1 = xEdit1 - labelW1 - 8
@@ -305,15 +305,15 @@ local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, 
 end
 
 local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spec1, label2, key2, spec2, customLabelW)
-  local rowH = (Controls and Controls.ROW_H) or 48
+  local rowH = (Controls and Controls.ROW_H) or 40
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   
-  local editW   = math.floor(w * 0.18)
-  local labelW  = customLabelW or math.floor(w * 0.12)
+  local editW   = math.floor(w * 0.24)
+  local labelW  = customLabelW or math.floor(w * 0.14)
   local gap     = 8
   local margin  = 10
-  local labelGap = 6
+  local labelGap = 4
   
   local xEdit2  = x + w - editW - margin
   local xLabel2 = xEdit2 - labelW - gap
@@ -549,10 +549,8 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, displayTitle)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
   end
-
-  cursorY = cursorY + 10
 
   -- Specs
   local specHz = { scale=1, mult=1, min=0, max=4000, suffix="Hz", decimals=0 }

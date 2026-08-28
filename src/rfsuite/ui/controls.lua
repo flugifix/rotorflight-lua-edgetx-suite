@@ -49,34 +49,36 @@ local function getRowH()
   local prof = getDisplayProfile()
   if prof and prof.rowH then return prof.rowH end
   local w = _G.LCD_W or 480
-  if w >= 760 then return 56 end
-  if w <= 320 then return 40 end
-  return 48
+  if w >= 760 then return 50 end
+  if w <= 320 then return 34 end
+  return 40
 end
 
 local function getHorizontalRowH()
   local prof = getDisplayProfile()
   if prof and prof.horizontalRowH then return prof.horizontalRowH end
   local w = _G.LCD_W or 480
-  if w >= 760 then return 78 end
-  if w <= 320 then return 56 end
-  return 64
+  if w >= 760 then return 68 end
+  if w <= 320 then return 48 end
+  return 56
 end
 
 local function getSectionH()
   local prof = getDisplayProfile()
   if prof and prof.sectionH then return prof.sectionH end
   local w = _G.LCD_W or 480
-  if w >= 760 then return 52 end
-  return 46
+  if w >= 760 then return 46 end
+  if w <= 320 then return 32 end
+  return 38
 end
 
 local function getStaticSectionH()
   local prof = getDisplayProfile()
   if prof and prof.staticSectionH then return prof.staticSectionH end
   local w = _G.LCD_W or 480
-  if w >= 760 then return 52 end
-  return 46
+  if w >= 760 then return 46 end
+  if w <= 320 then return 32 end
+  return 38
 end
 
 local CTRL_H = getNativeCtrlH()
@@ -174,7 +176,7 @@ function Controls.computeGridMetrics(totalW, columns, opts)
 end
 
 function Controls.appendSectionHeader(children, x, y, w, title, expanded, onToggle)
-  local sectionH = Controls.SECTION_H or 46
+  local sectionH = Controls.SECTION_H or 38
 
   -- Title label
   children[#children + 1] = {
@@ -229,7 +231,7 @@ function Controls.appendSectionHeader(children, x, y, w, title, expanded, onTogg
 end
 
 function Controls.appendStaticSectionHeader(children, x, y, w, title)
-  local staticSectionH = Controls.STATIC_SECTION_H or 46
+  local staticSectionH = Controls.STATIC_SECTION_H or 38
 
   children[#children + 1] = {
     type  = "label",
@@ -241,7 +243,7 @@ function Controls.appendStaticSectionHeader(children, x, y, w, title)
 
   children[#children + 1] = {
     type   = "rectangle",
-    x = x, y = y + staticSectionH - 6,
+    x = x, y = y + staticSectionH - 5,
     w = w, h = 3,
     color  = COLOR_THEME_SECONDARY1, filled = true
   }

@@ -349,7 +349,7 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
   end
 
   local rightMargin = 10
@@ -357,7 +357,7 @@ function M.build(ctx)
   local gap = 8
   local modeW = math.floor(w * 0.32)
   local valueW = math.floor(w * 0.24)
-  local rowH = (Controls and Controls.ROW_H) or 48
+  local rowH = (Controls and Controls.ROW_H) or 40
   local valueX = w - rightMargin - valueW
   local modeX = valueX - gap - modeW
   local titleW = modeX - leftMargin - gap

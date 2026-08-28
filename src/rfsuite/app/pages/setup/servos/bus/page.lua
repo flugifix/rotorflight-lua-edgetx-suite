@@ -1,4 +1,4 @@
-local M = {}
+﻿local M = {}
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -780,7 +780,7 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
   end
 
   -- Sixteen, not BUS_SERVO_CHANNELS: the firmware's 18 is an SBUS frame's 16 proportional
