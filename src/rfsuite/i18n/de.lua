@@ -49,7 +49,7 @@ return {
       setup_wizard = {
         name = "Volle Ersteinrichtung",
         all = "Kompletter Durchlauf",
-        radio = "Funk",
+        radio = "Sender",
         board = "Flugregler"
       },
       tools = { name = "Werkzeuge" },
@@ -1063,7 +1063,7 @@ return {
         begin = "Starten",
         write_now = "Schreiben",
         calibrate = "Kalibrieren",
-        section_radio = "Funk",
+        section_radio = "Sender",
         section_board = "Flugregler",
         step_intro = "Überblick",
         step_layout = "Belegung",
