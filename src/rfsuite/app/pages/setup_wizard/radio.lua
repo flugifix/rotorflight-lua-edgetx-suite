@@ -340,6 +340,13 @@ end
 -- It is what lets a pilot name a switch by moving it. The radio's own picker already does that
 -- for a position; a channel that needs the whole switch is asked with a plain list, and a list
 -- does not listen to the hardware unless something makes it.
+-- Is this exact position the one the switch is resting in? The read-back needs it for every row:
+-- what the board reports has to be compared against what the pilot's hand is doing right now, and
+-- nothing else on the screen knows that.
+function M.switchActive(swsrc)
+  return callGlobal("getSwitchValue", swsrc) == true
+end
+
 function M.activePosition(swsrc)
   local first = M.firstPositionOf(swsrc)
   if first == nil then return nil end
@@ -563,11 +570,8 @@ function M.writeThrottleChannel(entry, swsrc, govSwsrc)
   if mixSource == nil then return false, err end
 
   -- The governor switch, where the pilot named one, goes into an input of its own and that input
-  -- feeds the BASE line. Nothing about the value changes with it: every line stays at the floor
-  -- until the drivetrain section knows the governor mode, so the motor is off in every position
-  -- either way. What this writes is the STRUCTURE, in the model, where it can be read back like
-  -- everything else here -- rather than in a store, which is the form this was refused in.
-  local baseSource = mixSource
+  -- feeds the value line.
+  local baseSource = nil
   if govSwsrc ~= nil and govSwsrc ~= 0 and entry.govInput ~= nil then
     local govSource, govErr = writeChannelInput({
       input = entry.govInput, inputName = entry.govInputName, channel = entry.channel
@@ -578,11 +582,26 @@ function M.writeThrottleChannel(entry, swsrc, govSwsrc)
 
   if not M.clearChannel(entry.channel) then return false, "clear_failed" end
 
-  -- Two lines, and what gates a line and what feeds it are two different fields. The base carries
-  -- the governor where there is one; the second line is the one the picked position gates, and it
-  -- overrides, so the hold can never be lost to whatever the base grows into.
+  -- Two lines, and the SAFE one is the one that is always on.
+  --
+  -- The first line is the floor: the hold input at zero weight and full negative offset, with no
+  -- switch, so the channel sits at its minimum whatever else happens. The second is the value and
+  -- it is gated by the position the pilot named as *motor released*, replacing the floor only
+  -- there.
+  --
+  -- Written this way round on purpose. The failure of a gated line is that it does not fire, and
+  -- with the value gated that failure leaves the channel on the floor -- motor off. Gating the
+  -- HOLD instead would have made the same failure leave the motor running, and it would also have
+  -- needed an inverted switch condition to mean "everywhere except here", which is a second thing
+  -- to get wrong.
+  --
+  -- Both lines used to sit at the floor, so every switch position produced the same value and no
+  -- check on this channel could fail. The governor positions now carry their full travel, by the
+  -- pilot's decision and against a stated objection: the section can leave behind a model whose
+  -- throttle channel is not at minimum while the drivetrain section has never run. What that costs
+  -- is written down in this branch's document; what it buys is that the read-back can go red.
   local ok = pcall(insert, entry.channel - 1, 0, {
-    source = baseSource,
+    source = mixSource,
     weight = 0,
     offset = -100,
     switch = 0,
@@ -593,10 +612,12 @@ function M.writeThrottleChannel(entry, swsrc, govSwsrc)
   })
   if not ok then return false, "insert_failed" end
 
+  -- Without a governor switch there is no value to carry, so the second line stays at the floor
+  -- too and the channel behaves exactly as it did before.
   ok = pcall(insert, entry.channel - 1, 1, {
-    source = mixSource,
-    weight = 0,
-    offset = -100,
+    source = baseSource or mixSource,
+    weight = baseSource and 100 or 0,
+    offset = baseSource and 0 or -100,
     switch = swsrc,
     multiplex = MULTIPLEX_REPLACE,
     curveType = 0,

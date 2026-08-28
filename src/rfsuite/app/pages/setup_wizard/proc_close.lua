@@ -45,18 +45,28 @@ procs[#procs + 1] = {
           t(i18n, "close_p2",
             "This machine is not ready to spool up. These parts are not covered here and are still at their defaults:")) + 6
 
-        y = y + w.row(children, area.x, y, area.w,
-          t(i18n, "close_drivetrain", "Drivetrain"),
-          t(i18n, "close_drivetrain_what", "ESC, motor, battery, throttle range, governor"), nil)
-        y = y + w.row(children, area.x, y, area.w,
-          t(i18n, "close_servos", "Servos"),
-          t(i18n, "close_servos_what", "output parameters, direction, centre"), nil)
-        y = y + w.row(children, area.x, y, area.w,
-          t(i18n, "close_mechanics", "Mechanics"),
-          t(i18n, "close_mechanics_what", "swashplate, pitch limits, tail"), nil)
-        y = y + w.row(children, area.x, y, area.w,
-          t(i18n, "close_signoff", "Sign-off"),
-          t(i18n, "close_signoff_what", "arming test, throttle hold, failsafe, telemetry"), nil)
+        -- Name over list, not name beside list.
+        --
+        -- These four were rows, and a row's value column is a fifth of the page wide with no room
+        -- to wrap: every one of the lists ran past its own column, on three of the four
+        -- geometries. Found by measuring across the elements rather than only down them, which is
+        -- a check this bench did not have until the section beside this one was walked on a
+        -- radio. Written as a heading and a sentence, the list wraps and nothing is dropped from
+        -- it -- and what is listed here is exactly what the pilot must not assume is configured.
+        local parts = {
+          { "close_drivetrain", "Drivetrain",
+            "close_drivetrain_what", "ESC, motor, battery, throttle range, governor" },
+          { "close_servos", "Servos",
+            "close_servos_what", "output parameters, direction, centre" },
+          { "close_mechanics", "Mechanics",
+            "close_mechanics_what", "swashplate, pitch limits, tail" },
+          { "close_signoff", "Sign-off",
+            "close_signoff_what", "arming test, throttle hold, failsafe, telemetry" }
+        }
+        for _, part in ipairs(parts) do
+          y = y + w.row(children, area.x, y, area.w, t(i18n, part[1], part[2]), nil, nil)
+          y = y + 2 + w.paragraph(children, area.x, y + 2, area.w, t(i18n, part[3], part[4]))
+        end
       end
     }
   }

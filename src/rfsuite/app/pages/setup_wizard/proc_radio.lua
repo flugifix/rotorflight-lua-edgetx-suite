@@ -755,24 +755,40 @@ local function throttleComplete(w, channel)
   local info = w.radio.describeChannel(channel)
   if info == nil then return nil end
   if info.count < 2 then return false end
-  for _, mix in ipairs(info.lines) do
-    if (tonumber(mix.weight) or 0) ~= 0 then return false end
-    if (tonumber(mix.offset) or 0) > -100 then return false end
+
+  -- The floor is the first line and it is unconditional: no switch, no weight, full negative
+  -- offset. Everything the channel's safety rests on is in that one line, so it is checked on its
+  -- own rather than as part of a loop over both.
+  local floorLine = info.lines[1]
+  local valueLine = info.lines[2]
+  if floorLine == nil or valueLine == nil then return false end
+  if (tonumber(floorLine.weight) or 0) ~= 0 then return false end
+  if (tonumber(floorLine.offset) or 0) > -100 then return false end
+  if (tonumber(floorLine.switch) or 0) ~= 0 then return false end
+
+  -- And the value line is gated by the position the pilot named. Checked only where that position
+  -- is known: the criterion is asked from the overview as well, before the procedure has run.
+  local picked = w.data.picked and w.data.picked[channel]
+  if picked ~= nil and picked ~= 0 and (tonumber(valueLine.switch) or 0) ~= picked then
+    return false
   end
 
-  -- And where the pilot named a governor switch, the base line has to be carrying it. Left out of
-  -- the criterion the channel would report itself done with the governor half missing -- the same
-  -- mistake the naming already cost this branch once: what has to be right is the end state.
+  -- Where the pilot named a governor switch, the value line has to be carrying it, at full travel.
+  -- Left out of the criterion the channel would report itself done with the governor half missing
+  -- -- the same mistake the naming already cost this branch once: what has to be right is the end
+  -- state.
   local entry = entryFor(w, channel)
   local wantGov = w.data.pickedGov and w.data.pickedGov[channel]
   if entry ~= nil and entry.govInput ~= nil and wantGov ~= nil and wantGov ~= 0 then
     local govSource = w.radio.inputSource(entry.govInput)
-    local base = info.lines[1]
-    if govSource == nil or base == nil then return nil end
-    if tonumber(base.source) ~= govSource then return false end
+    if govSource == nil then return nil end
+    if tonumber(valueLine.source) ~= govSource then return false end
+    if (tonumber(valueLine.weight) or 0) ~= 100 then return false end
     local line = w.radio.getInput(entry.govInput, 0)
     if line == nil then return false end
     if tonumber(line.source) ~= w.radio.switchSource(wantGov) then return false end
+  elseif (tonumber(valueLine.weight) or 0) ~= 0 then
+    return false
   end
   return true
 end
@@ -1289,7 +1305,7 @@ procs[#procs + 1] = {
           end
           local role = action.role
           if role and role.kind == "throttle" then
-            target = target .. "  " .. t(i18n, "note_motor_off", "motor off in every position")
+            target = target .. "  " .. t(i18n, "note_motor_off", "hold and governor")
           elseif role and role.kind == "condition" and action.window then
             target = target .. "  " .. tostring(role.box) .. " " ..
               tostring(action.window.start) .. "-" .. tostring(action.window["end"])
@@ -1413,23 +1429,40 @@ procs[#procs + 1] = {
       wakeup = function(w)
         local verify = w.data.verify
         if verify == nil then
-          verify = { pending = false, last = 0, replied = false }
+          verify = { pending = false, last = 0, replied = false,
+                     statusPending = false, statusLast = 0 }
           w.data.verify = verify
         end
-        if verify.pending then return end
         local now = nowSeconds()
-        if now - (verify.last or 0) < 0.2 then return end
-        verify.last = now
-        verify.pending = true
-        w.msp.read("rc", function(parsed)
-          verify.pending = false
-          if type(parsed) ~= "table" then return end
-          verify.replied = true
-          -- No rebuild, for the same reason as the stick screen: this is a LIVE read, so "repaint
-          -- on a change" means repaint on nearly every reply, five times a second, with the whole
-          -- scene torn down each time. The rows below read themselves instead.
-          verify.channels = parsed.channels
-        end)
+
+        -- The channel values are the fast half: the pilot is holding a switch and the row has to
+        -- move with it.
+        if not verify.pending and now - (verify.last or 0) >= 0.2 then
+          verify.last = now
+          verify.pending = true
+          w.msp.read("rc", function(parsed)
+            verify.pending = false
+            if type(parsed) ~= "table" then return end
+            verify.replied = true
+            -- No rebuild, for the same reason as the stick screen: this is a LIVE read, so
+            -- "repaint on a change" means repaint on nearly every reply, five times a second,
+            -- with the whole scene torn down each time. The rows below read themselves instead.
+            verify.channels = parsed.channels
+          end)
+        end
+
+        -- And the board's own state is the slow half. It carries the profile the board has
+        -- actually switched to and the reasons it would refuse to arm -- neither of which moves
+        -- fast enough to be worth a request five times a second on a link that answers about six.
+        if not verify.statusPending and now - (verify.statusLast or 0) >= 1.0 then
+          verify.statusLast = now
+          verify.statusPending = true
+          w.msp.read("status", function(parsed)
+            verify.statusPending = false
+            if type(parsed) ~= "table" then return end
+            verify.status = parsed.parsed or parsed
+          end)
+        end
       end,
       build = function(w, ctx, area)
         local children, i18n, y = ctx.children, ctx.i18n, area.y
@@ -1443,37 +1476,107 @@ procs[#procs + 1] = {
         y = y + w.paragraph(children, area.x, y, area.w,
           t(i18n, "verify_intro", "These values come back from the flight controller, so the channel reaches it. On / off is what it would do at the switch position you are holding now.")) + 6
 
-        -- The read-back must not require ENTERING the state it verifies. What has to be proven is
-        -- that the switch reaches the channel and the board sees it on the right aux slot, and
-        -- that holds in every switch position -- so the value is watched wherever the switch is,
-        -- and the position that would arm is computed rather than entered.
+        -- What each row proves, and it is the END RESULT rather than the write.
+        --
+        -- The rows used to name the wire -- `CH5 -> AUX1` and a microsecond count -- which says
+        -- where something was written and nothing about whether it works. Each row now names the
+        -- FUNCTION and the switch that drives it, and shows what the board reports at the position
+        -- the switch is resting in this instant. Move the switch and the row has to follow; the
+        -- expectation is computed from the switch, so a row can go red.
+        --
+        -- Still without entering the state it verifies. Arming is the one function whose "the
+        -- board reports it" means the board is armed, so that row shows what the board says it
+        -- would do and, where it would refuse, its own reason for refusing. Proving that it arms
+        -- is the sign-off procedure's, not this screen's.
+        local waiting = t(i18n, "marker_waiting", "waiting")
+        local okMark = t(i18n, "marker_ok", "ok")
+        local badMark = t(i18n, "marker_deviates", "deviates")
+
         for _, action in ipairs(w.data.actions or {}) do
-          local entry = action
+          local entry, role = action.entry, action.role
+
           local function state()
             local live = w.data.verify or {}
-            if entry.aux ~= nil and type(live.channels) == "table" then
-              local us = tonumber(live.channels[5 + entry.aux + 1])
-              if us ~= nil then
-                -- Two words, and they are about the FUNCTION rather than about the wire. The wire
-                -- is proven by there being a number here at all, which the line above says once.
-                local marker = t(i18n, "marker_off", "off")
-                if entry.window and us >= entry.window.start and us <= entry.window["end"] then
-                  marker = t(i18n, "marker_on", "on")
+            local status = live.status
+            local held = action.swsrc ~= nil and action.swsrc ~= 0
+              and w.radio.switchActive(action.swsrc) or false
+
+            if role and role.kind == "condition" then
+              if action.aux == nil or type(live.channels) ~= "table" then return "-", waiting end
+              local us = tonumber(live.channels[5 + action.aux + 1])
+              if us == nil or action.window == nil then return "-", waiting end
+              local inside = us >= action.window.start and us <= action.window["end"]
+
+              local text
+              if entry.key == "arm" then
+                if not inside then
+                  text = t(i18n, "verify_not_armed", "not armed")
+                else
+                  local reasons = status
+                    and M_MSP.armingDisableReasons(status.arming_disable_flags) or {}
+                  if #reasons > 0 then
+                    -- The chain is right and the board still will not arm. That is not a wiring
+                    -- fault, so it is neither an ok nor a deviation -- it is the board naming its
+                    -- own reason, which is the most this screen can honestly show.
+                    return string.format(t(i18n, "verify_blocked", "blocked: %s"),
+                                         tostring(reasons[1])),
+                           t(i18n, "marker_blocked", "blocked")
+                  end
+                  text = t(i18n, "verify_would_arm", "would arm")
                 end
-                return tostring(us) .. " us", marker
+              else
+                text = inside and t(i18n, "marker_on", "on") or t(i18n, "marker_off", "off")
               end
-            elseif entry.role and entry.role.kind == "throttle" then
-              return t(i18n, "note_motor_off", "motor off in every position"),
-                     t(i18n, "marker_off", "off")
+
+              if inside == held then return text, okMark end
+              return text, badMark
             end
-            return "-", t(i18n, "marker_waiting", "waiting")
+
+            if role and role.kind == "adjustment" then
+              if status == nil then return "-", waiting end
+              local pid = (tonumber(status.current_pid_profile_index) or 0) + 1
+              local rate = (tonumber(status.current_control_rate_profile_index) or 0) + 1
+              local text = string.format(t(i18n, "verify_profile", "profile %d, rate %d"),
+                                         pid, rate)
+
+              -- The whole chain in one comparison, and the only thing anywhere that proves the
+              -- adjustment slots were written: the position the switch is resting in against the
+              -- profile the board has actually switched to.
+              local offset = action.swsrc and w.radio.activePosition(action.swsrc) or nil
+              if offset == nil then return text, waiting end
+              local want = offset + 1
+              if pid == want and rate == want then return text, okMark end
+              return text .. string.format(t(i18n, "verify_want", " - want %s"), tostring(want)),
+                     badMark
+            end
+
+            if role and role.kind == "throttle" then
+              if type(live.channels) ~= "table" then return "-", waiting end
+              -- Function-ordered, so the fifth entry is the throttle whatever the wire carries it.
+              local us = tonumber(live.channels[5])
+              if us == nil then return "-", waiting end
+
+              local want = 988
+              if held then
+                if action.govSwsrc == nil or action.govSwsrc == 0 then return tostring(us) .. " us", waiting end
+                local first = w.radio.firstPositionOf(action.govSwsrc)
+                local offset = w.radio.activePosition(action.govSwsrc)
+                if first == nil or offset == nil then return tostring(us) .. " us", waiting end
+                want = w.radio.positionUs(first + offset) or 988
+              end
+
+              local text = tostring(us) .. " us"
+              if math.abs(us - want) <= 150 then return text, okMark end
+              return text .. string.format(t(i18n, "verify_want", " - want %s"), tostring(want)),
+                     badMark
+            end
+
+            return "-", waiting
           end
-          -- The aux slot belongs in the NAME. It is the half of the claim the pilot cannot see
-          -- anywhere else: which slot the board reads this channel on, which is the thing the
-          -- whole procedure exists to make agree.
-          local label = "CH" .. tostring(action.entry.channel)
-          if action.aux ~= nil then
-            label = label .. " " .. string.format(t(i18n, "verify_aux", "-> AUX%d"), action.aux + 1)
+
+          local label = channelName(i18n, entry.key)
+          if action.switchName then
+            label = label .. "  " .. tostring(action.switchName)
           end
           y = y + w.row(children, area.x, y, area.w, label,
             function() local value = state() return value end,
@@ -1560,10 +1663,80 @@ end
 -- One picker over a field the module itself described. Returns the height it took, or 0 where the
 -- walk has not produced that field -- a module that does not offer it gets no row rather than an
 -- empty one.
+-- The values this project offers, in the order it offers them.
+--
+-- The screen used to hand over the module's whole option list on the grounds that a list of ours
+-- can name something a given module cannot do. That is true and it is now the pilot's decision:
+-- the list is short, it is ours, and it is maintained here.
+--
+-- `D500` carries BOTH of its rates in its own label, and that is the point of naming it. It is a
+-- DVDA mode: the module repeats every packet, so the handset and the flight controller see 500 Hz
+-- while the air runs at 1000. The telemetry schedule divides the AIR rate, so 1000 is the number
+-- the board's pacing is computed from -- and on every non-D mode the two coincide, which is why
+-- nothing has ever shown the difference.
+local LINK_RATES = {
+  { key = "333", label = function(i18n) return "333 Hz" end },
+  { key = "500", label = function(i18n) return "500 Hz" end },
+  { key = "d500", label = function(i18n) return t(i18n, "link_rate_dvda", "D500 - 1000 Hz air") end }
+}
+
+local LINK_RATIOS = { "1:4", "1:8", "1:16", "1:32" }
+
+-- Which of the module's own options is this entry? Matched on the module's label, because that
+-- string is the only thing the parameter walk brings back. `500` has to refuse `D500` and `F500`
+-- explicitly: a plain substring test would take the first of them and quietly offer a different
+-- mode under the right name.
+local function moduleOptionIndex(options, want)
+  for index, option in ipairs(options or {}) do
+    local text = string.lower(tostring(option or ""))
+    if want == "d500" then
+      if string.find(text, "d500", 1, true) then return index - 1 end
+    elseif want == "500" then
+      if string.find(text, "500", 1, true)
+        and not string.find(text, "d500", 1, true)
+        and not string.find(text, "f500", 1, true) then return index - 1 end
+    elseif want == "333" then
+      if string.find(text, "333", 1, true) then return index - 1 end
+    else
+      if string.find(text, want, 1, true) then return index - 1 end
+    end
+  end
+  return nil
+end
+
 local function linkChoice(w, children, area, y, kind, label, task)
   local field = (kind == "rate") and task.getRateField() or task.getRatioField()
   if type(field) ~= "table" or type(field.options) ~= "table" or #field.options == 0 then
     return 0
+  end
+
+  -- Our list, reduced to what this module actually has. The choice control has no disabled entry,
+  -- so an option it cannot do is left out rather than shown greyed; and if it has none of ours at
+  -- all the module's own list stands, because a screen that offers nothing is worse than one that
+  -- offers more than we chose.
+  local values, indices = {}, {}
+  if kind == "rate" then
+    for _, rate in ipairs(LINK_RATES) do
+      local index = moduleOptionIndex(field.options, rate.key)
+      if index ~= nil then
+        values[#values + 1] = rate.label(w.i18n)
+        indices[#indices + 1] = index
+      end
+    end
+  else
+    for _, ratio in ipairs(LINK_RATIOS) do
+      local index = moduleOptionIndex(field.options, string.lower(ratio))
+      if index ~= nil then
+        values[#values + 1] = ratio
+        indices[#indices + 1] = index
+      end
+    end
+  end
+  if #values == 0 then
+    for index, option in ipairs(field.options) do
+      values[#values + 1] = option
+      indices[#indices + 1] = index - 1
+    end
   end
 
   local pickerW = math.min(150, math.floor(area.w * 0.42))
@@ -1574,18 +1747,25 @@ local function linkChoice(w, children, area, y, kind, label, task)
     type = "choice",
     x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
     title = label,
-    values = field.options,
-    -- The module counts its options from zero and the control from one, and the offset lives
-    -- here rather than in the task: what goes over the wire is the module's own index.
+    values = values,
+    -- The module counts its options from zero and the control from one, and this list is a subset
+    -- of the module's in our own order -- so the position in the control and the index on the wire
+    -- are two different numbers and are kept apart here rather than in the task.
     get = function()
       local current = (kind == "rate") and task.getRateField() or task.getRatioField()
-      local index = current and tonumber(current.selectedIndex) or 0
-      return index + 1
+      local selected = current and tonumber(current.selectedIndex) or nil
+      if selected ~= nil then
+        for position, index in ipairs(indices) do
+          if index == selected then return position end
+        end
+      end
+      return 1
     end,
     set = function(value)
-      local index = (tonumber(value) or 1) - 1
+      local position = tonumber(value) or 1
+      local index = indices[position]
       local current = (kind == "rate") and task.getRateField() or task.getRatioField()
-      if current == nil or tonumber(current.selectedIndex) == index then return end
+      if index == nil or current == nil or tonumber(current.selectedIndex) == index then return end
       task.selectOption(kind, index)
       w.rebuild()
     end
@@ -1681,19 +1861,56 @@ procs[#procs + 1] = {
         local modRate, modRatio, modRateLabel, modRatioLabel = modulePair()
         local unknown = t(i18n, "link_unknown", "not read yet")
 
+        local readable = (fcRate ~= nil and fcRatio ~= nil and modRate ~= nil and modRatio ~= nil)
+        local differ = readable and not (fcRate == modRate and fcRatio == modRatio)
+
         local boardText = unknown
         if fcRate ~= nil and fcRatio ~= nil then
           boardText = tostring(fcRate) .. " Hz  1:" .. tostring(fcRatio)
           if fcMode == 0 then boardText = boardText .. "  " .. t(i18n, "link_mode_native", "native") end
         end
-        y = y + w.row(children, area.x, y, area.w, t(i18n, "link_board", "Flight controller"), boardText, nil)
 
         local moduleText = unknown
         if modRate ~= nil and modRatio ~= nil then
           moduleText = tostring(modRateLabel or (tostring(modRate) .. " Hz")) .. "  " ..
             tostring(modRatioLabel or ("1:" .. tostring(modRatio)))
         end
-        y = y + w.row(children, area.x, y, area.w, t(i18n, "link_module", "Transmitter module"), moduleText, nil)
+
+        -- Which side wins is read off the ROW, not off a button.
+        --
+        -- Two buttons stood at the bottom, *set module* and *set board*, with nothing saying which
+        -- direction was the ordinary one -- and a wrong press silently changed the other side. A
+        -- button on each row means *use this one*, and aligning the other side is simply what
+        -- pressing it does. It is offered only where the two differ; where they agree the marker
+        -- says so and there is nothing to press.
+        local useThis = t(i18n, "link_use_this", "use this")
+        local matches = t(i18n, "marker_matches", "matches")
+
+        if differ then
+          y = y + w.findingRow(children, area.x, y, area.w,
+            t(i18n, "link_board", "Flight controller"), boardText,
+            { { text = useThis,
+                active = function() return not task.isRunning() end,
+                press = function()
+                  task.start(task.MODE_ROTORFLIGHT_TO_ELRS)
+                  w.rebuild()
+                end } })
+          y = y + w.findingRow(children, area.x, y, area.w,
+            t(i18n, "link_module", "Transmitter module"), moduleText,
+            { { text = useThis,
+                active = function() return not task.isRunning() end,
+                press = function()
+                  task.start(task.MODE_ELRS_TO_ROTORFLIGHT)
+                  w.rebuild()
+                end } })
+        else
+          y = y + w.row(children, area.x, y, area.w,
+            t(i18n, "link_board", "Flight controller"), boardText,
+            readable and matches or nil)
+          y = y + w.row(children, area.x, y, area.w,
+            t(i18n, "link_module", "Transmitter module"), moduleText,
+            readable and matches or nil)
+        end
 
         -- And the pilot may simply SAY what the link should run at.
         --
@@ -1706,38 +1923,6 @@ procs[#procs + 1] = {
           t(i18n, "link_pick_rate", "Packet rate"), task)
         y = y + linkChoice(w, children, area, y, "ratio",
           t(i18n, "link_pick_ratio", "Telemetry ratio"), task)
-
-        -- The two directions are one finding with two equally weighted actions, for the same
-        -- reason every finding on this path is: which side is right is the PILOT's answer. A
-        -- module set deliberately to a slow rate for range is not a board that needs correcting,
-        -- and a board configured for the link the craft actually flies on is not a module that
-        -- needs it.
-        local readable = (fcRate ~= nil and fcRatio ~= nil and modRate ~= nil and modRatio ~= nil)
-        local verdict = unknown
-        if readable then
-          if fcRate == modRate and fcRatio == modRatio then
-            verdict = t(i18n, "link_agree", "agree")
-          else
-            verdict = t(i18n, "link_differ", "differ")
-          end
-        end
-
-        y = y + w.findingRow(children, area.x, y, area.w,
-          t(i18n, "link_match", "Match"), verdict,
-          {
-            { text = t(i18n, "link_set_module", "Set module"),
-              active = function() return readable and not task.isRunning() end,
-              press = function()
-                task.start(task.MODE_ROTORFLIGHT_TO_ELRS)
-                w.rebuild()
-              end },
-            { text = t(i18n, "link_set_board", "Set board"),
-              active = function() return readable and not task.isRunning() end,
-              press = function()
-                task.start(task.MODE_ELRS_TO_ROTORFLIGHT)
-                w.rebuild()
-              end }
-          })
 
         -- What the two buttons do is in the HELP, not on the screen, and that is the second
         -- attempt rather than the first choice.
