@@ -1,4 +1,4 @@
-﻿local M = {}
+local M = {}
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
