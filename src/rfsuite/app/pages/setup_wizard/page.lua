@@ -873,9 +873,21 @@ local function buildOverview(ctx, x, top, w)
   local children, i18n = ctx.children, ctx.i18n
 
   local cursor = top
-  cursor = cursor + wiz.paragraph(children, x, cursor, w,
-    pageText(i18n, "overview_intro",
-      "Each part runs on its own. Open one, or continue where the machine says the work stops.")) + 10
+
+  -- The sentence that used to stand here is help now. It is read once and then costs a row on
+  -- every later visit, and a row here is a whole procedure the pilot has to page forward to
+  -- reach -- on the tightest page the list held two of nine.
+  --
+  -- Whether the section headings are worth their height, for the same reason. Scoped to one
+  -- section they restate the menu entry the pilot just came through. Counted off the list rather
+  -- than read off `ui.scope`, because what decides it is how many sections are actually shown.
+  local sections, previous = 0, nil
+  for _, proc in ipairs(ui.procedures or {}) do
+    if proc.counted ~= false and inScope(proc) and proc.section ~= previous then
+      previous = proc.section
+      sections = sections + 1
+    end
+  end
 
   local section = nil
   for index, proc in ipairs(ui.procedures or {}) do
@@ -883,13 +895,15 @@ local function buildOverview(ctx, x, top, w)
       if proc.section ~= section then
         -- Air before a heading, but not above the first one: without it the second section title
         -- is drawn flush on the divider of the row above and reads as part of that row.
-        if section ~= nil then cursor = cursor + 10 end
+        if sections > 1 then
+          if section ~= nil then cursor = cursor + 10 end
+          local name = (proc.section == "board")
+            and pageText(i18n, "section_board", "Flight controller")
+            or pageText(i18n, "section_radio", "Radio")
+          label(children, x, cursor, w, name, wiz.font, COLOR_THEME_SECONDARY1)
+          cursor = cursor + 24
+        end
         section = proc.section
-        local name = (section == "board")
-          and pageText(i18n, "section_board", "Flight controller")
-          or pageText(i18n, "section_radio", "Radio")
-        label(children, x, cursor, w, name, wiz.font, COLOR_THEME_SECONDARY1)
-        cursor = cursor + 24
       end
 
       local title = type(proc.title) == "function" and proc.title(i18n) or tostring(proc.id)
@@ -1153,9 +1167,24 @@ function M.build(ctx)
 end
 
 function M.onHelp(ctx)
+  local i18n = ctx and ctx.i18n
   local help = loadModule(BASE .. "help.lua")
+
+  -- The overview is not a procedure, so it has no per-procedure text and would otherwise fall
+  -- through to the general one. It gets the sentence that used to be drawn above the list.
+  if ui.view ~= "run" then
+    local base = type(help) == "function" and help(ctx, nil) or nil
+    local intro = pageText(i18n, "overview_intro",
+      "Each part runs on its own. Open one, or continue where the machine says the work stops.")
+    if type(base) == "table" then
+      base.message = intro .. "\n\n" .. tostring(base.message or "")
+      return base
+    end
+    return { title = pageText(i18n, "help_title", "Setup Assistant"), message = intro }
+  end
+
   if type(help) == "function" then return help(ctx, wiz.procedure()) end
-  return { title = pageText(ctx and ctx.i18n, "help_title", "Setup Assistant"), message = "" }
+  return { title = pageText(i18n, "help_title", "Setup Assistant"), message = "" }
 end
 
 function M.onBack(ctx)
