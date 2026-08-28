@@ -32,7 +32,8 @@ function M.createFormRuntime(ui)
     requestRebuild = nil,
     sectionToggleHandlers = {},
     boolGetters = {},
-    boolSetters = {}
+    boolSetters = {},
+    valueSetters = {}
   }
 
   -- A page may draw different controls depending on the value that has just
@@ -58,6 +59,16 @@ function M.createFormRuntime(ui)
     markDirty()
   end
 
+  -- The same flag WITHOUT the rebuild, and it exists because of the difference between a
+  -- numberEdit and everything else. A numberEdit calls its `set` on every click while its
+  -- editor is open, and a rebuild destroys that editor: the remaining clicks then move the
+  -- focus instead of the value. So a control that is edited in place marks the page dirty
+  -- through this, and a control that can change WHICH controls are drawn -- a switch that
+  -- gates a section, a combo that commits and closes -- goes through markDirty above.
+  function runtime.markValueChanged()
+    ui.dirty = true
+  end
+
   function runtime.getSectionToggleHandler(name)
     local handler = runtime.sectionToggleHandlers[name]
     if handler then return handler end
@@ -81,6 +92,20 @@ function M.createFormRuntime(ui)
     end
     runtime.boolGetters[key] = getter
     return getter
+  end
+
+  -- The value analogue of getBoolSetter, for a plain `ui.config[key] = value` control.
+  function runtime.getValueSetter(key)
+    local setter = runtime.valueSetters[key]
+    if setter then return setter end
+
+    setter = function(nextVal)
+      if ui.config[key] == nextVal then return end
+      ui.config[key] = nextVal
+      ui.dirty = true
+    end
+    runtime.valueSetters[key] = setter
+    return setter
   end
 
   function runtime.getBoolSetter(key)

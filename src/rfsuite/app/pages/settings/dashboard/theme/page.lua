@@ -21,6 +21,7 @@ end
 
 local ui = {
   loaded = false,
+  dirty = false,
   config = {
     theme_preflight = nil,
     theme_inflight = nil,
@@ -136,6 +137,7 @@ local function setThemeFromId(key, id)
   if not theme then return end
   if ui.config[key] ~= theme.path then
     ui.config[key] = theme.path
+    ui.runtime.markDirty()
   end
 end
 
@@ -149,6 +151,7 @@ local function setModelThemeFromId(key, id)
   end
   if ui.config[key] ~= nextPath then
     ui.config[key] = nextPath
+    ui.runtime.markDirty()
   end
 end
 
@@ -213,6 +216,7 @@ end
 function M.onReload(ctx)
   ensureDeps()
   ui.loaded = false
+  ui.dirty = false
   ui.themes = nil
   if DashboardLib and type(DashboardLib.invalidateThemeCache) == "function" then
     DashboardLib.invalidateThemeCache()
@@ -242,6 +246,9 @@ function M.onSave(ctx)
     reportSaveError(ctx, err)
   elseif not modelOk then
     reportSaveError(ctx, modelErr)
+  else
+    -- Both stores, because this page reports a save as done only when both were believed.
+    ui.dirty = false
   end
   return true
 end

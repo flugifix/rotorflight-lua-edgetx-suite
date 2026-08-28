@@ -43,6 +43,7 @@ end
 
 local ui = {
   loaded = false,
+  dirty = false,
   sections = {
     arming = true,
     governor = true,
@@ -120,6 +121,7 @@ local function getEscThresholdSetter(minVal, maxVal)
     if nextVal > maxVal then nextVal = maxVal end
     if ui.config.esc_threshold ~= nextVal then
       ui.config.esc_threshold = nextVal
+      ui.runtime.markValueChanged()
     end
   end
   return ui.runtime.escThresholdSet
@@ -162,6 +164,7 @@ local function getFuelCalloutSetter()
     if not FUEL_CALLOUT_VALUES[nextValue] then nextValue = 10 end
     if ui.config.fuel_callout_percent ~= nextValue then
       ui.config.fuel_callout_percent = nextValue
+      ui.runtime.markDirty()
     end
   end
   return ui.runtime.fuelCalloutSet
@@ -187,6 +190,7 @@ local function getFuelRepeatSetter(minVal, maxVal)
     if nextValue > maxVal then nextValue = maxVal end
     if ui.config.fuel_repeat_below_zero ~= nextValue then
       ui.config.fuel_repeat_below_zero = nextValue
+      ui.runtime.markValueChanged()
     end
   end
   return ui.runtime.fuelRepeatSet
@@ -208,6 +212,7 @@ local function getFuelHapticSetter()
     local nextBool = (nextVal == true)
     if ui.config.fuel_haptic_below_zero ~= nextBool then
       ui.config.fuel_haptic_below_zero = nextBool
+      ui.runtime.markDirty()
     end
   end
   return ui.runtime.fuelHapticSet
@@ -340,6 +345,7 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
+  ui.dirty = false
   return true
 end
 
@@ -380,6 +386,7 @@ function M.onSave(ctx)
   end
 
   if ok then
+    ui.dirty = false
     if okLog and type(Log) == "table" and type(Log.emit) == "function" then
       pcall(Log.emit, "rfsuite", "onSave: savePreferences OK", "info", true)
     end
