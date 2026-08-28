@@ -591,7 +591,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
     type   = "rectangle",
     x = x, y = dividerY,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1

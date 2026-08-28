@@ -111,7 +111,7 @@ local function appendDataRow(children, x, y, w, labelText, valueText)
     y = y + rowH,
     w = w,
     h = 1,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true,
   }
 
@@ -717,7 +717,7 @@ function M.build(ctx)
     y = cursorY + rowH,
     w = w,
     h = 1,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true,
   }
 

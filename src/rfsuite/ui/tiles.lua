@@ -7,7 +7,7 @@ local function resolveTileTextColor(isEnabled, focused)
   if not isEnabled or focused then
     return GREY_DARK or BLACK or COLOR_THEME_SECONDARY2
   end
-  return COLOR_THEME_PRIMARY1 or WHITE or GREY_DEFAULT
+  return COLOR_THEME_PRIMARY1 or WHITE
 end
 
 local function formatTileText(text)
@@ -120,7 +120,7 @@ function Tiles.append(children, x, y, size, iconFile, text, focused, pressHandle
   if not isEnabled then
     children[#children + 1] = {
       type = "rectangle", x = x + 1, y = y + 1, w = size - 2, h = size - 2,
-      color = GREY_DEFAULT, filled = true
+      color = COLOR_THEME_DISABLED, filled = true
     }
   end
 

@@ -36,7 +36,7 @@ local LABEL_H = getNativeFontH()
 -- Layout (SECTION_H = 50 px total):
 --   y+2            title label     MIDSIZE, COLOR_THEME_PRIMARY1
 --   y+44           3 px blue bar   COLOR_THEME_SECONDARY1
---   y+49           1 px divider    GREY_DEFAULT
+--   y+49           1 px divider    COLOR_THEME_SECONDARY2
 --
 -- Controls.SECTION_H is exported so callers stay in sync.
 
@@ -169,7 +169,7 @@ function Controls.appendSectionHeader(children, x, y, w, title, expanded, onTogg
     type   = "rectangle",
     x = x, y = y + SECTION_H - 1,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 end
 
@@ -291,7 +291,7 @@ function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
@@ -410,7 +410,7 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
@@ -540,7 +540,7 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
@@ -595,7 +595,7 @@ function Controls.appendTextField(children, x, y, w, labelText, opts)
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1

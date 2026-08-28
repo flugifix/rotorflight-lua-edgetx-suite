@@ -29,7 +29,7 @@ local function rgb(hex, fallback)
   return fallback
 end
 
-local ARC_BG_COLOR = rgb(0x444444, GREY_DEFAULT)
+local ARC_BG_COLOR = rgb(0x444444, COLOR_THEME_SECONDARY2)
 local ARC_OK_COLOR = rgb(0x00FF00, GREEN or 0x00FF00)
 local ARC_WARN_COLOR = rgb(0xFF8000, 0xFF8000)
 local ARC_ALERT_COLOR = rgb(0xFF0000, 0xFF0000)

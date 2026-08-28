@@ -47,7 +47,7 @@ function Splash.build(zone, statusLine, title)
       w = w,
       text = tostring(statusLine or "Please wait for telemetry"),
       align = CENTER,
-      color = GREY_DEFAULT,
+      color = COLOR_THEME_PRIMARY2,
       font = SMLSIZE
     }
   }

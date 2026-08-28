@@ -426,7 +426,7 @@ local function drawColumnHeader(children, x, y, w, i18n, layout)
 		y = y + headerLineY,
 		w = w,
 		h = 1,
-		color = GREY_DEFAULT,
+		color = COLOR_THEME_SECONDARY2,
 		filled = true
 	}
 

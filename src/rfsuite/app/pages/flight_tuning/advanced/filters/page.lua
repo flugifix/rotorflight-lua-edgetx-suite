@@ -298,7 +298,7 @@ local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, 
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
@@ -423,7 +423,7 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
@@ -479,7 +479,7 @@ local function appendSingleChoiceRow(children, x, y, w, labelText, key, options)
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1

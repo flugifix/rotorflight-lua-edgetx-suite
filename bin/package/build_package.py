@@ -174,11 +174,15 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
         py_resolve = os.path.join(WORKSPACE_ROOT, ".vscode", "scripts", "resolve_i18n_tags.py")
         lang_file = os.path.join(src_core, "i18n", f"{lang}.lua")
 
+        py_exe = sys.executable
+        if not os.path.isfile(py_exe):
+            py_exe = shutil.which("python3") or shutil.which("python") or "python3"
+
         if os.path.isfile(py_precompile) and os.path.isfile(py_resolve) and os.path.isfile(lang_file):
-            subprocess.run([sys.executable, py_precompile, "--root", staging_tools], check=True)
-            subprocess.run([sys.executable, py_precompile, "--root", staging_widgets], check=True)
-            subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
-            subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
+            subprocess.run([py_exe, py_precompile, "--root", staging_tools], check=True)
+            subprocess.run([py_exe, py_precompile, "--root", staging_widgets], check=True)
+            subprocess.run([py_exe, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
+            subprocess.run([py_exe, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
 
         # Create output ZIP
         os.makedirs(output_dir, exist_ok=True)

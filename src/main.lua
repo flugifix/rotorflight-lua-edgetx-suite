@@ -1,4 +1,8 @@
 -- TNS|RFSuite|TNE
+if GREY_DEFAULT == nil then
+  GREY_DEFAULT = COLOR_THEME_SECONDARY2
+end
+
 local originalLoadScript = loadScript
 local chunkCache = {}
 _G.rfsuite = _G.rfsuite or {}

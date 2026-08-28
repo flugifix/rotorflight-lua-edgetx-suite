@@ -466,7 +466,7 @@ function M.build(ctx)
       type   = "rectangle",
       x = x, y = cursorY + rowH,
       w = w, h = 1,
-      color  = GREY_DEFAULT, filled = true
+      color  = COLOR_THEME_SECONDARY2, filled = true
     }
 
     cursorY = cursorY + rowH + 1
