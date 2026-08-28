@@ -34,6 +34,7 @@ local ui = {
     flags_bec12v = 0,
 
     -- Advanced (Section 2)
+    acceleration = 0,
     min_start_power = 0,
     max_start_power = 0,
     throttle_response = 0,
@@ -628,6 +629,19 @@ function M.build(ctx)
     end)
     cursorY = cursorY + rowH
 
+    -- Bit 2 of the flags byte, which unpackFlags and packFlags have always carried; it simply
+    -- had no row. Without one the bit is read off the ESC and written straight back, so the
+    -- setting could be seen in the ESC's own tool and not here.
+    local keepMahOpts = {
+      { value = 0, label = "Off" },
+      { value = 1, label = "On" }
+    }
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Keep mAh", keepMahOpts, ui.config.flags_keepmah, function(val)
+      ui.config.flags_keepmah = val
+      markDirty()
+    end)
+    cursorY = cursorY + rowH
+
   elseif ui.currentSection == 2 then
     -- Advanced Settings
     rowH = Controls.appendNumberField(children, x, cursorY, w, "Min Start Power", {
@@ -648,6 +662,19 @@ function M.build(ctx)
         markDirty()
       end
     })
+    cursorY = cursorY + rowH
+
+    -- `acceleration` in the field spec, and the same word of the parameter block that the
+    -- older Lua suite draws as `Startup Response` -- it sits between max start power and
+    -- throttle response there too. The ESC takes two values.
+    local startupOpts = {
+      { value = 0, label = "Normal" },
+      { value = 1, label = "Smooth" }
+    }
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Startup Response", startupOpts, ui.config.acceleration, function(val)
+      ui.config.acceleration = val
+      markDirty()
+    end)
     cursorY = cursorY + rowH
 
     local respOpts = {
