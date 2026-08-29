@@ -122,9 +122,11 @@ def write_build_identity(staging_root, staging_core, version):
             digest.update(b"\0")
 
     # Sixteen hex characters carry 64 bits of the digest, which is far past any collision concern
-    # for a stamp whose only job is to differ when the packed sources differ, and it keeps
-    # "<version>-<digest>" inside the 64-character cap the radio reads the file with.
-    identity = f"{version}-{digest.hexdigest()[:16]}"
+    # for a stamp whose only job is to differ when the packed sources differ. The digest leads and
+    # the version trails, because the radio compares a bounded prefix of this line: whatever a long
+    # version pushes past that bound then costs nothing, where the other order would have cut the
+    # digest instead and made two different trees read as one.
+    identity = f"{digest.hexdigest()[:16]}-{version}"
     with open(os.path.join(staging_core, "build.txt"), "w", encoding="utf-8", newline="\n") as f:
         f.write(identity + "\n")
     return identity

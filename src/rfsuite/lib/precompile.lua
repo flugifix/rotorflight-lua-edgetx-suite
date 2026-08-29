@@ -27,7 +27,15 @@ local STAMP_PATH = "/SCRIPTS/TOOLS/rfsuite.user/precompiled.txt"
 -- same version -- a development build, a re-cut candidate, the other locale -- is still
 -- recognised as a different tree. An install carrying no such file falls back to the version,
 -- which is what this pass compared against before.
+--
+-- Only the first STAMP_LIMIT characters of either file take part in the comparison, which is why
+-- the packager writes the digest first: what a long version pushes past that bound is then the
+-- half that does not tell two trees apart.
 local IDENTITY_PATH = "/SCRIPTS/TOOLS/rfsuite-core/build.txt"
+
+-- Enough for an identity, and a bound on what a damaged file can cost to read. Both files are
+-- read with it, because comparing two differently truncated strings would compare nothing.
+local STAMP_LIMIT = 64
 
 -- Listing a directory costs little next to compiling a file, so the walk is allowed to move
 -- faster. Reading a timestamp sits between the two, and one directory here holds over a
@@ -253,8 +261,8 @@ end
 -- of its own; without either the pass still fills in missing and outdated bytecode but never
 -- forces a rebuild.
 function Precompile.start(version)
-  local identity = readStampFile(IDENTITY_PATH, 64) or version
-  local stamp = readStampFile(STAMP_PATH, 64)
+  local identity = readStampFile(IDENTITY_PATH, STAMP_LIMIT) or version
+  local stamp = readStampFile(STAMP_PATH, STAMP_LIMIT)
 
   state = {
     identity = identity,
