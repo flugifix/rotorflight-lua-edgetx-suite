@@ -286,6 +286,28 @@ local function safeCollectEntries(listBasePath)
   return entries
 end
 
+local function formatDateText(date, time, isNarrow)
+  if not date or date == "" or date == "Unknown" then
+    return "Unknown"
+  end
+  local d = date
+  if isNarrow then
+    local md = string.match(date, "^%d%d%d%d%-(%d%d%-%d%d)$")
+    if md then
+      d = md
+    end
+  end
+  if not time or time == "" then
+    return d
+  end
+  local t = time
+  if isNarrow then
+    local hm = string.match(time, "^(%d%d:%d%d)")
+    if hm then t = hm end
+  end
+  return d .. "  " .. t
+end
+
 local function extractFileInfo(filename, fullPath, parentFolder)
   local date = string.match(filename, "(%d%d%d%d%-%d%d%-%d%d)")
   local time = nil
@@ -329,16 +351,16 @@ local function extractFileInfo(filename, fullPath, parentFolder)
     end
   end
 
-  date = date or "Unknown"
-  time = time or ""
-  local sortKey = date .. "_" .. string.gsub(time, ":", "") .. "_" .. filename
+  local sortDate = date or "0000-00-00"
+  local sortTime = (time and time ~= "") and string.gsub(time, ":", "") or "000000"
+  local sortKey = sortDate .. "_" .. sortTime .. "_" .. filename
 
   return {
     file = filename,
     path = fullPath,
     model = model,
-    date = date,
-    time = time,
+    date = date or "Unknown",
+    time = time or "",
     sortKey = sortKey
   }
 end
@@ -997,7 +1019,9 @@ function M.build(ctx)
     end
 
     local rowH = 40
-    local labelColW = 120
+    local labelColW = math.max(90, math.min(180, math.floor(w * 0.28)))
+    local valColX = x + labelColW + 15
+    local valColW = math.max(60, w - labelColW - 27)
 
     -- 1) Flight Duration Row
     children[#children + 1] = {
@@ -1011,9 +1035,9 @@ function M.build(ctx)
     }
     children[#children + 1] = {
       type = "label",
-      x = x + labelColW + 15,
+      x = valColX,
       y = cursorY + 10,
-      w = w - labelColW - 27,
+      w = valColW,
       text = string.format("%s   (%d %s)", summary.durationStr, summary.sampleCount, pageText(i18n, "samples")),
       color = COLOR_WHITE,
       font = SMLSIZE
@@ -1041,9 +1065,9 @@ function M.build(ctx)
     }
     children[#children + 1] = {
       type = "label",
-      x = x + labelColW + 15,
+      x = valColX,
       y = cursorY + 10,
-      w = w - labelColW - 27,
+      w = valColW,
       text = string.format("%s: %.2fV   |   %s: %.2fV (-%.2fV)   |   %s: %.2fV",
         pageText(i18n, "start"), summary.vStart,
         pageText(i18n, "min"), summary.vMin, summary.vSag,
@@ -1074,9 +1098,9 @@ function M.build(ctx)
     }
     children[#children + 1] = {
       type = "label",
-      x = x + labelColW + 15,
+      x = valColX,
       y = cursorY + 10,
-      w = w - labelColW - 27,
+      w = valColW,
       text = string.format("%s: %.1f A   |   %s: %.1f A   |   %s: ~%d mAh",
         pageText(i18n, "peak"), summary.cPeak,
         pageText(i18n, "avg"), summary.cAvg,
@@ -1107,9 +1131,9 @@ function M.build(ctx)
     }
     children[#children + 1] = {
       type = "label",
-      x = x + labelColW + 15,
+      x = valColX,
       y = cursorY + 10,
-      w = w - labelColW - 27,
+      w = valColW,
       text = string.format("%s: %d rpm   |   %s: %d rpm (%s)",
         pageText(i18n, "max"), math.floor(summary.rMax),
         pageText(i18n, "min"), math.floor(summary.rMin),
@@ -1140,9 +1164,9 @@ function M.build(ctx)
     }
     children[#children + 1] = {
       type = "label",
-      x = x + labelColW + 15,
+      x = valColX,
       y = cursorY + 10,
-      w = w - labelColW - 27,
+      w = valColW,
       text = string.format("%s: %d °C   |   %s: %d °C   |   %s %s: %d %%",
         pageText(i18n, "max"), math.floor(summary.tMax),
         pageText(i18n, "start"), math.floor(summary.tStart),
@@ -1252,35 +1276,22 @@ function M.build(ctx)
 
   -- Render log files list.
   --
-  -- The row was a fixed 44 px and the model-and-file label was given `w - 305` whatever the
-  -- screen is. On a 480-wide radio that is about 175 px, and `[GooSky S2 Ultra] flight19.csv`
-  -- needs more -- so the label wrapped, its second line was drawn across the separator and into
-  -- the row below, and the list read as though two renders were on top of each other. The rows
-  -- are in order; it is one row's tail sitting in the next row's band.
-  --
-  -- So the row height follows its own text: measured in the font the label is drawn in, clamped
-  -- so that a pathological name cannot take the whole screen. A label that fits on one line
-  -- leaves the row at 44 px exactly as before, so this changes nothing on a screen wide enough
-  -- for the labels it is showing.
-  --
-  -- That is deliberately NOT a claim that the list is correct on a wide screen. A separate
-  -- report has entries drawn over each other at 800 x 480, where every label is a single line
-  -- and no wrapping is involved -- so something else can misplace a row as well. Whatever that
-  -- is, it is not this, and it is not fixed here.
-  --
-  -- The height the row gets is the height of the text as it is BROKEN, not as it is measured
-  -- in one piece. `ceil(width / room)` is a lower bound on the line count -- the engine breaks
-  -- at word boundaries and leaves the end of a line unused -- and the clamp then made the
-  -- shortfall permanent: `[Goblin Kraken 700 Competition] Goblin Kraken 700
-  -- Competition-2026-08-10-100706.csv` needs four lines at 480 px, was handed a three-line row
-  -- and drew its fourth across the separator. So the break is done here rather than guessed
-  -- at, and the label is handed over with the breaks already in it: the count the row is
-  -- measured with is then the count that is drawn, and a text that would need more lines than
-  -- the row may have is cut on the last one instead of running past it.
+  -- Proportional layout based on available width `w`:
+  -- - Date/Time column: ~28-34% of `w` (compacts to `MM-DD HH:MM` on narrow screens < 380px)
+  -- - Action button: 60px on narrow screens, 80px on medium (<480px), 100px on wide screens
+  -- - Model & filename: space between date column and action button with safe margins
+  -- - Row height: follows measured broken lines so wrapped titles cannot overflow into adjacent rows
   local ROW_MIN_H = 44
   local ROW_MAX_LINES = 3
-  local labelW = math.max(40, w - 305)
+  local isNarrow = w < 380
+  local dateColW = isNarrow and math.floor(w * 0.34) or math.min(180, math.floor(w * 0.28))
+  local btnW = isNarrow and 60 or (w < 480 and 80 or 100)
+  local btnH = 30
+  local btnX = x + w - btnW - 10
+  local labelX = x + dateColW + 15
+  local labelW = math.max(40, btnX - labelX - 10)
   local _, labelLineH = textSize("Ag", SMLSIZE)
+
   for i = 1, #state.logsList do
     local item = state.logsList[i]
     local itemY = cursorY
@@ -1295,8 +1306,8 @@ function M.build(ctx)
       type = "label",
       x = x + 10,
       y = itemY + 11,
-      w = 175,
-      text = string.format("%s  %s", item.date, item.time),
+      w = dateColW,
+      text = formatDateText(item.date, item.time, isNarrow),
       color = COLOR_THEME_PRIMARY1,
       font = SMLSIZE
     }
@@ -1304,7 +1315,7 @@ function M.build(ctx)
     -- Model name and File name
     children[#children + 1] = {
       type = "label",
-      x = x + 190,
+      x = labelX,
       y = itemY + 11,
       w = labelW,
       text = labelText,
@@ -1313,9 +1324,6 @@ function M.build(ctx)
     }
 
     -- View button
-    local btnW = 100
-    local btnH = 30
-    local btnX = x + w - btnW - 10
     children[#children + 1] = {
       type = "button",
       x = btnX,
