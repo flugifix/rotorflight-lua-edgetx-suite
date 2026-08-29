@@ -15,6 +15,7 @@ local MspRuntime = nil
 local EscParametersBluejayApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
+local BluejayInit = nil
 local t = nil
 
 local ui = {
@@ -54,6 +55,9 @@ local ui = {
   parsedCache = nil,
   layoutRevision = nil,
   supportsLedControl = false,
+  escModel = nil,
+  escVersion = nil,
+  escFirmware = nil,
   runtime = {
     readPending = false,
     requestRebuild = nil,
@@ -76,6 +80,7 @@ local function ensureDeps()
   if not EscParametersBluejayApi then EscParametersBluejayApi = loadModule("tasks/msp/api/esc_parameters_bluejay.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  if not BluejayInit then BluejayInit = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/bluejay/init.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -132,9 +137,16 @@ local function queueBluejayReadActual(queue)
         ui.parsedCache = parsed
         ui.layoutRevision = buf and buf[5] or nil
 
-        local EscInit = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/bluejay/init.lua")
-        if EscInit and type(EscInit.supportsLedControl) == "function" then
-          ui.supportsLedControl = EscInit.supportsLedControl(buf)
+        local escModel = BluejayInit and type(BluejayInit.getEscModel) == "function" and BluejayInit.getEscModel(buf) or nil
+        local escVersion = BluejayInit and type(BluejayInit.getEscVersion) == "function" and BluejayInit.getEscVersion(buf) or nil
+        local escFirmware = BluejayInit and type(BluejayInit.getEscFirmware) == "function" and BluejayInit.getEscFirmware(buf) or nil
+
+        ui.escModel = escModel
+        ui.escVersion = escVersion
+        ui.escFirmware = escFirmware
+
+        if BluejayInit and type(BluejayInit.supportsLedControl) == "function" then
+          ui.supportsLedControl = BluejayInit.supportsLedControl(buf)
         else
           ui.supportsLedControl = false
         end
@@ -145,7 +157,10 @@ local function queueBluejayReadActual(queue)
             config = {},
             parsedCache = ui.parsedCache,
             layoutRevision = ui.layoutRevision,
-            supportsLedControl = ui.supportsLedControl
+            supportsLedControl = ui.supportsLedControl,
+            escModel = escModel,
+            escVersion = escVersion,
+            escFirmware = escFirmware
           }
           for k, v in pairs(ui.config) do
             session.setup_esc_motors_esc_tools_bluejay.config[k] = v
@@ -358,6 +373,9 @@ local function loadFromSession()
     ui.parsedCache = cached.parsedCache
     ui.layoutRevision = cached.layoutRevision
     ui.supportsLedControl = cached.supportsLedControl
+    ui.escModel = cached.escModel
+    ui.escVersion = cached.escVersion
+    ui.escFirmware = cached.escFirmware
     return true
   end
   return false
@@ -603,7 +621,15 @@ function M.build(ctx)
 
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
+    local headerTitle = title
+    if ui.escModel and ui.escModel ~= "" and ui.escModel ~= title then
+      if string.find(string.lower(ui.escModel), string.lower(title), 1, true) then
+        headerTitle = ui.escModel
+      else
+        headerTitle = title .. " - " .. ui.escModel
+      end
+    end
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
@@ -1026,6 +1052,7 @@ function M.onClose()
   EscParametersBluejayApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
+  BluejayInit = nil
   t = nil
 end
 

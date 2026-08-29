@@ -16,6 +16,7 @@ local EscParametersHw5Api = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local Hw5Profile = nil
+local Hw5Init = nil
 local t = nil
 
 local ui = {
@@ -46,6 +47,9 @@ local ui = {
   },
   currentSection = 1,
   parsedCache = nil,
+  escModel = nil,
+  escVersion = nil,
+  escFirmware = nil,
   runtime = {
     readPending = false,
     requestRebuild = nil,
@@ -69,6 +73,7 @@ local function ensureDeps()
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not Hw5Profile then Hw5Profile = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/hw5/profile.lua") end
+  if not Hw5Init then Hw5Init = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/hw5/init.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -128,16 +133,36 @@ local function queueHw5ReadActual(queue, retryOnError)
 
         ui.parsedCache = parsed
 
+        local escModel = Hw5Init and type(Hw5Init.getEscModel) == "function" and Hw5Init.getEscModel(buf) or nil
+        if not escModel or escModel == "" then
+          escModel = (parsed.esc_type2 or "") .. " " .. (parsed.esc_type or "")
+        end
+        local escVersion = Hw5Init and type(Hw5Init.getEscVersion) == "function" and Hw5Init.getEscVersion(buf) or nil
+        if not escVersion or escVersion == "" then
+          escVersion = parsed.hardware_version
+        end
+        local escFirmware = Hw5Init and type(Hw5Init.getEscFirmware) == "function" and Hw5Init.getEscFirmware(buf) or nil
+        if not escFirmware or escFirmware == "" then
+          escFirmware = parsed.firmware_version
+        end
+
+        ui.escModel = escModel
+        ui.escVersion = escVersion
+        ui.escFirmware = escFirmware
+
         local session = getSession()
         if session then
           session.escDetails = {
-            version = parsed.hardware_version,
-            model = (parsed.esc_type2 or "") .. " " .. (parsed.esc_type or ""),
-            firmware = parsed.firmware_version
+            version = escVersion,
+            model = escModel,
+            firmware = escFirmware
           }
           session.setup_esc_motors_esc_tools_hw5 = {
             config = {},
-            parsedCache = ui.parsedCache
+            parsedCache = ui.parsedCache,
+            escModel = escModel,
+            escVersion = escVersion,
+            escFirmware = escFirmware
           }
           for k, v in pairs(ui.config) do
             session.setup_esc_motors_esc_tools_hw5.config[k] = v
@@ -259,6 +284,9 @@ local function loadFromSession()
       end
     end
     ui.parsedCache = cached.parsedCache
+    ui.escModel = cached.escModel
+    ui.escVersion = cached.escVersion
+    ui.escFirmware = cached.escFirmware
     return true
   end
   return false
@@ -496,8 +524,14 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     local headerTitle = title
-    if ui.parsedCache and ui.parsedCache.model_name and ui.parsedCache.model_name ~= "" then
-      headerTitle = ui.parsedCache.model_name
+    local model = (ui.escModel and ui.escModel ~= "" and ui.escModel)
+               or (ui.parsedCache and ui.parsedCache.model_name and ui.parsedCache.model_name ~= "" and ui.parsedCache.model_name)
+    if model and model ~= title then
+      if string.find(string.lower(model), string.lower(title), 1, true) then
+        headerTitle = model
+      else
+        headerTitle = title .. " - " .. model
+      end
     end
     Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
@@ -793,6 +827,7 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   Hw5Profile = nil
+  Hw5Init = nil
   t = nil
 end
 
