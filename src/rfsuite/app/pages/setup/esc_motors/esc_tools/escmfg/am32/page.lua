@@ -144,11 +144,6 @@ local function queueAm32ReadActual(queue)
 
         local session = getSession()
         if session then
-          session.escDetails = {
-            model = escModel,
-            version = escVersion,
-            firmware = escFirmware
-          }
           session.setup_esc_motors_esc_tools_am32 = {
             config = {},
             parsedCache = ui.parsedCache,
@@ -618,8 +613,12 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     local headerTitle = title
-    if ui.escModel and ui.escModel ~= "" then
-      headerTitle = ui.escModel
+    if ui.escModel and ui.escModel ~= "" and ui.escModel ~= title then
+      if string.find(string.lower(ui.escModel), string.lower(title), 1, true) then
+        headerTitle = ui.escModel
+      else
+        headerTitle = title .. " - " .. ui.escModel
+      end
     end
     Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)

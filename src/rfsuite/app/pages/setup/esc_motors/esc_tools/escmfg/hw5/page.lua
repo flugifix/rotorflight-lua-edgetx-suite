@@ -133,9 +133,18 @@ local function queueHw5ReadActual(queue, retryOnError)
 
         ui.parsedCache = parsed
 
-        local escModel = Hw5Init and type(Hw5Init.getEscModel) == "function" and Hw5Init.getEscModel(buf) or ((parsed.esc_type2 or "") .. " " .. (parsed.esc_type or ""))
-        local escVersion = Hw5Init and type(Hw5Init.getEscVersion) == "function" and Hw5Init.getEscVersion(buf) or parsed.hardware_version
-        local escFirmware = Hw5Init and type(Hw5Init.getEscFirmware) == "function" and Hw5Init.getEscFirmware(buf) or parsed.firmware_version
+        local escModel = Hw5Init and type(Hw5Init.getEscModel) == "function" and Hw5Init.getEscModel(buf) or nil
+        if not escModel or escModel == "" then
+          escModel = (parsed.esc_type2 or "") .. " " .. (parsed.esc_type or "")
+        end
+        local escVersion = Hw5Init and type(Hw5Init.getEscVersion) == "function" and Hw5Init.getEscVersion(buf) or nil
+        if not escVersion or escVersion == "" then
+          escVersion = parsed.hardware_version
+        end
+        local escFirmware = Hw5Init and type(Hw5Init.getEscFirmware) == "function" and Hw5Init.getEscFirmware(buf) or nil
+        if not escFirmware or escFirmware == "" then
+          escFirmware = parsed.firmware_version
+        end
 
         ui.escModel = escModel
         ui.escVersion = escVersion
@@ -515,10 +524,14 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     local headerTitle = title
-    if ui.escModel and ui.escModel ~= "" then
-      headerTitle = ui.escModel
-    elseif ui.parsedCache and ui.parsedCache.model_name and ui.parsedCache.model_name ~= "" then
-      headerTitle = ui.parsedCache.model_name
+    local model = (ui.escModel and ui.escModel ~= "" and ui.escModel)
+               or (ui.parsedCache and ui.parsedCache.model_name and ui.parsedCache.model_name ~= "" and ui.parsedCache.model_name)
+    if model and model ~= title then
+      if string.find(string.lower(model), string.lower(title), 1, true) then
+        headerTitle = model
+      else
+        headerTitle = title .. " - " .. model
+      end
     end
     Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
