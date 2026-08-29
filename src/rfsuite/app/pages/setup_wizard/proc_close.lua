@@ -53,20 +53,27 @@ procs[#procs + 1] = {
         -- a check this bench did not have until the section beside this one was walked on a
         -- radio. Written as a heading and a sentence, the list wraps and nothing is dropped from
         -- it -- and what is listed here is exactly what the pilot must not assume is configured.
-        local parts = {
-          { "close_drivetrain", "Drivetrain",
-            "close_drivetrain_what", "ESC, motor, battery, throttle range, governor" },
-          { "close_servos", "Servos",
-            "close_servos_what", "output parameters, direction, centre" },
-          { "close_mechanics", "Mechanics",
-            "close_mechanics_what", "swashplate, pitch limits, tail" },
-          { "close_signoff", "Sign-off",
-            "close_signoff_what", "arming test, throttle hold, failsafe, telemetry" }
-        }
-        for _, part in ipairs(parts) do
-          y = y + w.row(children, area.x, y, area.w, t(i18n, part[1], part[2]), nil, nil)
-          y = y + 2 + w.paragraph(children, area.x, y + 2, area.w, t(i18n, part[3], part[4]))
+        -- Written out, one call per line, and the repetition is the point.
+        --
+        -- These were briefly a table walked by a loop, which reads better and does not work: the
+        -- build resolves `t(i18n, "key", "fallback")` where the key and the fallback are LITERAL
+        -- and leaves anything else alone. Passed as `part[1]`, `part[2]` there is nothing at the
+        -- call site to resolve, so the packaged German build showed every one of these in English
+        -- -- and shipped that way. The rule is in the header of the file next to this one; a loop
+        -- over the strings breaks it however tidy it looks.
+        local function block(title, detail)
+          y = y + w.row(children, area.x, y, area.w, title, nil, nil)
+          y = y + 2 + w.paragraph(children, area.x, y + 2, area.w, detail)
         end
+
+        block(t(i18n, "close_drivetrain", "Drivetrain"),
+              t(i18n, "close_drivetrain_what", "ESC, motor, battery, throttle range, governor"))
+        block(t(i18n, "close_servos", "Servos"),
+              t(i18n, "close_servos_what", "output parameters, direction, centre"))
+        block(t(i18n, "close_mechanics", "Mechanics"),
+              t(i18n, "close_mechanics_what", "swashplate, pitch limits, tail"))
+        block(t(i18n, "close_signoff", "Sign-off"),
+              t(i18n, "close_signoff_what", "arming test, throttle hold, failsafe, telemetry"))
 
         -- Three settings this assistant cannot make, named rather than skipped.
         --
@@ -81,19 +88,15 @@ procs[#procs + 1] = {
         y = y + 10 + w.paragraph(children, area.x, y + 10, area.w,
           t(i18n, "close_byhand", "These three are set by hand. The radio offers a script no way to set them."))
 
-        local byHand = {
-          { "close_hand_screen", "Home screen",
-            "close_hand_screen_what", "Screen 1, layout 1x1, the suite's own widget in it" },
-          { "close_hand_throttle", "Throttle warning",
-            "close_hand_throttle_what", "Model setup: switch the throttle warning off" },
-          { "close_hand_armsw", "Arming switch",
-            "close_hand_armsw_what",
-            "A function switch named ARM, two positions, starting off, red while armed" }
-        }
-        for _, part in ipairs(byHand) do
-          y = y + w.row(children, area.x, y, area.w, t(i18n, part[1], part[2]), nil, nil)
-          y = y + 2 + w.paragraph(children, area.x, y + 2, area.w, t(i18n, part[3], part[4]))
-        end
+        block(t(i18n, "close_hand_screen", "Home screen"),
+              t(i18n, "close_hand_screen_what",
+                "Screen 1, layout 1x1, the suite's own widget in it"))
+        block(t(i18n, "close_hand_throttle", "Throttle warning"),
+              t(i18n, "close_hand_throttle_what",
+                "Model setup: switch the throttle warning off"))
+        block(t(i18n, "close_hand_armsw", "Arming switch"),
+              t(i18n, "close_hand_armsw_what",
+                "A function switch named ARM, two positions, starting off, red while armed"))
       end
     }
   }
