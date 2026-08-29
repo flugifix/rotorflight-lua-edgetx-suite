@@ -26,22 +26,20 @@ return function(ctx, proc)
   -- can never resolve to anything: every one of these was the English fallback in the German
   -- build, and nothing anywhere went red. Found when the same mistake was made a second time on
   -- the closing screen and shipped.
-  -- Each call carries a literal FALLBACK as well as a literal key, and that is not decoration
-  -- either. Their pattern is `t(i18n, "key", "fallback")` with both quoted; a third argument of
-  -- `nil` fails it exactly as a variable key does, and the call is left alone. Caught by reading
-  -- the finished archive rather than the tree it was built from -- the source looked right.
+  -- Each call carries a literal key AND a literal fallback, and the fallback is ONE string.
+  --
+  -- Their pattern is `t(i18n, "key", "fallback")` with both quoted and the bracket straight after.
+  -- A third argument of `nil` fails it, and so does a fallback assembled with `..` -- the pattern
+  -- matches the first quoted run and then wants the closing bracket, which a concatenation does
+  -- not give it. Both mistakes were made here in one afternoon and both shipped English into the
+  -- German build. So these fallbacks are short: they are only ever seen in a locale that has no
+  -- entry for the key, and the locale that matters has one.
   local id = proc and tostring(proc.id) or nil
   local body = nil
   if id == "link" then
-    body = t(i18n, "help_link",
-      "The flight controller does not measure the link -- it is told how the link runs, and it "
-      .. "paces its telemetry from that pair. Set higher than the link carries and it plans more "
-      .. "than gets through; set lower and bandwidth goes unused. Both read as sticky telemetry "
-      .. "and neither is an error anywhere.")
+    body = t(i18n, "help_link", "The board does not measure the link. It is told how the link runs and paces its telemetry from that.")
   elseif id == nil then
-    body = t(i18n, "help_opening",
-      "The assistant walks the first setup of a bare flight controller. Every procedure can also "
-      .. "be run on its own later.")
+    body = t(i18n, "help_opening", "This assistant walks the first setup of a bare flight controller. Each procedure can also be run alone.")
   end
   if body == nil or body == "" then
     body = t(i18n, "help_general",
