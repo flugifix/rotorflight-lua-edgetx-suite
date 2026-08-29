@@ -322,13 +322,13 @@ local function reloadPreferencesIfNeeded(self, force)
     return
   end
 
-  -- Safety: Do not reload files while ARMED to prevent CPU spikes or sensor lost
+  -- Safety: Do not reload files while ARMED or during postflight offline to prevent CPU spikes or UI resets
   --
   -- Returning here does NOT lose the change: `pendingStamp` is not adopted, so the next
   -- pass after disarming sees the same difference and reloads then. With the old signal
   -- the flag had already been read and reset above this guard, so a save made while armed
   -- was gone with nothing left to re-signal it.
-  if self.state.armed then
+  if self.state.armed or (self.state.hadInflightFlight == true and not self.state.fblConnected) then
     return
   end
 
@@ -428,16 +428,11 @@ local function updateConnectionState(self)
     tasksDone = false
   end
   
-  -- What has to be true before the dashboard is DRAWN, and it deliberately no longer includes
-  -- the connect chain. Every value those tasks fill has a themed fallback -- the flight count
-  -- starts at 0, the dataflash bar is guarded on `state.dataflash`, and the cell count is
-  -- inferred from the pack voltage until `battery_config` arrives -- so the chain decides how
-  -- COMPLETE the dashboard is, not whether it can be shown. It is a strictly serial run of a
-  -- dozen MSP round trips, and behind this gate it was the whole screen's critical path.
-  --
-  -- `tasksDone` is still computed: it names the pending task in the status line below, and
-  -- `startupComplete` keeps the audio on exactly the condition it had before.
-  local rawReady = connected and batteryReady and rfReady
+  -- What has to be true before the dashboard is DRAWN.
+  -- Initial connect tasks (such as UID for model preferences/theme override, battery_config,
+  -- flight_stats) must be completed before dismissing the splash screen. This prevents theme pop-in
+  -- where the global default theme is rendered momentarily before model-specific preferences load.
+  local rawReady = connected and batteryReady and rfReady and tasksDone
   local now = nowSeconds()
 
   if connected and not rawReady then
@@ -871,23 +866,17 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
     if modelValue and modelValue ~= "" and modelValue ~= "nil" then
       chosen = modelValue
       reason = "model_" .. modelKey
-    else
-      local modelPreflight = modelDashboard["model_theme_preflight"]
-      if modelPreflight and modelPreflight ~= "" and modelPreflight ~= "nil" then
-        chosen = modelPreflight
-        reason = "model_preflight_fallback"
-      end
     end
   end
 
   if not chosen then
     local globalValue = dashboard and dashboard[key] or nil
-    if globalValue and globalValue ~= "" then
+    if globalValue and globalValue ~= "" and globalValue ~= "nil" then
       chosen = globalValue
       reason = "global_" .. key
     else
       local globalPreflight = dashboard and dashboard["theme_preflight"] or nil
-      if globalPreflight and globalPreflight ~= "" then
+      if globalPreflight and globalPreflight ~= "" and globalPreflight ~= "nil" then
         chosen = globalPreflight
         reason = "global_preflight_fallback"
       else
@@ -897,9 +886,9 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
     end
   end
 
-  logGv("resolveTheme: mode=%s, modelOverride=%s, modelPreflight=%s, globalPreflight=%s => chosen=%s (%s)",
-    tostring(flightMode), tostring(modelOverride), tostring(modelDashboard.model_theme_preflight),
-    tostring(dashboard and dashboard.theme_preflight), tostring(chosen), tostring(reason))
+  logGv("resolveTheme: mode=%s, modelOverride=%s, modelKey=%s, modelValue=%s, globalKey=%s, globalValue=%s => chosen=%s (%s)",
+    tostring(flightMode), tostring(modelOverride), tostring(modelKey), tostring(modelDashboard[modelKey]),
+    tostring(key), tostring(dashboard and dashboard[key]), tostring(chosen), tostring(reason))
 
   themePathMemo.dashboard = dashboard
   themePathMemo.modelPrefs = modelPrefs
@@ -1410,6 +1399,9 @@ function Runtime.new(zone, options)
       if type(_G.rfsuite.session.battery_config) == "table" then
         self.state.battery_config = _G.rfsuite.session.battery_config
       end
+      if type(_G.rfsuite.session.modelPreferences) == "table" then
+        self.modelPreferences = _G.rfsuite.session.modelPreferences
+      end
     end
     updateVoltageThemeConfig(self)
     if isFblConnected and not wasFblConnected then
@@ -1427,6 +1419,8 @@ function Runtime.new(zone, options)
       self.state.profile = nil
       self.state.rateProfile = nil
       self.state.batteryProfile = nil
+      self.modelPreferences = nil
+      self.lastModelPreferences = nil
       self.flightMode = "preflight"
       self.theme = nil
       self.built = false
