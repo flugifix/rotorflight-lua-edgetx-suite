@@ -149,9 +149,7 @@ end
 
 local function defaultModelPreferences()
   return {
-    battery = {
-      consumption_warning_percentage = 35
-    },
+    battery = {},
     dashboard = {
       model_override = false,
       model_theme_preflight = "nil",
