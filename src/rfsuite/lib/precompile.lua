@@ -4,12 +4,14 @@
 -- Opening a page for the first time starts with EdgeTX parsing the .lua and writing the
 -- .luac next to it; only then does anything run. With the suite loading in binary-or-text
 -- mode (see lib/require.lua) that part can be done in advance, so this walks the installed
--- tree and compiles whatever has no bytecode beside it yet. It does a little of the work per
--- call, so the screen keeps drawing while it runs.
+-- tree and compiles whatever has no usable bytecode beside it yet. It does a little of the
+-- work per call, so the screen keeps drawing while it runs.
 --
--- The version stamp is here because bytecode is picked by timestamp. A source arriving with
--- an older timestamp than the .luac of the previous install would keep running the old
--- bytecode, so a change of version recompiles the whole tree instead of trusting the dates.
+-- Two things make bytecode unusable, and they need different answers. A source that is newer
+-- than its .luac is found per file, by comparing the two timestamps the way the loader does.
+-- A source that is older cannot be found that way at all -- reinstalling an earlier release
+-- is the plain case -- so the pass also keeps a stamp of the version it last compiled and
+-- rebuilds everything when that changes.
 
 local Precompile = {}
 
@@ -21,10 +23,16 @@ local ROOTS = {
 local STAMP_PATH = "/SCRIPTS/TOOLS/rfsuite.user/precompiled.txt"
 
 -- Listing a directory costs little next to compiling a file, so the walk is allowed to move
--- faster; both are capped so that no single call runs long.
+-- faster. Reading a timestamp sits between the two, and one directory here holds over a
+-- hundred sources, so the entries of a directory are worked through across calls rather than
+-- in one: all three caps apply to a single call, and whichever is reached first ends it.
 local DIRS_PER_STEP = 8
+local STATS_PER_STEP = 16
 local FILES_PER_STEP = 1
 local GC_EVERY = 8
+
+-- The fields of an fstat timestamp, most significant first.
+local TIME_FIELDS = { "year", "mon", "day", "hour", "min", "sec" }
 
 local state = nil
 
@@ -63,6 +71,48 @@ local function listEntries(path)
   return entries
 end
 
+local function modifiedAt(path)
+  if type(fstat) ~= "function" then
+    return nil
+  end
+  local ok, info = pcall(fstat, path)
+  if not ok or type(info) ~= "table" or type(info.time) ~= "table" then
+    return nil
+  end
+  return info.time
+end
+
+-- Compared field by field rather than as one number, because a date packed down to seconds
+-- leaves the range a Lua integer is guaranteed to hold.
+local function isOlder(a, b)
+  for i = 1, #TIME_FIELDS do
+    local key = TIME_FIELDS[i]
+    local av, bv = a[key], b[key]
+    if type(av) ~= "number" or type(bv) ~= "number" then
+      return false
+    end
+    if av ~= bv then
+      return av < bv
+    end
+  end
+  return false
+end
+
+-- EdgeTX writes a .luac carrying the timestamp of the source it was made from, and reads it
+-- back only while it is not the older of the two. So bytecode standing at an earlier time
+-- than its source is bytecode the loader has already given up on, and compiling it here is
+-- the whole point of the pass -- otherwise that cost lands on the page that opens first.
+local function isStale(source, bytecode)
+  local sourceTime = modifiedAt(source)
+  local bytecodeTime = modifiedAt(bytecode)
+  if sourceTime == nil or bytecodeTime == nil then
+    -- Nothing to compare. The loader still decides correctly when the page opens; this pass
+    -- simply does not get ahead of it.
+    return false
+  end
+  return isOlder(bytecodeTime, sourceTime)
+end
+
 local function readStamp()
   local f = io.open(STAMP_PATH, "r")
   if not f then
@@ -85,36 +135,79 @@ local function writeStamp(version)
   io.close(f)
 end
 
+local function beginDirectory(path)
+  local entries = listEntries(path)
+
+  local hasBytecode = {}
+  for i = 1, #entries do
+    local name = entries[i]
+    if string.sub(name, -5) == ".luac" then
+      hasBytecode[string.sub(name, 1, -6)] = true
+    end
+  end
+
+  return { path = path, entries = entries, index = 1, hasBytecode = hasBytecode }
+end
+
+-- Takes one entry of the directory being read, and returns how many timestamps that cost.
+local function takeEntry(cursor)
+  local name = cursor.entries[cursor.index]
+  cursor.index = cursor.index + 1
+
+  if string.find(name, ".", 1, true) == nil then
+    -- No directory in the installed tree carries a dot and every file has an extension, so
+    -- this tells the two apart without a stat call per entry.
+    state.dirs[#state.dirs + 1] = cursor.path .. "/" .. name
+    return 0
+  end
+
+  if string.sub(name, -4) ~= ".lua" then
+    return 0
+  end
+
+  local stem = string.sub(name, 1, -5)
+  local source = cursor.path .. "/" .. name
+
+  if state.force or not cursor.hasBytecode[stem] then
+    state.files[#state.files + 1] = source
+    return 0
+  end
+
+  if isStale(source, cursor.path .. "/" .. stem .. ".luac") then
+    state.files[#state.files + 1] = source
+  end
+  return 2
+end
+
 local function walk()
-  for _ = 1, DIRS_PER_STEP do
-    local path = table.remove(state.dirs)
-    if not path then
-      state.walking = false
-      return
+  local dirsTaken = 0
+  local statsTaken = 0
+
+  while true do
+    local cursor = state.cursor
+
+    if cursor == nil then
+      if dirsTaken >= DIRS_PER_STEP then
+        return
+      end
+      local path = table.remove(state.dirs)
+      if not path then
+        state.walking = false
+        return
+      end
+      cursor = beginDirectory(path)
+      state.cursor = cursor
+      dirsTaken = dirsTaken + 1
     end
 
-    local entries = listEntries(path)
-
-    local hasBytecode = {}
-    for i = 1, #entries do
-      local name = entries[i]
-      if string.sub(name, -5) == ".luac" then
-        hasBytecode[string.sub(name, 1, -6)] = true
+    while cursor.index <= #cursor.entries do
+      statsTaken = statsTaken + takeEntry(cursor)
+      if statsTaken >= STATS_PER_STEP then
+        return
       end
     end
 
-    for i = 1, #entries do
-      local name = entries[i]
-      if string.find(name, ".", 1, true) == nil then
-        -- No directory in the installed tree carries a dot and every file has an extension,
-        -- so this tells the two apart without a stat call per entry.
-        state.dirs[#state.dirs + 1] = path .. "/" .. name
-      elseif string.sub(name, -4) == ".lua" then
-        if state.force or not hasBytecode[string.sub(name, 1, -5)] then
-          state.files[#state.files + 1] = path .. "/" .. name
-        end
-      end
-    end
+    state.cursor = nil
   end
 end
 
@@ -137,7 +230,7 @@ local function compile()
 end
 
 -- version is the suite version the stamp is compared against; without one the pass still
--- fills in missing bytecode but never forces a rebuild.
+-- fills in missing and outdated bytecode but never forces a rebuild.
 function Precompile.start(version)
   local stamp = readStamp()
 
@@ -145,6 +238,7 @@ function Precompile.start(version)
     version = version,
     force = version ~= nil and stamp ~= version,
     dirs = {},
+    cursor = nil,
     files = {},
     done = 0,
     walking = true,
