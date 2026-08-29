@@ -67,6 +67,33 @@ procs[#procs + 1] = {
           y = y + w.row(children, area.x, y, area.w, t(i18n, part[1], part[2]), nil, nil)
           y = y + 2 + w.paragraph(children, area.x, y + 2, area.w, t(i18n, part[3], part[4]))
         end
+
+        -- Three settings this assistant cannot make, named rather than skipped.
+        --
+        -- They are not oversights and not "not yet": EdgeTX exposes no Lua interface for any of
+        -- them in the firmware this suite runs on, and two of the three have none in the next one
+        -- either. Read out of the bindings rather than assumed. A script CAN write the model file
+        -- on the card, and that is not a way round it -- the radio holds the open model in memory
+        -- and writes it back over the file when it closes.
+        --
+        -- So what is left is to say exactly what to set and where, which is what this assistant
+        -- already does for everything else it cannot reach.
+        y = y + 10 + w.paragraph(children, area.x, y + 10, area.w,
+          t(i18n, "close_byhand", "These three are set by hand. The radio offers a script no way to set them."))
+
+        local byHand = {
+          { "close_hand_screen", "Home screen",
+            "close_hand_screen_what", "Screen 1, layout 1x1, the suite's own widget in it" },
+          { "close_hand_throttle", "Throttle warning",
+            "close_hand_throttle_what", "Model setup: switch the throttle warning off" },
+          { "close_hand_armsw", "Arming switch",
+            "close_hand_armsw_what",
+            "A function switch named ARM, two positions, starting off, red while armed" }
+        }
+        for _, part in ipairs(byHand) do
+          y = y + w.row(children, area.x, y, area.w, t(i18n, part[1], part[2]), nil, nil)
+          y = y + 2 + w.paragraph(children, area.x, y + 2, area.w, t(i18n, part[3], part[4]))
+        end
       end
     }
   }

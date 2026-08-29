@@ -513,6 +513,13 @@ procs[#procs + 1] = {
   -- stays skippable.
   skippable = true,
   isComplete = function(w)
+    -- Part of the criterion rather than only of the write, for the reason this note has already
+    -- ruled twice: what has to be right is the END STATE. A model whose sticks are laid out and
+    -- whose flight modes still carry trims is not done.
+    local trims = w.radio.flightModeTrimsOff()
+    if trims == nil then return nil end
+    if trims == false then return false end
+
     local cache = w.radio.controlSources()
     for _, entry in ipairs(w.radio.STICK_INPUTS) do
       local info = w.radio.describeStick(entry, cache)
@@ -579,6 +586,23 @@ procs[#procs + 1] = {
         end
       end,
       advance = function(w, done)
+        -- The trims of every flight mode, and they are settled here because they belong to the
+        -- sticks rather than to a channel: a trim moves the neutral the flight controller was
+        -- calibrated against, whichever stick it sits under.
+        --
+        -- Run before the "nothing to do" test below, because it is a different question. A model
+        -- whose four inputs are already laid out can still be carrying live flight-mode trims,
+        -- and returning early on the inputs used to leave exactly that.
+        if w.radio.flightModeTrimsOff() ~= true then
+          local trimOk, trimInfo = w.radio.disableFlightModeTrims()
+          Wlog.emit(trimOk and "info" or "warn", "sticks: flight mode trims -> %s",
+            trimOk and ("off on " .. tostring(trimInfo) .. " mode(s)") or tostring(trimInfo))
+          -- Logged and NOT blocking. A radio whose firmware does not answer for flight modes would
+          -- otherwise be walled at this step with nothing to do about it, which is the shape this
+          -- path refuses everywhere else. The pressure stays where it belongs: the criterion above
+          -- keeps reporting the procedure open, on the overview and on every later run.
+        end
+
         -- Nothing to do is not a write. A model that already carries the layout is left alone
         -- rather than rebuilt, so a second run does not churn the pilot's inputs.
         local pending = {}

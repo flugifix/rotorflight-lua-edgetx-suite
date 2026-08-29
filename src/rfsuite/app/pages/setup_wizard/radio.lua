@@ -216,6 +216,9 @@ end
 local SWSRC_FIRST_SWITCH = 1
 local POSITIONS_PER_SWITCH = 3
 
+-- What the firmware allows, and every one of them carries its own trims.
+local MAX_FLIGHT_MODES = 9
+
 -- Trim, as an input carries it. The firmware stores it inverted against what Lua reads and
 -- writes, so the value a script sees is the one the radio's own input editor shows: 0 is the
 -- trim of the input's own stick, and -1 is no trim at all. Anything below -1 names another
@@ -511,7 +514,9 @@ local MULTIPLEX_REPLACE = 2
 -- there it may be re-laying an input the pilot has tuned for that same stick; here the input is
 -- being given a switch it did not have, and a curve left over from whatever was on it before
 -- would be applied to that switch.
-local function writeChannelInput(entry, swsrc)
+-- `weight` is the whole of the polarity question, and it is the caller's because only the caller
+-- knows which way round this channel has to read.
+local function writeChannelInput(entry, swsrc, weight)
   local insertInput = modelApi("insertInput")
   local deleteInput = modelApi("deleteInput")
   if not insertInput or not deleteInput then return nil, "no_model_api" end
@@ -526,7 +531,7 @@ local function writeChannelInput(entry, swsrc)
     name = "",
     inputName = entry.inputName,
     source = source,
-    weight = 100,
+    weight = tonumber(weight) or 100,
     offset = 0,
     switch = 0,
     curveType = 0,
@@ -543,6 +548,30 @@ local function writeChannelInput(entry, swsrc)
   end
   if not pcall(insertInput, entry.input, 0, line) then return nil, "insert_input_failed" end
   return mixSource
+end
+
+-- Does the picked position read HIGH on this switch, or low?
+--
+-- Nothing in the model says. A mixer line records which switch feeds a channel and never which of
+-- its positions is the one the pilot meant, and assuming that an upper position yields an upper
+-- value is the defect a real flight controller caught: it reported the function off at exactly the
+-- position that had been chosen.
+--
+-- So it is read instead, and it can be read whatever position the switch is resting in. The radio
+-- answers two things at once -- the switch's live value, and whether the picked position is the
+-- active one -- and the pair gives the mapping: if the picked position is the one being held, the
+-- sign of the value is the sign this channel wants; if it is not, the wanted sign is the opposite.
+--
+-- `nil` where the answer would be a guess: a switch resting at centre has no sign, which on a
+-- two-position switch cannot happen and is therefore a fault rather than a case.
+function M.pickedReadsHigh(swsrc)
+  local source = M.switchSource(swsrc)
+  if source == nil then return nil end
+  local value = tonumber(callGlobal("getValue", source))
+  if value == nil or value == 0 then return nil end
+  local held = M.switchActive(swsrc)
+  if held == nil then return nil end
+  return (value > 0) == held
 end
 
 -- A channel that carries the switch's FULL TRAVEL, one value per position.
@@ -578,40 +607,29 @@ end
 function M.writeConditionChannel(entry, swsrc)
   local insert = modelApi("insertMix")
   if not insert then return false, "no_model_api" end
-  local mixSource, err = writeChannelInput(entry, swsrc)
+  -- ONE line, and the polarity is measured rather than built around.
+  --
+  -- This was briefly two lines -- a floor plus a gated override -- which produced the right value
+  -- for any switch without knowing anything about it. On a two-position switch, which is the only
+  -- kind these channels take, it produces exactly the same two values as a plain one-to-one does,
+  -- so it was paying an extra mixer line for an answer a single reading gives.
+  --
+  -- What it was really for was the assumption underneath: that the picked position reads high.
+  -- That assumption is gone either way; here it is replaced by asking the radio, and the answer
+  -- goes into the INPUT's weight. The mixer line is then the plain one the pilot would draw.
+  local high = M.pickedReadsHigh(swsrc)
+  if high == nil then return false, "switch_unreadable" end
+
+  local mixSource, err = writeChannelInput(entry, swsrc, high and 100 or -100)
   if mixSource == nil then return false, err end
   if not M.clearChannel(entry.channel) then return false, "clear_failed" end
 
-  -- The value is CONSTRUCTED, not passed through.
-  --
-  -- One line used to carry the switch at full weight, so what the channel read depended on which
-  -- way that switch is wired -- and the assistant simply assumed the picked position was the one
-  -- that reads high. It writes the board a window on the strength of that assumption, and on a
-  -- real flight controller the assumption was wrong: the function was reported off at the position
-  -- the pilot had named and on at the other.
-  --
-  -- Two lines instead. A floor that is always on, and a line gated by the picked position that
-  -- replaces it with the top of the travel. The channel then sits at the top AT that position and
-  -- at the bottom everywhere else -- for any switch, either polarity, any of its positions -- and
-  -- the fixed upper window `windowFor` hands the board is right by construction.
   local ok = pcall(insert, entry.channel - 1, 0, {
     source = mixSource,
-    weight = 0,
-    offset = -100,
+    weight = 100,
+    offset = 0,
     switch = 0,
     multiplex = MULTIPLEX_ADD,
-    curveType = 0,
-    curveValue = 0,
-    flightModes = 0
-  })
-  if not ok then return false, "insert_failed" end
-
-  ok = pcall(insert, entry.channel - 1, 1, {
-    source = mixSource,
-    weight = 0,
-    offset = 100,
-    switch = swsrc,
-    multiplex = MULTIPLEX_REPLACE,
     curveType = 0,
     curveValue = 0,
     flightModes = 0
@@ -901,6 +919,67 @@ end
 
 -- The channel's own label. Not decoration: it is what the pilot reads in the transmitter's output
 -- list, and a layout whose channels are called CH1..CH12 is one nobody can check by looking.
+-- Every trim of every flight mode, switched off.
+--
+-- `TRIM_MODE_NONE` is the firmware's own constant, `0x1F`, and it is what the pilot's own target
+-- model carries on all of them. This is a DIFFERENT mechanism from the input trim the assistant
+-- already turns off: that one says the input does not follow a trim, this one says the flight mode
+-- holds no trim to follow. A model can have the first and still be trimmed through the second,
+-- which is the state the assistant used to leave.
+--
+-- The reason is the flight controller's, and it is the same reason as for the input trim: the
+-- board holds the model, and a trim under it moves the neutral the board was calibrated against.
+--
+-- The trim count is read off the radio rather than assumed -- it differs per target -- and the
+-- table the setter takes is ONE-based, which its own documentation gets wrong and its code does
+-- not.
+M.TRIM_MODE_NONE = 0x1F
+
+function M.disableFlightModeTrims()
+  local getFlightMode = modelApi("getFlightMode")
+  local setFlightMode = modelApi("setFlightMode")
+  if not getFlightMode or not setFlightMode then return false, "no_model_api" end
+
+  local first = nil
+  local ok = pcall(function() first = getFlightMode(0) end)
+  if not ok or type(first) ~= "table" or type(first.trimsModes) ~= "table" then
+    return false, "no_flight_modes"
+  end
+
+  local trims = 0
+  for _ in pairs(first.trimsModes) do trims = trims + 1 end
+  if trims == 0 then return false, "no_trims" end
+
+  local modes = {}
+  for index = 1, trims do modes[index] = M.TRIM_MODE_NONE end
+
+  local touched = 0
+  for mode = 0, MAX_FLIGHT_MODES - 1 do
+    local current = nil
+    if pcall(function() current = getFlightMode(mode) end) and type(current) == "table" then
+      if pcall(setFlightMode, mode, { trimsModes = modes }) then touched = touched + 1 end
+    end
+  end
+  if touched == 0 then return false, "no_flight_mode_written" end
+  return true, touched
+end
+
+-- Are they already off? Asked of the machine, like every other criterion here, so a model that
+-- arrives correct is not written to and a model that is written to can be checked afterwards.
+function M.flightModeTrimsOff()
+  local getFlightMode = modelApi("getFlightMode")
+  if not getFlightMode then return nil end
+  for mode = 0, MAX_FLIGHT_MODES - 1 do
+    local current = nil
+    if not pcall(function() current = getFlightMode(mode) end) then return nil end
+    if type(current) ~= "table" or type(current.trimsModes) ~= "table" then return nil end
+    for _, value in pairs(current.trimsModes) do
+      if tonumber(value) ~= M.TRIM_MODE_NONE then return false end
+    end
+  end
+  return true
+end
+
 function M.setChannelName(channel, name)
   local fn = modelApi("setOutput")
   if not fn or type(name) ~= "string" then return false end
