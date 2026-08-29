@@ -18,9 +18,22 @@ return function(ctx, proc)
   local t = Common and Common.pageT("setup_wizard") or function(_, _, fb) return fb end
   local i18n = ctx and ctx.i18n
 
-  local key = proc and ("help_" .. tostring(proc.id)) or "help_opening"
-  local body = t(i18n, key, nil)
-  if body == nil or body == key then
+  -- Written out per procedure, and the repetition is not clumsiness.
+  --
+  -- This used to build the key -- `"help_" .. proc.id` -- and hand it to the translator. Their
+  -- packager rewrites a translated call only where the KEY and the FALLBACK are both literal at
+  -- the call site, and it drops the locale tables from the card, so a key assembled at runtime
+  -- can never resolve to anything: every one of these was the English fallback in the German
+  -- build, and nothing anywhere went red. Found when the same mistake was made a second time on
+  -- the closing screen and shipped.
+  local id = proc and tostring(proc.id) or nil
+  local body = nil
+  if id == "link" then
+    body = t(i18n, "help_link", nil)
+  elseif id == nil then
+    body = t(i18n, "help_opening", nil)
+  end
+  if body == nil then
     body = t(i18n, "help_general",
       "This assistant walks the first setup of a bare flight controller. It proposes, shows " ..
       "what it will do, and writes only after a press.")

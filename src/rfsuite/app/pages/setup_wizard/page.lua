@@ -89,6 +89,13 @@ local function applyScope(ctx)
   ui.scope = SCOPE_BY_MENU[menuId]
 end
 
+-- The page's own translator, and the one place a non-literal key is not a lost string.
+--
+-- Their packager rewrites `pageText(i18n, "key", "fallback")` AT THE CALL SITE, so by the time a
+-- packaged build runs, every caller of this has already been replaced by the locale's own literal
+-- and this body is reached only in an unpackaged tree. That is why the pass-through below is
+-- allowed to hand its own parameters on, and why a call site that does the same thing is not:
+-- there is nothing there for the packager to replace.
 local function pageText(i18n, key, fallback)
   if t then
     local translated = t(i18n, key, fallback)
