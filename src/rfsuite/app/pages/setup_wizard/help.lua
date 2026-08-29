@@ -26,14 +26,24 @@ return function(ctx, proc)
   -- can never resolve to anything: every one of these was the English fallback in the German
   -- build, and nothing anywhere went red. Found when the same mistake was made a second time on
   -- the closing screen and shipped.
+  -- Each call carries a literal FALLBACK as well as a literal key, and that is not decoration
+  -- either. Their pattern is `t(i18n, "key", "fallback")` with both quoted; a third argument of
+  -- `nil` fails it exactly as a variable key does, and the call is left alone. Caught by reading
+  -- the finished archive rather than the tree it was built from -- the source looked right.
   local id = proc and tostring(proc.id) or nil
   local body = nil
   if id == "link" then
-    body = t(i18n, "help_link", nil)
+    body = t(i18n, "help_link",
+      "The flight controller does not measure the link -- it is told how the link runs, and it "
+      .. "paces its telemetry from that pair. Set higher than the link carries and it plans more "
+      .. "than gets through; set lower and bandwidth goes unused. Both read as sticky telemetry "
+      .. "and neither is an error anywhere.")
   elseif id == nil then
-    body = t(i18n, "help_opening", nil)
+    body = t(i18n, "help_opening",
+      "The assistant walks the first setup of a bare flight controller. Every procedure can also "
+      .. "be run on its own later.")
   end
-  if body == nil then
+  if body == nil or body == "" then
     body = t(i18n, "help_general",
       "This assistant walks the first setup of a bare flight controller. It proposes, shows " ..
       "what it will do, and writes only after a press.")
