@@ -167,88 +167,23 @@ function Api.parse(buf)
         end
     end
 
-    local result = { parsed = parsed }
-    result.other = result.other or {}
-
     if parsed.startup_power_min ~= nil then
-        result.other.startup_power_min_raw = parsed.startup_power_min
         parsed.startup_power_min = normalizeStartupPowerMin(parsed.startup_power_min)
     end
     if parsed.startup_power_max ~= nil then
-        result.other.startup_power_max_raw = parsed.startup_power_max
         parsed.startup_power_max = normalizeStartupPowerMax(parsed.startup_power_max)
     end
     if parsed.pwm_frequency ~= nil then
-        result.other.pwm_frequency_raw = parsed.pwm_frequency
         parsed.pwm_frequency = normalizePwmFrequency(parsed.pwm_frequency)
     end
     if parsed.threshold_48to24 ~= nil then
-        result.other.threshold_48to24_raw = parsed.threshold_48to24
         parsed.threshold_48to24 = normalizeThreshold(parsed.threshold_48to24)
     end
     if parsed.threshold_96to48 ~= nil then
-        result.other.threshold_96to48_raw = parsed.threshold_96to48
         parsed.threshold_96to48 = normalizeThreshold(parsed.threshold_96to48)
     end
 
-    local layoutRevision = parsed.layout_revision or 0
-
-    -- build a lightweight structure metadata from FIELD_SPEC so callers can be adjusted
-    local meta = {}
-    for _, f in ipairs(FIELD_SPEC) do
-        local entry = {
-            field = f[1],
-            type = f[2],
-            min = f[3],
-            max = f[4],
-            step = f[9],
-            table = f[11],
-            tableEthos = f[15]
-        }
-        meta[#meta+1] = entry
-    end
-
-    -- adjust metadata similar to Ethos behavior
-    for _, field in ipairs(meta) do
-        if field.field == "rpm_power_slope" then
-            if layoutRevision == 200 then
-                field.tableEthos = rampupStartPowerEthos
-            else
-                field.tableEthos = rampupPowerEthos
-            end
-            field.table = nil
-        elseif field.field == "startup_beep" then
-            if layoutRevision == 205 then
-                field.tableEthos = startupBeepModeEthos
-            else
-                field.tableEthos = startupBeepBoolEthos
-            end
-            field.table = nil
-        elseif field.field == "braking_strength" then
-            if layoutRevision == 202 then
-                field.tableEthos = brakingModeEthos
-                field.min = nil
-                field.max = nil
-                field.step = nil
-            else
-                field.tableEthos = nil
-                field.min = 0
-                field.max = 255
-                field.step = 1
-            end
-            field.table = nil
-        elseif field.field == "pwm_frequency" then
-            if layoutRevision >= 209 then
-                field.tableEthos = pwmFrequencyDynamicEthos
-            else
-                field.tableEthos = pwmFrequencyEthos
-            end
-            field.table = nil
-        end
-    end
-
-    result.structure = meta
-    return result
+    return parsed
 end
 
 function Api.buildWritePayload(payloadData, _, _, state)

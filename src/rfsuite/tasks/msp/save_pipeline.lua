@@ -277,7 +277,7 @@ probeOnce = function(onValue)
       if not S.run then return end
       S.run.probeOutstanding = false
       local parsed = TxInfoApi.parse and TxInfoApi.parse(buf) or nil
-      local value = parsed and parsed.parsed and parsed.parsed.rtc_datetime_set or nil
+      local value = parsed and parsed.rtc_datetime_set or nil
       onValue(tonumber(value))
     end,
     errorHandler = function()

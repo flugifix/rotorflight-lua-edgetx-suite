@@ -257,7 +257,7 @@ local function queueSmartfuelRead()
 			if type(session) == "table" then
 				local parsed = api.parse and api.parse(buf) or nil
 				if type(parsed) == "table" then
-					session.smartfuel_config = parsed.parsed or parsed
+					session.smartfuel_config = parsed
 					if type(session.battery_config) == "table" then
 						session.battery_config.smartfuelRemoteSource = tonumber(session.smartfuel_config.smartfuel_mode) or 0
 					end

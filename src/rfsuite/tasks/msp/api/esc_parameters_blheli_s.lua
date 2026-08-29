@@ -215,30 +215,17 @@ function Api.parse(buf)
     end
   end
 
-  local result = { parsed = parsed }
-  result.other = result.other or {}
-
   if parsed.ppm_min_throttle ~= nil then
-    result.other.ppm_min_throttle_raw = parsed.ppm_min_throttle
     parsed.ppm_min_throttle = normalizePpm(parsed.ppm_min_throttle)
   end
   if parsed.ppm_max_throttle ~= nil then
-    result.other.ppm_max_throttle_raw = parsed.ppm_max_throttle
     parsed.ppm_max_throttle = normalizePpm(parsed.ppm_max_throttle)
   end
   if parsed.ppm_center_throttle ~= nil then
-    result.other.ppm_center_throttle_raw = parsed.ppm_center_throttle
     parsed.ppm_center_throttle = normalizePpm(parsed.ppm_center_throttle)
   end
 
-  -- build light structure metadata
-  local meta = {}
-  for _, f in ipairs(FIELD_SPEC) do
-    meta[#meta+1] = { field = f[1], type = f[2], min = f[3], max = f[4], step = f[9], table = f[11] }
-  end
-  result.structure = meta
-
-  return result
+  return parsed
 end
 
 function Api.buildWritePayload(payloadData, _, _, state)

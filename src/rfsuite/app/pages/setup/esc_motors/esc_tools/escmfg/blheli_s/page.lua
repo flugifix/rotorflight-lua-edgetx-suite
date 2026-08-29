@@ -112,9 +112,8 @@ local function queueBlheliReadActual(queue)
     timeout = 15,
     simulatorResponse = EscParametersBlheliSApi.simulatorResponse,
     processReply = function(self, buf)
-      local parsedResult = EscParametersBlheliSApi.parse(buf)
-      if parsedResult and parsedResult.parsed then
-        local parsed = parsedResult.parsed
+      local parsed = EscParametersBlheliSApi.parse(buf)
+      if parsed then
         for k, v in pairs(ui.config) do
           if parsed[k] ~= nil then
             ui.config[k] = parsed[k]

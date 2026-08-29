@@ -111,8 +111,7 @@ local function queueFailsafeRead(isAutoReload)
     command = RxfailConfigApi.command,
     simulatorResponse = RxfailConfigApi.simulatorResponse,
     processReply = function(self, buf)
-      local reply = RxfailConfigApi.parse(buf)
-      local parsed = reply and reply.parsed
+      local parsed = RxfailConfigApi.parse(buf)
       if parsed then
         for i = 1, 18 do
           ui.channels[i] = {
