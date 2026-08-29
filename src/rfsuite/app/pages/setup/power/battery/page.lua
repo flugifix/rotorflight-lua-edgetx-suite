@@ -50,6 +50,10 @@ end
 local ui = {
 	loaded = false,
 	dirty = false,
+	-- Tracks whether the pilot has actively changed the Consumption reserve field
+	-- in this session. Only when true will onSave write consumptionWarningPercentage
+	-- back to the flight controller, preventing silent overwrites of cbat_alert_percent.
+	reserveDirty = false,
 	config = {
 		selectedBatteryProfile = 0,
 		capacities = { 0, 0, 0, 0, 0, 0 },
@@ -214,9 +218,14 @@ local function loadFromSession()
 	ui.config.vbatmincellvoltage = clampInt(batteryConfig and batteryConfig.vbatmincellvoltage, 250, 500, 330)
 	ui.config.batteryCellCount = clampInt(batteryConfig and batteryConfig.batteryCellCount, CELL_COUNT_MIN, CELL_COUNT_MAX, 0)
 
-	local reserve = batteryPrefs and batteryPrefs.consumption_warning_percentage
+	-- Fix for issue #52: the flight controller's value always takes priority over the
+	-- per-model preference. The preference only acts as a fallback when batteryConfig has
+	-- not been populated from the FC yet (first frame before the MSP read completes).
+	-- This prevents loadFromSession from silently substituting the default preference
+	-- (35) for the board's actual cbat_alert_percent on every page open.
+	local reserve = batteryConfig and batteryConfig.consumptionWarningPercentage
 	if reserve == nil then
-		reserve = batteryConfig and batteryConfig.consumptionWarningPercentage
+		reserve = batteryPrefs and batteryPrefs.consumption_warning_percentage
 	end
 	ui.config.consumption_warning_percentage = clampInt(reserve, RESERVE_MIN, RESERVE_MAX, 35)
 end
@@ -366,6 +375,7 @@ local function getReserveSetter()
 		local nextValue = clampInt(value, RESERVE_MIN, RESERVE_MAX, 35)
 		if ui.config.consumption_warning_percentage == nextValue then return end
 		ui.config.consumption_warning_percentage = nextValue
+		ui.reserveDirty = true
 		markDirty()
 	end
 	return ui.runtime.reserveSet
@@ -415,6 +425,8 @@ end
 function M.onReload()
 	ensureDeps()
 	ui.loaded = false
+	ui.dirty = false
+	ui.reserveDirty = false
 	ensureLoaded()
 	return false
 end
@@ -439,7 +451,13 @@ function M.onSave(ctx)
 	batteryConfig.vbatfullcellvoltage = clampInt(ui.config.vbatfullcellvoltage, 250, 500, 410)
 	batteryConfig.vbatwarningcellvoltage = clampInt(ui.config.vbatwarningcellvoltage, 250, 500, 350)
 	batteryConfig.vbatmincellvoltage = clampInt(ui.config.vbatmincellvoltage, 250, 500, 330)
-	batteryConfig.consumptionWarningPercentage = reserve
+	-- Fix for issue #52: only update consumptionWarningPercentage in the session's batteryConfig
+	-- and write it to the FC when the pilot has actively changed the field in this session.
+	-- Without this guard a Save on an unedited page would overwrite the board's cbat_alert_percent
+	-- with the per-model preference default (35), regardless of what the FC holds.
+	if ui.reserveDirty then
+		batteryConfig.consumptionWarningPercentage = reserve
+	end
 	batteryConfig.batteryProfile = activeProfile
 	for i = 0, 5 do
 		batteryConfig["batteryCapacity_" .. tostring(i)] = clampInt(ui.config.capacities[i + 1], CAPACITY_MIN, CAPACITY_MAX, 0)
@@ -450,7 +468,10 @@ function M.onSave(ctx)
 	session.battery_config = batteryConfig
 	session.batteryConfig = batteryConfig
 
-	batteryPrefs.consumption_warning_percentage = reserve
+	-- Only persist the reserve preference when the pilot explicitly changed it.
+	if ui.reserveDirty then
+		batteryPrefs.consumption_warning_percentage = reserve
+	end
 	local okPrefs, errPrefs = saveModelPreferences(session)
 
 	local okMsp = false
@@ -515,6 +536,7 @@ function M.onSave(ctx)
 	end
 
 	ui.dirty = false
+	ui.reserveDirty = false
 	ui.runtime.lastSessionSignature = buildSessionSignature()
 	return true
 end
@@ -687,6 +709,7 @@ function M.onClose()
 		ui.loaded = false
 		ui.dirty = false
 	end
+	ui.reserveDirty = false
 	ui.loading = false
 	ui.progress = 0
 	Controls = nil
