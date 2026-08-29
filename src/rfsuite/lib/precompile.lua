@@ -10,7 +10,7 @@
 -- Two things make bytecode unusable, and they need different answers. A source that is newer
 -- than its .luac is found per file, by comparing the two timestamps the way the loader does.
 -- A source that is older cannot be found that way at all -- reinstalling an earlier release
--- is the plain case -- so the pass also keeps a stamp of the version it last compiled and
+-- is the plain case -- so the pass also keeps a stamp of the tree it last compiled and
 -- rebuilds everything when that changes.
 
 local Precompile = {}
@@ -21,6 +21,13 @@ local ROOTS = {
 }
 
 local STAMP_PATH = "/SCRIPTS/TOOLS/rfsuite.user/precompiled.txt"
+
+-- What the stamp is compared against, written by the packager over the sources it packed. It
+-- changes with the content rather than with the version number, so a second install of the
+-- same version -- a development build, a re-cut candidate, the other locale -- is still
+-- recognised as a different tree. An install carrying no such file falls back to the version,
+-- which is what this pass compared against before.
+local IDENTITY_PATH = "/SCRIPTS/TOOLS/rfsuite-core/build.txt"
 
 -- Listing a directory costs little next to compiling a file, so the walk is allowed to move
 -- faster. Reading a timestamp sits between the two, and one directory here holds over a
@@ -113,25 +120,29 @@ local function isStale(source, bytecode)
   return isOlder(bytecodeTime, sourceTime)
 end
 
-local function readStamp()
-  local f = io.open(STAMP_PATH, "r")
+local function readStampFile(path, limit)
+  local f = io.open(path, "r")
   if not f then
     return nil
   end
-  local text = io.read(f, 32)
+  local text = io.read(f, limit)
   io.close(f)
   if type(text) ~= "string" then
     return nil
   end
-  return (string.gsub(text, "%s", ""))
+  text = (string.gsub(text, "%s", ""))
+  if text == "" then
+    return nil
+  end
+  return text
 end
 
-local function writeStamp(version)
+local function writeStamp(identity)
   local f = io.open(STAMP_PATH, "w")
   if not f then
     return
   end
-  io.write(f, version)
+  io.write(f, identity)
   io.close(f)
 end
 
@@ -229,14 +240,16 @@ local function compile()
   end
 end
 
--- version is the suite version the stamp is compared against; without one the pass still
--- fills in missing and outdated bytecode but never forces a rebuild.
+-- version is what the stamp is compared against where the install carries no build identity
+-- of its own; without either the pass still fills in missing and outdated bytecode but never
+-- forces a rebuild.
 function Precompile.start(version)
-  local stamp = readStamp()
+  local identity = readStampFile(IDENTITY_PATH, 64) or version
+  local stamp = readStampFile(STAMP_PATH, 64)
 
   state = {
-    version = version,
-    force = version ~= nil and stamp ~= version,
+    identity = identity,
+    force = identity ~= nil and stamp ~= identity,
     dirs = {},
     cursor = nil,
     files = {},
@@ -269,8 +282,8 @@ function Precompile.step()
 
   state.finished = true
   collectgarbage("collect")
-  if state.force and state.version ~= nil then
-    writeStamp(state.version)
+  if state.force and state.identity ~= nil then
+    writeStamp(state.identity)
   end
 end
 

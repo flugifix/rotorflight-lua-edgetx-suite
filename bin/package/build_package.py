@@ -6,6 +6,7 @@ packaging via package.cmd / package.sh.
 """
 
 import argparse
+import hashlib
 import os
 import sys
 import shutil
@@ -94,6 +95,38 @@ def generate_theme_index(target_core_dir, target_user_dir):
         f.write("\n".join(lines))
 
 
+def write_build_identity(staging_root, staging_core, version):
+    """Record what this package is, for the compile pass on the radio to compare against.
+
+    lib/precompile.lua keeps a stamp of the tree it last compiled and rebuilds everything when
+    that stamp changes, because a source arriving with an older timestamp than the bytecode of
+    the install it replaces would otherwise keep running the old bytecode. The version number
+    is too coarse to serve as that stamp: two packages can carry the same one and different
+    sources -- a development build, a re-cut candidate, the other locale, which differs
+    wherever a translation was resolved into a source. A digest over the packaged sources
+    carries the same information and changes whenever they do, while an unchanged package
+    still produces an unchanged identity and so costs a reinstall nothing.
+    """
+    digest = hashlib.sha256()
+    for root, dirs, files in os.walk(staging_root):
+        dirs.sort()
+        for name in sorted(files):
+            if not name.endswith(".lua"):
+                continue
+            full_p = os.path.join(root, name)
+            rel_p = os.path.relpath(full_p, staging_root).replace(os.sep, "/")
+            digest.update(rel_p.encode("utf-8"))
+            digest.update(b"\0")
+            with open(full_p, "rb") as fh:
+                digest.update(fh.read())
+            digest.update(b"\0")
+
+    identity = f"{version}-{digest.hexdigest()[:16]}"
+    with open(os.path.join(staging_core, "build.txt"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(identity + "\n")
+    return identity
+
+
 def copy_audio_pack(lang, src_audio, dst_audio):
     src_pack = os.path.join(src_audio, lang, "default")
     if not os.path.isdir(src_pack):
@@ -179,6 +212,10 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
             subprocess.run([sys.executable, py_precompile, "--root", staging_widgets], check=True)
             subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
             subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
+
+        # Record the build identity, after the sources are final and before they are packed
+        identity = write_build_identity(temp_dir, staging_core, version)
+        print(f"[package] Build identity {identity}")
 
         # Create output ZIP
         os.makedirs(output_dir, exist_ok=True)
