@@ -121,6 +121,9 @@ def write_build_identity(staging_root, staging_core, version):
                 digest.update(fh.read())
             digest.update(b"\0")
 
+    # Sixteen hex characters carry 64 bits of the digest, which is far past any collision concern
+    # for a stamp whose only job is to differ when the packed sources differ, and it keeps
+    # "<version>-<digest>" inside the 64-character cap the radio reads the file with.
     identity = f"{version}-{digest.hexdigest()[:16]}"
     with open(os.path.join(staging_core, "build.txt"), "w", encoding="utf-8", newline="\n") as f:
         f.write(identity + "\n")

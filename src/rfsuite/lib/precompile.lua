@@ -33,6 +33,8 @@ local IDENTITY_PATH = "/SCRIPTS/TOOLS/rfsuite-core/build.txt"
 -- faster. Reading a timestamp sits between the two, and one directory here holds over a
 -- hundred sources, so the entries of a directory are worked through across calls rather than
 -- in one: all three caps apply to a single call, and whichever is reached first ends it.
+-- All three are budgets rather than measured optima; they bound what one call may do. The first
+-- to revisit is STATS_PER_STEP, once the cost of a timestamp on a real card has been measured.
 local DIRS_PER_STEP = 8
 local STATS_PER_STEP = 16
 local FILES_PER_STEP = 1
@@ -90,12 +92,17 @@ local function modifiedAt(path)
 end
 
 -- Compared field by field rather than as one number, because a date packed down to seconds
--- leaves the range a Lua integer is guaranteed to hold.
+-- leaves the range a Lua integer is guaranteed to hold. Equal stamps are deliberately not older:
+-- the loader rebuilds only where the bytecode is strictly the earlier of the two, and a fresh
+-- compile leaves them equal, so the same input has to reach the same verdict here.
 local function isOlder(a, b)
   for i = 1, #TIME_FIELDS do
     local key = TIME_FIELDS[i]
     local av, bv = a[key], b[key]
     if type(av) ~= "number" or type(bv) ~= "number" then
+      -- fstat fills all six fields wherever it exists at all, so this cannot fire on EdgeTX. It
+      -- is the default for an answer that is missing one: not older leaves the file to the loader
+      -- at page open, which is also where a missing fstat leaves it.
       return false
     end
     if av ~= bv then
@@ -167,7 +174,9 @@ local function takeEntry(cursor)
 
   if string.find(name, ".", 1, true) == nil then
     -- No directory in the installed tree carries a dot and every file has an extension, so
-    -- this tells the two apart without a stat call per entry.
+    -- this tells the two apart without a stat call per entry. The fourth argument makes it a
+    -- plain search: as a pattern the dot would match any character and every entry would look
+    -- like a file.
     state.dirs[#state.dirs + 1] = cursor.path .. "/" .. name
     return 0
   end
