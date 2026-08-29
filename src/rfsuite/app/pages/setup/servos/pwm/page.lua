@@ -820,7 +820,7 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
   local totalServoCount = ui.servoCount or 4

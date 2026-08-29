@@ -289,7 +289,7 @@ local function drawColumnHeader(children, x, y, w, i18n)
 end
 
 local function appendBandwidthRow(children, x, y, w, i18n, labelText, key0, key1, key2, spec)
-  local rowH = (Controls and Controls.ROW_H) or 48
+  local rowH = (Controls and Controls.ROW_H) or 64
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
@@ -418,7 +418,7 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, displayTitle)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
   cursorY = cursorY + 10

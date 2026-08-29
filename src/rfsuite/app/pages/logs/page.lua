@@ -618,7 +618,7 @@ local function buildCurvePicker(children, x, y, w, i18n)
 
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, pageText(i18n, "graph_select"))
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
   local templates = Graph.getTemplates()
@@ -980,7 +980,7 @@ function M.build(ctx)
     local titleText = summaryTitle(state.selectedModel or "Log", state.selectedFile, w)
     if Controls and type(Controls.appendStaticSectionHeader) == "function" then
       Controls.appendStaticSectionHeader(children, x, cursorY, w, titleText)
-      cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+      cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
     end
 
     if not summary then
@@ -1215,7 +1215,7 @@ function M.build(ctx)
 
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, pageText(i18n, "select_log"))
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
   if #state.logsList == 0 then

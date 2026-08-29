@@ -319,7 +319,7 @@ local function appendRangeRow(children, x, y, w, rangeIndex, modeRange, i18n)
   local rawExtra = slot and ui.modeRangesExtra[slot] or nil
   if not rawRange or not rawExtra or not rawRange.range then return 0 end
 
-  local singleRowH = (Controls and Controls.ROW_H) or 48
+  local singleRowH = (Controls and Controls.ROW_H) or 64
   local labelY1 = (Controls and Controls.labelY and Controls.labelY(y, singleRowH)) or (y + math.floor((singleRowH - 21) / 2))
   local controlY1 = (Controls and Controls.controlY and Controls.controlY(y, singleRowH)) or (y + math.floor((singleRowH - 32) / 2))
   local rightPadding = 10
@@ -942,7 +942,7 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
   cursorY = cursorY + 10
@@ -975,7 +975,7 @@ function M.build(ctx)
   -- Action bar
   local rightPadding = 10
   local buttonW = math.floor(w * 0.24)
-  local rowH = (Controls and Controls.ROW_H) or 48
+  local rowH = (Controls and Controls.ROW_H) or 64
   local labelY = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2))
   local btnY = (Controls and Controls.controlY and Controls.controlY(cursorY, rowH)) or (cursorY + math.floor((rowH - 32) / 2))
 

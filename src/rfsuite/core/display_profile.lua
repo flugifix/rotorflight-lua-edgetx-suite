@@ -49,6 +49,13 @@ local BASE = {
 
 local PRESETS = {
   tx16s = {},
+  small = {
+    key = "small",
+    rowH = 34,
+    horizontalRowH = 48,
+    sectionH = 32,
+    staticSectionH = 32
+  },
   tx15 = {
     key = "tx15",
     rootMinCardWidth = 96,
@@ -125,6 +132,10 @@ function DisplayProfile.current()
 
   if w >= 760 then
     return merge(BASE, PRESETS.tx16s_mk3)
+  end
+
+  if w <= 320 then
+    return merge(BASE, PRESETS.small)
   end
 
   if w == 480 and h >= 300 then

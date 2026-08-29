@@ -4,20 +4,26 @@
 -- All functions append LVGL widget entries to a children table.
 local Controls = {}
 
-local DisplayProfile = nil
+local function loadModule(path)
+  if _G.rfsuite and _G.rfsuite.require then
+    return _G.rfsuite.require(path)
+  end
+  local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
+  if loadScript then
+    local chunk = loadScript(fullPath, "t")
+    if type(chunk) == "function" then
+      local ok, mod = pcall(chunk)
+      if ok and type(mod) == "table" then
+        return mod
+      end
+    end
+  end
+  return nil
+end
 
 local function getDisplayProfile()
   if not DisplayProfile then
-    local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/core/display_profile.lua"
-    if loadScript then
-      local chunk = loadScript(fullPath, "t")
-      if type(chunk) == "function" then
-        local ok, mod = pcall(chunk)
-        if ok and type(mod) == "table" then
-          DisplayProfile = mod
-        end
-      end
-    end
+    DisplayProfile = loadModule("core/display_profile.lua")
   end
   if DisplayProfile and type(DisplayProfile.current) == "function" then
     return DisplayProfile.current()
@@ -176,7 +182,7 @@ function Controls.computeGridMetrics(totalW, columns, opts)
 end
 
 function Controls.appendSectionHeader(children, x, y, w, title, expanded, onToggle)
-  local sectionH = Controls.SECTION_H or 38
+  local sectionH = SECTION_H
 
   -- Title label
   children[#children + 1] = {
@@ -231,7 +237,7 @@ function Controls.appendSectionHeader(children, x, y, w, title, expanded, onTogg
 end
 
 function Controls.appendStaticSectionHeader(children, x, y, w, title)
-  local staticSectionH = Controls.STATIC_SECTION_H or 38
+  local staticSectionH = STATIC_SECTION_H
 
   children[#children + 1] = {
     type  = "label",
@@ -243,7 +249,7 @@ function Controls.appendStaticSectionHeader(children, x, y, w, title)
 
   children[#children + 1] = {
     type   = "rectangle",
-    x = x, y = y + staticSectionH - 5,
+    x = x, y = y + staticSectionH - 6,
     w = w, h = 3,
     color  = COLOR_THEME_SECONDARY1, filled = true
   }

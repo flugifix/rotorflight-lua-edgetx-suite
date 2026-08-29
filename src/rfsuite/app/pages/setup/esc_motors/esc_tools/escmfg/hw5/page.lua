@@ -500,7 +500,7 @@ function M.build(ctx)
       headerTitle = ui.parsedCache.model_name
     end
     Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
   local rowH
