@@ -322,13 +322,14 @@ local function reloadPreferencesIfNeeded(self, force)
     return
   end
 
-  -- Safety: Do not reload files while ARMED or during postflight offline to prevent CPU spikes or UI resets
+  -- Safety: Do not reload files while ARMED or during periodic postflight offline to prevent CPU spikes or UI resets.
+  -- Forced reloads (e.g. at connection state flips or explicit reloads) are still honored.
   --
   -- Returning here does NOT lose the change: `pendingStamp` is not adopted, so the next
   -- pass after disarming sees the same difference and reloads then. With the old signal
   -- the flag had already been read and reset above this guard, so a save made while armed
   -- was gone with nothing left to re-signal it.
-  if self.state.armed or (self.state.hadInflightFlight == true and not self.state.fblConnected) then
+  if self.state.armed or (not force and self.state.hadInflightFlight == true and not self.state.fblConnected) then
     return
   end
 
@@ -428,11 +429,25 @@ local function updateConnectionState(self)
     tasksDone = false
   end
   
-  -- What has to be true before the dashboard is DRAWN.
-  -- Initial connect tasks (such as UID for model preferences/theme override, battery_config,
-  -- flight_stats) must be completed before dismissing the splash screen. This prevents theme pop-in
-  -- where the global default theme is rendered momentarily before model-specific preferences load.
-  local rawReady = connected and batteryReady and rfReady and tasksDone
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local modelPrefsResolved = (session == nil)
+    or session.modelPreferencesResolved == true
+    or onconnectDone
+
+  -- What has to be true before the dashboard is DRAWN, and it deliberately no longer includes
+  -- the entire connect chain. Every value those tasks fill has a themed fallback -- the flight count
+  -- starts at 0, the dataflash bar is guarded on `state.dataflash`, and the cell count is
+  -- inferred from the pack voltage until `battery_config` arrives -- so the chain decides how
+  -- COMPLETE the dashboard is, not whether it can be shown. It is a strictly serial run of a
+  -- dozen MSP round trips, and behind this gate it was the whole screen's critical path.
+  --
+  -- However, we must wait for UID resolution (`modelPrefsResolved`) so that model-specific theme
+  -- overrides are known before dismissing the splash. This prevents theme pop-in without forcing
+  -- the screen to wait for all remaining connect tasks.
+  --
+  -- `tasksDone` is still computed: it names the pending task in the status line below, and
+  -- `startupComplete` keeps the audio on exactly the condition it had before.
+  local rawReady = connected and batteryReady and rfReady and modelPrefsResolved
   local now = nowSeconds()
 
   if connected and not rawReady then
