@@ -1,6 +1,13 @@
 # 0.1.6
 
 ### Features & Enhancements
+- **Dynamic ESC Model Identification & Interface Unification (`setup/esc_motors/esc_tools`)**:
+  - Added dynamic ESC model name detection and header display queried directly from hardware via telemetry / MSP.
+  - Unified device information and capability reporting across all supported ESC manufacturers (AM32, BLHeli_S, Bluejay, Flyrotor, Hobbywing V5, OMP, Scorpion, XDFly, YGE, ZTW).
+  - Isolated Hobbywing V5 parameter tables to prevent cross-talk and corrected YGE firmware version mapping.
+- **Active Profile & Rate Profile Live Resolution (`flight_tuning`)**:
+  - Centralized live profile resolution (`getLiveProfile()`) to read active PID and rate profiles directly from telemetry sensors and session state.
+  - Profile adjustments made via transmitter switches or telemetry are instantly reflected across all flight tuning pages without desync.
 - **Motor Override & ESC Motor Test Tool (`setup/esc_motors/motor_override`)**:
   - Added dedicated Motor Override tool allowing direct spool-up and functional testing of main and tail motors from the radio.
   - Multi-tier safety architecture: requires explicit disarm confirmation, hardware arming switch check, deadman timeout watchdog, manual throttle override sliders, and automatic shutoff upon page navigation or telemetry link loss.
@@ -15,6 +22,17 @@
   - Added smooth animated preparation progress bar on the home start screen.
 
 ### Bug Fixes & Improvements
+- **UI Layout & Display Profile Metrics (`ui/controls.lua`, `ui/display_profile.lua`)**:
+  - Harmonized row metrics, reduced excessive vertical spacing, and widened multi-column numeric input fields across standard and high-resolution color radios (such as TX15 and TX16S).
+  - Stripped UTF-8 BOM encoding from Lua files to avoid syntax errors on EdgeTX Lua interpreters.
+- **Navigation Exit Debounce (`ui/home.lua`)**:
+  - Debounced back-button navigation (`onBack`) to prevent rapid or repeated key events from causing accidental double-exit jumps from menus.
+  - Stamped `lastBackTick` strictly on actual navigation transitions.
+- **Battery Reserve Overwrite Protection (`setup/power/battery/page.lua`)**:
+  - Fixed an issue where saving battery configuration without modifications could overwrite `cbat_alert_percent` (battery capacity reserve).
+  - Removed unsafe preference seeding and ensured `batteryConfig` is safely populated and preserved on save.
+- **Theme Color Token Normalization (`ui/controls.lua`, widgets)**:
+  - Replaced hardcoded `GREY_DEFAULT` / nil color tokens with semantic theme color tokens across UI controls and widgets, fixing invisible text and rendering artifacts under custom color themes.
 - **UI Controls, Heights & Display Spacing (`ui/controls.lua`)**:
   - Unified native LVGL widget heights (standard 36 px), font rounding, and vertical alignments across all pages (PIDs, Rates, Mixer, Modes, Failsafe, Governor, Trims).
   - Resolved wide-display layout spacing and boundary clipping on large color touchscreens (e.g. 800x480).
@@ -46,6 +64,11 @@
   - Properly recognized asynchronous `lvgl.confirm` dialogs as active modals, preventing premature fallback invocation.
 
 ### Performance & Build System
+- **Incremental Bytecode Compilation & Build Identity (`lib/precompile.lua`, `bin/package/build_package.py`)**:
+  - Implemented incremental startup bytecode compilation checking file modification timestamps (`fstat`) with 2-second FAT tolerance against bytecode timestamps, only recompiling modified or stale Lua sources.
+  - Integrated deterministic SHA-256 build identity hashing (`build.txt`), ensuring complete cache invalidation between releases.
+- **Early Link-Ready Dashboard Rendering (`widgets/dashboard`)**:
+  - Render telemetry dashboard immediately upon establishing the RF/MSP telemetry link without waiting for the full multi-step initialization chain.
 - **Startup Pacing & Queue Optimization**:
   - MSP queue runner takes a second pass immediately after callers populate it, reducing round-trip latency.
   - Background task ticks twice as fast during initial connection startup.
