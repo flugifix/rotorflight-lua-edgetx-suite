@@ -55,7 +55,7 @@ end
 local function ensureDeps()
   if not Common then Common = loadModule("app/pages/settings/common.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
-  if not AsyncLoadUi then AsyncLoadUi = loadModule("app/lib/async_load_ui.lua") end
+  if not AsyncLoadUi then AsyncLoadUi = loadModule("app/pages/lib/async_load_ui.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not t then t = Common and Common.pageT("diagnostics_fblstatus") or nil end
@@ -159,6 +159,8 @@ local function requestData(i18n)
   mspState.queue:add({
     command = rtcApi.command,
     simulatorResponse = rtcApi.simulatorResponse,
+    retryDelay = 1.2,
+    timeout = 3.5,
     processReply = function(_, buf)
       local parsed = rtcApi.parse(buf)
       if parsed then
@@ -175,6 +177,8 @@ local function requestData(i18n)
   mspState.queue:add({
     command = statusApi.command,
     simulatorResponse = statusApi.simulatorResponse,
+    retryDelay = 1.2,
+    timeout = 3.5,
     processReply = function(_, buf)
       local res = statusApi.parse(buf)
       local parsed = res and res.parsed
@@ -193,6 +197,8 @@ local function requestData(i18n)
   mspState.queue:add({
     command = dfApi.command,
     simulatorResponse = dfApi.simulatorResponse,
+    retryDelay = 1.2,
+    timeout = 3.5,
     processReply = function(_, buf)
       local parsed = dfApi.parse(buf)
       if parsed then
@@ -307,7 +313,10 @@ function M.build(ctx)
 end
 
 function M.wakeup()
-  -- No auto refresh as requested
+  local now = nowSeconds()
+  if state.loading and AsyncLoadUi and type(AsyncLoadUi.isTimedOut) == "function" and AsyncLoadUi.isTimedOut(state, now) then
+    abortLoading(state.i18n, pageText(state.i18n, "loading_timeout", "Timeout while reading from FBL"))
+  end
 end
 
 function M.paint()
@@ -326,6 +335,9 @@ function M.closePage()
   state.requestRebuild = nil
   state.lastRefreshAt = 0
   state.i18n = nil
+  if AsyncLoadUi and type(AsyncLoadUi.reset) == "function" then
+    AsyncLoadUi.reset(state)
+  end
   Common = nil
   MspRuntime = nil
   AsyncLoadUi = nil

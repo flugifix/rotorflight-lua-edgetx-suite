@@ -100,6 +100,7 @@ local state = {
   errorMessage = nil,
   errorDialogShown = nil,
   rebuild = nil,
+  i18n = nil,
   values = {
     fc_version = nil,
     rf_version = nil,
@@ -125,13 +126,17 @@ end
 local function isFblConnected()
   ensureCoreDeps()
   local runtimeState = MspRuntime and MspRuntime.getState and MspRuntime.getState() or nil
-  if type(runtimeState) ~= "table" then
-    return false
+  if type(runtimeState) == "table" then
+    if runtimeState.isSimulator == true or runtimeState.lastConnected == true then
+      return true
+    end
   end
-  if runtimeState.isSimulator == true then
+  local root = type(_G) == "table" and _G.rfsuite or nil
+  local session = root and root.session
+  if type(session) == "table" and session.isConnected == true then
     return true
   end
-  return runtimeState.lastConnected == true
+  return false
 end
 
 local function ensureLiveDeps()
@@ -339,7 +344,13 @@ local function markStepDone()
 end
 
 local function abortLoading(i18n, reason)
-  AsyncLoadUi.fail(state, i18n, t, reason)
+  if AsyncLoadUi and type(AsyncLoadUi.fail) == "function" then
+    AsyncLoadUi.fail(state, i18n or state.i18n, t, reason)
+  else
+    state.loading = false
+    state.showLoadingOverlay = false
+    state.errorMessage = tostring(reason or "Loading failed")
+  end
   requestRebuild()
 end
 
@@ -390,13 +401,15 @@ local function startLiveLoad()
 
   local function onFailure(name, cmd)
     local runtimeMsg = readRuntimeErrorMessage()
-    local details = runtimeMsg or (tostring(name or "MSP") .. " failed (cmd=" .. tostring(cmd or "?") .. ")")
-    abortLoading(nil, details)
+    local details = runtimeMsg or (tostring(name or "MSP") .. " timed out / failed (cmd=" .. tostring(cmd or "?") .. ")")
+    abortLoading(state.i18n, details)
   end
 
   queue:add({
     command = VariantApi.command,
     simulatorResponse = VariantApi.simulatorResponse,
+    retryDelay = 1.2,
+    timeout = 3.5,
     processReply = function(_, buf)
       local parsed = VariantApi.parse(buf)
       if parsed and parsed.variant and parsed.variant ~= "" then
@@ -410,8 +423,8 @@ local function startLiveLoad()
   queue:add({
     command = BoardInfoApi.command,
     simulatorResponse = BoardInfoApi.simulatorResponse,
-    retryDelay = 1.6,
-    timeout = 4.0,
+    retryDelay = 1.2,
+    timeout = 3.5,
     processReply = function(_, buf)
       local parsed = BoardInfoApi.parse(buf)
       if parsed then
@@ -429,8 +442,8 @@ local function startLiveLoad()
   queue:add({
     command = BuildInfoApi.command,
     simulatorResponse = BuildInfoApi.simulatorResponse,
-    retryDelay = 1.6,
-    timeout = 4.0,
+    retryDelay = 1.2,
+    timeout = 3.5,
     processReply = function(_, buf)
       local parsed = BuildInfoApi.parse(buf)
       if parsed and parsed.buildInfo and parsed.buildInfo ~= "" then
@@ -444,8 +457,8 @@ local function startLiveLoad()
   queue:add({
     command = TelemetryConfigApi.command,
     simulatorResponse = TelemetryConfigApi.simulatorResponse,
-    retryDelay = 1.6,
-    timeout = 4.0,
+    retryDelay = 1.2,
+    timeout = 3.5,
     processReply = function(_, buf)
       local parsed = TelemetryConfigApi.parse(buf)
       if parsed then
@@ -528,11 +541,12 @@ function M.getModuleTitle()
 end
 
 function M.getHeaderActions()
-  return { reload = isFblConnected(), save = false, help = true }
+  return { reload = true, save = false, help = true }
 end
 
 function M.onReload()
   if not isFblConnected() then
+    abortLoading(state.i18n, t(state.i18n, "not_connected", "Telemetry / FBL not connected"))
     return false
   end
   queueLiveLoad(true)
@@ -551,6 +565,7 @@ function M.build(ctx)
   local h = ctx.h
   local i18n = ctx.i18n
 
+  state.i18n = i18n
   state.rebuild = ctx.requestRebuild
   if not isFblConnected() then
     state.pendingStart = false
@@ -568,8 +583,6 @@ function M.build(ctx)
     state.pendingStart = false
     startLiveLoad()
   end
-
-  pollPacketRateLive()
 
   local values = buildInfoValues()
   local rowY = y + 6
@@ -618,8 +631,8 @@ function M.build(ctx)
   end
 
   if state.loading and state.showLoadingOverlay then
-    if AsyncLoadUi.isTimedOut(state, nowSeconds()) then
-      abortLoading(i18n, readRuntimeErrorMessage() or t(i18n, "loading_timeout", "Timeout"))
+    if AsyncLoadUi and AsyncLoadUi.isTimedOut(state, nowSeconds()) then
+      abortLoading(i18n, readRuntimeErrorMessage() or t(i18n, "loading_timeout", "Timeout while reading from FBL"))
     end
     local title = t(i18n, "loading_title", "Loading")
     local message = string.format("%s %d/%d", t(i18n, "loading_message", "Reading live data"), state.done, state.total)
@@ -645,6 +658,25 @@ function M.build(ctx)
 end
 
 function M.wakeup()
+  local now = nowSeconds()
+  if state.loading then
+    if not isFblConnected() then
+      abortLoading(state.i18n, t(state.i18n, "link_lost", "Telemetry link lost"))
+      return
+    end
+    if AsyncLoadUi and type(AsyncLoadUi.isTimedOut) == "function" and AsyncLoadUi.isTimedOut(state, now) then
+      abortLoading(state.i18n, readRuntimeErrorMessage() or t(state.i18n, "loading_timeout", "Timeout while reading from FBL"))
+      return
+    end
+  else
+    local connected = isFblConnected()
+    if connected and not state.started and not state.pendingStart then
+      queueLiveLoad(false)
+      return
+    end
+  end
+
+  pollPacketRateLive()
 end
 
 function M.paint()
@@ -662,7 +694,7 @@ function M.closePage()
   local runtimeState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState() or nil
   local queue = runtimeState and runtimeState.queue
   if queue and type(queue.clear) == "function" then
-    queue:clear()
+    queue:clear("info-page")
   end
   state.started = false
   state.attached = false
@@ -671,7 +703,10 @@ function M.closePage()
   state.forceReload = false
   state.packetRateRequestPending = false
   state.lastPacketRateFetchAt = 0
-  AsyncLoadUi.reset(state)
+  state.i18n = nil
+  if AsyncLoadUi and type(AsyncLoadUi.reset) == "function" then
+    AsyncLoadUi.reset(state)
+  end
   state.rebuild = nil
 
   VariantApi = nil

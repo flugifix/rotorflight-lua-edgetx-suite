@@ -141,6 +141,8 @@ local function startLiveLoad()
     queue:add({
         command = ExperimentalApi.command,
         simulatorResponse = ExperimentalApi.simulatorResponse,
+        retryDelay = 1.2,
+        timeout = 3.5,
         processReply = function(_, buf)
             local parsed = ExperimentalApi.parse(buf)
             if parsed then
@@ -340,6 +342,13 @@ function M.build(ctx)
             overlay = LoadingOverlay,
             requestRebuild = ctx and ctx.requestRebuild
         }, state, i18n, t)
+    end
+end
+
+function M.wakeup()
+    local now = nowSeconds()
+    if state.loading and AsyncLoadUi and type(AsyncLoadUi.isTimedOut) == "function" and AsyncLoadUi.isTimedOut(state, now) then
+        abortLoading(nil, t(nil, "loading_timeout", "Timeout"))
     end
 end
 

@@ -1495,7 +1495,9 @@ return {
         loading_title = "Laden",
         loading_message = "Live-Daten werden gelesen",
         loading_failed = "Laden fehlgeschlagen",
-        loading_timeout = "Zeitueberschreitung beim Lesen vom FBL"
+        loading_timeout = "Zeitueberschreitung beim Lesen vom FBL",
+        not_connected = "Telemetrie / FBL nicht verbunden",
+        link_lost = "Telemetrieverbindung unterbrochen"
       },
       diagnostics_rfstatus = {
         cpu_load = "CPU-Last",
@@ -1538,7 +1540,9 @@ return {
         cpu_load = "CPU-Last",
         ok = "OK",
         loading_title = "Laden",
-        loading_message = "Lese FBL-Status..."
+        loading_message = "Lese FBL-Status...",
+        loading_failed = "Laden fehlgeschlagen",
+        loading_timeout = "Zeitueberschreitung beim Lesen vom FBL"
       },
       tools_copy_profiles = {
         title = "Profil kopieren",
