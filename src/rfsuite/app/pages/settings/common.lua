@@ -151,9 +151,9 @@ function M.createProfileAwareRuntime(options)
     local profileHelper = loadProfile()
     if profileHelper then
       if profileType == "rate" or profileType == "rate_profile" then
-        profileGetter = function() return profileHelper.getActiveRateProfile(1) end
+        profileGetter = function() return profileHelper.getActiveRateProfile() end
       else
-        profileGetter = function() return profileHelper.getActivePidProfile(1) end
+        profileGetter = function() return profileHelper.getActivePidProfile() end
       end
     end
   end

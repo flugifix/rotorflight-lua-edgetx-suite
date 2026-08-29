@@ -83,6 +83,12 @@ local function ensureProfileDep()
 end
 
 --- The key that makes a cached answer to `command` still valid, or nil when it is not cached.
+--
+-- Nil rather than a default, and the distinction is the whole point: this value is a CACHE
+-- KEY. A default is a key that never moves, so a reply stored under it stays "valid" across a
+-- profile switch and is then served for the wrong profile. An unknown profile therefore costs
+-- a round trip -- Cache.get and Cache.put both treat a nil key as not cacheable -- instead of
+-- costing a wrong answer.
 function Cache.keyFor(command)
   local kind = CACHEABLE[command]
   if kind == nil then
