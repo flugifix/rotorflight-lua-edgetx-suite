@@ -175,11 +175,10 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
         lang_file = os.path.join(src_core, "i18n", f"{lang}.lua")
 
         if os.path.isfile(py_precompile) and os.path.isfile(py_resolve) and os.path.isfile(lang_file):
-            py_exec = shutil.which("python3") or shutil.which("python") or shutil.which("py") or sys.executable
-            subprocess.run([py_exec, py_precompile, "--root", staging_tools], check=True)
-            subprocess.run([py_exec, py_precompile, "--root", staging_widgets], check=True)
-            subprocess.run([py_exec, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
-            subprocess.run([py_exec, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
+            subprocess.run([sys.executable, py_precompile, "--root", staging_tools], check=True)
+            subprocess.run([sys.executable, py_precompile, "--root", staging_widgets], check=True)
+            subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
+            subprocess.run([sys.executable, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
 
         # Create output ZIP
         os.makedirs(output_dir, exist_ok=True)

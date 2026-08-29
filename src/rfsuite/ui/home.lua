@@ -697,12 +697,11 @@ local function onBack(source, ev)
     return
   end
 
-  local now = (type(getTime) == "function" and getTime()) or (type(os) == "table" and type(os.clock) == "function" and math.floor(os.clock() * 100)) or 0
+  local now = (type(getTime) == "function" and getTime()) or 0
   if now > 0 and (state.lastBackTick or 0) > 0 and (now - state.lastBackTick) < 35 and (now - state.lastBackTick) >= 0 then
     logf("debug", "back dropped by debounce (dt=%d ticks)", now - state.lastBackTick)
     return
   end
-  state.lastBackTick = now
 
   local fromEvent = source == "event"
 
@@ -798,9 +797,11 @@ local function onBack(source, ev)
     if fromEvent then
       state.suppressBackFrames = 6
     end
+    state.lastBackTick = now
     scheduleBuildUI(true)
     return
   end
+  state.lastBackTick = now
   state.isClosing = true
 end
 
