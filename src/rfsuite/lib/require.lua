@@ -6,10 +6,6 @@
 
 local BASE_PATH = "/SCRIPTS/TOOLS/rfsuite-core/"
 
-if GREY_DEFAULT == nil then
-  GREY_DEFAULT = COLOR_THEME_SECONDARY2
-end
-
 _G.rfsuite = _G.rfsuite or {}
 _G.rfsuite.modules = _G.rfsuite.modules or {}
 

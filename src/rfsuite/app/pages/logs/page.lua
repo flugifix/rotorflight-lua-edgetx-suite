@@ -1225,7 +1225,7 @@ function M.build(ctx)
       y = cursorY + 25,
       w = w - 20,
       text = pageText(i18n, "no_logs_found"),
-      color = COLOR_THEME_PRIMARY2,
+      color = COLOR_THEME_DISABLED,
       align = CENTER
     }
     cursorY = cursorY + 60
@@ -1308,7 +1308,7 @@ function M.build(ctx)
       y = itemY + 11,
       w = labelW,
       text = labelText,
-      color = COLOR_THEME_PRIMARY2,
+      color = COLOR_THEME_DISABLED,
       font = SMLSIZE
     }
 

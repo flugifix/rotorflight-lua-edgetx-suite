@@ -28,7 +28,7 @@ end
 Theme.layout = { cols = 3, rows = 10, padding = 1 }
 
 Theme.boxes = {
-  { col = 1, row = 1, colspan = 1, rowspan = 2, type = "time", subtype = "flight", title = "@i18n(widgets.dashboard.flight_time):upper()@", titlepos = "bottom", titlecolor = COLOR_THEME_PRIMARY2, textcolor = WHITE, bgcolor = BLACK, font = AercCommon.compactStatsFont, value_offset_y = -6 },
+  { col = 1, row = 1, colspan = 1, rowspan = 2, type = "time", subtype = "flight", title = "@i18n(widgets.dashboard.flight_time):upper()@", titlepos = "bottom", titlecolor = COLOR_THEME_DISABLED, textcolor = WHITE, bgcolor = BLACK, font = AercCommon.compactStatsFont, value_offset_y = -6 },
   AercCommon and AercCommon.batteryBar and AercCommon.batteryBar("fuel", {
     col = 2,
     row = 1,
@@ -66,7 +66,7 @@ Theme.boxes = {
     maxpaddingbottom = 26,
     maxpaddingleft = 0,
     maxpaddingright = 0,
-    titlecolor = COLOR_THEME_PRIMARY2,
+    titlecolor = COLOR_THEME_DISABLED,
     textcolor = WHITE,
     bgcolor = BLACK,
     fillbgcolor = COLOR_THEME_SECONDARY2,
@@ -94,7 +94,7 @@ Theme.boxes = {
     maxpaddingbottom = 26,
     maxpaddingleft = 0,
     maxpaddingright = 0,
-    titlecolor = COLOR_THEME_PRIMARY2,
+    titlecolor = COLOR_THEME_DISABLED,
     textcolor = WHITE,
     bgcolor = BLACK,
     fillbgcolor = COLOR_THEME_SECONDARY2,
@@ -123,7 +123,7 @@ Theme.boxes = {
     maxpaddingbottom = 26,
     maxpaddingleft = 0,
     maxpaddingright = 0,
-    titlecolor = COLOR_THEME_PRIMARY2,
+    titlecolor = COLOR_THEME_DISABLED,
     textcolor = WHITE,
     bgcolor = BLACK,
     fillbgcolor = COLOR_THEME_SECONDARY2,

@@ -31,7 +31,6 @@ globals = {
   -- Colors
   "WHITE",
   "BLACK",
-  "GREY_DEFAULT",
   "RED",
   "GREEN",
   "YELLOW",

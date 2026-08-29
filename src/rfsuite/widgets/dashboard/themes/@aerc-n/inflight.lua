@@ -34,7 +34,7 @@ Theme.boxes = {
     unit = "",
     transform = "floor",
     bgcolor = BLACK,
-    titlecolor = COLOR_THEME_PRIMARY2,
+    titlecolor = COLOR_THEME_DISABLED,
     textcolor = WHITE,
     fillbgcolor = COLOR_THEME_SECONDARY2,
     maxtextcolor = YELLOW,
@@ -66,7 +66,7 @@ Theme.boxes = {
       return -22
     end,
     bgcolor = BLACK,
-    titlecolor = COLOR_THEME_PRIMARY2,
+    titlecolor = COLOR_THEME_DISABLED,
     textcolor = YELLOW
   },
 
@@ -94,7 +94,7 @@ Theme.boxes = {
     gaugepaddingbottom = 5,
     bgcolor = BLACK,
     fillbgcolor = COLOR_THEME_SECONDARY2,
-    titlecolor = COLOR_THEME_PRIMARY2,
+    titlecolor = COLOR_THEME_DISABLED,
     textcolor = WHITE,
     min = function(_, state) return cfgValue("bec_min", 3.0, state) end,
     max = function(_, state) return cfgValue("bec_max", 13.0, state) end,
@@ -122,7 +122,7 @@ Theme.boxes = {
     unit = "%",
     transform = "floor",
     bgcolor = BLACK,
-    titlecolor = COLOR_THEME_PRIMARY2,
+    titlecolor = COLOR_THEME_DISABLED,
     textcolor = WHITE,
     fillbgcolor = COLOR_THEME_SECONDARY2,
     maxtextcolor = YELLOW,

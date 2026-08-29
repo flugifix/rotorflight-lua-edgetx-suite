@@ -308,7 +308,7 @@ function Utils.resolveTextColor(box, state, fallback)
   end
 
   local bgColor = Utils.resolveValue(box and box.bgcolor, box, state)
-  if bgColor == BLACK or bgColor == COLOR_THEME_SECONDARY2 or bgColor == GREY_DEFAULT then
+  if bgColor == BLACK or bgColor == COLOR_THEME_SECONDARY2 then
     return WHITE
   end
 
@@ -429,7 +429,7 @@ function Utils.drawContainer(nodes, rect, box, state)
     titleY,
     rect.w - 8,
     title,
-    box.titlecolor or COLOR_THEME_PRIMARY2,
+    box.titlecolor or COLOR_THEME_DISABLED,
     box.titlealign or CENTER,
     Utils.resolveFont(box, state, SMLSIZE, "titlefont", "titlefont_lowres")
   )
