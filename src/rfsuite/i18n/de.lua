@@ -10,6 +10,7 @@ return {
       apiversion = "Lese API-Version",
       uid = "Lese Seriennummer",
       rtc = "Stelle die Uhr",
+      status = "Status auslesen",
       battery_config = "Lese Akku-Konfiguration",
       governor_config = "Lese Governor-Konfiguration",
       esc_sensor_config = "Lese ESC-Telemetrie-Konfiguration",

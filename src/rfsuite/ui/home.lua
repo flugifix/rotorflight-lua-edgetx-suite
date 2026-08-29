@@ -329,6 +329,7 @@ local ONCONNECT_TEXT = {
   apiversion        = "@i18n(app.onconnect.apiversion)@",
   uid               = "@i18n(app.onconnect.uid)@",
   rtc               = "@i18n(app.onconnect.rtc)@",
+  status            = "@i18n(app.onconnect.status)@",
   battery_config    = "@i18n(app.onconnect.battery_config)@",
   governor_config   = "@i18n(app.onconnect.governor_config)@",
   esc_sensor_config = "@i18n(app.onconnect.esc_sensor_config)@",

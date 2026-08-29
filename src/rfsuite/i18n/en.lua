@@ -10,6 +10,7 @@ return {
       apiversion = "Reading API version",
       uid = "Reading serial number",
       rtc = "Setting the clock",
+      status = "Reading status",
       battery_config = "Reading battery configuration",
       governor_config = "Reading governor configuration",
       esc_sensor_config = "Reading ESC telemetry configuration",

@@ -17,6 +17,7 @@ local GovernorProfileApi = nil
 local GovernorConfigApi = nil
 local LoadingOverlay = nil
 local Sensors = nil
+local Profile = nil
 local ApiVersion = nil
 local t = nil
 
@@ -52,28 +53,13 @@ local function ensureDeps()
   if not GovernorConfigApi then GovernorConfigApi = loadModule("tasks/msp/api/governor_config.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not Sensors then Sensors = loadModule("lib/sensors.lua") end
+  if not Profile then Profile = loadModule("lib/profile.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
   if not t then t = Common and Common.pageT("flight_tuning_advanced_tail_rotor") or nil end
   
   if Common then
     if not ui.runtimeBase then
-      ui.runtimeBase = Common.createProfileAwareRuntime({
-        profileGetter = function()
-          local sensorProfile = nil
-          if Sensors and type(Sensors.getValue) == "function" then
-            sensorProfile = tonumber(Sensors.getValue("pid_profile"))
-          end
-          if sensorProfile and sensorProfile > 0 then
-            return math.floor(sensorProfile)
-          end
-          local session = getSession()
-          local activeProfile = session and session.activeProfile
-          if activeProfile ~= nil then
-            return math.floor(tonumber(activeProfile) or 0) + 1
-          end
-          return 1
-        end
-      })
+      ui.runtimeBase = Common.createProfileAwareRuntime({ profileType = "pid" })
     end
     if type(ui.runtime) ~= "table" then
       ui.runtime = newRuntime()
@@ -299,18 +285,7 @@ local function queueRcWrite()
 end
 
 local function getLiveProfile()
-  if Sensors and type(Sensors.getValue) == "function" then
-    local raw = tonumber(Sensors.getValue("pid_profile"))
-    if raw and raw > 0 then
-      return math.floor(raw)
-    end
-  end
-  local session = getSession()
-  local activeProfile = tonumber(session and session.activeProfile)
-  if activeProfile ~= nil then
-    return math.floor(activeProfile) + 1
-  end
-  return 1
+  return Profile and Profile.getActivePidProfile(1) or 1
 end
 
 local function getBaseTitle()
