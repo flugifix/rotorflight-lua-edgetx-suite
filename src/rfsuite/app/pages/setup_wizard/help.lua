@@ -42,9 +42,7 @@ return function(ctx, proc)
     body = t(i18n, "help_opening", "This assistant walks the first setup of a bare flight controller. Each procedure can also be run alone.")
   end
   if body == nil or body == "" then
-    body = t(i18n, "help_general",
-      "This assistant walks the first setup of a bare flight controller. It proposes, shows " ..
-      "what it will do, and writes only after a press.")
+    body = t(i18n, "help_general", "This assistant walks the first setup of a bare flight controller. It proposes, shows what it will do, and writes only after a press.")
   end
 
   return {
