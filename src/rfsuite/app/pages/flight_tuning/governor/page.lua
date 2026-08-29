@@ -451,7 +451,7 @@ local function appendCompactNumberField(children, x, y, w, labelText, opts)
 		y = y + rowH,
 		w = w,
 		h = 1,
-		color = GREY_DEFAULT or 0x808080,
+		color = COLOR_THEME_SECONDARY2,
 		filled = true
 	}
 
@@ -557,7 +557,7 @@ local function appendHorizontalFields(children, x, y, w, labelText, rows, i18n)
 		y = y + rowH,
 		w = w,
 		h = 1,
-		color = GREY_DEFAULT or 0x808080,
+		color = COLOR_THEME_SECONDARY2,
 		filled = true
 	}
 

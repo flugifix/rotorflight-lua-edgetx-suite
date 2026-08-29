@@ -188,10 +188,10 @@ function Common.batteryBar(source, overrides)
       end
       return SMLSIZE
     end,
-    titlecolor = GREY_DEFAULT,
+    titlecolor = COLOR_THEME_DISABLED,
     textcolor = WHITE,
     bgcolor = BLACK,
-    fillbgcolor = GREY_DEFAULT,
+    fillbgcolor = COLOR_THEME_SECONDARY2,
     thresholds = {
       { value = 10, fillcolor = RED },
       { value = 45, fillcolor = YELLOW }

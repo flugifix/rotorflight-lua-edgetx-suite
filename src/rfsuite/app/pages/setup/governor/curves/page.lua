@@ -359,7 +359,7 @@ function M.build(ctx)
     type = "rectangle",
     x = gx, y = gy,
     w = gw, h = gh,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = false
   }
 
@@ -370,7 +370,7 @@ function M.build(ctx)
       type = "line",
       x = 0, y = 0, w = 0, h = 0,
       pts = { { gx, gridY }, { gx + gw, gridY } },
-      color = GREY_DEFAULT,
+      color = COLOR_THEME_SECONDARY2,
       thickness = 1
     }
   end
@@ -382,7 +382,7 @@ function M.build(ctx)
       type = "line",
       x = 0, y = 0, w = 0, h = 0,
       pts = { { gridX, gy }, { gridX, gy + gh } },
-      color = GREY_DEFAULT,
+      color = COLOR_THEME_SECONDARY2,
       thickness = 1
     }
   end

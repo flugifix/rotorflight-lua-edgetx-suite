@@ -368,7 +368,7 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
