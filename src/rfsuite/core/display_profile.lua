@@ -30,6 +30,10 @@ local BASE = {
   -- what a touch target needs. Per resolution and read off each one -- the header row does
   -- not scale between them either.
   armedBannerH = 24,
+  rowH = 40,
+  horizontalRowH = 56,
+  sectionH = 38,
+  staticSectionH = 38,
   header = {
     rightPad = 12,
     memW = 110,
@@ -45,6 +49,13 @@ local BASE = {
 
 local PRESETS = {
   tx16s = {},
+  small = {
+    key = "small",
+    rowH = 34,
+    horizontalRowH = 48,
+    sectionH = 32,
+    staticSectionH = 32
+  },
   tx15 = {
     key = "tx15",
     rootMinCardWidth = 96,
@@ -56,6 +67,10 @@ local PRESETS = {
     tileMax = 100,
     groupGapBottom = 10,
     armedBannerH = 24,
+    rowH = 40,
+    horizontalRowH = 56,
+    sectionH = 38,
+    staticSectionH = 38,
     header = {
       memW = 110,
       topButtonH = 34,
@@ -80,6 +95,10 @@ local PRESETS = {
     tileMax = 112,
     groupGapBottom = 16,
     armedBannerH = 27,
+    rowH = 50,
+    horizontalRowH = 68,
+    sectionH = 46,
+    staticSectionH = 46,
     header = {
       rightPad = 20,
       memW = 126,
@@ -113,6 +132,10 @@ function DisplayProfile.current()
 
   if w >= 760 then
     return merge(BASE, PRESETS.tx16s_mk3)
+  end
+
+  if w <= 320 then
+    return merge(BASE, PRESETS.small)
   end
 
   if w == 480 and h >= 300 then

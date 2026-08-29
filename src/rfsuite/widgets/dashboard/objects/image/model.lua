@@ -108,7 +108,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
       rect.y + rect.h - textH,
       rect.w - 8,
       displayTitle,
-      box.titlecolor or GREY_DEFAULT,
+      box.titlecolor or COLOR_THEME_DISABLED,
       CENTER,
       SMLSIZE
     )

@@ -41,12 +41,14 @@ local escModels = {
 local escFlags = {spinDirection = 0, f3cAuto = 1, keepMah = 2, bec12v = 3}
 
 local function getEscTypeLabel(values)
-    local idx = (values[mspHeaderBytes + 24] * 256) + values[mspHeaderBytes + 23]
+    if type(values) ~= "table" then return toolName end
+    local idx = ((values[mspHeaderBytes + 24] or 0) * 256) + (values[mspHeaderBytes + 23] or 0)
     local model = escModels[idx]
-    return (model and model.name) or "YGE ESC (" .. idx .. ")"
+    return (model and model.name) or ("YGE ESC (" .. idx .. ")")
 end
 
 local function getUInt(page, vals)
+    if type(page) ~= "table" then return 0 end
     local v = 0
     for idx = 1, #vals do
         local raw_val = page[vals[idx] + mspHeaderBytes] or 0
@@ -58,9 +60,17 @@ end
 
 local function getEscModel(buffer) return getEscTypeLabel(buffer) end
 
-local function getEscVersion(buffer) return getUInt(buffer, {29, 30, 31, 32}) end
+local function getEscVersion(buffer)
+    if type(buffer) ~= "table" then return "" end
+    local ver = getUInt(buffer, {2})
+    return ver ~= 0 and tostring(ver) or ""
+end
 
-local function getEscFirmware(buffer) return string.format("%.5f", getUInt(buffer, {25, 26, 27, 28}) / 100000) end
+local function getEscFirmware(buffer)
+    if type(buffer) ~= "table" then return "" end
+    local raw = getUInt(buffer, {25, 26, 27, 28})
+    return raw ~= 0 and string.format("%.5f", raw / 100000) or ""
+end
 
 return {mspapi = "ESC_PARAMETERS_YGE", toolName = toolName, escSensorProtocolId = 9, powerCycle = false, escModels = escModels, getEscModel = getEscModel, getEscVersion = getEscVersion, getEscFirmware = getEscFirmware}
 

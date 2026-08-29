@@ -710,7 +710,7 @@ function M.build(ctx)
     type = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true
   }
 
@@ -811,7 +811,7 @@ function M.build(ctx)
     type = "rectangle",
     x = x, y = y + 2 * rowH,
     w = w, h = 1,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true
   }
 
@@ -834,7 +834,7 @@ function M.build(ctx)
     type = "rectangle",
     x = x + leftW, y = splitY,
     w = 1, h = splitH,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true
   }
 
@@ -883,7 +883,7 @@ function M.build(ctx)
       type = "rectangle",
       x = x + 6, y = boxY,
       w = leftW - 12, h = boxH,
-      color = GREY_DEFAULT,
+      color = COLOR_THEME_SECONDARY2,
       filled = false
     }
     
@@ -982,9 +982,9 @@ function M.build(ctx)
 
   local mainColor = WHITE
   local accent = COLOR_THEME_SECONDARY1 or YELLOW
-  local disc = GREY_DEFAULT
-  local bodyLight = COLOR_THEME_PRIMARY2 or GREY_DEFAULT
-  local bodyMid = GREY_DEFAULT
+  local disc = COLOR_THEME_SECONDARY2
+  local bodyLight = COLOR_THEME_PRIMARY2
+  local bodyMid = COLOR_THEME_SECONDARY2
   local bodyDark = COLOR_THEME_PRIMARY3 or BLACK
 
   local nose = {2.35, 0.0, -0.02}

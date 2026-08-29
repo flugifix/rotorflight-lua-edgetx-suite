@@ -265,7 +265,7 @@ function M.appendSectionHeader(children, x, y, w, title)
     y = y + 34,
     w = w,
     h = 1,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true
   }
 end
@@ -295,7 +295,7 @@ function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow,
     y = ctrlY,
     w = valueW,
     h = ctrlH,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true
   }
 
@@ -330,7 +330,7 @@ function M.appendSettingsRow(children, x, y, w, labelText, valueText, withArrow,
     y = y + rowH - 1,
     w = w,
     h = 1,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true
   }
 end

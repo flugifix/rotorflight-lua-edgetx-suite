@@ -34,7 +34,7 @@ local function getLogColor(level)
   if l == "error" then return COLOR_THEME_WARNING end
   if l == "warn" then return COLOR_THEME_PRIMARY2 end
   if l == "info" then return COLOR_THEME_PRIMARY1 end
-  return GREY_DEFAULT
+  return COLOR_THEME_DISABLED
 end
 
 function M.getModuleTitle()
@@ -80,7 +80,7 @@ function M.build(ctx)
       type = "label",
       x = x + 10, y = y + 20, w = w - 20,
       text = pageText(ctx.i18n, "no_logs", "No logs available"),
-      color = GREY_DEFAULT, align = CENTER
+      color = COLOR_THEME_DISABLED, align = CENTER
     }
     return
   end

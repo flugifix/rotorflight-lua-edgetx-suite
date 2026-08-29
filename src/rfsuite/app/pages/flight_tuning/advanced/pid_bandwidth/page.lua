@@ -242,7 +242,7 @@ local function drawColumnHeader(children, x, y, w, i18n)
     type = "rectangle",
     x = x, y = y + headerLineY,
     w = w, h = 1,
-    color = GREY_DEFAULT, filled = true
+    color = COLOR_THEME_SECONDARY2, filled = true
   }
 
   local columns = { "roll", "pitch", "yaw" }
@@ -321,7 +321,7 @@ local function appendBandwidthRow(children, x, y, w, i18n, labelText, key0, key1
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1

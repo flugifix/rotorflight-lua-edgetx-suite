@@ -4,8 +4,32 @@
 -- All functions append LVGL widget entries to a children table.
 local Controls = {}
 
-local ROW_H          = 64  -- total row height (the +1 divider is included in each function)
-local HORIZONTAL_ROW_H = 78  -- total row height for horizontal multi-field rows with stacked headers
+local function loadModule(path)
+  if _G.rfsuite and _G.rfsuite.require then
+    return _G.rfsuite.require(path)
+  end
+  local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
+  if loadScript then
+    local chunk = loadScript(fullPath, "t")
+    if type(chunk) == "function" then
+      local ok, mod = pcall(chunk)
+      if ok and type(mod) == "table" then
+        return mod
+      end
+    end
+  end
+  return nil
+end
+
+local function getDisplayProfile()
+  if not DisplayProfile then
+    DisplayProfile = loadModule("core/display_profile.lua")
+  end
+  if DisplayProfile and type(DisplayProfile.current) == "function" then
+    return DisplayProfile.current()
+  end
+  return nil
+end
 
 local function getNativeCtrlH()
   if lvgl and lvgl.UI_ELEMENT_HEIGHT then
@@ -27,24 +51,61 @@ local function getNativeFontH()
   return 21
 end
 
+local function getRowH()
+  local prof = getDisplayProfile()
+  if prof and prof.rowH then return prof.rowH end
+  local w = _G.LCD_W or 480
+  if w >= 760 then return 50 end
+  if w <= 320 then return 34 end
+  return 40
+end
+
+local function getHorizontalRowH()
+  local prof = getDisplayProfile()
+  if prof and prof.horizontalRowH then return prof.horizontalRowH end
+  local w = _G.LCD_W or 480
+  if w >= 760 then return 68 end
+  if w <= 320 then return 48 end
+  return 56
+end
+
+local function getSectionH()
+  local prof = getDisplayProfile()
+  if prof and prof.sectionH then return prof.sectionH end
+  local w = _G.LCD_W or 480
+  if w >= 760 then return 46 end
+  if w <= 320 then return 32 end
+  return 38
+end
+
+local function getStaticSectionH()
+  local prof = getDisplayProfile()
+  if prof and prof.staticSectionH then return prof.staticSectionH end
+  local w = _G.LCD_W or 480
+  if w >= 760 then return 46 end
+  if w <= 320 then return 32 end
+  return 38
+end
+
 local CTRL_H = getNativeCtrlH()
 local LABEL_H = getNativeFontH()
-
 -- ── SectionHeader ─────────────────────────────────────────────────────────────
 -- Collapsible accordion section title with a blue bottom bar (like tile highlight).
 --
--- Layout (SECTION_H = 50 px total):
+-- Layout:
 --   y+2            title label     MIDSIZE, COLOR_THEME_PRIMARY1
 --   y+44           3 px blue bar   COLOR_THEME_SECONDARY1
---   y+49           1 px divider    GREY_DEFAULT
+--   y+49           1 px divider    COLOR_THEME_SECONDARY2
 --
 -- Controls.SECTION_H is exported so callers stay in sync.
 
-local SECTION_H            = 50
+local ROW_H = getRowH()
+local HORIZONTAL_ROW_H = getHorizontalRowH()
+local SECTION_H = getSectionH()
+local STATIC_SECTION_H = getStaticSectionH()
 local SECTION_BAR_H        = 3
 local SECTION_ARROW_W      = 30
 local SECTION_ARROW_H      = 30
-local STATIC_SECTION_H     = 50
 
 Controls.CTRL_H = CTRL_H
 Controls.LABEL_H = LABEL_H
@@ -121,6 +182,8 @@ function Controls.computeGridMetrics(totalW, columns, opts)
 end
 
 function Controls.appendSectionHeader(children, x, y, w, title, expanded, onToggle)
+  local sectionH = SECTION_H
+
   -- Title label
   children[#children + 1] = {
     type  = "label",
@@ -132,7 +195,7 @@ function Controls.appendSectionHeader(children, x, y, w, title, expanded, onTogg
 
   -- Expand/collapse button (styled chevron control)
   local btnX = x + w - SECTION_ARROW_W
-  local btnY = y + math.floor((SECTION_H - 6 - SECTION_ARROW_H) / 2)
+  local btnY = y + math.floor((sectionH - 6 - SECTION_ARROW_H) / 2)
   local icon = expanded and "v" or ">"
   children[#children + 1] = {
     type  = "button",
@@ -159,7 +222,7 @@ function Controls.appendSectionHeader(children, x, y, w, title, expanded, onTogg
   -- Blue accent bar (below title)
   children[#children + 1] = {
     type   = "rectangle",
-    x = x, y = y + SECTION_H - 6,
+    x = x, y = y + sectionH - 6,
     w = w, h = SECTION_BAR_H,
     color  = COLOR_THEME_SECONDARY1, filled = true
   }
@@ -167,13 +230,15 @@ function Controls.appendSectionHeader(children, x, y, w, title, expanded, onTogg
   -- Divider line (bottom edge)
   children[#children + 1] = {
     type   = "rectangle",
-    x = x, y = y + SECTION_H - 1,
+    x = x, y = y + sectionH - 1,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 end
 
 function Controls.appendStaticSectionHeader(children, x, y, w, title)
+  local staticSectionH = STATIC_SECTION_H
+
   children[#children + 1] = {
     type  = "label",
     x = x, y = y + 2,
@@ -184,7 +249,7 @@ function Controls.appendStaticSectionHeader(children, x, y, w, title)
 
   children[#children + 1] = {
     type   = "rectangle",
-    x = x, y = y + STATIC_SECTION_H - 6,
+    x = x, y = y + staticSectionH - 6,
     w = w, h = 3,
     color  = COLOR_THEME_SECONDARY1, filled = true
   }
@@ -291,7 +356,7 @@ function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
@@ -410,7 +475,7 @@ function Controls.appendNumberField(children, x, y, w, labelText, opts)
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
@@ -540,7 +605,7 @@ function Controls.appendComboSelect(children, x, y, w, labelText, options,
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
@@ -595,7 +660,7 @@ function Controls.appendTextField(children, x, y, w, labelText, opts)
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1

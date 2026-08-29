@@ -15,6 +15,7 @@ local MspRuntime = nil
 local EscParametersBlheliSApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
+local BlheliSInit = nil
 local t = nil
 
 local ui = {
@@ -41,6 +42,9 @@ local ui = {
   },
   currentSection = 1,
   parsedCache = nil,
+  escModel = nil,
+  escVersion = nil,
+  escFirmware = nil,
   runtime = {
     readPending = false,
     requestRebuild = nil,
@@ -63,6 +67,7 @@ local function ensureDeps()
   if not EscParametersBlheliSApi then EscParametersBlheliSApi = loadModule("tasks/msp/api/esc_parameters_blheli_s.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  if not BlheliSInit then BlheliSInit = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/blheli_s/init.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -118,11 +123,22 @@ local function queueBlheliReadActual(queue)
 
         ui.parsedCache = parsed
 
+        local escModel = BlheliSInit and type(BlheliSInit.getEscModel) == "function" and BlheliSInit.getEscModel(buf) or nil
+        local escVersion = BlheliSInit and type(BlheliSInit.getEscVersion) == "function" and BlheliSInit.getEscVersion(buf) or nil
+        local escFirmware = BlheliSInit and type(BlheliSInit.getEscFirmware) == "function" and BlheliSInit.getEscFirmware(buf) or nil
+
+        ui.escModel = escModel
+        ui.escVersion = escVersion
+        ui.escFirmware = escFirmware
+
         local session = getSession()
         if session then
           session.setup_esc_motors_esc_tools_blheli_s = {
             config = {},
-            parsedCache = ui.parsedCache
+            parsedCache = ui.parsedCache,
+            escModel = escModel,
+            escVersion = escVersion,
+            escFirmware = escFirmware
           }
           for k, v in pairs(ui.config) do
             session.setup_esc_motors_esc_tools_blheli_s.config[k] = v
@@ -334,6 +350,9 @@ local function loadFromSession()
       end
     end
     ui.parsedCache = cached.parsedCache
+    ui.escModel = cached.escModel
+    ui.escVersion = cached.escVersion
+    ui.escFirmware = cached.escFirmware
     return true
   end
   return false
@@ -574,7 +593,15 @@ function M.build(ctx)
 
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
+    local headerTitle = title
+    if ui.escModel and ui.escModel ~= "" and ui.escModel ~= title then
+      if string.find(string.lower(ui.escModel), string.lower(title), 1, true) then
+        headerTitle = ui.escModel
+      else
+        headerTitle = title .. " - " .. ui.escModel
+      end
+    end
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
@@ -819,6 +846,7 @@ function M.onClose()
   EscParametersBlheliSApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
+  BlheliSInit = nil
   t = nil
 end
 

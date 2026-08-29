@@ -171,13 +171,12 @@ local function readFirmwareFuelValue()
 end
 
 local function resolveReservePercent(session, batteryConfig)
-  local reserve = Reserve.resolve(session, batteryConfig)
-
-  if batteryConfig then
-    batteryConfig.consumptionWarningPercentage = reserve
-  end
-
-  return reserve
+  -- Fix for issue #52: do not write back into batteryConfig here. The session's
+  -- battery_config must keep what the flight controller reported so that
+  -- loadFromSession on the Battery page can display the board's actual value
+  -- rather than the substituted preference. SmartFuel only needs the resolved
+  -- number locally and is not authoritative for the page's display.
+  return Reserve.resolve(session, batteryConfig)
 end
 
 local function scaleField(raw, fallback, minValue, maxValue, scale)

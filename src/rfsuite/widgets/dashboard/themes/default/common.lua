@@ -260,7 +260,7 @@ function Common.addMetricCard(nodes, spec)
     y = spec.y + 5,
     w = spec.w - 12,
     text = spec.title,
-    color = spec.titleColor or GREY_DEFAULT,
+    color = spec.titleColor or COLOR_THEME_DISABLED,
     font = SMLSIZE
   }
 
@@ -293,7 +293,7 @@ function Common.addMetricCard(nodes, spec)
       y = spec.y + spec.h - 18,
       w = spec.w - 12,
       text = spec.note,
-      color = spec.noteColor or GREY_DEFAULT,
+      color = spec.noteColor or COLOR_THEME_DISABLED,
       align = spec.noteAlign or CENTER,
       font = SMLSIZE
     }

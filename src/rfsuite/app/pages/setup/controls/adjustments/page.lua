@@ -1207,7 +1207,7 @@ function M.build(ctx)
     type = "rectangle",
     x = x, y = cursorY,
     w = w, h = 1,
-    color = GREY_DEFAULT, filled = true
+    color = COLOR_THEME_SECONDARY2, filled = true
   }
   cursorY = cursorY + 8
 
@@ -1387,7 +1387,7 @@ function M.build(ctx)
     type = "rectangle",
     x = x, y = enaRowY + rowH,
     w = w, h = 1,
-    color = GREY_DEFAULT, filled = true
+    color = COLOR_THEME_SECONDARY2, filled = true
   }
   cursorY = cursorY + rowH + 1
 
@@ -1455,7 +1455,7 @@ function M.build(ctx)
     type = "rectangle",
     x = x, y = rangeRowY + rowH,
     w = w, h = 1,
-    color = GREY_DEFAULT, filled = true
+    color = COLOR_THEME_SECONDARY2, filled = true
   }
   cursorY = cursorY + rowH + 1
 
@@ -1532,7 +1532,7 @@ function M.build(ctx)
       type = "rectangle",
       x = x, y = valChRowY + rowH,
       w = w, h = 1,
-      color = GREY_DEFAULT, filled = true
+      color = COLOR_THEME_SECONDARY2, filled = true
     }
     cursorY = cursorY + rowH + 1
 
@@ -1629,7 +1629,7 @@ function M.build(ctx)
       type = "rectangle",
       x = x, y = r1RowY + rowH,
       w = w, h = 1,
-      color = GREY_DEFAULT, filled = true
+      color = COLOR_THEME_SECONDARY2, filled = true
     }
     cursorY = cursorY + rowH + 1
 
@@ -1705,7 +1705,7 @@ function M.build(ctx)
         type = "rectangle",
         x = x, y = r2RowY + rowH,
         w = w, h = 1,
-        color = GREY_DEFAULT, filled = true
+        color = COLOR_THEME_SECONDARY2, filled = true
       }
       cursorY = cursorY + rowH + 1
     end
@@ -1788,7 +1788,7 @@ function M.build(ctx)
       type = "rectangle",
       x = x, y = vRangeRowY + rowH,
       w = w, h = 1,
-      color = GREY_DEFAULT, filled = true
+      color = COLOR_THEME_SECONDARY2, filled = true
     }
     cursorY = cursorY + rowH + 1
   end

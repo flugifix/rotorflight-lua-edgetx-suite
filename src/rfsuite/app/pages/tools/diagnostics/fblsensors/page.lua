@@ -234,7 +234,7 @@ function M.build(ctx)
   children[#children + 1] = {
     type   = "rectangle",
     x = x, y = rowY + rowH + 2, w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   -- ── Graph Area (Responsive & Shorter to avoid scroll) ────────────────────────
@@ -250,7 +250,7 @@ function M.build(ctx)
   children[#children + 1] = {
     type = "rectangle",
     x = graphX, y = graphY, w = graphW, h = graphH,
-    color = GREY_DEFAULT, filled = false
+    color = COLOR_THEME_SECONDARY2, filled = false
   }
   
   -- Zero line
@@ -259,7 +259,7 @@ function M.build(ctx)
     children[#children + 1] = {
       type = "rectangle",
       x = graphX, y = zeroY, w = graphW, h = 1,
-      color = GREY_DEFAULT, filled = true
+      color = COLOR_THEME_SECONDARY2, filled = true
     }
   end
 
