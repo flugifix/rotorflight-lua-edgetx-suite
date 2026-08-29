@@ -264,13 +264,13 @@ end
 
 
 local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, spec1)
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 40
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
-  local editW1   = math.floor(w * 0.14)
-  local labelW1  = math.floor(w * 0.22)
-  local labelGap = 6
+  local editW1   = math.floor(w * 0.24)
+  local labelW1  = math.floor(w * 0.16)
+  local labelGap = 4
 
   local xEdit1   = x + w - editW1 - 10
   local xLabel1  = xEdit1 - labelW1
@@ -341,15 +341,15 @@ local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, 
 end
 
 local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spec1, label2, key2, spec2)
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 40
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   
-  local editW   = math.floor(w * 0.14)
-  local labelW  = math.floor(w * 0.11)
+  local editW   = math.floor(w * 0.24)
+  local labelW  = math.floor(w * 0.14)
   local gap     = 8
   local margin  = 10
-  local labelGap = 6
+  local labelGap = 4
   
   local xEdit2  = x + w - editW - margin
   local xLabel2 = xEdit2 - labelW - gap
@@ -466,13 +466,13 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
 end
 
 local function appendTripleFieldRow(children, x, y, w, i18n, labelText, key0, spec0, key1, spec1, key2, spec2)
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 40
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
   -- Calculate the exact same startX as appendDualFieldRow to keep alignment consistent
-  local editW   = math.floor(w * 0.14)
-  local labelW  = math.floor(w * 0.11)
+  local editW   = math.floor(w * 0.20)
+  local labelW  = math.floor(w * 0.14)
   local gap     = 8
   local margin  = 10
   
@@ -578,11 +578,11 @@ local function appendTripleFieldRow(children, x, y, w, i18n, labelText, key0, sp
 end
 
 local function appendSingleChoiceRow(children, x, y, w, labelText, key, options)
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 48
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
-  local comboW = math.floor(w * 0.22)
+  local comboW = math.floor(w * 0.24)
   local comboX = x + w - comboW - 10
   local mainW = comboX - x - 8
 
@@ -700,10 +700,8 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, displayTitle)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
   end
-
-  cursorY = cursorY + 10
 
   -- Specs
   local specDecay  = { scale=10, mult=1, min=0, max=250, suffix="s", decimals=1 }

@@ -251,13 +251,14 @@ local function formatValue(val, spec)
 end
 
 local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spec1, label2, key2, spec2)
-  local rowH = (Controls and Controls.ROW_H) or 64
+  local rowH = (Controls and Controls.ROW_H) or 40
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
-  local mainW    = math.floor(w * 0.24)
-  local labelW1  = math.floor(w * 0.21)
-  local editW1   = math.floor(w * 0.17)
-  local labelGap = 6
+  local mainW    = math.floor(w * 0.18)
+  local labelW1  = math.floor(w * 0.14)
+  local editW1   = math.floor(w * 0.24)
+  local gap      = 8
+  local labelGap = 4
   
   -- Left main label
   children[#children + 1] = {
@@ -316,9 +317,9 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
 
   -- Column 2
   if label2 and key2 and spec2 then
-    local labelW2 = math.floor(w * 0.21)
-    local editW2  = math.floor(w * 0.17)
-    local xLabel2 = xEdit1 + editW1 + 5
+    local labelW2 = math.floor(w * 0.14)
+    local editW2  = math.floor(w * 0.24)
+    local xLabel2 = xEdit1 + editW1 + gap
     local xEdit2  = xLabel2 + labelW2
 
     children[#children + 1] = {
@@ -440,10 +441,8 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, displayTitle)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
   end
-
-  cursorY = cursorY + 10
 
   -- 1) Rescue Mode Enable (Switch)
   local modeVal = (tonumber(ui.config.rescue_mode) or 0) == 1
