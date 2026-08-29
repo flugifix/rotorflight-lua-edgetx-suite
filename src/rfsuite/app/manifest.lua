@@ -355,8 +355,6 @@ local manifest = {
       title = "@i18n(app.modules.audio.name)@",
       pages = {
         { id = "audio_events", title = "@i18n(app.modules.audio_events.name)@", menuId = "settings_audio_events_page" }
-        --{ id = "audio_switches", title = "@i18n(app.modules.audio_switches.name)@", menuId = "settings_audio_switches_page" },
-        --{ id = "audio_timer", title = "@i18n(app.modules.audio_timer.name)@", menuId = "settings_audio_timer_page" }      
       }
     },
     developer_menu = {
@@ -386,14 +384,6 @@ local manifest = {
     },
     settings_audio_events_page = {
       title = "@i18n(app.modules.audio_events.name)@",
-      pages = {}
-    },
-    settings_audio_switches_page = {
-      title = "@i18n(app.modules.audio_switches.name)@",
-      pages = {}
-    },
-    settings_audio_timer_page = {
-      title = "@i18n(app.modules.audio_timer.name)@",
       pages = {}
     },
     diagnostics_fblsensors_page = {

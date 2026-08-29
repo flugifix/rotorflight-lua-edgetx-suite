@@ -146,13 +146,6 @@ function M.getHeaderActions()
   return { save = true, reload = true, help = true }
 end
 
-function M.allowMemAutoRefresh()
-  local module = ui.activeModule
-  if type(module) == "table" and type(module.allowMemAutoRefresh) == "function" then
-    return module.allowMemAutoRefresh()
-  end
-  return true
-end
 
 function M.onReload(ctx)
   ensureDeps()

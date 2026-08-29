@@ -490,9 +490,6 @@ function M.getHeaderActions()
   return { save = false, reload = false, help = true }
 end
 
-function M.allowMemAutoRefresh()
-  return true
-end
 
 local function discoverApis()
   Log.emit("api_tester", "discoverApis: starting", "debug", true)

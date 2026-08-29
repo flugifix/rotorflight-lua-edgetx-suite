@@ -16,8 +16,7 @@ local Common = nil
 --   type "number" → stored/restored via tonumber(), default must be a number
 
 local CONFIG_SCHEMA = {
-  { key = "iconsize",                     type = "number", default = 2     },
-  { key = "syncname",                     type = "bool",   default = false  },
+  { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
   { key = "developer_tools",              type = "bool",   default = false  },
@@ -38,7 +37,6 @@ local ui = {
   loaded = false,
   sections = {
     safety      = true,
-    integration = false,
     development = false,
   },
   config = buildDefaultConfig()
@@ -139,16 +137,6 @@ local function buildSafety(cursorY, children, x, w, i18n)
   return cursorY
 end
 
-local function buildIntegration(cursorY, children, x, w, i18n)
-  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "sync_model_name", "Modellname synchronisieren"),
-    ui.runtime.getBoolGetter("syncname"),
-    ui.runtime.getBoolSetter("syncname")
-  )
-
-  return cursorY
-end
-
 local function buildDevelopment(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "developer_tools", "Entwickler Tools"),
@@ -163,7 +151,6 @@ end
 
 local SECTIONS = {
   { key = "safety",      titleKey = "section_safety",      titleFallback = "Sicherheit & Prompts", build = buildSafety      },
-  { key = "integration", titleKey = "section_integration", titleFallback = "Integration",         build = buildIntegration },
   { key = "development", titleKey = "section_development", titleFallback = "Entwicklung",         build = buildDevelopment },
 }
 
@@ -172,10 +159,6 @@ local SECTIONS = {
 function M.getHeaderActions()
   ensureDeps()
   return { save = true, help = true }
-end
-
-function M.allowMemAutoRefresh()
-  return true
 end
 
 function M.onReload(ctx)

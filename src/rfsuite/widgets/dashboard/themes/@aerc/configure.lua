@@ -157,9 +157,6 @@ function M.getHeaderActions()
     return { save = true, help = false }
 end
 
-function M.allowMemAutoRefresh()
-    return true
-end
 
 function M.onReload(ctx)
     ui.loaded = false

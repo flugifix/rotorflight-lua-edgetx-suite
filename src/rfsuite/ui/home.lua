@@ -999,8 +999,18 @@ local function maybeRefreshInfoPageFromSession()
   end
 end
 
+local function isLocalSettingsPage()
+  if state.menu and type(state.menu.getCurrentMenuId) == "function" then
+    local menuId = state.menu.getCurrentMenuId()
+    if type(menuId) == "string" and (string.sub(menuId, 1, 9) == "settings_" or string.sub(menuId, 1, 10) == "developer_") then
+      return true
+    end
+  end
+  return false
+end
+
 local function onReload()
-  if isModelArmed() then
+  if isModelArmed() and not isLocalSettingsPage() then
     if lvgl and lvgl.alert then
       lvgl.alert({
         title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
@@ -1101,7 +1111,8 @@ local function onReload()
 end
 
 local function onSave()
-  if isModelArmed() then
+  local armedWarningPref = state.preferences and state.preferences.general and state.preferences.general.save_armed_warning
+  if isModelArmed() and not isLocalSettingsPage() and (armedWarningPref ~= false) then
     if lvgl and lvgl.alert then
       lvgl.alert({
         title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",

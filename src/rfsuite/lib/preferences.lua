@@ -33,19 +33,10 @@ end
 local function defaultPreferences()
   return {
     general = {
-      -- display
-      language                     = "en",
-      iconsize                     = 2,
-      txbatt_type                  = 0,
-      theme_loader                 = 1,
-      hs_loader                    = 0,
-      toolbar_timeout              = 10,
       -- safety & prompts
       save_confirm                 = true,
       save_armed_warning           = true,
       reload_confirm               = true,
-      -- integration
-      syncname                     = false,
       -- development
       developer_tools              = false,
       continuous_memory_log        = false,
@@ -70,28 +61,6 @@ local function defaultPreferences()
       battery_profile = true,
       model_announcement = false,
       initial_fuel = true,
-    },
-    audio_switches = {
-      flight_mode_switch = false,
-      arm_disarm_switch = false,
-      stabilize_mode_switch = false,
-      acro_mode_switch = false,
-      altitude_hold_switch = false,
-      position_hold_switch = false,
-      return_to_home_switch = false,
-      channel_6_switch = false,
-      switch_feedback = false,
-    },
-    audio_timer = {
-      timer1_alerts = false,
-      timer2_alerts = false,
-      timer3_alerts = false,
-      flight_time_alert = false,
-      battery_timer = false,
-      armed_timer = false,
-      count_down_timer = false,
-      count_up_timer = false,
-      timer_bell_sound = false,
     },
     dashboard = {
       theme_preflight = "system/default",

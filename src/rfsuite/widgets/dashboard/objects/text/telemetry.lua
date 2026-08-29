@@ -60,6 +60,12 @@ local function mapSourceFast(source, state, utils)
   return utils.mapTelemetrySource(source, state)
 end
 
+local function useFahrenheit()
+  local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
+  local localizations = prefs and prefs.localizations or nil
+  return tonumber(localizations and localizations.temperature_unit) == 1
+end
+
 function Render.render(nodes, rect, box, state, themeCommon, utils)
   local cfg = getBoxConfig(box)
 
@@ -69,6 +75,20 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
   end
 
   local raw = source ~= nil and mapSourceFast(source, state, utils) or nil
+
+  local unit = cfg.unit
+  if cfg.unitDynamic then
+    unit = utils.resolveValue(unit, box, state)
+  end
+
+  if source == "esc_temp" or source == "mcu_temp" then
+    if useFahrenheit() and type(raw) == "number" then
+      raw = (raw * 9 / 5) + 32
+      unit = "°F"
+    else
+      unit = "°C"
+    end
+  end
 
   local transform = cfg.transform
   if cfg.transformDynamic then
@@ -88,10 +108,6 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     valueText = utils.formatDisplayValue(raw, decimals)
   end
 
-  local unit = cfg.unit
-  if cfg.unitDynamic then
-    unit = utils.resolveValue(unit, box, state)
-  end
   if not (source == "voltage" and themeCommon and type(themeCommon.formatVoltage) == "function") then
     valueText = utils.appendUnit(valueText, unit)
   end

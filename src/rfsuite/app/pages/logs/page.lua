@@ -639,6 +639,17 @@ function M.build(ctx)
     }
 
     -- 5) ESC Temp Row
+    local prefs = (ctx and ctx.preferences) or (type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences)
+    local useFahrenheit = tonumber(prefs and prefs.localizations and prefs.localizations.temperature_unit) == 1
+    local tMaxVal = summary.tMax
+    local tStartVal = summary.tStart
+    local tempUnit = "°C"
+    if useFahrenheit then
+      tMaxVal = (tMaxVal * 9 / 5) + 32
+      tStartVal = (tStartVal * 9 / 5) + 32
+      tempUnit = "°F"
+    end
+
     children[#children + 1] = {
       type = "label",
       x = x + 12,
@@ -653,9 +664,9 @@ function M.build(ctx)
       x = x + labelColW + 15,
       y = cursorY + 10,
       w = w - labelColW - 27,
-      text = string.format("%s: %d °C   |   %s: %d °C   |   %s %s: %d %%",
-        pageText(i18n, "max"), math.floor(summary.tMax),
-        pageText(i18n, "start"), math.floor(summary.tStart),
+      text = string.format("%s: %d %s   |   %s: %d %s   |   %s %s: %d %%",
+        pageText(i18n, "max"), math.floor(tMaxVal), tempUnit,
+        pageText(i18n, "start"), math.floor(tStartVal), tempUnit,
         pageText(i18n, "max"), pageText(i18n, "throttle_title"), math.floor(summary.thrMax)),
       color = COLOR_WHITE,
       font = SMLSIZE
