@@ -111,11 +111,20 @@ local function processAudioEvents(self)
       modelName = _G.rfsuite.session.modelName
     end
     self.modelName = modelName
-    DashboardAudio.process(self, {
-      log = function(msg, level)
-        audioLog(self, msg, level)
-      end
-    })
+    -- Built once per widget, not once per pass: this runs on every logic tick, and a fresh
+    -- options table plus a fresh closure per tick is steady-state garbage in the Lua state
+    -- every widget on the radio shares. Audio.process itself throttles to 0.25-0.6 s, so most
+    -- of those allocations were for calls that returned immediately.
+    local opts = self._audioOpts
+    if not opts then
+      opts = {
+        log = function(msg, level)
+          audioLog(self, msg, level)
+        end
+      }
+      self._audioOpts = opts
+    end
+    DashboardAudio.process(self, opts)
     return
   end
 
@@ -1218,51 +1227,86 @@ function Runtime.new(zone, options)
     return nil
   end
 
+  -- Defined once per widget rather than once per updateVoltageThemeConfig call: that function
+  -- runs on every logic tick, and two fresh closures per tick is steady-state garbage in the
+  -- shared Lua state.
+  local function applyThemeConfig(self, nextConfig)
+    local prev = self.state.themeConfig or {}
+    local prevMin = tonumber(prev.v_min)
+    local prevMax = tonumber(prev.v_max)
+    local nextMin = tonumber(nextConfig and nextConfig.v_min)
+    local nextMax = tonumber(nextConfig and nextConfig.v_max)
+
+    self.state.themeConfig = nextConfig
+
+    local changed = (
+      type(prevMin) ~= "number" or type(prevMax) ~= "number" or
+      type(nextMin) ~= "number" or type(nextMax) ~= "number" or
+      math.abs(prevMin - nextMin) > 0.01 or math.abs(prevMax - nextMax) > 0.01
+    )
+    if changed then
+      self.built = false
+      self.renderKey = nil
+      self._cachedRenderKey = nil
+    end
+  end
+
+  local function logVoltageThemeDecision(self, reason, cells, inMin, inMax, outMin, outMax)
+    if not shouldLogAudio(self) then return end
+    local key = table.concat({
+      tostring(reason or "?"),
+      tostring(cells or "x"),
+      tostring(inMin or "x"),
+      tostring(inMax or "x"),
+      tostring(outMin or "x"),
+      tostring(outMax or "x")
+    }, "|")
+    if self._lastVoltageThemeDebugKey == key then return end
+    self._lastVoltageThemeDebugKey = key
+    widgetLog(
+      self,
+      "voltage theme normalize reason=" .. tostring(reason)
+        .. " cells=" .. tostring(cells)
+        .. " in=" .. tostring(inMin) .. "/" .. tostring(inMax)
+        .. " out=" .. tostring(outMin) .. "/" .. tostring(outMax),
+      "debug"
+    )
+  end
+
   local function updateVoltageThemeConfig(self)
-    local function applyThemeConfig(nextConfig)
-      local prev = self.state.themeConfig or {}
-      local prevMin = tonumber(prev.v_min)
-      local prevMax = tonumber(prev.v_max)
-      local nextMin = tonumber(nextConfig and nextConfig.v_min)
-      local nextMax = tonumber(nextConfig and nextConfig.v_max)
+    local currentConfig = self.state.themeConfig or {}
 
-      self.state.themeConfig = nextConfig
-
-      local changed = (
-        type(prevMin) ~= "number" or type(prevMax) ~= "number" or
-        type(nextMin) ~= "number" or type(nextMax) ~= "number" or
-        math.abs(prevMin - nextMin) > 0.01 or math.abs(prevMax - nextMax) > 0.01
+    -- The steady-state pass allocates nothing. When the bounds in hand are already numeric,
+    -- the three branches below that would end in a value-identical config -- custom bounds,
+    -- no cell count, or plausible bounds kept -- are decided here on the numbers alone, the
+    -- existing table is kept, and only the (deduplicated, developer-gated) log line is still
+    -- offered. Every path that can CHANGE a value falls through to the full copy below, so
+    -- what the function computes is exactly what it computed before.
+    local curMin = tonumber(currentConfig.v_min)
+    local curMax = tonumber(currentConfig.v_max)
+    if curMin ~= nil and curMax ~= nil then
+      if currentConfig._customVoltage == true then
+        logVoltageThemeDecision(self, "custom-config", nil, currentConfig.v_min, currentConfig.v_max, curMin, curMax)
+        return
+      end
+      local cells = resolveVoltageCellCount(self.state)
+      if not cells or cells <= 0 then
+        logVoltageThemeDecision(self, "no-cells", cells, currentConfig.v_min, currentConfig.v_max, curMin, curMax)
+        return
+      end
+      local isExactDefault = math.abs(curMin - 18.0) <= 0.01 and math.abs(curMax - 25.2) <= 0.01
+      local perCellMin = curMin / cells
+      local perCellMax = curMax / cells
+      local looksInvalidForCells = (
+        perCellMin < 2.0 or perCellMin > 5.0 or
+        perCellMax < 3.0 or perCellMax > 5.2 or
+        perCellMax <= perCellMin
       )
-      if changed then
-        self.built = false
-        self.renderKey = nil
-        self._cachedRenderKey = nil
+      if (not isExactDefault) and (not looksInvalidForCells) then
+        logVoltageThemeDecision(self, "keep", cells, currentConfig.v_min, currentConfig.v_max, curMin, curMax)
+        return
       end
     end
-
-    local function logVoltageThemeDecision(reason, cells, inMin, inMax, outMin, outMax)
-      if not shouldLogAudio(self) then return end
-      local key = table.concat({
-        tostring(reason or "?"),
-        tostring(cells or "x"),
-        tostring(inMin or "x"),
-        tostring(inMax or "x"),
-        tostring(outMin or "x"),
-        tostring(outMax or "x")
-      }, "|")
-      if self._lastVoltageThemeDebugKey == key then return end
-      self._lastVoltageThemeDebugKey = key
-      widgetLog(
-        self,
-        "voltage theme normalize reason=" .. tostring(reason)
-          .. " cells=" .. tostring(cells)
-          .. " in=" .. tostring(inMin) .. "/" .. tostring(inMax)
-          .. " out=" .. tostring(outMin) .. "/" .. tostring(outMax),
-        "debug"
-      )
-    end
-
-    local currentConfig = self.state.themeConfig or {}
     local nextConfig = {}
     for k, v in pairs(currentConfig) do
       nextConfig[k] = v
@@ -1272,8 +1316,8 @@ function Runtime.new(zone, options)
 
     -- If the user configured custom voltage values (in model or global preferences), respect them!
     if currentConfig._customVoltage == true then
-      applyThemeConfig(nextConfig)
-      logVoltageThemeDecision("custom-config", nil, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+      applyThemeConfig(self, nextConfig)
+      logVoltageThemeDecision(self, "custom-config", nil, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
@@ -1281,8 +1325,8 @@ function Runtime.new(zone, options)
     local defaultMax = 25.2
     local cells = resolveVoltageCellCount(self.state)
     if not cells or cells <= 0 then
-      applyThemeConfig(nextConfig)
-      logVoltageThemeDecision("no-cells", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+      applyThemeConfig(self, nextConfig)
+      logVoltageThemeDecision(self, "no-cells", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
@@ -1297,8 +1341,8 @@ function Runtime.new(zone, options)
       perCellMax <= perCellMin
     )
     if (not isExactDefault) and (not looksInvalidForCells) then
-      applyThemeConfig(nextConfig)
-      logVoltageThemeDecision("keep", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+      applyThemeConfig(self, nextConfig)
+      logVoltageThemeDecision(self, "keep", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
@@ -1309,8 +1353,8 @@ function Runtime.new(zone, options)
 
     nextConfig.v_min = cells * minCellVoltage
     nextConfig.v_max = cells * maxCellVoltage
-    applyThemeConfig(nextConfig)
-    logVoltageThemeDecision("normalize", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+    applyThemeConfig(self, nextConfig)
+    logVoltageThemeDecision(self, "normalize", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
   end
 
   local function reloadActiveTheme(self)
