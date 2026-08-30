@@ -2,6 +2,10 @@ local M = {}
 
 local PREF_PATH = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
 
+-- How much is asked for per io.read() call. It is a chunk size, not a limit: the reader
+-- below keeps going until the file ends.
+local READ_CHUNK = 2048
+
 local function trim(s)
   local asString = tostring(s or "")
   asString = string.gsub(asString, "^%s+", "")
@@ -42,6 +46,7 @@ local function defaultPreferences()
       continuous_memory_log        = false,
       show_header_memory           = false,
       enable_serial_debug          = false,
+      log_to_card                  = false,
       debug_level                  = "off",
     },
     localizations = {
@@ -66,10 +71,6 @@ local function defaultPreferences()
       theme_preflight = "system/default",
       theme_inflight = "system/default",
       theme_postflight = "system/default",
-      model_override = false,
-      model_theme_preflight = "nil",
-      model_theme_inflight = "nil",
-      model_theme_postflight = "nil",
       theme_config_target = "system/default",
       connection_guard = true,
     }
@@ -80,16 +81,32 @@ function M.getPath()
   return PREF_PATH
 end
 
+-- The one place the defaults are declared. Callers that need them without touching the
+-- card -- ui/preferences.lua is one -- ask for them here rather than keeping a copy.
+function M.defaults()
+  return defaultPreferences()
+end
+
 local function loadFileAsString(path)
   local f = io.open(path, "r")
   if not f then
     return nil
   end
 
-  local content = io.read(f, 2048)
+  -- io.read() hands back at most the number of bytes asked for and "" once the file is
+  -- exhausted, so a single call stops wherever that count lands. Stopping there is not
+  -- merely a short read: M.save() writes the whole table back, so everything the parser
+  -- never saw is dropped from the file by the next save.
+  local parts = {}
+  while true do
+    local chunk = io.read(f, READ_CHUNK)
+    if chunk == nil or chunk == "" then break end
+    parts[#parts + 1] = chunk
+  end
   io.close(f)
 
-  if content == nil or content == "" then
+  local content = table.concat(parts)
+  if content == "" then
     return nil
   end
 
@@ -127,7 +144,35 @@ end
 
 -- Writes ALL sections and keys from prefs to the INI file.
 -- No field list to maintain — adding a key to prefs automatically persists it.
+
+-- The install carries no directory entries, so /SCRIPTS/TOOLS/rfsuite.user exists on a card
+-- only because a file was unpacked into it, and io.open(path, "w") does not create a missing
+-- parent. Without this, the first save on such a card fails and every setting the pilot
+-- changed is lost with it.
+--
+-- mkdir() is a bare global of the firmware's filesystem library, not a member of os: there is
+-- no os table in this Lua at all, so a guard on os.mkdir can never be true. The shape follows
+-- app/pages/logs/graph.lua, which tests fstat() the same way. mkdir() creates one level at a
+-- time, so the tools root goes first.
+local function makeDir(path)
+  if type(mkdir) ~= "function" then return end
+  if type(path) ~= "string" or path == "" then return end
+  pcall(mkdir, path)
+end
+
+local function ensureUserDir()
+  local userRoot = string.match(PREF_PATH, "^(.*)/[^/]+$")
+  if not userRoot then return end
+  local toolsRoot = string.gsub(userRoot, "/rfsuite%.user$", "")
+  if toolsRoot ~= "" and toolsRoot ~= userRoot then
+    makeDir(toolsRoot)
+  end
+  makeDir(userRoot)
+end
+
 function M.save(prefs)
+  ensureUserDir()
+
   local f, err = io.open(PREF_PATH, "w")
   if not f then return false, err end
 
@@ -142,11 +187,9 @@ function M.save(prefs)
 
   io.close(f)
 
-  -- Signal the widget to reload preferences using EdgeTX Global Variables
-  -- GV9 (index 8) for FM8 (index 8) set to 1
-  if type(model) == "table" and type(model.setGlobalVariable) == "function" then
-    pcall(model.setGlobalVariable, 8, 8, 1)
-  end
+  -- No signal is sent. Writing this file IS the event: the widget compares the file's
+  -- size and mtime and reloads when they move, so nothing has to be told and nothing can
+  -- be consumed by the wrong reader. The pilot's model is not touched.
 
   return true
 end

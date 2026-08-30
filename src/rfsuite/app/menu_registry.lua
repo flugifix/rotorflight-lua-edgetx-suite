@@ -156,8 +156,26 @@ function MenuRegistry.new(manifest, i18n, options)
     end
   end
 
+  -- Whether the armed state is a reason this entry is unavailable. Kept apart from
+  -- isEntryEnabled because "disabled" has more than one cause and the card has to be able to
+  -- say which: a tile greyed because no flight controller answered is a different message to
+  -- the pilot than a tile locked because the craft is in the air.
+  local function isEntryLockedByArm(entry)
+    if type(entry) ~= "table" then
+      return false
+    end
+    return entry.lockedWhileArmed == true and self.conditions.modelArmed == true
+  end
+
   local function isEntryEnabled(entry)
     if type(entry) ~= "table" then
+      return false
+    end
+
+    -- AND-ed with whatever the entry already carries, and checked first because it is the
+    -- one reason that outranks the others: entering such an entry can put MSP on the wire,
+    -- and every pushed MSP frame is sent instead of an RC channels frame for that slot.
+    if isEntryLockedByArm(entry) then
       return false
     end
 
@@ -203,9 +221,28 @@ function MenuRegistry.new(manifest, i18n, options)
     local resolved = ""
 
     if entry.titleKey then
-      resolved = i18n.t(entry.titleKey)
+      -- Two things this has to survive. `i18n` is optional -- MenuRegistry.new takes it as an
+      -- argument and the locale helper above already guards it -- and `ctx.t` ends at
+      -- `return fallback or key`, so a lookup that finds nothing hands the key straight back.
+      -- A packaged install carries no locale table at all, which makes that the normal case
+      -- rather than the exceptional one: an entry with a titleKey would put its own key on the
+      -- menu. No entry in the tree sets one today, so this is a trap for the first that does.
+      local key = entry.titleKey
+      local value = nil
+      if i18n and i18n.t then
+        value = i18n.t(key, entry.titleFallback)
+      end
+      if type(value) == "string" and value ~= "" and value ~= key then
+        resolved = value
+      else
+        resolved = entry.titleFallback or entry.title or ""
+      end
     elseif entry.title then
-      resolved = i18n.resolve(entry.title)
+      if i18n and i18n.resolve then
+        resolved = i18n.resolve(entry.title)
+      else
+        resolved = entry.title
+      end
     end
 
     self._titleCache[entry] = resolved or ""
@@ -345,7 +382,8 @@ function MenuRegistry.new(manifest, i18n, options)
             text = resolveTitle(p),
             icon = resolveIconPath(iconRoot, p.icon, p.menuId),
             isMenu = p.menuId ~= nil,
-            enabled = enabled
+            enabled = enabled,
+            lockedByArm = isEntryLockedByArm(p)
           }
         }
         end
@@ -514,7 +552,8 @@ function MenuRegistry.new(manifest, i18n, options)
           text = resolveTitle(p),
           icon = resolveIconPath(iconRoot, p.icon, p.menuId),
           isMenu = p.menuId ~= nil,
-          enabled = enabled
+          enabled = enabled,
+          lockedByArm = isEntryLockedByArm(p)
         }
       }
       end

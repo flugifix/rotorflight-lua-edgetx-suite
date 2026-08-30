@@ -89,7 +89,6 @@ This path must point to the root of the mounted radio storage, not to `SCRIPTS` 
 
 - `SCRIPTS/TOOLS/rfsuite.lua`
 - `SCRIPTS/TOOLS/rfsuite-core/`
-- `SCRIPTS/TOOLS/rfsuite.user/preferences.ini` if it does not exist yet
 - `WIDGETS/rfsuite/`
 - `SOUNDS/rfsuite/`
 
@@ -145,7 +144,7 @@ By default, some announcements might be disabled. To configure them:
 - Boolean settings use native LVGL `toggle` via `Controls.appendRadioSwitch(...)`.
 - Numeric settings use native LVGL `numberEdit` via `Controls.appendNumberField(...)`.
 - Choice settings use native LVGL `choice` via `Controls.appendComboSelect(children, x, y, w, labelText, options, selectedValue, onSelect)`.
-- Settings rows use an enlarged shared row height derived from `ROW_H` and `NUMBER_H` so toggle, number, and choice controls align consistently.
+- Settings rows use a shared row height derived from `math.max(44, UI_ELEMENT_HEIGHT + 12)` so toggle, number, and choice controls align consistently.
 - Choice popups are now handled by EdgeTX itself; pages no longer need local open/close popup state for `appendComboSelect(...)`.
 
 ## License

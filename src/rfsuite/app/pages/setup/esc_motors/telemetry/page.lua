@@ -10,6 +10,7 @@ local function loadModule(path)
 end
 
 local Controls = nil
+local SavePipeline = nil
 local Common = nil
 local MspRuntime = nil
 local EscSensorConfigApi = nil
@@ -22,7 +23,6 @@ local ui = {
   loaded = false,
   dirty = false,
   loading = false,
-  saving = false,
   progress = 0,
   baseTitle = nil,
   config = {
@@ -157,14 +157,9 @@ local function queueTelemetryRead(isAutoReload)
 end
 
 local function queueTelemetryWrite(requestRebuild)
-  if not MspRuntime or not EscSensorConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not EscSensorConfigApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local writeData = {}
@@ -181,93 +176,37 @@ local function queueTelemetryWrite(requestRebuild)
   writeData.current_correction = ui.config.current_correction
   writeData.consumption_correction = ui.config.consumption_correction
 
-  local payload = EscSensorConfigApi.buildWritePayload(writeData)
-
-  ui.saving = true
-  ui.progress = 0
-  if type(requestRebuild) == "function" then
-    requestRebuild()
-  end
-
-  queue:add({
-    command = EscSensorConfigApi.writeCommand,
-    payload = payload,
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      -- Step 2: Write EEPROM
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            -- Step 3: Reboot FC
-            local rebootApi = loadModule("tasks/msp/api/reboot.lua")
-            if rebootApi then
-              queue:add({
-                command = rebootApi.writeCommand,
-                payload = rebootApi.buildWritePayload({ rebootMode = 0 }),
-                isWrite = true,
-                simulatorResponse = {},
-                processReply = function()
-                  ui.dirty = false
-                  ui.saving = false
-                  local session = getSession()
-                  if session then
-                    session.setup_esc_motors_telemetry = nil
-                    session.esc4WayDetectedProto = ui.config.protocol
-                  end
-                  if type(requestRebuild) == "function" then
-                    requestRebuild()
-                  end
-                end,
-                errorHandler = function()
-                  ui.saving = false
-                  if type(requestRebuild) == "function" then
-                    requestRebuild()
-                  end
-                end
-              })
-            else
-              ui.dirty = false
-              ui.saving = false
-              local session = getSession()
-              if session then
-                session.setup_esc_motors_telemetry = nil
-                session.esc4WayDetectedProto = ui.config.protocol
-              end
-              if type(requestRebuild) == "function" then
-                requestRebuild()
-              end
-            end
-          end,
-          errorHandler = function()
-            ui.saving = false
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
-          end
-        })
-      else
-        ui.dirty = false
-        ui.saving = false
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
+  -- The chain that stood here cleared the dirty flag inside the REBOOT step's processReply --
+  -- which is the moment the restart was sent, not the moment the settings were stored, and the
+  -- board is at its least able to confirm anything. It is reported at the EEPROM
+  -- acknowledgement now, and everything after it belongs to the pipeline.
+  return SavePipeline.start({
+    pageId = "setup_esc_motors_telemetry",
+    steps = {
+      {
+        label = "MSP_SET_ESC_SENSOR_CONFIG",
+        command = EscSensorConfigApi.writeCommand,
+        payload = EscSensorConfigApi.buildWritePayload(writeData)
+      }
+    },
+    reboot = true,
+    invalidateSessionKeys = { "setup_esc_motors_telemetry" },
+    onSaved = function()
+      ui.dirty = false
+      local session = getSession()
+      if session then
+        session.esc4WayDetectedProto = ui.config.protocol
       end
     end,
-    errorHandler = function()
-      ui.saving = false
+    onDone = function(result)
+      if result.status ~= "done" then
+        ui.dirty = true
+      end
       if type(requestRebuild) == "function" then
         requestRebuild()
       end
     end
   })
-
-  return true, nil
 end
 
 local function ensureLoaded()
@@ -316,6 +255,11 @@ end
 function M.onActivate()
   ensureDeps()
   ensureLoaded()
+  -- A save whose overlay was dismissed finished without a screen. Its outcome was held
+  -- back rather than raised over whatever page the user went to; claim it now.
+  if SavePipeline and type(SavePipeline.takeResult) == "function" then
+    SavePipeline.takeResult("setup_esc_motors_telemetry")
+  end
 end
 
 function M.wakeup(ctx)
@@ -360,9 +304,9 @@ function M.build(ctx)
   local h = ctx.h
   local i18n = ctx.i18n
 
-  if ui.loading or ui.saving then
-    local titleText = ui.loading and pageText(i18n, "loading_telemetry", "Loading") or pageText(i18n, "saving_telemetry", "Saving")
-    local msgText = ui.loading and pageText(i18n, "loading_telemetry", "Loading telemetry configuration...") or pageText(i18n, "saving_telemetry", "Saving telemetry configuration...")
+  if ui.loading then
+    local titleText = "@i18n(app.loading)@"
+    local msgText = pageText(i18n, "loading_telemetry", "Loading telemetry configuration...")
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
       title = titleText,
@@ -533,8 +477,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueTelemetryWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

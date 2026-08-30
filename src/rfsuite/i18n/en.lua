@@ -2,9 +2,43 @@ return {
   app = {
     loading = "Loading...",
     saving = "Saving...",
+    erasing = "Erasing...",
+    connecting = "Connecting",
+    preparing = "Preparing suite",
+    unknown_value = "Unknown (%s)",
+    onconnect = {
+      apiversion = "Reading API version",
+      uid = "Reading serial number",
+      rtc = "Setting the clock",
+      status = "Reading status",
+      battery_config = "Reading battery configuration",
+      governor_config = "Reading governor configuration",
+      esc_sensor_config = "Reading ESC telemetry configuration",
+      smartfuel_config = "Reading SmartFuel configuration",
+      name = "Reading craft name",
+      telemetry = "Reading telemetry configuration",
+      flight_stats = "Reading flight statistics",
+      dataflash_summary = "Reading dataflash status"
+    },
     saving_settings = "Applying settings",
+    save = {
+      rebooting = "Restarting the flight controller...",
+      waiting = "Waiting for the flight controller...",
+      reconnecting = "Reconnecting...",
+      reading_back = "Reading the settings back...",
+      saved_title = "Saved",
+      dismiss = "Continue",
+      timeout_title = "Saved",
+      timeout_message = "Settings saved. The flight controller has not come back yet.",
+      done_message = "Settings saved.",
+      failed_title = "Not saved",
+      failed_message = "The flight controller did not confirm the settings.",
+      eeprom_pending = "Saved, but the EEPROM write is pending:"
+    },
     closing_rfsuite = "Closing RFSuite...",
     model_armed_title = "Model Armed",
+    model_armed_badge = "!",
+    model_armed_banner = "Model is ARMED - settings locked",
     model_armed_warning = "Model is ARMED! Please disarm.",
     header_system = "System",
     header_configuration = "Configuration",
@@ -21,6 +55,7 @@ return {
       general = { name = "General" },
       configuration = { name = "Configuration" },
       radio_config = { name = "Radio Config" },
+      model = { name = "Model" },
       telemetry = { name = "Telemetry" },
       accelerometer = { name = "Accelerometer" },
       alignment = { name = "Alignment" },
@@ -62,7 +97,8 @@ return {
         throttle = "Throttle",
         telemetry = "Telemetry",
         rpm = "RPM",
-        esc_tools = "ESC Tools"
+        esc_tools = "ESC Tools",
+        motor_override = "Motor Override"
       },
       power = { name = "Power" },
       battery = { name = "Battery" },
@@ -174,7 +210,8 @@ return {
       yes = "Yes",
       no = "No",
       confirm_save = "Do you want to save the changes?",
-      confirm_reload = "Do you want to reload and discard unsaved changes?"
+      confirm_reload = "Do you want to reload and discard unsaved changes?",
+      confirm_save_arm_unknown = "Cannot read the arming state. Is the model disarmed?"
     },
     help = {
       title = "Help",
@@ -326,6 +363,7 @@ return {
         rates_type = "Rates Type",
         rate_table = "Rate Table",
         msg_reset_to_defaults = "Rate type changed. Values will be reset to defaults.",
+        warning_title = "Warning",
         table_help_p1 = "Rates type: Choose the rate type you prefer flying with. Raceflight and Actual are the most straightforward.",
         table_help_p2 = "Dynamics: Applied regardless of rates type. Typically left on defaults but can be adjusted to smooth heli movements, like with scale helis.",
         roll = "Roll",
@@ -562,6 +600,22 @@ return {
         tbl_rp = "RP",
         tbl_rpy = "RPY"
       },
+      setup_model = {
+        section_params = "Model Parameters",
+        section_features = "Radio Features",
+        param_none = "None",
+        param_timer = "Timer",
+        param_type = "Parameter %d Type",
+        param_value = "Parameter %d Value",
+        sync_params = "Synchronize Model Parameters",
+        radio_wide = "Stored on this radio, for every model",
+        flag_set_name = "Set Model Name on the Radio",
+        flag_tell_capacity = "Announce Remaining Capacity",
+        flags_unsupported = "No model flags on this firmware: no capacity announcement",
+        loading_title = "Model Configuration",
+        loading_message = "Reading from the flight controller",
+        help_message = "Settings the flight controller stores for this model: three parameters it applies to the radio's timers or global variables on connect, and the radio-side features it asks for. Whether those are applied is decided here too. From RF 2.3 the craft itself carries the model-name decision; on older firmware the radio does, and the switch then applies to every model on this radio."
+      },
       settings_general = {
         section_safety = "Safety & Prompts",
         section_development = "Development",
@@ -601,9 +655,6 @@ return {
         value_show_labels = "ON",
         value_widget_spacing = "MEDIUM",
         value_refresh_rate = "10Hz"
-      },
-      settings_dashboard_settings = {
-        section_default_voltage = "Default Theme Voltage"
       },
       settings_activelook = {
         section_activelook = "ActiveLook",
@@ -666,7 +717,8 @@ return {
         fuel_callout_percent = "Callout %",
         fuel_repeat_below_zero = "Repeats below 0%",
         fuel_haptic_below_zero = "Haptic below 0%",
-        fuel_callout_default = "Default (Only at 10%)",
+        fuel_callout_only_10 = "Only at 10%",
+        fuel_callout_default = "Only at 10%",
         fuel_callout_5 = "Every 5%",
         fuel_callout_10 = "Every 10%",
         fuel_callout_20 = "Every 20%",
@@ -720,7 +772,9 @@ return {
         loading_title = "Loading",
         loading_message = "Reading PID tuning",
         saved_title = "Saved",
-        saved_message = "PID tuning saved"
+        saved_message = "PID tuning saved",
+        warning_title = "Warning",
+        saved_local_only_message = "Saved locally; FC write pending",
       },
       setup_power_battery = {
         section_profiles = "Profiles",
@@ -923,7 +977,18 @@ return {
         safety_warning_title = "Safety Warning",
         remove_blades_warning = "Please remove main and tail blades before configuring the ESC!",
         loading_data = "Loading ESC parameters...",
-        saving_data = "Saving ESC parameters..."
+        saving_data = "Saving ESC parameters...",
+        title_motor_override = "Motor Override",
+        motor = "Motor",
+        motor_override_note = "Blades off and the craft secured. The motor turns as soon as the throttle leaves zero.",
+        motor_override_enable = "Enable motor override",
+        motor_override_enable_msg = "The flight controller drives the motor directly. Remove the blades, secure the craft and stand clear.",
+        motor_override_disable = "Disable motor override",
+        motor_override_disable_msg = "Return control of the motor to the flight controller.",
+        motor_override_throttle = "Throttle",
+        loading_motor_override = "Reading motor override...",
+        help_title_motor_override = "Motor Override Help",
+        help_p1_motor_override = "Drive one motor directly, blades off, to check its direction or to teach an ESC its throttle range. The flight controller refuses the override while armed and stops the motor a second after the last command, so leaving this page stops it."
       },
       setup_radio_config = {
         title = "Radio Config",
@@ -1034,6 +1099,11 @@ return {
         loading = "Loading adjustment ranges...",
         saving = "Saving adjustment ranges...",
         unsaved_changes = "Unsaved changes",
+        saved_title = "Saved",
+        saved_message = "Adjustment configuration saved",
+        save_error_title = "Error",
+        save_error_message = "Save failed",
+        read_failed = "Could not read the adjustments from the flight controller",
         fn_none = "None",
         fn_rate_profile = "Rate Profile",
         fn_pid_profile = "PID Profile",
@@ -1389,7 +1459,9 @@ return {
         mag_y = "Mag Y",
         mag_z = "Mag Z",
         stream = "Live Stream",
-        help_message = "Displays live sensor data from the flight controller in a graph."
+        help_message = "Displays live sensor data from the flight controller in a graph.",
+        loading_title = "Loading",
+        loading_message = "Reading sensors..."
       },
       diagnostics_fblstatus = {
         date = "Date",
@@ -1488,7 +1560,9 @@ return {
         status_probe_requested = "Probe requested",
         status_sync_requested = "Sync requested: ",
         mode_native = "Native",
-        mode_custom = "Custom"
+        mode_custom = "Custom",
+        loading_title = "Loading",
+        loading_message = "Reading link configuration..."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",
@@ -1556,11 +1630,15 @@ return {
         section_logging = "Logging",
         debug_level = "Debug Level",
         debug_level_off = "OFF",
+        debug_level_error = "ERROR",
+        debug_level_warn = "WARN",
         debug_level_info = "INFO",
         debug_level_debug = "DEBUG",
+        debug_level_trace = "TRACE",
         continuous_memory_log = "Continuous Memory Log",
         show_header_memory = "Show Header Memory",
         enable_serial_debug = "Enable Serial Debug",
+        log_to_card = "Log Session To Card",
         help_message = "Configure logging and debugging options for development diagnostics.",
         saved_title = "Saved",
         saved_message = "Developer settings saved",
@@ -1576,6 +1654,7 @@ return {
         model_override = "Model Override",
         model_disabled = "Disabled",
         no_themes_found = "No dashboard themes found",
+        model_override_unavailable = "Connect a flight controller to store a per-model theme",
         value_theme_preflight = "DEFAULT",
         value_theme_inflight = "DEFAULT",
         value_theme_postflight = "DEFAULT",
@@ -1650,6 +1729,7 @@ return {
         samples = "Samples",
         file_size = "Size",
         no_logs_found = "No telemetry logs found in /LOGS/.",
+        scanning_message = "Searching /LOGS/ for telemetry logs...",
         loading_title = "Loading",
         loading_message = "Reading telemetry log...\nPlease wait, this may take a few seconds depending on file size.",
         back_to_list = "Back to list",
@@ -1657,7 +1737,27 @@ return {
         refresh = "Refresh list",
         help_p1 = "Telemetry Logs: Displays flight statistics recorded on your radio SD card.",
         help_p2 = "Log Location: Logs are loaded from /LOGS/ and /LOGS/rfsuite/telemetry/.",
-        help_p3 = "Summary Cards: Shows Min, Max, and Average values for Battery Voltage, Current, Headspeed, and ESC Temperature."
+        help_p3 = "Summary Cards: Shows Min, Max, and Average values for Battery Voltage, Current, Headspeed, and ESC Temperature.",
+        help_p4 = "Graph: Plots up to four telemetry columns of the selected log against flight time, with zoom, paging and a cursor readout.",
+        graph_open = "Graph",
+        graph_title = "Graph",
+        graph_select = "Select Sensors",
+        graph_curve = "Curve",
+        graph_none = "None",
+        graph_flight = "Flight",
+        graph_show = "Show",
+        graph_full = "Full",
+        graph_curves = "Sensors",
+        graph_scanning = "Indexing telemetry log...\nThis reads the whole file once so that zooming and paging do not have to.",
+        graph_no_columns = "This log carries no plottable columns.",
+        graph_err_open = "Cannot open the log file.",
+        graph_err_empty = "The log file is empty.",
+        graph_err_not_telemetry = "Not an EdgeTX telemetry log: no Date and Time columns.",
+        graph_err_no_data = "The log file carries no data rows.",
+        tpl_power = "Power",
+        tpl_battery = "Battery",
+        tpl_link = "Link",
+        tpl_governor = "Governor"
       }
     }
   },
@@ -1745,6 +1845,12 @@ return {
       SPOOLUP = "SPOOLUP",
       THROFF = "THR-OFF",
       UNKNOWN = "UNKNOWN"
+    },
+    service = {
+      title = "SERVICE",
+      waiting_for_link = "Waiting for MSP link",
+      loading = "Loading data...",
+      connected = "Connected"
     }
   }
 }

@@ -14,7 +14,11 @@ local titleCache = {}
 
 local function rgb(hex, fallback)
   if lcd and type(lcd.RGB) == "function" then
-    return lcd.RGB(hex)
+    local r = math.floor(hex / 65536) % 256
+    local g = math.floor(hex / 256) % 256
+    local b = hex % 256
+    local ok, col = pcall(lcd.RGB, r, g, b)
+    if ok and col then return col end
   end
   return fallback
 end
@@ -25,8 +29,8 @@ local COLOR_NAME_MAP = {
   red = RED,
   green = GREEN,
   yellow = YELLOW,
-  grey = GREY_DEFAULT,
-  gray = GREY_DEFAULT,
+  grey = COLOR_THEME_SECONDARY2,
+  gray = COLOR_THEME_SECONDARY2,
   orange = rgb(0xFF8000, 0xFF8000),
   blue = rgb(0x3399FF, 0x3399FF)
 }
@@ -304,7 +308,7 @@ function Utils.resolveTextColor(box, state, fallback)
   end
 
   local bgColor = Utils.resolveValue(box and box.bgcolor, box, state)
-  if bgColor == BLACK or bgColor == GREY_DEFAULT then
+  if bgColor == BLACK or bgColor == COLOR_THEME_SECONDARY2 then
     return WHITE
   end
 
@@ -425,7 +429,7 @@ function Utils.drawContainer(nodes, rect, box, state)
     titleY,
     rect.w - 8,
     title,
-    box.titlecolor or GREY_DEFAULT,
+    box.titlecolor or COLOR_THEME_DISABLED,
     box.titlealign or CENTER,
     Utils.resolveFont(box, state, SMLSIZE, "titlefont", "titlefont_lowres")
   )

@@ -5,6 +5,10 @@ local USER_ROOTS = {
   "SCRIPTS:/TOOLS/rfsuite.user"
 }
 
+-- How much is asked for per io.read() call. It is a chunk size, not a limit: the reader
+-- below keeps going until the file ends.
+local READ_CHUNK = 2048
+
 local function trim(s)
   local asString = tostring(s or "")
   asString = string.gsub(asString, "^%s+", "")
@@ -80,10 +84,20 @@ local function loadFileAsString(path)
   local f = io.open(path, "r")
   if not f then return nil end
 
-  local content = io.read(f, 2048)
+  -- io.read() hands back at most the number of bytes asked for and "" once the file is
+  -- exhausted, so a single call stops wherever that count lands. Stopping there is not
+  -- merely a short read: saveIni() writes the whole table back, so everything the parser
+  -- never saw is dropped from the file by the next save.
+  local parts = {}
+  while true do
+    local chunk = io.read(f, READ_CHUNK)
+    if chunk == nil or chunk == "" then break end
+    parts[#parts + 1] = chunk
+  end
   io.close(f)
 
-  if content == nil or content == "" then return nil end
+  local content = table.concat(parts)
+  if content == "" then return nil end
   return content
 end
 
@@ -157,14 +171,23 @@ local function getToolsRoot(userRoot)
   return string.gsub(userRoot or "", "/rfsuite%.user$", "")
 end
 
+-- mkdir() is a bare global of the firmware's filesystem library, not a member of os. The
+-- previous guard here tested os.mkdir and could never pass -- this Lua has no os table at
+-- all -- so no directory was ever created and a store whose parent was missing simply failed
+-- to write. The shape follows app/pages/logs/graph.lua, which tests fstat() the same way.
+-- mkdir() creates one level at a time, so the tools root goes first.
+local function makeDir(path)
+  if type(mkdir) ~= "function" then return end
+  if type(path) ~= "string" or path == "" then return end
+  pcall(mkdir, path)
+end
+
 local function ensureDirs(userRoot)
-  if type(os) == "table" and type(os.mkdir) == "function" then
-    local toolsRoot = getToolsRoot(userRoot)
-    if toolsRoot ~= "" then
-      pcall(os.mkdir, toolsRoot)
-    end
-    pcall(os.mkdir, userRoot)
+  local toolsRoot = getToolsRoot(userRoot)
+  if toolsRoot ~= "" then
+    makeDir(toolsRoot)
   end
+  makeDir(userRoot)
 end
 
 local function buildPathForRoot(userRoot, safeId)
@@ -290,6 +313,7 @@ function M.saveByMcuId(mcuId, prefs)
     if okTouch then
       local okSave, saveErr = saveIni(path, data)
       if okSave then
+        -- No signal is sent. Writing this file IS the event -- see lib/preferences.lua.
         return true
       end
       lastErr = saveErr or "io"

@@ -1,4 +1,7 @@
 local function loadModule(path)
+  if _G.rfsuite and _G.rfsuite.require then
+    return _G.rfsuite.require(path)
+  end
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
   local chunk = assert(loadScript(fullPath, "t"))
   return chunk()
@@ -39,10 +42,10 @@ local Log = nil
 local Events = nil
 local Audio = nil
 local Sensors = nil
+local Precompile = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
 
-local ICON_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/assets/icons/"
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
 
 local M = {}
@@ -71,10 +74,29 @@ local function ensureVersion()
   end
 end
 
+local function ensurePrecompile()
+  if not Precompile then
+    Precompile = loadModule("lib/precompile.lua")
+  end
+end
+
 local function ensureMspRuntime()
   if not MspRuntime then
     MspRuntime = loadModule("tasks/msp/runtime.lua")
   end
+end
+
+-- Who the MSP queue files a request under while no page is open. It is the id this script
+-- attaches to the runtime with, so that whatever the host itself queues goes when the host does.
+local TOOL_MSP_CLIENT = "tool"
+
+-- One client per page, because that is the unit that appears and disappears: everything a page
+-- queued stops being wanted the moment the page is gone, and nothing else in the queue does.
+local function mspClientForMenu(menuId)
+  if menuId == nil then
+    return TOOL_MSP_CLIENT
+  end
+  return "page:" .. tostring(menuId)
 end
 
 local function ensureEepromWriteApi()
@@ -164,9 +186,84 @@ local function isModelArmed()
   return false
 end
 
+-- A no-op stand-in rather than false. Every call site below is `pcall(Log.emit, ...)`, and Lua
+-- evaluates the argument list before pcall runs -- so indexing a false Log raises outside the
+-- very pcall that was written to contain it.
+local NO_LOG = { emit = function() end }
+-- Whether the armed state cannot be established AT ALL, as opposed to being established as
+-- disarmed. isModelArmed answers the question the screen needs -- "paint the warning?" -- and
+-- answers false for three different reasons: not armed, no sensor, no link. That is the right
+-- default for a warning, which must not stand permanently on a radio that cannot know. It is
+-- the wrong default in front of a WRITE, where "cannot tell" is not "safe to proceed".
+--
+-- Deliberately narrow. A missing sensor module is a broken tool and not this question; a link
+-- that is down cannot carry the write either, so the save fails on its own terms. What is left
+-- is the case worth asking about: the link is up, the module is there, and the flight
+-- controller does not report the arming flags -- no bridge, or no slot for them among its
+-- forty telemetry sensors.
+local function armedStateIsUncertain()
+  ensureEvents()
+  if not Sensors or type(Sensors.getValue) ~= "function" then
+    return false
+  end
+  if Sensors.getValue("armflags") ~= nil then
+    return false
+  end
+  local isSim = type(Sensors.isSimulator) == "function" and Sensors.isSimulator() or false
+  if not isSim and type(getRSSI) == "function" then
+    local ok, rssi = pcall(getRSSI)
+    if ok and type(rssi) == "number" and rssi <= 0 then
+      return false
+    end
+  end
+  return true
+end
+
 local Log = nil
 if Log == nil then
-  Log = loadModule("lib/log.lua") or false
+  Log = loadModule("lib/log.lua") or NO_LOG
+end
+
+-- The card sink is loaded on first use rather than here: with the option off, which is how it
+-- ships, the chunk is never read off the card and the cost of asking is one table lookup.
+-- lib/log_sink.lua makes the same check itself, so a caller cannot be wrong about it -- this
+-- one only decides whether the module is worth loading.
+local LogSink = nil
+local logSinkTried = false
+
+local function cardLogEnabled()
+  local general = state and state.preferences and state.preferences.general
+  return type(general) == "table" and general.log_to_card == true
+end
+
+local function sink()
+  if not cardLogEnabled() then return nil end
+  if not LogSink and not logSinkTried then
+    logSinkTried = true
+    LogSink = loadModule("lib/log_sink.lua")
+    if LogSink and type(LogSink.configure) == "function" then
+      LogSink.configure("tool")
+    end
+  end
+  return LogSink
+end
+
+-- Navigation, in the log rather than only on the screen. The tool's whole job is to move
+-- between menus and pages, and until now almost none of that left a trace: a report that "it
+-- hung after I opened X" could not be checked against what the tool thought it had opened.
+local function logf(level, fmt, ...)
+  if Log and type(Log.emitf) == "function" then
+    Log.emitf("rfsuite.ui", level, fmt, ...)
+  end
+end
+
+-- What was being started. Written to a file of its own that is closed again immediately, so it
+-- is on the card even when the call it names never returns.
+local function logStep(label, force, key)
+  local s = sink()
+  if s and type(s.step) == "function" then
+    pcall(s.step, label, force, key)
+  end
 end
 
 local function ensurePageRegistry()
@@ -188,6 +285,74 @@ local function ensureHelpRegistry()
 end
 
 local LoadingOverlay = nil
+local SavePipeline = nil
+
+--- What the start is waiting for, by the onconnect runner's own task name.
+-- The runner reports the pending task as the manifest id; these are the same ids, with a text
+-- the pilot can read. An id with no entry falls back to the generic notice rather than putting
+-- an internal name on screen.
+--- What a save is doing, for the phases that have no step count of their own.
+-- The writes and the EEPROM commit are counted, so they name the step being written; everything
+-- after the commit is a wait on the flight controller and is named rather than counted.
+local SAVE_TEXT = {
+  rebooting    = "@i18n(app.save.rebooting)@",
+  waiting      = "@i18n(app.save.waiting)@",
+  reconnecting = "@i18n(app.save.reconnecting)@",
+  reading_back = "@i18n(app.save.reading_back)@",
+  saved_title  = "@i18n(app.save.saved_title)@",
+  dismiss      = "@i18n(app.save.dismiss)@",
+  done_message = "@i18n(app.save.done_message)@",
+  timeout_title   = "@i18n(app.save.timeout_title)@",
+  timeout_message = "@i18n(app.save.timeout_message)@",
+  failed_title    = "@i18n(app.save.failed_title)@",
+  failed_message  = "@i18n(app.save.failed_message)@",
+  eeprom_pending  = "@i18n(app.save.eeprom_pending)@",
+}
+
+-- getTime() ticks, at 10 ms each. How long a notice reporting a SUCCESSFUL save stays up
+-- before it clears itself; the button it already draws stays as the earlier way out. A page
+-- says a save succeeded by passing `ok = true` to reportSave -- absent, the notice stands,
+-- which is what a failure, a warning and a refusal all need. Kept level with the pipeline's
+-- own OUTCOME_LINGER_SECONDS so a save reports for the same length of time either way.
+local SAVE_OUTCOME_LINGER_TICKS = 200
+
+local SAVE_PHASE_TEXT = {
+  preflight = "rebooting",
+  reboot    = "rebooting",
+  probe     = "waiting",
+  onconnect = "reconnecting",
+  verify    = "reading_back",
+  reload    = "reading_back",
+}
+
+local ONCONNECT_TEXT = {
+  apiversion        = "@i18n(app.onconnect.apiversion)@",
+  uid               = "@i18n(app.onconnect.uid)@",
+  rtc               = "@i18n(app.onconnect.rtc)@",
+  status            = "@i18n(app.onconnect.status)@",
+  battery_config    = "@i18n(app.onconnect.battery_config)@",
+  governor_config   = "@i18n(app.onconnect.governor_config)@",
+  esc_sensor_config = "@i18n(app.onconnect.esc_sensor_config)@",
+  smartfuel_config  = "@i18n(app.onconnect.smartfuel_config)@",
+  name              = "@i18n(app.onconnect.name)@",
+  telemetry         = "@i18n(app.onconnect.telemetry)@",
+  flight_stats      = "@i18n(app.onconnect.flight_stats)@",
+  dataflash_summary = "@i18n(app.onconnect.dataflash_summary)@"
+}
+
+-- The glyph on a tile the armed state has locked. It goes through i18n like every other
+-- string on screen, even though both locales carry the same mark: ui/tiles.lua is a pure
+-- renderer and is handed the resolved text rather than a locale of its own.
+local ARMED_BADGE_TEXT = "@i18n(app.model_armed_badge)@"
+
+-- The one line the strip carries. It says what the state is and what it costs, because the
+-- tool stays usable around it -- it is a status, not a demand.
+local ARMED_BANNER_TEXT = "@i18n(app.model_armed_banner)@"
+
+-- What the backstop behind the disabled Save and Reload buttons says. Unchanged wording: it
+-- is the same refusal it always was, in the tool's own box instead of a native modal.
+local ARMED_NOTICE_TITLE = "@i18n(app.model_armed_title)@"
+local ARMED_NOTICE_MESSAGE = "@i18n(app.model_armed_warning)@"
 
 local function ensureBuildDeps()
   if not GridLayout then
@@ -204,6 +369,9 @@ local function ensureBuildDeps()
   end
   if not LoadingOverlay then
     LoadingOverlay = loadModule("ui/loading_overlay.lua")
+  end
+  if not SavePipeline then
+    SavePipeline = loadModule("tasks/msp/save_pipeline.lua")
   end
 end
 
@@ -239,6 +407,30 @@ local function computeTileSize(cardW, cardH, cfg)
     return 1
   end
   return size
+end
+
+-- The height a page module may actually lay out in.
+--
+-- `lvgl.build` gives a "page" element a header of its own and parents the children to
+-- page->getBody(), a window at {0, MENU_HEADER_HEIGHT, LCD_W, LCD_H - MENU_HEADER_HEIGHT}
+-- (lua_lvgl_widget.cpp). Handing a page module LCD_H therefore overstates its room by exactly
+-- that header, and nothing complains because the page scrolls.
+--
+-- EdgeTxStyles::MENU_HEADER_HEIGHT is LAYOUT_SCALE(45) and is not exposed to Lua, so the value
+-- is restated here. LAYOUT_SCALE is the identity outside landscape, where it gives 36 at
+-- LCD_W 320 and 62 at 800 (etx_lv_theme.h) -- a portrait radio 320 wide still gets 45.
+local function pageBodyHeight()
+  local screenW = LCD_W or 480
+  local screenH = LCD_H or 320
+  local headerH = 45
+  if screenW > screenH then
+    if screenW == 320 then
+      headerH = 36
+    elseif screenW == 800 then
+      headerH = 62
+    end
+  end
+  return screenH - headerH
 end
 
 local function toWrappedItems(items, cols)
@@ -280,10 +472,12 @@ state = {
   suppressPressFrames = 0,
   suppressBackFrames = 0,
   backGestureActive = false,
+  lastBackTick = 0,
   memBucket    = nil,
   memLastTick  = 0,
   memPeakKb    = 0,
   lastInputTick = 0,
+  initialLoadStartTick = 0,
   activePageMenuId = nil,
   helpContent = nil,
   helpPageTitle = nil,
@@ -291,7 +485,10 @@ state = {
   pendingBuildUI = false,
   pendingGcAfterBuild = false,
   pendingSaveAction = nil,
+  saveOutcome = nil,
   saveOverlayVisible = false,
+  armedNoticeVisible = false,
+  lastSaveSnapshot = nil,
   mspAttached = false,
   mspLastTick = 0,
   fblConnected = false,
@@ -305,6 +502,14 @@ state = {
     lowFuelActive = false,
     lowFuelLastAt = 0,
     lowFuelRepeatCount = 0,
+    -- This table is rebuilt every time the tool is started, which is not the same thing as
+    -- the craft having reconnected. The fuel level and the battery capacity are announced
+    -- once per connection, so without these two the pilot hears both again on every open,
+    -- with nothing on the craft having changed. Each flag is consumed once, by the first
+    -- reading that would otherwise have been announced, and a genuine reconnect later in the
+    -- same session speaks as it always did.
+    seedInitialFuel = true,
+    seedBatteryCapacity = true,
     -- lastAlertAt wird nicht mehr hier initialisiert, sondern nur noch lazy in Audio
     lastValues = { arming_flags = nil, governor_state = nil, pid_profile = nil, rate_profile = nil, battery_profile = nil },
     pendingValues = { pid_profile = nil, rate_profile = nil, battery_profile = nil },
@@ -446,29 +651,105 @@ local function scheduleBuildUI(withGc)
   end
 end
 
+-- The `requestRebuild` handed to a page, a dialog or the help view is always one of
+-- these two calls. Written inline at six sites, a closure was built every time the
+-- table around it was: once per scene build at five of them, and once per frame at
+-- the sixth, which is the active page's wakeup in `M.run`.
+local function requestRebuild() scheduleBuildUI(false) end
+local function requestRebuildWithGc() scheduleBuildUI(true) end
+
 local function syncActivePageModule()
   local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
   if state.activePageMenuId == currentMenuId then
     return
   end
 
+  -- Take the outgoing page's reads back before it is released. Every one of them carries a
+  -- processReply that closes over the widgets this rebuild is about to destroy, so a reply that
+  -- arrives after the release runs against a tree that no longer exists. This happens first
+  -- because the release itself queues work -- the override and rollback resets -- and that work
+  -- must not be dropped again as part of the page it belongs to.
+  ensureMspRuntime()
+  if state.activePageMenuId ~= nil and MspRuntime and type(MspRuntime.dropClientReads) == "function" then
+    pcall(MspRuntime.dropClientReads, mspClientForMenu(state.activePageMenuId))
+  end
+
   if state.activePageMenuId and PageRegistry and PageRegistry.release then
     PageRegistry.release(state.activePageMenuId, buildPageContext())
   end
 
+  logf("debug", "page %s -> %s", tostring(state.activePageMenuId), tostring(currentMenuId))
   state.activePageMenuId = currentMenuId
+
+  -- From here everything queued belongs to the page that is up, without the page saying so: the
+  -- pages hold the queue itself and none of them names a client.
+  if MspRuntime and type(MspRuntime.setDefaultClient) == "function" then
+    pcall(MspRuntime.setDefaultClient, mspClientForMenu(currentMenuId))
+  end
 end
 
 -- ── Handlers ─────────────────────────────────────────────────────────────────
 
 local function onBack(source, ev)
   logToFile("onBack called source=" .. tostring(source) .. " ev=" .. tostring(ev))
+  logf("debug", "back source=%s ev=%s at=%s", tostring(source), tostring(ev),
+    tostring(state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId()))
+
+  if state.isClosing then
+    return
+  end
+
+  local now = (type(getTime) == "function" and getTime()) or 0
+  if now > 0 and (state.lastBackTick or 0) > 0 and (now - state.lastBackTick) < 35 and (now - state.lastBackTick) >= 0 then
+    logf("debug", "back dropped by debounce (dt=%d ticks)", now - state.lastBackTick)
+    return
+  end
+
   local fromEvent = source == "event"
 
   if state.backGestureActive then
     return
   end
   state.backGestureActive = true
+
+  -- A save that reboots holds the page: the values are on their way to a flight controller that
+  -- is about to restart, and leaving would put a page on screen showing what it read before.
+  -- Once the settings are in EEPROM there is nothing left to protect, so from that moment the
+  -- same press dismisses the overlay and the pipeline carries on without a screen.
+  -- A save that has just reported itself is not holding the page -- it is holding a notice, and
+  -- the press that would leave the page reads it instead.
+  -- A save with no pipeline reports into the same notice, and the press that would leave the
+  -- page reads that notice away instead.
+  if state.saveOutcome then
+    state.saveOutcome = nil
+    state.saveOverlayVisible = false
+    if fromEvent then
+      state.suppressBackFrames = 6
+    end
+    scheduleBuildUI(false)
+    return
+  end
+
+  if SavePipeline and type(SavePipeline.hasOutcome) == "function" and SavePipeline.hasOutcome() then
+    SavePipeline.dismiss()
+    if fromEvent then
+      state.suppressBackFrames = 6
+    end
+    scheduleBuildUI(false)
+    return
+  end
+
+  if SavePipeline and type(SavePipeline.blocksNavigation) == "function"
+    and SavePipeline.blocksNavigation() then
+    if SavePipeline.isDismissible() then
+      SavePipeline.dismiss()
+      if fromEvent then
+        state.suppressBackFrames = 6
+      end
+      scheduleBuildUI(false)
+    end
+    return
+  end
 
   if state.helpContent then
     closeHelpDialogIfOpen()
@@ -485,7 +766,7 @@ local function onBack(source, ev)
     local pageModule = PageRegistry and PageRegistry.get and PageRegistry.get(currentMenuId) or nil
     if pageModule and type(pageModule.onBack) == "function" then
       local handled = pageModule.onBack({
-        requestRebuild = function() scheduleBuildUI(true) end,
+        requestRebuild = requestRebuildWithGc,
         i18n = state.i18n
       })
       if handled == true then
@@ -518,9 +799,11 @@ local function onBack(source, ev)
     if fromEvent then
       state.suppressBackFrames = 6
     end
+    state.lastBackTick = now
     scheduleBuildUI(true)
     return
   end
+  state.lastBackTick = now
   state.isClosing = true
 end
 
@@ -627,8 +910,8 @@ local function onStar()
     return
   end
 
-  if lvgl and lvgl.alert and state.i18n then
-    lvgl.alert({
+  if lvgl and lvgl.message and state.i18n then
+    lvgl.message({
       title = state.i18n.t("app.help.title"),
       message = "Star action is reserved for standard functions."
     })
@@ -643,11 +926,17 @@ getActivePageModule = function()
   return PageRegistry and PageRegistry.byMenuId and PageRegistry.byMenuId[menuId]
 end
 
-closeHelpDialogIfOpen = function()
+-- Closes the dialog object only and leaves the help CONTENT in place: buildUI needs it for
+-- the repaint it is performing. Every real dismissal uses closeHelpDialogIfOpen instead.
+local function closeHelpDialogHandle()
   if state.helpDialog and type(state.helpDialog.close) == "function" then
     pcall(state.helpDialog.close, state.helpDialog)
   end
   state.helpDialog = nil
+end
+
+closeHelpDialogIfOpen = function()
+  closeHelpDialogHandle()
   state.helpContent = nil
   state.helpPageTitle = nil
   state.helpPageSubtitle = nil
@@ -661,18 +950,8 @@ local function getMspUnsupportedDialogModule()
   if mspUnsupportedDialogLoadTried then
     return mspUnsupportedDialogModule
   end
-
   mspUnsupportedDialogLoadTried = true
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/ui/msp_unsupported_dialog.lua", "t")
-  if type(chunk) ~= "function" then
-    return nil
-  end
-
-  local ok, mod = pcall(chunk)
-  if ok and type(mod) == "table" and type(mod.show) == "function" then
-    mspUnsupportedDialogModule = mod
-  end
-
+  mspUnsupportedDialogModule = loadModule("ui/msp_unsupported_dialog.lua")
   return mspUnsupportedDialogModule
 end
 
@@ -683,14 +962,7 @@ local function getConfirmDialogModule()
     return confirmDialogModule
   end
   confirmDialogLoadTried = true
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/ui/confirm_dialog.lua", "t")
-  if type(chunk) ~= "function" then
-    return nil
-  end
-  local ok, mod = pcall(chunk)
-  if ok and type(mod) == "table" and type(mod.show) == "function" then
-    confirmDialogModule = mod
-  end
+  confirmDialogModule = loadModule("ui/confirm_dialog.lua")
   return confirmDialogModule
 end
 
@@ -873,6 +1145,9 @@ local function readFblConnected()
   if mspState.apiSupported == false then
     return false
   end
+  if mspState.versionReadCompleted ~= true then
+    return false
+  end
 
   return mspState.lastConnected == true
 end
@@ -883,9 +1158,7 @@ local function returnToRootOnDisconnect()
   end
 
   closeHelpDialogIfOpen()
-  state.loadingMenuId = nil
   state.pendingMenuOpen = nil
-  state.pendingMenuBack = false
 
   local stepped = false
   while state.menu and (not state.menu.isRoot()) do
@@ -933,13 +1206,10 @@ local function updateRuntimeMenuConditions()
   end
 
   if currentMenuId == "esc_tools_menu" and session and session.esc4WayDetectedProto == nil and not state.escProtoCheckPending then
-    state.escProtoCheckPending = true
-    local ok, SensorConfigApi = pcall(function()
-      return assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/esc_sensor_config.lua", "t"))()
-    end)
+    local SensorConfigApi = loadModule("tasks/msp/api/esc_sensor_config.lua")
     local msp = root and root.tasks and root.tasks.msp
     local queue = msp and msp.getState and msp.getState().queue
-    if ok and queue and SensorConfigApi then
+    if queue and SensorConfigApi then
       queue:add({
         command = SensorConfigApi.command,
         isWrite = false,
@@ -956,6 +1226,9 @@ local function updateRuntimeMenuConditions()
           state.escProtoCheckPending = false
         end
       })
+      -- The three assignments above are all resets. Without this one the guard on the `if`
+      -- is never false, so the probe is queued again on every pass through this function.
+      state.escProtoCheckPending = true
     else
       state.escProtoCheckPending = false
     end
@@ -1013,14 +1286,41 @@ local function isLocalSettingsPage()
   return false
 end
 
+-- Drop everything the MSP layer is still holding from an earlier read.
+--
+-- The response cache answers a re-read from the last reply while its key still holds, and its
+-- keys are the connection and the live profile. Two events move the value on the board without
+-- moving either key, so they are named here rather than left to the key to catch:
+--
+--   a Reload   the pilot asked for what the board holds NOW, and was told that unsaved changes
+--              would be discarded to get it. A reload that serves the value it already had is
+--              not a reload, whatever it saves in round trips.
+--   a disarm   an in-flight adjustment changes gains, rates and governor values on the flight
+--              controller with nothing written from here, and this tool is not on screen while
+--              it happens. So the first read after a flight has to reach the board.
+--
+-- Everything else the cache holds is dropped by the two rules it already has: a disconnect,
+-- and any write this tool issues.
+local function dropMspResponseCache()
+  local ok, cache = pcall(loadModule, "tasks/msp/cache.lua")
+  if ok and type(cache) == "table" and type(cache.clear) == "function" then
+    pcall(cache.clear)
+  end
+end
+
+-- The backstop behind the disabled Save and Reload buttons: a path that reaches either of
+-- them while the craft is armed is refused, and says so. Drawn as the tool's own notice box
+-- rather than raised as an `lvgl.message`, which is a native MessageDialog with no focusable
+-- child of its own -- its key path exists only while its LVGL group is empty, and while one
+-- stands this script's run() is not reached at all.
+local function showArmedNotice()
+  state.armedNoticeVisible = true
+  scheduleBuildUI(false)
+end
+
 local function onReload()
   if isModelArmed() and not isLocalSettingsPage() then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
-        title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
-        message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-      })
-    end
+    showArmedNotice()
     return
   end
 
@@ -1037,6 +1337,9 @@ local function onReload()
     closeHelpDialogIfOpen()
 
     local function doPageReload()
+      -- Before the page re-reads, not after: every route into a reload ends here, and the
+      -- page issues its requests inside onReload below.
+      dropMspResponseCache()
       -- Keep preferences in-memory for reload to avoid repeated disk loads and table churn.
       _G.rfsuite.preferences = state.preferences
       local shouldRebuild = page.onReload({
@@ -1071,7 +1374,7 @@ local function onReload()
 
       pcall(Log.emit, "rfsuite", "onReload invoked; reloadPref=true", "debug", true)
       if lvgl then
-        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.message)), "debug", true)
       else
         pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
       end
@@ -1088,13 +1391,6 @@ local function onReload()
         if ok and res == true then return end
       end
 
-      if type(lvgl.confirm) == "function" then
-        local ok, res = pcall(lvgl.confirm, { title = title, message = message })
-        pcall(Log.emit, "rfsuite", "called lvgl.confirm; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
-        if ok and res == true then doPageReload() end
-        return
-      end
-
       -- Fallback: no confirm UI available — proceed with reload.
       pcall(Log.emit, "rfsuite", "no confirm API available; performing reload fallback", "debug", true)
       doPageReload()
@@ -1106,22 +1402,39 @@ local function onReload()
     return
   end
 
-  if lvgl and lvgl.alert then
-    lvgl.alert({
+  if lvgl and lvgl.message then
+    lvgl.message({
       title = "Reload",
       message = "Reload from FBL is not wired yet."
     })
   end
 end
 
+-- A page that has no pipeline still saves behind the notice, so its outcome belongs in the
+-- notice as well. Raising a dialog for it puts a second box on top of a first one that cannot
+-- be repainted away, because the report is made from inside the save the notice is announcing --
+-- and while a native modal stands the tool's run() does not run at all.
+local function reportSaveOutcome(outcome)
+  if type(outcome) ~= "table" then return end
+  local title = outcome.title
+  local message = outcome.message
+  if type(title) ~= "string" and type(message) ~= "string" then return end
+  state.saveOutcome = { title = title, message = message }
+  -- A save that worked has nothing to be acknowledged, so its notice gets a moment to be read
+  -- and then goes; anything else stands until it is read away. The page decides which it is,
+  -- because only the page knows whether the write it just made reached anything.
+  if outcome.ok == true then
+    state.saveOutcome.clearAt = (getTime and getTime() or 0) + SAVE_OUTCOME_LINGER_TICKS
+  end
+  state.saveOverlayVisible = true
+  scheduleBuildUI(false)
+end
+
 local function onSave()
   local armedWarningPref = state.preferences and state.preferences.general and state.preferences.general.save_armed_warning
   if isModelArmed() and not isLocalSettingsPage() then
-    if armedWarningPref ~= false and lvgl and lvgl.alert then
-      lvgl.alert({
-        title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
-        message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-      })
+    if armedWarningPref ~= false then
+      showArmedNotice()
     end
     return
   end
@@ -1132,6 +1445,7 @@ local function onSave()
 
     -- Runs save in the next tick so the save overlay can render first.
     local function queuePageSave()
+      state.saveOutcome = nil
       state.pendingSaveAction = function()
         local ok, shouldRebuild = pcall(page.onSave, {
           i18n = state.i18n,
@@ -1139,14 +1453,15 @@ local function onSave()
           menu = state.menu,
           savePreferences = performSave,
           refresh = M.buildUI,
-          requestRebuild = function() scheduleBuildUI(false) end
+          requestRebuild = requestRebuild,
+          reportSave = reportSaveOutcome
         })
 
         if not ok then
           pcall(Log.emit, "rfsuite", "page.onSave failed: " .. tostring(shouldRebuild), "error", true)
-          if lvgl and lvgl.alert then
-            lvgl.alert({
-              title = "Save",
+          if lvgl and lvgl.message then
+            lvgl.message({
+              title = SAVE_TEXT.failed_title,
               message = tostring(shouldRebuild)
             })
           end
@@ -1160,10 +1475,10 @@ local function onSave()
         local okEeprom, errEeprom = queueEepromWriteIfNeeded(page)
         if not okEeprom then
           pcall(Log.emit, "rfsuite", "EEPROM write queue failed: " .. tostring(errEeprom), "warn", true)
-          if lvgl and lvgl.alert then
-            lvgl.alert({
-              title = "Save",
-              message = "Saved, but EEPROM write is pending: " .. tostring(errEeprom)
+          if lvgl and lvgl.message then
+            lvgl.message({
+              title = SAVE_TEXT.saved_title,
+              message = SAVE_TEXT.eeprom_pending .. " " .. tostring(errEeprom)
             })
           end
         end
@@ -1178,7 +1493,11 @@ local function onSave()
 
     -- Check preference and show confirm dialog if enabled.
     local savePref = state.preferences and state.preferences.general and state.preferences.general.save_confirm
-    if savePref == true and lvgl then
+    -- The confirmation is a preference, except when the armed state cannot be read: then it is
+    -- asked whatever the preference says, because the alternative is writing to a flight
+    -- controller that may be armed without anybody having been told the check did not run.
+    local armedUnknown = armedStateIsUncertain()
+    if (savePref == true or armedUnknown) and lvgl then
       local function tr(key, fallback)
         if state and state.i18n and type(state.i18n.t) == "function" then
           local ok, val = pcall(state.i18n.t, key)
@@ -1191,10 +1510,13 @@ local function onSave()
 
       local title = tr("app.pages.settings_general.save_confirm", "Confirm on Save")
       local message = tr("app.dialogs.confirm_save", "Save changes?")
+      if armedUnknown then
+        message = tr("app.dialogs.confirm_save_arm_unknown", "Cannot read the arming state. Disarmed?")
+      end
 
       pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug", true)
       if lvgl then
-        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.alert)), "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.message)), "debug", true)
       else
         pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
       end
@@ -1211,13 +1533,6 @@ local function onSave()
         if ok and res == true then return end
       end
 
-      if type(lvgl.confirm) == "function" then
-        local ok, res = pcall(lvgl.confirm, { title = title, message = message })
-        pcall(Log.emit, "rfsuite", "called lvgl.confirm; pcall ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true)
-        if ok and res == true then queuePageSave() end
-        return
-      end
-
       -- Fallback: no confirm API available — proceed with save.
       pcall(Log.emit, "rfsuite", "no confirm API available; performing save fallback", "debug", true)
       queuePageSave()
@@ -1229,8 +1544,8 @@ local function onSave()
     return
   end
 
-  if lvgl and lvgl.alert then
-    lvgl.alert({
+  if lvgl and lvgl.message then
+    lvgl.message({
       title = "Save",
       message = "Save to FBL is not wired yet."
     })
@@ -1243,18 +1558,15 @@ local function getCardPressHandler(cardId)
     if (state.suppressPressFrames or 0) > 0 then
       return
     end
-    if isModelArmed() then
-      if lvgl and lvgl.alert then
-        lvgl.alert({
-          title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
-          message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-        })
-      end
-      return
-    end
     if state.menu and (not state.menu.isRoot()) then
-      state.loadingMenuId = cardId
-      scheduleBuildUI(false)
+      logf("debug", "press card=%s from=%s", tostring(cardId),
+        tostring(state.menu.getCurrentMenuId and state.menu.getCurrentMenuId()))
+      -- Parking the target is the whole press: run() opens pendingMenuOpen and schedules the
+      -- rebuild itself, so nothing is scheduled here and the next thing drawn is the target's
+      -- own first frame -- a menu, or a page with the loading overlay the page paints while it
+      -- reads. A frame in front of that one is a second scene rebuild whose only content is a
+      -- notice the frame after it replaces.
+      state.pendingMenuOpen = cardId
     end
   end
   state.cardHandlers[cardId] = fn
@@ -1268,22 +1580,48 @@ local function getRootCardPressHandler(sectionId, cardId)
     if (state.suppressPressFrames or 0) > 0 then
       return
     end
-    if isModelArmed() then
-      if lvgl and lvgl.alert then
-        lvgl.alert({
-          title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
-          message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-        })
-      end
-      return
-    end
     if state.menu and state.menu.isRoot() then
-      state.loadingMenuId = { section = sectionId, card = cardId }
-      scheduleBuildUI(false)
+      logf("debug", "press root section=%s card=%s", tostring(sectionId), tostring(cardId))
+      state.pendingMenuOpen = { section = sectionId, card = cardId }
     end
   end
   state.cardHandlers[key] = fn
   return fn
+end
+
+-- A strip across the top of the page body, drawn on root, on a menu and on a page for as long
+-- as the craft is armed. The content below it is moved down by exactly this height rather than
+-- being drawn under it: a warning that covers a value is worse than no warning at all.
+--
+-- The colours are the firmware's own full-screen alert idiom -- WARNING as the background with
+-- the message in PRIMARY1 (libui/fullscreen_dialog.cpp). The pairing this replaces was the
+-- other way round, WARNING text on PRIMARY3, which computes about 2.2:1 off the default theme
+-- table and is below every legibility floor there is.
+local function appendArmedBanner(children, x, y, w, h, text)
+  children[#children + 1] = {
+    type = "rectangle",
+    x = x, y = y, w = w, h = h,
+    color = COLOR_THEME_WARNING or COLOR_THEME_SECONDARY1,
+    filled = true
+  }
+
+  local radius = math.max(6, math.floor(h * 0.30))
+  local pad = math.max(4, math.floor(h * 0.20))
+  local cx = x + pad + radius
+  local cy = y + math.floor(h / 2)
+  Tiles.appendBadge(children, cx, cy, radius, ARMED_BADGE_TEXT)
+
+  local textX = cx + radius + pad
+  local textH = Tiles.lineHeight(SMLSIZE, 14)
+  children[#children + 1] = {
+    type  = "label",
+    x = textX,
+    y = y + math.floor((h - textH) / 2),
+    w = math.max(0, (x + w) - textX - pad),
+    text  = text,
+    color = COLOR_THEME_PRIMARY1,
+    font  = SMLSIZE
+  }
 end
 
 -- ── Main UI build ─────────────────────────────────────────────────────────────
@@ -1293,75 +1631,190 @@ function M.buildUI()
 
   ensureBuildDeps()
 
+  -- Before the build, not after it. A build that allocates more than the LVGL pool can give it
+  -- does not come back, so a line written afterwards is the one line that would never appear --
+  -- and it is the one naming the screen that could not be built.
+  local buildingMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
+  logStep("build menu=" .. tostring(buildingMenuId))
+
   local isArmed = isModelArmed()
-  if isArmed then
+
+  if state.initialLoad then
+    -- The run loop already counts this start: it reads done/total off the onconnect runner and
+    -- repaints whenever that number changes. The frame it repainted carried none of it, so every
+    -- one of those repaints produced a screen identical to the one before it. Draw what is being
+    -- counted -- on the start's own full-screen background, in the shape this file already uses
+    -- for a full-screen notice: a centred title over a centred message. The offsets are wider
+    -- than the armed screen's because a third element follows them and MIDSIZE at h/2 - 30 puts
+    -- the title's descenders on the message's ascenders. The page overlays' box is not reused
+    -- here: that is a box drawn OVER a page, and there is no page yet.
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
-    local title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed"
-    local msg = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."
-    local color = COLOR_THEME_WARNING or COLOR_THEME_PRIMARY2
+    local title = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
+
+    -- Two things are counted while this screen stands, and only one of them can own the bar.
+    -- The compile pass runs first, happens only after an install or a version change, and is by
+    -- far the longer of the two, so it takes the bar for as long as it lasts and names itself in
+    -- the message line. It used to ride along as a bare "47/312" behind the title, which counts
+    -- files that mean nothing to whoever is holding the radio and leaves the message reading
+    -- "Connecting" while nothing is being connected -- the pair of them reads as a stall rather
+    -- than as work.
+    local compileDone = state.precompileDone or 0
+    local compileTotal = state.precompileTotal or 0
+    local preparing = compileTotal > 0 and compileDone < compileTotal
+
+    local message
+    if preparing then
+      message = state.i18n and state.i18n.t and state.i18n.t("app.preparing") or "Preparing suite"
+    else
+      message = ONCONNECT_TEXT[state.startTaskName or ""] or
+                (state.i18n and state.i18n.t and state.i18n.t("app.connecting")) or
+                "Connecting"
+    end
+    local screenW = LCD_W or 320
+    local screenH = LCD_H or 240
+
+    -- The logo, in the same box the widget's own connection splash gives it
+    -- (widgets/dashboard/splash.lua): the arithmetic below is that file's, applied to the
+    -- full screen instead of a widget zone. Reusing it rather than choosing new numbers
+    -- keeps the tool's start and the widget's splash the same picture, and the caps are
+    -- what stop a 400x84 image from filling a large screen.
+    local logoW = math.max(112, math.min(math.floor(screenW * 0.80), 240))
+    local logoH = math.max(36, math.min(math.floor(screenH * 0.32), 68))
+    local logoX = math.floor((screenW - logoW) * 0.5)
+    local logoY = math.max(6, math.floor(screenH * 0.10))
 
     local children = {
       {
         type = "rectangle",
-        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        x = 0, y = 0, w = screenW, h = screenH,
         color = COLOR_THEME_PRIMARY3,
         filled = true
       },
       {
+        type = "image",
+        x = logoX, y = logoY, w = logoW, h = logoH,
+        file = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png"
+      },
+      {
         type = "label",
-        x = 0, y = (LCD_H or 240) / 2 - 30, w = LCD_W or 320,
+        x = 0, y = screenH / 2 - 44, w = screenW,
         text = title,
-        color = color,
+        color = COLOR_THEME_PRIMARY2,
         align = CENTER,
         font = MIDSIZE
       },
       {
         type = "label",
-        x = 20, y = (LCD_H or 240) / 2, w = (LCD_W or 320) - 40,
-        text = msg,
+        x = 20, y = screenH / 2 - 4, w = screenW - 40,
+        text = message,
         color = COLOR_THEME_PRIMARY2,
         align = CENTER,
         font = SMLSIZE
       }
     }
 
-    lvgl.build({
-      {
-        type     = "page",
-        title    = title,
-        back     = onBack,
-        children = children
-      }
-    })
-    return
-  end
+    -- The bar is drawn only once there is something to count. Before the onconnect runner has
+    -- loaded its manifest there is no denominator, and an empty trough would claim a measurement
+    -- that has not started. The track is the theme's inactive colour rather than its accent, so
+    -- that an empty bar cannot be mistaken for a full one -- the failure the page overlay's own
+    -- track had until this series.
+    --
+    -- The compile pass fills the same bar while it is the phase being shown. Its denominator
+    -- grows for as long as the tree is still being walked, but nothing is compiled before the
+    -- walk is through, so the numerator is zero throughout it and the fill never runs backwards.
+    local done = preparing and compileDone or (state.startDone or 0)
+    local total = preparing and compileTotal or (state.startTotal or 0)
+    if total > 0 then
+      local barW = math.min(420, math.max(200, screenW - 120))
+      local barH = 12
+      local barX = math.floor((screenW - barW) / 2)
+      local barY = math.floor(screenH / 2) + 26
+      local fillW = math.floor((barW - 4) * math.min(1, done / total) + 0.5)
 
-  if state.initialLoad then
-    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
-    local tr = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
-    lvgl.build({
-      {
+      children[#children + 1] = {
         type = "rectangle",
-        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
-        color = COLOR_THEME_PRIMARY3,
+        x = barX, y = barY, w = barW, h = barH,
+        color = COLOR_THEME_DISABLED,
         filled = true
-      },
-      {
-        type = "label",
-        x = 0, y = (LCD_H or 240) / 2 - 10, w = LCD_W or 320,
-        text = tr,
-        color = COLOR_THEME_PRIMARY2,
-        align = CENTER,
-        font = MIDSIZE
       }
-    })
+      if fillW > 0 then
+        children[#children + 1] = {
+          type = "rectangle",
+          x = barX + 2, y = barY + 2, w = fillW, h = barH - 4,
+          color = COLOR_THEME_SECONDARY2,
+          filled = true
+        }
+      end
+    end
+
+    lvgl.build(children)
     return
   end
 
-  if state.pendingSaveAction then
-    local tr = state.i18n and state.i18n.t
-    local title = tr and tr("app.saving") or "Saving..."
-    local message = tr and tr("app.saving_settings") or "Applying settings"
+  local saveProgress = SavePipeline and type(SavePipeline.getProgress) == "function"
+    and SavePipeline.getProgress() or nil
+
+  if state.pendingSaveAction or saveProgress or state.saveOutcome then
+    local title = state.i18n and state.i18n.t and state.i18n.t("app.saving") or "Saving..."
+    local message = state.i18n and state.i18n.t and state.i18n.t("app.saving_settings") or "Applying settings"
+    local progress = 0.35
+    local action = nil
+
+    -- Until the save reaches the flight controller the notice says only that something is being
+    -- applied, which is all a queued chain can honestly say. A pipeline reports which step it is
+    -- on, and stays on screen for the phases the old notice never covered: the restart, the wait
+    -- for the board to answer and the read-back.
+    if saveProgress then
+      local phaseKey = SAVE_PHASE_TEXT[saveProgress.phase]
+      message = saveProgress.label or (phaseKey and SAVE_TEXT[phaseKey]) or message
+      progress = saveProgress.indeterminate and 1 or (saveProgress.fraction or 0)
+      if saveProgress.saved then
+        title = SAVE_TEXT.saved_title
+      end
+      -- A finished save reports itself HERE, in the box that has been reporting all along. A
+      -- native dialog for it would be drawn over this one from inside the reply handler, so
+      -- this box could not be repainted away first -- and while such a dialog stands the tool's
+      -- run() does not run at all.
+      if saveProgress.terminal then
+        local result = saveProgress.result or {}
+        if saveProgress.status == "timeout" and result.saved then
+          title = SAVE_TEXT.timeout_title
+          message = SAVE_TEXT.timeout_message
+        elseif saveProgress.status ~= "done" then
+          title = SAVE_TEXT.failed_title
+          message = SAVE_TEXT.failed_message
+        else
+          title = SAVE_TEXT.saved_title
+          message = SAVE_TEXT.done_message
+        end
+      end
+      if saveProgress.dismissible then
+        action = {
+          text = SAVE_TEXT.dismiss,
+          press = function()
+            SavePipeline.dismiss()
+            scheduleBuildUI(false)
+          end
+        }
+      end
+    end
+
+    -- A page with no pipeline is finished the moment its onSave returns, so there is no bar
+    -- left to fill: the notice carries the result and the way out of it instead.
+    if state.saveOutcome and not saveProgress then
+      title = state.saveOutcome.title or title
+      message = state.saveOutcome.message or message
+      progress = 1
+      action = {
+        text = SAVE_TEXT.dismiss,
+        press = function()
+          state.saveOutcome = nil
+          state.saveOverlayVisible = false
+          scheduleBuildUI(false)
+        end
+      }
+    end
+
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
     local lyt = {
       {
@@ -1378,39 +1831,37 @@ function M.buildUI()
       h = LCD_H or 240,
       title = title,
       message = message,
-      progress = 0.35
+      progress = progress,
+      action = action
     })
     lvgl.build(lyt)
     state.saveOverlayVisible = true
     return
   end
 
-
-  if state.loadingMenuId then
+  if state.armedNoticeVisible then
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
-    local tr = state.i18n and state.i18n.t and state.i18n.t("app.loading") or "Loading..."
-    lvgl.build({
+    local lyt = {
       {
         type = "rectangle",
         x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
         color = COLOR_THEME_PRIMARY3,
         filled = true
-      },
-      {
-        type = "label",
-        x = 0, y = (LCD_H or 240) / 2 - 10, w = LCD_W or 320,
-        text = tr,
-        color = COLOR_THEME_PRIMARY2,
-        align = CENTER,
-        font = MIDSIZE
       }
+    }
+    LoadingOverlay.appendNotice(lyt, {
+      x = 0,
+      y = 0,
+      w = LCD_W or 320,
+      h = LCD_H or 240,
+      title = ARMED_NOTICE_TITLE,
+      message = ARMED_NOTICE_MESSAGE,
+      press = function()
+        state.armedNoticeVisible = false
+        scheduleBuildUI(false)
+      end
     })
-    if state.loadingMenuId == "back" then
-      state.pendingMenuBack = true
-    else
-      state.pendingMenuOpen = state.loadingMenuId
-    end
-    state.loadingMenuId = nil
+    lvgl.build(lyt)
     return
   end
 
@@ -1445,12 +1896,23 @@ function M.buildUI()
     HelpRegistry  = HelpRegistry
   })
 
+  -- Both actions end at the MSP queue, which the runtime clears on every tick while armed, so
+  -- neither could do anything but fail. Rendered disabled rather than merely inert: ui/header.lua
+  -- reports that through `active`, which also takes the button out of the encoder focus group.
+  if isArmed then
+    actions.save = false
+    actions.reload = false
+  end
+
   -- Clear and reuse the children table to reduce garbage collection
   local children = state.children
   wipeTable(children)
 
   local contentX = contentPad
-  local contentY = tileGap
+  -- The strip sits flush under the page header and the content starts one gap below it, so
+  -- everything the view already laid out is moved down by exactly the strip's own height.
+  local bannerH = isArmed and (profile.armedBannerH or 24) or 0
+  local contentY = tileGap + bannerH
   local contentW = LCD_W - contentPad * 2
 
   -- ── Help view (no lvgl.dialog – avoids LVGL lifecycle crashes) ───────────────
@@ -1459,7 +1921,7 @@ function M.buildUI()
     local helpTitle = state.helpPageTitle or pageTitle
     local helpSubtitle = state.helpPageSubtitle
     ensureHelpView()
-    closeHelpDialogIfOpen()
+    closeHelpDialogHandle()
     if HelpView and type(HelpView.open) == "function" then
       local opened = HelpView.open({
         i18n = state.i18n,
@@ -1472,7 +1934,7 @@ function M.buildUI()
         subtitle = helpSubtitle,
         icon = APP_ICON,
         onBack = onBack,
-        requestRebuild = function() scheduleBuildUI(false) end,
+        requestRebuild = requestRebuild,
         header = Header,
         headerLayout = profile.header,
         state = state
@@ -1493,7 +1955,7 @@ function M.buildUI()
       subtitle = helpSubtitle,
       icon = APP_ICON,
       onBack = onBack,
-      requestRebuild = function() scheduleBuildUI(false) end,
+      requestRebuild = requestRebuild,
       header = Header,
       headerLayout = profile.header,
       state = state
@@ -1506,8 +1968,12 @@ function M.buildUI()
   end
   -- ── End help view ────────────────────────────────────────────────────────────
 
+  if bannerH > 0 then
+    appendArmedBanner(children, contentX, 0, contentW, bannerH, ARMED_BANNER_TEXT)
+  end
+
   if state.menu.isRoot() then
-    local groups    = state.menu.getRootGroups(ICON_ROOT)
+    local groups    = state.menu.getRootGroups()
     local flatCards = Tiles.flattenRootCards(groups)
     -- Never alias cached root card tables into state.cards because submenu grid
     -- layout reuses state.cards as mutable output and would overwrite root data.
@@ -1562,7 +2028,8 @@ function M.buildUI()
           card.data.icon, card.data.text,
           flatIndex == state.focusIndex,
           getRootCardPressHandler(group.id, card.id),
-          card.data.enabled
+          card.data.enabled,
+          card.data.lockedByArm and ARMED_BADGE_TEXT or nil
         )
 
         local bottom = tileY + tileSize
@@ -1584,7 +2051,7 @@ function M.buildUI()
         x = contentX,
         y = contentY,
         w = contentW,
-        h = LCD_H,
+        h = pageBodyHeight() - bannerH,
         i18n = state.i18n,
         preferences = state.preferences,
         menu = state.menu,
@@ -1597,10 +2064,10 @@ function M.buildUI()
           end
           openPageHelpDialog(message, resolvedTitle, resolvedSubtitle)
         end,
-        requestRebuild = function() scheduleBuildUI(false) end
+        requestRebuild = requestRebuild
       })
     else
-      local gridItems = state.menu.getCards(ICON_ROOT)
+      local gridItems = state.menu.getCards()
       local computedCols = Tiles.computeColumns(contentW, profile.menuMinCardWidth, profile.menuMaxColumns)
       local columns   = computedCols
       local layoutItems, rows = toWrappedItems(gridItems, columns)
@@ -1625,7 +2092,8 @@ function M.buildUI()
           card.data.icon, card.data.text,
           i == state.focusIndex,
           getCardPressHandler(card.id),
-          card.data.enabled
+          card.data.enabled,
+          card.data.lockedByArm and ARMED_BADGE_TEXT or nil
         )
       end
     end
@@ -1681,14 +2149,30 @@ function M.init()
   local prefs = loadPreferencesSafe()
   state.preferences = prefs
   _G.rfsuite.preferences = prefs
+
+  -- The earliest point at which anything can be written, because the option lives in the file
+  -- that was just read. Everything before this line -- the module loads and the preference read
+  -- itself -- is invisible by construction and no option could change that.
+  --
+  -- What it does reach back over is the log ring: attaching seeds the sink from it, so the lines
+  -- emitted while the modules above were loading go out with the first flush. A start that hangs
+  -- after this point leaves the step file naming the stage it stopped in.
+  logStep("init: preferences read", true)
+
   local locale = resolveLocaleFromSystem()
   state.i18n       = I18n.new(locale)
+  logStep("init: locale " .. tostring(locale), true)
   _G.rfsuite.savePreferences = performSave
   state.manifest = manifest
+  logStep("init: menu registry", true)
   state.menu       = MenuRegistry.new(manifest, state.i18n, {
     conditions = {
       developerTools = prefs.general and prefs.general.developer_tools == true,
-      fblConnected = false
+      fblConnected = false,
+      -- Declared here rather than left to the first run() tick, so that the build M.init()
+      -- does below already asks the registry a question it can answer. run() owns the value
+      -- from its first pass on.
+      modelArmed = false
     },
     apiVersionProvider = function()
       local root = _G and _G.rfsuite
@@ -1704,9 +2188,12 @@ function M.init()
   state.memLastTick = 0
   state.memPeakKb = 0
   state.lastInputTick = getTime and getTime() or 0
+  state.initialLoadStartTick = getTime and getTime() or 0
   state.ignoreNextPageKey = false
   state.suppressPressFrames = 0
   state.suppressBackFrames = 0
+  state.backGestureActive = false
+  state.lastBackTick = 0
   state.focusIndex = 0
   state.activePageMenuId = nil
   state.helpContent = nil
@@ -1715,10 +2202,10 @@ function M.init()
   state.pendingBuildUI = false
   state.pendingGcAfterBuild = false
   state.pendingSaveAction = nil
+  state.saveOutcome = nil
   state.saveOverlayVisible = false
+  state.armedNoticeVisible = false
   state.pendingMenuOpen = nil
-  state.pendingMenuBack = false
-  state.loadingMenuId = nil
   state.isClosing = false
   state.closeTicks = nil
   state.closeMemStart = nil
@@ -1731,79 +2218,97 @@ function M.init()
   state.mspAttached = false
   state.initialLoad = true
   state.lastProgressSnapshot = ""
+  state.precompileDone = 0
+  state.precompileTotal = 0
+  ensureVersion()
+  ensurePrecompile()
+  if Precompile then
+    Precompile.start(Version and Version.VERSION or nil)
+  end
+  logStep("init: first build", true)
   M.buildUI()
+  logStep("init: done", true)
 end
 
-function M.run(event, touchState)
-  local function isEvent(ev, ...)
-    for i = 1, select("#", ...) do
-      local c = select(i, ...)
-      if c and ev == c then return true end
-    end
+-- Hoisted out of `M.run`. EdgeTX drives `run()` from the standalone window's event
+-- check, so anything declared inside it is built again on every refresh. None of the
+-- three captures anything from that call and none of them changes while the script
+-- runs, so file scope is where they belong.
+local function isEvent(ev, ...)
+  for i = 1, select("#", ...) do
+    local c = select(i, ...)
+    if c and ev == c then return true end
+  end
+  return false
+end
+
+-- Read once instead of per call. The globals a radio exports do not change while the
+-- script runs, and a nil entry is skipped by the type tests below exactly as before.
+local BACK_KEY_CANDIDATES = {
+  _G.KEY_EXIT,
+  _G.KEY_RTN,
+  _G.KEY_RETURN,
+  _G.KEY_ESC
+}
+
+local BACK_EVENT_GENERATORS = {
+  _G.EVT_KEY_BREAK,
+  _G.EVT_KEY_FIRST,
+  _G.EVT_KEY_LONG
+}
+
+local function isGeneratedBackEvent(ev)
+  if type(ev) ~= "number" or ev == 0 then
     return false
   end
 
-  local function isGeneratedBackEvent(ev)
-    if type(ev) ~= "number" or ev == 0 then
-      return false
-    end
+  -- Observed on some radios/pages: RTN can arrive as raw generated event 1537.
+  if ev == 1537 then
+    return true
+  end
 
-    -- Observed on some radios/pages: RTN can arrive as raw generated event 1537.
-    if ev == 1537 then
-      return true
-    end
+  local keyCandidates = BACK_KEY_CANDIDATES
+  local generators = BACK_EVENT_GENERATORS
 
-    local keyCandidates = {
-      _G.KEY_EXIT,
-      _G.KEY_RTN,
-      _G.KEY_RETURN,
-      _G.KEY_ESC
-    }
-
-    local generators = {
-      _G.EVT_KEY_BREAK,
-      _G.EVT_KEY_FIRST,
-      _G.EVT_KEY_LONG
-    }
-
-    for gi = 1, #generators do
-      local gen = generators[gi]
-      if type(gen) == "function" then
-        for ki = 1, #keyCandidates do
-          local key = keyCandidates[ki]
-          if type(key) == "number" then
-            local ok, generated = pcall(gen, key)
-            if ok and generated == ev then
-              return true
-            end
+  for gi = 1, #generators do
+    local gen = generators[gi]
+    if type(gen) == "function" then
+      for ki = 1, #keyCandidates do
+        local key = keyCandidates[ki]
+        if type(key) == "number" then
+          local ok, generated = pcall(gen, key)
+          if ok and generated == ev then
+            return true
           end
         end
       end
     end
-
-    return false
   end
 
-  local function isBackEvent(ev)
-    if isEvent(
-      ev,
-      EVT_VIRTUAL_EXIT,
-      EVT_VIRTUAL_EXIT_BREAK,
-      EVT_VIRTUAL_EXIT_FIRST,
-      EVT_VIRTUAL_EXIT_LONG,
-      EVT_EXIT_BREAK,
-      EVT_EXIT_FIRST,
-      EVT_EXIT_LONG,
-      EVT_RTN_BREAK,
-      EVT_RTN_FIRST,
-      EVT_RTN_LONG
-    ) then
-      return true
-    end
+  return false
+end
 
-    return isGeneratedBackEvent(ev)
+local function isBackEvent(ev)
+  if isEvent(
+    ev,
+    EVT_VIRTUAL_EXIT,
+    EVT_VIRTUAL_EXIT_BREAK,
+    EVT_VIRTUAL_EXIT_FIRST,
+    EVT_VIRTUAL_EXIT_LONG,
+    EVT_EXIT_BREAK,
+    EVT_EXIT_FIRST,
+    EVT_EXIT_LONG,
+    EVT_RTN_BREAK,
+    EVT_RTN_FIRST,
+    EVT_RTN_LONG
+  ) then
+    return true
   end
 
+  return isGeneratedBackEvent(ev)
+end
+
+function M.run(event, touchState)
   if lvgl == nil then
     lcd.drawText(10, 10, "LVGL support required (EdgeTX 2.11+)", WHITE)
   end
@@ -1813,8 +2318,30 @@ function M.run(event, touchState)
     local transitionedMenuThisTick = false
 
     local armed = isModelArmed()
+
+    -- The card sink advances here and nowhere else in this state: it is the one place per pass
+    -- that runs whatever is on screen. It decides for itself whether anything is written, and
+    -- the armed state only lengthens its interval.
+    local cardSink = sink()
+    if cardSink and type(cardSink.tick) == "function" then
+      pcall(cardSink.tick, armed)
+    end
+
     if armed ~= state.lastModelArmedState then
       state.lastModelArmedState = armed
+      -- The registry is the one place that already knows why an entry is or is not
+      -- available, and it invalidates its own card caches when a condition moves. Feeding
+      -- the armed state in here costs no new update path: the scheduleBuildUI below is the
+      -- redraw this transition already asked for.
+      state.menu.setCondition("modelArmed", armed)
+      if not armed then
+        -- The refusal has outlived its reason; it must not stand over the tool after a disarm.
+        state.armedNoticeVisible = false
+        -- And no cached reply has outlived the flight that just ended: an in-flight
+        -- adjustment can have moved any of them, and this is the edge the cache's own keys
+        -- cannot see. It costs no new update path -- the transition is already handled here.
+        dropMspResponseCache()
+      end
       if armed then
         -- Clear MSP queue to abort any pending MSP operations immediately
         ensureMspRuntime()
@@ -1866,6 +2393,7 @@ function M.run(event, touchState)
     if state.isClosing then
       if not state.closeTicks then
         logToFile("Closing sequence started (Tick 0).")
+        logStep("closing tick 0", true)
         state.closeTicks = 0
         -- Tick 0: ONLY build the UI overlay. Do NOT do any cleanup or GC yet.
         -- This ensures the Lua VM yields immediately and EdgeTX can draw the screen.
@@ -1895,15 +2423,22 @@ function M.run(event, touchState)
       if state.closeTicks == 0 then
         -- Tick 1: Do page releases and event resets (this queues any override resets)
         logToFile("Closing sequence Tick 1. Starting cleanup.")
+        logStep("closing tick 1: cleanup", true)
         state.pendingBuildUI = false
         state.pendingGcAfterBuild = false
         state.pendingSaveAction = nil
+        state.saveOutcome = nil
         state.saveOverlayVisible = false
         state.pendingMenuOpen = nil
-        state.pendingMenuBack = false
-        state.loadingMenuId = nil
         closeHelpDialogIfOpen()
         
+        -- Same as on a page change, and for the same reason: the page on screen loses its reads
+        -- before it is released, so none of them can come back to a torn-down tree. Its writes
+        -- stay -- the shutdown ticks below are there to get exactly those out.
+        if state.activePageMenuId ~= nil and MspRuntime and type(MspRuntime.dropClientReads) == "function" then
+          pcall(MspRuntime.dropClientReads, mspClientForMenu(state.activePageMenuId))
+        end
+
         -- Release all pages in the registry to free their resources (queues override/rollback resets)
         if PageRegistry and type(PageRegistry.releaseAll) == "function" then
           logToFile("Releasing all pages in registry.")
@@ -1913,6 +2448,9 @@ function M.run(event, touchState)
           pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
         end
         state.activePageMenuId = nil
+        if MspRuntime and type(MspRuntime.setDefaultClient) == "function" then
+          pcall(MspRuntime.setDefaultClient, TOOL_MSP_CLIENT)
+        end
         
         if Events and type(Events.reset) == "function" then
           logToFile("Resetting events.")
@@ -1928,6 +2466,7 @@ function M.run(event, touchState)
       elseif not state.shouldExit then
         -- Tick 16: Finalize library cleanup and detach MSP
         logToFile("Closing sequence finalizing. Detaching MSP.")
+        logStep("closing: detaching MSP", true)
         if state.mspAttached then
           if MspRuntime and type(MspRuntime.detach) == "function" then
             pcall(MspRuntime.detach, "tool")
@@ -1983,6 +2522,7 @@ function M.run(event, touchState)
       -- Skip all other background tasks and exit immediately
       if state.shouldExit then
         logToFile("Closing sequence returning 2 to EdgeTX.")
+        logStep("closing: returning to the radio", true)
         if state.mspAttached and MspRuntime and type(MspRuntime.detach) == "function" then
           pcall(MspRuntime.detach, "tool")
           state.mspAttached = false
@@ -2010,27 +2550,60 @@ function M.run(event, touchState)
       if not ok then
         pcall(Log.emit, "rfsuite", "pendingSaveAction failed: " .. tostring(err), "error", true)
       end
+      -- A page that only queues its writes is finished here and the notice goes; a page that
+      -- started the pipeline is not, and the notice stays up for the phases that follow.
+      if SavePipeline and type(SavePipeline.isActive) == "function" and SavePipeline.isActive() then
+        state.saveOverlayVisible = true
+      end
+      -- A page that reported an outcome is finished, but the notice is not: it is now the box
+      -- carrying the result, and it stands until the pilot reads it away.
+      if state.saveOutcome then
+        state.saveOverlayVisible = true
+      end
       -- Ensure the save overlay is replaced even when page.onSave returns false.
       scheduleBuildUI(false)
     end
 
+    -- A reported save that carried a linger has it counted here rather than by the page, which
+    -- is gone by the time it runs out.
+    if state.saveOutcome and state.saveOutcome.clearAt and not state.isClosing
+      and (getTime and getTime() or 0) >= state.saveOutcome.clearAt then
+      state.saveOutcome = nil
+      state.saveOverlayVisible = false
+      scheduleBuildUI(false)
+    end
+
+    -- The pipeline's reply-driven steps advance themselves; this drives the phases that wait on
+    -- time -- the bound on a flight controller that does not come back, and the bound on the
+    -- connect chain. Repaint on what is DISPLAYED rather than on every tick, the same rule the
+    -- start screen follows, or an unchanged notice would be rebuilt at tick rate.
+    if SavePipeline and type(SavePipeline.wakeup) == "function" and not state.isClosing then
+      SavePipeline.wakeup()
+      local saveProgress = SavePipeline.getProgress()
+      local snapshot = saveProgress and (tostring(saveProgress.phase) .. "/"
+        .. tostring(saveProgress.done) .. "/" .. tostring(saveProgress.label) .. "/"
+        .. tostring(saveProgress.dismissible)) or nil
+      if snapshot ~= state.lastSaveSnapshot then
+        state.lastSaveSnapshot = snapshot
+        state.saveOverlayVisible = snapshot ~= nil
+        scheduleBuildUI(false)
+      end
+    end
+
     if state.pendingMenuOpen and not state.isClosing then
+      -- The press parks a target and this is where it is taken, a tick later. A press with no
+      -- open after it is the shape of a menu step that stalls, and the two lines apart are what
+      -- tell that apart from a press that never registered.
       if type(state.pendingMenuOpen) == "table" then
+        logf("debug", "open root section=%s card=%s", tostring(state.pendingMenuOpen.section),
+          tostring(state.pendingMenuOpen.card))
         state.menu.openRootEntry(state.pendingMenuOpen.section, state.pendingMenuOpen.card)
       else
+        logf("debug", "open entry=%s", tostring(state.pendingMenuOpen))
         state.menu.openEntry(state.pendingMenuOpen)
       end
       state.focusIndex = 0
       state.pendingMenuOpen = nil
-      transitionedMenuThisTick = true
-      scheduleBuildUI(true)
-    end
-
-    if state.pendingMenuBack and not state.isClosing then
-      if state.menu and state.menu.goBack() then
-        state.focusIndex = 0
-      end
-      state.pendingMenuBack = false
       transitionedMenuThisTick = true
       scheduleBuildUI(true)
     end
@@ -2054,20 +2627,49 @@ function M.run(event, touchState)
         pTotal = mspProgress.total or 0
       end
 
-      local snapshot = tostring(pDone) .. "/" .. tostring(pTotal)
+      local taskName = Events and Events.getOnconnectPendingTaskName and
+                       Events.getOnconnectPendingTaskName() or nil
+
+      state.startDone = pDone
+      state.startTotal = pTotal
+      state.startTaskName = taskName
+
+      local compileDone, compileTotal, compileFinished = 0, 0, true
+      if Precompile then
+        Precompile.step()
+        compileDone, compileTotal, compileFinished = Precompile.getProgress()
+      end
+      state.precompileDone = compileDone
+      state.precompileTotal = compileTotal
+
+      -- Repaint when what is DISPLAYED changes, which is the count, the task name and the
+      -- compile count -- not the count alone, or the frame naming a task would go stale
+      -- within its own step.
+      local snapshot = tostring(pDone) .. "/" .. tostring(pTotal) .. "/" .. tostring(taskName) ..
+                       " " .. tostring(compileDone) .. "/" .. tostring(compileTotal)
       if snapshot ~= state.lastProgressSnapshot then
         state.lastProgressSnapshot = snapshot
         scheduleBuildUI(false)
       end
 
-      -- Finish initial load when MSP is stable and all tasks are done.
+      -- Finish initial load when core MSP identity is resolved or timeout is reached.
       -- If the FBL is offline, we enter the menu after a short timeout (2s).
-      local mspState = MspRuntime.getState()
+      -- If connected but the FC is unresponsive or wedged, we bound the wait (3.5s)
+      -- so the pilot reaches the main menu with locked tiles rather than hanging on the start screen indefinitely.
+      local mspState = nil
+      if MspRuntime and type(MspRuntime.getState) == "function" then
+        mspState = MspRuntime.getState()
+      end
       local isConnected = mspState and mspState.lastConnected == true
-      local timeoutReached = (now - state.lastInputTick) > 200
+      local elapsed = now - (state.initialLoadStartTick or now)
+      local timeoutReached = (not isConnected and elapsed > 200) or (elapsed > 350)
 
-      if (isConnected and mspProgress and mspProgress.done >= mspProgress.total and not Events.isOnconnectActive())
-         or (not isConnected and timeoutReached) then
+      local mspSettled = (isConnected and mspProgress and mspProgress.done >= mspProgress.total)
+                         or timeoutReached
+
+      -- Hold the start screen until the compiling is through, which is the point of doing it
+      -- here rather than on the first page that happens to need a file.
+      if mspSettled and compileFinished then
         state.initialLoad = false
         scheduleBuildUI(false)
       end
@@ -2082,6 +2684,12 @@ function M.run(event, touchState)
         if Events and type(Events.wakeup) == "function" then
           pcall(Events.wakeup)
         end
+        -- The wakeup above is what fills the queue while the connect chain runs. Without a
+        -- second turn here every request it enqueues waits for the next tick of this block
+        -- before it is looked at.
+        if type(MspRuntime.pump) == "function" then
+          MspRuntime.pump()
+        end
       end
     end
 
@@ -2095,7 +2703,7 @@ function M.run(event, touchState)
             preferences = state.preferences,
             menu = state.menu,
             manifest = state.manifest,
-            requestRebuild = function() scheduleBuildUI(false) end
+            requestRebuild = requestRebuild
           })
           if not ok then
             pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error", true)
@@ -2113,12 +2721,16 @@ function M.run(event, touchState)
     maybeRefreshInfoPageFromSession()
 
     -- Audio Feedback Polling (gedrosselt auf ca. 5Hz)
-    if Audio and type(Audio.process) == "function" and (now - state.lastAudioTick) > 0.2 then
+    if Audio and type(Audio.process) == "function" and (now - state.lastAudioTick) >= 20 then
       state.lastAudioTick = now
       
       local lq = Sensors and Sensors.getValue("link") or 0
       local vbat = Sensors and Sensors.getValue("voltage") or 0
-      local fuel = Sensors and Sensors.getValue("fuel") or -1
+      local fuel = Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")) or -1
+
+      if type(fuel) == "number" and fuel >= 0 then
+        if fuel > 100 then fuel = 100 end
+      end
 
       if Sensors then
         state.telemetryState.profile = Sensors.getValue("pid_profile") or state.telemetryState.profile
@@ -2156,6 +2768,11 @@ function M.run(event, touchState)
           state.audioState.initialized = false
           state.audioState.modelAnnounced = false
         end
+        state.telemetryState.profile = nil
+        state.telemetryState.rateProfile = nil
+        state.telemetryState.batteryProfile = nil
+        state.telemetryState.voltage = nil
+        state.telemetryState.fuel = nil
       end
     end
 
@@ -2174,9 +2791,19 @@ function M.run(event, touchState)
       MspRuntime.detach("tool")
       state.mspAttached = false
     end
+    -- An orderly exit is the one case where the tail is not lost, so take it.
+    local exitSink = sink()
+    if exitSink and type(exitSink.shutdown) == "function" then
+      pcall(exitSink.shutdown)
+    end
     return 2
   end
   return 0
 end
 
-return { init = M.init, run = M.run, useLvgl = true }
+-- `requestRebuild` is the same schedule-and-repaint-later mechanism this file uses
+-- internally, exposed so an embedding host can ask for a repaint after it has cleared the
+-- LVGL tree itself. A host that clears the tree without it leaves the page blank, because
+-- nothing in `run` notices that the objects it built are gone. The rebuild still happens at
+-- the same point in `run` as every other one, so it cannot land in the middle of a build.
+return { init = M.init, run = M.run, useLvgl = true, requestRebuild = scheduleBuildUI }

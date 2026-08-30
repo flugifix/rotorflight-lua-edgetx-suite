@@ -111,7 +111,7 @@ local function appendDataRow(children, x, y, w, labelText, valueText)
     y = y + rowH,
     w = w,
     h = 1,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true,
   }
 
@@ -294,7 +294,7 @@ local function enqueueApiRead(apiName)
     return false
   end
 
-  local isEsc = (command == 217 or apiName:sub(1, 15) == "esc_parameters_")
+  local isEsc = (command == 217 or string.sub(apiName, 1, 15) == "esc_parameters_")
 
   if (not isEsc or not ui.connState or ui.connState == 0) and type(queue.clear) == "function" then
     queue:clear()
@@ -639,11 +639,9 @@ function M.build(ctx)
   Controls.appendStaticSectionHeader(children, x, y, w, t(i18n, "section_test", "API Tester"))
 
   local cursorY = y + Controls.STATIC_SECTION_H
-  local rowH = 44
+  local rowH = (Controls and Controls.ROW_H) or 64
   local buttonW = 130
-  local buttonH = 36
   local comboW = 220
-  local comboH = 36
   local rightPad = 10
   local gap = 8
   local buttonX = x + w - buttonW - rightPad
@@ -654,13 +652,13 @@ function M.build(ctx)
   end
   if comboW < 120 then comboW = 120 end
   local labelW = comboX - x - 8
-  local buttonY = cursorY + math.floor((rowH - buttonH) / 2) - 2
-  local comboY = cursorY + math.floor((rowH - comboH) / 2) - 2
+  local ctrlY = (Controls and Controls.controlY and Controls.controlY(cursorY, rowH)) or (cursorY + math.floor((rowH - 32) / 2))
+  local labelY = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2))
 
   children[#children + 1] = {
     type = "label",
     x = x,
-    y = cursorY + 10,
+    y = labelY,
     w = labelW,
     text = t(i18n, "label_api", "API"),
     color = COLOR_THEME_PRIMARY1,
@@ -670,9 +668,8 @@ function M.build(ctx)
   children[#children + 1] = {
     type = "choice",
     x = comboX,
-    y = comboY,
+    y = ctrlY,
     w = comboW,
-    h = comboH,
     title = tostring(t(i18n, "label_api", "API")),
     values = (#ui.choiceLabels > 0) and ui.choiceLabels or { "" },
     get = function()
@@ -693,9 +690,8 @@ function M.build(ctx)
   children[#children + 1] = {
     type = "button",
     x = buttonX,
-    y = buttonY,
+    y = ctrlY,
     w = buttonW,
-    h = buttonH,
     text = "",
     color = COLOR_THEME_SECONDARY1,
     press = ui.handlers.test,
@@ -704,7 +700,7 @@ function M.build(ctx)
   children[#children + 1] = {
     type = "label",
     x = buttonX,
-    y = buttonY + 8,
+    y = Controls.labelY(ctrlY, Controls.CTRL_H),
     w = buttonW,
     text = t(i18n, "btn_test", "Test"),
     color = WHITE,
@@ -718,7 +714,7 @@ function M.build(ctx)
     y = cursorY + rowH,
     w = w,
     h = 1,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true,
   }
 
@@ -763,8 +759,15 @@ function M.build(ctx)
       message = message,
       progress = ui.progress
     })
-  elseif ui.errorMessage and ui.errorMessage ~= "" and AsyncLoadUi and type(AsyncLoadUi.showErrorDialog) == "function" then
-    AsyncLoadUi.showErrorDialog(ui, i18n, t)
+  elseif ui.errorMessage and ui.errorMessage ~= "" and AsyncLoadUi and type(AsyncLoadUi.appendErrorNotice) == "function" then
+    AsyncLoadUi.appendErrorNotice(children, {
+      x = x,
+      y = y,
+      w = w,
+      h = ctx.h,
+      overlay = LoadingOverlay,
+      requestRebuild = ctx and ctx.requestRebuild
+    }, ui, i18n, t)
   end
 end
 

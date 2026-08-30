@@ -30,7 +30,11 @@ function M.wakeup()
 
     if not UidApi then UidApi = loadModule("tasks/msp/api/uid.lua") end
     if not ModelPreferences then ModelPreferences = loadModule("lib/model_preferences.lua") end
-    if not UidApi then done = true; return end
+    if not UidApi then
+      if session then session.modelPreferencesResolved = true end
+      done = true
+      return
+    end
 
     mspState.queue:add({
       command = UidApi.command,
@@ -48,9 +52,11 @@ function M.wakeup()
             session.modelPreferencesFile = filePath
           end
         end
+        session.modelPreferencesResolved = true
         done = true
       end,
       errorHandler = function()
+        if session then session.modelPreferencesResolved = true end
         done = true
       end
     })
@@ -62,7 +68,12 @@ function M.isComplete() return done end
 function M.reset() 
   done = false; requestSent = false
   local root = _G and _G.rfsuite
-  if root and type(root.session) == "table" then root.session.mcu_id = nil root.session.modelPreferences = nil root.session.modelPreferencesFile = nil end
+  if root and type(root.session) == "table" then
+    root.session.mcu_id = nil
+    root.session.modelPreferences = nil
+    root.session.modelPreferencesFile = nil
+    root.session.modelPreferencesResolved = nil
+  end
   if root and type(root.diagnostics) == "table" then root.diagnostics.mcu_id = nil end
 end
 return M

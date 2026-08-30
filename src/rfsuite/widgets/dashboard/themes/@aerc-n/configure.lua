@@ -167,11 +167,11 @@ end
 function M.onSave(ctx)
     saveConfig(ctx.preferences)
     local ok, err = ctx.savePreferences()
-    if lvgl and lvgl.alert and not ok then
+    if lvgl and lvgl.message and not ok then
         local i18n = ctx.i18n
         local title = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_title") or "Error"
         local message = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_message") or "Save failed"
-        lvgl.alert({ title = title, message = message .. ": " .. tostring(err or "io") })
+        lvgl.message({ title = title, message = message .. ": " .. tostring(err or "io") })
     end
     return true
 end

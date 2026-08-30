@@ -304,6 +304,7 @@ Sensors.aliases = {
   rpm = "Hspd",
   link = "RQly",
   fuel = "Bat%",
+  smartfuel = "SmFt",
   smartconsumption = "SmCp",
   consumption = "Capa",
   current = "Curr",
@@ -374,7 +375,14 @@ function Sensors.isSimulator()
 end
 
 -- Resolve alias to 4-char sensor name
-function Sensors.resolveName(source)
+-- Memoised: the answer depends only on the source string and on Sensors.map / Sensors.aliases,
+-- both of which are written once as literals and only read afterwards --
+-- and getValue resolves a name on every read -- about twenty-five of them per background pass of
+-- the dashboard widget. `false` records a name that resolves to nothing, so a miss is answered
+-- from the table instead of running the pattern again.
+local resolvedNames = {}
+
+local function resolveNameUncached(source)
   if type(source) ~= "string" then return nil end
   local baseSource, suffix = string.match(source, "^(.-)([+-])$")
   if baseSource and suffix then
@@ -392,6 +400,18 @@ function Sensors.resolveName(source)
     return source
   end
   return nil
+end
+
+function Sensors.resolveName(source)
+  if type(source) ~= "string" then return nil end
+  local memo = resolvedNames[source]
+  if memo ~= nil then
+    if memo == false then return nil end
+    return memo
+  end
+  local resolved = resolveNameUncached(source)
+  resolvedNames[source] = (resolved == nil) and false or resolved
+  return resolved
 end
 
 -- Get sensor metadata by 4-char name or alias
@@ -427,7 +447,7 @@ function Sensors.getValue(source)
       local simValue = readSimSensorFile(resolved, source)
       if type(simValue) == "number" then
         local normalized = normalizeSimValue(resolved, simValue)
-        debugLog("sim-use:" .. source, "using sim value " .. resolved .. " = " .. tostring(normalized))
+        if debugEnabled then debugLog("sim-use:" .. source, "using sim value " .. resolved .. " = " .. tostring(normalized)) end
         return normalized
       end
     end
@@ -435,7 +455,7 @@ function Sensors.getValue(source)
     local simDirect = readSimSensorFile(source, source)
     if type(simDirect) == "number" then
       local normalized = normalizeSimValue(source, simDirect)
-      debugLog("sim-direct-use:" .. source, "using sim direct value " .. source .. " = " .. tostring(normalized))
+      if debugEnabled then debugLog("sim-direct-use:" .. source, "using sim direct value " .. source .. " = " .. tostring(normalized)) end
       return normalized
     end
 
@@ -445,7 +465,7 @@ function Sensors.getValue(source)
         local simPathValue = readSimSensorFile(paths[i], source)
         if type(simPathValue) == "number" then
           local normalized = normalizeSimValue(paths[i], simPathValue)
-          debugLog("sim-search-hit:" .. source, "using sim search value " .. paths[i] .. " = " .. tostring(normalized))
+          if debugEnabled then debugLog("sim-search-hit:" .. source, "using sim search value " .. paths[i] .. " = " .. tostring(normalized)) end
           return normalized
         end
       end
@@ -459,7 +479,7 @@ function Sensors.getValue(source)
   if activePath then
     local val = readTelemetryValue(activePath)
     if type(val) == "number" then
-      debugLog("telemetry-hit-cached:" .. source, "hit " .. activePath .. " = " .. tostring(val))
+      if debugEnabled then debugLog("telemetry-hit-cached:" .. source, "hit " .. activePath .. " = " .. tostring(val)) end
       return val
     end
   end
@@ -477,7 +497,7 @@ function Sensors.getValue(source)
       if type(val) == "number" then
         Sensors.active_paths = Sensors.active_paths or {}
         Sensors.active_paths[source] = paths[i]
-        debugLog("telemetry-hit:" .. source, "hit " .. paths[i] .. " = " .. tostring(val))
+        if debugEnabled then debugLog("telemetry-hit:" .. source, "hit " .. paths[i] .. " = " .. tostring(val)) end
         return val
       end
     end
@@ -488,7 +508,7 @@ function Sensors.getValue(source)
     if type(value) == "number" then
       Sensors.active_paths = Sensors.active_paths or {}
       Sensors.active_paths[source] = resolved
-      debugLog("telemetry-hit:" .. source, "telemetry hit " .. resolved .. " = " .. tostring(value))
+      if debugEnabled then debugLog("telemetry-hit:" .. source, "telemetry hit " .. resolved .. " = " .. tostring(value)) end
       return value
     end
   end
@@ -497,7 +517,7 @@ function Sensors.getValue(source)
   if type(direct) == "number" then
     Sensors.active_paths = Sensors.active_paths or {}
     Sensors.active_paths[source] = source
-    debugLog("telemetry-direct-hit:" .. source, "telemetry direct hit " .. source .. " = " .. tostring(direct))
+    if debugEnabled then debugLog("telemetry-direct-hit:" .. source, "telemetry direct hit " .. source .. " = " .. tostring(direct)) end
     return direct
   end
 

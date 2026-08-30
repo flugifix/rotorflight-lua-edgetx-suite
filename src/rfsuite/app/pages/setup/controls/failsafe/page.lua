@@ -329,7 +329,7 @@ function M.build(ctx)
   local i18n = ctx.i18n
 
   if ui.loading or ui.saving then
-    local titleText = ui.loading and pageText(i18n, "loading", "Loading") or pageText(i18n, "saving", "Saving")
+    local titleText = ui.loading and "@i18n(app.loading)@" or "@i18n(app.saving)@"
     local msgText = ui.loading and pageText(i18n, "loading", "Loading failsafe configuration...") or pageText(i18n, "saving", "Saving failsafe configuration...")
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
@@ -349,22 +349,21 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
   end
 
   local rightMargin = 10
-  local leftMargin = 15
-  local gap = 10
-  local modeW = 160
-  local valueW = 130
-  local rowH = 62
-
+  local leftMargin = 10
+  local gap = 8
+  local modeW = math.floor(w * 0.32)
+  local valueW = math.floor(w * 0.24)
+  local rowH = (Controls and Controls.ROW_H) or 40
   local valueX = w - rightMargin - valueW
   local modeX = valueX - gap - modeW
   local titleW = modeX - leftMargin - gap
 
-  local labelYOffset = math.floor((rowH - 20) / 2)
-  local comboYOffset = math.floor((rowH - 36) / 2) + (-2)
+  local labelYOffset = (Controls and Controls.labelY and Controls.labelY(0, rowH)) or math.floor((rowH - 21) / 2)
+  local controlYOffset = (Controls and Controls.controlY and Controls.controlY(0, rowH)) or math.floor((rowH - 32) / 2)
 
   local modeOptions = {
     { label = pageText(i18n, "mode_auto", "Auto"), value = 0 },
@@ -400,8 +399,8 @@ function M.build(ctx)
 
     children[#children + 1] = {
       type  = "choice",
-      x = x + modeX, y = cursorY + comboYOffset,
-      w = modeW, h = 36,
+      x = x + modeX, y = cursorY + controlYOffset,
+      w = modeW,
       title = chName,
       values = values,
       get = function()
@@ -432,8 +431,8 @@ function M.build(ctx)
     local isEnabled = (ch.mode == 2) -- Active only when Set (2)
     children[#children + 1] = {
       type = "numberEdit",
-      x = x + valueX, y = cursorY + comboYOffset,
-      w = valueW, h = 36,
+      x = x + valueX, y = cursorY + controlYOffset,
+      w = valueW,
       min = math.floor(875 / 5),
       max = math.ceil(2125 / 5),
       active = function()
@@ -465,12 +464,12 @@ function M.build(ctx)
     -- 4. Separator Line
     children[#children + 1] = {
       type   = "rectangle",
-      x = x, y = cursorY + rowH - 1,
+      x = x, y = cursorY + rowH,
       w = w, h = 1,
-      color  = GREY_DEFAULT, filled = true
+      color  = COLOR_THEME_SECONDARY2, filled = true
     }
 
-    cursorY = cursorY + rowH
+    cursorY = cursorY + rowH + 1
   end
 
   if ui.dirty then
@@ -487,8 +486,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueFailsafeWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

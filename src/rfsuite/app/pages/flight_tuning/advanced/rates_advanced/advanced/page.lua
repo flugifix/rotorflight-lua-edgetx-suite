@@ -15,6 +15,7 @@ local MspRuntime = nil
 local RcTuningApi = nil
 local LoadingOverlay = nil
 local Sensors = nil
+local Profile = nil
 local ApiVersion = nil
 local t = nil
 
@@ -49,28 +50,13 @@ local function ensureDeps()
   if not RcTuningApi then RcTuningApi = loadModule("tasks/msp/api/rc_tuning.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not Sensors then Sensors = loadModule("lib/sensors.lua") end
+  if not Profile then Profile = loadModule("lib/profile.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
   if not t then t = Common and Common.pageT("flight_tuning_rates_advanced_advanced") or nil end
   
   if Common then
     if not ui.runtimeBase then
-      ui.runtimeBase = Common.createProfileAwareRuntime({
-        profileGetter = function()
-          local sensorProfile = nil
-          if Sensors and type(Sensors.getValue) == "function" then
-            sensorProfile = tonumber(Sensors.getValue("rate_profile"))
-          end
-          if sensorProfile and sensorProfile > 0 then
-            return math.floor(sensorProfile)
-          end
-          local session = getSession()
-          local activeProfile = session and session.activeRateProfile
-          if activeProfile ~= nil then
-            return math.floor(tonumber(activeProfile) or 0) + 1
-          end
-          return 1
-        end
-      })
+      ui.runtimeBase = Common.createProfileAwareRuntime({ profileType = "rate" })
     end
     if type(ui.runtime) ~= "table" then
       ui.runtime = newRuntime()
@@ -210,18 +196,7 @@ local function queueRcWrite()
 end
 
 local function getLiveProfile()
-  if Sensors and type(Sensors.getValue) == "function" then
-    local raw = tonumber(Sensors.getValue("rate_profile"))
-    if raw and raw > 0 then
-      return math.floor(raw)
-    end
-  end
-  local session = getSession()
-  local activeProfile = tonumber(session and session.activeRateProfile)
-  if activeProfile ~= nil then
-    return math.floor(activeProfile) + 1
-  end
-  return 1
+  return Profile and Profile.getActiveRateProfile(1) or 1
 end
 
 local function getBaseTitle()
@@ -328,35 +303,35 @@ local function getLayoutProfile(w, h)
   local profile = {
     headerFont = SMLSIZE,
     headerTextY = 0,
-    headerLineY = 36,
-    headerH = 40,
+    headerLineY = 24,
+    headerH = 30,
     rowFont = SMLSIZE,
-    rowH = 44,
-    rowLabelY = 8,
-    cellTop = 4,
+    rowH = 42,
+    rowLabelY = 10,
+    cellTop = 5,
     afterHeaderGap = 6
   }
 
   if w >= 700 then
     profile.headerFont = SMLSIZE
     profile.headerTextY = 2
-    profile.headerLineY = 40
-    profile.headerH = 44
+    profile.headerLineY = 32
+    profile.headerH = 38
     profile.rowFont = SMLSIZE
-    profile.rowH = 46
+    profile.rowH = 50
     profile.rowLabelY = 10
-    profile.cellTop = 6
+    profile.cellTop = 3
     profile.afterHeaderGap = 6
   elseif w < 560 then
     profile.headerFont = SMLSIZE
     profile.headerTextY = 0
-    profile.headerLineY = 24
-    profile.headerH = 30
+    profile.headerLineY = 22
+    profile.headerH = 26
     profile.rowFont = SMLSIZE
     profile.rowH = 40
-    profile.rowLabelY = 10
+    profile.rowLabelY = 9
     profile.cellTop = 4
-    profile.afterHeaderGap = 6
+    profile.afterHeaderGap = 4
   end
 
   return profile
@@ -394,7 +369,7 @@ local function drawColumnHeader(children, x, y, w, i18n, layout, cols)
     y = y + headerLineY,
     w = w,
     h = 1,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = true
   }
 
@@ -569,7 +544,7 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, displayTitle)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
   end
 
   local rowsConfig = {

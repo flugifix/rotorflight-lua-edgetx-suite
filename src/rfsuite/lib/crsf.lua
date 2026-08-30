@@ -10,6 +10,15 @@ end
 local queues = {}
 local MAX_QUEUE_SIZE = 10
 
+-- Frame types some consumer has asked for, learned from popFrame itself.
+-- Draining the system queue means taking frames of every type on the link, and only a
+-- few of them have a consumer here: MSP responses, the custom telemetry frame, and --
+-- while that diagnostics page is open -- ELRS device info and parameter entries.
+-- Everything else was filed into a queue of ten that nothing ever pops, so link
+-- statistics, battery, attitude, GPS and RPM frames each left ten stale payload tables
+-- behind for as long as the Lua state lives -- in a widget, that is until power-off.
+local wanted = {}
+
 local function log(msg, level)
   local rf = _G.rfsuite
   if rf and rf.Log and type(rf.Log.emit) == "function" then
@@ -19,6 +28,8 @@ end
 
 function M.popFrame(frameType)
   if type(crossfireTelemetryPop) ~= "function" then return nil end
+
+  if frameType ~= nil then wanted[frameType] = true end
 
   -- 1. Check local buffer for this type
   if queues[frameType] and #queues[frameType] > 0 then
@@ -34,8 +45,8 @@ function M.popFrame(frameType)
 
     if cmd == frameType then
       return data
-    else
-      -- Store for other consumers
+    elseif wanted[cmd] then
+      -- Store for another consumer that has asked for this type
       queues[cmd] = queues[cmd] or {}
       if #queues[cmd] < MAX_QUEUE_SIZE then
         table.insert(queues[cmd], data)

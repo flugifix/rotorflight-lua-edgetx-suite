@@ -15,6 +15,7 @@ local MspRuntime = nil
 local EscParametersScorpionApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
+local ScorpInit = nil
 local t = nil
 
 local ui = {
@@ -45,6 +46,9 @@ local ui = {
   },
   currentSection = 1,
   parsedCache = nil,
+  escModel = nil,
+  escVersion = nil,
+  escFirmware = nil,
   runtime = {
     readPending = false,
     requestRebuild = nil,
@@ -67,6 +71,7 @@ local function ensureDeps()
   if not EscParametersScorpionApi then EscParametersScorpionApi = loadModule("tasks/msp/api/esc_parameters_scorpion.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  if not ScorpInit then ScorpInit = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/scorp/init.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -105,10 +110,15 @@ local function logMsg(msg, level)
   end
 end
 
-local function queueScorpionReadActual(queue)
+-- `retryOnError` is set only for the read that FOLLOWS a write. The firmware invalidates
+-- its parameter cache on a successful commit and answers both the read and the next write
+-- with an error until a fresh readback from the ESC has been cached, so that first refusal
+-- is a wait rather than a failure. The queue already knows how to wait for one.
+local function queueScorpionReadActual(queue, retryOnError)
   queue:add({
     command = EscParametersScorpionApi.command,
     timeout = 15,
+    retryOnErrorReply = retryOnError or nil,
     simulatorResponse = EscParametersScorpionApi.simulatorResponse,
     processReply = function(self, buf)
       local parsed = EscParametersScorpionApi.parse(buf)
@@ -121,11 +131,22 @@ local function queueScorpionReadActual(queue)
 
         ui.parsedCache = parsed
 
+        local escModel = ScorpInit and type(ScorpInit.getEscModel) == "function" and ScorpInit.getEscModel(buf) or nil
+        local escVersion = ScorpInit and type(ScorpInit.getEscVersion) == "function" and ScorpInit.getEscVersion(buf) or nil
+        local escFirmware = ScorpInit and type(ScorpInit.getEscFirmware) == "function" and ScorpInit.getEscFirmware(buf) or nil
+
+        ui.escModel = escModel
+        ui.escVersion = escVersion
+        ui.escFirmware = escFirmware
+
         local session = getSession()
         if session then
           session.setup_esc_motors_esc_tools_scorp = {
             config = {},
-            parsedCache = ui.parsedCache
+            parsedCache = ui.parsedCache,
+            escModel = escModel,
+            escVersion = escVersion,
+            escFirmware = escFirmware
           }
           for k, v in pairs(ui.config) do
             session.setup_esc_motors_esc_tools_scorp.config[k] = v
@@ -151,7 +172,7 @@ local function queueScorpionReadActual(queue)
   })
 end
 
-local function queueScorpionRead(isAutoReload)
+local function queueScorpionRead(isAutoReload, retryOnError)
   if not MspRuntime or not EscParametersScorpionApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -173,100 +194,8 @@ local function queueScorpionRead(isAutoReload)
     end
   end
 
-  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
-  if FwdProgApi then
-    if not ui.connState or ui.connState == 0 then
-      ui.connState = 1
-      queue:add({
-        command = FwdProgApi.writeCommand,
-        payload = FwdProgApi.buildWritePayload({ target = 100 }),
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function()
-          if not ui.runtime then return end
-          ui.connState = 2
-          ui.connTimer = nowSeconds()
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end,
-        errorHandler = function()
-          if not ui.runtime then return end
-          ui.connState = 0
-          ui.loading = false
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end
-      })
-    elseif ui.connState == 3 then
-      queue:add({
-        command = FwdProgApi.writeCommand,
-        payload = FwdProgApi.buildWritePayload({ target = ui.escTarget or 0 }),
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function()
-          if not ui.runtime then return end
-          ui.connState = 4
-          ui.connTimer = nowSeconds()
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end,
-        errorHandler = function()
-          if not ui.runtime then return end
-          ui.connState = 0
-          ui.loading = false
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end
-      })
-    elseif ui.connState == 5 then
-      queueScorpionReadActual(queue)
-    else
-      ui.runtime.readPending = false
-    end
-  else
-    queueScorpionReadActual(queue)
-  end
-
+  queueScorpionReadActual(queue, retryOnError)
   return true, nil
-end
-
-local function queuePostSaveReset(target, nextState)
-  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
-  if not FwdProgApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
-    return
-  end
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue then return end
-
-  queue:add({
-    command = FwdProgApi.writeCommand,
-    payload = FwdProgApi.buildWritePayload({ target = target }),
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      ui.connState = nextState
-      ui.connTimer = nowSeconds()
-      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
-    end,
-    errorHandler = function()
-      ui.connState = 5
-      ui.saving = false
-      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
-    end
-  })
 end
 
 local function queueScorpionWrite(requestRebuild)
@@ -280,6 +209,13 @@ local function queueScorpionWrite(requestRebuild)
     return false, "msp_queue_unavailable"
   end
 
+  -- A Scorpion write is the whole 84-byte block, not the changed fields, so it can only be
+  -- built from a block that was read. Without one, every field the page does not itself
+  -- carry would be packed as zero and written to the ESC.
+  if not ui.parsedCache then
+    return false, "esc_not_read"
+  end
+
   local writeData = {}
   if ui.parsedCache then
     for k, v in pairs(ui.parsedCache) do
@@ -291,6 +227,7 @@ local function queueScorpionWrite(requestRebuild)
     writeData[k] = v
   end
 
+  writeData.esc_signature = writeData.esc_signature or (EscParametersScorpionApi and EscParametersScorpionApi.mspSignature) or 0x53
   writeData.esc_command = 0 -- Required by Scorpion ESC write specification
 
   ui.saving = true
@@ -305,11 +242,16 @@ local function queueScorpionWrite(requestRebuild)
     isWrite = true,
     processReply = function(self, buf)
       ui.dirty = false
-      ui.connState = 6
-      ui.connTimer = nowSeconds()
+      ui.saving = false
+      ui.progress = 100
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
+      -- Read back what was just written. Two reasons, and the second is the one that is
+      -- easy to miss: the values on screen are now unconfirmed, AND the flight
+      -- controller cannot accept another write until it has re-cached the parameters
+      -- from the ESC. This read is what makes it do that.
+      queueScorpionRead(true, true)
     end,
     errorHandler = function()
       ui.saving = false
@@ -336,6 +278,9 @@ local function loadFromSession()
       end
     end
     ui.parsedCache = cached.parsedCache
+    ui.escModel = cached.escModel
+    ui.escVersion = cached.escVersion
+    ui.escFirmware = cached.escFirmware
     return true
   end
   return false
@@ -420,22 +365,16 @@ local function ensureLoaded()
   ui.dirty = false
   ui.runtime.lastSessionSignature = buildSessionSignature()
   
-  local warningTitle = pageText(nil, "safety_warning_title", "Safety Warning")
-  local warningMsg = pageText(nil, "remove_blades_warning", "Please remove main and tail blades before configuring the ESC!")
-
-  if lvgl then
-    if type(lvgl.message) == "function" then
-      pcall(lvgl.message, {
-        title = warningTitle,
-        message = warningMsg
-      })
-    elseif type(lvgl.alert) == "function" then
-      pcall(lvgl.alert, {
-        title = warningTitle,
-        message = warningMsg
-      })
-    end
-  end
+  -- The safety warning is raised from HERE, which is inside the page build. A native
+  -- lvgl.message raised there cannot be closed by a hardware key: Layer::push gives the
+  -- dialog an empty LVGL group, but the same build goes on creating this page's objects
+  -- afterwards and they land in it, so EXIT is delivered to a widget behind the modal. It
+  -- is now the tool's own notice box, drawn into the page's own child list and dismissed
+  -- by its own button -- which also keeps the tool's run loop reachable while it stands.
+  ui.notice = {
+    title = pageText(nil, "safety_warning_title", "Safety Warning"),
+    message = pageText(nil, "remove_blades_warning", "Please remove main and tail blades before configuring the ESC!")
+  }
   queueScorpionRead(false)
 end
 
@@ -464,35 +403,6 @@ function M.wakeup(ctx)
     end
   end
 
-  -- 4way target switch delay timing and post-save cycle
-  if ui.connState == 2 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 2.5 then
-      ui.connState = 3
-      queueScorpionRead(false)
-    end
-  elseif ui.connState == 4 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 5.0 then
-      ui.connState = 5
-      queueScorpionRead(false)
-    end
-  elseif ui.connState == 6 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 1.0 then
-      ui.connState = 7
-      queuePostSaveReset(100, 8)
-    end
-  elseif ui.connState == 8 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 1.0 then
-      ui.connState = 9
-      queuePostSaveReset(ui.escTarget or 0, 10)
-    end
-  elseif ui.connState == 10 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 0.5 then
-      ui.connState = 5
-      ui.saving = false
-      queueScorpionRead(true)
-    end
-  end
-
   if ui.motorConfigRetryPending and ui.motorConfigRetryTimer then
     if nowSeconds() - ui.motorConfigRetryTimer >= 0.5 then
       ui.motorConfigRetryPending = false
@@ -513,8 +423,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueScorpionWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })
@@ -526,8 +436,6 @@ end
 
 function M.onReload(ctx)
   ui.dirty = false
-  ui.connState = 0
-  ui.connTimer = nil
   queueScorpionRead(false)
   return true
 end
@@ -551,6 +459,21 @@ function M.build(ctx)
     ui.runtime.syncHeaderTitle(title, M.getHeaderActions())
   end
 
+  if ui.notice and LoadingOverlay and type(LoadingOverlay.appendNotice) == "function" then
+    LoadingOverlay.appendNotice(children, {
+      x = x, y = y, w = w, h = h,
+      title = ui.notice.title,
+      message = ui.notice.message,
+      press = function()
+        ui.notice = nil
+        if type(ui.runtime.requestRebuild) == "function" then
+          ui.runtime.requestRebuild()
+        end
+      end
+    })
+    return
+  end
+
   if ui.loading or ui.saving then
     local titleText = ui.loading and pageText(i18n, "loading", "Loading") or pageText(i18n, "saving", "Saving")
     local msgText = ui.loading and pageText(i18n, "loading_data", "Loading ESC parameters...") or pageText(i18n, "saving_data", "Saving ESC parameters...")
@@ -567,7 +490,15 @@ function M.build(ctx)
 
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
+    local headerTitle = title
+    if ui.escModel and ui.escModel ~= "" and ui.escModel ~= title then
+      if string.find(string.lower(ui.escModel), string.lower(title), 1, true) then
+        headerTitle = ui.escModel
+      else
+        headerTitle = title .. " - " .. ui.escModel
+      end
+    end
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
@@ -608,9 +539,6 @@ function M.build(ctx)
 
   local function markDirty()
     ui.dirty = true
-    if type(ui.runtime.requestRebuild) == "function" then
-      ui.runtime.requestRebuild()
-    end
   end
 
   if ui.currentSection == 1 then
@@ -802,36 +730,20 @@ function M.build(ctx)
     cursorY = cursorY + rowH
   end
 
-  if ui.dirty then
-    children[#children + 1] = {
-      type = "label",
-      x = x + 16, y = cursorY + 10,
-      text = pageText(i18n, "unsaved_changes", "Unsaved changes"),
-      color = COLOR_THEME_SECONDARY1,
-      font = SMLSIZE
-    }
-  end
+  -- The label is built once and reads the flag itself, so a change that sets the flag
+  -- does not have to replace the scene to show it. The text is resolved here rather
+  -- than inside the closure: the closure runs on every refresh, the lookup need not.
+  local unsavedText = pageText(i18n, "unsaved_changes", "Unsaved changes")
+  children[#children + 1] = {
+    type = "label",
+    x = x + 16, y = cursorY + 10,
+    text = function() return ui.dirty and unsavedText or "" end,
+    color = COLOR_THEME_SECONDARY1,
+    font = SMLSIZE
+  }
 end
 
 function M.onClose()
-  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
-  if FwdProgApi and MspRuntime and type(MspRuntime.getState) == "function" then
-    local mspState = MspRuntime.getState()
-    local queue = mspState and mspState.queue
-    if queue then
-      queue:add({
-        command = FwdProgApi.writeCommand,
-        payload = FwdProgApi.buildWritePayload({ target = 100 }),
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function() end,
-        errorHandler = function() end
-      })
-    end
-  end
-
-  ui.connState = nil
-  ui.connTimer = nil
   ui.escTarget = nil
   ui.motorCount = nil
   ui.motorConfigRetryPending = nil
@@ -848,6 +760,7 @@ function M.onClose()
   EscParametersScorpionApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
+  ScorpInit = nil
   t = nil
 end
 

@@ -15,6 +15,12 @@ local Common = nil
 --   type "bool"   → stored/restored as boolean, default must be true/false
 --   type "number" → stored/restored via tonumber(), default must be a number
 
+-- The schema is what is loaded, defaulted and SAVED. A control the page draws whose key is not
+-- in here is read from nothing, written to nothing and lost when the page closes -- which is
+-- what happened to `save_confirm`: it is in SAFETY_ITEMS below, so it is drawn and it can be
+-- toggled, and neither `copyFromPrefs` nor `onSave` ever touched it, because both walk this
+-- table. The comment those two carry -- "no manual field list" -- is true of them and was not
+-- true of the page, because the page had a second list.
 local CONFIG_SCHEMA = {
   { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
@@ -35,6 +41,7 @@ end
 
 local ui = {
   loaded = false,
+  dirty = false,
   sections = {
     safety      = true,
     development = false,
@@ -120,9 +127,9 @@ end
 -- Signature: (cursorY, children, x, w, i18n, requestRebuild) -> newCursorY
 
 local SAFETY_ITEMS = {
-  { key = "save_confirm",                 labelKey = "save_confirm",                 fallback = "Bestätigen beim Speichern" },
-  { key = "save_armed_warning",           labelKey = "save_armed_warning",           fallback = "Warnung beim Speichern (armed)" },
-  { key = "reload_confirm",               labelKey = "reload_confirm",               fallback = "Bestätigen beim Neuladen" },
+  { key = "save_confirm",                 labelKey = "save_confirm",                 fallback = "Confirm on Save" },
+  { key = "save_armed_warning",           labelKey = "save_armed_warning",           fallback = "Show Disarm-to-Save Warning" },
+  { key = "reload_confirm",               labelKey = "reload_confirm",               fallback = "Confirm on Reload" },
 }
 
 local function buildSafety(cursorY, children, x, w, i18n)
@@ -139,7 +146,7 @@ end
 
 local function buildDevelopment(cursorY, children, x, w, i18n)
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "developer_tools", "Entwickler Tools"),
+    t(i18n, "developer_tools", "Developer Tools"),
     ui.runtime.getBoolGetter("developer_tools"),
     ui.runtime.getBoolSetter("developer_tools")
   )
@@ -150,8 +157,13 @@ end
 -- Add new sections here — one entry, one builder function above, done.
 
 local SECTIONS = {
+<<<<<<< HEAD
   { key = "safety",      titleKey = "section_safety",      titleFallback = "Sicherheit & Prompts", build = buildSafety      },
   { key = "development", titleKey = "section_development", titleFallback = "Entwicklung",         build = buildDevelopment },
+=======
+  { key = "safety",      titleKey = "section_safety",      titleFallback = "Safety & Prompts", build = buildSafety      },
+  { key = "development", titleKey = "section_development", titleFallback = "Development",      build = buildDevelopment },
+>>>>>>> upstream/master
 }
 
 -- ─── Module API ──────────────────────────────────────────────────────────────
@@ -164,6 +176,7 @@ end
 function M.onReload(ctx)
   ensureDeps()
   copyFromPrefs(ctx.preferences)
+  ui.dirty = false
 end
 
 function M.onSave(ctx)
@@ -177,15 +190,16 @@ function M.onSave(ctx)
 
   local ok, err = ctx.savePreferences()
   if ok then
+    ui.dirty = false
     if ctx.menu and ctx.menu.setCondition then
       ctx.menu.setCondition("developerTools", ui.config.developer_tools == true)
     end
-    if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "saved_title", "Gespeichert"), message = t(ctx.i18n, "saved_message", "Einstellungen gespeichert") })
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
     end
   else
-    if lvgl and lvgl.alert then
-      lvgl.alert({ title = t(ctx.i18n, "save_error_title", "Fehler"), message = t(ctx.i18n, "save_error_message", "Speichern fehlgeschlagen") .. ": " .. tostring(err or "io") })
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
     end
   end
 end
@@ -218,9 +232,7 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  Common.resetPageState(ui, {
-    tablesToWipe = { "sections" }
-  })
+  Common.resetPageState(ui)
   Controls = nil
   Common = nil
   t = nil

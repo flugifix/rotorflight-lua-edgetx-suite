@@ -6,9 +6,6 @@ local APPID_SMARTCONSUMPTION = 0x5FE0
 local SENSOR_NAME_SMARTFUEL = "SmFt"
 local SENSOR_NAME_SMARTCONSUMPTION = "SmCp"
 local FORCE_REFRESH_INTERVAL = 2.0
-local RESERVE_MIN = 15
-local RESERVE_MAX = 60
-local RESERVE_DEFAULT = 35
 
 local MIRROR_FUEL_QUERIES = {
   { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x5007 },
@@ -26,6 +23,7 @@ local Sensors = nil
 local MspRuntime = nil
 local Log = nil
 local ApiVersion = nil
+local Reserve = nil
 
 local initialized = false
 local lastWake = 0
@@ -172,39 +170,13 @@ local function readFirmwareFuelValue()
   return nil, nil
 end
 
-local function applyReservePercent(value, warningPercent)
-  if type(value) ~= "number" then return nil end
-  local fuel = clamp(value, 0, 100)
-  local warning = clamp(tonumber(warningPercent) or 0, 0, 99)
-  if warning > 0 then
-    fuel = (fuel - warning) * 100 / (100 - warning)
-  end
-  return clamp(fuel, 0, 100)
-end
-
-local function sanitizeReservePercent(value)
-  local reserve = tonumber(value)
-  if reserve == nil then return RESERVE_DEFAULT end
-  reserve = math.floor(reserve + 0.5)
-  if reserve < RESERVE_MIN or reserve > RESERVE_MAX then
-    return RESERVE_DEFAULT
-  end
-  return reserve
-end
-
 local function resolveReservePercent(session, batteryConfig)
-  local batteryPrefs = session and session.modelPreferences and session.modelPreferences.battery or nil
-  local reserve = (batteryConfig and batteryConfig.consumptionWarningPercentage)
-  if reserve == nil then
-    reserve = batteryPrefs and batteryPrefs.consumption_warning_percentage
-  end
-  reserve = sanitizeReservePercent(reserve)
-
-  if batteryConfig then
-    batteryConfig.consumptionWarningPercentage = reserve
-  end
-
-  return reserve
+  -- Fix for issue #52: do not write back into batteryConfig here. The session's
+  -- battery_config must keep what the flight controller reported so that
+  -- loadFromSession on the Battery page can display the board's actual value
+  -- rather than the substituted preference. SmartFuel only needs the resolved
+  -- number locally and is not authoritative for the page's display.
+  return Reserve.resolve(session, batteryConfig)
 end
 
 local function scaleField(raw, fallback, minValue, maxValue, scale)
@@ -305,7 +277,7 @@ local function getActivePackCapacity(session, batteryConfig)
 end
 
 local function getUsableCapacity(packCapacity, reserve)
-  local safeReserve = sanitizeReservePercent(reserve)
+  local safeReserve = Reserve.sanitize(reserve)
   local usable = packCapacity * (1 - safeReserve / 100)
   if usable < 10 then usable = packCapacity end
   return usable, safeReserve
@@ -317,7 +289,7 @@ local function fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, rese
 
   local minV = (tonumber(batteryConfig and batteryConfig.vbatmincellvoltage) or 330) / 100
   local fullV = (tonumber(batteryConfig and batteryConfig.vbatfullcellvoltage) or 410) / 100
-  local safeReserve = sanitizeReservePercent(reserve)
+  local safeReserve = Reserve.sanitize(reserve)
 
   local voltagePerCell = voltage / cellCount
   if voltagePerCell >= fullV then return 100 end
@@ -331,10 +303,7 @@ local function fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, rese
   index = clamp(index, 1, #dischargeCurveTable)
 
   local rawPercent = dischargeCurveTable[index]
-  local usableSpan = 100 - safeReserve
-  if usableSpan <= 0 then return rawPercent end
-  if rawPercent <= safeReserve then return 0 end
-  return ((rawPercent - safeReserve) / usableSpan) * 100
+  return Reserve.applyPercent(rawPercent, safeReserve)
 end
 
 local function isArmed()
@@ -476,9 +445,11 @@ function Smart.wakeup()
     MspRuntime = loadModule("tasks/msp/runtime.lua")
     Log = loadModule("lib/log.lua")
     ApiVersion = loadModule("lib/api_version.lua")
+    Reserve = loadModule("lib/smartfuel_reserve.lua")
     initialized = true
   end
   if not Sensors then return end
+  if not Reserve then return end
 
   local session = getSession()
   if type(session) ~= "table" or session.isConnected ~= true then
@@ -557,7 +528,7 @@ function Smart.wakeup()
   if firmwareActive then
     local rawFuel, rawFuelSource = readFirmwareFuelValue()
     local rawConsumption = readFirstSourceValue(MIRROR_CONSUMPTION_QUERIES)
-    fuelPercent = applyReservePercent(rawFuel, reserve)
+    fuelPercent = Reserve.applyPercent(rawFuel, reserve)
     smartConsumption = rawConsumption
     if type(fuelPercent) ~= "number" then
       if (now - (state.lastFirmwareFuelMissingLog or 0)) >= 5.0 then

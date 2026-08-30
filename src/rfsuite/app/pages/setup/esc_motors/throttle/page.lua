@@ -10,6 +10,7 @@ local function loadModule(path)
 end
 
 local Controls = nil
+local SavePipeline = nil
 local Common = nil
 local MspRuntime = nil
 local MotorConfigApi = nil
@@ -22,7 +23,6 @@ local ui = {
   loaded = false,
   dirty = false,
   loading = false,
-  saving = false,
   progress = 0,
   baseTitle = nil,
   config = {
@@ -157,14 +157,9 @@ local function queueThrottleRead(isAutoReload)
 end
 
 local function queueThrottleWrite(requestRebuild)
-  if not MspRuntime or not MotorConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if not SavePipeline or not MotorConfigApi then
     return false, "msp_runtime_unavailable"
-  end
-
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" then
-    return false, "msp_queue_unavailable"
   end
 
   local writeData = {}
@@ -181,91 +176,32 @@ local function queueThrottleWrite(requestRebuild)
   writeData.maxthrottle = ui.config.maxthrottle
   writeData.use_unsynced_pwm = ui.config.use_unsynced_pwm
 
-  local payload = MotorConfigApi.buildWritePayload(writeData)
-
-  ui.saving = true
-  ui.progress = 0
-  if type(requestRebuild) == "function" then
-    requestRebuild()
-  end
-
-  queue:add({
-    command = MotorConfigApi.writeCommand,
-    payload = payload,
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      -- Step 2: Write EEPROM
-      local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
-      if eepromApi then
-        queue:add({
-          command = eepromApi.writeCommand,
-          payload = {},
-          isWrite = true,
-          simulatorResponse = {},
-          processReply = function()
-            -- Step 3: Reboot FC
-            local rebootApi = loadModule("tasks/msp/api/reboot.lua")
-            if rebootApi then
-              queue:add({
-                command = rebootApi.writeCommand,
-                payload = rebootApi.buildWritePayload({ rebootMode = 0 }),
-                isWrite = true,
-                simulatorResponse = {},
-                processReply = function()
-                  ui.dirty = false
-                  ui.saving = false
-                  local session = getSession()
-                  if session then
-                    session.setup_esc_motors_throttle = nil
-                  end
-                  if type(requestRebuild) == "function" then
-                    requestRebuild()
-                  end
-                end,
-                errorHandler = function()
-                  ui.saving = false
-                  if type(requestRebuild) == "function" then
-                    requestRebuild()
-                  end
-                end
-              })
-            else
-              ui.dirty = false
-              ui.saving = false
-              local session = getSession()
-              if session then
-                session.setup_esc_motors_throttle = nil
-              end
-              if type(requestRebuild) == "function" then
-                requestRebuild()
-              end
-            end
-          end,
-          errorHandler = function()
-            ui.saving = false
-            if type(requestRebuild) == "function" then
-              requestRebuild()
-            end
-          end
-        })
-      else
-        ui.dirty = false
-        ui.saving = false
-        if type(requestRebuild) == "function" then
-          requestRebuild()
-        end
-      end
+  -- The chain that stood here cleared the dirty flag inside the REBOOT step's processReply --
+  -- the moment the restart was sent, not the moment the settings were stored. It is reported at
+  -- the EEPROM acknowledgement now, and everything after it belongs to the pipeline.
+  return SavePipeline.start({
+    pageId = "setup_esc_motors_throttle",
+    steps = {
+      {
+        label = "MSP_SET_MOTOR_CONFIG",
+        command = MotorConfigApi.writeCommand,
+        payload = MotorConfigApi.buildWritePayload(writeData)
+      }
+    },
+    reboot = true,
+    invalidateSessionKeys = { "setup_esc_motors_throttle" },
+    onSaved = function()
+      ui.dirty = false
     end,
-    errorHandler = function()
-      ui.saving = false
+    onDone = function(result)
+      if result.status ~= "done" then
+        ui.dirty = true
+      end
       if type(requestRebuild) == "function" then
         requestRebuild()
       end
     end
   })
-
-  return true, nil
 end
 
 local function ensureLoaded()
@@ -306,6 +242,11 @@ end
 function M.onActivate()
   ensureDeps()
   ensureLoaded()
+  -- A save whose overlay was dismissed finished without a screen. Its outcome was held
+  -- back rather than raised over whatever page the user went to; claim it now.
+  if SavePipeline and type(SavePipeline.takeResult) == "function" then
+    SavePipeline.takeResult("setup_esc_motors_throttle")
+  end
 end
 
 function M.wakeup(ctx)
@@ -375,9 +316,9 @@ function M.build(ctx)
   local h = ctx.h
   local i18n = ctx.i18n
 
-  if ui.loading or ui.saving then
-    local titleText = ui.loading and pageText(i18n, "loading", "Loading") or pageText(i18n, "saving", "Saving")
-    local msgText = ui.loading and pageText(i18n, "loading", "Loading throttle configuration...") or pageText(i18n, "saving", "Saving throttle configuration...")
+  if ui.loading then
+    local titleText = "@i18n(app.loading)@"
+    local msgText = pageText(i18n, "loading", "Loading throttle configuration...")
     LoadingOverlay.append(children, {
       x = x, y = y, w = w, h = h,
       title = titleText,
@@ -531,8 +472,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueThrottleWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

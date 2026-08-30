@@ -15,6 +15,7 @@ local MspRuntime = nil
 local EscParametersYgeApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
+local YgeInit = nil
 local t = nil
 
 local ui = {
@@ -34,6 +35,7 @@ local ui = {
     flags_bec12v = 0,
 
     -- Advanced (Section 2)
+    acceleration = 0,
     min_start_power = 0,
     max_start_power = 0,
     throttle_response = 0,
@@ -51,6 +53,9 @@ local ui = {
   },
   currentSection = 1,
   parsedCache = nil,
+  escModel = nil,
+  escVersion = nil,
+  escFirmware = nil,
   runtime = {
     readPending = false,
     requestRebuild = nil,
@@ -73,6 +78,9 @@ local function ensureDeps()
   if not EscParametersYgeApi then EscParametersYgeApi = loadModule("tasks/msp/api/esc_parameters_yge.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  -- The model table, which this page used to keep a second copy of. Loaded the way the omp,
+  -- xdfly and ztw pages already load their own init module.
+  if not YgeInit then YgeInit = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/yge/init.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -145,11 +153,22 @@ local function queueYgeReadActual(queue)
 
         ui.parsedCache = parsed
 
+        local escModel = YgeInit and type(YgeInit.getEscModel) == "function" and YgeInit.getEscModel(buf) or nil
+        local escVersion = YgeInit and type(YgeInit.getEscVersion) == "function" and YgeInit.getEscVersion(buf) or nil
+        local escFirmware = YgeInit and type(YgeInit.getEscFirmware) == "function" and YgeInit.getEscFirmware(buf) or nil
+
+        ui.escModel = escModel
+        ui.escVersion = escVersion
+        ui.escFirmware = escFirmware
+
         local session = getSession()
         if session then
           session.setup_esc_motors_esc_tools_yge = {
             config = {},
-            parsedCache = ui.parsedCache
+            parsedCache = ui.parsedCache,
+            escModel = escModel,
+            escVersion = escVersion,
+            escFirmware = escFirmware
           }
           for k, v in pairs(ui.config) do
             session.setup_esc_motors_esc_tools_yge.config[k] = v
@@ -197,100 +216,8 @@ local function queueYgeRead(isAutoReload)
     end
   end
 
-  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
-  if FwdProgApi then
-    if not ui.connState or ui.connState == 0 then
-      ui.connState = 1
-      queue:add({
-        command = FwdProgApi.writeCommand,
-        payload = FwdProgApi.buildWritePayload({ target = 100 }),
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function()
-          if not ui.runtime then return end
-          ui.connState = 2
-          ui.connTimer = nowSeconds()
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end,
-        errorHandler = function()
-          if not ui.runtime then return end
-          ui.connState = 0
-          ui.loading = false
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end
-      })
-    elseif ui.connState == 3 then
-      queue:add({
-        command = FwdProgApi.writeCommand,
-        payload = FwdProgApi.buildWritePayload({ target = ui.escTarget or 0 }),
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function()
-          if not ui.runtime then return end
-          ui.connState = 4
-          ui.connTimer = nowSeconds()
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end,
-        errorHandler = function()
-          if not ui.runtime then return end
-          ui.connState = 0
-          ui.loading = false
-          ui.runtime.readPending = false
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-        end
-      })
-    elseif ui.connState == 5 then
-      queueYgeReadActual(queue)
-    else
-      ui.runtime.readPending = false
-    end
-  else
-    queueYgeReadActual(queue)
-  end
-
+  queueYgeReadActual(queue)
   return true, nil
-end
-
-local function queuePostSaveReset(target, nextState)
-  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
-  if not FwdProgApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
-    return
-  end
-  local mspState = MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue then return end
-
-  queue:add({
-    command = FwdProgApi.writeCommand,
-    payload = FwdProgApi.buildWritePayload({ target = target }),
-    isWrite = true,
-    simulatorResponse = {},
-    processReply = function()
-      ui.connState = nextState
-      ui.connTimer = nowSeconds()
-      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
-    end,
-    errorHandler = function()
-      ui.connState = 5
-      ui.saving = false
-      if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
-    end
-  })
 end
 
 local function queueYgeWrite(requestRebuild)
@@ -329,8 +256,8 @@ local function queueYgeWrite(requestRebuild)
     isWrite = true,
     processReply = function(self, buf)
       ui.dirty = false
-      ui.connState = 6
-      ui.connTimer = nowSeconds()
+      ui.saving = false
+      ui.progress = 100
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
@@ -360,6 +287,9 @@ local function loadFromSession()
       end
     end
     ui.parsedCache = cached.parsedCache
+    ui.escModel = cached.escModel
+    ui.escVersion = cached.escVersion
+    ui.escFirmware = cached.escFirmware
     return true
   end
   return false
@@ -367,16 +297,10 @@ end
 
 local function supports12vBec()
   local typeId = ui.parsedCache and ui.parsedCache.esc_type
-  if not typeId then return false end
-  local hvt12vTypes = {
-    [8272] = true, -- YGE 205 HVT
-    [8273] = true, -- YGE 205 HVT BEC
-    [5712] = true, -- YGE 165 HVT
-    [4179] = true, -- YGE Aureus 105v2
-    [5027] = true, -- YGE Aureus 135v2
-    [5459] = true  -- YGE Saphir 155v2
-  }
-  return hvt12vTypes[typeId] == true
+  if not typeId or not YgeInit then return false end
+  local models = YgeInit.escModels
+  local model = type(models) == "table" and models[typeId] or nil
+  return model ~= nil and model.bec12v == true
 end
 
 local motorConfigRetryCount = 0
@@ -458,22 +382,16 @@ local function ensureLoaded()
   ui.dirty = false
   ui.runtime.lastSessionSignature = buildSessionSignature()
   
-  local warningTitle = pageText(nil, "safety_warning_title", "Safety Warning")
-  local warningMsg = pageText(nil, "remove_blades_warning", "Please remove main and tail blades before configuring the ESC!")
-
-  if lvgl then
-    if type(lvgl.message) == "function" then
-      pcall(lvgl.message, {
-        title = warningTitle,
-        message = warningMsg
-      })
-    elseif type(lvgl.alert) == "function" then
-      pcall(lvgl.alert, {
-        title = warningTitle,
-        message = warningMsg
-      })
-    end
-  end
+  -- The safety warning is raised from HERE, which is inside the page build. A native
+  -- lvgl.message raised there cannot be closed by a hardware key: Layer::push gives the
+  -- dialog an empty LVGL group, but the same build goes on creating this page's objects
+  -- afterwards and they land in it, so EXIT is delivered to a widget behind the modal. It
+  -- is now the tool's own notice box, drawn into the page's own child list and dismissed
+  -- by its own button -- which also keeps the tool's run loop reachable while it stands.
+  ui.notice = {
+    title = pageText(nil, "safety_warning_title", "Safety Warning"),
+    message = pageText(nil, "remove_blades_warning", "Please remove main and tail blades before configuring the ESC!")
+  }
   queueYgeRead(false)
 end
 
@@ -502,35 +420,6 @@ function M.wakeup(ctx)
     end
   end
 
-  -- 4way target switch delay timing and post-save cycle
-  if ui.connState == 2 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 2.5 then
-      ui.connState = 3
-      queueYgeRead(false)
-    end
-  elseif ui.connState == 4 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 5.0 then
-      ui.connState = 5
-      queueYgeRead(false)
-    end
-  elseif ui.connState == 6 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 1.0 then
-      ui.connState = 7
-      queuePostSaveReset(100, 8)
-    end
-  elseif ui.connState == 8 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 1.0 then
-      ui.connState = 9
-      queuePostSaveReset(ui.escTarget or 0, 10)
-    end
-  elseif ui.connState == 10 and ui.connTimer then
-    if nowSeconds() - ui.connTimer >= 0.5 then
-      ui.connState = 5
-      ui.saving = false
-      queueYgeRead(true)
-    end
-  end
-
   if ui.motorConfigRetryPending and ui.motorConfigRetryTimer then
     if nowSeconds() - ui.motorConfigRetryTimer >= 0.5 then
       ui.motorConfigRetryPending = false
@@ -551,8 +440,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueYgeWrite(ctx and ctx.requestRebuild)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })
@@ -564,8 +453,6 @@ end
 
 function M.onReload(ctx)
   ui.dirty = false
-  ui.connState = 0
-  ui.connTimer = nil
   queueYgeRead(false)
   return true
 end
@@ -589,6 +476,21 @@ function M.build(ctx)
     ui.runtime.syncHeaderTitle(title, M.getHeaderActions())
   end
 
+  if ui.notice and LoadingOverlay and type(LoadingOverlay.appendNotice) == "function" then
+    LoadingOverlay.appendNotice(children, {
+      x = x, y = y, w = w, h = h,
+      title = ui.notice.title,
+      message = ui.notice.message,
+      press = function()
+        ui.notice = nil
+        if type(ui.runtime.requestRebuild) == "function" then
+          ui.runtime.requestRebuild()
+        end
+      end
+    })
+    return
+  end
+
   if ui.loading or ui.saving then
     local titleText = ui.loading and pageText(i18n, "loading", "Loading") or pageText(i18n, "saving", "Saving")
     local msgText = ui.loading and pageText(i18n, "loading_data", "Loading ESC parameters...") or pageText(i18n, "saving_data", "Saving ESC parameters...")
@@ -605,7 +507,15 @@ function M.build(ctx)
 
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
-    Controls.appendStaticSectionHeader(children, x, cursorY, w, title)
+    local headerTitle = title
+    if ui.escModel and ui.escModel ~= "" and ui.escModel ~= title then
+      if string.find(string.lower(ui.escModel), string.lower(title), 1, true) then
+        headerTitle = ui.escModel
+      else
+        headerTitle = title .. " - " .. ui.escModel
+      end
+    end
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, headerTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
@@ -742,6 +652,19 @@ function M.build(ctx)
     end)
     cursorY = cursorY + rowH
 
+    -- Bit 2 of the flags byte, which unpackFlags and packFlags have always carried; it simply
+    -- had no row. Without one the bit is read off the ESC and written straight back, so the
+    -- setting could be seen in the ESC's own tool and not here.
+    local keepMahOpts = {
+      { value = 0, label = "Off" },
+      { value = 1, label = "On" }
+    }
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Keep mAh", keepMahOpts, ui.config.flags_keepmah, function(val)
+      ui.config.flags_keepmah = val
+      markDirty()
+    end)
+    cursorY = cursorY + rowH
+
   elseif ui.currentSection == 2 then
     -- Advanced Settings
     rowH = Controls.appendNumberField(children, x, cursorY, w, "Min Start Power", {
@@ -762,6 +685,19 @@ function M.build(ctx)
         markDirty()
       end
     })
+    cursorY = cursorY + rowH
+
+    -- `acceleration` in the field spec, and the same word of the parameter block that the
+    -- older Lua suite draws as `Startup Response` -- it sits between max start power and
+    -- throttle response there too. The ESC takes two values.
+    local startupOpts = {
+      { value = 0, label = "Normal" },
+      { value = 1, label = "Smooth" }
+    }
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, "Startup Response", startupOpts, ui.config.acceleration, function(val)
+      ui.config.acceleration = val
+      markDirty()
+    end)
     cursorY = cursorY + rowH
 
     local respOpts = {
@@ -879,36 +815,20 @@ function M.build(ctx)
     cursorY = cursorY + rowH
   end
 
-  if ui.dirty then
-    children[#children + 1] = {
-      type = "label",
-      x = x + 16, y = cursorY + 10,
-      text = pageText(i18n, "unsaved_changes", "Unsaved changes"),
-      color = COLOR_THEME_SECONDARY1,
-      font = SMLSIZE
-    }
-  end
+  -- The label is built once and reads the flag itself, so a change that sets the flag
+  -- does not have to replace the scene to show it. The text is resolved here rather
+  -- than inside the closure: the closure runs on every refresh, the lookup need not.
+  local unsavedText = pageText(i18n, "unsaved_changes", "Unsaved changes")
+  children[#children + 1] = {
+    type = "label",
+    x = x + 16, y = cursorY + 10,
+    text = function() return ui.dirty and unsavedText or "" end,
+    color = COLOR_THEME_SECONDARY1,
+    font = SMLSIZE
+  }
 end
 
 function M.onClose()
-  local FwdProgApi = loadModule("tasks/msp/api/4wif_esc_fwd_prog.lua")
-  if FwdProgApi and MspRuntime and type(MspRuntime.getState) == "function" then
-    local mspState = MspRuntime.getState()
-    local queue = mspState and mspState.queue
-    if queue then
-      queue:add({
-        command = FwdProgApi.writeCommand,
-        payload = FwdProgApi.buildWritePayload({ target = 100 }),
-        isWrite = true,
-        simulatorResponse = {},
-        processReply = function() end,
-        errorHandler = function() end
-      })
-    end
-  end
-
-  ui.connState = nil
-  ui.connTimer = nil
   ui.escTarget = nil
   ui.motorCount = nil
   ui.motorConfigRetryPending = nil
@@ -925,6 +845,7 @@ function M.onClose()
   EscParametersYgeApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
+  YgeInit = nil
   t = nil
 end
 

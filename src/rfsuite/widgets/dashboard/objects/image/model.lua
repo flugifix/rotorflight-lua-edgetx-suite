@@ -1,9 +1,18 @@
 local Render = {}
 
-function Render.render(nodes, rect, box, state, themeCommon, utils)
-  local fblModelName = nil
-  if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
-    fblModelName = _G.rfsuite.session.modelName
+local modelImageCache = {}
+
+local function resolveModelImage(fblModelName)
+  local cacheKey = tostring(fblModelName or "")
+  if model and type(model.getInfo) == "function" then
+    local info = model.getInfo()
+    if info and info.name then
+      cacheKey = cacheKey .. "|" .. tostring(info.name) .. "|" .. tostring(info.bitmap or "")
+    end
+  end
+
+  if modelImageCache[cacheKey] ~= nil then
+    return modelImageCache[cacheKey].imageFile, modelImageCache[cacheKey].modelNameText
   end
 
   local imageFile = nil
@@ -17,7 +26,6 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
       io.close(f)
       imageFile = path
     else
-      -- try lowercase extension just in case
       path = "/IMAGES/" .. fblModelName .. ".PNG"
       f = io.open(path, "r")
       if f then
@@ -49,6 +57,18 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
   if not imageFile then
     imageFile = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png"
   end
+
+  modelImageCache[cacheKey] = { imageFile = imageFile, modelNameText = modelNameText }
+  return imageFile, modelNameText
+end
+
+function Render.render(nodes, rect, box, state, themeCommon, utils)
+  local fblModelName = nil
+  if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+    fblModelName = _G.rfsuite.session.modelName
+  end
+
+  local imageFile, modelNameText = resolveModelImage(fblModelName)
 
   -- We need space for the text at the bottom
   local textH = 22
@@ -88,7 +108,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
       rect.y + rect.h - textH,
       rect.w - 8,
       displayTitle,
-      box.titlecolor or GREY_DEFAULT,
+      box.titlecolor or COLOR_THEME_DISABLED,
       CENTER,
       SMLSIZE
     )

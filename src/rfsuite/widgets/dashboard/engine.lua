@@ -1,8 +1,20 @@
 local Engine = {}
 
-local Common = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/default/common.lua", "t"))()
-local Utils = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/common.lua", "t"))()
-local Sensors = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors.lua", "t"))()
+local requireModule = (_G.rfsuite and _G.rfsuite.require)
+if not requireModule then
+  local rChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", "t")
+  if rChunk then
+    requireModule = rChunk()
+  end
+end
+requireModule = requireModule or function(path)
+  local fullPath = string.sub(path, 1, 1) == "/" and path or ("/SCRIPTS/TOOLS/rfsuite-core/" .. path)
+  return assert(loadScript(fullPath, "t"))()
+end
+
+local Common = requireModule("widgets/dashboard/themes/default/common.lua")
+local Utils = requireModule("widgets/dashboard/objects/common.lua")
+local Sensors = requireModule("lib/sensors.lua")
 
 local OBJECTS_BASE = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/"
 local objectWrappers = {}
@@ -19,14 +31,8 @@ local function loadObjectWrapper(typ)
     return objectWrappers[typ]
   end
 
-  local chunk = loadScript(OBJECTS_BASE .. typ .. ".lua", "t")
-  if not chunk then
-    objectWrappers[typ] = false
-    return nil
-  end
-
-  local ok, wrapper = pcall(chunk)
-  if not ok or type(wrapper) ~= "table" then
+  local wrapper = requireModule("widgets/dashboard/objects/" .. typ .. ".lua")
+  if not wrapper or type(wrapper) ~= "table" then
     objectWrappers[typ] = false
     return nil
   end
@@ -42,9 +48,36 @@ local function resolveGrid(layout)
   return cols, rows, padding
 end
 
+-- A rect's geometry depends on exactly these four fields of a box; everything else a box
+-- carries is read back from `rect.box` at render time. A theme whose `boxes` is a function
+-- returns a fresh table on every build, so comparing the table itself can never match and the
+-- whole grid is recomputed on every repaint even though nothing about the layout moved.
+local function sameGridGeometry(cached, boxes)
+  if cached == boxes then return true end
+  if type(cached) ~= "table" or type(boxes) ~= "table" then return false end
+  if #cached ~= #boxes then return false end
+  for i = 1, #boxes do
+    local a, b = cached[i], boxes[i]
+    if type(a) ~= "table" or type(b) ~= "table" then return false end
+    if a.col ~= b.col or a.row ~= b.row or a.colspan ~= b.colspan or a.rowspan ~= b.rowspan then
+      return false
+    end
+  end
+  return true
+end
+
+-- Reused rects keep their arithmetic and take the current box objects, so a box whose colour,
+-- source, title or any other non-geometry field changed still renders from its own table.
+local function rebindGridRects(rects, boxes)
+  for i = 1, #rects do
+    rects[i].box = boxes[i]
+  end
+  return rects
+end
+
 local function canReuseGridRects(cache, zone, boxes, cols, rows, padding)
   return cache
-    and cache.boxes == boxes
+    and sameGridGeometry(cache.boxes, boxes)
     and cache.zoneX == zone.x
     and cache.zoneY == zone.y
     and cache.zoneW == zone.w
@@ -136,7 +169,8 @@ function Engine.build(zone, state, theme)
 
   local rects = nil
   if canReuseGridRects(engineCache and engineCache.main, zone, boxes, cols, rows, padding) then
-    rects = engineCache.main.rects
+    rects = rebindGridRects(engineCache.main.rects, boxes)
+    engineCache.main.boxes = boxes
   else
     rects = buildGridRects(zone, boxes, cols, rows, padding)
     if engineCache then
@@ -154,16 +188,7 @@ function Engine.build(zone, state, theme)
     end
   end
 
-  local maxMainRects = #rects
-  local maxHeaderRects = 9999
-  if isSimulator() then
-    -- Simulator has a stricter per-refresh instruction budget than TX16.
-    -- Render a reduced subset to keep the widget alive in desktop simulation.
-    maxMainRects = math.min(maxMainRects, 14)
-    maxHeaderRects = 4
-  end
-
-  for i = 1, maxMainRects do
+  for i = 1, #rects do
     renderBox(nodes, rects[i], state)
   end
 
@@ -175,7 +200,8 @@ function Engine.build(zone, state, theme)
     local hCols, hRows, hPadding = resolveGrid(headerLayout)
     local headerRects = nil
     if canReuseGridRects(engineCache and engineCache.header, headerZone, headerBoxes, hCols, hRows, hPadding) then
-      headerRects = engineCache.header.rects
+      headerRects = rebindGridRects(engineCache.header.rects, headerBoxes)
+      engineCache.header.boxes = headerBoxes
     else
       headerRects = buildGridRects(headerZone, headerBoxes, hCols, hRows, hPadding)
       if engineCache then
@@ -192,8 +218,7 @@ function Engine.build(zone, state, theme)
         }
       end
     end
-    local headerLimit = math.min(#headerRects, maxHeaderRects)
-    for i = 1, headerLimit do
+    for i = 1, #headerRects do
       renderBox(nodes, headerRects[i], state)
     end
   end
@@ -214,25 +239,26 @@ function Engine.renderKey(state, boxSources)
   local themeMin = Utils.toNumber(state and state.themeConfig and state.themeConfig.v_min, 0)
   local themeMax = Utils.toNumber(state and state.themeConfig and state.themeConfig.v_max, 0)
   local armFlags = Utils.toNumber(state and state.armFlags, 0)
-  local parts = {
-    tostring(math.floor(lq + 0.5)),
-    tostring(math.floor(fuel + 0.5)),
-    tostring(math.floor(rpm + 0.5)),
-    tostring(math.floor(flight + 0.5)),
-    tostring(math.floor(total + 0.5)),
-    tostring(math.floor(voltage * 10 + 0.5)),
-    tostring(bb_used),
-    tostring(bb_total),
-    tostring(math.floor(cells + 0.5)),
-    tostring(math.floor(themeMin * 10 + 0.5)),
-    tostring(math.floor(themeMax * 10 + 0.5)),
-    tostring(math.floor(armFlags + 0.5))
-  }
+
+  local k = string.format("%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
+    math.floor(lq + 0.5),
+    math.floor(fuel + 0.5),
+    math.floor(rpm + 0.5),
+    math.floor(flight + 0.5),
+    math.floor(total + 0.5),
+    math.floor(voltage * 10 + 0.5),
+    math.floor(bb_used + 0.5),
+    math.floor(bb_total + 0.5),
+    math.floor(cells + 0.5),
+    math.floor(themeMin * 10 + 0.5),
+    math.floor(themeMax * 10 + 0.5),
+    math.floor(armFlags + 0.5)
+  )
+
   if boxSources and state then
     for i = 1, #boxSources do
       local source = boxSources[i]
       local v = nil
-      -- Zuerst im State suchen (wird in readTelemetry aktualisiert)
       if source == "esc_temp" then v = state.escTemp
       elseif source == "mcu_temp" then v = state.mcuTemp
       elseif source == "pid_profile" then v = state.profile
@@ -241,20 +267,18 @@ function Engine.renderKey(state, boxSources)
       elseif source == "governor" then
         v = tostring(state.governor or "x") .. ":" .. tostring(state.armDisableFlags or "x")
       else
-        -- Fallback auf Sensors, aber gedrosselt oder nur wenn absolut nötig
-        -- In der Regel sollten alle wichtigen Dashboard-Quellen im State sein
         v = state[source]
       end
       if type(v) == "number" then
-        parts[#parts + 1] = tostring(math.floor(v * 10 + 0.5))
+        k = k .. "|" .. tostring(math.floor(v * 10 + 0.5))
       elseif type(v) == "string" then
-        parts[#parts + 1] = v
+        k = k .. "|" .. v
       else
-        parts[#parts + 1] = "x"
+        k = k .. "|x"
       end
     end
   end
-  return table.concat(parts, "|")
+  return k
 end
 
 return Engine

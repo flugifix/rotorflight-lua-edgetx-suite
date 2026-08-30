@@ -200,8 +200,9 @@ local function queueGovWrite(requestRebuild, ctx)
               session.governor_config = writeData
               session.governorMode = writeData.gov_mode
             end
-            if lvgl and lvgl.alert then
-              lvgl.alert({
+            if ctx and type(ctx.reportSave) == "function" then
+              ctx.reportSave({
+                ok = true,
                 title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
                 message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
               })
@@ -226,8 +227,9 @@ local function queueGovWrite(requestRebuild, ctx)
           session.governor_config = writeData
           session.governorMode = writeData.gov_mode
         end
-        if lvgl and lvgl.alert then
-          lvgl.alert({
+        if ctx and type(ctx.reportSave) == "function" then
+          ctx.reportSave({
+            ok = true,
             title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
             message = pageText(ctx and ctx.i18n, "saved_message", "Governor settings saved")
           })
@@ -357,7 +359,7 @@ function M.build(ctx)
     type = "rectangle",
     x = gx, y = gy,
     w = gw, h = gh,
-    color = GREY_DEFAULT,
+    color = COLOR_THEME_SECONDARY2,
     filled = false
   }
 
@@ -368,7 +370,7 @@ function M.build(ctx)
       type = "line",
       x = 0, y = 0, w = 0, h = 0,
       pts = { { gx, gridY }, { gx + gw, gridY } },
-      color = GREY_DEFAULT,
+      color = COLOR_THEME_SECONDARY2,
       thickness = 1
     }
   end
@@ -380,7 +382,7 @@ function M.build(ctx)
       type = "line",
       x = 0, y = 0, w = 0, h = 0,
       pts = { { gridX, gy }, { gridX, gy + gh } },
-      color = GREY_DEFAULT,
+      color = COLOR_THEME_SECONDARY2,
       thickness = 1
     }
   end
@@ -418,14 +420,13 @@ function M.build(ctx)
 
   -- ── 2. Refresh Button ─────────────────────────────────────────────────────
   local btnW = math.min(260, w - 40)
-  local btnH = 36
+  local btnH = (lvgl and lvgl.UI_ELEMENT_HEIGHT) or (Controls and Controls.CTRL_H) or 32
   local btnX = x + math.floor((w - btnW) / 2)
   children[#children + 1] = {
     type = "button",
     x = btnX,
     y = cursorY,
     w = btnW,
-    h = btnH,
     text = pageText(i18n, "refresh_graph", "Refresh Graph"),
     press = function()
       if type(ui.runtime.requestRebuild) == "function" then
@@ -439,8 +440,8 @@ function M.build(ctx)
   -- ── 3. 9 Throttle Points Inputs ───────────────────────────────────────────
   local gap = 4
   local fieldW = math.floor((gw - (gap * (FIELD_COUNT - 1))) / FIELD_COUNT)
-  local labelH = 18
-  local editH = 38
+  local labelH = (Controls and Controls.LABEL_H) or (lvgl and lvgl.LCD_SCALE and math.floor(21 * lvgl.LCD_SCALE + 0.5)) or 21
+  local editH = (lvgl and lvgl.UI_ELEMENT_HEIGHT) or (Controls and Controls.CTRL_H) or 32
 
   for i = 1, FIELD_COUNT do
     local cellX = gx + (i - 1) * (fieldW + gap)
@@ -480,7 +481,7 @@ function M.build(ctx)
     }
   end
 
-  cursorY = cursorY + labelH + editH + 14
+  cursorY = cursorY + labelH + 6 + editH + 14
 
   if ui.dirty then
     children[#children + 1] = {
@@ -496,8 +497,8 @@ end
 function M.onSave(ctx)
   local ok, err = queueGovWrite(ctx and ctx.requestRebuild, ctx)
   if not ok then
-    if lvgl and lvgl.alert then
-      lvgl.alert({
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
         message = tostring(err or "MSP write failed")
       })

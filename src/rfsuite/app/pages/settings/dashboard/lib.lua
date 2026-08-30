@@ -351,7 +351,18 @@ function M.getThemeConfig(prefs, path, defaults, modelPrefs)
     dashboard = {}
   end
 
-  -- First, apply global preferences
+  local prefix = sanitizeThemeKey(path)
+  local prefixPattern = prefix and ("^cfg_" .. prefix .. "_(.+)$")
+
+  -- 1. First, apply global preferences
+  if prefixPattern then
+    for k, v in pairs(dashboard) do
+      local subKey = string.match(k, prefixPattern)
+      if subKey then
+        out[subKey] = v
+      end
+    end
+  end
   for k in pairs(source) do
     local key = themeConfigKey(path, k)
     if key and dashboard[key] ~= nil then
@@ -359,10 +370,18 @@ function M.getThemeConfig(prefs, path, defaults, modelPrefs)
     end
   end
 
-  -- Then, apply model-specific preferences (higher priority)
+  -- 2. Then, apply model-specific preferences (higher priority)
   if type(modelPrefs) == "table" then
     local modelDashboard = modelPrefs.dashboard
     if type(modelDashboard) == "table" then
+      if prefixPattern then
+        for k, v in pairs(modelDashboard) do
+          local subKey = string.match(k, prefixPattern)
+          if subKey then
+            out[subKey] = v
+          end
+        end
+      end
       for k in pairs(source) do
         local key = themeConfigKey(path, k)
         if key and modelDashboard[key] ~= nil then
@@ -376,19 +395,27 @@ function M.getThemeConfig(prefs, path, defaults, modelPrefs)
 end
 
 function M.setThemeConfig(prefs, path, values, modelPrefs)
-  -- If modelPrefs provided, save to model prefs; otherwise save to global prefs
-  local target = modelPrefs or prefs
-  if type(target) ~= "table" then return end
   if type(values) ~= "table" then return end
 
-  target.dashboard = target.dashboard or {}
-  local dashboard = target.dashboard
-  if type(dashboard) ~= "table" then return end
+  -- Always update global prefs if provided
+  if type(prefs) == "table" then
+    prefs.dashboard = prefs.dashboard or {}
+    for k, v in pairs(values) do
+      local key = themeConfigKey(path, k)
+      if key then
+        prefs.dashboard[key] = v
+      end
+    end
+  end
 
-  for k, v in pairs(values) do
-    local key = themeConfigKey(path, k)
-    if key then
-      dashboard[key] = v
+  -- Also update model prefs if provided
+  if type(modelPrefs) == "table" then
+    modelPrefs.dashboard = modelPrefs.dashboard or {}
+    for k, v in pairs(values) do
+      local key = themeConfigKey(path, k)
+      if key then
+        modelPrefs.dashboard[key] = v
+      end
     end
   end
 end

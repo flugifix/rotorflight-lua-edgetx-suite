@@ -1,35 +1,35 @@
 local Wrapper = {}
 
-local function loadModule(path, globalKey)
-  if globalKey and _G[globalKey] then return _G[globalKey] end
-  local chunk = loadScript(path, "t")
-  if not chunk then return nil end
-  local ok, mod = pcall(chunk)
-  if ok and type(mod) == "table" then
-    if globalKey then _G[globalKey] = mod end
-    return mod
+local requireModule = (_G.rfsuite and _G.rfsuite.require) or function(path)
+  local fullPath = string.sub(path, 1, 1) == "/" and path or ("/SCRIPTS/TOOLS/rfsuite-core/" .. path)
+  local chunk = loadScript(fullPath, "t")
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then return mod end
   end
   return nil
 end
 
-
-
 local function getUtils()
-  return loadModule("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/objects/common.lua", "__rfsuiteObjectsCommonModule")
+  return requireModule("widgets/dashboard/objects/common.lua")
 end
 
 local function getThemeCommon()
-  return loadModule("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/default/common.lua", "__rfsuiteThemeDefaultCommonModule")
+  return requireModule("widgets/dashboard/themes/default/common.lua")
 end
 
 local function rgb(hex, fallback)
   if lcd and type(lcd.RGB) == "function" then
-    return lcd.RGB(hex)
+    local r = math.floor(hex / 65536) % 256
+    local g = math.floor(hex / 256) % 256
+    local b = hex % 256
+    local ok, col = pcall(lcd.RGB, r, g, b)
+    if ok and col then return col end
   end
   return fallback
 end
 
-local ARC_BG_COLOR = rgb(0x444444, GREY_DEFAULT)
+local ARC_BG_COLOR = rgb(0x444444, COLOR_THEME_SECONDARY2)
 local ARC_OK_COLOR = rgb(0x00FF00, GREEN or 0x00FF00)
 local ARC_WARN_COLOR = rgb(0xFF8000, 0xFF8000)
 local ARC_ALERT_COLOR = rgb(0xFF0000, 0xFF0000)

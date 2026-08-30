@@ -224,28 +224,31 @@ local function isAtLeastVersion(req)
   return ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(rawApiVersion, req)
 end
 
-local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, spec1)
-  local rowH = 52
-  local labelY = y + 16
-  local cellTop = y + 4
+local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, spec1, customLabelW)
+  local rowH = (Controls and Controls.ROW_H) or 40
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
-  local editW1   = math.floor(w * 0.14)
-  local labelW1  = math.floor(w * 0.22)
-  local labelGap = 6
-
-  local xEdit1   = x + w - editW1 - 10
-  local xLabel1  = xEdit1 - labelW1
-  local mainW    = xLabel1 - x
+  local editW1   = math.floor(w * 0.24)
+  local labelW1  = customLabelW or ((label1 and label1 ~= "") and math.floor(w * 0.24) or math.floor(w * 0.14))
+  local margin   = 10
+  local labelGap = 4
+  
+  local xEdit1  = x + w - editW1 - margin
+  local xLabel1 = xEdit1 - labelW1 - 8
+  local mainW   = (label1 and label1 ~= "") and (xLabel1 - x - 8) or (xEdit1 - x - 8)
 
   -- Left main label
-  children[#children + 1] = {
-    type  = "label",
-    x = x, y = labelY,
-    w = mainW,
-    text  = labelText,
-    color = COLOR_THEME_PRIMARY1,
-    font  = SMLSIZE
-  }
+  if labelText and labelText ~= "" then
+    children[#children + 1] = {
+      type  = "label",
+      x = x, y = labelY,
+      w = mainW,
+      text  = labelText,
+      color = COLOR_THEME_PRIMARY1,
+      font  = SMLSIZE
+    }
+  end
 
   -- Sublabel (if any)
   if label1 and label1 ~= "" then
@@ -269,7 +272,6 @@ local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, 
     x = xEdit1,
     y = cellTop,
     w = editW1,
-    h = 44,
     min = math.floor(rawMin / stepSize),
     max = math.ceil(rawMax / stepSize),
     active = function() return true end,
@@ -296,22 +298,22 @@ local function appendSingleFieldRow(children, x, y, w, labelText, label1, key1, 
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
 end
 
 local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spec1, label2, key2, spec2, customLabelW)
-  local rowH = 52
-  local labelY = y + 16
-  local cellTop = y + 4
+  local rowH = (Controls and Controls.ROW_H) or 40
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
   
-  local editW   = math.floor(w * 0.14)
-  local labelW  = customLabelW or math.floor(w * 0.11)
+  local editW   = math.floor(w * 0.24)
+  local labelW  = customLabelW or math.floor(w * 0.14)
   local gap     = 8
   local margin  = 10
-  local labelGap = 6
+  local labelGap = 4
   
   local xEdit2  = x + w - editW - margin
   local xLabel2 = xEdit2 - labelW - gap
@@ -351,7 +353,6 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
     x = xEdit1,
     y = cellTop,
     w = editW,
-    h = 44,
     min = math.floor(rawMin / stepSize),
     max = math.ceil(rawMax / stepSize),
     active = function() return true end,
@@ -395,7 +396,6 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
       x = xEdit2,
       y = cellTop,
       w = editW,
-      h = 44,
       min = math.floor(rawMinB / stepSizeB),
       max = math.ceil(rawMaxB / stepSizeB),
       active = function() return true end,
@@ -423,18 +423,18 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
 end
 
 local function appendSingleChoiceRow(children, x, y, w, labelText, key, options)
-  local rowH = 52
-  local labelY = y + 16
-  local cellTop = y + 4
+  local rowH = (Controls and Controls.ROW_H) or 48
+  local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
+  local cellTop = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
 
-  local comboW = math.floor(w * 0.22)
+  local comboW = math.floor(w * 0.24)
   local comboX = x + w - comboW - 10
   local mainW = comboX - x - 8
 
@@ -455,8 +455,8 @@ local function appendSingleChoiceRow(children, x, y, w, labelText, key, options)
 
   children[#children + 1] = {
     type  = "choice",
-    x = comboX, y = cellTop + 4,
-    w = comboW, h = 36,
+    x = comboX, y = cellTop,
+    w = comboW,
     title = labelText,
     values = values,
     get = function()
@@ -479,7 +479,7 @@ local function appendSingleChoiceRow(children, x, y, w, labelText, key, options)
     type   = "rectangle",
     x = x, y = y + rowH,
     w = w, h = 1,
-    color  = GREY_DEFAULT, filled = true
+    color  = COLOR_THEME_SECONDARY2, filled = true
   }
 
   return rowH + 1
@@ -549,10 +549,8 @@ function M.build(ctx)
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, displayTitle)
-    cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
   end
-
-  cursorY = cursorY + 10
 
   -- Specs
   local specHz = { scale=1, mult=1, min=0, max=4000, suffix="Hz", decimals=0 }

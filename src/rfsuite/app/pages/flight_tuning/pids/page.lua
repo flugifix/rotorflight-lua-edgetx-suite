@@ -15,6 +15,7 @@ local MspRuntime = nil
 local PidTuningApi = nil
 local LoadingOverlay = nil
 local Sensors = nil
+local Profile = nil
 local t = nil
 local getSession = nil
 
@@ -98,25 +99,10 @@ local function ensureDeps()
 	if not PidTuningApi then PidTuningApi = loadModule("tasks/msp/api/pid_tuning.lua") end
 	if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
 	if not Sensors then Sensors = loadModule("lib/sensors.lua") end
+	if not Profile then Profile = loadModule("lib/profile.lua") end
 	if not t then t = Common and Common.pageT("flight_tuning_pids") or nil end
 	if Common and not ui.runtimeBase then
-		ui.runtimeBase = Common.createProfileAwareRuntime({
-			profileGetter = function()
-				local sensorProfile = nil
-				if Sensors and type(Sensors.getValue) == "function" then
-					sensorProfile = tonumber(Sensors.getValue("pid_profile"))
-				end
-				if sensorProfile and sensorProfile > 0 then
-					return math.floor(sensorProfile)
-				end
-				local session = getSession()
-				local activeProfile = session and session.activeProfile
-				if activeProfile ~= nil then
-					return math.floor(tonumber(activeProfile) or 0) + 1
-				end
-				return nil
-			end
-		})
+		ui.runtimeBase = Common.createProfileAwareRuntime({ profileType = "pid" })
 		if type(ui.runtime) ~= "table" then
 			ui.runtime = newRuntime()
 		end
@@ -173,16 +159,12 @@ local function getFieldSetter(fieldName)
 	return setter
 end
 
+local function getLiveProfile()
+	return Profile and Profile.getActivePidProfile(1) or 1
+end
+
 local function buildSessionSignature()
-	local profile = nil
-	if Sensors and type(Sensors.getValue) == "function" then
-		profile = tonumber(Sensors.getValue("pid_profile"))
-	end
-	if profile == nil or profile <= 0 then
-		local session = getSession()
-		profile = math.floor(tonumber(session and session.activeProfile) or 0) + 1
-	end
-	return tostring(profile)
+	return tostring(getLiveProfile())
 end
 
 local function loadFromSession()
@@ -206,21 +188,6 @@ local function getBaseTitle()
 		title = "PIDs"
 	end
 	return title
-end
-
-local function getCurrentProfileDisplay()
-	if Sensors and type(Sensors.getValue) == "function" then
-		local raw = tonumber(Sensors.getValue("pid_profile"))
-		if raw and raw > 0 then
-			return math.floor(raw)
-		end
-	end
-	local session = getSession()
-	local activeProfile = tonumber(session and session.activeProfile)
-	if activeProfile ~= nil then
-		return math.floor(activeProfile) + 1
-	end
-	return nil
 end
 
 local function queuePidRead()
@@ -362,35 +329,35 @@ local function getLayoutProfile(w, h)
 	local profile = {
 		headerFont = SMLSIZE,
 		headerTextY = 0,
-		headerLineY = 36,
-		headerH = 40,
+		headerLineY = 24,
+		headerH = 30,
 		rowFont = SMLSIZE,
-		rowH = 44,
-		rowLabelY = 8,
-		cellTop = 4,
+		rowH = 42,
+		rowLabelY = 10,
+		cellTop = 5,
 		afterHeaderGap = 6
 	}
 
 	if w >= 700 then
 		profile.headerFont = SMLSIZE
 		profile.headerTextY = 2
-		profile.headerLineY = 40
-		profile.headerH = 44
+		profile.headerLineY = 32
+		profile.headerH = 38
 		profile.rowFont = SMLSIZE
-		profile.rowH = 46
+		profile.rowH = 50
 		profile.rowLabelY = 10
-		profile.cellTop = 6
+		profile.cellTop = 3
 		profile.afterHeaderGap = 6
 	elseif w < 560 then
 		profile.headerFont = SMLSIZE
 		profile.headerTextY = 0
-		headerLineY = 24
-		profile.headerH = 30
+		profile.headerLineY = 22
+		profile.headerH = 26
 		profile.rowFont = SMLSIZE
 		profile.rowH = 40
-		profile.rowLabelY = 10
+		profile.rowLabelY = 9
 		profile.cellTop = 4
-		profile.afterHeaderGap = 6
+		profile.afterHeaderGap = 4
 	end
 
 	return profile
@@ -426,7 +393,7 @@ local function drawColumnHeader(children, x, y, w, i18n, layout)
 		y = y + headerLineY,
 		w = w,
 		h = 1,
-		color = GREY_DEFAULT,
+		color = COLOR_THEME_SECONDARY2,
 		filled = true
 	}
 
@@ -528,16 +495,17 @@ function M.onSave(ctx)
 	local errMsp = nil
 	okMsp, errMsp = queuePidWrite(session)
 
-	if lvgl and lvgl.alert then
+	if ctx and type(ctx.reportSave) == "function" then
 		if okMsp then
-			lvgl.alert({
-				title = pageText(ctx and ctx.i18n, "saved_title"),
-				message = pageText(ctx and ctx.i18n, "saved_message")
+			ctx.reportSave({
+				ok = true,
+				title = pageText(ctx and ctx.i18n, "saved_title", "@i18n(app.pages.flight_tuning_pids.saved_title)@"),
+				message = pageText(ctx and ctx.i18n, "saved_message", "@i18n(app.pages.flight_tuning_pids.saved_message)@")
 			})
 		else
-			lvgl.alert({
-				title = pageText(ctx and ctx.i18n, "warning_title"),
-				message = pageText(ctx and ctx.i18n, "saved_local_only_message") .. (errMsp and (": " .. tostring(errMsp)) or "")
+			ctx.reportSave({
+				title = pageText(ctx and ctx.i18n, "warning_title", "@i18n(app.pages.flight_tuning_pids.warning_title)@"),
+				message = pageText(ctx and ctx.i18n, "saved_local_only_message", "@i18n(app.pages.flight_tuning_pids.saved_local_only_message)@") .. (errMsp and (": " .. tostring(errMsp)) or "")
 			})
 		end
 	end
@@ -579,14 +547,14 @@ function M.build(ctx)
 	local w = ctx.w
 	local h = ctx.h or 200
 	local i18n = ctx.i18n
-	local profileDisplay = getCurrentProfileDisplay() or 1
+	local profileDisplay = getLiveProfile()
 	local layout = getLayoutProfile(w, h)
 
 	if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then
 		ui.runtime.syncHeaderTitle(ui.baseTitle or getBaseTitle(), ctx and ctx.navButtons or nil)
 	end
 
-	local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 50
+	local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 38
 	local cursorY = y
 	if Controls and type(Controls.appendStaticSectionHeader) == "function" then
 		local headingTitle = string.format("%s #%d", ui.baseTitle or getBaseTitle(), profileDisplay)
