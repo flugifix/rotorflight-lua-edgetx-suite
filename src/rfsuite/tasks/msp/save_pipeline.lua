@@ -24,8 +24,13 @@
 --      are dynamically re-calculated in RAM upon MSP write without needing a reboot.
 --    - flight_tuning/governor: Gains, feedforward, and target headspeed tables are active runtime tuning.
 --    - flight_tuning (pids, rates, autolevel, rescue, etc.): Live in-memory updates.
---    - setup/servos (pwm, bus) & controls: Live trim/center/range updates.
+--    - setup/servos (pwm, bus) & controls: Live trim/center/range updates (except servo PWM rate,
+--      which takes effect at the next boot).
 --    - setup/model: Profile / model metadata changes only.
+--
+-- Note on MSP_STATUS.reboot_required: Although MSP_STATUS carries a reboot_required flag,
+-- the firmware's MSP set-handlers do not currently set it (only CMS does). Therefore, the
+-- suite explicitly defines and orchestrates this reboot policy on the client side.
 --
 -- Every page that ends a save in MSP_EEPROM_WRITE builds its own chain of nested queue:add
 -- calls, each next step queued from the previous step's processReply. The pages that
