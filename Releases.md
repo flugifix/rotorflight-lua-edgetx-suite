@@ -1,6 +1,13 @@
 # 0.1.6
 
 ### Features & Enhancements
+- **Dynamic ESC Model Identification & Interface Unification (`setup/esc_motors/esc_tools`)**:
+  - Added dynamic ESC model name detection and header display queried directly from hardware via telemetry / MSP.
+  - Unified device information and capability reporting across all supported ESC manufacturers (AM32, BLHeli_S, Bluejay, Flyrotor, Hobbywing V5, OMP, Scorpion, XDFly, YGE, ZTW).
+  - Isolated Hobbywing V5 parameter tables to prevent cross-talk and corrected YGE firmware version mapping.
+- **Active Profile & Rate Profile Live Resolution (`flight_tuning`)**:
+  - Centralized live profile resolution (`getLiveProfile()`) to read active PID and rate profiles directly from telemetry sensors and session state.
+  - Profile adjustments made via transmitter switches or telemetry are instantly reflected across all flight tuning pages without desync.
 - **Motor Override & ESC Motor Test Tool (`setup/esc_motors/motor_override`)**:
   - Added dedicated Motor Override tool allowing direct spool-up and functional testing of main and tail motors from the radio.
   - Multi-tier safety architecture: requires explicit disarm confirmation, hardware arming switch check, deadman timeout watchdog, manual throttle override sliders, and automatic shutoff upon page navigation or telemetry link loss.
@@ -13,8 +20,43 @@
   - Added self-identification tags for simulator responses in debug traces.
 - **Startup Progress & Visual Preparation (`ui/home.lua`)**:
   - Added smooth animated preparation progress bar on the home start screen.
+- **Flight Controller Reboot Policy Documentation (`tasks/msp/save_pipeline.lua`)**:
+  - Embedded explicit Rotorflight 2 flight controller reboot policy guidelines directly into save pipeline headers and architecture documentation.
+  - Formulated clear boundaries for mandatory reboots (hardware drivers, DMA, UART ports, radio config, ESC protocols, sensor alignment), conditional reboots (swash/tail geometry changes), and non-reboot live tuning (PIDs, rates, governor, filters).
+- **MSP API Return Format Normalization (`tasks/msp/api`)**:
+  - Standardized all 102 MSP API modules (`Api.parse`) to return a clean, flat table (`return { ... }`) rather than mixed wrapped tables (`{ parsed = ... }`), eliminating duplicate unnesting logic across servo, esc, and setup pages and improving API tester introspection.
 
 ### Bug Fixes & Improvements
+- **Start Screen Bounded Wait & Startup Race Elimination (`ui/home.lua`)**:
+  - Enforced an upper bound (max 2.0s offline, max 3.5s online) on the initial startup screen, preventing indefinite hangs when connecting to powered receivers with unresponsive flight controllers or wedged MSP links.
+  - Eliminated the 0.6s timer race (0.45s vs 8.75s) by resolving the start screen as soon as core MSP identity (API version + MCU UID) is established, allowing onconnect tasks to run asynchronously in the background.
+  - Replaced input-sensitive `state.lastInputTick` with dedicated `state.initialLoadStartTick` so key presses or touch gestures during boot do not restart the timeout timer.
+  - Kept FBL-dependent menu tiles locked if startup times out without flight controller response, allowing pilots to access diagnostic tools instead of a frozen screen.
+- **Diagnostics & Info Stalled Read Handling (`app/pages/tools/diagnostics/info`, `fblstatus`)**:
+  - Added proactive timeout monitoring in `M.wakeup()` using `AsyncLoadUi.isTimedOut()` to abort stalled reads after 12s with clear modal feedback.
+  - Added automatic link-loss detection and offline reload feedback notices.
+  - Standardized per-request timeouts (3.5s) across diagnostic endpoints and fixed require path in `fblstatus/page.lua`.
+- **ESC Configuration Save Timeout & Give-Up Notice (`app/pages/setup/esc_motors/esc_tools`)**:
+  - Reduced ESC write timeout from 5.0s to 2.5s and added user-facing failure notice overlay on give-up so pilots are immediately informed when an ESC fails to acknowledge parameter writes.
+- **Flight Log Selector Row Overlap & Sort Order (`app/pages/logs/page.lua`)**:
+  - Fixed row layout height calculations in the flight log chooser, eliminating vertical text overlapping and clipping on compact displays.
+  - Sorted flight logs in descending chronological order (newest files listed first).
+- **Settings & Preferences Surface Consolidation (`lib/preferences.lua`, `settings/general`)**:
+  - Consolidated `CONFIG_SCHEMA` in `settings/general` as single source of truth for save confirmations and disarm warnings.
+  - Pruned orphaned preference keys (`txbatt_type`, `theme_loader`, `hs_loader`, `toolbar_timeout`, `iconsize`, `syncname`, `audio_switches`, `audio_timer`) and removed unreferenced audio stubs.
+  - Fixed temperature unit conversion (`useFahrenheit()`) in dashboard telemetry text and flight log summaries.
+  - Applied `sag_gain` in SmartFuel load calculation.
+- **UI Layout & Display Profile Metrics (`ui/controls.lua`, `ui/display_profile.lua`)**:
+  - Harmonized row metrics, reduced excessive vertical spacing, and widened multi-column numeric input fields across standard and high-resolution color radios (such as TX15 and TX16S).
+  - Stripped UTF-8 BOM encoding from Lua files to avoid syntax errors on EdgeTX Lua interpreters.
+- **Navigation Exit Debounce (`ui/home.lua`)**:
+  - Debounced back-button navigation (`onBack`) to prevent rapid or repeated key events from causing accidental double-exit jumps from menus.
+  - Stamped `lastBackTick` strictly on actual navigation transitions.
+- **Battery Reserve Overwrite Protection (`setup/power/battery/page.lua`)**:
+  - Fixed an issue where saving battery configuration without modifications could overwrite `cbat_alert_percent` (battery capacity reserve).
+  - Removed unsafe preference seeding and ensured `batteryConfig` is safely populated and preserved on save.
+- **Theme Color Token Normalization (`ui/controls.lua`, widgets)**:
+  - Replaced hardcoded `GREY_DEFAULT` / nil color tokens with semantic theme color tokens across UI controls and widgets, fixing invisible text and rendering artifacts under custom color themes.
 - **UI Controls, Heights & Display Spacing (`ui/controls.lua`)**:
   - Unified native LVGL widget heights (standard 36 px), font rounding, and vertical alignments across all pages (PIDs, Rates, Mixer, Modes, Failsafe, Governor, Trims).
   - Resolved wide-display layout spacing and boundary clipping on large color touchscreens (e.g. 800x480).
@@ -45,7 +87,18 @@
 - **Dialog Fallback Handling (`ui/controls.lua`)**:
   - Properly recognized asynchronous `lvgl.confirm` dialogs as active modals, preventing premature fallback invocation.
 
-### Performance & Build System
+### Performance, Memory & Build System
+- **Tile & Theme Icon Pre-Scaling to 40x40 (`app/pages`, `widgets/dashboard/themes`)**:
+  - Pre-scaled all 148 page/tile icons and 7 theme icons to exact 40x40 px using Lanczos resampling.
+  - Reduced C-heap decode buffer allocation from 19.6 kB to 6.4 kB per PNG decode (3.1x reduction), reducing LVGL image cache footprint from ~78 kB to ~26 kB and eliminating LVGL heap exhaustion (`ta` error tiles) on image-heavy menus.
+  - Cut total asset disk footprint by 51.3% and eliminated software zoom/scaling overhead on 800x480 displays.
+- **Codebase GC & Memory Cleanup (`allowMemAutoRefresh`)**:
+  - Removed 60 obsolete `allowMemAutoRefresh()` function stubs across all page modules and dashboard themes to reduce garbage collection churn and memory overhead.
+- **Incremental Bytecode Compilation & Build Identity (`lib/precompile.lua`, `bin/package/build_package.py`)**:
+  - Implemented incremental startup bytecode compilation checking file modification timestamps (`fstat`) with 2-second FAT tolerance against bytecode timestamps, only recompiling modified or stale Lua sources.
+  - Integrated deterministic SHA-256 build identity hashing (`build.txt`), ensuring complete cache invalidation between releases.
+- **Early Link-Ready Dashboard Rendering (`widgets/dashboard`)**:
+  - Render telemetry dashboard immediately upon establishing the RF/MSP telemetry link without waiting for the full multi-step initialization chain.
 - **Startup Pacing & Queue Optimization**:
   - MSP queue runner takes a second pass immediately after callers populate it, reducing round-trip latency.
   - Background task ticks twice as fast during initial connection startup.
