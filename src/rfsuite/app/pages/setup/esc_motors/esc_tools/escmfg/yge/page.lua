@@ -251,7 +251,8 @@ local function queueYgeWrite(requestRebuild)
 
   queue:add({
     command = EscParametersYgeApi.writeCommand,
-    timeout = 15,
+    timeout = 5,
+    maxRetries = 1,
     payload = EscParametersYgeApi.buildWritePayload(writeData),
     isWrite = true,
     processReply = function(self, buf)
@@ -264,6 +265,10 @@ local function queueYgeWrite(requestRebuild)
     end,
     errorHandler = function()
       ui.saving = false
+      ui.notice = {
+        title = pageText(ui.i18n, "save_failed_title", "Save Failed"),
+        message = pageText(ui.i18n, "save_failed_message", "ESC did not respond / write timed out.")
+      }
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
@@ -463,6 +468,7 @@ function M.build(ctx)
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
   ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
+  ui.i18n = ctx and ctx.i18n or nil
 
   local children = ctx.children
   local x = ctx.x

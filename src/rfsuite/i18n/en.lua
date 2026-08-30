@@ -1044,6 +1044,8 @@ return {
         remove_blades_warning = "Please remove main and tail blades before configuring the ESC!",
         loading_data = "Loading ESC parameters...",
         saving_data = "Saving ESC parameters...",
+        save_failed_title = "Save Failed",
+        save_failed_message = "ESC did not respond / write timed out.",
         title_motor_override = "Motor Override",
         motor = "Motor",
         motor_override_note = "Blades off and the craft secured. The motor turns as soon as the throttle leaves zero.",

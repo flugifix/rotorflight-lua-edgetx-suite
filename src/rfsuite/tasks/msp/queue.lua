@@ -460,6 +460,7 @@ function Queue:processQueue(now)
   local retryDelay = tonumber(msg.retryBackoff) or tonumber(msg.retryDelay) or self.retryBackoff
   local timeoutSeconds = tonumber(msg.timeout) or self.timeout
   local commandInterval = tonumber(msg.commandInterval) or self.commandInterval
+  local maxRetries = tonumber(msg.maxRetries) or self.maxRetries
 
   if simulatorMode then
     if not msg.simulatorResponse then
@@ -575,7 +576,7 @@ function Queue:processQueue(now)
   local canSendByInterval = not self.lastTimeCommandSent or (self.lastTimeCommandSent + commandInterval < now)
   local canSendByTimeout = (self.currentMessageStartTime == nil) or ((now - self.currentMessageStartTime) >= timeoutSeconds)
 
-  if canSendByInterval and canSendByTimeout and self.retryCount <= self.maxRetries then
+  if canSendByInterval and canSendByTimeout and self.retryCount <= maxRetries then
     local payload = msg.payload or EMPTY_PAYLOAD
     local okSend = self.common and type(self.common.sendRequest) == "function"
       and self.common.sendRequest(msg.command, payload, { write = isWriteMessage(msg) })
@@ -601,11 +602,11 @@ function Queue:processQueue(now)
       if self.wanted("trace") then
         self.logf("trace", "tx cmd=%s rw=%s client=%s attempt=%d/%d len=%s %s",
           tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
-          self.retryCount, self.maxRetries + 1, tostring(bufLen(payload)), self.hex(payload))
+          self.retryCount, maxRetries + 1, tostring(bufLen(payload)), self.hex(payload))
       else
         self.logf("debug", "tx cmd=%s rw=%s client=%s attempt=%d/%d len=%s",
           tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
-          self.retryCount, self.maxRetries + 1, tostring(bufLen(payload)))
+          self.retryCount, maxRetries + 1, tostring(bufLen(payload)))
       end
 
       if self.common and type(self.common.processTxQ) == "function" then
@@ -622,7 +623,7 @@ function Queue:processQueue(now)
   -- answered. So the last retry is not a retry -- it is a send whose reply is never waited for,
   -- and a link that answers slowly loses the one attempt that would have succeeded.
   -- The timeout branch below already waits for the window in exactly this way.
-  if self.retryCount > self.maxRetries
+  if self.retryCount > maxRetries
     and (self.currentMessageStartTime == nil
          or (now - self.currentMessageStartTime) > timeoutSeconds) then
     msg.__retryCount = self.retryCount
@@ -657,7 +658,7 @@ function Queue:processQueue(now)
 
   -- Timeout: nur abbrechen, wenn keine weiteren Retries mehr erlaubt sind
   if self.currentMessage and self.currentMessageStartTime and (now - self.currentMessageStartTime) > timeoutSeconds then
-    if self.retryCount < self.maxRetries + 1 then
+    if self.retryCount < maxRetries + 1 then
       -- Noch ein Retry erlaubt, warte auf Retry-Logik oben
       return
     end
@@ -670,7 +671,7 @@ function Queue:processQueue(now)
     end
     self.logf("warn", "timeout cmd=%s rw=%s client=%s attempt=%d/%d",
       tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
-      self.retryCount, self.maxRetries + 1)
+      self.retryCount, maxRetries + 1)
     self.currentMessage = nil
     self.currentMessageStartTime = nil
     self.lastTimeCommandSent = nil
