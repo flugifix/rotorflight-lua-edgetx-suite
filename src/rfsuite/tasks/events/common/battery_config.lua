@@ -51,6 +51,9 @@ function M.wakeup(args)
     command = batteryConfigApi.command,
     simulatorResponse = batteryConfigApi.simulatorResponse,
     timeout = 5.0,
+    -- Bounded below the task timeout in tasks/events/common/runner.lua, so this read
+    -- is given up by the queue before the runner re-queues the task that owns it.
+    maxRetries = 2,
     processReply = function(self, buf)
       local data = batteryConfigApi.parse(buf)
       if data then

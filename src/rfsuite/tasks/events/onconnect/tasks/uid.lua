@@ -40,6 +40,9 @@ function M.wakeup()
       command = UidApi.command,
       simulatorResponse = UidApi.simulatorResponse,
       timeout = 5.0,
+      -- Bounded below the task timeout in tasks/events/common/runner.lua, so this read
+      -- is given up by the queue before the runner re-queues the task that owns it.
+      maxRetries = 2,
       processReply = function(self, buf)
         local parsed = UidApi.parse(buf)
         if parsed and parsed.mcuId and parsed.mcuId ~= "" then
