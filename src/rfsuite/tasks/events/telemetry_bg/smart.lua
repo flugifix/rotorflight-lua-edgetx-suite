@@ -232,6 +232,7 @@ local function getSmartConfig(session)
 
   local voltageDropRate = tonumber(pick("voltage_drop_rate"))
   local chargeDropRate = tonumber(pick("charge_drop_rate"))
+  local sagGain = tonumber(pick("sag_gain")) or 40
 
   local voltageFallPerSecond = nil
   if voltageDropRate ~= nil then
@@ -253,7 +254,8 @@ local function getSmartConfig(session)
     stabilizeDelaySeconds = scaleField(pick("stabilize_delay"), 1.5, 0, 10, 1000),
     stableWindowVolts = scaleField(pick("stable_window"), 0.15, 0, 1, 100),
     voltageFallPerSecond = voltageFallPerSecond,
-    fuelDropPerSecond = fuelDropPerSecond
+    fuelDropPerSecond = fuelDropPerSecond,
+    sagGain = sagGain
   }
 end
 
@@ -391,7 +393,8 @@ local function computeVoltageMode(now, voltage, cellCount, batteryConfig, usable
 
   local filteredVoltage = voltage
   if previousVoltage then
-    local maxDrop = dt * cfg.voltageFallPerSecond
+    local sagFactor = 1.0 - math.max(0, math.min(0.5, (cfg.sagGain or 40) / 100 * 0.5))
+    local maxDrop = dt * cfg.voltageFallPerSecond * sagFactor
     if voltage < previousVoltage then
       filteredVoltage = math.max(voltage, previousVoltage - maxDrop)
     end

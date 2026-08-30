@@ -22,7 +22,6 @@ local Common = nil
 -- table. The comment those two carry -- "no manual field list" -- is true of them and was not
 -- true of the page, because the page had a second list.
 local CONFIG_SCHEMA = {
-  { key = "iconsize",                     type = "number", default = 2     },
   { key = "save_confirm",                 type = "bool",   default = true   },
   { key = "save_armed_warning",           type = "bool",   default = true   },
   { key = "reload_confirm",               type = "bool",   default = true   },
@@ -158,8 +157,13 @@ end
 -- Add new sections here — one entry, one builder function above, done.
 
 local SECTIONS = {
+<<<<<<< HEAD
+  { key = "safety",      titleKey = "section_safety",      titleFallback = "Sicherheit & Prompts", build = buildSafety      },
+  { key = "development", titleKey = "section_development", titleFallback = "Entwicklung",         build = buildDevelopment },
+=======
   { key = "safety",      titleKey = "section_safety",      titleFallback = "Safety & Prompts", build = buildSafety      },
   { key = "development", titleKey = "section_development", titleFallback = "Development",      build = buildDevelopment },
+>>>>>>> upstream/master
 }
 
 -- ─── Module API ──────────────────────────────────────────────────────────────
@@ -167,10 +171,6 @@ local SECTIONS = {
 function M.getHeaderActions()
   ensureDeps()
   return { save = true, help = true }
-end
-
-function M.allowMemAutoRefresh()
-  return true
 end
 
 function M.onReload(ctx)

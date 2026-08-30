@@ -1272,6 +1272,20 @@ local function maybeRefreshInfoPageFromSession()
   end
 end
 
+local function isLocalSettingsPage()
+  local page = getActivePageModule()
+  if type(page) == "table" and (page.savesLocally == true or page.isLocal == true) then
+    return true
+  end
+  if state.menu and type(state.menu.getCurrentMenuId) == "function" then
+    local menuId = state.menu.getCurrentMenuId()
+    if type(menuId) == "string" and string.sub(menuId, 1, 9) == "settings_" then
+      return true
+    end
+  end
+  return false
+end
+
 -- Drop everything the MSP layer is still holding from an earlier read.
 --
 -- The response cache answers a re-read from the last reply while its key still holds, and its
@@ -1305,7 +1319,7 @@ local function showArmedNotice()
 end
 
 local function onReload()
-  if isModelArmed() then
+  if isModelArmed() and not isLocalSettingsPage() then
     showArmedNotice()
     return
   end
@@ -1417,8 +1431,11 @@ local function reportSaveOutcome(outcome)
 end
 
 local function onSave()
-  if isModelArmed() then
-    showArmedNotice()
+  local armedWarningPref = state.preferences and state.preferences.general and state.preferences.general.save_armed_warning
+  if isModelArmed() and not isLocalSettingsPage() then
+    if armedWarningPref ~= false then
+      showArmedNotice()
+    end
     return
   end
 
