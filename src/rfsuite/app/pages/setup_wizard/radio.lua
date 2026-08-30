@@ -62,11 +62,12 @@ M.STICKS = {
 -- criterion compares it against.
 M.CHANNELS = {
   {
-    -- A whole switch, and a two-position one. The pilot names the switch; which of its positions
-    -- turns the function on is settled by the rule rather than asked, and the channel is built so
-    -- that the rule holds whatever the switch's polarity is.
+    -- A two-position switch, and the pilot names the POSITION that arms -- a safety function
+    -- has no defensible default, and which end of a switch means on is the pilot's convention
+    -- rather than anything the machine could settle. The channel is built so that exactly the
+    -- named position reads at the top of the travel, whichever way the switch is mounted.
     channel = 5, input = 4, key = "arm", tier = "required",
-    switchOnly = true, exactPositions = 2,
+    exactPositions = 2,
     inputName = "Arm", channelName = "Arming",
     roles = { { kind = "condition", box = "ARM" } }
   },
@@ -97,7 +98,7 @@ M.CHANNELS = {
   },
   {
     channel = 8, input = 7, key = "rescue", tier = "recommended",
-    switchOnly = true, exactPositions = 2,
+    exactPositions = 2,
     inputName = "Resc", channelName = "Rescue",
     roles = { { kind = "condition", box = "RESCUE" } }
   }
@@ -364,15 +365,17 @@ function M.activePosition(swsrc)
   return nil
 end
 
--- What a switch position produces on a channel the assistant wrote itself: full deflection at
--- the ends, centre in the middle. Computed rather than measured because the assistant is the
--- author of that mix and therefore knows its transfer function exactly.
-function M.positionUs(swsrc)
+-- The weight that puts a picked position at the BOTTOM of the travel.
+--
+-- Unlike the condition channels there is nothing to measure here: which PHYSICAL direction a
+-- switch is mounted in is absorbed by the radio's own inversion setting, and the logical
+-- encoding underneath is fixed -- a switch source reads the bottom of its range at its first
+-- position and the top at its last. The middle of a three-position switch is not an end of
+-- the travel, so it has no weight and is refused by name rather than mapped to a guess.
+function M.weightForLowAt(swsrc)
   local position = M.switchPosition(swsrc)
-  if position == nil then return nil end
-  if position == M.POSITION_UP then return 2012 end
-  if position == M.POSITION_MIDDLE then return 1500 end
-  return 988
+  if position == nil or position == M.POSITION_MIDDLE then return nil end
+  return position == M.POSITION_UP and 100 or -100
 end
 
 -- The travel a switch actually produces on a channel the assistant wrote itself -- both ends, not
@@ -654,12 +657,18 @@ function M.writeThrottleChannel(entry, swsrc, govSwsrc)
   if mixSource == nil then return false, err end
 
   -- The governor switch, where the pilot named one, goes into an input of its own and that input
-  -- feeds the value line.
+  -- feeds the value line. Its DIRECTION is part of the answer: the pilot names the position
+  -- where the motor is off, and the input's weight puts that position at the bottom of the
+  -- travel -- so the other end, or both remaining positions of a three-position switch, carry
+  -- the value. Written without asking, the direction was a rule, and a rule about which way a
+  -- pilot's switch runs is a guess wearing a constant.
   local baseSource = nil
   if govSwsrc ~= nil and govSwsrc ~= 0 and entry.govInput ~= nil then
+    local govWeight = M.weightForLowAt(govSwsrc)
+    if govWeight == nil then return false, "gov_middle" end
     local govSource, govErr = writeChannelInput({
       input = entry.govInput, inputName = entry.govInputName, channel = entry.channel
-    }, govSwsrc)
+    }, govSwsrc, govWeight)
     if govSource == nil then return false, govErr end
     baseSource = govSource
   end

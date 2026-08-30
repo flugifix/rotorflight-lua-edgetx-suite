@@ -117,10 +117,10 @@ local function channelName(i18n, key)
 end
 
 local function pickerName(i18n, key)
-  if key == "arm" then return t(i18n, "pick_arm", "Arms at") end
+  if key == "arm" then return t(i18n, "pick_arm", "Switch position for armed") end
   if key == "throttle" then return t(i18n, "pick_throttle", "Motor released at") end
   if key == "profile" then return t(i18n, "pick_profile", "Profile switch") end
-  if key == "rescue" then return t(i18n, "pick_rescue", "Rescue at") end
+  if key == "rescue" then return t(i18n, "pick_rescue", "Switch position for rescue") end
   return key
 end
 
@@ -806,6 +806,11 @@ local function throttleComplete(w, channel)
     local line = w.radio.getInput(entry.govInput, 0)
     if line == nil then return false end
     if tonumber(line.source) ~= w.radio.switchSource(wantGov) then return false end
+    -- The direction is part of the end state: the input must put the named off position at the
+    -- bottom of the travel, or the channel reports itself done with the motor running on the
+    -- wrong side of the switch.
+    local wantWeight = w.radio.weightForLowAt(wantGov)
+    if wantWeight == nil or tonumber(line.weight) ~= wantWeight then return false end
   elseif (tonumber(valueLine.weight) or 0) ~= 0 then
     return false
   end
@@ -875,11 +880,22 @@ local function makeChannelProcedure(channel, order)
     -- A governor already in the model is proposed back, the same way the hold is: the switch is
     -- the source of the channel's second input, so a second run does not ask again for something
     -- that is already there.
-    local govEntry = entryFor(w, channel)
-    if govEntry ~= nil and govEntry.govInput ~= nil and data.pickedGov[channel] == nil then
-      local line = w.radio.getInput(govEntry.govInput, 0)
+    local entry = entryFor(w, channel)
+    if entry ~= nil and entry.govInput ~= nil and data.pickedGov[channel] == nil then
+      local line = w.radio.getInput(entry.govInput, 0)
       local source = line and tonumber(line.source) or nil
-      if source ~= nil then data.pickedGov[channel] = w.radio.switchFromSource(source) end
+      if source ~= nil then
+        -- The stored weight says which end this assistant put at the bottom, so the off
+        -- position is proposed exactly rather than guessed: +100 bottoms the first position,
+        -- -100 the last. Any other weight is not this assistant's work and proposes nothing.
+        local first = w.radio.switchFromSource(source)
+        local weight = tonumber(line.weight)
+        if first ~= nil and weight == 100 then
+          data.pickedGov[channel] = first
+        elseif first ~= nil and weight == -100 then
+          data.pickedGov[channel] = first + w.radio.POSITION_DOWN
+        end
+      end
     end
     local info = w.radio.describeChannel(channel)
     data.found[channel] = info
@@ -897,18 +913,28 @@ local function makeChannelProcedure(channel, order)
           break
         end
       end
-      -- And where the mix records no gate, NOTHING is proposed.
-      --
-      -- This used to search for the switch behind the mix source and offer its first position --
-      -- an answer to a question the mix does not hold. A plain one-to-one carries a switch and not
-      -- which of its positions means on, so the proposal was a guess wearing the pilot's own
-      -- earlier answer. The field stays empty instead, which is what it already does for a channel
-      -- with nothing on it, and for the same reason: a safety function has no defensible default.
-      if picked == nil and info.source and entry ~= nil and not entry.switchOnly then
+      -- A plain one-to-one MIX carries a switch and not which of its positions means on -- but
+      -- on a condition channel the INPUT does: this assistant writes the weight so that the
+      -- meant position reads at the top, -100 topping the first position and +100 the last.
+      -- So the position is proposed exactly where that signature is found, and NOT AT ALL
+      -- where it is not: anything else on the input is not this assistant's work, and a safety
+      -- function has no defensible default. The profile channel carries a value across the
+      -- whole travel, so for it the switch itself is the answer.
+      if picked == nil and info.source and entry ~= nil then
         for swsrc = 1, MAX_SWITCH_POSITIONS do
           local source = w.radio.switchSource(swsrc)
           if source ~= nil and source == info.source then
             picked = w.radio.firstPositionOf(swsrc)
+            local role = w.radio.firstRole(entry)
+            if role and role.kind == "condition" then
+              local line = entry.input ~= nil and w.radio.getInput(entry.input, 0) or nil
+              local weight = line and tonumber(line.weight) or nil
+              if weight == 100 then
+                picked = picked + w.radio.POSITION_DOWN
+              elseif weight ~= -100 then
+                picked = nil
+              end
+            end
             break
           end
         end
@@ -916,7 +942,6 @@ local function makeChannelProcedure(channel, order)
       data.picked[channel] = picked
     end
 
-    local entry = entryFor(w, channel)
     local role = entry and w.radio.firstRole(entry) or nil
     if role and role.kind == "adjustment" and data.adjustments == nil then
       -- The single-slot accessor arrived with API 12.09. Below it the command does not
@@ -962,6 +987,14 @@ local function makeChannelProcedure(channel, order)
         local positions = w.radio.switchPositionCount(picked) or 0
         if entry.needsPositions and positions < entry.needsPositions then return false end
         if entry.exactPositions and positions ~= entry.exactPositions then return false end
+        -- The governor's off position cannot be the middle of its travel; the screen says why.
+        if entry.govInput ~= nil then
+          local gov = w.data.pickedGov and w.data.pickedGov[channel]
+          if gov ~= nil and gov ~= 0
+             and w.radio.switchPosition(gov) == w.radio.POSITION_MIDDLE then
+            return false
+          end
+        end
         return true
       end,
       build = function(w, ctx, area)
@@ -1064,15 +1097,17 @@ local function makeChannelProcedure(channel, order)
           pickerName(i18n, entry.key), w.font, COLOR_THEME_PRIMARY1)
 
         -- Two picker kinds for two channel kinds. Where the function sits AT a position -- arming,
-        -- the throttle hold, rescue -- the radio's own picker is exactly right: which switch and
-        -- which state collapse into the one answer the pilot already knows from their transmitter.
+        -- the throttle hold, rescue -- the radio's own position picker is exactly right: which
+        -- switch and which state collapse into the one answer the pilot already knows from their
+        -- transmitter, and naming the position is the half of the answer no rule may settle for
+        -- them.
         --
         -- Where the channel carries a VALUE across the whole travel there is no position to name,
         -- because all three are in use, one per profile. Asked with the position picker the pilot
         -- had to pick one of three answers that all mean the same thing, and `proc.enter` then
         -- normalised two of them away with `firstPositionOf`. So that channel gets a list of
         -- SWITCHES, filtered to the ones that can carry it.
-        if entry.needsPositions or entry.switchOnly then
+        if entry.needsPositions then
           -- The radio's OWN source picker, filtered to switches.
           --
           -- This channel's answer is a whole switch rather than one of its positions -- all three
@@ -1100,11 +1135,12 @@ local function makeChannelProcedure(channel, order)
               return w.radio.switchSource(picked) or 0
             end,
             set = function(value)
-              -- The FIRST position of the switch, which EdgeTX numbers zero and calls up. For a
-              -- condition channel that is the position the rule turns the function on at, and the
-              -- channel is built so that it reads high there whatever the switch's polarity is.
+              -- The whole switch is the answer here, normalised to its first position -- the
+              -- spelling everything downstream shares.
               local first = w.radio.switchFromSource(value)
               w.data.picked[channel] = first or 0
+              Wlog.emit("debug", "pick ch%d -> %s", channel,
+                tostring(w.radio.switchBaseName(w.data.picked[channel]) or 0))
             end
           }
 
@@ -1119,15 +1155,6 @@ local function makeChannelProcedure(channel, order)
               t(i18n, "pick_needs_three",
                 "This switch has two positions. The profile channel needs three, one per profile. Pick a three-position switch."))
           end
-          -- Two positions and no more, on the channels that carry a mode. It is a simplification
-          -- rather than a limit the machine imposes: with the channel constructed the way it now
-          -- is, a middle position would work. The pilot's ruling is that this assistant is for a
-          -- first setup, and a first setup gets one answer, not three.
-          if positions ~= nil and entry.exactPositions and positions ~= entry.exactPositions then
-            w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
-              t(i18n, "pick_needs_two",
-                "This switch has more than two positions. This channel takes a two-position switch: on, or not."))
-          end
           return
         end
 
@@ -1138,49 +1165,82 @@ local function makeChannelProcedure(channel, order)
           get = function() return w.data.picked[channel] or 0 end,
           -- No repaint on a change. The button that gates this screen asks a FUNCTION whether it
           -- may be pressed, so it follows the field without the page being rebuilt -- and a rebuild
-          -- would throw the focus back to the first row after every choice.
-          set = function(value) w.data.picked[channel] = tonumber(value) or 0 end
+          -- would throw the focus back to the first row after every choice. The line is the one
+          -- record of the answer before the write, which is what makes a report traceable.
+          set = function(value)
+            w.data.picked[channel] = tonumber(value) or 0
+            Wlog.emit("debug", "pick ch%d -> %s", channel,
+              tostring(w.radio.switchPositionName(w.data.picked[channel]) or 0))
+          end
         }
         y = y + w.ROW_H
 
+        -- Two positions and no more, on the channels that carry a mode. It is a simplification
+        -- rather than a limit the machine imposes: with the channel constructed the way it is, a
+        -- middle position would work. The pilot's ruling is that this assistant is for a first
+        -- setup, and a first setup gets one answer, not three. The picker cannot be filtered by
+        -- position count, so the shortfall is said in words; the gate on the step refuses it.
+        if entry.exactPositions then
+          local picked = w.data.picked and w.data.picked[channel]
+          local positions = picked ~= nil and picked ~= 0
+            and (w.radio.switchPositionCount(picked) or 0) or nil
+          if positions ~= nil and positions ~= entry.exactPositions then
+            y = y + 6 + w.paragraph(children, area.x, y + 6, area.w,
+              t(i18n, "pick_needs_two",
+                "This switch has more than two positions. This channel takes a two-position switch: on, or not."))
+          end
+        end
+
+        -- The half the field name cannot carry: naming where the motor may run says nothing
+        -- about the rest of the travel, and the rest is the whole point of the channel.
+        if entry.key == "throttle" then
+          y = y + 4 + w.paragraph(children, area.x, y + 4, area.w,
+            t(i18n, "hold_others_off", "In every other position the motor is off."))
+        end
+
         -- The SECOND switch of this channel, and the only channel on the path that has one.
         --
-        -- It is a whole switch rather than a position, because its positions carry VALUES later --
-        -- off, spool, flight -- so the answer is the switch, the same shape the profile channel
-        -- needs and the same control the radio offers for it.
+        -- Asked as a POSITION -- the one where the motor is off -- because the direction of the
+        -- travel is half of the answer: the same switch mounted the same way can run the motor
+        -- at either end, and which end is the pilot's convention rather than anything a rule
+        -- may settle. The off position goes to the bottom of the travel and the rest of the
+        -- switch carries the value.
         --
-        -- What is written for it now is structure only: the switch becomes the source of an input
-        -- of its own and that input feeds this channel's base line, with every line still forced
-        -- to the floor. The motor is off in every position until the drivetrain section knows the
-        -- governor mode -- which is what makes this a decision the radio section can FINISH,
-        -- rather than one it collects and leaves lying somewhere to go stale.
+        -- The switch becomes the source of an input of its own and that input feeds this
+        -- channel's base line, gated by the hold -- which is what makes this a decision the
+        -- radio section can FINISH, rather than one it collects and leaves lying somewhere to
+        -- go stale.
         if entry.govInput ~= nil then
           w.data.pickedGov = w.data.pickedGov or {}
           w.label(children, area.x, y + math.floor((w.ROW_H - 18) / 2), area.w - pickerW - 8,
-            t(i18n, "pick_governor", "Governor via"), w.font, COLOR_THEME_PRIMARY1)
+            t(i18n, "pick_governor", "Switch position for motor off"), w.font, COLOR_THEME_PRIMARY1)
           children[#children + 1] = {
-            type = "source",
+            type = "switch",
             x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
-            -- No `title` here either; see the note on the profile channel's picker.
-            filter = (SRC_SWITCH or 0xFFFFFFFF),
-            get = function()
-              local picked = w.data.pickedGov[channel]
-              if picked == nil or picked == 0 then return 0 end
-              return w.radio.switchSource(picked) or 0
-            end,
+            filter = SW_SWITCH | SW_NONE,
+            get = function() return w.data.pickedGov[channel] or 0 end,
             set = function(value)
-              w.data.pickedGov[channel] = w.radio.switchFromSource(value) or 0
+              w.data.pickedGov[channel] = tonumber(value) or 0
+              Wlog.emit("debug", "pick ch%d governor -> %s", channel,
+                tostring(w.radio.switchPositionName(w.data.pickedGov[channel]) or 0))
             end
           }
           y = y + w.ROW_H
 
+          -- The middle of a three-position switch is not an end of the travel, so the motor
+          -- cannot be off exactly there. The step's gate refuses it; this line says why.
+          local hold = w.data.picked[channel]
+          local gov = w.data.pickedGov[channel]
+          if gov ~= nil and gov ~= 0
+             and w.radio.switchPosition(gov) == w.radio.POSITION_MIDDLE then
+            w.paragraph(children, area.x, y + 4, area.w,
+              t(i18n, "gov_middle",
+                "The motor cannot be off in the middle position. Pick an end position."))
           -- The starvation check the concept asks for, and it is on POSITIONS rather than on
           -- which switch. The hold line overrides, so every position it covers is lost to the
           -- governor: one switch for both leaves the governor with what the hold does not take,
           -- and on a two-position switch that is nothing at all.
-          local hold = w.data.picked[channel]
-          local gov = w.data.pickedGov[channel]
-          if hold ~= nil and hold ~= 0 and gov ~= nil and gov ~= 0
+          elseif hold ~= nil and hold ~= 0 and gov ~= nil and gov ~= 0
              and w.radio.firstPositionOf(hold) == w.radio.firstPositionOf(gov) then
             local spare = (w.radio.switchPositionCount(gov) or 0) - 1
             if spare < 2 then
@@ -1602,10 +1662,20 @@ procs[#procs + 1] = {
               local want = 988
               if held then
                 if action.govSwsrc == nil or action.govSwsrc == 0 then return tostring(us) .. " us", waiting end
-                local first = w.radio.firstPositionOf(action.govSwsrc)
+                -- What the WRITE put there: the named off position at the bottom of the travel,
+                -- the middle of a three-position switch at centre, every other position at the
+                -- top. Computed from the same answer the write ran on, so the row can only go
+                -- red where the machine deviates -- never where the expectation does.
                 local offset = w.radio.activePosition(action.govSwsrc)
-                if first == nil or offset == nil then return tostring(us) .. " us", waiting end
-                want = w.radio.positionUs(first + offset) or 988
+                local offOffset = w.radio.switchPosition(action.govSwsrc)
+                if offset == nil or offOffset == nil then return tostring(us) .. " us", waiting end
+                if offset == offOffset then
+                  want = 988
+                elseif offset == w.radio.POSITION_MIDDLE then
+                  want = 1500
+                else
+                  want = 2012
+                end
               end
 
               local text = tostring(us) .. " us"
