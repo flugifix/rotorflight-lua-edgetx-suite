@@ -13,12 +13,32 @@ if lvgl == nil then
 end
 
 local function create(zone, options)
-  local requireChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local requireChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", mode)
   if requireChunk then
-    requireChunk()
+    pcall(requireChunk)
   end
-  local factory = assert(loadScript("/WIDGETS/rfsuite/app.lua", "t"))
-  return factory(zone, options)
+  local appChunk = loadScript("/WIDGETS/rfsuite/app.lua", mode)
+  if not appChunk then
+    appChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/runtime.lua", mode)
+  end
+  if not appChunk then return nil end
+
+  local ok, res = pcall(appChunk, zone, options)
+  if ok and res ~= nil then
+    if type(res) == "function" then
+      local okFn, widget = pcall(res, zone, options)
+      if okFn then return widget end
+    elseif type(res) == "table" then
+      if type(res.new) == "function" then
+        local okNew, widget = pcall(res.new, zone, options)
+        if okNew then return widget end
+      else
+        return res
+      end
+    end
+  end
+  return nil
 end
 
 local function nowSeconds()
