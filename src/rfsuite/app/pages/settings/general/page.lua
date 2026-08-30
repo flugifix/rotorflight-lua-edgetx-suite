@@ -157,13 +157,8 @@ end
 -- Add new sections here — one entry, one builder function above, done.
 
 local SECTIONS = {
-<<<<<<< HEAD
-  { key = "safety",      titleKey = "section_safety",      titleFallback = "Sicherheit & Prompts", build = buildSafety      },
-  { key = "development", titleKey = "section_development", titleFallback = "Entwicklung",         build = buildDevelopment },
-=======
   { key = "safety",      titleKey = "section_safety",      titleFallback = "Safety & Prompts", build = buildSafety      },
   { key = "development", titleKey = "section_development", titleFallback = "Development",      build = buildDevelopment },
->>>>>>> upstream/master
 }
 
 -- ─── Module API ──────────────────────────────────────────────────────────────
