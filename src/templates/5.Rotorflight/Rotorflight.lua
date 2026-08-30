@@ -138,13 +138,122 @@ local function switchLabel(swsrc)
   return R.switchBaseName(swsrc) or tostring(swsrc)
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- Drawing. Plain lcd calls, arranged rather than listed: a dark header naming the wizard and
+-- the step, the question at reading size, the candidate in a box of its own so the thing ENTER
+-- will take is the thing the eye is on, and the key hints at the bottom edge. Colours come from
+-- the radio's own theme where the constants exist and fall back to plain drawing where they do
+-- not -- a standalone script cannot assume a theme.
+-- ---------------------------------------------------------------------------------------------
+
+local COL_HEADER = COLOR_THEME_SECONDARY1 or BLACK or 0
+local COL_HEADER_TEXT = COLOR_THEME_PRIMARY2 or WHITE or 0
+local COL_TEXT = COLOR_THEME_PRIMARY1 or BLACK or 0
+local COL_BOX = COLOR_THEME_FOCUS or BLACK or 0
+
+local function screenWidth() return LCD_W or 480 end
+local function screenHeight() return LCD_H or 320 end
+
+local function textWidth(text, flags)
+  if lcd.sizeText ~= nil then
+    local w = lcd.sizeText(text, flags or 0)
+    if type(w) == "number" then return w end
+  end
+  return #text * 8
+end
+
+local function centered(y, text, flags)
+  lcd.drawText(math.floor((screenWidth() - textWidth(text, flags)) / 2), y, text, flags or 0)
+end
+
+-- Greedy wrap against the real text width, so a sentence survives every screen size the
+-- template may meet.
+local function wrapped(x, y, width, text, flags, lineH)
+  local line = ""
+  for word in string.gmatch(text, "%S+") do
+    local candidateLine = line == "" and word or (line .. " " .. word)
+    if textWidth(candidateLine, flags) > width and line ~= "" then
+      lcd.drawText(x, y, line, flags)
+      y = y + lineH
+      line = word
+    else
+      line = candidateLine
+    end
+  end
+  if line ~= "" then
+    lcd.drawText(x, y, line, flags)
+    y = y + lineH
+  end
+  return y
+end
+
+local function drawFrame(title, right)
+  lcd.clear()
+  lcd.drawFilledRectangle(0, 0, screenWidth(), 36, COL_HEADER)
+  lcd.drawText(10, 8, title, COL_HEADER_TEXT + (BOLD or 0))
+  if right ~= nil then
+    lcd.drawText(screenWidth() - 10 - textWidth(right, 0), 8, right, COL_HEADER_TEXT)
+  end
+end
+
+local function drawFooter(left, right)
+  local y = screenHeight() - 24
+  if left ~= nil then
+    lcd.drawText(10, y, left, COL_TEXT + (SMLSIZE or 0))
+  end
+  if right ~= nil then
+    lcd.drawText(screenWidth() - 10 - textWidth(right, SMLSIZE or 0), y, right,
+      COL_TEXT + (SMLSIZE or 0))
+  end
+end
+
+local function drawQuestion(question, stepText)
+  drawFrame("Rotorflight", stepText)
+  local x = 14
+  local w = screenWidth() - 2 * x
+  local y = 50
+  lcd.drawText(x, y, question.title, COL_TEXT + (MIDSIZE or 0) + (BOLD or 0))
+  y = y + 34
+  y = wrapped(x, y, w, question.prompt, COL_TEXT, 20)
+
+  -- The candidate box: what ENTER will take, or why the last movement was refused, or the
+  -- invitation to move something -- one box, three states, so the eye has one place to look.
+  local boxY = y + 12
+  local boxH = 56
+  lcd.drawRectangle(x, boxY, w, boxH, COL_BOX)
+  if candidate ~= nil then
+    -- The position as a WORD beside the name: the position glyphs live in the small fonts and
+    -- silently vanish from the large one, and a candidate whose position cannot be read is
+    -- half an answer.
+    local label
+    if question.kind == "switch" then
+      label = switchLabel(candidate)
+    else
+      local words = { [0] = "up", [1] = "middle", [2] = "down" }
+      label = switchLabel(candidate) .. "  " .. (words[R.switchPosition(candidate)] or "?")
+    end
+    centered(boxY + 8, label, COL_TEXT + (DBLSIZE or MIDSIZE or 0) + (BOLD or 0))
+    centered(boxY + boxH + 6, "ENTER takes it", COL_TEXT + (SMLSIZE or 0))
+  elseif rejection ~= nil then
+    wrapped(x + 10, boxY + 10, w - 20, rejection, COL_TEXT, 18)
+  else
+    centered(boxY + math.floor((boxH - 16) / 2), "move a switch...", COL_TEXT)
+  end
+
+  if step == 1 then
+    drawFooter("RTN leaves -- the assistant can ask all of this later", nil)
+  else
+    drawFooter("RTN goes back one question", nil)
+  end
+end
+
 local function drawLines(lines)
   lcd.clear()
-  local x = math.floor((LCD_W or 480) / 14)
+  local x = math.floor(screenWidth() / 14)
   local y = 10
   for i = 1, #lines do
     if lines[i] ~= "" then
-      lcd.drawText(x, y, lines[i], 0)
+      lcd.drawText(x, y, lines[i], COL_TEXT)
     end
     y = y + 18
   end
@@ -205,55 +314,30 @@ local function run(event)
     local moved = watchSwitches()
     if moved ~= nil then considerCandidate(question, moved) end
 
-    local answerLine = "waiting for a switch..."
-    if candidate ~= nil then
-      if question.kind == "switch" then
-        answerLine = "> " .. switchLabel(candidate) .. "   ENTER = take it"
-      else
-        answerLine = "> " .. positionLabel(candidate) .. "   ENTER = take it"
-      end
-    elseif rejection ~= nil then
-      answerLine = rejection
-    end
-
-    drawLines({
-      "Rotorflight  -  step " .. tostring(step) .. " of " .. tostring(#QUESTIONS) ..
-        "  -  " .. question.title,
-      "",
-      question.prompt,
-      "",
-      answerLine,
-      "",
-      step == 1 and "RTN leaves; the assistant can ask all of"
-        or "RTN goes back one question.",
-      step == 1 and "this later as well." or ""
-    })
+    drawQuestion(question, tostring(step) .. " / " .. tostring(#QUESTIONS))
     return 0
   end
 
   -- The closing screen: what was written, and where the other half happens.
   if event == EVT_VIRTUAL_EXIT or event == EVT_VIRTUAL_ENTER then return 1 end
-  local lines = {
-    "Done. This model now carries:",
-    ""
-  }
+  drawFrame("Rotorflight", "done")
+  local x = 14
+  local w = screenWidth() - 2 * x
+  local y = 46
   for _, result in ipairs(written or {}) do
     local mark = result.ok and "ok" or ("FAILED: " .. tostring(result.err))
-    lines[#lines + 1] = "  CH" .. tostring(result.channel) .. "  " ..
-      tostring(result.name) .. "  -  " .. mark
+    lcd.drawText(x, y, "CH" .. tostring(result.channel), COL_TEXT + (BOLD or 0))
+    lcd.drawText(x + 52, y, tostring(result.name), COL_TEXT)
+    lcd.drawText(x + 150, y, mark, COL_TEXT + (result.ok and 0 or (BOLD or 0)))
+    y = y + 20
   end
-  lines[#lines + 1] = ""
-  lines[#lines + 1] = "Plus, from the template: ARM function switch,"
-  lines[#lines + 1] = "switch warnings, flight timer, dashboard."
-  lines[#lines + 1] = ""
-  lines[#lines + 1] = "Next: connect the flight controller and run the"
-  lines[#lines + 1] = "setup assistant (SYS > Tools > RFSuite >"
-  lines[#lines + 1] = "Configuration > Wizards). It reads this layout"
-  lines[#lines + 1] = "back and sets the flight controller to match."
-  lines[#lines + 1] = ""
-  lines[#lines + 1] = "Put every switch back to its safe position,"
-  lines[#lines + 1] = "then press RTN to close."
-  drawLines(lines)
+  y = y + 8
+  y = wrapped(x, y, w, "Plus, from the template: ARM function switch, switch warnings, "
+    .. "flight timer, dashboard.", COL_TEXT, 18) + 8
+  y = wrapped(x, y, w, "Next: connect the flight controller and run the setup assistant "
+    .. "(SYS > Tools > RFSuite > Configuration > Wizards). It reads this layout back and "
+    .. "sets the flight controller to match.", COL_TEXT, 18)
+  drawFooter("put every switch back to its safe position", "RTN closes")
   return 0
 end
 
