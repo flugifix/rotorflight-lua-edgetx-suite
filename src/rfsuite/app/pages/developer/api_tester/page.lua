@@ -771,4 +771,11 @@ function M.build(ctx)
   end
 end
 
+function M.wakeup()
+  local now = nowSeconds()
+  if ui.loading and AsyncLoadUi and type(AsyncLoadUi.isTimedOut) == "function" and AsyncLoadUi.isTimedOut(ui, now) then
+    abortLoading(ui.i18n, tr("loading_timeout", "Timeout"))
+  end
+end
+
 return M

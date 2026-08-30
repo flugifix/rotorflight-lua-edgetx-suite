@@ -308,8 +308,7 @@ local function queueAlignmentRead(isAutoReload)
         command = SensorAlignmentApi.command,
         simulatorResponse = SensorAlignmentApi.simulatorResponse,
         processReply = function(self2, buf2)
-          local parsedObj2 = SensorAlignmentApi.parse(buf2)
-          local parsed2 = parsedObj2 and parsedObj2.parsed
+          local parsed2 = SensorAlignmentApi.parse(buf2)
           if parsed2 then
             ui.display.gyro_1_alignment = math.max(0, math.min(255, tonumber(parsed2.gyro_1_alignment) or 0))
             ui.display.gyro_2_alignment = math.max(0, math.min(255, tonumber(parsed2.gyro_2_alignment) or 0))

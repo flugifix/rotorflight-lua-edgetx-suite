@@ -978,6 +978,8 @@ return {
         remove_blades_warning = "Bitte entfernen Sie Haupt- und Heckrotorblätter vor der ESC-Konfiguration!",
         loading_data = "Lade Regler-Parameter...",
         saving_data = "Speichere Regler-Parameter...",
+        save_failed_title = "Speichern fehlgeschlagen",
+        save_failed_message = "ESC antwortet nicht / Zeitüberschreitung beim Schreiben.",
         title_motor_override = "Motor-Override",
         motor = "Motor",
         motor_override_note = "Blätter ab und Modell gesichert. Der Motor dreht, sobald das Gas die Null verlässt.",
@@ -1429,7 +1431,9 @@ return {
         loading_title = "Laden",
         loading_message = "Live-Daten werden gelesen",
         loading_failed = "Laden fehlgeschlagen",
-        loading_timeout = "Zeitueberschreitung beim Lesen vom FBL"
+        loading_timeout = "Zeitueberschreitung beim Lesen vom FBL",
+        not_connected = "Telemetrie / FBL nicht verbunden",
+        link_lost = "Telemetrieverbindung unterbrochen"
       },
       diagnostics_rfstatus = {
         cpu_load = "CPU-Last",
@@ -1472,7 +1476,9 @@ return {
         cpu_load = "CPU-Last",
         ok = "OK",
         loading_title = "Laden",
-        loading_message = "Lese FBL-Status..."
+        loading_message = "Lese FBL-Status...",
+        loading_failed = "Laden fehlgeschlagen",
+        loading_timeout = "Zeitueberschreitung beim Lesen vom FBL"
       },
       tools_copy_profiles = {
         title = "Profil kopieren",

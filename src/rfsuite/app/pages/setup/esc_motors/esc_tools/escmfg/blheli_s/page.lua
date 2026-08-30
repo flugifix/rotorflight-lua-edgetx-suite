@@ -112,9 +112,8 @@ local function queueBlheliReadActual(queue)
     timeout = 15,
     simulatorResponse = EscParametersBlheliSApi.simulatorResponse,
     processReply = function(self, buf)
-      local parsedResult = EscParametersBlheliSApi.parse(buf)
-      if parsedResult and parsedResult.parsed then
-        local parsed = parsedResult.parsed
+      local parsed = EscParametersBlheliSApi.parse(buf)
+      if parsed then
         for k, v in pairs(ui.config) do
           if parsed[k] ~= nil then
             ui.config[k] = parsed[k]
@@ -265,6 +264,8 @@ local function queuePostSaveReset(target, nextState)
 
   queue:add({
     command = FwdProgApi.writeCommand,
+    timeout = 5,
+    maxRetries = 1,
     payload = FwdProgApi.buildWritePayload({ target = target }),
     isWrite = true,
     simulatorResponse = {},
@@ -278,6 +279,10 @@ local function queuePostSaveReset(target, nextState)
     errorHandler = function()
       ui.connState = 5
       ui.saving = false
+      ui.notice = {
+        title = pageText(ui.i18n, "save_failed_title", "Save Failed"),
+        message = pageText(ui.i18n, "save_failed_message", "ESC did not respond / write timed out.")
+      }
       if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
@@ -314,7 +319,8 @@ local function queueBlheliWrite(requestRebuild)
 
   queue:add({
     command = EscParametersBlheliSApi.writeCommand,
-    timeout = 15,
+    timeout = 5,
+    maxRetries = 1,
     payload = EscParametersBlheliSApi.buildWritePayload(writeData),
     isWrite = true,
     processReply = function(self, buf)
@@ -327,6 +333,10 @@ local function queueBlheliWrite(requestRebuild)
     end,
     errorHandler = function()
       ui.saving = false
+      ui.notice = {
+        title = pageText(ui.i18n, "save_failed_title", "Save Failed"),
+        message = pageText(ui.i18n, "save_failed_message", "ESC did not respond / write timed out.")
+      }
       if requestRebuild and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
@@ -549,6 +559,7 @@ function M.build(ctx)
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
   ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
+  ui.i18n = ctx and ctx.i18n or nil
 
   local children = ctx.children
   local x = ctx.x

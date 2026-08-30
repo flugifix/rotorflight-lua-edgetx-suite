@@ -60,8 +60,7 @@ function M.wakeup(args)
     simulatorResponse = statusApi.simulatorResponse,
     timeout = 5.0,
     processReply = function(self, buf)
-      local res = statusApi.parse(buf)
-      local parsed = res and res.parsed
+      local parsed = statusApi.parse(buf)
       if parsed then
         if Profile and type(Profile.setSessionPidProfile) == "function" then
           Profile.setSessionPidProfile(parsed.current_pid_profile_index)

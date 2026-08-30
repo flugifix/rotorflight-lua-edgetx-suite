@@ -504,8 +504,8 @@ local function queueServosRead(isAutoReload)
         simulatorResponse = StatusApi.simulatorResponse,
         processReply = function(self, buf)
           local parsed = StatusApi.parse(buf)
-          if parsed and parsed.parsed then
-            ui.servoCount = parsed.parsed.servo_count or 0
+          if parsed then
+            ui.servoCount = parsed.servo_count or 0
           end
 
           ui.progress = 50
@@ -519,12 +519,12 @@ local function queueServosRead(isAutoReload)
             simulatorResponse = SerialConfigApi.simulatorResponse,
             processReply = function(self, buf)
               local parsed = SerialConfigApi.parse(buf)
-              if parsed and parsed.parsed then
+              if parsed then
                 local fbus_mask = 524288
                 local sbus_mask = 262144
                 local found = false
                 for i = 1, 12 do
-                  local mask = parsed.parsed["port_" .. i .. "_function_mask"]
+                  local mask = parsed["port_" .. i .. "_function_mask"]
                   if mask == fbus_mask or mask == sbus_mask then
                     found = true
                     break
@@ -552,8 +552,7 @@ local function queueServosRead(isAutoReload)
                 command = ServoConfigsApi.command,
                 simulatorResponse = ServoConfigsApi.simulatorResponse,
                 processReply = function(self, buf)
-                  local res = ServoConfigsApi.parse(buf)
-                  local parsed = res and res.parsed
+                  local parsed = ServoConfigsApi.parse(buf)
                   if parsed then
                     ui.config.servos = {}
                     local count = parsed.servo_count or 0

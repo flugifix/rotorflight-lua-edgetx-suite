@@ -741,8 +741,7 @@ local function startLoad(requestRebuild)
     command = RxMapApi.command,
     simulatorResponse = RxMapApi.simulatorResponse,
     processReply = function(self, buf)
-      local parsedObj = RxMapApi.parse(buf)
-      local rxParsed = parsedObj and parsedObj.parsed
+      local rxParsed = RxMapApi.parse(buf)
       if rxParsed then
         local session = getSession()
         if session then

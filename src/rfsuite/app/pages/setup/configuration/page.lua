@@ -125,8 +125,8 @@ local function queueRcRead(isAutoReload)
     simulatorResponse = StatusApi.simulatorResponse,
     processReply = function(self, buf)
       local parsedStatus = StatusApi.parse(buf)
-      if parsedStatus and parsedStatus.parsed then
-        local delta = tonumber(parsedStatus.parsed.task_delta_time_gyro) or 0
+      if parsedStatus then
+        local delta = tonumber(parsedStatus.task_delta_time_gyro) or 0
         if delta > 0 then
           ui.config.task_delta_time_gyro = delta
         end

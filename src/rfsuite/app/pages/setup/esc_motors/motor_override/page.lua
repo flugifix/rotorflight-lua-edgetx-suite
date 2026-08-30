@@ -198,8 +198,8 @@ local function queueOverrideRead()
     simulatorResponse = StatusApi.simulatorResponse,
     processReply = function(_, statusBuf)
       local status = StatusApi.parse(statusBuf)
-      if status and status.parsed then
-        ui.motorCount = status.parsed.motor_count or 0
+      if status then
+        ui.motorCount = status.motor_count or 0
       end
       if ui.selected >= effectiveMotorCount() then
         ui.selected = 0

@@ -66,7 +66,7 @@ function Api.parse(buf)
       end
     end
   end
-  return { parsed = parsed }
+  return parsed
 end
 
 Api.simulatorResponse = SIM_RESPONSE

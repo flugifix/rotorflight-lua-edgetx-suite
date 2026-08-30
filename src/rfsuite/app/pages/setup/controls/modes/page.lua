@@ -610,9 +610,8 @@ local function startLoad(requestRebuild)
                 simulatorResponse = ModeRangesExtraApi.simulatorResponse,
                 processReply = function(self4, buf4)
                   local parsedObj4 = ModeRangesExtraApi.parse(buf4)
-                  local extParsed = parsedObj4 and parsedObj4.parsed
-                  if extParsed and extParsed.mode_ranges_extra then
-                    ui.modeRangesExtra = extParsed.mode_ranges_extra
+                  if parsedObj4 and parsedObj4.mode_ranges_extra then
+                    ui.modeRangesExtra = parsedObj4.mode_ranges_extra
                   end
                   ui.progress = 80
                   triggerRebuild()
@@ -622,8 +621,7 @@ local function startLoad(requestRebuild)
                     command = RxMapApi.command,
                     simulatorResponse = RxMapApi.simulatorResponse,
                     processReply = function(self5, buf5)
-                      local parsedObj5 = RxMapApi.parse(buf5)
-                      local rxParsed = parsedObj5 and parsedObj5.parsed
+                      local rxParsed = RxMapApi.parse(buf5)
                       if rxParsed then
                         local session = getSession()
                         if session then
