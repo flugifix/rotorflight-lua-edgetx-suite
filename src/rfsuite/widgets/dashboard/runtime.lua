@@ -111,11 +111,20 @@ local function processAudioEvents(self)
       modelName = _G.rfsuite.session.modelName
     end
     self.modelName = modelName
-    DashboardAudio.process(self, {
-      log = function(msg, level)
-        audioLog(self, msg, level)
-      end
-    })
+    -- Built once per widget, not once per pass: this runs on every logic tick, and a fresh
+    -- options table plus a fresh closure per tick is steady-state garbage in the Lua state
+    -- every widget on the radio shares. Audio.process itself throttles to 0.25-0.6 s, so most
+    -- of those allocations were for calls that returned immediately.
+    local opts = self._audioOpts
+    if not opts then
+      opts = {
+        log = function(msg, level)
+          audioLog(self, msg, level)
+        end
+      }
+      self._audioOpts = opts
+    end
+    DashboardAudio.process(self, opts)
     return
   end
 
@@ -322,13 +331,14 @@ local function reloadPreferencesIfNeeded(self, force)
     return
   end
 
-  -- Safety: Do not reload files while ARMED to prevent CPU spikes or sensor lost
+  -- Safety: Do not reload files while ARMED or during periodic postflight offline to prevent CPU spikes or UI resets.
+  -- Forced reloads (e.g. at connection state flips or explicit reloads) are still honored.
   --
   -- Returning here does NOT lose the change: `pendingStamp` is not adopted, so the next
   -- pass after disarming sees the same difference and reloads then. With the old signal
   -- the flag had already been read and reset above this guard, so a save made while armed
   -- was gone with nothing left to re-signal it.
-  if self.state.armed then
+  if self.state.armed or (not force and self.state.hadInflightFlight == true and not self.state.fblConnected) then
     return
   end
 
@@ -428,16 +438,25 @@ local function updateConnectionState(self)
     tasksDone = false
   end
   
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local modelPrefsResolved = (session == nil)
+    or session.modelPreferencesResolved == true
+    or onconnectDone
+
   -- What has to be true before the dashboard is DRAWN, and it deliberately no longer includes
-  -- the connect chain. Every value those tasks fill has a themed fallback -- the flight count
+  -- the entire connect chain. Every value those tasks fill has a themed fallback -- the flight count
   -- starts at 0, the dataflash bar is guarded on `state.dataflash`, and the cell count is
   -- inferred from the pack voltage until `battery_config` arrives -- so the chain decides how
   -- COMPLETE the dashboard is, not whether it can be shown. It is a strictly serial run of a
   -- dozen MSP round trips, and behind this gate it was the whole screen's critical path.
   --
+  -- However, we must wait for UID resolution (`modelPrefsResolved`) so that model-specific theme
+  -- overrides are known before dismissing the splash. This prevents theme pop-in without forcing
+  -- the screen to wait for all remaining connect tasks.
+  --
   -- `tasksDone` is still computed: it names the pending task in the status line below, and
   -- `startupComplete` keeps the audio on exactly the condition it had before.
-  local rawReady = connected and batteryReady and rfReady
+  local rawReady = connected and batteryReady and rfReady and modelPrefsResolved
   local now = nowSeconds()
 
   if connected and not rawReady then
@@ -871,23 +890,17 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
     if modelValue and modelValue ~= "" and modelValue ~= "nil" then
       chosen = modelValue
       reason = "model_" .. modelKey
-    else
-      local modelPreflight = modelDashboard["model_theme_preflight"]
-      if modelPreflight and modelPreflight ~= "" and modelPreflight ~= "nil" then
-        chosen = modelPreflight
-        reason = "model_preflight_fallback"
-      end
     end
   end
 
   if not chosen then
     local globalValue = dashboard and dashboard[key] or nil
-    if globalValue and globalValue ~= "" then
+    if globalValue and globalValue ~= "" and globalValue ~= "nil" then
       chosen = globalValue
       reason = "global_" .. key
     else
       local globalPreflight = dashboard and dashboard["theme_preflight"] or nil
-      if globalPreflight and globalPreflight ~= "" then
+      if globalPreflight and globalPreflight ~= "" and globalPreflight ~= "nil" then
         chosen = globalPreflight
         reason = "global_preflight_fallback"
       else
@@ -897,9 +910,9 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
     end
   end
 
-  logGv("resolveTheme: mode=%s, modelOverride=%s, modelPreflight=%s, globalPreflight=%s => chosen=%s (%s)",
-    tostring(flightMode), tostring(modelOverride), tostring(modelDashboard.model_theme_preflight),
-    tostring(dashboard and dashboard.theme_preflight), tostring(chosen), tostring(reason))
+  logGv("resolveTheme: mode=%s, modelOverride=%s, modelKey=%s, modelValue=%s, globalKey=%s, globalValue=%s => chosen=%s (%s)",
+    tostring(flightMode), tostring(modelOverride), tostring(modelKey), tostring(modelDashboard[modelKey]),
+    tostring(key), tostring(dashboard and dashboard[key]), tostring(chosen), tostring(reason))
 
   themePathMemo.dashboard = dashboard
   themePathMemo.modelPrefs = modelPrefs
@@ -1214,51 +1227,86 @@ function Runtime.new(zone, options)
     return nil
   end
 
+  -- Defined once per widget rather than once per updateVoltageThemeConfig call: that function
+  -- runs on every logic tick, and two fresh closures per tick is steady-state garbage in the
+  -- shared Lua state.
+  local function applyThemeConfig(self, nextConfig)
+    local prev = self.state.themeConfig or {}
+    local prevMin = tonumber(prev.v_min)
+    local prevMax = tonumber(prev.v_max)
+    local nextMin = tonumber(nextConfig and nextConfig.v_min)
+    local nextMax = tonumber(nextConfig and nextConfig.v_max)
+
+    self.state.themeConfig = nextConfig
+
+    local changed = (
+      type(prevMin) ~= "number" or type(prevMax) ~= "number" or
+      type(nextMin) ~= "number" or type(nextMax) ~= "number" or
+      math.abs(prevMin - nextMin) > 0.01 or math.abs(prevMax - nextMax) > 0.01
+    )
+    if changed then
+      self.built = false
+      self.renderKey = nil
+      self._cachedRenderKey = nil
+    end
+  end
+
+  local function logVoltageThemeDecision(self, reason, cells, inMin, inMax, outMin, outMax)
+    if not shouldLogAudio(self) then return end
+    local key = table.concat({
+      tostring(reason or "?"),
+      tostring(cells or "x"),
+      tostring(inMin or "x"),
+      tostring(inMax or "x"),
+      tostring(outMin or "x"),
+      tostring(outMax or "x")
+    }, "|")
+    if self._lastVoltageThemeDebugKey == key then return end
+    self._lastVoltageThemeDebugKey = key
+    widgetLog(
+      self,
+      "voltage theme normalize reason=" .. tostring(reason)
+        .. " cells=" .. tostring(cells)
+        .. " in=" .. tostring(inMin) .. "/" .. tostring(inMax)
+        .. " out=" .. tostring(outMin) .. "/" .. tostring(outMax),
+      "debug"
+    )
+  end
+
   local function updateVoltageThemeConfig(self)
-    local function applyThemeConfig(nextConfig)
-      local prev = self.state.themeConfig or {}
-      local prevMin = tonumber(prev.v_min)
-      local prevMax = tonumber(prev.v_max)
-      local nextMin = tonumber(nextConfig and nextConfig.v_min)
-      local nextMax = tonumber(nextConfig and nextConfig.v_max)
+    local currentConfig = self.state.themeConfig or {}
 
-      self.state.themeConfig = nextConfig
-
-      local changed = (
-        type(prevMin) ~= "number" or type(prevMax) ~= "number" or
-        type(nextMin) ~= "number" or type(nextMax) ~= "number" or
-        math.abs(prevMin - nextMin) > 0.01 or math.abs(prevMax - nextMax) > 0.01
+    -- The steady-state pass allocates nothing. When the bounds in hand are already numeric,
+    -- the three branches below that would end in a value-identical config -- custom bounds,
+    -- no cell count, or plausible bounds kept -- are decided here on the numbers alone, the
+    -- existing table is kept, and only the (deduplicated, developer-gated) log line is still
+    -- offered. Every path that can CHANGE a value falls through to the full copy below, so
+    -- what the function computes is exactly what it computed before.
+    local curMin = tonumber(currentConfig.v_min)
+    local curMax = tonumber(currentConfig.v_max)
+    if curMin ~= nil and curMax ~= nil then
+      if currentConfig._customVoltage == true then
+        logVoltageThemeDecision(self, "custom-config", nil, currentConfig.v_min, currentConfig.v_max, curMin, curMax)
+        return
+      end
+      local cells = resolveVoltageCellCount(self.state)
+      if not cells or cells <= 0 then
+        logVoltageThemeDecision(self, "no-cells", cells, currentConfig.v_min, currentConfig.v_max, curMin, curMax)
+        return
+      end
+      local isExactDefault = math.abs(curMin - 18.0) <= 0.01 and math.abs(curMax - 25.2) <= 0.01
+      local perCellMin = curMin / cells
+      local perCellMax = curMax / cells
+      local looksInvalidForCells = (
+        perCellMin < 2.0 or perCellMin > 5.0 or
+        perCellMax < 3.0 or perCellMax > 5.2 or
+        perCellMax <= perCellMin
       )
-      if changed then
-        self.built = false
-        self.renderKey = nil
-        self._cachedRenderKey = nil
+      if (not isExactDefault) and (not looksInvalidForCells) then
+        logVoltageThemeDecision(self, "keep", cells, currentConfig.v_min, currentConfig.v_max, curMin, curMax)
+        return
       end
     end
-
-    local function logVoltageThemeDecision(reason, cells, inMin, inMax, outMin, outMax)
-      if not shouldLogAudio(self) then return end
-      local key = table.concat({
-        tostring(reason or "?"),
-        tostring(cells or "x"),
-        tostring(inMin or "x"),
-        tostring(inMax or "x"),
-        tostring(outMin or "x"),
-        tostring(outMax or "x")
-      }, "|")
-      if self._lastVoltageThemeDebugKey == key then return end
-      self._lastVoltageThemeDebugKey = key
-      widgetLog(
-        self,
-        "voltage theme normalize reason=" .. tostring(reason)
-          .. " cells=" .. tostring(cells)
-          .. " in=" .. tostring(inMin) .. "/" .. tostring(inMax)
-          .. " out=" .. tostring(outMin) .. "/" .. tostring(outMax),
-        "debug"
-      )
-    end
-
-    local currentConfig = self.state.themeConfig or {}
     local nextConfig = {}
     for k, v in pairs(currentConfig) do
       nextConfig[k] = v
@@ -1268,8 +1316,8 @@ function Runtime.new(zone, options)
 
     -- If the user configured custom voltage values (in model or global preferences), respect them!
     if currentConfig._customVoltage == true then
-      applyThemeConfig(nextConfig)
-      logVoltageThemeDecision("custom-config", nil, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+      applyThemeConfig(self, nextConfig)
+      logVoltageThemeDecision(self, "custom-config", nil, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
@@ -1277,8 +1325,8 @@ function Runtime.new(zone, options)
     local defaultMax = 25.2
     local cells = resolveVoltageCellCount(self.state)
     if not cells or cells <= 0 then
-      applyThemeConfig(nextConfig)
-      logVoltageThemeDecision("no-cells", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+      applyThemeConfig(self, nextConfig)
+      logVoltageThemeDecision(self, "no-cells", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
@@ -1293,8 +1341,8 @@ function Runtime.new(zone, options)
       perCellMax <= perCellMin
     )
     if (not isExactDefault) and (not looksInvalidForCells) then
-      applyThemeConfig(nextConfig)
-      logVoltageThemeDecision("keep", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+      applyThemeConfig(self, nextConfig)
+      logVoltageThemeDecision(self, "keep", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
@@ -1305,8 +1353,8 @@ function Runtime.new(zone, options)
 
     nextConfig.v_min = cells * minCellVoltage
     nextConfig.v_max = cells * maxCellVoltage
-    applyThemeConfig(nextConfig)
-    logVoltageThemeDecision("normalize", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
+    applyThemeConfig(self, nextConfig)
+    logVoltageThemeDecision(self, "normalize", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
   end
 
   local function reloadActiveTheme(self)
@@ -1410,6 +1458,9 @@ function Runtime.new(zone, options)
       if type(_G.rfsuite.session.battery_config) == "table" then
         self.state.battery_config = _G.rfsuite.session.battery_config
       end
+      if type(_G.rfsuite.session.modelPreferences) == "table" then
+        self.modelPreferences = _G.rfsuite.session.modelPreferences
+      end
     end
     updateVoltageThemeConfig(self)
     if isFblConnected and not wasFblConnected then
@@ -1427,6 +1478,8 @@ function Runtime.new(zone, options)
       self.state.profile = nil
       self.state.rateProfile = nil
       self.state.batteryProfile = nil
+      self.modelPreferences = nil
+      self.lastModelPreferences = nil
       self.flightMode = "preflight"
       self.theme = nil
       self.built = false

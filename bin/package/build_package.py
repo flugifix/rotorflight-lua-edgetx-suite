@@ -213,11 +213,11 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
         lang_file = os.path.join(src_core, "i18n", f"{lang}.lua")
 
         if os.path.isfile(py_precompile) and os.path.isfile(py_resolve) and os.path.isfile(lang_file):
-            py_exe = sys.executable if os.path.isfile(sys.executable) else (shutil.which("python3") or shutil.which("python") or sys.executable)
-            subprocess.run([py_exe, py_precompile, "--root", staging_tools], check=True)
-            subprocess.run([py_exe, py_precompile, "--root", staging_widgets], check=True)
-            subprocess.run([py_exe, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
-            subprocess.run([py_exe, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
+            python_exe = sys.executable if (sys.executable and os.path.isfile(sys.executable)) else (shutil.which("python3") or shutil.which("python") or shutil.which("py") or "python")
+            subprocess.run([python_exe, py_precompile, "--root", staging_tools], check=True)
+            subprocess.run([python_exe, py_precompile, "--root", staging_widgets], check=True)
+            subprocess.run([python_exe, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
+            subprocess.run([python_exe, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
 
         # Record the build identity, after the sources are final and before they are packed
         identity = write_build_identity(temp_dir, staging_core, version)
