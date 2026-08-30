@@ -99,13 +99,25 @@ end
 local PREFERENCES_FILE = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
 local PREFS_STAT_INTERVAL = 1.0
 
+-- `fstat` returns the modification time as a TABLE -- year, mon, day, hour, min, sec
+-- (radio/src/lua/api_filesystem.cpp) -- not as a number. `tostring()` on that table is an
+-- address, which can differ between two calls on the same unchanged file, so a stamp built
+-- from it reports a change that never happened and the reload below runs for nothing --
+-- preferences re-read, theme scripts re-loaded, the scene rebuilt. The fields are what
+-- identify the file, so the stamp is built from the fields, the same way
+-- widgets/dashboard/runtime.lua builds its own.
 local function preferencesStamp()
   if type(fstat) ~= "function" then return nil end
   local okg, g = pcall(fstat, PREFERENCES_FILE)
-  if okg and type(g) == "table" then
-    return tostring(g.size) .. ":" .. tostring(g.time)
+  if not okg or type(g) ~= "table" then return nil end
+  local t = g.time
+  if type(t) ~= "table" then
+    -- Not the documented shape. Whatever it is, it is at least not an address.
+    return tostring(g.size) .. ":" .. tostring(t)
   end
-  return nil
+  return string.format("%s:%s-%s-%s.%s.%s.%s",
+    tostring(g.size), tostring(t.year), tostring(t.mon), tostring(t.day),
+    tostring(t.hour), tostring(t.min), tostring(t.sec))
 end
 
 local function shouldReloadWidget(widget)
