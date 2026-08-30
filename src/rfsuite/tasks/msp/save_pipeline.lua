@@ -1,7 +1,39 @@
 -- One save mechanism: writes -> EEPROM commit -> optional reboot -> reconnect -> reload.
 --
+-- Architectural Reboot Policy (Rotorflight 2 Lifecycle):
+-- In Rotorflight 2, whether a reboot is required after saving comes down to whether hardware
+-- drivers, DMA streams, timer allocations or core structures require full re-initialization
+-- during board boot, vs runtime tuning parameters that are live-updated in memory:
+--
+-- 1. Reboot Required (Hardware drivers, DMA streams, timer allocations & core architecture):
+--    - setup/ports: UART re-initialization, baud rates, DMA channels.
+--    - setup/radio_config: Serial/SPI RX protocol drivers and hardware binding.
+--    - setup/esc_motors (throttle, rpm, telemetry): DShot/PWM hardware timers, bidirectional
+--      DShot DMA, and telemetry pin configurations.
+--    - setup/alignment: Gyro/accelerometer sensor orientation matrices and low-level driver re-init.
+--    - setup/configuration: Loop rates, system feature flags, and core task scheduler sizing.
+--
+-- 2. Conditional Reboot (Mixer structural changes vs geometry tuning):
+--    - setup/mixer/swash: Reboots only if swashplate geometry type changed (swashTypeChanged).
+--      Rate/direction changes are live runtime math and do not trigger a reboot.
+--    - setup/mixer/tail: Reboots only if tail rotor mode changed (tailModeChanged, e.g. servo vs
+--      motorized). Trims, yaw rates and limit adjustments do not trigger a reboot.
+--
+-- 3. No Reboot (Runtime tuning, mathematical filters & control loops):
+--    - flight_tuning/advanced/filters: In RF2, gyro/D-term filter coefficients and state structures
+--      are dynamically re-calculated in RAM upon MSP write without needing a reboot.
+--    - flight_tuning/governor: Gains, feedforward, and target headspeed tables are active runtime tuning.
+--    - flight_tuning (pids, rates, autolevel, rescue, etc.): Live in-memory updates.
+--    - setup/servos (pwm, bus) & controls: Live trim/center/range updates (except servo PWM rate,
+--      which takes effect at the next boot).
+--    - setup/model: Profile / model metadata changes only.
+--
+-- Note on MSP_STATUS.reboot_required: Although MSP_STATUS carries a reboot_required flag,
+-- the firmware's MSP set-handlers do not currently set it (only CMS does). Therefore, the
+-- suite explicitly defines and orchestrates this reboot policy on the client side.
+--
 -- Every page that ends a save in MSP_EEPROM_WRITE builds its own chain of nested queue:add
--- calls, each next step queued from the previous step's processReply. The nine pages that
+-- calls, each next step queued from the previous step's processReply. The pages that
 -- append MSP_REBOOT queue it with an empty processReply, so the reboot is fire-and-forget:
 -- nobody waits for the flight controller to come back, the page keeps displaying values the
 -- board re-derived in validateAndFixConfig() while it was booting, and the save is reported
