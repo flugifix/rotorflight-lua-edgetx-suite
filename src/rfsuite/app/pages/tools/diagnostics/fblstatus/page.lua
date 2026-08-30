@@ -116,9 +116,13 @@ local function rebuildRows(i18n)
 end
 
 local function abortLoading(i18n, message)
-  state.loading = false
-  state.showLoadingOverlay = false
-  state.errorMessage = message or "Loading failed"
+  if AsyncLoadUi and type(AsyncLoadUi.fail) == "function" then
+    AsyncLoadUi.fail(state, i18n, pageText, message)
+  else
+    state.loading = false
+    state.showLoadingOverlay = false
+    state.errorMessage = message or "Loading failed"
+  end
   if type(state.requestRebuild) == "function" then
     state.requestRebuild()
   end
@@ -126,13 +130,10 @@ end
 
 local function requestData(i18n)
   if state.loading then return end
+  ensureDeps()
 
-  state.loading = true
-  state.showLoadingOverlay = true
-  state.done = 0
-  state.progress = 0
-  state.startTime = nowSeconds()
-  state.errorMessage = nil
+  AsyncLoadUi.begin(state, nowSeconds(), 3, true)
+  state.startTime = state.loadingStartedAt
 
   local msp = MspRuntime
   local mspState = msp and type(msp.getState) == "function" and msp.getState()
@@ -142,12 +143,17 @@ local function requestData(i18n)
   end
 
   local function incrementProgress()
-    state.done = state.done + 1
-    state.progress = math.floor((state.done / state.total) * 100)
-    if state.done >= state.total then
-      state.loading = false
-      state.showLoadingOverlay = false
-      state.loaded = true
+    if AsyncLoadUi and type(AsyncLoadUi.stepDone) == "function" then
+      if AsyncLoadUi.stepDone(state) then
+        state.loaded = true
+      end
+    else
+      state.done = state.done + 1
+      if state.total > 0 and state.done >= state.total then
+        state.loading = false
+        state.showLoadingOverlay = false
+        state.loaded = true
+      end
     end
     if type(state.requestRebuild) == "function" then
       state.requestRebuild()

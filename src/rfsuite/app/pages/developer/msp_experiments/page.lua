@@ -139,6 +139,7 @@ local function startLiveLoad()
     AsyncLoadUi.begin(state, nowSeconds(), 1, true)
 
     queue:add({
+        client = "exp-page",
         command = ExperimentalApi.command,
         simulatorResponse = ExperimentalApi.simulatorResponse,
         retryDelay = 1.2,
@@ -155,7 +156,7 @@ local function startLiveLoad()
             end
             markStepDone()
         end,
-        errorHandler = function() abortLoading(nil, "MSP Fetch failed") end
+        errorHandler = function() abortLoading(state.i18n, "MSP Fetch failed") end
     })
 
     requestRebuild()
@@ -245,8 +246,9 @@ function M.build(ctx)
     if not state.loaded then
         M.onReload()
     end
-    state.rebuild = ctx.requestRebuild
     local i18n = ctx.i18n
+    state.i18n = i18n
+    state.rebuild = ctx.requestRebuild
 
     if not isFblConnected() then
         state.pendingStart = false
@@ -348,8 +350,30 @@ end
 function M.wakeup()
     local now = nowSeconds()
     if state.loading and AsyncLoadUi and type(AsyncLoadUi.isTimedOut) == "function" and AsyncLoadUi.isTimedOut(state, now) then
-        abortLoading(nil, t(nil, "loading_timeout", "Timeout"))
+        abortLoading(state.i18n, t(state.i18n, "loading_timeout", "Timeout"))
     end
+end
+
+function M.closePage()
+    if state.attached and MspRuntime and type(MspRuntime.detach) == "function" then
+        MspRuntime.detach("exp-page")
+    end
+    local runtimeState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState() or nil
+    local queue = runtimeState and runtimeState.queue
+    if queue and type(queue.clear) == "function" then
+        queue:clear("exp-page")
+    end
+    state.started = false
+    state.attached = false
+    state.pendingStart = false
+    state.deferStartBuild = false
+    state.forceReload = false
+    state.i18n = nil
+    if AsyncLoadUi and type(AsyncLoadUi.reset) == "function" then
+        AsyncLoadUi.reset(state)
+    end
+    state.rebuild = nil
+    state.loaded = false
 end
 
 return M

@@ -406,6 +406,7 @@ local function startLiveLoad()
   end
 
   queue:add({
+    client = "info-page",
     command = VariantApi.command,
     simulatorResponse = VariantApi.simulatorResponse,
     retryDelay = 1.2,
@@ -421,6 +422,7 @@ local function startLiveLoad()
   })
 
   queue:add({
+    client = "info-page",
     command = BoardInfoApi.command,
     simulatorResponse = BoardInfoApi.simulatorResponse,
     retryDelay = 1.2,
@@ -440,6 +442,7 @@ local function startLiveLoad()
   })
 
   queue:add({
+    client = "info-page",
     command = BuildInfoApi.command,
     simulatorResponse = BuildInfoApi.simulatorResponse,
     retryDelay = 1.2,
@@ -455,6 +458,7 @@ local function startLiveLoad()
   })
 
   queue:add({
+    client = "info-page",
     command = TelemetryConfigApi.command,
     simulatorResponse = TelemetryConfigApi.simulatorResponse,
     retryDelay = 1.2,
@@ -516,19 +520,23 @@ local function pollPacketRateLive()
   state.lastPacketRateFetchAt = now
 
   queue:add({
+    client = "info-page",
     command = TelemetryConfigApi.command,
     simulatorResponse = TelemetryConfigApi.simulatorResponse,
     retryDelay = 1.2,
     timeout = 3.0,
     processReply = function(_, buf)
       local parsed = TelemetryConfigApi.parse(buf)
+      local newRate = "-"
       if parsed then
-        state.values.packet_rate = formatPacketRate(parsed.crsf_telemetry_link_ratio)
-      else
-        state.values.packet_rate = "-"
+        newRate = formatPacketRate(parsed.crsf_telemetry_link_ratio)
       end
+      local changed = (state.values.packet_rate ~= newRate)
+      state.values.packet_rate = newRate
       state.packetRateRequestPending = false
-      requestRebuild()
+      if changed then
+        requestRebuild()
+      end
     end,
     errorHandler = function()
       state.packetRateRequestPending = false
