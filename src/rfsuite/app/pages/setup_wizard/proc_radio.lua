@@ -367,12 +367,10 @@ procs[#procs + 1] = {
   id = "rxmap",
   section = "radio",
   title = function(i18n) return t(i18n, "step_rxmap", "Channel map") end,
-  -- Skippable like every other procedure here, and that is deliberate even though everything
-  -- after it depends on this map. A step that cannot be passed is a wall, and this one rests on a
-  -- READ: a board that does not answer the map accessor would strand the pilot on the first
-  -- screen with no way forward and nothing to do about it. The derived criterion keeps saying the
-  -- map is wrong, on the overview and on every later run, which is the honest pressure.
-  skippable = true,
+  -- Not skippable, like every other radio procedure -- see `wiz.isSkipped` for the reasoning.
+  -- The anti-wall duty the skip used to carry sits in `advance` below: a board that does not
+  -- answer the map accessor lets the pilot move on with the failure named, and the derived
+  -- criterion keeps saying the map is wrong, on the overview and on every later run.
   isComplete = function(w) return rxMapMatches(w) end,
   enter = function(w) w.data.rxMapError = nil end,
   screens = {
@@ -462,7 +460,6 @@ procs[#procs + 1] = {
   id = "layout",
   section = "radio",
   title = function(i18n) return t(i18n, "step_layout", "Layout") end,
-  skippable = true,
   isComplete = function(w)
     -- Realised rather than declared: every channel this layout asks for carries mixes. A layout
     -- that is only an intention is not something the board can confirm.
@@ -509,9 +506,7 @@ procs[#procs + 1] = {
   title = function(i18n) return t(i18n, "step_sticks", "Sticks") end,
   -- The one screen of this procedure that WRITES is the reason it has a criterion at all: a stick
   -- layout is a state of the model, so the machine can answer whether it is there. The chain
-  -- screen beside it is a measurement and leaves no mark, which is why the procedure as a whole
-  -- stays skippable.
-  skippable = true,
+  -- screen beside it is a measurement and leaves no mark.
   isComplete = function(w)
     -- Part of the criterion rather than only of the write, for the reason this note has already
     -- ruled twice: what has to be right is the END STATE. A model whose sticks are laid out and
@@ -824,8 +819,7 @@ local function makeChannelProcedure(channel, order)
     title = function(i18n)
       local entry = { key = ({ [5] = "arm", [6] = "throttle", [7] = "profile", [8] = "rescue" })[channel] }
       return "CH" .. tostring(channel) .. " " .. channelName(i18n, entry.key)
-    end,
-    skippable = true
+    end
   }
 
   proc.isComplete = function(w)
@@ -1826,9 +1820,8 @@ procs[#procs + 1] = {
   id = "link",
   section = "radio",
   title = function(i18n) return t(i18n, "step_link", "Link") end,
-  -- Skippable, and it has to be: a radio that is not on CRSF has no question here at all, and
-  -- neither has one whose module does not answer the parameter walk.
-  skippable = true,
+  -- A radio that is not on CRSF has no question here at all -- the screen says so, and nothing
+  -- on this procedure gates the step, so Next simply walks on.
   isComplete = function(w)
     if not linkIsCrsf() then return nil end
     local fcRate, fcRatio = boardPair()

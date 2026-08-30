@@ -163,8 +163,15 @@ function wiz.isComplete(proc)
   return value
 end
 
+-- Only a procedure that OFFERS the skip may be silenced by one. The radio section does not
+-- offer it any more, by the pilot's own ruling: a stored skip is a claim that a step was
+-- settled outside the assistant, it outlives the state it described -- a model reset, a board
+-- move -- and a later run then passes over work that is not there. The guard on `skippable`
+-- is what keeps flags already on the card from replaying that claim on a procedure that no
+-- longer shows the control to withdraw it.
 function wiz.isSkipped(proc)
   if type(proc) ~= "table" or Store == nil then return false end
+  if proc.skippable ~= true then return false end
   return Store.isSkipped(proc.id, proc.section == "radio")
 end
 
