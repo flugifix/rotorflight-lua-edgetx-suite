@@ -78,6 +78,9 @@ function M.wakeup()
     command = smartfuelConfigApi.command,
     simulatorResponse = smartfuelConfigApi.simulatorResponse,
     timeout = 5.0,
+    -- Bounded below the task timeout in tasks/events/common/runner.lua, so this read
+    -- is given up by the queue before the runner re-queues the task that owns it.
+    maxRetries = 2,
     processReply = function(self, buf)
       local data = smartfuelConfigApi.parse(buf)
       if type(data) == "table" then

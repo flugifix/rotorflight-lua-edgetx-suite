@@ -2,6 +2,11 @@
 -- Supports shared state between Tool and Widget contexts
 local M = {}
 
+-- This has to stay ABOVE the give-up of anything a task puts on the MSP queue, or the runner
+-- re-queues a task whose request is still in flight and the queue ends up holding two copies of
+-- the same read. The queue's own give-up is (maxRetries + 1) x the message timeout, and its
+-- transport-wide maxRetries is 5 on CRSF -- so a 5 s read there ran for 30 s against this 25 s.
+-- The connect reads now carry a maxRetries of their own for exactly this reason.
 local DEFAULT_TASK_TIMEOUT_SECONDS = 25
 local MAX_RETRIES = 3
 local RETRY_BACKOFF_SECONDS = 1
