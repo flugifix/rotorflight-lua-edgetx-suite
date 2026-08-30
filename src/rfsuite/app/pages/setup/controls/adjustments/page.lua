@@ -22,7 +22,11 @@ local ConfirmDialog = nil
 local ApiVersion = nil
 local t = nil
 
-local AUX_CHANNEL_COUNT_FALLBACK = 20
+-- The firmware's own limit: MAX_AUX_CHANNEL_COUNT = MAX_SUPPORTED_RC_CHANNEL_COUNT (18)
+-- - CONTROL_CHANNEL_COUNT (5) = 13, the same on RF 4.5.x and 4.6.x. The CLI refuses a
+-- channel index past it, and rc_adjustments.c indexes rcInput[] out of bounds with one,
+-- so the pickers must not offer AUX 14 and above.
+local AUX_CHANNEL_COUNT_FALLBACK = 13
 local RANGE_MIN = 875
 local RANGE_MAX = 2125
 local RANGE_STEP = 5
@@ -869,10 +873,12 @@ local function queueAdjustmentsWrite(requestRebuild, i18n)
     local payload = {
       slotIndex - 1,
       clamp(adjRange.adjFunction, 0, 255),
-      clamp(adjRange.enaChannel, 0, 255),
+      -- 255 is the Always sentinel; any real channel index is bounded so a stale
+      -- selection from an older save cannot reach the firmware out of range.
+      adjRange.enaChannel == 255 and 255 or clamp(adjRange.enaChannel, 0, AUX_CHANNEL_COUNT_FALLBACK - 1),
       toS8Byte(enaStartStep),
       toS8Byte(enaEndStep),
-      clamp(adjRange.adjChannel, 0, 255),
+      clamp(adjRange.adjChannel, 0, AUX_CHANNEL_COUNT_FALLBACK - 1),
       toS8Byte(adjRange1StartStep),
       toS8Byte(adjRange1EndStep),
       toS8Byte(adjRange2StartStep),
