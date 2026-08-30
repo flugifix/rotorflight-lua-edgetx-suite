@@ -72,3 +72,18 @@ Log.emit("tag", "message", "info") -- levels: info, debug, warn, error
 ## Telemetry & MSP
 - **Sensors**: Centralized in `src/rfsuite/lib/sensors.lua`. Maps 4-character OpenTX/EdgeTX sensor names to human-readable internal aliases.
 - **MSP Tasks**: Background communication logic lives in `src/rfsuite/tasks/msp/`.
+
+## Release Notes Maintenance (`Releases.md`)
+- **Mandatory PR Requirement**: With every feature, enhancement, bug fix, UI change, or performance optimization, `Releases.md` must be kept up to date.
+- Record changes under the active / upcoming release header (e.g. `# 0.1.x`) categorized by `Features & Enhancements`, `Bug Fixes & Improvements`, and `Performance & Build System`.
+- Always commit the updated `Releases.md` as part of the PR.
+
+## CLI & PowerShell Execution Guidelines
+
+### PowerShell Escape Sequence & Backtick Protection
+- **Critical Rule**: NEVER pass inline Markdown containing backticks (`` ` ``) directly in PowerShell command arguments, command strings, or double-quoted here-strings (`@"..."@`).
+- **Reason**: In PowerShell, the backtick character is the escape character. Sequences like `` `a `` (e.g. `` `am32` ``), `` `b `` (e.g. `` `blheli_s` ``, `` `bluejay` ``), `` `f `` (e.g. `` `flrtr` ``), `` `t `` (e.g. `` `timeout` ``), `` `n ``, `` `r `` are expanded to ASCII control characters (BEL `\a`, Backspace `\b`, Formfeed `\f`, Tab `\t`, etc.), corrupting text sent to GitHub (e.g. rendering as `\m32`, `\lheli_s`, `\lrtr`).
+- **Enforcement**:
+  - When creating or editing PRs, issues, or comments with `gh` (`gh pr create`, `gh pr edit`, `gh pr comment`, `gh issue comment`), ALWAYS write the body text to a temporary markdown file.
+  - Pass the body via `--body-file <path>` to `gh`.
+  - Delete the temporary file immediately after command execution.
