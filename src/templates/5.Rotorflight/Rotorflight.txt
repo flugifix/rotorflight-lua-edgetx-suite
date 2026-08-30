@@ -1,0 +1,5 @@
+Starting point for a Rotorflight helicopter.
+
+Brings the pieces no script can set later: an ARM function switch with its colours, switch warnings, the throttle warning off, a persistent flight timer and the RFSuite dashboard as the main view.
+
+After creating the model, connect the flight controller and run the setup assistant: SYS > Tools > RFSuite > Configuration > Wizards.
