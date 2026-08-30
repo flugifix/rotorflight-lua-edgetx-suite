@@ -4,95 +4,42 @@
 -- the template is applied (gui/colorlcd/model/model_select.cpp, the "wizard Lua script" hook).
 -- The yml has already delivered everything no script can set later -- the ARM function switch,
 -- the warnings, the static reference channels, the dashboard. What is still open is the
--- pilot's half: WHICH switch carries which function. That is asked here, the way a radio asks
--- best -- the pilot moves the switch -- and written in the shape of the reference models this
--- template is derived from: plain lines at full weight, active low, the hold as a MAX line
--- gated by the one position the pilot names. Only the hold asks for a position at all; every
--- other question is settled by naming the switch, because the reference construction encodes
--- the rest as convention.
+-- pilot's half: WHICH switch carries which function. That is asked with the radio's OWN
+-- pickers -- the source picker filtered to switches for the four whole-switch answers, the
+-- position picker for the one position the reference construction stores, the hold gate --
+-- and written in the reference models' shape: plain lines at full weight, active low, the
+-- hold as a MAX line gated by the named position, the governor beneath it.
 --
 -- The setup assistant asks its own position questions later, against a connected flight
 -- controller and with a read-back to prove them -- this wizard deliberately stops at the
 -- reference-model shape a pilot could also have built by hand.
 --
--- Plain lcd drawing and plain English on purpose: a standalone script runs outside the suite,
--- so none of its i18n or UI helpers exist here.
+-- Plain English on purpose: a standalone script runs outside the suite, so none of its i18n
+-- helpers exist here.
 
 local RADIO_MODULE = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/setup_wizard/radio.lua"
 
 local R = nil          -- the assistant's radio-side module, loaded below
 local loadError = nil
 
--- The questions. `kind` decides what a moved switch answers: the SWITCH (any movement names
--- it, whatever the position -- the reference lines carry the whole travel), or one POSITION
--- (the hold gate, which is the single place the reference construction stores a position).
--- `min` is the position count the function needs: the governor and the profiles carry three
--- values across the travel, arming and rescue work on two or three (the reference arms on a
--- three-position switch, low position armed).
---
--- The arming prompt NAMES the prepared switch, because the preparation cannot follow the
--- answer: the yml gave SW1 the ARM name and its colours, and no script can move them.
-local QUESTIONS = {
-  { key = "arm", kind = "switch", min = 2,
-    title = "Arming",
-    prompt = "Move the switch that should arm the flight controller. "
-      .. "SW1 is prepared for it: named ARM, red while armed." },
-  { key = "hold", kind = "position", min = 2,
-    title = "Throttle hold",
-    prompt = "Move the hold switch to the position where the motor is LOCKED." },
-  { key = "gov", kind = "switch", min = 3,
-    title = "Governor",
-    prompt = "Move the governor switch. It needs three positions: off, spool-up, flight." },
-  { key = "profile", kind = "switch", min = 3,
-    title = "Profiles",
-    prompt = "Move the switch that selects the three profiles." },
-  { key = "rescue", kind = "switch", min = 2,
-    title = "Rescue",
-    prompt = "Move the switch that triggers rescue." }
+-- The five rows. `whole` answers with a SWITCH through the radio's source picker (any of its
+-- positions may carry the function -- the reference encodes the rest as convention, active
+-- low); the hold row answers with the one POSITION the reference construction stores. `min`
+-- is the position count the function needs: governor and profiles carry three values across
+-- the travel, arming and rescue work on two or three (the reference arms on a three-position
+-- switch).
+local ROWS = {
+  { key = "arm", whole = true, min = 2, label = "Arming switch" },
+  { key = "hold", whole = false, label = "Hold: motor LOCKED at" },
+  { key = "gov", whole = true, min = 3, label = "Governor switch (3 pos)" },
+  { key = "profile", whole = true, min = 3, label = "Profile switch (3 pos)" },
+  { key = "rescue", whole = true, min = 2, label = "Rescue switch" }
 }
 
-local step = 1          -- 1..#QUESTIONS, then the write, then the closing screen
-local answers = {}      -- key -> swsrc (a switch's first position, or the hold position)
-local candidate = nil   -- what the last switch movement proposes for the current question
-local rejection = nil   -- why the candidate cannot be taken, said in words
+local answers = {}      -- key -> swsrc: a switch's first position, or the hold position
+local message = nil     -- what stands between the pilot and the Create button, in words
 local written = nil     -- per-channel results of the write, once it ran
-local rest = {}         -- switch number -> the position it was last seen resting in
-
--- Watch every switch and answer with the one the pilot moves. The baseline is where each
--- switch rested when last looked at; a switch whose active position changed is the answer to
--- the question on screen. Deliberately not a picker: moving the real switch is the one gesture
--- that cannot name the wrong hardware.
-local function watchSwitches()
-  local moved = nil
-  for _, sw in ipairs(R.switches(2)) do
-    local number = R.switchNumber(sw.swsrc)
-    local position = R.activePosition(sw.swsrc)
-    if position ~= nil then
-      if rest[number] ~= nil and rest[number] ~= position then
-        moved = sw.swsrc + position
-      end
-      rest[number] = position
-    end
-  end
-  return moved
-end
-
-local function considerCandidate(question, moved)
-  local positions = R.switchPositionCount(moved) or 0
-  if positions < question.min then
-    -- A switch that cannot carry the function replaces NOTHING: a valid candidate already on
-    -- screen survives a stray movement, and the shortfall is said beneath it instead.
-    rejection = "That switch has " .. tostring(positions) .. " positions; this function needs "
-      .. tostring(question.min) .. "."
-    return
-  end
-  rejection = nil
-  if question.kind == "switch" then
-    candidate = R.firstPositionOf(moved)
-  else
-    candidate = moved
-  end
-end
+local view = nil        -- nil (not built) | "form" | "done"
 
 -- ---------------------------------------------------------------------------------------------
 -- The write: the REFERENCE construction, with the pilot's switches in it.
@@ -100,14 +47,14 @@ end
 --   input Arm   <arm switch>  +100                   -> CH5 "Arming"
 --   input Thr   MAX -100 gated by the hold position,
 --               then <governor> +100  ("Hold"/"GOV") -> CH6 "Thr"
---   input Prof  <profile switch> +100                -> CH7 "Prof"
+--   input Prof  <profile switch> +100 ("Prof")       -> CH7 "Prof"
 --   input Res   <rescue switch>  +100 ("Rescue")     -> CH8 "Rescue"
 --
 -- Expo lines are alternatives: the first line whose gate matches wins, so the hold line rules
 -- exactly one position and every other position carries the governor -- the reference's own
--- trick, and the reason the hold is the one position asked for. Active is LOW throughout,
--- as both reference models have it. The assistant recognises the plain lines and re-asks
--- what it cannot read when it later walks the flight-controller half.
+-- trick, and the reason the hold is the one position asked for. Active is LOW throughout, as
+-- both reference models have it. The assistant recognises the plain lines and re-asks what it
+-- cannot read when it later walks the flight-controller half.
 -- ---------------------------------------------------------------------------------------------
 
 local function sourceByName(name)
@@ -199,13 +146,23 @@ local function writeAnswers()
   simple(8, 7, "Res", "Rescue", answers.rescue, "Rescue")
 end
 
-local function positionWord(swsrc)
-  local words = { [0] = "up", [1] = "middle", [2] = "down" }
-  return words[R.switchPosition(swsrc)] or "?"
-end
-
-local function switchLabel(swsrc)
-  return R.switchBaseName(swsrc) or tostring(swsrc)
+-- What still stands between the pilot and the write, in one sentence -- or nil, which is what
+-- lets the button act.
+local function firstProblem()
+  for _, row in ipairs(ROWS) do
+    local value = answers[row.key]
+    if value == nil or value == 0 then
+      return row.label .. ": nothing chosen yet."
+    end
+    if row.min ~= nil then
+      local positions = R.switchPositionCount(value) or 0
+      if positions < row.min then
+        return row.label .. ": that switch has " .. tostring(positions) ..
+          " positions, " .. tostring(row.min) .. " are needed."
+      end
+    end
+  end
+  return nil
 end
 
 -- Does the arming answer sit on a function switch OTHER than the one the template prepared?
@@ -222,142 +179,148 @@ local function armNamingHint()
 end
 
 -- ---------------------------------------------------------------------------------------------
--- Drawing. Plain lcd calls, arranged rather than listed: a dark header naming the wizard and
--- the step, the question at reading size, the candidate in a box of its own so the thing that
--- will be taken is the thing the eye is on, and the actions as BUTTONS at the bottom edge --
--- tappable on a touch radio, mirrored on ENTER and RTN everywhere. Colours come from the
--- radio's own theme where the constants exist and fall back to plain drawing where they do
--- not -- a standalone script cannot assume a theme.
+-- The form, out of the radio's own controls -- the same child tables the suite hands to
+-- lvgl.build, source pickers without a `title` (the picker class does not carry the property
+-- and raises on it).
 -- ---------------------------------------------------------------------------------------------
 
-local COL_HEADER = COLOR_THEME_SECONDARY1 or BLACK or 0
-local COL_HEADER_TEXT = COLOR_THEME_PRIMARY2 or WHITE or 0
 local COL_TEXT = COLOR_THEME_PRIMARY1 or BLACK or 0
-local COL_BOX = COLOR_THEME_FOCUS or BLACK or 0
 
-local function screenWidth() return LCD_W or 480 end
-local function screenHeight() return LCD_H or 320 end
+-- The picker filters. The bit values are the firmware's own (dataconstants.h); the source
+-- filter is taken from the lvgl module where it exists, because that registered constant
+-- already includes the function-switch bit -- the switches this template cares most about.
+local SRC_SWITCH_FILTER = (lvgl ~= nil and lvgl.SRC_SWITCH) or 0xFFFFFFFF
+local SW_SWITCH = 1
+local SW_NONE = 1 << 20
 
-local function textWidth(text, flags)
-  if lcd.sizeText ~= nil then
-    local w = lcd.sizeText(text, flags or 0)
-    if type(w) == "number" then return w end
-  end
-  return #text * 8
-end
+local W = LCD_W or 480
+local ROW_H = 36
+local PICKER_W = 190
+local LEFT = 12
 
-local function centered(y, text, flags)
-  lcd.drawText(math.floor((screenWidth() - textWidth(text, flags)) / 2), y, text, flags or 0)
-end
-
--- Greedy wrap against the real text width, so a sentence survives every screen size the
--- template may meet.
-local function wrapped(x, y, width, text, flags, lineH)
-  local line = ""
-  for word in string.gmatch(text, "%S+") do
-    local candidateLine = line == "" and word or (line .. " " .. word)
-    if textWidth(candidateLine, flags) > width and line ~= "" then
-      lcd.drawText(x, y, line, flags)
-      y = y + lineH
-      line = word
-    else
-      line = candidateLine
+local function sourceRow(children, y, row)
+  children[#children + 1] = {
+    type = "label", x = LEFT, y = y + 8, w = W - PICKER_W - 2 * LEFT - 8,
+    text = row.label, color = COL_TEXT
+  }
+  children[#children + 1] = {
+    type = "source",
+    x = W - PICKER_W - LEFT, y = y + 2, w = PICKER_W, h = ROW_H - 6,
+    filter = SRC_SWITCH_FILTER,
+    get = function()
+      local picked = answers[row.key]
+      if picked == nil or picked == 0 then return 0 end
+      return R.switchSource(picked) or 0
+    end,
+    set = function(value)
+      answers[row.key] = R.switchFromSource(value) or 0
     end
-  end
-  if line ~= "" then
-    lcd.drawText(x, y, line, flags)
-    y = y + lineH
-  end
-  return y
+  }
 end
 
-local function drawFrame(title, right)
-  lcd.clear()
-  lcd.drawFilledRectangle(0, 0, screenWidth(), 36, COL_HEADER)
-  lcd.drawText(10, 8, title, COL_HEADER_TEXT + (BOLD or 0))
-  if right ~= nil then
-    lcd.drawText(screenWidth() - 10 - textWidth(right, 0), 8, right, COL_HEADER_TEXT)
-  end
+local function positionRow(children, y, row)
+  children[#children + 1] = {
+    type = "label", x = LEFT, y = y + 8, w = W - PICKER_W - 2 * LEFT - 8,
+    text = row.label, color = COL_TEXT
+  }
+  children[#children + 1] = {
+    type = "switch",
+    x = W - PICKER_W - LEFT, y = y + 2, w = PICKER_W, h = ROW_H - 6,
+    filter = SW_SWITCH | SW_NONE,
+    get = function() return answers[row.key] or 0 end,
+    set = function(value) answers[row.key] = tonumber(value) or 0 end
+  }
 end
 
--- The two actions as drawn buttons, remembered for the tap test. A touch radio taps them; the
--- keys do the same thing everywhere, and the labels say so.
-local buttons = {}
-
-local function drawButtons(leftLabel, rightLabel)
-  buttons = {}
-  local h = 30
-  local y = screenHeight() - h - 6
-  if leftLabel ~= nil then
-    local w = textWidth(leftLabel, 0) + 24
-    lcd.drawRectangle(10, y, w, h, COL_BOX)
-    lcd.drawText(22, y + 7, leftLabel, COL_TEXT)
-    buttons.left = { x = 10, y = y, w = w, h = h }
+local function buildForm()
+  lvgl.clear()
+  local children = {}
+  children[#children + 1] = {
+    type = "label", x = LEFT, y = 6, w = W - 2 * LEFT,
+    text = "Rotorflight - pick your switches", color = COL_TEXT
+  }
+  local y = 34
+  for _, row in ipairs(ROWS) do
+    if row.whole then sourceRow(children, y, row) else positionRow(children, y, row) end
+    y = y + ROW_H
   end
-  if rightLabel ~= nil then
-    local w = textWidth(rightLabel, 0) + 24
-    local x = screenWidth() - 10 - w
-    lcd.drawFilledRectangle(x, y, w, h, COL_HEADER)
-    lcd.drawText(x + 12, y + 7, rightLabel, COL_HEADER_TEXT + (BOLD or 0))
-    buttons.right = { x = x, y = y, w = w, h = h }
+
+  -- The one sentence that stands between the pilot and the button; the button's press
+  -- rebuilds this form, which is what puts the sentence on screen.
+  if message ~= nil then
+    children[#children + 1] = {
+      type = "label", x = LEFT, y = y + 4, w = W - 2 * LEFT,
+      color = COL_TEXT, text = message
+    }
   end
-end
 
-local function tapped(box, touch)
-  return box ~= nil and touch ~= nil and touch.x ~= nil
-    and touch.x >= box.x and touch.x <= box.x + box.w
-    and touch.y >= box.y and touch.y <= box.y + box.h
-end
-
-local function drawQuestion(question, stepText)
-  drawFrame("Rotorflight", stepText)
-  local x = 14
-  local w = screenWidth() - 2 * x
-  local y = 50
-  lcd.drawText(x, y, question.title, COL_TEXT + (MIDSIZE or 0) + (BOLD or 0))
-  y = y + 34
-  y = wrapped(x, y, w, question.prompt, COL_TEXT, 20)
-
-  -- The candidate box: what will be taken, or the invitation to move something; a refusal is
-  -- said BENEATH the box and leaves a valid candidate standing.
-  local boxY = y + 12
-  local boxH = 56
-  lcd.drawRectangle(x, boxY, w, boxH, COL_BOX)
-  if candidate ~= nil then
-    local label = switchLabel(candidate)
-    if question.kind == "position" then
-      label = label .. "  " .. positionWord(candidate)
+  children[#children + 1] = {
+    type = "button", x = LEFT, y = y + 30, w = 200, h = 34,
+    text = "Create switch setup",
+    press = function()
+      message = firstProblem()
+      -- Either way the view is rebuilt: with the write done it becomes the closing screen,
+      -- with a problem it comes back carrying the sentence -- a live label alone stayed
+      -- blank here, and a refusal nobody can read is a button that does nothing.
+      if message == nil then writeAnswers() end
+      view = nil
     end
-    centered(boxY + 8, label, COL_TEXT + (DBLSIZE or MIDSIZE or 0) + (BOLD or 0))
-  else
-    centered(boxY + math.floor((boxH - 16) / 2), "move a switch...", COL_TEXT)
-  end
-  if rejection ~= nil then
-    wrapped(x, boxY + boxH + 4, w, rejection, COL_TEXT, 18)
-  end
-
-  drawButtons(step == 1 and "RTN  leave" or "RTN  back",
-              candidate ~= nil and "ENTER  take it" or nil)
+  }
+  children[#children + 1] = {
+    type = "label", x = LEFT + 212, y = y + 38, w = W - LEFT - 212,
+    text = "RTN skips this - the assistant can ask later", color = COL_TEXT
+  }
+  lvgl.build(children)
 end
 
-local function drawLines(lines)
-  lcd.clear()
-  local x = math.floor(screenWidth() / 14)
-  local y = 10
-  for i = 1, #lines do
-    if lines[i] ~= "" then
-      lcd.drawText(x, y, lines[i], COL_TEXT)
-    end
-    y = y + 18
+local function buildDone()
+  lvgl.clear()
+  local children = {}
+  children[#children + 1] = {
+    type = "label", x = LEFT, y = 6, w = W - 2 * LEFT,
+    text = "Rotorflight - done", color = COL_TEXT
+  }
+  local y = 32
+  for _, result in ipairs(written or {}) do
+    children[#children + 1] = {
+      type = "label", x = LEFT, y = y, w = W - 2 * LEFT, color = COL_TEXT,
+      text = "CH" .. tostring(result.channel) .. "  " .. tostring(result.name) .. "  -  "
+        .. (result.ok and "ok" or ("FAILED: " .. tostring(result.err)))
+    }
+    y = y + 20
   end
+  y = y + 6
+  local hint = armNamingHint()
+  if hint ~= nil then
+    children[#children + 1] = {
+      type = "label", x = LEFT, y = y, w = W - 2 * LEFT, text = hint, color = COL_TEXT
+    }
+    y = y + 38
+  end
+  children[#children + 1] = {
+    type = "label", x = LEFT, y = y, w = W - 2 * LEFT, color = COL_TEXT,
+    text = "Next: connect the flight controller and run the setup assistant"
+  }
+  children[#children + 1] = {
+    type = "label", x = LEFT, y = y + 20, w = W - 2 * LEFT, color = COL_TEXT,
+    text = "(SYS > Tools > RFSuite > Configuration > Wizards)."
+  }
+  children[#children + 1] = {
+    type = "label", x = LEFT, y = y + 48, w = W - 2 * LEFT,
+    text = "RTN closes.", color = COL_TEXT
+  }
+  lvgl.build(children)
 end
 
 local function init()
 end
 
-local function run(event, touch)
+local function run(event)
+  if event == EVT_VIRTUAL_EXIT then return 1 end
+
   -- Without the suite there is no radio module to borrow, and half a wizard would leave half
-  -- a layout. The template's yml part is already in the model either way.
+  -- a layout. The template's yml part is already in the model either way. And without lvgl
+  -- there is no picker to offer -- the same honest exit.
   if R == nil then
     if loadError == nil then
       local chunk = loadScript(RADIO_MODULE, "t")
@@ -367,79 +330,40 @@ local function run(event, touch)
       else
         loadError = "missing"
       end
+      if lvgl == nil or type(lvgl.build) ~= "function" then loadError = "no_lvgl" end
+      if R ~= nil and loadError == nil and (answers.arm == nil or answers.arm == 0) then
+        -- SW1 is the switch the template PREPARED -- named ARM, red while armed -- so it is
+        -- the one picker that starts filled. Everything else starts empty: those answers are
+        -- not prepared anywhere.
+        -- The prepared switch answers to TWO names: the hardware calls it SW1, and the
+        -- template's own yml just named it ARM -- which is the name its source now carries.
+        for _, sw in ipairs(R.switches(2)) do
+          if sw.name == "SW1" or sw.name == "ARM" then answers.arm = sw.swsrc break end
+        end
+      end
     end
-    if R == nil then
-      if event == EVT_VIRTUAL_EXIT or event == EVT_VIRTUAL_ENTER then return 1 end
-      drawLines({
-        "Model created from the Rotorflight template.",
-        "",
-        "RFSuite is not installed on this card, so the",
-        "switch questions cannot be asked here.",
-        "The ARM switch, warnings and dashboard are",
-        "already in the model.",
-        "",
-        "Press RTN to close."
-      })
+    if R == nil or loadError ~= nil then
+      if event == EVT_VIRTUAL_ENTER then return 1 end
+      if lcd ~= nil and lcd.clear ~= nil then
+        lcd.clear()
+        lcd.drawText(30, 40, "Model created from the Rotorflight template.", 0)
+        lcd.drawText(30, 70, "The switch questions need RFSuite on the card;", 0)
+        lcd.drawText(30, 90, "the ARM switch, warnings and dashboard are", 0)
+        lcd.drawText(30, 110, "already in the model.", 0)
+        lcd.drawText(30, 150, "Press RTN to close.", 0)
+      end
       return 0
     end
   end
 
-  local isTap = EVT_TOUCH_TAP ~= nil and event == EVT_TOUCH_TAP
-  local question = QUESTIONS[step]
-
-  if question ~= nil then
-    local takeIt = event == EVT_VIRTUAL_ENTER or (isTap and tapped(buttons.right, touch))
-    local goBack = event == EVT_VIRTUAL_EXIT or (isTap and tapped(buttons.left, touch))
-
-    if goBack then
-      -- Back walks the questions; leaving is only offered at the first one. Nothing has been
-      -- written yet, so leaving early costs nothing but the answers given so far.
-      if step == 1 then return 1 end
-      step = step - 1
-      answers[QUESTIONS[step].key] = nil
-      candidate, rejection = nil, nil
-      return 0
-    end
-    if takeIt and candidate ~= nil then
-      answers[question.key] = candidate
-      candidate, rejection = nil, nil
-      step = step + 1
-      if QUESTIONS[step] == nil then writeAnswers() end
-      return 0
-    end
-
-    local moved = watchSwitches()
-    if moved ~= nil then considerCandidate(question, moved) end
-
-    drawQuestion(question, tostring(step) .. " / " .. tostring(#QUESTIONS))
-    return 0
+  if written ~= nil and view ~= "done" then
+    buildDone()
+    view = "done"
+  elseif written == nil and view ~= "form" then
+    buildForm()
+    view = "form"
   end
 
-  -- The closing screen: what was written, and where the other half happens.
-  if event == EVT_VIRTUAL_EXIT or event == EVT_VIRTUAL_ENTER
-     or (isTap and tapped(buttons.right, touch)) then
-    return 1
-  end
-  drawFrame("Rotorflight", "done")
-  local x = 14
-  local w = screenWidth() - 2 * x
-  local y = 44
-  for _, result in ipairs(written or {}) do
-    local mark = result.ok and "ok" or ("FAILED: " .. tostring(result.err))
-    lcd.drawText(x, y, "CH" .. tostring(result.channel), COL_TEXT + (BOLD or 0))
-    lcd.drawText(x + 52, y, tostring(result.name), COL_TEXT)
-    lcd.drawText(x + 150, y, mark, COL_TEXT + (result.ok and 0 or (BOLD or 0)))
-    y = y + 20
-  end
-  y = y + 6
-  local hint = armNamingHint()
-  if hint ~= nil then
-    y = wrapped(x, y, w, hint, COL_TEXT, 18) + 4
-  end
-  y = wrapped(x, y, w, "Next: connect the flight controller and run the setup assistant "
-    .. "(SYS > Tools > RFSuite > Configuration > Wizards). It reads this layout back and "
-    .. "sets the flight controller to match.", COL_TEXT, 18)
-  drawButtons(nil, "RTN  close")
   return 0
 end
 
