@@ -56,12 +56,15 @@ function M.wakeup()
   log("wakeup: adding cmd=" .. tostring(TelemetryApi.command) .. " to queue")
   mspState.queue:add({
     command = TelemetryApi.command,
+    timeout = 5.0,
+    maxRetries = 2,
     simulatorResponse = TelemetryApi.simulatorResponse,
     processReply = function(_, buf)
       log("processReply: received bytes=" .. tostring(buf and #buf or 0))
       local parsed = TelemetryApi.parse(buf)
       if parsed then
         log("processReply: parsed config successfully")
+        session.telemetry_config = parsed
         session.crsfTelemetryConfig = {
           mode = parsed.crsf_telemetry_mode,
           linkRate = parsed.crsf_telemetry_link_rate,
