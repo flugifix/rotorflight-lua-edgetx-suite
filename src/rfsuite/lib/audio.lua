@@ -756,8 +756,7 @@ function Audio.process(self, opts)
 
         if elapsed >= targetSeconds then
           if audioState.flightTimerTriggered ~= true then
-            local timerPrefs = (self.preferences and self.preferences.audio_timer) or {}
-            local sound = prefEnabled(timerPrefs, "timer_bell_sound", false) and "stat/alerts/timer.wav" or "evt/elapsed.wav"
+            local sound = "evt/elapsed.wav"
             if tryPlayEventFile(audioState, now, sound, opts) then
               audioState.flightTimerTriggered = true
               audioState.lastAlertAt.flight_time = now

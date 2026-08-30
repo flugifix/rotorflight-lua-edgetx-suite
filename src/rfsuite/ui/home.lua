@@ -1000,9 +1000,13 @@ local function maybeRefreshInfoPageFromSession()
 end
 
 local function isLocalSettingsPage()
+  local page = getActivePageModule()
+  if type(page) == "table" and (page.savesLocally == true or page.isLocal == true) then
+    return true
+  end
   if state.menu and type(state.menu.getCurrentMenuId) == "function" then
     local menuId = state.menu.getCurrentMenuId()
-    if type(menuId) == "string" and (string.sub(menuId, 1, 9) == "settings_" or string.sub(menuId, 1, 10) == "developer_") then
+    if type(menuId) == "string" and string.sub(menuId, 1, 9) == "settings_" then
       return true
     end
   end
@@ -1112,8 +1116,8 @@ end
 
 local function onSave()
   local armedWarningPref = state.preferences and state.preferences.general and state.preferences.general.save_armed_warning
-  if isModelArmed() and not isLocalSettingsPage() and (armedWarningPref ~= false) then
-    if lvgl and lvgl.alert then
+  if isModelArmed() and not isLocalSettingsPage() then
+    if armedWarningPref ~= false and lvgl and lvgl.alert then
       lvgl.alert({
         title = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_title") or "Model Armed",
         message = state.i18n and state.i18n.t and state.i18n.t("app.model_armed_warning") or "Model is ARMED! Please disarm."

@@ -38,15 +38,35 @@ local BAR_OK_COLOR = rgb(0x00FF00, GREEN or 0x00FF00)
 local BAR_WARN_COLOR = rgb(0xFF8000, 0xFF8000)
 local BAR_ALERT_COLOR = rgb(0xFF0000, 0xFF0000)
 
-local function resolveThresholdColor(value, thresholds, defaultColor)
+local function useFahrenheit()
+  local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
+  local localizations = prefs and prefs.localizations or nil
+  return tonumber(localizations and localizations.temperature_unit) == 1
+end
+
+local function isTempSource(source)
+  return source == "esc_temp" or source == "mcu_temp" or source == "temp_esc" or source == "temp_mcu"
+end
+
+local function cToF(c)
+  if type(c) == "number" then
+    return (c * 9 / 5) + 32
+  end
+  return c
+end
+
+local function resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit)
   if type(value) ~= "number" or type(thresholds) ~= "table" or #thresholds == 0 then
     return defaultColor
   end
 
   for i = 1, #thresholds do
     local threshold = thresholds[i]
-    if type(threshold) == "table" and type(threshold.value) == "number" and value <= threshold.value then
-      return threshold.fillcolor or threshold.color or defaultColor
+    if type(threshold) == "table" and type(threshold.value) == "number" then
+      local thVal = isFahrenheit and cToF(threshold.value) or threshold.value
+      if value <= thVal then
+        return threshold.fillcolor or threshold.color or defaultColor
+      end
     end
   end
 
@@ -113,7 +133,7 @@ local function getMaxValue(source, state, box, utils)
   return nil
 end
 
-local function resolveGaugeBounds(box, state, utils, defaultMin, defaultMax)
+local function resolveGaugeBounds(box, state, utils, defaultMin, defaultMax, isTemp)
   local fallbackMin = utils.toNumber(
     state and state.themeConfig and state.themeConfig.v_min,
     utils.toNumber(defaultMin, 0)
@@ -123,24 +143,37 @@ local function resolveGaugeBounds(box, state, utils, defaultMin, defaultMax)
     utils.toNumber(defaultMax, 100)
   )
 
+  local minValue, maxValue
   if type(box.min) == "number" and type(box.max) == "number" then
     box._gaugeMin = box._gaugeMin or box.min
     box._gaugeMax = box._gaugeMax or box.max
-    return utils.toNumber(box._gaugeMin, fallbackMin), utils.toNumber(box._gaugeMax, fallbackMax)
+    minValue = utils.toNumber(box._gaugeMin, fallbackMin)
+    maxValue = utils.toNumber(box._gaugeMax, fallbackMax)
+  else
+    minValue = utils.toNumber(utils.resolveValue(box.min, box, state), fallbackMin)
+    maxValue = utils.toNumber(utils.resolveValue(box.max, box, state), fallbackMax)
   end
 
-  local minValue = utils.toNumber(utils.resolveValue(box.min, box, state), fallbackMin)
-  local maxValue = utils.toNumber(utils.resolveValue(box.max, box, state), fallbackMax)
+  if isTemp and useFahrenheit() then
+    minValue = cToF(minValue)
+    maxValue = cToF(maxValue)
+  end
+
   return minValue, maxValue
 end
 
 local function renderBar(nodes, rect, box, state, themeCommon, utils)
   local source = utils.resolveValue(box.source, box, state)
+  local isTemp = isTempSource(source)
+  local fahrenheit = isTemp and useFahrenheit()
   local rawValue = utils.mapTelemetrySource(source, state)
   local hasValue = type(rawValue) == "number"
   local gaugeValue = utils.toNumber(rawValue, 0)
+  if fahrenheit and hasValue then
+    gaugeValue = cToF(gaugeValue)
+  end
 
-  local gaugeMin, gaugeMax = resolveGaugeBounds(box, state, utils, 0, 100)
+  local gaugeMin, gaugeMax = resolveGaugeBounds(box, state, utils, isTemp and 20 or 0, isTemp and 140 or 100, isTemp)
   
   if gaugeMax <= gaugeMin then gaugeMax = 100 end
   
@@ -168,7 +201,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local thresholds = box.thresholds or {}
     local barColor = box.fillcolor or BAR_OK_COLOR
     if hasValue then
-      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor)
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit)
     end
     
     -- Background bar (vertical)
@@ -217,6 +250,11 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     
     -- Value text (above or inside gauge)
     local unit = utils.resolveValue(box.unit, box, state)
+    if fahrenheit then
+      unit = "°F"
+    elseif isTemp and (unit == nil or unit == "") then
+      unit = "°C"
+    end
     local decimals = utils.resolveValue(box.decimals, box, state)
     local valueText = nil
     
@@ -232,12 +270,12 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     
     local textFont = utils.resolveValue(box.valuefont, box, state) or utils.resolveValue(box.font, box, state) or DBLSIZE
     local valuePaddingTop = utils.toNumber(utils.resolveValue(box.valuepaddingtop, box, state), 0)
-    local valuePosition = utils.resolveValue(box.valueposition, box, state) or "center"
+    local valuePosition = utils.resolveValue(box.valueposition, box, state) or "inside"
     local valueAlign = utils.resolveValue(box.valuealign, box, state) or CENTER
-    local valueY = barY + math.floor((barH - 8) / 2) + valuePaddingTop
+    local valueY = barY + math.floor((barH - 12) / 2) + valuePaddingTop
 
     if valuePosition == "top" then
-      valueY = barY + 4 + valuePaddingTop
+      valueY = barY + valuePaddingTop
     elseif valuePosition == "bottom" then
       valueY = barY + barH - 12 + valuePaddingTop
     end
@@ -266,7 +304,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local thresholds = box.thresholds or {}
     local barColor = box.fillcolor or BAR_OK_COLOR
     if hasValue then
-      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor)
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit)
     end
     
     -- Background bar
@@ -295,6 +333,11 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     
     -- Value text
     local unit = utils.resolveValue(box.unit, box, state)
+    if fahrenheit then
+      unit = "°F"
+    elseif isTemp and (unit == nil or unit == "") then
+      unit = "°C"
+    end
     local decimals = utils.resolveValue(box.decimals, box, state)
     local valueText = nil
     
@@ -393,11 +436,18 @@ end
 
 local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local source = utils.resolveValue(box.source, box, state)
+  local isTemp = isTempSource(source)
+  local fahrenheit = isTemp and useFahrenheit()
   local rawValue = utils.mapTelemetrySource(source, state)
   local hasValue = type(rawValue) == "number"
   local gaugeValue = utils.toNumber(rawValue, 0)
+  if fahrenheit and hasValue then
+    gaugeValue = cToF(gaugeValue)
+  end
 
-  local gaugeMin, gaugeMax = resolveGaugeBounds(box, state, utils, 18.0, 25.2)
+  local defaultMin = isTemp and 20 or 18.0
+  local defaultMax = isTemp and 140 or 25.2
+  local gaugeMin, gaugeMax = resolveGaugeBounds(box, state, utils, defaultMin, defaultMax, isTemp)
 
   -- Schutz gegen extreme Werte
   if gaugeMin == gaugeMax or gaugeMax - gaugeMin < 0.1 then return end
@@ -425,7 +475,7 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local arcValueColor = box.fillcolor
   if not arcValueColor then
     if type(box.thresholds) == "table" and #box.thresholds > 0 and hasValue then
-      arcValueColor = resolveThresholdColor(gaugeValue, box.thresholds, ARC_OK_COLOR)
+      arcValueColor = resolveThresholdColor(gaugeValue, box.thresholds, ARC_OK_COLOR, fahrenheit)
     else
       arcValueColor = getArcValueColor(gaugeValue, state, box, themeCommon, utils)
     end
@@ -465,6 +515,11 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   if valueY < rect.y + 10 then valueY = rect.y + 10 end
 
   local unit = utils.resolveValue(box.unit, box, state)
+  if fahrenheit then
+    unit = "°F"
+  elseif isTemp and (unit == nil or unit == "") then
+    unit = "°C"
+  end
   local decimals = utils.resolveValue(box.decimals, box, state)
   local valueText = nil
   if source == "voltage" and themeCommon and type(themeCommon.formatVoltage) == "function" then
@@ -499,6 +554,9 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   if box.arcmax then
     local maxValue = getMaxValue(source, state, box, utils)
     if maxValue and type(maxValue) == "number" and maxValue > 0 then
+      if fahrenheit then
+        maxValue = cToF(maxValue)
+      end
       local maxPrefix = utils.resolveValue(box.maxprefix, box, state) or "Max: "
       local maxDecimals = utils.resolveValue(box.maxdecimals, box, state)
       local maxUnit = utils.resolveValue(box.maxunit, box, state) or unit or ""

@@ -424,7 +424,7 @@ local function computeVoltageMode(now, voltage, cellCount, batteryConfig, usable
 
   local filteredVoltage = voltage
   if previousVoltage then
-    local sagFactor = 1.0 - math.max(0, math.min(0.8, (cfg.sagGain or 40) / 100 * 0.5))
+    local sagFactor = 1.0 - math.max(0, math.min(0.5, (cfg.sagGain or 40) / 100 * 0.5))
     local maxDrop = dt * cfg.voltageFallPerSecond * sagFactor
     if voltage < previousVoltage then
       filteredVoltage = math.max(voltage, previousVoltage - maxDrop)
