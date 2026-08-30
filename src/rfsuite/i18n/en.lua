@@ -1497,7 +1497,9 @@ return {
         loading_title = "Loading",
         loading_message = "Reading live data",
         loading_failed = "Loading failed",
-        loading_timeout = "Timeout while reading from FBL"
+        loading_timeout = "Timeout while reading from FBL",
+        not_connected = "Telemetry / FBL not connected",
+        link_lost = "Telemetry link lost"
       },
       diagnostics_rfstatus = {
         cpu_load = "CPU Load",
@@ -1540,7 +1542,9 @@ return {
         cpu_load = "CPU Load",
         ok = "OK",
         loading_title = "Loading",
-        loading_message = "Reading FBL status..."
+        loading_message = "Reading FBL status...",
+        loading_failed = "Loading failed",
+        loading_timeout = "Timeout while reading from FBL"
       },
       tools_copy_profiles = {
         title = "Copy Profile",
