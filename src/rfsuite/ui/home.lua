@@ -477,6 +477,7 @@ state = {
   memLastTick  = 0,
   memPeakKb    = 0,
   lastInputTick = 0,
+  initialLoadStartTick = 0,
   activePageMenuId = nil,
   helpContent = nil,
   helpPageTitle = nil,
@@ -1142,6 +1143,9 @@ local function readFblConnected()
     return false
   end
   if mspState.apiSupported == false then
+    return false
+  end
+  if mspState.versionReadCompleted ~= true then
     return false
   end
 
@@ -2167,6 +2171,7 @@ function M.init()
   state.memLastTick = 0
   state.memPeakKb = 0
   state.lastInputTick = getTime and getTime() or 0
+  state.initialLoadStartTick = getTime and getTime() or 0
   state.ignoreNextPageKey = false
   state.suppressPressFrames = 0
   state.suppressBackFrames = 0
@@ -2630,17 +2635,20 @@ function M.run(event, touchState)
         scheduleBuildUI(false)
       end
 
-      -- Finish initial load when MSP is stable and all tasks are done.
+      -- Finish initial load when core MSP identity is resolved or timeout is reached.
       -- If the FBL is offline, we enter the menu after a short timeout (2s).
+      -- If connected but the FC is unresponsive or wedged, we bound the wait (3.5s)
+      -- so the pilot reaches the main menu with locked tiles rather than hanging on the start screen indefinitely.
       local mspState = nil
       if MspRuntime and type(MspRuntime.getState) == "function" then
         mspState = MspRuntime.getState()
       end
       local isConnected = mspState and mspState.lastConnected == true
-      local timeoutReached = (now - state.lastInputTick) > 200
+      local elapsed = now - (state.initialLoadStartTick or now)
+      local timeoutReached = (not isConnected and elapsed > 200) or (elapsed > 350)
 
-      local mspSettled = (isConnected and mspProgress and mspProgress.done >= mspProgress.total and not Events.isOnconnectActive())
-                         or (not isConnected and timeoutReached)
+      local mspSettled = (isConnected and mspProgress and mspProgress.done >= mspProgress.total)
+                         or timeoutReached
 
       -- Hold the start screen until the compiling is through, which is the point of doing it
       -- here rather than on the first page that happens to need a file.
