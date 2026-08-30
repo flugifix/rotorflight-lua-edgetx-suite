@@ -99,7 +99,7 @@ M.CHANNELS = {
   {
     channel = 8, input = 7, key = "rescue", tier = "recommended",
     exactPositions = 2,
-    inputName = "Resc", channelName = "Rescue",
+    inputName = "Res", channelName = "Rescue",
     roles = { { kind = "condition", box = "RESCUE" } }
   }
 }
