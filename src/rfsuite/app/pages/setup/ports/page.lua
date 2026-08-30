@@ -324,8 +324,7 @@ local function queuePortsRead(isAutoReload)
     command = SerialConfigApi.command,
     simulatorResponse = SerialConfigApi.simulatorResponse,
     processReply = function(self, buf)
-      local parsedObj = SerialConfigApi.parse(buf)
-      local parsed = parsedObj and parsedObj.parsed
+      local parsed = SerialConfigApi.parse(buf)
       if parsed then
         local ports = {}
         local maxPorts = 12
@@ -361,8 +360,7 @@ local function queuePortsRead(isAutoReload)
         command = RxConfigApi.command,
         simulatorResponse = RxConfigApi.simulatorResponse,
         processReply = function(self2, buf2)
-          local parsedObj2 = RxConfigApi.parse(buf2)
-          local parsed2 = parsedObj2 and parsedObj2.parsed
+          local parsed2 = RxConfigApi.parse(buf2)
           if parsed2 then
             ui.rxSerialProvider = tonumber(parsed2.serialrx_provider) or 0
             saveToSession()

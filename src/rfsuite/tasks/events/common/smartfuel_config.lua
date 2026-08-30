@@ -81,7 +81,7 @@ function M.wakeup()
     processReply = function(self, buf)
       local data = smartfuelConfigApi.parse(buf)
       if type(data) == "table" then
-        session.smartfuel_config = data.parsed or data
+        session.smartfuel_config = data
       end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then

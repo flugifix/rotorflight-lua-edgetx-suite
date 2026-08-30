@@ -186,8 +186,7 @@ local function requestData(i18n)
     retryDelay = 1.2,
     timeout = 3.5,
     processReply = function(_, buf)
-      local res = statusApi.parse(buf)
-      local parsed = res and res.parsed
+      local parsed = statusApi.parse(buf)
       if parsed then
         state.values.arming_flags = parsed.arming_disable_flags
         state.values.real_time_load = string.format("%.1f%%", parsed.max_real_time_load / 10)

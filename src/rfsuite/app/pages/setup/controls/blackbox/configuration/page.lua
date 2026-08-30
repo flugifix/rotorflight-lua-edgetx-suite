@@ -214,8 +214,7 @@ local function queueBlackboxRead(isAutoReload)
         simulatorResponse = StatusApi.simulatorResponse,
         processReply = function(self, buf)
           if not ui.runtime or not ui.runtime.readPending then return end
-          local reply = StatusApi.parse(buf)
-          local status = reply and reply.parsed
+          local status = StatusApi.parse(buf)
           if status and status.task_delta_time_pid then
             ui.pidDeltaUs = status.task_delta_time_pid
           end

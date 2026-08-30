@@ -226,10 +226,10 @@ local function requestData()
       processReply = function(_, buf)
         widgetLog("requestData: smartfuel_config received")
         local res = sfApi.parse(buf)
-        if res and res.parsed then
-          state.firmwareConfig = res.parsed
+        if res then
+          state.firmwareConfig = res
           local session = getSession()
-          if session then session.smartfuel_config = res.parsed end
+          if session then session.smartfuel_config = res end
         end
         onTaskDone()
       end,

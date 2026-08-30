@@ -142,8 +142,7 @@ local function requestInitialData()
     simulatorResponse = statusApi.simulatorResponse,
     processReply = function(_, buf)
       state.pendingRequest = false
-      local res = statusApi.parse(buf)
-      local parsed = res and res.parsed
+      local parsed = statusApi.parse(buf)
       if parsed then
         state.pidProfileIndex = parsed.current_pid_profile_index
         state.rateProfileIndex = parsed.current_control_rate_profile_index
