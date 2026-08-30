@@ -62,8 +62,8 @@ local function getEscModel(buffer) return getEscTypeLabel(buffer) end
 
 local function getEscVersion(buffer)
     if type(buffer) ~= "table" then return "" end
-    local ver = getUInt(buffer, {2})
-    return ver ~= 0 and tostring(ver) or ""
+    local sn = getUInt(buffer, {29, 30, 31, 32})
+    return sn ~= 0 and tostring(sn) or ""
 end
 
 local function getEscFirmware(buffer)

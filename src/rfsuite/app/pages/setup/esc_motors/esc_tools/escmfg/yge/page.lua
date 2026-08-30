@@ -525,6 +525,10 @@ function M.build(ctx)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 50)
   end
 
+  if Controls and type(Controls.appendEscSubheader) == "function" then
+    cursorY = cursorY + Controls.appendEscSubheader(children, x, cursorY, w, ui.escFirmware, ui.escVersion)
+  end
+
   local rowH
   local hasMultipleEscs = (ui.motorCount == nil) or (ui.motorCount >= 2)
   if hasMultipleEscs then

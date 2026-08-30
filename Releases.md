@@ -5,6 +5,10 @@
   - Added dynamic ESC model name detection and header display queried directly from hardware via telemetry / MSP.
   - Unified device information and capability reporting across all supported ESC manufacturers (AM32, BLHeli_S, Bluejay, Flyrotor, Hobbywing V5, OMP, Scorpion, XDFly, YGE, ZTW).
   - Isolated Hobbywing V5 parameter tables to prevent cross-talk and corrected YGE firmware version mapping.
+- **ESC Firmware Version & Serial Number / Revision Subheader Display (`setup/esc_motors/esc_tools`)**:
+  - Implemented a compact subheader info line directly beneath the section header across all 10 ESC manufacturer configuration pages (AM32, BLHeli_S, Bluejay, Flyrotor, Hobbywing V5, OMP, Scorpion, XDFly, YGE, ZTW).
+  - Provides persistent, at-a-glance visibility into firmware versions (`FW`), device serial numbers (`S/N`), and layout revisions (`Rev`) across all parameter tabs with minimal screen footprint (~18px).
+  - Corrected YGE serial number extraction (`getEscVersion`) to parse the 32-bit uint serial number from protocol buffers.
 - **Active Profile & Rate Profile Live Resolution (`flight_tuning`)**:
   - Centralized live profile resolution (`getLiveProfile()`) to read active PID and rate profiles directly from telemetry sensors and session state.
   - Profile adjustments made via transmitter switches or telemetry are instantly reflected across all flight tuning pages without desync.

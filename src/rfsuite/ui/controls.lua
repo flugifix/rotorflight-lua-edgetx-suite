@@ -255,6 +255,46 @@ function Controls.appendStaticSectionHeader(children, x, y, w, title)
   }
 end
 
+function Controls.formatEscSubheader(firmware, version)
+  local parts = {}
+  local fw = firmware and tostring(firmware) or ""
+  fw = string.match(fw, "^%s*(.-)%s*$") or ""
+  if fw ~= "" then
+    table.insert(parts, "FW: " .. fw)
+  end
+
+  local ver = version and tostring(version) or ""
+  ver = string.match(ver, "^%s*(.-)%s*$") or ""
+  if ver ~= "" then
+    local revNum = string.match(ver, "^[Rr]evision%s+(%d+)$") or string.match(ver, "^[Rr]ev%s*[:%s]%s*(%d+)$")
+    if revNum then
+      table.insert(parts, "Rev: " .. revNum)
+    elseif string.match(ver, "^[0-9A-Fa-f]+$") or string.match(ver, "^%d+$") then
+      table.insert(parts, "S/N: " .. ver)
+    elseif not string.match(ver, "^HW%w+") then
+      table.insert(parts, "Ver: " .. ver)
+    end
+  end
+
+  if #parts == 0 then return nil end
+  return table.concat(parts, "  •  ")
+end
+
+function Controls.appendEscSubheader(children, x, y, w, firmware, version)
+  local text = Controls.formatEscSubheader(firmware, version)
+  if not text or text == "" then return 0 end
+
+  children[#children + 1] = {
+    type  = "label",
+    x = x, y = y,
+    text  = text,
+    color = COLOR_THEME_SECONDARY2,
+    font  = SMLSIZE
+  }
+
+  return 18
+end
+
 -- ── RadioSwitch ───────────────────────────────────────────────────────────────
 -- Slider-style boolean toggle with dynamic visuals.
 -- Visual state updates are driven by getter functions, so callers can avoid
