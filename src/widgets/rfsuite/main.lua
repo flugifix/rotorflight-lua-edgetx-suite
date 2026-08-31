@@ -85,6 +85,28 @@ local function update(widget, options)
   end
 end
 
+-- lib/log.lua once it is reachable, false once it is known not to be. Held here rather than
+-- required at the top of the file: this file is read for every widget at boot and deliberately
+-- pulls in nothing, and the caller below is on the reload path rather than on a per-frame one.
+local gvLog = nil
+
+--- Is the configured level at least as verbose as "info"?
+--
+-- Asked of the logger instead of compared against two literals. lib/log.lua orders the ladder
+-- off < error < warn < info < debug < trace, so a test for "debug" or "info" fell through on
+-- "trace" and the loudest setting on the selector wrote strictly less than the one below it.
+local function gvWanted()
+  if gvLog == nil then
+    local requireModule = _G.rfsuite and _G.rfsuite.require
+    if type(requireModule) ~= "function" then return false end
+    local okLoad, mod = pcall(requireModule, "lib/log.lua")
+    gvLog = (okLoad and type(mod) == "table" and type(mod.wanted) == "function") and mod or false
+  end
+  if not gvLog then return false end
+  local ok, wanted = pcall(gvLog.wanted, "info")
+  return ok and wanted == true
+end
+
 local function logGv(fmt, ...)
   -- Same gate as the dashboard runtime's copy of this function. Ungated, every call opens,
   -- appends to and closes a file on the SD card. The callers here are the reload path rather
@@ -93,10 +115,7 @@ local function logGv(fmt, ...)
   --
   -- Variadic for the same reason as the other copy, and kept in the same shape as it: with
   -- the test inside the function, a caller pays for a message the gate then drops.
-  local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
-  local general = prefs and prefs.general
-  local debugLevel = general and general.debug_level
-  if debugLevel ~= "debug" and debugLevel ~= "info" then return end
+  if not gvWanted() then return end
 
   local msg = tostring(fmt)
   if select("#", ...) > 0 then msg = string.format(msg, ...) end

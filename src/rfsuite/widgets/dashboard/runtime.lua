@@ -309,10 +309,12 @@ local function logGv(fmt, ...)
   -- The message is assembled HERE, after the gate, rather than by the caller: with the
   -- test inside the function the callers still paid for a string that was then dropped,
   -- and one of them sits on the unconditional path of every background pass.
-  local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
-  local general = prefs and prefs.general
-  local debugLevel = general and general.debug_level
-  if debugLevel ~= "debug" and debugLevel ~= "info" then return end
+  -- The level is asked of the logger instead of compared against two literals. lib/log.lua
+  -- orders the ladder off < error < warn < info < debug < trace, so a test for "debug" or
+  -- "info" fell through on "trace" and the loudest setting on the selector wrote strictly
+  -- less than the one below it. Log.wanted asks the same question the emit path asks, so a
+  -- level added to the ladder later cannot leave this gate behind again.
+  if not (Log and type(Log.wanted) == "function" and Log.wanted("info")) then return end
 
   local msg = tostring(fmt)
   if select("#", ...) > 0 then msg = string.format(msg, ...) end
