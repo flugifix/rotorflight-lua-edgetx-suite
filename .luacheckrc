@@ -11,6 +11,7 @@ globals = {
   
   -- System/Time/Model
   "getTime",
+  "getUsage",
   "system",
   "model",
   "getVersion",
