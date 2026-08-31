@@ -102,6 +102,70 @@ local function nowSeconds()
   return 0
 end
 
+-- How often the usage line below is written, in seconds.
+--
+-- Reporting only when the figure RISES was the obvious shape and it is the wrong one: a widget
+-- whose very first pass is also its worst -- which is exactly the widget a bug report is about --
+-- states its number once and is then silent for the rest of the session. A fixed interval keeps a
+-- current figure in the log for as long as the widget is alive, and it gives the end of the lines
+-- a meaning they otherwise do not have: a widget that has stopped reporting has stopped
+-- refreshing.
+local USAGE_REPORT_INTERVAL = 5
+
+--- Report how much of the per-pass instruction ceiling this widget is consuming.
+--
+-- EdgeTX gives the widget Lua state a fixed instruction budget per pass, and
+-- LuaWidget::foreground (radio/src/lua/lua_widget.cpp) runs this widget's refresh() AND the
+-- LVGL reactive-reference sweep callRefs() inside one protected block on that one budget. It
+-- stores the share consumed once both have returned, and getUsage() hands exactly that value
+-- back for an LVGL widget (luaGetUsage, radio/src/lua/api_general.cpp). So the figure readable
+-- here is the PREVIOUS pass's, refresh and sweep together -- which is why it is sampled at the
+-- top of a pass, where the object count still describes the tree that sweep walked.
+--
+-- Past the budget the firmware raises "CPU limit" from inside the sweep, paints its own message
+-- over the widget and stops calling refresh() altogether, so the pass that fails can never
+-- report itself and no line here can be the failing one. What this gives a bug report is the
+-- approach to it, and the point at which the reporting stopped.
+--
+-- Three figures, because each of them alone misleads. The current sample says what a settled
+-- widget costs. The peak over the interval says how close the worst pass in that stretch came,
+-- which is the number that decides whether the ceiling gets crossed on a busier screen. The peak
+-- since load keeps the worst pass of a session from scrolling out of a card log.
+--
+-- The value is not bounded by 100: the firmware's hook switches to a per-line mask once the count
+-- is up and keeps counting until the raise lands, so an overrunning pass reports what it cost.
+-- It is held in a uint8_t, though, so a pass past 255 wraps and reads low -- one more reason to
+-- report a stream of figures rather than a single worst one, since a wrapped sample stands out
+-- among its neighbours and would silently become the record on its own.
+--
+-- Nothing here tests the debug level. Log.emitf does that, and below "trace" the line is neither
+-- printed, nor put in the session ring, nor written to the card.
+local function traceInstructionUsage(self)
+  if type(getUsage) ~= "function" then return end
+  local ok, percent = pcall(getUsage)
+  if not ok then return end
+  percent = tonumber(percent)
+  if percent == nil then return end
+
+  -- The cheap path, taken on all but one pass in fifty: two comparisons and a clock read.
+  -- Sampling has to happen on every pass, because the peak is the point of the line.
+  if percent > self._usageWindowPeak then self._usageWindowPeak = percent end
+  if percent > self._usagePeak then self._usagePeak = percent end
+
+  local now = nowSeconds()
+  if now < self._usageReportAt then return end
+  self._usageReportAt = now + USAGE_REPORT_INTERVAL
+
+  if Log and type(Log.emitf) == "function" then
+    Log.emitf("rfsuite.widget", "trace",
+      "instruction budget %d%% now, %d%% peak/%ds, %d%% peak since load, %d objects, theme=%s",
+      percent, self._usageWindowPeak, USAGE_REPORT_INTERVAL, self._usagePeak,
+      self._lastChildCount, tostring(self.themePath))
+  end
+
+  self._usageWindowPeak = -1
+end
+
 local function readValue(name, fallback)
   if not getValue then return fallback end
   local ok, value = pcall(getValue, name)
@@ -1100,6 +1164,13 @@ function Runtime.new(zone, options)
     dashboardEngine = dashboardEngine,
     preferences = prefs,
     preferencesLastLoadedAt = 0,
+    -- Instruction-budget reporting, see traceInstructionUsage above. The object count starts at
+    -- 0 rather than at "unknown": before the first build this widget has put nothing on screen,
+    -- so 0 is what the reactive sweep walks and the honest thing to print.
+    _usagePeak = -1,
+    _usageWindowPeak = -1,
+    _usageReportAt = 0,
+    _lastChildCount = 0,
     themePath = "system/default",
     flightMode = "preflight",
     theme = nil,
@@ -1557,10 +1628,18 @@ function Runtime.new(zone, options)
     self.renderKey = nil
     self._cachedRenderKey = nil
     self._lastUIRefresh = 0
+    -- Reporting starts over, which is what makes switching tracing on mid-session work: changing
+    -- the debug level rewrites preferences.ini, and that is what the widget entry point watches,
+    -- so the reload lands at exactly the moment a user is asked to turn tracing on.
+    self._usagePeak = -1
+    self._usageWindowPeak = -1
+    self._usageReportAt = 0
   end
 
 
   function widget.refresh(self, event, touchState)
+    traceInstructionUsage(self)
+
     -- Route touch/key events to LVGL engine when active (e.g. fullscreen)
     if lvgl and type(lvgl.onEvent) == "function" and event ~= nil then
        -- On some EdgeTX versions, touchState coordinates are global.
@@ -1590,9 +1669,14 @@ function Runtime.new(zone, options)
       if not self.built then
         local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
         local title = (t and t("widgets.dashboard.connecting_fbl")) or "Connecting FBL..."
+        local splash = buildConnectionSplash(self.zone, statusLine, title)
         lvgl.clear()
-        lvgl.build(buildConnectionSplash(self.zone, statusLine, title))
+        lvgl.build(splash)
         self.built = true
+        -- What the reactive sweep walks from the next pass on. Kept up to date here as well as
+        -- at the dashboard build below, so the usage line never reports a count belonging to a
+        -- tree that has already been cleared.
+        self._lastChildCount = #splash
       end
       return
     end
@@ -1654,6 +1738,7 @@ function Runtime.new(zone, options)
       lvgl.clear()
       lvgl.build(children)
       self.built = true
+      self._lastChildCount = #children
       logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children)
     end
   end
