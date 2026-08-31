@@ -136,10 +136,16 @@ local function headerLine(name, slot)
     end
   end
 
-  if type(_G) == "table" and type(_G.rfsuite) == "table" then
-    local suite = _G.rfsuite.config
-    local suiteVersion = type(suite) == "table" and suite.version
-    if type(suiteVersion) == "string" then parts[#parts + 1] = "suite=" .. suiteVersion end
+  -- Which release wrote the file, taken from lib/version.lua. This read used to go to
+  -- `_G.rfsuite.config.version`, and nothing in the tree ever sets `_G.rfsuite.config`, so the
+  -- field was silently absent from every log ever written -- and a log that cannot say which
+  -- version produced it answers no question that depends on the code having changed. The module
+  -- is a table of constants and is asked for once, on the path that builds this line.
+  if type(_G) == "table" and type(_G.rfsuite) == "table" and type(_G.rfsuite.require) == "function" then
+    local ok, Version = pcall(_G.rfsuite.require, "lib/version.lua")
+    if ok and type(Version) == "table" and type(Version.VERSION) == "string" then
+      parts[#parts + 1] = "suite=" .. Version.VERSION
+    end
   end
 
   return table.concat(parts, " ") .. "\n"
