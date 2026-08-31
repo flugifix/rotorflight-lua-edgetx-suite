@@ -9,11 +9,20 @@ end
 
 local state
 
+-- lib/log.lua once it is reachable, false once it is known not to be. This file has a `Log`
+-- local of its own, but it is declared below and the function under it would capture nothing.
+local exitLog = nil
+
 local function logToFile(msg)
-  local prefs = state and state.preferences
-  local general = prefs and prefs.general
-  local debugLevel = general and general.debug_level
-  if debugLevel == "debug" or debugLevel == "info" then
+  -- The level is asked of the logger instead of compared against two literals. lib/log.lua
+  -- orders the ladder off < error < warn < info < debug < trace, so a test for "debug" or
+  -- "info" fell through on "trace" and the loudest setting on the selector wrote strictly
+  -- less than the one below it -- this whole file included.
+  if exitLog == nil then
+    local ok, mod = pcall(loadModule, "lib/log.lua")
+    exitLog = (ok and type(mod) == "table" and type(mod.wanted) == "function") and mod or false
+  end
+  if exitLog and exitLog.wanted("info") then
     local f = io.open("/SCRIPTS/TOOLS/rfsuite.user/exit_debug.log", "a")
     if f then
       local t = getTime and getTime() or 0
