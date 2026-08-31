@@ -316,8 +316,14 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
       return cachedBarText
     end
     
-    local textFontGetter = function()
-      return utils.resolveValue(box.valuefont, box, state) or utils.resolveValue(box.font, box, state) or DBLSIZE
+    local textFontRef = nil
+    if type(box.valuefont) ~= "function" and type(box.font) ~= "function" then
+      textFontRef = box.valuefont or box.font or DBLSIZE
+    end
+    if textFontRef == nil then
+      textFontRef = function()
+        return utils.resolveValue(box.valuefont, box, state) or utils.resolveValue(box.font, box, state) or DBLSIZE
+      end
     end
     local valuePaddingTop = utils.toNumber(utils.resolveValue(box.valuepaddingtop, box, state), 0)
     local valuePosition = utils.resolveValue(box.valueposition, box, state) or "inside"
@@ -330,8 +336,11 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
       valueY = barY + barH - 12 + valuePaddingTop
     end
     
-    local colorGetter = function()
-      return utils.resolveTextColor(box, state, WHITE)
+    local colorRef = utils.staticTextColor(box, state, WHITE)
+    if colorRef == nil then
+      colorRef = function()
+        return utils.resolveTextColor(box, state, WHITE)
+      end
     end
 
     utils.pushLabel(
@@ -340,9 +349,9 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
       valueY,
       barWidth,
       valueTextGetter,
-      colorGetter,
+      colorRef,
       valueAlign,
-      textFontGetter
+      textFontRef
     )
   
   -- HORIZONTAL GAUGE (default)
@@ -415,15 +424,24 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
       return cachedBarText
     end
     
-    local textFontGetter = function()
-      return utils.resolveValue(box.valuefont, box, state) or utils.resolveValue(box.font, box, state) or DBLSIZE
+    local textFontRef = nil
+    if type(box.valuefont) ~= "function" and type(box.font) ~= "function" then
+      textFontRef = box.valuefont or box.font or DBLSIZE
+    end
+    if textFontRef == nil then
+      textFontRef = function()
+        return utils.resolveValue(box.valuefont, box, state) or utils.resolveValue(box.font, box, state) or DBLSIZE
+      end
     end
     local valuePaddingLeft = utils.toNumber(utils.resolveValue(box.valuepaddingleft, box, state), 8)
     local valuePaddingTop = utils.toNumber(utils.resolveValue(box.valuepaddingtop, box, state), 0)
     local valueAlign = utils.resolveValue(box.valuealign, box, state) or LEFT
     
-    local colorGetter = function()
-      return utils.resolveTextColor(box, state, WHITE)
+    local colorRef = utils.staticTextColor(box, state, WHITE)
+    if colorRef == nil then
+      colorRef = function()
+        return utils.resolveTextColor(box, state, WHITE)
+      end
     end
 
     utils.pushLabel(
@@ -432,9 +450,9 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
       barY + math.floor((barHeight - 8) / 2) + valuePaddingTop,
       barW - valuePaddingLeft - 4,
       valueTextGetter,
-      colorGetter,
+      colorRef,
       valueAlign,
-      textFontGetter
+      textFontRef
     )
   
     -- Battery advanced info (like capacity) - only for horizontal
@@ -505,8 +523,14 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
         return cachedBattAdvText
       end
       
-      local battAdvFontGetter = function()
-        return utils.resolveValue(box.battadvfont, box, state) or 0
+      local battAdvFontRef = nil
+      if type(box.battadvfont) ~= "function" then
+        battAdvFontRef = box.battadvfont or 0
+      end
+      if battAdvFontRef == nil then
+        battAdvFontRef = function()
+          return utils.resolveValue(box.battadvfont, box, state) or 0
+        end
       end
       local battAdvPaddingTop = utils.toNumber(utils.resolveValue(box.battadvpaddingtop, box, state), math.floor((barHeight - 8) / 2))
       local battAdvPaddingRight = utils.toNumber(utils.resolveValue(box.battadvpaddingright, box, state), 6)
@@ -520,7 +544,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
         battAdvTextGetter,
         box.battadvtextcolor or WHITE,
         battAdvAlign,
-        battAdvFontGetter
+        battAdvFontRef
       )
     end
   end
@@ -672,29 +696,42 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     return cachedValueText
   end
 
-  local lastRawValColor = nil
-  local cachedValColor = nil
-  local valueColorGetter = function()
-    local curRaw = readDerived(state, source)
-    if curRaw == lastRawValColor and cachedValColor ~= nil then
+
+  -- Only a percentage arc colours its own reading by the value. On every other unit this getter
+  -- reduces to resolveTextColor, and reads the telemetry source once per pass to answer with the
+  -- number the box already carries.
+  local valueColorRef = nil
+  if unit ~= "%" then
+    valueColorRef = utils.staticTextColor(box, state, WHITE)
+  end
+  if valueColorRef == nil then
+    local lastRawValColor = nil
+    local cachedValColor = nil
+    valueColorRef = function()
+      local curRaw = readDerived(state, source)
+      if curRaw == lastRawValColor and cachedValColor ~= nil then
+        return cachedValColor
+      end
+      lastRawValColor = curRaw
+      local curHasValue = type(curRaw) == "number"
+      local curVal = utils.toNumber(curRaw, 0)
+      if fahrenheit and curHasValue then
+        curVal = cToF(curVal)
+      end
+      local valueColor = utils.resolveTextColor(box, state, WHITE)
+      if unit == "%" and curHasValue then
+        valueColor = getArcValueColor(curVal, state, box, themeCommon, utils)
+      end
+      cachedValColor = valueColor
       return cachedValColor
     end
-    lastRawValColor = curRaw
-    local curHasValue = type(curRaw) == "number"
-    local curVal = utils.toNumber(curRaw, 0)
-    if fahrenheit and curHasValue then
-      curVal = cToF(curVal)
-    end
-    local valueColor = utils.resolveTextColor(box, state, WHITE)
-    if unit == "%" and curHasValue then
-      valueColor = getArcValueColor(curVal, state, box, themeCommon, utils)
-    end
-    cachedValColor = valueColor
-    return cachedValColor
   end
 
-  local fontGetter = function()
-    return utils.resolveFont(box, state, DBLSIZE, "value_font", "value_font_lowres")
+  local fontRef = utils.staticFont(box, state, DBLSIZE, "value_font", "value_font_lowres")
+  if fontRef == nil then
+    fontRef = function()
+      return utils.resolveFont(box, state, DBLSIZE, "value_font", "value_font_lowres")
+    end
   end
 
   utils.pushLabel(
@@ -703,9 +740,9 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     valueY,
     rect.w - 8,
     valueTextGetter,
-    valueColorGetter,
+    valueColorRef,
     box.valuealign or box.titlealign or CENTER,
-    fontGetter
+    fontRef
   )
   
   -- MAX value display

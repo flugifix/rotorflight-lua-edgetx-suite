@@ -38,35 +38,50 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     return cachedText
   end
 
-  local lastFontText = nil
-  local cachedFont = nil
+  -- Without autosize_chars the font never depends on the text, so a font that is not a function
+  -- leaves nothing for a getter to answer -- and the label's text is then computed once per pass
+  -- rather than twice, since this getter calls textGetter as well.
+  local fontRef = nil
+  if box and box.autosize_chars == nil and utils and type(utils.staticFont) == "function" then
+    fontRef = utils.staticFont(box, state, MIDSIZE, "font", "font_lowres")
+  end
+  if fontRef == nil then
+    local lastFontText = nil
+    local cachedFont = nil
 
-  local fontGetter = function()
-    local valueText = textGetter()
-    if valueText == lastFontText and cachedFont ~= nil then
+    fontRef = function()
+      local valueText = textGetter()
+      if valueText == lastFontText and cachedFont ~= nil then
+        return cachedFont
+      end
+      lastFontText = valueText
+
+      local autoSizeChars = (utils and type(utils.resolveValue) == "function") and utils.resolveValue(box.autosize_chars, box, state) or box.autosize_chars
+      if type(autoSizeChars) == "number" and type(valueText) == "string" and #valueText > autoSizeChars then
+        local autoSizeFont = (utils and type(utils.resolveValue) == "function") and utils.resolveValue(box.autosize_font, box, state) or box.autosize_font
+        cachedFont = autoSizeFont or SMLSIZE
+        return cachedFont
+      end
+      if utils and type(utils.resolveFont) == "function" then
+        cachedFont = utils.resolveFont(box, state, MIDSIZE, "font", "font_lowres")
+      else
+        cachedFont = (box and box.font) or MIDSIZE
+      end
       return cachedFont
     end
-    lastFontText = valueText
-
-    local autoSizeChars = (utils and type(utils.resolveValue) == "function") and utils.resolveValue(box.autosize_chars, box, state) or box.autosize_chars
-    if type(autoSizeChars) == "number" and type(valueText) == "string" and #valueText > autoSizeChars then
-      local autoSizeFont = (utils and type(utils.resolveValue) == "function") and utils.resolveValue(box.autosize_font, box, state) or box.autosize_font
-      cachedFont = autoSizeFont or SMLSIZE
-      return cachedFont
-    end
-    if utils and type(utils.resolveFont) == "function" then
-      cachedFont = utils.resolveFont(box, state, MIDSIZE, "font", "font_lowres")
-    else
-      cachedFont = (box and box.font) or MIDSIZE
-    end
-    return cachedFont
   end
 
-  local colorGetter = function()
-    if utils and type(utils.resolveTextColor) == "function" then
-      return utils.resolveTextColor(box, state, WHITE)
+  local colorRef = nil
+  if utils and type(utils.staticTextColor) == "function" then
+    colorRef = utils.staticTextColor(box, state, WHITE)
+  end
+  if colorRef == nil then
+    colorRef = function()
+      if utils and type(utils.resolveTextColor) == "function" then
+        return utils.resolveTextColor(box, state, WHITE)
+      end
+      return (box and box.textcolor) or WHITE
     end
-    return (box and box.textcolor) or WHITE
   end
 
   if utils and type(utils.pushLabel) == "function" then
@@ -76,9 +91,9 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
       (utils.defaultValueY and utils.defaultValueY(rect, box)) or (rect.y + 4),
       rect.w - 8,
       textGetter,
-      colorGetter,
+      colorRef,
       box.valuealign or box.titlealign or CENTER,
-      fontGetter
+      fontRef
     )
   end
 end

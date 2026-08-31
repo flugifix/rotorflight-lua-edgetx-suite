@@ -186,12 +186,18 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     return cachedText
   end
 
-  local colorGetter = function()
-    return utils.resolveTextColor(box, state, WHITE)
+  local colorRef = utils.staticTextColor(box, state, WHITE)
+  if colorRef == nil then
+    colorRef = function()
+      return utils.resolveTextColor(box, state, WHITE)
+    end
   end
 
-  local fontGetter = function()
-    return utils.resolveFont(box, state, MIDSIZE, "font", "font_lowres")
+  local fontRef = utils.staticFont(box, state, MIDSIZE, "font", "font_lowres")
+  if fontRef == nil then
+    fontRef = function()
+      return utils.resolveFont(box, state, MIDSIZE, "font", "font_lowres")
+    end
   end
 
   utils.pushLabel(
@@ -200,9 +206,9 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     utils.defaultValueY(rect, box),
     rect.w - 8,
     textGetter,
-    colorGetter,
+    colorRef,
     box.valuealign or box.titlealign or CENTER,
-    fontGetter
+    fontRef
   )
 end
 

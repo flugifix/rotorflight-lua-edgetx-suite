@@ -143,49 +143,62 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     return cachedText
   end
 
-  local lastFontText = nil
-  local cachedFont = nil
+  -- Without autosize_chars the font never depends on the text, so a font that is not a function
+  -- leaves nothing for a getter to answer. This getter calls textGetter, which the label's own
+  -- text reference calls again on the same pass, so where the font is fixed the value is also
+  -- computed once per pass instead of twice.
+  local fontRef = nil
+  if cfg.autoSizeChars == nil then
+    fontRef = utils.staticFont(box, state, MIDSIZE)
+  end
+  if fontRef == nil then
+    local lastFontText = nil
+    local cachedFont = nil
 
-  local fontGetter = function()
-    local valueText = textGetter()
-    if valueText == lastFontText and cachedFont ~= nil then
+    fontRef = function()
+      local valueText = textGetter()
+      if valueText == lastFontText and cachedFont ~= nil then
+        return cachedFont
+      end
+      lastFontText = valueText
+
+      local autoSizeChars = cfg.autoSizeChars
+      if cfg.autoSizeCharsDynamic then
+        autoSizeChars = utils.resolveValue(autoSizeChars, box, state)
+      end
+
+      if type(autoSizeChars) == "number" and type(valueText) == "string" and #valueText > autoSizeChars then
+        local autoSizeFont = cfg.autoSizeFont
+        if cfg.autoSizeFontDynamic then
+          autoSizeFont = utils.resolveValue(autoSizeFont, box, state)
+        end
+        cachedFont = autoSizeFont or SMLSIZE
+        return cachedFont
+      end
+
+      local valueFont = cfg.font
+      if cfg.fontDynamic then
+        valueFont = utils.resolveValue(valueFont, box, state)
+      end
+      if utils.isLowResolution(state) then
+        local lowFont = cfg.fontLowRes
+        if cfg.fontLowResDynamic then
+          lowFont = utils.resolveValue(lowFont, box, state)
+        end
+        if lowFont ~= nil then
+          valueFont = lowFont
+        end
+      end
+      cachedFont = valueFont or MIDSIZE
       return cachedFont
     end
-    lastFontText = valueText
-
-    local autoSizeChars = cfg.autoSizeChars
-    if cfg.autoSizeCharsDynamic then
-      autoSizeChars = utils.resolveValue(autoSizeChars, box, state)
-    end
-
-    if type(autoSizeChars) == "number" and type(valueText) == "string" and #valueText > autoSizeChars then
-      local autoSizeFont = cfg.autoSizeFont
-      if cfg.autoSizeFontDynamic then
-        autoSizeFont = utils.resolveValue(autoSizeFont, box, state)
-      end
-      cachedFont = autoSizeFont or SMLSIZE
-      return cachedFont
-    end
-
-    local valueFont = cfg.font
-    if cfg.fontDynamic then
-      valueFont = utils.resolveValue(valueFont, box, state)
-    end
-    if utils.isLowResolution(state) then
-      local lowFont = cfg.fontLowRes
-      if cfg.fontLowResDynamic then
-        lowFont = utils.resolveValue(lowFont, box, state)
-      end
-      if lowFont ~= nil then
-        valueFont = lowFont
-      end
-    end
-    cachedFont = valueFont or MIDSIZE
-    return cachedFont
   end
 
-  local colorGetter = function()
-    return utils.resolveTextColor(box, state, WHITE)
+  local colorRef = utils.staticTextColor(box, state, WHITE)
+  if colorRef == nil then
+    colorRef = function()
+      return utils.resolveTextColor(box, state, WHITE)
+    end
   end
 
   utils.pushLabel(
@@ -194,9 +207,9 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     utils.defaultValueY(rect, box),
     rect.w - 8,
     textGetter,
-    colorGetter,
+    colorRef,
     box.valuealign or box.titlealign or CENTER,
-    fontGetter
+    fontRef
   )
 end
 
