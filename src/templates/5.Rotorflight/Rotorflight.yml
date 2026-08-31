@@ -2,6 +2,16 @@ semver: 2.12.2
 header:
    name: "Rotorflight"
 disableThrottleWarning: 1
+moduleData:
+   0:
+      type: TYPE_CROSSFIRE
+      subType: 0
+      channelsStart: 0
+      channelsCount: 16
+      failsafeMode: NOT_SET
+      mod:
+         crsf:
+            telemetryBaudrate: 0
 mixData:
  -
    destCh: 0

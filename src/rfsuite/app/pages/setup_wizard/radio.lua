@@ -72,17 +72,13 @@ M.CHANNELS = {
     roles = { { kind = "condition", box = "ARM" } }
   },
   {
-    -- The one channel that carries TWO switches, and the first place the "a channel may need
-    -- several switches" note becomes code rather than a caution.
-    --
-    -- The hold sits in this channel's own input. The governor switch gets an input of ITS own --
-    -- an input holds one source, and these are two -- and that input feeds the channel's base
-    -- line, which is the placeholder the drivetrain section later raises off the floor. Inputs
-    -- eight and nine are spoken for by the two channels this path does not build yet, so the
-    -- governor takes the one after them.
+    -- The one channel that carries TWO switches, and both live on its own input as
+    -- ALTERNATIVE lines, the reference construction: MAX at -100 gated by the lock position,
+    -- the governor switch at full weight beneath it. Expo lines are alternatives -- the first
+    -- whose gate matches wins -- so the lock rules exactly one position and every other
+    -- carries the governor's travel.
     channel = 6, input = 5, key = "throttle", tier = "required",
     inputName = "Thr", channelName = "Thr",
-    govInput = 10, govInputName = "Gov",
     roles = { { kind = "throttle" } }
   },
   {
@@ -365,19 +361,6 @@ function M.activePosition(swsrc)
   return nil
 end
 
--- The weight that puts a picked position at the BOTTOM of the travel.
---
--- Unlike the condition channels there is nothing to measure here: which PHYSICAL direction a
--- switch is mounted in is absorbed by the radio's own inversion setting, and the logical
--- encoding underneath is fixed -- a switch source reads the bottom of its range at its first
--- position and the top at its last. The middle of a three-position switch is not an end of
--- the travel, so it has no weight and is refused by name rather than mapped to a guess.
-function M.weightForLowAt(swsrc)
-  local position = M.switchPosition(swsrc)
-  if position == nil or position == M.POSITION_MIDDLE then return nil end
-  return position == M.POSITION_UP and 100 or -100
-end
-
 -- The travel a switch actually produces on a channel the assistant wrote itself -- both ends, not
 -- the theoretical span of the step encoding.
 --
@@ -472,16 +455,12 @@ function M.channelFooting(entry)
   if mixSource == nil or count == nil or inputLines == nil then return nil end
   if inputLines == 0 or count == 0 then return false end
 
-  -- Every line takes this channel's own input, EXCEPT where the channel carries a second switch
-  -- in an input of its own -- the throttle channel and its governor. Demanding one source for
-  -- every line would report that channel as never laid out, which is the shape of a rule applied
-  -- past the case it was written for.
-  local govSource = entry.govInput ~= nil and M.inputSource(entry.govInput) or nil
+  -- Every line takes this channel's own input -- the throttle included, whose whole shape
+  -- lives on the input's two alternative lines rather than on a second mixer line.
   for index = 0, count - 1 do
     local mix = M.getMix(entry.channel, index)
     if mix == nil then return false end
-    local source = tonumber(mix.source)
-    if source ~= mixSource and not (govSource ~= nil and source == govSource) then return false end
+    if tonumber(mix.source) ~= mixSource then return false end
   end
 
   local line = M.getInput(entry.input, 0)
@@ -643,60 +622,62 @@ function M.writeConditionChannel(entry, swsrc)
   return true
 end
 
--- The throttle channel, and it is the one place where the safe intermediate state has to be
--- built rather than hoped for. An unassigned channel sits at centre, which the flight
--- controller reads as half throttle rather than as off. So both lines carry the minimum: the
--- base line is a placeholder the drivetrain step later replaces with the governor source, and
--- the hold line overrides it wherever the hold position is present. Until that replacement
--- happens the motor is off in every switch position, which is the correct state for an
--- assistant the pilot may leave at any point.
-function M.writeThrottleChannel(entry, swsrc, govSwsrc)
+-- The throttle channel, in the REFERENCE construction: the channel is a plain one-to-one from
+-- its own input, and the whole shape lives on that input's two ALTERNATIVE lines -- expo lines
+-- are alternatives, the first whose gate matches wins. Line one is MAX at -100, gated by the
+-- one position the pilot names as the LOCK, so exactly that position pins the motor; line two
+-- is the governor switch at full weight, so every other position carries its travel -- off,
+-- spool-up, flight. This is the shape the pilot's own reference models carry and the shape the
+-- template's wizard writes, and having ONE construction is the point: the assistant proposes
+-- it back instead of re-asking in different words.
+function M.writeThrottleChannel(entry, lockSwsrc, govSwsrc)
   local insert = modelApi("insertMix")
-  if not insert then return false, "no_model_api" end
-  local mixSource, err = writeChannelInput(entry, swsrc)
-  if mixSource == nil then return false, err end
+  local insertInput = modelApi("insertInput")
+  local deleteInput = modelApi("deleteInput")
+  if not insert or not insertInput or not deleteInput then return false, "no_model_api" end
+  if entry.input == nil then return false, "no_input" end
+  if govSwsrc == nil or govSwsrc == 0 then return false, "no_gov" end
 
-  -- The governor switch, where the pilot named one, goes into an input of its own and that input
-  -- feeds the value line. Its DIRECTION is part of the answer: the pilot names the position
-  -- where the motor is off, and the input's weight puts that position at the bottom of the
-  -- travel -- so the other end, or both remaining positions of a three-position switch, carry
-  -- the value. Written without asking, the direction was a rule, and a rule about which way a
-  -- pilot's switch runs is a guess wearing a constant.
-  local baseSource = nil
-  if govSwsrc ~= nil and govSwsrc ~= 0 and entry.govInput ~= nil then
-    local govWeight = M.weightForLowAt(govSwsrc)
-    if govWeight == nil then return false, "gov_middle" end
-    local govSource, govErr = writeChannelInput({
-      input = entry.govInput, inputName = entry.govInputName, channel = entry.channel
-    }, govSwsrc, govWeight)
-    if govSource == nil then return false, govErr end
-    baseSource = govSource
+  local maxSource = M.plainSource("MAX")
+  if maxSource == nil then return false, "no_max" end
+  local govSource = M.switchSource(govSwsrc)
+  if govSource == nil then return false, "no_source" end
+  local mixSource = M.inputSource(entry.input)
+  if mixSource == nil then return false, "no_input_source" end
+
+  local function line(source, weight, gate, name)
+    return {
+      name = name or "",
+      inputName = entry.inputName,
+      source = source,
+      weight = weight,
+      offset = 0,
+      switch = gate or 0,
+      curveType = 0,
+      curveValue = 0,
+      scale = 0,
+      side = 3,
+      trimSource = M.TRIM_OFF,
+      flightModes = 0
+    }
+  end
+
+  local count = M.inputCount(entry.input) or 0
+  for _ = 1, count do
+    if not pcall(deleteInput, entry.input, 0) then return false, "clear_input_failed" end
+  end
+  if not pcall(insertInput, entry.input, 0, line(maxSource, -100, lockSwsrc, "Hold")) then
+    return false, "insert_input_failed"
+  end
+  if not pcall(insertInput, entry.input, 1, line(govSource, 100, 0, "GOV")) then
+    return false, "insert_input_failed"
   end
 
   if not M.clearChannel(entry.channel) then return false, "clear_failed" end
-
-  -- Two lines, and the SAFE one is the one that is always on.
-  --
-  -- The first line is the floor: the hold input at zero weight and full negative offset, with no
-  -- switch, so the channel sits at its minimum whatever else happens. The second is the value and
-  -- it is gated by the position the pilot named as *motor released*, replacing the floor only
-  -- there.
-  --
-  -- Written this way round on purpose. The failure of a gated line is that it does not fire, and
-  -- with the value gated that failure leaves the channel on the floor -- motor off. Gating the
-  -- HOLD instead would have made the same failure leave the motor running, and it would also have
-  -- needed an inverted switch condition to mean "everywhere except here", which is a second thing
-  -- to get wrong.
-  --
-  -- Both lines used to sit at the floor, so every switch position produced the same value and no
-  -- check on this channel could fail. The governor positions now carry their full travel, by the
-  -- pilot's decision and against a stated objection: the section can leave behind a model whose
-  -- throttle channel is not at minimum while the drivetrain section has never run. What that costs
-  -- is written down in this branch's document; what it buys is that the read-back can go red.
   local ok = pcall(insert, entry.channel - 1, 0, {
     source = mixSource,
-    weight = 0,
-    offset = -100,
+    weight = 100,
+    offset = 0,
     switch = 0,
     multiplex = MULTIPLEX_ADD,
     curveType = 0,
@@ -704,22 +685,18 @@ function M.writeThrottleChannel(entry, swsrc, govSwsrc)
     flightModes = 0
   })
   if not ok then return false, "insert_failed" end
-
-  -- Without a governor switch there is no value to carry, so the second line stays at the floor
-  -- too and the channel behaves exactly as it did before.
-  ok = pcall(insert, entry.channel - 1, 1, {
-    source = baseSource or mixSource,
-    weight = baseSource and 100 or 0,
-    offset = baseSource and 0 or -100,
-    switch = swsrc,
-    multiplex = MULTIPLEX_REPLACE,
-    curveType = 0,
-    curveValue = 0,
-    flightModes = 0
-  })
-  if not ok then return false, "insert_failed" end
   M.setChannelName(entry.channel, entry.channelName)
   return true
+end
+
+-- A plain source by the name the firmware knows it under -- MAX is the one this file needs:
+-- the reference construction pins the hold line to the top of the travel through it.
+function M.plainSource(name)
+  local id = callGlobal("getSourceIndex", name)
+  if id ~= nil then return tonumber(id) end
+  local info = callGlobal("getFieldInfo", name)
+  if type(info) == "table" and info.id ~= nil then return tonumber(info.id) end
+  return nil
 end
 
 -- The mix source that stands for an input. The inputs are the first block of mix sources -- the

@@ -118,7 +118,7 @@ end
 
 local function pickerName(i18n, key)
   if key == "arm" then return t(i18n, "pick_arm", "Switch position for armed") end
-  if key == "throttle" then return t(i18n, "pick_throttle", "Motor released at") end
+  if key == "throttle" then return t(i18n, "pick_throttle", "Motor locked at") end
   if key == "profile" then return t(i18n, "pick_profile", "Profile switch") end
   if key == "rescue" then return t(i18n, "pick_rescue", "Switch position for rescue") end
   return key
@@ -771,47 +771,36 @@ end
 -- The throttle channel is complete when BOTH of its lines force the minimum, which is what makes
 -- the state it leaves behind safe on its own. A single line, or a line that does not, is not.
 local function throttleComplete(w, channel)
+  -- The REFERENCE construction: the channel is one plain line from its own input, and the
+  -- shape lives on that input -- MAX at -100 gated by the lock position, the governor switch
+  -- at full weight beneath it. Expo lines are alternatives, so the lock rules exactly one
+  -- position and every other carries the governor's travel.
+  local entry = entryFor(w, channel)
+  if entry == nil or entry.input == nil then return nil end
   local info = w.radio.describeChannel(channel)
   if info == nil then return nil end
-  if info.count < 2 then return false end
+  if info.count ~= 1 then return false end
+  local maxSource = w.radio.plainSource("MAX")
+  if maxSource == nil then return nil end
 
-  -- The floor is the first line and it is unconditional: no switch, no weight, full negative
-  -- offset. Everything the channel's safety rests on is in that one line, so it is checked on its
-  -- own rather than as part of a loop over both.
-  local floorLine = info.lines[1]
-  local valueLine = info.lines[2]
-  if floorLine == nil or valueLine == nil then return false end
-  if (tonumber(floorLine.weight) or 0) ~= 0 then return false end
-  if (tonumber(floorLine.offset) or 0) > -100 then return false end
-  if (tonumber(floorLine.switch) or 0) ~= 0 then return false end
+  local hold = w.radio.getInput(entry.input, 0)
+  local gov = w.radio.getInput(entry.input, 1)
+  if hold == nil or gov == nil then return false end
+  if tonumber(hold.source) ~= maxSource then return false end
+  if (tonumber(hold.weight) or 0) ~= -100 then return false end
+  if (tonumber(hold.switch) or 0) == 0 then return false end
+  if (tonumber(gov.weight) or 0) ~= 100 then return false end
+  if (tonumber(gov.switch) or 0) ~= 0 then return false end
 
-  -- And the value line is gated by the position the pilot named. Checked only where that position
-  -- is known: the criterion is asked from the overview as well, before the procedure has run.
+  -- Checked against the answers only where they are known: the criterion is asked from the
+  -- overview as well, before the procedure has run.
   local picked = w.data.picked and w.data.picked[channel]
-  if picked ~= nil and picked ~= 0 and (tonumber(valueLine.switch) or 0) ~= picked then
+  if picked ~= nil and picked ~= 0 and (tonumber(hold.switch) or 0) ~= picked then
     return false
   end
-
-  -- Where the pilot named a governor switch, the value line has to be carrying it, at full travel.
-  -- Left out of the criterion the channel would report itself done with the governor half missing
-  -- -- the same mistake the naming already cost this branch once: what has to be right is the end
-  -- state.
-  local entry = entryFor(w, channel)
   local wantGov = w.data.pickedGov and w.data.pickedGov[channel]
-  if entry ~= nil and entry.govInput ~= nil and wantGov ~= nil and wantGov ~= 0 then
-    local govSource = w.radio.inputSource(entry.govInput)
-    if govSource == nil then return nil end
-    if tonumber(valueLine.source) ~= govSource then return false end
-    if (tonumber(valueLine.weight) or 0) ~= 100 then return false end
-    local line = w.radio.getInput(entry.govInput, 0)
-    if line == nil then return false end
-    if tonumber(line.source) ~= w.radio.switchSource(wantGov) then return false end
-    -- The direction is part of the end state: the input must put the named off position at the
-    -- bottom of the travel, or the channel reports itself done with the motor running on the
-    -- wrong side of the switch.
-    local wantWeight = w.radio.weightForLowAt(wantGov)
-    if wantWeight == nil or tonumber(line.weight) ~= wantWeight then return false end
-  elseif (tonumber(valueLine.weight) or 0) ~= 0 then
+  if wantGov ~= nil and wantGov ~= 0
+     and tonumber(gov.source) ~= w.radio.switchSource(wantGov) then
     return false
   end
   return true
@@ -881,20 +870,14 @@ local function makeChannelProcedure(channel, order)
     -- the source of the channel's second input, so a second run does not ask again for something
     -- that is already there.
     local entry = entryFor(w, channel)
-    if entry ~= nil and entry.govInput ~= nil and data.pickedGov[channel] == nil then
-      local line = w.radio.getInput(entry.govInput, 0)
+    if entry ~= nil and entry.input ~= nil and entry.key == "throttle"
+       and data.pickedGov[channel] == nil then
+      -- The governor is the SECOND line of this channel's own input in the reference
+      -- construction; its source names the switch exactly.
+      local line = w.radio.getInput(entry.input, 1)
       local source = line and tonumber(line.source) or nil
       if source ~= nil then
-        -- The stored weight says which end this assistant put at the bottom, so the off
-        -- position is proposed exactly rather than guessed: +100 bottoms the first position,
-        -- -100 the last. Any other weight is not this assistant's work and proposes nothing.
-        local first = w.radio.switchFromSource(source)
-        local weight = tonumber(line.weight)
-        if first ~= nil and weight == 100 then
-          data.pickedGov[channel] = first
-        elseif first ~= nil and weight == -100 then
-          data.pickedGov[channel] = first + w.radio.POSITION_DOWN
-        end
+        data.pickedGov[channel] = w.radio.switchFromSource(source)
       end
     end
     local info = w.radio.describeChannel(channel)
@@ -906,9 +889,16 @@ local function makeChannelProcedure(channel, order)
     -- that position and the answer is therefore exact rather than proposed.
     if data.picked[channel] == nil and info then
       local picked = nil
+      -- The throttle's lock position is the gate of its input's FIRST line in the reference
+      -- construction; every other channel's mix records no gate at all.
+      if entry ~= nil and entry.key == "throttle" and entry.input ~= nil then
+        local hold = w.radio.getInput(entry.input, 0)
+        local gate = hold and tonumber(hold.switch) or 0
+        if gate ~= 0 then picked = gate end
+      end
       for _, mix in ipairs(info.lines or {}) do
         local gate = tonumber(mix.switch) or 0
-        if gate ~= 0 then
+        if picked == nil and gate ~= 0 then
           picked = gate
           break
         end
@@ -987,13 +977,12 @@ local function makeChannelProcedure(channel, order)
         local positions = w.radio.switchPositionCount(picked) or 0
         if entry.needsPositions and positions < entry.needsPositions then return false end
         if entry.exactPositions and positions ~= entry.exactPositions then return false end
-        -- The governor's off position cannot be the middle of its travel; the screen says why.
-        if entry.govInput ~= nil then
+        -- The governor carries three values across its travel, so it takes a three-position
+        -- switch, and the step waits until one is named.
+        if entry.key == "throttle" then
           local gov = w.data.pickedGov and w.data.pickedGov[channel]
-          if gov ~= nil and gov ~= 0
-             and w.radio.switchPosition(gov) == w.radio.POSITION_MIDDLE then
-            return false
-          end
+          if gov == nil or gov == 0 then return false end
+          if (w.radio.switchPositionCount(gov) or 0) < 3 then return false end
         end
         return true
       end,
@@ -1191,62 +1180,57 @@ local function makeChannelProcedure(channel, order)
           end
         end
 
-        -- The half the field name cannot carry: naming where the motor may run says nothing
-        -- about the rest of the travel, and the rest is the whole point of the channel.
+        -- The half the field name cannot carry: the lock rules exactly one position, and
+        -- every other position hands the channel to the governor's travel.
         if entry.key == "throttle" then
           y = y + 4 + w.paragraph(children, area.x, y + 4, area.w,
-            t(i18n, "hold_others_off", "In every other position the motor is off."))
+            t(i18n, "hold_others_off", "In every other position the governor switch drives the motor."))
         end
 
-        -- The SECOND switch of this channel, and the only channel on the path that has one.
-        --
-        -- Asked as a POSITION -- the one where the motor is off -- because the direction of the
-        -- travel is half of the answer: the same switch mounted the same way can run the motor
-        -- at either end, and which end is the pilot's convention rather than anything a rule
-        -- may settle. The off position goes to the bottom of the travel and the rest of the
-        -- switch carries the value.
-        --
-        -- The switch becomes the source of an input of its own and that input feeds this
-        -- channel's base line, gated by the hold -- which is what makes this a decision the
-        -- radio section can FINISH, rather than one it collects and leaves lying somewhere to
-        -- go stale.
-        if entry.govInput ~= nil then
+        -- The SECOND switch of this channel, and it is a whole switch: all three of its
+        -- positions carry values -- off, spool-up, flight -- so the answer is the switch,
+        -- the same shape the profile channel needs and the same control the radio offers.
+        if entry.key == "throttle" then
           w.data.pickedGov = w.data.pickedGov or {}
           w.label(children, area.x, y + math.floor((w.ROW_H - 18) / 2), area.w - pickerW - 8,
-            t(i18n, "pick_governor", "Switch position for motor off"), w.font, COLOR_THEME_PRIMARY1)
+            t(i18n, "pick_governor", "Governor switch"), w.font, COLOR_THEME_PRIMARY1)
           children[#children + 1] = {
-            type = "switch",
+            type = "source",
             x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
-            filter = SW_SWITCH | SW_NONE,
-            get = function() return w.data.pickedGov[channel] or 0 end,
+            -- No `title`; the source picker does not carry the property (see the profile
+            -- channel's note).
+            filter = (SRC_SWITCH or 0xFFFFFFFF),
+            get = function()
+              local picked = w.data.pickedGov[channel]
+              if picked == nil or picked == 0 then return 0 end
+              return w.radio.switchSource(picked) or 0
+            end,
             set = function(value)
-              w.data.pickedGov[channel] = tonumber(value) or 0
+              w.data.pickedGov[channel] = w.radio.switchFromSource(value) or 0
               Wlog.emit("debug", "pick ch%d governor -> %s", channel,
-                tostring(w.radio.switchPositionName(w.data.pickedGov[channel]) or 0))
+                tostring(w.radio.switchBaseName(w.data.pickedGov[channel]) or 0))
             end
           }
           y = y + w.ROW_H
 
-          -- The middle of a three-position switch is not an end of the travel, so the motor
-          -- cannot be off exactly there. The step's gate refuses it; this line says why.
+          -- Three positions, because all three carry values -- off, spool-up, flight. Said in
+          -- words where a narrower switch is picked; the step's gate refuses it.
+          local govPicked = w.data.pickedGov[channel]
+          if govPicked ~= nil and govPicked ~= 0
+             and (w.radio.switchPositionCount(govPicked) or 0) < 3 then
+            y = y + 4 + w.paragraph(children, area.x, y + 4, area.w,
+              t(i18n, "gov_needs_three", "This switch has two positions. The governor needs three: off, spool-up, flight."))
+          end
+
           local hold = w.data.picked[channel]
           local gov = w.data.pickedGov[channel]
-          if gov ~= nil and gov ~= 0
-             and w.radio.switchPosition(gov) == w.radio.POSITION_MIDDLE then
-            w.paragraph(children, area.x, y + 4, area.w,
-              t(i18n, "gov_middle",
-                "The motor cannot be off in the middle position. Pick an end position."))
-          -- The starvation check the concept asks for, and it is on POSITIONS rather than on
-          -- which switch. The hold line overrides, so every position it covers is lost to the
-          -- governor: one switch for both leaves the governor with what the hold does not take,
-          -- and on a two-position switch that is nothing at all.
-          elseif hold ~= nil and hold ~= 0 and gov ~= nil and gov ~= 0
+          -- The starvation check, on POSITIONS: the lock rules one position of whatever switch
+          -- carries it, so a lock position ON the governor switch takes that position away
+          -- from the travel.
+          if hold ~= nil and hold ~= 0 and gov ~= nil and gov ~= 0
              and w.radio.firstPositionOf(hold) == w.radio.firstPositionOf(gov) then
-            local spare = (w.radio.switchPositionCount(gov) or 0) - 1
-            if spare < 2 then
-              w.paragraph(children, area.x, y + 4, area.w,
-                t(i18n, "gov_starved", "One switch for both, and the hold takes a position from it. Give the governor its own switch, or use one with three positions."))
-            end
+            w.paragraph(children, area.x, y + 4, area.w,
+              t(i18n, "gov_starved", "One switch for both, and the hold takes a position from it. Give the governor its own switch, or use one with three positions."))
           end
         end
       end
@@ -1350,6 +1334,11 @@ local function actionBlocked(action)
   -- No switch, nothing to write. This is the case that used to be absent from the list rather
   -- than blocked in it.
   if action.swsrc == nil or action.swsrc == 0 then return true end
+  -- The throttle needs BOTH its answers: without the governor the reference construction has
+  -- no second line to carry the travel.
+  if role.kind == "throttle" and (action.govSwsrc == nil or action.govSwsrc == 0) then
+    return true
+  end
   -- Both surfaces index the same array in the firmware, so both take the same bound, and
   -- neither write path enforces it. A field past the end is not refused and not clamped;
   -- it is stored and then read out of bounds on every evaluation.
@@ -1660,24 +1649,21 @@ procs[#procs + 1] = {
               if us == nil then return "-", waiting end
 
               local want = 988
-              if held then
+              if not held then
                 if action.govSwsrc == nil or action.govSwsrc == 0 then return tostring(us) .. " us", waiting end
-                -- What the WRITE put there: the named off position at the bottom of the travel,
-                -- the middle of a three-position switch at centre, every other position at the
-                -- top. Computed from the same answer the write ran on, so the row can only go
-                -- red where the machine deviates -- never where the expectation does.
+                -- What the WRITE put there: the lock position pins the bottom; everywhere else
+                -- the governor's own position carries the travel at +100 -- first position
+                -- bottom, middle centre, last top.
                 local offset = w.radio.activePosition(action.govSwsrc)
-                local offOffset = w.radio.switchPosition(action.govSwsrc)
-                if offset == nil or offOffset == nil then return tostring(us) .. " us", waiting end
-                if offset == offOffset then
-                  want = 988
-                elseif offset == w.radio.POSITION_MIDDLE then
+                if offset == nil then return tostring(us) .. " us", waiting end
+                if offset == w.radio.POSITION_MIDDLE then
                   want = 1500
+                elseif offset == w.radio.POSITION_UP then
+                  want = 988
                 else
                   want = 2012
                 end
               end
-
               local text = tostring(us) .. " us"
               if math.abs(us - want) <= 150 then return text, okMark end
               return text .. string.format(t(i18n, "verify_want", " - want %s"), tostring(want)),

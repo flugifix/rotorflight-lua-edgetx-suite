@@ -107,7 +107,6 @@ end
 
 local function writeAnswers()
   written = {}
-  local maxSource = sourceByName("MAX")
 
   local function record(channel, name, ok, err)
     written[#written + 1] = { channel = channel, name = name, ok = ok and true or false, err = err }
@@ -125,19 +124,17 @@ local function writeAnswers()
 
   simple(5, 4, "Arm", "Arming", answers.arm)
 
-  -- The throttle input, two alternative lines: the hold rules its one position, the governor
-  -- carries every other.
-  local govSource = R.switchSource(answers.gov)
-  if maxSource == nil or govSource == nil then
-    record(6, "Thr", false, maxSource == nil and "no_max" or "no_source")
-  else
-    clearInput(5)
-    local okHold = pcall(putLine, 5, 0, "Thr", maxSource, -100, answers.hold, "Hold")
-    local okGov = okHold and pcall(putLine, 5, 1, "Thr", govSource, 100, 0, "GOV")
-    if not (okHold and okGov) then
-      record(6, "Thr", false, "input_failed")
+  -- The throttle goes through the assistant's own writer: ONE construction, one place, and
+  -- the assistant recognises its own work when it walks the flight-controller half later.
+  do
+    local throttleEntry = nil
+    for _, entry in ipairs(R.CHANNELS) do
+      if entry.key == "throttle" then throttleEntry = entry break end
+    end
+    if throttleEntry == nil then
+      record(6, "Thr", false, "no_entry")
     else
-      local ok, err = wire(6, 5, "Thr")
+      local ok, err = R.writeThrottleChannel(throttleEntry, answers.hold, answers.gov)
       record(6, "Thr", ok, err)
     end
   end
