@@ -509,6 +509,86 @@ customSwitches:
          r: 248
          g: 252
          b: 248
+   SW2:
+      name: ""
+      type: 2POS
+      group: 0
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor:
+         r: 248
+         g: 0
+         b: 0
+      offColor:
+         r: 0
+         g: 0
+         b: 0
+   SW3:
+      name: ""
+      type: 2POS
+      group: 0
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor:
+         r: 248
+         g: 0
+         b: 0
+      offColor:
+         r: 0
+         g: 0
+         b: 0
+   SW4:
+      name: ""
+      type: 2POS
+      group: 0
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor:
+         r: 248
+         g: 0
+         b: 0
+      offColor:
+         r: 0
+         g: 0
+         b: 0
+   SW5:
+      name: ""
+      type: 2POS
+      group: 0
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor:
+         r: 248
+         g: 0
+         b: 0
+      offColor:
+         r: 0
+         g: 0
+         b: 0
+   SW6:
+      name: ""
+      type: 2POS
+      group: 0
+      start: START_OFF
+      state: 0
+      onColorLuaOverride: OFF
+      offColorLuaOverride: OFF
+      onColor:
+         r: 248
+         g: 0
+         b: 0
+      offColor:
+         r: 0
+         g: 0
+         b: 0
 screenData:
    0:
       LayoutId: Layout1x1
