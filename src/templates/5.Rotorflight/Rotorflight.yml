@@ -494,7 +494,7 @@ inputNames:
       val: "BckU"
 customSwitches:
    SW1:
-      name: "ARM"
+      name: ""
       type: 2POS
       group: 0
       start: START_OFF
@@ -506,9 +506,9 @@ customSwitches:
          g: 0
          b: 0
       offColor:
-         r: 248
-         g: 252
-         b: 248
+         r: 0
+         g: 0
+         b: 0
    SW2:
       name: ""
       type: 2POS

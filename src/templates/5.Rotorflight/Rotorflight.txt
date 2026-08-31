@@ -1,7 +1,7 @@
 Starting point for a Rotorflight helicopter.
 
-Brings the pieces no script can set later: the SW1 function switch prepared as ARM (red while armed), switch warnings, the throttle warning off, the blackbox, backup, pot and trim channels, and the RFSuite dashboard as the main view.
+Brings the pieces no script can set later: all six function switches arm-ready (two positions, ungrouped, start off, red while on - the radio's own default would group them and start SW1 on), switch warnings, the throttle warning off, the blackbox, backup, pot and trim channels, and the RFSuite dashboard as the main view.
 
-Then asks for your switches with the radio's own pickers - arming (SW1 preselected), the hold position that locks the motor, governor, profiles, rescue - and lays the channels out like the reference models. If you arm on a function switch other than SW1, its name and colours have to be moved by hand; no script can do that.
+Then asks for your switches with the radio's own pickers - arming (SW1 preselected, any function switch works the same), the hold position that locks the motor, governor, profiles, rescue - and lays the channels out like the reference models.
 
 Connect the flight controller afterwards and run the setup assistant (SYS > Tools > RFSuite > Configuration > Wizards); it reads this layout back and sets the flight controller to match.

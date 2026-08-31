@@ -165,18 +165,6 @@ local function firstProblem()
   return nil
 end
 
--- Does the arming answer sit on a function switch OTHER than the one the template prepared?
--- The name and the colours cannot be moved by any script -- that gap is why this template
--- exists -- so the one honest thing to do is say so.
-local function armNamingHint()
-  if answers.arm == nil then return nil end
-  local base = R.switchBaseName(answers.arm)
-  if type(base) == "string" and string.sub(base, 1, 2) == "SW" and base ~= "SW1" then
-    return "SW1 carries the ARM name and colours; move them to " .. base ..
-      " by hand (Model setup, function switches)."
-  end
-  return nil
-end
 
 -- ---------------------------------------------------------------------------------------------
 -- The form, out of the radio's own controls -- the same child tables the suite hands to
@@ -290,13 +278,6 @@ local function buildDone()
     y = y + 20
   end
   y = y + 6
-  local hint = armNamingHint()
-  if hint ~= nil then
-    children[#children + 1] = {
-      type = "label", x = LEFT, y = y, w = W - 2 * LEFT, text = hint, color = COL_TEXT
-    }
-    y = y + 38
-  end
   children[#children + 1] = {
     type = "label", x = LEFT, y = y, w = W - 2 * LEFT, color = COL_TEXT,
     text = "Next: connect the flight controller and run the setup assistant"
@@ -335,10 +316,10 @@ local function run(event)
         -- SW1 is the switch the template PREPARED -- named ARM, red while armed -- so it is
         -- the one picker that starts filled. Everything else starts empty: those answers are
         -- not prepared anywhere.
-        -- The prepared switch answers to TWO names: the hardware calls it SW1, and the
-        -- template's own yml just named it ARM -- which is the name its source now carries.
+        -- Every function switch arrives identically arm-ready; SW1 is preselected only
+        -- because a filled picker is one decision fewer, not because it is special.
         for _, sw in ipairs(R.switches(2)) do
-          if sw.name == "SW1" or sw.name == "ARM" then answers.arm = sw.swsrc break end
+          if sw.name == "SW1" then answers.arm = sw.swsrc break end
         end
       end
     end
