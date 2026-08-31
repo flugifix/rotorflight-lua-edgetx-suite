@@ -450,7 +450,10 @@ local function reloadPreferencesIfNeeded(self, force)
     self.built = false
     self.renderKey = nil
     self._cachedRenderKey = nil
-    self.lastModelPreferences = nil
+    -- NOTE: do NOT clear lastModelPreferences here. Clearing it disarms the
+    -- content-signature guard in refresh() so that the next identical table
+    -- instance (allocated by a concurrent publisher) would trigger a redundant
+    -- full scene rebuild and blow the EdgeTX instruction budget.
     self._lastUIRefresh = 0
   end
 
@@ -523,20 +526,15 @@ local function updateConnectionState(self)
     or session.modelPreferencesResolved == true
     or onconnectDone
 
-  -- What has to be true before the dashboard is DRAWN, and it deliberately no longer includes
-  -- the entire connect chain. Every value those tasks fill has a themed fallback -- the flight count
-  -- starts at 0, the dataflash bar is guarded on `state.dataflash`, and the cell count is
-  -- inferred from the pack voltage until `battery_config` arrives -- so the chain decides how
-  -- COMPLETE the dashboard is, not whether it can be shown. It is a strictly serial run of a
-  -- dozen MSP round trips, and behind this gate it was the whole screen's critical path.
+  -- What has to be true before the dashboard is DRAWN:
+  -- We require connection, battery telemetry, RF telemetry, UID resolution (`modelPrefsResolved`),
+  -- and completion of onconnect tasks (`tasksDone`).
+  -- Requiring `tasksDone` ensures the initial dashboard build is held until all onconnect tasks
+  -- have completed and are no longer loading scripts via `loadScript()`. This prevents concurrent
+  -- script loads from colliding with the LVGL scene build and blowing the instruction budget.
   --
-  -- However, we must wait for UID resolution (`modelPrefsResolved`) so that model-specific theme
-  -- overrides are known before dismissing the splash. This prevents theme pop-in without forcing
-  -- the screen to wait for all remaining connect tasks.
-  --
-  -- `tasksDone` is still computed: it names the pending task in the status line below, and
   -- `startupComplete` keeps the audio on exactly the condition it had before.
-  local rawReady = connected and batteryReady and rfReady and modelPrefsResolved
+  local rawReady = connected and batteryReady and rfReady and modelPrefsResolved and tasksDone
   local now = nowSeconds()
 
   if connected and not rawReady then
@@ -584,7 +582,8 @@ local function updateConnectionState(self)
     end
     local loadingTasksStr = (t and t("widgets.dashboard.loading_tasks")) or "Loading data..."
     if showNumbers then
-      statusLine = loadingTasksStr .. " (" .. tostring(pDone) .. "/" .. tostring(pTotal) .. ")"
+      local currentStep = math.min(pDone + 1, pTotal)
+      statusLine = loadingTasksStr .. " (" .. tostring(currentStep) .. "/" .. tostring(pTotal) .. ")"
     else
       statusLine = loadingTasksStr
     end
@@ -611,8 +610,21 @@ local function updateConnectionState(self)
       if softTimeoutReady then
         widgetLog(self, "Splash soft-timeout reached; continuing without full startup prerequisites", "warn")
       end
-      -- Force reload preferences when connection ready to ensure we have the latest model settings
-      reloadPreferencesIfNeeded(self, true)
+      -- NOTE: do NOT call reloadPreferencesIfNeeded() here. The FBL
+      -- reconnect-edge handler already cleared self.theme and self.built,
+      -- which is sufficient to trigger a single fresh theme load in the
+      -- next refresh() pass.  A redundant forced-reload here allocates a
+      -- new modelPreferences table instance that races the concurrent MSP
+      -- publisher reads, defeating the content-signature guard and causing
+      -- multiple full scene teardowns in rapid succession (CPU limit crash).
+      --
+      -- Defer the first LVGL dashboard build to the next firmware tick.
+      -- During the connect burst, background work shares the instruction budget
+      -- with the firmware. Adding a full LVGL build on top of that can push the
+      -- pass over the EdgeTX limit. The one-tick deferral allows background work
+      -- to finish cleanly this frame, deferring the LVGL build to the next tick
+      -- before callRefs() runs firmware-side.
+      self._themeReloadedThisTick = true
     else
       -- Open, and shut again: from here on there is something to steady and the hold is paid.
       if wasReady then self.everReady = true end
@@ -1488,6 +1500,8 @@ function Runtime.new(zone, options)
     self.theme = loadThemeModuleForState(selectedTheme, self.flightMode)
     self.built = false
     self.renderKey = nil
+    -- Defer LVGL scene build to next tick whenever a theme module is loaded
+    self._themeReloadedThisTick = true
 
     logGv("reloadActiveTheme: flightMode=%s, selectedTheme=%s, loadedTheme=%s, v_min=%.1f, v_max=%.1f, customV=%s",
       tostring(self.flightMode), tostring(selectedTheme), tostring(self.theme ~= nil),
@@ -1591,7 +1605,13 @@ function Runtime.new(zone, options)
       self.state.rateProfile = nil
       self.state.batteryProfile = nil
       self.modelPreferences = nil
+      -- Clear the reference so the identity check fails on the next frame
+      -- and the slow-path signature comparison is triggered.  Keep the
+      -- signature itself so that an identical modelPrefs content (same model,
+      -- same settings) is correctly identified as "no change" and only a
+      -- genuine model or settings change triggers a theme rebuild.
       self.lastModelPreferences = nil
+      -- self.lastModelPrefsSignature is intentionally NOT cleared here.
       self.flightMode = "preflight"
       self.theme = nil
       self.built = false
@@ -1600,9 +1620,6 @@ function Runtime.new(zone, options)
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       end
-      -- Recalculate voltage theme config now that batteryCellCount is reset to 0
-      -- This ensures gauge bounds are computed fresh, not with stale cell count from previous session
-      updateVoltageThemeConfig(self)
       widgetLog(self, "FBL reconnect edge: reset dashboard session state", "info")
     elseif not isFblConnected and wasFblConnected then
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
@@ -1665,6 +1682,7 @@ function Runtime.new(zone, options)
     logGv("widget.reload called with force=%s", tostring(force))
     reloadPreferencesIfNeeded(self, force ~= false)
     reloadActiveTheme(self)
+    self._themeReloadedThisTick = true
     self.built = false
     self.renderKey = nil
     self._cachedRenderKey = nil
@@ -1690,6 +1708,17 @@ function Runtime.new(zone, options)
     end
 
     local ready = performBackgroundWork(self)
+
+    -- If performBackgroundWork() or widget.reload() loaded a new theme module
+    -- this tick, the combined instruction cost of background work and script
+    -- loading already consumes a significant share of the EdgeTX budget.  Adding
+    -- a full LVGL build on top of that risks exceeding the limit.  Defer all
+    -- drawing to the next firmware tick -- the radio will simply hold the
+    -- previous frame for one ~50 ms cycle, which is imperceptible to the user.
+    if self._themeReloadedThisTick then
+      self._themeReloadedThisTick = false
+      return
+    end
 
     if self.zone then
       self.state.zoneW = self.zone.w or 0
