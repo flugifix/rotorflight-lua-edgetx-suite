@@ -937,6 +937,30 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
   return chosen
 end
 
+-- Everything reloadActiveTheme reads out of the per-model preferences sits under `dashboard`:
+-- resolveThemePathForState above takes `model_override` and the `model_theme_*` keys, and
+-- app/pages/settings/dashboard/lib.lua's getThemeConfig takes the `cfg_<theme>_*` keys. A
+-- signature over that one flat table therefore decides whether anything a rebuild would read
+-- has actually changed.
+local function modelPreferencesSignature(modelPrefs)
+  if type(modelPrefs) ~= "table" then return nil end
+  local dashboard = modelPrefs.dashboard
+  if type(dashboard) ~= "table" then return "" end
+
+  local keys = {}
+  for k in pairs(dashboard) do
+    keys[#keys + 1] = k
+  end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+
+  local parts = {}
+  for i = 1, #keys do
+    local k = keys[i]
+    parts[i] = tostring(k) .. "=" .. tostring(dashboard[k])
+  end
+  return table.concat(parts, "\n")
+end
+
 -- Hoisted out of readTelemetry, which runs on every background pass: the per-pass cache and the
 -- two helpers below were rebuilt each time, and they are almost everything the pass allocates.
 -- The cache is emptied in place rather than replaced, and it keeps the original rule that a nil
@@ -1524,7 +1548,22 @@ function Runtime.new(zone, options)
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
     local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, nextMode)
 
-    local modelPrefsChanged = (modelPrefs ~= self.lastModelPreferences)
+    -- A different table is not a different preference set. The connect chain
+    -- (tasks/events/onconnect/tasks/uid.lua), the MSP publisher (tasks/msp/runtime.lua) and
+    -- reloadPreferencesIfNeeded above each load the per-model preferences file on their own,
+    -- so the same content arrives here as several distinct tables within a few hundred
+    -- milliseconds. Comparing the table identity made every one of them call
+    -- reloadActiveTheme, which clears `built` and `renderKey` and so tears the whole theme
+    -- page down and builds it again -- and a build shares the widget's instruction budget
+    -- with the reactive-reference sweep the firmware runs after it. Compare the content the
+    -- rebuild would read instead, and keep the identity test as the cheap path so the
+    -- signature is only built when the table really was replaced.
+    local modelPrefsChanged = false
+    if modelPrefs ~= self.lastModelPreferences then
+      local signature = modelPreferencesSignature(modelPrefs)
+      modelPrefsChanged = (signature ~= self.lastModelPrefsSignature)
+      self.lastModelPrefsSignature = signature
+    end
     self.lastModelPreferences = modelPrefs
 
     if nextMode ~= self.flightMode then
