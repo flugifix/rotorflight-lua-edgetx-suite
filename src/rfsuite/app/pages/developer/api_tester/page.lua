@@ -249,18 +249,18 @@ local function listApiDir(path, names, seen)
             local apiName = string.match(clean, "([%w_%-]+)%.lua$")
             
             if apiName then
-              Log.emit("api_tester", "listApiDir: addApiName AUFRUF mit apiName='" .. tostring(apiName) .. "'", "debug", true)
+              Log.emit("api_tester", "listApiDir: calling addApiName with apiName='" .. tostring(apiName) .. "'", "debug", true)
               addApiName(apiName, names, seen)
             end
           end
         end)
         if not ok then
-          Log.emit("api_tester", "listApiDir: ERROR bei Verarbeitung von '" .. tostring(fname) .. "': " .. tostring(err), "error", true)
+          Log.emit("api_tester", "listApiDir: error processing '" .. tostring(fname) .. "': " .. tostring(err), "error", true)
         end
       end
     else
-      -- Ordner existiert nicht oder ist leer
-      Log.emit("api_tester", "listApiDir: Ordner nicht gefunden oder leer für " .. tostring(path), "warn", true)
+      -- folder missing or empty
+      Log.emit("api_tester", "listApiDir: folder not found or empty for " .. tostring(path), "warn", true)
     end
 
     local namesStr = (names and #names > 0) and table.concat(names, ", ") or "<leer>"
