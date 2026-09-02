@@ -143,6 +143,11 @@ local function addToHistory(tag, msg, level)
   _G.rfsuite.log_history_seq = _G.rfsuite.log_history_seq + 1
 end
 
+--- Emit one log line.
+--
+-- `enabled` is a console OPT-OUT: false keeps a line off the console while it still reaches
+-- the ring, the sink and serial; nil and true both mean on. It exists for the call sites
+-- that gate console output on a preference of their own, and it decides nothing else.
 function Log.emit(tag, msg, level, enabled)
   local emitByLevel = shouldEmitByLevel(level)
   
@@ -168,7 +173,7 @@ function Log.emit(tag, msg, level, enabled)
     addToSink(tag, msg, level)
   end
 
-  local emitConsole = isTruthy(enabled) and emitByLevel
+  local emitConsole = (enabled == nil or isTruthy(enabled)) and emitByLevel
   local emitSerial = isSerialDebugEnabled() and type(serialWrite) == "function" and emitByLevel
 
   if not emitConsole and not emitSerial then
@@ -230,7 +235,18 @@ function Log.emitf(tag, level, fmt, ...)
   end
 
   local ok, text = pcall(string.format, fmt, ...)
-  Log.emit(tag, ok and text or tostring(fmt), level, true)
+  Log.emit(tag, ok and text or tostring(fmt), level)
+end
+
+--- A logger bound to one tag.
+--
+-- For a module that logs under a single tag: the closure carries the tag and the default
+-- level, so the module states its tag once and the logging policy -- the default level,
+-- the console flag, the gate -- stays in this file instead of drifting at call sites.
+function Log.tagged(tag)
+  return function(msg, level)
+    Log.emit(tag, msg, level or "debug")
+  end
 end
 
 --- A buffer as hex, for a payload line. Bounded, and it says when it truncated.

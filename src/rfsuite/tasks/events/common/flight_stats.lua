@@ -44,7 +44,7 @@ function M.wakeup(args)
   end
 
   if type(Log) == "table" and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.tasks.flight_stats", "MSP request for flight_stats (cmd=" .. tostring(flightStats.command) .. ") via queue", "debug", true)
+    pcall(Log.emit, "rfsuite.tasks.flight_stats", "MSP request for flight_stats (cmd=" .. tostring(flightStats.command) .. ") via queue", "debug")
   end
 
   mspState.queue:add({
@@ -61,12 +61,12 @@ function M.wakeup(args)
       end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.flight_stats", "flight_stats received: " .. tostring(stats and stats.flightcount), "debug", true)
+        pcall(Log.emit, "rfsuite.tasks.flight_stats", "flight_stats received: " .. tostring(stats and stats.flightcount), "debug")
       end
     end,
     errorHandler = function()
       done = true
-      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.flight_stats", "flight_stats read failed", "warn", true) end
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.flight_stats", "flight_stats read failed", "warn") end
     end
   })
 end

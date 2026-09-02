@@ -15,7 +15,7 @@ local DEBUG_PREFIX = "[dashboard.theme.page] "
 
 local function debugLog(message)
   if Log and type(Log.emit) == "function" then
-    Log.emit("dashboard.theme.page", DEBUG_PREFIX .. tostring(message), "debug", true)
+    Log.emit("dashboard.theme.page", DEBUG_PREFIX .. tostring(message), "debug")
   end
 end
 

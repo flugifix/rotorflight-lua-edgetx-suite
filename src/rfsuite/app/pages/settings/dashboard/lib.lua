@@ -17,7 +17,7 @@ end
 
 local function debugLog(message)
   if Log then
-    Log.emit("dashboard.lib", DEBUG_PREFIX .. tostring(message), "debug", true)
+    Log.emit("dashboard.lib", DEBUG_PREFIX .. tostring(message), "debug")
   end
 end
 

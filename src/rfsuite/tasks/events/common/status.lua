@@ -52,7 +52,7 @@ function M.wakeup(args)
   requestSent = true
 
   if type(Log) == "table" and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.tasks.status", "MSP request for status (cmd=" .. tostring(statusApi.command) .. ") via queue", "debug", true)
+    pcall(Log.emit, "rfsuite.tasks.status", "MSP request for status (cmd=" .. tostring(statusApi.command) .. ") via queue", "debug")
   end
 
   mspState.queue:add({
@@ -78,12 +78,12 @@ function M.wakeup(args)
       end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.status", "status received: PID profile=" .. tostring(parsed and parsed.current_pid_profile_index) .. ", Rate profile=" .. tostring(parsed and parsed.current_control_rate_profile_index), "debug", true)
+        pcall(Log.emit, "rfsuite.tasks.status", "status received: PID profile=" .. tostring(parsed and parsed.current_pid_profile_index) .. ", Rate profile=" .. tostring(parsed and parsed.current_control_rate_profile_index), "debug")
       end
     end,
     errorHandler = function()
       done = true
-      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.status", "status read failed", "warn", true) end
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.status", "status read failed", "warn") end
     end
   })
 end

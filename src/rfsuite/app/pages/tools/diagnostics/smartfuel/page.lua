@@ -69,7 +69,7 @@ local SMART_SENSORS = {
 
 local function widgetLog(msg, level)
   if Log and type(Log.emit) == "function" then
-    Log.emit("rfsuite.smartfuel.diag", tostring(msg), level or "debug", true)
+    Log.emit("rfsuite.smartfuel.diag", tostring(msg), level or "debug")
   end
 end
 

@@ -40,7 +40,7 @@ function M.show(ctx)
     end
   end
 
-  if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl types: message=" .. tostring(type(lvgl and lvgl.message)), "debug", true) end
+  if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl types: message=" .. tostring(type(lvgl and lvgl.message)), "debug") end
 
   local handled = false
   local function doConfirm()
@@ -59,7 +59,7 @@ function M.show(ctx)
     local ok, res = safeCall(function()
       return lvgl.confirm({ title = title, message = message, confirm = doConfirm, cancel = doCancel })
     end)
-    if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.confirm attempt ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug", true) end
+    if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.ui.confirm_dialog", "lvgl.confirm attempt ok=" .. tostring(ok) .. ", res=" .. tostring(res), "debug") end
 
     if ok and res == true then
       doConfirm()

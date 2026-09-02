@@ -93,7 +93,7 @@ end
 
 local function widgetLog(self, msg, level)
   if Log and type(Log.emit) == "function" then
-    Log.emit("rfsuite.widget", msg, level or "debug", true)
+    Log.emit("rfsuite.widget", msg, level or "debug")
   end
 end
 
@@ -311,31 +311,21 @@ local function publishPreferencesToGlobal(prefs)
 end
 
 local function logGv(fmt, ...)
-  -- Gated the way the tool gates its own file logger. Ungated, every call here opens,
-  -- appends to and closes a file on the SD card -- and the callers are on the widget's
-  -- refresh and background passes rather than on anything the pilot did, so it runs for
-  -- the whole flight on every model that carries the widget.
+  -- The reload trace, through the logging core: the ring (Session Logs) takes it, and --
+  -- when logging to card is on -- the sink's session file, which is bounded, rotated and
+  -- loss-counted.
   --
   -- The message is assembled HERE, after the gate, rather than by the caller: with the
   -- test inside the function the callers still paid for a string that was then dropped,
-  -- and one of them sits on the unconditional path of every background pass.
-  -- The level is asked of the logger instead of compared against two literals. lib/log.lua
-  -- orders the ladder off < error < warn < info < debug < trace, so a test for "debug" or
-  -- "info" fell through on "trace" and the loudest setting on the selector wrote strictly
-  -- less than the one below it. Log.wanted asks the same question the emit path asks, so a
-  -- level added to the ladder later cannot leave this gate behind again.
+  -- and one of them sits on the unconditional path of every background pass. Log.wanted
+  -- asks the same question the emit path asks, so a level added to the ladder later
+  -- cannot leave this gate behind.
   if not (Log and type(Log.wanted) == "function" and Log.wanted("info")) then return end
 
   local msg = tostring(fmt)
   if select("#", ...) > 0 then msg = string.format(msg, ...) end
 
-  local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
-  if fLog then
-    local t = (getTime and getTime()) or 0
-    io.write(fLog, string.format("[%.2f][Runtime] %s\n", t / 100, msg))
-    io.close(fLog)
-  end
-  if print then pcall(print, "[Runtime] " .. msg) end
+  Log.emit("rfsuite.reload", msg, "info")
 end
 
 -- The job slot. At most one job is pending per widget, held in `self._job` as

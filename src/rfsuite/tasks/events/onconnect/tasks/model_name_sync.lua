@@ -25,7 +25,7 @@
 local M = {}
 
 local done = false
-local Log = nil
+local taggedLog = nil
 local ModelPreferences = nil
 local NameStore = nil
 
@@ -47,13 +47,16 @@ local function loadModule(path)
   return mod
 end
 
+-- The logging core's tagged emitter, bound on first use: the default level and the
+-- console flag are lib/log.lua's, and this file states only its tag.
 local function log(msg, level)
-  if Log == nil then
-    Log = loadModule("lib/log.lua") or false
+  if not taggedLog then
+    local rf = _G.rfsuite
+    local L = rf and rf.Log
+    if type(L) ~= "table" or type(L.tagged) ~= "function" then return end
+    taggedLog = L.tagged("rfsuite.tasks.model_name_sync")
   end
-  if type(Log) == "table" and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.tasks.model_name_sync", msg, level or "debug", true)
-  end
+  taggedLog(msg, level)
 end
 
 local function isTruthy(value)

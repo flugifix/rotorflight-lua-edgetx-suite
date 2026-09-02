@@ -68,7 +68,7 @@ end
 local function logSmart(msg, level)
   if not Log then return end
   if type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.smart", tostring(msg), level or "debug", true)
+    pcall(Log.emit, "rfsuite.smart", tostring(msg), level or "debug")
   end
 end
 

@@ -44,7 +44,7 @@ function M.wakeup(args)
   end
 
   if type(Log) == "table" and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.tasks.battery", "MSP request for battery_config (cmd=" .. tostring(batteryConfigApi.command) .. ") via queue", "debug", true)
+    pcall(Log.emit, "rfsuite.tasks.battery", "MSP request for battery_config (cmd=" .. tostring(batteryConfigApi.command) .. ") via queue", "debug")
   end
 
   mspState.queue:add({
@@ -61,12 +61,12 @@ function M.wakeup(args)
       end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.battery", "battery_config received", "debug", true)
+        pcall(Log.emit, "rfsuite.tasks.battery", "battery_config received", "debug")
       end
     end,
     errorHandler = function()
       done = true
-      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.battery", "battery_config read failed", "warn", true) end
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.battery", "battery_config read failed", "warn") end
     end
   })
 end

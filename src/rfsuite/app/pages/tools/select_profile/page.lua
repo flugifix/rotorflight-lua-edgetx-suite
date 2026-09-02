@@ -36,7 +36,7 @@ local state = {
 local function logMsg(msg, level)
   local rf = _G.rfsuite
   if rf and rf.Log and type(rf.Log.emit) == "function" then
-    rf.Log.emit("rfsuite.profile", msg, level or "debug", true)
+    rf.Log.emit("rfsuite.profile", msg, level or "debug")
   end
 end
 

@@ -40,7 +40,7 @@ Service.VERSION = 1
 
 local Runtime = nil
 local runtimeLoadAttempted = false
-local Log = nil
+local taggedLog = nil
 
 local clients = {}
 local clientSerial = 0
@@ -62,13 +62,16 @@ local function loadModule(path)
   return mod
 end
 
+-- The logging core's tagged emitter, bound on first use: the default level and the
+-- console flag are lib/log.lua's, and this file states only its tag.
 local function log(msg, level)
-  if not Log then
-    Log = loadModule("lib/log.lua")
+  if not taggedLog then
+    local rf = _G.rfsuite
+    local L = rf and rf.Log
+    if type(L) ~= "table" or type(L.tagged) ~= "function" then return end
+    taggedLog = L.tagged("rfsuite.msp.service")
   end
-  if Log and type(Log.emit) == "function" then
-    Log.emit("rfsuite.msp.service", msg, level or "debug", true)
-  end
+  taggedLog(msg, level)
 end
 
 -- Loaded on first use rather than at the top of the chunk, because the runtime loads this module

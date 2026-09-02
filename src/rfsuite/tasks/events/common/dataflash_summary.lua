@@ -44,7 +44,7 @@ function M.wakeup(args)
   end
 
   if type(Log) == "table" and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.tasks.dataflash", "MSP request for dataflash_summary (cmd=" .. tostring(dataflashApi.command) .. ") via queue", "debug", true)
+    pcall(Log.emit, "rfsuite.tasks.dataflash", "MSP request for dataflash_summary (cmd=" .. tostring(dataflashApi.command) .. ") via queue", "debug")
   end
 
   mspState.queue:add({
@@ -61,12 +61,12 @@ function M.wakeup(args)
       end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.dataflash", "dataflash_summary received: used=" .. tostring(stats and stats.used) .. " total=" .. tostring(stats and stats.total), "debug", true)
+        pcall(Log.emit, "rfsuite.tasks.dataflash", "dataflash_summary received: used=" .. tostring(stats and stats.used) .. " total=" .. tostring(stats and stats.total), "debug")
       end
     end,
     errorHandler = function()
       done = true
-      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.dataflash", "dataflash_summary read failed", "warn", true) end
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.dataflash", "dataflash_summary read failed", "warn") end
     end
   })
 end
