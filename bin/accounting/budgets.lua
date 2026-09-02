@@ -34,17 +34,25 @@ return {
     -- 14 000 less the largest shipped theme's sweep -- rather than chosen.
     ----------------------------------------------------------------------------
     ["pass.state"] = { target = 12200, measured = 11437, proposed = 8000 },
-    ["pass.job.prepare"] = { target = 1250, measured = 986 },
-    ["pass.job.build"] = { target = 5700, measured = 4527, proposed = 10000 },
-    ["pass.swap"] = { target = 3400, measured = 2702, proposed = 6000 },
-    ["pass.splash"] = { target = 2300, measured = 1826 },
+    ["pass.job.prepare"] = { target = 1250, measured = 1021 },
+    ["pass.job.build"] = { target = 5700, measured = 4562, proposed = 10000 },
+    ["pass.swap"] = { target = 3400, measured = 2737, proposed = 6000 },
+
+    -- The splash pass is the one JOB pass that runs while the connect chain still has
+    -- MSP traffic in flight, so its pump quantum does real poll work. Until the pump
+    -- ran under the widget event context, its poll loop kept the tool state's
+    -- wall-clock exit -- which the accounting stubs' fixed-step clock expired on the
+    -- first read, so the loop barely ran and the row was first calibrated on that
+    -- under-measurement (1 826). Counts-only, the loop runs to its poll caps, which
+    -- is what a pass on the radio could always cost.
+    ["pass.splash"] = { target = 7100, measured = 5678 },
 
     -- The cold start, before the link is up and the first scene is on screen. It is
     -- the pass that loads modules, and it is the closest any pass comes to the
     -- firmware's hard limit -- which is why the entry point's "CPU limit" back-off
     -- is still in place. The target holds it at today's cost; it is not a share of
     -- a budget anyone would call comfortable.
-    ["pass.startup.worst"] = { target = 18000, measured = 17542 },
+    ["pass.startup.worst"] = { target = 18000, measured = 17598 },
 
     -- The service widget's background pass: the same two runtimes, with no scene
     -- build and no sweep of a theme mixed into it.

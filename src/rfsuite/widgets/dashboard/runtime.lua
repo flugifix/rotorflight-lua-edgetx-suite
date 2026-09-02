@@ -1856,9 +1856,22 @@ function Runtime.new(zone, options)
     -- JOB pass: serve the link with the minimal queue quantum, then run one job step.
     -- pump() is the queue half of tick() and nothing else, so in-flight MSP transfers
     -- keep moving while the build occupies the pass.
+    --
+    -- The same event context the background half sets brackets the pump: the poll and
+    -- drain loops it reaches (tasks/msp/common.lua, tasks/msp/queue.lua) pick their
+    -- widget-state bounds -- counts per pass, never wall clock -- by reading it, and
+    -- without the bracket a JOB pass would silently run them under the tool rules.
     if self._job then
       if MspRuntime and type(MspRuntime.pump) == "function" then
+        if type(_G) == "table" then
+          _G.rfsuite = _G.rfsuite or {}
+          _G.rfsuite.session = _G.rfsuite.session or {}
+          _G.rfsuite.session.event_context = "widget"
+        end
         MspRuntime.pump()
+        if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+          _G.rfsuite.session.event_context = nil
+        end
       end
       if self._job.step(self) then
         self._job = nil
