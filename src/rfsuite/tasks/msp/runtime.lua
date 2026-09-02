@@ -79,13 +79,16 @@ local function nowSeconds()
   return 0
 end
 
+-- The logging core's tagged emitter, bound on first use: the default level and the
+-- console flag are lib/log.lua's, and this file states only its tag.
+local taggedLog = nil
 local function log(msg, level)
-  if not Log then
-    Log = loadModule("lib/log.lua")
+  if not taggedLog then
+    if not Log then Log = loadModule("lib/log.lua") end
+    if not (Log and type(Log.tagged) == "function") then return end
+    taggedLog = Log.tagged("rfsuite.msp")
   end
-  if Log and type(Log.emit) == "function" then
-    Log.emit("rfsuite.msp", msg, level or "debug", true)
-  end
+  taggedLog(msg, level)
 end
 
 -- The transport does not load the log module itself -- it takes what it needs through the

@@ -18,11 +18,18 @@ local function getSession()
   return _G.rfsuite and _G.rfsuite.session
 end
 
+-- The logging core's tagged emitter, bound on first use through the shared instance in
+-- _G -- a loadScript here would read and compile a fresh copy of the module per message.
+-- The default level and the console flag are lib/log.lua's; this file states only its tag.
+local taggedLog = nil
 local function log(msg, level)
-  local Log = loadModule("lib/log.lua")
-  if Log and type(Log.emit) == "function" then
-    Log.emit("rfsuite.tasks.telemetry", msg, level or "debug", true)
+  if not taggedLog then
+    local rf = _G.rfsuite
+    local L = rf and rf.Log
+    if type(L) ~= "table" or type(L.tagged) ~= "function" then return end
+    taggedLog = L.tagged("rfsuite.tasks.telemetry")
   end
+  taggedLog(msg, level)
 end
 
 function M.wakeup()

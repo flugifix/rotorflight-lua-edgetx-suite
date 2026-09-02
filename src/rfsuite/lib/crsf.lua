@@ -19,11 +19,17 @@ local MAX_QUEUE_SIZE = 10
 -- behind for as long as the Lua state lives -- in a widget, that is until power-off.
 local wanted = {}
 
+-- The logging core's tagged emitter, bound on first use: the default level and the
+-- console flag are lib/log.lua's, and this file states only its tag.
+local taggedLog = nil
 local function log(msg, level)
-  local rf = _G.rfsuite
-  if rf and rf.Log and type(rf.Log.emit) == "function" then
-    rf.Log.emit("rfsuite.crsf", msg, level or "debug", true)
+  if not taggedLog then
+    local rf = _G.rfsuite
+    local L = rf and rf.Log
+    if type(L) ~= "table" or type(L.tagged) ~= "function" then return end
+    taggedLog = L.tagged("rfsuite.crsf")
   end
+  taggedLog(msg, level)
 end
 
 function M.popFrame(frameType)

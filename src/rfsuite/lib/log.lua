@@ -238,6 +238,17 @@ function Log.emitf(tag, level, fmt, ...)
   Log.emit(tag, ok and text or tostring(fmt), level)
 end
 
+--- A logger bound to one tag.
+--
+-- For a module that logs under a single tag: the closure carries the tag and the default
+-- level, so the module states its tag once and the logging policy -- the default level,
+-- the console flag, the gate -- stays in this file instead of drifting at call sites.
+function Log.tagged(tag)
+  return function(msg, level)
+    Log.emit(tag, msg, level or "debug")
+  end
+end
+
 --- A buffer as hex, for a payload line. Bounded, and it says when it truncated.
 --
 -- Only ever called behind Log.wanted: this allocates in proportion to the buffer and there is
