@@ -120,11 +120,23 @@ function M.wakeup()
         RFSensors = loadModule("lib/rf2tlm_sensors.lua")
         if not RFSensors then return end
     end
-    if not Smart then
-        Smart = loadModule("tasks/events/telemetry_bg/smart.lua")
+    -- One module per wakeup, the same shape the RFSensors branch above already has: each of
+    -- these pulls in a subtree of its own -- smart.lua alone reaches the sensor library, the
+    -- reserve helper and the logger -- and loading them together puts every one of those
+    -- top-level chunks into a single widget pass, which is the pass class that runs closest
+    -- to the firmware's per-call instruction limit.
+    --
+    -- `false` rather than a retry: with `not Smart` as the test a module that cannot be
+    -- loaded is asked for again on every wakeup, which is a failing card read ten times a
+    -- second for as long as the radio is on. Every use below is already guarded, so a
+    -- module that is genuinely absent stays absent cheaply.
+    if Smart == nil then
+        Smart = loadModule("tasks/events/telemetry_bg/smart.lua") or false
+        return
     end
-    if not Adjustments then
-        Adjustments = loadModule("tasks/events/telemetry_bg/adjustments.lua")
+    if Adjustments == nil then
+        Adjustments = loadModule("tasks/events/telemetry_bg/adjustments.lua") or false
+        return
     end
     
     local limit = 15
