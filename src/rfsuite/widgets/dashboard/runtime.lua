@@ -505,13 +505,16 @@ local function reloadPreferencesIfNeeded(self, force)
   end
 
   -- Safety: Do not reload files while ARMED or during periodic postflight offline to prevent CPU spikes or UI resets.
-  -- Forced reloads (e.g. at connection state flips or explicit reloads) are still honored.
+  -- Forced reloads (e.g. at connection state flips or explicit reloads) are still honored --
+  -- the armed clause is gated on `force` like the offline one, which is what this line has
+  -- always claimed. A forced caller asks for the reload outright and carries no `pendingStamp`
+  -- to re-signal itself with, so dropping it here dropped it for good.
   --
   -- Returning here does NOT lose the change: `pendingStamp` is not adopted, so the next
   -- pass after disarming sees the same difference and reloads then. With the old signal
   -- the flag had already been read and reset above this guard, so a save made while armed
   -- was gone with nothing left to re-signal it.
-  if self.state.armed or (not force and self.state.hadInflightFlight == true and not self.state.fblConnected) then
+  if not force and (self.state.armed or (self.state.hadInflightFlight == true and not self.state.fblConnected)) then
     return
   end
 
