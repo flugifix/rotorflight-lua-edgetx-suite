@@ -297,9 +297,11 @@ local function buildDone()
   local cardX, cardY = LEFT, BAND_H + 12
   local cardW = W - 2 * LEFT
   local cardH = #rows * rowH + 16
+  -- A filled panel rather than a hairline: the outline drew in a near-background grey on the
+  -- default theme and the card read as loose rows.
   children[#children + 1] = {
     type = "rectangle", x = cardX, y = cardY, w = cardW, h = cardH,
-    color = COL_LINE, thickness = 1, rounded = 6
+    color = COLOR_THEME_SECONDARY2 or COL_LINE, filled = true, rounded = 6
   }
   local statusW = 190
   local y = cardY + 8
@@ -323,8 +325,10 @@ local function buildDone()
     type = "label", x = LEFT, y = y, w = W - 2 * LEFT, color = COL_TEXT,
     text = "@i18n(templates.rotorflight.next_steps)@"
   }
+  -- Two lines of room above the path: the sentence wraps at 480 px in more than one locale,
+  -- and with only one line's gap it wrapped straight across the path.
   children[#children + 1] = {
-    type = "label", x = LEFT, y = y + 20, w = W - 2 * LEFT, color = COL_MUTED,
+    type = "label", x = LEFT, y = y + 40, w = W - 2 * LEFT, color = COL_MUTED,
     text = "@i18n(templates.rotorflight.next_steps_path)@"
   }
 
