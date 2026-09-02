@@ -5,6 +5,7 @@ local done = false
 local requestSent = false
 local NameApi = nil
 local Log = nil
+local MspRuntime = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -34,7 +35,10 @@ function M.wakeup(args)
   if not NameApi then
     NameApi = loadModule("tasks/msp/api/name.lua")
   end
-  local msp = loadModule("tasks/msp/runtime.lua")
+  if MspRuntime == nil then
+    MspRuntime = loadModule("tasks/msp/runtime.lua") or false
+  end
+  local msp = MspRuntime or nil
   if not msp or not NameApi then return end
 
   local mspState = type(msp.getState) == "function" and msp.getState()

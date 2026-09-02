@@ -20,6 +20,7 @@ local PARAM_TYPE_GV_LAST = 12
 -- Global variables are written for the first flight mode; the radio's own inheritance carries
 -- them to the others.
 local GV_FLIGHT_MODE = 0
+local MspRuntime = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -127,7 +128,10 @@ function M.wakeup()
   if not PilotConfigApi then
     PilotConfigApi = loadModule("tasks/msp/api/pilot_config.lua")
   end
-  local msp = loadModule("tasks/msp/runtime.lua")
+  if MspRuntime == nil then
+    MspRuntime = loadModule("tasks/msp/runtime.lua") or false
+  end
+  local msp = MspRuntime or nil
   if not msp or not PilotConfigApi then
     done = true
     return

@@ -4,6 +4,7 @@ local M = {}
 local TelemetryApi = nil
 local done = false
 local pending = false
+local MspRuntime = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -45,7 +46,10 @@ function M.wakeup()
     return
   end
 
-  local msp = loadModule("tasks/msp/runtime.lua")
+  if MspRuntime == nil then
+    MspRuntime = loadModule("tasks/msp/runtime.lua") or false
+  end
+  local msp = MspRuntime or nil
   local mspState = msp and type(msp.getState) == "function" and msp.getState()
   if not mspState or not mspState.queue then
     log("wakeup: msp/queue missing", "warn")
