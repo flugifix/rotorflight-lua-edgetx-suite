@@ -19,6 +19,11 @@ local SPLASH_SOFT_TIMEOUT_SECONDS = 25.0
 -- by offline instruction accounting; what matters structurally is that it is a constant,
 -- so a pass's build cost no longer scales with the theme's object count.
 local BUILD_BOXES_PER_PASS = 8
+-- The telemetry read runs on the display's own cadence rather than on every logic tick:
+-- ~25 sensor reads per call, and the render key that consumes them already updates at 2 Hz,
+-- so reading faster only spends the pass budget. The state machine downstream reads values
+-- up to half a second old, which the audio events tolerate.
+local TELEMETRY_READ_SECONDS = 0.5
 
 
 local requireModule = (_G.rfsuite and _G.rfsuite.require)
@@ -1141,8 +1146,9 @@ local function modelPreferencesSignature(modelPrefs)
   return table.concat(parts, "\n")
 end
 
--- Hoisted out of readTelemetry, which runs on every background pass: the per-pass cache and the
--- two helpers below were rebuilt each time, and they are almost everything the pass allocates.
+-- Hoisted out of readTelemetry, which runs on the display's 2 Hz cadence: the per-pass cache
+-- and the two helpers below were rebuilt each time, and they are almost everything the pass
+-- allocates.
 -- The cache is emptied in place rather than replaced, and it keeps the original rule that a nil
 -- reading is read again within the same pass.
 --
@@ -1676,7 +1682,10 @@ function Runtime.new(zone, options)
     -- when sensors go offline, while hadInflightFlight stays true until next session.
     local isPostflightOffline = (self.state.hadInflightFlight == true) and (self.state.rfConnected ~= true)
     if not isPostflightOffline then
-      readTelemetry(self.state)
+      if (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS then
+        self._lastTelemetryReadAt = now
+        readTelemetry(self.state)
+      end
     end
     
     -- Update session values if available (from MSP)

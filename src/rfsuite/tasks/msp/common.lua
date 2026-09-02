@@ -13,6 +13,21 @@ local function loadTransport(protocol)
   return transport
 end
 
+local Env = nil
+
+local function getEnv()
+  if Env == nil then
+    if _G.rfsuite and _G.rfsuite.require then
+      Env = _G.rfsuite.require("lib/env.lua") or false
+    else
+      local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/env.lua", "t")
+      local ok, mod = pcall(chunk)
+      Env = (ok and type(mod) == "table") and mod or false
+    end
+  end
+  return Env or nil
+end
+
 local function new(protocol)
   local transport = loadTransport(protocol)
   if not transport then return nil end
@@ -309,7 +324,14 @@ local function new(protocol)
     local polls = 0
     local nilPolls = 0
 
-    while nowSeconds() < deadline do
+    -- In the widget state the loop is bounded by counts alone (maxPolls and the nil caps):
+    -- the firmware bills a widget call in instructions, not wall time, so the same time
+    -- window costs more iterations on a faster board and cannot be accounted statically.
+    -- The tool state has no instruction hook, wants throughput, and keeps the window.
+    local env = getEnv()
+    local countsOnly = env ~= nil and type(env.isWidget) == "function" and env.isWidget() == true
+
+    while countsOnly or nowSeconds() < deadline do
       polls = polls + 1
       if polls > maxPolls then
         return nil

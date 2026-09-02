@@ -29,6 +29,21 @@ local function getCache()
   return Cache or nil
 end
 
+local Env = nil
+
+local function getEnv()
+  if Env == nil then
+    if _G.rfsuite and _G.rfsuite.require then
+      Env = _G.rfsuite.require("lib/env.lua") or false
+    else
+      local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/env.lua", "t")
+      local ok, mod = pcall(chunk)
+      Env = (ok and type(mod) == "table") and mod or false
+    end
+  end
+  return Env or nil
+end
+
 local DEFAULT_RETRY_BACKOFF_SECONDS = 1.0
 local DEFAULT_TIMEOUT_SECONDS = 2.0
 local DEFAULT_COMMAND_INTERVAL_SECONDS = 0.25
@@ -149,7 +164,12 @@ local function drainAfterSuccess(self, cmd)
   local pollsLeft = self.drainMaxPolls or 0
   if pollsLeft <= 0 then return end
 
-  while pollsLeft > 0 and nowSeconds() < deadline do
+  -- In the widget state the drain is bounded by its poll count alone -- same reasoning as
+  -- the poll loop in common.lua: instructions are billed per iteration, not per second.
+  local env = getEnv()
+  local countsOnly = env ~= nil and type(env.isWidget) == "function" and env.isWidget() == true
+
+  while pollsLeft > 0 and (countsOnly or nowSeconds() < deadline) do
     local ok, rcmd, _, rerr = pcall(self.common.pollReply)
     if not ok or not rcmd then
       break
