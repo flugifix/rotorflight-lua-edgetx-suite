@@ -1212,6 +1212,7 @@ return {
         sticks_writing = "Laying out the sticks",
         finding_no_input = "no input",
         overview_intro = "Each part runs on its own. Open one, or continue where the machine says the work stops.",
+        overview_new_model = "New model? Create it from the Rotorflight template: Manage models > New model > 5.Rotorflight.",
         overview_open = "Open",
         overview_continue = "Continue",
         overview_close = "Close",
@@ -1990,6 +1991,33 @@ return {
         tpl_link = "Link",
         tpl_governor = "Governor"
       }
+    }
+  },
+  templates = {
+    rotorflight = {
+      about = "Starting point for a Rotorflight helicopter: prepared function switches, switch warnings, the reference channels and the RFSuite dashboard. Your switch layout is asked right after creation; the flight controller is set up later by the setup assistant.",
+      info = "Creates a Rotorflight helicopter model: all six function switches arm-ready (ungrouped, off, red while on), switch warnings, blackbox, backup, pot and trim channels, and the RFSuite dashboard. A short dialog then asks for your switches and lays the channels out like the reference models.",
+      title_form = "Rotorflight - pick your switches",
+      row_arm = "Arming switch",
+      row_hold = "Hold: motor LOCKED at",
+      row_gov = "Governor switch (3 pos)",
+      row_profile = "Profile switch (3 pos)",
+      row_rescue = "Rescue switch",
+      nothing_chosen = "%s: nothing chosen yet.",
+      too_few_positions = "%s: that switch has %d positions, %d are needed.",
+      create_button = "Create switch setup",
+      skip_hint = "RTN skips this - the assistant can ask later",
+      title_done = "Rotorflight - switches written",
+      row_ok = "OK",
+      row_failed = "failed: %s",
+      next_steps = "Next: connect the flight controller and run the setup assistant",
+      next_steps_path = "(SYS > Tools > RFSuite > Configuration > Wizards).",
+      close_button = "Close",
+      fallback_created = "Model created from the Rotorflight template.",
+      fallback_needs_1 = "The switch questions need RFSuite on the card;",
+      fallback_needs_2 = "the function switches, warnings and dashboard",
+      fallback_needs_3 = "are already in the model.",
+      fallback_close = "Press RTN to close."
     }
   },
   widgets = {

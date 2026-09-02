@@ -14,8 +14,8 @@
 -- controller and with a read-back to prove them -- this wizard deliberately stops at the
 -- reference-model shape a pilot could also have built by hand.
 --
--- Plain English on purpose: a standalone script runs outside the suite, so none of its i18n
--- helpers exist here.
+-- Strings carry i18n markers like every suite source: the packager resolves them per locale
+-- at build time, so the standalone script needs none of the suite's i18n helpers at runtime.
 
 local RADIO_MODULE = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/setup_wizard/radio.lua"
 
@@ -29,17 +29,18 @@ local loadError = nil
 -- the travel, arming and rescue work on two or three (the reference arms on a three-position
 -- switch).
 local ROWS = {
-  { key = "arm", whole = true, min = 2, label = "Arming switch" },
-  { key = "hold", whole = false, label = "Hold: motor LOCKED at" },
-  { key = "gov", whole = true, min = 3, label = "Governor switch (3 pos)" },
-  { key = "profile", whole = true, min = 3, label = "Profile switch (3 pos)" },
-  { key = "rescue", whole = true, min = 2, label = "Rescue switch" }
+  { key = "arm", whole = true, min = 2, label = "@i18n(templates.rotorflight.row_arm)@" },
+  { key = "hold", whole = false, label = "@i18n(templates.rotorflight.row_hold)@" },
+  { key = "gov", whole = true, min = 3, label = "@i18n(templates.rotorflight.row_gov)@" },
+  { key = "profile", whole = true, min = 3, label = "@i18n(templates.rotorflight.row_profile)@" },
+  { key = "rescue", whole = true, min = 2, label = "@i18n(templates.rotorflight.row_rescue)@" }
 }
 
 local answers = {}      -- key -> swsrc: a switch's first position, or the hold position
 local message = nil     -- what stands between the pilot and the Create button, in words
 local written = nil     -- per-channel results of the write, once it ran
 local view = nil        -- nil (not built) | "form" | "done"
+local quit = false      -- the closing screen's button asked to leave
 
 -- ---------------------------------------------------------------------------------------------
 -- The write: the REFERENCE construction, with the pilot's switches in it.
@@ -149,13 +150,13 @@ local function firstProblem()
   for _, row in ipairs(ROWS) do
     local value = answers[row.key]
     if value == nil or value == 0 then
-      return row.label .. ": nothing chosen yet."
+      return string.format("@i18n(templates.rotorflight.nothing_chosen)@", row.label)
     end
     if row.min ~= nil then
       local positions = R.switchPositionCount(value) or 0
       if positions < row.min then
-        return row.label .. ": that switch has " .. tostring(positions) ..
-          " positions, " .. tostring(row.min) .. " are needed."
+        return string.format("@i18n(templates.rotorflight.too_few_positions)@",
+          row.label, positions, row.min)
       end
     end
   end
@@ -169,7 +170,20 @@ end
 -- and raises on it).
 -- ---------------------------------------------------------------------------------------------
 
+-- Theme roles, with fallbacks for a stripped surface: strong foreground, muted secondary,
+-- the header band and its on-band text, hairlines, and the two hard colors that carry a
+-- meaning (a write that worked, a write that failed). Everything else stays theme-colored,
+-- so the screens follow whatever theme the radio wears.
 local COL_TEXT = COLOR_THEME_PRIMARY1 or BLACK or 0
+local COL_MUTED = COLOR_THEME_PRIMARY3 or COL_TEXT
+local COL_BAND = COLOR_THEME_SECONDARY1 or COL_TEXT
+local COL_ON_BAND = COLOR_THEME_PRIMARY2 or WHITE or 0
+local COL_LINE = COLOR_THEME_SECONDARY3 or COL_MUTED
+local COL_WARN = COLOR_THEME_WARNING or ORANGE or COL_TEXT
+local COL_OK_TXT = GREEN or COL_TEXT
+local COL_BAD_TXT = RED or COL_TEXT
+local FONT_TITLE = BOLD or 0
+local BAND_H = 30
 
 -- The picker filters. The bit values are the firmware's own (dataconstants.h); the source
 -- filter is taken from the lvgl module where it exists, because that registered constant
@@ -179,6 +193,7 @@ local SW_SWITCH = 1
 local SW_NONE = 1 << 20
 
 local W = LCD_W or 480
+local H = LCD_H or 272
 local ROW_H = 36
 local PICKER_W = 190
 local LEFT = 12
@@ -217,13 +232,23 @@ local function positionRow(children, y, row)
   }
 end
 
+-- The theme-colored band every screen opens with. Drawn first so it sits behind its title,
+-- and kept above y=34, where the form's rows begin -- the row geometry is proven and stays.
+local function bandWithTitle(children, title)
+  children[#children + 1] = {
+    type = "rectangle", x = 0, y = 0, w = W, h = BAND_H,
+    color = COL_BAND, filled = true
+  }
+  children[#children + 1] = {
+    type = "label", x = LEFT, y = 7, w = W - 2 * LEFT,
+    text = title, color = COL_ON_BAND, font = FONT_TITLE
+  }
+end
+
 local function buildForm()
   lvgl.clear()
   local children = {}
-  children[#children + 1] = {
-    type = "label", x = LEFT, y = 6, w = W - 2 * LEFT,
-    text = "Rotorflight - pick your switches", color = COL_TEXT
-  }
+  bandWithTitle(children, "@i18n(templates.rotorflight.title_form)@")
   local y = 34
   for _, row in ipairs(ROWS) do
     if row.whole then sourceRow(children, y, row) else positionRow(children, y, row) end
@@ -231,17 +256,18 @@ local function buildForm()
   end
 
   -- The one sentence that stands between the pilot and the button; the button's press
-  -- rebuilds this form, which is what puts the sentence on screen.
+  -- rebuilds this form, which is what puts the sentence on screen. Warning-colored: it is
+  -- the refusal, and it must not read like one more row label.
   if message ~= nil then
     children[#children + 1] = {
       type = "label", x = LEFT, y = y + 4, w = W - 2 * LEFT,
-      color = COL_TEXT, text = message
+      color = COL_WARN, text = message
     }
   end
 
   children[#children + 1] = {
     type = "button", x = LEFT, y = y + 30, w = 200, h = 34,
-    text = "Create switch setup",
+    text = "@i18n(templates.rotorflight.create_button)@",
     press = function()
       message = firstProblem()
       -- Either way the view is rebuilt: with the write done it becomes the closing screen,
@@ -253,7 +279,7 @@ local function buildForm()
   }
   children[#children + 1] = {
     type = "label", x = LEFT + 212, y = y + 38, w = W - LEFT - 212,
-    text = "RTN skips this - the assistant can ask later", color = COL_TEXT
+    text = "@i18n(templates.rotorflight.skip_hint)@", color = COL_MUTED
   }
   lvgl.build(children)
 end
@@ -261,31 +287,53 @@ end
 local function buildDone()
   lvgl.clear()
   local children = {}
+  bandWithTitle(children, "@i18n(templates.rotorflight.title_done)@")
+
+  -- One card, one row per channel written, the verdict as a colored word on the right --
+  -- green carries "worked", red carries "failed: why", and nothing else on this screen
+  -- wears a hard color, so a failure is the loudest thing on it.
+  local rows = written or {}
+  local rowH = 24
+  local cardX, cardY = LEFT, BAND_H + 12
+  local cardW = W - 2 * LEFT
+  local cardH = #rows * rowH + 16
   children[#children + 1] = {
-    type = "label", x = LEFT, y = 6, w = W - 2 * LEFT,
-    text = "Rotorflight - done", color = COL_TEXT
+    type = "rectangle", x = cardX, y = cardY, w = cardW, h = cardH,
+    color = COL_LINE, thickness = 1, rounded = 6
   }
-  local y = 32
-  for _, result in ipairs(written or {}) do
+  local statusW = 190
+  local y = cardY + 8
+  for _, result in ipairs(rows) do
     children[#children + 1] = {
-      type = "label", x = LEFT, y = y, w = W - 2 * LEFT, color = COL_TEXT,
-      text = "CH" .. tostring(result.channel) .. "  " .. tostring(result.name) .. "  -  "
-        .. (result.ok and "ok" or ("FAILED: " .. tostring(result.err)))
+      type = "label", x = cardX + 10, y = y + 3, w = cardW - statusW - 24,
+      color = COL_TEXT,
+      text = "CH" .. tostring(result.channel) .. "  " .. tostring(result.name)
     }
-    y = y + 20
+    children[#children + 1] = {
+      type = "label", x = cardX + cardW - statusW - 10, y = y + 3, w = statusW,
+      color = result.ok and COL_OK_TXT or COL_BAD_TXT,
+      text = result.ok and "@i18n(templates.rotorflight.row_ok)@"
+        or string.format("@i18n(templates.rotorflight.row_failed)@", tostring(result.err))
+    }
+    y = y + rowH
   end
-  y = y + 6
+
+  y = cardY + cardH + 12
   children[#children + 1] = {
     type = "label", x = LEFT, y = y, w = W - 2 * LEFT, color = COL_TEXT,
-    text = "Next: connect the flight controller and run the setup assistant"
+    text = "@i18n(templates.rotorflight.next_steps)@"
   }
   children[#children + 1] = {
-    type = "label", x = LEFT, y = y + 20, w = W - 2 * LEFT, color = COL_TEXT,
-    text = "(SYS > Tools > RFSuite > Configuration > Wizards)."
+    type = "label", x = LEFT, y = y + 20, w = W - 2 * LEFT, color = COL_MUTED,
+    text = "@i18n(templates.rotorflight.next_steps_path)@"
   }
+
+  -- A button to leave by, because a screen only RTN can close reads as stuck. RTN still
+  -- works; the button says the same thing where a finger already is.
   children[#children + 1] = {
-    type = "label", x = LEFT, y = y + 48, w = W - 2 * LEFT,
-    text = "RTN closes.", color = COL_TEXT
+    type = "button", x = LEFT, y = H - 46, w = 160, h = 34,
+    text = "@i18n(templates.rotorflight.close_button)@",
+    press = function() quit = true end
   }
   lvgl.build(children)
 end
@@ -294,7 +342,7 @@ local function init()
 end
 
 local function run(event)
-  if event == EVT_VIRTUAL_EXIT then return 1 end
+  if quit or event == EVT_VIRTUAL_EXIT then return 1 end
 
   -- Without the suite there is no radio module to borrow, and half a wizard would leave half
   -- a layout. The template's yml part is already in the model either way. And without lvgl
@@ -324,11 +372,11 @@ local function run(event)
       if event == EVT_VIRTUAL_ENTER then return 1 end
       if lcd ~= nil and lcd.clear ~= nil then
         lcd.clear()
-        lcd.drawText(30, 40, "Model created from the Rotorflight template.", 0)
-        lcd.drawText(30, 70, "The switch questions need RFSuite on the card;", 0)
-        lcd.drawText(30, 90, "the ARM switch, warnings and dashboard are", 0)
-        lcd.drawText(30, 110, "already in the model.", 0)
-        lcd.drawText(30, 150, "Press RTN to close.", 0)
+        lcd.drawText(30, 40, "@i18n(templates.rotorflight.fallback_created)@", 0)
+        lcd.drawText(30, 70, "@i18n(templates.rotorflight.fallback_needs_1)@", 0)
+        lcd.drawText(30, 90, "@i18n(templates.rotorflight.fallback_needs_2)@", 0)
+        lcd.drawText(30, 110, "@i18n(templates.rotorflight.fallback_needs_3)@", 0)
+        lcd.drawText(30, 150, "@i18n(templates.rotorflight.fallback_close)@", 0)
       end
       return 0
     end

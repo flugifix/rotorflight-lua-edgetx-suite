@@ -922,6 +922,16 @@ local function buildOverview(ctx, x, top, w)
 
   local cursor = top
 
+  -- The one sentence that does stand above the list: where a model for the suite comes from.
+  -- Unlike the intro that moved to help, this one cannot wait until the pilot asks -- by the
+  -- time they are reading procedures, a hand-built model is already the thing being repaired.
+  -- Not in the board scope: that entry is walked on an existing model by definition.
+  if ui.scope ~= "board" then
+    local hint = pageText(i18n, "overview_new_model",
+      "New model? Create it from the Rotorflight template: Manage models > New model > 5.Rotorflight.")
+    cursor = cursor + wiz.paragraph(children, x, cursor, w, hint) + 6
+  end
+
   -- The sentence that used to stand here is help now. It is read once and then costs a row on
   -- every later visit, and a row here is a whole procedure the pilot has to page forward to
   -- reach -- on the tightest page the list held two of nine.

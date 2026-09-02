@@ -1212,6 +1212,7 @@ return {
         sticks_writing = "Lege die Knüppel.",
         finding_no_input = "kein Input",
         overview_intro = "Jeder Teil läuft einzeln. Öffne einen, oder mach dort weiter, wo die Maschine die Arbeit offen sieht.",
+        overview_new_model = "Neues Modell? Am besten aus der Rotorflight-Vorlage: Modellverwaltung > Neues Modell > 5.Rotorflight.",
         overview_open = "Öffnen",
         overview_continue = "Weiter",
         overview_close = "Schließen",
@@ -1991,6 +1992,33 @@ return {
         tpl_link = "Funk",
         tpl_governor = "Governor"
       }
+    }
+  },
+  templates = {
+    rotorflight = {
+      about = "Startpunkt für einen Rotorflight-Helikopter: vorbereitete Funktionsschalter, Schalterwarnungen, die Referenzkanäle und das RFSuite-Dashboard. Die Schalterbelegung wird direkt nach dem Anlegen abgefragt; den Flugregler richtet später der Einrichtungsassistent ein.",
+      info = "Erstellt ein Rotorflight-Heli-Modell: alle sechs Funktionsschalter arm-bereit (ungruppiert, aus, rot wenn an), Schalterwarnungen, Blackbox-, Backup-, Poti- und Trimm-Kanäle und das RFSuite-Dashboard. Ein kurzer Dialog fragt dann die Schalter ab und legt die Kanäle wie die Referenzmodelle an.",
+      title_form = "Rotorflight - Schalter wählen",
+      row_arm = "Arming-Schalter",
+      row_hold = "Hold: Motor GESPERRT bei",
+      row_gov = "Governor-Schalter (3 Pos.)",
+      row_profile = "Profil-Schalter (3 Pos.)",
+      row_rescue = "Rescue-Schalter",
+      nothing_chosen = "%s: noch nichts gewählt.",
+      too_few_positions = "%s: der Schalter hat %d Stellungen, %d sind nötig.",
+      create_button = "Schalter einrichten",
+      skip_hint = "RTN überspringt - der Assistent kann später fragen",
+      title_done = "Rotorflight - Schalter geschrieben",
+      row_ok = "OK",
+      row_failed = "fehlgeschlagen: %s",
+      next_steps = "Weiter: Flugregler verbinden und den Einrichtungsassistenten starten",
+      next_steps_path = "(SYS > Tools > RFSuite > Konfiguration > Assistenten).",
+      close_button = "Schließen",
+      fallback_created = "Modell aus der Rotorflight-Vorlage erstellt.",
+      fallback_needs_1 = "Die Schalterfragen brauchen RFSuite auf der Karte;",
+      fallback_needs_2 = "die Funktionsschalter, Warnungen und das Dashboard",
+      fallback_needs_3 = "sind bereits im Modell.",
+      fallback_close = "RTN schließt."
     }
   },
   widgets = {
