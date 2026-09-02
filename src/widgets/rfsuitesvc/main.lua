@@ -29,11 +29,24 @@ local function create(zone, options)
     end
     return nil
   end
-  local ok, factory = pcall(appChunk)
-  if ok and type(factory) == "function" then
-    return factory(zone, options)
-  elseif ok and type(factory) == "table" and type(factory.new) == "function" then
-    return factory.new(zone, options)
+  -- Same invocation as src/widgets/rfsuite/main.lua: app.lua reads (zone, options) from its
+  -- varargs and returns the finished widget instance, so the chunk has to be called WITH
+  -- them, and an instance is a table without a .new. Called bare, app.lua built a widget
+  -- around a nil zone, the instance matched neither test below, and create() returned nil --
+  -- from there every wrapped entry point no-ops on a nil widget and the service never ticks.
+  local ok, res = pcall(appChunk, zone, options)
+  if ok and res ~= nil then
+    if type(res) == "function" then
+      local okFn, widget = pcall(res, zone, options)
+      if okFn then return widget end
+    elseif type(res) == "table" then
+      if type(res.new) == "function" then
+        local okNew, widget = pcall(res.new, zone, options)
+        if okNew then return widget end
+      else
+        return res
+      end
+    end
   end
   return nil
 end
