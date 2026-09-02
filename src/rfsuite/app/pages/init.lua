@@ -43,6 +43,7 @@ local entries = {
   setup_accelerometer_page = definePage("setup/accelerometer"),
   setup_alignment_page = definePage("setup/alignment"),
   setup_ports_page = definePage("setup/ports"),
+  setup_gps_page = definePage("setup/gps"),
   setup_mixer_swash_page = definePage("setup/mixer/swash"),
   setup_mixer_swashgeometry_page = definePage("setup/mixer/swashgeometry"),
   setup_mixer_tail_page = definePage("setup/mixer/tail"),
