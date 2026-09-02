@@ -58,6 +58,21 @@ The framework uses a declarative approach for UI building. Reusable components i
 - **Telemetry Optimization**: Use `Sensors.getValue(name)` which includes miss-caching to prevent CPU limit errors on physical hardware.
 - **CPU Limits**: Keep the `refresh()` loop of widgets and UI pages efficient. Avoid redundant `getValue` calls.
 
+### Dashboard Reactive Closures
+Any function field handed to `lvgl.build()` (text, color, font, angle getters in
+`src/rfsuite/widgets/dashboard/objects/`) runs per frame in the firmware's reactive sweep,
+on whatever instruction budget `refresh()` left over, outside the widget's own `pcall`. A
+closure therefore:
+- reads precomputed `state.derived` fields and the box's own compiled config — it makes no
+  sensor, `model.*` or file probe (a `.luacheckrc` override enforces this for `objects/`);
+- contains no unbounded loop (a walk over a per-box compiled list of build-time-constant
+  length is fine);
+- formats at most one string per value change (keep the existing value-change caches).
+
+Everything else belongs in the widget pass that builds `state.derived`
+(`src/rfsuite/widgets/dashboard/derived.lua`, rebuilt on the telemetry-read cadence).
+Theme-level closures run on the same leftover budget and follow the same rule.
+
 ### Localization (i18n)
 - Strings are localized via files in `src/rfsuite/i18n/`.
 - Use the `@i18n(key)@` syntax in manifests or the `i18n.t(key)` function in code.

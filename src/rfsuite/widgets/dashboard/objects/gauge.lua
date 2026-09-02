@@ -59,18 +59,53 @@ local function cToF(c)
   return c
 end
 
-local function resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit)
+-- The value a reactive closure renders comes out of the derived snapshot, never from a
+-- probe: the sweep runs per frame on the refresh's leftover budget, outside any pcall,
+-- so its per-object cost has to be a constant (see GEMINI.md, "Dashboard reactive
+-- closures"). The snapshot is rebuilt on the telemetry-read cadence.
+local function readDerived(state, source)
+  local derived = type(state) == "table" and state.derived or nil
+  if derived == nil or source == nil then return nil end
+  return derived[source]
+end
+
+-- Compiled once per box and kept on a weak-keyed cache (a theme whose `boxes` is a
+-- function hands out fresh box tables per resolve; a strong key would leak one compiled
+-- list per resolve): the comparison values with their unit conversion already applied and
+-- the fill color picked, in the theme's own order. The per-frame pick is then a walk over
+-- a list whose length is a build-time constant.
+local thresholdCache = setmetatable({}, { __mode = "k" })
+
+local function compiledThresholds(box, thresholds, isFahrenheit)
+  local cached = box and thresholdCache[box] or nil
+  if cached and cached.src == thresholds and cached.fahrenheit == isFahrenheit then
+    return cached.list
+  end
+  local list = {}
+  for i = 1, #thresholds do
+    local threshold = thresholds[i]
+    if type(threshold) == "table" and type(threshold.value) == "number" then
+      list[#list + 1] = {
+        value = isFahrenheit and cToF(threshold.value) or threshold.value,
+        color = threshold.fillcolor or threshold.color
+      }
+    end
+  end
+  if box then
+    thresholdCache[box] = { src = thresholds, fahrenheit = isFahrenheit, list = list }
+  end
+  return list
+end
+
+local function resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit, box)
   if type(value) ~= "number" or type(thresholds) ~= "table" or #thresholds == 0 then
     return defaultColor
   end
 
-  for i = 1, #thresholds do
-    local threshold = thresholds[i]
-    if type(threshold) == "table" and type(threshold.value) == "number" then
-      local thVal = isFahrenheit and cToF(threshold.value) or threshold.value
-      if value <= thVal then
-        return threshold.fillcolor or threshold.color or defaultColor
-      end
+  local list = compiledThresholds(box, thresholds, isFahrenheit == true)
+  for i = 1, #list do
+    if value <= list[i].value then
+      return list[i].color or defaultColor
     end
   end
 
@@ -170,7 +205,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
   local source = utils.resolveValue(box.source, box, state)
   local isTemp = isTempSource(source)
   local fahrenheit = isTemp and useFahrenheit()
-  local rawValue = utils.mapTelemetrySource(source, state)
+  local rawValue = readDerived(state, source)
   local hasValue = type(rawValue) == "number"
   local gaugeValue = utils.toNumber(rawValue, 0)
   if fahrenheit and hasValue then
@@ -205,7 +240,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local thresholds = box.thresholds or {}
     local barColor = box.fillcolor or BAR_OK_COLOR
     if hasValue then
-      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit)
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box)
     end
     
     -- Background bar (vertical)
@@ -262,7 +297,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local lastBarVal = nil
     local cachedBarText = nil
     local valueTextGetter = function()
-      local curRaw = utils.mapTelemetrySource(source, state)
+      local curRaw = readDerived(state, source)
       if curRaw == lastBarVal and cachedBarText ~= nil then
         return cachedBarText
       end
@@ -323,7 +358,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local thresholds = box.thresholds or {}
     local barColor = box.fillcolor or BAR_OK_COLOR
     if hasValue then
-      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit)
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box)
     end
     
     -- Background bar
@@ -361,7 +396,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local lastBarVal = nil
     local cachedBarText = nil
     local valueTextGetter = function()
-      local curRaw = utils.mapTelemetrySource(source, state)
+      local curRaw = readDerived(state, source)
       if curRaw == lastBarVal and cachedBarText ~= nil then
         return cachedBarText
       end
@@ -535,7 +570,7 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local lastRawAngle = nil
   local cachedEndAngle = nil
   local valueEndAngleGetter = function()
-    local curRaw = utils.mapTelemetrySource(source, state)
+    local curRaw = readDerived(state, source)
     if curRaw == lastRawAngle and cachedEndAngle ~= nil then
       return cachedEndAngle
     end
@@ -555,7 +590,7 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local lastRawArcColor = nil
   local cachedArcColor = nil
   local valueArcColorGetter = function()
-    local curRaw = utils.mapTelemetrySource(source, state)
+    local curRaw = readDerived(state, source)
     if curRaw == lastRawArcColor and cachedArcColor ~= nil then
       return cachedArcColor
     end
@@ -568,7 +603,7 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     local arcValueColor = box.fillcolor
     if not arcValueColor then
       if type(box.thresholds) == "table" and #box.thresholds > 0 and curHasValue then
-        arcValueColor = resolveThresholdColor(curVal, box.thresholds, ARC_OK_COLOR, fahrenheit)
+        arcValueColor = resolveThresholdColor(curVal, box.thresholds, ARC_OK_COLOR, fahrenheit, box)
       else
         arcValueColor = getArcValueColor(curVal, state, box, themeCommon, utils)
       end
@@ -607,7 +642,7 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local lastRawText = nil
   local cachedValueText = nil
   local valueTextGetter = function()
-    local curRaw = utils.mapTelemetrySource(source, state)
+    local curRaw = readDerived(state, source)
     if curRaw == lastRawText and cachedValueText ~= nil then
       return cachedValueText
     end
@@ -640,7 +675,7 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local lastRawValColor = nil
   local cachedValColor = nil
   local valueColorGetter = function()
-    local curRaw = utils.mapTelemetrySource(source, state)
+    local curRaw = readDerived(state, source)
     if curRaw == lastRawValColor and cachedValColor ~= nil then
       return cachedValColor
     end

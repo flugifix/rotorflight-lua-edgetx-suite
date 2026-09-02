@@ -57,7 +57,14 @@ local function mapSourceFast(source, state, utils)
     end
   end
 
-  return utils.mapTelemetrySource(source, state)
+  -- Everything else comes out of the derived snapshot: this runs per frame in the
+  -- reactive sweep, where a probe is forbidden (see GEMINI.md, "Dashboard reactive
+  -- closures"); the snapshot is rebuilt on the telemetry-read cadence.
+  local derived = type(state) == "table" and state.derived or nil
+  if derived ~= nil then
+    return derived[source]
+  end
+  return nil
 end
 
 local function useFahrenheit()

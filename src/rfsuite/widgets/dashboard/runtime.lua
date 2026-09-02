@@ -15,6 +15,15 @@ local SPLASH_READY_HOLD_SECONDS = 1.0
 local LOGIC_TICK_SECONDS = 0.1
 local LOGIC_TICK_STARTING_SECONDS = 0.05
 local SPLASH_SOFT_TIMEOUT_SECONDS = 25.0
+-- Boxes rendered per JOB pass by the stepped scene build. Provisional -- to be calibrated
+-- by offline instruction accounting; what matters structurally is that it is a constant,
+-- so a pass's build cost no longer scales with the theme's object count.
+local BUILD_BOXES_PER_PASS = 8
+-- The telemetry read runs on the display's own cadence rather than on every logic tick:
+-- ~25 sensor reads per call, and the render key that consumes them already updates at 2 Hz,
+-- so reading faster only spends the pass budget. The state machine downstream reads values
+-- up to half a second old, which the audio events tolerate.
+local TELEMETRY_READ_SECONDS = 0.5
 
 
 local requireModule = (_G.rfsuite and _G.rfsuite.require)
@@ -46,6 +55,7 @@ local DashboardSplash = requireModule("widgets/dashboard/splash.lua")
 local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")
 local Sensors = requireModule("lib/sensors.lua")
+local DerivedSnapshot = requireModule("widgets/dashboard/derived.lua")
 local LogSink = requireModule("lib/log_sink.lua")
 if LogSink and type(LogSink.configure) == "function" then
   LogSink.configure("widget")
@@ -326,6 +336,108 @@ local function logGv(fmt, ...)
     io.close(fLog)
   end
   if print then pcall(print, "[Runtime] " .. msg) end
+end
+
+-- The job slot. At most one job is pending per widget, held in `self._job` as
+-- { kind, step }: `kind` names the job for the log line, `step(self)` runs the work
+-- against the CURRENT state (never a snapshot taken at enqueue time) and returns true
+-- when the job is complete. The splash and menu jobs complete in one step; the scene job
+-- returns false to keep the slot and spread its build over several passes -- prepare,
+-- a bounded chunk per pass, then the swap. The STATE pass enqueues, the JOB pass
+-- executes -- see the dispatcher in widget.refresh.
+
+local function splashJobStep(self)
+  local statusLine = self.statusLine or "Please wait..."
+  local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
+  local title = (t and t("widgets.dashboard.connecting_fbl")) or "Connecting FBL..."
+  local splash = buildConnectionSplash(self.zone, statusLine, title)
+  lvgl.clear()
+  lvgl.build(splash)
+  self.built = true
+  -- What the reactive sweep walks from the next pass on. Kept up to date here as well as
+  -- at the scene build below, so the usage line never reports a count belonging to a
+  -- tree that has already been cleared.
+  self._lastChildCount = #splash
+  return true
+end
+
+-- The scene job in three phases, carried as fields on the job table. The old LVGL tree
+-- stands until the swap, so a stepped rebuild shows the previous frame, never a blank one.
+local function sceneJobStep(self)
+  local job = self._job
+
+  -- Swap: hand the finished node table over in a pass of its own. Two C calls, so the
+  -- pass carries almost nothing beyond the reactive sweep of the new tree.
+  --
+  -- No forced full collection here. This job runs whenever the render key changes, i.e.
+  -- whenever a displayed telemetry value moves, and every widget on the radio shares one
+  -- Lua state -- so a full collect walks every other widget's live set as well. The
+  -- firmware already runs an incremental collection on that state on every GUI pass.
+  -- GEMINI.md asks for an explicit collect after large I/O or JSON work; a repaint is
+  -- neither.
+  if job.swap then
+    lvgl.clear()
+    lvgl.build(job.build.nodes)
+    self.built = true
+    self._lastChildCount = #job.build.nodes
+    logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #job.build.nodes)
+    return true
+  end
+
+  -- Chunk: render a bounded slice of boxes into plain Lua tables. No theme revalidation
+  -- here or at the swap: every path that tears the theme down clears the job slot, so a
+  -- job cannot outlive its theme, and rects and nodes are self-contained.
+  if job.build then
+    if self.dashboardEngine.stepBuild(job.build, self.state, BUILD_BOXES_PER_PASS) then
+      job.swap = true
+    end
+    return false
+  end
+
+  -- Prepare: bind structure once. The theme can be gone by the time the job runs: while
+  -- the widget is off screen, widget.background keeps mutating state, and a reconnect
+  -- edge clears the theme. Drop the job; the next STATE pass re-detects and re-enqueues
+  -- against the new state.
+  if not self.theme then return true end
+
+  if type(self.theme.build) == "function" then
+    -- A free-form theme builds in one step, exactly as before -- the engine cannot chunk
+    -- what it does not render.
+    local children = self.theme.build(self.zone, self.state)
+    if type(children) ~= "table" then return true end
+    lvgl.clear()
+    lvgl.build(children)
+    self.built = true
+    self._lastChildCount = #children
+    logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children)
+    return true
+  end
+
+  if self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
+    job.build = self.dashboardEngine.beginBuild(self.zone, self.state, self.theme)
+    return false
+  end
+
+  -- Neither free-form nor declarative: hand LVGL an empty scene, exactly as the
+  -- single-step build did.
+  lvgl.clear()
+  lvgl.build({})
+  self.built = true
+  self._lastChildCount = 0
+  logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), 0)
+  return true
+end
+
+local function menuJobStep(self)
+  local menu = requireModule("widgets/dashboard/fullscreen_menu.lua")
+  if not (menu and type(menu.build) == "function") then return true end
+  local children = {}
+  menu.build(children, self)
+  lvgl.clear()
+  lvgl.build(children)
+  self.built = true
+  self._lastChildCount = #children
+  return true
 end
 
 --- What the preference files look like right now: size and mtime, as one string.
@@ -618,13 +730,9 @@ local function updateConnectionState(self)
       -- publisher reads, defeating the content-signature guard and causing
       -- multiple full scene teardowns in rapid succession (CPU limit crash).
       --
-      -- Defer the first LVGL dashboard build to the next firmware tick.
-      -- During the connect burst, background work shares the instruction budget
-      -- with the firmware. Adding a full LVGL build on top of that can push the
-      -- pass over the EdgeTX limit. The one-tick deferral allows background work
-      -- to finish cleanly this frame, deferring the LVGL build to the next tick
-      -- before callRefs() runs firmware-side.
-      self._themeReloadedThisTick = true
+      -- The first dashboard build lands in a pass of its own: the invalidation
+      -- above only marks the scene dirty, and the next STATE pass enqueues the
+      -- build as a job -- see the dispatcher in widget.refresh.
     else
       -- Open, and shut again: from here on there is something to steady and the hold is paid.
       if wasReady then self.everReady = true end
@@ -1039,8 +1147,9 @@ local function modelPreferencesSignature(modelPrefs)
   return table.concat(parts, "\n")
 end
 
--- Hoisted out of readTelemetry, which runs on every background pass: the per-pass cache and the
--- two helpers below were rebuilt each time, and they are almost everything the pass allocates.
+-- Hoisted out of readTelemetry, which runs on the display's 2 Hz cadence: the per-pass cache
+-- and the two helpers below were rebuilt each time, and they are almost everything the pass
+-- allocates.
 -- The cache is emptied in place rather than replaced, and it keeps the original rule that a nil
 -- reading is read again within the same pass.
 --
@@ -1209,6 +1318,9 @@ function Runtime.new(zone, options)
     _usageWindowPeak = -1,
     _usageReportAt = 0,
     _lastChildCount = 0,
+    -- The pending job, at most one: { kind, step } or nil. See the job steps above and
+    -- the dispatcher in widget.refresh.
+    _job = nil,
     themePath = "system/default",
     flightMode = "preflight",
     theme = nil,
@@ -1500,8 +1612,9 @@ function Runtime.new(zone, options)
     self.theme = loadThemeModuleForState(selectedTheme, self.flightMode)
     self.built = false
     self.renderKey = nil
-    -- Defer LVGL scene build to next tick whenever a theme module is loaded
-    self._themeReloadedThisTick = true
+    -- A pending job may belong to the theme just torn down; drop it. The next STATE
+    -- pass re-detects and enqueues a build against the new theme, in a pass of its own.
+    self._job = nil
 
     logGv("reloadActiveTheme: flightMode=%s, selectedTheme=%s, loadedTheme=%s, v_min=%.1f, v_max=%.1f, customV=%s",
       tostring(self.flightMode), tostring(selectedTheme), tostring(self.theme ~= nil),
@@ -1509,15 +1622,16 @@ function Runtime.new(zone, options)
 
     local sources = {}
     if self.theme then
-      local parsedBoxes = nil
-      if type(self.theme.boxes) == "function" then
-        local ok, b = pcall(self.theme.boxes, nil, self.state)
-        if ok and type(b) == "table" then parsedBoxes = b end
-      elseif type(self.theme.boxes) == "table" then
-        parsedBoxes = self.theme.boxes
-      end
-      if parsedBoxes then
-        local seen = {}
+      local seen = {}
+      local function collect(boxes)
+        local parsedBoxes = nil
+        if type(boxes) == "function" then
+          local ok, b = pcall(boxes, nil, self.state)
+          if ok and type(b) == "table" then parsedBoxes = b end
+        elseif type(boxes) == "table" then
+          parsedBoxes = boxes
+        end
+        if not parsedBoxes then return end
         for i = 1, #parsedBoxes do
           local box = parsedBoxes[i]
           local src = box and box.source
@@ -1530,8 +1644,16 @@ function Runtime.new(zone, options)
           end
         end
       end
+      collect(self.theme.boxes)
+      -- Header boxes stand in the same tree and their closures read the same snapshot.
+      collect(self.theme.header_boxes)
     end
     self.boxSources = sources
+    -- One immediate build, so a theme switch never leaves the new tree a tick of "--"
+    -- staring at an empty snapshot.
+    if DerivedSnapshot and type(DerivedSnapshot.build) == "function" then
+      DerivedSnapshot.build(self.state, self.boxSources)
+    end
   end
 
   local function performBackgroundWork(self)
@@ -1570,7 +1692,15 @@ function Runtime.new(zone, options)
     -- when sensors go offline, while hadInflightFlight stays true until next session.
     local isPostflightOffline = (self.state.hadInflightFlight == true) and (self.state.rfConnected ~= true)
     if not isPostflightOffline then
-      readTelemetry(self.state)
+      if (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS then
+        self._lastTelemetryReadAt = now
+        readTelemetry(self.state)
+        -- The snapshot the reactive closures read, rebuilt on the same cadence as the
+        -- telemetry read that feeds it -- probing is legal here and nowhere in the sweep.
+        if DerivedSnapshot and type(DerivedSnapshot.build) == "function" then
+          DerivedSnapshot.build(self.state, self.boxSources)
+        end
+      end
     end
     
     -- Update session values if available (from MSP)
@@ -1617,6 +1747,7 @@ function Runtime.new(zone, options)
       self.built = false
       self.renderKey = nil
       self._cachedRenderKey = nil
+      self._job = nil
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       end
@@ -1676,13 +1807,14 @@ function Runtime.new(zone, options)
   function widget.update(self, newOptions)
     self.options = newOptions
     self.built = false
+    self._job = nil
   end
 
   function widget.reload(self, force)
     logGv("widget.reload called with force=%s", tostring(force))
     reloadPreferencesIfNeeded(self, force ~= false)
     reloadActiveTheme(self)
-    self._themeReloadedThisTick = true
+    self._job = nil
     self.built = false
     self.renderKey = nil
     self._cachedRenderKey = nil
@@ -1696,6 +1828,12 @@ function Runtime.new(zone, options)
   end
 
 
+  -- One work class per pass. `refresh` dispatches: when a job is pending, the pass runs
+  -- that job and nothing else; otherwise it runs the background/state half, whose
+  -- invalidation checks may enqueue a job but never execute one. A build therefore never
+  -- shares a pass with the connect chain, so the two cannot sum against the firmware's
+  -- per-call instruction limit. This generalises the one-tick deferral #152 introduced
+  -- for theme loads into a structural rule for every build.
   function widget.refresh(self, event, touchState)
     traceInstructionUsage(self)
 
@@ -1707,19 +1845,6 @@ function Runtime.new(zone, options)
        lvgl.onEvent(event, touchState)
     end
 
-    local ready = performBackgroundWork(self)
-
-    -- If performBackgroundWork() or widget.reload() loaded a new theme module
-    -- this tick, the combined instruction cost of background work and script
-    -- loading already consumes a significant share of the EdgeTX budget.  Adding
-    -- a full LVGL build on top of that risks exceeding the limit.  Defer all
-    -- drawing to the next firmware tick -- the radio will simply hold the
-    -- previous frame for one ~50 ms cycle, which is imperceptible to the user.
-    if self._themeReloadedThisTick then
-      self._themeReloadedThisTick = false
-      return
-    end
-
     if self.zone then
       self.state.zoneW = self.zone.w or 0
       self.state.zoneH = self.zone.h or 0
@@ -1728,6 +1853,35 @@ function Runtime.new(zone, options)
     end
     self.state.flightMode = self.flightMode
 
+    -- JOB pass: serve the link with the minimal queue quantum, then run one job step.
+    -- pump() is the queue half of tick() and nothing else, so in-flight MSP transfers
+    -- keep moving while the build occupies the pass.
+    --
+    -- The same event context the background half sets brackets the pump: the poll and
+    -- drain loops it reaches (tasks/msp/common.lua, tasks/msp/queue.lua) pick their
+    -- widget-state bounds -- counts per pass, never wall clock -- by reading it, and
+    -- without the bracket a JOB pass would silently run them under the tool rules.
+    if self._job then
+      if MspRuntime and type(MspRuntime.pump) == "function" then
+        if type(_G) == "table" then
+          _G.rfsuite = _G.rfsuite or {}
+          _G.rfsuite.session = _G.rfsuite.session or {}
+          _G.rfsuite.session.event_context = "widget"
+        end
+        MspRuntime.pump()
+        if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+          _G.rfsuite.session.event_context = nil
+        end
+      end
+      if self._job.step(self) then
+        self._job = nil
+      end
+      return
+    end
+
+    -- STATE pass: the background half, then invalidation checks that only enqueue.
+    local ready = performBackgroundWork(self)
+
     if not ready and self.flightMode ~= "postflight" then
       local statusLine = self.statusLine or "Please wait..."
       local splashKey = "splash|" .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
@@ -1735,18 +1889,8 @@ function Runtime.new(zone, options)
         self.renderKey = splashKey
         self.built = false
       end
-
       if not self.built then
-        local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
-        local title = (t and t("widgets.dashboard.connecting_fbl")) or "Connecting FBL..."
-        local splash = buildConnectionSplash(self.zone, statusLine, title)
-        lvgl.clear()
-        lvgl.build(splash)
-        self.built = true
-        -- What the reactive sweep walks from the next pass on. Kept up to date here as well as
-        -- at the dashboard build below, so the usage line never reports a count belonging to a
-        -- tree that has already been cleared.
-        self._lastChildCount = #splash
+        self._job = { kind = "splash", step = splashJobStep }
       end
       return
     end
@@ -1778,38 +1922,16 @@ function Runtime.new(zone, options)
     if nextRenderKey ~= self.renderKey then
       self.renderKey = nextRenderKey
       self.built = false
-      -- Ausführung auf den nächsten Tick verschieben, um das CPU Limit beim Zeichnen zu umgehen
-      return
+      -- Fall through: detection and enqueue happen in this same pass, and the build
+      -- lands in the next one, which carries nothing else.
     end
 
     if not self.built then
-      local children = {}
-      
       if isInteractive then
-        local menu = requireModule("widgets/dashboard/fullscreen_menu.lua")
-        if menu and type(menu.build) == "function" then
-          menu.build(children, self)
-        end
+        self._job = { kind = "menu", step = menuJobStep }
       else
-        if type(self.theme.build) == "function" then
-          children = self.theme.build(self.zone, self.state)
-        elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
-          children = self.dashboardEngine.build(self.zone, self.state, self.theme)
-        end
-        if type(children) ~= "table" then return end
+        self._job = { kind = "scene", step = sceneJobStep }
       end
-
-      -- No forced full collection here. This block runs whenever the render key changes, i.e.
-      -- whenever a displayed telemetry value moves, and every widget on the radio shares one
-      -- Lua state -- so a full collect walks every other widget's live set as well. The
-      -- firmware already runs an incremental collection on that state on every GUI pass.
-      -- GEMINI.md asks for an explicit collect after large I/O or JSON work; a repaint is
-      -- neither.
-      lvgl.clear()
-      lvgl.build(children)
-      self.built = true
-      self._lastChildCount = #children
-      logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children)
     end
   end
 

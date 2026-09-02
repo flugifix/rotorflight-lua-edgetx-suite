@@ -73,46 +73,58 @@ end
 
 local CrsfManager = nil
 
-local function crossfirePop()
+-- Per-pass bounds for the custom-telemetry drain. Popping a frame is a handful of C calls;
+-- DECODING one is a Lua walk over every sensor it carries -- the expensive term. So the
+-- drain looks at up to POP_CAP frames per wakeup to keep the queue from backing up, but
+-- fully decodes only the newest DECODE_CAP of them: telemetry is values, not commands, and
+-- the next frame carries the current state, so under a backlog the oldest frames are the
+-- right ones to skip. Both are provisional counts, to be calibrated by offline instruction
+-- accounting.
+local POP_CAP = 15
+local DECODE_CAP = 4
+
+-- The cheap half: pop one frame and keep the frame counters honest. The id bookkeeping runs
+-- for EVERY popped frame, decoded or not -- `*Skp` means "the link skipped", and a decode
+-- the drain chose to skip must never read as a link problem.
+local function popAndAccount()
     local CRSF_FRAME_CUSTOM_TELEM = 0x88
     if not CrsfManager then
       CrsfManager = loadModule("lib/crsf.lua")
     end
-    if not CrsfManager then return false end
-    
+    if not CrsfManager then return nil end
+
     local data = CrsfManager.popFrame(CRSF_FRAME_CUSTOM_TELEM)
-    if data then
-        local fid, sid, val
-        local ptr = 3
-        fid,ptr = decU8(data, ptr)
-        local delta = bit32.band(fid - telemetryFrameId, 0xFF)
-        if delta > 1 then
-            telemetryFrameSkip = telemetryFrameSkip + 1
-        end
-        telemetryFrameId = fid
-        telemetryFrameCount = telemetryFrameCount + 1
-        local now = nowSeconds()
-        while ptr < #data do
-            sid,ptr = decU16(data, ptr)
-            local sensor = RFSensors[sid]
-            if sensor and type(sensor.dec) == "function" then
-                val,ptr = sensor.dec(data, ptr)
-                if val then
-                    publishSensorValue(sid, val, sensor, now)
-                end
-            else
-                break
-            end
-        end
-        -- Published unconditionally, and that is deliberate: the sibling project creates the
-        -- same two sensors and treats a missing `*Cnt` as "the pilot deleted the telemetry
-        -- sensors", so a radio carrying both suites needs them to keep meaning what they mean.
-        -- A pilot who does not want the two rows can delete them on the telemetry page; outside
-        -- a discovery window nothing here creates them again.
-        publishCounters(telemetryFrameCount, telemetryFrameSkip, now)
-        return true
+    if not data then return nil end
+
+    local fid, ptr
+    ptr = 3
+    fid, ptr = decU8(data, ptr)
+    local delta = bit32.band(fid - telemetryFrameId, 0xFF)
+    if delta > 1 then
+        telemetryFrameSkip = telemetryFrameSkip + 1
     end
-    return false
+    telemetryFrameId = fid
+    telemetryFrameCount = telemetryFrameCount + 1
+    return data
+end
+
+-- The expensive half: the byte walk through the per-sensor decoders. The frame id at byte 3
+-- was consumed by popAndAccount, so the walk starts at byte 4.
+local function decodeFrame(data, now)
+    local sid, val
+    local ptr = 4
+    while ptr < #data do
+        sid,ptr = decU16(data, ptr)
+        local sensor = RFSensors[sid]
+        if sensor and type(sensor.dec) == "function" then
+            val,ptr = sensor.dec(data, ptr)
+            if val then
+                publishSensorValue(sid, val, sensor, now)
+            end
+        else
+            break
+        end
+    end
 end
 
 function M.wakeup()
@@ -126,11 +138,33 @@ function M.wakeup()
     if not Adjustments then
         Adjustments = loadModule("tasks/events/telemetry_bg/adjustments.lua")
     end
-    
-    local limit = 15
-    local processed = 0
-    while processed < limit and crossfirePop() do
-        processed = processed + 1
+
+    -- Pop up to POP_CAP, keep the newest DECODE_CAP in arrival order, decode only those --
+    -- on a same-sensor conflict the newest value lands last.
+    local kept = {}
+    local popped = 0
+    while popped < POP_CAP do
+        local data = popAndAccount()
+        if not data then break end
+        popped = popped + 1
+        kept[#kept + 1] = data
+        if #kept > DECODE_CAP then
+            table.remove(kept, 1)
+        end
+    end
+
+    if popped > 0 then
+        local now = nowSeconds()
+        for i = 1, #kept do
+            decodeFrame(kept[i], now)
+        end
+        -- Published unconditionally, and that is deliberate: the sibling project creates the
+        -- same two sensors and treats a missing `*Cnt` as "the pilot deleted the telemetry
+        -- sensors", so a radio carrying both suites needs them to keep meaning what they mean.
+        -- A pilot who does not want the two rows can delete them on the telemetry page; outside
+        -- a discovery window nothing here creates them again. Once per wakeup: the publisher
+        -- rate-limits itself, and per-frame publication was redundancy, not information.
+        publishCounters(telemetryFrameCount, telemetryFrameSkip, now)
     end
 
     if Smart and type(Smart.wakeup) == "function" then

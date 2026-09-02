@@ -73,6 +73,50 @@ local function session()
   return _G.rfsuite.session
 end
 
+-- How often the usage line below is written, in seconds.
+local USAGE_REPORT_INTERVAL = 5
+
+--- Report how much of the per-pass instruction ceiling this widget is consuming.
+--
+-- The same instrument widgets/dashboard/runtime.lua carries, in the widget that isolates the
+-- background half: this one draws a status tile and otherwise does nothing but tick the two
+-- runtimes, so the figure it reports is the cost of the background work alone -- no scene
+-- build and no reactive sweep of a theme is mixed into it.
+--
+-- EdgeTX gives the widget Lua state a fixed instruction budget per pass and stores the share
+-- consumed once the call has returned; getUsage() hands that value back, so what is readable
+-- here is the PREVIOUS pass's figure. It is held in a uint8_t, so a pass past 255 % wraps and
+-- reads low -- which is why this reports a stream of figures rather than a single worst one.
+--
+-- Three figures, because each of them alone misleads: the current sample says what a settled
+-- pass costs, the peak over the interval says how close the worst pass in that stretch came,
+-- and the peak since load keeps the worst pass of a session from scrolling out of a card log.
+--
+-- Nothing here tests the debug level. Log.emitf does that, and below "trace" the line is
+-- neither printed, nor put in the session ring, nor written to the card.
+local function traceInstructionUsage(self)
+  if type(getUsage) ~= "function" then return end
+  local ok, percent = pcall(getUsage)
+  if not ok then return end
+  percent = tonumber(percent)
+  if percent == nil then return end
+
+  if percent > self._usageWindowPeak then self._usageWindowPeak = percent end
+  if percent > self._usagePeak then self._usagePeak = percent end
+
+  local now = nowSeconds()
+  if now < self._usageReportAt then return end
+  self._usageReportAt = now + USAGE_REPORT_INTERVAL
+
+  if Log and type(Log.emitf) == "function" then
+    Log.emitf("rfsuite.service", "trace",
+      "instruction budget %d%% now, %d%% peak/%ds, %d%% peak since load",
+      percent, self._usageWindowPeak, USAGE_REPORT_INTERVAL, self._usagePeak)
+  end
+
+  self._usageWindowPeak = -1
+end
+
 local function isArmed()
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then return false end
   local runtimeState = MspRuntime.getState()
@@ -98,6 +142,8 @@ end
 -- One pass of the background work: the same two calls the dashboard makes, bracketed by the same
 -- event context, so tasks that behave differently in a widget see what they expect.
 local function tickRuntimes(self)
+  traceInstructionUsage(self)
+
   local now = nowSeconds()
   if self._lastWorkTick == now then return end
   self._lastWorkTick = now
@@ -267,7 +313,10 @@ function Runtime.new(zone, options)
     _lastWorkTick = nil,
     _lastLogicTick = 0,
     _lastUIRefresh = 0,
-    _lastPreferencesLoad = 0
+    _lastPreferencesLoad = 0,
+    _usagePeak = -1,
+    _usageWindowPeak = -1,
+    _usageReportAt = 0
   }
 
   refreshPreferences(widget, true)
