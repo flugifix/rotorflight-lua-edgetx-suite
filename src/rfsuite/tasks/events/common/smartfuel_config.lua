@@ -11,6 +11,7 @@ local waitingLogged = false
 local function apiVersionReady(v)
   return v ~= nil and v ~= "" and tostring(v) ~= "0"
 end
+local MspRuntime = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -62,7 +63,10 @@ function M.wakeup()
   if not smartfuelConfigApi then
     smartfuelConfigApi = loadModule("tasks/msp/api/smartfuel_config.lua")
   end
-  local msp = loadModule("tasks/msp/runtime.lua")
+  if MspRuntime == nil then
+    MspRuntime = loadModule("tasks/msp/runtime.lua") or false
+  end
+  local msp = MspRuntime or nil
   if not msp or not smartfuelConfigApi then
     done = true
     return

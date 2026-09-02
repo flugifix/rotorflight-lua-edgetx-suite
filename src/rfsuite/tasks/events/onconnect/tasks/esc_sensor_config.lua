@@ -5,6 +5,7 @@ local done = false
 local requestSent = false
 local EscSensorConfigApi = nil
 local Log = nil
+local MspRuntime = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -33,7 +34,10 @@ function M.wakeup(args)
   if not EscSensorConfigApi then
     EscSensorConfigApi = loadModule("tasks/msp/api/esc_sensor_config.lua")
   end
-  local msp = loadModule("tasks/msp/runtime.lua")
+  if MspRuntime == nil then
+    MspRuntime = loadModule("tasks/msp/runtime.lua") or false
+  end
+  local msp = MspRuntime or nil
   if not msp or not EscSensorConfigApi then
     done = true
     return

@@ -5,6 +5,7 @@ local done = false
 local requestSent = false
 local governorConfigApi = nil
 local Log = nil
+local MspRuntime = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -34,7 +35,10 @@ function M.wakeup(args)
   if not governorConfigApi then
     governorConfigApi = loadModule("tasks/msp/api/governor_config.lua")
   end
-  local msp = loadModule("tasks/msp/runtime.lua")
+  if MspRuntime == nil then
+    MspRuntime = loadModule("tasks/msp/runtime.lua") or false
+  end
+  local msp = MspRuntime or nil
   if not msp or not governorConfigApi then return end
 
   local mspState = type(msp.getState) == "function" and msp.getState()
