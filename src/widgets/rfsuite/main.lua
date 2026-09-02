@@ -108,25 +108,17 @@ local function gvWanted()
 end
 
 local function logGv(fmt, ...)
-  -- Same gate as the dashboard runtime's copy of this function. Ungated, every call opens,
-  -- appends to and closes a file on the SD card. The callers here are the reload path rather
-  -- than a per-frame one, so it costs less than the other copy -- but it is the same defect
-  -- and it is not switchable either.
+  -- The reload trace, through the logging core -- the same tag and level as the dashboard
+  -- runtime's copy, so both halves of a reload read as one sequence on Session Logs.
   --
-  -- Variadic for the same reason as the other copy, and kept in the same shape as it: with
-  -- the test inside the function, a caller pays for a message the gate then drops.
+  -- Variadic, with the test inside the function: a caller must not pay for a message the
+  -- gate then drops.
   if not gvWanted() then return end
 
   local msg = tostring(fmt)
   if select("#", ...) > 0 then msg = string.format(msg, ...) end
 
-  local fLog = io.open("/SCRIPTS/TOOLS/rfsuite.user/gv_debug.log", "a")
-  if fLog then
-    local t = (getTime and getTime()) or 0
-    io.write(fLog, string.format("[%.2f][Widget.main] %s\n", t / 100, msg))
-    io.close(fLog)
-  end
-  if print then pcall(print, "[Widget.main] " .. msg) end
+  gvLog.emit("rfsuite.reload", msg, "info")
 end
 
 --- The global preference file's size and mtime, as one string.

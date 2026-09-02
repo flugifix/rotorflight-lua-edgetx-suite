@@ -14,21 +14,15 @@ local state
 local exitLog = nil
 
 local function logToFile(msg)
-  -- The level is asked of the logger instead of compared against two literals. lib/log.lua
-  -- orders the ladder off < error < warn < info < debug < trace, so a test for "debug" or
-  -- "info" fell through on "trace" and the loudest setting on the selector wrote strictly
-  -- less than the one below it -- this whole file included.
+  -- The exit trace, through the logging core: the ring takes it, and -- when logging to
+  -- card is on -- the sink's session file, beside the step file that already records the
+  -- last thing the tool did before it stopped.
   if exitLog == nil then
     local ok, mod = pcall(loadModule, "lib/log.lua")
     exitLog = (ok and type(mod) == "table" and type(mod.wanted) == "function") and mod or false
   end
   if exitLog and exitLog.wanted("info") then
-    local f = io.open("/SCRIPTS/TOOLS/rfsuite.user/exit_debug.log", "a")
-    if f then
-      local t = getTime and getTime() or 0
-      io.write(f, "[" .. tostring(t) .. "] " .. tostring(msg) .. "\n")
-      io.close(f)
-    end
+    exitLog.emit("rfsuite.ui", tostring(msg), "info")
   end
 end
 
