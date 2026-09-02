@@ -7,7 +7,7 @@ local function loadModule(path)
   local ok, mod = pcall(chunk)
   if not ok then 
     if _G and _G.rfsuite and _G.rfsuite.Log then
-      _G.rfsuite.Log.emit("rfsuite.elrs", "loadModule pcall error: " .. tostring(mod), "error", true)
+      _G.rfsuite.Log.emit("rfsuite.elrs", "loadModule pcall error: " .. tostring(mod), "error")
     end
     return nil 
   end
@@ -50,7 +50,7 @@ local function ensureDeps()
   if not ElrsTask then 
     ElrsTask = loadModule("app/pages/tools/diagnostics/elrs_link/elrslink_task.lua") 
     if not ElrsTask and _G and _G.rfsuite and _G.rfsuite.Log then
-      _G.rfsuite.Log.emit("rfsuite.elrs", "Failed to load elrslink_task.lua", "error", true)
+      _G.rfsuite.Log.emit("rfsuite.elrs", "Failed to load elrslink_task.lua", "error")
     end
   end
   if not t then t = Common and Common.pageT("diagnostics_elrs_link") or nil end
@@ -71,7 +71,7 @@ end
 local function log(msg, level)
   local rf = _G.rfsuite
   if rf and rf.Log and type(rf.Log.emit) == "function" then
-    rf.Log.emit("rfsuite.elrs.page", msg, level or "debug", true)
+    rf.Log.emit("rfsuite.elrs.page", msg, level or "debug")
   end
 end
 

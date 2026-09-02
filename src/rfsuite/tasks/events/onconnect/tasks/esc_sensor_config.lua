@@ -46,7 +46,7 @@ function M.wakeup(args)
   end
 
   if type(Log) == "table" and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.tasks.esc_sensor_config", "MSP request for esc_sensor_config (cmd=" .. tostring(EscSensorConfigApi.command) .. ") via queue", "debug", true)
+    pcall(Log.emit, "rfsuite.tasks.esc_sensor_config", "MSP request for esc_sensor_config (cmd=" .. tostring(EscSensorConfigApi.command) .. ") via queue", "debug")
   end
 
   mspState.queue:add({
@@ -63,7 +63,7 @@ function M.wakeup(args)
         local proto = tonumber(data.protocol) or 0
         session.esc4WayDetectedProto = proto
         if type(Log) == "table" and type(Log.emit) == "function" then
-          pcall(Log.emit, "rfsuite.tasks.esc_sensor_config", "esc_sensor_config received (protocol=" .. tostring(proto) .. ")", "info", true)
+          pcall(Log.emit, "rfsuite.tasks.esc_sensor_config", "esc_sensor_config received (protocol=" .. tostring(proto) .. ")", "info")
         end
       end
       done = true
@@ -71,7 +71,7 @@ function M.wakeup(args)
     errorHandler = function()
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.esc_sensor_config", "esc_sensor_config read failed", "warn", true)
+        pcall(Log.emit, "rfsuite.tasks.esc_sensor_config", "esc_sensor_config read failed", "warn")
       end
     end
   })

@@ -129,7 +129,7 @@ end
 
 local function logLine(msg, level)
   if type(Log) == "table" and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.save", tostring(msg), level or "debug", true)
+    pcall(Log.emit, "rfsuite.save", tostring(msg), level or "debug")
   end
 end
 

@@ -105,7 +105,7 @@ local function logMsg(msg, level)
     end
 
     if logModule and type(logModule.emit) == "function" then
-        logModule.emit(t, msg, lvl, true)
+        logModule.emit(t, msg, lvl)
     end
 end
 

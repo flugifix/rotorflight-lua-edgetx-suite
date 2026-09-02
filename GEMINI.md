@@ -66,8 +66,13 @@ The framework uses a declarative approach for UI building. Reusable components i
 Use the centralized `Log` library for consistent output:
 ```lua
 local Log = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t"))()
-Log.emit("tag", "message", "info") -- levels: info, debug, warn, error
+Log.emit("tag", "message", "info") -- levels: error, warn, info, debug, trace; "off" silences everything
+Log.emitf("tag", "info", "value=%d", v) -- formats only past the level gate
+if Log.wanted("trace") then end      -- ask first when building the message is the expensive part
 ```
+
+`Log.emit` takes an optional fourth argument, a console opt-out: pass `false` to keep a line
+off the console while it still reaches the log ring, the card sink and serial; omitted means on.
 
 ## Telemetry & MSP
 - **Sensors**: Centralized in `src/rfsuite/lib/sensors.lua`. Maps 4-character OpenTX/EdgeTX sensor names to human-readable internal aliases.

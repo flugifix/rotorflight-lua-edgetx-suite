@@ -70,7 +70,7 @@ function M.wakeup(args)
     if ok and type(ts) == "number" and ts > 0 then
       unixSecs = ts
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.rtc", "Using getRtcTime() = " .. tostring(unixSecs), "debug", true)
+        pcall(Log.emit, "rfsuite.tasks.rtc", "Using getRtcTime() = " .. tostring(unixSecs), "debug")
       end
     end
   end
@@ -78,7 +78,7 @@ function M.wakeup(args)
   if not unixSecs then
     if type(getDateTime) ~= "function" then
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.rtc", "Neither getRtcTime nor getDateTime available, skipping RTC sync", "warn", true)
+        pcall(Log.emit, "rfsuite.tasks.rtc", "Neither getRtcTime nor getDateTime available, skipping RTC sync", "warn")
       end
       done = true
       return
@@ -90,7 +90,7 @@ function M.wakeup(args)
     end
     unixSecs = dateToUnix(dt.year, dt.mon, dt.day, dt.hour, dt.min, dt.sec)
     if type(Log) == "table" and type(Log.emit) == "function" then
-      pcall(Log.emit, "rfsuite.tasks.rtc", "Using getDateTime() converted to Unix = " .. tostring(unixSecs), "debug", true)
+      pcall(Log.emit, "rfsuite.tasks.rtc", "Using getDateTime() converted to Unix = " .. tostring(unixSecs), "debug")
     end
   end
 
@@ -102,7 +102,7 @@ function M.wakeup(args)
   local payload = RtcApi.buildWritePayload(payloadData)
 
   if type(Log) == "table" and type(Log.emit) == "function" then
-    pcall(Log.emit, "rfsuite.tasks.rtc", "MSP request for RTC sync (cmd=" .. tostring(RtcApi.writeCommand) .. ") via queue", "debug", true)
+    pcall(Log.emit, "rfsuite.tasks.rtc", "MSP request for RTC sync (cmd=" .. tostring(RtcApi.writeCommand) .. ") via queue", "debug")
   end
 
   mspState.queue:add({
@@ -114,13 +114,13 @@ function M.wakeup(args)
     processReply = function(self, buf)
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.rtc", "RTC successfully synced", "info", true)
+        pcall(Log.emit, "rfsuite.tasks.rtc", "RTC successfully synced", "info")
       end
     end,
     errorHandler = function()
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then 
-        pcall(Log.emit, "rfsuite.tasks.rtc", "RTC sync failed", "warn", true) 
+        pcall(Log.emit, "rfsuite.tasks.rtc", "RTC sync failed", "warn") 
       end
     end
   })

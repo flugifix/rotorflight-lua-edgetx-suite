@@ -41,7 +41,7 @@ function M.wakeup()
   if not apiVersionReady(session.apiVersion) then
     done = true
     if (not waitingLogged) and type(Log) == "table" and type(Log.emit) == "function" then
-      pcall(Log.emit, "rfsuite.tasks.smartfuel", "skip smartfuel_config (api unknown)", "debug", true)
+      pcall(Log.emit, "rfsuite.tasks.smartfuel", "skip smartfuel_config (api unknown)", "debug")
       waitingLogged = true
     end
     return
@@ -52,7 +52,7 @@ function M.wakeup()
   if not (ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(apiVersion, { 12, 0, 9 })) then
     done = true
     if type(Log) == "table" and type(Log.emit) == "function" then
-      pcall(Log.emit, "rfsuite.tasks.smartfuel", "skip smartfuel_config (api=" .. tostring(session.apiVersion) .. " < 12.0.9)", "debug", true)
+      pcall(Log.emit, "rfsuite.tasks.smartfuel", "skip smartfuel_config (api=" .. tostring(session.apiVersion) .. " < 12.0.9)", "debug")
     end
     return
   end
@@ -88,13 +88,13 @@ function M.wakeup()
       end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.smartfuel", "smartfuel_config received", "debug", true)
+        pcall(Log.emit, "rfsuite.tasks.smartfuel", "smartfuel_config received", "debug")
       end
     end,
     errorHandler = function()
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
-        pcall(Log.emit, "rfsuite.tasks.smartfuel", "smartfuel_config read failed", "warn", true)
+        pcall(Log.emit, "rfsuite.tasks.smartfuel", "smartfuel_config read failed", "warn")
       end
     end
   })

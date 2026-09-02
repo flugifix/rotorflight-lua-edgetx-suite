@@ -59,7 +59,7 @@ function M.wakeup()
         version = tostring(session.apiVersion or "?"),
         onFallback = function(t, m)
           if type(Log) == "table" and type(Log.emit) == "function" then
-            pcall(Log.emit, "rfsuite.tasks.apiversion", "Unsupported MSP API: " .. tostring(session.apiVersion), "warn", true)
+            pcall(Log.emit, "rfsuite.tasks.apiversion", "Unsupported MSP API: " .. tostring(session.apiVersion), "warn")
           end
         end
       })

@@ -54,13 +54,13 @@ function M.new(category)
     if Log == nil then Log = loadModule("lib/log.lua") or false end
     local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. MANIFEST_PATH, "t")
     if type(chunk) ~= "function" then
-      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "manifest missing: " .. tostring(MANIFEST_PATH), "debug", true) end
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "manifest missing: " .. tostring(MANIFEST_PATH), "debug") end
       tasksLoaded = true
       return
     end
     local ok, manifest = pcall(chunk)
     if not ok or type(manifest) ~= "table" then
-      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "invalid manifest: " .. tostring(MANIFEST_PATH), "debug", true) end
+      if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "invalid manifest: " .. tostring(MANIFEST_PATH), "debug") end
       tasksLoaded = true
       return
     end
@@ -186,7 +186,7 @@ function M.new(category)
 
     if not task then
       if not tasksDoneLogged then
-        if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "all eligible " .. category .. " tasks complete for " .. currentEnv, "debug", true) end
+        if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "all eligible " .. category .. " tasks complete for " .. currentEnv, "debug") end
         tasksDoneLogged = true
       end
       return
@@ -203,7 +203,7 @@ function M.new(category)
       task.failed = true
       task.startTime = nil
       task.nextEligibleAt = 0
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "failed to load task " .. tostring(task.name) .. ": " .. tostring(err or "?"), "info", true) end
+      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "failed to load task " .. tostring(task.name) .. ": " .. tostring(err or "?"), "info") end
       return
     end
 
@@ -236,7 +236,7 @@ function M.new(category)
       task.startTime = nil
       task.nextEligibleAt = 0
       releaseTaskModule(task, false)
-      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "completed task " .. tostring(task.name), "debug", true) end
+      if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "completed task " .. tostring(task.name), "debug") end
       return
     end
 
@@ -248,12 +248,12 @@ function M.new(category)
         task.nextEligibleAt = now + backoff
         task.initialized = false
         task.startTime = nil
-        if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, string.format("Task '%s' timed out. Re-queueing (attempt %d/%d) in %.1fs.", task.name, task.attempts, MAX_RETRIES, backoff), "info", true) end
+        if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, string.format("Task '%s' timed out. Re-queueing (attempt %d/%d) in %.1fs.", task.name, task.attempts, MAX_RETRIES, backoff), "info") end
       else
         task.failed = true
         task.startTime = nil
         releaseTaskModule(task, false)
-        if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, string.format("Task '%s' failed after %d attempts. Skipping.", task.name, MAX_RETRIES), "info", true) end
+        if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, string.format("Task '%s' failed after %d attempts. Skipping.", task.name, MAX_RETRIES), "info") end
       end
     end
   end

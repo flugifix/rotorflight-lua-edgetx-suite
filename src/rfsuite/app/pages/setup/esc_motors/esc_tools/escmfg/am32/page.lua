@@ -383,7 +383,7 @@ end
 local function log(msg, level)
   local Log = loadModule("lib/log.lua")
   if Log and type(Log.emit) == "function" then
-    Log.emit("rfsuite.am32", msg, level or "debug", true)
+    Log.emit("rfsuite.am32", msg, level or "debug")
   end
 end
 

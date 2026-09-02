@@ -620,7 +620,7 @@ local function logMemoryUsage(now)
 
   local line = "[mem][info] lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
   local msg = "lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
-  pcall(Log.emit, "mem", msg, "info", true)
+  pcall(Log.emit, "mem", msg, "info")
 end
 
 local function resolveLocaleFromSystem()
@@ -1388,11 +1388,11 @@ local function onReload()
       local title = tr("app.pages.settings_general.reload_confirm", "Confirm on Reload")
       local message = tr("app.dialogs.confirm_reload", "Reload and discard unsaved changes?")
 
-      pcall(Log.emit, "rfsuite", "onReload invoked; reloadPref=true", "debug", true)
+      pcall(Log.emit, "rfsuite", "onReload invoked; reloadPref=true", "debug")
       if lvgl then
-        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.message)), "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.message)), "debug")
       else
-        pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl is nil", "debug")
       end
 
       local confirmModule = getConfirmDialogModule()
@@ -1408,7 +1408,7 @@ local function onReload()
       end
 
       -- Fallback: no confirm UI available — proceed with reload.
-      pcall(Log.emit, "rfsuite", "no confirm API available; performing reload fallback", "debug", true)
+      pcall(Log.emit, "rfsuite", "no confirm API available; performing reload fallback", "debug")
       doPageReload()
       return
     end
@@ -1453,7 +1453,7 @@ local function onSave()
         })
 
         if not ok then
-          pcall(Log.emit, "rfsuite", "page.onSave failed: " .. tostring(shouldRebuild), "error", true)
+          pcall(Log.emit, "rfsuite", "page.onSave failed: " .. tostring(shouldRebuild), "error")
           reportSaveOutcome({
             ok = false,
             title = SAVE_TEXT.failed_title,
@@ -1468,7 +1468,7 @@ local function onSave()
 
         local okEeprom, errEeprom = queueEepromWriteIfNeeded(page)
         if not okEeprom then
-          pcall(Log.emit, "rfsuite", "EEPROM write queue failed: " .. tostring(errEeprom), "warn", true)
+          pcall(Log.emit, "rfsuite", "EEPROM write queue failed: " .. tostring(errEeprom), "warn")
           reportSaveOutcome({
             ok = false,
             title = SAVE_TEXT.saved_title,
@@ -1507,11 +1507,11 @@ local function onSave()
         message = tr("app.dialogs.confirm_save_arm_unknown", "Cannot read the arming state. Disarmed?")
       end
 
-      pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug", true)
+      pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug")
       if lvgl then
-        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.message)), "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl types: confirm=" .. tostring(type(lvgl.confirm)) .. ", dialog=" .. tostring(type(lvgl.dialog)) .. ", alert=" .. tostring(type(lvgl.message)), "debug")
       else
-        pcall(Log.emit, "rfsuite", "lvgl is nil", "debug", true)
+        pcall(Log.emit, "rfsuite", "lvgl is nil", "debug")
       end
 
       local confirmModule = getConfirmDialogModule()
@@ -1527,7 +1527,7 @@ local function onSave()
       end
 
       -- Fallback: no confirm API available — proceed with save.
-      pcall(Log.emit, "rfsuite", "no confirm API available; performing save fallback", "debug", true)
+      pcall(Log.emit, "rfsuite", "no confirm API available; performing save fallback", "debug")
       queuePageSave()
       return
     end
@@ -2541,7 +2541,7 @@ function M.run(event, touchState)
       state.saveOverlayVisible = false
       local ok, err = pcall(action)
       if not ok then
-        pcall(Log.emit, "rfsuite", "pendingSaveAction failed: " .. tostring(err), "error", true)
+        pcall(Log.emit, "rfsuite", "pendingSaveAction failed: " .. tostring(err), "error")
       end
       -- A page that only queues its writes is finished here and the notice goes; a page that
       -- started the pipeline is not, and the notice stays up for the phases that follow.
@@ -2702,7 +2702,7 @@ function M.run(event, touchState)
             requestRebuild = requestRebuild
           })
           if not ok then
-            pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error", true)
+            pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error")
             if type(serialWrite) == "function" then
               pcall(serialWrite, "[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err) .. "\n")
             end

@@ -364,12 +364,12 @@ function M.onSave(ctx)
       local v = (ctx and ctx.preferences and ctx.preferences.audio_events) and ctx.preferences.audio_events[k] or "<nil>"
       parts[#parts+1] = tostring(k) .. "=" .. tostring(v)
     end
-    pcall(Log.emit, "rfsuite", "onSave: prefs.audio_events=" .. table.concat(parts, ","), "debug", true)
+    pcall(Log.emit, "rfsuite", "onSave: prefs.audio_events=" .. table.concat(parts, ","), "debug")
     local parts2 = {}
     for _, field in ipairs(CONFIG_SCHEMA) do
       parts2[#parts2+1] = tostring(field.key) .. "=" .. tostring(ui.config[field.key])
     end
-    pcall(Log.emit, "rfsuite", "onSave: ui.config=" .. table.concat(parts2, ","), "debug", true)
+    pcall(Log.emit, "rfsuite", "onSave: ui.config=" .. table.concat(parts2, ","), "debug")
   end
 
   local ok, err = nil, nil
@@ -377,7 +377,7 @@ function M.onSave(ctx)
     ok, err = ctx.savePreferences()
   else
     if okLog and type(Log) == "table" and type(Log.emit) == "function" then
-      pcall(Log.emit, "rfsuite", "onSave: ctx.savePreferences not a function", "warn", true)
+      pcall(Log.emit, "rfsuite", "onSave: ctx.savePreferences not a function", "warn")
     end
     return false
   end
@@ -385,12 +385,12 @@ function M.onSave(ctx)
   if ok then
     ui.dirty = false
     if okLog and type(Log) == "table" and type(Log.emit) == "function" then
-      pcall(Log.emit, "rfsuite", "onSave: savePreferences OK", "info", true)
+      pcall(Log.emit, "rfsuite", "onSave: savePreferences OK", "info")
     end
     return true
   else
     if okLog and type(Log) == "table" and type(Log.emit) == "function" then
-      pcall(Log.emit, "rfsuite", "onSave: savePreferences failed: " .. tostring(err or "?"), "error", true)
+      pcall(Log.emit, "rfsuite", "onSave: savePreferences failed: " .. tostring(err or "?"), "error")
     end
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })

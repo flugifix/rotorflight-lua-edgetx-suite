@@ -116,13 +116,13 @@ end
 
 local function logDebug(message)
 	if Log and type(Log.emit) == "function" then
-		pcall(Log.emit, "rfsuite.smartfuel.page", tostring(message), "debug", true)
+		pcall(Log.emit, "rfsuite.smartfuel.page", tostring(message), "debug")
 	end
 end
 
 local function logWarn(message)
 	if Log and type(Log.emit) == "function" then
-		pcall(Log.emit, "rfsuite.smartfuel.page", tostring(message), "warn", true)
+		pcall(Log.emit, "rfsuite.smartfuel.page", tostring(message), "warn")
 	end
 end
 

@@ -66,7 +66,7 @@ local function debugLog(key, msg)
   if key and loggedSources[key] then return end
   if key then loggedSources[key] = true end
   if Log then
-    Log.emit("rfsuite.sensors", tostring(msg), "debug", true)
+    Log.emit("rfsuite.sensors", tostring(msg), "debug")
   end
 end
 
