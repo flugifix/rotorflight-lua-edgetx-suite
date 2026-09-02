@@ -6,16 +6,12 @@
 
 local Sensors = {}
 Sensors.sim_search_misses = {}
-local Log = nil
-do
-  local okLoad, chunk = pcall(loadScript, "/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
-  if okLoad and type(chunk) == "function" then
-    local okMod, mod = pcall(chunk)
-    if okMod and type(mod) == "table" and type(mod.emit) == "function" then
-      Log = mod
-    end
-  end
-end
+-- The logging core's tagged emitter, bound on first use. It cannot be bound at module scope:
+-- this file is reached from contexts where lib/log.lua has not published itself yet, which is
+-- what the raw loadScript that stood here was working around -- at the cost of going past
+-- lib/require.lua's cache and compiling a second copy of the logger for every load of this
+-- module, in "t" mode rather than the loader's own.
+local taggedLog = nil
 
 local SIM_FILE_ALIASES = {
   ["PID#"] = "pid_profile",
@@ -65,9 +61,12 @@ local function debugLog(key, msg)
   if not debugEnabled then return end
   if key and loggedSources[key] then return end
   if key then loggedSources[key] = true end
-  if Log then
-    Log.emit("rfsuite.sensors", tostring(msg), "debug")
+  if not taggedLog then
+    local L = type(_G) == "table" and _G.rfsuite and _G.rfsuite.Log
+    if type(L) ~= "table" or type(L.tagged) ~= "function" then return end
+    taggedLog = L.tagged("rfsuite.sensors")
   end
+  taggedLog(tostring(msg), "debug")
 end
 
 local fieldInfoCache = {}
