@@ -754,16 +754,23 @@ local function modeRangeFor(w, boxId, aux)
   return nil
 end
 
-local function freeModeSlot(w, boxId, aux)
+-- `taken` carries the slots this PLAN has already promised to another box. The whole plan is
+-- derived from one read of the mode ranges, so without it two boxes resolve to the same free
+-- slot -- on a board with no ranges yet, every record reads as ARM's (an unused record stores
+-- ARM's id) or as empty, both writes land on slot one, and the second silently replaces the
+-- first. One mode range on the board where two were written, and nothing anywhere went red.
+local function freeModeSlot(w, boxId, aux, taken)
   local ranges = w.data.modeRanges
   if type(ranges) ~= "table" then return nil end
   local index = modeRangeFor(w, boxId, aux)
-  if index then return index end
+  if index and not (taken and taken[index]) then return index end
   for i, range in ipairs(ranges) do
-    if tonumber(range.id) == boxId then return i end
-    local from = range.range and tonumber(range.range.start)
-    local to = range.range and tonumber(range.range["end"])
-    if from ~= nil and to ~= nil and from >= to then return i end
+    if not (taken and taken[i]) then
+      if tonumber(range.id) == boxId then return i end
+      local from = range.range and tonumber(range.range.start)
+      local to = range.range and tonumber(range.range["end"])
+      if from ~= nil and to ~= nil and from >= to then return i end
+    end
   end
   return nil
 end
@@ -1285,6 +1292,7 @@ end
 -- nothing about what is written changes -- only what is SHOWN.
 local function plannedActions(w)
   local actions = {}
+  local takenSlots = {}
   for _, entry in ipairs(w.radio.CHANNELS) do
     if wanted(w, entry) then
       local swsrc = w.data.picked and w.data.picked[entry.channel]
@@ -1302,7 +1310,8 @@ local function plannedActions(w)
           action.boxId = boxIdFor(w, role.box)
           action.window = w.radio.windowFor(swsrc)
           if action.boxId and action.aux then
-            action.slot = freeModeSlot(w, action.boxId, action.aux)
+            action.slot = freeModeSlot(w, action.boxId, action.aux, takenSlots)
+            if action.slot then takenSlots[action.slot] = true end
           end
         elseif role and role.kind == "adjustment" then
           action.travel = w.radio.travelRange(swsrc)
@@ -1429,9 +1438,9 @@ procs[#procs + 1] = {
 
         w.setBusy(t(w.i18n, "writing_title", "Writing"), t(w.i18n, "writing_message", "Writing the model and the flight controller"))
         for _, action in ipairs(actions) do
-          Wlog.emit("info", "commit: ch%d %s switch=%s aux=%s %s",
+          Wlog.emit("info", "commit: ch%d %s switch=%s aux=%s slot=%s %s",
             action.entry.channel, tostring(action.role and action.role.kind),
-            tostring(action.switchName), tostring(action.aux),
+            tostring(action.switchName), tostring(action.aux), tostring(action.slot),
             actionBlocked(action) and "BLOCKED" or "ready")
         end
 
