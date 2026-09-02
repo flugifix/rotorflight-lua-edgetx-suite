@@ -25,7 +25,6 @@ local Log = nil
 local ApiVersion = nil
 local Reserve = nil
 
-local initialized = false
 local lastWake = 0
 local wakeInterval = 1.0
 local dischargeCurveTable = nil
@@ -440,13 +439,30 @@ local function publishTelemetryValue(sid, value, unit, sensorName, cacheValueKey
 end
 
 function Smart.wakeup()
-  if not initialized then
-    Sensors = loadModule("lib/sensors.lua")
-    MspRuntime = loadModule("tasks/msp/runtime.lua")
-    Log = loadModule("lib/log.lua")
-    ApiVersion = loadModule("lib/api_version.lua")
-    Reserve = loadModule("lib/smartfuel_reserve.lua")
-    initialized = true
+  -- One module per wakeup, for the same reason the caller in tasks.lua takes them one at a
+  -- time: five top-level chunks in a single widget pass is the largest remaining block of the
+  -- cold start, and `lib/sensors.lua` brings the logger in with it. A slot that cannot be
+  -- filled is recorded as `false` rather than left nil, so an absent module is not asked for
+  -- again on every wakeup; the two guards below already read `false` as absent.
+  if Sensors == nil then
+    Sensors = loadModule("lib/sensors.lua") or false
+    return
+  end
+  if MspRuntime == nil then
+    MspRuntime = loadModule("tasks/msp/runtime.lua") or false
+    return
+  end
+  if Log == nil then
+    Log = loadModule("lib/log.lua") or false
+    return
+  end
+  if ApiVersion == nil then
+    ApiVersion = loadModule("lib/api_version.lua") or false
+    return
+  end
+  if Reserve == nil then
+    Reserve = loadModule("lib/smartfuel_reserve.lua") or false
+    return
   end
   if not Sensors then return end
   if not Reserve then return end
