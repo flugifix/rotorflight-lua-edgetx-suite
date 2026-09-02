@@ -41,3 +41,20 @@ jobs:
           name: rfsuite-radio-install-v${{ env.GIT_VER }}_${{ matrix.lang }}
           path: rfsuite-radio-install-v${{ env.GIT_VER }}_${{ matrix.lang }}.zip
           if-no-files-found: error
+
+  instruction-budget:
+    name: Instruction budget
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+
+      - name: Prove the gate can go red
+        run: lua5.3 bin/accounting/measure.lua --self-test
+
+      - name: Account instructions per pass
+        run: lua5.3 bin/accounting/measure.lua --check
