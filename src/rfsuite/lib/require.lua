@@ -44,6 +44,8 @@ local function requireModule(path, forceReload)
   local chunk, err = loadScript(fullPath, _G.rfsuite.loadMode)
   if not chunk then
     if type(err) == "string" then
+      -- Raw print on purpose, here and below: this is the module loader reporting that a
+      -- load failed, and the logger may be the very module that could not load.
       print("[require] Failed to load " .. tostring(fullPath) .. ": " .. err)
     end
     return nil, err
