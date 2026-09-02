@@ -55,6 +55,7 @@ local DashboardSplash = requireModule("widgets/dashboard/splash.lua")
 local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")
 local Sensors = requireModule("lib/sensors.lua")
+local DerivedSnapshot = requireModule("widgets/dashboard/derived.lua")
 local LogSink = requireModule("lib/log_sink.lua")
 if LogSink and type(LogSink.configure) == "function" then
   LogSink.configure("widget")
@@ -1621,15 +1622,16 @@ function Runtime.new(zone, options)
 
     local sources = {}
     if self.theme then
-      local parsedBoxes = nil
-      if type(self.theme.boxes) == "function" then
-        local ok, b = pcall(self.theme.boxes, nil, self.state)
-        if ok and type(b) == "table" then parsedBoxes = b end
-      elseif type(self.theme.boxes) == "table" then
-        parsedBoxes = self.theme.boxes
-      end
-      if parsedBoxes then
-        local seen = {}
+      local seen = {}
+      local function collect(boxes)
+        local parsedBoxes = nil
+        if type(boxes) == "function" then
+          local ok, b = pcall(boxes, nil, self.state)
+          if ok and type(b) == "table" then parsedBoxes = b end
+        elseif type(boxes) == "table" then
+          parsedBoxes = boxes
+        end
+        if not parsedBoxes then return end
         for i = 1, #parsedBoxes do
           local box = parsedBoxes[i]
           local src = box and box.source
@@ -1642,8 +1644,16 @@ function Runtime.new(zone, options)
           end
         end
       end
+      collect(self.theme.boxes)
+      -- Header boxes stand in the same tree and their closures read the same snapshot.
+      collect(self.theme.header_boxes)
     end
     self.boxSources = sources
+    -- One immediate build, so a theme switch never leaves the new tree a tick of "--"
+    -- staring at an empty snapshot.
+    if DerivedSnapshot and type(DerivedSnapshot.build) == "function" then
+      DerivedSnapshot.build(self.state, self.boxSources)
+    end
   end
 
   local function performBackgroundWork(self)
@@ -1685,6 +1695,11 @@ function Runtime.new(zone, options)
       if (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS then
         self._lastTelemetryReadAt = now
         readTelemetry(self.state)
+        -- The snapshot the reactive closures read, rebuilt on the same cadence as the
+        -- telemetry read that feeds it -- probing is legal here and nowhere in the sweep.
+        if DerivedSnapshot and type(DerivedSnapshot.build) == "function" then
+          DerivedSnapshot.build(self.state, self.boxSources)
+        end
       end
     end
     

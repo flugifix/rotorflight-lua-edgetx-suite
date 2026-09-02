@@ -1,5 +1,14 @@
 local Render = {}
 
+-- Sensor-backed values come out of the derived snapshot, never from a probe: this runs
+-- per frame in the reactive sweep, where a probe is forbidden (see GEMINI.md, "Dashboard
+-- reactive closures"). The `+`/`-` min/max variants are part of the snapshot too.
+local function readDerived(state, source)
+  local derived = type(state) == "table" and state.derived or nil
+  if derived == nil or source == nil then return nil end
+  return derived[source]
+end
+
 local function resolveCellCount(state, themeCommon)
   local stateCells = tonumber(state and state.batteryCellCount)
   if stateCells and stateCells > 0 then
@@ -109,7 +118,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         elseif source == "current" then
           statValue = state and (state.lastFlightMaxCurrent or state.currentFlightMaxCurrent or state.current)
           if statValue == nil and statSource then
-            statValue = utils.mapTelemetrySource(statSource, state)
+            statValue = readDerived(state, statSource)
           end
         elseif source == "mcu_temp" then
           statValue = state and (state.lastFlightMaxMcuTemp or state.currentFlightMaxMcuTemp or state.mcuTemp)
@@ -147,16 +156,16 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
           end
         end
       elseif stattype == "count" then
-        statValue = utils.mapTelemetrySource(source, state)
+        statValue = readDerived(state, source)
       elseif stattype == "time" then
-        statValue = utils.mapTelemetrySource(source, state)
+        statValue = readDerived(state, source)
       end
 
       if statValue == nil and statSource then
-        statValue = utils.mapTelemetrySource(statSource, state)
+        statValue = readDerived(state, statSource)
       end
       if statValue == nil and type(source) == "string" then
-        statValue = utils.mapTelemetrySource(source, state)
+        statValue = readDerived(state, source)
       end
 
       if source == lastSource and stattype == lastStattype and statValue == lastStatInput and cachedText ~= nil then

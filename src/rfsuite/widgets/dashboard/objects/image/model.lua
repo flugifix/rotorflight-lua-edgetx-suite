@@ -2,14 +2,13 @@ local Render = {}
 
 local modelImageCache = {}
 
-local function resolveModelImage(fblModelName)
+-- The EdgeTX model name and bitmap come out of the derived snapshot rather than from a
+-- `model.getInfo` probe: renders run in the widget's own pass, but the objects tree as a
+-- whole is barred from probing (see GEMINI.md, "Dashboard reactive closures", and the
+-- .luacheckrc override that enforces it) -- the snapshot is where a probe is legal.
+local function resolveModelImage(fblModelName, edgetxName, edgetxBitmap)
   local cacheKey = tostring(fblModelName or "")
-  if model and type(model.getInfo) == "function" then
-    local info = model.getInfo()
-    if info and info.name then
-      cacheKey = cacheKey .. "|" .. tostring(info.name) .. "|" .. tostring(info.bitmap or "")
-    end
-  end
+    .. "|" .. tostring(edgetxName or "") .. "|" .. tostring(edgetxBitmap or "")
 
   if modelImageCache[cacheKey] ~= nil then
     return modelImageCache[cacheKey].imageFile, modelImageCache[cacheKey].modelNameText
@@ -17,7 +16,7 @@ local function resolveModelImage(fblModelName)
 
   local imageFile = nil
   local modelNameText = fblModelName
-  
+
   -- 1. Try to load image based on FBL model name
   if fblModelName and fblModelName ~= "" then
     local path = "/IMAGES/" .. fblModelName .. ".png"
@@ -37,19 +36,16 @@ local function resolveModelImage(fblModelName)
 
   -- 2. Fallback to current EdgeTX model image
   if not imageFile then
-    if model and type(model.getInfo) == "function" then
-      local info = model.getInfo()
-      if info and info.bitmap and info.bitmap ~= "" then
-        local path = "/IMAGES/" .. info.bitmap
-        local f = io.open(path, "r")
-        if f then
-          io.close(f)
-          imageFile = path
-        end
+    if edgetxBitmap and edgetxBitmap ~= "" then
+      local path = "/IMAGES/" .. edgetxBitmap
+      local f = io.open(path, "r")
+      if f then
+        io.close(f)
+        imageFile = path
       end
-      if not modelNameText or modelNameText == "" then
-        modelNameText = info.name
-      end
+    end
+    if not modelNameText or modelNameText == "" then
+      modelNameText = edgetxName
     end
   end
 
@@ -68,7 +64,9 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     fblModelName = _G.rfsuite.session.modelName
   end
 
-  local imageFile, modelNameText = resolveModelImage(fblModelName)
+  local derived = type(state) == "table" and state.derived or nil
+  local imageFile, modelNameText = resolveModelImage(fblModelName,
+    derived and derived.edgetx_model_name, derived and derived.edgetx_model_bitmap)
 
   -- We need space for the text at the bottom
   local textH = 22
