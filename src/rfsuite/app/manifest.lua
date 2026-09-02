@@ -145,7 +145,8 @@ local manifest = {
         { id = "power", title = "@i18n(app.modules.power.name)@", menuId = "power_menu", icon = "@pages/setup/power/icon.png", row = 2, col = 4 },
         { id = "esc_motors", title = "@i18n(app.modules.esc_motors.name)@", menuId = "esc_motors_menu", icon = "@pages/setup/esc_motors/icon.png", row = 2, col = 5 },
         { id = "governor", title = "@i18n(app.modules.governor.name)@", menuId = "governor_menu", icon = "@pages/setup/governor/icon.png", row = 2, col = 6 },
-        { id = "model", title = "@i18n(app.modules.model.name)@", menuId = "setup_model_page", icon = "@pages/setup/model/icon.png", row = 3, col = 1, enabledWhen = "fblConnected", lockedWhileArmed = true }
+        { id = "model", title = "@i18n(app.modules.model.name)@", menuId = "setup_model_page", icon = "@pages/setup/model/icon.png", row = 3, col = 1, enabledWhen = "fblConnected", lockedWhileArmed = true },
+        { id = "gps", title = "@i18n(app.modules.gps.name)@", menuId = "setup_gps_page", icon = "@pages/setup/gps/icon.png", row = 3, col = 2, lockedWhileArmed = true }
       }
     },
     mixer_menu = {
@@ -296,6 +297,10 @@ local manifest = {
     },
     setup_telemetry_page = {
       title = "@i18n(app.modules.telemetry.name)@",
+      pages = {}
+    },
+    setup_gps_page = {
+      title = "@i18n(app.modules.gps.name)@",
       pages = {}
     },
     setup_accelerometer_page = {
