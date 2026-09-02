@@ -166,8 +166,11 @@ local function renderBox(nodes, rect, state)
   end
 end
 
-function Engine.build(zone, state, theme)
-  local nodes = {}
+-- Everything the build decides, bound once: layout and boxes resolved, grid rects taken
+-- through the cache, main rects and header rects concatenated IN THAT ORDER -- later nodes
+-- draw on top, which is what keeps the header above the scene. Values are read per step;
+-- structure is never re-resolved.
+function Engine.beginBuild(zone, state, theme)
   local layout = Utils.resolveValue(theme.layout, nil, state) or { cols = 1, rows = 1, padding = 0 }
   local boxes = Utils.resolveValue(theme.boxes, nil, state) or {}
   local cols, rows, padding = resolveGrid(layout)
@@ -177,12 +180,12 @@ function Engine.build(zone, state, theme)
     state._engineCache = engineCache
   end
 
-  local rects = nil
+  local mainRects = nil
   if canReuseGridRects(engineCache and engineCache.main, zone, boxes, cols, rows, padding) then
-    rects = rebindGridRects(engineCache.main.rects, boxes)
+    mainRects = rebindGridRects(engineCache.main.rects, boxes)
     engineCache.main.boxes = boxes
   else
-    rects = buildGridRects(zone, boxes, cols, rows, padding)
+    mainRects = buildGridRects(zone, boxes, cols, rows, padding)
     if engineCache then
       engineCache.main = {
         boxes = boxes,
@@ -193,13 +196,16 @@ function Engine.build(zone, state, theme)
         cols = cols,
         rows = rows,
         padding = padding,
-        rects = rects
+        rects = mainRects
       }
     end
   end
 
-  for i = 1, #rects do
-    renderBox(nodes, rects[i], state)
+  -- The combined list is a fresh table: the cached rect lists are long-lived and must not
+  -- grow header entries.
+  local rects = {}
+  for i = 1, #mainRects do
+    rects[#rects + 1] = mainRects[i]
   end
 
   local headerLayout = Utils.resolveValue(theme.header_layout, nil, state)
@@ -229,11 +235,32 @@ function Engine.build(zone, state, theme)
       end
     end
     for i = 1, #headerRects do
-      renderBox(nodes, headerRects[i], state)
+      rects[#rects + 1] = headerRects[i]
     end
   end
 
-  return nodes
+  return { rects = rects, nodes = {}, cursor = 1 }
+end
+
+-- Renders up to `k` boxes from the cursor into the build's node table -- pure Lua data
+-- construction, no LVGL call anywhere on this path. Returns true when every rect has been
+-- rendered.
+function Engine.stepBuild(build, state, k)
+  local rects = build.rects
+  local last = math.min(build.cursor + k - 1, #rects)
+  for i = build.cursor, last do
+    renderBox(build.nodes, rects[i], state)
+  end
+  build.cursor = last + 1
+  return build.cursor > #rects
+end
+
+-- One call, one pass: beginBuild plus a single step over everything. Same nodes in the
+-- same order as the stepped path, which is what makes the two interchangeable.
+function Engine.build(zone, state, theme)
+  local build = Engine.beginBuild(zone, state, theme)
+  Engine.stepBuild(build, state, #build.rects)
+  return build.nodes
 end
 
 function Engine.renderKey(state, _)

@@ -15,6 +15,10 @@ local SPLASH_READY_HOLD_SECONDS = 1.0
 local LOGIC_TICK_SECONDS = 0.1
 local LOGIC_TICK_STARTING_SECONDS = 0.05
 local SPLASH_SOFT_TIMEOUT_SECONDS = 25.0
+-- Boxes rendered per JOB pass by the stepped scene build. Provisional -- to be calibrated
+-- by offline instruction accounting; what matters structurally is that it is a constant,
+-- so a pass's build cost no longer scales with the theme's object count.
+local BUILD_BOXES_PER_PASS = 8
 
 
 local requireModule = (_G.rfsuite and _G.rfsuite.require)
@@ -331,9 +335,10 @@ end
 -- The job slot. At most one job is pending per widget, held in `self._job` as
 -- { kind, step }: `kind` names the job for the log line, `step(self)` runs the work
 -- against the CURRENT state (never a snapshot taken at enqueue time) and returns true
--- when the job is complete. Every job below completes in one step; the boolean contract
--- exists so a chunked build can later return false and keep the slot. The STATE pass
--- enqueues, the JOB pass executes -- see the dispatcher in widget.refresh.
+-- when the job is complete. The splash and menu jobs complete in one step; the scene job
+-- returns false to keep the slot and spread its build over several passes -- prepare,
+-- a bounded chunk per pass, then the swap. The STATE pass enqueues, the JOB pass
+-- executes -- see the dispatcher in widget.refresh.
 
 local function splashJobStep(self)
   local statusLine = self.statusLine or "Please wait..."
@@ -350,31 +355,70 @@ local function splashJobStep(self)
   return true
 end
 
+-- The scene job in three phases, carried as fields on the job table. The old LVGL tree
+-- stands until the swap, so a stepped rebuild shows the previous frame, never a blank one.
 local function sceneJobStep(self)
-  -- The theme can be gone by the time the job runs: while the widget is off screen,
-  -- widget.background keeps mutating state, and a reconnect edge clears the theme.
-  -- Drop the job; the next STATE pass re-detects and re-enqueues against the new state.
-  if not self.theme then return true end
+  local job = self._job
 
-  local children = {}
-  if type(self.theme.build) == "function" then
-    children = self.theme.build(self.zone, self.state)
-  elseif self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
-    children = self.dashboardEngine.build(self.zone, self.state, self.theme)
-  end
-  if type(children) ~= "table" then return true end
-
+  -- Swap: hand the finished node table over in a pass of its own. Two C calls, so the
+  -- pass carries almost nothing beyond the reactive sweep of the new tree.
+  --
   -- No forced full collection here. This job runs whenever the render key changes, i.e.
   -- whenever a displayed telemetry value moves, and every widget on the radio shares one
   -- Lua state -- so a full collect walks every other widget's live set as well. The
   -- firmware already runs an incremental collection on that state on every GUI pass.
   -- GEMINI.md asks for an explicit collect after large I/O or JSON work; a repaint is
   -- neither.
+  if job.swap then
+    lvgl.clear()
+    lvgl.build(job.build.nodes)
+    self.built = true
+    self._lastChildCount = #job.build.nodes
+    logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #job.build.nodes)
+    return true
+  end
+
+  -- Chunk: render a bounded slice of boxes into plain Lua tables. No theme revalidation
+  -- here or at the swap: every path that tears the theme down clears the job slot, so a
+  -- job cannot outlive its theme, and rects and nodes are self-contained.
+  if job.build then
+    if self.dashboardEngine.stepBuild(job.build, self.state, BUILD_BOXES_PER_PASS) then
+      job.swap = true
+    end
+    return false
+  end
+
+  -- Prepare: bind structure once. The theme can be gone by the time the job runs: while
+  -- the widget is off screen, widget.background keeps mutating state, and a reconnect
+  -- edge clears the theme. Drop the job; the next STATE pass re-detects and re-enqueues
+  -- against the new state.
+  if not self.theme then return true end
+
+  if type(self.theme.build) == "function" then
+    -- A free-form theme builds in one step, exactly as before -- the engine cannot chunk
+    -- what it does not render.
+    local children = self.theme.build(self.zone, self.state)
+    if type(children) ~= "table" then return true end
+    lvgl.clear()
+    lvgl.build(children)
+    self.built = true
+    self._lastChildCount = #children
+    logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children)
+    return true
+  end
+
+  if self.dashboardEngine and (type(self.theme.layout) == "table" or type(self.theme.boxes) == "table" or type(self.theme.boxes) == "function") then
+    job.build = self.dashboardEngine.beginBuild(self.zone, self.state, self.theme)
+    return false
+  end
+
+  -- Neither free-form nor declarative: hand LVGL an empty scene, exactly as the
+  -- single-step build did.
   lvgl.clear()
-  lvgl.build(children)
+  lvgl.build({})
   self.built = true
-  self._lastChildCount = #children
-  logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children)
+  self._lastChildCount = 0
+  logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), 0)
   return true
 end
 
