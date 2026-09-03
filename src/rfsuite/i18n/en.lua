@@ -1144,6 +1144,7 @@ return {
         verify_profile = "profile %d, rate %d",
         verify_blocked = "blocked: %s",
         verify_not_written = "not written",
+        intro_experimental = "This assistant is experimental. Check what it has written before you fly, and expect its screens and their order to still change.",
         plan_still_reading = "Nothing was written: the flight controller is still being read. Wait until no row says blocked, then press Write again.",
         plan_all_blocked = "Nothing was written: every row is blocked. Go back and give each channel a switch.",
         verify_not_armed = "not armed",

@@ -244,6 +244,15 @@ procs[#procs + 1] = {
       nextLabel = function(i18n) return t(i18n, "begin", "Begin") end,
       build = function(w, ctx, area)
         local children, i18n, y = ctx.children, ctx.i18n, area.y
+
+        -- First, and before the description of what the path does, because by the time a pilot
+        -- has read that they have already decided. This assistant writes mixer lines, channel
+        -- ranges and board settings on a model that is somebody's helicopter; what it is worth
+        -- is that it is quick, and what it costs is that it is young. Saying so is the honest
+        -- half of offering it at all, and it is one line rather than a dialogue because a
+        -- confirmation nobody can decline is a keypress, not a warning.
+        y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "intro_experimental", "This assistant is experimental. Check what it has written before you fly, and expect its screens and their order to still change.")) + 10
+
         y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p1", "This assistant sets the transmitter model up for the flight controller and configures the flight controller to match it.")) + 10
         y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p2", "The transmitter setup is needed once per model and survives a change of flight controller. Every flight controller must be set to that layout once.")) + 10
         y = y + w.paragraph(children, area.x, y, area.w, t(i18n, "intro_p3", "This part covers the radio and the basics on the board. Drivetrain, servos and mechanics are separate procedures.")) + 10

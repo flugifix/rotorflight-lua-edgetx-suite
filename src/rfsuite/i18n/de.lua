@@ -1144,6 +1144,7 @@ return {
         verify_profile = "Profil %d, Rate %d",
         verify_blocked = "gesperrt: %s",
         verify_not_written = "nicht geschrieben",
+        intro_experimental = "Dieser Assistent ist experimentell. Prüfe nach, was er geschrieben hat, bevor du fliegst, und rechne damit, dass sich seine Schirme und ihre Reihenfolge noch ändern.",
         plan_still_reading = "Es wurde nichts geschrieben: der Flugregler wird noch gelesen. Warte, bis keine Zeile mehr blockiert ist, und drücke dann erneut auf Schreiben.",
         plan_all_blocked = "Es wurde nichts geschrieben: jede Zeile ist blockiert. Geh zurück und gib jedem Kanal einen Schalter.",
         verify_not_armed = "nicht scharf",
