@@ -1365,6 +1365,39 @@ local function actionBlocked(action)
   return false
 end
 
+-- The plan rests on five board reads, and one of them is not a single request: the adjustment
+-- ranges are enumerated one slot at a time, which is tens of seconds on a radio link. Every one
+-- of them can therefore still be outstanding while the plan screen is already on the display.
+--
+-- A stamp over the five is what makes that recoverable. The plan used to be derived once, in the
+-- procedure's `enter`, so a screen opened during the enumeration resolved no adjustment slot,
+-- blocked the action that needs one, and STAYED blocked -- the enumeration's own `rebuild` redraws
+-- the screen and does not re-derive what it draws. Waiting did not help, which is the part that
+-- made it unreadable from the outside.
+local function planReadsStamp(w)
+  local data = w.data
+  local adjustments = data.adjustments
+  return table.concat({
+    type(adjustments) == "table" and "table" or tostring(adjustments),
+    type(data.modeRanges) == "table" and #data.modeRanges or -1,
+    type(data.boxIds) == "table" and #data.boxIds or -1,
+    type(data.boxNames) == "table" and #data.boxNames or -1,
+    data.rxMap ~= nil and "map" or "-"
+  }, "/")
+end
+
+-- Whether the plan is blocked on a board that has not finished answering, as opposed to a plan
+-- that has nothing in it. The distinction is the whole content of the refusal below: the first
+-- resolves by itself and the second never does, and a pilot cannot tell them apart from a row
+-- that says `blocked` in both cases. `false` is the adjustment enumeration's own in-flight
+-- marker; the other four are simply absent until their reply lands.
+local function planStillReading(w)
+  local data = w.data
+  return data.adjustments == false
+    or data.rxMap == nil or data.modeRanges == nil
+    or data.boxIds == nil or data.boxNames == nil
+end
+
 procs[#procs + 1] = {
   id = "commit",
   section = "radio",
@@ -1384,13 +1417,28 @@ procs[#procs + 1] = {
     return true
   end,
   enter = function(w)
+    w.data.planStamp = planReadsStamp(w)
     w.data.actions = plannedActions(w)
     w.data.writeError = nil
+    w.data.planRefusal = nil
   end,
   screens = {
     {
       id = "plan",
       nextLabel = function(i18n) return t(i18n, "write_now", "Write") end,
+      wakeup = function(w)
+        -- Re-derived when, and only when, one of the reads it rests on has answered. Deriving it
+        -- every wakeup would walk every channel and name every switch several times a second for
+        -- an answer that changes perhaps twice in a run; deriving it once on entry is what left a
+        -- plan standing that the board had since made writable.
+        local stamp = planReadsStamp(w)
+        if w.data.planStamp == stamp then return end
+        w.data.planStamp = stamp
+        w.data.actions = plannedActions(w)
+        -- A refusal is a statement about the plan that was refused. This is a different one.
+        w.data.planRefusal = nil
+        w.rebuild()
+      end,
       build = function(w, ctx, area)
         local children, i18n, y = ctx.children, ctx.i18n, area.y
 
@@ -1415,7 +1463,15 @@ procs[#procs + 1] = {
             target, marker)
         end
 
-        if w.data.writeError then
+        if w.data.planRefusal == "reading" then
+          w.paragraph(children, area.x, y + 6, area.w,
+            t(i18n, "plan_still_reading",
+              "Nothing was written: the flight controller is still being read. Wait until no row says blocked, then press Write again."))
+        elseif w.data.planRefusal == "blocked" then
+          w.paragraph(children, area.x, y + 6, area.w,
+            t(i18n, "plan_all_blocked",
+              "Nothing was written: every row is blocked. Go back and give each channel a switch."))
+        elseif w.data.writeError then
           w.paragraph(children, area.x, y + 6, area.w,
             t(i18n, "write_failed", "The write did not complete.") .. " " .. tostring(w.data.writeError))
         end
@@ -1423,16 +1479,26 @@ procs[#procs + 1] = {
       advance = function(w, done)
         local actions = w.data.actions or {}
         w.data.writeError = nil
+        w.data.planRefusal = nil
 
         -- Nothing writable means nothing to write. Committing anyway would send a lone
         -- persist for a change that was never made, and a failure of it would be reported
         -- as if the plan had failed.
+        --
+        -- But it is not an ADVANCE either, and it used to be one. The screen went on to the
+        -- verification, which then held the switches against a flight controller nobody had
+        -- written: every row of it waited for a change that was never sent, and a row whose
+        -- board happened to already agree reported ok. A write that did not happen must not be
+        -- able to produce either of those, so the refusal stays on this screen and says which of
+        -- the two reasons it is -- a plan that is only unread yet becomes writable by itself, a
+        -- plan with no switches in it never does.
         local writable = false
         for _, action in ipairs(actions) do
           if not actionBlocked(action) then writable = true break end
         end
         if not writable then
-          done(true)
+          w.data.planRefusal = planStillReading(w) and "reading" or "blocked"
+          done(false)
           return
         end
 
@@ -1599,6 +1665,17 @@ procs[#procs + 1] = {
           local function state()
             local live = w.data.verify or {}
             local status = live.status
+
+            -- The write skips a blocked action, so nothing about it reached the board and there is
+            -- nothing there for the switch to move. Comparing anyway produced both failure modes
+            -- this screen has: a row that waits for a change that was never sent, and -- where the
+            -- board already happened to hold the value -- a row reporting ok for a write that did
+            -- not happen. Neither is readable as *this was never written*, so the row says it.
+            if actionBlocked(action) then
+              return t(i18n, "verify_not_written", "not written"),
+                     t(i18n, "marker_blocked", "blocked")
+            end
+
             local held = action.swsrc ~= nil and action.swsrc ~= 0
               and w.radio.switchActive(action.swsrc) or false
 
