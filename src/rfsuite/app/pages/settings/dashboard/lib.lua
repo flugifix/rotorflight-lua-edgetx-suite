@@ -394,27 +394,44 @@ function M.getThemeConfig(prefs, path, defaults, modelPrefs)
   return out
 end
 
+-- A theme's configuration describes the aircraft rather than the radio: the battery bounds a
+-- theme is configured with are the cell count of one model. So the per-model store is the
+-- target whenever there is one, and the global file is the fallback for a radio that has none
+-- -- not a second copy.
+--
+-- Writing both made every value the last configured model chose the default for every model
+-- that has none of its own, and getThemeConfig reads the global half first, so the leak is
+-- read straight back. It reaches further than the numbers: widgets/dashboard/runtime.lua
+-- treats any v_min/v_max it finds as a deliberate choice (`_customVoltage`) and then skips
+-- normalising the bounds to the cell count it measured, so one configured theme switched that
+-- normalisation off for every other model as well.
+--
+-- Where the global file still holds the copy this function used to write -- the same key
+-- with the same value -- that copy is dropped, so that it cannot outlive the save on a model
+-- that never set it. A global value that differs is left alone: it was chosen with no
+-- per-model store in reach and is the fallback for the models that have none.
 function M.setThemeConfig(prefs, path, values, modelPrefs)
   if type(values) ~= "table" then return end
 
-  -- Always update global prefs if provided
-  if type(prefs) == "table" then
-    prefs.dashboard = prefs.dashboard or {}
-    for k, v in pairs(values) do
-      local key = themeConfigKey(path, k)
-      if key then
-        prefs.dashboard[key] = v
-      end
+  local target = (type(modelPrefs) == "table") and modelPrefs or prefs
+  if type(target) ~= "table" then return end
+
+  target.dashboard = target.dashboard or {}
+  for k, v in pairs(values) do
+    local key = themeConfigKey(path, k)
+    if key then
+      target.dashboard[key] = v
     end
   end
 
-  -- Also update model prefs if provided
-  if type(modelPrefs) == "table" then
-    modelPrefs.dashboard = modelPrefs.dashboard or {}
+  if target ~= prefs and type(prefs) == "table" and type(prefs.dashboard) == "table" then
     for k, v in pairs(values) do
       local key = themeConfigKey(path, k)
-      if key then
-        modelPrefs.dashboard[key] = v
+      -- Only the copy this function itself left behind is dropped. A global value that
+      -- DIFFERS was chosen on a radio with no per-model store, and it stays the fallback for
+      -- the models that have none of their own.
+      if key and prefs.dashboard[key] == v then
+        prefs.dashboard[key] = nil
       end
     end
   end

@@ -51,7 +51,9 @@ end
 
 local function saveConfig(prefs)
   local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
-  local modelPrefs = session and session.modelPreferences
+  -- The per-model store can only be written once the flight controller's id is known, so
+  -- a theme configured without one is stored globally instead.
+  local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
   DashboardLib.setThemeConfig(prefs, THEME_PATH, {
     bec_warn = (tonumber(ui.config.bec_warn_tenths) or 65) / 10,
