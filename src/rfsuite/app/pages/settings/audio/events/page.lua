@@ -19,7 +19,11 @@ local CONFIG_SCHEMA = {
   { key = "pid_profile",       type = "bool", default = true  },
   { key = "rate_profile",      type = "bool", default = true  },
   { key = "esc_temperature",   type = "bool", default = false },
-  { key = "esc_threshold",     type = "number", default = 90  },
+  -- `scope = "model"` marks a value that describes the aircraft rather than the radio:
+  -- the ESC's temperature limit is a property of one model's hardware. It is read and
+  -- written through the per-model store whenever there is one, and falls back to the
+  -- global file on a radio that has none.
+  { key = "esc_threshold",     type = "number", default = 90, scope = "model" },
   { key = "adjustment_events", type = "bool", default = false },
   { key = "fuel_alerts",       type = "bool", default = true  },
   { key = "fuel_callout_percent", type = "number", default = 10 },
@@ -29,6 +33,37 @@ local CONFIG_SCHEMA = {
   { key = "model_announcement",type = "bool", default = false },
   { key = "initial_fuel",      type = "bool", default = true  },
 }
+
+-- The per-model store hangs off the session and exists only once the flight controller's
+-- id has been read, so every caller here has to cope with it being absent.
+local function modelAudioEvents(create)
+  local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
+  if not session or not session.mcu_id or type(session.modelPreferences) ~= "table" then
+    return nil, session
+  end
+  if type(session.modelPreferences.audio_events) ~= "table" then
+    if not create then return nil, session end
+    session.modelPreferences.audio_events = {}
+  end
+  return session.modelPreferences.audio_events, session
+end
+
+-- ctx.savePreferences() writes the global file only, so a page that puts a value in the
+-- per-model store has to persist that store itself -- and has to be able to say so when
+-- the write fails, or it reports a save the store never got.
+local function saveModelStore()
+  local _, session = modelAudioEvents(false)
+  if not session or not session.mcu_id or type(session.modelPreferences) ~= "table" then
+    return true
+  end
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
+  if type(chunk) ~= "function" then return false, "model_preferences" end
+  local loaded, MP = pcall(chunk)
+  if not (loaded and type(MP) == "table" and type(MP.saveByMcuId) == "function") then
+    return false, "model_preferences"
+  end
+  return MP.saveByMcuId(session.mcu_id, session.modelPreferences)
+end
 
 -- Build ui.config defaults from schema
 local function buildDefaultConfig()
@@ -226,8 +261,12 @@ end
 -- Loads all settings from preferences using the schema
 local function copyFromPrefs(prefs)
   local audio_events = (prefs and prefs.audio_events) or {}
+  local modelEvents = modelAudioEvents(false)
   for _, field in ipairs(CONFIG_SCHEMA) do
     local raw = audio_events[field.key]
+    if field.scope == "model" and modelEvents and modelEvents[field.key] ~= nil then
+      raw = modelEvents[field.key]
+    end
     if field.type == "number" then
       ui.config[field.key] = tonumber(raw) or field.default
     else
@@ -350,9 +389,21 @@ function M.onSave(ctx)
   ensureDeps()
   if not ctx.preferences.audio_events then ctx.preferences.audio_events = {} end
 
-  -- Saves all settings using the schema
+  -- Saves all settings using the schema. A `scope = "model"` field goes into the per-model
+  -- store when there is one to hold it; with no flight controller connected it stays in the
+  -- global file, which is also what every model without a store of its own reads.
+  local modelEvents = modelAudioEvents(true)
   for _, field in ipairs(CONFIG_SCHEMA) do
-    ctx.preferences.audio_events[field.key] = ui.config[field.key]
+    if field.scope == "model" and modelEvents then
+      modelEvents[field.key] = ui.config[field.key]
+    else
+      ctx.preferences.audio_events[field.key] = ui.config[field.key]
+    end
+  end
+
+  local modelOk, modelErr = true, nil
+  if modelEvents then
+    modelOk, modelErr = saveModelStore()
   end
 
   -- Diagnostic logging for save flow
@@ -380,6 +431,11 @@ function M.onSave(ctx)
       pcall(Log.emit, "rfsuite", "onSave: ctx.savePreferences not a function", "warn")
     end
     return false
+  end
+
+  -- Both stores, because a save is only done when both were believed.
+  if ok and not modelOk then
+    ok, err = false, modelErr
   end
 
   if ok then
