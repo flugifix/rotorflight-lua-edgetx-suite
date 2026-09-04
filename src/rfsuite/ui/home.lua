@@ -752,7 +752,13 @@ local function syncActivePageModule()
   end
 
   if state.activePageMenuId and PageRegistry and PageRegistry.release then
-    PageRegistry.release(state.activePageMenuId, buildPageContext())
+    -- Guarded for the reason the close path already guards the same call: what runs here is the
+    -- page's own release code, and a raise in it would take the menu transition down with it --
+    -- leaving the tool gone on the way to a page that had nothing wrong with it.
+    local okRelease, errRelease = pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
+    if not okRelease then
+      reportHookCrash("PageRegistry.release", state.activePageMenuId, errRelease)
+    end
   end
 
   logf("debug", "page %s -> %s", tostring(state.activePageMenuId), tostring(currentMenuId))
@@ -945,7 +951,17 @@ local function onHelp()
   local helpData = nil
   local page = getActivePageModule()
   if page and type(page.onHelp) == "function" then
-    helpData = page.onHelp(helpCtx)
+    local okHelp, fromPage = pcall(page.onHelp, helpCtx)
+    if okHelp then
+      helpData = fromPage
+    else
+      reportHookCrash("activePage.onHelp", menuId, fromPage)
+      -- The hook did not answer, so the registry is asked exactly as it is for a page that
+      -- offers no hook at all. A help text is not worth ending the tool over.
+      if HelpRegistry and HelpRegistry.get then
+        helpData = HelpRegistry.get(menuId, helpCtx)
+      end
+    end
   elseif HelpRegistry and HelpRegistry.get then
     helpData = HelpRegistry.get(menuId, helpCtx)
   end
@@ -994,13 +1010,18 @@ local function onStar()
   local page = getActivePageModule()
   if page and type(page.onStar) == "function" then
     closeHelpDialogIfOpen()
-    local shouldRebuild = page.onStar({
+    local okStar, shouldRebuild = pcall(page.onStar, {
       i18n = state.i18n,
       preferences = state.preferences,
       menu = state.menu,
       refresh = M.buildUI
     })
-    if shouldRebuild ~= false then
+    if not okStar then
+      reportHookCrash("activePage.onStar", state.activePageMenuId, shouldRebuild)
+      -- A hook that raised has said nothing about a rebuild, and whatever it changed before it
+      -- raised is what the screen is now showing: repaint, as a hook returning nothing does.
+      scheduleBuildUI(false)
+    elseif shouldRebuild ~= false then
       scheduleBuildUI(false)
     end
     return
@@ -1431,7 +1452,14 @@ local function onReload()
   if page and page.onReload then
     local actions = nil
     if type(page.getHeaderActions) == "function" then
-      actions = page.getHeaderActions()
+      local okActions, fromPage = pcall(page.getHeaderActions)
+      if okActions then
+        actions = fromPage
+      else
+        reportHookCrash("activePage.getHeaderActions", state.activePageMenuId, fromPage)
+        -- `actions` stays nil, so the veto below does not apply and the reload goes ahead: the
+        -- same outcome a page that declares no header actions already gets.
+      end
     end
     if type(actions) == "table" and actions.reload == false then
       return
@@ -1444,13 +1472,18 @@ local function onReload()
       dropMspResponseCache()
       -- Keep preferences in-memory for reload to avoid repeated disk loads and table churn.
       _G.rfsuite.preferences = state.preferences
-      local shouldRebuild = page.onReload({
+      local okReload, shouldRebuild = pcall(page.onReload, {
         i18n = state.i18n,
         preferences = state.preferences,
         menu = state.menu,
         refresh = M.buildUI
       })
-      if shouldRebuild == false then
+      if not okReload then
+        reportHookCrash("activePage.onReload", state.activePageMenuId, shouldRebuild)
+        -- The read did not happen and the page is showing whatever it had; render once so a
+        -- loading state the reload put up does not stay on the screen for good.
+        scheduleBuildUI(false)
+      elseif shouldRebuild == false then
         -- Even with deferred page-managed reloads, render once so loading state
         -- (progress/overlay) is visible immediately after pressing Reload.
         scheduleBuildUI(false)
@@ -2031,7 +2064,10 @@ function M.buildUI()
     i18n          = state.i18n,
     preferences   = state.preferences,
     PageRegistry  = PageRegistry,
-    HelpRegistry  = HelpRegistry
+    HelpRegistry  = HelpRegistry,
+    -- The header calls a page hook of its own and has no logger of its own. It reports through
+    -- this one rather than growing a second wording for the same event.
+    reportHookCrash = reportHookCrash
   })
 
   -- Both actions end at the MSP queue, which the runtime clears on every tick while armed, so
