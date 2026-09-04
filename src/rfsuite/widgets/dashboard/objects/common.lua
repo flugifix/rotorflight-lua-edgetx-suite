@@ -372,6 +372,47 @@ function Utils.resolveTextColor(box, state, fallback)
   return WHITE
 end
 
+-- Colour and font handed to lvgl as a VALUE rather than as a getter, wherever the box cannot
+-- change them.
+--
+-- lvgl takes a number or a function for `color`, `font` and `align`. A function is kept as a
+-- reactive reference and EdgeTX calls it for every object on every foreground pass; a number is
+-- applied once when the object is built and costs nothing afterwards. That sweep and the
+-- widget's own refresh() share one instruction budget, so a getter that can only ever return
+-- the same number is paid for on every pass for an answer that was already known when the scene
+-- was built.
+--
+-- Both helpers return nil when the property is not fixed, which is the caller's signal to keep
+-- its getter. A resolved colour or font is never nil, so nil is unambiguous.
+
+--- The text colour, resolved once, or nil if it can move.
+--
+-- resolveTextColor reads box.textcolor and box.bgcolor and nothing else. When neither is a
+-- function both are literals in the theme's box table, and the answer holds for as long as that
+-- table is the one being drawn.
+function Utils.staticTextColor(box, state, fallback)
+  if type(box) == "table" and (type(box.textcolor) == "function" or type(box.bgcolor) == "function") then
+    return nil
+  end
+  return Utils.resolveTextColor(box, state, fallback)
+end
+
+--- The font, resolved once, or nil if either the font or its low-resolution variant is dynamic.
+--
+-- resolveFont reads the zone size as well, through isLowResolution(state), and that is not a
+-- literal. It is still fixed for the lifetime of the scene: the zone size is part of the render
+-- key (Engine.renderKey), so a zone that changes size tears the scene down and every object is
+-- built again from the current state. A font resolved at build time cannot outlive the size it
+-- was resolved for.
+function Utils.staticFont(box, state, defaultFont, fontProp, lowResFontProp)
+  local mainKey = fontProp or "font"
+  local lowKey = lowResFontProp or "font_lowres"
+  if type(box) == "table" and (type(box[mainKey]) == "function" or type(box[lowKey]) == "function") then
+    return nil
+  end
+  return Utils.resolveFont(box, state, defaultFont, fontProp, lowResFontProp)
+end
+
 function Utils.pushLabel(nodes, x, y, w, text, color, align, font)
   nodes[#nodes + 1] = {
     type = "label",

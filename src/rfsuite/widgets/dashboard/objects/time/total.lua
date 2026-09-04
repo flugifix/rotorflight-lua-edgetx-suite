@@ -27,22 +27,34 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     return cachedText
   end
 
-  local fontGetter = function()
-    if utils and type(utils.resolveFont) == "function" then
-      return utils.resolveFont(box, state, MIDSIZE, "font", "font_lowres")
+  local fontRef = nil
+  if utils and type(utils.staticFont) == "function" then
+    fontRef = utils.staticFont(box, state, MIDSIZE, "font", "font_lowres")
+  end
+  if fontRef == nil then
+    fontRef = function()
+      if utils and type(utils.resolveFont) == "function" then
+        return utils.resolveFont(box, state, MIDSIZE, "font", "font_lowres")
+      end
+      return (box and box.font) or MIDSIZE
     end
-    return (box and box.font) or MIDSIZE
   end
 
-  local colorGetter = function()
-    if utils and type(utils.resolveTextColor) == "function" then
-      return utils.resolveTextColor(box, state, WHITE)
+  local colorRef = nil
+  if utils and type(utils.staticTextColor) == "function" then
+    colorRef = utils.staticTextColor(box, state, WHITE)
+  end
+  if colorRef == nil then
+    colorRef = function()
+      if utils and type(utils.resolveTextColor) == "function" then
+        return utils.resolveTextColor(box, state, WHITE)
+      end
+      return (box and box.textcolor) or WHITE
     end
-    return (box and box.textcolor) or WHITE
   end
 
   if utils and type(utils.pushLabel) == "function" then
-    utils.pushLabel(nodes, rect.x + 4, (utils.defaultValueY and utils.defaultValueY(rect, box)) or (rect.y + 4), rect.w - 8, textGetter, colorGetter, box.valuealign or box.titlealign or CENTER, fontGetter)
+    utils.pushLabel(nodes, rect.x + 4, (utils.defaultValueY and utils.defaultValueY(rect, box)) or (rect.y + 4), rect.w - 8, textGetter, colorRef, box.valuealign or box.titlealign or CENTER, fontRef)
   end
 end
 

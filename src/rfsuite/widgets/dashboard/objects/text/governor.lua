@@ -219,8 +219,11 @@ function Render.render(nodes, rect, box, state, _, utils)
     return cachedColor
   end
 
-  local fontGetter = function()
-    return utils.resolveFont(box, state, 0, "font", "font_lowres")
+  local fontRef = utils.staticFont(box, state, 0, "font", "font_lowres")
+  if fontRef == nil then
+    fontRef = function()
+      return utils.resolveFont(box, state, 0, "font", "font_lowres")
+    end
   end
 
   utils.pushLabel(
@@ -231,7 +234,7 @@ function Render.render(nodes, rect, box, state, _, utils)
     textGetter,
     colorGetter,
     box.valuealign or box.titlealign or CENTER,
-    fontGetter
+    fontRef
   )
 end
 
