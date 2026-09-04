@@ -29,10 +29,10 @@ end
 local function loadConfig(prefs)
     if ui.loaded then return end
 
-    local modelPrefs = nil
-    if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
-        modelPrefs = _G.rfsuite.session.modelPreferences
-    end
+    local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
+    -- The per-model store is only addressable once the flight controller's id is known, so
+    -- the read is conditioned on it exactly as the save is.
+    local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
     local cfg = DashboardLib.getThemeConfig(prefs, THEME_PATH, THEME_DEFAULTS, modelPrefs)
     local vMin = tonumber(cfg.v_min) or THEME_DEFAULTS.v_min
@@ -48,7 +48,9 @@ end
 
 local function saveConfig(prefs)
     local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
-    local modelPrefs = session and session.modelPreferences
+    -- The per-model store can only be written once the flight controller's id is known, so
+    -- a theme configured without one is stored globally instead.
+    local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
     DashboardLib.setThemeConfig(prefs, THEME_PATH, {
         v_min = (tonumber(ui.config.v_min_tenths) or 180) / 10,

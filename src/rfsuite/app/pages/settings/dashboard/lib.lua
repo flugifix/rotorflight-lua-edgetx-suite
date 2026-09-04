@@ -394,27 +394,42 @@ function M.getThemeConfig(prefs, path, defaults, modelPrefs)
   return out
 end
 
+-- A theme's configuration describes the aircraft rather than the radio: the battery bounds a
+-- theme is configured with are the cell count of one model. So the per-model store is the
+-- target whenever there is one, and the global file is the fallback for a radio that has none
+-- -- not a second copy.
+--
+-- Writing both made every value the last configured model chose the default for every model
+-- that has none of its own, and getThemeConfig reads the global half first, so the leak is
+-- read straight back. It reaches further than the numbers: widgets/dashboard/runtime.lua
+-- treats any v_min/v_max it finds as a deliberate choice (`_customVoltage`) and then skips
+-- normalising the bounds to the cell count it measured, so one configured theme switched that
+-- normalisation off for every other model as well.
+--
+-- Saving into the per-model store therefore also clears this theme's keys from the global
+-- file, whatever they hold. A value there cannot be told apart from the copy the old
+-- unconditional double write left behind, so keeping the ones that merely differ would carry
+-- the leak on for every radio configured before this: the next model with no store of its own
+-- would read that number and lose its cell-count normalisation exactly as before.
 function M.setThemeConfig(prefs, path, values, modelPrefs)
   if type(values) ~= "table" then return end
 
-  -- Always update global prefs if provided
-  if type(prefs) == "table" then
-    prefs.dashboard = prefs.dashboard or {}
-    for k, v in pairs(values) do
-      local key = themeConfigKey(path, k)
-      if key then
-        prefs.dashboard[key] = v
-      end
+  local target = (type(modelPrefs) == "table") and modelPrefs or prefs
+  if type(target) ~= "table" then return end
+
+  target.dashboard = target.dashboard or {}
+  for k, v in pairs(values) do
+    local key = themeConfigKey(path, k)
+    if key then
+      target.dashboard[key] = v
     end
   end
 
-  -- Also update model prefs if provided
-  if type(modelPrefs) == "table" then
-    modelPrefs.dashboard = modelPrefs.dashboard or {}
-    for k, v in pairs(values) do
+  if target ~= prefs and type(prefs) == "table" and type(prefs.dashboard) == "table" then
+    for k in pairs(values) do
       local key = themeConfigKey(path, k)
       if key then
-        modelPrefs.dashboard[key] = v
+        prefs.dashboard[key] = nil
       end
     end
   end
