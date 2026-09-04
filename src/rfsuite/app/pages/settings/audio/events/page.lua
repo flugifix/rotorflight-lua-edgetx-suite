@@ -107,6 +107,10 @@ local ui = {
 
 ui.runtimeBase = nil
 
+-- What copyFromPrefs put into ui.config. A save reads it to tell a field the pilot changed
+-- from one that merely carries the value it was loaded with.
+local loadedConfig = {}
+
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
 local t = nil
@@ -279,6 +283,12 @@ local function copyFromPrefs(prefs)
   if not FUEL_CALLOUT_VALUES[ui.config.fuel_callout_percent] then ui.config.fuel_callout_percent = 10 end
   if ui.config.fuel_repeat_below_zero < 1 then ui.config.fuel_repeat_below_zero = 1 end
   if ui.config.fuel_repeat_below_zero > 10 then ui.config.fuel_repeat_below_zero = 10 end
+
+  -- After the clamps, so that correcting an out-of-range stored value does not read as an
+  -- edit the pilot made.
+  for _, field in ipairs(CONFIG_SCHEMA) do
+    loadedConfig[field.key] = ui.config[field.key]
+  end
 end
 
 local function ensureLoaded(prefs)
@@ -392,9 +402,25 @@ function M.onSave(ctx)
   -- Saves all settings using the schema. A `scope = "model"` field goes into the per-model
   -- store when there is one to hold it; with no flight controller connected it stays in the
   -- global file, which is also what every model without a store of its own reads.
-  local modelEvents = modelAudioEvents(true)
+  --
+  -- It goes there only once the model owns that value: either the model already carries one,
+  -- or the pilot just changed it here. A model that was never given a limit of its own must
+  -- not be pinned to whichever one is current by a save of the radio-wide settings beside it,
+  -- because from then on it would no longer follow a change to the global default.
+  local modelEvents = modelAudioEvents(false)
+  local modelDirty = false
   for _, field in ipairs(CONFIG_SCHEMA) do
-    if field.scope == "model" and modelEvents then
+    local toModel = false
+    if field.scope == "model" then
+      if modelEvents and modelEvents[field.key] ~= nil then
+        toModel = true
+      elseif loadedConfig[field.key] ~= nil and ui.config[field.key] ~= loadedConfig[field.key] then
+        modelEvents = modelEvents or modelAudioEvents(true)
+        toModel = modelEvents ~= nil
+      end
+    end
+    if toModel then
+      if modelEvents[field.key] ~= ui.config[field.key] then modelDirty = true end
       modelEvents[field.key] = ui.config[field.key]
     else
       ctx.preferences.audio_events[field.key] = ui.config[field.key]
@@ -402,7 +428,7 @@ function M.onSave(ctx)
   end
 
   local modelOk, modelErr = true, nil
-  if modelEvents then
+  if modelDirty then
     modelOk, modelErr = saveModelStore()
   end
 
@@ -421,6 +447,20 @@ function M.onSave(ctx)
       parts2[#parts2+1] = tostring(field.key) .. "=" .. tostring(ui.config[field.key])
     end
     pcall(Log.emit, "rfsuite", "onSave: ui.config=" .. table.concat(parts2, ","), "debug")
+    -- The dump above reads the global store, where a `scope = "model"` field is not written
+    -- while the model holds it -- so without this line the log shows the old value for it.
+    local parts3 = {}
+    for _, field in ipairs(CONFIG_SCHEMA) do
+      if field.scope == "model" then
+        local v = modelEvents and modelEvents[field.key]
+        parts3[#parts3+1] = tostring(field.key) .. "=" .. tostring(v == nil and "<nil>" or v)
+      end
+    end
+    pcall(Log.emit, "rfsuite", "onSave: model.audio_events=" .. table.concat(parts3, ",")
+      .. " store=" .. tostring(modelEvents ~= nil)
+      .. " written=" .. tostring(modelDirty)
+      .. " ok=" .. tostring(modelOk)
+      .. (modelErr and (" err=" .. tostring(modelErr)) or ""), "debug")
   end
 
   local ok, err = nil, nil
