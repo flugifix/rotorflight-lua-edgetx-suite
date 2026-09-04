@@ -35,7 +35,7 @@ return {
     ----------------------------------------------------------------------------
     ["pass.state"] = { target = 12200, measured = 11437, proposed = 8000 },
     ["pass.job.prepare"] = { target = 1250, measured = 1021 },
-    ["pass.job.build"] = { target = 5700, measured = 4562, proposed = 10000 },
+    ["pass.job.build"] = { target = 5700, measured = 5057, proposed = 10000 },
     ["pass.swap"] = { target = 3400, measured = 2737, proposed = 6000 },
 
     -- The splash pass is the one JOB pass that runs while the connect chain still has
@@ -77,33 +77,41 @@ return {
     -- references that render collected. A theme's cost is the sum of its boxes
     -- through these two rows, which is what makes a new theme priceable before it
     -- is built.
+    --
+    -- Five of these rows carry a `proposed` that is their PREVIOUS target rather than a
+    -- pre-measurement guess, and they are the rows where resolving a constant colour or font
+    -- once at build moved work out of the sweep and into the render. The trade is deliberate:
+    -- a render happens once per scene, a sweep on every foreground pass. Per box type the
+    -- render grows by 47 to 146 instructions and the sweep falls by 27 to 136, so the change
+    -- has paid for itself after one to two passes and every pass after that is profit --
+    -- which is why the `theme.*` rows, the ones the safety argument rests on, all fall.
     ----------------------------------------------------------------------------
     ["box.dial"] = { target = 200, measured = 121 },
     ["sweep.dial"] = { target = 50, measured = 0 },
-    ["box.gauge"] = { target = 800, measured = 614 },
-    ["sweep.gauge"] = { target = 400, measured = 316 },
-    ["box.gauge/arc"] = { target = 1150, measured = 907 },
-    ["sweep.gauge/arc"] = { target = 450, measured = 329 },
-    ["box.gauge/bar"] = { target = 1300, measured = 1018 },
-    ["sweep.gauge/bar"] = { target = 350, measured = 251 },
+    ["box.gauge"] = { target = 960, measured = 748, proposed = 800 },
+    ["sweep.gauge"] = { target = 400, measured = 180 },
+    ["box.gauge/arc"] = { target = 1150, measured = 971 },
+    ["sweep.gauge/arc"] = { target = 450, measured = 262 },
+    ["box.gauge/bar"] = { target = 1300, measured = 1073 },
+    ["sweep.gauge/bar"] = { target = 350, measured = 224 },
     ["box.image/image"] = { target = 200, measured = 159 },
     ["sweep.image/image"] = { target = 50, measured = 0 },
     ["box.image/model"] = { target = 400, measured = 306 },
     ["sweep.image/model"] = { target = 50, measured = 0 },
-    ["box.text/blackbox"] = { target = 600, measured = 473 },
-    ["sweep.text/blackbox"] = { target = 500, measured = 385 },
-    ["box.text/governor"] = { target = 600, measured = 465 },
-    ["sweep.text/governor"] = { target = 500, measured = 389 },
-    ["box.text/stats"] = { target = 300, measured = 233 },
-    ["sweep.text/stats"] = { target = 300, measured = 205 },
-    ["box.text/telemetry"] = { target = 600, measured = 473 },
-    ["sweep.text/telemetry"] = { target = 450, measured = 328 },
-    ["box.time/count"] = { target = 600, measured = 469 },
-    ["sweep.time/count"] = { target = 300, measured = 210 },
-    ["box.time/flight"] = { target = 650, measured = 489 },
-    ["sweep.time/flight"] = { target = 300, measured = 205 },
-    ["box.time/total"] = { target = 300, measured = 237 },
-    ["sweep.time/total"] = { target = 300, measured = 224 },
+    ["box.text/blackbox"] = { target = 600, measured = 528 },
+    ["sweep.text/blackbox"] = { target = 500, measured = 352 },
+    ["box.text/governor"] = { target = 600, measured = 537 },
+    ["sweep.text/governor"] = { target = 500, measured = 339 },
+    ["box.text/stats"] = { target = 470, measured = 365, proposed = 300 },
+    ["sweep.text/stats"] = { target = 300, measured = 109 },
+    ["box.text/telemetry"] = { target = 600, measured = 520 },
+    ["sweep.text/telemetry"] = { target = 450, measured = 301 },
+    ["box.time/count"] = { target = 700, measured = 545, proposed = 600 },
+    ["sweep.time/count"] = { target = 300, measured = 177 },
+    ["box.time/flight"] = { target = 790, measured = 616, proposed = 650 },
+    ["sweep.time/flight"] = { target = 300, measured = 116 },
+    ["box.time/total"] = { target = 490, measured = 383, proposed = 300 },
+    ["sweep.time/total"] = { target = 300, measured = 116 },
 
     ----------------------------------------------------------------------------
     -- Per unit. These do not gate a pass on their own -- they are the terms a pass
