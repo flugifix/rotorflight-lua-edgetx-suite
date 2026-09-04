@@ -117,6 +117,17 @@ local function readBatteryPrefs()
   return session.modelPreferences.battery
 end
 
+-- The ESC's temperature limit describes the aircraft, so the model's own store wins over
+-- the radio-wide default in preferences.ini. Reached the same way readBatteryPrefs above
+-- reaches the other half of the same file.
+local function readAudioEventPrefs()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  if not session or type(session.modelPreferences) ~= "table" then
+    return nil
+  end
+  return session.modelPreferences.audio_events
+end
+
 local function isArmedFromState(state)
   if type(state) ~= "table" then
     return false
@@ -739,7 +750,9 @@ function Audio.process(self, opts)
   end
 
   if prefEnabled(events, "esc_temperature", false) then
-    local threshold = tonumber(events.esc_threshold) or 90
+    local modelEvents = readAudioEventPrefs()
+    local threshold = tonumber(modelEvents and modelEvents.esc_threshold)
+      or tonumber(events.esc_threshold) or 90
     local escTemp = tonumber(self.state.escTemp)
     if type(escTemp) == "number" then
       if escTemp >= threshold then

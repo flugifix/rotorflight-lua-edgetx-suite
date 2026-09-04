@@ -19,7 +19,11 @@ local CONFIG_SCHEMA = {
   { key = "pid_profile",       type = "bool", default = true  },
   { key = "rate_profile",      type = "bool", default = true  },
   { key = "esc_temperature",   type = "bool", default = false },
-  { key = "esc_threshold",     type = "number", default = 90  },
+  -- `scope = "model"` marks a value that describes the aircraft rather than the radio:
+  -- the ESC's temperature limit is a property of one model's hardware. It is read and
+  -- written through the per-model store whenever there is one, and falls back to the
+  -- global file on a radio that has none.
+  { key = "esc_threshold",     type = "number", default = 90, scope = "model" },
   { key = "adjustment_events", type = "bool", default = false },
   { key = "fuel_alerts",       type = "bool", default = true  },
   { key = "fuel_callout_percent", type = "number", default = 10 },
@@ -29,6 +33,42 @@ local CONFIG_SCHEMA = {
   { key = "model_announcement",type = "bool", default = false },
   { key = "initial_fuel",      type = "bool", default = true  },
 }
+
+-- The per-model store hangs off the session and exists only once the flight controller's
+-- id has been read, so every caller here has to cope with it being absent. The session is
+-- returned rather than a boolean, because every caller that asks then needs it.
+local function modelStore()
+  local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
+  if not session or not session.mcu_id or type(session.modelPreferences) ~= "table" then
+    return nil
+  end
+  return session
+end
+
+local function modelAudioEvents(create)
+  local session = modelStore()
+  if not session then return nil end
+  if type(session.modelPreferences.audio_events) ~= "table" then
+    if not create then return nil end
+    session.modelPreferences.audio_events = {}
+  end
+  return session.modelPreferences.audio_events
+end
+
+-- ctx.savePreferences() writes the global file only, so a page that puts a value in the
+-- per-model store has to persist that store itself -- and has to be able to say so when
+-- the write fails, or it reports a save the store never got.
+local function saveModelStore()
+  local session = modelStore()
+  if not session then return true end
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
+  if type(chunk) ~= "function" then return false, "model_preferences" end
+  local loaded, MP = pcall(chunk)
+  if not (loaded and type(MP) == "table" and type(MP.saveByMcuId) == "function") then
+    return false, "model_preferences"
+  end
+  return MP.saveByMcuId(session.mcu_id, session.modelPreferences)
+end
 
 -- Build ui.config defaults from schema
 local function buildDefaultConfig()
@@ -71,6 +111,10 @@ local ui = {
 }
 
 ui.runtimeBase = nil
+
+-- What copyFromPrefs put into ui.config. A save reads it to tell a field the pilot changed
+-- from one that merely carries the value it was loaded with.
+local loadedConfig = {}
 
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -226,8 +270,12 @@ end
 -- Loads all settings from preferences using the schema
 local function copyFromPrefs(prefs)
   local audio_events = (prefs and prefs.audio_events) or {}
+  local modelEvents = modelAudioEvents(false)
   for _, field in ipairs(CONFIG_SCHEMA) do
     local raw = audio_events[field.key]
+    if field.scope == "model" and modelEvents and modelEvents[field.key] ~= nil then
+      raw = modelEvents[field.key]
+    end
     if field.type == "number" then
       ui.config[field.key] = tonumber(raw) or field.default
     else
@@ -240,6 +288,12 @@ local function copyFromPrefs(prefs)
   if not FUEL_CALLOUT_VALUES[ui.config.fuel_callout_percent] then ui.config.fuel_callout_percent = 10 end
   if ui.config.fuel_repeat_below_zero < 1 then ui.config.fuel_repeat_below_zero = 1 end
   if ui.config.fuel_repeat_below_zero > 10 then ui.config.fuel_repeat_below_zero = 10 end
+
+  -- After the clamps, so that correcting an out-of-range stored value does not read as an
+  -- edit the pilot made.
+  for _, field in ipairs(CONFIG_SCHEMA) do
+    loadedConfig[field.key] = ui.config[field.key]
+  end
 end
 
 local function ensureLoaded(prefs)
@@ -350,9 +404,37 @@ function M.onSave(ctx)
   ensureDeps()
   if not ctx.preferences.audio_events then ctx.preferences.audio_events = {} end
 
-  -- Saves all settings using the schema
+  -- Saves all settings using the schema. A `scope = "model"` field goes into the per-model
+  -- store when there is one to hold it; with no flight controller connected it stays in the
+  -- global file, which is also what every model without a store of its own reads.
+  --
+  -- It goes there only once the model owns that value: either the model already carries one,
+  -- or the pilot just changed it here. A model that was never given a limit of its own must
+  -- not be pinned to whichever one is current by a save of the radio-wide settings beside it,
+  -- because from then on it would no longer follow a change to the global default.
+  local modelEvents = modelAudioEvents(false)
+  local modelDirty = false
   for _, field in ipairs(CONFIG_SCHEMA) do
-    ctx.preferences.audio_events[field.key] = ui.config[field.key]
+    local toModel = false
+    if field.scope == "model" then
+      if modelEvents and modelEvents[field.key] ~= nil then
+        toModel = true
+      elseif loadedConfig[field.key] ~= nil and ui.config[field.key] ~= loadedConfig[field.key] then
+        modelEvents = modelEvents or modelAudioEvents(true)
+        toModel = modelEvents ~= nil
+      end
+    end
+    if toModel then
+      if modelEvents[field.key] ~= ui.config[field.key] then modelDirty = true end
+      modelEvents[field.key] = ui.config[field.key]
+    else
+      ctx.preferences.audio_events[field.key] = ui.config[field.key]
+    end
+  end
+
+  local modelOk, modelErr = true, nil
+  if modelDirty then
+    modelOk, modelErr = saveModelStore()
   end
 
   -- Diagnostic logging for save flow
@@ -370,6 +452,20 @@ function M.onSave(ctx)
       parts2[#parts2+1] = tostring(field.key) .. "=" .. tostring(ui.config[field.key])
     end
     pcall(Log.emit, "rfsuite", "onSave: ui.config=" .. table.concat(parts2, ","), "debug")
+    -- The dump above reads the global store, where a `scope = "model"` field is not written
+    -- while the model holds it -- so without this line the log shows the old value for it.
+    local parts3 = {}
+    for _, field in ipairs(CONFIG_SCHEMA) do
+      if field.scope == "model" then
+        local v = modelEvents and modelEvents[field.key]
+        parts3[#parts3+1] = tostring(field.key) .. "=" .. tostring(v == nil and "<nil>" or v)
+      end
+    end
+    pcall(Log.emit, "rfsuite", "onSave: model.audio_events=" .. table.concat(parts3, ",")
+      .. " store=" .. tostring(modelEvents ~= nil)
+      .. " written=" .. tostring(modelDirty)
+      .. " ok=" .. tostring(modelOk)
+      .. (modelErr and (" err=" .. tostring(modelErr)) or ""), "debug")
   end
 
   local ok, err = nil, nil
@@ -380,6 +476,11 @@ function M.onSave(ctx)
       pcall(Log.emit, "rfsuite", "onSave: ctx.savePreferences not a function", "warn")
     end
     return false
+  end
+
+  -- Both stores, because a save is only done when both were believed.
+  if ok and not modelOk then
+    ok, err = false, modelErr
   end
 
   if ok then
@@ -397,6 +498,18 @@ function M.onSave(ctx)
     end
     return false
   end
+end
+
+-- The threshold is edited in the model's own store while a flight controller is connected and
+-- in the radio's file otherwise, and nothing on the page says which: a number entered with a
+-- model connected reads as the radio-wide default it no longer is. So the label carries a
+-- marker exactly while the model's store is the one being written.
+--
+-- The key is spelled out here rather than taken from the schema entry, because the packager
+-- resolves a translation whose key is a literal and a computed one would reach the radio raw.
+local function modelScopeLabel(i18n, key, plain)
+  if key ~= "esc_threshold" or not modelStore() then return plain end
+  return t(i18n, "esc_threshold_model", "Threshold (°) [Model]")
 end
 
 function M.build(ctx)
@@ -451,6 +564,7 @@ function M.build(ctx)
           local minVal = item.min or 0
           local maxVal = item.max or 100
           local labelText = t(i18n, item.labelKey, item.labelFallback)
+          labelText = modelScopeLabel(i18n, k, labelText)
           cursorY = cursorY + Controls.appendNumberField(
             children, x, cursorY, w,
             labelText,

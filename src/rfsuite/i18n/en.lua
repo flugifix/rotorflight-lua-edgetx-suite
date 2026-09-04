@@ -712,6 +712,7 @@ return {
         rate_profile = "Rate Profile",
         esc_temperature = "ESC Temperature",
         esc_threshold = "Threshold (°)",
+        esc_threshold_model = "Threshold (°) [Model]",
         adjustment_events = "Adjustment Announcements",
         fuel_alerts = "Fuel",
         fuel_callout_percent = "Callout %",
