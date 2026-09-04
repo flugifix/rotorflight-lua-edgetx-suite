@@ -49,6 +49,21 @@ local Precompile = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
 
+-- Below this much free heap the next page build is the one that may not come back. The number
+-- is a first cut and not a measurement: it is the order of magnitude a full page rebuild
+-- allocates on a colour radio, and it is one constant to move when a radio says otherwise.
+local MEM_LOW_FREE_KB = 64
+
+-- The warning latches, so it is said once per crossing instead of once per interval, and it
+-- unlatches well above the threshold so a reading sitting on the line cannot produce a stream.
+local MEM_LOW_CLEAR_KB = 96
+
+-- EdgeTX answers getAvailableMemory in bytes, and its desktop simulator answers a constant
+-- 1000 of them regardless of the heap. A reading that small is not a heap about to run out --
+-- at one page of memory nothing is running any more -- so it is read as "no instrumentation
+-- here" and neither warns nor is logged.
+local MEM_FREE_MIN_KB = 4
+
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
 
 local M = {}
@@ -497,6 +512,7 @@ state = {
   memBucket    = nil,
   memLastTick  = 0,
   memPeakKb    = 0,
+  memLowWarned = false,
   lastInputTick = 0,
   initialLoadStartTick = 0,
   activePageMenuId = nil,
@@ -608,18 +624,57 @@ local function isSerialMemoryLogEnabled()
   return type(general) == "table" and general.enable_serial_debug == true and type(serialWrite) == "function"
 end
 
+-- What is LEFT, as opposed to what the suite is holding. `collectgarbage("count")` answers the
+-- second and cannot answer the first, and only the first says how close the next build is to
+-- the wall. Returns nil where the platform does not instrument it -- see MEM_FREE_MIN_KB.
+local function readFreeHeapKb()
+  if type(getAvailableMemory) ~= "function" then
+    return nil
+  end
+
+  local ok, bytes = pcall(getAvailableMemory)
+  bytes = ok and tonumber(bytes) or nil
+  if not bytes then
+    return nil
+  end
+
+  local freeKb = math.floor(bytes / 1024 + 0.5)
+  if freeKb < MEM_FREE_MIN_KB then
+    return nil
+  end
+
+  return freeKb
+end
+
+-- Running out of Lua heap is the one failure the guards in this file cannot catch: the firmware
+-- closes the whole Lua state rather than raising into the script, so there is no pcall between
+-- it and the pilot. It can be seen coming, and that is what the warning below is for.
 local function logMemoryUsage(now)
+  local tickNow = tonumber(now) or 0
+  if tickNow > 0 and state.memLastTick > 0 and (tickNow - state.memLastTick) < MEM_LOG_INTERVAL_TICKS then
+    return
+  end
+  state.memLastTick = tickNow > 0 and tickNow or (state.memLastTick or 0)
+
+  local freeKb = readFreeHeapKb()
+
+  -- Deliberately not behind the continuous-log preference. That option writes a line every
+  -- interval and is off in every shipped configuration; this one writes a line once per
+  -- crossing, and the run it has to survive is the one where nobody switched anything on.
+  if freeKb then
+    if freeKb < MEM_LOW_FREE_KB and not state.memLowWarned then
+      state.memLowWarned = true
+      pcall(Log.emit, "mem", "low heap: free_kb=" .. tostring(freeKb), "warn")
+    elseif freeKb >= MEM_LOW_CLEAR_KB and state.memLowWarned then
+      state.memLowWarned = false
+    end
+  end
+
   if not isContinuousMemoryLogEnabled() then
-    state.memLastTick = 0
     return
   end
 
   if type(collectgarbage) ~= "function" then
-    return
-  end
-
-  local tickNow = tonumber(now) or 0
-  if tickNow > 0 and state.memLastTick > 0 and (tickNow - state.memLastTick) < MEM_LOG_INTERVAL_TICKS then
     return
   end
 
@@ -628,10 +683,10 @@ local function logMemoryUsage(now)
     state.memPeakKb = memKb
   end
 
-  state.memLastTick = tickNow > 0 and tickNow or (state.memLastTick or 0)
-
-  local line = "[mem][info] lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
   local msg = "lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
+  if freeKb then
+    msg = msg .. " free_kb=" .. tostring(freeKb)
+  end
   pcall(Log.emit, "mem", msg, "info")
 end
 
@@ -2270,6 +2325,7 @@ function M.init()
   state.memBucket  = nil
   state.memLastTick = 0
   state.memPeakKb = 0
+  state.memLowWarned = false
   state.lastInputTick = getTime and getTime() or 0
   state.initialLoadStartTick = getTime and getTime() or 0
   state.ignoreNextPageKey = false
