@@ -35,27 +35,32 @@ local CONFIG_SCHEMA = {
 }
 
 -- The per-model store hangs off the session and exists only once the flight controller's
--- id has been read, so every caller here has to cope with it being absent.
-local function modelAudioEvents(create)
+-- id has been read, so every caller here has to cope with it being absent. The session is
+-- returned rather than a boolean, because every caller that asks then needs it.
+local function modelStore()
   local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
   if not session or not session.mcu_id or type(session.modelPreferences) ~= "table" then
-    return nil, session
+    return nil
   end
+  return session
+end
+
+local function modelAudioEvents(create)
+  local session = modelStore()
+  if not session then return nil end
   if type(session.modelPreferences.audio_events) ~= "table" then
-    if not create then return nil, session end
+    if not create then return nil end
     session.modelPreferences.audio_events = {}
   end
-  return session.modelPreferences.audio_events, session
+  return session.modelPreferences.audio_events
 end
 
 -- ctx.savePreferences() writes the global file only, so a page that puts a value in the
 -- per-model store has to persist that store itself -- and has to be able to say so when
 -- the write fails, or it reports a save the store never got.
 local function saveModelStore()
-  local _, session = modelAudioEvents(false)
-  if not session or not session.mcu_id or type(session.modelPreferences) ~= "table" then
-    return true
-  end
+  local session = modelStore()
+  if not session then return true end
   local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
   if type(chunk) ~= "function" then return false, "model_preferences" end
   local loaded, MP = pcall(chunk)
@@ -495,6 +500,18 @@ function M.onSave(ctx)
   end
 end
 
+-- The threshold is edited in the model's own store while a flight controller is connected and
+-- in the radio's file otherwise, and nothing on the page says which: a number entered with a
+-- model connected reads as the radio-wide default it no longer is. So the label carries a
+-- marker exactly while the model's store is the one being written.
+--
+-- The key is spelled out here rather than taken from the schema entry, because the packager
+-- resolves a translation whose key is a literal and a computed one would reach the radio raw.
+local function modelScopeLabel(i18n, key, plain)
+  if key ~= "esc_threshold" or not modelStore() then return plain end
+  return t(i18n, "esc_threshold_model", "Threshold (°) [Model]")
+end
+
 function M.build(ctx)
   ensureDeps()
   ensureLoaded(ctx.preferences)
@@ -547,6 +564,7 @@ function M.build(ctx)
           local minVal = item.min or 0
           local maxVal = item.max or 100
           local labelText = t(i18n, item.labelKey, item.labelFallback)
+          labelText = modelScopeLabel(i18n, k, labelText)
           cursorY = cursorY + Controls.appendNumberField(
             children, x, cursorY, w,
             labelText,

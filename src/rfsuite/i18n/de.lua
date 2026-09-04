@@ -712,6 +712,7 @@ return {
         rate_profile = "Raten-Profil",
         esc_temperature = "ESC-Temperatur",
         esc_threshold = "Schwellwert (°)",
+        esc_threshold_model = "Schwellwert (°) [Modell]",
         adjustment_events = "Einstellungsansagen",
         fuel_alerts = "Kraftstoff",
         fuel_callout_percent = "Ansage %",
