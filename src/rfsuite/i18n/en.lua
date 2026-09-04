@@ -18,7 +18,9 @@ return {
       name = "Reading craft name",
       telemetry = "Reading telemetry configuration",
       flight_stats = "Reading flight statistics",
-      dataflash_summary = "Reading dataflash status"
+      dataflash_summary = "Reading dataflash status",
+      model_params_sync = "Synchronizing model parameters",
+      model_name_sync = "Synchronizing the model name"
     },
     saving_settings = "Applying settings",
     save = {
