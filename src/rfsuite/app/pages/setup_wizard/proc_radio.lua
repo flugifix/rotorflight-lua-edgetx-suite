@@ -876,11 +876,25 @@ local function makeChannelProcedure(channel, order)
     return nil
   end
 
+  -- Complete on the model is not the same as confirmed for this run. The criterion above reads
+  -- the switch back off the channel's own input, so a model set up on an earlier run satisfies
+  -- it before the pilot has been asked -- and the forward walk then passed this screen while the
+  -- write plan still needed the answer that only this screen's `enter` proposes. So the walk
+  -- stops here once per run: the found switch comes up pre-selected and one press confirms it.
+  -- A channel the run does not want has no answer to hold and is passed over as before.
+  proc.confirmed = function(w)
+    local entry = entryFor(w, channel)
+    if entry == nil or not wanted(w, entry) then return true end
+    return w.data.seen ~= nil and w.data.seen[channel] == true
+  end
+
   proc.enter = function(w)
     local data = w.data
     data.picked = data.picked or {}
     data.pickedGov = data.pickedGov or {}
     data.found = data.found or {}
+    data.seen = data.seen or {}
+    data.seen[channel] = true
 
     -- A governor already in the model is proposed back, the same way the hold is: the switch is
     -- the source of the channel's second input, so a second run does not ask again for something

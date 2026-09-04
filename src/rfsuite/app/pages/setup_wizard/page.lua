@@ -287,6 +287,14 @@ local function nextOpenIndex(from)
     if inScope(proc) then
       if proc.counted == false then return index end
       if wiz.isComplete(proc) ~= true and not wiz.isSkipped(proc) then return index end
+      -- Done on the machine is not the same as answered by the pilot. A channel's criterion
+      -- reads the switch back off the model, so a model set up on an earlier run satisfies it
+      -- before the pilot has said which switch they want today -- and the write plan then
+      -- listed that channel without a switch, because the answer lives in the run and only the
+      -- channel's own screen puts it there. A procedure like that says so with `confirmed`, and
+      -- it is walked until this run holds the answer: what it proposes back is for the pilot to
+      -- confirm or change, not for the walk to pass over.
+      if type(proc.confirmed) == "function" and proc.confirmed(wiz) ~= true then return index end
     end
   end
   return lastScopedIndex()
