@@ -79,9 +79,15 @@ function M.flush()
   if type(prefs) ~= "table" then return false, "no_prefs" end
   local mod = loadModule("lib/model_preferences.lua")
   if type(mod) ~= "table" or type(mod.saveByMcuId) ~= "function" then return false, "unavailable" end
-  local ok = pcall(mod.saveByMcuId, mcuId, prefs)
-  if ok then dirty = false end
-  return ok
+  -- `saveByMcuId` reports an unwritable card by RETURNING false rather than by raising, so a
+  -- successful `pcall` says nothing about the write. Both halves have to be read, and `dirty`
+  -- has to stay set when either fails: it is the only thing that makes the next flush retry.
+  local ok, saved, err = pcall(mod.saveByMcuId, mcuId, prefs)
+  if ok and saved then
+    dirty = false
+    return true
+  end
+  return false, (not ok and tostring(saved)) or err or "save_failed"
 end
 
 local function keyFor(id, perModel)
