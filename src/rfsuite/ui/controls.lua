@@ -133,6 +133,83 @@ local function clampInt(v, lo, hi)
   return v
 end
 
+-- ── Text metrics ─────────────────────────────────────────────────────────────
+-- How tall a wrapped label actually is.
+--
+-- A caller that advances its cursor by a constant has measured one radio and assumed the rest.
+-- The same sentence wraps to one line at 800 px and to three at 480, so on the narrower screen
+-- that constant puts the next row on top of the text -- which is a layout bug that only appears
+-- on the radio nobody developed on.
+--
+-- EdgeTX's call is `lcd.sizeText(text [, flags])` and it takes the font flags, so the answer is
+-- for the font the text will be drawn in. There is no `lcd.getTextSize` on any EdgeTX build, so
+-- a name like that falls through to the crude estimate below.
+local function safeTextSize(text, font)
+  local fn = lcd and lcd.sizeText
+  if type(fn) == "function" then
+    local ok, w, h = pcall(fn, tostring(text or ""), font)
+    w, h = tonumber(w), tonumber(h)
+    if ok and w and h and h > 0 then
+      return w, h
+    end
+  end
+
+  local str = tostring(text or "")
+  return (#str * 8), 16
+end
+
+local function splitLines(text)
+  local lines = {}
+  if type(text) ~= "string" or text == "" then
+    return lines
+  end
+
+  local pos = 1
+  while true do
+    local nextPos = string.find(text, "\n", pos, true)
+    if not nextPos then
+      lines[#lines + 1] = string.sub(text, pos)
+      break
+    end
+    lines[#lines + 1] = string.sub(text, pos, nextPos - 1)
+    pos = nextPos + 1
+  end
+
+  return lines
+end
+
+function Controls.estimateWrappedTextHeight(text, width, font)
+  local lines = splitLines(tostring(text or ""))
+  if #lines == 0 then return 0 end
+
+  local _, lineH = safeTextSize("Ag", font)
+  lineH = tonumber(lineH) or 16
+  if lineH < 12 then lineH = 12 end
+
+  width = tonumber(width) or 0
+  if width <= 0 then return #lines * lineH end
+
+  local totalH = 0
+  for i = 1, #lines do
+    local currentLine = ""
+    local wrapped = 1
+
+    for word in string.gmatch(lines[i], "%S+") do
+      local candidate = currentLine == "" and word or (currentLine .. " " .. word)
+      if safeTextSize(candidate, font) > width and currentLine ~= "" then
+        wrapped = wrapped + 1
+        currentLine = word
+      else
+        currentLine = candidate
+      end
+    end
+
+    totalH = totalH + wrapped * lineH
+  end
+
+  return totalH
+end
+
 -- Shared responsive grid metrics for table-like pages (PIDs, rates, etc.).
 -- Returns stable spacing/cell widths across different radios.
 function Controls.computeGridMetrics(totalW, columns, opts)

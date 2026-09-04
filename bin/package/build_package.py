@@ -195,6 +195,13 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
                 if os.path.isdir(s):
                     shutil.copytree(s, os.path.join(staging_widgets, widget_dir), dirs_exist_ok=True)
 
+        # Copy model templates. EdgeTX lists each directory under /TEMPLATES as a category in
+        # its "New model" dialog; a template is the yml the model is created from, a txt shown
+        # beside it, and an optional lua the radio fires right after applying the yml.
+        src_templates = os.path.join(src_root, "templates")
+        if os.path.isdir(src_templates):
+            shutil.copytree(src_templates, os.path.join(temp_dir, "TEMPLATES"), dirs_exist_ok=True)
+
         # Copy sounds
         if os.path.isdir(src_audio):
             copy_audio_pack("en", src_audio, os.path.join(staging_sounds, "en"))
@@ -218,6 +225,11 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
             subprocess.run([python_exe, py_precompile, "--root", staging_widgets], check=True)
             subprocess.run([python_exe, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
             subprocess.run([python_exe, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
+            # The templates carry markers too -- their lua and the txt files EdgeTX shows in
+            # the template picker -- so each locale's ZIP ships them in its own language.
+            staging_templates = os.path.join(temp_dir, "TEMPLATES")
+            if os.path.isdir(staging_templates):
+                subprocess.run([python_exe, py_resolve, "--json", lang_file, "--root", staging_templates], check=True)
 
         # Record the build identity, after the sources are final and before they are packed
         identity = write_build_identity(temp_dir, staging_core, version)
