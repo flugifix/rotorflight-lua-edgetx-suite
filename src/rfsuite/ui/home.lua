@@ -49,6 +49,21 @@ local Precompile = nil
 
 local MEM_LOG_INTERVAL_TICKS = 100
 
+-- Below this much free heap the next page build is the one that may not come back. The number
+-- is a first cut and not a measurement: it is the order of magnitude a full page rebuild
+-- allocates on a colour radio, and it is one constant to move when a radio says otherwise.
+local MEM_LOW_FREE_KB = 64
+
+-- The warning latches, so it is said once per crossing instead of once per interval, and it
+-- unlatches well above the threshold so a reading sitting on the line cannot produce a stream.
+local MEM_LOW_CLEAR_KB = 96
+
+-- EdgeTX answers getAvailableMemory in bytes, and its desktop simulator answers a constant
+-- 1000 of them regardless of the heap. A reading that small is not a heap about to run out --
+-- at one page of memory nothing is running any more -- so it is read as "no instrumentation
+-- here" and neither warns nor is logged.
+local MEM_FREE_MIN_KB = 4
+
 local APP_ICON  = "/SCRIPTS/TOOLS/rfsuite-core/assets/icon.png"
 
 local M = {}
@@ -269,6 +284,24 @@ local function logStep(label, force, key)
   end
 end
 
+-- A page hook that raised, said once and in the two places a pilot's report can be built from.
+-- Only `wakeup` used to be reported this way; `build` and `onBack` were called bare, so a raise
+-- in either ended the tool with nothing on screen and no line naming a cause. A pilot can copy
+-- a named error out of a log; an absence is not something anybody can report.
+--
+-- The serial line goes out whatever the debug preferences say, which is what the wakeup path
+-- already did: a crash is the one message worth having on a radio where nothing was switched on
+-- in advance.
+local function reportHookCrash(hook, menuId, err)
+  local where = menuId ~= nil and (" on menu " .. tostring(menuId)) or ""
+  local message = "Crash in " .. tostring(hook) .. where .. ": " .. tostring(err)
+  pcall(Log.emit, "rfsuite", message, "error")
+  if type(serialWrite) == "function" then
+    pcall(serialWrite, "[rfsuite][error] " .. message .. "\n")
+  end
+  return message
+end
+
 local function ensurePageRegistry()
   if not PageRegistry then
     PageRegistry = loadModule("app/pages/init.lua")
@@ -479,6 +512,7 @@ state = {
   memBucket    = nil,
   memLastTick  = 0,
   memPeakKb    = 0,
+  memLowWarned = false,
   lastInputTick = 0,
   initialLoadStartTick = 0,
   activePageMenuId = nil,
@@ -590,18 +624,57 @@ local function isSerialMemoryLogEnabled()
   return type(general) == "table" and general.enable_serial_debug == true and type(serialWrite) == "function"
 end
 
+-- What is LEFT, as opposed to what the suite is holding. `collectgarbage("count")` answers the
+-- second and cannot answer the first, and only the first says how close the next build is to
+-- the wall. Returns nil where the platform does not instrument it -- see MEM_FREE_MIN_KB.
+local function readFreeHeapKb()
+  if type(getAvailableMemory) ~= "function" then
+    return nil
+  end
+
+  local ok, bytes = pcall(getAvailableMemory)
+  bytes = ok and tonumber(bytes) or nil
+  if not bytes then
+    return nil
+  end
+
+  local freeKb = math.floor(bytes / 1024 + 0.5)
+  if freeKb < MEM_FREE_MIN_KB then
+    return nil
+  end
+
+  return freeKb
+end
+
+-- Running out of Lua heap is the one failure the guards in this file cannot catch: the firmware
+-- closes the whole Lua state rather than raising into the script, so there is no pcall between
+-- it and the pilot. It can be seen coming, and that is what the warning below is for.
 local function logMemoryUsage(now)
+  local tickNow = tonumber(now) or 0
+  if tickNow > 0 and state.memLastTick > 0 and (tickNow - state.memLastTick) < MEM_LOG_INTERVAL_TICKS then
+    return
+  end
+  state.memLastTick = tickNow > 0 and tickNow or (state.memLastTick or 0)
+
+  local freeKb = readFreeHeapKb()
+
+  -- Deliberately not behind the continuous-log preference. That option writes a line every
+  -- interval and is off in every shipped configuration; this one writes a line once per
+  -- crossing, and the run it has to survive is the one where nobody switched anything on.
+  if freeKb then
+    if freeKb < MEM_LOW_FREE_KB and not state.memLowWarned then
+      state.memLowWarned = true
+      pcall(Log.emit, "mem", "low heap: free_kb=" .. tostring(freeKb), "warn")
+    elseif freeKb >= MEM_LOW_CLEAR_KB and state.memLowWarned then
+      state.memLowWarned = false
+    end
+  end
+
   if not isContinuousMemoryLogEnabled() then
-    state.memLastTick = 0
     return
   end
 
   if type(collectgarbage) ~= "function" then
-    return
-  end
-
-  local tickNow = tonumber(now) or 0
-  if tickNow > 0 and state.memLastTick > 0 and (tickNow - state.memLastTick) < MEM_LOG_INTERVAL_TICKS then
     return
   end
 
@@ -610,10 +683,10 @@ local function logMemoryUsage(now)
     state.memPeakKb = memKb
   end
 
-  state.memLastTick = tickNow > 0 and tickNow or (state.memLastTick or 0)
-
-  local line = "[mem][info] lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
   local msg = "lua_kb=" .. tostring(memKb) .. " peak_kb=" .. tostring(state.memPeakKb or memKb)
+  if freeKb then
+    msg = msg .. " free_kb=" .. tostring(freeKb)
+  end
   pcall(Log.emit, "mem", msg, "info")
 end
 
@@ -807,10 +880,16 @@ local function onBack(source, ev)
     ensurePageRegistry()
     local pageModule = PageRegistry and PageRegistry.get and PageRegistry.get(currentMenuId) or nil
     if pageModule and type(pageModule.onBack) == "function" then
-      local handled = pageModule.onBack({
+      -- A page whose back hook raised has not handled the press. Falling through to the menu's
+      -- own back is what still gets the pilot off a page that cannot answer.
+      local ok, handled = pcall(pageModule.onBack, {
         requestRebuild = requestRebuildWithGc,
         i18n = state.i18n
       })
+      if not ok then
+        reportHookCrash("activePage.onBack", currentMenuId, handled)
+        handled = false
+      end
       if handled == true then
         if fromEvent then
           state.suppressBackFrames = 6
@@ -1623,6 +1702,66 @@ local function appendArmedBanner(children, x, y, w, h, text)
   }
 end
 
+-- What a page's build leaves behind when it raises is half a screen, laid out for a page that
+-- does not exist. The caller drops that and puts this in its place: what failed, which menu it
+-- was, and the message itself -- inside the normal page frame, so the header and the back key
+-- keep working and the pilot is not stuck on it.
+local function appendPageBuildError(children, x, y, w, h, i18n, menuId, err)
+  local title = i18n and i18n.t and i18n.t("app.page_error.title") or "This page could not be drawn"
+  local menuText = string.format(
+    i18n and i18n.t and i18n.t("app.page_error.menu") or "Menu: %s",
+    tostring(menuId))
+  local hint = i18n and i18n.t and i18n.t("app.page_error.hint") or "Please report this with the log."
+
+  local titleH = Tiles.lineHeight(MIDSIZE, 24)
+  local lineH  = Tiles.lineHeight(SMLSIZE, 14)
+  local gap    = 6
+  local cursorY = y
+
+  children[#children + 1] = {
+    type  = "label",
+    x = x, y = cursorY, w = w,
+    text  = title,
+    color = COLOR_THEME_WARNING or COLOR_THEME_PRIMARY1,
+    font  = MIDSIZE
+  }
+  cursorY = cursorY + titleH + gap
+
+  children[#children + 1] = {
+    type  = "label",
+    x = x, y = cursorY, w = w,
+    text  = menuText,
+    color = COLOR_THEME_PRIMARY1,
+    font  = SMLSIZE
+  }
+  cursorY = cursorY + lineH + gap
+
+  -- The message is what a report is made of, so it gets whatever room is left rather than a
+  -- fixed box, and the hint keeps its own line at the bottom.
+  --
+  -- `h` is the body's height measured from the top of the container the page draws in, and `y`
+  -- is where the content starts inside that same container -- so the last line sits at
+  -- `h - lineH`. Adding `y` to it overshoots the bottom by exactly `y` and clips the hint.
+  local hintY = h - lineH
+  if hintY < cursorY + lineH then hintY = cursorY + lineH end
+  local messageH = math.max(lineH, hintY - gap - cursorY)
+  children[#children + 1] = {
+    type  = "label",
+    x = x, y = cursorY, w = w, h = messageH,
+    text  = tostring(err),
+    color = COLOR_THEME_PRIMARY1,
+    font  = SMLSIZE
+  }
+
+  children[#children + 1] = {
+    type  = "label",
+    x = x, y = hintY, w = w,
+    text  = hint,
+    color = COLOR_THEME_PRIMARY1,
+    font  = SMLSIZE
+  }
+end
+
 -- ── Main UI build ─────────────────────────────────────────────────────────────
 
 function M.buildUI()
@@ -2045,12 +2184,13 @@ function M.buildUI()
     if pageModule and pageModule.build then
       wipeTable(state.cards)
       state.focusIndex = 0
-      pageModule.build({
+      local pageBodyH = pageBodyHeight() - bannerH
+      local ok, err = pcall(pageModule.build, {
         children = children,
         x = contentX,
         y = contentY,
         w = contentW,
-        h = pageBodyHeight() - bannerH,
+        h = pageBodyH,
         i18n = state.i18n,
         preferences = state.preferences,
         menu = state.menu,
@@ -2069,6 +2209,18 @@ function M.buildUI()
         end,
         requestRebuild = requestRebuild
       })
+
+      if not ok then
+        reportHookCrash("activePage.build", currentMenuId, err)
+        -- Everything the page appended before it raised belongs to a screen that will never be
+        -- finished, and the armed strip appended before it does not. Both come off, the strip
+        -- goes back on, and the failure takes the page body.
+        wipeTable(children)
+        if bannerH > 0 then
+          appendArmedBanner(children, contentX, 0, contentW, bannerH, ARMED_BANNER_TEXT)
+        end
+        appendPageBuildError(children, contentX, contentY, contentW, pageBodyH, state.i18n, currentMenuId, err)
+      end
     else
       local gridItems = state.menu.getCards()
       local computedCols = Tiles.computeColumns(contentW, profile.menuMinCardWidth, profile.menuMaxColumns)
@@ -2190,6 +2342,7 @@ function M.init()
   state.memBucket  = nil
   state.memLastTick = 0
   state.memPeakKb = 0
+  state.memLowWarned = false
   state.lastInputTick = getTime and getTime() or 0
   state.initialLoadStartTick = getTime and getTime() or 0
   state.ignoreNextPageKey = false
@@ -2713,10 +2866,7 @@ function M.run(event, touchState)
             requestRebuild = requestRebuild
           })
           if not ok then
-            pcall(Log.emit, "rfsuite", "Crash in activePage.wakeup: " .. tostring(err), "error")
-            if type(serialWrite) == "function" then
-              pcall(serialWrite, "[rfsuite][error] Crash in activePage.wakeup: " .. tostring(err) .. "\n")
-            end
+            reportHookCrash("activePage.wakeup", state.activePageMenuId, err)
           end
         end
       end

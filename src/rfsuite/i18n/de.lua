@@ -6,6 +6,11 @@ return {
     connecting = "Verbinde",
     preparing = "Bereite Suite vor",
     unknown_value = "Unbekannt (%s)",
+    page_error = {
+      title = "Diese Seite konnte nicht gezeichnet werden",
+      menu = "Menü: %s",
+      hint = "Bitte zusammen mit dem Log melden."
+    },
     onconnect = {
       apiversion = "Lese API-Version",
       uid = "Lese Seriennummer",
