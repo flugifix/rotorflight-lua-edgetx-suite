@@ -610,8 +610,9 @@ local function updateConnectionState(self)
   -- A real loss of the link is `connected` going false, and that term is unlatched and still
   -- carries it. `fuelTelemetrySeen` is already this shape, but it is cleared at the end of every
   -- flight because the flight statistics own it; the gate's question is whether this session has
-  -- ever had telemetry, so these two are cleared with the rest of the session state on the FBL
-  -- connect edge instead, and a new craft re-earns them.
+  -- ever had telemetry, so these two are cleared on the FBL DISCONNECT edge instead, and a new
+  -- craft re-earns them. The two assignments below are what makes that safe: they run before the
+  -- reads, so the first pass of a returning session earns its latches from its own sensors.
   if hasVoltage or hasFuel then self.state.batteryTelemetrySeen = true end
   if hasLq or hasRss1 or hasRss2 then self.state.rfTelemetrySeen = true end
   local batteryReady = self.state.batteryTelemetrySeen == true
@@ -1740,8 +1741,6 @@ function Runtime.new(zone, options)
       self.state.wasArmed = false
       self.state.armed = false
       self.state.batteryCellCount = 0
-      self.state.batteryTelemetrySeen = false
-      self.state.rfTelemetrySeen = false
       self.state.currentFlightSeconds = 0
       self.state.lastFlightSeconds = 0
       self.state.flightSeconds = 0
@@ -1768,6 +1767,17 @@ function Runtime.new(zone, options)
       end
       widgetLog(self, "FBL reconnect edge: reset dashboard session state", "info")
     elseif not isFblConnected and wasFblConnected then
+      -- The session latches are cleared here rather than on the connect edge, and the difference
+      -- is not stylistic. updateConnectionState() runs at the top of this pass, so a clear placed
+      -- on the connect edge is first READ by the next pass -- the opening pass of a new session,
+      -- which is exactly where an instantaneous sensor read is least likely to answer. A brief
+      -- interruption is the case this gate exists for, and it is the case where that pass would
+      -- find lq and both RSS at 0, shut the gate, tear the scene down and announce the model a
+      -- second time -- the failure the latch was added to prevent. Cleared here, they are false
+      -- for the whole disconnected stretch and the returning session earns them back before
+      -- anything reads them.
+      self.state.batteryTelemetrySeen = false
+      self.state.rfTelemetrySeen = false
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       end
