@@ -68,6 +68,38 @@ local THROTTLE_INFLIGHT_THRESHOLD_DIRECT = 8
 local RPM_INFLIGHT_THRESHOLD_DIRECT = 500
 local CURRENT_INFLIGHT_THRESHOLD_DIRECT = 8
 
+-- The connect chain reports the step it is on by its module name -- an identifier, not
+-- something to put in front of a pilot. Those names already have wording of their own under
+-- `app.onconnect.*`, which is what the tool's own start screen shows (ONCONNECT_TEXT in
+-- ui/home.lua), so the splash reads the same strings and the two screens say the same thing.
+--
+-- The text is taken through the build marker rather than by concatenating the task name onto a
+-- prefix and asking i18n.t() for it. Translation here happens when the install is packaged: the
+-- precompile step rewrites a call whose key is a literal into the translated string, and
+-- bin/package/build_package.py then copies i18n/init.lua alone, without a locale bundle behind
+-- it. A computed key is the one shape that step cannot rewrite, and at runtime there is nothing
+-- left to resolve it against, so "app.onconnect.<name>" would reach the screen as it stands.
+--
+-- The names come from tasks/events/onconnect/manifest.lua. One added there without an entry
+-- here keeps the generic line, which is the right way round: a missing step name costs wording,
+-- a missing string would cost the sentence.
+local ONCONNECT_STEP_TEXT = {
+  apiversion        = "@i18n(app.onconnect.apiversion)@",
+  uid               = "@i18n(app.onconnect.uid)@",
+  rtc               = "@i18n(app.onconnect.rtc)@",
+  status            = "@i18n(app.onconnect.status)@",
+  telemetry         = "@i18n(app.onconnect.telemetry)@",
+  flight_stats      = "@i18n(app.onconnect.flight_stats)@",
+  dataflash_summary = "@i18n(app.onconnect.dataflash_summary)@",
+  battery_config    = "@i18n(app.onconnect.battery_config)@",
+  governor_config   = "@i18n(app.onconnect.governor_config)@",
+  esc_sensor_config = "@i18n(app.onconnect.esc_sensor_config)@",
+  smartfuel_config  = "@i18n(app.onconnect.smartfuel_config)@",
+  name              = "@i18n(app.onconnect.name)@",
+  model_params_sync = "@i18n(app.onconnect.model_params_sync)@",
+  model_name_sync   = "@i18n(app.onconnect.model_name_sync)@"
+}
+
 local utils = {}
 
 local function isTruthy(value)
@@ -685,15 +717,15 @@ local function updateConnectionState(self)
       pTotal = onconnectProgress.total or 0
       showNumbers = true
     end
-    local loadingTasksStr = (t and t("widgets.dashboard.loading_tasks")) or "Loading data..."
+    local headline = onconnectPendingTaskName and ONCONNECT_STEP_TEXT[onconnectPendingTaskName]
+    if not headline then
+      headline = (t and t("widgets.dashboard.loading_tasks")) or "Loading data..."
+    end
     if showNumbers then
       local currentStep = math.min(pDone + 1, pTotal)
-      statusLine = loadingTasksStr .. " (" .. tostring(currentStep) .. "/" .. tostring(pTotal) .. ")"
+      statusLine = headline .. " (" .. tostring(currentStep) .. "/" .. tostring(pTotal) .. ")"
     else
-      statusLine = loadingTasksStr
-    end
-    if onconnectPendingTaskName and onconnectPendingTaskName ~= "" then
-      statusLine = statusLine .. " [" .. tostring(onconnectPendingTaskName) .. "]"
+      statusLine = headline
     end
   elseif not rfReady then
     statusLine = (t and t("widgets.dashboard.waiting_for_receiver_telemetry")) or "Waiting for receiver telemetry (1RSS/2RSS)"

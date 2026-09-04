@@ -18,7 +18,9 @@ return {
       name = "Lese Modellnamen",
       telemetry = "Lese Telemetrie-Konfiguration",
       flight_stats = "Lese Flugstatistik",
-      dataflash_summary = "Lese Dataflash-Status"
+      dataflash_summary = "Lese Dataflash-Status",
+      model_params_sync = "Synchronisiere Modellparameter",
+      model_name_sync = "Synchronisiere den Modellnamen"
     },
     saving_settings = "Einstellungen werden angewendet",
     save = {
