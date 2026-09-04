@@ -516,6 +516,10 @@ state = {
   lastInputTick = 0,
   initialLoadStartTick = 0,
   activePageMenuId = nil,
+  -- The menu id of a page whose `build` raised, so the failure page is up rather than the page.
+  -- It suppresses that page's `wakeup` while the failure page is on screen and is cleared the
+  -- moment the menu moves, so re-entering the page tries the build again.
+  pageBuildFailed = nil,
   helpContent = nil,
   helpPageTitle = nil,
   helpPageSubtitle = nil,
@@ -763,6 +767,8 @@ local function syncActivePageModule()
 
   logf("debug", "page %s -> %s", tostring(state.activePageMenuId), tostring(currentMenuId))
   state.activePageMenuId = currentMenuId
+  -- The latch belongs to the page that is leaving. Re-entering it is a fresh attempt.
+  state.pageBuildFailed = nil
 
   -- From here everything queued belongs to the page that is up, without the page saying so: the
   -- pages hold the queue itself and none of them names a client.
@@ -2246,8 +2252,16 @@ function M.buildUI()
         requestRebuild = requestRebuild
       })
 
-      if not ok then
+      if ok then
+        state.pageBuildFailed = nil
+      else
         reportHookCrash("activePage.build", currentMenuId, err)
+        -- The page's own `wakeup` keeps being called while this failure page is up, and a page
+        -- that did not finish building is the likeliest one to raise there too -- once per tick,
+        -- through a reporter that writes to the serial port whatever the preferences say. Worse,
+        -- a `requestRebuild` from such a wakeup rebuilds into the same raise. The latch stops
+        -- that without deciding the page is dead: leaving the menu clears it.
+        state.pageBuildFailed = currentMenuId
         -- The header is resolved before the page is built, so a page that declared Save, Reload
         -- or a star still offers all three on a screen its own build never finished -- and each
         -- of them would act on a page that does not exist. They come off. Help stays: it is
@@ -2395,6 +2409,7 @@ function M.init()
   state.lastBackTick = 0
   state.focusIndex = 0
   state.activePageMenuId = nil
+  state.pageBuildFailed = nil
   state.helpContent = nil
   state.helpPageTitle = nil
   state.helpPageSubtitle = nil
@@ -2648,6 +2663,7 @@ function M.run(event, touchState)
           pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
         end
         state.activePageMenuId = nil
+        state.pageBuildFailed = nil
         if MspRuntime and type(MspRuntime.setDefaultClient) == "function" then
           pcall(MspRuntime.setDefaultClient, TOOL_MSP_CLIENT)
         end
@@ -2897,7 +2913,11 @@ function M.run(event, touchState)
     end
 
     if not armed then
-      if not transitionedMenuThisTick then
+      -- A page whose build raised is not running; only the failure page is. Its `wakeup` would
+      -- be looking at state the aborted build never created.
+      local buildFailedHere = state.pageBuildFailed ~= nil
+        and state.pageBuildFailed == state.activePageMenuId
+      if (not transitionedMenuThisTick) and (not buildFailedHere) then
         local activePage = getActivePageModule()
         local wakeupFn = activePage and (activePage.wakeup or activePage.onWake)
         if type(wakeupFn) == "function" then
