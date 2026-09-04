@@ -599,6 +599,938 @@ customSwitches:
          r: 0
          g: 0
          b: 0
+telemetrySensors:
+   0:
+      id1:
+         id: 20
+      id2:
+         instance: 0
+      label: "1RSS"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 17
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   1:
+      id1:
+         id: 20
+      id2:
+         instance: 1
+      label: "2RSS"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 17
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   2:
+      id1:
+         id: 20
+      id2:
+         instance: 2
+      label: "RQly"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 13
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   3:
+      id1:
+         id: 20
+      id2:
+         instance: 3
+      label: "RSNR"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 17
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   4:
+      id1:
+         id: 20
+      id2:
+         instance: 4
+      label: "ANT"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   5:
+      id1:
+         id: 20
+      id2:
+         instance: 5
+      label: "RFMD"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   6:
+      id1:
+         id: 20
+      id2:
+         instance: 6
+      label: "TPWR"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 16
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   7:
+      id1:
+         id: 20
+      id2:
+         instance: 7
+      label: "TRSS"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 17
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   8:
+      id1:
+         id: 20
+      id2:
+         instance: 8
+      label: "TQly"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 13
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   9:
+      id1:
+         id: 20
+      id2:
+         instance: 9
+      label: "TSNR"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 17
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   10:
+      id1:
+         id: 4097
+      id2:
+         instance: 0
+      label: "BEAT"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   11:
+      id1:
+         id: 4113
+      id2:
+         instance: 0
+      label: "Vbat"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 1
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   12:
+      id1:
+         id: 4114
+      id2:
+         instance: 0
+      label: "Curr"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 2
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   13:
+      id1:
+         id: 4115
+      id2:
+         instance: 0
+      label: "Capa"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 14
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   14:
+      id1:
+         id: 4116
+      id2:
+         instance: 0
+      label: "Bat%"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 13
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   15:
+      id1:
+         id: 4128
+      id2:
+         instance: 0
+      label: "Cel#"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   16:
+      id1:
+         id: 4129
+      id2:
+         instance: 0
+      label: "Vcel"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 1
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   17:
+      id1:
+         id: 4149
+      id2:
+         instance: 0
+      label: "Thr"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 13
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   18:
+      id1:
+         id: 4167
+      id2:
+         instance: 0
+      label: "EscT"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 11
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   19:
+      id1:
+         id: 4169
+      id2:
+         instance: 0
+      label: "BecV"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 1
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   20:
+      id1:
+         id: 4174
+      id2:
+         instance: 0
+      label: "EscF"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   21:
+      id1:
+         id: 4175
+      id2:
+         instance: 0
+      label: "Esc#"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   22:
+      id1:
+         id: 4224
+      id2:
+         instance: 0
+      label: "Vesc"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 1
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   23:
+      id1:
+         id: 4225
+      id2:
+         instance: 0
+      label: "Vbec"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 1
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   24:
+      id1:
+         id: 4226
+      id2:
+         instance: 0
+      label: "Vbus"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 1
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   25:
+      id1:
+         id: 4227
+      id2:
+         instance: 0
+      label: "Vmcu"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 1
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   26:
+      id1:
+         id: 4240
+      id2:
+         instance: 0
+      label: "Iesc"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 2
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   27:
+      id1:
+         id: 4241
+      id2:
+         instance: 0
+      label: "Ibec"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 2
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   28:
+      id1:
+         id: 4242
+      id2:
+         instance: 0
+      label: "Ibus"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 2
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   29:
+      id1:
+         id: 4243
+      id2:
+         instance: 0
+      label: "Imcu"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 2
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   30:
+      id1:
+         id: 4256
+      id2:
+         instance: 0
+      label: "Tesc"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 11
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   31:
+      id1:
+         id: 4257
+      id2:
+         instance: 0
+      label: "Tbec"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 11
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   32:
+      id1:
+         id: 4259
+      id2:
+         instance: 0
+      label: "Tmcu"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 11
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   33:
+      id1:
+         id: 4274
+      id2:
+         instance: 0
+      label: "Alt"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 9
+      prec: 2
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   34:
+      id1:
+         id: 4288
+      id2:
+         instance: 0
+      label: "Hspd"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 18
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   35:
+      id1:
+         id: 4417
+      id2:
+         instance: 0
+      label: "CPU%"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 13
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   36:
+      id1:
+         id: 4418
+      id2:
+         instance: 0
+      label: "SYS%"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 13
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   37:
+      id1:
+         id: 4419
+      id2:
+         instance: 0
+      label: "RT%"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 13
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   38:
+      id1:
+         id: 4608
+      id2:
+         instance: 0
+      label: "MDL#"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   39:
+      id1:
+         id: 4609
+      id2:
+         instance: 0
+      label: "Mode"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   40:
+      id1:
+         id: 4610
+      id2:
+         instance: 0
+      label: "ARM"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   41:
+      id1:
+         id: 4611
+      id2:
+         instance: 0
+      label: "ARMD"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   42:
+      id1:
+         id: 4612
+      id2:
+         instance: 0
+      label: "Resc"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   43:
+      id1:
+         id: 4613
+      id2:
+         instance: 0
+      label: "Gov"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   44:
+      id1:
+         id: 4625
+      id2:
+         instance: 0
+      label: "PID#"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   45:
+      id1:
+         id: 4626
+      id2:
+         instance: 0
+      label: "RTE#"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   46:
+      id1:
+         id: 4628
+      id2:
+         instance: 0
+      label: "BAT#"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   47:
+      id1:
+         id: 4641
+      id2:
+         instance: 0
+      label: "AdjF"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
+   48:
+      id1:
+         id: 4642
+      id2:
+         instance: 0
+      label: "AdjV"
+      subId: 0
+      type: TYPE_CUSTOM
+      unit: 0
+      prec: 0
+      autoOffset: 0
+      filter: 0
+      logs: 1
+      persistent: 0
+      onlyPositive: 0
+      cfg:
+         custom:
+            ratio: 0
+            offset: 0
 screenData:
    0:
       LayoutId: Layout1x1
