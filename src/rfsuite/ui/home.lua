@@ -2248,6 +2248,13 @@ function M.buildUI()
 
       if not ok then
         reportHookCrash("activePage.build", currentMenuId, err)
+        -- The header is resolved before the page is built, so a page that declared Save, Reload
+        -- or a star still offers all three on a screen its own build never finished -- and each
+        -- of them would act on a page that does not exist. They come off. Help stays: it is
+        -- answered for this menu id by the help registry, which never needed the build to run.
+        actions.save = false
+        actions.reload = false
+        actions.star = false
         -- Everything the page appended before it raised belongs to a screen that will never be
         -- finished, and the armed strip appended before it does not. Both come off, the strip
         -- goes back on, and the failure takes the page body.
