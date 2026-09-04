@@ -516,6 +516,10 @@ state = {
   lastInputTick = 0,
   initialLoadStartTick = 0,
   activePageMenuId = nil,
+  -- The menu id of a page whose `build` raised, so the failure page is up rather than the page.
+  -- It suppresses that page's `wakeup` while the failure page is on screen and is cleared the
+  -- moment the menu moves, so re-entering the page tries the build again.
+  pageBuildFailed = nil,
   helpContent = nil,
   helpPageTitle = nil,
   helpPageSubtitle = nil,
@@ -752,11 +756,19 @@ local function syncActivePageModule()
   end
 
   if state.activePageMenuId and PageRegistry and PageRegistry.release then
-    PageRegistry.release(state.activePageMenuId, buildPageContext())
+    -- Guarded for the reason the close path already guards the same call: what runs here is the
+    -- page's own release code, and a raise in it would take the menu transition down with it --
+    -- leaving the tool gone on the way to a page that had nothing wrong with it.
+    local okRelease, errRelease = pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
+    if not okRelease then
+      reportHookCrash("PageRegistry.release", state.activePageMenuId, errRelease)
+    end
   end
 
   logf("debug", "page %s -> %s", tostring(state.activePageMenuId), tostring(currentMenuId))
   state.activePageMenuId = currentMenuId
+  -- The latch belongs to the page that is leaving. Re-entering it is a fresh attempt.
+  state.pageBuildFailed = nil
 
   -- From here everything queued belongs to the page that is up, without the page saying so: the
   -- pages hold the queue itself and none of them names a client.
@@ -945,7 +957,17 @@ local function onHelp()
   local helpData = nil
   local page = getActivePageModule()
   if page and type(page.onHelp) == "function" then
-    helpData = page.onHelp(helpCtx)
+    local okHelp, fromPage = pcall(page.onHelp, helpCtx)
+    if okHelp then
+      helpData = fromPage
+    else
+      reportHookCrash("activePage.onHelp", menuId, fromPage)
+      -- The hook did not answer, so the registry is asked exactly as it is for a page that
+      -- offers no hook at all. A help text is not worth ending the tool over.
+      if HelpRegistry and HelpRegistry.get then
+        helpData = HelpRegistry.get(menuId, helpCtx)
+      end
+    end
   elseif HelpRegistry and HelpRegistry.get then
     helpData = HelpRegistry.get(menuId, helpCtx)
   end
@@ -994,13 +1016,18 @@ local function onStar()
   local page = getActivePageModule()
   if page and type(page.onStar) == "function" then
     closeHelpDialogIfOpen()
-    local shouldRebuild = page.onStar({
+    local okStar, shouldRebuild = pcall(page.onStar, {
       i18n = state.i18n,
       preferences = state.preferences,
       menu = state.menu,
       refresh = M.buildUI
     })
-    if shouldRebuild ~= false then
+    if not okStar then
+      reportHookCrash("activePage.onStar", state.activePageMenuId, shouldRebuild)
+      -- A hook that raised has said nothing about a rebuild, and whatever it changed before it
+      -- raised is what the screen is now showing: repaint, as a hook returning nothing does.
+      scheduleBuildUI(false)
+    elseif shouldRebuild ~= false then
       scheduleBuildUI(false)
     end
     return
@@ -1431,7 +1458,14 @@ local function onReload()
   if page and page.onReload then
     local actions = nil
     if type(page.getHeaderActions) == "function" then
-      actions = page.getHeaderActions()
+      local okActions, fromPage = pcall(page.getHeaderActions)
+      if okActions then
+        actions = fromPage
+      else
+        reportHookCrash("activePage.getHeaderActions", state.activePageMenuId, fromPage)
+        -- `actions` stays nil, so the veto below does not apply and the reload goes ahead: the
+        -- same outcome a page that declares no header actions already gets.
+      end
     end
     if type(actions) == "table" and actions.reload == false then
       return
@@ -1444,13 +1478,18 @@ local function onReload()
       dropMspResponseCache()
       -- Keep preferences in-memory for reload to avoid repeated disk loads and table churn.
       _G.rfsuite.preferences = state.preferences
-      local shouldRebuild = page.onReload({
+      local okReload, shouldRebuild = pcall(page.onReload, {
         i18n = state.i18n,
         preferences = state.preferences,
         menu = state.menu,
         refresh = M.buildUI
       })
-      if shouldRebuild == false then
+      if not okReload then
+        reportHookCrash("activePage.onReload", state.activePageMenuId, shouldRebuild)
+        -- The read did not happen and the page is showing whatever it had; render once so a
+        -- loading state the reload put up does not stay on the screen for good.
+        scheduleBuildUI(false)
+      elseif shouldRebuild == false then
         -- Even with deferred page-managed reloads, render once so loading state
         -- (progress/overlay) is visible immediately after pressing Reload.
         scheduleBuildUI(false)
@@ -2031,7 +2070,10 @@ function M.buildUI()
     i18n          = state.i18n,
     preferences   = state.preferences,
     PageRegistry  = PageRegistry,
-    HelpRegistry  = HelpRegistry
+    HelpRegistry  = HelpRegistry,
+    -- The header calls a page hook of its own and has no logger of its own. It reports through
+    -- this one rather than growing a second wording for the same event.
+    reportHookCrash = reportHookCrash
   })
 
   -- Both actions end at the MSP queue, which the runtime clears on every tick while armed, so
@@ -2210,8 +2252,23 @@ function M.buildUI()
         requestRebuild = requestRebuild
       })
 
-      if not ok then
+      if ok then
+        state.pageBuildFailed = nil
+      else
         reportHookCrash("activePage.build", currentMenuId, err)
+        -- The page's own `wakeup` keeps being called while this failure page is up, and a page
+        -- that did not finish building is the likeliest one to raise there too -- once per tick,
+        -- through a reporter that writes to the serial port whatever the preferences say. Worse,
+        -- a `requestRebuild` from such a wakeup rebuilds into the same raise. The latch stops
+        -- that without deciding the page is dead: leaving the menu clears it.
+        state.pageBuildFailed = currentMenuId
+        -- The header is resolved before the page is built, so a page that declared Save, Reload
+        -- or a star still offers all three on a screen its own build never finished -- and each
+        -- of them would act on a page that does not exist. They come off. Help stays: it is
+        -- answered for this menu id by the help registry, which never needed the build to run.
+        actions.save = false
+        actions.reload = false
+        actions.star = false
         -- Everything the page appended before it raised belongs to a screen that will never be
         -- finished, and the armed strip appended before it does not. Both come off, the strip
         -- goes back on, and the failure takes the page body.
@@ -2352,6 +2409,7 @@ function M.init()
   state.lastBackTick = 0
   state.focusIndex = 0
   state.activePageMenuId = nil
+  state.pageBuildFailed = nil
   state.helpContent = nil
   state.helpPageTitle = nil
   state.helpPageSubtitle = nil
@@ -2605,6 +2663,7 @@ function M.run(event, touchState)
           pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
         end
         state.activePageMenuId = nil
+        state.pageBuildFailed = nil
         if MspRuntime and type(MspRuntime.setDefaultClient) == "function" then
           pcall(MspRuntime.setDefaultClient, TOOL_MSP_CLIENT)
         end
@@ -2854,7 +2913,11 @@ function M.run(event, touchState)
     end
 
     if not armed then
-      if not transitionedMenuThisTick then
+      -- A page whose build raised is not running; only the failure page is. Its `wakeup` would
+      -- be looking at state the aborted build never created.
+      local buildFailedHere = state.pageBuildFailed ~= nil
+        and state.pageBuildFailed == state.activePageMenuId
+      if (not transitionedMenuThisTick) and (not buildFailedHere) then
         local activePage = getActivePageModule()
         local wakeupFn = activePage and (activePage.wakeup or activePage.onWake)
         if type(wakeupFn) == "function" then
