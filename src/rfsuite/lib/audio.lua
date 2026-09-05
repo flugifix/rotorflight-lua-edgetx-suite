@@ -257,20 +257,24 @@ local function getPilotConfigApi()
   return pilotConfigApi
 end
 
--- WHO decides that the remaining capacity is announced.
+-- WHO decides that the remaining capacity is announced, and it is not always the radio.
 --
 -- From MSP API 12.09 the flight controller carries a MODEL_TELL_CAPACITY bit in its pilot
 -- config (`src/main/pg/pilot.h`), where the enum is introduced as indicating "what features on
--- the radio should be enabled for this model". A SET bit therefore turns the announcement on
--- for this craft whatever the radio is configured to do, so the same helicopter behaves the
--- same way on any transmitter. The `model_params_sync` task reads the word on connect and
--- parks it in the session.
+-- the radio should be enabled for this model". Once the board reports the word, that bit is the
+-- answer in both directions, the way `model_name_sync` already reads MODEL_SET_NAME: the craft
+-- says whether it wants the announcement, so the same helicopter behaves the same way on any
+-- transmitter. The `model_params_sync` task reads the word on connect and parks it in the
+-- session.
 --
--- A CLEAR bit does NOT turn it off, and that asymmetry is deliberate rather than an oversight.
--- `modelFlags` has no entry in the firmware's PG_RESET_TEMPLATE, so a board nobody has
--- configured for this reports zero, which is indistinguishable from a deliberate no. Letting
--- zero win would silence an announcement that is on by default, on every board new enough to
--- report the word at all -- the opposite of what the bit is for.
+-- A CLEAR bit therefore silences it, and it has to. Once `model_flags` is present,
+-- `app/pages/setup/model/page.lua` offers this bit as the only control for the feature -- there
+-- is no radio-side counterpart shown beside it -- so a bit that could only ever say yes would
+-- leave that switch unable to turn the callout off for a craft.
+--
+-- Below 12.09 there is no such field -- `model_flags` is nil rather than zero, which is why the
+-- API wrapper keeps those apart -- and the radio-side setting is then the only thing that can
+-- decide. It stays, as the fallback it now is.
 --
 -- The announcement itself is the fuel level spoken once per connection: that IS the capacity
 -- this model has left, and until now it was reachable only through the radio-side setting.
@@ -283,8 +287,9 @@ local function initialFuelWanted(events)
   if flags ~= nil then
     local Api = getPilotConfigApi()
     if type(Api) == "table" and type(Api.flagSet) == "function" then
-      if Api.flagSet(flags, Api.FLAG_TELL_CAPACITY) == true then
-        return true
+      local wanted = Api.flagSet(flags, Api.FLAG_TELL_CAPACITY)
+      if wanted ~= nil then
+        return wanted
       end
     end
   end
