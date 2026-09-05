@@ -74,6 +74,14 @@ local function defaultPreferences()
       model_announcement = false,
       initial_fuel = true,
     },
+    flightlog = {
+      -- Off by default, and deliberately so: a suite that starts writing files to every pilot's
+      -- card without being asked has made a decision that is the pilot's.
+      enabled = false,
+      -- An arm shorter than this is a check rather than a flight, and reaches neither the log
+      -- nor a battery's cycle count. 0 logs every arm.
+      min_seconds = 30,
+    },
     dashboard = {
       theme_preflight = "system/default",
       -- Phase overrides on top of the theme above, read only while theme_per_phase is on.

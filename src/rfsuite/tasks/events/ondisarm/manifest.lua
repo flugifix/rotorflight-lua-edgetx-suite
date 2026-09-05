@@ -2,4 +2,5 @@
 return {
   { name = "flight_stats", context = "widget" },
   { name = "dataflash_summary", context = "widget" },
+  { name = "flight_log", context = "widget" },
 }
