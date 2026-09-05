@@ -1075,8 +1075,9 @@ function Audio.process(self, opts)
     audioState.fuelSeenPositive = false
   end
 
-  local initialFuelEnabled = initialFuelWanted(events)
-  if initialFuelEnabled and audioState.initialized and not audioState.initialFuelAnnounced then
+  -- Once the callout has fired it stays fired for the session, so the cheapest of the three
+  -- tests goes first: no later pass then walks into `session.pilotConfig` at all.
+  if not audioState.initialFuelAnnounced and audioState.initialized and initialFuelWanted(events) then
     local fuel = tonumber(self.state and self.state.fuel)
     -- Same reason as the battery capacity above: this announcement is meant once per
     -- connection, and a caller that rebuilds its audio state for its own reasons has not
