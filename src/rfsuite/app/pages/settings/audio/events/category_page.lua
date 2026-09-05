@@ -12,6 +12,21 @@ end
 -- category's page.lua names its category and nothing else, and lib/audio.lua goes on reading
 -- one flat table.
 
+-- The governor states in the order the firmware numbers them (govState_e, 0..9). lib/audio.lua
+-- keeps the same order in its file map and in the preference keys it consults.
+local GOVERNOR_STATES = {
+  { key = "governor_state_off",      labelKey = "governor_state_off",      labelFallback = "Off" },
+  { key = "governor_state_idle",     labelKey = "governor_state_idle",     labelFallback = "Idle" },
+  { key = "governor_state_spoolup",  labelKey = "governor_state_spoolup",  labelFallback = "Spool-up" },
+  { key = "governor_state_recovery", labelKey = "governor_state_recovery", labelFallback = "Recovery" },
+  { key = "governor_state_active",   labelKey = "governor_state_active",   labelFallback = "Active" },
+  { key = "governor_state_thr_off",  labelKey = "governor_state_thr_off",  labelFallback = "Throttle off" },
+  { key = "governor_state_lost_hs",  labelKey = "governor_state_lost_hs",  labelFallback = "Lost headspeed" },
+  { key = "governor_state_autorot",  labelKey = "governor_state_autorot",  labelFallback = "Autorotation" },
+  { key = "governor_state_bailout",  labelKey = "governor_state_bailout",  labelFallback = "Bailout" },
+  { key = "governor_state_bypass",   labelKey = "governor_state_bypass",   labelFallback = "Bypass" },
+}
+
 -- ─── Config schema ───────────────────────────────────────────────────────────
 -- Single source of truth for all persisted audio event settings. `section` names the page
 -- that draws and saves an entry: a save writes its own section's keys and leaves the rest of
@@ -39,8 +54,18 @@ local CONFIG_SCHEMA = {
   { key = "model_announcement",type = "bool", default = false, section = "other" },
 }
 
+-- One enable per governor state, under the `governor_state` master switch. They default to on,
+-- so a preferences.ini written before they existed announces every state, as it did.
+for i = 1, #GOVERNOR_STATES do
+  CONFIG_SCHEMA[#CONFIG_SCHEMA + 1] = {
+    key = GOVERNOR_STATES[i].key, type = "bool", default = true, section = "governor"
+  }
+end
+
 -- ─── Sections ────────────────────────────────────────────────────────────────
--- One entry per page.
+-- One entry per page. An item with `requires` is drawn only while that switch is on: the
+-- per-state rows qualify the governor master switch, and ten greyed-out rows under a switch
+-- that is off would say nothing the switch does not.
 
 local SECTIONS = {
   arming = {
@@ -55,6 +80,7 @@ local SECTIONS = {
     titleFallback = "Governor State",
     items = {
       { key = "governor_state", labelKey = "governor_state", labelFallback = "Governor State" },
+      { kind = "subheader", labelKey = "section_governor_states", labelFallback = "Announced states", requires = "governor_state" },
     },
   },
   voltage = {
@@ -113,6 +139,14 @@ local SECTIONS = {
     },
   },
 }
+
+for i = 1, #GOVERNOR_STATES do
+  local state = GOVERNOR_STATES[i]
+  local items = SECTIONS.governor.items
+  items[#items + 1] = {
+    key = state.key, labelKey = state.labelKey, labelFallback = state.labelFallback, requires = "governor_state"
+  }
+end
 
 local FUEL_CALLOUT_VALUES = { [0] = true, [5] = true, [10] = true, [20] = true, [25] = true, [50] = true }
 
@@ -523,7 +557,13 @@ function M.new(sectionKey)
 
     for _, item in ipairs(section.items) do
       local k = item.key
-      if item.kind == "choice" and k == "fuel_callout_percent" then
+      if item.requires and ui.config[item.requires] ~= true then
+        -- drawn only while the switch it qualifies is on
+      elseif item.kind == "subheader" then
+        cursorY = cursorY + 10
+        Controls.appendStaticSectionHeader(children, x, cursorY, w, t(i18n, item.labelKey, item.labelFallback))
+        cursorY = cursorY + Controls.STATIC_SECTION_H
+      elseif item.kind == "choice" and k == "fuel_callout_percent" then
         local labelText = t(i18n, item.labelKey, item.labelFallback)
         cursorY = cursorY + Controls.appendComboSelect(
           children, x, cursorY, w,
