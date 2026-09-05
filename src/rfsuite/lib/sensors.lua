@@ -38,23 +38,29 @@ local SIM_FILE_ALIASES = {
   ["rpm"] = "rpm",
 }
 
-local logWanted = nil
+local debugEnabled = nil
 
--- This flag was declared false with nothing anywhere in the tree to assign it, so every call
+-- This flag was declared false with nothing anywhere in the tree assigning it, so every call
 -- site behind it was unreachable -- including the ones that say WHY a sensor did not resolve,
 -- which is what a report about a missing telemetry value needs. The suite's own log level
 -- decides now, so the diagnostics appear when a pilot raises it and stay silent otherwise.
 --
--- `Log.wanted` rather than a flag of our own: the call sites below build their message by
--- concatenation before the call, so they have to ask before they build. That is what it is for.
+-- Resolved ONCE rather than per call, and that is a budget decision rather than a style one.
+-- These call sites sit on the sensor read path, which runs inside the widget's state pass;
+-- asking `Log.wanted` each time walks the preference table and lowercases a string per sensor
+-- per pass, and that showed up as ~950 instructions on `pass.state` -- over its budget on its
+-- own. The cost of resolving once is that raising the log level takes effect when the module is
+-- next loaded rather than immediately, which is the right trade for a diagnostic that a pilot
+-- turns on deliberately and then goes flying with.
 local function debugWanted()
-  if logWanted == nil then
+  if debugEnabled == nil then
     local L = type(_G) == "table" and _G.rfsuite and _G.rfsuite.Log
     if type(L) ~= "table" or type(L.wanted) ~= "function" then return false end
-    logWanted = L.wanted
+    debugEnabled = L.wanted("debug") == true
   end
-  return logWanted("debug") == true
+  return debugEnabled
 end
+
 local loggedSimulatorState = false
 local loggedSources = {}
 local simValueCache = {}
