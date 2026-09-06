@@ -1121,6 +1121,10 @@ local function updateConnectionState(self)
   self.state.rfConnected = connected
   self.state.fblConnected = fblConnected
   self.state.connectionReady = ready
+  -- Published because `connectionReady` is not the same question: it opens on the soft timeout
+  -- while the connect chain is still running, and anything that must not compete with that chain
+  -- for the single MSP queue needs to know when the chain is actually finished.
+  self.state.tasksDone = tasksDone
   -- Kept apart from `ready` on purpose. Drawing may start before the connect chain has run;
   -- announcing the model may not, because the announcement needs the name that chain reads.
   -- This is the condition `ready` itself carried before the chain left the gate above, soft

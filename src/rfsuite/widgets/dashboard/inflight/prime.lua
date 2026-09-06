@@ -86,10 +86,16 @@ local AUX_FIELD_COUNT = 13
 -- ahead of it, 0-based.
 local AUX_MEMBER_BASE = 5
 
--- How long the link has to have stood before the automatic prime runs, in getTime ticks of 10 ms.
--- The connect chain is still filling the queue in the first second of a session, and a prime
--- pushed in beside it delays what the dashboard itself is waiting for.
-local AUTO_DELAY_TICKS = 200
+-- How long the connect chain has to have been FINISHED before the automatic prime runs, in
+-- getTime ticks of 10 ms.
+--
+-- The wait used to be measured from the link coming up, and two seconds of link is not the same
+-- thing at all: measured against a board, the chain was still running sixteen seconds in, the
+-- prime's forty-odd round trips went into the same single queue beside it, and the chain the
+-- dashboard is waiting for took fifty-nine seconds instead of sixteen -- long enough for the
+-- widget's own splash timeout to fire. So the chain is what is waited for, and this is only the
+-- settle on top of it.
+local AUTO_DELAY_TICKS = 100
 
 -- How many profiles a board has, when neither the status read nor the session says. Their own
 -- status reply carries `pid_profile_count`, which is where the real number comes from; this is
@@ -811,6 +817,15 @@ function M.tick(widget, drive)
   if widget.state.fblConnected ~= true then
     drive._primeLinkSince = nil
     drive._primeAutoDone = false
+    return
+  end
+
+  -- The connect chain owns the queue until it says otherwise. `tasksDone` is the widget's own
+  -- reading of that (widgets/dashboard/runtime.lua, updateConnectionState): the onconnect runner
+  -- is idle and the MSP progress is complete. Only the AUTOMATIC run is held here -- a pilot who
+  -- asks for a prime from the ground screen still gets one straight away.
+  if widget.state.tasksDone == false then
+    drive._primeLinkSince = nil
     return
   end
 
