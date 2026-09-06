@@ -142,6 +142,20 @@ end
 -- cannot hang the widget pass.
 local SWITCH_WALK_LIMIT = 256
 
+-- How many switch positions one WIDGET pass may take off that walk.
+--
+-- The whole walk does not fit in a widget pass and must not be attempted in one. `switches()`
+-- yields every available position on the radio -- the physical switches, both positions of every
+-- trim, the flight modes and every logical switch the model has configured -- and each one costs
+-- a call into the firmware plus a table. Run in a startup pass, where the widget is already close
+-- to the firmware's per-call instruction limit, the walk overruns it: the pass raises `CPU limit`,
+-- the widget entry point catches it and the pass is abandoned before anything below it has run.
+-- Measured on a radio: with the overlay enabled the dashboard never left its connection splash,
+-- because every pass died in this walk and the build was enqueued in the part of `refresh` that
+-- was never reached. The walk is therefore taken in slices and resumed, the way the runtime's own
+-- scene build is chunked.
+local SWITCH_SLICE = 32
+
 local function modelApi(name)
   local m = _G and _G.model
   if type(m) ~= "table" then return nil end
@@ -170,18 +184,24 @@ function M.radio()
     -- Every switch POSITION the radio offers, in the firmware's own order, as { swsrc, name }.
     -- The trim block is found by walking this rather than by computing an index: the first trim's
     -- position number is not a constant Lua is ever told.
-    switchList = function()
+    -- `from` resumes the walk after that position and `budget` bounds what one call takes; with
+    -- neither it walks the lot, which is what a Lua PAGE wants and what a widget pass must not do.
+    -- Resuming needs no state on this side: the firmware's iterator is a plain function of (last,
+    -- index), so handing it back the last position seen continues exactly where it stopped.
+    --
+    -- Returns the slice and the position to resume AFTER, or nil for "that was the end".
+    switchList = function(from, budget)
       local iter, last, first = callGlobal("switches")
       if type(iter) ~= "function" then return nil end
       local list = {}
-      local index = first
-      for _ = 1, SWITCH_WALK_LIMIT do
+      local index = from or first
+      for _ = 1, (budget or SWITCH_WALK_LIMIT) do
         local ok, nextIndex, name = pcall(iter, last, index)
-        if not ok or nextIndex == nil then break end
+        if not ok or nextIndex == nil then return list, nil end
         list[#list + 1] = { swsrc = nextIndex, name = name }
         index = nextIndex
       end
-      return list
+      return list, index
     end,
 
     channelUs = function(channel)
@@ -330,6 +350,15 @@ end
 -- its start -- a lone `SA-` between two arrow-spelled positions can never satisfy that.
 function M.resolveTrims(radio)
   local list = radio and type(radio.switchList) == "function" and radio.switchList() or nil
+  return M.trimsFromList(list)
+end
+
+--- The same analysis over a list that has already been read, in one slice or in several.
+--
+-- Kept apart from the walk above because the two have different budgets: a Lua page reads the
+-- whole list in one call and analyses it there, while a widget pass reads it a slice at a time
+-- and analyses it once, on the pass that completes it.
+function M.trimsFromList(list)
   if type(list) ~= "table" or #list == 0 then return nil end
 
   local bestStart, bestLength = nil, 0
@@ -405,6 +434,7 @@ function M.newDrive(radio, settings)
   self.trimUp = nil
   self.trims = nil
   self.trimsResolved = false
+  self.trimScan = nil
   self.navDir = 0
   self.navNextAt = nil
   self.values = {}
@@ -643,11 +673,41 @@ end
 
 --- The radio's trim block, resolved once and kept. Re-resolved when the settings change, because
 -- the walk that finds it is not free and nothing else moves it.
+--
+-- The walk is taken a slice at a time and answers nil until it is complete, so no single pass can
+-- be killed by it -- and the cursor is advanced BEFORE the slice is asked for, so a pass that is
+-- killed inside it anyway loses that slice rather than starting the same walk again on the next
+-- pass, for ever. That ordering is the whole defect this function was rewritten for: with the
+-- state written after the work, a walk that overruns the instruction limit is retried by every
+-- following pass and the widget never gets past it.
+--
+-- The epoch is bumped on the pass that completes the walk, because the row list carries a marker
+-- per trim and that marker becomes knowable exactly then.
 function Drive:ensureTrims()
-  if not self.trimsResolved then
-    self.trims = M.resolveTrims(self.radio)
-    self.trimsResolved = true
+  if self.trimsResolved then
+    if type(self.trims) ~= "table" then return nil end
+    return self.trims
   end
+
+  local scan = self.trimScan
+  if scan == nil then
+    scan = { list = {}, from = nil }
+    self.trimScan = scan
+  end
+
+  local slice, resumeAt = self.radio.switchList(scan.from, SWITCH_SLICE)
+  scan.from = resumeAt
+  if type(slice) == "table" then
+    for i = 1, #slice do
+      scan.list[#scan.list + 1] = slice[i]
+    end
+  end
+  if resumeAt ~= nil and #scan.list < SWITCH_WALK_LIMIT then return nil end
+
+  self.trims = M.trimsFromList(scan.list)
+  self.trimsResolved = true
+  self.trimScan = nil
+  self.valueEpoch = self.valueEpoch + 1
   if type(self.trims) ~= "table" then return nil end
   return self.trims
 end
@@ -726,12 +786,18 @@ end
 --
 -- In `rows` mode that is the rows whose trim this radio has; in `navigate` mode it is every
 -- assigned cell, because the walk reaches all of them with the same two trims.
+-- This is the SNAPSHOT's view and it never starts the walk. The mask describes the tuning
+-- surface's rows, and that surface exists only while the overlay is live; starting the walk from
+-- here put it in every pass of the widget's cold start instead, which is where it does not fit.
+-- Until `pollTrims` has finished the walk the rows publish no marker, and the epoch bump on the
+-- completing pass is what puts them on the screen.
 function Drive:trimRowsPresent()
   local mask = {}
   local settings = self.settings
   if not settings or settings.trims ~= true then return mask end
-  local trims = self:ensureTrims()
-  if trims == nil then return mask end
+  if self.trimsResolved ~= true then return mask end
+  local trims = self.trims
+  if type(trims) ~= "table" then return mask end
 
   if self:navigateMode() then
     if trims[settings.adj_trim or 0] == nil then return mask end
@@ -987,6 +1053,9 @@ function M.get(widget)
     drive.settings = settings
     drive._signature = signature
     drive.trimsResolved = false
+    -- and with it whatever a walk in progress had collected: a half-read list belongs to the
+    -- settings it was started under.
+    drive.trimScan = nil
     drive.seeded = false
   end
   drive._source = prefs
