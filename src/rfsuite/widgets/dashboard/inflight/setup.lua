@@ -555,6 +555,19 @@ function M.check(drive, settings)
   if (settings.bank_gvar or 0) <= 0 then faults[#faults + 1] = "no_bank_gvar" end
   if (settings.value_gvar or 0) <= 0 then faults[#faults + 1] = "no_value_gvar" end
 
+  -- The two halves have to be two variables and two channels. Pointed at one, the bank the pilot
+  -- selects and the step he asks for land on the same wire, and the flight controller reads the
+  -- step as a bank change and the bank change as a step -- a configuration that is not merely
+  -- broken but actively dangerous, since the parameter that moves is not the one on the screen.
+  -- M.plan has always refused this; the check said nothing, so a pilot who never pressed the
+  -- setup button was told his model was fine.
+  if (settings.bank_gvar or 0) > 0 and settings.bank_gvar == settings.value_gvar then
+    faults[#faults + 1] = "same_gvar"
+  end
+  if settings.bank_ch == settings.value_ch then
+    faults[#faults + 1] = "same_channel"
+  end
+
   local looked = false
   if (settings.bank_gvar or 0) > 0 then
     checkGvarDetails(radio, settings.bank_gvar, faults, "bank")

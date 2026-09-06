@@ -140,9 +140,15 @@ function M.describeCheck(result, t)
   if type(result) ~= "table" then return "" end
 
   local unset, mix, gvar, trim, claim = false, false, false, false, false
+  local same = false
   for i = 1, #result do
     local code = result[i]
-    if string.find(code, "mix", 1, true) then
+    -- The two "one thing doing both jobs" faults are matched FIRST and by name. `same_gvar` reads
+    -- as neither a gvar_ fault nor a mixer one, and left to the tests below it would have fallen
+    -- through to "not set" -- which is the opposite of what it is.
+    if code == "same_gvar" or code == "same_channel" then
+      same = true
+    elseif string.find(code, "mix", 1, true) then
       mix = true
     elseif string.find(code, "gvar_", 1, true) then
       gvar = true
@@ -157,6 +163,7 @@ function M.describeCheck(result, t)
 
   local parts = {}
   if unset then parts[#parts + 1] = t("widgets.dashboard.inflight_check_unset", "Switch or variables not set") end
+  if same then parts[#parts + 1] = t("widgets.dashboard.inflight_check_same", "Bank and value share a variable or a channel") end
   if mix then parts[#parts + 1] = t("widgets.dashboard.inflight_check_mix", "Mixer line missing or wrong") end
   if gvar then parts[#parts + 1] = t("widgets.dashboard.inflight_check_gvar", "Variable range or precision") end
   if trim then parts[#parts + 1] = t("widgets.dashboard.inflight_check_trim", "Trim still active here") end

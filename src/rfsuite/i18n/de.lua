@@ -2539,6 +2539,7 @@ return {
       inflight_check_gvar = "Variablenbereich oder Nachkommastelle",
       inflight_check_trim = "Trimmung hier noch aktiv",
       inflight_check_claim = "Wechseln und Verstellen brauchen zwei Trimmungen",
+      inflight_check_same = "Bank und Wert teilen sich Variable oder Kanal",
       inflight_prime = "Auslesen",
       inflight_backup = "Sichern nach",
       inflight_restore = "Zurück aus",
