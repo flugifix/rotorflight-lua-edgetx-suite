@@ -2552,6 +2552,8 @@ return {
       inflight_backup_held = "Backup in profile",
       inflight_transfer_busy = "Copying profile",
       inflight_transfer_failed = "Profile copy failed",
+      inflight_transfer_refused = "Profile copy refused",
+      inflight_backup_unprimed = "Read the board before taking a backup",
       inflight_ground_armed = "Disarm to prime or copy a profile",
       inflight_delta_title = "CHANGED SINCE THE BACKUP",
       inflight_delta_unprimed = "Prime first: there is nothing to compare against",

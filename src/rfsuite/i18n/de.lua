@@ -2552,6 +2552,8 @@ return {
       inflight_backup_held = "Sicherung in Profil",
       inflight_transfer_busy = "Profil wird kopiert",
       inflight_transfer_failed = "Profil kopieren fehlgeschlagen",
+      inflight_transfer_refused = "Profil kopieren abgelehnt",
+      inflight_backup_unprimed = "Vor dem Sichern den Flugcontroller auslesen",
       inflight_ground_armed = "Zum Auslesen oder Kopieren disarmen",
       inflight_delta_title = "SEIT DER SICHERUNG GEÄNDERT",
       inflight_delta_unprimed = "Erst auslesen: es gibt nichts zum Vergleichen",

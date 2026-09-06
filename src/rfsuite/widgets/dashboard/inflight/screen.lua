@@ -425,10 +425,22 @@ local function describeSet(snapshot, t)
 end
 
 --- Whether an undo exists, and what the last attempt at making one did.
+--
+-- A refusal is shown HERE rather than on the delta line below, because this is the line under the
+-- button the pilot pressed. The delta line says its own thing about the same state -- that there
+-- is nothing to compare a flight with -- and the two are deliberately both on the screen: one
+-- answers "why did that button do nothing", the other answers "why is this list empty".
 local function describeBackup(snapshot, t)
   local transfer = snapshot.transfer
   if type(transfer) == "table" and transfer.state == "busy" then
     return t("widgets.dashboard.inflight_transfer_busy", "Copying profile")
+  end
+  if type(transfer) == "table" and transfer.state == "refused" then
+    if transfer.reason == "unprimed" then
+      return t("widgets.dashboard.inflight_backup_unprimed", "Read the board before taking a backup")
+    end
+    return t("widgets.dashboard.inflight_transfer_refused", "Profile copy refused")
+      .. ": " .. tostring(transfer.reason)
   end
   if type(transfer) == "table" and transfer.state == "error" then
     return t("widgets.dashboard.inflight_transfer_failed", "Profile copy failed")

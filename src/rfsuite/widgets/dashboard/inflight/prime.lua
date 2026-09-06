@@ -1044,9 +1044,28 @@ end
 -- copy has to exist BEFORE the flight; afterwards there is nothing left to copy. The values are
 -- snapshotted at the same moment and for the same reason: after that save nothing on the radio
 -- could still say what the profile used to hold, and the delta is measured against this.
+--- A refusal the pilot can read, rather than one that came back as a return value nobody looked
+-- at. It goes on the drive where every other outcome of a transfer goes, so the ground screen's
+-- backup line says what the last press did.
+local function refuseTransfer(drive, kind, reason)
+  drive.transfer = { kind = kind, state = "refused", reason = reason }
+  bump(drive)
+  return false, reason
+end
+
 function M.backup(widget, drive)
   local refusal = M.transferRefusal(widget, drive)
-  if refusal ~= nil then return false, refusal end
+  if refusal ~= nil then return refuseTransfer(drive, "backup", refusal) end
+
+  -- A backup taken before the board has been read copies the profile and snapshots NOTHING, and
+  -- the delta after the flight is then measured against an empty table. That reads on screen as
+  -- "nothing has changed" for a flight that changed everything -- a wrong answer where a missing
+  -- one was wanted, and the worst of the three states this screen can be in. An undo is only an
+  -- undo once there is something to compare the flight with.
+  local prime = drive.prime
+  if type(prime) ~= "table" or prime.phase ~= M.PHASE_DONE then
+    return refuseTransfer(drive, "backup", "unprimed")
+  end
 
   local backup0 = math.floor(tonumber(drive.settings.backup_profile) or 0) - 1
   local active0 = M.activeProfile0(drive)
@@ -1067,7 +1086,7 @@ end
 -- what it no longer holds; leaving them would show a delta against a profile that has been undone.
 function M.restore(widget, drive)
   local refusal = M.transferRefusal(widget, drive)
-  if refusal ~= nil then return false, refusal end
+  if refusal ~= nil then return refuseTransfer(drive, "restore", refusal) end
 
   local backup0 = math.floor(tonumber(drive.settings.backup_profile) or 0) - 1
   local active0 = M.activeProfile0(drive)
@@ -1093,7 +1112,10 @@ end
 function M.delta(drive)
   if type(drive) ~= "table" then return nil end
   local reference = (type(drive.backup) == "table" and drive.backup.values) or drive.primedValues
-  if type(reference) ~= "table" then return nil end
+  -- An EMPTY reference is no reference. A snapshot taken before anything had been read off the
+  -- board is a table with nothing in it, and measuring against it yields an empty list -- which
+  -- the screen reads as "nothing has changed", a wrong answer where a missing one was wanted.
+  if type(reference) ~= "table" or next(reference) == nil then return nil end
   if drive._deltaEpoch == drive.valueEpoch and drive._deltaList ~= nil then return drive._deltaList end
 
   local list = {}
