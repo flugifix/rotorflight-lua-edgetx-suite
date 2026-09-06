@@ -429,6 +429,17 @@ local function cleanupInflight(self)
   if drive then drive.cleanup(self) end
 end
 
+-- The overlay's ground half, loaded on the same terms and separately from the drive: it speaks
+-- MSP and the drive does not, and a widget whose pilot has the feature off loads neither.
+local InflightPrime = nil
+local function inflightPrime()
+  if InflightPrime == nil then
+    InflightPrime = requireModule("widgets/dashboard/inflight/prime.lua") or false
+  end
+  if InflightPrime == false then return nil end
+  return InflightPrime
+end
+
 --- One pass of the overlay. Off the overlay this costs one table lookup; with it enabled but the
 -- interlock open, one switch read.
 local function tickInflight(self)
@@ -437,7 +448,16 @@ local function tickInflight(self)
     return
   end
   local drive = inflightDrive()
-  if drive then drive.tick(self) end
+  if not drive then return end
+  -- The ground half runs BEFORE the drive's own pass, on the same drive object: what it moves has
+  -- to reach the published snapshot in the pass that moved it, and it is the drive's pass that
+  -- publishes.
+  local prime = inflightPrime()
+  if prime then
+    local instance = drive.get(self)
+    if instance then prime.tick(self, instance) end
+  end
+  drive.tick(self)
 end
 
 -- Which tuning surface this pass belongs to, or nil for the dashboard as it has always been.

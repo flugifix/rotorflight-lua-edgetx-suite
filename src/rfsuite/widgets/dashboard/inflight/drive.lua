@@ -386,9 +386,12 @@ function M.newDrive(radio, settings)
   self.rawSince = nil
   self.bank = 1
   self.row = 1
+  -- The documented layout, until the ground prime has read the board's own slot table and
+  -- replaced all three. Nothing else in this file reads the three constants.
   self.bands = Functions.REFERENCE_BANDS
   self.bankValues = Functions.REFERENCE_BAND_GV
   self.set = Functions.REFERENCE_SET
+  self.setSource = "reference"
   self.bankShown = nil
   self.written = 0
   self.writtenFm = nil
@@ -1021,6 +1024,21 @@ local function publish(widget, drive)
     }
   end
 
+  -- The ground half's progress, summarised rather than handed over. Its own table is mutated in
+  -- place as replies arrive, and everything published here is read from a tree that is being
+  -- built -- so what travels is a copy of the four counters, taken at the moment of the swap.
+  local prime = drive.prime
+  local primeState = nil
+  if type(prime) == "table" then
+    primeState = {
+      phase = prime.phase,
+      done = prime.done,
+      total = prime.total,
+      error = prime.error,
+      skipped = prime.skipped
+    }
+  end
+
   local activeId = drive:functionId(drive.bank, drive.row)
   state.inflight = {
     epoch = epoch,
@@ -1034,7 +1052,16 @@ local function publish(widget, drive)
     activeName = activeId and Functions.nameOf(activeId) or nil,
     activeValue = activeId and drive.values[activeId] or nil,
     navigate = drive:navigateMode(),
-    profile = drive.profile
+    profile = drive.profile,
+    prime = primeState,
+    -- Which of the two layouts the rows above came from: the board's own slot table once the
+    -- prime has read it, the documented one until then and whenever the board's yields nothing
+    -- usable. It is on the screen because a set that silently fell back to the reference layout
+    -- and a set that came off this board look exactly alike otherwise.
+    setSource = drive.setSource,
+    -- Both are written once and not touched again, so they travel as themselves.
+    backup = drive.backup,
+    transfer = drive.transfer
   }
 end
 
