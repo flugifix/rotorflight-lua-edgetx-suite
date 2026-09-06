@@ -69,19 +69,25 @@ local imageKey, imageFile, imageCaption
 
 --- The model image and its caption: which picture belongs to the craft in front of us.
 --
--- The craft name comes from the flight controller and the other two from the radio, so the
--- picture follows the model rather than the radio slot it is flown from.
-local function resolveModelImage(craftName, edgetxName, edgetxBitmap)
+-- The craft name comes from the flight controller and the other three from the radio, so
+-- the picture follows the model rather than the radio slot it is flown from. A per-cell
+-- variant comes first, which is how one airframe flown on two batteries gets two pictures.
+local function resolveModelImage(craftName, edgetxName, edgetxBitmap, cells)
   -- A flight controller with no name answers the read with an empty string rather than
   -- with nothing (tasks/msp/api/name.lua, Api.parse), so "" is the case to step over.
   if type(craftName) ~= "string" then craftName = "" end
   if type(edgetxName) ~= "string" then edgetxName = "" end
   if type(edgetxBitmap) ~= "string" then edgetxBitmap = "" end
+  cells = math.floor(tonumber(cells) or 0)
 
-  local key = craftName .. "\0" .. edgetxName .. "\0" .. edgetxBitmap
+  local key = craftName .. "\0" .. edgetxName .. "\0" .. edgetxBitmap .. "\0" .. cells
   if key == imageKey then return imageFile, imageCaption end
 
-  local file = findImage(craftName)
+  local file = nil
+  if craftName ~= "" then
+    if cells > 0 then file = findImage(craftName .. "-" .. cells .. "S") end
+    if not file then file = findImage(craftName) end
+  end
   if not file then file = findImage(edgetxBitmap) end
 
   local caption = nil
@@ -135,7 +141,7 @@ function Derived.build(state, sources)
     craftName = _G.rfsuite.session.modelName
   end
   snap.model_image, snap.model_image_caption = resolveModelImage(
-    craftName, snap.edgetx_model_name, snap.edgetx_model_bitmap)
+    craftName, snap.edgetx_model_name, snap.edgetx_model_bitmap, state.batteryCellCount)
 
   -- Assigned once, as a fresh table per build: closures hold `state` and read mid-sweep,
   -- so the swap has to be atomic -- a table filled in place would show half a snapshot.
