@@ -82,9 +82,14 @@ local SLOT_COUNT = 42
 -- Their adjustments page bounds an AUX field to this before it maps it (its AUX_CHANNEL_COUNT).
 local AUX_FIELD_COUNT = 13
 
--- The first AUX member when the receiver map has not been read: four sticks and the throttle
--- ahead of it, 0-based.
+-- The first AUX member: four sticks and the throttle ahead of it, 0-based. This is the firmware's
+-- CONTROL_CHANNEL_COUNT (rx/rx.h), the same five `rc_adjustments.c` adds to an adjustment's field.
 local AUX_MEMBER_BASE = 5
+
+-- How many AUX fields the receiver map has anything to say about. The map is
+-- RX_MAPPABLE_CHANNEL_COUNT = 8 bytes long (target/common_defaults_post.h, served whole by
+-- MSP_RX_MAP), five of them the sticks, so it names AUX1, AUX2 and AUX3 and stops.
+local MAPPED_AUX_COUNT = 3
 
 -- How long the connect chain has to have been FINISHED before the automatic prime runs, in
 -- getTime ticks of 10 ms.
@@ -227,24 +232,35 @@ end
 
 --- The wire channel an AUX field of a slot record names.
 --
--- The record's field is a 0-based index into the receiver's AUX channels, and which wire channel
--- AUX1 actually is comes out of the receiver map (MSP 64). Above AUX3 the map says nothing and
--- the channels are consecutive from AUX1, which is the extrapolation their own adjustments page
--- makes. The return is 1-based, the way "ch11" is spelled.
+-- The record's field is a 0-based index into the AUX channels, and the firmware reads it as
+-- `rcInput[field + CONTROL_CHANNEL_COUNT]` with a count of five (fc/rc_adjustments.c, rx/rx.h).
+-- So the field names a position in `rcInput`, and the question is only which wire channel the
+-- receiver put there.
+--
+-- The receiver map answers that for the FIRST EIGHT positions and for no others.
+-- `readRxChannels` (rx/rx.c) takes the sample for position `channel` from wire channel
+-- `rcmap[channel]` while `channel < RX_MAPPABLE_CHANNEL_COUNT`, which is 8, and from `channel`
+-- itself above it -- and MSP_RX_MAP serves exactly those eight bytes. Positions 5, 6 and 7 are
+-- the AUX1..AUX3 the map's last three bytes name; position 8 and up carry the wire channel of
+-- the same number, whatever the map says about the sticks.
+--
+-- Fields 0..2 therefore go through the map and fields 3 and up are the identity, which is where
+-- extrapolating `map.aux1 + index` past AUX3 goes wrong. Measured on a board whose map is
+-- `AECR1T23` (`aux1 = 4`): the documented layout's enable field 5 and value field 6 came out as
+-- CH10 and CH11 instead of CH11 and CH12, no slot matched the channels the model devotes to the
+-- pair, and the board's own slot table was discarded in favour of the documented one.
+--
+-- The return is 1-based, the way "ch11" is spelled.
 function M.auxToWireChannel(auxField, map)
   local index = math.floor(tonumber(auxField) or 0)
   if index < 0 then index = 0 end
   if index > (AUX_FIELD_COUNT - 1) then index = AUX_FIELD_COUNT - 1 end
 
   local member = nil
-  if type(map) == "table" then
+  if type(map) == "table" and index < MAPPED_AUX_COUNT then
     if index == 0 then member = tonumber(map.aux1) end
     if index == 1 then member = tonumber(map.aux2) end
     if index == 2 then member = tonumber(map.aux3) end
-    if member == nil then
-      local base = tonumber(map.aux1)
-      if base ~= nil then member = base + index end
-    end
   end
   if member == nil then member = AUX_MEMBER_BASE + index end
   return member + 1
