@@ -2451,7 +2451,26 @@ return {
       fn_gov_headspeed = "Gov Head Speed",
       fn_gov_yaw_ff = "Gov Heck FF",
       fn_battery_profile = "Akku-Profil",
-      fn_unknown = "Funktion"
+      fn_unknown = "Funktion",
+      -- The in-flight tuning overlay's own screens.
+      inflight_title = "IN-FLIGHT-TUNING",
+      inflight_open = "IN-FLIGHT-TUNING",
+      inflight_profile = "PROFIL",
+      inflight_live = "LIVE",
+      inflight_ground = "BODEN",
+      inflight_bank = "BANK",
+      inflight_row = "REIHE",
+      inflight_bank_unknown = "Freigabekanal zwischen zwei Bänken",
+      inflight_unassigned = "Nicht belegt",
+      inflight_hint_touch = "Lang drücken für die Touch-Bedienung",
+      inflight_interlock_off = "Freigabe aus - es werden keine Schritte gesendet",
+      inflight_check = "SETUP",
+      inflight_check_ok = "Setup in Ordnung",
+      inflight_check_unchecked = "Setup nicht geprüft",
+      inflight_check_unset = "Schalter oder Variablen nicht gesetzt",
+      inflight_check_mix = "Mischerzeile fehlt oder ist falsch",
+      inflight_check_gvar = "Variablenbereich oder Nachkommastelle",
+      inflight_check_trim = "Trimmung hier noch aktiv"
     },
     governor = {
       ACTIVE = "AKTIV",

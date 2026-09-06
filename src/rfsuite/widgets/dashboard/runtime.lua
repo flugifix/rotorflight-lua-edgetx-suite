@@ -401,6 +401,59 @@ local function logGv(fmt, ...)
   Log.emit("rfsuite.reload", msg, "info")
 end
 
+-- The in-flight tuning overlay, loaded on first use rather than at the top of this file. It is
+-- off by default and the widget's cold start is the pass closest to the firmware's instruction
+-- limit, so a model that does not use it never pays for the module.
+local InflightDrive = nil
+local function inflightDrive()
+  if InflightDrive == nil then
+    InflightDrive = requireModule("widgets/dashboard/inflight/drive.lua") or false
+  end
+  if InflightDrive == false then return nil end
+  return InflightDrive
+end
+
+local function inflightEnabled(self)
+  local prefs = self.modelPreferences
+  local section = (type(prefs) == "table") and prefs.inflight or nil
+  return type(section) == "table" and section.enabled == true
+end
+
+--- Everything the overlay wrote goes back to 0. Called on every way out -- the widget going to
+-- background, the link dropping, the feature being switched off -- because which transition is
+-- actually observed is not knowable in advance, and a value variable left standing keeps the
+-- flight controller stepping.
+local function cleanupInflight(self)
+  if self._inflight == nil then return end
+  local drive = inflightDrive()
+  if drive then drive.cleanup(self) end
+end
+
+--- One pass of the overlay. Off the overlay this costs one table lookup; with it enabled but the
+-- interlock open, one switch read.
+local function tickInflight(self)
+  if self._foreground ~= true or not inflightEnabled(self) then
+    cleanupInflight(self)
+    return
+  end
+  local drive = inflightDrive()
+  if drive then drive.tick(self) end
+end
+
+-- Which tuning surface this pass belongs to, or nil for the dashboard as it has always been.
+-- `zone` needs the interlock; `fs` is also reached from the quick settings menu with the
+-- interlock open, where the drive is inert and the screen is a read-out.
+local function inflightMode(self, isInteractive)
+  local snapshot = self.state and self.state.inflight
+  if type(snapshot) ~= "table" then return nil end
+  if isInteractive then
+    if snapshot.live == true or self.inflightFullscreen == true then return "fs" end
+    return nil
+  end
+  if snapshot.live == true then return "zone" end
+  return nil
+end
+
 -- The job slot. At most one job is pending per widget, held in `self._job` as
 -- { kind, step }: `kind` names the job for the log line, `step(self)` runs the work
 -- against the CURRENT state (never a snapshot taken at enqueue time) and returns true
@@ -496,6 +549,32 @@ local function menuJobStep(self)
   if not (menu and type(menu.build) == "function") then return true end
   local children = {}
   menu.build(children, self)
+  lvgl.clear()
+  lvgl.build(children)
+  self.built = true
+  self._lastChildCount = #children
+  return true
+end
+
+-- The tuning overlay's two builds. Both complete in one step, like the menu: the tree is a fixed
+-- handful of nodes rather than a theme's box list, so there is nothing to spread over passes.
+local function tuningJobStep(self)
+  local screen = requireModule("widgets/dashboard/inflight/screen.lua")
+  if not (screen and type(screen.buildZone) == "function") then return true end
+  local children = {}
+  screen.buildZone(children, self)
+  lvgl.clear()
+  lvgl.build(children)
+  self.built = true
+  self._lastChildCount = #children
+  return true
+end
+
+local function tuningFullscreenJobStep(self)
+  local screen = requireModule("widgets/dashboard/inflight/screen.lua")
+  if not (screen and type(screen.buildFullscreen) == "function") then return true end
+  local children = {}
+  screen.buildFullscreen(children, self)
   lvgl.clear()
   lvgl.build(children)
   self.built = true
@@ -2117,6 +2196,9 @@ function Runtime.new(zone, options)
       if Sensors and type(Sensors.reset) == "function" then
         Sensors.reset()
       end
+      -- The link is gone, so nothing can report what the board is doing with what the overlay
+      -- last wrote. Both variables go back to 0 here rather than being left for the interlock.
+      cleanupInflight(self)
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       end
@@ -2171,6 +2253,10 @@ function Runtime.new(zone, options)
       reloadActiveTheme(self)
     end
     
+    -- The overlay, last in the pass: it reads the per-model preferences and the connection state
+    -- this pass has just settled, and it writes nothing that anything above it reads back.
+    tickInflight(self)
+
     -- Clear event_context immediately after all widget background logic
     if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
       _G.rfsuite.session.event_context = nil
@@ -2211,6 +2297,10 @@ function Runtime.new(zone, options)
   -- for theme loads into a structural rule for every build.
   function widget.refresh(self, event, touchState)
     traceInstructionUsage(self)
+
+    -- The firmware calls refresh() for the widget the pilot is looking at and background() for
+    -- every other one, so this is where "on screen" is known. The overlay drives only from here.
+    self._foreground = true
 
     -- Route touch/key events to LVGL engine when active (e.g. fullscreen)
     if lvgl and type(lvgl.onEvent) == "function" and event ~= nil then
@@ -2274,10 +2364,32 @@ function Runtime.new(zone, options)
 
     -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
     local isInteractive = (event ~= nil)
+    local tuningMode = inflightMode(self, isInteractive)
+    if not isInteractive then
+      -- Leaving fullscreen is the one exit the firmware does not always report -- a long press on
+      -- RTN closes it and Lua may never see the key -- so the ground surface is dropped whenever a
+      -- pass arrives without an event rather than when a close is observed.
+      self.inflightFullscreen = nil
+    end
     local nextRenderKey = nil
-    if isInteractive then
+    if tuningMode then
+      -- The same 2 Hz throttle the scene key is under. The value and the armed row are reactive
+      -- closures and follow the state per frame; everything the key covers is layout, and
+      -- rebuilding that at the pass rate would spend the budget those closures live on.
+      if not self._lastUIRefresh then self._lastUIRefresh = 0 end
+      local now = nowSeconds()
+      if self._cachedTuningKey == nil or (now - self._lastUIRefresh) >= 0.5 then
+        self._lastUIRefresh = now
+        local snapshot = self.state.inflight
+        self._cachedTuningKey = "tuning|" .. tuningMode .. "|" .. tostring(snapshot.bank)
+          .. "|" .. tostring(snapshot.row) .. "|" .. tostring(snapshot.epoch)
+      end
+      nextRenderKey = self._cachedTuningKey
+    elseif isInteractive then
+      self._cachedTuningKey = nil
       nextRenderKey = "fullscreen_menu"
     else
+      self._cachedTuningKey = nil
       -- Throttle dashboard rendering to max 2Hz (0.5s) to save CPU
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
       local now = nowSeconds()
@@ -2302,7 +2414,11 @@ function Runtime.new(zone, options)
     end
 
     if not self.built then
-      if isInteractive then
+      if tuningMode == "zone" then
+        self._job = { kind = "tuning", step = tuningJobStep }
+      elseif tuningMode == "fs" then
+        self._job = { kind = "tuning_fs", step = tuningFullscreenJobStep }
+      elseif isInteractive then
         self._job = { kind = "menu", step = menuJobStep }
       else
         self._job = { kind = "scene", step = sceneJobStep }
@@ -2311,6 +2427,9 @@ function Runtime.new(zone, options)
   end
 
   function widget.background(self)
+    -- Off screen. The overlay's own tick refuses to drive from here and cleans up instead, which
+    -- is what makes a widget scrolled away stop writing the two variables.
+    self._foreground = false
     performBackgroundWork(self, true)
     return 0
   end
