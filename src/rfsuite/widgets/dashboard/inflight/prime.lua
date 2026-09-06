@@ -186,6 +186,22 @@ local function bump(drive)
   drive.valueEpoch = (drive.valueEpoch or 0) + 1
 end
 
+--- Everything stored for a run that is over, or whose phase has been reset under it.
+--
+-- Replies are stored where they arrive and parsed a pass later (see "The phases" below), so a run
+-- that ends can be holding answers it will never look at.
+local function dropStored(prime)
+  local pending = prime.pending
+  if type(pending) ~= "table" then
+    prime.pending, prime.pendingHead, prime.pendingTail = {}, 1, 0
+    prime.chainPaused = false
+    return
+  end
+  for i = prime.pendingHead or 1, prime.pendingTail or 0 do pending[i] = nil end
+  prime.pendingHead, prime.pendingTail = 1, 0
+  prime.chainPaused = false
+end
+
 --- The reply belongs to the run that is still current, or it belongs to nothing.
 --
 -- A prime that was restarted, abandoned or failed leaves its messages in the queue, and their
@@ -199,6 +215,9 @@ local function fail(drive, prime, reason)
   if not stillCurrent(drive, prime) then return false end
   prime.phase = M.PHASE_ERROR
   prime.error = tostring(reason or "failed")
+  -- A reply already stored is a parse this run will never make. Dropping it here is what keeps
+  -- the passes after a failure free of work for a run that is over.
+  dropStored(prime)
   bump(drive)
   logPrime("prime failed in %s: %s", tostring(prime.failedIn or "?"), prime.error)
   return false
@@ -211,6 +230,7 @@ local function abandon(drive, prime, why)
   if not stillCurrent(drive, prime) then return end
   prime.phase = M.PHASE_IDLE
   prime.error = nil
+  dropStored(prime)
   bump(drive)
   logPrime("prime abandoned: %s", tostring(why))
 end
@@ -466,24 +486,117 @@ end
 
 -- ---------------------------------------------------------------------------
 -- The phases
+--
+-- A reply is STORED when it arrives and PARSED on a later widget pass, at most one per pass.
+--
+-- The firmware bills a widget call at 20 000 VM instructions (lua_widget.cpp, MAX_INSTRUCTIONS)
+-- and the LVGL reactive sweep of the tree standing after the call comes out of the same 20 000,
+-- on top of a background pass that already costs eleven and a half thousand. One reply of this
+-- run parses for between 42 and 933 of those, so the question is not what a reply costs but how
+-- many of them one pass can be made to carry -- and the answer used to be "as many as the link
+-- delivers". The widget pass gives the MSP queue two turns (Runtime.tick and Runtime.pump,
+-- widgets/dashboard/runtime.lua), a read the queue finds in its cache completes with no round
+-- trip at all, and a retry can still be answered after its replacement has gone out. A bounded
+-- pass may not rest on none of that happening.
+--
+-- So `processReply` copies the bytes, stores them and returns, and `M.tick` -- once per widget
+-- pass -- parses exactly one stored reply. The worst pass carries one parse however the link
+-- behaves.
+--
+-- What does NOT move is the request that follows. The next command is known from the run's own
+-- cursor for every phase but one -- only the function-id reply says which slots are worth reading
+-- -- so the chain is continued from the ARRIVAL, in the same queue turn it was continued from
+-- before. That keeps the wire timing the one this module was measured with against a board: the
+-- request goes out on the queue's second turn of the same pass, and its answer is picked up by
+-- the first turn of the next one. Moving the send to the parse instead would put every request on
+-- the first turn, where the custom-telemetry drain runs between the send and the second turn --
+-- and lib/crsf.lua buffers a frame only for a type its OWN instance has been asked for, while the
+-- drain and the MSP transport load that file separately and hold an instance each.
+--
+-- The copy is not avoidable. tasks/msp/common.lua reassembles every reply into one table and
+-- clears it when the next reply's first frame arrives; the queue hands that same table to
+-- `processReply` and to its read cache. The MSP runtime's own periodic reads share that
+-- transport, so between the pass a reply lands on and the pass that parses it the buffer can
+-- already hold somebody else's answer. A copy is a fraction of a parse -- one element loop over a
+-- reply of 1 to 43 bytes, 17 to 143 instructions against 42 to 933 -- which is what makes the
+-- trade worth making.
 -- ---------------------------------------------------------------------------
 
-local sendValues
+--- How many replies may wait for their parse at once, before the chain waits for the parse.
+--
+-- A pass parses one reply and gives the queue two turns, so a link that answered both of them
+-- would store two replies for every one parsed and the backlog would grow for the whole run.
+-- Past this depth the arrival does not ask for the next command; the parse does, which is one
+-- reply in flight per parse and cannot grow. On a link that answers one request per pass -- which
+-- is every real one, and the offline check in bin/accounting too -- the depth never reaches it.
+local PENDING_CHAIN_LIMIT = 1
+
+--- The bytes of a reply, kept away from the transport's own buffer. See above.
+local function copyBuf(buf)
+  if type(buf) ~= "table" then return buf end
+  local out = {}
+  for i = 1, #buf do out[i] = buf[i] end
+  return out
+end
+
+--- How many stored replies are waiting for their parse.
+local function pendingDepth(prime)
+  return (prime.pendingTail or 0) - (prime.pendingHead or 1) + 1
+end
+
+--- Put a reply's bytes and the context its parse needs at the tail of the run's parse queue.
+--
+-- Head and tail are counters rather than a table length: a queue drained to empty on most passes
+-- must not allocate a fresh table to say so.
+local function stash(prime, record)
+  local tail = prime.pendingTail + 1
+  prime.pendingTail = tail
+  prime.pending[tail] = record
+end
+
+-- Assigned below the senders: the two halves of a reply, one on arrival and one on the parse.
+local arrived, chain
+
+--- The reply handler every message this module sends carries: copy, store, ask for the next.
+--
+-- A fresh record is built for every reply rather than the template being stored again, so a
+-- handler that fires twice -- a late answer to a retry, an answer off the wire beside one out of
+-- the read cache -- stores two replies with two buffers instead of two references to one buffer
+-- that both read whichever answer arrived last.
+local function stashHandler(widget, drive, prime, template)
+  return function(_, buf)
+    if not stillCurrent(drive, prime) then return end
+    local record = {
+      kind = template.kind, command = template.command, api = template.api,
+      fields = template.fields, slot = template.slot, buf = copyBuf(buf)
+    }
+    stash(prime, record)
+    arrived(widget, drive, prime, record)
+  end
+end
+
+--- The run is over: everything the nine reads can answer is in the cache.
+--
+-- The snapshot the delta is measured against is taken here only when no backup has been made yet:
+-- once one exists, THAT is what the flight is compared with, and re-priming must not quietly move
+-- the baseline.
+local function finishValues(drive, prime)
+  if type(drive.backup) ~= "table" then
+    local copy = {}
+    for id, value in pairs(drive.values) do copy[id] = value end
+    drive.primedValues = copy
+  end
+  prime.phase = M.PHASE_DONE
+  bump(drive)
+  logPrime("prime done: %d value(s) cached, %d id(s) unanswered", prime.mapped or 0, prime.unmapped or 0)
+end
 
 local function sendValueRead(widget, drive, prime, queue)
   local command = Functions.VALUE_READS[prime.valueAt]
   if command == nil then
-    -- Everything the nine reads can answer is in the cache. The snapshot the delta is measured
-    -- against is taken here only when no backup has been made yet: once one exists, THAT is what
-    -- the flight is compared with, and re-priming must not quietly move the baseline.
-    if type(drive.backup) ~= "table" then
-      local copy = {}
-      for id, value in pairs(drive.values) do copy[id] = value end
-      drive.primedValues = copy
-    end
-    prime.phase = M.PHASE_DONE
-    bump(drive)
-    logPrime("prime done: %d value(s) cached, %d id(s) unanswered", prime.mapped or 0, prime.unmapped or 0)
+    -- Nothing left to ask for. The run only ends here when nothing is still waiting to be parsed;
+    -- otherwise the last parse ends it, because the values it holds belong in the snapshot.
+    if pendingDepth(prime) <= 0 then finishValues(drive, prime) end
     return true
   end
 
@@ -503,34 +616,14 @@ local function sendValueRead(widget, drive, prime, queue)
     isWrite = false,
     simulatorResponse = api.simulatorResponse,
     client = M.CLIENT,
-    processReply = function(_, buf)
-      if not stillCurrent(drive, prime) then return end
-      local parsed = api.parse(buf)
-      if type(parsed) == "table" then
-        for i = 1, #fields do
-          local entry = fields[i]
-          local value = tonumber(parsed[entry.field])
-          if value == nil then
-            prime.unmapped = (prime.unmapped or 0) + 1
-          else
-            drive.values[entry.id] = value
-            prime.mapped = (prime.mapped or 0) + 1
-          end
-        end
-        -- The status reply is the only one that says how many profiles this board has and which
-        -- of them is live, and the undo needs both.
-        if command == CMD_STATUS then prime.status = parsed end
-      end
-      prime.valueAt = prime.valueAt + 1
-      advanced(drive, prime)
-      sendValues(widget, drive, prime)
-    end,
+    processReply = stashHandler(widget, drive, prime,
+      { kind = "values", command = command, api = api, fields = fields }),
     errorHandler = replyFailed(drive, prime, "values")
   })
   return true
 end
 
-sendValues = function(widget, drive, prime)
+local function sendValues(widget, drive, prime)
   local queue = queueOf()
   if queue == nil then
     prime.failedIn = "values"
@@ -576,16 +669,7 @@ local function sendSlot(widget, drive, prime)
   end
 
   local slot = prime.slotList[prime.slotAt]
-  if slot == nil then
-    -- The board's table is complete. Turning it into the set does not happen here: it is the
-    -- most expensive single thing this module does and the pass that just parsed a reply cannot
-    -- carry it. The prime enters a phase of its own and the next tick takes the first slice.
-    prime.phase = M.PHASE_DERIVE
-    prime.derivation = M.newDerivation(prime.records, prime.map,
-      drive.settings.bank_ch, drive.settings.value_ch)
-    bump(drive)
-    return true
-  end
+  if slot == nil then return true end
 
   local api = prime.rangeApi
   queue:add({
@@ -596,15 +680,8 @@ local function sendSlot(widget, drive, prime)
     isWrite = false,
     simulatorResponse = api.simulatorResponse,
     client = M.CLIENT,
-    processReply = function(_, buf)
-      if not stillCurrent(drive, prime) then return end
-      local parsed = api.parse(buf)
-      local record = type(parsed) == "table" and parsed.adjustment_range or nil
-      if type(record) == "table" then prime.records[slot] = record end
-      prime.slotAt = prime.slotAt + 1
-      advanced(drive, prime)
-      sendSlot(widget, drive, prime)
-    end,
+    processReply = stashHandler(widget, drive, prime,
+      { kind = "slot", command = CMD_ADJ_RANGE, api = api, slot = slot }),
     errorHandler = replyFailed(drive, prime, "slots")
   })
   return true
@@ -627,34 +704,8 @@ local function sendFunctionIds(widget, drive, prime)
     isWrite = false,
     simulatorResponse = api.simulatorResponse,
     client = M.CLIENT,
-    processReply = function(_, buf)
-      if not stillCurrent(drive, prime) then return end
-      local parsed = api.parse(buf)
-      local ids = type(parsed) == "table" and parsed.adjustment_function_ids or nil
-      if type(ids) ~= "table" then
-        prime.failedIn = "functionIds"
-        fail(drive, prime, "no_function_ids")
-        return
-      end
-      -- Only the slots that name a function are read in full. An empty slot has nothing in its
-      -- record worth 14 bytes and a round trip, and on this transport that is the whole cost.
-      prime.slotList = {}
-      for slot = 1, SLOT_COUNT do
-        if (tonumber(ids[slot]) or 0) ~= 0 then prime.slotList[#prime.slotList + 1] = slot end
-      end
-      prime.slotAt = 1
-      prime.rangeApi = apiModule("get_adjustment_range")
-      if prime.rangeApi == nil then
-        prime.failedIn = "slots"
-        fail(drive, prime, "no_api")
-        return
-      end
-      -- The estimate the run started with was the whole table; now the length is known.
-      prime.total = 2 + #prime.slotList + #Functions.VALUE_READS
-      prime.phase = M.PHASE_SLOTS
-      advanced(drive, prime)
-      sendSlot(widget, drive, prime)
-    end,
+    processReply = stashHandler(widget, drive, prime,
+      { kind = "functionIds", command = CMD_ADJ_FUNCTION_IDS, api = api }),
     errorHandler = replyFailed(drive, prime, "functionIds")
   })
   return true
@@ -677,17 +728,177 @@ local function sendRxMap(widget, drive, prime)
     isWrite = false,
     simulatorResponse = api.simulatorResponse,
     client = M.CLIENT,
-    processReply = function(_, buf)
-      if not stillCurrent(drive, prime) then return end
-      -- A receiver that does not answer its map is not fatal: without it AUX1 is taken to be the
-      -- sixth channel, which is where every documented setup puts it.
-      prime.map = api.parse(buf)
-      prime.phase = M.PHASE_FUNCTION_IDS
-      advanced(drive, prime)
-      sendFunctionIds(widget, drive, prime)
-    end,
+    processReply = stashHandler(widget, drive, prime,
+      { kind = "rxmap", command = CMD_RX_MAP, api = api }),
     errorHandler = replyFailed(drive, prime, "rxmap")
   })
+  return true
+end
+
+--- Ask the board for whatever the run's cursor now points at.
+--
+-- Called on a reply's arrival, and by a parse that found the arrival had held the chain back. The
+-- END of a phase is never asked for from here: the last record of the slot table still has to be
+-- decoded before the derivation reads them all, and the last of the nine values still has to be
+-- decoded before the snapshot is taken from them. Both of those belong to the parse.
+chain = function(widget, drive, prime)
+  prime.chainPaused = false
+  local phase = prime.phase
+  if phase == M.PHASE_FUNCTION_IDS then
+    return sendFunctionIds(widget, drive, prime)
+  end
+  if phase == M.PHASE_SLOTS then
+    if prime.slotList[prime.slotAt] == nil then return false end
+    return sendSlot(widget, drive, prime)
+  end
+  if phase == M.PHASE_VALUES then
+    if Functions.VALUE_READS[prime.valueAt] == nil then return false end
+    return sendValues(widget, drive, prime)
+  end
+  return false
+end
+
+--- What a reply does the moment it arrives. Nothing here decodes anything.
+--
+-- The cursor moves and the next command goes out, which is the half that has to stay in the queue
+-- turn the reply landed on; the function-id reply is the one exception, because what comes after
+-- it is not known until it has been parsed.
+arrived = function(widget, drive, prime, record)
+  local kind = record.kind
+  if kind == "rxmap" then
+    prime.phase = M.PHASE_FUNCTION_IDS
+  elseif kind == "slot" then
+    prime.slotAt = prime.slotAt + 1
+  elseif kind == "values" then
+    prime.valueAt = prime.valueAt + 1
+  end
+  advanced(drive, prime)
+
+  if kind == "functionIds" then return end
+  if pendingDepth(prime) > PENDING_CHAIN_LIMIT then
+    prime.chainPaused = true
+    return
+  end
+  chain(widget, drive, prime)
+end
+
+-- ---------------------------------------------------------------------------
+-- The parses. One of these runs per widget pass, and never two.
+-- ---------------------------------------------------------------------------
+
+local function parseRxMap(widget, drive, prime, record)
+  -- A receiver that does not answer its map is not fatal: without it AUX1 is taken to be the
+  -- sixth channel, which is where every documented setup puts it. Nothing waits for this: the
+  -- map is not read until the whole slot table has been.
+  prime.map = record.api.parse(record.buf)
+  if prime.chainPaused then chain(widget, drive, prime) end
+end
+
+local function parseFunctionIds(widget, drive, prime, record)
+  local parsed = record.api.parse(record.buf)
+  local ids = type(parsed) == "table" and parsed.adjustment_function_ids or nil
+  if type(ids) ~= "table" then
+    prime.failedIn = "functionIds"
+    fail(drive, prime, "no_function_ids")
+    return
+  end
+  -- Only the slots that name a function are read in full. An empty slot has nothing in its
+  -- record worth 14 bytes and a round trip, and on this transport that is the whole cost.
+  prime.slotList = {}
+  for slot = 1, SLOT_COUNT do
+    if (tonumber(ids[slot]) or 0) ~= 0 then prime.slotList[#prime.slotList + 1] = slot end
+  end
+  prime.slotAt = 1
+  prime.rangeApi = apiModule("get_adjustment_range")
+  if prime.rangeApi == nil then
+    prime.failedIn = "slots"
+    fail(drive, prime, "no_api")
+    return
+  end
+  -- The estimate the run started with was the whole table; now the length is known.
+  prime.total = 2 + #prime.slotList + #Functions.VALUE_READS
+  prime.phase = M.PHASE_SLOTS
+  -- This is the one reply whose arrival could not ask for the next command, so its parse does.
+  chain(widget, drive, prime)
+end
+
+local function parseSlot(widget, drive, prime, record)
+  local parsed = record.api.parse(record.buf)
+  local decoded = type(parsed) == "table" and parsed.adjustment_range or nil
+  if type(decoded) == "table" then prime.records[record.slot] = decoded end
+
+  if prime.slotList[prime.slotAt] == nil and pendingDepth(prime) <= 0 then
+    -- The board's table is in AND every record of it is decoded. Turning it into the set does not
+    -- happen here: it is the most expensive single thing this module does and the pass that just
+    -- parsed a reply cannot carry it. The prime enters a phase of its own and the next tick takes
+    -- the first slice.
+    prime.phase = M.PHASE_DERIVE
+    prime.derivation = M.newDerivation(prime.records, prime.map,
+      drive.settings.bank_ch, drive.settings.value_ch)
+    bump(drive)
+  elseif prime.chainPaused then
+    chain(widget, drive, prime)
+  end
+end
+
+local function parseValues(widget, drive, prime, record)
+  local parsed = record.api.parse(record.buf)
+  if type(parsed) == "table" then
+    local fields = record.fields
+    for i = 1, #fields do
+      local entry = fields[i]
+      local value = tonumber(parsed[entry.field])
+      if value == nil then
+        prime.unmapped = (prime.unmapped or 0) + 1
+      else
+        drive.values[entry.id] = value
+        prime.mapped = (prime.mapped or 0) + 1
+      end
+    end
+    -- The status reply is the only one that says how many profiles this board has and which of
+    -- them is live, and the undo needs both.
+    if record.command == CMD_STATUS then prime.status = parsed end
+  end
+
+  if Functions.VALUE_READS[prime.valueAt] == nil and pendingDepth(prime) <= 0 then
+    finishValues(drive, prime)
+  elseif prime.chainPaused then
+    chain(widget, drive, prime)
+  end
+end
+
+--- Parse ONE stored reply, and no more, however many are waiting.
+--
+-- Answers true when the pass was spent here, so the caller stops at it.
+local function takeReply(widget, drive)
+  local prime = drive.prime
+  if type(prime) ~= "table" then return false end
+  local head = prime.pendingHead
+  if head == nil or head > prime.pendingTail then return false end
+
+  local record = prime.pending[head]
+  prime.pending[head] = nil
+  prime.pendingHead = head + 1
+  -- Drained: the counters go back to where a fresh run starts them, so a long prime does not
+  -- walk them upward for a whole session.
+  if prime.pendingHead > prime.pendingTail then
+    prime.pendingHead, prime.pendingTail = 1, 0
+  end
+
+  -- A run that was restarted, abandoned or failed since the reply landed keeps none of it. The
+  -- pass still counts as spent: discarding a stored reply is what this pass did.
+  if not stillCurrent(drive, prime) or type(record) ~= "table" then return true end
+
+  local kind = record.kind
+  if kind == "values" then
+    parseValues(widget, drive, prime, record)
+  elseif kind == "slot" then
+    parseSlot(widget, drive, prime, record)
+  elseif kind == "functionIds" then
+    parseFunctionIds(widget, drive, prime, record)
+  elseif kind == "rxmap" then
+    parseRxMap(widget, drive, prime, record)
+  end
   return true
 end
 
@@ -710,7 +921,11 @@ function M.start(widget, drive)
     slotAt = 1,
     valueAt = 1,
     mapped = 0,
-    unmapped = 0
+    unmapped = 0,
+    pending = {},
+    pendingHead = 1,
+    pendingTail = 0,
+    chainPaused = false
   }
   drive.prime = prime
   bump(drive)
@@ -730,6 +945,9 @@ function M.refreshValues(widget, drive)
   prime.error = nil
   prime.done = 0
   prime.total = #Functions.VALUE_READS
+  -- Anything stored for the run being restarted here belongs to nothing: the phase it was read
+  -- in is over and the counters it would have moved have just been reset.
+  dropStored(prime)
   return startValues(widget, drive, prime)
 end
 
@@ -927,6 +1145,11 @@ function M.tick(widget, drive)
     drive._primeAutoDone = false
     return
   end
+
+  -- One stored reply, parsed here rather than where it arrived, and never more than one however
+  -- many the link delivered into the same pass. This is the bound the whole section above exists
+  -- for; the derivation slice below is the same rule for the one piece of work no reply drives.
+  if takeReply(widget, drive) then return end
 
   -- The derivation is the one part of a prime that no reply drives, so it is stepped here. It
   -- comes before the auto-start gates below, which return as soon as a run has been started.
