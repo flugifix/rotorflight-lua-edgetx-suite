@@ -66,14 +66,20 @@ return {
     -- regression detector, and as the price of decoding a whole backlog instead of
     -- its newest quarter.
     ["pass.function"] = { target = 7300, measured = 5808 },
-    -- The in-flight tuning overlay. Its STATE pass is CHEAPER than the dashboard's: the
-    -- surface replaces the scene, so the theme's render key is not computed and the drive's
-    -- own work -- one switch read, the trims, the enable channel, the pulse -- costs less
-    -- than what it displaces. The JOB pass builds the whole surface in one step, the way
-    -- the menu does, and its worst is the FULLSCREEN build: that one carries the setup
-    -- check, which walks the two mixer lines and both variables' details.
-    ["pass.tuning.state"] = { target = 11000, measured = 8785 },
-    ["pass.job.tuning"] = { target = 9550, measured = 7638 },
+    -- The in-flight tuning overlay. The drive's own work -- one switch read, the trims, the
+    -- enable channel, the pulse -- costs less than the theme render key it displaces, so the
+    -- STATE pass was cheaper than the dashboard's while the overlay only drove the radio.
+    -- The ground half moved it: a prime reads the receiver map, the board's slot table and
+    -- nine value replies over MSP, and the pass a reply lands in pays that reply's parse on
+    -- top of everything else. The row prices THAT pass, because it is the one a pilot
+    -- standing at the model actually produces; the previous target sat below it.
+    --
+    -- The JOB pass builds the whole surface in one step, the way the menu does, and it covers
+    -- two different builds: the tuning surface with its chips, rows and step buttons, and the
+    -- ground surface with the three profile actions and the delta list at its cap. The setup
+    -- check, which walks the two mixer lines and both variables' details, is on both.
+    ["pass.tuning.state"] = { target = 13000, measured = 11674, proposed = 11000 },
+    ["pass.job.tuning"] = { target = 9550, measured = 8482 },
 
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of

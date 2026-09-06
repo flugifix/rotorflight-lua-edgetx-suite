@@ -365,6 +365,12 @@ function Stubs.install(root)
   end
 
   _G.rfsuite = { session = {}, preferences = {} }
+  -- tasks/msp/cache.lua hangs its store off this root and creates it in its own top-level, which
+  -- runs ONCE per interpreter: this file replaces the root on every world, and a chunk that was
+  -- loaded in an earlier one then reads a store that is no longer there. On the radio there is
+  -- one root and the question does not arise; here the store is laid down with the root, which
+  -- also means one world's cached reply can never be served to the next.
+  _G.rfsuite.mspResponseCache = {}
   local requireChunk = loadfile(repoRoot .. "/src/rfsuite/lib/require.lua")
   if not requireChunk then
     error("accounting: lib/require.lua not found under " .. tostring(repoRoot))
