@@ -576,6 +576,23 @@ local function menuJobStep(self)
   return true
 end
 
+--- A step control that is still held, let go before the object holding it is destroyed.
+--
+-- EdgeTX's momentary button reports a release only as LV_EVENT_RELEASED on the object itself
+-- (lua_lvgl_widget.cpp, MomentaryButton::customEventHandler); an object deleted under the finger
+-- never gets that event, and lvgl.clear() below deletes the whole tree. Without this the drive
+-- would go on writing the row's magnitude to the value variable with nothing left in the world
+-- able to take it back, and the flight controller would keep stepping the parameter.
+--
+-- The render key is held still while a control is held, so this is the second line of defence
+-- rather than the first: it covers the rebuilds that are not the key's -- leaving fullscreen,
+-- the close box, a build forced from elsewhere.
+local function releaseInflightHold(self)
+  if self._inflight == nil then return end
+  local drive = inflightDrive()
+  if drive and type(drive.release) == "function" then drive.release(self) end
+end
+
 -- The tuning overlay's two builds. Both complete in one step, like the menu: the tree is a fixed
 -- handful of nodes rather than a theme's box list, so there is nothing to spread over passes.
 local function tuningJobStep(self)
@@ -583,6 +600,7 @@ local function tuningJobStep(self)
   if not (screen and type(screen.buildZone) == "function") then return true end
   local children = {}
   screen.buildZone(children, self)
+  releaseInflightHold(self)
   lvgl.clear()
   lvgl.build(children)
   self.built = true
@@ -595,6 +613,7 @@ local function tuningFullscreenJobStep(self)
   if not (screen and type(screen.buildFullscreen) == "function") then return true end
   local children = {}
   screen.buildFullscreen(children, self)
+  releaseInflightHold(self)
   lvgl.clear()
   lvgl.build(children)
   self.built = true
@@ -2400,20 +2419,37 @@ function Runtime.new(zone, options)
       -- The same 2 Hz throttle the scene key is under. The value and the armed row are reactive
       -- closures and follow the state per frame; everything the key covers is layout, and
       -- rebuilding that at the pass rate would spend the budget those closures live on.
+      --
+      -- With one exception, and it is a safety rule rather than a performance one: while a step
+      -- control is HELD the key is left exactly where it is. A rebuild calls lvgl.clear(), which
+      -- deletes the momentary button under the pilot's finger, and EdgeTX raises that button's
+      -- release handler only as LV_EVENT_RELEASED on the object itself -- so a deleted button
+      -- never reports its release and the drive would keep writing the row's magnitude. The
+      -- rebuild during a hold is the NORMAL case, not a corner: the flight controller's first
+      -- step arrives on AdjF/AdjV, the value cache moves, the drive's epoch bumps, and the epoch
+      -- is in the key below. When the hold ends the next recompute happens as it always did.
+      local snapshot = self.state.inflight
+      local holding = (type(snapshot) == "table") and snapshot.holding == true
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
       local now = nowSeconds()
-      if self._cachedTuningKey == nil or (now - self._lastUIRefresh) >= 0.5 then
+      -- A tap on a bank chip or a row asks for the new selection to be on screen at once rather
+      -- than up to half a second later; it sets this flag instead of dropping the key itself, so
+      -- that it goes through the hold gate like everything else.
+      local wanted = (self._tuningKeyDirty == true) or (now - self._lastUIRefresh) >= 0.5
+      if self._cachedTuningKey == nil or (wanted and not holding) then
         self._lastUIRefresh = now
-        local snapshot = self.state.inflight
+        self._tuningKeyDirty = nil
         self._cachedTuningKey = "tuning|" .. tuningMode .. "|" .. tostring(snapshot.bank)
           .. "|" .. tostring(snapshot.row) .. "|" .. tostring(snapshot.epoch)
       end
       nextRenderKey = self._cachedTuningKey
     elseif isInteractive then
       self._cachedTuningKey = nil
+      self._tuningKeyDirty = nil
       nextRenderKey = "fullscreen_menu"
     else
       self._cachedTuningKey = nil
+      self._tuningKeyDirty = nil
       -- Throttle dashboard rendering to max 2Hz (0.5s) to save CPU
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
       local now = nowSeconds()

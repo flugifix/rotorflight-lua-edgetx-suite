@@ -212,8 +212,10 @@ local function appendChips(children, widget, m, y, t, accent, btn, interactive)
     if interactive and drive then
       node.press = function()
         drive:setBank(bank)
-        widget.built = false
-        widget.renderKey = nil
+        -- Asked for rather than taken. Dropping the render key here would rebuild in the next
+        -- pass whatever else is going on, and a rebuild deletes the step button a finger may be
+        -- resting on; the widget's own key gate decides when -- and whether -- to act on this.
+        widget._tuningKeyDirty = true
       end
     end
     children[#children + 1] = node
@@ -287,8 +289,8 @@ local function appendRows(children, widget, m, y, w, t, accent, btn, interactive
       if interactive and drive then
         node.press = function()
           drive:selectRow(row)
-          widget.built = false
-          widget.renderKey = nil
+          -- See appendChips: the rebuild is asked for, never taken.
+          widget._tuningKeyDirty = true
         end
       end
       children[#children + 1] = node
@@ -528,20 +530,17 @@ function M.buildGround(children, widget, m, w, h, t, accent, btn)
     appendAction(children, m, m.pad, y, buttonW,
       t("widgets.dashboard.inflight_prime", "Prime"), btn, function()
         Prime.start(widget, drive)
-        widget.built = false
-        widget.renderKey = nil
+        widget._tuningKeyDirty = true
       end)
     appendAction(children, m, m.pad * 2 + buttonW, y, buttonW,
       t("widgets.dashboard.inflight_backup", "Backup to") .. " " .. tostring(slot), btn, function()
         Prime.backup(widget, drive)
-        widget.built = false
-        widget.renderKey = nil
+        widget._tuningKeyDirty = true
       end)
     appendAction(children, m, m.pad * 3 + buttonW * 2, y, buttonW,
       t("widgets.dashboard.inflight_restore", "Restore from") .. " " .. tostring(slot), btn, function()
         Prime.restore(widget, drive)
-        widget.built = false
-        widget.renderKey = nil
+        widget._tuningKeyDirty = true
       end)
   end
   y = y + m.actionH + m.pad

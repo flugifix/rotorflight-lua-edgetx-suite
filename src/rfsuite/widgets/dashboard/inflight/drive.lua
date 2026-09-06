@@ -630,8 +630,14 @@ local function publish(widget, drive)
   if type(state) ~= "table" then return end
   local snapshot = state.inflight
   local epoch = drive.valueEpoch
+  -- Whether a control is being HELD, which is the one thing on here that no epoch bump reports:
+  -- a press and a release both leave the value cache alone. It is on the snapshot because the
+  -- widget's render key must not move while a finger is down -- the rebuild would delete the very
+  -- object that reports the release -- so the guard below has to notice it changing.
+  local holding = (drive.holdRow ~= nil)
   if type(snapshot) == "table" and snapshot.epoch == epoch and snapshot.live == drive.live
-    and snapshot.bank == drive.bank and snapshot.row == drive.row then
+    and snapshot.bank == drive.bank and snapshot.row == drive.row
+    and snapshot.holding == holding then
     return
   end
 
@@ -667,6 +673,9 @@ local function publish(widget, drive)
     epoch = epoch,
     enabled = drive.settings.enabled == true,
     live = drive.live,
+    -- True exactly while a step control is held down. The widget reads it and leaves the render
+    -- key alone while it is true; see M.release above for what a rebuild would cost here.
+    holding = holding,
     bank = drive.bank,
     bankShown = drive.bankShown,
     row = drive.row,
@@ -702,6 +711,24 @@ function M.tick(widget)
   if live then drive.profile = drive.radio.sensor("PID#") end
   publish(widget, drive)
   return live == true
+end
+
+--- The held control let go, from a caller that is about to destroy the object which would have
+-- reported the release itself.
+--
+-- EdgeTX raises a momentary button's release handler on LV_EVENT_RELEASED and on nothing else
+-- (lua_lvgl_widget.cpp, MomentaryButton::customEventHandler), and an object that is deleted while
+-- the finger is still down never receives that event. So a rebuild -- lvgl.clear() drops the whole
+-- tree -- would take the release with it and leave the drive writing the row's magnitude with
+-- nothing left in the world able to take it back. The rebuild path lets go here instead.
+--
+-- Answers whether there was a hold to let go, so a caller can tell the two cases apart.
+function M.release(widget)
+  if type(widget) ~= "table" then return false end
+  local drive = widget._inflight
+  if drive == nil or drive.holdRow == nil then return false end
+  drive:release()
+  return true
 end
 
 --- Everything off, from a widget that is going away. Never allocates a drive that does not
