@@ -29,6 +29,11 @@ local Common = nil
 local Controls = nil
 local Setup = nil
 local ConfirmDialog = nil
+-- The flight controller action, loaded only when the button that uses it is pressed. It brings
+-- inflight/fcsetup.lua and the whole adjustment function table with it, and the page's entry cost
+-- is what the pilot's radio ran out of heap on -- so nothing that is not needed to DRAW the page
+-- is loaded to draw it.
+local FcAction = nil
 
 local M = {}
 
@@ -110,7 +115,20 @@ local function ensureLoaded()
   ui.proposed = false
   ui.gvarsShort = false
   ui.planNotice = nil
+  ui.fcRun = nil
+  ui.fcNotice = nil
+  ui.fcPercent = nil
   ui.loaded = true
+end
+
+--- A repaint WITHOUT marking the settings edited.
+--
+-- ui.runtime.markDirty does both, which is right for a field the pilot changed and wrong for the
+-- progress of a flight controller write: that changes the board, not the settings, and raising the
+-- edited flag for it would leave the page asking to save something nobody typed.
+local function requestRepaint()
+  local rebuild = ui.runtime and ui.runtime.requestRebuild
+  if type(rebuild) == "function" then rebuild() end
 end
 
 --- The two variables the model does not already use, offered rather than assumed.
@@ -194,6 +212,8 @@ local function markValue(key, value)
   ui.config[key] = value
   ui.checkDone = false
   ui.planNotice = nil
+  -- The verdict on the flight controller was reached about the channels that have just changed.
+  ui.fcNotice = nil
   ui.runtime.markValueChanged()
 end
 
@@ -370,6 +390,35 @@ local function offerSetup(i18n)
 end
 
 -- ---------------------------------------------------------------------------
+-- Setting the flight controller up
+-- ---------------------------------------------------------------------------
+
+--- Hand the flight controller action its context, having loaded it first.
+--
+-- The action itself lives in fcaction.lua beside this file and is read off the card only here,
+-- on the press. Everything it needs travels in the table: the page's text helper, the settings
+-- being edited, the page state it reports into and the repaint it asks for. Loading it at the top
+-- of this file instead would put the whole adjustment function table into the tool's heap for
+-- every pilot who ever opens this page, which is the cost that froze one radio already.
+local function offerFcSetup(i18n)
+  if FcAction == nil then
+    FcAction = loadModule("app/pages/settings/dashboard/inflight/fcaction.lua")
+  end
+  if type(FcAction) ~= "table" or type(FcAction.offer) ~= "function" then
+    ui.fcNotice = t(i18n, "fc_unavailable", "This build cannot reach the flight controller.")
+    requestRepaint()
+    return
+  end
+  FcAction.offer({
+    i18n = i18n,
+    t = t,
+    config = ui.config,
+    state = ui,
+    repaint = requestRepaint
+  })
+end
+
+-- ---------------------------------------------------------------------------
 -- The sections
 -- ---------------------------------------------------------------------------
 
@@ -405,6 +454,31 @@ local function buildGeneral(children, x, y, w, i18n)
   }
   cursorY = cursorY + rowH
 
+  -- Which parameters the overlay offers, and whether it is allowed to put them on the board.
+  local setOptions = {
+    { value = Setup.SET_MODE_STANDARD, label = t(i18n, "set_mode_standard", "Standard") },
+    { value = Setup.SET_MODE_CUSTOM, label = t(i18n, "set_mode_custom", "Custom") }
+  }
+  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+    t(i18n, "set_mode", "Set layout"), setOptions, ui.config.set_mode,
+    function(value)
+      if ui.config.set_mode == value then return end
+      ui.config.set_mode = value
+      ui.checkDone = false
+      ui.planNotice = nil
+      ui.fcNotice = nil
+      ui.runtime.markDirty()
+    end)
+  if ui.config.set_mode == Setup.SET_MODE_CUSTOM then
+    cursorY = cursorY + appendNote(children, x, cursorY, w,
+      t(i18n, "set_mode_custom_note",
+        "The set is whatever the flight controller carries. Nothing is written to it."))
+  else
+    cursorY = cursorY + appendNote(children, x, cursorY, w,
+      t(i18n, "set_mode_standard_note",
+        "Six banks of six parameters, known in advance. The flight controller is read to compare."))
+  end
+
   cursorY = cursorY + appendNote(children, x, cursorY, w, describeCheck(i18n, checkResult()))
 
   -- The button that makes the model match what the verdict just reported. It sits here rather than
@@ -421,6 +495,27 @@ local function buildGeneral(children, x, y, w, i18n)
 
   if ui.planNotice then
     cursorY = cursorY + appendNote(children, x, cursorY, w, ui.planNotice)
+  end
+
+  -- The other half of the same job, and the only thing on this page that writes the FLIGHT
+  -- CONTROLLER. Offered in the standard layout alone: in the custom one the set is whatever the
+  -- board carries, and a button that overwrote it would overwrite the very thing being read.
+  if ui.config.set_mode ~= Setup.SET_MODE_CUSTOM then
+    children[#children + 1] = {
+      type = "button",
+      x = x + math.floor((w - btnW) / 2), y = cursorY, w = btnW, h = btnH,
+      text = t(i18n, "setup_fc", "Set up the flight controller"),
+      press = function()
+        -- One run at a time. A second press while the first chain is on the wire would put two
+        -- sets of writes into one queue with no order between them.
+        if ui.fcRun == nil then offerFcSetup(i18n) end
+      end
+    }
+    cursorY = cursorY + btnH + 6
+
+    if ui.fcNotice then
+      cursorY = cursorY + appendNote(children, x, cursorY, w, ui.fcNotice)
+    end
   end
   return cursorY
 end
@@ -599,10 +694,16 @@ function M.onClose()
   ui.checkResult = nil
   ui.trimNames = nil
   ui.planNotice = nil
+  -- The run is dropped rather than cancelled: its callbacks all ask whether they still belong to
+  -- the page's current run before touching anything, and a write already on the wire is finished
+  -- by the queue, which is the state a flight controller should be left in.
+  ui.fcRun = nil
+  ui.fcNotice = nil
   Controls = nil
   Common = nil
   Setup = nil
   ConfirmDialog = nil
+  FcAction = nil
   t = nil
 end
 

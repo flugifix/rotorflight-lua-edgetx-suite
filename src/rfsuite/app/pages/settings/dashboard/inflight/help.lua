@@ -13,12 +13,16 @@ return function(ctx)
   local intro = tr(i18n, "help_message",
     "Choose the interlock switch, the channels, variables and trims it uses, and a spare PID profile as the undo.")
 
-  -- The button is the one thing on this page that changes the model rather than the settings, so
-  -- the help says what it writes and that it asks first.
+  -- The two buttons are the only things on this page that change anything but the settings, so
+  -- the help says what each of them writes and that both ask first. They write different things:
+  -- one the radio's own model, the other the flight controller's adjustment slots.
   local setup = tr(i18n, "help_setup",
     "Set up the model writes the mixer lines, the variables and the trim modes, after showing what it removes.")
 
+  local setupFc = tr(i18n, "help_setup_fc",
+    "Writes the standard set into the adjustment slots, after showing what it overwrites. Standard layout only.")
+
   return {
-    message = intro .. "\n\n" .. setup
+    message = intro .. "\n\n" .. setup .. "\n\n" .. setupFc
   }
 end
