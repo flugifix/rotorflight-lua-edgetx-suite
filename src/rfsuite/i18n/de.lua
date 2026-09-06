@@ -2550,6 +2550,7 @@ return {
       inflight_prime_failed = "Auslesen fehlgeschlagen",
       inflight_set_board = "Belegung vom Flugcontroller",
       inflight_set_reference = "Dokumentierte Belegung",
+      inflight_set_skipped = "übersprungen",
       inflight_backup_none = "Keine Sicherung",
       inflight_backup_held = "Sicherung in Profil",
       inflight_transfer_busy = "Profil wird kopiert",

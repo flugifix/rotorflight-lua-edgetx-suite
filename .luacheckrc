@@ -105,6 +105,18 @@ end
 -- replaces, which is what a restriction has to do.
 files["src/rfsuite/widgets/dashboard/objects"] = { new_globals = object_globals }
 files["src/rfsuite/widgets/dashboard/objects/common.lua"] = { new_globals = globals }
+-- The in-flight tuning surface hands lvgl.build the same kind of value closures and is under the
+-- same rule for the same reason: they run per frame in the reactive sweep, on the leftover budget,
+-- outside the pcall. It reads the snapshot its own drive publishes and probes nothing.
+--
+-- Spelled with `not_globals` rather than with the narrowed list above, and the difference is
+-- whether the rule bites. A `globals` list inside a `files` override is UNIONED with the top-level
+-- one rather than replacing it, so narrowing a list there takes nothing away: measured on this
+-- configuration, a file under the objects override reads `model` without a word. `not_globals`
+-- removes the names, and the same measurement then reports "accessing undefined variable 'model'".
+files["src/rfsuite/widgets/dashboard/inflight/screen.lua"] = {
+  not_globals = { "model", "getValue", "getSensor", "getFieldInfo" }
+}
 
 -- Code style rules
 max_line_length = 140

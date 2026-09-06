@@ -640,6 +640,11 @@ function M.get(widget)
     drive:cleanup(false)
     drive.settings = settings
     drive._signature = signature
+    -- and the setup verdict with it: the settings are the only thing that can change the answer
+    -- without the pilot leaving the screen it is shown on, and the screen walks the model once
+    -- and then reads this.
+    drive._checkedAt = nil
+    drive._checkResult = nil
     drive.trimsResolved = false
     -- and with it whatever a walk in progress had collected: a half-read list belongs to the
     -- settings it was started under.
@@ -689,7 +694,12 @@ local function publish(widget, drive)
 
   -- The ground half's progress, summarised rather than handed over. Its own table is mutated in
   -- place as replies arrive, and everything published here is read from a tree that is being
-  -- built -- so what travels is a copy of the four counters, taken at the moment of the swap.
+  -- built -- so what travels is a copy of the counters, taken at the moment of the swap.
+  --
+  -- `skipped` travels as a COUNT and not as the list it is kept as. The list is the run's own and
+  -- goes on being appended to; a snapshot holding a reference to it is not a snapshot, and the
+  -- screen wants the number anyway -- how many of the board's slots the overlay cannot drive is a
+  -- fact the pilot needs, and it was being published in a form the screen never showed.
   local prime = drive.prime
   local primeState = nil
   if type(prime) == "table" then
@@ -698,8 +708,24 @@ local function publish(widget, drive)
       done = prime.done,
       total = prime.total,
       error = prime.error,
-      skipped = prime.skipped
+      skipped = #(prime.skipped or {})
     }
+  end
+
+  -- The undo and the transfer, likewise copied rather than aliased. The transfer table in
+  -- particular is mutated in place -- a copy that is running writes its own outcome into it when
+  -- the reply lands -- so a snapshot pointing at it would change under a closure that is reading
+  -- it. Only the scalars travel; the backup's own value table is not on this screen.
+  local backup = drive.backup
+  local backupState = nil
+  if type(backup) == "table" then
+    backupState = { profile = backup.profile, at = backup.at }
+  end
+
+  local transfer = drive.transfer
+  local transferState = nil
+  if type(transfer) == "table" then
+    transferState = { kind = transfer.kind, state = transfer.state, reason = transfer.reason }
   end
 
   local activeId = drive:functionId(drive.bank, drive.row)
@@ -725,9 +751,8 @@ local function publish(widget, drive)
     -- usable. It is on the screen because a set that silently fell back to the reference layout
     -- and a set that came off this board look exactly alike otherwise.
     setSource = drive.setSource,
-    -- Both are written once and not touched again, so they travel as themselves.
-    backup = drive.backup,
-    transfer = drive.transfer
+    backup = backupState,
+    transfer = transferState
   }
 end
 

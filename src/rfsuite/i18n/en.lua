@@ -2550,6 +2550,7 @@ return {
       inflight_prime_failed = "Prime failed",
       inflight_set_board = "Set from the board",
       inflight_set_reference = "Documented layout",
+      inflight_set_skipped = "skipped",
       inflight_backup_none = "No backup",
       inflight_backup_held = "Backup in profile",
       inflight_transfer_busy = "Copying profile",

@@ -16,9 +16,21 @@
 
 local M = {}
 
-local requireModule = (_G.rfsuite and _G.rfsuite.require) or function(path)
+local requireModule = (_G.rfsuite and _G.rfsuite.require)
+if not requireModule then
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local rChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", mode)
+  if rChunk then
+    local ok, res = pcall(rChunk)
+    if ok and type(res) == "function" then
+      requireModule = res
+    end
+  end
+end
+requireModule = requireModule or function(path)
   local fullPath = string.sub(path, 1, 1) == "/" and path or ("/SCRIPTS/TOOLS/rfsuite-core/" .. path)
-  local chunk = loadScript(fullPath, "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript(fullPath, mode)
   if chunk then
     local ok, mod = pcall(chunk)
     if ok and type(mod) == "table" then return mod end
@@ -41,10 +53,6 @@ local function prime()
   return PrimeModule
 end
 
--- How often the setup check is allowed to walk the model again, in getTime ticks. It reads mixer
--- lines and global variable details, which is far too much to pay on a rebuild that happens
--- whenever a value moves.
-local CHECK_INTERVAL_TICKS = 200
 
 local UNKNOWN_VALUE = "--"
 
@@ -113,15 +121,25 @@ end
 -- The setup check, as one line
 -- ---------------------------------------------------------------------------
 
---- The verdict, cached on the drive: the walk over mixer lines and variable details is far too
--- expensive to repeat on every rebuild, and nothing it reads changes without the pilot opening
--- the radio's own menus.
+--- The verdict, walked ONCE and then kept on the drive.
+--
+-- Two things this is deliberately not. It is not on a timer: with a two-second one it walked the
+-- model's mixer lines, its variable details and its flight mode's trim modes over and over for as
+-- long as the surface was up -- and in the air that is every couple of seconds, for a verdict
+-- about a model that cannot change while the pilot is flying it. And it is not run while the
+-- overlay is LIVE at all: the live surface shows the last verdict the ground surface reached and
+-- walks nothing, because the one place that budget must not be spent is the pass that is driving
+-- the flight controller.
+--
+-- The walk is repeated when the settings move, which is the only thing that can change the answer
+-- without the pilot leaving this screen; widgets/dashboard/inflight/drive.lua's own settings
+-- comparison drops the cache when it re-settles a drive.
 function M.checkVerdict(widget)
   local drive = widget and widget._inflight
   if drive == nil then return nil end
-  local now = drive.radio.now()
-  if drive._checkAt == nil or (now - drive._checkAt) >= CHECK_INTERVAL_TICKS then
-    drive._checkAt = now
+  if drive.live == true then return drive._checkResult end
+  if drive._checkedAt == nil then
+    drive._checkedAt = drive.radio.now()
     drive._checkResult = Drive.check(drive)
   end
   return drive._checkResult
@@ -425,13 +443,24 @@ local function describePrime(snapshot, t)
     .. tostring(state.done or 0) .. "/" .. tostring(state.total or 0)
 end
 
---- Which of the two layouts the rows came from. Said in words because a set that quietly fell
--- back to the documented layout and one that came off this board look exactly alike otherwise.
+--- Which of the two layouts the rows came from, and how much of the board's table did not fit in
+-- it. Said in words because a set that quietly fell back to the documented layout and one that
+-- came off this board look exactly alike otherwise -- and the skipped count for the same reason:
+-- a continuous slot has no park position, so the overlay cannot drive it, and a pilot who has
+-- configured one and cannot find it on the screen has no other way of learning why.
 local function describeSet(snapshot, t)
+  local text
   if snapshot.setSource == "board" then
-    return t("widgets.dashboard.inflight_set_board", "Set from the board")
+    text = t("widgets.dashboard.inflight_set_board", "Set from the board")
+  else
+    text = t("widgets.dashboard.inflight_set_reference", "Documented layout")
   end
-  return t("widgets.dashboard.inflight_set_reference", "Documented layout")
+  local state = snapshot.prime
+  local skipped = (type(state) == "table") and tonumber(state.skipped) or nil
+  if skipped ~= nil and skipped > 0 then
+    text = text .. " (" .. tostring(skipped) .. " " .. t("widgets.dashboard.inflight_set_skipped", "skipped") .. ")"
+  end
+  return text
 end
 
 --- Whether an undo exists, and what the last attempt at making one did.
@@ -577,7 +606,13 @@ function M.buildGround(children, widget, m, w, h, t, accent, btn)
   end
   y = y + m.actionH + m.pad
 
-  appendDelta(children, widget, m, y, w, h, t, accent)
+  -- The delta list is a DISARMED read-out and nothing else. Drawn while armed it is a table of
+  -- numbers on the screen a pilot is flying by, moving as the board reports each step -- and it
+  -- describes the flight that is happening rather than one that is over, so it is not even the
+  -- question it answers on the ground. What stands here while armed is the line above.
+  if not armed then
+    appendDelta(children, widget, m, y, w, h, t, accent)
+  end
 end
 
 --- The overlay with its controls. Reached by a long press while the interlock is on, and from the
@@ -611,9 +646,13 @@ function M.buildFullscreen(children, widget)
   appendActions(children, widget, m, y, w, t, btn)
   y = y + m.actionH
 
-  local verdict = M.describeCheck(M.checkVerdict(widget), t)
+  -- The verdict the GROUND surface reached, shown and not taken again. M.checkVerdict walks
+  -- nothing while the overlay is live: the model cannot change while the pilot is flying it, and
+  -- the pass that is driving the flight controller is the one place that walk must not be paid
+  -- for. Before the first ground visit it reads as unchecked, which is the honest answer.
   appendLabel(children, m.pad, y, w - m.pad * 2,
-    t("widgets.dashboard.inflight_check", "SETUP") .. ": " .. verdict, WHITE, m.smallFont, LEFT)
+    t("widgets.dashboard.inflight_check", "SETUP") .. ": " .. M.describeCheck(M.checkVerdict(widget), t),
+    WHITE, m.smallFont, LEFT)
 end
 
 return M
