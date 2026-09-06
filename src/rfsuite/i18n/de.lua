@@ -750,6 +750,8 @@ return {
         governor_state_bailout = "Bailout",
         governor_state_bypass = "Bypass",
         voltage_alert = "Spannung",
+        pack_not_full = "Akku nicht voll",
+        pack_not_full_margin = "Toleranz (mV/Zelle)",
         pid_profile = "PID-Profil",
         rate_profile = "Raten-Profil",
         esc_temperature = "ESC-Temperatur",
@@ -787,7 +789,7 @@ return {
         help_message = "Ansage des Governor-Status. Der Hauptschalter schaltet die Ansagen ein; darunter waehlst du, welche Zustaende gesprochen werden. Ein Zustand wird erst angesagt, wenn er einen Moment anliegt, damit die Zustaende eines Hochlaufs nicht nacheinander vorgelesen werden."
       },
       settings_audio_events_voltage = {
-        help_message = "Ansage, wenn die Akkuspannung auf die in der Akkukonfiguration eingestellte Warnschwelle faellt. Die Warnung wiederholt sich alle 10 Sekunden, bis sich die Spannung erholt."
+        help_message = "Ansage, wenn die Akkuspannung auf die in der Akkukonfiguration eingestellte Warnschwelle faellt. Die Warnung wiederholt sich alle 10 Sekunden, bis sich die Spannung erholt. Darunter meldet sich die Akkupruefung einmal beim Verbinden des Modells, wenn der Akku nicht voll ist, und sagt die Spannung pro Zelle an. Die Toleranz gibt an, wie weit ein Akku unter der Zellenspannung aus der Akkukonfiguration liegen darf und trotzdem als voll gilt, damit ein einen Tag lang gelagerter Akku sie nicht ausloest. Die Pruefung erfolgt einmal pro Verbindung und nie wieder im Flug."
       },
       settings_audio_events_profiles = {
         help_message = "Ansage des PID-Profils und des Raten-Profils bei einem Wechsel, mit der Nummer des neuen Profils."

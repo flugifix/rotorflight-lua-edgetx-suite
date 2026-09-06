@@ -750,6 +750,8 @@ return {
         governor_state_bailout = "Bailout",
         governor_state_bypass = "Bypass",
         voltage_alert = "Voltage",
+        pack_not_full = "Pack Not Full",
+        pack_not_full_margin = "Margin (mV/cell)",
         pid_profile = "PID Profile",
         rate_profile = "Rate Profile",
         esc_temperature = "ESC Temperature",
@@ -787,7 +789,7 @@ return {
         help_message = "Announce the governor's state. The main switch turns the announcements on; below it, choose which states are spoken. A state is announced once it has held for a moment, so the states a spool-up passes through are not read out one after another."
       },
       settings_audio_events_voltage = {
-        help_message = "Announce when the pack voltage falls to the warning level set in the battery configuration. The alert repeats every 10 seconds until the voltage recovers."
+        help_message = "Announce when the pack voltage falls to the warning level set in the battery configuration. The alert repeats every 10 seconds until the voltage recovers. Below it, the pack check speaks once when the model connects if the pack is not full, with the per-cell voltage read out. The margin is how far below the full-cell voltage of the battery configuration a pack may sit and still count as full, so that one left standing for a day does not trip it. The check is made once per connection and never again in flight."
       },
       settings_audio_events_profiles = {
         help_message = "Announce the PID profile and the rate profile when they change, with the new profile's number."

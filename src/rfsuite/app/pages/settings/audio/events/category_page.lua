@@ -37,6 +37,10 @@ local CONFIG_SCHEMA = {
   { key = "arming_flags",      type = "bool", default = true,  section = "arming" },
   { key = "governor_state",    type = "bool", default = true,  section = "governor" },
   { key = "voltage_alert",     type = "bool", default = true,  section = "voltage" },
+  { key = "pack_not_full",     type = "bool", default = false, section = "voltage" },
+  -- Millivolts per cell, so the number reads the same whatever the pack is: 100 is a tenth of
+  -- a volt below the configured full-cell voltage.
+  { key = "pack_not_full_margin", type = "number", default = 100, min = 10, max = 500, section = "voltage" },
   { key = "pid_profile",       type = "bool", default = true,  section = "profiles" },
   { key = "rate_profile",      type = "bool", default = true,  section = "profiles" },
   { key = "esc_temperature",   type = "bool", default = false, section = "esc" },
@@ -107,6 +111,9 @@ local SECTIONS = {
     titleFallback = "Voltage",
     items = {
       { key = "voltage_alert", labelKey = "voltage_alert", labelFallback = "Voltage" },
+      { kind = "bool", key = "pack_not_full", labelKey = "pack_not_full", labelFallback = "Pack Not Full" },
+      { kind = "number", key = "pack_not_full_margin", labelKey = "pack_not_full_margin", labelFallback = "Margin (mV/cell)",
+        suffix = " mV", enabledBy = "pack_not_full" },
     },
   },
   profiles = {

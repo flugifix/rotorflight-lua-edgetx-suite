@@ -248,6 +248,21 @@ local function unitCelsius()
   return 0
 end
 
+local function unitVolts()
+  if type(UNIT_VOLTS) == "number" then return UNIT_VOLTS end
+  return 0
+end
+
+-- EdgeTX speaks a fractional value by taking the number in hundredths together with the PREC2
+-- attribute: radio/src/lua/api_general.cpp documents playNumber's third argument as "PREC2
+-- plays a number with two decimal places (for a number 123 it plays 1.23)". On a firmware
+-- that does not export the constant there are no decimals to be had, and the caller has to
+-- fall back to whole units -- which is what a zero here says.
+local function precTwo()
+  if type(PREC2) == "number" then return PREC2 end
+  return 0
+end
+
 local function emitLog(opts, msg, level)
   if opts and type(opts.log) == "function" then
     opts.log(msg, level)
@@ -702,6 +717,95 @@ local function announceBatteryCapacityEvent(self, opts)
   audioState.batteryCapacityAnnounced = true
 end
 
+-- The pack the model came up with is not full. Judged once per connection and then latched:
+-- in flight the per-cell voltage falls past any margin, and without the latch this would turn
+-- from one warning at power-up into a running commentary on the discharge.
+--
+-- Nothing is judged until everything it needs is there -- a pack voltage, a cell count and a
+-- battery configuration to take the full-cell voltage from -- so a missing piece costs a pass
+-- and not a wrong answer. The battery configuration arrives over MSP, which is the same
+-- reason the voltage alert skips until it is available.
+local function announcePackNotFullEvent(self, events, opts)
+  local audioState = self.audioState
+  if audioState.packCheckDone then
+    return
+  end
+  if not prefEnabled(events, "pack_not_full", false) then
+    return
+  end
+
+  local voltage = tonumber(self.state and self.state.voltage)
+  if type(voltage) ~= "number" or voltage <= 0 then
+    return
+  end
+
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local bc = session and (session.batteryConfig or session.battery_config) or nil
+  if type(bc) ~= "table" then
+    return
+  end
+
+  -- A configured cell count of 0 means auto-detect, so telemetry answers instead.
+  local cells = tonumber(bc.batteryCellCount)
+  if not cells or cells <= 0 then
+    cells = tonumber(self.state and self.state.batteryCellCount)
+  end
+  if type(cells) ~= "number" then
+    return
+  end
+  cells = math.floor(cells + 0.5)
+  if cells <= 0 then
+    return
+  end
+
+  local now = nowSeconds()
+  if now < (audioState.nextAllowedAt or 0) then
+    return
+  end
+
+  -- The reasoning of seedInitialFuel further down, applied to this check: a caller that
+  -- rebuilt its audio state has not reconnected, and the pack it would report on was judged
+  -- when the craft actually came up. The flag clears itself, so a real reconnect judges again.
+  if audioState.seedPackCheck then
+    audioState.seedPackCheck = nil
+    audioState.packCheckDone = true
+    return
+  end
+
+  local fullCell = normalizeCellVoltage(bc.vbatmaxcellvoltage, 4.2)
+  local margin = tonumber(events.pack_not_full_margin) or 100
+  if margin < 0 then margin = 0 end
+  local perCell = voltage / cells
+
+  audioState.packCheckDone = true
+
+  if perCell >= fullCell - (margin / 1000) then
+    emitLog(opts, "pack check: full at " .. tostring(perCell) .. " V/cell over " .. tostring(cells) .. " cells", "debug")
+    return
+  end
+
+  emitLog(opts, "pack not full: " .. tostring(perCell) .. " V/cell against " .. tostring(fullCell)
+    .. " V less a " .. tostring(margin) .. " mV margin", "info")
+
+  -- notfull.wav is the one file this announcement would like the sound packs to gain. Every
+  -- pack ships voltage.wav, so one without it still says something rather than nothing, and
+  -- resolveEventPath caches the answer, so the probe costs one open per session.
+  local soundFile = "stat/alerts/notfull.wav"
+  if not resolveEventPath(soundFile) then
+    soundFile = "stat/alerts/voltage.wav"
+  end
+
+  if tryPlayEventFile(audioState, now, soundFile, opts) and type(playNumber) == "function" then
+    local attribute = precTwo()
+    local spoken = math.floor((perCell * 100) + 0.5)
+    if attribute == 0 then
+      spoken = math.floor(perCell + 0.5)
+    end
+    local ok, err = pcall(playNumber, spoken, unitVolts(), attribute)
+    if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+  end
+end
+
 -- Whether the value under `lq` may be read as a link quality in percent. Two independent
 -- tests, because either can be the only one available: the caller reports which sensor the
 -- search settled on, and the value has to fall inside the range a percentage has. A receiver
@@ -770,6 +874,7 @@ function Audio.resetConnectionState(audioState)
   audioState.smartfuelEmptySound = nil
   audioState.lqLevel = nil
   audioState.lqNotQualityLogged = nil
+  audioState.packCheckDone = false
 
   if type(audioState.lastValues) == "table" then
     for k in pairs(audioState.lastValues) do
@@ -868,6 +973,9 @@ function Audio.process(self, opts)
   announceProfileEvent(self, "pid_profile", self.state.profile, "evt/profile.wav", opts)
   announceProfileEvent(self, "rate_profile", self.state.rateProfile, "evt/rates.wav", opts)
   announceBatteryCapacityEvent(self, opts)
+  -- Deliberately not gated on `initialized`: the first pass after a connect carries the pack's
+  -- resting voltage, which is the reading this check is about.
+  announcePackNotFullEvent(self, events, opts)
 
   if prefEnabled(events, "voltage_alert", true) then
     -- Resolve cell count: prefer MSP batteryConfig, fall back to telemetry state,

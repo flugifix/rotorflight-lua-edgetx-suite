@@ -113,6 +113,8 @@ local function defaultPreferences()
       arming_flags = true,
       governor_state = true,
       voltage_alert = true,
+      pack_not_full = false,
+      pack_not_full_margin = 100,
       pid_profile = true,
       rate_profile = true,
       esc_temperature = false,
