@@ -244,6 +244,25 @@ function M.radio()
       return mix
     end,
 
+    -- The INPUT lines, which encode a source reference in a weight or an offset exactly as a mixer
+    -- line does. A radio whose firmware does not offer these answers nil and the walk that uses
+    -- them says less rather than raising.
+    inputsCount = function(input0)
+      local fn = modelApi("getInputsCount")
+      if not fn then return nil end
+      local ok, count = pcall(fn, input0)
+      if not ok then return nil end
+      return tonumber(count) or 0
+    end,
+
+    input = function(input0, line0)
+      local fn = modelApi("getInput")
+      if not fn then return nil end
+      local ok, line = pcall(fn, input0, line0)
+      if not ok or type(line) ~= "table" then return nil end
+      return line
+    end,
+
     flightModeData = function(fm)
       local fn = modelApi("getFlightMode")
       if not fn then return nil end
@@ -637,6 +656,12 @@ end
 -- one getMix per line, paid when a page is opened and never in a widget pass.
 local MIX_SCAN_CHANNELS = 32
 
+-- And how many INPUTS. EdgeTX carries 32 of those as well, each with its own lines, and an input
+-- line's weight and offset use the same source encoding a mixer line's do -- so a global variable
+-- scaling an expo curve is a variable this model has spoken for just as firmly as one on a mixer
+-- line, and one the overlay must not be handed. Same one-off cost, on the same page entry.
+local INPUT_SCAN_COUNT = 32
+
 -- A weight or an offset at or above this magnitude is not a number, it is a SOURCE reference
 -- (datastructs_private.h, sourceNumValToLuaInt), and a global variable used as one is a variable
 -- this model has already spoken for.
@@ -666,21 +691,40 @@ function M.freeGvars(radio, wanted)
 
   local used = {}
   local lines = 0
+
+  --- Both magnitudes of one line, read for a source reference. A negated reference is spelled with
+  -- the sign on the whole number rather than on the index, so both signs are looked up.
+  local function readLine(line)
+    if type(line) ~= "table" then return end
+    local weight = tonumber(line.weight) or 0
+    local offset = tonumber(line.offset) or 0
+    local byWeight = indexOfGvar[weight] or indexOfGvar[-weight]
+    local byOffset = indexOfGvar[offset] or indexOfGvar[-offset]
+    if byWeight ~= nil then used[byWeight] = true end
+    if byOffset ~= nil then used[byOffset] = true end
+  end
+
   for channel = 1, MIX_SCAN_CHANNELS do
     local count = radio.mixesCount(channel)
     if count == nil then break end
     for line0 = 0, count - 1 do
-      local mix = radio.mix(channel, line0)
       lines = lines + 1
-      if type(mix) == "table" then
-        -- Both magnitudes carry a reference the same way, and a negated one is spelled with the
-        -- sign on the whole number rather than on the index.
-        local weight = tonumber(mix.weight) or 0
-        local offset = tonumber(mix.offset) or 0
-        local byWeight = indexOfGvar[weight] or indexOfGvar[-weight]
-        local byOffset = indexOfGvar[offset] or indexOfGvar[-offset]
-        if byWeight ~= nil then used[byWeight] = true end
-        if byOffset ~= nil then used[byOffset] = true end
+      readLine(radio.mix(channel, line0))
+    end
+  end
+
+  -- The inputs, on the same terms. An input line encodes a source in its weight and its offset
+  -- exactly as a mixer line does, so a variable scaling a rate or an expo is spoken for -- and a
+  -- proposal that overlooked it would hand the overlay a variable it pulses several times a second
+  -- while a pilot is tuning, moving a control surface for a reason nobody could connect to it.
+  -- A firmware without the input readers answers nil and this half is simply not walked.
+  if type(radio.inputsCount) == "function" and type(radio.input) == "function" then
+    for input = 1, INPUT_SCAN_COUNT do
+      local count = radio.inputsCount(input - 1)
+      if count == nil then break end
+      for line0 = 0, count - 1 do
+        lines = lines + 1
+        readLine(radio.input(input - 1, line0))
       end
     end
   end
