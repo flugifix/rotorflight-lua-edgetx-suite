@@ -29,6 +29,18 @@ end
 local Functions = requireModule("widgets/dashboard/inflight/functions.lua")
 local Drive = requireModule("widgets/dashboard/inflight/drive.lua")
 
+-- The ground half, loaded only when the ground surface is actually built. It pulls in the MSP
+-- runtime and the api modules behind it, and the zone screen -- the one that is built while the
+-- pilot is flying -- has no use for any of that.
+local PrimeModule = nil
+local function prime()
+  if PrimeModule == nil then
+    PrimeModule = requireModule("widgets/dashboard/inflight/prime.lua") or false
+  end
+  if PrimeModule == false then return nil end
+  return PrimeModule
+end
+
 -- How often the setup check is allowed to walk the model again, in getTime ticks. It reads mixer
 -- lines and global variable details, which is far too much to pay on a rebuild that happens
 -- whenever a value moves.
@@ -370,9 +382,170 @@ local function appendActions(children, widget, m, y, w, t, btn)
   end
 end
 
+-- ---------------------------------------------------------------------------
+-- The ground surface
+-- ---------------------------------------------------------------------------
+
+-- What the delta list is written to. There is no scrolling here -- the surface is a read-out a
+-- pilot glances at between flights, not a table to be walked -- so what does not fit is COUNTED
+-- rather than reachable, and the count is on the screen.
+local MAX_DELTA_ROWS = 8
+
+--- Where the ground half has got to, in one phrase.
+local function describePrime(snapshot, t)
+  local state = snapshot.prime
+  if type(state) ~= "table" or state.phase == nil or state.phase == "idle" then
+    return t("widgets.dashboard.inflight_prime_never", "Not primed")
+  end
+  if state.phase == "done" then
+    return t("widgets.dashboard.inflight_prime_done", "Primed")
+  end
+  if state.phase == "error" then
+    return t("widgets.dashboard.inflight_prime_failed", "Prime failed")
+  end
+  return t("widgets.dashboard.inflight_prime_running", "Priming") .. " "
+    .. tostring(state.done or 0) .. "/" .. tostring(state.total or 0)
+end
+
+--- Which of the two layouts the rows came from. Said in words because a set that quietly fell
+-- back to the documented layout and one that came off this board look exactly alike otherwise.
+local function describeSet(snapshot, t)
+  if snapshot.setSource == "board" then
+    return t("widgets.dashboard.inflight_set_board", "Set from the board")
+  end
+  return t("widgets.dashboard.inflight_set_reference", "Documented layout")
+end
+
+--- Whether an undo exists, and what the last attempt at making one did.
+local function describeBackup(snapshot, t)
+  local transfer = snapshot.transfer
+  if type(transfer) == "table" and transfer.state == "busy" then
+    return t("widgets.dashboard.inflight_transfer_busy", "Copying profile")
+  end
+  if type(transfer) == "table" and transfer.state == "error" then
+    return t("widgets.dashboard.inflight_transfer_failed", "Profile copy failed")
+  end
+  local backup = snapshot.backup
+  if type(backup) == "table" then
+    return t("widgets.dashboard.inflight_backup_held", "Backup in profile") .. " " .. tostring(backup.profile)
+  end
+  return t("widgets.dashboard.inflight_backup_none", "No backup")
+end
+
+--- One action, as the button-with-a-label-over-it their fullscreen menu is built from: an LVGL
+-- button carries the press and a label drawn on top of it carries the text.
+local function appendAction(children, m, x, y, width, label, btn, press)
+  children[#children + 1] = {
+    type = "button", x = x, y = y, w = width, h = m.actionH, color = btn, press = press
+  }
+  appendLabel(children, x, y + math.floor((m.actionH - m.lineH) / 2), width, label, WHITE, m.font, CENTER)
+end
+
+--- What the flight changed: every parameter whose cached value has moved away from the snapshot
+-- the backup was taken with, largest change first.
+--
+-- Built into the tree rather than read by a closure. The list only moves when a value does, and
+-- a value moving already moves the drive's epoch, which is in the render key -- so the rebuild
+-- that puts a new list on screen is the one the key was going to cause anyway.
+local function appendDelta(children, widget, m, y, w, h, t, accent)
+  local drive = widget._inflight
+  local Prime = prime()
+  appendLabel(children, m.pad, y, w - m.pad * 2,
+    t("widgets.dashboard.inflight_delta_title", "CHANGED SINCE THE BACKUP"), accent, m.smallFont, LEFT)
+  y = y + m.lineH + 2
+
+  local list = (drive ~= nil and Prime ~= nil) and Prime.delta(drive) or nil
+  if list == nil then
+    appendLabel(children, m.pad, y, w - m.pad * 2,
+      t("widgets.dashboard.inflight_delta_unprimed", "Prime first: there is nothing to compare against"),
+      WHITE, m.smallFont, LEFT)
+    return
+  end
+  if #list == 0 then
+    appendLabel(children, m.pad, y, w - m.pad * 2,
+      t("widgets.dashboard.inflight_delta_none", "Nothing has changed"), WHITE, m.smallFont, LEFT)
+    return
+  end
+
+  -- What the screen has room for, and never more than the cap: the shortest radio decides.
+  local room = math.floor((h - y - m.pad) / m.lineH)
+  if room > MAX_DELTA_ROWS then room = MAX_DELTA_ROWS end
+  if room < 1 then room = 1 end
+  local shown = (#list < room) and #list or room
+
+  for i = 1, shown do
+    local entry = list[i]
+    local rowY = y + (i - 1) * m.lineH
+    appendLabel(children, m.pad, rowY, math.floor(w * 0.55), entry.name, WHITE, m.smallFont, LEFT)
+    appendLabel(children, math.floor(w * 0.55), rowY, math.floor(w * 0.45) - m.pad,
+      formatValue(entry.old) .. " -> " .. formatValue(entry.new), accent, m.smallFont, RIGHT)
+  end
+
+  if #list > shown then
+    appendLabel(children, m.pad, y + shown * m.lineH, w - m.pad * 2,
+      "+" .. tostring(#list - shown) .. " " .. t("widgets.dashboard.inflight_delta_more", "more"),
+      WHITE, m.smallFont, LEFT)
+  end
+end
+
+--- The surface the pilot meets between flights: what the overlay knows, what it can undo, and
+-- what the last flight moved.
+--
+-- The tuning controls are not here on purpose. The interlock is open, so nothing could be sent
+-- anyway, and the space that the bank chips and the row list would take is what the delta list
+-- needs on the shortest screen the suite runs on.
+function M.buildGround(children, widget, m, w, h, t, accent, btn)
+  local snapshot = widget.state.inflight or {}
+  local drive = widget._inflight
+  local Prime = prime()
+  local armed = (widget.state and widget.state.armed) == true
+
+  local y = m.headerH + m.pad
+  appendLabel(children, m.pad, y, w - m.pad * 2,
+    t("widgets.dashboard.inflight_check", "SETUP") .. ": " .. M.describeCheck(M.checkVerdict(widget), t),
+    WHITE, m.smallFont, LEFT)
+  y = y + m.lineH + 2
+  appendLabel(children, m.pad, y, w - m.pad * 2,
+    describePrime(snapshot, t) .. "  /  " .. describeSet(snapshot, t), WHITE, m.smallFont, LEFT)
+  y = y + m.lineH + 2
+  appendLabel(children, m.pad, y, w - m.pad * 2, describeBackup(snapshot, t), WHITE, m.smallFont, LEFT)
+  y = y + m.lineH + m.pad
+
+  if armed then
+    -- Nothing here can reach the board while it is armed -- the MSP runtime clears its queue on
+    -- every armed tick -- so the actions are absent rather than present and refusing.
+    appendLabel(children, m.pad, y + math.floor(m.actionH / 2) - math.floor(m.lineH / 2), w - m.pad * 2,
+      t("widgets.dashboard.inflight_ground_armed", "Disarm to prime or copy a profile"), WHITE, m.smallFont, CENTER)
+  elseif drive ~= nil and Prime ~= nil then
+    local slot = math.floor(tonumber(drive.settings.backup_profile) or 0)
+    local buttonW = math.floor((w - m.pad * 4) / 3)
+    appendAction(children, m, m.pad, y, buttonW,
+      t("widgets.dashboard.inflight_prime", "Prime"), btn, function()
+        Prime.start(widget, drive)
+        widget.built = false
+        widget.renderKey = nil
+      end)
+    appendAction(children, m, m.pad * 2 + buttonW, y, buttonW,
+      t("widgets.dashboard.inflight_backup", "Backup to") .. " " .. tostring(slot), btn, function()
+        Prime.backup(widget, drive)
+        widget.built = false
+        widget.renderKey = nil
+      end)
+    appendAction(children, m, m.pad * 3 + buttonW * 2, y, buttonW,
+      t("widgets.dashboard.inflight_restore", "Restore from") .. " " .. tostring(slot), btn, function()
+        Prime.restore(widget, drive)
+        widget.built = false
+        widget.renderKey = nil
+      end)
+  end
+  y = y + m.actionH + m.pad
+
+  appendDelta(children, widget, m, y, w, h, t, accent)
+end
+
 --- The overlay with its controls. Reached by a long press while the interlock is on, and from the
--- quick settings menu while it is off -- there the drive is inert and the screen is a read-out
--- with the setup check on it.
+-- quick settings menu while it is off -- there the drive is inert and what is shown instead is
+-- the ground surface.
 function M.buildFullscreen(children, widget)
   local w = (widget.zone and widget.zone.w) or LCD_W or 480
   local h = (widget.zone and widget.zone.h) or LCD_H or 272
@@ -384,6 +557,12 @@ function M.buildFullscreen(children, widget)
   appendHeader(children, widget, m, w, t, accent, btn)
   appendClose(children, widget, m, w, t)
 
+  local snapshot = widget.state.inflight or {}
+  if snapshot.live ~= true then
+    M.buildGround(children, widget, m, w, h, t, accent, btn)
+    return
+  end
+
   local y = m.headerH + m.pad
   appendChips(children, widget, m, y, t, accent, btn, true)
   y = y + m.chipH + m.pad
@@ -392,13 +571,7 @@ function M.buildFullscreen(children, widget)
   appendRows(children, widget, m, y, w, t, accent, btn, true)
   y = y + m.rowH * Functions.ROW_COUNT + m.pad
 
-  local snapshot = widget.state.inflight or {}
-  if snapshot.live == true then
-    appendActions(children, widget, m, y, w, t, btn)
-  else
-    appendLabel(children, m.pad, y + math.floor(m.actionH / 2) - math.floor(m.lineH / 2), w - m.pad * 2,
-      t("widgets.dashboard.inflight_interlock_off", "Interlock off - no steps are sent"), WHITE, m.smallFont, CENTER)
-  end
+  appendActions(children, widget, m, y, w, t, btn)
   y = y + m.actionH
 
   local verdict = M.describeCheck(M.checkVerdict(widget), t)
