@@ -79,6 +79,12 @@ local CMD_STATUS = 101
 -- The board's table is 42 slots, the length of the 167 reply.
 local SLOT_COUNT = 42
 
+-- How many slot records one widget pass may turn into the set. The whole derivation is 7 471 VM
+-- instructions on the pilot's own board (33 populated slots) against a call budget of 20 000 that
+-- the LVGL reactive sweep also comes out of, so it is taken in slices; eight records is about
+-- 1 800 instructions, which is the same order as the widget's other bounded work.
+local DERIVE_SLICE = 8
+
 -- Their adjustments page bounds an AUX field to this before it maps it (its AUX_CHANNEL_COUNT).
 local AUX_FIELD_COUNT = 13
 
@@ -159,13 +165,15 @@ M.PHASE_IDLE = "idle"
 M.PHASE_RXMAP = "rxmap"
 M.PHASE_FUNCTION_IDS = "functionIds"
 M.PHASE_SLOTS = "slots"
+--- The board's table is in and is being turned into the set, a slice per widget pass.
+M.PHASE_DERIVE = "derive"
 M.PHASE_VALUES = "values"
 M.PHASE_DONE = "done"
 M.PHASE_ERROR = "error"
 
 local RUNNING = {
   [M.PHASE_RXMAP] = true, [M.PHASE_FUNCTION_IDS] = true,
-  [M.PHASE_SLOTS] = true, [M.PHASE_VALUES] = true
+  [M.PHASE_SLOTS] = true, [M.PHASE_DERIVE] = true, [M.PHASE_VALUES] = true
 }
 
 --- Whether a run is still expecting a reply.
@@ -290,88 +298,146 @@ end
 -- Answers nil when nothing usable came back, which is what keeps the documented layout as the
 -- fallback rather than replacing it with an empty table.
 function M.deriveSet(records, map, bankChannel, valueChannel)
-  if type(records) ~= "table" then return nil, {} end
+  local work = M.newDerivation(records, map, bankChannel, valueChannel)
+  if work == nil then return nil, {} end
+  local done, result, skipped
+  repeat
+    done, result, skipped = M.deriveStep(work)
+  until done
+  return result, skipped
+end
 
-  local usable, skipped = {}, {}
-  for slot = 1, SLOT_COUNT do
-    local record = records[slot]
-    if type(record) == "table" and (tonumber(record.adjFunction) or 0) ~= 0 then
-      local enableCh = M.auxToWireChannel(record.enaChannel, map)
-      local valueCh = M.auxToWireChannel(record.adjChannel, map)
-      if enableCh == bankChannel and valueCh == valueChannel then
-        if (tonumber(record.adjStep) or 0) > 0 then
-          usable[#usable + 1] = record
-        else
-          skipped[#skipped + 1] = slot
+--- The same derivation, prepared to run a SLICE at a time.
+--
+-- Measured on a desktop Lua with the pilot's own board -- 33 populated slots, 31 of them usable
+-- -- the whole derivation costs 7 471 VM instructions. EdgeTX bills a widget call at 20 000
+-- (lua_widget.cpp, MAX_INSTRUCTIONS) and the LVGL reactive sweep of the tree standing after the
+-- call comes out of that same 20 000, on top of a background pass that already costs eleven and
+-- a half thousand. Run whole, it therefore does not fit, and what fails is not the widget's own
+-- pass: `refresh` returns and `callRefs` raises afterwards, outside the pcall the widget entry
+-- point wraps everything in. On a radio that reads as `ERROR in foreground calRefs error` across
+-- the frame, with nothing in any log the suite keeps, and the widget stops.
+--
+-- So it is taken in slices with a budget, like the trim walk in inflight/drive.lua and like the
+-- scene build in widgets/dashboard/runtime.lua. The two sorts are not chunked and do not need to
+-- be: they order at most `BANK_COUNT` bands and `ROW_COUNT` rows.
+function M.newDerivation(records, map, bankChannel, valueChannel)
+  if type(records) ~= "table" then return nil end
+  return {
+    records = records, map = map,
+    bankCh = bankChannel, valueCh = valueChannel,
+    phase = "scan", at = 0,
+    usable = {}, skipped = {},
+    bands = {}, bandSeen = {}, rows = {}, rowSeen = {},
+    set = {}, placed = 0
+  }
+end
+
+--- One slice. Answers `done, result, skipped`; `result` is nil until the last slice, and nil at
+-- the end means nothing usable came back -- which is what keeps the documented layout as the
+-- fallback rather than replacing it with an empty table.
+function M.deriveStep(work, budget)
+  if type(work) ~= "table" then return true, nil, {} end
+  local taken = 0
+
+  if work.phase == "scan" then
+    -- Classify and collect in one walk. A slot is usable only when it steps -- a continuous slot
+    -- has no park position -- and when both of its channels are the ones this model devotes to
+    -- the pair. A slot on some other channel belongs to a switch the pilot flies with.
+    while work.at < SLOT_COUNT do
+      if budget ~= nil and taken >= budget then return false, nil, nil end
+      work.at = work.at + 1
+      taken = taken + 1
+      local slot = work.at
+      local record = work.records[slot]
+      if type(record) == "table" and (tonumber(record.adjFunction) or 0) ~= 0 then
+        local enableCh = M.auxToWireChannel(record.enaChannel, work.map)
+        local valueCh = M.auxToWireChannel(record.adjChannel, work.map)
+        if enableCh == work.bankCh and valueCh == work.valueCh then
+          if (tonumber(record.adjStep) or 0) > 0 then
+            work.usable[#work.usable + 1] = record
+            local bandKey, bandFrom, bandTo = windowKey(record.enaRange)
+            if bandKey ~= nil and work.bandSeen[bandKey] == nil then
+              work.bandSeen[bandKey] = true
+              work.bands[#work.bands + 1] = { key = bandKey, min = bandFrom, max = bandTo }
+            end
+            local rowKey, rowFrom, rowTo = windowKey(record.adjRange2)
+            if rowKey ~= nil and work.rowSeen[rowKey] == nil then
+              work.rowSeen[rowKey] = true
+              work.rows[#work.rows + 1] = { key = rowKey, min = rowFrom, max = rowTo }
+            end
+          else
+            work.skipped[#work.skipped + 1] = slot
+          end
         end
       end
     end
+    if #work.usable == 0 then return true, nil, work.skipped end
+    work.phase = "order"
+    return false, nil, nil
   end
 
-  if #usable == 0 then return nil, skipped end
+  if work.phase == "order" then
+    -- The BANKS are the distinct enable windows, in rising microseconds -- the order a switch or
+    -- a variable walks them in. The ROWS are the distinct increment windows in FALLING
+    -- microseconds, so row 1 is the one furthest from centre: the row the documented layout
+    -- drives with the largest trim throw, and a board configured some other way still gets its
+    -- own outermost pair as row 1.
+    table.sort(work.bands, function(a, b)
+      if a.min ~= b.min then return a.min < b.min end
+      return a.max < b.max
+    end)
+    table.sort(work.rows, function(a, b)
+      if a.min ~= b.min then return a.min > b.min end
+      return a.max > b.max
+    end)
 
-  local bands, bandSeen = {}, {}
-  local rows, rowSeen = {}, {}
-  for i = 1, #usable do
-    local record = usable[i]
-    local bandKey, bandFrom, bandTo = windowKey(record.enaRange)
-    if bandKey ~= nil and bandSeen[bandKey] == nil then
-      bandSeen[bandKey] = true
-      bands[#bands + 1] = { key = bandKey, min = bandFrom, max = bandTo }
+    work.bandIndex, work.rowIndex = {}, {}
+    work.outBands, work.bankValues = {}, {}
+    for i = 1, #work.bands do
+      if i > Functions.BANK_COUNT then break end
+      work.bandIndex[work.bands[i].key] = i
+      work.outBands[i] = { min = work.bands[i].min, max = work.bands[i].max }
+      work.bankValues[i] = Functions.bandMidGv(work.outBands[i])
     end
-    local rowKey, rowFrom, rowTo = windowKey(record.adjRange2)
-    if rowKey ~= nil and rowSeen[rowKey] == nil then
-      rowSeen[rowKey] = true
-      rows[#rows + 1] = { key = rowKey, min = rowFrom, max = rowTo }
+    for i = 1, #work.rows do
+      if i > Functions.ROW_COUNT then break end
+      work.rowIndex[work.rows[i].key] = i
     end
+    work.phase = "place"
+    work.at = 0
+    return false, nil, nil
   end
 
-  table.sort(bands, function(a, b)
-    if a.min ~= b.min then return a.min < b.min end
-    return a.max < b.max
-  end)
-  table.sort(rows, function(a, b)
-    if a.min ~= b.min then return a.min > b.min end
-    return a.max > b.max
-  end)
-
-  local bandIndex, rowIndex = {}, {}
-  local outBands, bankValues = {}, {}
-  for i = 1, #bands do
-    if i > Functions.BANK_COUNT then break end
-    bandIndex[bands[i].key] = i
-    outBands[i] = { min = bands[i].min, max = bands[i].max }
-    bankValues[i] = Functions.bandMidGv(outBands[i])
-  end
-  for i = 1, #rows do
-    if i > Functions.ROW_COUNT then break end
-    rowIndex[rows[i].key] = i
-  end
-
-  local set, placed = {}, 0
-  for i = 1, #usable do
-    local record = usable[i]
-    local bank = bandIndex[windowKey(record.enaRange) or ""]
-    local row = rowIndex[windowKey(record.adjRange2) or ""]
-    if bank ~= nil and row ~= nil then
-      set[bank] = set[bank] or {}
-      -- The first slot wins a cell it shares. Two slots on the same window pair are a
-      -- configuration the board itself cannot resolve either -- it fires whichever it reaches
-      -- first -- so guessing the other one here would only disagree with the flight controller.
-      if set[bank][row] == nil then
-        set[bank][row] = math.floor(tonumber(record.adjFunction) or 0)
-        placed = placed + 1
+  if work.phase == "place" then
+    while work.at < #work.usable do
+      if budget ~= nil and taken >= budget then return false, nil, nil end
+      work.at = work.at + 1
+      taken = taken + 1
+      local record = work.usable[work.at]
+      local bank = work.bandIndex[windowKey(record.enaRange) or ""]
+      local row = work.rowIndex[windowKey(record.adjRange2) or ""]
+      if bank ~= nil and row ~= nil then
+        work.set[bank] = work.set[bank] or {}
+        -- The first slot wins a cell it shares. Two slots on the same window pair are a
+        -- configuration the board itself cannot resolve either -- it fires whichever it reaches
+        -- first -- so guessing the other one here would only disagree with the flight controller.
+        if work.set[bank][row] == nil then
+          work.set[bank][row] = math.floor(tonumber(record.adjFunction) or 0)
+          work.placed = work.placed + 1
+        end
       end
     end
+    if work.placed == 0 then return true, nil, work.skipped end
+    return true, { bands = work.outBands, bankValues = work.bankValues,
+                   set = work.set, placed = work.placed }, work.skipped
   end
 
-  if placed == 0 then return nil, skipped end
-  return { bands = outBands, bankValues = bankValues, set = set, placed = placed }, skipped
+  return true, nil, work.skipped
 end
 
-local function applySet(drive, prime)
-  local derived, skipped = M.deriveSet(prime.records, prime.map,
-    drive.settings.bank_ch, drive.settings.value_ch)
+--- What the finished derivation does to the drive. Called on the slice that completed it.
+local function applySet(drive, prime, derived, skipped)
   prime.skipped = skipped or {}
   if derived == nil then
     drive.setSource = "reference"
@@ -482,6 +548,26 @@ local function startValues(widget, drive, prime)
   return sendValues(widget, drive, prime)
 end
 
+--- One slice of the derivation, taken from the widget's own pass rather than from a reply.
+--
+-- Answers true while the prime is in this phase, so the caller knows the pass has been spent.
+local function stepDerivation(widget, drive)
+  local prime = drive.prime
+  if type(prime) ~= "table" or prime.phase ~= M.PHASE_DERIVE then return false end
+  if type(prime.derivation) ~= "table" then
+    -- Nothing to work on: fall through to the values as if the table had yielded nothing.
+    applySet(drive, prime, nil, prime.skipped)
+    startValues(widget, drive, prime)
+    return true
+  end
+  local done, derived, skipped = M.deriveStep(prime.derivation, DERIVE_SLICE)
+  if not done then return true end
+  prime.derivation = nil
+  applySet(drive, prime, derived, skipped)
+  startValues(widget, drive, prime)
+  return true
+end
+
 local function sendSlot(widget, drive, prime)
   local queue = queueOf()
   if queue == nil then
@@ -491,8 +577,14 @@ local function sendSlot(widget, drive, prime)
 
   local slot = prime.slotList[prime.slotAt]
   if slot == nil then
-    applySet(drive, prime)
-    return startValues(widget, drive, prime)
+    -- The board's table is complete. Turning it into the set does not happen here: it is the
+    -- most expensive single thing this module does and the pass that just parsed a reply cannot
+    -- carry it. The prime enters a phase of its own and the next tick takes the first slice.
+    prime.phase = M.PHASE_DERIVE
+    prime.derivation = M.newDerivation(prime.records, prime.map,
+      drive.settings.bank_ch, drive.settings.value_ch)
+    bump(drive)
+    return true
   end
 
   local api = prime.rangeApi
@@ -835,6 +927,10 @@ function M.tick(widget, drive)
     drive._primeAutoDone = false
     return
   end
+
+  -- The derivation is the one part of a prime that no reply drives, so it is stepped here. It
+  -- comes before the auto-start gates below, which return as soon as a run has been started.
+  if stepDerivation(widget, drive) then return end
 
   -- The connect chain owns the queue until it says otherwise. `tasksDone` is the widget's own
   -- reading of that (widgets/dashboard/runtime.lua, updateConnectionState): the onconnect runner
