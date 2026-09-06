@@ -368,7 +368,8 @@ local manifest = {
       pages = {
         { id = "dashboard_theme", title = "@i18n(app.modules.dashboard_theme.name)@", menuId = "settings_dashboard_theme_page" },
         { id = "dashboard_settings", title = "@i18n(app.modules.dashboard_settings.name)@", menuId = "settings_dashboard_settings_menu", icon = "@pages/settings/dashboard/settings/icon.png" },
-        { id = "dashboard_inflight", title = "@i18n(app.modules.dashboard_inflight.name)@", menuId = "settings_dashboard_inflight_page" }
+        { id = "dashboard_inflight", title = "@i18n(app.modules.dashboard_inflight.name)@",
+          menuId = "settings_dashboard_inflight_page", icon = "@pages/settings/dashboard/inflight/icon.png" }
       }
     },
     settings_dashboard_settings_menu = {
