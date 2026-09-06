@@ -106,6 +106,7 @@ function M.newDrive(radio, settings)
   self.written = 0
   self.writtenFm = nil
   self.bankWritten = nil
+  self.bankFm = nil
   self.pulseCode = nil
   self.pulseUntil = nil
   self.coolUntil = 0
@@ -194,7 +195,14 @@ function Drive:armBank(bank)
   -- Recorded before it is written, for the reason writeValue sets out: a pass killed between the
   -- two must leave the drive believing MORE is standing than is, never less, because a cleanup
   -- only takes back what it believes it put there.
+  --
+  -- The flight mode is recorded with it, for the same reason the value variable's is:
+  -- model.setGlobalVariable resolves a "same as FMx" link itself, so a bank armed in one mode and
+  -- cleared in another leaves the first one armed. A pilot who changes flight mode with the
+  -- interlock closed -- which is a switch, not a rare event -- would otherwise land back on the
+  -- ground with the enable channel still parked in a band.
   self.bankWritten = value
+  self.bankFm = fm
   writeGvar(self, settings.bank_gvar, fm, value)
   logDrive("bank gvar %d fm %d <- %d (bank %d)", settings.bank_gvar, fm, value, bank)
   return true
@@ -315,11 +323,16 @@ function Drive:cleanup(force)
   self.writtenFm = nil
 
   if settings and (settings.bank_gvar or 0) > 0 and (force or (self.bankWritten or 0) ~= 0) then
-    local bankFm = self.radio.flightMode()
+    -- The mode the bank was ARMED in, not the mode the radio happens to be in now. Cleared in the
+    -- wrong one, the write goes to a different slot -- or is redirected by a "same as FMx" link --
+    -- and the enable channel stays parked in a band nobody chose.
+    local bankFm = self.bankFm
+    if bankFm == nil then bankFm = self.radio.flightMode() end
     writeGvar(self, settings.bank_gvar, bankFm, 0)
     logDrive("cleanup: bank gvar %d fm %d <- 0", settings.bank_gvar, bankFm)
   end
   self.bankWritten = 0
+  self.bankFm = nil
   self.coolUntil = 0
 end
 
