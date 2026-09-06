@@ -201,9 +201,14 @@ local function appendChips(children, widget, m, y, t, accent, btn, interactive)
     local node = {
       type = interactive and "button" or "rectangle",
       x = x, y = y, w = m.chipW, h = m.chipH,
-      color = isActive and accent or btn,
-      filled = true
+      color = isActive and accent or btn
     }
+    -- `filled` belongs to the BORDERED objects -- rectangle, circle, arc
+    -- (lua_lvgl_widget.cpp, LvglWidgetBorderedObject::parseParam). A button is built from
+    -- LvglWidgetObject and rejects it with `Invalid property 'filled'`, which is raised out of
+    -- the build and swallowed by the entry point's pcall: measured on a radio, the live surface
+    -- drew its header and nothing below it, and the trace said nothing at all.
+    if not interactive then node.filled = true end
     if interactive and drive then
       node.press = function()
         drive:setBank(bank)
@@ -269,7 +274,6 @@ local function appendRows(children, widget, m, y, w, t, accent, btn, interactive
       local node = {
         type = interactive and "button" or "rectangle",
         x = m.pad, y = rowY, w = w - m.pad * 2, h = m.rowH - 2,
-        filled = true,
         -- The other reactive closure: which row is armed moves with the pilot's trims, and
         -- repainting the whole scene for it would cost a build per press.
         color = function()
@@ -278,6 +282,8 @@ local function appendRows(children, widget, m, y, w, t, accent, btn, interactive
           return btn
         end
       }
+      -- See appendChips: a button has no `filled`.
+      if not interactive then node.filled = true end
       if interactive and drive then
         node.press = function()
           drive:selectRow(row)
