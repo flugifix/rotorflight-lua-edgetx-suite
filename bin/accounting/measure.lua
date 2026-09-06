@@ -173,6 +173,88 @@ local function feedLink(sensorIds, frameId)
   end
 end
 
+-- The frame type feedLink pushes: a custom telemetry frame, as against a flight controller's MSP
+-- response, which arrives on the same queue and is what a prime is waiting for.
+local FRAME_TELEMETRY = 0x88
+
+--- Put the link back to the backlog feedLink models, before a pass that is about to be measured.
+--
+-- feedLink tops the stub's frame queue up on every pass and nothing takes back what the pass did
+-- not read, so the leftovers grow for as long as a scenario runs -- five figures by the end of a
+-- long one. Nothing reads them until an MSP request is outstanding. Then the CRSF transport walks
+-- maxFramesPerPoll frames per poll and mspPollSlicePolls polls per call, on BOTH turns the widget
+-- pass gives the queue, and a pile that never runs out is what makes those caps reachable:
+-- fifteen thousand instructions of polling that a radio does not pay, because a radio's queue
+-- holds a pass's worth of frames and the loop runs out of frames long before it runs out of caps.
+--
+-- Leaving them in is what made pass.tuning.state measure 12 730 or 24 107 for identical code --
+-- the difference was not the work the pass did, but whether the prime happened to have a request
+-- outstanding while the pile was deep. So the scenario that drives the overlay -- the only one
+-- here that runs several hundred passes with MSP requests in flight -- holds the queue at one
+-- pass's worth before every pass it drives. The flight controller's own replies are kept: the
+-- oldest telemetry is what a queue that overflows drops.
+local function holdLinkBacklog()
+  local frames = Stubs.telemetryFrames
+  local surplus = #frames - FRAME_BACKLOG
+  if surplus <= 0 then return end
+  local kept, n = {}, 0
+  for i = 1, #frames do
+    local frame = frames[i]
+    if surplus > 0 and frame.command == FRAME_TELEMETRY then
+      surplus = surplus - 1
+    else
+      n = n + 1
+      kept[n] = frame
+    end
+  end
+  Stubs.telemetryFrames = kept
+end
+
+-- The frame type the flight controller stub answers with.
+local FRAME_MSP_REPLY = 0x7B
+
+--- A link that answers between two passes instead of inside the call that asked.
+--
+-- stubs/fc.lua answers at the wire and synchronously: it decodes the frame the transport pushed
+-- and queues the reply before crossfireTelemetryPush has returned. A board answers milliseconds
+-- later, so its reply is always already waiting when a pass polls -- and a widget pass polls the
+-- MSP queue (Runtime.tick) BEFORE it drains custom telemetry, so the poll is always what sees it.
+-- Answered synchronously, the reply instead lands between those two, and the drain is what finds
+-- it: lib/crsf.lua buffers a frame only for a frame type its OWN instance has been asked for, and
+-- the drain and the MSP transport each load that file for themselves, so a reply the drain reaches
+-- first is discarded rather than handed on. Every retry of that request then goes out from the
+-- same place and is lost the same way.
+--
+-- That is why a prime in this world used to stop wherever it happened to stop, and why the same
+-- code measured 12 730 or 24 107: the rows depended on how far the run had got, not on what the
+-- pass did. Holding the replies for one pass is the link the rest of this file already assumes.
+local heldReplies = {}
+local realPushFrame = Stubs.pushFrame
+
+local function installDeferredLink()
+  realPushFrame = Stubs.pushFrame
+  Stubs.pushFrame = function(command, data)
+    if command == FRAME_MSP_REPLY then
+      heldReplies[#heldReplies + 1] = { command = command, data = data }
+      return
+    end
+    return realPushFrame(command, data)
+  end
+end
+
+local function removeDeferredLink()
+  Stubs.pushFrame = realPushFrame
+  for i = #heldReplies, 1, -1 do heldReplies[i] = nil end
+end
+
+--- Deliver what the flight controller answered during the previous pass.
+local function releaseReplies()
+  local n = #heldReplies
+  if n == 0 then return end
+  for i = 1, n do realPushFrame(heldReplies[i].command, heldReplies[i].data) end
+  for i = n, 1, -1 do heldReplies[i] = nil end
+end
+
 -- ---------------------------------------------------------------------------
 -- Pass classification. The dispatcher in widgets/dashboard/runtime.lua decides what a
 -- pass does from the job slot BEFORE the call, so that is where the class is read.
@@ -563,12 +645,18 @@ do
 end
 
 ------------------------------------------------------------------------------
--- The in-flight tuning overlay: the pass that drives it, and the builds of its two screens.
+-- The in-flight tuning overlay: the pass that drives it, the pass a reply lands on, and the
+-- builds of its two screens.
 --
 -- The overlay replaces the scene while its interlock is closed, so the widget is settled FIRST
 -- with the interlock open -- that is the only way the reference scene ever reaches its swap --
 -- and the switch is thrown afterwards. The fullscreen build is measured with a non-nil event,
 -- which is what the firmware passes there and what no other row in this file covers.
+--
+-- The ground half is measured as a window of its own, between the prime starting and the prime
+-- being finished, and everything after it is measured with the prime DONE. Both halves of that
+-- are deliberate: a pass that parses a reply and a pass that does not are different passes, and
+-- a row that sometimes contains one and sometimes does not is a row nobody can reproduce.
 ------------------------------------------------------------------------------
 World.reset()
 do
@@ -611,6 +699,11 @@ do
     end
   end
 
+  -- From here on the flight controller answers between passes rather than inside the push, and
+  -- the link is held at one pass's worth of telemetry. Both are properties of this check rather
+  -- than of the suite, and both are what make the rows below reproducible; see their comments.
+  installDeferredLink()
+
   -- The interlock, thrown after the dashboard is up. The drive seeds on its first evaluation and
   -- waits out its stability delay, so the passes in between are the ones a pilot's hand produces.
   Stubs.switchValues[1] = true
@@ -620,12 +713,78 @@ do
   -- theme load that belongs to this driver rather than to the overlay. They are spent here,
   -- before anything is measured.
   for i = 1, 30 do
+    holdLinkBacklog()
+    releaseReplies()
     feedLink(World.sensorIds, 900 + i)
     widget.refresh(widget, nil, nil)
   end
 
+  local drive = widget._inflight
+  if drive == nil then error("accounting: the tuning overlay never built a drive") end
+
+  ----------------------------------------------------------------------------
+  -- The GROUND HALF, priced as the window it occupies.
+  --
+  -- The overlay reads the board before a flight: the receiver map, the slot table one record at a
+  -- time, and nine value reads. Each of those replies is parsed on a widget pass, and
+  -- widgets/dashboard/inflight/prime.lua parses AT MOST ONE PER PASS -- which is the only reason
+  -- the cost of a reply can be written down as a row at all. So the window is driven pass by pass
+  -- from the run starting to the run reporting itself done, and the check below is the bound's own
+  -- positive control: the run's completed-reply counter may never move by more than one in a pass.
+  --
+  -- Nothing is faked into the run. The widget's own tick starts it, the flight controller stub
+  -- answers at the wire, and the number of passes it takes is printed on the row so a run that
+  -- took a different number of them is visible rather than silently equivalent.
+  ----------------------------------------------------------------------------
+  local primeWorst = {}
+  local primePasses = 0
+  local Prime = World.require("widgets/dashboard/inflight/prime.lua")
+  local Functions = World.require("widgets/dashboard/inflight/functions.lua")
+  if type(Prime) ~= "table" or type(Functions) ~= "table" then
+    error("accounting: the overlay's ground half did not load")
+  end
+
+  for i = 1, 400 do
+    holdLinkBacklog()
+    releaseReplies()
+    feedLink(World.sensorIds, 5000 + i)
+    local prime = drive.prime
+    local phase = type(prime) == "table" and prime.phase or nil
+    if phase == Prime.PHASE_DONE then break end
+    if phase == Prime.PHASE_ERROR then
+      error("accounting: the prime failed with " .. tostring(prime.error))
+    end
+    local doneBefore = (type(prime) == "table" and prime.done) or 0
+    local class = passClass(widget)
+    local n = count(widget.refresh, widget, nil, nil)
+    -- Only the passes the run itself occupies are counted and priced. Before the widget's own
+    -- tick starts it there is a settle to wait out, and those passes are the dashboard's.
+    if type(prime) == "table" then
+      primePasses = primePasses + 1
+      if n > (primeWorst[class] or 0) then primeWorst[class] = n end
+    end
+    local after = drive.prime
+    if type(after) == "table" and type(prime) == "table" and after == prime then
+      local step = (after.done or 0) - doneBefore
+      if step > 1 then
+        error(string.format(
+          "accounting: one pass completed %d replies, so the overlay's per-pass bound is gone", step))
+      end
+    end
+  end
+  if type(drive.prime) ~= "table" or drive.prime.phase ~= Prime.PHASE_DONE then
+    error("accounting: the prime never finished in 400 passes")
+  end
+  if primePasses < #Functions.VALUE_READS then
+    error(string.format(
+      "accounting: the prime finished in %d passes, fewer than its %d value reads -- a pass parsed "
+      .. "more than one reply", primePasses, #Functions.VALUE_READS))
+  end
+
   local worst = {}
   for i = 1, 240 do
+    holdLinkBacklog()
+    releaseReplies()
     feedLink(World.sensorIds, i)
     if i % 3 == 0 then invalidate(widget) end
     local class = passClass(widget)
@@ -636,6 +795,8 @@ do
   -- The same surface in fullscreen. `event` is an integer there and nil everywhere else, so this
   -- is also the only place any row in this file exercises the interactive path.
   for i = 1, 60 do
+    holdLinkBacklog()
+    releaseReplies()
     feedLink(World.sensorIds, 1000 + i)
     invalidate(widget)
     local class = passClass(widget)
@@ -648,14 +809,14 @@ do
   -- ground actions and the delta list. It is measured at its worst -- a prime still running and
   -- more changed parameters than the list has room for, so the cap and its "+N more" are both
   -- exercised -- because the rows below are one budget for both builds of this job.
-  local drive = widget._inflight
-  if drive == nil then error("accounting: the tuning overlay never built a drive") end
 
   -- The interlock falls, with the ordinary passes the drive's stability delay needs. Measured
   -- passes start afterwards: the fall itself writes both variables back to 0 and belongs to the
   -- live surface, not to this one.
   Stubs.switchValues[1] = false
   for i = 1, 60 do
+    holdLinkBacklog()
+    releaseReplies()
     feedLink(World.sensorIds, 2000 + i)
     widget.refresh(widget, nil, nil)
   end
@@ -675,6 +836,8 @@ do
   drive.setSource = "board"
 
   for i = 1, 60 do
+    holdLinkBacklog()
+    releaseReplies()
     feedLink(World.sensorIds, 3000 + i)
     -- A run still in flight on every pass, and an epoch that has moved: the epoch is what the
     -- render key carries, so this is also what makes the surface rebuild rather than repaint.
@@ -707,8 +870,13 @@ do
     if not capped then error("accounting: the delta list was not measured at its cap") end
   end
 
+  removeDeferredLink()
+
   addRow("pass.tuning.state", worst.state or 0)
-  addRow("pass.job.tuning", worst.tuning or 0)
+  addRow("pass.tuning.prime", primeWorst.state or 0,
+    string.format("%d replies over %d passes, one parse per pass",
+      drive.prime.done or 0, primePasses))
+  addRow("pass.job.tuning", math.max(worst.tuning or 0, primeWorst.tuning or 0))
 end
 
 ------------------------------------------------------------------------------

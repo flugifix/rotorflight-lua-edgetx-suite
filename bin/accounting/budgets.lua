@@ -66,20 +66,34 @@ return {
     -- regression detector, and as the price of decoding a whole backlog instead of
     -- its newest quarter.
     ["pass.function"] = { target = 7300, measured = 5808 },
-    -- The in-flight tuning overlay. The drive's own work -- one switch read, the trims, the
-    -- enable channel, the pulse -- costs less than the theme render key it displaces, so the
-    -- STATE pass was cheaper than the dashboard's while the overlay only drove the radio.
-    -- The ground half moved it: a prime reads the receiver map, the board's slot table and
-    -- nine value replies over MSP, and the pass a reply lands in pays that reply's parse on
-    -- top of everything else. The row prices THAT pass, because it is the one a pilot
-    -- standing at the model actually produces; the previous target sat below it.
+    -- The in-flight tuning overlay, in three rows: the pass that drives it, the pass a reply of
+    -- its ground half lands on, and the build of its screens.
+    --
+    -- `pass.tuning.state` is the STEADY state -- the overlay driving the radio with nothing
+    -- outstanding on the wire. One switch read, the trims, the enable channel, the pulse; less
+    -- than the theme render key it displaces, which is why it sits below the dashboard's own
+    -- STATE pass.
+    --
+    -- `pass.tuning.prime` is the ground half, and it is a row of its own because it is a
+    -- different pass and not a worse day of the same one. Before a flight the overlay reads the
+    -- receiver map, the board's slot table one record at a time and nine value replies, and the
+    -- pass a reply lands on pays that reply's parse -- 42 to 933 instructions depending on the
+    -- command -- on top of the drive, the progress the screen shows and the poll the outstanding
+    -- request keeps busy. It is bounded by inflight/prime.lua parsing AT MOST ONE reply per pass;
+    -- without that bound the row is not a number at all, because what a pass costs then depends
+    -- on how many answers the link happened to deliver into it. The margin here is the check's
+    -- 10 % floor rather than the 15 % most rows carry: this pass is close enough to the
+    -- firmware's own 20 000 that a wider target would be widening the wrong thing.
     --
     -- The JOB pass builds the whole surface in one step, the way the menu does, and it covers
     -- two different builds: the tuning surface with its chips, rows and step buttons, and the
     -- ground surface with the three profile actions and the delta list at its cap. The setup
-    -- check, which walks the two mixer lines and both variables' details, is on both.
-    ["pass.tuning.state"] = { target = 13000, measured = 11674, proposed = 11000 },
-    ["pass.job.tuning"] = { target = 9550, measured = 8482 },
+    -- check, which walks the two mixer lines and both variables' details, is on both. Its target
+    -- rises because the prime's own progress is on the surface, so the build now also happens
+    -- while a run is in flight.
+    ["pass.tuning.state"] = { target = 13000, measured = 11589, proposed = 11000 },
+    ["pass.tuning.prime"] = { target = 16700, measured = 14960 },
+    ["pass.job.tuning"] = { target = 10600, measured = 8967, proposed = 9550 },
 
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of
