@@ -443,12 +443,35 @@ local function describePrime(snapshot, t)
     .. tostring(state.done or 0) .. "/" .. tostring(state.total or 0)
 end
 
---- Which of the two layouts the rows came from, and how much of the board's table did not fit in
--- it. Said in words because a set that quietly fell back to the documented layout and one that
--- came off this board look exactly alike otherwise -- and the skipped count for the same reason:
--- a continuous slot has no park position, so the overlay cannot drive it, and a pilot who has
--- configured one and cannot find it on the screen has no other way of learning why.
+--- Where the rows came from, and whether the flight controller agrees with them.
+--
+-- Said in words because the three cases look exactly alike on the rest of the screen. In the
+-- STANDARD layout the set is this build's own and the board's table was read only to be held
+-- against it, so what belongs here is the verdict: the board carries this set, the board carries
+-- something else in so many of its slots, or the board carries nothing at all. In the CUSTOM
+-- layout the set IS the board's table, so what belongs here is whether that table could be used
+-- -- a set that quietly fell back to the documented layout and one that came off this board are
+-- otherwise indistinguishable -- and how many of its slots the overlay had to leave out, since a
+-- continuous slot has no park position and a pilot who configured one and cannot find it on the
+-- screen has no other way of learning why.
 local function describeSet(snapshot, t)
+  if snapshot.setSource == "standard" then
+    local text = t("widgets.dashboard.inflight_set_standard", "Standard set")
+    local compare = snapshot.compare
+    local verdict = (type(compare) == "table") and compare.verdict or nil
+    if verdict == "match" then
+      return text .. " - " .. t("widgets.dashboard.inflight_board_matches", "board matches")
+    elseif verdict == "empty" then
+      return text .. " - " .. t("widgets.dashboard.inflight_board_empty", "board empty")
+    elseif verdict == "differ" then
+      return text .. " - " .. t("widgets.dashboard.inflight_board_differs", "board differs in")
+        .. " " .. tostring(compare.count)
+    elseif verdict == "unmapped" then
+      return text .. " - " .. t("widgets.dashboard.inflight_board_unmapped", "channels not on the receiver map")
+    end
+    return text .. " - " .. t("widgets.dashboard.inflight_board_unknown", "board not compared")
+  end
+
   local text
   if snapshot.setSource == "board" then
     text = t("widgets.dashboard.inflight_set_board", "Set from the board")

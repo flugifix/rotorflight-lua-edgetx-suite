@@ -46,6 +46,7 @@ requireModule = requireModule or function(path)
 end
 
 local Functions = requireModule("widgets/dashboard/inflight/functions.lua")
+local Setup = requireModule("widgets/dashboard/inflight/setup.lua")
 local Log = requireModule("lib/log.lua")
 
 local function logPrime(fmt, ...)
@@ -84,18 +85,6 @@ local SLOT_COUNT = 42
 -- the LVGL reactive sweep also comes out of, so it is taken in slices; eight records is about
 -- 1 800 instructions, which is the same order as the widget's other bounded work.
 local DERIVE_SLICE = 8
-
--- Their adjustments page bounds an AUX field to this before it maps it (its AUX_CHANNEL_COUNT).
-local AUX_FIELD_COUNT = 13
-
--- The first AUX member: four sticks and the throttle ahead of it, 0-based. This is the firmware's
--- CONTROL_CHANNEL_COUNT (rx/rx.h), the same five `rc_adjustments.c` adds to an adjustment's field.
-local AUX_MEMBER_BASE = 5
-
--- How many AUX fields the receiver map has anything to say about. The map is
--- RX_MAPPABLE_CHANNEL_COUNT = 8 bytes long (target/common_defaults_post.h, served whole by
--- MSP_RX_MAP), five of them the sticks, so it names AUX1, AUX2 and AUX3 and stops.
-local MAPPED_AUX_COUNT = 3
 
 -- How long the connect chain has to have been FINISHED before the automatic prime runs, in
 -- getTime ticks of 10 ms.
@@ -300,41 +289,12 @@ end
 -- The board's own slot table, turned into a set
 -- ---------------------------------------------------------------------------
 
---- The wire channel an AUX field of a slot record names.
---
--- The record's field is a 0-based index into the AUX channels, and the firmware reads it as
--- `rcInput[field + CONTROL_CHANNEL_COUNT]` with a count of five (fc/rc_adjustments.c, rx/rx.h).
--- So the field names a position in `rcInput`, and the question is only which wire channel the
--- receiver put there.
---
--- The receiver map answers that for the FIRST EIGHT positions and for no others.
--- `readRxChannels` (rx/rx.c) takes the sample for position `channel` from wire channel
--- `rcmap[channel]` while `channel < RX_MAPPABLE_CHANNEL_COUNT`, which is 8, and from `channel`
--- itself above it -- and MSP_RX_MAP serves exactly those eight bytes. Positions 5, 6 and 7 are
--- the AUX1..AUX3 the map's last three bytes name; position 8 and up carry the wire channel of
--- the same number, whatever the map says about the sticks.
---
--- Fields 0..2 therefore go through the map and fields 3 and up are the identity, which is where
--- extrapolating `map.aux1 + index` past AUX3 goes wrong. Measured on a board whose map is
--- `AECR1T23` (`aux1 = 4`): the documented layout's enable field 5 and value field 6 came out as
--- CH10 and CH11 instead of CH11 and CH12, no slot matched the channels the model devotes to the
--- pair, and the board's own slot table was discarded in favour of the documented one.
---
--- The return is 1-based, the way "ch11" is spelled.
-function M.auxToWireChannel(auxField, map)
-  local index = math.floor(tonumber(auxField) or 0)
-  if index < 0 then index = 0 end
-  if index > (AUX_FIELD_COUNT - 1) then index = AUX_FIELD_COUNT - 1 end
-
-  local member = nil
-  if type(map) == "table" and index < MAPPED_AUX_COUNT then
-    if index == 0 then member = tonumber(map.aux1) end
-    if index == 1 then member = tonumber(map.aux2) end
-    if index == 2 then member = tonumber(map.aux3) end
-  end
-  if member == nil then member = AUX_MEMBER_BASE + index end
-  return member + 1
-end
+-- Which wire channel an AUX field of a slot record names, and the inverse. Both live in
+-- inflight/functions.lua, because the settings page's writer needs the inverse without loading
+-- this file; re-exported here because the derivation below, the screens and the probes all reach
+-- for the forward direction through this module.
+M.auxToWireChannel = Functions.auxToWireChannel
+M.wireToAuxField = Functions.wireToAuxField
 
 local function windowKey(window)
   if type(window) ~= "table" then return nil end
@@ -683,12 +643,75 @@ local function startValues(widget, drive, prime)
   return sendValues(widget, drive, prime)
 end
 
---- One slice of the derivation, taken from the widget's own pass rather than from a reply.
+--- Whether this model's set is the one this build knows rather than the one the board carries.
+local function standardMode(drive)
+  local settings = drive.settings
+  return type(settings) == "table" and settings.set_mode ~= Setup.SET_MODE_CUSTOM
+end
+
+--- What the finished comparison does to the drive. The set is NOT touched: in the standard layout
+-- the set is a constant of this build and the board's table is evidence about the board, not about
+-- the set. A comparison that could not be made at all -- no field on this receiver map reaches the
+-- configured channels -- is recorded as its own verdict rather than as a difference.
+local function applyComparison(drive, prime, result)
+  if result == nil then
+    drive.compare = { verdict = "unmapped", count = 0 }
+    logPrime("standard set: neither channel has a field on this receiver map")
+    return
+  end
+  drive.compare = result
+  logPrime("standard set: board %s (%d of %d slot(s) differ, %d of them empty)",
+    result.verdict, result.count, result.total, result.empty)
+end
+
+--- The slot table is in: enter the phase that turns it into a set or into a verdict.
+--
+-- Reached from two places, and the second one is the case an empty board found: when 167 says no
+-- slot at all carries a function there is nothing to read with 156, and a run that only ever
+-- entered this phase from the last slot record would sit in the slot phase for ever -- no request
+-- out, no reply due, no error. A flight controller with nothing configured is exactly the board
+-- this feature exists to offer a set to.
+local function startDerive(drive, prime)
+  prime.phase = M.PHASE_DERIVE
+  if standardMode(drive) then
+    -- The set is known; what the board's table is read for is the verdict on the board.
+    prime.comparison = Functions.newComparison(prime.records, prime.map,
+      drive.settings.bank_ch, drive.settings.value_ch)
+  else
+    prime.derivation = M.newDerivation(prime.records, prime.map,
+      drive.settings.bank_ch, drive.settings.value_ch)
+  end
+  bump(drive)
+end
+
+--- One slice of the work that turns the board's slot table into something, taken from the widget's
+-- own pass rather than from a reply. In the custom layout that is the SET; in the standard layout
+-- the set is already known and what is derived is the verdict on the board.
 --
 -- Answers true while the prime is in this phase, so the caller knows the pass has been spent.
 local function stepDerivation(widget, drive)
   local prime = drive.prime
   if type(prime) ~= "table" or prime.phase ~= M.PHASE_DERIVE then return false end
+
+  if prime.comparison ~= nil then
+    local done, result = Functions.compareStep(prime.comparison, Functions.COMPARE_SLICE)
+    if not done then return true end
+    prime.comparison = nil
+    applyComparison(drive, prime, result)
+    bump(drive)
+    startValues(widget, drive, prime)
+    return true
+  end
+
+  if standardMode(drive) then
+    -- The standard layout with no comparison to run: the receiver map did not answer, or neither
+    -- configured channel has a field that could carry the set. Said as its own verdict.
+    applyComparison(drive, prime, nil)
+    bump(drive)
+    startValues(widget, drive, prime)
+    return true
+  end
+
   if type(prime.derivation) ~= "table" then
     -- Nothing to work on: fall through to the values as if the table had yielded nothing.
     applySet(drive, prime, nil, prime.skipped)
@@ -874,10 +897,7 @@ local function parseSlot(widget, drive, prime, record)
     -- happen here: it is the most expensive single thing this module does and the pass that just
     -- parsed a reply cannot carry it. The prime enters a phase of its own and the next tick takes
     -- the first slice.
-    prime.phase = M.PHASE_DERIVE
-    prime.derivation = M.newDerivation(prime.records, prime.map,
-      drive.settings.bank_ch, drive.settings.value_ch)
-    bump(drive)
+    startDerive(drive, prime)
   elseif prime.chainPaused then
     chain(widget, drive, prime)
   end
@@ -970,6 +990,10 @@ function M.start(widget, drive)
     chainPaused = false
   }
   drive.prime = prime
+  -- The verdict on the board belongs to the table that produced it, and this run is about to read
+  -- that table again. Leaving the old one up would show a board as matching while its own answer
+  -- was still on the wire.
+  drive.compare = nil
   bump(drive)
   logPrime("prime started")
   return sendRxMap(widget, drive, prime)

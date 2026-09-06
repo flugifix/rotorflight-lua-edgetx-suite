@@ -75,7 +75,8 @@ M.DEFAULTS = {
   row_trim_4 = 3,
   row_trim_5 = 5,
   row_trim_6 = 6,
-  backup_profile = 0
+  backup_profile = 0,
+  set_mode = "standard"
 }
 
 M.PULSE_MS_MIN = 100
@@ -95,6 +96,19 @@ M.PROFILE_MAX = 6
 -- wants one gesture rather than six positions to remember.
 M.TRIM_MODE_ROWS = "rows"
 M.TRIM_MODE_NAVIGATE = "navigate"
+
+-- The two ways the overlay learns which parameter sits in which bank and row.
+--
+-- `standard` is a set the overlay KNOWS: the documented six-band layout with the six cells it
+-- leaves empty filled in, held in inflight/functions.lua. The screen can name every cell before
+-- the board has said anything, the board's own slot table is read only to be COMPARED against it,
+-- and the settings page can offer to write that set onto the flight controller.
+--
+-- `custom` is the board's: the slot table is read and turned into whatever layout it describes,
+-- nothing is ever written, and the documented layout stands only where the table yields nothing
+-- the overlay can drive. It is the mode for a pilot whose adjustment configuration is his own.
+M.SET_MODE_STANDARD = "standard"
+M.SET_MODE_CUSTOM = "custom"
 
 -- TRIM_MODE_NONE, as model.getFlightMode reports it. A row driven from a trim needs the trim
 -- switched OFF in the active flight mode, otherwise the same press also moves a stick's neutral.
@@ -369,6 +383,11 @@ function M.loadSettings(modelPreferences)
     pulse_ms = clampNumber(src.pulse_ms, M.PULSE_MS_MIN, M.PULSE_MS_MAX, M.DEFAULTS.pulse_ms),
     trims = src.trims ~= false,
     trim_mode = (src.trim_mode == M.TRIM_MODE_NAVIGATE) and M.TRIM_MODE_NAVIGATE or M.TRIM_MODE_ROWS,
+    -- Anything that is not the word `custom` is the standard set, which is what a store written
+    -- by a build that did not have this setting yet reads as -- and is the right way round: the
+    -- standard set names every cell without a round trip, while the custom one shows nothing at
+    -- all until the board has been read.
+    set_mode = (src.set_mode == M.SET_MODE_CUSTOM) and M.SET_MODE_CUSTOM or M.SET_MODE_STANDARD,
     nav_trim = clampNumber(src.nav_trim, 0, M.TRIM_COUNT, M.DEFAULTS.nav_trim),
     adj_trim = clampNumber(src.adj_trim, 0, M.TRIM_COUNT, M.DEFAULTS.adj_trim),
     backup_profile = clampNumber(src.backup_profile, 0, M.PROFILE_MAX, M.DEFAULTS.backup_profile)
@@ -396,6 +415,7 @@ function M.storeSettings(section, settings)
   section.pulse_ms = settings.pulse_ms
   section.trims = settings.trims == true
   section.trim_mode = settings.trim_mode or M.TRIM_MODE_ROWS
+  section.set_mode = settings.set_mode or M.SET_MODE_STANDARD
   section.nav_trim = settings.nav_trim or 0
   section.adj_trim = settings.adj_trim or 0
   section.backup_profile = settings.backup_profile

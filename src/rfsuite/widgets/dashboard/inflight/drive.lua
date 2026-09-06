@@ -85,6 +85,30 @@ local NAV_REPEAT_INTERVAL_TICKS = 33
 local Drive = {}
 Drive.__index = Drive
 
+--- Which parameters the screen offers, before anything has been read off the board.
+--
+-- In the STANDARD set layout that is the whole answer: the set is a constant of this build, the
+-- screen names all thirty-six cells from the first frame, and the ground half reads the board's
+-- own slot table only to say whether the board agrees with it. In the CUSTOM layout it is a
+-- placeholder -- the documented thirty, which is the best guess available until the board's table
+-- has been read and turned into the set it really describes.
+--
+-- Called again whenever the settings change, because the channels a cell is derived from and the
+-- layout it is derived under are both settings.
+function Drive:seedSet()
+  local standard = (self.settings and self.settings.set_mode) ~= Setup.SET_MODE_CUSTOM
+  self.bands = Functions.REFERENCE_BANDS
+  self.bankValues = Functions.REFERENCE_BAND_GV
+  if standard then
+    self.set = Functions.STANDARD_SET
+    self.setSource = "standard"
+  else
+    self.set = Functions.REFERENCE_SET
+    self.setSource = "reference"
+  end
+  self.compare = nil
+end
+
 --- A drive with no history: nothing seeded, nothing written, no bank chosen.
 function M.newDrive(radio, settings)
   local self = setmetatable({}, Drive)
@@ -96,12 +120,7 @@ function M.newDrive(radio, settings)
   self.rawSince = nil
   self.bank = 1
   self.row = 1
-  -- The documented layout, until the ground prime has read the board's own slot table and
-  -- replaced all three. Nothing else in this file reads the three constants.
-  self.bands = Functions.REFERENCE_BANDS
-  self.bankValues = Functions.REFERENCE_BAND_GV
-  self.set = Functions.REFERENCE_SET
-  self.setSource = "reference"
+  self:seedSet()
   self.bankShown = nil
   self.written = 0
   self.writtenFm = nil
@@ -611,6 +630,7 @@ local function settingsSignature(settings)
     tostring(settings.value_ch), tostring(settings.bank_gvar), tostring(settings.value_gvar),
     tostring(settings.pulse_ms), tostring(settings.trims), tostring(settings.backup_profile),
     tostring(settings.trim_mode), tostring(settings.nav_trim), tostring(settings.adj_trim),
+    tostring(settings.set_mode),
     tostring(rows[1]), tostring(rows[2]), tostring(rows[3]),
     tostring(rows[4]), tostring(rows[5]), tostring(rows[6])
   }, "|")
@@ -650,6 +670,10 @@ function M.get(widget)
     -- settings it was started under.
     drive.trimScan = nil
     drive.seeded = false
+    -- The set goes back to what this build knows, and the verdict on the board with it. Both were
+    -- reached under the channels and the layout that have just changed; a set derived from the
+    -- old value channel would keep naming parameters no window on the new one reaches.
+    drive:seedSet()
   end
   drive._source = prefs
   return drive
@@ -728,6 +752,15 @@ local function publish(widget, drive)
     transferState = { kind = transfer.kind, state = transfer.state, reason = transfer.reason }
   end
 
+  -- What the board's own slot table said when it was held against the standard set. Only the
+  -- verdict and the count travel: the list of slots behind it is the ground half's own table and
+  -- goes on being appended to, and the screen has room for a sentence rather than for a list.
+  local compare = drive.compare
+  local compareState = nil
+  if type(compare) == "table" then
+    compareState = { verdict = compare.verdict, count = compare.count }
+  end
+
   local activeId = drive:functionId(drive.bank, drive.row)
   state.inflight = {
     epoch = epoch,
@@ -751,6 +784,9 @@ local function publish(widget, drive)
     -- usable. It is on the screen because a set that silently fell back to the reference layout
     -- and a set that came off this board look exactly alike otherwise.
     setSource = drive.setSource,
+    -- and, in the standard layout, whether the board carries it: the set is known without the
+    -- board in that mode, so its table is read to be compared rather than to be believed.
+    compare = compareState,
     backup = backupState,
     transfer = transferState
   }

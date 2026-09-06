@@ -365,4 +365,314 @@ for i = 1, #M.REFERENCE_BANDS do
   M.REFERENCE_BAND_GV[i] = M.bandMidGv(M.REFERENCE_BANDS[i])
 end
 
+
+-- ---------------------------------------------------------------------------
+-- The receiver map, and which wire channel an adjustment slot's field names
+-- ---------------------------------------------------------------------------
+
+-- Their adjustments page bounds an AUX field to this before it maps it (its AUX_CHANNEL_COUNT):
+-- MAX_SUPPORTED_RC_CHANNEL_COUNT 18 less CONTROL_CHANNEL_COUNT 5, so AUX1..AUX13 as fields 0..12.
+local AUX_FIELD_COUNT = 13
+
+-- The first AUX member: four sticks and the throttle ahead of it, 0-based. This is the firmware's
+-- CONTROL_CHANNEL_COUNT (rx/rx.h), the same five `rc_adjustments.c` adds to an adjustment's field.
+local AUX_MEMBER_BASE = 5
+
+-- How many AUX fields the receiver map has anything to say about. The map is
+-- RX_MAPPABLE_CHANNEL_COUNT = 8 bytes long (target/common_defaults_post.h, served whole by
+-- MSP_RX_MAP), five of them the sticks, so it names AUX1, AUX2 and AUX3 and stops.
+local MAPPED_AUX_COUNT = 3
+
+M.AUX_FIELD_COUNT = AUX_FIELD_COUNT
+M.AUX_MEMBER_BASE = AUX_MEMBER_BASE
+M.MAPPED_AUX_COUNT = MAPPED_AUX_COUNT
+
+--- The wire channel an AUX field of a slot record names.
+--
+-- The record's field is a 0-based index into the AUX channels, and the firmware reads it as
+-- `rcInput[field + CONTROL_CHANNEL_COUNT]` with a count of five (fc/rc_adjustments.c, rx/rx.h).
+-- So the field names a position in `rcInput`, and the question is only which wire channel the
+-- receiver put there.
+--
+-- The receiver map answers that for the FIRST EIGHT positions and for no others.
+-- `readRxChannels` (rx/rx.c) takes the sample for position `channel` from wire channel
+-- `rcmap[channel]` while `channel < RX_MAPPABLE_CHANNEL_COUNT`, which is 8, and from `channel`
+-- itself above it -- and MSP_RX_MAP serves exactly those eight bytes. Positions 5, 6 and 7 are
+-- the AUX1..AUX3 the map's last three bytes name; position 8 and up carry the wire channel of
+-- the same number, whatever the map says about the sticks.
+--
+-- Fields 0..2 therefore go through the map and fields 3 and up are the identity, which is where
+-- extrapolating `map.aux1 + index` past AUX3 goes wrong. Measured on a board whose map is
+-- `AECR1T23` (`aux1 = 4`): the documented layout's enable field 5 and value field 6 came out as
+-- CH10 and CH11 instead of CH11 and CH12, no slot matched the channels the model devotes to the
+-- pair, and the board's own slot table was discarded in favour of the documented one.
+--
+-- The return is 1-based, the way "ch11" is spelled.
+function M.auxToWireChannel(auxField, map)
+  local index = math.floor(tonumber(auxField) or 0)
+  if index < 0 then index = 0 end
+  if index > (AUX_FIELD_COUNT - 1) then index = AUX_FIELD_COUNT - 1 end
+
+  local member = nil
+  if type(map) == "table" and index < MAPPED_AUX_COUNT then
+    if index == 0 then member = tonumber(map.aux1) end
+    if index == 1 then member = tonumber(map.aux2) end
+    if index == 2 then member = tonumber(map.aux3) end
+  end
+  if member == nil then member = AUX_MEMBER_BASE + index end
+  return member + 1
+end
+
+--- The inverse: which field a slot record has to carry so that it watches wire channel `wire`.
+--
+-- The mapped positions are tried FIRST and the identity only afterwards, because that is the
+-- order the firmware resolves them in: a receiver map naming a high wire channel as AUX1 makes
+-- position 5 read that channel, and the position of the same number reads it as well. Both would
+-- fire, and the mapped one is the one the map was written for.
+--
+-- Answers nil when no field reaches that channel -- a channel below the first AUX member, or one
+-- past the thirteen a slot record can index. A write derived from a refused field would be a
+-- write onto a slot watching some other channel entirely, so the caller is expected to refuse
+-- rather than to fall back.
+function M.wireToAuxField(wire, map)
+  local wire0 = math.floor(tonumber(wire) or 0) - 1
+  if wire0 < 0 then return nil end
+  if type(map) == "table" then
+    if tonumber(map.aux1) == wire0 then return 0 end
+    if tonumber(map.aux2) == wire0 then return 1 end
+    if tonumber(map.aux3) == wire0 then return 2 end
+  end
+  local field = wire0 - AUX_MEMBER_BASE
+  if field < MAPPED_AUX_COUNT then return nil end
+  if field > (AUX_FIELD_COUNT - 1) then return nil end
+  return field
+end
+
+-- ---------------------------------------------------------------------------
+-- The standard set: the documented layout with its six empty cells filled
+-- ---------------------------------------------------------------------------
+
+-- bank -> row -> adjustment function id.
+--
+-- The first four rows of every bank and all six rows of the first three banks are the documented
+-- layout above, UNCHANGED, so a flight controller set up by hand from the project's own generic
+-- radio setup carries a subset of this and nothing it carries contradicts it. What is added is
+-- the six cells that setup leaves empty: the two yaw precompensation terms beside the F gains,
+-- the two cross-coupling terms beside the O gains, and the head speed and the tail-torque gain
+-- beside the governor's own.
+M.STANDARD_SET = {
+  [1] = { [1] = 14, [2] = 18, [3] = 22, [4] = 49, [5] = 27, [6] = 26 },
+  [2] = { [1] = 15, [2] = 19, [3] = 23, [4] = 50, [5] = 28, [6] = 29 },
+  [3] = { [1] = 16, [2] = 20, [3] = 24, [4] = 51, [5] = 39, [6] = 40 },
+  [4] = { [1] = 17, [2] = 21, [3] = 25, [4] = 52, [5] = 66, [6] = 75 },
+  [5] = { [1] = 59, [2] = 60, [3] = 54, [4] = 55, [5] = 61, [6] = 63 },
+  [6] = { [1] = 56, [2] = 57, [3] = 58, [4] = 48, [5] = 80, [6] = 53 }
+}
+
+-- What a slot of the standard set carries as its step and its bounds.
+--
+-- The documented thirty get `5 10 200` verbatim, which is what every one of the documented
+-- `adjfunc` lines says -- so a board written from this set is byte for byte the layout that
+-- describes, and a pilot who set his up by hand finds nothing changed under him. It is NOT the
+-- function's own range from the table at the top of this file: those are wider, and widening a
+-- documented line would be a silent change to a configuration somebody else wrote down.
+--
+-- The six added cells have no documented line to be equal to, so they take the range their own
+-- adjustments page offers for the same function, and the head speed takes a step of ten because
+-- a step of five over ten thousand rpm is a control nobody can reach the end of.
+local STANDARD_LIMITS_DOCUMENTED = { step = 5, min = 10, max = 200 }
+
+M.STANDARD_LIMITS = {
+  [66] = { step = 5, min = 0, max = 250 },
+  [75] = { step = 5, min = 0, max = 250 },
+  [61] = { step = 5, min = 0, max = 250 },
+  [63] = { step = 5, min = 0, max = 250 },
+  [80] = { step = 10, min = 0, max = 10000 },
+  [53] = { step = 5, min = 0, max = 250 }
+}
+
+-- Which slot of the board's table each cell of the standard set is written to, in order, starting
+-- at M.STANDARD_FIRST_SLOT.
+--
+-- The DOCUMENTED thirty come first and in the documented order -- bank by bank, row by row, with
+-- the six cells that layout leaves empty simply not there -- so each of them lands on the very
+-- slot index the documentation gives it and a written board matches it line for line, index
+-- included. The six added cells follow, in the same bank-major order, on the six slots after the
+-- documented thirty. Laying all thirty-six out bank-major from slot 2 instead would move twelve
+-- of the documented lines onto other slot numbers for no gain.
+M.STANDARD_FIRST_SLOT = 2
+M.STANDARD_SLOT_ORDER = {
+  { 1, 1 }, { 1, 2 }, { 1, 3 }, { 1, 4 }, { 1, 5 }, { 1, 6 },
+  { 2, 1 }, { 2, 2 }, { 2, 3 }, { 2, 4 }, { 2, 5 }, { 2, 6 },
+  { 3, 1 }, { 3, 2 }, { 3, 3 }, { 3, 4 }, { 3, 5 }, { 3, 6 },
+  { 4, 1 }, { 4, 2 }, { 4, 3 }, { 4, 4 },
+  { 5, 1 }, { 5, 2 }, { 5, 3 }, { 5, 4 },
+  { 6, 1 }, { 6, 2 }, { 6, 3 }, { 6, 4 },
+  { 4, 5 }, { 4, 6 },
+  { 5, 5 }, { 5, 6 },
+  { 6, 5 }, { 6, 6 }
+}
+
+-- The two windows of a row are mirror images about the channel centre, so a decrement window is
+-- this less the increment window's own edges.
+local MIRROR_US = CENTRE_US * 2
+
+--- What the standard set says a cell has to hold, in the shape
+-- tasks/msp/api/get_adjustment_range.lua decodes a record into.
+--
+-- One shape for both jobs on purpose: the comparison holds this against what the board answered,
+-- and the writer encodes this into the fifteen bytes MSP 53 takes. A second spelling of the same
+-- record would be a second place for the two to drift apart.
+function M.standardRecord(bank, row, enaField, adjField)
+  local id = (M.STANDARD_SET[bank] or {})[row]
+  if id == nil then return nil end
+  local band = M.REFERENCE_BANDS[bank]
+  local inc = M.REFERENCE_ROW_WINDOWS[row]
+  if band == nil or inc == nil then return nil end
+  local limits = M.STANDARD_LIMITS[id] or STANDARD_LIMITS_DOCUMENTED
+  return {
+    adjFunction = id,
+    enaChannel = enaField,
+    enaRange = { start = band.min, ["end"] = band.max },
+    adjChannel = adjField,
+    adjRange1 = { start = MIRROR_US - inc.max, ["end"] = MIRROR_US - inc.min },
+    adjRange2 = { start = inc.min, ["end"] = inc.max },
+    adjMin = limits.min,
+    adjMax = limits.max,
+    adjStep = limits.step
+  }
+end
+
+--- The whole standard set as a list of slots, in the order they are written.
+--
+-- `enaField` and `adjField` are the caller's, because they come off the receiver map and nothing
+-- in this file reads anything.
+function M.standardSlots(enaField, adjField)
+  local out = {}
+  for i = 1, #M.STANDARD_SLOT_ORDER do
+    local cell = M.STANDARD_SLOT_ORDER[i]
+    local record = M.standardRecord(cell[1], cell[2], enaField, adjField)
+    if record ~= nil then
+      out[#out + 1] = {
+        slot0 = M.STANDARD_FIRST_SLOT + i - 1,
+        bank = cell[1],
+        row = cell[2],
+        id = record.adjFunction,
+        record = record
+      }
+    end
+  end
+  return out
+end
+
+-- ---------------------------------------------------------------------------
+-- Holding a board's own table against the standard set
+-- ---------------------------------------------------------------------------
+
+local function windowsEqual(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" then return false end
+  return (tonumber(a.start) == tonumber(b.start)) and (tonumber(a["end"]) == tonumber(b["end"]))
+end
+
+--- Whether the board's record for a slot is the record the standard set asks for.
+--
+-- Every field the write sets is compared and nothing else is: a record agreeing on all of them
+-- behaves identically, and one that differs anywhere fires differently. Answers the first field
+-- that disagrees, so a report can say WHAT differs and not only that something does.
+function M.recordMatches(actual, wanted)
+  if type(actual) ~= "table" or type(wanted) ~= "table" then return false, "missing" end
+  if (tonumber(actual.adjFunction) or 0) ~= wanted.adjFunction then return false, "function" end
+  if (tonumber(actual.enaChannel) or -1) ~= wanted.enaChannel then return false, "ena_channel" end
+  if not windowsEqual(actual.enaRange, wanted.enaRange) then return false, "ena_window" end
+  if (tonumber(actual.adjChannel) or -1) ~= wanted.adjChannel then return false, "adj_channel" end
+  if not windowsEqual(actual.adjRange1, wanted.adjRange1) then return false, "dec_window" end
+  if not windowsEqual(actual.adjRange2, wanted.adjRange2) then return false, "inc_window" end
+  if (tonumber(actual.adjMin) or 0) ~= wanted.adjMin then return false, "min" end
+  if (tonumber(actual.adjMax) or 0) ~= wanted.adjMax then return false, "max" end
+  if (tonumber(actual.adjStep) or 0) ~= wanted.adjStep then return false, "step" end
+  return true, nil
+end
+
+--- How many slot records one pass may hold against the set. The same order of work as the
+-- derivation's own slice, for the same reason: the reactive sweep of the tree standing after the
+-- call comes out of the same instruction budget the call itself is billed against.
+M.COMPARE_SLICE = 8
+
+--- A comparison prepared to run a slice at a time. `records` is keyed by 1-based slot, the way
+-- the ground half keeps them.
+--
+-- Answers nil when the configured channels have no field on this receiver map at all, which is
+-- not a verdict about the board and is reported as its own state rather than as a difference.
+function M.newComparison(records, map, bankChannel, valueChannel)
+  if type(records) ~= "table" then return nil end
+  local enaField = M.wireToAuxField(bankChannel, map)
+  local adjField = M.wireToAuxField(valueChannel, map)
+  if enaField == nil or adjField == nil then return nil end
+  return {
+    records = records,
+    slots = M.standardSlots(enaField, adjField),
+    at = 0,
+    empty = 0,
+    differ = 0,
+    list = {}
+  }
+end
+
+--- One slice. Answers `done, result`; `result` is nil until the last slice.
+--
+-- The verdict is one of three, and the empty board has one of its own because it is the case the
+-- action this comparison sits beside exists for: a board carrying nothing is not a board that
+-- disagrees, and telling a pilot his configuration differs in thirty-six slots when he has none
+-- is an answer he cannot act on.
+function M.compareStep(work, budget)
+  if type(work) ~= "table" then return true, nil end
+  local taken = 0
+  while work.at < #work.slots do
+    if budget ~= nil and taken >= budget then return false, nil end
+    work.at = work.at + 1
+    taken = taken + 1
+    local cell = work.slots[work.at]
+    local actual = work.records[cell.slot0 + 1]
+    local held = 0
+    if type(actual) == "table" then held = tonumber(actual.adjFunction) or 0 end
+    if held == 0 then
+      work.empty = work.empty + 1
+      work.list[#work.list + 1] = { slot0 = cell.slot0, id = cell.id, reason = "empty" }
+    else
+      local ok, reason = M.recordMatches(actual, cell.record)
+      if not ok then
+        work.differ = work.differ + 1
+        work.list[#work.list + 1] = { slot0 = cell.slot0, id = cell.id, reason = reason }
+      end
+    end
+  end
+
+  local total = #work.slots
+  local verdict = "match"
+  if total > 0 and work.empty == total then
+    verdict = "empty"
+  elseif (work.empty + work.differ) > 0 then
+    verdict = "differ"
+  end
+  return true, {
+    verdict = verdict,
+    total = total,
+    empty = work.empty,
+    differ = work.differ,
+    count = work.empty + work.differ,
+    slots = work.list
+  }
+end
+
+--- The same comparison, run whole. For a caller that is not on a widget pass.
+function M.compare(records, map, bankChannel, valueChannel)
+  local work = M.newComparison(records, map, bankChannel, valueChannel)
+  if work == nil then return nil end
+  local done, result
+  repeat
+    done, result = M.compareStep(work)
+  until done
+  return result
+end
+
 return M
