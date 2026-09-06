@@ -147,6 +147,18 @@ end
 -- The flight mode matters: model.setGlobalVariable resolves a "same as FMx" link itself, so a
 -- write made in one mode and cleared in another can leave the first one standing. The clear goes
 -- back to the mode the write was made in.
+--
+-- The BOOKKEEPING IS PESSIMISTIC, and the order of the two lines is the whole of it. A widget pass
+-- is killed wherever the firmware's instruction limit happens to land, including between the write
+-- and the note of it, and the two orders fail in opposite directions. Recording afterwards, a pass
+-- killed in between leaves the drive believing 0 is standing when the row's magnitude is -- and
+-- `cleanup(false)` then writes nothing, for ever, because it only clears what it believes it put
+-- there. Recording first, the same pass leaves the drive believing a value is standing that is
+-- not, and the cost of that is one redundant write of 0.
+--
+-- Which of the two lines comes first therefore depends on the direction. A value going ON is
+-- recorded before it is written; a value going OFF is written before it is un-recorded, because
+-- for a clear it is the clear itself that must not be lost.
 function Drive:writeValue(value, fm)
   if self.written == value then return end
   local settings = self.settings
@@ -157,9 +169,15 @@ function Drive:writeValue(value, fm)
   local mode = fm
   if mode == nil then mode = self.writtenFm end
   if mode == nil then mode = self.radio.flightMode() end
-  writeGvar(self, settings.value_gvar, mode, value)
-  self.written = value
-  self.writtenFm = (value ~= 0) and mode or nil
+  if value ~= 0 then
+    self.written = value
+    self.writtenFm = mode
+    writeGvar(self, settings.value_gvar, mode, value)
+  else
+    writeGvar(self, settings.value_gvar, mode, 0)
+    self.written = 0
+    self.writtenFm = nil
+  end
   logDrive("value gvar %d fm %d <- %d", settings.value_gvar, mode, value)
 end
 
@@ -173,8 +191,11 @@ function Drive:armBank(bank)
   local value = self.bankValues and self.bankValues[bank]
   if value == nil then return false, "no_band" end
   local fm = self.radio.flightMode()
-  writeGvar(self, settings.bank_gvar, fm, value)
+  -- Recorded before it is written, for the reason writeValue sets out: a pass killed between the
+  -- two must leave the drive believing MORE is standing than is, never less, because a cleanup
+  -- only takes back what it believes it put there.
   self.bankWritten = value
+  writeGvar(self, settings.bank_gvar, fm, value)
   logDrive("bank gvar %d fm %d <- %d (bank %d)", settings.bank_gvar, fm, value, bank)
   return true
 end
