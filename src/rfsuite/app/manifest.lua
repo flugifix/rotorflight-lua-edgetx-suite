@@ -367,7 +367,8 @@ local manifest = {
       title = "@i18n(app.modules.dashboard.name)@",
       pages = {
         { id = "dashboard_theme", title = "@i18n(app.modules.dashboard_theme.name)@", menuId = "settings_dashboard_theme_page" },
-        { id = "dashboard_settings", title = "@i18n(app.modules.dashboard_settings.name)@", menuId = "settings_dashboard_settings_menu", icon = "@pages/settings/dashboard/settings/icon.png" }
+        { id = "dashboard_settings", title = "@i18n(app.modules.dashboard_settings.name)@", menuId = "settings_dashboard_settings_menu", icon = "@pages/settings/dashboard/settings/icon.png" },
+        { id = "dashboard_inflight", title = "@i18n(app.modules.dashboard_inflight.name)@", menuId = "settings_dashboard_inflight_page" }
       }
     },
     settings_dashboard_settings_menu = {
@@ -381,6 +382,10 @@ local manifest = {
     },
     settings_dashboard_theme_page = {
       title = "@i18n(app.modules.dashboard_theme.name)@",
+      pages = {}
+    },
+    settings_dashboard_inflight_page = {
+      title = "@i18n(app.modules.dashboard_inflight.name)@",
       pages = {}
     },
     settings_dashboard_settings_page = {

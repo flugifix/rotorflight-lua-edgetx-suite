@@ -14,6 +14,7 @@ local entries = {
   --settings_shortcuts_page = definePage("settings/shortcuts"),
   settings_dashboard_theme_page = definePage("settings/dashboard/theme"),
   settings_dashboard_settings_page = definePage("settings/dashboard/settings"),
+  settings_dashboard_inflight_page = definePage("settings/dashboard/inflight"),
   --settings_activelook_page = definePage("settings/activelook"),
   settings_localization_page = definePage("settings/localization"),
   settings_audio_page = definePage("settings/audio"),
