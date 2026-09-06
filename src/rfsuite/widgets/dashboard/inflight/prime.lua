@@ -882,6 +882,12 @@ local function parseFunctionIds(widget, drive, prime, record)
   end
   -- The estimate the run started with was the whole table; now the length is known.
   prime.total = 2 + #prime.slotList + #Functions.VALUE_READS
+  if #prime.slotList == 0 then
+    -- Nothing to read: the board carries no adjustment at all. Straight to the phase that would
+    -- otherwise have been entered by the last slot record.
+    startDerive(drive, prime)
+    return
+  end
   prime.phase = M.PHASE_SLOTS
   -- This is the one reply whose arrival could not ask for the next command, so its parse does.
   chain(widget, drive, prime)
