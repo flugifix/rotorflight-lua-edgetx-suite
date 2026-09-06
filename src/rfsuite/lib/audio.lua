@@ -66,6 +66,20 @@ local GOVERNOR_PREF_KEYS = {
 -- otherwise still be playing, or be skipped by the cooldown, when the next one is due.
 local GOVERNOR_HOLD_SECONDS = 0.3
 
+-- The `link` key's search path in lib/sensors.lua ends in 1RSS and 2RSS, and those carry an
+-- RSSI in dBm rather than a link quality in percent. A percent threshold held against a
+-- negative dBm reading is below itself on every sample, so the alert has to know which
+-- sensor answered before it says anything.
+local RSSI_LINK_SOURCES = {
+  ["1RSS"] = true,
+  ["2RSS"] = true
+}
+
+-- How far the link has to climb back above a threshold before that level is left again. A
+-- quality resting on the threshold otherwise alternates between two levels, and each rise
+-- would speak.
+local LQ_HYSTERESIS = 5
+
 local function nowSeconds()
   if getTime then
     local ok, value = pcall(getTime)
@@ -683,6 +697,37 @@ local function announceBatteryCapacityEvent(self, opts)
   audioState.batteryCapacityAnnounced = true
 end
 
+-- Whether the value under `lq` may be read as a link quality in percent. Two independent
+-- tests, because either can be the only one available: the caller reports which sensor the
+-- search settled on, and the value has to fall inside the range a percentage has. A receiver
+-- without an `RQly` sensor answers with an RSSI in dBm, which is negative and would put the
+-- alert below any threshold for the whole flight.
+--
+-- Declining is logged once per connection. Repeating it would be several lines a second, and
+-- a receiver that reports no quality does not start reporting one later in the same session.
+local function linkIsQuality(self, audioState, lq, opts)
+  local source = self.state and self.state.lqSource
+  -- 0 is left out on purpose: it is what both callers read as "no link" -- the tool's
+  -- readiness test is `lq ~= 0`, the widget's telemetry latch the same -- and it is what
+  -- the link sensor reads once it has aged out, which on the widget happens while the MSP
+  -- side still counts as connected. Accepting it would announce a lost link as a quality
+  -- of nought, with the haptic, which is another announcement's job.
+  local usable = lq > 0 and lq <= 100
+  if type(source) == "string" and RSSI_LINK_SOURCES[source] then
+    usable = false
+  end
+  if usable then
+    return true
+  end
+
+  if not audioState.lqNotQualityLogged then
+    audioState.lqNotQualityLogged = true
+    emitLog(opts, "link quality alert off: link resolved to an RSSI rather than a percentage"
+      .. " (source=" .. tostring(source) .. " value=" .. tostring(lq) .. ")", "debug")
+  end
+  return false
+end
+
 --- Play one file out of the audio pack, by its path below `SOUNDS/rf/<locale>/`.
 --
 -- Exported because the locale fallback lives here and should live in exactly one place. The
@@ -718,6 +763,8 @@ function Audio.resetConnectionState(audioState)
   audioState.smartfuelHasCapacity = nil
   audioState.smartfuelIsElectric = nil
   audioState.smartfuelEmptySound = nil
+  audioState.lqLevel = nil
+  audioState.lqNotQualityLogged = nil
 
   if type(audioState.lastValues) == "table" then
     for k in pairs(audioState.lastValues) do
@@ -741,6 +788,7 @@ function Audio.resetConnectionState(audioState)
     audioState.lastAlertAt.bec_voltage = 0
     audioState.lastAlertAt.rx_voltage = 0
     audioState.lastAlertAt.flight_time = 0
+    audioState.lastAlertAt.lq = 0
   end
 end
 
@@ -766,6 +814,7 @@ function Audio.process(self, opts)
   audioState.lastAlertAt.bec_voltage = tonumber(audioState.lastAlertAt.bec_voltage) or 0
   audioState.lastAlertAt.rx_voltage = tonumber(audioState.lastAlertAt.rx_voltage) or 0
   audioState.lastAlertAt.flight_time = tonumber(audioState.lastAlertAt.flight_time) or 0
+  audioState.lastAlertAt.lq = tonumber(audioState.lastAlertAt.lq) or 0
   if type(audioState.lastValues) ~= "table" then
     audioState.lastValues = {
       arming_flags = nil,
@@ -877,6 +926,51 @@ function Audio.process(self, opts)
         end
       else
         -- kein hartes Rücksetzen, damit Cooldown erhalten bleibt
+      end
+    end
+  end
+
+  if prefEnabled(events, "lq_alert", false) then
+    local lq = tonumber(self.state.lq)
+    if type(lq) == "number" and linkIsQuality(self, audioState, lq, opts) then
+      local warn = tonumber(events.lq_warn) or 70
+      local critical = tonumber(events.lq_critical) or 50
+      -- A critical level above the warning level cannot be crossed second, so the lower of
+      -- the two is the critical one. Nothing is refused over it; the pair is just ordered.
+      if critical > warn then critical = warn end
+
+      local spoken = tonumber(audioState.lqLevel) or 0
+      local level = 0
+      if lq <= critical then
+        level = 2
+      elseif lq <= warn then
+        level = 1
+      end
+
+      -- Leaving a level costs LQ_HYSTERESIS points more than entering it.
+      if level < spoken then
+        if spoken >= 2 and lq <= critical + LQ_HYSTERESIS then
+          level = 2
+        elseif level < 1 and spoken >= 1 and lq <= warn + LQ_HYSTERESIS then
+          level = 1
+        end
+      end
+
+      if level < spoken then
+        -- Recovering is not announced; the next fall is.
+        audioState.lqLevel = level
+      elseif level > 0 and (level > spoken or now - (audioState.lastAlertAt.lq or 0) >= 10) then
+        if tryPlayEventFile(audioState, now, "stat/alerts/lq.wav", opts) then
+          if type(playNumber) == "function" then
+            local ok, err = pcall(playNumber, math.floor(lq + 0.5), unitPercent())
+            if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+          end
+          if level >= 2 and type(playHaptic) == "function" then
+            pcall(playHaptic, 15, 10, 3)
+          end
+          audioState.lqLevel = level
+          audioState.lastAlertAt.lq = now
+        end
       end
     end
   end

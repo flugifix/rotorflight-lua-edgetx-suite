@@ -174,6 +174,7 @@ return {
       audio_events_adjustment = { name = "Einstellungen" },
       audio_events_fuel = { name = "Kraftstoff" },
       audio_events_battery = { name = "Akku" },
+      audio_events_link = { name = "Link" },
       audio_events_other = { name = "Sonstiges" },
       msp_speed = { name = "MSP-Geschwindigkeit" },
       api_tester = { name = "API Tester" },
@@ -729,6 +730,7 @@ return {
         section_voltage = "Spannung",
         section_profiles = "PID/Raten-Profil",
         section_esc = "ESC-Temperatur",
+        section_link = "Linkqualitaet",
         section_adjustment = "Einstellungsansagen",
         section_fuel = "Kraftstoff",
         section_battery = "Akku",
@@ -752,6 +754,9 @@ return {
         esc_temperature = "ESC-Temperatur",
         esc_threshold = "Schwellwert (°)",
         esc_threshold_model = "Schwellwert (°) [Modell]",
+        lq_alert = "Linkqualitaet",
+        lq_warn = "Warnung (%)",
+        lq_critical = "Kritisch (%)",
         adjustment_events = "Einstellungsansagen",
         fuel_alerts = "Kraftstoff",
         fuel_callout_percent = "Ansage %",
@@ -796,6 +801,9 @@ return {
       },
       settings_audio_events_battery = {
         help_message = "Ansage der Akku-Kapazitaet bei einem Wechsel des Akkuprofils und des Kraftstoffstands einmal beim Verbinden des Modells."
+      },
+      settings_audio_events_link = {
+        help_message = "Ansage der Linkqualitaet mit gesprochenem Prozentwert, auf einer Warnstufe und noch einmal auf einer kritischen Stufe. Eine Stufe wird beim Erreichen angesagt und danach alle 10 Sekunden, solange sie anliegt; die Erholung bleibt still. Bei einem Empfaenger, der keine Linkqualitaet meldet, bleibt die Warnung stumm, denn der Wert, der stattdessen ankommt, ist eine Signalstaerke in dBm und kein Prozentwert."
       },
       settings_audio_events_other = {
         help_message = "Ansage des Modellnamens beim Verbinden. Die Ansage ist eine WAV-Datei mit dem Namen des Modells im Ordner SOUNDS."

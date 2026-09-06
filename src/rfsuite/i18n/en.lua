@@ -174,6 +174,7 @@ return {
       audio_events_adjustment = { name = "Adjustments" },
       audio_events_fuel = { name = "Fuel" },
       audio_events_battery = { name = "Battery" },
+      audio_events_link = { name = "Link" },
       audio_events_other = { name = "Other" },
       msp_speed = { name = "MSP Speed" },
       api_tester = { name = "API Tester" },
@@ -729,6 +730,7 @@ return {
         section_voltage = "Voltage",
         section_profiles = "PID/Rate Profile",
         section_esc = "ESC Temperature",
+        section_link = "Link Quality",
         section_adjustment = "Adjustment Announcements",
         section_fuel = "Fuel",
         section_battery = "Battery",
@@ -752,6 +754,9 @@ return {
         esc_temperature = "ESC Temperature",
         esc_threshold = "Threshold (°)",
         esc_threshold_model = "Threshold (°) [Model]",
+        lq_alert = "Link Quality",
+        lq_warn = "Warning (%)",
+        lq_critical = "Critical (%)",
         adjustment_events = "Adjustment Announcements",
         fuel_alerts = "Fuel",
         fuel_callout_percent = "Callout %",
@@ -796,6 +801,9 @@ return {
       },
       settings_audio_events_battery = {
         help_message = "Announce the battery capacity when the battery profile changes, and the fuel level once when the model connects."
+      },
+      settings_audio_events_link = {
+        help_message = "Announce the link quality with the percentage spoken, at a warning level and again at a critical one. A level is announced when it is first reached and then every 10 seconds while it holds; recovering is silent. On a receiver that reports no link quality the alert stays quiet, because the value that arrives instead is a signal strength in dBm and not a percentage."
       },
       settings_audio_events_other = {
         help_message = "Announce the model's name when it connects. The announcement is a WAV file named after the model in the SOUNDS folder."
