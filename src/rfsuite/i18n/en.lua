@@ -651,6 +651,8 @@ return {
         reload_confirm = "Confirm on Reload",
         preview_setup_wizard = "Setup Assistant",
         preview_confirm_setup_wizard = "The setup assistant is not finished. Its screens and their order can still change, and it can write to the flight controller. Check what it has written before you fly. Show it anyway?",
+        preview_flight_log = "Flight Log",
+        preview_confirm_flight_log = "The flight log is not finished. What it records, and how the page presents it, can still change, and it keeps a file of its own on the card. Show it anyway?",
         developer_tools = "Developer Tools",
         help_message = "Configure safety prompts, preview features and developer visibility in general settings. A preview feature is already in the suite but not finished: it stays hidden until it is switched on here.",
         saved_title = "Saved",

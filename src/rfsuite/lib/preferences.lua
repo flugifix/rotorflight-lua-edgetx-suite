@@ -43,6 +43,7 @@ local function defaultPreferences()
       reload_confirm               = true,
       -- preview features
       preview_setup_wizard         = false,
+      preview_flight_log           = false,
       -- development
       developer_tools              = false,
       continuous_memory_log        = false,
