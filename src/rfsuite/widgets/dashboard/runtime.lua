@@ -440,6 +440,44 @@ local function inflightPrime()
   return InflightPrime
 end
 
+--- The clear the widget's entry point can reach when the widget itself has been shut down.
+--
+-- src/widgets/rfsuite/main.lua holds a widget off for 1.2 s after a CPU limit and RETURNS before
+-- widget.refresh for the whole of that time. Every path that takes the overlay's two variables
+-- back to 0 -- the interlock falling, fullscreen closing, the widget going to background, the link
+-- dropping -- lives inside refresh or background, so for those 1.2 s not one of them runs. A value
+-- left standing there is a flight controller stepping a parameter every 200 ms with nothing
+-- driving it, which is exactly the state the whole drive is built to make impossible.
+--
+-- So the runtime hands the entry point something it can call instead. It is two model writes and
+-- nothing else: no module is loaded, nothing is allocated, and a drive that believes both
+-- variables are already at 0 does not write at all. The flight mode each write goes back to is the
+-- one it was made in, because model.setGlobalVariable resolves a "same as FMx" link itself and a
+-- clear sent to the wrong mode leaves the first one standing.
+local function installInflightPanic(self)
+  if self._inflightPanic ~= nil then return end
+  self._inflightPanic = function()
+    local drive = self._inflight
+    if drive == nil then return end
+    local settings = drive.settings
+    if settings == nil then return end
+    if drive.written ~= 0 and (settings.value_gvar or 0) > 0 then
+      model.setGlobalVariable(settings.value_gvar - 1, drive.writtenFm or 0, 0)
+      drive.written = 0
+      drive.writtenFm = nil
+    end
+    if (drive.bankWritten or 0) ~= 0 and (settings.bank_gvar or 0) > 0 then
+      local fm = drive.bankFm
+      -- Through the drive's own radio table rather than the global, which is where every other
+      -- reading of the flight mode in the overlay comes from.
+      if fm == nil and type(drive.radio) == "table" then fm = drive.radio.flightMode() end
+      model.setGlobalVariable(settings.bank_gvar - 1, fm or 0, 0)
+      drive.bankWritten = 0
+      drive.bankFm = nil
+    end
+  end
+end
+
 --- One pass of the overlay. Off the overlay this costs one table lookup; with it enabled but the
 -- interlock open, one switch read.
 local function tickInflight(self)
@@ -449,14 +487,13 @@ local function tickInflight(self)
   end
   local drive = inflightDrive()
   if not drive then return end
+  local instance = drive.get(self)
+  if instance ~= nil then installInflightPanic(self) end
   -- The ground half runs BEFORE the drive's own pass, on the same drive object: what it moves has
   -- to reach the published snapshot in the pass that moved it, and it is the drive's pass that
   -- publishes.
   local prime = inflightPrime()
-  if prime then
-    local instance = drive.get(self)
-    if instance then prime.tick(self, instance) end
-  end
+  if prime and instance then prime.tick(self, instance) end
   drive.tick(self)
 end
 
