@@ -339,12 +339,18 @@ end
 --- A raw channel reading, as microseconds. EdgeTX answers getValue("chN") on -1024..1024 around
 -- centre; the flight controller and every window above speak microseconds. A reading already in
 -- the microsecond band is passed through, because the same helper meets numbers from both sides.
--- Follows app/pages/setup/controls/adjustments/page.lua, which converts the same two ways.
+--
+-- The factor is a HALF, not 500/1024. A channel at its mechanical limit is 1024 raw and 2012 us
+-- on the wire -- 512 us either side of centre, which is what the radio sends and what the flight
+-- controller measures -- so 500/1024 is short by 12 us at full travel and by proportionally less
+-- everywhere else. It matters here because every reading this returns is tested against an
+-- adjustment window, and the documented windows are 50 us wide with 25 us gaps between them:
+-- a reading that is 12 us out is a reading that can name the wrong window at its edges.
 function M.channelRawToUs(raw)
   raw = tonumber(raw)
   if raw == nil then return nil end
   if raw >= -1200 and raw <= 1200 then
-    return roundToInt(CENTRE_US + (raw * 500 / 1024))
+    return roundToInt(CENTRE_US + (raw * 0.5))
   end
   if raw >= 700 and raw <= 2300 then
     return roundToInt(raw)
