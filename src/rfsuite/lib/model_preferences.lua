@@ -176,6 +176,31 @@ local function defaultModelPreferences()
       model_theme_inflight = "nil",
       model_theme_postflight = "nil"
     },
+    -- The in-flight tuning overlay, per model because everything in it is: which switch arms it,
+    -- which channels and global variables this model's mixer devotes to the adjustment pair, and
+    -- which trims stand in for its rows.
+    --
+    -- Off until a pilot switches it on, and no global variable is defaulted: 0 means "none", and
+    -- a variable defaulted to a number would be written into whatever that variable already
+    -- drives on somebody's model. The two channels ARE defaulted, to the pair the project's own
+    -- generic radio setup documents.
+    inflight = {
+      enabled = false,
+      switch = 0,
+      bank_ch = 11,
+      value_ch = 12,
+      bank_gvar = 0,
+      value_gvar = 0,
+      pulse_ms = 150,
+      trims = true,
+      row_trim_1 = 2,
+      row_trim_2 = 4,
+      row_trim_3 = 1,
+      row_trim_4 = 3,
+      row_trim_5 = 5,
+      row_trim_6 = 6,
+      backup_profile = 0
+    },
     widgets = {}
   }
 end
