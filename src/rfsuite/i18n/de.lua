@@ -2139,6 +2139,13 @@ return {
         check_mix = "Mischerzeile fehlt oder ist falsch",
         check_gvar = "Variablenbereich oder Nachkommastelle",
         check_trim = "Trimmung in diesem Flugmodus noch aktiv",
+        trim_mode = "Trimm-Belegung",
+        trim_mode_rows = "Eine Trimmung je Reihe",
+        trim_mode_navigate = "Wechseln und Verstellen",
+        navigate_note = "Eine Trimmung blaettert durch die Parameter, die andere verstellt den gewaehlten.",
+        nav_trim = "Trimmung zum Wechseln",
+        adj_trim = "Trimmung zum Verstellen",
+        check_claim = "Wechseln und Verstellen brauchen zwei verschiedene Trimmungen",
         help_message = "Waehle den Schalter, der das In-Flight-Tuning freigibt, die beiden Kanaele und Variablen seiner Mischerzeilen und die Trimmung je Reihe.",
         saved_title = "Gespeichert",
         saved_message = "In-Flight-Tuning-Einstellungen gespeichert",
@@ -2514,7 +2521,8 @@ return {
       inflight_check_unset = "Schalter oder Variablen nicht gesetzt",
       inflight_check_mix = "Mischerzeile fehlt oder ist falsch",
       inflight_check_gvar = "Variablenbereich oder Nachkommastelle",
-      inflight_check_trim = "Trimmung hier noch aktiv"
+      inflight_check_trim = "Trimmung hier noch aktiv",
+      inflight_check_claim = "Wechseln und Verstellen brauchen zwei Trimmungen"
     },
     governor = {
       ACTIVE = "AKTIV",

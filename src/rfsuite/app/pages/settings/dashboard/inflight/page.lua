@@ -126,7 +126,7 @@ local function describeCheck(i18n, result)
   if result == "ok" then return t(i18n, "check_ok", "Setup OK") end
   if type(result) ~= "table" then return "" end
 
-  local unset, mix, gvar, trim = false, false, false, false
+  local unset, mix, gvar, trim, claim = false, false, false, false, false
   for i = 1, #result do
     local code = result[i]
     if string.find(code, "mix", 1, true) then
@@ -135,6 +135,8 @@ local function describeCheck(i18n, result)
       gvar = true
     elseif string.find(code, "trim_mode", 1, true) then
       trim = true
+    elseif code == "no_nav_trim" or code == "trim_claimed_twice" then
+      claim = true
     else
       unset = true
     end
@@ -145,6 +147,7 @@ local function describeCheck(i18n, result)
   if mix then parts[#parts + 1] = t(i18n, "check_mix", "Mixer line missing or wrong") end
   if gvar then parts[#parts + 1] = t(i18n, "check_gvar", "Variable range or precision") end
   if trim then parts[#parts + 1] = t(i18n, "check_trim", "Trim still active in this flight mode") end
+  if claim then parts[#parts + 1] = t(i18n, "check_claim", "Walk and adjust need two different trims") end
   return table.concat(parts, " / ")
 end
 
@@ -292,6 +295,13 @@ local function trimOptions(i18n)
   return options
 end
 
+--- Which trim does what.
+--
+-- Two arrangements, and the difference is how many trims a pilot has to spare. `rows` gives each
+-- of the six rows its own trim, which is the layout the project's own radio setup documents;
+-- `navigate` claims two -- one walks the whole set, one moves what the walk selected -- which is
+-- what a radio with four trims can offer and what a pilot who does not want to remember six
+-- positions asks for.
 local function buildTrims(children, x, y, w, i18n)
   local cursorY = y
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
@@ -305,6 +315,32 @@ local function buildTrims(children, x, y, w, i18n)
   end
 
   local options = trimOptions(i18n)
+
+  local modeOptions = {
+    { value = Drive.TRIM_MODE_ROWS, label = t(i18n, "trim_mode_rows", "One trim per row") },
+    { value = Drive.TRIM_MODE_NAVIGATE, label = t(i18n, "trim_mode_navigate", "Walk and adjust") }
+  }
+  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+    t(i18n, "trim_mode", "Trim layout"), modeOptions, ui.config.trim_mode,
+    function(value)
+      if ui.config.trim_mode == value then return end
+      ui.config.trim_mode = value
+      ui.checkAt = nil
+      ui.runtime.markDirty()
+    end)
+
+  if ui.config.trim_mode == Drive.TRIM_MODE_NAVIGATE then
+    cursorY = cursorY + appendNote(children, x, cursorY, w,
+      t(i18n, "navigate_note", "One trim steps through the parameters, the other moves the one it selected."))
+    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+      t(i18n, "nav_trim", "Walk trim"), options, ui.config.nav_trim,
+      function(value) markValue("nav_trim", tonumber(value) or 0) end)
+    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+      t(i18n, "adj_trim", "Adjust trim"), options, ui.config.adj_trim,
+      function(value) markValue("adj_trim", tonumber(value) or 0) end)
+    return cursorY
+  end
+
   local labels = {
     t(i18n, "row_1", "Row 1"),
     t(i18n, "row_2", "Row 2"),

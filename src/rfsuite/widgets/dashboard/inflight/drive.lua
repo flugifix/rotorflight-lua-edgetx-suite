@@ -66,6 +66,9 @@ M.DEFAULTS = {
   value_gvar = 0,
   pulse_ms = 150,
   trims = true,
+  trim_mode = "rows",
+  nav_trim = 2,
+  adj_trim = 4,
   row_trim_1 = 2,
   row_trim_2 = 4,
   row_trim_3 = 1,
@@ -84,10 +87,25 @@ M.GVAR_MAX_INDEX = 9
 M.TRIM_COUNT = 6
 M.PROFILE_MAX = 6
 
+-- The two ways the physical trims reach the parameters.
+--
+-- `rows` is the reference layout: six trims, six rows, each trim's two directions moving that
+-- row's parameter. `navigate` claims two trims instead -- one walks the set and one adjusts what
+-- the walk has selected -- which is the route for a radio with four trims and for a pilot who
+-- wants one gesture rather than six positions to remember.
+M.TRIM_MODE_ROWS = "rows"
+M.TRIM_MODE_NAVIGATE = "navigate"
+
 -- A switch has to hold its new reading this long before the overlay believes it. It is not a
 -- debounce for the switch, which does not bounce: it is the margin against a pilot brushing the
 -- interlock on the way to something else.
 local STABILITY_TICKS = 30
+
+-- The walk is EDGE triggered: one press, one parameter. A trim held on purpose then repeats, after
+-- a delay long enough that a single press can never produce two steps, at a rate a pilot can still
+-- count while looking somewhere else.
+local NAV_REPEAT_DELAY_TICKS = 50
+local NAV_REPEAT_INTERVAL_TICKS = 33
 
 -- TRIM_MODE_NONE, as model.getFlightMode reports it. A row driven from a trim needs the trim
 -- switched OFF in the active flight mode, otherwise the same press also moves a stick's neutral.
@@ -251,6 +269,9 @@ function M.loadSettings(modelPreferences)
     value_gvar = clampNumber(src.value_gvar, 0, M.GVAR_MAX_INDEX, M.DEFAULTS.value_gvar),
     pulse_ms = clampNumber(src.pulse_ms, M.PULSE_MS_MIN, M.PULSE_MS_MAX, M.DEFAULTS.pulse_ms),
     trims = src.trims ~= false,
+    trim_mode = (src.trim_mode == M.TRIM_MODE_NAVIGATE) and M.TRIM_MODE_NAVIGATE or M.TRIM_MODE_ROWS,
+    nav_trim = clampNumber(src.nav_trim, 0, M.TRIM_COUNT, M.DEFAULTS.nav_trim),
+    adj_trim = clampNumber(src.adj_trim, 0, M.TRIM_COUNT, M.DEFAULTS.adj_trim),
     backup_profile = clampNumber(src.backup_profile, 0, M.PROFILE_MAX, M.DEFAULTS.backup_profile)
   }
 
@@ -275,6 +296,9 @@ function M.storeSettings(section, settings)
   section.value_gvar = settings.value_gvar
   section.pulse_ms = settings.pulse_ms
   section.trims = settings.trims == true
+  section.trim_mode = settings.trim_mode or M.TRIM_MODE_ROWS
+  section.nav_trim = settings.nav_trim or 0
+  section.adj_trim = settings.adj_trim or 0
   section.backup_profile = settings.backup_profile
   for row = 1, M.TRIM_COUNT do
     section["row_trim_" .. tostring(row)] = (settings.rowTrim and settings.rowTrim[row]) or 0
@@ -374,6 +398,8 @@ function M.newDrive(radio, settings)
   self.trimUp = nil
   self.trims = nil
   self.trimsResolved = false
+  self.navDir = 0
+  self.navNextAt = nil
   self.values = {}
   self.valueEpoch = 0
   return self
@@ -419,7 +445,23 @@ function Drive:writeValue(value, fm)
   logDrive("value gvar %d fm %d <- %d", settings.value_gvar, mode, value)
 end
 
---- Arm a bank by parking the enable channel in the middle of its window.
+--- Park the enable channel in the middle of one band's window.
+--
+-- Mid-band rather than an edge, so switch, mixer and receiver tolerance all fit inside the window
+-- the firmware is watching.
+function Drive:armBank(bank)
+  local settings = self.settings
+  if not settings or (settings.bank_gvar or 0) <= 0 then return false, "no_gvar" end
+  local value = self.bankValues and self.bankValues[bank]
+  if value == nil then return false, "no_band" end
+  local fm = self.radio.flightMode()
+  writeGvar(self, settings.bank_gvar, fm, value)
+  self.bankWritten = value
+  logDrive("bank gvar %d fm %d <- %d (bank %d)", settings.bank_gvar, fm, value, bank)
+  return true
+end
+
+--- A bank chosen by hand, from a chip on the fullscreen screen.
 --
 -- Refused while the value variable is not 0: moving the enable channel under a value that is
 -- inside a step window is how one tap ends up counted against another parameter.
@@ -429,14 +471,40 @@ function Drive:setBank(bank)
   if self.written ~= 0 then return false, "busy" end
   self.bank = bank
   self.row = 1
-  local settings = self.settings
-  if not settings or (settings.bank_gvar or 0) <= 0 then return false, "no_gvar" end
-  local value = self.bankValues and self.bankValues[bank]
-  if value == nil then return false, "no_band" end
-  local fm = self.radio.flightMode()
-  writeGvar(self, settings.bank_gvar, fm, value)
-  self.bankWritten = value
-  logDrive("bank gvar %d fm %d <- %d (bank %d)", settings.bank_gvar, fm, value, bank)
+  return self:armBank(bank)
+end
+
+--- The next assigned cell in the set's own order: bank by bank, row by row, unassigned cells
+-- skipped. It wraps, because a walk that stops without a sound cannot be told apart from a trim
+-- that stopped answering -- and this is the control a pilot uses without looking.
+function Drive:stepCell(up)
+  local perBank = Functions.ROW_COUNT
+  local total = Functions.BANK_COUNT * perBank
+  local index = (self.bank - 1) * perBank + (self.row - 1)
+  for _ = 1, total do
+    index = (index + (up and 1 or -1)) % total
+    local bank = (index // perBank) + 1
+    local row = (index % perBank) + 1
+    if self:functionId(bank, row) ~= nil then return bank, row end
+  end
+  return nil
+end
+
+--- One step of the walk, in navigate mode.
+--
+-- Refused outright while the value variable is not 0. The alternative -- moving the selection and
+-- leaving the enable channel where it was -- puts the screen and the board on different
+-- parameters, which is the one state a tuning surface must never be in.
+function Drive:navigate(up)
+  if not self.live then return false, "not_live" end
+  if self.written ~= 0 then return false, "busy" end
+  local bank, row = self:stepCell(up)
+  if bank == nil then return false, "empty" end
+  local crossed = (bank ~= self.bank)
+  self.bank = bank
+  self.row = row
+  self.valueEpoch = self.valueEpoch + 1
+  if crossed then self:armBank(bank) end
   return true
 end
 
@@ -497,6 +565,8 @@ function Drive:cleanup(force)
   self.holdUp = nil
   self.trimRow = nil
   self.trimUp = nil
+  self.navDir = 0
+  self.navNextAt = nil
 
   if settings and (settings.value_gvar or 0) > 0 and (force or self.written ~= 0) then
     writeGvar(self, settings.value_gvar, fm, 0)
@@ -564,22 +634,79 @@ function Drive:evaluateInterlock(now)
   return self.live
 end
 
---- The trims assigned to rows, read once per pass. A row whose trim this radio does not have is
--- hidden rather than dead: `getSwitchValue` answers nil there, and nil is not a press.
-function Drive:pollTrims()
-  local settings = self.settings
-  if not settings or settings.trims ~= true then return nil, nil end
+--- The radio's trim block, resolved once and kept. Re-resolved when the settings change, because
+-- the walk that finds it is not free and nothing else moves it.
+function Drive:ensureTrims()
   if not self.trimsResolved then
     self.trims = M.resolveTrims(self.radio)
     self.trimsResolved = true
   end
-  if type(self.trims) ~= "table" then return nil, nil end
+  if type(self.trims) ~= "table" then return nil end
+  return self.trims
+end
+
+function Drive:navigateMode()
+  local settings = self.settings
+  return settings ~= nil and settings.trim_mode == M.TRIM_MODE_NAVIGATE
+end
+
+--- The walk trim, read as an EDGE. One press moves one parameter, however long the pass takes;
+-- held on purpose, it repeats after a delay no single press can reach.
+function Drive:pollNavigate(now)
+  local settings = self.settings
+  if not settings or settings.trims ~= true or not self:navigateMode() then return end
+  local trims = self:ensureTrims()
+  local trim = trims and trims[settings.nav_trim or 0] or nil
+  if trim == nil then return end
+
+  local direction = 0
+  if self.radio.switchValue(trim.plus) == true then
+    direction = 1
+  elseif self.radio.switchValue(trim.minus) == true then
+    direction = -1
+  end
+
+  if direction ~= self.navDir then
+    self.navDir = direction
+    if direction ~= 0 then
+      self:navigate(direction > 0)
+      self.navNextAt = now + NAV_REPEAT_DELAY_TICKS
+    else
+      self.navNextAt = nil
+    end
+    return
+  end
+
+  if direction ~= 0 and self.navNextAt ~= nil and now >= self.navNextAt then
+    self:navigate(direction > 0)
+    self.navNextAt = now + NAV_REPEAT_INTERVAL_TICKS
+  end
+end
+
+--- Which row a held trim is asking for, read once per pass.
+--
+-- In `rows` mode every assigned trim is a row of its own. In `navigate` mode ONE trim adjusts and
+-- it always means the selected row; every other trim, the walk trim included, is inert here.
+function Drive:pollTrims()
+  local settings = self.settings
+  if not settings or settings.trims ~= true then return nil, nil end
+  local trims = self:ensureTrims()
+  if trims == nil then return nil, nil end
+
+  if self:navigateMode() then
+    local trim = trims[settings.adj_trim or 0]
+    if trim then
+      if self.radio.switchValue(trim.plus) == true then return self.row, true end
+      if self.radio.switchValue(trim.minus) == true then return self.row, false end
+    end
+    return nil, nil
+  end
 
   -- The row with the largest magnitude wins when two trims are held at once. It is a choice
   -- rather than a reading: the shipped template SUMS its trims onto the value channel, and a sum
   -- of two lands outside every window, so two trims there produce no step at all.
   for row = 1, Functions.ROW_COUNT do
-    local trim = self.trims[settings.rowTrim and settings.rowTrim[row] or 0]
+    local trim = trims[settings.rowTrim and settings.rowTrim[row] or 0]
     if trim then
       if self.radio.switchValue(trim.plus) == true then return row, true end
       if self.radio.switchValue(trim.minus) == true then return row, false end
@@ -588,19 +715,28 @@ function Drive:pollTrims()
   return nil, nil
 end
 
---- Which trim rows this radio can actually drive, as a mask the screen hides rows by.
+--- Which rows the pilot can actually reach, as a mask the zone screen hides rows by.
+--
+-- In `rows` mode that is the rows whose trim this radio has; in `navigate` mode it is every
+-- assigned cell, because the walk reaches all of them with the same two trims.
 function Drive:trimRowsPresent()
   local mask = {}
   local settings = self.settings
   if not settings or settings.trims ~= true then return mask end
-  if not self.trimsResolved then
-    self.trims = M.resolveTrims(self.radio)
-    self.trimsResolved = true
+  local trims = self:ensureTrims()
+  if trims == nil then return mask end
+
+  if self:navigateMode() then
+    if trims[settings.adj_trim or 0] == nil then return mask end
+    for row = 1, Functions.ROW_COUNT do
+      mask[row] = self:functionId(self.bank, row) ~= nil
+    end
+    return mask
   end
-  if type(self.trims) ~= "table" then return mask end
+
   for row = 1, Functions.ROW_COUNT do
     local index = settings.rowTrim and settings.rowTrim[row] or 0
-    mask[row] = (index > 0 and self.trims[index] ~= nil)
+    mask[row] = (index > 0 and trims[index] ~= nil)
   end
   return mask
 end
@@ -639,10 +775,11 @@ function Drive:tick()
     end
   end
 
-  -- A running touch pulse suspends the relay: the pilot's thumb and the pilot's finger must not
-  -- both be writing the same variable.
+  -- A running touch pulse suspends both trim paths: the pilot's thumb and the pilot's finger must
+  -- not both be writing the same variable.
   local pulsing = (self.pulseUntil ~= nil) or (self.holdRow ~= nil)
   if not pulsing then
+    self:pollNavigate(now)
     local row, up = self:pollTrims()
     if row ~= self.trimRow or up ~= self.trimUp then
       self.trimRow, self.trimUp = row, up
@@ -759,16 +896,38 @@ function M.check(drive, settings)
   -- A trim driving a row must be OFF as a trim in the active flight mode. Left on, the same press
   -- moves the stick neutral the flight controller was calibrated against.
   if settings.trims == true then
-    local data = radio.flightModeData(radio.flightMode())
-    if type(data) == "table" and type(data.trimsModes) == "table" then
-      looked = true
+    -- Which trims this configuration actually claims, and under what name a fault would be
+    -- reported. In navigate mode two trims do the work and every other one is inert, so checking
+    -- the six row assignments there would report on trims nothing reads.
+    local claimed = {}
+    if settings.trim_mode == M.TRIM_MODE_NAVIGATE then
+      local nav = settings.nav_trim or 0
+      local adj = settings.adj_trim or 0
+      if nav == 0 or adj == 0 then
+        faults[#faults + 1] = "no_nav_trim"
+      elseif nav == adj then
+        -- One trim cannot both walk the set and move the parameter: whichever ran first would
+        -- decide, and which one that is nobody could tell from the screen.
+        faults[#faults + 1] = "trim_claimed_twice"
+      end
+      if nav > 0 then claimed[#claimed + 1] = { index = nav, code = "trim_mode_nav" } end
+      if adj > 0 then claimed[#claimed + 1] = { index = adj, code = "trim_mode_adj" } end
+    else
       for row = 1, M.TRIM_COUNT do
         local index = settings.rowTrim and settings.rowTrim[row] or 0
         if index > 0 then
-          local mode = tonumber(data.trimsModes[index])
-          if mode ~= nil and mode ~= TRIM_MODE_NONE then
-            faults[#faults + 1] = "trim_mode_" .. tostring(row)
-          end
+          claimed[#claimed + 1] = { index = index, code = "trim_mode_" .. tostring(row) }
+        end
+      end
+    end
+
+    local data = radio.flightModeData(radio.flightMode())
+    if type(data) == "table" and type(data.trimsModes) == "table" then
+      looked = true
+      for i = 1, #claimed do
+        local mode = tonumber(data.trimsModes[claimed[i].index])
+        if mode ~= nil and mode ~= TRIM_MODE_NONE then
+          faults[#faults + 1] = claimed[i].code
         end
       end
     end
@@ -790,6 +949,7 @@ local function settingsSignature(settings)
     tostring(settings.enabled), tostring(settings.switch), tostring(settings.bank_ch),
     tostring(settings.value_ch), tostring(settings.bank_gvar), tostring(settings.value_gvar),
     tostring(settings.pulse_ms), tostring(settings.trims), tostring(settings.backup_profile),
+    tostring(settings.trim_mode), tostring(settings.nav_trim), tostring(settings.adj_trim),
     tostring(rows[1]), tostring(rows[2]), tostring(rows[3]),
     tostring(rows[4]), tostring(rows[5]), tostring(rows[6])
   }, "|")
@@ -859,6 +1019,7 @@ local function publish(widget, drive)
     activeId = activeId,
     activeName = activeId and Functions.nameOf(activeId) or nil,
     activeValue = activeId and drive.values[activeId] or nil,
+    navigate = drive:navigateMode(),
     profile = drive.profile
   }
 end

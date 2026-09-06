@@ -127,7 +127,7 @@ function M.describeCheck(result, t)
   end
   if type(result) ~= "table" then return "" end
 
-  local unset, mix, gvar, trim = false, false, false, false
+  local unset, mix, gvar, trim, claim = false, false, false, false, false
   for i = 1, #result do
     local code = result[i]
     if string.find(code, "mix", 1, true) then
@@ -136,6 +136,8 @@ function M.describeCheck(result, t)
       gvar = true
     elseif string.find(code, "trim_mode", 1, true) then
       trim = true
+    elseif code == "no_nav_trim" or code == "trim_claimed_twice" then
+      claim = true
     else
       unset = true
     end
@@ -146,6 +148,7 @@ function M.describeCheck(result, t)
   if mix then parts[#parts + 1] = t("widgets.dashboard.inflight_check_mix", "Mixer line missing or wrong") end
   if gvar then parts[#parts + 1] = t("widgets.dashboard.inflight_check_gvar", "Variable range or precision") end
   if trim then parts[#parts + 1] = t("widgets.dashboard.inflight_check_trim", "Trim still active here") end
+  if claim then parts[#parts + 1] = t("widgets.dashboard.inflight_check_claim", "Walk and adjust need two trims") end
   return table.concat(parts, " / ")
 end
 

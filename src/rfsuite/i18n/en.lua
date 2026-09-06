@@ -2111,6 +2111,13 @@ return {
         check_mix = "Mixer line missing or wrong",
         check_gvar = "Variable range or precision",
         check_trim = "Trim still active in this flight mode",
+        trim_mode = "Trim layout",
+        trim_mode_rows = "One trim per row",
+        trim_mode_navigate = "Walk and adjust",
+        navigate_note = "One trim steps through the parameters, the other moves the one it selected.",
+        nav_trim = "Walk trim",
+        adj_trim = "Adjust trim",
+        check_claim = "Walk and adjust need two different trims",
         help_message = "Choose the switch that arms in-flight tuning, the two channels and variables its mixer lines use, and which trim drives each row.",
         saved_title = "Saved",
         saved_message = "In-flight tuning settings saved",
@@ -2514,7 +2521,8 @@ return {
       inflight_check_unset = "Switch or variables not set",
       inflight_check_mix = "Mixer line missing or wrong",
       inflight_check_gvar = "Variable range or precision",
-      inflight_check_trim = "Trim still active here"
+      inflight_check_trim = "Trim still active here",
+      inflight_check_claim = "Walk and adjust need two trims"
     },
     governor = {
       ACTIVE = "ACTIVE",
