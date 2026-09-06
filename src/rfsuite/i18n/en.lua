@@ -2540,6 +2540,7 @@ return {
       inflight_check_trim = "Trim still active here",
       inflight_check_claim = "Walk and adjust need two trims",
       inflight_check_same = "Bank and value share a variable or a channel",
+      inflight_check_twice = "One trim is claimed twice",
       inflight_prime = "Prime",
       inflight_backup = "Backup to",
       inflight_restore = "Restore from",

@@ -2540,6 +2540,7 @@ return {
       inflight_check_trim = "Trimmung hier noch aktiv",
       inflight_check_claim = "Wechseln und Verstellen brauchen zwei Trimmungen",
       inflight_check_same = "Bank und Wert teilen sich Variable oder Kanal",
+      inflight_check_twice = "Eine Trimmung ist doppelt belegt",
       inflight_prime = "Auslesen",
       inflight_backup = "Sichern nach",
       inflight_restore = "Zurück aus",

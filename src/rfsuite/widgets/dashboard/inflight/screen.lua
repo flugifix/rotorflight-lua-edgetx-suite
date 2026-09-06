@@ -140,7 +140,7 @@ function M.describeCheck(result, t)
   if type(result) ~= "table" then return "" end
 
   local unset, mix, gvar, trim, claim = false, false, false, false, false
-  local same = false
+  local same, twice = false, false
   for i = 1, #result do
     local code = result[i]
     -- The two "one thing doing both jobs" faults are matched FIRST and by name. `same_gvar` reads
@@ -148,13 +148,15 @@ function M.describeCheck(result, t)
     -- through to "not set" -- which is the opposite of what it is.
     if code == "same_gvar" or code == "same_channel" then
       same = true
+    elseif code == "trim_claimed_twice" then
+      twice = true
     elseif string.find(code, "mix", 1, true) then
       mix = true
     elseif string.find(code, "gvar_", 1, true) then
       gvar = true
     elseif string.find(code, "trim_mode", 1, true) then
       trim = true
-    elseif code == "no_nav_trim" or code == "trim_claimed_twice" then
+    elseif code == "no_nav_trim" then
       claim = true
     else
       unset = true
@@ -168,6 +170,7 @@ function M.describeCheck(result, t)
   if gvar then parts[#parts + 1] = t("widgets.dashboard.inflight_check_gvar", "Variable range or precision") end
   if trim then parts[#parts + 1] = t("widgets.dashboard.inflight_check_trim", "Trim still active here") end
   if claim then parts[#parts + 1] = t("widgets.dashboard.inflight_check_claim", "Walk and adjust need two trims") end
+  if twice then parts[#parts + 1] = t("widgets.dashboard.inflight_check_twice", "One trim is claimed twice") end
   return table.concat(parts, " / ")
 end
 

@@ -520,9 +520,14 @@ end
 -- In `navigate` mode two trims do the work and every other one is inert, so the six row
 -- assignments describe trims nothing reads; reporting on them -- or switching them off in the
 -- model -- would be acting on a claim this configuration never makes.
+--
+-- Answers the list, and whether one trim was claimed TWICE. In rows mode a trim assigned to two
+-- rows was de-duplicated here without a word, and the row that lost is unreachable on the radio
+-- for the rest of the model's life -- silently, because the row list still shows it. Which of the
+-- two rows a press then moves is the one thing the pilot cannot read off the screen.
 function M.claimedTrims(settings)
   local claimed = {}
-  if type(settings) ~= "table" then return claimed end
+  if type(settings) ~= "table" then return claimed, false end
   if settings.trim_mode == M.TRIM_MODE_NAVIGATE then
     local nav = settings.nav_trim or 0
     local adj = settings.adj_trim or 0
@@ -530,17 +535,22 @@ function M.claimedTrims(settings)
     if adj > 0 and adj ~= nav then
       claimed[#claimed + 1] = { index = adj, code = "trim_mode_adj" }
     end
-    return claimed
+    return claimed, (nav > 0 and adj > 0 and nav == adj)
   end
   local seen = {}
+  local twice = false
   for row = 1, M.TRIM_COUNT do
     local index = settings.rowTrim and settings.rowTrim[row] or 0
-    if index > 0 and not seen[index] then
-      seen[index] = true
-      claimed[#claimed + 1] = { index = index, code = "trim_mode_" .. tostring(row) }
+    if index > 0 then
+      if seen[index] then
+        twice = true
+      else
+        seen[index] = true
+        claimed[#claimed + 1] = { index = index, code = "trim_mode_" .. tostring(row) }
+      end
     end
   end
-  return claimed
+  return claimed, twice
 end
 
 function M.check(drive, settings)
@@ -584,17 +594,20 @@ function M.check(drive, settings)
     -- Which trims this configuration actually claims, and under what name a fault would be
     -- reported. In navigate mode two trims do the work and every other one is inert, so checking
     -- the six row assignments there would report on trims nothing reads.
-    local claimed = M.claimedTrims(settings)
+    local claimed, twice = M.claimedTrims(settings)
     if settings.trim_mode == M.TRIM_MODE_NAVIGATE then
       local nav = settings.nav_trim or 0
       local adj = settings.adj_trim or 0
       if nav == 0 or adj == 0 then
         faults[#faults + 1] = "no_nav_trim"
-      elseif nav == adj then
-        -- One trim cannot both walk the set and move the parameter: whichever ran first would
-        -- decide, and which one that is nobody could tell from the screen.
-        faults[#faults + 1] = "trim_claimed_twice"
       end
+    end
+    -- One trim cannot do two jobs, in either layout. In navigate mode it would both walk the set
+    -- and move the parameter; in rows mode it stands for two rows and one of them is unreachable
+    -- for good. Either way whichever job runs first decides, and which one that is nobody could
+    -- tell from the screen -- so it is named rather than resolved.
+    if twice then
+      faults[#faults + 1] = "trim_claimed_twice"
     end
 
     local data = radio.flightModeData(radio.flightMode())
