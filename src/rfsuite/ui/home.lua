@@ -3001,7 +3001,8 @@ function M.run(event, touchState)
     if Audio and type(Audio.process) == "function" and (now - state.lastAudioTick) >= 20 then
       state.lastAudioTick = now
       
-      local lq = Sensors and Sensors.getValue("link") or 0
+      local lqReading = Sensors and Sensors.getValue("link")
+      local lq = lqReading or 0
       local vbat = Sensors and Sensors.getValue("voltage") or 0
       local fuel = Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")) or -1
 
@@ -3019,7 +3020,11 @@ function M.run(event, touchState)
         local armFlagsValue = Sensors.getValue("armflags")
 
         ts.rpm = Sensors.getValue("rpm") or ts.rpm
-        ts.lq = lq
+        -- Only a reading is stored. `lq` above falls back to 0 for the readiness test
+        -- further down, and writing that fallback here would report a link quality of
+        -- zero as a measurement on a setup whose battery telemetry keeps this loop
+        -- running while no link sensor is present.
+        ts.lq = lqReading or ts.lq
         ts.profile = roundInt(Sensors.getValue("pid_profile") or ts.profile, ts.profile or 1)
         ts.rateProfile = roundInt(Sensors.getValue("rate_profile") or ts.rateProfile, ts.rateProfile or 1)
         ts.batteryProfile = roundInt(Sensors.getValue("battery_profile") or ts.batteryProfile, ts.batteryProfile or 1)
@@ -3109,23 +3114,30 @@ function M.run(event, touchState)
           state.audioState.initialized = false
           state.audioState.modelAnnounced = false
         end
+        -- Every field the block above writes is cleared here, one for one. A field left
+        -- standing is read after the next connect as if it had just been measured, and
+        -- the reading it carries belongs to the link that went away.
         state.telemetryState.profile = nil
         state.telemetryState.rateProfile = nil
         state.telemetryState.batteryProfile = nil
         state.telemetryState.voltage = nil
+        state.telemetryState.bec_voltage = nil
         state.telemetryState.fuel = nil
         state.telemetryState.fuelTelemetrySeen = nil
         state.telemetryState.rpm = nil
         state.telemetryState.lq = nil
+        state.telemetryState.armFlags = nil
         state.telemetryState.armDisableFlags = nil
+        state.telemetryState.armed = nil
+        state.telemetryState.governor = nil
         state.telemetryState.mcuTemp = nil
+        state.telemetryState.escTemp = nil
         state.telemetryState.throttlePercent = nil
         state.telemetryState.current = nil
         state.telemetryState.watts = nil
         state.telemetryState.altitude = nil
         state.telemetryState.consumedMah = nil
         state.telemetryState.batteryCellCount = nil
-        state.telemetryState.armed = nil
         state.telemetryState.rss1 = nil
         state.telemetryState.rss2 = nil
       end
