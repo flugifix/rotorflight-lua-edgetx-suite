@@ -693,6 +693,16 @@ do
       enabled = true, switch = 1, bank_ch = 11, value_ch = 12,
       bank_gvar = 1, value_gvar = 2, pulse_ms = 150, trims = true,
       trim_mode = "rows", nav_trim = 2, adj_trim = 4,
+      -- The STANDARD set layout, which is the default and, measured, the dearer of the two here.
+      --
+      -- The two layouts differ in what the passes after the slot table does with it: the custom
+      -- one DERIVES a set from the board's own windows, the standard one holds the board against
+      -- a set this build already has. Both are taken in slices and both land inside a window whose
+      -- worst pass is dominated by an MSP reply parse rather than by the slice -- measured on this
+      -- tree, `pass.tuning.prime` reads 15069 in the standard layout over 28 passes and 15063 in
+      -- the custom one over 29, so the row bounds either. It is pinned to the one a pilot gets
+      -- without changing anything, and the other is six instructions below it.
+      set_mode = "standard",
       row_trim_1 = 2, row_trim_2 = 4, row_trim_3 = 1,
       row_trim_4 = 3, row_trim_5 = 5, row_trim_6 = 6, backup_profile = 0
     }
