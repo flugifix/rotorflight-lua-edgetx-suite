@@ -66,6 +66,14 @@ return {
     -- regression detector, and as the price of decoding a whole backlog instead of
     -- its newest quarter.
     ["pass.function"] = { target = 7300, measured = 5808 },
+    -- The in-flight tuning overlay. Its STATE pass is CHEAPER than the dashboard's: the
+    -- surface replaces the scene, so the theme's render key is not computed and the drive's
+    -- own work -- one switch read, the trims, the enable channel, the pulse -- costs less
+    -- than what it displaces. The JOB pass builds the whole surface in one step, the way
+    -- the menu does, and its worst is the FULLSCREEN build: that one carries the setup
+    -- check, which walks the two mixer lines and both variables' details.
+    ["pass.tuning.state"] = { target = 11000, measured = 8785 },
+    ["pass.job.tuning"] = { target = 9550, measured = 7638 },
 
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of

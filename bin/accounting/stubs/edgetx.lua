@@ -43,6 +43,20 @@ local SPECIAL_FUNCTION_COUNT = 64
 -- What getSwitchIndex answers for the always-on switch. Nothing measured here depends on the
 -- value, only on its being a number other than zero.
 local ALWAYS_ON_SWITCH_INDEX = 121
+-- The switch positions the radio offers, indexed by their switch source number, and which of them
+-- are held. The names matter: the in-flight tuning drive finds the trim block by walking this list
+-- for the run of positions ending in plus and minus, so the arrows in front of it are spelled the
+-- way the firmware spells them (getSwitchPositionName, radio/src/strhelpers.cpp) and the middle
+-- position of a three-way switch carries the hyphen that must not be swallowed into the run.
+Stubs.switchNames = {
+  "SA\226\134\145", "SA-", "SA\226\134\147",
+  "Rud-", "Rud+", "Ele-", "Ele+", "Thr-", "Thr+",
+  "Ail-", "Ail+", "T5-", "T5+", "T6-", "T6+",
+}
+Stubs.switchValues = {}     -- switch source -> true / false, absent for a position this radio lacks
+
+-- The model's global variables, as written. A stub records; nothing here recomputes a channel.
+Stubs.gvars = {}
 
 -- The far side of the link. stubs/fc.lua replaces this with a scripted flight controller;
 -- on its own the link accepts every frame and answers nothing, which is a radio with no
@@ -87,6 +101,8 @@ function Stubs.reset()
   end
   Stubs.lvgl.trees = {}
   Stubs.lvgl.refs = {}
+  Stubs.switchValues = {}
+  Stubs.gvars = {}
 end
 
 function Stubs.install(root)
@@ -133,6 +149,10 @@ function Stubs.install(root)
 
   -- radio/src/lua/api_general.cpp, the etxcst constant table.
   _G.FUNC_PLAY_SCRIPT = 24
+  -- A mixer weight naming a global variable is 1024 plus that variable's source index
+  -- (radio/src/datastructs_private.h); the index itself is whatever the target's source table
+  -- happens to number GV1 at. Any fixed base answers, as long as both ends here agree.
+  local GVAR_SOURCE_BASE = 263
 
   _G.model = {
     getInfo = function()
@@ -149,6 +169,33 @@ function Stubs.install(root)
       Stubs.customFunctions[index] = value
       Stubs.customFunctionWrites[#Stubs.customFunctionWrites + 1] = { index = index, value = value }
     end,
+    getGlobalVariable = function(index, phase)
+      return Stubs.gvars[index .. ":" .. phase] or 0
+    end,
+    setGlobalVariable = function(index, phase, value)
+      Stubs.gvars[index .. ":" .. phase] = value
+    end,
+    getGlobalVariableDetails = function(_index)
+      return { name = "GV", min = -1024, max = 1024, prec = 0, unit = 0, popup = false }
+    end,
+    -- One line per channel, and the channels the in-flight overlay is measured on carry the two
+    -- variables it declares: CH11 (zero based 10) the enable, CH12 the value.
+    getMixesCount = function(_channel)
+      return 1
+    end,
+    getMix = function(channel, _line)
+      local gvar = (channel == 10) and 1 or 2
+      return {
+        source = _G.MIXSRC_MAX,
+        weight = 1024 + GVAR_SOURCE_BASE + gvar,
+        multiplex = 0,
+        switch = 0
+      }
+    end,
+    -- 31 is TRIM_MODE_NONE: no trim of this flight mode moves a stick's neutral.
+    getFlightMode = function(_mode)
+      return { trimsModes = { 31, 31, 31, 31, 31, 31 } }
+    end,
   }
 
   _G.getSwitchIndex = function(name)
@@ -163,6 +210,37 @@ function Stubs.install(root)
   -- Zero for a slot nothing has written, which is what the firmware's static array holds.
   _G.getShmVar = function(id)
     return Stubs.shmVars[id] or 0
+  end
+
+  _G.MIXSRC_MAX = 4242
+
+  _G.getSourceIndex = function(name)
+    local index = tonumber(string.match(tostring(name), "^GV(%d+)$"))
+    if index == nil then return nil end
+    return GVAR_SOURCE_BASE + index
+  end
+
+  _G.getFlightMode = function()
+    return 0, "FM0"
+  end
+
+  _G.getSwitchValue = function(swsrc)
+    return Stubs.switchValues[swsrc]
+  end
+
+  -- The firmware's iterator: `for swsrc, name in switches() do`. It yields the positions this
+  -- radio has, in order, and skips the ones it does not.
+  _G.switches = function()
+    local function nextSwitch(last, index)
+      index = index + 1
+      while index <= last do
+        local name = Stubs.switchNames[index]
+        if name ~= nil then return index, name end
+        index = index + 1
+      end
+      return nil
+    end
+    return nextSwitch, #Stubs.switchNames, 0
   end
 
   _G.getValue = function(name)
@@ -234,6 +312,10 @@ function Stubs.install(root)
       return true
     end,
     onEvent = function() end,
+    -- Present as a function, not called: the tuning screen asks the lvgl table whether this
+    -- firmware offers a momentary button and emits a different node type either way. Asking here
+    -- is what makes the measured tree the one a colour radio builds.
+    momentaryButton = function() end,
   }
 
   -- loadScript remap: the deploy prefix -> src/rfsuite, widget entry prefix -> src/widgets,

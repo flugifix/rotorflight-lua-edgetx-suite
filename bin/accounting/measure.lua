@@ -182,6 +182,7 @@ local function passClass(widget)
   if not job then return "state" end
   if job.kind == "splash" then return "splash" end
   if job.kind == "menu" then return "menu" end
+  if job.kind == "tuning" or job.kind == "tuning_fs" then return "tuning" end
   if job.swap then return "swap" end
   if job.build then return "build" end
   return "prepare"
@@ -223,6 +224,7 @@ end
 --- Force the next STATE pass to enqueue a scene build: a render key that has moved.
 local function invalidate(widget)
   widget._cachedRenderKey = nil
+  widget._cachedTuningKey = nil
   widget.renderKey = nil
   widget._lastUIRefresh = 0
   widget.built = false
@@ -558,6 +560,91 @@ do
   if widest == nil then error("accounting: no API module carries both a payload and a parser") end
   addRow("unit.msp.parse.max", count(widest.parse, widest.simulatorResponse),
     widestFile .. ", " .. #widest.simulatorResponse .. " bytes")
+end
+
+------------------------------------------------------------------------------
+-- The in-flight tuning overlay: the pass that drives it, and the builds of its two screens.
+--
+-- The overlay replaces the scene while its interlock is closed, so the widget is settled FIRST
+-- with the interlock open -- that is the only way the reference scene ever reaches its swap --
+-- and the switch is thrown afterwards. The fullscreen build is measured with a non-nil event,
+-- which is what the firmware passes there and what no other row in this file covers.
+------------------------------------------------------------------------------
+World.reset()
+do
+  local Runtime = World.require("widgets/dashboard/runtime.lua")
+  local widget = Runtime.new(ZONE, {})
+  widget.preferences = widget.preferences or {}
+  widget.preferences.dashboard = { theme_preflight = reference }
+
+  -- The enable channel, as a raw reading: 998 microseconds, the middle of the first band.
+  Stubs.sensors["ch11"] = -1028
+  Stubs.sensors["ch12"] = 0
+  -- The board reporting its last adjustment, which is the branch a CRSF link actually takes.
+  Stubs.sensors["AdjF"] = 14
+  Stubs.sensors["AdjV"] = 100
+  Stubs.sensors["PID#"] = 1
+
+  settle(widget, World.sensorIds, 400)
+
+  -- The per-model store, as the widget reads it.
+  --
+  -- Written after the settle, and written where the MSP runtime keeps it rather than only on the
+  -- session: that runtime republishes its own copy onto the session on every publish, so a store
+  -- put only on the session is overwritten by the next one and the overlay measures as switched
+  -- off -- which is what a first run of this driver did, silently, with a zero in the row.
+  local store = {
+    inflight = {
+      enabled = true, switch = 1, bank_ch = 11, value_ch = 12,
+      bank_gvar = 1, value_gvar = 2, pulse_ms = 150, trims = true,
+      trim_mode = "rows", nav_trim = 2, adj_trim = 4,
+      row_trim_1 = 2, row_trim_2 = 4, row_trim_3 = 1,
+      row_trim_4 = 3, row_trim_5 = 5, row_trim_6 = 6, backup_profile = 0
+    }
+  }
+  _G.rfsuite.session.modelPreferences = store
+  do
+    local Msp = World.require("tasks/msp/runtime.lua")
+    local mspState = (type(Msp) == "table" and type(Msp.getState) == "function") and Msp.getState() or nil
+    if type(mspState) == "table" and type(mspState.values) == "table" then
+      mspState.values.modelPreferences = store
+    end
+  end
+
+  -- The interlock, thrown after the dashboard is up. The drive seeds on its first evaluation and
+  -- waits out its stability delay, so the passes in between are the ones a pilot's hand produces.
+  Stubs.switchValues[1] = true
+
+  -- Swapping the store is a change the widget reacts to -- it compares what a rebuild would
+  -- read and reloads the theme when that moved -- so the passes right after the swap carry a
+  -- theme load that belongs to this driver rather than to the overlay. They are spent here,
+  -- before anything is measured.
+  for i = 1, 30 do
+    feedLink(World.sensorIds, 900 + i)
+    widget.refresh(widget, nil, nil)
+  end
+
+  local worst = {}
+  for i = 1, 240 do
+    feedLink(World.sensorIds, i)
+    if i % 3 == 0 then invalidate(widget) end
+    local class = passClass(widget)
+    local n = count(widget.refresh, widget, nil, nil)
+    if n > (worst[class] or 0) then worst[class] = n end
+  end
+
+  -- The same surface in fullscreen. `event` is an integer there and nil everywhere else, so this
+  -- is also the only place any row in this file exercises the interactive path.
+  for i = 1, 60 do
+    feedLink(World.sensorIds, 1000 + i)
+    invalidate(widget)
+    local class = passClass(widget)
+    local n = count(widget.refresh, widget, 0, nil)
+    if n > (worst[class] or 0) then worst[class] = n end
+  end
+
+  addRow("pass.tuning.state", worst.state or 0)
+  addRow("pass.job.tuning", worst.tuning or 0)
 end
 
 ------------------------------------------------------------------------------

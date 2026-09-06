@@ -157,7 +157,7 @@ end
 function M.radio()
   return {
     now = function()
-      return tonumber(callGlobal("getTime")) or 0
+      return tonumber((callGlobal("getTime"))) or 0
     end,
 
     -- true while the position is the one the switch rests in, false when it is not, and nil when
@@ -189,11 +189,15 @@ function M.radio()
     end,
 
     sensor = function(name)
-      return tonumber(callGlobal("getValue", name))
+      return tonumber((callGlobal("getValue", name)))
     end,
 
+    -- getFlightMode() answers with the mode number AND its name, and getSourceIndex and
+    -- getValue may grow a second return the same way, so every one of these calls is truncated to
+    -- its first value before tonumber sees it. Unparenthesised, the second return lands on
+    -- tonumber's BASE argument and the call raises inside the widget pass.
     flightMode = function()
-      return tonumber(callGlobal("getFlightMode")) or 0
+      return tonumber((callGlobal("getFlightMode"))) or 0
     end,
 
     setGlobalVariable = function(index0, fm, value)
@@ -235,7 +239,7 @@ function M.radio()
     end,
 
     sourceIndex = function(name)
-      return tonumber(callGlobal("getSourceIndex", name))
+      return tonumber((callGlobal("getSourceIndex", name)))
     end,
 
     mixsrcMax = function()
@@ -957,11 +961,20 @@ end
 
 --- The drive belonging to this widget, constructed on first use and re-settled whenever the
 -- per-model store has been re-read.
+--
+-- A different TABLE is not a different setting. The store arrives here as a fresh table several
+-- times per second -- the MSP runtime republishes its own copy on every publish -- so the identity
+-- test is the cheap path taken on almost every pass, and the section is parsed and its signature
+-- built only when the table really was replaced. Without it every pass paid for both, which is the
+-- same trap widgets/dashboard/runtime.lua documents for its own theme reload.
 function M.get(widget)
   if type(widget) ~= "table" then return nil end
-  local settings = M.loadSettings(widget.modelPreferences)
-  local signature = settingsSignature(settings)
+  local prefs = widget.modelPreferences
   local drive = widget._inflight
+  if drive ~= nil and drive._source == prefs then return drive end
+
+  local settings = M.loadSettings(prefs)
+  local signature = settingsSignature(settings)
   if drive == nil then
     drive = M.newDrive(nil, settings)
     drive._signature = signature
@@ -973,6 +986,7 @@ function M.get(widget)
     drive.trimsResolved = false
     drive.seeded = false
   end
+  drive._source = prefs
   return drive
 end
 
