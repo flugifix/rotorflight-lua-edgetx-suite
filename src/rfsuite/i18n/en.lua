@@ -2265,7 +2265,10 @@ return {
       min = "MIN",
       max = "MAX",
       warning = "WARNING",
-      altitude_max = "MAX ALTITUDE"
+      altitude_max = "MAX ALTITUDE",
+      bec_warning = "BEC Warning",
+      esc_warning = "ESC Warning",
+      esc_max = "ESC Max"
     },
     governor = {
       ACTIVE = "ACTIVE",
