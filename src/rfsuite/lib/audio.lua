@@ -243,6 +243,11 @@ local function unitMah()
   return 108 -- fallback typical for OpenTX/EdgeTX
 end
 
+local function unitCelsius()
+  if type(UNIT_CELSIUS) == "number" then return UNIT_CELSIUS end
+  return 0
+end
+
 local function emitLog(opts, msg, level)
   if opts and type(opts.log) == "function" then
     opts.log(msg, level)
@@ -789,6 +794,7 @@ function Audio.resetConnectionState(audioState)
     audioState.lastAlertAt.rx_voltage = 0
     audioState.lastAlertAt.flight_time = 0
     audioState.lastAlertAt.lq = 0
+    audioState.lastAlertAt.mcu_temperature = 0
   end
 end
 
@@ -815,6 +821,7 @@ function Audio.process(self, opts)
   audioState.lastAlertAt.rx_voltage = tonumber(audioState.lastAlertAt.rx_voltage) or 0
   audioState.lastAlertAt.flight_time = tonumber(audioState.lastAlertAt.flight_time) or 0
   audioState.lastAlertAt.lq = tonumber(audioState.lastAlertAt.lq) or 0
+  audioState.lastAlertAt.mcu_temperature = tonumber(audioState.lastAlertAt.mcu_temperature) or 0
   if type(audioState.lastValues) ~= "table" then
     audioState.lastValues = {
       arming_flags = nil,
@@ -926,6 +933,30 @@ function Audio.process(self, opts)
         end
       else
         -- kein hartes Rücksetzen, damit Cooldown erhalten bleibt
+      end
+    end
+  end
+
+  -- The same shape as the ESC alert above, with one difference: no `scope = "model"`. The
+  -- ESC's limit describes one aircraft's hardware, while the flight controller's MCU is the
+  -- same silicon with the same rating in every model, so this threshold is radio-wide and
+  -- is read out of the global table only.
+  if prefEnabled(events, "mcu_temperature", false) then
+    local threshold = tonumber(events.mcu_threshold) or 80
+    local mcuTemp = tonumber(self.state.mcuTemp)
+    if type(mcuTemp) == "number" and mcuTemp >= threshold then
+      local lastAt = audioState.lastAlertAt.mcu_temperature or 0
+      if now - lastAt >= 10 then
+        if tryPlayEventFile(audioState, now, "stat/alerts/mcu.wav", opts) then
+          if type(playNumber) == "function" then
+            local ok, err = pcall(playNumber, math.floor(mcuTemp + 0.5), unitCelsius())
+            if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+          end
+          if type(playHaptic) == "function" then
+            pcall(playHaptic, 15, 10, 3)
+          end
+          audioState.lastAlertAt.mcu_temperature = now
+        end
       end
     end
   end

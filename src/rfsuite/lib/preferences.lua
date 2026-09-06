@@ -117,6 +117,8 @@ local function defaultPreferences()
       rate_profile = true,
       esc_temperature = false,
       esc_threshold = 90,
+      mcu_temperature = false,
+      mcu_threshold = 80,
       lq_alert = false,
       lq_warn = 70,
       lq_critical = 50,

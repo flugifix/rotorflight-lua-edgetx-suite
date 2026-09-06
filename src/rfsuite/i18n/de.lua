@@ -730,6 +730,7 @@ return {
         section_voltage = "Spannung",
         section_profiles = "PID/Raten-Profil",
         section_esc = "ESC-Temperatur",
+        section_mcu = "MCU-Temperatur",
         section_link = "Linkqualitaet",
         section_adjustment = "Einstellungsansagen",
         section_fuel = "Kraftstoff",
@@ -754,6 +755,7 @@ return {
         esc_temperature = "ESC-Temperatur",
         esc_threshold = "Schwellwert (°)",
         esc_threshold_model = "Schwellwert (°) [Modell]",
+        mcu_temperature = "MCU-Temperatur",
         lq_alert = "Linkqualitaet",
         lq_warn = "Warnung (%)",
         lq_critical = "Kritisch (%)",
@@ -791,7 +793,7 @@ return {
         help_message = "Ansage des PID-Profils und des Raten-Profils bei einem Wechsel, mit der Nummer des neuen Profils."
       },
       settings_audio_events_esc = {
-        help_message = "Ansage, wenn die ESC-Temperatur den Schwellwert erreicht. Der Schwellwert gehoert zum Modell: mit verbundenem Flugregler wird er beim Modell gespeichert, sonst gilt der radioweite Standard."
+        help_message = "Ansage, wenn die ESC-Temperatur den Schwellwert erreicht. Der Schwellwert gehoert zum Modell: mit verbundenem Flugregler wird er beim Modell gespeichert, sonst gilt der radioweite Standard. Darunter hat die MCU-Temperatur des Flugreglers einen eigenen Schalter und einen eigenen Schwellwert. Dieser gilt radioweit, denn derselbe Regler ist in jedem Modell gleich spezifiziert. Beide Warnungen wiederholen sich alle 10 Sekunden, solange die Temperatur auf oder ueber ihrem Schwellwert bleibt."
       },
       settings_audio_events_adjustment = {
         help_message = "Ansage eines Werts, der ueber eine Adjustment-Funktion geaendert wurde, so wie der Flugregler ihn meldet."

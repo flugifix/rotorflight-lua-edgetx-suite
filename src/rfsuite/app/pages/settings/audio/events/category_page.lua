@@ -45,6 +45,11 @@ local CONFIG_SCHEMA = {
   -- written through the per-model store whenever there is one, and falls back to the
   -- global file on a radio that has none.
   { key = "esc_threshold",     type = "number", default = 90, min = 60, max = 300, scope = "model", section = "esc" },
+  { key = "mcu_temperature",   type = "bool", default = false, section = "esc" },
+  -- No `scope = "model"`, unlike the ESC threshold above: the flight controller's MCU is the
+  -- same silicon with the same rating in every aircraft, so a copy of this limit per model
+  -- would be one more place to keep in step and nothing else.
+  { key = "mcu_threshold",     type = "number", default = 80, min = 40, max = 150, section = "esc" },
   { key = "lq_alert",          type = "bool", default = false, section = "link" },
   { key = "lq_warn",           type = "number", default = 70, min = 1, max = 100, section = "link" },
   { key = "lq_critical",       type = "number", default = 50, min = 1, max = 100, section = "link" },
@@ -119,6 +124,13 @@ local SECTIONS = {
       { kind = "bool", key = "esc_temperature", labelKey = "esc_temperature", labelFallback = "ESC Temperature" },
       { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", suffix = "°",
         enabledBy = "esc_temperature" },
+      { kind = "subheader", labelKey = "section_mcu", labelFallback = "MCU Temperature" },
+      { kind = "bool", key = "mcu_temperature", labelKey = "mcu_temperature", labelFallback = "MCU Temperature" },
+      -- The label of the ESC threshold, on purpose: the row says the same thing, and the
+      -- subheader above it is what tells the two thresholds apart. modelScopeLabel keys on
+      -- the row's own key, so this one carries no [Model] marker.
+      { kind = "number", key = "mcu_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", suffix = "°",
+        enabledBy = "mcu_temperature" },
     },
   },
   link = {

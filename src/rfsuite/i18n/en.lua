@@ -730,6 +730,7 @@ return {
         section_voltage = "Voltage",
         section_profiles = "PID/Rate Profile",
         section_esc = "ESC Temperature",
+        section_mcu = "MCU Temperature",
         section_link = "Link Quality",
         section_adjustment = "Adjustment Announcements",
         section_fuel = "Fuel",
@@ -754,6 +755,7 @@ return {
         esc_temperature = "ESC Temperature",
         esc_threshold = "Threshold (°)",
         esc_threshold_model = "Threshold (°) [Model]",
+        mcu_temperature = "MCU Temperature",
         lq_alert = "Link Quality",
         lq_warn = "Warning (%)",
         lq_critical = "Critical (%)",
@@ -791,7 +793,7 @@ return {
         help_message = "Announce the PID profile and the rate profile when they change, with the new profile's number."
       },
       settings_audio_events_esc = {
-        help_message = "Announce when the ESC temperature reaches the threshold. The threshold belongs to the model: with a flight controller connected it is stored with that model, otherwise it is the radio-wide default."
+        help_message = "Announce when the ESC temperature reaches the threshold. The threshold belongs to the model: with a flight controller connected it is stored with that model, otherwise it is the radio-wide default. Below it, the flight controller's own MCU temperature has its own switch and threshold. That one is radio-wide, because the same controller is rated the same in every aircraft. Either alert repeats every 10 seconds while the temperature stays at or above its threshold."
       },
       settings_audio_events_adjustment = {
         help_message = "Announce a value changed through an adjustment function, as the flight controller reports it."
