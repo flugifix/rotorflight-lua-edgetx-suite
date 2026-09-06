@@ -2146,7 +2146,7 @@ return {
         nav_trim = "Trimmung zum Wechseln",
         adj_trim = "Trimmung zum Verstellen",
         check_claim = "Wechseln und Verstellen brauchen zwei verschiedene Trimmungen",
-        help_message = "Waehle den Schalter, der das In-Flight-Tuning freigibt, die beiden Kanaele und Variablen seiner Mischerzeilen und die Trimmung je Reihe.",
+        help_message = "Waehle den Freigabeschalter, die beiden Kanaele und Variablen seiner Mischerzeilen und die Trimmung je Reihe.",
         saved_title = "Gespeichert",
         saved_message = "In-Flight-Tuning-Einstellungen gespeichert",
         save_error_title = "Fehler",
