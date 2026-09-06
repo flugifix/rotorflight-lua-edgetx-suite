@@ -91,9 +91,9 @@ return {
     -- check, which walks the two mixer lines and both variables' details, is on both. Its target
     -- rises because the prime's own progress is on the surface, so the build now also happens
     -- while a run is in flight.
-    ["pass.tuning.state"] = { target = 13000, measured = 11589, proposed = 11000 },
-    ["pass.tuning.prime"] = { target = 16700, measured = 14960 },
-    ["pass.job.tuning"] = { target = 10600, measured = 8967, proposed = 9550 },
+    ["pass.tuning.state"] = { target = 13000, measured = 11674, proposed = 11000 },
+    ["pass.tuning.prime"] = { target = 16700, measured = 15056 },
+    ["pass.job.tuning"] = { target = 10600, measured = 8999, proposed = 9550 },
 
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of

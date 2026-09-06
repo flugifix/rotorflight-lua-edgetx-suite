@@ -668,6 +668,13 @@ do
   -- The enable channel, as a raw reading: 998 microseconds, the middle of the first band.
   Stubs.sensors["ch11"] = -1028
   Stubs.sensors["ch12"] = 0
+  -- A machine that is NOT turning. The sensor set above is a helicopter with its governor in the
+  -- active state and the head at 1750 rpm, which is the right world for the dashboard rows and the
+  -- wrong one for this scenario: the overlay's ground half refuses to speak MSP while the rotor is
+  -- turning, whatever the arm flag says, so a prime priced in that world would be a prime that
+  -- never starts. The bench is what a prime and a profile copy actually happen on.
+  Stubs.sensors["Gov"] = 0
+  Stubs.sensors["Hspd"] = 0
   -- The board reporting its last adjustment, which is the branch a CRSF link actually takes.
   Stubs.sensors["AdjF"] = 14
   Stubs.sensors["AdjV"] = 100
