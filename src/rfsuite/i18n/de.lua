@@ -2555,6 +2555,7 @@ return {
       inflight_transfer_refused = "Profil kopieren abgelehnt",
       inflight_backup_unprimed = "Vor dem Sichern den Flugcontroller auslesen",
       inflight_ground_armed = "Zum Auslesen oder Kopieren disarmen",
+      inflight_ground_no_arm = "Arm-Sensor nicht gesehen: ist Telemetriesensor 99 (ARM) ausgewählt?",
       inflight_delta_title = "SEIT DER SICHERUNG GEÄNDERT",
       inflight_delta_unprimed = "Erst auslesen: es gibt nichts zum Vergleichen",
       inflight_delta_none = "Nichts hat sich geändert",

@@ -531,11 +531,21 @@ function M.buildGround(children, widget, m, w, h, t, accent, btn)
   appendLabel(children, m.pad, y, w - m.pad * 2, describeBackup(snapshot, t), WHITE, m.smallFont, LEFT)
   y = y + m.lineH + m.pad
 
+  -- Why the ground half is refusing, when it is not simply that the board is armed. The one case
+  -- so far is the arm sensor never having answered: the ground half then refuses everything,
+  -- because a model whose sensor 99 is not in the telemetry list reads as disarmed for ever and
+  -- MSP sent on that reading goes to a helicopter in the air.
+  local refusal = (Prime ~= nil and type(Prime.groundRefusal) == "function") and Prime.groundRefusal(widget) or nil
+
   if armed then
     -- Nothing here can reach the board while it is armed -- the MSP runtime clears its queue on
     -- every armed tick -- so the actions are absent rather than present and refusing.
     appendLabel(children, m.pad, y + math.floor(m.actionH / 2) - math.floor(m.lineH / 2), w - m.pad * 2,
       t("widgets.dashboard.inflight_ground_armed", "Disarm to prime or copy a profile"), WHITE, m.smallFont, CENTER)
+  elseif refusal == "no_arm_sensor" then
+    appendLabel(children, m.pad, y + math.floor(m.actionH / 2) - math.floor(m.lineH / 2), w - m.pad * 2,
+      t("widgets.dashboard.inflight_ground_no_arm", "Arm sensor not seen: is telemetry sensor 99 (ARM) selected?"),
+      COLOR_THEME_WARNING, m.smallFont, CENTER)
   elseif drive ~= nil and Prime ~= nil then
     local slot = math.floor(tonumber(drive.settings.backup_profile) or 0)
     local buttonW = math.floor((w - m.pad * 4) / 3)

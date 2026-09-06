@@ -139,17 +139,59 @@ local function queueOf()
   return state.queue
 end
 
---- Whether the board is armed, from both places that know.
+-- The rotor is turning, whatever the arm sensor says. The thresholds are the ones
+-- widgets/dashboard/runtime.lua's own computeFlightMode uses to decide that a model has left the
+-- ground: a governor in one of its running states, or a head speed that nothing on a bench
+-- produces. They are read straight off the telemetry state rather than through `armed`, which is
+-- the point -- this is a SECOND witness and it has to be independent of the first.
+local GOVERNOR_RUNNING_FROM = 4
+local GOVERNOR_RUNNING_TO = 8
+local RPM_RUNNING = 500
+
+--- Whether the board is armed -- or cannot be shown not to be.
 --
 -- The widget's own copy is what the screen is drawn from; the MSP runtime's is what actually
 -- gates the queue. Either one saying armed is enough: the two are read from the same sensor a
 -- pass apart, and the cost of believing the earlier of them is a prime that starts a moment
 -- later, while the cost of believing the later one is a request the runtime throws away.
+--
+-- It FAILS CLOSED, and that is the part worth stating. `armed` is false on a model whose arm
+-- sensor was never selected in the telemetry list, exactly as it is on a model sitting disarmed
+-- on the bench, and the two are not distinguishable from the flag alone. Answering "not armed"
+-- there means sending MSP to a helicopter in the air. So until the sensor has answered once --
+-- `armedSeen`, set by the widget's telemetry read and cleared on the reconnect edge -- everything
+-- that asks this question is refused, and the ground screen says which sensor is missing rather
+-- than showing buttons that would do the wrong thing.
+--
+-- The rotor test underneath it is the second witness. It is deliberately NOT the widget's
+-- `hadInflightFlight` latch, although that is the flag this reading came from: that latch can
+-- only ever be set while `armed` is already true, so it adds no independent evidence, and it
+-- STAYS true from touchdown until the next arming -- which is the whole window in which a pilot
+-- wants the restore this module exists to offer. The live reading refuses while the machine is
+-- turning and stops refusing when it stops.
 local function isArmed(widget)
   local state = widget and widget.state
-  if type(state) == "table" and state.armed == true then return true end
+  if type(state) == "table" then
+    if state.armed == true then return true end
+    if state.armedSeen ~= true then return true end
+    local governor = tonumber(state.governor)
+    if governor ~= nil and governor >= GOVERNOR_RUNNING_FROM and governor <= GOVERNOR_RUNNING_TO then
+      return true
+    end
+    if (tonumber(state.rpm) or 0) >= RPM_RUNNING then return true end
+  end
   local msp = mspState()
   return type(msp) == "table" and msp.lastArmed == true
+end
+
+--- Why the ground half is refusing, when it is not simply that the board is armed. The screen
+-- turns this into a sentence; nil means the ordinary armed/disarmed reading applies.
+function M.groundRefusal(widget)
+  local state = widget and widget.state
+  if type(state) ~= "table" then return nil end
+  if state.armed == true then return nil end
+  if state.armedSeen ~= true then return "no_arm_sensor" end
+  return nil
 end
 
 local function apiModule(name)

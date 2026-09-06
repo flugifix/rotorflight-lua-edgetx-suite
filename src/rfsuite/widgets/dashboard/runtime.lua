@@ -1729,6 +1729,14 @@ local function readTelemetry(state)
   end
 
   local armState = getSensor("armflags")
+  if type(armState) == "number" then
+    -- STICKY, and cleared only on the reconnect edge below. `armed` starting false is
+    -- indistinguishable from `armed` never having been read at all -- a model whose telemetry
+    -- sensor 99 is not selected reads nil here for ever and looks disarmed the whole time -- and
+    -- anything that refuses while armed has to be able to tell those two apart, because failing
+    -- open there means sending MSP to a flying helicopter.
+    state.armedSeen = true
+  end
   if type(armState) == "number" and bit32 then
     setField("armed", bit32.btest(armState, 1))
   elseif type(armState) == "number" then
@@ -1820,6 +1828,9 @@ function Runtime.new(zone, options)
     boxSources = {},
     state = {
       armed = false,
+      -- Set the first time the arm sensor answers with a number, and never inferred from `armed`
+      -- being false: see readTelemetry.
+      armedSeen = false,
       hadArmedFlight = false,
       hadInflightFlight = false,
       prevArmed = false,
@@ -2229,6 +2240,9 @@ function Runtime.new(zone, options)
       self.state.prevArmed = false
       self.state.wasArmed = false
       self.state.armed = false
+      -- Whether the arm sensor has been read at all this session. Cleared with the rest, because
+      -- a new flight controller is a new answer to that question.
+      self.state.armedSeen = false
       self.state.batteryCellCount = 0
       self.state.currentFlightSeconds = 0
       self.state.lastFlightSeconds = 0
