@@ -998,7 +998,7 @@ function M.transferRefusal(widget, drive)
   return nil
 end
 
-local function copyProfile(drive, destination0, source0, kind, onDone)
+local function copyProfile(widget, drive, destination0, source0, kind, onDone)
   local queue = queueOf()
   if queue == nil then return false, "no_link" end
 
@@ -1020,6 +1020,12 @@ local function copyProfile(drive, destination0, source0, kind, onDone)
     simulatorResponse = {},
     client = M.CLIENT,
     processReply = function()
+      -- The armed check the outer message made is not the armed check this one needs. It was made
+      -- before the copy went out; the reply comes back a round trip later, and a pilot who armed
+      -- in between would have the commit added to a queue that tasks/msp/runtime.lua clears on
+      -- every armed tick -- dropped without a word, leaving the transfer reading "busy" for ever
+      -- and the copy sitting in the board's RAM believing it is an undo.
+      if isArmed(widget) then return finished(false, "armed") end
       -- The copy lives in RAM until the board is told to commit it, and the board commits nothing
       -- on its own until the next disarm -- by which time the flight this undo exists for has
       -- been flown. So the write follows immediately, as their copy-profiles page does it.
@@ -1074,7 +1080,7 @@ function M.backup(widget, drive)
   local at = drive.radio.now()
 
   logPrime("backup: pid profile %d -> %d", active0, backup0)
-  return copyProfile(drive, backup0, active0, "backup", function()
+  return copyProfile(widget, drive, backup0, active0, "backup", function()
     drive.backup = { profile = backup0 + 1, at = at, values = snapshot }
     bump(drive)
   end)
@@ -1092,7 +1098,7 @@ function M.restore(widget, drive)
   local active0 = M.activeProfile0(drive)
 
   logPrime("restore: pid profile %d -> %d", backup0, active0)
-  return copyProfile(drive, active0, backup0, "restore", function()
+  return copyProfile(widget, drive, active0, backup0, "restore", function()
     M.refreshValues(widget, drive)
   end)
 end
