@@ -133,6 +133,10 @@ function M.newDrive(radio, settings)
   self.holdUp = nil
   self.trimRow = nil
   self.trimUp = nil
+  self.trimCode = nil
+  self.trimHold = false
+  self.trimPulseUntil = nil
+  self.trimCoolUntil = 0
   self.trims = nil
   self.trimsResolved = false
   self.trimScan = nil
@@ -331,6 +335,9 @@ function Drive:cleanup(force)
   self.holdUp = nil
   self.trimRow = nil
   self.trimUp = nil
+  self.trimCode = nil
+  self.trimHold = false
+  self.trimPulseUntil = nil
   self.navDir = 0
   self.navNextAt = nil
 
@@ -353,6 +360,7 @@ function Drive:cleanup(force)
   self.bankWritten = 0
   self.bankFm = nil
   self.coolUntil = 0
+  self.trimCoolUntil = 0
 end
 
 --- Where the interlock stands, with the first evaluation seeding rather than firing.
@@ -516,6 +524,61 @@ function Drive:pollTrims()
   return nil, nil
 end
 
+--- The adjust trim, read as an EDGE and answered with a PULSE.
+--
+-- Why it is not the level, which is what this was. A trim is a momentary contact and a pilot's
+-- press on one lasts as long as a pilot's press: the two in his own log are 0.0 and 0.1 seconds
+-- long. The flight controller counts no step at all until the value channel has stood STILL
+-- inside one window for TRIGGER_DELAY, 100 ms (fc/rc_adjustments.c) -- so a relay that wrote the
+-- magnitude while the trim was down and 0 when it came up made the channel move out and back
+-- without ever standing still. Short press: no step, and nothing on the screen to say why. Held
+-- for a second: three or four. That is the pilot's report exactly -- it works "only after a
+-- while, and very inaccurately".
+--
+-- So one press is one pulse, which is what the touch control has always done: the magnitude goes
+-- on at the edge and stays on for at least `pulse_ms` however early the trim is let go, and a
+-- trim genuinely held keeps it on past that for as long as it is held -- which is where the
+-- board's own REPEAT_DELAY takes over and steps at its own rate. The cool-down after a pulse is
+-- the same length, so two presses closer together than the board can tell apart are one step and
+-- not an arbitrary number of them.
+--
+-- The pulse and the hold are the trim's OWN, deliberately not the touch control's. A held touch
+-- button is published as `holding` and freezes the widget's render key, because a rebuild would
+-- delete the object that reports its release; a trim has no object and a rebuild cannot lose it,
+-- and freezing the surface for as long as a thumb is on a trim would freeze it for the whole of
+-- the tuning.
+function Drive:pollTrimStep(now)
+  local row, up = self:pollTrims()
+
+  if row ~= self.trimRow or up ~= self.trimUp then
+    self.trimRow, self.trimUp = row, up
+    self.valueEpoch = self.valueEpoch + 1
+    if row == nil then
+      -- Let go. The magnitude does not fall away here: a pulse still running owns it until its
+      -- own clock says otherwise, and that is the whole of what makes a short press step at all.
+      self.trimHold = false
+    else
+      self.row = row
+      -- The same thumb moved to another row without coming up. The magnitude follows the new row
+      -- rather than finishing the old one's pulse: the screen has already followed the pilot and
+      -- the wire has to agree with the screen.
+      if self.trimHold == true then self.trimCode = Functions.rowCode(row, up) end
+    end
+  end
+
+  if row == nil then return end
+  -- Already holding the value, or a pulse of this trim's own still on the wire: nothing to start.
+  if self.trimHold == true or self.trimPulseUntil ~= nil then return end
+  -- The board needs its REPEAT_DELAY between two magnitudes before it counts them as two steps.
+  -- A trim still down when that gap has passed gets its pulse then; two TAPS inside the gap get
+  -- ONE pulse between them, which is the point of having it.
+  if now < (self.trimCoolUntil or 0) then return end
+
+  self.trimCode = Functions.rowCode(row, up)
+  self.trimPulseUntil = now + self:pulseTicks()
+  self.trimHold = true
+end
+
 --- Which rows the pilot can actually reach, as a mask the zone screen hides rows by.
 --
 -- In `rows` mode that is the rows whose trim this radio has; in `navigate` mode it is every
@@ -587,12 +650,7 @@ function Drive:tick()
   local pulsing = (self.pulseUntil ~= nil) or (self.holdRow ~= nil)
   if not pulsing then
     self:pollNavigate(now)
-    local row, up = self:pollTrims()
-    if row ~= self.trimRow or up ~= self.trimUp then
-      self.trimRow, self.trimUp = row, up
-      if row ~= nil then self.row = row end
-      self.valueEpoch = self.valueEpoch + 1
-    end
+    self:pollTrimStep(now)
   end
 
   if self.pulseUntil ~= nil and now >= self.pulseUntil then
@@ -600,13 +658,23 @@ function Drive:tick()
     self.pulseCode = nil
     self.coolUntil = now + self:pulseTicks()
   end
+  -- The trim's pulse ends on its own clock, and it ends on every pass -- including one the touch
+  -- path took over above. A magnitude left standing by a pulse nothing is looking at any more is
+  -- precisely the state this module exists to make impossible.
+  if self.trimPulseUntil ~= nil and now >= self.trimPulseUntil then
+    self.trimPulseUntil = nil
+    self.trimCode = nil
+    self.trimCoolUntil = now + self:pulseTicks()
+  end
 
   local want = 0
   if self.pulseUntil ~= nil then
     want = self.pulseCode or 0
   elseif self.holdRow ~= nil then
     want = Functions.rowCode(self.holdRow, self.holdUp) or 0
-  elseif self.trimRow ~= nil then
+  elseif self.trimPulseUntil ~= nil then
+    want = self.trimCode or 0
+  elseif self.trimHold == true and self.trimRow ~= nil then
     want = Functions.rowCode(self.trimRow, self.trimUp) or 0
   end
 
