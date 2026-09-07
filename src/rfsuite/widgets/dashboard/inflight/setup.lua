@@ -68,6 +68,7 @@ M.DEFAULTS = {
   trims = true,
   trim_mode = "rows",
   nav_trim = 2,
+  bank_trim = 0,
   adj_trim = 4,
   row_trim_1 = 2,
   row_trim_2 = 4,
@@ -94,6 +95,12 @@ M.PROFILE_MAX = 6
 -- row's parameter. `navigate` claims two trims instead -- one walks the set and one adjusts what
 -- the walk has selected -- which is the route for a radio with four trims and for a pilot who
 -- wants one gesture rather than six positions to remember.
+--
+-- `navigate` takes an optional THIRD trim, and it is the pilot's own ask after the first radio
+-- round. With it the walk splits in two: the third trim steps the BANK and the walk trim then
+-- moves between the rows of the bank it is in, which is the shape of the set itself -- six banks
+-- of six -- rather than a strip of thirty-six the pilot has to count his way along. Left at 0 the
+-- walk trim walks the whole set as it did, so the two-trim route is unchanged.
 M.TRIM_MODE_ROWS = "rows"
 M.TRIM_MODE_NAVIGATE = "navigate"
 
@@ -389,6 +396,7 @@ function M.loadSettings(modelPreferences)
     -- all until the board has been read.
     set_mode = (src.set_mode == M.SET_MODE_CUSTOM) and M.SET_MODE_CUSTOM or M.SET_MODE_STANDARD,
     nav_trim = clampNumber(src.nav_trim, 0, M.TRIM_COUNT, M.DEFAULTS.nav_trim),
+    bank_trim = clampNumber(src.bank_trim, 0, M.TRIM_COUNT, M.DEFAULTS.bank_trim),
     adj_trim = clampNumber(src.adj_trim, 0, M.TRIM_COUNT, M.DEFAULTS.adj_trim),
     backup_profile = clampNumber(src.backup_profile, 0, M.PROFILE_MAX, M.DEFAULTS.backup_profile)
   }
@@ -417,6 +425,7 @@ function M.storeSettings(section, settings)
   section.trim_mode = settings.trim_mode or M.TRIM_MODE_ROWS
   section.set_mode = settings.set_mode or M.SET_MODE_STANDARD
   section.nav_trim = settings.nav_trim or 0
+  section.bank_trim = settings.bank_trim or 0
   section.adj_trim = settings.adj_trim or 0
   section.backup_profile = settings.backup_profile
   for row = 1, M.TRIM_COUNT do
@@ -568,13 +577,29 @@ function M.claimedTrims(settings)
   local claimed = {}
   if type(settings) ~= "table" then return claimed, false end
   if settings.trim_mode == M.TRIM_MODE_NAVIGATE then
-    local nav = settings.nav_trim or 0
-    local adj = settings.adj_trim or 0
-    if nav > 0 then claimed[#claimed + 1] = { index = nav, code = "trim_mode_nav" } end
-    if adj > 0 and adj ~= nav then
-      claimed[#claimed + 1] = { index = adj, code = "trim_mode_adj" }
+    -- Up to three, and each of them has to be its own. The bank trim is optional -- 0 means the
+    -- walk trim walks the whole set -- but a bank trim that repeats one of the other two is the
+    -- same fault as any other double claim: whichever job runs first decides, and which one that
+    -- is cannot be read off the screen.
+    local wanted = {
+      { index = settings.nav_trim or 0, code = "trim_mode_nav" },
+      { index = settings.bank_trim or 0, code = "trim_mode_bank" },
+      { index = settings.adj_trim or 0, code = "trim_mode_adj" }
+    }
+    local seenNav = {}
+    local twiceNav = false
+    for i = 1, #wanted do
+      local index = wanted[i].index
+      if index > 0 then
+        if seenNav[index] then
+          twiceNav = true
+        else
+          seenNav[index] = true
+          claimed[#claimed + 1] = wanted[i]
+        end
+      end
     end
-    return claimed, (nav > 0 and adj > 0 and nav == adj)
+    return claimed, twiceNav
   end
   local seen = {}
   local twice = false

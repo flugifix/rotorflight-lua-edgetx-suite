@@ -204,6 +204,19 @@ end
 M.BANK_COUNT = 6
 M.ROW_COUNT = 6
 
+-- What the six banks of the STANDARD set are called on the chips.
+--
+-- One character each, because the chips are a strip across the top of a 480 pixel screen and a
+-- word does not fit in one. The letters are read off M.STANDARD_SET's own contents further down:
+-- bank 1 holds the P gains, 2 the I, 3 the D, 4 the F, 5 the O terms with their cross-coupling
+-- neighbours, 6 the tail and governor band. They are NOT translated -- P, I and D name the same
+-- three terms wherever a helicopter is tuned, and a translated letter would stop matching the
+-- flight controller's own pages.
+--
+-- A CUSTOM set gets 1..6 instead: its banks hold whatever the board's slot table put in them, so
+-- there is nothing for a letter to stand for.
+M.STANDARD_BANK_LABELS = { "P", "I", "D", "F", "O", "B" }
+
 -- The nine MSP reads that between them answer every id in the table above, in the order the
 -- ground prime sends them. The order is the useful-first one: the gains a pilot tunes come back
 -- before the profile indices, so a prime that is interrupted has still filled in what the screen

@@ -142,6 +142,8 @@ function M.newDrive(radio, settings)
   self.trimScan = nil
   self.navDir = 0
   self.navNextAt = nil
+  self.bankDir = 0
+  self.bankNextAt = nil
   self.fastAt = nil
   self.values = {}
   self.valueEpoch = 0
@@ -341,6 +343,8 @@ function Drive:cleanup(force)
   self.trimPulseUntil = nil
   self.navDir = 0
   self.navNextAt = nil
+  self.bankDir = 0
+  self.bankNextAt = nil
 
   if settings and (settings.value_gvar or 0) > 0 and (force or self.written ~= 0) then
     writeGvar(self, settings.value_gvar, fm, 0)
@@ -460,15 +464,68 @@ function Drive:navigateMode()
   return settings ~= nil and settings.trim_mode == M.TRIM_MODE_NAVIGATE
 end
 
---- The walk trim, read as an EDGE. One press moves one parameter, however long the pass takes;
--- held on purpose, it repeats after a delay no single press can reach.
-function Drive:pollNavigate(now)
+--- Whether a trim of this radio's is actually stepping the bank.
+--
+-- Configured is not enough: a bank trim named in the settings and absent from this radio would
+-- otherwise leave the walk trim confined to one bank with no way of reaching the other five, which
+-- is worse than either arrangement on its own. So the split is decided by what the walk can
+-- REACH, and a radio without the named trim falls back to walking the whole set.
+function Drive:bankTrimActive()
   local settings = self.settings
-  if not settings or settings.trims ~= true or not self:navigateMode() then return end
-  local trims = self:ensureTrims()
-  local trim = trims and trims[settings.nav_trim or 0] or nil
-  if trim == nil then return end
+  if not settings or settings.trims ~= true or not self:navigateMode() then return false end
+  local index = settings.bank_trim or 0
+  if index <= 0 then return false end
+  local trims = self.trims
+  return type(trims) == "table" and trims[index] ~= nil
+end
 
+--- One step of the walk WITHIN the current bank, wrapping. The other half of the pilot's own
+-- arrangement: with a bank trim of its own the walk trim no longer has to count its way across
+-- thirty-six cells to reach the row beside the one it started on.
+function Drive:navigateRow(up)
+  if not self:bankTrimActive() then return self:navigate(up) end
+  if not self.live then return false, "not_live" end
+  if self.written ~= 0 then return false, "busy" end
+  local total = Functions.ROW_COUNT
+  local index = self.row - 1
+  for _ = 1, total do
+    index = (index + (up and 1 or -1)) % total
+    if self:functionId(self.bank, index + 1) ~= nil then
+      self.row = index + 1
+      self.valueEpoch = self.valueEpoch + 1
+      return true
+    end
+  end
+  return false, "empty"
+end
+
+--- One bank previous or next, wrapping, with the first assigned row of the new bank selected.
+--
+-- Refused while the value variable is not 0, for the reason the bank CHIP is: moving the enable
+-- channel under a value that sits inside a step window is how one press ends up counted against
+-- another parameter. A bank with no assigned cell at all is stepped over rather than shown empty.
+function Drive:navigateBank(up)
+  if not self.live then return false, "not_live" end
+  if self.written ~= 0 then return false, "busy" end
+  local count = Functions.BANK_COUNT
+  local bank = self.bank
+  for _ = 1, count do
+    bank = ((bank - 1 + (up and 1 or -1)) % count) + 1
+    for row = 1, Functions.ROW_COUNT do
+      if self:functionId(bank, row) ~= nil then
+        self.bank = bank
+        self.row = row
+        self.valueEpoch = self.valueEpoch + 1
+        return self:armBank(bank)
+      end
+    end
+  end
+  return false, "empty"
+end
+
+--- One walk trim, read as an EDGE with a repeat clock of its own. One press moves one step,
+-- however long the pass takes; held on purpose it repeats, after a delay no single press reaches.
+local function walkTrim(self, now, trim, dirKey, nextKey, step)
   local direction = 0
   if self.radio.switchValue(trim.plus) == true then
     direction = 1
@@ -476,20 +533,43 @@ function Drive:pollNavigate(now)
     direction = -1
   end
 
-  if direction ~= self.navDir then
-    self.navDir = direction
+  if direction ~= self[dirKey] then
+    self[dirKey] = direction
     if direction ~= 0 then
-      self:navigate(direction > 0)
-      self.navNextAt = now + NAV_REPEAT_DELAY_TICKS
+      step(self, direction > 0)
+      self[nextKey] = now + NAV_REPEAT_DELAY_TICKS
     else
-      self.navNextAt = nil
+      self[nextKey] = nil
     end
     return
   end
 
-  if direction ~= 0 and self.navNextAt ~= nil and now >= self.navNextAt then
-    self:navigate(direction > 0)
-    self.navNextAt = now + NAV_REPEAT_INTERVAL_TICKS
+  if direction ~= 0 and self[nextKey] ~= nil and now >= self[nextKey] then
+    step(self, direction > 0)
+    self[nextKey] = now + NAV_REPEAT_INTERVAL_TICKS
+  end
+end
+
+--- The two walk trims: one steps the bank, one steps the row inside it.
+--
+-- The bank is polled FIRST. Both refuse while a value is standing on the variable, and a pilot
+-- who presses the two together means the bank -- the row he lands on is chosen by the bank step
+-- anyway, so reading the row first would make the pair depend on which one his thumb reached a
+-- millisecond earlier.
+function Drive:pollNavigate(now)
+  local settings = self.settings
+  if not settings or settings.trims ~= true or not self:navigateMode() then return end
+  local trims = self:ensureTrims()
+  if trims == nil then return end
+
+  local bankTrim = trims[settings.bank_trim or 0]
+  if bankTrim ~= nil then
+    walkTrim(self, now, bankTrim, "bankDir", "bankNextAt", Drive.navigateBank)
+  end
+
+  local navTrim = trims[settings.nav_trim or 0]
+  if navTrim ~= nil then
+    walkTrim(self, now, navTrim, "navDir", "navNextAt", Drive.navigateRow)
   end
 end
 
@@ -716,7 +796,8 @@ local function settingsSignature(settings)
     tostring(settings.enabled), tostring(settings.switch), tostring(settings.bank_ch),
     tostring(settings.value_ch), tostring(settings.bank_gvar), tostring(settings.value_gvar),
     tostring(settings.pulse_ms), tostring(settings.trims), tostring(settings.backup_profile),
-    tostring(settings.trim_mode), tostring(settings.nav_trim), tostring(settings.adj_trim),
+    tostring(settings.trim_mode), tostring(settings.nav_trim), tostring(settings.bank_trim),
+    tostring(settings.adj_trim),
     tostring(settings.set_mode),
     tostring(rows[1]), tostring(rows[2]), tostring(rows[3]),
     tostring(rows[4]), tostring(rows[5]), tostring(rows[6])

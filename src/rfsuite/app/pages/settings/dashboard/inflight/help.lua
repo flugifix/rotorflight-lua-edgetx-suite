@@ -22,7 +22,13 @@ return function(ctx)
   local setupFc = tr(i18n, "help_setup_fc",
     "Writes the standard set into the adjustment slots, after showing what it overwrites. Standard layout only.")
 
+  -- The trim layout is the one setting a pilot meets with his thumbs rather than his eyes, so
+  -- the help says what each of the three trims does rather than leaving the field labels to
+  -- carry it on their own.
+  local trims = tr(i18n, "help_trims",
+    "Walk and adjust: the bank trim steps the bank, the walk trim the row in it, the adjust trim the value.")
+
   return {
-    message = intro .. "\n\n" .. setup .. "\n\n" .. setupFc
+    message = intro .. "\n\n" .. trims .. "\n\n" .. setup .. "\n\n" .. setupFc
   }
 end

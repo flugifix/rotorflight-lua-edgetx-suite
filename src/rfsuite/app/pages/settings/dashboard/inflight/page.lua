@@ -610,6 +610,11 @@ local function buildTrims(children, x, y, w, i18n)
     cursorY = cursorY + appendNote(children, x, cursorY, w,
       t(i18n, "navigate_note", "One trim steps through the parameters, the other moves the one it selected."))
     cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+      t(i18n, "bank_trim", "Bank trim"), options, ui.config.bank_trim,
+      function(value) markValue("bank_trim", tonumber(value) or 0) end)
+    cursorY = cursorY + appendNote(children, x, cursorY, w,
+      t(i18n, "bank_trim_note", "With a bank trim the walk trim stays inside the bank; without one it walks the whole set."))
+    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
       t(i18n, "nav_trim", "Walk trim"), options, ui.config.nav_trim,
       function(value) markValue("nav_trim", tonumber(value) or 0) end)
     cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
