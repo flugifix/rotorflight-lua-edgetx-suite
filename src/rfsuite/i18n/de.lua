@@ -2610,6 +2610,7 @@ return {
       inflight_transfer_failed = "Profil kopieren fehlgeschlagen",
       inflight_transfer_refused = "Profil kopieren abgelehnt",
       inflight_backup_unprimed = "Vor dem Sichern den Flugcontroller auslesen",
+      inflight_restore_other_profile = "Die Sicherung stammt aus einem anderen Profil: erst dorthin zurueck",
       inflight_ground_armed = "Zum Auslesen oder Kopieren disarmen",
       inflight_ground_no_arm = "Arm-Sensor nicht gesehen: ist Telemetriesensor 99 (ARM) ausgewählt?",
       inflight_delta_title = "SEIT DER SICHERUNG GEÄNDERT",

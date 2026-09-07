@@ -2610,6 +2610,7 @@ return {
       inflight_transfer_failed = "Profile copy failed",
       inflight_transfer_refused = "Profile copy refused",
       inflight_backup_unprimed = "Read the board before taking a backup",
+      inflight_restore_other_profile = "The backup came from another profile: switch back to it first",
       inflight_ground_armed = "Disarm to prime or copy a profile",
       inflight_ground_no_arm = "Arm sensor not seen: is telemetry sensor 99 (ARM) selected?",
       inflight_delta_title = "CHANGED SINCE THE BACKUP",

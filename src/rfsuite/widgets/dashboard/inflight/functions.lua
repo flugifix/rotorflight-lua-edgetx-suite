@@ -217,6 +217,29 @@ M.ROW_COUNT = 6
 -- there is nothing for a letter to stand for.
 M.STANDARD_BANK_LABELS = { "P", "I", "D", "F", "O", "B" }
 
+-- Which profile a parameter lives in, so that a profile change can say what it invalidated.
+--
+-- The firmware's adjustment functions act on the ACTIVE profile: the PID, rescue and
+-- governor-profile terms follow the PID profile, the rates follow the rate profile, and a handful
+-- of settings follow neither. The MSP command each value is read back with says exactly that and
+-- is already in the table above, so the scope is derived from it rather than listed a second
+-- time -- 112 pid_tuning, 94 pid_profile, 146 rescue_profile and 148 governor_profile follow the
+-- PID profile, 111 rc_tuning follows the rate profile, and 142 governor_config, 240 acc_trim,
+-- 175 battery_profile and 101 status follow neither.
+M.SCOPE_PID = "pid"
+M.SCOPE_RATE = "rate"
+local SCOPE_BY_COMMAND = {
+  [112] = M.SCOPE_PID, [94] = M.SCOPE_PID, [146] = M.SCOPE_PID, [148] = M.SCOPE_PID,
+  [111] = M.SCOPE_RATE
+}
+
+--- Which profile the parameter `id` belongs to, or nil when it belongs to neither.
+function M.scopeOf(id)
+  local fn = byId[tonumber(id) or -1]
+  if fn == nil then return nil end
+  return SCOPE_BY_COMMAND[fn.cmd]
+end
+
 -- The nine MSP reads that between them answer every id in the table above, in the order the
 -- ground prime sends them. The order is the useful-first one: the gains a pilot tunes come back
 -- before the profile indices, so a prime that is interrupted has still filled in what the screen

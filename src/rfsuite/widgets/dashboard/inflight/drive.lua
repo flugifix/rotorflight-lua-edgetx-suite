@@ -147,6 +147,9 @@ function M.newDrive(radio, settings)
   self.fastAt = nil
   self.values = {}
   self.valueEpoch = 0
+  self.profile = nil
+  self.rateProfile = nil
+  self.profileChanged = nil
   return self
 end
 
@@ -765,6 +768,59 @@ function Drive:fastTick(now)
   end
 end
 
+--- Which profiles the board is flying, and what a change of one of them invalidates.
+--
+-- The firmware's adjustment functions act on the ACTIVE profile: the PID, rescue and
+-- governor-profile terms on `currentPidProfile`, the rates on `currentControlRateProfile`, and a
+-- handful of settings on neither. So the profile the pilot is flying is the profile being tuned,
+-- and he chooses it with his own switch rather than through this overlay -- which means every
+-- value the overlay believes it knows is true of ONE profile, and a change of that profile turns
+-- the lot of them into guesses about a profile nobody has read.
+--
+-- What is dropped is decided by the MSP command each value is read back with, which is already in
+-- the function table: functions.lua's `scopeOf`. Everything scoped to the profile that moved goes
+-- back to unknown and shows as a dash; the acc trims, the governor config, the battery profile
+-- and the status indices are global and are kept. Nothing is READ here -- in the air there is
+-- nothing that could be, and on the ground the ground half sends the nine value reads again.
+--
+-- The first reading of each sensor SEEDS. A widget that comes up on profile 3 has not seen the
+-- pilot change anything, and dropping a cache that is not there yet would only cost an epoch.
+function Drive:watchProfiles()
+  local dropPid, dropRate = false, false
+
+  local pid = self.radio.sensor("PID#")
+  if pid ~= nil and pid > 0 then
+    if self.profile ~= nil and self.profile ~= pid then dropPid = true end
+    if self.profile ~= pid then self.valueEpoch = self.valueEpoch + 1 end
+    self.profile = pid
+  end
+
+  local rate = self.radio.sensor("RTE#")
+  if rate ~= nil and rate > 0 then
+    if self.rateProfile ~= nil and self.rateProfile ~= rate then dropRate = true end
+    if self.rateProfile ~= rate then self.valueEpoch = self.valueEpoch + 1 end
+    self.rateProfile = rate
+  end
+
+  if not (dropPid or dropRate) then return false end
+
+  local dropped = 0
+  for id in pairs(self.values) do
+    local scope = Functions.scopeOf(id)
+    if (dropPid and scope == Functions.SCOPE_PID) or (dropRate and scope == Functions.SCOPE_RATE) then
+      self.values[id] = nil
+      dropped = dropped + 1
+    end
+  end
+  -- The ground half's signal to read the nine value commands again. It is a flag rather than a
+  -- call because this runs wherever the widget's pass happens to be -- including in the air,
+  -- where the one thing that must not happen is an MSP request.
+  self.profileChanged = true
+  logDrive("profile changed: pid %s rate %s, %d cached value(s) now unknown",
+    tostring(self.profile), tostring(self.rateProfile), dropped)
+  return true
+end
+
 --- One pass of the drive. Everything with a cost is behind `live`; a widget whose pilot has the
 -- interlock off pays one switch read per pass and nothing else.
 function Drive:tick()
@@ -943,7 +999,9 @@ local function publish(widget, drive)
   local backup = drive.backup
   local backupState = nil
   if type(backup) == "table" then
-    backupState = { profile = backup.profile, at = backup.at }
+    -- The profile the backup was taken FROM travels with it. A backup is an undo for that one
+    -- profile and for no other, because the board's adjustments only ever moved that one.
+    backupState = { profile = backup.profile, at = backup.at, source = backup.source }
   end
 
   local transfer = drive.transfer
@@ -985,6 +1043,7 @@ local function publish(widget, drive)
     spokenId = drive.spokenId,
     navigate = drive:navigateMode(),
     profile = drive.profile,
+    rateProfile = drive.rateProfile,
     prime = primeState,
     -- Which of the two layouts the rows above came from: the board's own slot table once the
     -- prime has read it, the documented one until then and whenever the board's yields nothing
@@ -1007,10 +1066,14 @@ function M.tick(widget)
     if widget.state and widget.state.inflight ~= nil then widget.state.inflight = nil end
     return false
   end
+  -- The two profile sensors, watched whether or not the overlay is up and gated on the link
+  -- rather than on the interlock: the pilot changes a profile with his own switch, at any time,
+  -- and what the overlay believes about a value is only ever true of the profile it was read
+  -- from. Two getValue calls on the widget's logic tick.
+  if widget.state ~= nil and widget.state.fblConnected == true then
+    drive:watchProfiles()
+  end
   local live = drive:tick()
-  -- The profile sensor is read only while the overlay is up. Off the overlay a pass costs one
-  -- switch read and nothing else, which is the whole point of putting the gate first.
-  if live then drive.profile = drive.radio.sensor("PID#") end
   publish(widget, drive)
   return live == true
 end

@@ -1153,7 +1153,10 @@ function M.backup(widget, drive)
 
   logPrime("backup: pid profile %d -> %d", active0, backup0)
   return copyProfile(widget, drive, backup0, active0, "backup", function()
-    drive.backup = { profile = backup0 + 1, at = at, values = snapshot }
+    -- The profile the copy was taken FROM is kept with it. The board's adjustments act on
+    -- whichever profile is active, so this backup describes that one and no other: it is what the
+    -- ground surface names under the button, and what the restore below refuses to cross.
+    drive.backup = { profile = backup0 + 1, source = active0 + 1, at = at, values = snapshot }
     bump(drive)
   end)
 end
@@ -1168,6 +1171,15 @@ function M.restore(widget, drive)
 
   local backup0 = math.floor(tonumber(drive.settings.backup_profile) or 0) - 1
   local active0 = M.activeProfile0(drive)
+
+  -- A backup is an undo for the profile it was taken from and for no other. Put back over a
+  -- different one it would not undo anything: it would overwrite a profile the copy never
+  -- described, with values the pilot never flew there. Refused by name rather than silently, so
+  -- the screen can say which profile to switch back to.
+  local source = (type(drive.backup) == "table") and tonumber(drive.backup.source) or nil
+  if source ~= nil and active0 ~= nil and (source - 1) ~= active0 then
+    return refuseTransfer(drive, "restore", "other_profile")
+  end
 
   logPrime("restore: pid profile %d -> %d", backup0, active0)
   return copyProfile(widget, drive, active0, backup0, "restore", function()
@@ -1262,6 +1274,26 @@ function M.tick(widget, drive)
   if widget.state.tasksDone == false then
     drive._primeLinkSince = nil
     return
+  end
+
+  -- A profile change invalidated everything scoped to it, and the board is the only thing that
+  -- can say what the new profile holds. On the GROUND that is the nine value reads again and
+  -- nothing else: the slot table describes a LAYOUT, and a layout does not move when a profile
+  -- does, so re-reading forty records would be forty round trips spent on something that cannot
+  -- have changed. In the air this is never reached -- the armed gate at the top of this function
+  -- returns first -- and the values simply stay unknown until the board reports each one on
+  -- AdjV, which is the honest answer while nothing may be asked.
+  --
+  -- The flag is left standing while a run is on the wire: that run was started under the old
+  -- profile and the next idle pass sends the reads again. If nothing has been primed at all it is
+  -- dropped, because the automatic run below reads everything anyway.
+  if drive.profileChanged == true and not M.isRunning(drive) then
+    drive.profileChanged = nil
+    if type(drive.prime) == "table" and drive.prime.phase == M.PHASE_DONE then
+      logPrime("profile changed: the nine value reads are sent again")
+      M.refreshValues(widget, drive)
+      return
+    end
   end
 
   local now = drive.radio.now()
