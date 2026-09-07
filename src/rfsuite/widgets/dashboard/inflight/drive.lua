@@ -1113,6 +1113,84 @@ local function settingsSignature(settings)
   }, "|")
 end
 
+-- How often the per-model store is stat'ed, in radio ticks. One second, which is the cadence the
+-- widget's own preference watcher already runs its stat at.
+local STORE_STAT_TICKS = 100
+
+--- What the per-model store looks like on the card right now: its size and its modification time,
+-- as one string.
+--
+-- A STATE and not a signal, and the difference is the whole of why this exists. A signal is
+-- consumed by whoever reads it first; a state is not, so a pass killed by the instruction limit
+-- between reading this and acting on it changes nothing -- the next pass sees the same difference
+-- and does the work then.
+--
+-- `fstat` returns the modification time as a TABLE (api_filesystem.cpp), so it is spelled out
+-- field by field: tostring() on it is an ADDRESS, different on every call, and a stamp built that
+-- way never equals the previous one.
+local function storeStamp(path)
+  if type(path) ~= "string" or type(_G.fstat) ~= "function" then return nil end
+  local ok, info = pcall(_G.fstat, path)
+  if not ok or type(info) ~= "table" then return nil end
+  local time = info.time
+  local parts = tostring(info.size)
+  if type(time) == "table" then
+    parts = parts .. ":" .. tostring(time.year) .. tostring(time.mon) .. tostring(time.day)
+      .. tostring(time.hour) .. tostring(time.min) .. tostring(time.sec)
+  end
+  return parts
+end
+
+--- The per-model store, re-read off the card when the file on the card has moved.
+--
+-- WHY THE OVERLAY DOES ITS OWN. The pilot set the backup profile on the settings page and only a
+-- radio restart applied it. The chain, measured on his card log: the widget's own preference
+-- watcher DID fire, and it re-reads through lib/model_preferences.lua `loadByMcuId` WITHOUT
+-- `force` -- and that function serves a module-level cache whose only invalidation, `clearCache`,
+-- nothing in the tree calls. The tool that saved the file runs in a different Lua state
+-- (`lsWidgets` is its own `lua_newstate`, not a coroutine of the main one), so the save refreshed
+-- the TOOL's copy of that cache and the widget's still held the file as it stood at connect. What
+-- came back was a brand-new table containing the old content -- which defeats every identity test
+-- downstream of it, ours included, because a different table is not a different setting.
+--
+-- So the overlay looks at the file itself. One `fstat` a second while the feature is enabled; on a
+-- change, one forced read that goes to the disk. Nothing of theirs is touched and
+-- `widget.modelPreferences` is left exactly where it was -- their theme reload still reads what it
+-- always read -- because a fix that reached into their state would be a second writer of it.
+--
+-- Answers the table to settle from, or nil for "use what the widget was given".
+local function freshPreferences(widget)
+  local settings = widget._inflight and widget._inflight.settings
+  if settings ~= nil and settings.enabled ~= true then return nil end
+
+  local session = _G.rfsuite and _G.rfsuite.session
+  local mcuId = type(session) == "table" and session.mcu_id or nil
+  if mcuId == nil then return nil end
+
+  local clock = _G.getTime
+  local now = (type(clock) == "function") and (tonumber(clock()) or 0) or 0
+  if widget._inflightStoreAt ~= nil and (now - widget._inflightStoreAt) < STORE_STAT_TICKS then
+    return widget._inflightPrefs
+  end
+  widget._inflightStoreAt = now
+
+  local MP = requireModule("lib/model_preferences.lua")
+  if type(MP) ~= "table" or type(MP.loadByMcuId) ~= "function" then return widget._inflightPrefs end
+  local path = type(MP.buildPath) == "function" and MP.buildPath(mcuId) or nil
+  local stamp = storeStamp(path)
+  -- No stamp at all: no file, or a firmware without fstat. Neither is a change, and re-reading on
+  -- every pass because nothing can be measured is how a guard becomes the cost it was avoiding.
+  if stamp == nil then return widget._inflightPrefs end
+  if stamp == widget._inflightStamp then return widget._inflightPrefs end
+
+  widget._inflightStamp = stamp
+  local prefs = MP.loadByMcuId(mcuId, true)
+  if type(prefs) ~= "table" then return widget._inflightPrefs end
+  widget._inflightPrefs = prefs
+  Setup.log("store re-read: %s", tostring(path))
+  return prefs
+end
+
 --- The drive belonging to this widget, constructed on first use and re-settled whenever the
 -- per-model store has been re-read.
 --
@@ -1123,7 +1201,10 @@ end
 -- same trap widgets/dashboard/runtime.lua documents for its own theme reload.
 function M.get(widget)
   if type(widget) ~= "table" then return nil end
-  local prefs = widget.modelPreferences
+  -- The overlay's own copy where the file has moved under the widget's, and the widget's
+  -- otherwise. See freshPreferences: the loader the widget's own reload goes through serves a
+  -- cache it never invalidates, so a table arriving from there can be new and stale at once.
+  local prefs = freshPreferences(widget) or widget.modelPreferences
   local drive = widget._inflight
   if drive ~= nil and drive._source == prefs then return drive end
 
