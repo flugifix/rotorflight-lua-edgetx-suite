@@ -178,8 +178,9 @@ local function metrics(w, h, fullscreen)
   m.rowW = w - m.rowX - m.pad
   m.rowNumX = m.rowX + math.max(2, math.floor(m.rowW * 0.035 + 0.5))
   m.rowTrimX = m.rowX + math.floor(m.rowW * 0.118 + 0.5)
-  m.rowNameX = m.rowX + math.floor(m.rowW * 0.294 + 0.5)
-  m.rowValueW = math.floor(m.rowW * 0.30 + 0.5)
+  m.rowNameX = m.rowX + math.floor(m.rowW * 0.26 + 0.5)
+  m.rowValueW = math.floor(m.rowW * 0.22 + 0.5)
+  m.rowNameW = (m.rowX + m.rowW) - m.rowValueW - m.rowNameX - 6
 
   m.leftX = math.floor(w * 0.025 + 0.5)
   m.leftW = m.rowX - m.leftX - m.pad
@@ -214,6 +215,39 @@ end
 local function appendCentredLabel(children, x, y, w, boxH, text, color, font, align, m)
   appendLabel(children, x, y + math.floor((boxH - fontHeight(font)) / 2) + m.textOff,
     w, text, color, font, align)
+end
+
+-- Roughly how wide one character of a font is. The firmware will not say, and a label whose text
+-- is wider than its box does not clip it -- it WRAPS, onto the row below and off the bottom of
+-- the screen. So a name that cannot fit is cut here instead, on a budget that over-estimates:
+-- measured on a rendered frame the small font runs about 6.2 pixels a character and this reserves
+-- seven, so the cut is early rather than late and no line ever wraps.
+local CHAR_W_RATIO = 0.5
+
+--- `text`, cut to what fits in `width` at `font`. Cut without an ellipsis: three dots cost three
+-- of the characters that were the reason to cut, and on a parameter name the front is what
+-- identifies it.
+local function textFits(text, width, font)
+  if type(text) ~= "string" then return true end
+  return (#text * math.max(1, fontHeight(font) * CHAR_W_RATIO)) <= width
+end
+
+local function fitText(text, width, font)
+  if type(text) ~= "string" then return text end
+  local budget = math.floor(width / math.max(1, fontHeight(font) * CHAR_W_RATIO))
+  if budget < 1 then budget = 1 end
+  if #text <= budget then return text end
+  return string.sub(text, 1, budget)
+end
+
+--- `long` where it fits, `short` where it does not, cut only if neither does.
+--
+-- A caption or a hint carries more on a wide screen than on a narrow one, and the alternative --
+-- one wording cut in the middle -- loses the end of the sentence on every radio rather than on
+-- the small one. The pair is two i18n keys and the choice is made per screen.
+local function pickText(long, short, width, font)
+  if textFits(long, width, font) then return long end
+  return fitText(short, width, font)
 end
 
 local function formatValue(value)
@@ -314,9 +348,10 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   local setName = (snapshot.setSource == "standard")
     and t("widgets.dashboard.inflight_hdr_standard", "standard")
     or t("widgets.dashboard.inflight_hdr_custom", "custom")
-  appendCentredLabel(children, m.pad, 0, math.floor(w * 0.48), m.headerH,
-    t("widgets.dashboard.inflight_title", "TUNING") .. " - "
-      .. t("widgets.dashboard.inflight_hdr_set", "set:") .. " " .. setName,
+  local titleW = math.floor(w * 0.48)
+  appendCentredLabel(children, m.pad, 0, titleW, m.headerH,
+    fitText(t("widgets.dashboard.inflight_title", "TUNING") .. " - "
+      .. t("widgets.dashboard.inflight_hdr_set", "set:") .. " " .. setName, titleW, m.font),
     p.text, m.font, LEFT, m)
 
   -- The profile, in dim text: it is the thing the pilot is tuning and the thing his undo lives
@@ -324,8 +359,9 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   -- can see it without asking for it.
   local profile = t("widgets.dashboard.inflight_profile", "PID profile") .. " "
     .. (snapshot.profile and formatValue(snapshot.profile) or UNKNOWN_VALUE)
+  local backupText = nil
   if snapshot.backup ~= nil and snapshot.backup.profile ~= nil then
-    profile = profile .. "  (" .. t("widgets.dashboard.inflight_hdr_backup", "backup")
+    backupText = "  (" .. t("widgets.dashboard.inflight_hdr_backup", "backup")
       .. ": " .. tostring(snapshot.backup.profile) .. ")"
   end
 
@@ -341,9 +377,16 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   }
   appendCentredLabel(children, liveX, 0, liveW, m.headerH, liveText, liveColor, m.font, LEFT, m)
 
+  -- The backup is dropped whole rather than cut in half where the header is too narrow for
+  -- both. On the shortest radio the box is 149 pixels and the pair needs 182, and a label that
+  -- does not fit wraps -- inside a header bar, onto a line that is not there.
   local profileX = math.floor(w * 0.48)
-  appendCentredLabel(children, profileX, 0, liveX - m.pad - dotR * 2 - m.pad - profileX, m.headerH,
-    profile, p.dim, m.small, RIGHT, m)
+  local profileW = liveX - m.pad - dotR * 2 - m.pad - profileX
+  if backupText ~= nil and textFits(profile .. backupText, profileW, m.small) then
+    profile = profile .. backupText
+  end
+  appendCentredLabel(children, profileX, 0, profileW, m.headerH,
+    fitText(profile, profileW, m.small), p.dim, m.small, RIGHT, m)
 end
 
 --- The six bank chips, and one caption beside them.
@@ -415,7 +458,7 @@ local function appendChips(children, widget, m, t, p, interactive)
     captionColor = p.dim
   end
   appendCentredLabel(children, m.chipEnd, m.chipY, m.chipCaptionW, m.chipH,
-    captionText, captionColor, m.small, LEFT, m)
+    fitText(captionText, m.chipCaptionW, m.small), captionColor, m.small, LEFT, m)
 end
 
 --- The parameter the pilot is on: its name, where it sits, and its value in the accent, large.
@@ -488,7 +531,9 @@ local function appendRows(children, widget, m, w, t, p, interactive)
   local inset = interactive and OUTLINE_W or 0
 
   appendLabel(children, m.rowNumX, m.bodyY - m.smallH - 2 + m.textOff, rowW,
-    t("widgets.dashboard.inflight_row_caption", "row = trim = inc/dec window"), p.dim, m.small, LEFT)
+    pickText(t("widgets.dashboard.inflight_row_caption", "row = trim = inc/dec window"),
+             t("widgets.dashboard.inflight_row_caption_short", "row = trim"), rowW, m.small),
+    p.dim, m.small, LEFT)
 
   for row = 1, Functions.ROW_COUNT do
     local entry = rows[row] or {}
@@ -542,9 +587,11 @@ local function appendRows(children, widget, m, w, t, p, interactive)
       -- parameter name and a number have to fit in a third of the screen, and the row a pilot is
       -- on is told apart by its colour and its frame rather than by its size.
       local label = entry.name or t("widgets.dashboard.inflight_unassigned", "Unassigned")
-      appendCentredLabel(children, m.rowNameX, rowY, w - m.pad - m.rowValueW - m.rowNameX, m.rowH - 2,
-        label, isActive and p.text or p.dim, m.small, LEFT, m)
-      appendCentredLabel(children, w - m.pad - m.rowValueW, rowY, m.rowValueW, m.rowH - 2,
+      appendCentredLabel(children, m.rowNameX, rowY, m.rowNameW, m.rowH - 2,
+        fitText(label, m.rowNameW, m.small), isActive and p.text or p.dim, m.small, LEFT, m)
+      -- Four pixels clear of the row's own frame, which is two pixels wide and was taking the
+      -- last column of every value's last digit.
+      appendCentredLabel(children, m.rowX + m.rowW - m.rowValueW - 4, rowY, m.rowValueW, m.rowH - 2,
         formatValue(entry.value), isActive and p.text or p.dim, m.small, RIGHT, m)
     end
   end
@@ -648,15 +695,21 @@ local function appendActions(children, widget, m, w, t, p)
   local snapshot = widget.state.inflight or {}
   local hintW = w - m.rowX - m.pad
   appendLabel(children, m.rowX, m.hintY, hintW,
-    t("widgets.dashboard.inflight_hint_tap", "tap = one pulse = one step"), p.text, m.small, LEFT)
+    pickText(t("widgets.dashboard.inflight_hint_tap", "tap = one pulse = one step"),
+             t("widgets.dashboard.inflight_hint_tap_short", "tap = one step"), hintW, m.small),
+    p.text, m.small, LEFT)
   appendLabel(children, m.rowX, m.hintY + m.lineH, hintW,
-    t("widgets.dashboard.inflight_hint_hold", "hold = pulses at the board's rate"), p.dim, m.small, LEFT)
+    pickText(t("widgets.dashboard.inflight_hint_hold", "hold = pulses at the board's rate"),
+             t("widgets.dashboard.inflight_hint_hold_short", "hold = repeats"), hintW, m.small),
+    p.dim, m.small, LEFT)
   -- The third line names the trim the pilot actually configured, because the whole point of it is
   -- that he does not have to look at the screen to use it.
   if snapshot.activeTrim ~= nil then
+    local head = t("widgets.dashboard.inflight_hint_trim", "or the") .. " " .. snapshot.activeTrim .. " "
     appendLabel(children, m.rowX, m.hintY + m.lineH * 2, hintW,
-      t("widgets.dashboard.inflight_hint_trim", "or the") .. " " .. snapshot.activeTrim .. " "
-        .. t("widgets.dashboard.inflight_hint_trim_tail", "trim, eyes off"), p.dim, m.small, LEFT)
+      pickText(head .. t("widgets.dashboard.inflight_hint_trim_tail", "trim, eyes off"),
+               head .. t("widgets.dashboard.inflight_hint_trim_tail_short", "trim"),
+               hintW, m.small), p.dim, m.small, LEFT)
   end
 end
 
