@@ -195,6 +195,11 @@ local function metrics(w, h, fullscreen)
   m.actionH = fullscreen and math.max(18, math.floor(h * 0.206 + 0.5)) or 0
   m.actionY = fullscreen and (h - m.actionH - math.max(3, math.floor(h * 0.029 + 0.5))) or h
   m.buttonW = math.floor(w * 0.271 + 0.5)
+  -- The hints start clear of the two step buttons, not at the row column: the buttons are wider
+  -- than the space to the left of that column and the first letter of every hint was drawn
+  -- underneath the plus.
+  m.hintX = math.max(m.rowX, m.pad * 3 + m.buttonW * 2)
+  m.hintW = w - m.hintX - m.pad
   -- The glyph inside the step button, at the largest rung the button is tall enough to hold.
   m.glyphFont = (m.actionH >= 80) and XXLSIZE or DBLSIZE
   m.glyphH = fontHeight(m.glyphFont)
@@ -716,12 +721,12 @@ local function appendActions(children, widget, m, w, t, p)
   end
 
   local snapshot = widget.state.inflight or {}
-  local hintW = w - m.rowX - m.pad
-  appendLabel(children, m.rowX, m.hintY, hintW,
+  local hintW = m.hintW
+  appendLabel(children, m.hintX, m.hintY, hintW,
     pickText(t("widgets.dashboard.inflight_hint_tap", "tap = one pulse = one step"),
              t("widgets.dashboard.inflight_hint_tap_short", "tap = one step"), hintW, m.small),
     p.text, m.small, LEFT)
-  appendLabel(children, m.rowX, m.hintY + m.lineH, hintW,
+  appendLabel(children, m.hintX, m.hintY + m.lineH, hintW,
     pickText(t("widgets.dashboard.inflight_hint_hold", "hold = the board repeats"),
              t("widgets.dashboard.inflight_hint_hold_short", "hold = repeats"), hintW, m.small),
     p.dim, m.small, LEFT)
@@ -729,7 +734,7 @@ local function appendActions(children, widget, m, w, t, p)
   -- that he does not have to look at the screen to use it.
   if snapshot.activeTrim ~= nil then
     local head = t("widgets.dashboard.inflight_hint_trim", "or the") .. " " .. snapshot.activeTrim .. " "
-    appendLabel(children, m.rowX, m.hintY + m.lineH * 2, hintW,
+    appendLabel(children, m.hintX, m.hintY + m.lineH * 2, hintW,
       pickText(head .. t("widgets.dashboard.inflight_hint_trim_tail", "trim, eyes off"),
                head .. t("widgets.dashboard.inflight_hint_trim_tail_short", "trim"),
                hintW, m.small), p.dim, m.small, LEFT)
