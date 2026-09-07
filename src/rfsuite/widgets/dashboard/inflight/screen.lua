@@ -835,6 +835,44 @@ local function describeSet(snapshot, t)
   return text
 end
 
+--- Every reason a backup or a restore was refused, in words a pilot can act on.
+--
+-- The pilot's third radio round asked for exactly this: a refusal that names a code he has never
+-- seen is a button that did nothing. Each of them says what is wrong AND where he changes it.
+local function refusalWords(reason, t)
+  if reason == "unset" then
+    return t("widgets.dashboard.inflight_refuse_unset",
+      "Choose the backup profile in the settings")
+  end
+  if reason == "same" then
+    return t("widgets.dashboard.inflight_refuse_same",
+      "The backup profile is the one being flown: choose another")
+  end
+  if reason == "other_profile" then
+    return t("widgets.dashboard.inflight_restore_other_profile",
+      "The backup was taken from another profile: switch back to it first")
+  end
+  if reason == "unprimed" then
+    return t("widgets.dashboard.inflight_backup_unprimed", "Read the board before taking a backup")
+  end
+  if reason == "range" then
+    return t("widgets.dashboard.inflight_refuse_range",
+      "This flight controller has no such profile")
+  end
+  if reason == "no_active" then
+    return t("widgets.dashboard.inflight_refuse_no_active",
+      "The profile being flown is unknown")
+  end
+  if reason == "no_link" then
+    return t("widgets.dashboard.inflight_refuse_no_link", "No link to the flight controller")
+  end
+  if reason == "armed" then
+    return t("widgets.dashboard.inflight_refuse_armed", "Disarm first")
+  end
+  return t("widgets.dashboard.inflight_transfer_refused", "Profile copy refused")
+    .. ": " .. tostring(reason)
+end
+
 --- Whether an undo exists, and what the last attempt at making one did.
 --
 -- A refusal is shown HERE rather than on the delta line below, because this is the line under the
@@ -847,15 +885,7 @@ local function describeBackup(snapshot, t)
     return t("widgets.dashboard.inflight_transfer_busy", "Copying profile")
   end
   if type(transfer) == "table" and transfer.state == "refused" then
-    if transfer.reason == "unprimed" then
-      return t("widgets.dashboard.inflight_backup_unprimed", "Read the board before taking a backup")
-    end
-    if transfer.reason == "other_profile" then
-      return t("widgets.dashboard.inflight_restore_other_profile",
-        "The backup was taken from another profile: switch back to it first")
-    end
-    return t("widgets.dashboard.inflight_transfer_refused", "Profile copy refused")
-      .. ": " .. tostring(transfer.reason)
+    return refusalWords(transfer.reason, t)
   end
   if type(transfer) == "table" and transfer.state == "error" then
     return t("widgets.dashboard.inflight_transfer_failed", "Profile copy failed")
@@ -871,6 +901,12 @@ local function describeBackup(snapshot, t)
         .. tostring(backup.source) .. ")"
     end
     return text
+  end
+  -- No backup, and the reason is usually that no profile has been chosen to keep one in. Saying
+  -- WHERE to choose it is the difference between a screen that reports a state and one a pilot can
+  -- act on: the two buttons beside this line read "Backup to -" until he does.
+  if (tonumber(snapshot.backupProfile) or 0) <= 0 then
+    return refusalWords("unset", t)
   end
   return t("widgets.dashboard.inflight_backup_none", "No backup")
 end
@@ -939,10 +975,10 @@ end
 -- screen the suite runs on. The chips ARE here, as a read-out: they are the one part of the live
 -- surface that still says something on the ground -- which bank a step would land in.
 function M.buildGround(children, widget, m, w, h, t, p)
-  local snapshot = widget.state.inflight or {}
   local drive = widget._inflight
   local Prime = prime()
   local armed = (widget.state and widget.state.armed) == true
+  local state = widget.state
 
   appendChips(children, widget, m, t, p, false)
 
@@ -951,10 +987,44 @@ function M.buildGround(children, widget, m, w, h, t, p)
     t("widgets.dashboard.inflight_check", "SETUP") .. ": " .. M.describeCheck(M.checkVerdict(widget), t),
     p.text, m.small, LEFT)
   y = y + m.lineH
-  appendLabel(children, m.pad, y, w - m.pad * 2,
-    describePrime(snapshot, t) .. "  /  " .. describeSet(snapshot, t), p.text, m.small, LEFT)
+
+  -- The two lines a run MOVES, drawn as reactive closures rather than as text baked into the tree.
+  --
+  -- This is the pilot's third radio round. A prime bumped the drive's epoch on every reply, the
+  -- epoch is in the widget's render key, and the surface is forty-five objects -- so the whole tree
+  -- came down and went up again once per reply while the replies were being parsed, and his radio
+  -- stopped answering mid-read with nothing in the fault log at all. A counter needs a string per
+  -- frame, not a tree, and that is what these two are.
+  children[#children + 1] = {
+    type = "label", x = m.pad, y = y, w = w - m.pad * 2,
+    color = p.text, align = LEFT, font = m.small,
+    text = function()
+      local snap = state.inflight
+      if type(snap) ~= "table" then return "" end
+      return describePrime(snap, t) .. "  /  " .. describeSet(snap, t)
+    end
+  }
   y = y + m.lineH
-  appendLabel(children, m.pad, y, w - m.pad * 2, describeBackup(snapshot, t), p.text, m.small, LEFT)
+
+  children[#children + 1] = {
+    type = "label", x = m.pad, y = y, w = w - m.pad * 2,
+    color = p.text, align = LEFT, font = m.small,
+    text = function()
+      local snap = state.inflight
+      if type(snap) ~= "table" then return "" end
+      return describeBackup(snap, t)
+    end
+  }
+  y = y + m.lineH
+
+  -- What to do here, in the order it is done in. The pilot met this screen with four buttons and
+  -- no idea which one comes first; the whole flow is four words and it is worth the line.
+  appendLabel(children, m.pad, y, w - m.pad * 2,
+    pickText(t("widgets.dashboard.inflight_flow",
+                "1 choose profile - 2 Backup - 3 fly - 4 Delta / Restore"),
+             t("widgets.dashboard.inflight_flow_short", "1 profile - 2 Backup - 3 fly - 4 Restore"),
+             w - m.pad * 2, m.small),
+    p.dim, m.small, LEFT)
   y = y + m.lineH + m.pad
 
   -- Why the ground half is refusing, when it is not simply that the board is armed. The one case
@@ -974,20 +1044,27 @@ function M.buildGround(children, widget, m, w, h, t, p)
       t("widgets.dashboard.inflight_ground_no_arm", "Arm sensor not seen: is telemetry sensor 99 (ARM) selected?"),
       p.warn, m.small, CENTER, m)
   elseif drive ~= nil and Prime ~= nil then
-    local slot = math.floor(tonumber(drive.settings.backup_profile) or 0)
+    -- A profile nobody has chosen is a dash and not a zero. "Backup to 0" reads as a profile
+    -- number on a board whose profiles start at one, and the pilot read it as one.
+    local profile = math.floor(tonumber(drive.settings.backup_profile) or 0)
+    local slot = (profile > 0) and tostring(profile) or UNKNOWN_VALUE
     local buttonW = math.floor((w - m.pad * 4) / 3)
     appendAction(children, m, m.pad, y, buttonW,
       t("widgets.dashboard.inflight_prime", "Prime"), p, function()
+        -- Refused while one is already running. A second press would put a second chain into the
+        -- same queue with no order between the two, and the surface has no way of showing which of
+        -- them the counter belongs to.
+        if Prime.isRunning(drive) then return end
         Prime.start(widget, drive)
         widget._tuningKeyDirty = true
       end)
     appendAction(children, m, m.pad * 2 + buttonW, y, buttonW,
-      t("widgets.dashboard.inflight_backup", "Backup to") .. " " .. tostring(slot), p, function()
+      t("widgets.dashboard.inflight_backup", "Backup to") .. " " .. slot, p, function()
         Prime.backup(widget, drive)
         widget._tuningKeyDirty = true
       end)
     appendAction(children, m, m.pad * 3 + buttonW * 2, y, buttonW,
-      t("widgets.dashboard.inflight_restore", "Restore from") .. " " .. tostring(slot), p, function()
+      t("widgets.dashboard.inflight_restore", "Restore from") .. " " .. slot, p, function()
         Prime.restore(widget, drive)
         widget._tuningKeyDirty = true
       end)

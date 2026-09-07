@@ -266,9 +266,24 @@ local function abandon(drive, prime, why)
   logPrime("prime abandoned: %s", tostring(why))
 end
 
-local function advanced(drive, prime)
+--- One more reply is in. The counter moves and the epoch does NOT.
+--
+-- This is the pilot's third radio round, and it is the failure that froze his radio rather than
+-- merely slowing it. The epoch is in the widget's tuning render key, so every bump asked for the
+-- whole surface to be torn down and built again -- forty-five objects, throttled to twice a second,
+-- which is once per reply for a prime whose replies arrive every half second. His widget_2.log has
+-- the instruction budget climbing 35 -> 60 -> 70 % of a five-second peak across a prime and then
+-- stopping mid-record with no fault line at all: the firmware's LVGL sweep of the tree runs in the
+-- same 20 000-instruction call and OUTSIDE the pcall the entry point wraps refresh in, so nothing
+-- of ours can ever see it and the only witness is the screen.
+--
+-- What the pilot needs to see while a prime runs is a counter, and a counter does not need a tree.
+-- The counters travel on the published snapshot, which Drive's publish swaps atomically whenever
+-- they move, and the ground surface reads them through a reactive text closure -- one formatted
+-- string per frame, no objects. The surface is rebuilt when the prime STARTS and when it ENDS,
+-- because those change what is on it.
+local function advanced(_drive, prime)
   prime.done = (prime.done or 0) + 1
-  bump(drive)
 end
 
 --- One handler for every message this module sends: the queue's own clear is an abandon, and
@@ -471,6 +486,10 @@ local function applySet(drive, prime, derived, skipped)
   drive.bankValues = derived.bankValues
   drive.set = derived.set
   drive.setSource = "board"
+  -- The one place inside a run that must move the epoch. Everything else a prime does travels on
+  -- the snapshot and is read by a closure, but the SET is the row list itself -- six names built
+  -- into the tree -- and a tree built from the documented layout cannot show the board's.
+  bump(drive)
   logPrime("slot table gave %d cell(s) over %d band(s)", derived.placed, #derived.bands)
 
   -- The selection may be pointing at a cell the board's own table does not have.
@@ -634,12 +653,13 @@ local function sendValues(widget, drive, prime)
   return sendValueRead(widget, drive, prime, queue)
 end
 
+-- Moving from one phase of a run to the next changes a word on one line and nothing else on the
+-- surface, and that line is a reactive closure. No epoch, so no rebuild -- see `advanced` above.
 local function startValues(widget, drive, prime)
   prime.phase = M.PHASE_VALUES
   prime.valueAt = 1
   prime.mapped = 0
   prime.unmapped = 0
-  bump(drive)
   return sendValues(widget, drive, prime)
 end
 
@@ -681,7 +701,6 @@ local function startDerive(drive, prime)
     prime.derivation = M.newDerivation(prime.records, prime.map,
       drive.settings.bank_ch, drive.settings.value_ch)
   end
-  bump(drive)
 end
 
 --- One slice of the work that turns the board's slot table into something, taken from the widget's
@@ -698,7 +717,6 @@ local function stepDerivation(widget, drive)
     if not done then return true end
     prime.comparison = nil
     applyComparison(drive, prime, result)
-    bump(drive)
     startValues(widget, drive, prime)
     return true
   end
@@ -707,7 +725,6 @@ local function stepDerivation(widget, drive)
     -- The standard layout with no comparison to run: the receiver map did not answer, or neither
     -- configured channel has a field that could carry the set. Said as its own verdict.
     applyComparison(drive, prime, nil)
-    bump(drive)
     startValues(widget, drive, prime)
     return true
   end

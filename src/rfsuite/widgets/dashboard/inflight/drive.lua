@@ -930,9 +930,19 @@ local function publish(widget, drive)
   -- widget's render key must not move while a finger is down -- the rebuild would delete the very
   -- object that reports the release -- so the guard below has to notice it changing.
   local holding = (drive.holdRow ~= nil)
+  -- And how far the ground half has got, which since the pilot's third radio round is the OTHER
+  -- thing no epoch bump reports. A prime used to move the epoch on every reply, and the epoch is
+  -- in the widget's render key -- so a prime tore the surface down and built it again once per
+  -- reply while its replies were being parsed, which is the mechanism behind a frozen radio and an
+  -- instruction budget at 70 % of its five-second peak. The counters travel here instead and the
+  -- surface reads them through a closure, so the number moves and the tree does not.
+  local prime = drive.prime
+  local primePhase, primeDone = nil, nil
+  if type(prime) == "table" then primePhase, primeDone = prime.phase, prime.done end
   if type(snapshot) == "table" and snapshot.epoch == epoch and snapshot.live == drive.live
     and snapshot.bank == drive.bank and snapshot.row == drive.row
-    and snapshot.holding == holding then
+    and snapshot.holding == holding
+    and snapshot.primePhase == primePhase and snapshot.primeDone == primeDone then
     return
   end
 
@@ -980,7 +990,6 @@ local function publish(widget, drive)
   -- goes on being appended to; a snapshot holding a reference to it is not a snapshot, and the
   -- screen wants the number anyway -- how many of the board's slots the overlay cannot drive is a
   -- fact the pilot needs, and it was being published in a form the screen never showed.
-  local prime = drive.prime
   local primeState = nil
   if type(prime) == "table" then
     primeState = {
@@ -1045,6 +1054,11 @@ local function publish(widget, drive)
     profile = drive.profile,
     rateProfile = drive.rateProfile,
     prime = primeState,
+    -- The two scalars the guard above compares. They are the same numbers primeState carries; a
+    -- copy of them sits here so that the guard reads one flat table rather than reaching into a
+    -- nested one that may be nil.
+    primePhase = primePhase,
+    primeDone = primeDone,
     -- Which of the two layouts the rows above came from: the board's own slot table once the
     -- prime has read it, the documented one until then and whenever the board's yields nothing
     -- usable. It is on the screen because a set that silently fell back to the reference layout
@@ -1054,6 +1068,10 @@ local function publish(widget, drive)
     -- board in that mode, so its table is read to be compared rather than to be believed.
     compare = compareState,
     backup = backupState,
+    -- Which profile the pilot chose as the undo, 0 when he has chosen none. On the snapshot
+    -- because the ground surface says where to set it when it is unset, and a reactive closure
+    -- reads the snapshot and nothing else.
+    backupProfile = math.floor(tonumber(drive.settings.backup_profile) or 0),
     transfer = transferState
   }
 end
