@@ -1191,7 +1191,17 @@ local function freshPreferences(widget)
   if stamp == nil then return widget._inflightPrefs end
   if stamp == widget._inflightStamp then return widget._inflightPrefs end
 
+  -- The FIRST reading seeds and reads nothing. What the widget was handed at start-up came off
+  -- the card a moment earlier -- the runtime loads the store on the connect, and the cache that
+  -- defeats a later reload was fresh then -- so there is nothing to correct yet, and forcing a
+  -- read here puts a whole file parse on a cold-start pass. Measured on a radio: three runs out
+  -- of three raised `CPU limit` in this function about thirteen seconds in, on the pass this
+  -- seed replaces. A stamp is a state, so a seed loses nothing: the next real change still
+  -- differs from it.
+  local seeding = (widget._inflightStamp == nil)
   widget._inflightStamp = stamp
+  if seeding then return widget._inflightPrefs end
+
   local MP = requireModule("lib/model_preferences.lua")
   if type(MP) ~= "table" or type(MP.loadByMcuId) ~= "function" then return widget._inflightPrefs end
   local prefs = MP.loadByMcuId(mcuId, true)

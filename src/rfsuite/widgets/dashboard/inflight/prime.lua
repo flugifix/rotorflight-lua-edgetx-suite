@@ -1413,13 +1413,27 @@ function M.tick(widget, drive)
   -- records the profile it was taken from, so a second interlock cycle on the same profile finds
   -- one already made and sends nothing, while a profile change makes the next cycle take a fresh
   -- one. No counter of its own, and nothing to reset.
+  --
+  -- THE REQUEST IS A STATE AND NOT A SIGNAL, and that distinction is a defect this round
+  -- measured rather than reasoned about. The first cut cleared the flag on the line above the
+  -- test below it, so an interlock thrown while the values were not yet read consumed the
+  -- request and made no undo at all -- silently, for the rest of that interlock cycle. It is a
+  -- pilot-plausible sequence and it was measured: a momentary arming on the bench cleared the
+  -- MSP queue, the value re-read came back `abandoned`, and the interlock forty seconds later
+  -- produced nothing. So the flag stands until a backup is actually asked for, or until there is
+  -- one for this profile already, or until the phase leaves the ground -- which is where the
+  -- drive clears it, on every transition that is not into `ground`.
   if drive.autoBackupWanted == true then
-    drive.autoBackupWanted = false
     local prime = drive.prime
     if type(prime) == "table" and prime.phase == M.PHASE_DONE then
       local active0 = M.activeProfile0(drive)
       local have = type(drive.backup) == "table" and tonumber(drive.backup.source) or nil
-      if active0 == nil or have == nil or (have - 1) ~= active0 then
+      if active0 ~= nil and have ~= nil and (have - 1) == active0 then
+        -- There is one already, and it describes the profile being flown. Nothing to ask for,
+        -- and nothing to keep asking about.
+        drive.autoBackupWanted = false
+      else
+        drive.autoBackupWanted = false
         logPrime("automatic backup on the interlock")
         M.backup(widget, drive)
         return
