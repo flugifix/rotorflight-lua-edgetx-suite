@@ -33,7 +33,13 @@ return function(ctx)
   local flow = tr(i18n, "help_flow",
     "The flight controller's own half is in Setup > Controls > In-Flight Tuning.")
 
+  -- The switch that shows the feature at all is not on this page, and the widget adopts a
+  -- change to it on its own clock: the preferences reload it depends on is held back while
+  -- the craft is armed, so a switch thrown in the air is taken up on the ground.
+  local preview = tr(i18n, "help_preview",
+    "Settings > General > Preview is what shows this feature. The widget takes a change to it after landing.")
+
   return {
-    message = intro .. NL .. trims .. NL .. setup .. NL .. flow
+    message = intro .. NL .. trims .. NL .. setup .. NL .. flow .. NL .. preview
   }
 end
