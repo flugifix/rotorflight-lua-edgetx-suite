@@ -7,20 +7,20 @@ local function tr(i18n, key, fallback)
   return fallback
 end
 
+-- The blank line between two paragraphs of the help sheet.
+local NL = "\n\n"
+
 return function(ctx)
   local i18n = ctx and ctx.i18n or nil
 
   local intro = tr(i18n, "help_message",
-    "Choose the interlock switch, the channels, variables and trims it uses, and a spare PID profile as the undo.")
+    "Choose the interlock switch and the channels, variables and trims the overlay uses on this radio.")
 
-  -- The two buttons are the only things on this page that change anything but the settings, so
-  -- the help says what each of them writes and that both ask first. They write different things:
-  -- one the radio's own model, the other the flight controller's adjustment slots.
+  -- The one button on this page that changes anything but the settings, so the help says what it
+  -- writes and that it asks first. Its counterpart -- the one that writes the flight controller's
+  -- own adjustment slots -- went to the page that owns the flight controller's half.
   local setup = tr(i18n, "help_setup",
     "Set up the model writes the mixer lines, the variables and the trim modes, after showing what it removes.")
-
-  local setupFc = tr(i18n, "help_setup_fc",
-    "Writes the standard set into the adjustment slots, after showing what it overwrites. Standard layout only.")
 
   -- The trim layout is the one setting a pilot meets with his thumbs rather than his eyes, so
   -- the help says what each of the three trims does rather than leaving the field labels to
@@ -28,21 +28,12 @@ return function(ctx)
   local trims = tr(i18n, "help_trims",
     "Walk and adjust: the bank trim steps the bank, the walk trim the row in it, the adjust trim the value.")
 
-  -- What the ground surface is FOR, in the order a pilot uses it. The three buttons are three
-  -- separate ideas and nothing on the screen says which comes first; the pilot who flew round 3
-  -- pressed the read button because it was on the left.
+  -- Where the other half is. The split is the pilot's after the third radio round and the one
+  -- thing it costs him is knowing which page a setting is on, so both pages say.
   local flow = tr(i18n, "help_flow",
-    "On the ground: choose the backup profile here, take the backup, fly, then read the difference or restore.")
-
-  -- And the one button whose cost is worth stating. Reading the board is roughly twelve seconds
-  -- of round trips, and the overlay does it once per connect on its own -- so the button exists
-  -- for the case the automatic read cannot cover: an adjustment changed in the Configurator while
-  -- the radio stayed connected.
-  local read = tr(i18n, "help_read",
-    "Read once per connect, about twelve seconds. Read again only after changing adjustments in the Configurator.")
+    "The flight controller's own half is in Setup > Controls > In-Flight Tuning.")
 
   return {
-    message = intro .. "\n\n" .. trims .. "\n\n" .. flow .. "\n\n" .. read
-      .. "\n\n" .. setup .. "\n\n" .. setupFc
+    message = intro .. NL .. trims .. NL .. setup .. NL .. flow
   }
 end

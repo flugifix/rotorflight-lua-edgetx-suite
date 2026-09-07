@@ -1,4 +1,12 @@
--- Settings > Dashboard > In-flight tuning.
+-- Settings > Dashboard > In-flight tuning: the RADIO's half of it.
+--
+-- The flight controller's half -- the set layout, the step every slot is written with, the undo
+-- profile and the action that puts them on the board -- moved to Setup > Controls > In-Flight
+-- Tuning after the pilot's third radio round. They are not one job: this page is a mixer, two
+-- global variables, a switch and six trims, and it is true of the radio whether or not anything is
+-- connected; the other cannot be looked at without a flight controller. He kept finding the button
+-- that writes the board on a page he had opened to change a trim. The STORE does not move: both
+-- pages are views of one `inflight` section, because every key in it is per model.
 --
 -- Everything on this page is per MODEL: which switch arms the overlay, which channels and global
 -- variables this model's mixer devotes to the adjustment pair, and which trims stand in for its
@@ -29,11 +37,6 @@ local Common = nil
 local Controls = nil
 local Setup = nil
 local ConfirmDialog = nil
--- The flight controller action, loaded only when the button that uses it is pressed. It brings
--- inflight/fcsetup.lua and the whole adjustment function table with it, and the page's entry cost
--- is what the pilot's radio ran out of heap on -- so nothing that is not needed to DRAW the page
--- is loaded to draw it.
-local FcAction = nil
 
 local M = {}
 
@@ -57,8 +60,7 @@ local ui = {
   sections = {
     general = true,
     wiring = false,
-    trims = false,
-    undo = false
+    trims = false
   },
   config = nil,
   trimNames = nil
@@ -118,10 +120,6 @@ local function ensureLoaded()
   ui.gvarWalkDone = false
   ui.gvarConflicts = nil
   ui.planNotice = nil
-  ui.fcRun = nil
-  ui.fcNotice = nil
-  ui.fcProgress = nil
-  ui.fcPhase = nil
   ui.loaded = true
 end
 
@@ -130,11 +128,6 @@ end
 -- ui.runtime.markDirty does both, which is right for a field the pilot changed and wrong for the
 -- progress of a flight controller write: that changes the board, not the settings, and raising the
 -- edited flag for it would leave the page asking to save something nobody typed.
-local function requestRepaint()
-  local rebuild = ui.runtime and ui.runtime.requestRebuild
-  if type(rebuild) == "function" then rebuild() end
-end
-
 --- Whether this model already drives something with one of the two configured variables.
 --
 -- This replaces a PROPOSAL. The page used to walk the model for two variables nothing referred to
@@ -267,8 +260,6 @@ local function markValue(key, value)
   -- variable makes it a sentence about a setting nobody holds any more.
   if key == "value_gvar" or key == "bank_gvar" then ui.gvarWalkDone = false end
   ui.planNotice = nil
-  -- The verdict on the flight controller was reached about the channels that have just changed.
-  ui.fcNotice = nil
   ui.runtime.markValueChanged()
 end
 
@@ -448,31 +439,6 @@ end
 -- Setting the flight controller up
 -- ---------------------------------------------------------------------------
 
---- Hand the flight controller action its context, having loaded it first.
---
--- The action itself lives in fcaction.lua beside this file and is read off the card only here,
--- on the press. Everything it needs travels in the table: the page's text helper, the settings
--- being edited, the page state it reports into and the repaint it asks for. Loading it at the top
--- of this file instead would put the whole adjustment function table into the tool's heap for
--- every pilot who ever opens this page, which is the cost that froze one radio already.
-local function offerFcSetup(i18n)
-  if FcAction == nil then
-    FcAction = loadModule("app/pages/settings/dashboard/inflight/fcaction.lua")
-  end
-  if type(FcAction) ~= "table" or type(FcAction.offer) ~= "function" then
-    ui.fcNotice = t(i18n, "fc_unavailable", "This build cannot reach the flight controller.")
-    requestRepaint()
-    return
-  end
-  FcAction.offer({
-    i18n = i18n,
-    t = t,
-    config = ui.config,
-    state = ui,
-    repaint = requestRepaint
-  })
-end
-
 -- ---------------------------------------------------------------------------
 -- The sections
 -- ---------------------------------------------------------------------------
@@ -484,32 +450,10 @@ local function appendNote(children, x, y, w, text)
   return 24
 end
 
---- The line under the flight controller button while a run is on, drawn through a CLOSURE.
---
--- A moving number and a rebuild are two different things, and this page pays dearly for confusing
--- them: the read used to ask for a rebuild every time its percentage moved, which on the pilot's
--- radio was once per record for thirty-six records, on a tool with 134 kB of heap left. A closure
--- handed to lvgl.build runs in the firmware's reactive sweep and formats one string per frame,
--- which is what a counter needs and all it needs. The precedent is theirs -- every ESC page draws
--- its "unsaved" marker exactly this way.
---
--- The closure reads the page's own state and probes nothing.
-local function appendProgressNote(children, x, y, w, source)
-  children[#children + 1] = {
-    type = "label", x = x, y = y, w = w, color = COLOR_THEME_PRIMARY1, font = SMLSIZE,
-    text = function()
-      local fn = source()
-      if type(fn) ~= "function" then return "" end
-      local ok, text = pcall(fn)
-      if not ok or type(text) ~= "string" then return "" end
-      return text
-    end
-  }
-  return 24
-end
-
 local function buildGeneral(children, x, y, w, i18n)
   local cursorY = y
+  cursorY = cursorY + appendNote(children, x, cursorY, w,
+    t(i18n, "pointer_fc", "The set layout, the step size and the undo profile are in Setup > Controls."))
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "enabled", "Enabled"),
     ui.runtime.getBoolGetter("enabled"),
@@ -533,31 +477,6 @@ local function buildGeneral(children, x, y, w, i18n)
   }
   cursorY = cursorY + rowH
 
-  -- Which parameters the overlay offers, and whether it is allowed to put them on the board.
-  local setOptions = {
-    { value = Setup.SET_MODE_STANDARD, label = t(i18n, "set_mode_standard", "Standard") },
-    { value = Setup.SET_MODE_CUSTOM, label = t(i18n, "set_mode_custom", "Custom") }
-  }
-  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-    t(i18n, "set_mode", "Set layout"), setOptions, ui.config.set_mode,
-    function(value)
-      if ui.config.set_mode == value then return end
-      ui.config.set_mode = value
-      ui.checkDone = false
-      ui.planNotice = nil
-      ui.fcNotice = nil
-      ui.runtime.markDirty()
-    end)
-  if ui.config.set_mode == Setup.SET_MODE_CUSTOM then
-    cursorY = cursorY + appendNote(children, x, cursorY, w,
-      t(i18n, "set_mode_custom_note",
-        "The set is whatever the flight controller carries. Nothing is written to it."))
-  else
-    cursorY = cursorY + appendNote(children, x, cursorY, w,
-      t(i18n, "set_mode_standard_note",
-        "Six banks of six parameters, known in advance. The flight controller is read to compare."))
-  end
-
   cursorY = cursorY + appendNote(children, x, cursorY, w, describeCheck(i18n, checkResult()))
 
   -- The button that makes the model match what the verdict just reported. It sits here rather than
@@ -576,30 +495,6 @@ local function buildGeneral(children, x, y, w, i18n)
     cursorY = cursorY + appendNote(children, x, cursorY, w, ui.planNotice)
   end
 
-  -- The other half of the same job, and the only thing on this page that writes the FLIGHT
-  -- CONTROLLER. Offered in the standard layout alone: in the custom one the set is whatever the
-  -- board carries, and a button that overwrote it would overwrite the very thing being read.
-  if ui.config.set_mode ~= Setup.SET_MODE_CUSTOM then
-    children[#children + 1] = {
-      type = "button",
-      x = x + math.floor((w - btnW) / 2), y = cursorY, w = btnW, h = btnH,
-      text = t(i18n, "setup_fc", "Set up the flight controller"),
-      press = function()
-        -- One run at a time. A second press while the first chain is on the wire would put two
-        -- sets of writes into one queue with no order between them.
-        if ui.fcRun == nil then offerFcSetup(i18n) end
-      end
-    }
-    cursorY = cursorY + btnH + 6
-
-    -- While a run is on, the moving line; when it is over, the fixed one it left behind. Never
-    -- both, and the closure is not built at all once there is nothing for it to say.
-    if ui.fcProgress then
-      cursorY = cursorY + appendProgressNote(children, x, cursorY, w, function() return ui.fcProgress end)
-    elseif ui.fcNotice then
-      cursorY = cursorY + appendNote(children, x, cursorY, w, ui.fcNotice)
-    end
-  end
   return cursorY
 end
 
@@ -710,20 +605,10 @@ local function buildTrims(children, x, y, w, i18n)
   return cursorY
 end
 
-local function buildUndo(children, x, y, w, i18n)
-  local cursorY = y
-  cursorY = cursorY + appendNote(children, x, cursorY, w,
-    t(i18n, "undo_note", "The board saves an in-flight change itself, shortly after disarm, so the undo has to exist beforehand."))
-  cursorY = cursorY + appendNumber(children, x, cursorY, w,
-    t(i18n, "backup_profile", "Backup PID profile"), "backup_profile", 0, Setup.PROFILE_MAX)
-  return cursorY
-end
-
 local SECTIONS = {
   { key = "general", titleKey = "section_general", titleFallback = "In-flight tuning", build = buildGeneral },
   { key = "wiring", titleKey = "section_wiring", titleFallback = "Channels and variables", build = buildWiring },
-  { key = "trims", titleKey = "section_trims", titleFallback = "Rows and trims", build = buildTrims },
-  { key = "undo", titleKey = "section_undo", titleFallback = "Undo", build = buildUndo }
+  { key = "trims", titleKey = "section_trims", titleFallback = "Rows and trims", build = buildTrims }
 }
 
 function M.build(ctx)
@@ -756,34 +641,15 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  -- A READ the pilot walked away from is given up here, and its messages come out of the queue
-  -- with it. His third radio round is the reason: he pressed the button, watched a screen that
-  -- said nothing for twenty-eight seconds, pressed BACK -- and the chain went on running against
-  -- a page that no longer existed, finishing nine seconds later with nobody to tell.
-  --
-  -- A WRITE is not given up, and that is deliberate: stopped half way it leaves the flight
-  -- controller holding part of one adjustment set and part of another. The screen says so while it
-  -- runs, which is the honest way round.
-  if type(FcAction) == "table" and type(FcAction.cancel) == "function" then
-    pcall(FcAction.cancel, ui)
-  end
-
   Common.resetPageState(ui)
   ui.radio = nil
   ui.checkResult = nil
   ui.trimNames = nil
   ui.planNotice = nil
-  -- What is left after the cancel above: a write still on the wire, whose callbacks all ask
-  -- whether they still belong to the page's current run before touching anything.
-  ui.fcRun = nil
-  ui.fcProgress = nil
-  ui.fcPhase = nil
-  ui.fcNotice = nil
   Controls = nil
   Common = nil
   Setup = nil
   ConfirmDialog = nil
-  FcAction = nil
   t = nil
 end
 

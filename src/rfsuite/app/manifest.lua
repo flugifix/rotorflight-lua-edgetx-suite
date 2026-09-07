@@ -188,7 +188,10 @@ local manifest = {
         { id = "failsafe", title = "@i18n(app.modules.controls.failsafe)@", menuId = "setup_controls_failsafe_page", icon = "@pages/setup/controls/failsafe/icon.png", row = 1, col = 3, lockedWhileArmed = true },
         { id = "beepers", title = "@i18n(app.modules.controls.beepers)@", menuId = "beepers_menu", icon = "@pages/setup/controls/beepers/icon.png", row = 1, col = 4 },
         { id = "blackbox", title = "@i18n(app.modules.controls.blackbox)@", menuId = "blackbox_menu", icon = "@pages/setup/controls/blackbox/icon.png", row = 1, col = 5 },
-        { id = "stats", title = "@i18n(app.modules.controls.stats)@", menuId = "setup_controls_stats_page", icon = "@pages/setup/controls/stats/icon.png", row = 1, col = 6, lockedWhileArmed = true }
+        { id = "stats", title = "@i18n(app.modules.controls.stats)@", menuId = "setup_controls_stats_page", icon = "@pages/setup/controls/stats/icon.png", row = 1, col = 6, lockedWhileArmed = true },
+        { id = "inflight", title = "@i18n(app.modules.controls.inflight)@",
+          menuId = "setup_controls_inflight_page", icon = "@pages/setup/controls/adjustments/icon.png",
+          row = 2, col = 1, enabledWhen = "fblConnected", lockedWhileArmed = true }
       }
     },
     beepers_menu = {
@@ -538,6 +541,10 @@ local manifest = {
     },
     setup_controls_adjustments_page = {
       title = "@i18n(app.modules.controls.adjustments)@",
+      pages = {}
+    },
+    setup_controls_inflight_page = {
+      title = "@i18n(app.modules.controls.inflight)@",
       pages = {}
     },
     setup_controls_failsafe_page = {
