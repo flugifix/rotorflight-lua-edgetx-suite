@@ -117,7 +117,8 @@ local function ensureLoaded()
   ui.planNotice = nil
   ui.fcRun = nil
   ui.fcNotice = nil
-  ui.fcPercent = nil
+  ui.fcProgress = nil
+  ui.fcPhase = nil
   ui.loaded = true
 end
 
@@ -429,6 +430,30 @@ local function appendNote(children, x, y, w, text)
   return 24
 end
 
+--- The line under the flight controller button while a run is on, drawn through a CLOSURE.
+--
+-- A moving number and a rebuild are two different things, and this page pays dearly for confusing
+-- them: the read used to ask for a rebuild every time its percentage moved, which on the pilot's
+-- radio was once per record for thirty-six records, on a tool with 134 kB of heap left. A closure
+-- handed to lvgl.build runs in the firmware's reactive sweep and formats one string per frame,
+-- which is what a counter needs and all it needs. The precedent is theirs -- every ESC page draws
+-- its "unsaved" marker exactly this way.
+--
+-- The closure reads the page's own state and probes nothing.
+local function appendProgressNote(children, x, y, w, source)
+  children[#children + 1] = {
+    type = "label", x = x, y = y, w = w, color = COLOR_THEME_PRIMARY1, font = SMLSIZE,
+    text = function()
+      local fn = source()
+      if type(fn) ~= "function" then return "" end
+      local ok, text = pcall(fn)
+      if not ok or type(text) ~= "string" then return "" end
+      return text
+    end
+  }
+  return 24
+end
+
 local function buildGeneral(children, x, y, w, i18n)
   local cursorY = y
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
@@ -513,7 +538,11 @@ local function buildGeneral(children, x, y, w, i18n)
     }
     cursorY = cursorY + btnH + 6
 
-    if ui.fcNotice then
+    -- While a run is on, the moving line; when it is over, the fixed one it left behind. Never
+    -- both, and the closure is not built at all once there is nothing for it to say.
+    if ui.fcProgress then
+      cursorY = cursorY + appendProgressNote(children, x, cursorY, w, function() return ui.fcProgress end)
+    elseif ui.fcNotice then
       cursorY = cursorY + appendNote(children, x, cursorY, w, ui.fcNotice)
     end
   end
@@ -694,15 +723,28 @@ function M.build(ctx)
 end
 
 function M.onClose()
+  -- A READ the pilot walked away from is given up here, and its messages come out of the queue
+  -- with it. His third radio round is the reason: he pressed the button, watched a screen that
+  -- said nothing for twenty-eight seconds, pressed BACK -- and the chain went on running against
+  -- a page that no longer existed, finishing nine seconds later with nobody to tell.
+  --
+  -- A WRITE is not given up, and that is deliberate: stopped half way it leaves the flight
+  -- controller holding part of one adjustment set and part of another. The screen says so while it
+  -- runs, which is the honest way round.
+  if type(FcAction) == "table" and type(FcAction.cancel) == "function" then
+    pcall(FcAction.cancel, ui)
+  end
+
   Common.resetPageState(ui)
   ui.radio = nil
   ui.checkResult = nil
   ui.trimNames = nil
   ui.planNotice = nil
-  -- The run is dropped rather than cancelled: its callbacks all ask whether they still belong to
-  -- the page's current run before touching anything, and a write already on the wire is finished
-  -- by the queue, which is the state a flight controller should be left in.
+  -- What is left after the cancel above: a write still on the wire, whose callbacks all ask
+  -- whether they still belong to the page's current run before touching anything.
   ui.fcRun = nil
+  ui.fcProgress = nil
+  ui.fcPhase = nil
   ui.fcNotice = nil
   Controls = nil
   Common = nil

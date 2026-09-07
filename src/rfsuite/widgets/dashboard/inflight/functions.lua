@@ -711,4 +711,54 @@ function M.compare(records, map, bankChannel, valueChannel)
   return result
 end
 
+--- The same verdict from the FUNCTION IDS alone, which is one reply rather than one per slot.
+--
+-- MSP_GET_ADJUSTMENT_FUNCTION_IDS answers every slot's function in a single forty-two byte reply,
+-- and that is enough to say which slots of the set hold nothing, which hold the function the set
+-- wants, and which hold a different one. What it cannot say is whether a slot holding the right
+-- function watches the right channels through the right windows -- so the verdict carries
+-- `idsOnly`, and every caller that shows it says what was not looked at.
+--
+-- `ids` is 1-based by slot, the way the reply's own parse hands it over.
+function M.compareFunctionIds(ids, map, bankChannel, valueChannel)
+  if type(ids) ~= "table" then return nil end
+  local enaField = M.wireToAuxField(bankChannel, map)
+  local adjField = M.wireToAuxField(valueChannel, map)
+  if enaField == nil or adjField == nil then return nil end
+
+  local slots = M.standardSlots(enaField, adjField)
+  local empty, differ, list = 0, 0, {}
+  for i = 1, #slots do
+    local cell = slots[i]
+    local held = tonumber(ids[cell.slot0 + 1]) or 0
+    if held == 0 then
+      empty = empty + 1
+      list[#list + 1] = { slot0 = cell.slot0, id = cell.id, reason = "empty" }
+    elseif held ~= cell.id then
+      differ = differ + 1
+      list[#list + 1] = { slot0 = cell.slot0, id = cell.id, held = held, reason = "function" }
+    end
+  end
+
+  local total = #slots
+  local verdict = "match"
+  if total > 0 and empty == total then
+    verdict = "empty"
+  elseif (empty + differ) > 0 then
+    verdict = "differ"
+  end
+  return {
+    verdict = verdict,
+    total = total,
+    empty = empty,
+    differ = differ,
+    count = empty + differ,
+    slots = list,
+    -- The flag that keeps this verdict from being read as the one M.compare makes. A board whose
+    -- every slot names the right function can still have every window wrong, and this comparison
+    -- would call it a match.
+    idsOnly = true
+  }
+end
+
 return M

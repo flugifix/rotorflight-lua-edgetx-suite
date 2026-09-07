@@ -10,17 +10,26 @@
 --
 -- Four steps, and the middle one is the pilot's:
 --
---   1 READ    the receiver map (64), the function id of every slot (167) and the full record of
---             every slot the write will touch that is not already empty (156). Never 52: over
---             CRSF that reply overruns the flight controller's own reassembly buffer, which is
---             why their page reads the table one slot at a time as well.
---   2 PLAN    what each of those slots holds now and what it would hold, which of them are being
---             overwritten, and which of them belong to a switch on some other channel. Nothing is
---             written to build a plan and the plan is what the confirmation is worded from.
+--   1 READ    the receiver map (64) and the function id of every slot (167). TWO round trips, and
+--             that is the whole of the read: 167 answers all forty-two slots in one forty-two byte
+--             reply. Never 52 -- over CRSF that reply overruns the flight controller's own
+--             reassembly buffer, which is why their page reads the table one slot at a time.
+--   2 PLAN    what each slot of the set holds now and what it would hold, and which of them are
+--             therefore being overwritten. Nothing is written to build a plan and the plan is what
+--             the confirmation is worded from.
 --   3 WRITE   the thirty-six records, one MSP 53 each, chained from the previous reply, then one
 --             MSP 250 to commit. Refused before it starts and abandoned mid-chain if the model
 --             arms.
 --   4 VERIFY  read the same slots back with 156 and hold them against the set field by field.
+--
+-- The read used to ask 156 for every populated slot as well -- thirty-six further round trips at
+-- roughly three-quarters of a second each on a pilot's own radio, with nothing on the screen while
+-- they ran. What those records bought the PLAN was the channel each slot watches, which is one
+-- sentence in a confirmation; what they cost was thirty-six seconds in front of a button press.
+-- They are gone from the read and the sentence is gone with them: the plan says which slots hold
+-- another function and that their channel fields were not looked at, and the VERIFY step -- which
+-- reads the same records anyway, after the write, when their answer is the one that matters --
+-- does the field-by-field comparison.
 --
 -- The armed rule is the same one the ground half of the overlay follows and for the same reason:
 -- tasks/msp/runtime.lua clears its whole queue on every armed tick, so a write sent to an armed
@@ -100,7 +109,6 @@ local STEP_LIMIT = 125
 M.PHASE_IDLE = "idle"
 M.PHASE_RXMAP = "rxmap"
 M.PHASE_FUNCTION_IDS = "functionIds"
-M.PHASE_SLOTS = "slots"
 M.PHASE_PLANNED = "planned"
 M.PHASE_WRITING = "writing"
 M.PHASE_COMMIT = "commit"
@@ -216,7 +224,9 @@ function M.newRun(settings)
   return {
     settings = settings,
     phase = M.PHASE_IDLE,
-    records = {},
+    -- The records the READ-BACK collects. The read before the plan collects none: there is no
+    -- `records` table here any more, and a caller finding one is looking at a verify.
+    verifyRecords = {},
     functionIds = nil,
     map = nil,
     slotList = {},
@@ -237,6 +247,10 @@ local function callHandler(handlers, name, ...)
 end
 
 local function fail(run, handlers, reason)
+  -- A run the caller gave up on is not a run that failed. Its own queue clear comes back through
+  -- the error handlers a moment later, and without this the pilot would be told the write was
+  -- refused for something he never did.
+  if run.cancelled == true then return false end
   if run.phase == M.PHASE_ERROR then return false end
   run.phase = M.PHASE_ERROR
   run.error = tostring(reason or "failed")
@@ -262,6 +276,7 @@ end
 -- A chain of thirty-seven writes takes seconds, and a pilot can arm inside it. The runtime would
 -- drop the rest silently; this stops and says which slot it stopped at.
 local function stillAllowed(run, handlers)
+  if run.cancelled == true then return false end
   local refusal = M.armRefusal()
   if refusal ~= nil then
     fail(run, handlers, refusal)
@@ -270,18 +285,49 @@ local function stillAllowed(run, handlers)
   return true
 end
 
+--- The phases a run may be abandoned in: the READ, and the plan waiting for an answer.
+--
+-- Nothing past them is on this list and that is the point. A write chain stopped half way leaves
+-- the flight controller holding part of one adjustment set and part of another -- a state no
+-- screen describes and the pilot has no way of recognising in the air -- so a page that is left
+-- during the write lets the queue finish it. Which is why the screen says so while it runs.
+local CANCELLABLE = {
+  [M.PHASE_RXMAP] = true,
+  [M.PHASE_FUNCTION_IDS] = true,
+  [M.PHASE_PLANNED] = true
+}
+
+--- Give a run up, if it is in a phase that may be given up.
+--
+-- Answers whether it was. The messages still in the queue are dropped by client id -- the ground
+-- half of the overlay uses a different one, so a prime running beside this is not touched -- and
+-- the flag above keeps their error handlers from reporting the drop as a refusal.
+function M.cancel(run)
+  if type(run) ~= "table" then return false end
+  if CANCELLABLE[run.phase] ~= true then return false end
+  run.cancelled = true
+  run.phase = M.PHASE_IDLE
+  local queue = queueOf()
+  if queue ~= nil and type(queue.clear) == "function" then
+    pcall(queue.clear, queue, M.CLIENT)
+  end
+  logSetup("fc setup cancelled: nothing had been written")
+  return true
+end
+
 -- ---------------------------------------------------------------------------
 -- Reading the board
 -- ---------------------------------------------------------------------------
 
-local function sendSlotRead(run, handlers, command, slot, kind)
+--- One record of the READ-BACK. The only place in this module that asks 156 for anything.
+local function sendVerifyRead(run, handlers, slot)
   local queue = queueOf()
   if queue == nil then return fail(run, handlers, "no_link") end
   local api = apiModule("get_adjustment_range")
   if api == nil then return fail(run, handlers, "no_api") end
 
   queue:add({
-    command = command,
+    command = CMD_ADJ_RANGE,
     -- The slot index is 0-based on the wire, and a payload does not make this a write: it says
     -- which slot to answer for. The queue infers `isWrite` from a non-empty payload, so both are
     -- stated rather than left to it.
@@ -292,39 +338,27 @@ local function sendSlotRead(run, handlers, command, slot, kind)
     processReply = function(_, buf)
       local parsed = api.parse(buf)
       local decoded = type(parsed) == "table" and parsed.adjustment_range or nil
-      if type(decoded) == "table" then
-        if kind == "verify" then
-          run.verifyRecords[slot] = decoded
-        else
-          run.records[slot] = decoded
-        end
-      end
+      if type(decoded) == "table" then run.verifyRecords[slot] = decoded end
       run.done = run.done + 1
-      callHandler(handlers, "onProgress", run)
       run.slotAt = run.slotAt + 1
-      if kind == "verify" then
-        M.stepVerify(run, handlers)
-      else
-        M.stepRead(run, handlers)
-      end
+      -- The counters move here and the next record goes out from the same reply; whether anything
+      -- is REDRAWN for it is the caller's decision, and after the pilot's round-3 log it is not
+      -- taken per record. See fcaction.lua.
+      callHandler(handlers, "onProgress", run)
+      M.stepVerify(run, handlers)
     end,
-    errorHandler = replyFailed(run, handlers, kind == "verify" and "verify" or "slots")
+    errorHandler = replyFailed(run, handlers, "verify")
   })
   return true
 end
 
---- Ask for the next slot record of the READ, or move on to the plan when there are no more.
-function M.stepRead(run, handlers)
-  local slot = run.slotList[run.slotAt]
-  if slot == nil then
-    run.plan = M.buildPlan(run)
-    run.phase = M.PHASE_PLANNED
-    logSetup("fc setup planned: %s", run.plan.ok and "ok" or tostring(run.plan.refused))
-    callHandler(handlers, "onPlan", run, run.plan)
-    return true
-  end
-  if not stillAllowed(run, handlers) then return false end
-  return sendSlotRead(run, handlers, CMD_ADJ_RANGE, slot, "read")
+--- The read is over: build the plan and hand it to the pilot.
+local function planned(run, handlers)
+  run.plan = M.buildPlan(run)
+  run.phase = M.PHASE_PLANNED
+  logSetup("fc setup planned: %s", run.plan.ok and "ok" or tostring(run.plan.refused))
+  callHandler(handlers, "onPlan", run, run.plan)
+  return true
 end
 
 local function sendFunctionIds(run, handlers)
@@ -340,27 +374,16 @@ local function sendFunctionIds(run, handlers)
     simulatorResponse = api.simulatorResponse,
     client = M.CLIENT,
     processReply = function(_, buf)
+      if run.cancelled == true then return end
       local parsed = api.parse(buf)
       local ids = type(parsed) == "table" and parsed.adjustment_function_ids or nil
       if type(ids) ~= "table" then return fail(run, handlers, "no_function_ids") end
       run.functionIds = ids
-      -- Only the slots the write will touch, and of those only the ones that hold something. A
-      -- slot the board has just said is empty has no record worth a round trip: an empty slot is
-      -- an empty slot whatever the other thirteen bytes say.
-      run.slotList = {}
-      local cells = Functions.STANDARD_SLOT_ORDER
-      for i = 1, #cells do
-        local slot0 = Functions.STANDARD_FIRST_SLOT + i - 1
-        if (tonumber(ids[slot0 + 1]) or 0) ~= 0 then
-          run.slotList[#run.slotList + 1] = slot0 + 1
-        end
-      end
-      run.slotAt = 1
-      run.total = 2 + #run.slotList
       run.done = 2
-      run.phase = M.PHASE_SLOTS
       callHandler(handlers, "onProgress", run)
-      M.stepRead(run, handlers)
+      -- The whole read, in two replies. Everything the plan says about what a slot holds today
+      -- comes out of this one table.
+      planned(run, handlers)
     end,
     errorHandler = replyFailed(run, handlers, "functionIds")
   })
@@ -382,10 +405,11 @@ function M.begin(run, handlers)
   if api == nil then return fail(run, handlers, "no_api") end
 
   run.phase = M.PHASE_RXMAP
-  run.records = {}
+  run.verifyRecords = {}
   run.done = 0
-  run.total = 2 + #Functions.STANDARD_SLOT_ORDER
-  logSetup("fc setup: reading the board")
+  -- Two, and only two: the receiver map and the whole function-id table.
+  run.total = 2
+  logSetup("fc setup: reading the board (2 replies)")
 
   queue:add({
     command = CMD_RX_MAP,
@@ -393,6 +417,7 @@ function M.begin(run, handlers)
     simulatorResponse = api.simulatorResponse,
     client = M.CLIENT,
     processReply = function(_, buf)
+      if run.cancelled == true then return end
       run.map = api.parse(buf)
       run.done = 1
       callHandler(handlers, "onProgress", run)
@@ -412,15 +437,18 @@ end
 -- anything; M.apply does, and only what this returned.
 --
 -- Three things the plan has to say, because none of them can be taken back afterwards:
---   * which slots are being OVERWRITTEN -- they hold a function today, and a different one after;
---   * which of those are IN USE BY ANOTHER SWITCH -- they watch a channel that is neither of the
---     two this model devotes to the overlay, so a switch the pilot flies with stops working;
+--   * which slots are being OVERWRITTEN -- they hold a function today, and a different one after,
+--     and what each of them holds is named so the pilot can recognise a control he flies with;
+--   * that the plan is built from the FUNCTION IDS alone, so nothing here has looked at which
+--     channel a slot watches or through which window -- the read-back after the write does that;
 --   * that slots 0 and 1 are kept, since a pilot who has the documented layout has his profile
 --     selects there and would otherwise have to take that on trust.
 function M.buildPlan(run)
   local settings = run.settings or {}
   local plan = {
-    slots = {}, keep = {}, overwritten = 0, otherSwitch = 0,
+    slots = {}, keep = {}, overwritten = 0,
+    -- What the plan was built from, so the confirmation can say it rather than imply it.
+    idsOnly = true,
     bankCh = settings.bank_ch, valueCh = settings.value_ch
   }
 
@@ -450,11 +478,8 @@ function M.buildPlan(run)
   for i = 1, #cells do
     local cell = cells[i]
     local slot = cell.slot0 + 1
-    local record = run.records[slot]
     local heldFn = 0
-    if type(record) == "table" then
-      heldFn = tonumber(record.adjFunction) or 0
-    elseif type(run.functionIds) == "table" then
+    if type(run.functionIds) == "table" then
       heldFn = tonumber(run.functionIds[slot]) or 0
     end
 
@@ -467,25 +492,19 @@ function M.buildPlan(run)
       record = cell.record,
       heldFn = heldFn,
       heldName = (heldFn ~= 0) and Functions.nameOf(heldFn) or nil,
-      overwritten = false,
-      otherSwitch = false
+      overwritten = false
     }
 
+    -- A slot holding a DIFFERENT function is the one the pilot has to recognise: it is a control
+    -- he flies with, wherever its switch sits, and after the write it adjusts something else. It
+    -- is named rather than counted, because a slot number is not something anybody recognises.
+    --
+    -- A slot already holding the right function is still written -- the record is replaced whole
+    -- and its channels and windows were never read -- but nothing is lost by it, so it is not on
+    -- the list of things that cannot be taken back.
     if heldFn ~= 0 and heldFn ~= cell.id then
       entry.overwritten = true
       plan.overwritten = plan.overwritten + 1
-    end
-
-    -- A slot on some other channel is somebody's switch. It is judged on the record's own
-    -- channels rather than on the function it holds: the same parameter can perfectly well be on
-    -- a second switch of the pilot's, and that is exactly the case worth naming.
-    if heldFn ~= 0 and type(record) == "table" then
-      local heldEna = Functions.auxToWireChannel(record.enaChannel, run.map)
-      local heldAdj = Functions.auxToWireChannel(record.adjChannel, run.map)
-      if heldEna ~= settings.bank_ch or heldAdj ~= settings.value_ch then
-        entry.otherSwitch = true
-        plan.otherSwitch = plan.otherSwitch + 1
-      end
     end
 
     plan.slots[#plan.slots + 1] = entry
@@ -506,10 +525,12 @@ function M.buildPlan(run)
     }
   end
 
-  -- What the board carries today, held against the set as a whole. The same comparison the
-  -- overlay's own ground half makes, so the sentence on this page and the one on the tuning
-  -- screen cannot disagree about the same board.
-  plan.compare = Functions.compare(run.records, run.map, settings.bank_ch, settings.value_ch)
+  -- What the board carries today, held against the set as a whole -- at the function id and no
+  -- further, since that is all the read asked for. It carries `idsOnly`, and the sentence the
+  -- confirmation words from it says so: a board whose every slot names the right function can
+  -- still watch the wrong channel through the wrong window, and only the read-back sees that.
+  plan.compare = Functions.compareFunctionIds(run.functionIds, run.map,
+    settings.bank_ch, settings.value_ch)
 
   plan.writes = #plan.slots
   plan.ok = true
@@ -683,7 +704,7 @@ function M.stepVerify(run, handlers)
     return true
   end
   if not stillAllowed(run, handlers) then return false end
-  return sendSlotRead(run, handlers, CMD_ADJ_RANGE, slot, "verify")
+  return sendVerifyRead(run, handlers, slot)
 end
 
 --- Read back every slot the write touched, and hold it against the set field by field.

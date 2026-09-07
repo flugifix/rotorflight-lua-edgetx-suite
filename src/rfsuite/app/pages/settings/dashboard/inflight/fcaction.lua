@@ -55,10 +55,16 @@ local function refusalText(i18n, reason)
 end
 
 --- What the board carries today, held against the standard set.
+--
+-- The verdict comes from the function-id reply and from nothing else, so what it can say is which
+-- slots name the right FUNCTION. "Already carries this set" would overstate that -- a slot naming
+-- the right function can still watch the wrong channel through the wrong window -- so the matching
+-- case is worded at the level it was actually measured at.
 local function compareText(i18n, compare)
   local verdict = (type(compare) == "table") and compare.verdict or nil
   if verdict == "match" then
-    return t(i18n, "fc_board_matches", "The flight controller already carries this set.")
+    return t(i18n, "fc_board_functions_match",
+      "Every slot of this set already names the function it should.")
   elseif verdict == "empty" then
     return t(i18n, "fc_board_empty", "The flight controller carries none of this set.")
   elseif verdict == "differ" then
@@ -70,10 +76,14 @@ end
 
 --- The question the pilot answers, built from the plan and not from what the page intended.
 --
--- The counts come first because they are what cannot be taken back, and the two that matter get a
--- sentence and a list of their own rather than a number in a row: a slot being overwritten is a
--- parameter moving somewhere else on the screen, and a slot in use by another switch is a control
--- the pilot flies with that will stop working.
+-- The counts come first because they are what cannot be taken back, and the overwrites get a list
+-- of their own rather than a number in a row: a slot being overwritten is a parameter moving
+-- somewhere else on the screen, or a control the pilot flies with that stops working, and the
+-- function each of them holds today is the only thing on this screen he can recognise it by.
+--
+-- What the question no longer claims is which CHANNEL each of those slots watches. That was worth
+-- thirty-six extra round trips before the plan and is worth one sentence in it, so it is a
+-- sentence saying it was not looked at.
 local function question(i18n, plan)
   local lines = {}
   lines[#lines + 1] = compareText(i18n, plan.compare)
@@ -98,11 +108,15 @@ local function question(i18n, plan)
     end
   end
 
-  if plan.otherSwitch > 0 then
+  if plan.overwritten > 0 then
+    lines[#lines + 1] = t(i18n, "fc_overwritten_note",
+      "Slots holding another function are overwritten, whichever switch they belong to.")
+  end
+
+  if plan.idsOnly then
     lines[#lines + 1] = ""
-    lines[#lines + 1] = string.format("%s %d",
-      t(i18n, "fc_other_switch", "In use by a switch on another channel:"), plan.otherSwitch)
-    lines[#lines + 1] = t(i18n, "fc_other_switch_note", "Those switches stop adjusting anything.")
+    lines[#lines + 1] = t(i18n, "fc_ids_only",
+      "Only the function of each slot was read. Which channel it watches is checked after the write.")
   end
 
   local kept = {}
@@ -122,13 +136,19 @@ local function question(i18n, plan)
 end
 
 --- Where the action has got to, for the line under the button.
+--
+-- Called from a reactive closure on that line, so it formats one string and reads nothing but the
+-- run's own counters. The two write phases carry the sentence that matters more than the number:
+-- the page must not be left while they run, because they are the phases nothing cancels.
 local function progressText(i18n, run)
   local phase = run.phase
   local done, total = run.done or 0, run.total or 0
   if phase == FcSetup.PHASE_WRITING or phase == FcSetup.PHASE_COMMIT then
-    return string.format("%s %d/%d", t(i18n, "fc_writing", "Writing"), done, total)
+    return string.format("%s %d/%d - %s", t(i18n, "fc_writing", "Writing"), done, total,
+      t(i18n, "fc_do_not_leave", "do not leave this page"))
   elseif phase == FcSetup.PHASE_VERIFY then
-    return string.format("%s %d/%d", t(i18n, "fc_verifying", "Reading back"), done, total)
+    return string.format("%s %d/%d - %s", t(i18n, "fc_verifying", "Reading back"), done, total,
+      t(i18n, "fc_do_not_leave", "do not leave this page"))
   end
   return string.format("%s %d/%d", t(i18n, "fc_reading", "Reading the flight controller"), done, total)
 end
@@ -156,54 +176,69 @@ function M.offer(ctx)
 
   local run = FcSetup.newRun(ctx.config)
   ui.fcRun = run
-  ui.fcPercent = nil
+  ui.fcPhase = nil
+  -- The line under the button reads THIS while the run is on, and the page draws it through a
+  -- closure rather than as a string baked into the tree. Set here so that the closure has
+  -- something to answer with from the first frame.
+  ui.fcProgress = function() return progressText(i18n, run) end
 
   local function mine()
     return ui.fcRun == run
   end
 
+  --- One reply has moved the counters. Nothing is REBUILT for it.
+  --
+  -- The pilot's third radio round is what this is written from. The read used to rebuild the whole
+  -- page once per record, because the percentage moved by three points every time -- thirty-six
+  -- rebuilds, each of them a fresh set of closures and a fresh child list, on a radio that had 134
+  -- kB of heap left. His log has the tool climbing from 1078 to 1575 kB across that phase and a
+  -- `low heap` warning inside it.
+  --
+  -- So the NUMBER travels through a reactive closure, which costs one formatted string per frame
+  -- and no tree at all, and a rebuild is asked for only when the PHASE changes -- four times in a
+  -- whole run, and each of those genuinely changes what is on the screen.
   local function progress()
     if not mine() then return end
-    local total = run.total or 0
-    local percent = (total > 0) and math.floor((run.done or 0) * 100 / total) or 0
-    ui.fcNotice = progressText(i18n, run)
-    -- A rebuild tears the screen down and builds it again, so it is worth doing only when the
-    -- number on it has actually changed. Their own adjustments page throttles its save overlay
-    -- the same way.
-    if percent ~= ui.fcPercent then
-      ui.fcPercent = percent
+    if run.phase ~= ui.fcPhase then
+      ui.fcPhase = run.phase
       requestRepaint()
     end
   end
 
+  --- The run is over, however it ended: the moving line goes away and a fixed one takes its place.
+  --
+  -- One place, so that no exit path can leave the progress closure standing over a run that has
+  -- stopped -- which would read as a read still going, for ever.
+  local function settle(text)
+    ui.fcRun = nil
+    ui.fcProgress = nil
+    ui.fcPhase = nil
+    ui.fcNotice = text
+    requestRepaint()
+  end
+
   local function failed(_, reason)
     if not mine() then return end
-    ui.fcRun = nil
-    ui.fcNotice = refusalText(i18n, reason)
-    requestRepaint()
+    settle(refusalText(i18n, reason))
   end
 
   local function done(_, report)
     if not mine() then return end
-    ui.fcRun = nil
     if report.verdict == "match" then
-      ui.fcNotice = string.format("%s (%d)",
-        t(i18n, "fc_done", "Flight controller set up"), report.written)
+      settle(string.format("%s (%d)",
+        t(i18n, "fc_done", "Flight controller set up"), report.written))
     else
       -- The write said yes to every slot and the read-back disagrees, which is the one outcome
       -- worth spelling out: it is not a failure the queue reported and it is not a success.
-      ui.fcNotice = string.format("%s (%d)",
-        t(i18n, "fc_verify_differs", "Written, but the read-back does not match"), report.count)
+      settle(string.format("%s (%d)",
+        t(i18n, "fc_verify_differs", "Written, but the read-back does not match"), report.count))
     end
-    requestRepaint()
   end
 
   local function planned(_, plan)
     if not mine() then return end
     if plan.ok ~= true then
-      ui.fcRun = nil
-      ui.fcNotice = refusalText(i18n, plan.refused)
-      requestRepaint()
+      settle(refusalText(i18n, plan.refused))
       return
     end
 
@@ -226,9 +261,7 @@ function M.offer(ctx)
           -- nothing, and saying so here is what keeps that from being an accident of the dialog's
           -- defaults.
           if not mine() then return end
-          ui.fcRun = nil
-          ui.fcNotice = t(i18n, "plan_cancelled", "Nothing was changed")
-          requestRepaint()
+          settle(t(i18n, "plan_cancelled", "Nothing was changed"))
         end
       })
     end
@@ -236,15 +269,35 @@ function M.offer(ctx)
     if not shown then
       -- No confirmation could be put up, so there is no answer to act on. Writing a flight
       -- controller is not something to do on the assumption that the pilot would have said yes.
-      ui.fcRun = nil
-      ui.fcNotice = t(i18n, "plan_no_dialog", "This radio cannot show the confirmation.")
-      requestRepaint()
+      settle(t(i18n, "plan_no_dialog", "This radio cannot show the confirmation."))
     end
   end
 
-  ui.fcNotice = progressText(i18n, run)
+  ui.fcNotice = nil
+  ui.fcPhase = run.phase
   requestRepaint()
   FcSetup.begin(run, { onProgress = progress, onPlan = planned, onError = failed, onDone = done })
+end
+
+--- Give up a run the pilot has walked away from, if it is in a phase that may be given up.
+--
+-- The page calls this on its way out. Only the READ is abandoned -- a write chain stopped half way
+-- leaves the flight controller holding part of one adjustment set and part of another, which is a
+-- worse state than a finished write nobody watched, so the write is left to the queue and the
+-- screen says so while it runs.
+--
+-- Answers whether anything was given up, so the caller can tell "cancelled" from "left running".
+function M.cancel(ui)
+  if type(ui) ~= "table" then return false end
+  local run = ui.fcRun
+  if run == nil or type(FcSetup) ~= "table" or type(FcSetup.cancel) ~= "function" then return false end
+  local cancelled = FcSetup.cancel(run)
+  if cancelled then
+    ui.fcRun = nil
+    ui.fcProgress = nil
+    ui.fcPhase = nil
+  end
+  return cancelled
 end
 
 return M
