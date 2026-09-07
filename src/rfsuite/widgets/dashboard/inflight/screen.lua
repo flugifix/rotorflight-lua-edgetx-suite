@@ -449,7 +449,7 @@ local function appendActive(children, widget, m, t, p)
   local heard = teller and snapshot.activeId ~= nil and snapshot.spokenId == snapshot.activeId
   appendLabel(children, m.sideX, m.sideY + m.lineH, m.rowX - m.sideX - m.pad,
     heard and t("widgets.dashboard.inflight_spoken_ok", "spoken: OK")
-      or t("widgets.dashboard.inflight_spoken_none", "spoken: --"),
+      or t("widgets.dashboard.inflight_spoken_none", "spoken: -"),
     heard and p.ok or p.dim, m.small, LEFT)
 end
 

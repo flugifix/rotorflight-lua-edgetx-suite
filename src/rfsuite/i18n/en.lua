@@ -2569,7 +2569,7 @@ return {
       inflight_row_caption = "row = trim = inc/dec window",
       inflight_primed_short = "primed",
       inflight_spoken_ok = "spoken: OK",
-      inflight_spoken_none = "spoken: --",
+      inflight_spoken_none = "spoken: -",
       inflight_hint_tap = "tap = one pulse = one step",
       inflight_hint_hold = "hold = pulses at the board's rate",
       inflight_hint_trim = "or the",

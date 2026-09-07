@@ -2569,7 +2569,7 @@ return {
       inflight_row_caption = "Reihe = Trimmung = Schrittfenster",
       inflight_primed_short = "vorher",
       inflight_spoken_ok = "Ansage: OK",
-      inflight_spoken_none = "Ansage: --",
+      inflight_spoken_none = "Ansage: -",
       inflight_hint_tap = "Tippen = ein Puls = ein Schritt",
       inflight_hint_hold = "Halten = Pulse im Takt des Reglers",
       inflight_hint_trim = "oder die Trimmung",
