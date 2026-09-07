@@ -109,13 +109,13 @@ files["src/rfsuite/widgets/dashboard/objects/common.lua"] = { new_globals = glob
 -- same rule for the same reason: they run per frame in the reactive sweep, on the leftover budget,
 -- outside the pcall. It reads the snapshot its own drive publishes and probes nothing.
 --
--- Spelled with `not_globals` rather than with the narrowed list above, and the difference is
--- whether the rule bites. A `globals` list inside a `files` override is UNIONED with the top-level
--- one rather than replacing it, so narrowing a list there takes nothing away: measured on this
--- configuration, a file under the objects override reads `model` without a word. `not_globals`
--- removes the names, and the same measurement then reports "accessing undefined variable 'model'".
+-- The same set of names as the objects rule above, and it names them directly because there is
+-- one file rather than a directory: `not_globals` subtracts from the inherited list, which is
+-- what a single-file restriction needs, and `new_globals` would have to repeat the whole list
+-- to take four names out of it. Verified in both directions -- a planted `model` read in this
+-- file reports "accessing undefined variable 'model'", and removing the entry silences it.
 files["src/rfsuite/widgets/dashboard/inflight/screen.lua"] = {
-  not_globals = { "model", "getValue", "getSensor", "getFieldInfo" }
+  not_globals = { "model", "getValue", "getSensor", "getFieldInfo", "fstat" }
 }
 
 -- Code style rules
