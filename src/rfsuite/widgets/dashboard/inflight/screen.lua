@@ -113,10 +113,14 @@ end
 -- Geometry
 -- ---------------------------------------------------------------------------
 
--- The firmware's font ladder, with the heights the layout has to reserve for them. There is no
--- way to ask the firmware how tall a font is from a widget, so these are the sizes the label
--- objects actually occupy on a colour radio and every vertical stack below is built from them.
-local FONT_H = { [SMLSIZE or -1] = 12, [MIDSIZE or -2] = 24, [DBLSIZE or -3] = 32, [XXLSIZE or -4] = 64 }
+-- The firmware's font ladder, with the heights the layout has to reserve for them.
+--
+-- There is no way to ask the firmware how tall a font is from a widget, so these are read off a
+-- rendered frame -- the title in the header, the parameter name and the value, measured on the
+-- simulator at 800 x 480 -- and every vertical stack below is built from them. They are the box
+-- the glyphs occupy and not the cap height: a stack built from the cap height puts the next line
+-- across the descenders of the one above, which is what the caption did to the parameter name.
+local FONT_H = { [SMLSIZE or -1] = 14, [MIDSIZE or -2] = 30, [DBLSIZE or -3] = 40, [XXLSIZE or -4] = 66 }
 
 local function fontHeight(font)
   return FONT_H[font] or 12
@@ -159,14 +163,23 @@ local function metrics(w, h, fullscreen)
   m.chipGap = math.max(2, math.floor(w * 0.0125 + 0.5))
   m.chipW = math.max(12, math.floor(w * 0.075 + 0.5))
   m.chipEnd = m.pad + Functions.BANK_COUNT * (m.chipW + m.chipGap)
+  -- To the right edge and not to the row column: the caption sits ABOVE the row list, so its
+  -- width is bounded by the screen. Bounded at the column, the longer of the two things that
+  -- can stand here wrapped into three lines and ran into the row caption below it.
+  m.chipCaptionW = w - m.chipEnd - m.pad
 
   m.bodyY = math.max(m.chipY + m.chipH + 4, math.floor(h * 0.279 + 0.5))
   m.rowX = math.floor(w * 0.625 + 0.5)
   m.rowH = math.max(10, math.floor(h * 0.081 + 0.5))
-  m.rowNumX = m.rowX + math.floor(w * 0.0125 + 0.5)
-  m.rowTrimX = m.rowX + math.floor(w * 0.042 + 0.5)
-  m.rowNameX = m.rowX + math.floor(w * 0.104 + 0.5)
-  m.rowValueW = math.floor(w * 0.20 + 0.5)
+  -- The four columns inside a row are fractions of the ROW's own width and not of the screen's.
+  -- Taken from the screen they grow faster than the row does -- at 800 pixels the name was left
+  -- 40 of the row's 283 -- and a label narrower than its text does not clip, it WRAPS: the row
+  -- list drew each name three lines deep, over its neighbours and off the bottom of the screen.
+  m.rowW = w - m.rowX - m.pad
+  m.rowNumX = m.rowX + math.max(2, math.floor(m.rowW * 0.035 + 0.5))
+  m.rowTrimX = m.rowX + math.floor(m.rowW * 0.118 + 0.5)
+  m.rowNameX = m.rowX + math.floor(m.rowW * 0.294 + 0.5)
+  m.rowValueW = math.floor(m.rowW * 0.30 + 0.5)
 
   m.leftX = math.floor(w * 0.025 + 0.5)
   m.leftW = m.rowX - m.leftX - m.pad
@@ -401,7 +414,7 @@ local function appendChips(children, widget, m, t, p, interactive)
     captionText = t("widgets.dashboard.inflight_chip_caption", "bank = enable band")
     captionColor = p.dim
   end
-  appendCentredLabel(children, m.chipEnd, m.chipY, m.rowX - m.chipEnd, m.chipH,
+  appendCentredLabel(children, m.chipEnd, m.chipY, m.chipCaptionW, m.chipH,
     captionText, captionColor, m.small, LEFT, m)
 end
 
@@ -525,11 +538,14 @@ local function appendRows(children, widget, m, w, t, p, interactive)
         appendCentredLabel(children, m.rowTrimX, rowY, m.rowNameX - m.rowTrimX, m.rowH - 2,
           entry.trimName, p.dim, m.small, LEFT, m)
       end
+      -- All four columns in the small font, which is what the drawing has: six rows of a
+      -- parameter name and a number have to fit in a third of the screen, and the row a pilot is
+      -- on is told apart by its colour and its frame rather than by its size.
       local label = entry.name or t("widgets.dashboard.inflight_unassigned", "Unassigned")
       appendCentredLabel(children, m.rowNameX, rowY, w - m.pad - m.rowValueW - m.rowNameX, m.rowH - 2,
-        label, isActive and p.text or p.dim, m.font, LEFT, m)
+        label, isActive and p.text or p.dim, m.small, LEFT, m)
       appendCentredLabel(children, w - m.pad - m.rowValueW, rowY, m.rowValueW, m.rowH - 2,
-        formatValue(entry.value), isActive and p.text or p.dim, m.font, RIGHT, m)
+        formatValue(entry.value), isActive and p.text or p.dim, m.small, RIGHT, m)
     end
   end
 end
