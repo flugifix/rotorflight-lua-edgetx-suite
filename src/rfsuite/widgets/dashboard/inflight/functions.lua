@@ -507,24 +507,33 @@ M.STANDARD_SET = {
 
 -- What a slot of the standard set carries as its step and its bounds.
 --
--- The documented thirty get `5 10 200` verbatim, which is what every one of the documented
--- `adjfunc` lines says -- so a board written from this set is byte for byte the layout that
--- describes, and a pilot who set his up by hand finds nothing changed under him. It is NOT the
+-- The documented thirty get `10 200` verbatim as their bounds, which is what every one of the
+-- documented `adjfunc` lines says -- so a board written from this set is the layout that
+-- describes, and a pilot who set his up by hand finds his bounds unchanged. They are NOT the
 -- function's own range from the table at the top of this file: those are wider, and widening a
 -- documented line would be a silent change to a configuration somebody else wrote down.
 --
 -- The six added cells have no documented line to be equal to, so they take the range their own
--- adjustments page offers for the same function, and the head speed takes a step of ten because
--- a step of five over ten thousand rpm is a control nobody can reach the end of.
-local STANDARD_LIMITS_DOCUMENTED = { step = 5, min = 10, max = 200 }
+-- adjustments page offers for the same function.
+--
+-- THE STEP IS THE PILOT'S, not this table's. It used to be part of the record -- 5 for the
+-- documented thirty and 10 for the head speed -- and the pilot's ruling after the third radio
+-- round is that one setting decides it for every slot the setup action writes. So the numbers
+-- below carry bounds only, and `M.DEFAULT_STEP` is what a caller that names no step gets: the
+-- documented 5, so a caller written before the setting existed still asks for the documented
+-- line. The consequence worth stating: the head speed is written with the pilot's step like
+-- every other slot, so at a step of 1 its ten thousand rpm take ten thousand presses.
+M.DEFAULT_STEP = 5
+
+local STANDARD_LIMITS_DOCUMENTED = { min = 10, max = 200 }
 
 M.STANDARD_LIMITS = {
-  [66] = { step = 5, min = 0, max = 250 },
-  [75] = { step = 5, min = 0, max = 250 },
-  [61] = { step = 5, min = 0, max = 250 },
-  [63] = { step = 5, min = 0, max = 250 },
-  [80] = { step = 10, min = 0, max = 10000 },
-  [53] = { step = 5, min = 0, max = 250 }
+  [66] = { min = 0, max = 250 },
+  [75] = { min = 0, max = 250 },
+  [61] = { min = 0, max = 250 },
+  [63] = { min = 0, max = 250 },
+  [80] = { min = 0, max = 10000 },
+  [53] = { min = 0, max = 250 }
 }
 
 -- Which slot of the board's table each cell of the standard set is written to, in order, starting
@@ -559,7 +568,7 @@ local MIRROR_US = CENTRE_US * 2
 -- One shape for both jobs on purpose: the comparison holds this against what the board answered,
 -- and the writer encodes this into the fifteen bytes MSP 53 takes. A second spelling of the same
 -- record would be a second place for the two to drift apart.
-function M.standardRecord(bank, row, enaField, adjField)
+function M.standardRecord(bank, row, enaField, adjField, step)
   local id = (M.STANDARD_SET[bank] or {})[row]
   if id == nil then return nil end
   local band = M.REFERENCE_BANDS[bank]
@@ -575,7 +584,7 @@ function M.standardRecord(bank, row, enaField, adjField)
     adjRange2 = { start = inc.min, ["end"] = inc.max },
     adjMin = limits.min,
     adjMax = limits.max,
-    adjStep = limits.step
+    adjStep = math.floor(tonumber(step) or M.DEFAULT_STEP)
   }
 end
 
@@ -583,11 +592,11 @@ end
 --
 -- `enaField` and `adjField` are the caller's, because they come off the receiver map and nothing
 -- in this file reads anything.
-function M.standardSlots(enaField, adjField)
+function M.standardSlots(enaField, adjField, step)
   local out = {}
   for i = 1, #M.STANDARD_SLOT_ORDER do
     local cell = M.STANDARD_SLOT_ORDER[i]
-    local record = M.standardRecord(cell[1], cell[2], enaField, adjField)
+    local record = M.standardRecord(cell[1], cell[2], enaField, adjField, step)
     if record ~= nil then
       out[#out + 1] = {
         slot0 = M.STANDARD_FIRST_SLOT + i - 1,
@@ -639,17 +648,22 @@ M.COMPARE_SLICE = 8
 --
 -- Answers nil when the configured channels have no field on this receiver map at all, which is
 -- not a verdict about the board and is reported as its own state rather than as a difference.
-function M.newComparison(records, map, bankChannel, valueChannel)
+function M.newComparison(records, map, bankChannel, valueChannel, step)
   if type(records) ~= "table" then return nil end
   local enaField = M.wireToAuxField(bankChannel, map)
   local adjField = M.wireToAuxField(valueChannel, map)
   if enaField == nil or adjField == nil then return nil end
   return {
     records = records,
-    slots = M.standardSlots(enaField, adjField),
+    slots = M.standardSlots(enaField, adjField, step),
     at = 0,
     empty = 0,
     differ = 0,
+    -- Slots that hold the right function on the right channels and disagree only on the step. It
+    -- is counted apart from the rest because it is the one difference a SETTING on the radio can
+    -- cause, and the pilot can act on "the step you chose is not the step on the board" where he
+    -- cannot act on "thirty-six slots differ".
+    steps = 0,
     list = {}
   }
 end
@@ -678,6 +692,7 @@ function M.compareStep(work, budget)
       local ok, reason = M.recordMatches(actual, cell.record)
       if not ok then
         work.differ = work.differ + 1
+        if reason == "step" then work.steps = work.steps + 1 end
         work.list[#work.list + 1] = { slot0 = cell.slot0, id = cell.id, reason = reason }
       end
     end
@@ -695,14 +710,18 @@ function M.compareStep(work, budget)
     total = total,
     empty = work.empty,
     differ = work.differ,
+    steps = work.steps,
+    -- True when the ONLY thing wrong is the step, which is the case a pilot who has just changed
+    -- the setting is in, and the one where the screen can name the remedy exactly.
+    stepOnly = (work.steps > 0) and (work.steps == work.differ) and (work.empty == 0),
     count = work.empty + work.differ,
     slots = work.list
   }
 end
 
 --- The same comparison, run whole. For a caller that is not on a widget pass.
-function M.compare(records, map, bankChannel, valueChannel)
-  local work = M.newComparison(records, map, bankChannel, valueChannel)
+function M.compare(records, map, bankChannel, valueChannel, step)
+  local work = M.newComparison(records, map, bankChannel, valueChannel, step)
   if work == nil then return nil end
   local done, result
   repeat

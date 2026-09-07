@@ -180,18 +180,18 @@ local function defaultModelPreferences()
     -- which channels and global variables this model's mixer devotes to the adjustment pair, and
     -- which trims stand in for its rows.
     --
-    -- Off until a pilot switches it on, and no global variable is defaulted: 0 means "none", and
-    -- a variable defaulted to a number would be written into whatever that variable already
-    -- drives on somebody's model. The two channels ARE defaulted, to the pair the project's own
-    -- generic radio setup documents.
+    -- Off until a pilot switches it on. Everything else is defaulted to a working arrangement:
+    -- the channel pair the project's own generic radio setup documents, the two highest global
+    -- variables a helicopter model rarely reaches, and the last PID profile as the undo. The
+    -- settings page walks the model and WARNS when one of those variables is already spoken for.
     inflight = {
       enabled = false,
       switch = 0,
       bank_ch = 11,
       value_ch = 12,
-      bank_gvar = 0,
-      value_gvar = 0,
-      pulse_ms = 150,
+      bank_gvar = 6,
+      value_gvar = 5,
+      pulse_ms = 250,
       trims = true,
       trim_mode = "navigate",
       nav_trim = 1,
@@ -203,7 +203,9 @@ local function defaultModelPreferences()
       row_trim_4 = 3,
       row_trim_5 = 5,
       row_trim_6 = 6,
-      backup_profile = 0
+      backup_profile = 6,
+      set_mode = "standard",
+      step = 5
     },
     widgets = {}
   }

@@ -910,6 +910,11 @@ local function describeSet(snapshot, t)
     elseif verdict == "empty" then
       return text .. " - " .. t("widgets.dashboard.inflight_board_empty", "board empty")
     elseif verdict == "differ" then
+      -- Named rather than counted when the step is all of it: the pilot changed a field on the
+      -- radio and the remedy is one button, not thirty-six slots to look at.
+      if compare.stepOnly == true then
+        return text .. " - " .. t("widgets.dashboard.inflight_board_step", "step differs: set the board up again")
+      end
       return text .. " - " .. t("widgets.dashboard.inflight_board_differs", "board differs in")
         .. " " .. tostring(compare.count)
     elseif verdict == "unmapped" then

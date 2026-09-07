@@ -42,6 +42,9 @@ local M = {}
 -- block, SW_NONE the empty entry that lets a pilot clear the choice. Trims are a filter of their
 -- own and are deliberately not offered -- a trim is a row, not the interlock.
 local SW_SWITCH = 1
+-- The trim block, as its own filter. A trim is offered by the picker as two positions -- the
+-- decrement and the increment -- and the overlay stores the increment; see Setup.normaliseTrim.
+local SW_TRIM = 1 << 1
 local SW_NONE = 1 << 20
 
 -- How many of the lines the write would remove are named one by one in the question. Past this the
@@ -112,8 +115,8 @@ local function ensureLoaded()
   ui.checkDone = false
   ui.checkResult = nil
   ui.trimNames = nil
-  ui.proposed = false
-  ui.gvarsShort = false
+  ui.gvarWalkDone = false
+  ui.gvarConflicts = nil
   ui.planNotice = nil
   ui.fcRun = nil
   ui.fcNotice = nil
@@ -132,30 +135,79 @@ local function requestRepaint()
   if type(rebuild) == "function" then rebuild() end
 end
 
---- The two variables the model does not already use, offered rather than assumed.
+--- Whether this model already drives something with one of the two configured variables.
 --
--- The pilot's radio arrived with both variables unset and nothing on the page to say which ones
--- were free, so they are proposed -- VISIBLY, in the fields, where the numbers can be overruled
--- before they go anywhere. Nothing is written here and `ui.dirty` is deliberately NOT raised: a
--- proposal the pilot never looked at must not turn into a store write on the way out.
+-- This replaces a PROPOSAL. The page used to walk the model for two variables nothing referred to
+-- and put them in the fields; the pilot's ruling after the third radio round is that the pair is
+-- a fixed default instead, because a setting that moves with the model is one nobody can write
+-- down and a pilot who never opens this page had an overlay that could not go live.
 --
--- Runs once per visit, off the same latch as the check.
-local function proposeGvars()
-  if ui.proposed then return end
-  ui.proposed = true
-  local value, bank = Setup.proposeGvars(radio(), ui.config)
-  if value ~= nil then ui.config.value_gvar = value end
-  if bank ~= nil then ui.config.bank_gvar = bank end
-  -- Two are needed and a busy model may not have two to spare; the verdict says so when it cannot.
-  ui.gvarsShort = ((ui.config.value_gvar or 0) <= 0) or ((ui.config.bank_gvar or 0) <= 0)
+-- The walk stays, and its answer is now a WARNING rather than a choice: the overlay pulses these
+-- variables several times a second while a pilot is tuning, so one that already scales a mixer or
+-- an input line would move a control surface for a reason nobody could connect to it. It names the
+-- line, because a warning that says only "taken" sends the pilot through thirty-two channels.
+--
+-- Runs once per visit, off the same latch as the check, and writes nothing.
+local function gvarConflicts()
+  if ui.gvarWalkDone then return ui.gvarConflicts end
+  ui.gvarWalkDone = true
+  ui.gvarConflicts = Setup.gvarConflicts(radio(), ui.config)
+  return ui.gvarConflicts
 end
 
 local function trimNames()
   if ui.trimNames == nil then
     ui.trimNames = Setup.resolveTrims(radio()) or false
+    -- A store written before the trims were picked with the radio's own picker holds semantic
+    -- indices, 1..6; from here on they are switch positions. The walk is the first moment this
+    -- page can say what an old index meant, so the conversion happens here -- in the working copy
+    -- only. It reaches the card on the next save, which is what the pilot asked for: nothing is
+    -- rewritten behind him, and a page he opens and leaves changes nothing.
+    if ui.trimNames ~= false then Setup.migrateTrims(ui.config, ui.trimNames) end
   end
   if ui.trimNames == false then return nil end
   return ui.trimNames
+end
+
+--- One trim, chosen with the radio's own switch picker rather than from a list this page wrote.
+--
+-- The list was a per-radio guess: the six semantic trims with the radio's labels where they could
+-- be read and English stems where they could not, on a radio that may carry four. The picker is
+-- the firmware's own, filtered to the trim block, so it offers exactly the trims this radio has
+-- and names each of them the way every other page of the radio does.
+--
+-- It offers both positions of every trim and the store keeps the INCREMENT: the drive derives the
+-- decrement from the same block entry, and a setting that could hold either would be two
+-- spellings of one choice. A picked decrement is normalised to its own increment on the way in.
+local function appendTrimPicker(children, x, y, w, label, get, set)
+  local pickerW = 172
+  if pickerW > w then pickerW = w end
+  local rowH = Controls.ROW_H
+  children[#children + 1] = {
+    type = "label", x = x, y = Controls.labelY(y, rowH), w = w - pickerW - 18,
+    text = label, color = COLOR_THEME_PRIMARY1, font = SMLSIZE
+  }
+  children[#children + 1] = {
+    type = "switch",
+    x = x + w - pickerW - 10, y = Controls.controlY(y, rowH), w = pickerW, h = rowH - 6,
+    filter = SW_TRIM | SW_NONE,
+    get = get,
+    set = function(value)
+      local wanted = Setup.normaliseTrim(trimNames(), value)
+      if get() == wanted then return end
+      set(wanted)
+      ui.checkDone = false
+      ui.planNotice = nil
+      ui.runtime.markValueChanged()
+    end
+  }
+  return rowH
+end
+
+--- A getter and a setter for one of the three named trim settings.
+local function trimField(key)
+  return function() return ui.config[key] or 0 end,
+         function(value) ui.config[key] = value end
 end
 
 --- The setup check, cached.
@@ -166,7 +218,9 @@ end
 local function checkResult()
   if not ui.checkDone then
     ui.checkDone = true
-    ui.checkResult = Setup.check({ radio = radio(), settings = ui.config }, ui.config)
+    -- The resolved block goes with it: a trim setting is a switch POSITION now, and the trim-mode
+    -- half of the check indexes the firmware's own table by the semantic number behind it.
+    ui.checkResult = Setup.check({ radio = radio(), settings = ui.config }, ui.config, trimNames())
   end
   return ui.checkResult
 end
@@ -175,9 +229,6 @@ end
 -- the mixer, the global variables, the trims. A list of one line per fault reads longer and says
 -- the same thing.
 local function describeCheck(i18n, result)
-  if ui.gvarsShort then
-    return t(i18n, "check_no_free_gvar", "Fewer than two free variables on this model")
-  end
   if result == nil then return t(i18n, "check_unchecked", "Setup not checked") end
   if result == "ok" then return t(i18n, "check_ok", "Setup OK") end
   if type(result) ~= "table" then return "" end
@@ -212,6 +263,9 @@ local function markValue(key, value)
   if ui.config[key] == value then return end
   ui.config[key] = value
   ui.checkDone = false
+  -- The conflict warning names the variable that was configured when the walk ran, so a changed
+  -- variable makes it a sentence about a setting nobody holds any more.
+  if key == "value_gvar" or key == "bank_gvar" then ui.gvarWalkDone = false end
   ui.planNotice = nil
   -- The verdict on the flight controller was reached about the channels that have just changed.
   ui.fcNotice = nil
@@ -572,32 +626,24 @@ local function buildWiring(children, x, y, w, i18n)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
     t(i18n, "value_gvar", "Value variable"), "value_gvar", 0, Setup.GVAR_MAX_INDEX)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
-    t(i18n, "pulse_ms", "Step length (ms)"), "pulse_ms", Setup.PULSE_MS_MIN, Setup.PULSE_MS_MAX, 10)
-  return cursorY
-end
+    t(i18n, "pulse_ms", "Pulse length (ms)"), "pulse_ms", Setup.PULSE_MS_MIN, Setup.PULSE_MS_MAX, 10)
+  cursorY = cursorY + appendNote(children, x, cursorY, w,
+    t(i18n, "pulse_ms_note",
+      "One press is one step. The board counts nothing before 100 ms of stillness and repeats only after 200 ms more."))
 
---- The six rows against the trims that drive them.
---
--- The options carry the radio's OWN trim names where they can be read: those labels are localised
--- and renameable, so a list of fixed stems would name something else on a radio set up
--- differently. Where they cannot be read the default order stands in.
-local function trimOptions(i18n)
-  local resolved = trimNames()
-  local options = { { value = 0, label = t(i18n, "trim_off", "Off") } }
-  local defaults = {
-    t(i18n, "trim_1", "Rudder"),
-    t(i18n, "trim_2", "Elevator"),
-    t(i18n, "trim_3", "Throttle"),
-    t(i18n, "trim_4", "Aileron"),
-    t(i18n, "trim_5", "T5"),
-    t(i18n, "trim_6", "T6")
-  }
-  for index = 1, Setup.TRIM_COUNT do
-    local entry = resolved and resolved[index] or nil
-    local label = (entry and entry.name) or defaults[index]
-    options[#options + 1] = { value = index, label = label }
+  -- The variables are fixed defaults now, so the model is walked to say when one of them is
+  -- already spoken for rather than to choose a free pair. It is a warning and not a refusal: a
+  -- pilot who knows what that line does may well want it.
+  local conflicts = gvarConflicts()
+  if type(conflicts) == "table" and #conflicts > 0 then
+    local parts = {}
+    for i = 1, #conflicts do
+      parts[#parts + 1] = "GV" .. tostring(conflicts[i].index) .. " "
+        .. t(i18n, "gvar_in_use", "is in use by") .. " " .. tostring(conflicts[i].where)
+    end
+    cursorY = cursorY + appendNote(children, x, cursorY, w, table.concat(parts, " / "))
   end
-  return options
+  return cursorY
 end
 
 --- Which trim does what.
@@ -619,8 +665,6 @@ local function buildTrims(children, x, y, w, i18n)
       t(i18n, "trims_unreadable", "This radio did not report its trims; the default order is used."))
   end
 
-  local options = trimOptions(i18n)
-
   local modeOptions = {
     { value = Setup.TRIM_MODE_ROWS, label = t(i18n, "trim_mode_rows", "One trim per row") },
     { value = Setup.TRIM_MODE_NAVIGATE, label = t(i18n, "trim_mode_navigate", "Walk and adjust") }
@@ -638,17 +682,14 @@ local function buildTrims(children, x, y, w, i18n)
   if ui.config.trim_mode == Setup.TRIM_MODE_NAVIGATE then
     cursorY = cursorY + appendNote(children, x, cursorY, w,
       t(i18n, "navigate_note", "One trim steps through the parameters, the other moves the one it selected."))
-    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-      t(i18n, "bank_trim", "Bank trim"), options, ui.config.bank_trim,
-      function(value) markValue("bank_trim", tonumber(value) or 0) end)
+    cursorY = cursorY + appendTrimPicker(children, x, cursorY, w,
+      t(i18n, "bank_trim", "Bank trim"), trimField("bank_trim"))
     cursorY = cursorY + appendNote(children, x, cursorY, w,
       t(i18n, "bank_trim_note", "With a bank trim the walk trim stays inside the bank; without one it walks the whole set."))
-    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-      t(i18n, "nav_trim", "Walk trim"), options, ui.config.nav_trim,
-      function(value) markValue("nav_trim", tonumber(value) or 0) end)
-    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-      t(i18n, "adj_trim", "Adjust trim"), options, ui.config.adj_trim,
-      function(value) markValue("adj_trim", tonumber(value) or 0) end)
+    cursorY = cursorY + appendTrimPicker(children, x, cursorY, w,
+      t(i18n, "nav_trim", "Walk trim"), trimField("nav_trim"))
+    cursorY = cursorY + appendTrimPicker(children, x, cursorY, w,
+      t(i18n, "adj_trim", "Adjust trim"), trimField("adj_trim"))
     return cursorY
   end
 
@@ -662,16 +703,9 @@ local function buildTrims(children, x, y, w, i18n)
   }
   for row = 1, Setup.TRIM_COUNT do
     local index = row
-    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-      labels[row], options, ui.config.rowTrim[index],
-      function(value)
-        local chosen = tonumber(value) or 0
-        if ui.config.rowTrim[index] == chosen then return end
-        ui.config.rowTrim[index] = chosen
-        ui.checkDone = false
-        ui.planNotice = nil
-        ui.runtime.markDirty()
-      end)
+    cursorY = cursorY + appendTrimPicker(children, x, cursorY, w, labels[row],
+      function() return ui.config.rowTrim[index] or 0 end,
+      function(value) ui.config.rowTrim[index] = value end)
   end
   return cursorY
 end
@@ -695,7 +729,6 @@ local SECTIONS = {
 function M.build(ctx)
   ensureDeps()
   ensureLoaded()
-  proposeGvars()
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
 
   local children = ctx.children

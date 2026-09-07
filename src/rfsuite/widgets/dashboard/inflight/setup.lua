@@ -62,9 +62,21 @@ M.DEFAULTS = {
   switch = 0,
   bank_ch = 11,
   value_ch = 12,
-  bank_gvar = 0,
-  value_gvar = 0,
-  pulse_ms = 150,
+  -- The two variables are DEFAULTED, and the pilot's ruling after the third radio round is what
+  -- changed here. They used to default to 0 -- "none" -- and be proposed from what the model left
+  -- free, on the reasoning that a defaulted variable might already drive something. Two radio
+  -- rounds showed what that cost: a pilot who has not been to this page has an overlay that
+  -- cannot go live at all, and a proposal that moves with the model is a setting nobody can write
+  -- down or check. So the pair is fixed, high in the range where a helicopter model rarely
+  -- reaches, and the model is walked to WARN that one of them is spoken for rather than to choose.
+  bank_gvar = 6,
+  value_gvar = 5,
+  -- Long enough that the flight controller sees the channel stand still. It counts no step until
+  -- the value has been steady inside one window for TRIGGER_DELAY, 100 ms, and repeats every
+  -- REPEAT_DELAY, 200 ms (fc/rc_adjustments.c) -- so 250 ms is clear of the first threshold and
+  -- short of the second, which is exactly one step. 150 ms cleared the first by 50 ms and left
+  -- nothing for a pass that ran late.
+  pulse_ms = 250,
   trims = true,
   -- Walk-and-adjust with three trims is the arrangement the pilot flew and asked to keep, and it
   -- is the one that works on every radio: the six-trim layout needs six trims, and the TX15, the
@@ -80,12 +92,27 @@ M.DEFAULTS = {
   row_trim_4 = 3,
   row_trim_5 = 5,
   row_trim_6 = 6,
-  backup_profile = 0,
-  set_mode = "standard"
+  -- The last PID profile, because a helicopter that uses several uses them from the first upwards
+  -- and the undo wants the one nothing is flown on. A default and not a rule: a board with fewer
+  -- profiles has the choice refused by name, and the pilot can move it.
+  backup_profile = 6,
+  set_mode = "standard",
+  -- What one press of a step control moves a parameter by, in the flight controller's own units.
+  -- It is written into every slot the setup action puts on the board, so a changed step means
+  -- setting the flight controller up again -- which the help says and the compare verdict reports.
+  step = 5
 }
 
 M.PULSE_MS_MIN = 100
 M.PULSE_MS_MAX = 500
+
+-- What one press moves a parameter by on the board. Four rungs rather than a free number: the
+-- firmware stores the step in one byte per slot and the four cover the range a pilot asks for --
+-- one for the parameters where a single unit is already a change worth feeling, ten for the ones
+-- whose useful range is hundreds. Anything else the store happens to hold is rounded to the
+-- nearest of the four rather than refused, so a hand-edited file cannot put a step on the board
+-- that the compare would then report as a mismatch for ever.
+M.STEP_CHOICES = { 1, 2, 5, 10 }
 M.CHANNEL_MIN = 5
 M.CHANNEL_MAX = 16
 -- F4 and F7 radios carry nine global variables, H7 fifteen. Nine is what every target has.
@@ -120,6 +147,25 @@ M.TRIM_MODE_NAVIGATE = "navigate"
 -- the overlay can drive. It is the mode for a pilot whose adjustment configuration is his own.
 M.SET_MODE_STANDARD = "standard"
 M.SET_MODE_CUSTOM = "custom"
+
+--- The rung of M.STEP_CHOICES a stored value means.
+--
+-- Rounded to the nearest rather than refused, and the default where there is no number at all. A
+-- store is a text file a pilot can edit, and a step the overlay rejected would leave the board
+-- written with one number and compared against another with nothing on screen able to say why.
+function M.nearestStep(value)
+  local wanted = tonumber(value)
+  if wanted == nil then return M.DEFAULTS.step end
+  local best, bestDistance = M.STEP_CHOICES[1], nil
+  for i = 1, #M.STEP_CHOICES do
+    local choice = M.STEP_CHOICES[i]
+    local distance = math.abs(choice - wanted)
+    if bestDistance == nil or distance < bestDistance then
+      best, bestDistance = choice, distance
+    end
+  end
+  return best
+end
 
 -- TRIM_MODE_NONE, as model.getFlightMode reports it. A row driven from a trim needs the trim
 -- switched OFF in the active flight mode, otherwise the same press also moves a stick's neutral.
@@ -410,16 +456,21 @@ function M.loadSettings(modelPreferences)
     -- standard set names every cell without a round trip, while the custom one shows nothing at
     -- all until the board has been read.
     set_mode = (src.set_mode == M.SET_MODE_CUSTOM) and M.SET_MODE_CUSTOM or M.SET_MODE_STANDARD,
-    nav_trim = clampNumber(src.nav_trim, 0, M.TRIM_COUNT, M.DEFAULTS.nav_trim),
-    bank_trim = clampNumber(src.bank_trim, 0, M.TRIM_COUNT, M.DEFAULTS.bank_trim),
-    adj_trim = clampNumber(src.adj_trim, 0, M.TRIM_COUNT, M.DEFAULTS.adj_trim),
+    step = M.nearestStep(src.step),
+    -- The upper bound is the switch-position range and not the trim count: since the pilot's
+    -- third radio round these hold the POSITION of a trim's `+`, which is a number well above six
+    -- on every radio. A store written before that still holds an index of 1..6, and M.migrateTrims
+    -- turns it into a position once the radio has said what its trims are.
+    nav_trim = clampNumber(src.nav_trim, 0, 1024, M.DEFAULTS.nav_trim),
+    bank_trim = clampNumber(src.bank_trim, 0, 1024, M.DEFAULTS.bank_trim),
+    adj_trim = clampNumber(src.adj_trim, 0, 1024, M.DEFAULTS.adj_trim),
     backup_profile = clampNumber(src.backup_profile, 0, M.PROFILE_MAX, M.DEFAULTS.backup_profile)
   }
 
   settings.rowTrim = {}
   for row = 1, M.TRIM_COUNT do
     local key = "row_trim_" .. tostring(row)
-    settings.rowTrim[row] = clampNumber(src[key], 0, M.TRIM_COUNT, M.DEFAULTS[key])
+    settings.rowTrim[row] = clampNumber(src[key], 0, 1024, M.DEFAULTS[key])
   end
 
   return settings
@@ -439,6 +490,7 @@ function M.storeSettings(section, settings)
   section.trims = settings.trims == true
   section.trim_mode = settings.trim_mode or M.TRIM_MODE_ROWS
   section.set_mode = settings.set_mode or M.SET_MODE_STANDARD
+  section.step = M.nearestStep(settings.step)
   section.nav_trim = settings.nav_trim or 0
   section.bank_trim = settings.bank_trim or 0
   section.adj_trim = settings.adj_trim or 0
@@ -517,6 +569,96 @@ function M.trimsFromList(list)
 end
 
 -- ---------------------------------------------------------------------------
+-- Which trim a setting names
+-- ---------------------------------------------------------------------------
+
+-- A stored trim used to be a SEMANTIC INDEX, 1..6 in the firmware's own trim order, and is now
+-- the switch POSITION of the trim's `+`, which is what the radio's switch picker hands over and
+-- what getSwitchValue takes. Both forms are read.
+--
+-- The two cannot be confused, and it is worth saying why rather than hoping. A trim's position
+-- number is SWSRC_FIRST_TRIM or above (dataconstants.h), and everything below that is the
+-- physical switches and the multi-position pots -- three positions per switch, so the lowest a
+-- trim can sit on any radio with a single switch is 4. So 1..6 is never a trim position, and a
+-- number in that range is the old form.
+M.TRIM_LEGACY_MAX = 6
+
+--- The resolved trim a stored setting names, or nil for "off" and for one this radio lacks.
+--
+-- Resolved through the walked block rather than by arithmetic on the position number. The
+-- firmware spells a trim's two positions consecutively with the DECREMENT first
+-- (strhelpers.cpp: `idx & 1 ? '+' : '-'`, the index being relative to SWSRC_FIRST_TRIM), so the
+-- parity that decides it is the block's and not the number's -- and the block's start is not a
+-- constant Lua is ever told. The walk knows both positions of every trim by name, so it is asked.
+function M.trimEntry(trims, stored)
+  if type(trims) ~= "table" then return nil end
+  local value = tonumber(stored)
+  if value == nil or value == 0 then return nil end
+  if value >= 1 and value <= M.TRIM_LEGACY_MAX then return trims[value] end
+  for index = 1, M.TRIM_COUNT do
+    local entry = trims[index]
+    if entry ~= nil and (entry.plus == value or entry.minus == value) then return entry end
+  end
+  return nil
+end
+
+--- The value a setting should hold for a trim the pilot has just picked.
+--
+-- The picker offers both positions of every trim and the overlay stores one of them: the `+`,
+-- because the drive derives the other from the same entry and a setting that could hold either
+-- would make two spellings of one choice. A picked `-` is normalised to its own `+`.
+function M.normaliseTrim(trims, picked)
+  local value = tonumber(picked)
+  if value == nil or value == 0 then return 0 end
+  local entry = M.trimEntry(trims, value)
+  if entry == nil then return 0 end
+  return entry.plus or 0
+end
+
+-- Every trim-valued key of the settings table, in one place: the migration below and the double
+-- claim check both walk it, and a key named in one and not the other is a trim nothing watches.
+local TRIM_KEYS = { "nav_trim", "bank_trim", "adj_trim" }
+
+--- Turn every trim setting into the position form, once the radio has said what its trims are.
+--
+-- Runs where the walk finishes -- the widget's drive and the settings page both -- and changes the
+-- table in place. The widget writes no store, so there it is an in-memory reading of an old file;
+-- the page's next save is what puts the new form on the card, which is what the pilot asked for.
+--
+-- Answers whether anything moved, so a caller that cares can say so.
+function M.migrateTrims(settings, trims)
+  if type(settings) ~= "table" or type(trims) ~= "table" then return false end
+  local moved = false
+  local function convert(value)
+    local number = tonumber(value) or 0
+    if number <= 0 or number > M.TRIM_LEGACY_MAX then return number end
+    local entry = trims[number]
+    -- A legacy index this radio has no trim for becomes OFF rather than staying a number that
+    -- would be read as a position on the next radio the card is put in.
+    if entry == nil or entry.plus == nil then return 0 end
+    return entry.plus
+  end
+  for i = 1, #TRIM_KEYS do
+    local key = TRIM_KEYS[i]
+    local converted = convert(settings[key])
+    if converted ~= settings[key] then
+      settings[key] = converted
+      moved = true
+    end
+  end
+  if type(settings.rowTrim) == "table" then
+    for row = 1, M.TRIM_COUNT do
+      local converted = convert(settings.rowTrim[row])
+      if converted ~= settings.rowTrim[row] then
+        settings.rowTrim[row] = converted
+        moved = true
+      end
+    end
+  end
+  return moved
+end
+
+-- ---------------------------------------------------------------------------
 -- The setup check
 -- ---------------------------------------------------------------------------
 
@@ -588,56 +730,71 @@ end
 -- rows was de-duplicated here without a word, and the row that lost is unreachable on the radio
 -- for the rest of the model's life -- silently, because the row list still shows it. Which of the
 -- two rows a press then moves is the one thing the pilot cannot read off the screen.
-function M.claimedTrims(settings)
+--- Which semantic trim, 1..6, a stored setting resolves to on this radio.
+--
+-- The de-duplication and the flight-mode check both need it: two settings holding DIFFERENT
+-- numbers can name the same trim once one of them is an old index and the other a position, and
+-- the firmware's trimsModes table is indexed by the semantic number and by nothing else. Falls
+-- back to the stored number where the radio has said nothing, which is the old behaviour on a
+-- radio that cannot answer.
+local function semanticTrim(trims, stored)
+  local value = tonumber(stored) or 0
+  if value <= 0 then return 0 end
+  if type(trims) ~= "table" then return value end
+  for index = 1, M.TRIM_COUNT do
+    local entry = trims[index]
+    if entry ~= nil and (entry.plus == value or entry.minus == value) then return index end
+  end
+  if value <= M.TRIM_LEGACY_MAX then return value end
+  -- A position this radio does not carry: claimed by the settings, present on no thumb. It is not
+  -- a double claim and it has no trim mode to check, so it drops out here.
+  return 0
+end
+
+function M.claimedTrims(settings, trims)
   local claimed = {}
   if type(settings) ~= "table" then return claimed, false end
+
+  --- One job's trim, added to the list unless another job already holds the same one.
+  local seen = {}
+  local twice = false
+  local function claim(stored, code)
+    local index = semanticTrim(trims, stored)
+    if index <= 0 then return end
+    if seen[index] then
+      twice = true
+      return
+    end
+    seen[index] = true
+    claimed[#claimed + 1] = { index = index, stored = tonumber(stored) or 0, code = code }
+  end
+
   if settings.trim_mode == M.TRIM_MODE_NAVIGATE then
     -- Up to three, and each of them has to be its own. The bank trim is optional -- 0 means the
     -- walk trim walks the whole set -- but a bank trim that repeats one of the other two is the
     -- same fault as any other double claim: whichever job runs first decides, and which one that
     -- is cannot be read off the screen.
-    local wanted = {
-      { index = settings.nav_trim or 0, code = "trim_mode_nav" },
-      { index = settings.bank_trim or 0, code = "trim_mode_bank" },
-      { index = settings.adj_trim or 0, code = "trim_mode_adj" }
-    }
-    local seenNav = {}
-    local twiceNav = false
-    for i = 1, #wanted do
-      local index = wanted[i].index
-      if index > 0 then
-        if seenNav[index] then
-          twiceNav = true
-        else
-          seenNav[index] = true
-          claimed[#claimed + 1] = wanted[i]
-        end
-      end
-    end
-    return claimed, twiceNav
+    claim(settings.nav_trim, "trim_mode_nav")
+    claim(settings.bank_trim, "trim_mode_bank")
+    claim(settings.adj_trim, "trim_mode_adj")
+    return claimed, twice
   end
-  local seen = {}
-  local twice = false
   for row = 1, M.TRIM_COUNT do
-    local index = settings.rowTrim and settings.rowTrim[row] or 0
-    if index > 0 then
-      if seen[index] then
-        twice = true
-      else
-        seen[index] = true
-        claimed[#claimed + 1] = { index = index, code = "trim_mode_" .. tostring(row) }
-      end
-    end
+    claim(settings.rowTrim and settings.rowTrim[row], "trim_mode_" .. tostring(row))
   end
   return claimed, twice
 end
 
-function M.check(drive, settings)
+function M.check(drive, settings, trims)
   if type(drive) ~= "table" then return nil end
   settings = settings or drive.settings
   if type(settings) ~= "table" then return nil end
   local radio = drive.radio
   if type(radio) ~= "table" then return nil end
+  -- The resolved trim block, where the caller has one. Without it a stored position cannot be
+  -- turned into the semantic number the firmware's trim-mode table is indexed by, and the two
+  -- trim faults below simply are not raised -- which is the right answer, not a guess.
+  if trims == nil then trims = drive.trimsResolved == true and drive.trims or nil end
 
   local faults = {}
   if (settings.switch or 0) == 0 then faults[#faults + 1] = "no_switch" end
@@ -673,7 +830,7 @@ function M.check(drive, settings)
     -- Which trims this configuration actually claims, and under what name a fault would be
     -- reported. In navigate mode two trims do the work and every other one is inert, so checking
     -- the six row assignments there would report on trims nothing reads.
-    local claimed, twice = M.claimedTrims(settings)
+    local claimed, twice = M.claimedTrims(settings, trims)
     if settings.trim_mode == M.TRIM_MODE_NAVIGATE then
       local nav = settings.nav_trim or 0
       local adj = settings.adj_trim or 0
@@ -754,22 +911,27 @@ function M.freeGvars(radio, wanted)
 
   --- Both magnitudes of one line, read for a source reference. A negated reference is spelled with
   -- the sign on the whole number rather than on the index, so both signs are looked up.
-  local function readLine(line)
+  --
+  -- `where` names the line the reference was found on, and it is the whole point of the walk now
+  -- that the two variables are defaulted rather than proposed: a warning that says a variable is
+  -- taken and not where would send the pilot through thirty-two channels to find out.
+  local function readLine(line, where)
     if type(line) ~= "table" then return end
     local weight = tonumber(line.weight) or 0
     local offset = tonumber(line.offset) or 0
     local byWeight = indexOfGvar[weight] or indexOfGvar[-weight]
     local byOffset = indexOfGvar[offset] or indexOfGvar[-offset]
-    if byWeight ~= nil then used[byWeight] = true end
-    if byOffset ~= nil then used[byOffset] = true end
+    if byWeight ~= nil and used[byWeight] == nil then used[byWeight] = where end
+    if byOffset ~= nil and used[byOffset] == nil then used[byOffset] = where end
   end
 
   for channel = 1, MIX_SCAN_CHANNELS do
     local count = radio.mixesCount(channel)
     if count == nil then break end
+    local where = "CH" .. tostring(channel)
     for line0 = 0, count - 1 do
       lines = lines + 1
-      readLine(radio.mix(channel, line0))
+      readLine(radio.mix(channel, line0), where)
     end
   end
 
@@ -782,55 +944,48 @@ function M.freeGvars(radio, wanted)
     for input = 1, INPUT_SCAN_COUNT do
       local count = radio.inputsCount(input - 1)
       if count == nil then break end
+      local where = "IN" .. tostring(input)
       for line0 = 0, count - 1 do
         lines = lines + 1
-        readLine(radio.input(input - 1, line0))
+        readLine(radio.input(input - 1, line0), where)
       end
     end
   end
 
   local free = {}
   for n = 1, M.GVAR_MAX_INDEX do
-    if not used[n] then
+    if used[n] == nil then
       free[#free + 1] = n
       if wanted ~= nil and #free >= wanted then break end
     end
   end
-  return free, lines
+  return free, lines, used
 end
 
---- The value variable first, then the bank one, out of what the model leaves free.
+--- Which of the two configured variables this model already refers to, and on which line.
 --
--- The order is the one a pilot reads on the radio's own global-variable page: the variable that
--- moves on every step gets the lower number, because it is the one that will be looked at.
--- Answers nil for whichever half is already set, so a proposal never overwrites a choice.
-function M.proposeGvars(radio, settings)
-  if type(radio) ~= "table" or type(settings) ~= "table" then return nil, nil, 0 end
-  local needValue = (settings.value_gvar or 0) <= 0
-  local needBank = (settings.bank_gvar or 0) <= 0
-  if not (needValue or needBank) then return nil, nil, 0 end
-
-  local free, lines = M.freeGvars(radio, nil)
-  if free == nil then return nil, nil, 0 end
-
-  -- A variable the OTHER half already holds is not free for this one, whatever the mixer says.
-  local taken = {}
-  if not needValue then taken[settings.value_gvar] = true end
-  if not needBank then taken[settings.bank_gvar] = true end
-
-  local pick = {}
-  for i = 1, #free do
-    if not taken[free[i]] then pick[#pick + 1] = free[i] end
+-- The half of the old proposal that survives the fixed defaults. The overlay no longer CHOOSES a
+-- variable off this walk -- a setting that moves with the model is one nobody can write down --
+-- but a variable the model already drives something with is still a variable the overlay must not
+-- pulse, and the pilot has to be told which and where.
+--
+-- Answers a list of { index, where } in the order value, bank, and an empty list when the walk
+-- found nothing. nil means the walk could not be made at all.
+function M.gvarConflicts(radio, settings)
+  if type(radio) ~= "table" or type(settings) ~= "table" then return nil end
+  local _, _, used = M.freeGvars(radio, nil)
+  if type(used) ~= "table" then return nil end
+  local out = {}
+  local seen = {}
+  local wanted = { settings.value_gvar or 0, settings.bank_gvar or 0 }
+  for i = 1, #wanted do
+    local index = wanted[i]
+    if index > 0 and used[index] ~= nil and not seen[index] then
+      seen[index] = true
+      out[#out + 1] = { index = index, where = used[index] }
+    end
   end
-
-  local value, bank = nil, nil
-  local at = 1
-  if needValue then
-    value = pick[at]
-    at = at + 1
-  end
-  if needBank then bank = pick[at] end
-  return value, bank, lines
+  return out
 end
 
 -- ---------------------------------------------------------------------------

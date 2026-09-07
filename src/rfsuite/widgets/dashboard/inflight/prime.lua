@@ -715,8 +715,11 @@ local function startDerive(drive, prime)
   prime.phase = M.PHASE_DERIVE
   if standardMode(drive) then
     -- The set is known; what the board's table is read for is the verdict on the board.
+    -- The step is part of what a slot has to hold, so it is part of what the board is compared
+    -- against: a board set up under one step and a radio configured with another disagree, and
+    -- the verdict has to say so rather than call the pair a match.
     prime.comparison = Functions.newComparison(prime.records, prime.map,
-      drive.settings.bank_ch, drive.settings.value_ch)
+      drive.settings.bank_ch, drive.settings.value_ch, drive.settings.step)
   else
     prime.derivation = M.newDerivation(prime.records, prime.map,
       drive.settings.bank_ch, drive.settings.value_ch)

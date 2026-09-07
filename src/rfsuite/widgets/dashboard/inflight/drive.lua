@@ -76,11 +76,16 @@ M.TRIM_COUNT = Setup.TRIM_COUNT
 M.PROFILE_MAX = Setup.PROFILE_MAX
 M.TRIM_MODE_ROWS = Setup.TRIM_MODE_ROWS
 M.TRIM_MODE_NAVIGATE = Setup.TRIM_MODE_NAVIGATE
+M.STEP_CHOICES = Setup.STEP_CHOICES
+M.nearestStep = Setup.nearestStep
 M.radio = Setup.radio
 M.loadSettings = Setup.loadSettings
 M.storeSettings = Setup.storeSettings
 M.resolveTrims = Setup.resolveTrims
 M.trimsFromList = Setup.trimsFromList
+M.trimEntry = Setup.trimEntry
+M.normaliseTrim = Setup.normaliseTrim
+M.migrateTrims = Setup.migrateTrims
 M.check = Setup.check
 
 local logDrive = Setup.log
@@ -495,6 +500,12 @@ function Drive:ensureTrims()
   self.trims = M.trimsFromList(scan.list)
   self.trimsResolved = true
   self.trimScan = nil
+  -- A store written before the trims were picked with the radio's own picker holds semantic
+  -- indices, 1..6. The walk is the first moment anything here can say what those mean, so the
+  -- conversion happens on the pass that completes it. Nothing is written to the card from the
+  -- widget: this is an in-memory reading of an old file, and the settings page's next save is
+  -- what puts the new form on it.
+  if type(self.trims) == "table" then Setup.migrateTrims(self.settings, self.trims) end
   self.valueEpoch = self.valueEpoch + 1
   if type(self.trims) ~= "table" then return nil end
   return self.trims
@@ -514,10 +525,8 @@ end
 function Drive:bankTrimActive()
   local settings = self.settings
   if not settings or settings.trims ~= true or not self:navigateMode() then return false end
-  local index = settings.bank_trim or 0
-  if index <= 0 then return false end
-  local trims = self.trims
-  return type(trims) == "table" and trims[index] ~= nil
+  if (tonumber(settings.bank_trim) or 0) <= 0 then return false end
+  return Setup.trimEntry(self.trims, settings.bank_trim) ~= nil
 end
 
 --- One step of the walk WITHIN the current bank, wrapping. The other half of the pilot's own
@@ -603,12 +612,12 @@ function Drive:pollNavigate(now)
   local trims = self:ensureTrims()
   if trims == nil then return end
 
-  local bankTrim = trims[settings.bank_trim or 0]
+  local bankTrim = Setup.trimEntry(trims, settings.bank_trim)
   if bankTrim ~= nil then
     walkTrim(self, now, bankTrim, "bankDir", "bankNextAt", Drive.navigateBank)
   end
 
-  local navTrim = trims[settings.nav_trim or 0]
+  local navTrim = Setup.trimEntry(trims, settings.nav_trim)
   if navTrim ~= nil then
     walkTrim(self, now, navTrim, "navDir", "navNextAt", Drive.navigateRow)
   end
@@ -625,7 +634,7 @@ function Drive:pollTrims()
   if trims == nil then return nil, nil end
 
   if self:navigateMode() then
-    local trim = trims[settings.adj_trim or 0]
+    local trim = Setup.trimEntry(trims, settings.adj_trim)
     if trim then
       if self.radio.switchValue(trim.plus) == true then return self.row, true end
       if self.radio.switchValue(trim.minus) == true then return self.row, false end
@@ -637,7 +646,7 @@ function Drive:pollTrims()
   -- rather than a reading: the shipped template SUMS its trims onto the value channel, and a sum
   -- of two lands outside every window, so two trims there produce no step at all.
   for row = 1, Functions.ROW_COUNT do
-    local trim = trims[settings.rowTrim and settings.rowTrim[row] or 0]
+    local trim = Setup.trimEntry(trims, settings.rowTrim and settings.rowTrim[row])
     if trim then
       if self.radio.switchValue(trim.plus) == true then return row, true end
       if self.radio.switchValue(trim.minus) == true then return row, false end
@@ -719,7 +728,7 @@ function Drive:trimRowsPresent()
   if type(trims) ~= "table" then return mask end
 
   if self:navigateMode() then
-    if trims[settings.adj_trim or 0] == nil then return mask end
+    if Setup.trimEntry(trims, settings.adj_trim) == nil then return mask end
     for row = 1, Functions.ROW_COUNT do
       mask[row] = self:functionId(self.bank, row) ~= nil
     end
@@ -727,8 +736,7 @@ function Drive:trimRowsPresent()
   end
 
   for row = 1, Functions.ROW_COUNT do
-    local index = settings.rowTrim and settings.rowTrim[row] or 0
-    mask[row] = (index > 0 and trims[index] ~= nil)
+    mask[row] = Setup.trimEntry(trims, settings.rowTrim and settings.rowTrim[row]) ~= nil
   end
   return mask
 end
@@ -924,7 +932,7 @@ local function settingsSignature(settings)
     tostring(settings.pulse_ms), tostring(settings.trims), tostring(settings.backup_profile),
     tostring(settings.trim_mode), tostring(settings.nav_trim), tostring(settings.bank_trim),
     tostring(settings.adj_trim),
-    tostring(settings.set_mode),
+    tostring(settings.set_mode), tostring(settings.step),
     tostring(rows[1]), tostring(rows[2]), tostring(rows[3]),
     tostring(rows[4]), tostring(rows[5]), tostring(rows[6])
   }, "|")
@@ -1023,7 +1031,7 @@ local function publish(widget, drive)
     local id = drive:functionId(drive.bank, row)
     local trimName = nil
     if not navigate and type(trims) == "table" and type(rowTrim) == "table" then
-      local entry = trims[rowTrim[row] or 0]
+      local entry = Setup.trimEntry(trims, rowTrim[row])
       trimName = entry and entry.name or nil
     end
     rows[row] = {
@@ -1039,9 +1047,9 @@ local function publish(widget, drive)
   -- whatever the row; in rows mode it is the selected row's own.
   local activeTrim = nil
   if type(trims) == "table" then
-    local index = navigate and (drive.settings.adj_trim or 0)
+    local stored = navigate and drive.settings.adj_trim
       or (type(rowTrim) == "table" and rowTrim[drive.row] or 0)
-    local entry = trims[index or 0]
+    local entry = Setup.trimEntry(trims, stored)
     activeTrim = entry and entry.name or nil
   end
 
@@ -1088,7 +1096,10 @@ local function publish(widget, drive)
   local compare = drive.compare
   local compareState = nil
   if type(compare) == "table" then
-    compareState = { verdict = compare.verdict, count = compare.count }
+    compareState = { verdict = compare.verdict, count = compare.count,
+      -- Whether the step is the whole of the difference. It travels because the pilot can fix
+      -- that one on the radio, in one field, and the sentence on screen is a different sentence.
+      stepOnly = compare.stepOnly }
   end
 
   local activeId = drive:functionId(drive.bank, drive.row)
