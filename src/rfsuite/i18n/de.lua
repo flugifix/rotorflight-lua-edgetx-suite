@@ -2573,7 +2573,7 @@ return {
       inflight_spoken_none = "Ansage: -",
       inflight_hint_tap = "Tippen = ein Puls = ein Schritt",
       inflight_hint_tap_short = "Tippen = ein Schritt",
-      inflight_hint_hold = "Halten = Pulse im Takt des Reglers",
+      inflight_hint_hold = "Halten = der Regler wiederholt",
       inflight_hint_hold_short = "Halten = wiederholt",
       inflight_hint_trim = "oder die Trimmung",
       inflight_hint_trim_tail = "ohne hinzusehen",

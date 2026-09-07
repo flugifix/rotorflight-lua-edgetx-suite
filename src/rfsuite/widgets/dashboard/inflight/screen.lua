@@ -177,8 +177,9 @@ local function metrics(w, h, fullscreen)
   -- list drew each name three lines deep, over its neighbours and off the bottom of the screen.
   m.rowW = w - m.rowX - m.pad
   m.rowNumX = m.rowX + math.max(2, math.floor(m.rowW * 0.035 + 0.5))
-  m.rowTrimX = m.rowX + math.floor(m.rowW * 0.118 + 0.5)
-  m.rowNameX = m.rowX + math.floor(m.rowW * 0.26 + 0.5)
+  m.rowTrimX = m.rowX + math.floor(m.rowW * 0.10 + 0.5)
+  m.rowNameX = m.rowX + math.floor(m.rowW * 0.30 + 0.5)
+  m.rowTrimW = m.rowNameX - m.rowTrimX - 2
   m.rowValueW = math.floor(m.rowW * 0.22 + 0.5)
   m.rowNameW = (m.rowX + m.rowW) - m.rowValueW - m.rowNameX - 6
 
@@ -217,24 +218,32 @@ local function appendCentredLabel(children, x, y, w, boxH, text, color, font, al
     w, text, color, font, align)
 end
 
--- Roughly how wide one character of a font is. The firmware will not say, and a label whose text
--- is wider than its box does not clip it -- it WRAPS, onto the row below and off the bottom of
--- the screen. So a name that cannot fit is cut here instead, on a budget that over-estimates:
--- measured on a rendered frame the small font runs about 6.2 pixels a character and this reserves
--- seven, so the cut is early rather than late and no line ever wraps.
-local CHAR_W_RATIO = 0.5
+-- How wide one character of each font is, on average. The firmware will not say, and a label
+-- whose text is wider than its box does not clip it -- it WRAPS, onto the row below and off the
+-- bottom of the screen. So text that cannot fit is cut here instead.
+--
+-- MEASURED on a rendered frame, per font, and not derived from the height by one ratio: the
+-- small font runs about 8.5 pixels against a box 14 tall and the middle one about 15 against a
+-- box of 30, so one ratio over-estimates the larger fonts by a third and cuts titles that fit.
+-- Each figure below rounds the measurement UP, so a cut is early rather than late -- text cut a
+-- character short is still text, and text that wrapped is two lines over its neighbour.
+local FONT_W = { [SMLSIZE or -1] = 9, [MIDSIZE or -2] = 16, [DBLSIZE or -3] = 21, [XXLSIZE or -4] = 34 }
+
+local function charWidth(font)
+  return FONT_W[font] or 9
+end
 
 --- `text`, cut to what fits in `width` at `font`. Cut without an ellipsis: three dots cost three
 -- of the characters that were the reason to cut, and on a parameter name the front is what
 -- identifies it.
 local function textFits(text, width, font)
   if type(text) ~= "string" then return true end
-  return (#text * math.max(1, fontHeight(font) * CHAR_W_RATIO)) <= width
+  return (#text * charWidth(font)) <= width
 end
 
 local function fitText(text, width, font)
   if type(text) ~= "string" then return text end
-  local budget = math.floor(width / math.max(1, fontHeight(font) * CHAR_W_RATIO))
+  local budget = math.floor(width / charWidth(font))
   if budget < 1 then budget = 1 end
   if #text <= budget then return text end
   return string.sub(text, 1, budget)
@@ -348,7 +357,7 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   local setName = (snapshot.setSource == "standard")
     and t("widgets.dashboard.inflight_hdr_standard", "standard")
     or t("widgets.dashboard.inflight_hdr_custom", "custom")
-  local titleW = math.floor(w * 0.48)
+  local titleW = math.floor(w * 0.45)
   appendCentredLabel(children, m.pad, 0, titleW, m.headerH,
     fitText(t("widgets.dashboard.inflight_title", "TUNING") .. " - "
       .. t("widgets.dashboard.inflight_hdr_set", "set:") .. " " .. setName, titleW, m.font),
@@ -380,7 +389,7 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   -- The backup is dropped whole rather than cut in half where the header is too narrow for
   -- both. On the shortest radio the box is 149 pixels and the pair needs 182, and a label that
   -- does not fit wraps -- inside a header bar, onto a line that is not there.
-  local profileX = math.floor(w * 0.48)
+  local profileX = math.floor(w * 0.46)
   local profileW = liveX - m.pad - dotR * 2 - m.pad - profileX
   if backupText ~= nil and textFits(profile .. backupText, profileW, m.small) then
     profile = profile .. backupText
@@ -580,8 +589,8 @@ local function appendRows(children, widget, m, w, t, p, interactive)
       -- has no trim of its own -- one trim adjusts whichever row is selected -- and the drive
       -- publishes no name, so the column simply stays empty.
       if entry.trimName ~= nil then
-        appendCentredLabel(children, m.rowTrimX, rowY, m.rowNameX - m.rowTrimX, m.rowH - 2,
-          entry.trimName, p.dim, m.small, LEFT, m)
+        appendCentredLabel(children, m.rowTrimX, rowY, m.rowTrimW, m.rowH - 2,
+          fitText(entry.trimName, m.rowTrimW, m.small), p.dim, m.small, LEFT, m)
       end
       -- All four columns in the small font, which is what the drawing has: six rows of a
       -- parameter name and a number have to fit in a third of the screen, and the row a pilot is
@@ -699,7 +708,7 @@ local function appendActions(children, widget, m, w, t, p)
              t("widgets.dashboard.inflight_hint_tap_short", "tap = one step"), hintW, m.small),
     p.text, m.small, LEFT)
   appendLabel(children, m.rowX, m.hintY + m.lineH, hintW,
-    pickText(t("widgets.dashboard.inflight_hint_hold", "hold = pulses at the board's rate"),
+    pickText(t("widgets.dashboard.inflight_hint_hold", "hold = the board repeats"),
              t("widgets.dashboard.inflight_hint_hold_short", "hold = repeats"), hintW, m.small),
     p.dim, m.small, LEFT)
   -- The third line names the trim the pilot actually configured, because the whole point of it is

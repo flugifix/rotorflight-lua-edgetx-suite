@@ -2573,7 +2573,7 @@ return {
       inflight_spoken_none = "spoken: -",
       inflight_hint_tap = "tap = one pulse = one step",
       inflight_hint_tap_short = "tap = one step",
-      inflight_hint_hold = "hold = pulses at the board's rate",
+      inflight_hint_hold = "hold = the board repeats",
       inflight_hint_hold_short = "hold = repeats",
       inflight_hint_trim = "or the",
       inflight_hint_trim_tail = "trim, eyes off",
