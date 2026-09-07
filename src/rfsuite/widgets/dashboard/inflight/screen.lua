@@ -187,6 +187,10 @@ local function metrics(w, h, fullscreen)
   return m
 end
 
+-- How wide the frame around an interactive chip, row or step button is -- and, because the
+-- object that carries the press is inset by it, how much smaller that object is than the frame.
+local OUTLINE_W = 2
+
 local function appendLabel(children, x, y, w, text, color, font, align)
   children[#children + 1] = {
     type = "label", x = x, y = y, w = w, text = text, color = color, align = align, font = font
@@ -339,12 +343,25 @@ local function appendChips(children, widget, m, t, p, interactive)
   local drive = widget._inflight
   local standard = (snapshot.setSource == "standard")
 
+  -- The outline goes DOWN FIRST and the object that carries the press sits INSIDE it. An LVGL
+  -- object drawn after a button and overlapping it takes the touch: measured on the simulator
+  -- against the real firmware, an outline laid over the step button swallowed every press while
+  -- the one chip that had no outline -- the selected one -- still fired. So the frame is a
+  -- rectangle behind, and the button is inset by its width.
+  local inset = interactive and OUTLINE_W or 0
   for bank = 1, Functions.BANK_COUNT do
     local x = m.pad + (bank - 1) * (m.chipW + m.chipGap)
     local isActive = (snapshot.bank == bank)
+    if not isActive then
+      children[#children + 1] = {
+        type = "rectangle", x = x, y = m.chipY, w = m.chipW, h = m.chipH,
+        color = p.dim, filled = false
+      }
+    end
     local node = {
       type = interactive and "button" or "rectangle",
-      x = x, y = m.chipY, w = m.chipW, h = m.chipH,
+      x = x + inset, y = m.chipY + inset,
+      w = m.chipW - inset * 2, h = m.chipH - inset * 2,
       color = isActive and p.accent or p.button
     }
     -- `filled` belongs to the BORDERED objects -- rectangle, circle, arc
@@ -365,16 +382,6 @@ local function appendChips(children, widget, m, t, p, interactive)
     children[#children + 1] = node
     -- The chip that is not selected reads as an outline rather than a filled box, which is what
     -- lets six of them sit in a strip without the eye having to pick the odd one out.
-    -- `filled = false` is STATED, not left to the default. These three outlines are the whole of
-    -- the drawing's look -- an outlined chip, an outlined armed row, an outlined step button --
-    -- and a bordered object that fills when nothing says otherwise would paint a solid box over
-    -- what it is supposed to be framing.
-    if not isActive then
-      children[#children + 1] = {
-        type = "rectangle", x = x, y = m.chipY, w = m.chipW, h = m.chipH,
-        color = p.dim, filled = false
-      }
-    end
     local label = standard and (Functions.STANDARD_BANK_LABELS[bank] or tostring(bank))
       or tostring(bank)
     appendCentredLabel(children, x, m.chipY, m.chipW, m.chipH, label,
@@ -463,6 +470,9 @@ local function appendRows(children, widget, m, w, t, p, interactive)
   local rows = snapshot.rows or {}
   local state = widget.state
   local rowW = w - m.rowX - m.pad
+  -- See appendChips: on the surface whose rows take a press the frame goes down first and the
+  -- button is inset inside it.
+  local inset = interactive and OUTLINE_W or 0
 
   appendLabel(children, m.rowNumX, m.bodyY - m.smallH - 2 + m.textOff, rowW,
     t("widgets.dashboard.inflight_row_caption", "row = trim = inc/dec window"), p.dim, m.small, LEFT)
@@ -473,9 +483,18 @@ local function appendRows(children, widget, m, w, t, p, interactive)
     if visible and m.rowH > 0 then
       local rowY = m.bodyY + (row - 1) * m.rowH
       local isActive = (snapshot.row == row)
+      -- See appendChips: the frame goes down first and the object that takes the press sits
+      -- inside it, because an object drawn over a button takes the touch away from it.
+      if isActive then
+        children[#children + 1] = {
+          type = "rectangle", x = m.rowX, y = rowY, w = rowW, h = m.rowH - 2,
+          color = p.accent, filled = false
+        }
+      end
       local node = {
         type = interactive and "button" or "rectangle",
-        x = m.rowX, y = rowY, w = rowW, h = m.rowH - 2,
+        x = m.rowX + inset, y = rowY + inset,
+        w = rowW - inset * 2, h = m.rowH - 2 - inset * 2,
         -- The other reactive closure: which row is armed moves with the pilot's trims, and
         -- repainting the whole scene for it would cost a build per press. The row that is not
         -- armed is painted in the background so that the list reads as text rather than as six
@@ -496,12 +515,6 @@ local function appendRows(children, widget, m, w, t, p, interactive)
         end
       end
       children[#children + 1] = node
-      if isActive then
-        children[#children + 1] = {
-          type = "rectangle", x = m.rowX, y = rowY, w = rowW, h = m.rowH - 2,
-          color = p.accent, filled = false
-        }
-      end
 
       appendCentredLabel(children, m.rowNumX, rowY, m.rowTrimX - m.rowNumX, m.rowH - 2,
         tostring(row), isActive and p.accent or p.dim, m.small, LEFT, m)
@@ -593,9 +606,17 @@ local function appendActions(children, widget, m, w, t, p)
 
   for i = 1, #specs do
     local spec = specs[i]
+    -- See appendChips: the frame first, the control inside it. This is the object the finding
+    -- was measured on -- with the outline laid over it, not one press in a whole run reached the
+    -- drive, and the trace was clean because nothing had gone wrong.
+    children[#children + 1] = {
+      type = "rectangle", x = spec.x, y = m.actionY, w = m.buttonW, h = m.actionH,
+      color = p.text, filled = false
+    }
     local node = {
       type = momentary and "momentaryButton" or "button",
-      x = spec.x, y = m.actionY, w = m.buttonW, h = m.actionH, color = p.button
+      x = spec.x + OUTLINE_W, y = m.actionY + OUTLINE_W,
+      w = m.buttonW - OUTLINE_W * 2, h = m.actionH - OUTLINE_W * 2, color = p.button
     }
     if momentary then
       node.press = function() drive:press(drive.row, spec.up) end
@@ -604,10 +625,6 @@ local function appendActions(children, widget, m, w, t, p)
       node.press = function() drive:tap(drive.row, spec.up) end
     end
     children[#children + 1] = node
-    children[#children + 1] = {
-      type = "rectangle", x = spec.x, y = m.actionY, w = m.buttonW, h = m.actionH,
-      color = p.text, filled = false
-    }
     appendCentredLabel(children, spec.x, m.actionY, m.buttonW, m.actionH,
       spec.label, p.text, m.glyphFont, CENTER, m)
   end
