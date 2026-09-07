@@ -39,7 +39,7 @@ return function(ctx)
   -- for the case the automatic read cannot cover: an adjustment changed in the Configurator while
   -- the radio stayed connected.
   local read = tr(i18n, "help_read",
-    "The board is read once per connect, about twelve seconds. Read again only after changing adjustments in the Configurator.")
+    "Read once per connect, about twelve seconds. Read again only after changing adjustments in the Configurator.")
 
   return {
     message = intro .. "\n\n" .. trims .. "\n\n" .. flow .. "\n\n" .. read

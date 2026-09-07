@@ -2167,7 +2167,7 @@ return {
         plan_no_dialog = "Dieser Sender kann die Rueckfrage nicht anzeigen.",
         help_setup = "Modell einrichten schreibt Mischerzeilen, Variablen und Trimm-Modi, nachdem es gezeigt hat, was entfernt wird.",
         help_flow = "Am Boden: hier das Sicherungsprofil waehlen, sichern, fliegen, danach die Differenz lesen oder zurueckholen.",
-        help_read = "Der Flugregler wird einmal je Verbindung gelesen, rund zwoelf Sekunden. Erneut nur nach einer Aenderung der Adjustments im Configurator.",
+        help_read = "Einmal je Verbindung gelesen, rund zwoelf Sekunden. Erneut nur nach Adjustment-Aenderungen im Configurator.",
         help_trims = "Wechseln und Verstellen: Bank-Trimmung schaltet die Bank, Wechsel-Trimmung die Zeile, Verstell-Trimmung den Wert.",
         set_mode = "Belegung",
         set_mode_standard = "Standard",

@@ -2139,7 +2139,7 @@ return {
         plan_no_dialog = "This radio cannot show the confirmation.",
         help_setup = "Set up the model writes the mixer lines, the variables and the trim modes, after showing what it removes.",
         help_flow = "On the ground: choose the backup profile here, take the backup, fly, then read the difference or restore.",
-        help_read = "The board is read once per connect, about twelve seconds. Read again only after changing adjustments in the Configurator.",
+        help_read = "Read once per connect, about twelve seconds. Read again only after changing adjustments in the Configurator.",
         help_trims = "Walk and adjust: the bank trim steps the bank, the walk trim the row in it, the adjust trim the value.",
         set_mode = "Set layout",
         set_mode_standard = "Standard",
