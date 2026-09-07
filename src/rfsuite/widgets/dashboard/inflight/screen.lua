@@ -242,6 +242,14 @@ local function metrics(w, h, fullscreen)
   m.valueY = m.captionY + math.floor(m.smallH / 2)
   m.sideY = m.valueY + math.floor(m.valueH / 2) - m.smallH
 
+  -- The ground surface's four status lines. They used to be the smallest font the radio has at a
+  -- pitch of that font plus two, which on an 800-pixel screen is four cramped lines under a header
+  -- twice their height. They take the row list's own scaling instead -- the same fraction of the
+  -- zone height m.rowH is -- with a floor at the larger font's box, so the pitch does not move
+  -- when the block picks its font. That matters beyond looks: the ground actions are placed under
+  -- this block rather than at a fixed line, so a pitch that varied would move the buttons.
+  m.statusLineH = math.max(m.fontH + 2, m.rowH)
+
   m.actionH = fullscreen and math.max(18, math.floor(h * 0.206 + 0.5)) or 0
   m.actionY = fullscreen and (h - m.actionH - math.max(3, math.floor(h * 0.029 + 0.5))) or h
   m.buttonW = math.floor(w * 0.271 + 0.5)
@@ -322,10 +330,19 @@ end
 -- The walk is repeated when the settings move, which is the only thing that can change the answer
 -- without the pilot leaving this screen; widgets/dashboard/inflight/drive.lua's own settings
 -- comparison drops the cache when it re-settles a drive.
+--
+-- What holds the walk off is the PHASE and not the interlock, and the difference is the whole of
+-- the verdict on a great many screens. `live` says the interlock is closed; the phase says the
+-- craft is in the air, since it only reaches `live` on the arm reading. A pilot who closes the
+-- interlock on the ground -- to look at the surface before he flies, which is what it is for --
+-- had a drive whose `live` was already true, so the walk never ran and the one line that exists
+-- to tell him whether his model is wired up read "Setup not checked" for the whole session. The
+-- reason the walk is held off at all is the pass that is driving the flight controller, and that
+-- pass is the airborne one.
 function M.checkVerdict(widget)
   local drive = widget and widget._inflight
   if drive == nil then return nil end
-  if drive.live == true then return drive._checkResult end
+  if drive.phase == Drive.PHASE_LIVE then return drive._checkResult end
   if drive._checkedAt == nil then
     drive._checkedAt = drive.radio.now()
     drive._checkResult = Drive.check(drive)
@@ -1082,46 +1099,64 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
   local y = m.chipY
   local lineW = w - m.pad * 2
 
+  -- The font the whole block is drawn in, chosen once here.
+  --
+  -- ONE font for four lines rather than one each: they are four answers to the same question and
+  -- three sizes would read as three kinds of thing. It is the larger rung where every one of them
+  -- fits at it, measured on what the snapshot says at build time -- a label narrower than its text
+  -- does not clip, it WRAPS -- and each line is cut to the chosen font as well, for the ones that
+  -- grow between two builds. The PITCH does not depend on this choice (see m.statusLineH), so the
+  -- block and the actions under it stand in the same place whichever rung is picked.
+  local snapNow = (type(state.inflight) == "table") and state.inflight or nil
+  local checkText = t("widgets.dashboard.inflight_check", "SETUP") .. ": "
+    .. M.describeCheck(M.checkVerdict(widget), t)
+  local lineFont = m.small
+  if m.font ~= m.small and snapNow ~= nil
+    and textFits(checkText, lineW, m.font)
+    and textFits(describeSet(snapNow, t), lineW, m.font)
+    and textFits(describePrime(snapNow, t), lineW, m.font)
+    and textFits(describeBackup(snapNow, t), lineW, m.font) then
+    lineFont = m.font
+  end
+
   -- 1: is this model wired up at all.
-  appendLabel(children, m.pad, y, lineW,
-    t("widgets.dashboard.inflight_check", "SETUP") .. ": " .. M.describeCheck(M.checkVerdict(widget), t),
-    p.text, m.small, LEFT)
-  y = y + m.lineH
+  appendLabel(children, m.pad, y, lineW, fitText(checkText, lineW, lineFont), p.text, lineFont, LEFT)
+  y = y + m.statusLineH
 
   -- 2: does the flight controller carry the set, and 3: when the values were read. Both reactive
   -- rather than baked in, and that is the pilot's third radio round: a read used to bump the
   -- drive's epoch on every reply, the epoch is in the widget's render key, and the whole tree came
   -- down and went up again once per reply while his radio was answering them.
   children[#children + 1] = {
-    type = "label", x = m.pad, y = y, w = lineW, color = p.text, align = LEFT, font = m.small,
+    type = "label", x = m.pad, y = y, w = lineW, color = p.text, align = LEFT, font = lineFont,
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return "" end
-      return describeSet(snap, t)
+      return fitText(describeSet(snap, t), lineW, lineFont)
     end
   }
-  y = y + m.lineH
+  y = y + m.statusLineH
 
   children[#children + 1] = {
-    type = "label", x = m.pad, y = y, w = lineW, color = p.text, align = LEFT, font = m.small,
+    type = "label", x = m.pad, y = y, w = lineW, color = p.text, align = LEFT, font = lineFont,
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return "" end
-      return describePrime(snap, t)
+      return fitText(describePrime(snap, t), lineW, lineFont)
     end
   }
-  y = y + m.lineH
+  y = y + m.statusLineH
 
   -- 4: the undo. What it is, when it was made, or why the last attempt was refused.
   children[#children + 1] = {
-    type = "label", x = m.pad, y = y, w = lineW, color = p.text, align = LEFT, font = m.small,
+    type = "label", x = m.pad, y = y, w = lineW, color = p.text, align = LEFT, font = lineFont,
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return "" end
-      return describeBackup(snap, t)
+      return fitText(describeBackup(snap, t), lineW, lineFont)
     end
   }
-  y = y + m.lineH + m.pad
+  y = y + m.statusLineH + m.pad
 
   -- Why the ground half is refusing, when it is not simply that the board is armed. The one case
   -- so far is the arm sensor never having answered: the ground half then refuses everything,
@@ -1129,28 +1164,37 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
   -- MSP sent on that reading goes to a helicopter in the air.
   local refusal = (Prime ~= nil and type(Prime.groundRefusal) == "function") and Prime.groundRefusal(widget) or nil
 
+  local blocked = false
   if armed then
     -- Nothing here can reach the board while it is armed -- the MSP runtime clears its queue on
     -- every armed tick -- so the actions are absent rather than present and refusing.
     appendLabel(children, m.pad, y, lineW,
-      t("widgets.dashboard.inflight_ground_armed", "Disarm to read or copy a profile"),
-      p.text, m.small, LEFT)
-    return
-  end
-  if refusal == "no_arm_sensor" then
+      fitText(t("widgets.dashboard.inflight_ground_armed", "Disarm to read or copy a profile"),
+              lineW, lineFont),
+      p.text, lineFont, LEFT)
+    y = y + m.statusLineH
+    blocked = true
+  elseif refusal == "no_arm_sensor" then
     appendLabel(children, m.pad, y, lineW,
       fitText(t("widgets.dashboard.inflight_ground_no_arm", "Arm sensor not seen: is sensor 99 selected?"),
-              lineW, m.small),
-      p.warn, m.small, LEFT)
-    return
+              lineW, lineFont),
+      p.warn, lineFont, LEFT)
+    y = y + m.statusLineH
+    blocked = true
   end
+
   if not interactive then
     -- The zone screen has no buttons at all -- whether an LVGL button in a widget zone even takes
-    -- a press is unmeasured -- so it says where the three actions are instead.
+    -- a press is unmeasured -- so it says where the three actions are instead. It says it whatever
+    -- else stands above it: the two states that used to return before this line are exactly the
+    -- ones a pilot is looking for something to do about, and the hint is the only thing on the
+    -- zone that tells him this screen has more on it than he can see.
     appendLabel(children, m.pad, y, lineW,
-      t("widgets.dashboard.inflight_hint_touch", "long press for touch controls"), p.dim, m.small, LEFT)
+      fitText(t("widgets.dashboard.inflight_hint_touch", "long press for touch controls"), lineW, m.small),
+      p.dim, m.small, LEFT)
     return
   end
+  if blocked then return end
   if drive == nil or Prime == nil then return end
 
   -- A profile nobody has chosen is a dash and not a zero. "Backup to 0" reads as a profile number
