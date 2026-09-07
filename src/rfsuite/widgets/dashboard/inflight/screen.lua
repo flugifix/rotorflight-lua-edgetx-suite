@@ -460,13 +460,26 @@ end
 -- Answers nil when no banner is standing, so a caller can fall back to whatever it normally draws.
 -- Read through the clock rather than through a flag somebody has to clear: the stamp is on the
 -- published snapshot, so the banner goes away by itself with no pass rebuilding anything for it.
-local function profileBanner(snapshot, t)
+--
+-- Two wordings, the way every other line on this surface has two: on a 480-pixel screen the slot
+-- beside the bank chips is about 230 pixels, and a label narrower than its text WRAPS rather than
+-- clipping. A banner cut off after "active -" says less than a short one that fits.
+local function profileBanner(snapshot, t, width, font)
   local until_ = tonumber(snapshot.profileBannerUntil)
   if until_ == nil then return nil end
-  if getTime() >= until_ then return nil end
-  return t("widgets.dashboard.inflight_profile_banner", "PID profile") .. " "
-    .. tostring(snapshot.profile or "?") .. " "
-    .. t("widgets.dashboard.inflight_profile_banner_tail", "active - values unknown")
+  -- Reached through the name rather than called outright: this runs in the firmware's reactive
+  -- sweep, OUTSIDE the pcall the widget entry point wraps refresh in, so a build without the call
+  -- would take the whole frame down with nothing able to report it.
+  local clock = getTime
+  if type(clock) ~= "function" then return nil end
+  if clock() >= until_ then return nil end
+  local number = tostring(snapshot.profile or "?")
+  return pickText(
+    t("widgets.dashboard.inflight_profile_banner", "PID profile") .. " " .. number .. " "
+      .. t("widgets.dashboard.inflight_profile_banner_tail", "active - values unknown"),
+    t("widgets.dashboard.inflight_profile_banner_short", "PID") .. " " .. number .. " "
+      .. t("widgets.dashboard.inflight_profile_banner_tail_short", "- values ?"),
+    width, font)
 end
 
 local function appendChips(children, widget, m, t, p, interactive)
@@ -553,13 +566,15 @@ local function appendChips(children, widget, m, t, p, interactive)
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return captionText end
-      local banner = profileBanner(snap, t)
+      local banner = profileBanner(snap, t, captionW, captionFont)
       if banner ~= nil then return fitText(banner, captionW, captionFont) end
       return captionText
     end,
     color = function()
       local snap = state.inflight
-      if type(snap) == "table" and profileBanner(snap, t) ~= nil then return bannerColor end
+      if type(snap) == "table" and profileBanner(snap, t, captionW, captionFont) ~= nil then
+        return bannerColor
+      end
       return captionColor
     end
   }
@@ -603,13 +618,15 @@ local function appendActive(children, widget, m, t, p)
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return captionText end
-      local banner = profileBanner(snap, t)
+      local banner = profileBanner(snap, t, captionW, captionFont)
       if banner ~= nil then return fitText(banner, captionW, captionFont) end
       return captionText
     end,
     color = function()
       local snap = state.inflight
-      if type(snap) == "table" and profileBanner(snap, t) ~= nil then return bannerColor end
+      if type(snap) == "table" and profileBanner(snap, t, captionW, captionFont) ~= nil then
+        return bannerColor
+      end
       return captionColor
     end
   }

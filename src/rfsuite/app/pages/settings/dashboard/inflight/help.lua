@@ -28,7 +28,21 @@ return function(ctx)
   local trims = tr(i18n, "help_trims",
     "Walk and adjust: the bank trim steps the bank, the walk trim the row in it, the adjust trim the value.")
 
+  -- What the ground surface is FOR, in the order a pilot uses it. The three buttons are three
+  -- separate ideas and nothing on the screen says which comes first; the pilot who flew round 3
+  -- pressed the read button because it was on the left.
+  local flow = tr(i18n, "help_flow",
+    "On the ground: choose the backup profile here, take the backup, fly, then read the difference or restore.")
+
+  -- And the one button whose cost is worth stating. Reading the board is roughly twelve seconds
+  -- of round trips, and the overlay does it once per connect on its own -- so the button exists
+  -- for the case the automatic read cannot cover: an adjustment changed in the Configurator while
+  -- the radio stayed connected.
+  local read = tr(i18n, "help_read",
+    "The board is read once per connect, about twelve seconds. Read again only after changing adjustments in the Configurator.")
+
   return {
-    message = intro .. "\n\n" .. trims .. "\n\n" .. setup .. "\n\n" .. setupFc
+    message = intro .. "\n\n" .. trims .. "\n\n" .. flow .. "\n\n" .. read
+      .. "\n\n" .. setup .. "\n\n" .. setupFc
   }
 end
