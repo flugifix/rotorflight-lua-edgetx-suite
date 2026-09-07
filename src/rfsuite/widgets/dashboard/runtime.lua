@@ -497,6 +497,21 @@ local function tickInflight(self)
   drive.tick(self)
 end
 
+--- The overlay's fast half, on EVERY foreground pass rather than on the logic tick.
+--
+-- performBackgroundWork below runs at 100 ms and a JOB pass skips it entirely, which is the right
+-- cadence for reading telemetry into a dashboard and the wrong one for a surface that is driving
+-- a flight controller. The value the pilot reads is the board's answer to the step he has just
+-- asked for, and the trims are momentary contacts a slower poll can miss between two ticks.
+--
+-- Costs one table lookup and one boolean test while the overlay is not live, and it constructs
+-- nothing: the drive is built by tickInflight and this only ever samples one that exists.
+local function sampleInflight(self)
+  if self._inflight == nil then return end
+  local drive = inflightDrive()
+  if drive and type(drive.sample) == "function" then drive.sample(self) end
+end
+
 -- Which tuning surface this pass belongs to, or nil for the dashboard as it has always been.
 -- `zone` needs the interlock; `fs` is also reached from the quick settings menu with the
 -- interlock open, where the drive is inert and the screen is a read-out.
@@ -2395,6 +2410,11 @@ function Runtime.new(zone, options)
     -- The firmware calls refresh() for the widget the pilot is looking at and background() for
     -- every other one, so this is where "on screen" is known. The overlay drives only from here.
     self._foreground = true
+
+    -- The tuning overlay's fast half, ahead of everything else this pass may or may not do: a
+    -- JOB pass returns before the background half and a state pass reaches it only on the logic
+    -- tick, and neither cadence is one a surface driving a flight controller can be read at.
+    sampleInflight(self)
 
     -- Route touch/key events to LVGL engine when active (e.g. fullscreen)
     if lvgl and type(lvgl.onEvent) == "function" and event ~= nil then

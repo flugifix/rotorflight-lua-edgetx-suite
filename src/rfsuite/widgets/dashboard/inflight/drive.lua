@@ -142,6 +142,7 @@ function M.newDrive(radio, settings)
   self.trimScan = nil
   self.navDir = 0
   self.navNextAt = nil
+  self.fastAt = nil
   self.values = {}
   self.valueEpoch = 0
   return self
@@ -611,28 +612,21 @@ function Drive:trimRowsPresent()
   return mask
 end
 
---- One pass of the drive. Everything with a cost is behind `live`; a widget whose pilot has the
--- interlock off pays one switch read per pass and nothing else.
-function Drive:tick()
-  local now = self.radio.now()
-  local wasLive = self.live
-  self:evaluateInterlock(now)
-  if not self.live then
-    if wasLive then self.valueEpoch = self.valueEpoch + 1 end
-    return false
-  end
-
-  -- What the enable channel is actually doing. Read rather than assumed, so a six-position switch
-  -- wired straight to it shows the right bank without the overlay having written anything, and a
-  -- missing mixer line is visible as a bank that does not move.
-  local shown = Functions.usToBand(self.radio.channelUs(self.settings.bank_ch), self.bands)
-  if shown ~= self.bankShown then
-    self.bankShown = shown
-    self.valueEpoch = self.valueEpoch + 1
-  end
-  if shown ~= nil and shown ~= self.bank then
-    self.bank = shown
-  end
+--- The fast half of a pass: what the board is reporting and what the pilot's thumb is doing.
+--
+-- Split out of `tick` because the two clocks are not the same one. The widget's background half
+-- runs on a 100 ms logic tick while the firmware calls the widget every 50 ms, and neither of the
+-- things in here can wait for the slower clock. The value on the screen is the board's answer to
+-- the step the pilot has just asked for, and it is the only thing that tells him the step landed;
+-- the trims are momentary contacts, and a press that begins and ends between two logic ticks is a
+-- press nothing ever saw. Both are cheap -- two telemetry reads and a handful of switch reads, no
+-- allocation and no model call -- and none of it runs while the interlock is open.
+--
+-- Guarded on the radio's own clock, so a pass that runs the whole tick as well as this one does
+-- the work once rather than twice.
+function Drive:fastTick(now)
+  if self.fastAt == now then return end
+  self.fastAt = now
 
   -- The last adjustment the board reports having made. AdjF reads 0 between adjustments, so a
   -- non-zero reading is a fresh one and its value belongs to that function.
@@ -681,7 +675,32 @@ function Drive:tick()
   if want ~= self.written then
     self:writeValue(want, want ~= 0 and self.radio.flightMode() or nil)
   end
+end
 
+--- One pass of the drive. Everything with a cost is behind `live`; a widget whose pilot has the
+-- interlock off pays one switch read per pass and nothing else.
+function Drive:tick()
+  local now = self.radio.now()
+  local wasLive = self.live
+  self:evaluateInterlock(now)
+  if not self.live then
+    if wasLive then self.valueEpoch = self.valueEpoch + 1 end
+    return false
+  end
+
+  -- What the enable channel is actually doing. Read rather than assumed, so a six-position switch
+  -- wired straight to it shows the right bank without the overlay having written anything, and a
+  -- missing mixer line is visible as a bank that does not move.
+  local shown = Functions.usToBand(self.radio.channelUs(self.settings.bank_ch), self.bands)
+  if shown ~= self.bankShown then
+    self.bankShown = shown
+    self.valueEpoch = self.valueEpoch + 1
+  end
+  if shown ~= nil and shown ~= self.bank then
+    self.bank = shown
+  end
+
+  self:fastTick(now)
   return true
 end
 
@@ -874,6 +893,26 @@ function M.tick(widget)
   if live then drive.profile = drive.radio.sensor("PID#") end
   publish(widget, drive)
   return live == true
+end
+
+--- The fast half of a pass, called from the widget's FOREGROUND half on every pass.
+--
+-- The widget's background work runs on a 100 ms logic tick and a build pass skips it altogether,
+-- which is the right cadence for reading telemetry into a dashboard and the wrong one for a
+-- tuning surface: the pilot's own report is that the value lags and that a trim press often does
+-- nothing. Both come off the same clock. So the two things that must not wait -- the board's
+-- AdjF/AdjV report and the trims -- are polled here instead, at the firmware's own 50 ms widget
+-- cadence, and everything else stays where it was.
+--
+-- Costs one table lookup and one boolean test unless the overlay is live, and never constructs a
+-- drive: a widget that has not run the overlay this session has nothing to sample.
+function M.sample(widget)
+  if type(widget) ~= "table" then return false end
+  local drive = widget._inflight
+  if drive == nil or drive.live ~= true then return false end
+  drive:fastTick(drive.radio.now())
+  publish(widget, drive)
+  return true
 end
 
 --- The held control let go, from a caller that is about to destroy the object which would have
