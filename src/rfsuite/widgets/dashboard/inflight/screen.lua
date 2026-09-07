@@ -481,14 +481,20 @@ local function appendChips(children, widget, m, t, p, interactive)
   -- name on the shortest radio.
   local captionText, captionColor
   if snapshot.live == true and snapshot.bankShown == nil then
-    captionText = t("widgets.dashboard.inflight_bank_unknown", "Enable channel between banks")
+    captionText = pickText(
+      t("widgets.dashboard.inflight_bank_unknown", "Enable channel between banks"),
+      t("widgets.dashboard.inflight_bank_unknown_short", "no bank armed"),
+      m.chipCaptionW, m.small)
     captionColor = p.warn
   else
-    captionText = t("widgets.dashboard.inflight_chip_caption", "bank = enable band")
+    captionText = pickText(
+      t("widgets.dashboard.inflight_chip_caption", "bank = enable band"),
+      t("widgets.dashboard.inflight_chip_caption_short", "bank = band"),
+      m.chipCaptionW, m.small)
     captionColor = p.dim
   end
   appendCentredLabel(children, m.chipEnd, m.chipY, m.chipCaptionW, m.chipH,
-    fitText(captionText, m.chipCaptionW, m.small), captionColor, m.small, LEFT, m)
+    captionText, captionColor, m.small, LEFT, m)
 end
 
 --- The parameter the pilot is on: its name, where it sits, and its value in the accent, large.
