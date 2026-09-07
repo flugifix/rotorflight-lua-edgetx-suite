@@ -169,7 +169,7 @@ local function metrics(w, h, fullscreen)
   m.chipCaptionW = w - m.chipEnd - m.pad
 
   m.bodyY = math.max(m.chipY + m.chipH + 4, math.floor(h * 0.279 + 0.5))
-  m.rowX = math.floor(w * 0.625 + 0.5)
+  m.rowX = math.floor(w * 0.58 + 0.5)
   m.rowH = math.max(10, math.floor(h * 0.081 + 0.5))
   -- The four columns inside a row are fractions of the ROW's own width and not of the screen's.
   -- Taken from the screen they grow faster than the row does -- at 800 pixels the name was left
@@ -225,9 +225,13 @@ end
 -- MEASURED on a rendered frame, per font, and not derived from the height by one ratio: the
 -- small font runs about 8.5 pixels against a box 14 tall and the middle one about 15 against a
 -- box of 30, so one ratio over-estimates the larger fonts by a third and cuts titles that fit.
--- Each figure below rounds the measurement UP, so a cut is early rather than late -- text cut a
--- character short is still text, and text that wrapped is two lines over its neighbour.
-local FONT_W = { [SMLSIZE or -1] = 9, [MIDSIZE or -2] = 16, [DBLSIZE or -3] = 21, [XXLSIZE or -4] = 34 }
+--
+-- Each figure is the WIDEST average a string of that font was measured at, not the mean one --
+-- `Yaw CCW Stop` runs 10.1 pixels a character where a lowercase sentence runs 8. A budget set at
+-- the mean cuts most strings correctly and lets the capital-heavy ones wrap, which is the failure
+-- it exists to prevent; set at the maximum it cuts a few strings a character early, which is not
+-- a failure at all.
+local FONT_W = { [SMLSIZE or -1] = 11, [MIDSIZE or -2] = 16, [DBLSIZE or -3] = 21, [XXLSIZE or -4] = 34 }
 
 local function charWidth(font)
   return FONT_W[font] or 9
@@ -357,11 +361,16 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   local setName = (snapshot.setSource == "standard")
     and t("widgets.dashboard.inflight_hdr_standard", "standard")
     or t("widgets.dashboard.inflight_hdr_custom", "custom")
-  local titleW = math.floor(w * 0.45)
+  local titleW = math.floor(w * 0.44)
+  -- The title in the SMALL font, at every size, and it is the drawing's own proportion: twelve
+  -- pixels of title in a thirty-four pixel bar. A header that has to hold the title, the profile,
+  -- the backup, a marker and a close box in 480 pixels has room for one of them in a larger font
+  -- and it is not this one.
   appendCentredLabel(children, m.pad, 0, titleW, m.headerH,
-    fitText(t("widgets.dashboard.inflight_title", "TUNING") .. " - "
-      .. t("widgets.dashboard.inflight_hdr_set", "set:") .. " " .. setName, titleW, m.font),
-    p.text, m.font, LEFT, m)
+    pickText(t("widgets.dashboard.inflight_title", "TUNING") .. " - "
+      .. t("widgets.dashboard.inflight_hdr_set", "set:") .. " " .. setName,
+      t("widgets.dashboard.inflight_title", "TUNING"), titleW, m.small),
+    p.text, m.small, LEFT, m)
 
   -- The profile, in dim text: it is the thing the pilot is tuning and the thing his undo lives
   -- in, and the firmware's adjustments act on whichever one is active -- so it belongs where he
@@ -370,8 +379,8 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
     .. (snapshot.profile and formatValue(snapshot.profile) or UNKNOWN_VALUE)
   local backupText = nil
   if snapshot.backup ~= nil and snapshot.backup.profile ~= nil then
-    backupText = "  (" .. t("widgets.dashboard.inflight_hdr_backup", "backup")
-      .. ": " .. tostring(snapshot.backup.profile) .. ")"
+    backupText = " (" .. t("widgets.dashboard.inflight_hdr_backup", "backup")
+      .. " " .. tostring(snapshot.backup.profile) .. ")"
   end
 
   local liveText = (snapshot.live == true) and t("widgets.dashboard.inflight_live", "LIVE")
@@ -389,7 +398,7 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   -- The backup is dropped whole rather than cut in half where the header is too narrow for
   -- both. On the shortest radio the box is 149 pixels and the pair needs 182, and a label that
   -- does not fit wraps -- inside a header bar, onto a line that is not there.
-  local profileX = math.floor(w * 0.46)
+  local profileX = math.floor(w * 0.44)
   local profileW = liveX - m.pad - dotR * 2 - m.pad - profileX
   if backupText ~= nil and textFits(profile .. backupText, profileW, m.small) then
     profile = profile .. backupText
@@ -484,12 +493,17 @@ local function appendActive(children, widget, m, t, p)
   if snapshot.setSource == "standard" then
     bankLabel = Functions.STANDARD_BANK_LABELS[snapshot.bank or 0] or bankLabel
   end
+  -- Where the parameter sits, and which trim moves it. The trim is the part that goes where the
+  -- line does not fit: the third hint under the step buttons names it too, and the row and the
+  -- bank are what the pilot cannot read anywhere else on the surface.
   local caption = t("widgets.dashboard.inflight_row", "row") .. " " .. tostring(snapshot.row)
     .. " - " .. t("widgets.dashboard.inflight_bank", "bank") .. " " .. bankLabel
+  local withTrim = caption
   if snapshot.activeTrim ~= nil then
-    caption = caption .. " - " .. t("widgets.dashboard.inflight_trim", "trim") .. " " .. snapshot.activeTrim
+    withTrim = caption .. " - " .. t("widgets.dashboard.inflight_trim", "trim") .. " " .. snapshot.activeTrim
   end
-  appendLabel(children, m.leftX, m.captionY, m.leftW, caption, p.dim, m.small, LEFT)
+  appendLabel(children, m.leftX, m.captionY, m.leftW,
+    pickText(withTrim, caption, m.leftW, m.small), p.dim, m.small, LEFT)
 
   local state = widget.state
   children[#children + 1] = {
