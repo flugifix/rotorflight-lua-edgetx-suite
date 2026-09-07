@@ -1,7 +1,14 @@
--- The two renderings of the in-flight tuning overlay: the widget zone, and fullscreen.
+-- The three renderings of the in-flight tuning overlay: the widget zone, fullscreen, and the
+-- ground surface between flights.
 --
--- Both append node tables to `children`, the idiom widgets/dashboard/fullscreen_menu.lua uses, so
--- the runtime builds them exactly the way it builds the quick settings menu.
+-- All three append node tables to `children`, the idiom widgets/dashboard/fullscreen_menu.lua
+-- uses, so the runtime builds them exactly the way it builds the quick settings menu.
+--
+-- The layout is the concept drawing's, and it is laid out in FRACTIONS of the widget's own zone
+-- rather than in constants: the reference is 480 x 272, the pilot's radio is 480 x 320 and the
+-- large radios are 800 x 480, and a surface a pilot reads at arm's length in sunlight cannot have
+-- a row list that runs off the bottom of one of them. Only the fonts step, because the firmware
+-- offers a ladder of five and not a size.
 --
 -- The zone screen carries NO buttons. Whether an LVGL button in a non-fullscreen widget zone ever
 -- receives a press is not something this file knows, and a control that may or may not answer is
@@ -61,48 +68,122 @@ local function translator(widget)
     or function(key, fallback) return fallback or key end
 end
 
-local function palette()
-  local bg = COLOR_THEME_PRIMARY3 or BLACK
-  if bg == BLACK and lcd and type(lcd.RGB) == "function" then
-    bg = lcd.RGB(40, 40, 40)
+-- ---------------------------------------------------------------------------
+-- Colours
+-- ---------------------------------------------------------------------------
+
+--- The surface's palette.
+--
+-- The theme's own constants where the quick settings menu uses them, and named colours where the
+-- drawing asks for one the theme does not carry. `lcd.RGB` is the firmware's own mixer and this
+-- file is not the first to reach for it: widgets/dashboard/fullscreen_menu.lua builds its
+-- background with it, and widgets/dashboard/objects/common.lua wraps it for the gauges.
+--
+-- The accent is AMBER and deliberately not the theme's, which is the one deviation from "use what
+-- the theme gives you". The tuning surface is a MODE: the flight controller is being driven from
+-- the radio, the value the pilot is looking at is being written to the board, and the one thing
+-- that must never happen is a pilot mistaking it for the dashboard. A theme whose accent is the
+-- dashboard's accent cannot say that. Every colour falls back to a named constant on a build
+-- without lcd.RGB, so a radio that lacks it gets a plainer screen rather than an error.
+local function rgb(r, g, b, fallback)
+  if lcd and type(lcd.RGB) == "function" then
+    local ok, col = pcall(lcd.RGB, r, g, b)
+    if ok and col ~= nil then return col end
   end
-  return bg, COLOR_THEME_SECONDARY1 or WHITE, COLOR_THEME_PRIMARY1 or BLACK
+  return fallback
 end
 
--- One layout profile per screen size, the shape widgets/dashboard/fullscreen_menu.lua uses.
--- The tall radios get the generous numbers; everything else gets the compact set, which is what
--- has to survive the shortest screen the suite runs on.
+local function palette()
+  local p = {}
+  p.bg = rgb(10, 12, 16, COLOR_THEME_PRIMARY3 or BLACK)
+  p.header = rgb(28, 32, 40, COLOR_THEME_PRIMARY1 or BLACK)
+  p.text = WHITE
+  p.dim = rgb(140, 140, 140, COLOR_THEME_DISABLED or WHITE)
+  p.accent = rgb(255, 180, 40, COLOR_THEME_SECONDARY1 or YELLOW)
+  p.ok = rgb(90, 200, 120, GREEN or WHITE)
+  p.warn = COLOR_THEME_WARNING or p.accent
+  p.button = rgb(40, 44, 54, COLOR_THEME_PRIMARY1 or BLACK)
+  -- The armed row's fill: dark, with just enough of the accent in it that the outline reads as
+  -- belonging to the row rather than floating over it.
+  p.rowFill = rgb(45, 45, 30, COLOR_THEME_PRIMARY1 or BLACK)
+  return p
+end
+
+-- ---------------------------------------------------------------------------
+-- Geometry
+-- ---------------------------------------------------------------------------
+
+-- The firmware's font ladder, with the heights the layout has to reserve for them. There is no
+-- way to ask the firmware how tall a font is from a widget, so these are the sizes the label
+-- objects actually occupy on a colour radio and every vertical stack below is built from them.
+local FONT_H = { [SMLSIZE or -1] = 12, [MIDSIZE or -2] = 24, [DBLSIZE or -3] = 32, [XXLSIZE or -4] = 64 }
+
+local function fontHeight(font)
+  return FONT_H[font] or 12
+end
+
+--- The layout, in fractions of the zone the widget was given.
+--
+-- Every number here is the concept drawing's own, divided by 480 or by 272: the drawing is the
+-- specification and this is it, expressed so that the same surface lands on a 480 x 320 radio and
+-- on an 800 x 480 one. What does NOT scale is the font ladder, so the two size classes below pick
+-- the nearest rung and the vertical stacks are built from the chosen font's height rather than
+-- from a constant -- which is the defect the first cut had, a caption laid out for one font and
+-- drawn in another, printed over the parameter name.
 local function metrics(w, h, fullscreen)
   local m = {}
   m.large = h > 350
+
   if m.large then
-    m.pad = 14
-    m.headerH = 46
-    m.chipH = 40
-    m.activeH = 74
-    m.hintH = 24
     m.font = MIDSIZE
-    m.smallFont = SMLSIZE
-    m.bigFont = XXLSIZE
-    m.lineH = 26
+    m.nameFont = DBLSIZE
   else
-    m.pad = 5
-    m.headerH = 22
-    m.chipH = 22
-    m.activeH = 46
-    m.hintH = 14
     m.font = SMLSIZE
-    m.smallFont = SMLSIZE
-    m.bigFont = DBLSIZE
-    m.lineH = 14
+    m.nameFont = MIDSIZE
   end
-  m.actionH = fullscreen and (m.large and 56 or 34) or 0
-  m.checkH = fullscreen and m.hintH or 0
-  m.chipW = math.floor((w - m.pad * 2 - 5 * 4) / 6)
-  local used = m.headerH + m.chipH + m.activeH + m.actionH + m.checkH + m.hintH + m.pad * 3
-  m.rowsH = h - used
-  if m.rowsH < 0 then m.rowsH = 0 end
-  m.rowH = math.floor(m.rowsH / Functions.ROW_COUNT)
+  m.small = SMLSIZE
+  m.valueFont = XXLSIZE
+  m.fontH = fontHeight(m.font)
+  m.smallH = fontHeight(m.small)
+  m.nameH = fontHeight(m.nameFont)
+  m.valueH = fontHeight(m.valueFont)
+  m.lineH = m.smallH + 2
+  -- The label objects carry leading above the glyphs; their own menu nudges its text up by the
+  -- same amounts and this surface has to sit on the same baselines.
+  m.textOff = m.large and -6 or -2
+
+  m.pad = math.max(3, math.floor(w * 0.021 + 0.5))
+  m.headerH = math.max(16, math.floor(h * 0.125 + 0.5))
+  m.chipY = m.headerH + math.max(2, math.floor(h * 0.029 + 0.5))
+  m.chipH = math.max(14, math.floor(h * 0.096 + 0.5))
+  m.chipGap = math.max(2, math.floor(w * 0.0125 + 0.5))
+  m.chipW = math.max(12, math.floor(w * 0.075 + 0.5))
+  m.chipEnd = m.pad + Functions.BANK_COUNT * (m.chipW + m.chipGap)
+
+  m.bodyY = math.max(m.chipY + m.chipH + 4, math.floor(h * 0.279 + 0.5))
+  m.rowX = math.floor(w * 0.625 + 0.5)
+  m.rowH = math.max(10, math.floor(h * 0.081 + 0.5))
+  m.rowNumX = m.rowX + math.floor(w * 0.0125 + 0.5)
+  m.rowTrimX = m.rowX + math.floor(w * 0.042 + 0.5)
+  m.rowNameX = m.rowX + math.floor(w * 0.104 + 0.5)
+  m.rowValueW = math.floor(w * 0.20 + 0.5)
+
+  m.leftX = math.floor(w * 0.025 + 0.5)
+  m.leftW = m.rowX - m.leftX - m.pad
+  m.sideX = m.leftX + math.floor(w * 0.204 + 0.5)
+
+  m.nameY = m.bodyY + 2
+  m.captionY = m.nameY + m.nameH + 2
+  m.valueY = m.captionY + m.smallH + 2
+  m.sideY = m.valueY + math.floor(m.valueH / 2)
+
+  m.actionH = fullscreen and math.max(18, math.floor(h * 0.206 + 0.5)) or 0
+  m.actionY = fullscreen and (h - m.actionH - math.max(3, math.floor(h * 0.029 + 0.5))) or h
+  m.buttonW = math.floor(w * 0.271 + 0.5)
+  -- The glyph inside the step button, at the largest rung the button is tall enough to hold.
+  m.glyphFont = (m.actionH >= 80) and XXLSIZE or DBLSIZE
+  m.glyphH = fontHeight(m.glyphFont)
+  m.hintY = m.actionY + math.max(2, math.floor(h * 0.022 + 0.5))
   return m
 end
 
@@ -110,6 +191,12 @@ local function appendLabel(children, x, y, w, text, color, font, align)
   children[#children + 1] = {
     type = "label", x = x, y = y, w = w, text = text, color = color, align = align, font = font
   }
+end
+
+--- A label whose glyphs sit centred in a box `boxH` tall.
+local function appendCentredLabel(children, x, y, w, boxH, text, color, font, align, m)
+  appendLabel(children, x, y + math.floor((boxH - fontHeight(font)) / 2) + m.textOff,
+    w, text, color, font, align)
 end
 
 local function formatValue(value)
@@ -127,9 +214,9 @@ end
 -- model's mixer lines, its variable details and its flight mode's trim modes over and over for as
 -- long as the surface was up -- and in the air that is every couple of seconds, for a verdict
 -- about a model that cannot change while the pilot is flying it. And it is not run while the
--- overlay is LIVE at all: the live surface shows the last verdict the ground surface reached and
--- walks nothing, because the one place that budget must not be spent is the pass that is driving
--- the flight controller.
+-- overlay is LIVE at all: the ground surface is the only place the verdict is shown, and it walks
+-- nothing while the overlay is up, because the one place that budget must not be spent is the
+-- pass that is driving the flight controller.
 --
 -- The walk is repeated when the settings move, which is the only thing that can change the answer
 -- without the pilot leaving this screen; widgets/dashboard/inflight/drive.lua's own settings
@@ -193,43 +280,72 @@ function M.describeCheck(result, t)
 end
 
 -- ---------------------------------------------------------------------------
--- The pieces both screens share
+-- The pieces the three surfaces share
 -- ---------------------------------------------------------------------------
 
-local function appendHeader(children, widget, m, w, t, accent, btn)
+--- The header bar: what this surface is, which profile it is tuning, and whether it is live.
+--
+-- The set the rows come from is named HERE rather than left to the ground surface, because a
+-- standard set and a set read off the board name the same six banks differently and the chips
+-- immediately below carry the difference.
+local function appendHeader(children, widget, m, w, t, p, closeW)
   local snapshot = widget.state.inflight or {}
   children[#children + 1] = {
-    type = "rectangle", x = 0, y = 0, w = w, h = m.headerH, color = btn, filled = true
+    type = "rectangle", x = 0, y = 0, w = w, h = m.headerH, color = p.header, filled = true
   }
-  local textY = math.floor((m.headerH - m.lineH) / 2)
-  appendLabel(children, m.pad, textY, math.floor(w / 2),
-    t("widgets.dashboard.inflight_title", "IN-FLIGHT TUNING"), WHITE, m.font, LEFT)
 
-  local right = {}
-  if snapshot.profile ~= nil then
-    right[#right + 1] = t("widgets.dashboard.inflight_profile", "PROFILE") .. " " .. formatValue(snapshot.profile)
+  local setName = (snapshot.setSource == "standard")
+    and t("widgets.dashboard.inflight_hdr_standard", "standard")
+    or t("widgets.dashboard.inflight_hdr_custom", "custom")
+  appendCentredLabel(children, m.pad, 0, math.floor(w * 0.48), m.headerH,
+    t("widgets.dashboard.inflight_title", "TUNING") .. " - "
+      .. t("widgets.dashboard.inflight_hdr_set", "set:") .. " " .. setName,
+    p.text, m.font, LEFT, m)
+
+  -- The profile, in dim text: it is the thing the pilot is tuning and the thing his undo lives
+  -- in, and the firmware's adjustments act on whichever one is active -- so it belongs where he
+  -- can see it without asking for it.
+  local profile = t("widgets.dashboard.inflight_profile", "PID profile") .. " "
+    .. (snapshot.profile and formatValue(snapshot.profile) or UNKNOWN_VALUE)
+  if snapshot.backup ~= nil and snapshot.backup.profile ~= nil then
+    profile = profile .. "  (" .. t("widgets.dashboard.inflight_hdr_backup", "backup")
+      .. ": " .. tostring(snapshot.backup.profile) .. ")"
   end
-  if snapshot.live == true then
-    right[#right + 1] = t("widgets.dashboard.inflight_live", "LIVE")
-  else
-    right[#right + 1] = t("widgets.dashboard.inflight_ground", "GROUND")
-  end
-  appendLabel(children, math.floor(w / 2), textY, math.floor(w / 2) - m.pad,
-    table.concat(right, "  "), snapshot.live == true and accent or WHITE, m.font, RIGHT)
+
+  local liveText = (snapshot.live == true) and t("widgets.dashboard.inflight_live", "LIVE")
+    or t("widgets.dashboard.inflight_ground", "GROUND")
+  local liveColor = (snapshot.live == true) and p.ok or p.dim
+  local liveW = math.floor(w * 0.09)
+  local liveX = w - closeW - m.pad - liveW
+  local dotR = math.max(3, math.floor(m.headerH * 0.12))
+  children[#children + 1] = {
+    type = "circle", x = liveX - m.pad - dotR, y = math.floor(m.headerH / 2),
+    radius = dotR, color = liveColor, filled = true
+  }
+  appendCentredLabel(children, liveX, 0, liveW, m.headerH, liveText, liveColor, m.font, LEFT, m)
+
+  local profileX = math.floor(w * 0.48)
+  appendCentredLabel(children, profileX, 0, liveX - m.pad - dotR * 2 - m.pad - profileX, m.headerH,
+    profile, p.dim, m.small, RIGHT, m)
 end
 
---- The six bank chips. `press` is nil on the zone screen, which is what makes them read-outs
--- there and controls in fullscreen.
-local function appendChips(children, widget, m, y, t, accent, btn, interactive)
+--- The six bank chips, and one caption beside them.
+--
+-- Labelled with the standard set's own letters -- P, I, D, F, O, B -- when that is the set, and
+-- with 1..6 when the set came off the board, where a letter would stand for nothing. `press` is
+-- nil on the zone and ground surfaces, which is what makes them read-outs there.
+local function appendChips(children, widget, m, t, p, interactive)
   local snapshot = widget.state.inflight or {}
   local drive = widget._inflight
+  local standard = (snapshot.setSource == "standard")
+
   for bank = 1, Functions.BANK_COUNT do
-    local x = m.pad + (bank - 1) * (m.chipW + 4)
+    local x = m.pad + (bank - 1) * (m.chipW + m.chipGap)
     local isActive = (snapshot.bank == bank)
     local node = {
       type = interactive and "button" or "rectangle",
-      x = x, y = y, w = m.chipW, h = m.chipH,
-      color = isActive and accent or btn
+      x = x, y = m.chipY, w = m.chipW, h = m.chipH,
+      color = isActive and p.accent or p.button
     }
     -- `filled` belongs to the BORDERED objects -- rectangle, circle, arc
     -- (lua_lvgl_widget.cpp, LvglWidgetBorderedObject::parseParam). A button is built from
@@ -247,31 +363,67 @@ local function appendChips(children, widget, m, y, t, accent, btn, interactive)
       end
     end
     children[#children + 1] = node
-    appendLabel(children, x, y + math.floor((m.chipH - m.lineH) / 2), m.chipW,
-      tostring(bank), isActive and BLACK or WHITE, m.font, CENTER)
+    -- The chip that is not selected reads as an outline rather than a filled box, which is what
+    -- lets six of them sit in a strip without the eye having to pick the odd one out.
+    -- `filled = false` is STATED, not left to the default. These three outlines are the whole of
+    -- the drawing's look -- an outlined chip, an outlined armed row, an outlined step button --
+    -- and a bordered object that fills when nothing says otherwise would paint a solid box over
+    -- what it is supposed to be framing.
+    if not isActive then
+      children[#children + 1] = {
+        type = "rectangle", x = x, y = m.chipY, w = m.chipW, h = m.chipH,
+        color = p.dim, filled = false
+      }
+    end
+    local label = standard and (Functions.STANDARD_BANK_LABELS[bank] or tostring(bank))
+      or tostring(bank)
+    appendCentredLabel(children, x, m.chipY, m.chipW, m.chipH, label,
+      isActive and p.bg or p.dim, m.font, CENTER, m)
   end
-  -- Said in words rather than left to the chips: a bank the enable channel is not resting in is
-  -- one the flight controller is not listening on, whatever the screen highlights.
-  if snapshot.bankShown == nil then
-    appendLabel(children, m.pad, y + m.chipH, m.chipW * 6,
-      t("widgets.dashboard.inflight_bank_unknown", "Enable channel between banks"), COLOR_THEME_WARNING, m.smallFont, LEFT)
+
+  -- The caption beside the strip, and where the enable channel is not resting in any band the
+  -- WARNING takes its place. Said in words rather than left to the chips: a bank the flight
+  -- controller is not listening on is not one the highlight can describe -- and it is the same
+  -- slot rather than a line of its own, which is where it used to be drawn over the parameter
+  -- name on the shortest radio.
+  local captionText, captionColor
+  if snapshot.live == true and snapshot.bankShown == nil then
+    captionText = t("widgets.dashboard.inflight_bank_unknown", "Enable channel between banks")
+    captionColor = p.warn
+  else
+    captionText = t("widgets.dashboard.inflight_chip_caption", "bank = enable band")
+    captionColor = p.dim
   end
+  appendCentredLabel(children, m.chipEnd, m.chipY, m.rowX - m.chipEnd, m.chipH,
+    captionText, captionColor, m.small, LEFT, m)
 end
 
---- The parameter the pilot is on, large, with its value.
+--- The parameter the pilot is on: its name, where it sits, and its value in the accent, large.
 --
--- The value is the one reactive closure on this screen. It reads the published snapshot and
--- formats one string per change, which is exactly what the reactive-closure rule allows.
-local function appendActive(children, widget, m, y, w, t, accent)
+-- The value is the one reactive closure on the left of this screen. It reads the published
+-- snapshot and formats one string per change, which is exactly what the reactive-closure rule
+-- allows -- and it is the reason the number can follow the board without a rebuild.
+local function appendActive(children, widget, m, t, p)
   local snapshot = widget.state.inflight or {}
   local name = snapshot.activeName or t("widgets.dashboard.inflight_unassigned", "Unassigned")
-  appendLabel(children, m.pad, y, math.floor(w * 0.6) - m.pad, name, WHITE, m.font, LEFT)
+  appendLabel(children, m.leftX, m.nameY, m.leftW, name, p.text, m.nameFont, LEFT)
+
+  local bankLabel = tostring(snapshot.bank)
+  if snapshot.setSource == "standard" then
+    bankLabel = Functions.STANDARD_BANK_LABELS[snapshot.bank or 0] or bankLabel
+  end
+  local caption = t("widgets.dashboard.inflight_row", "row") .. " " .. tostring(snapshot.row)
+    .. " - " .. t("widgets.dashboard.inflight_bank", "bank") .. " " .. bankLabel
+  if snapshot.activeTrim ~= nil then
+    caption = caption .. " - " .. t("widgets.dashboard.inflight_trim", "trim") .. " " .. snapshot.activeTrim
+  end
+  appendLabel(children, m.leftX, m.captionY, m.leftW, caption, p.dim, m.small, LEFT)
 
   local state = widget.state
   children[#children + 1] = {
     type = "label",
-    x = math.floor(w * 0.6), y = y, w = math.floor(w * 0.4) - m.pad,
-    color = accent, align = RIGHT, font = m.bigFont,
+    x = m.leftX, y = m.valueY, w = m.sideX - m.leftX - 4,
+    color = p.accent, align = LEFT, font = m.valueFont,
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return UNKNOWN_VALUE end
@@ -281,35 +433,57 @@ local function appendActive(children, widget, m, y, w, t, accent)
     end
   }
 
-  local caption = t("widgets.dashboard.inflight_row", "ROW") .. " " .. tostring(snapshot.row)
-    .. "  " .. t("widgets.dashboard.inflight_bank", "BANK") .. " " .. tostring(snapshot.bank)
-  appendLabel(children, m.pad, y + m.lineH + 2, w - m.pad * 2, caption, WHITE, m.smallFont, LEFT)
+  -- Where the parameter STARTED, beside where it is. Without it the pilot has a number and no way
+  -- of telling how far he has moved from the setting he took off with.
+  appendLabel(children, m.sideX, m.sideY, m.rowX - m.sideX - m.pad,
+    t("widgets.dashboard.inflight_primed_short", "primed") .. " " .. formatValue(snapshot.activePrimed),
+    p.dim, m.small, LEFT)
+
+  -- And whether the adjustment teller had anything to say about THIS parameter. Two things have
+  -- to hold: the pilot has the announcement switched on, and the board has reported a step on
+  -- this function -- which is the only evidence the radio has that the telemetry preconditions
+  -- (sensor 99, custom telemetry) are actually met on this model.
+  local prefs = _G.rfsuite and _G.rfsuite.preferences
+  local events = type(prefs) == "table" and prefs.audio_events or nil
+  local teller = type(events) == "table" and events.adjustment_events == true
+  local heard = teller and snapshot.activeId ~= nil and snapshot.spokenId == snapshot.activeId
+  appendLabel(children, m.sideX, m.sideY + m.lineH, m.rowX - m.sideX - m.pad,
+    heard and t("widgets.dashboard.inflight_spoken_ok", "spoken: OK")
+      or t("widgets.dashboard.inflight_spoken_none", "spoken: --"),
+    heard and p.ok or p.dim, m.small, LEFT)
 end
 
---- The six rows of the armed bank.
+--- The six rows of the armed bank: number, the trim that drives it, its name and its value.
 --
 -- A row whose trim this radio does not have is hidden on the ZONE screen, where the trim is the
 -- only way to reach it; in fullscreen every row is shown, because a tap reaches it there.
-local function appendRows(children, widget, m, y, w, t, accent, btn, interactive)
+local function appendRows(children, widget, m, w, t, p, interactive)
   local snapshot = widget.state.inflight or {}
   local drive = widget._inflight
   local rows = snapshot.rows or {}
   local state = widget.state
+  local rowW = w - m.rowX - m.pad
+
+  appendLabel(children, m.rowNumX, m.bodyY - m.smallH - 2 + m.textOff, rowW,
+    t("widgets.dashboard.inflight_row_caption", "row = trim = inc/dec window"), p.dim, m.small, LEFT)
 
   for row = 1, Functions.ROW_COUNT do
     local entry = rows[row] or {}
     local visible = interactive or entry.trim == true
     if visible and m.rowH > 0 then
-      local rowY = y + (row - 1) * m.rowH
+      local rowY = m.bodyY + (row - 1) * m.rowH
+      local isActive = (snapshot.row == row)
       local node = {
         type = interactive and "button" or "rectangle",
-        x = m.pad, y = rowY, w = w - m.pad * 2, h = m.rowH - 2,
+        x = m.rowX, y = rowY, w = rowW, h = m.rowH - 2,
         -- The other reactive closure: which row is armed moves with the pilot's trims, and
-        -- repainting the whole scene for it would cost a build per press.
+        -- repainting the whole scene for it would cost a build per press. The row that is not
+        -- armed is painted in the background so that the list reads as text rather than as six
+        -- boxes, which is what the drawing asks for.
         color = function()
           local snap = state.inflight
-          if type(snap) == "table" and snap.row == row then return accent end
-          return btn
+          if type(snap) == "table" and snap.row == row then return p.rowFill end
+          return p.bg
         end
       }
       -- See appendChips: a button has no `filled`.
@@ -322,12 +496,27 @@ local function appendRows(children, widget, m, y, w, t, accent, btn, interactive
         end
       end
       children[#children + 1] = node
+      if isActive then
+        children[#children + 1] = {
+          type = "rectangle", x = m.rowX, y = rowY, w = rowW, h = m.rowH - 2,
+          color = p.accent, filled = false
+        }
+      end
 
+      appendCentredLabel(children, m.rowNumX, rowY, m.rowTrimX - m.rowNumX, m.rowH - 2,
+        tostring(row), isActive and p.accent or p.dim, m.small, LEFT, m)
+      -- The trim that drives this row, under the radio's own name for it. In navigate mode a row
+      -- has no trim of its own -- one trim adjusts whichever row is selected -- and the drive
+      -- publishes no name, so the column simply stays empty.
+      if entry.trimName ~= nil then
+        appendCentredLabel(children, m.rowTrimX, rowY, m.rowNameX - m.rowTrimX, m.rowH - 2,
+          entry.trimName, p.dim, m.small, LEFT, m)
+      end
       local label = entry.name or t("widgets.dashboard.inflight_unassigned", "Unassigned")
-      local textY = rowY + math.floor((m.rowH - m.lineH) / 2)
-      appendLabel(children, m.pad + 6, textY, math.floor(w * 0.6), label, WHITE, m.smallFont, LEFT)
-      appendLabel(children, math.floor(w * 0.6), textY, math.floor(w * 0.4) - m.pad - 6,
-        formatValue(entry.value), WHITE, m.smallFont, RIGHT)
+      appendCentredLabel(children, m.rowNameX, rowY, w - m.pad - m.rowValueW - m.rowNameX, m.rowH - 2,
+        label, isActive and p.text or p.dim, m.font, LEFT, m)
+      appendCentredLabel(children, w - m.pad - m.rowValueW, rowY, m.rowValueW, m.rowH - 2,
+        formatValue(entry.value), isActive and p.text or p.dim, m.font, RIGHT, m)
     end
   end
 end
@@ -342,29 +531,29 @@ function M.buildZone(children, widget)
   local w = (widget.zone and widget.zone.w) or LCD_W or 480
   local h = (widget.zone and widget.zone.h) or LCD_H or 272
   local t = translator(widget)
-  local bg, accent, btn = palette()
+  local p = palette()
   local m = metrics(w, h, false)
 
-  children[#children + 1] = { type = "rectangle", x = 0, y = 0, w = w, h = h, color = bg, filled = true }
-  appendHeader(children, widget, m, w, t, accent, btn)
+  children[#children + 1] = { type = "rectangle", x = 0, y = 0, w = w, h = h, color = p.bg, filled = true }
+  appendHeader(children, widget, m, w, t, p, 0)
+  appendChips(children, widget, m, t, p, false)
+  appendActive(children, widget, m, t, p)
+  appendRows(children, widget, m, w, t, p, false)
 
-  local y = m.headerH + m.pad
-  appendChips(children, widget, m, y, t, accent, btn, false)
-  y = y + m.chipH + m.pad
-  appendActive(children, widget, m, y, w, t, accent)
-  y = y + m.activeH
-  appendRows(children, widget, m, y, w, t, accent, btn, false)
-
-  appendLabel(children, m.pad, h - m.hintH, w - m.pad * 2,
-    t("widgets.dashboard.inflight_hint_touch", "Long press for the touch controls"), WHITE, m.smallFont, CENTER)
+  appendLabel(children, m.pad, h - m.lineH, w - m.pad * 2,
+    t("widgets.dashboard.inflight_hint_touch", "long press for touch controls"), p.dim, m.small, CENTER)
 end
 
 -- ---------------------------------------------------------------------------
 -- The fullscreen screen
 -- ---------------------------------------------------------------------------
 
-local function appendClose(children, widget, m, w, t)
-  local size = m.large and 44 or 20
+local function closeWidth(m)
+  return m.large and 44 or 20
+end
+
+local function appendClose(children, widget, m, w, p)
+  local size = closeWidth(m)
   local x = w - size - (m.large and 8 or 1)
   local y = math.floor((m.headerH - size) / 2)
   children[#children + 1] = {
@@ -379,32 +568,34 @@ local function appendClose(children, widget, m, w, t)
       end
     end
   }
-  appendLabel(children, x, y + math.floor((size - m.lineH) / 2), size,
-    "X", WHITE, m.font, CENTER)
+  appendCentredLabel(children, x, y, size, size, "X", p.text, m.font, CENTER, m)
 end
 
---- The two step controls.
+--- The two step controls, and the three lines that say what they and the trims do.
 --
 -- A momentary button reports its press AND its release, which is what a held control needs: the
 -- value stays written for as long as the finger is down and the flight controller repeats its own
 -- step. Where the firmware's LVGL build does not offer one -- the table is asked, not assumed --
 -- a plain button stands in and a tap is one step.
-local function appendActions(children, widget, m, y, w, t, btn)
+--
+-- The glyph is drawn as a label over the button, the label-over-button idiom their fullscreen
+-- menu is built from, and it is centred on the GLYPH FONT's own height. Centring it on a line
+-- height instead is what put the two glyphs outside their buttons on the first cut.
+local function appendActions(children, widget, m, w, t, p)
   local drive = widget._inflight
   if drive == nil then return end
   local momentary = lvgl and type(lvgl.momentaryButton) == "function"
-  local buttonW = math.floor((w - m.pad * 3) / 2)
 
   local specs = {
     { x = m.pad, up = false, label = "-" },
-    { x = m.pad * 2 + buttonW, up = true, label = "+" }
+    { x = m.pad * 2 + m.buttonW, up = true, label = "+" }
   }
 
   for i = 1, #specs do
     local spec = specs[i]
     local node = {
       type = momentary and "momentaryButton" or "button",
-      x = spec.x, y = y, w = buttonW, h = m.actionH, color = btn
+      x = spec.x, y = m.actionY, w = m.buttonW, h = m.actionH, color = p.button
     }
     if momentary then
       node.press = function() drive:press(drive.row, spec.up) end
@@ -413,8 +604,26 @@ local function appendActions(children, widget, m, y, w, t, btn)
       node.press = function() drive:tap(drive.row, spec.up) end
     end
     children[#children + 1] = node
-    appendLabel(children, spec.x, y + math.floor((m.actionH - m.lineH) / 2), buttonW,
-      spec.label, WHITE, m.bigFont, CENTER)
+    children[#children + 1] = {
+      type = "rectangle", x = spec.x, y = m.actionY, w = m.buttonW, h = m.actionH,
+      color = p.text, filled = false
+    }
+    appendCentredLabel(children, spec.x, m.actionY, m.buttonW, m.actionH,
+      spec.label, p.text, m.glyphFont, CENTER, m)
+  end
+
+  local snapshot = widget.state.inflight or {}
+  local hintW = w - m.rowX - m.pad
+  appendLabel(children, m.rowX, m.hintY, hintW,
+    t("widgets.dashboard.inflight_hint_tap", "tap = one pulse = one step"), p.text, m.small, LEFT)
+  appendLabel(children, m.rowX, m.hintY + m.lineH, hintW,
+    t("widgets.dashboard.inflight_hint_hold", "hold = pulses at the board's rate"), p.dim, m.small, LEFT)
+  -- The third line names the trim the pilot actually configured, because the whole point of it is
+  -- that he does not have to look at the screen to use it.
+  if snapshot.activeTrim ~= nil then
+    appendLabel(children, m.rowX, m.hintY + m.lineH * 2, hintW,
+      t("widgets.dashboard.inflight_hint_trim", "or the") .. " " .. snapshot.activeTrim .. " "
+        .. t("widgets.dashboard.inflight_hint_trim_tail", "trim, eyes off"), p.dim, m.small, LEFT)
   end
 end
 
@@ -501,6 +710,10 @@ local function describeBackup(snapshot, t)
     if transfer.reason == "unprimed" then
       return t("widgets.dashboard.inflight_backup_unprimed", "Read the board before taking a backup")
     end
+    if transfer.reason == "other_profile" then
+      return t("widgets.dashboard.inflight_restore_other_profile",
+        "The backup was taken from another profile: switch back to it first")
+    end
     return t("widgets.dashboard.inflight_transfer_refused", "Profile copy refused")
       .. ": " .. tostring(transfer.reason)
   end
@@ -509,18 +722,26 @@ local function describeBackup(snapshot, t)
   end
   local backup = snapshot.backup
   if type(backup) == "table" then
-    return t("widgets.dashboard.inflight_backup_held", "Backup in profile") .. " " .. tostring(backup.profile)
+    local text = t("widgets.dashboard.inflight_backup_held", "Backup in profile") .. " " .. tostring(backup.profile)
+    -- Which profile it was taken FROM, because a backup is only an undo for that one: the
+    -- firmware's adjustments act on whichever profile is active, so a restore into a different
+    -- one would overwrite a profile the backup never described.
+    if backup.source ~= nil then
+      text = text .. " (" .. t("widgets.dashboard.inflight_backup_from", "from") .. " "
+        .. tostring(backup.source) .. ")"
+    end
+    return text
   end
   return t("widgets.dashboard.inflight_backup_none", "No backup")
 end
 
 --- One action, as the button-with-a-label-over-it their fullscreen menu is built from: an LVGL
 -- button carries the press and a label drawn on top of it carries the text.
-local function appendAction(children, m, x, y, width, label, btn, press)
+local function appendAction(children, m, x, y, width, label, p, press)
   children[#children + 1] = {
-    type = "button", x = x, y = y, w = width, h = m.actionH, color = btn, press = press
+    type = "button", x = x, y = y, w = width, h = m.actionH, color = p.button, press = press
   }
-  appendLabel(children, x, y + math.floor((m.actionH - m.lineH) / 2), width, label, WHITE, m.font, CENTER)
+  appendCentredLabel(children, x, y, width, m.actionH, label, p.text, m.small, CENTER, m)
 end
 
 --- What the flight changed: every parameter whose cached value has moved away from the snapshot
@@ -529,23 +750,23 @@ end
 -- Built into the tree rather than read by a closure. The list only moves when a value does, and
 -- a value moving already moves the drive's epoch, which is in the render key -- so the rebuild
 -- that puts a new list on screen is the one the key was going to cause anyway.
-local function appendDelta(children, widget, m, y, w, h, t, accent)
+local function appendDelta(children, widget, m, y, w, h, t, p)
   local drive = widget._inflight
   local Prime = prime()
   appendLabel(children, m.pad, y, w - m.pad * 2,
-    t("widgets.dashboard.inflight_delta_title", "CHANGED SINCE THE BACKUP"), accent, m.smallFont, LEFT)
-  y = y + m.lineH + 2
+    t("widgets.dashboard.inflight_delta_title", "CHANGED SINCE THE BACKUP"), p.accent, m.small, LEFT)
+  y = y + m.lineH
 
   local list = (drive ~= nil and Prime ~= nil) and Prime.delta(drive) or nil
   if list == nil then
     appendLabel(children, m.pad, y, w - m.pad * 2,
       t("widgets.dashboard.inflight_delta_unprimed", "Prime first: there is nothing to compare against"),
-      WHITE, m.smallFont, LEFT)
+      p.text, m.small, LEFT)
     return
   end
   if #list == 0 then
     appendLabel(children, m.pad, y, w - m.pad * 2,
-      t("widgets.dashboard.inflight_delta_none", "Nothing has changed"), WHITE, m.smallFont, LEFT)
+      t("widgets.dashboard.inflight_delta_none", "Nothing has changed"), p.text, m.small, LEFT)
     return
   end
 
@@ -558,15 +779,15 @@ local function appendDelta(children, widget, m, y, w, h, t, accent)
   for i = 1, shown do
     local entry = list[i]
     local rowY = y + (i - 1) * m.lineH
-    appendLabel(children, m.pad, rowY, math.floor(w * 0.55), entry.name, WHITE, m.smallFont, LEFT)
+    appendLabel(children, m.pad, rowY, math.floor(w * 0.55), entry.name, p.text, m.small, LEFT)
     appendLabel(children, math.floor(w * 0.55), rowY, math.floor(w * 0.45) - m.pad,
-      formatValue(entry.old) .. " -> " .. formatValue(entry.new), accent, m.smallFont, RIGHT)
+      formatValue(entry.old) .. " -> " .. formatValue(entry.new), p.accent, m.small, RIGHT)
   end
 
   if #list > shown then
     appendLabel(children, m.pad, y + shown * m.lineH, w - m.pad * 2,
       "+" .. tostring(#list - shown) .. " " .. t("widgets.dashboard.inflight_delta_more", "more"),
-      WHITE, m.smallFont, LEFT)
+      p.text, m.small, LEFT)
   end
 end
 
@@ -574,23 +795,26 @@ end
 -- what the last flight moved.
 --
 -- The tuning controls are not here on purpose. The interlock is open, so nothing could be sent
--- anyway, and the space that the bank chips and the row list would take is what the delta list
--- needs on the shortest screen the suite runs on.
-function M.buildGround(children, widget, m, w, h, t, accent, btn)
+-- anyway, and the space that the row list would take is what the delta list needs on the shortest
+-- screen the suite runs on. The chips ARE here, as a read-out: they are the one part of the live
+-- surface that still says something on the ground -- which bank a step would land in.
+function M.buildGround(children, widget, m, w, h, t, p)
   local snapshot = widget.state.inflight or {}
   local drive = widget._inflight
   local Prime = prime()
   local armed = (widget.state and widget.state.armed) == true
 
-  local y = m.headerH + m.pad
+  appendChips(children, widget, m, t, p, false)
+
+  local y = m.chipY + m.chipH + m.pad
   appendLabel(children, m.pad, y, w - m.pad * 2,
     t("widgets.dashboard.inflight_check", "SETUP") .. ": " .. M.describeCheck(M.checkVerdict(widget), t),
-    WHITE, m.smallFont, LEFT)
-  y = y + m.lineH + 2
+    p.text, m.small, LEFT)
+  y = y + m.lineH
   appendLabel(children, m.pad, y, w - m.pad * 2,
-    describePrime(snapshot, t) .. "  /  " .. describeSet(snapshot, t), WHITE, m.smallFont, LEFT)
-  y = y + m.lineH + 2
-  appendLabel(children, m.pad, y, w - m.pad * 2, describeBackup(snapshot, t), WHITE, m.smallFont, LEFT)
+    describePrime(snapshot, t) .. "  /  " .. describeSet(snapshot, t), p.text, m.small, LEFT)
+  y = y + m.lineH
+  appendLabel(children, m.pad, y, w - m.pad * 2, describeBackup(snapshot, t), p.text, m.small, LEFT)
   y = y + m.lineH + m.pad
 
   -- Why the ground half is refusing, when it is not simply that the board is armed. The one case
@@ -602,27 +826,28 @@ function M.buildGround(children, widget, m, w, h, t, accent, btn)
   if armed then
     -- Nothing here can reach the board while it is armed -- the MSP runtime clears its queue on
     -- every armed tick -- so the actions are absent rather than present and refusing.
-    appendLabel(children, m.pad, y + math.floor(m.actionH / 2) - math.floor(m.lineH / 2), w - m.pad * 2,
-      t("widgets.dashboard.inflight_ground_armed", "Disarm to prime or copy a profile"), WHITE, m.smallFont, CENTER)
+    appendCentredLabel(children, m.pad, y, w - m.pad * 2, m.actionH,
+      t("widgets.dashboard.inflight_ground_armed", "Disarm to prime or copy a profile"),
+      p.text, m.small, CENTER, m)
   elseif refusal == "no_arm_sensor" then
-    appendLabel(children, m.pad, y + math.floor(m.actionH / 2) - math.floor(m.lineH / 2), w - m.pad * 2,
+    appendCentredLabel(children, m.pad, y, w - m.pad * 2, m.actionH,
       t("widgets.dashboard.inflight_ground_no_arm", "Arm sensor not seen: is telemetry sensor 99 (ARM) selected?"),
-      COLOR_THEME_WARNING, m.smallFont, CENTER)
+      p.warn, m.small, CENTER, m)
   elseif drive ~= nil and Prime ~= nil then
     local slot = math.floor(tonumber(drive.settings.backup_profile) or 0)
     local buttonW = math.floor((w - m.pad * 4) / 3)
     appendAction(children, m, m.pad, y, buttonW,
-      t("widgets.dashboard.inflight_prime", "Prime"), btn, function()
+      t("widgets.dashboard.inflight_prime", "Prime"), p, function()
         Prime.start(widget, drive)
         widget._tuningKeyDirty = true
       end)
     appendAction(children, m, m.pad * 2 + buttonW, y, buttonW,
-      t("widgets.dashboard.inflight_backup", "Backup to") .. " " .. tostring(slot), btn, function()
+      t("widgets.dashboard.inflight_backup", "Backup to") .. " " .. tostring(slot), p, function()
         Prime.backup(widget, drive)
         widget._tuningKeyDirty = true
       end)
     appendAction(children, m, m.pad * 3 + buttonW * 2, y, buttonW,
-      t("widgets.dashboard.inflight_restore", "Restore from") .. " " .. tostring(slot), btn, function()
+      t("widgets.dashboard.inflight_restore", "Restore from") .. " " .. tostring(slot), p, function()
         Prime.restore(widget, drive)
         widget._tuningKeyDirty = true
       end)
@@ -634,7 +859,7 @@ function M.buildGround(children, widget, m, w, h, t, accent, btn)
   -- describes the flight that is happening rather than one that is over, so it is not even the
   -- question it answers on the ground. What stands here while armed is the line above.
   if not armed then
-    appendDelta(children, widget, m, y, w, h, t, accent)
+    appendDelta(children, widget, m, y, w, h, t, p)
   end
 end
 
@@ -645,37 +870,26 @@ function M.buildFullscreen(children, widget)
   local w = (widget.zone and widget.zone.w) or LCD_W or 480
   local h = (widget.zone and widget.zone.h) or LCD_H or 272
   local t = translator(widget)
-  local bg, accent, btn = palette()
+  local p = palette()
   local m = metrics(w, h, true)
 
-  children[#children + 1] = { type = "rectangle", x = 0, y = 0, w = w, h = h, color = bg, filled = true }
-  appendHeader(children, widget, m, w, t, accent, btn)
-  appendClose(children, widget, m, w, t)
+  children[#children + 1] = { type = "rectangle", x = 0, y = 0, w = w, h = h, color = p.bg, filled = true }
+  appendHeader(children, widget, m, w, t, p, closeWidth(m))
+  appendClose(children, widget, m, w, p)
 
   local snapshot = widget.state.inflight or {}
   if snapshot.live ~= true then
-    M.buildGround(children, widget, m, w, h, t, accent, btn)
+    M.buildGround(children, widget, m, w, h, t, p)
     return
   end
 
-  local y = m.headerH + m.pad
-  appendChips(children, widget, m, y, t, accent, btn, true)
-  y = y + m.chipH + m.pad
-  appendActive(children, widget, m, y, w, t, accent)
-  y = y + m.activeH
-  appendRows(children, widget, m, y, w, t, accent, btn, true)
-  y = y + m.rowH * Functions.ROW_COUNT + m.pad
-
-  appendActions(children, widget, m, y, w, t, btn)
-  y = y + m.actionH
-
-  -- The verdict the GROUND surface reached, shown and not taken again. M.checkVerdict walks
-  -- nothing while the overlay is live: the model cannot change while the pilot is flying it, and
-  -- the pass that is driving the flight controller is the one place that walk must not be paid
-  -- for. Before the first ground visit it reads as unchecked, which is the honest answer.
-  appendLabel(children, m.pad, y, w - m.pad * 2,
-    t("widgets.dashboard.inflight_check", "SETUP") .. ": " .. M.describeCheck(M.checkVerdict(widget), t),
-    WHITE, m.smallFont, LEFT)
+  -- No setup verdict on the LIVE surface. It is a sentence about a model that cannot change while
+  -- the pilot is flying it, it belongs to the ground surface where he can act on it, and on the
+  -- shortest radio the line it needed was the line the parameter name was drawn on.
+  appendChips(children, widget, m, t, p, true)
+  appendActive(children, widget, m, t, p)
+  appendRows(children, widget, m, w, t, p, true)
+  appendActions(children, widget, m, w, t, p)
 end
 
 return M

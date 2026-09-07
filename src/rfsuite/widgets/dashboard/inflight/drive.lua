@@ -717,6 +717,14 @@ function Drive:fastTick(now)
       self.values[adjF] = adjV
       self.valueEpoch = self.valueEpoch + 1
     end
+    -- Which function the board last reported, kept even when its value did not move. It is the
+    -- one witness the radio has that the adjustment teller had something to speak about THIS
+    -- parameter, and the screen says so rather than leaving the pilot to wonder whether the
+    -- silence was the sensor or the setting.
+    if adjF ~= self.spokenId then
+      self.spokenId = adjF
+      self.valueEpoch = self.valueEpoch + 1
+    end
   end
 
   -- A running touch pulse suspends both trim paths: the pilot's thumb and the pilot's finger must
@@ -872,16 +880,40 @@ local function publish(widget, drive)
     return
   end
 
+  -- The names of the trims the rows are driven from. Read here rather than in the screen because
+  -- the resolved block is the drive's -- the screen is forbidden to probe the radio at all -- and
+  -- because the labels are the LOCALISED, renameable stick short names, so no stem can be guessed
+  -- from the row number. In navigate mode a row carries no trim of its own and the field stays
+  -- nil: one trim adjusts whichever row is selected, and naming it on all six would be a lie.
   local rows = {}
   local mask = drive:trimRowsPresent()
+  local trims = (drive.trimsResolved == true) and drive.trims or nil
+  local rowTrim = drive.settings.rowTrim
+  local navigate = drive:navigateMode()
   for row = 1, Functions.ROW_COUNT do
     local id = drive:functionId(drive.bank, row)
+    local trimName = nil
+    if not navigate and type(trims) == "table" and type(rowTrim) == "table" then
+      local entry = trims[rowTrim[row] or 0]
+      trimName = entry and entry.name or nil
+    end
     rows[row] = {
       id = id,
       name = id and Functions.nameOf(id) or nil,
       value = id and drive.values[id] or nil,
-      trim = mask[row] == true
+      trim = mask[row] == true,
+      trimName = trimName
     }
+  end
+
+  -- Which trim moves the parameter that is selected. In navigate mode that is the adjust trim,
+  -- whatever the row; in rows mode it is the selected row's own.
+  local activeTrim = nil
+  if type(trims) == "table" then
+    local index = navigate and (drive.settings.adj_trim or 0)
+      or (type(rowTrim) == "table" and rowTrim[drive.row] or 0)
+    local entry = trims[index or 0]
+    activeTrim = entry and entry.name or nil
   end
 
   -- The ground half's progress, summarised rather than handed over. Its own table is mutated in
@@ -944,6 +976,13 @@ local function publish(widget, drive)
     activeId = activeId,
     activeName = activeId and Functions.nameOf(activeId) or nil,
     activeValue = activeId and drive.values[activeId] or nil,
+    -- What the ground half read off the board before the flight, so the screen can show where a
+    -- parameter started as well as where it is.
+    activePrimed = activeId and type(drive.primedValues) == "table" and drive.primedValues[activeId] or nil,
+    activeTrim = activeTrim,
+    -- The last function the board reported having stepped. The screen holds it against the
+    -- selected one to say whether the teller had anything to say about THIS parameter.
+    spokenId = drive.spokenId,
     navigate = drive:navigateMode(),
     profile = drive.profile,
     prime = primeState,
