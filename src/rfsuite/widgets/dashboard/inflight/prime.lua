@@ -628,6 +628,10 @@ local function finishValues(drive, prime)
     drive.primedValues = copy
   end
   prime.phase = M.PHASE_DONE
+  -- When, on the radio's own wall clock. The ground surface says "values read 14:31" because a
+  -- pilot standing beside the machine wants to know whether that was this session or the last
+  -- one, and a tick count cannot tell him.
+  drive.readAt = drive.radio.clock and drive.radio.clock() or nil
   bump(drive)
   logPrime("prime done: %d value(s) cached, %d id(s) unanswered", prime.mapped or 0, prime.unmapped or 0)
 end
@@ -1196,7 +1200,12 @@ function M.backup(widget, drive)
     -- The profile the copy was taken FROM is kept with it. The board's adjustments act on
     -- whichever profile is active, so this backup describes that one and no other: it is what the
     -- ground surface names under the button, and what the restore below refuses to cross.
-    drive.backup = { profile = backup0 + 1, source = active0 + 1, at = at, values = snapshot }
+    drive.backup = { profile = backup0 + 1, source = active0 + 1, at = at, values = snapshot,
+      clock = drive.radio.clock and drive.radio.clock() or nil }
+    -- A fresh undo ends the postflight read-out. It is one of the three enders the pilot named,
+    -- and it is the one that matters: the list the delta was measured against has just been
+    -- replaced, so what stood on that screen described a comparison that no longer exists.
+    if type(drive.endPost) == "function" then drive:endPost("backup") end
     bump(drive)
   end)
 end
@@ -1389,6 +1398,32 @@ function M.tick(widget, drive)
       logPrime("profile changed: the nine value reads are sent again")
       M.refreshValues(widget, drive)
       return
+    end
+  end
+
+  -- The undo, made without being asked for.
+  --
+  -- The pilot's ruling after the third radio round: the interlock is the one entry, so turning it
+  -- on before a flight is the moment the backup should exist -- not a button he has to remember
+  -- on the flight line. The drive raises the request on the interlock's rising edge and knows
+  -- nothing else; this is where the link, the arm state and the prime are known, and every
+  -- refusal the button has applies here unchanged and lands on the same line of the screen.
+  --
+  -- Once per session and per ACTIVE PID profile, and the existing backup is what says so: it
+  -- records the profile it was taken from, so a second interlock cycle on the same profile finds
+  -- one already made and sends nothing, while a profile change makes the next cycle take a fresh
+  -- one. No counter of its own, and nothing to reset.
+  if drive.autoBackupWanted == true then
+    drive.autoBackupWanted = false
+    local prime = drive.prime
+    if type(prime) == "table" and prime.phase == M.PHASE_DONE then
+      local active0 = M.activeProfile0(drive)
+      local have = type(drive.backup) == "table" and tonumber(drive.backup.source) or nil
+      if active0 == nil or have == nil or (have - 1) ~= active0 then
+        logPrime("automatic backup on the interlock")
+        M.backup(widget, drive)
+        return
+      end
     end
   end
 

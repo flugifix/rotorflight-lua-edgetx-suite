@@ -2544,7 +2544,11 @@ function Runtime.new(zone, options)
       if self._cachedTuningKey == nil or (wanted and not holding) then
         self._lastUIRefresh = now
         self._tuningKeyDirty = nil
-        self._cachedTuningKey = "tuning|" .. tuningMode .. "|" .. tostring(snapshot.bank)
+        -- The PHASE is in the key, and it has to be: the three phases are three different trees,
+        -- not three states of one, so a transition that did not move the key would leave the
+        -- ground surface standing through a whole flight.
+        self._cachedTuningKey = "tuning|" .. tuningMode .. "|" .. tostring(snapshot.phase)
+          .. "|" .. tostring(snapshot.bank)
           .. "|" .. tostring(snapshot.row) .. "|" .. tostring(snapshot.epoch)
       end
       nextRenderKey = self._cachedTuningKey

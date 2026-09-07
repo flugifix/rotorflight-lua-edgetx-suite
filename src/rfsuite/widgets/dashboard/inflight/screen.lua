@@ -233,9 +233,14 @@ local function metrics(w, h, fullscreen)
   m.valueW = m.sideX - m.leftX - 4
 
   m.nameY = m.bodyY + 2
+  -- The caption under the name -- "row 2 - bank P - trim Ele" -- is gone on the pilot's word after
+  -- the third radio round: he reads the row and the bank off the highlighted row and the lit chip
+  -- and never looked at the sentence. Its line goes to the value, which is the thing he does look
+  -- at. The slot itself stays, as the ZONE screen's home for the profile banner, and carries
+  -- nothing at all the rest of the time.
   m.captionY = m.nameY + m.nameH + 2
-  m.valueY = m.captionY + m.smallH + 2
-  m.sideY = m.valueY + math.floor(m.valueH / 2)
+  m.valueY = m.captionY + math.floor(m.smallH / 2)
+  m.sideY = m.valueY + math.floor(m.valueH / 2) - m.smallH
 
   m.actionH = fullscreen and math.max(18, math.floor(h * 0.206 + 0.5)) or 0
   m.actionY = fullscreen and (h - m.actionH - math.max(3, math.floor(h * 0.029 + 0.5))) or h
@@ -390,37 +395,37 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
     type = "rectangle", x = 0, y = 0, w = w, h = m.headerH, color = p.header, filled = true
   }
 
-  local setName = (snapshot.setSource == "standard")
-    and t("widgets.dashboard.inflight_hdr_standard", "standard")
-    or t("widgets.dashboard.inflight_hdr_custom", "custom")
-  -- The title in the SMALL font, at every size, and it is the drawing's own proportion: twelve
-  -- pixels of title in a thirty-four pixel bar. A header that has to hold the title, the profile,
-  -- the backup, a marker and a close box in 480 pixels has room for one of them in a larger font
-  -- and it is not this one.
-  --
-  -- Its box is what its text NEEDS and not a fixed share of the header, because the profile
-  -- beside it starts where it ends: a fixed share reserves the long title's room on the radio
-  -- that shows the short one, and the profile then loses its own last word for nothing.
-  local titleText = pickText(t("widgets.dashboard.inflight_title", "TUNING") .. " - "
-      .. t("widgets.dashboard.inflight_hdr_set", "set:") .. " " .. setName,
-    t("widgets.dashboard.inflight_title", "TUNING"), math.floor(w * 0.44), m.small)
-  local titleW = #titleText * charWidth(m.small)
-  appendCentredLabel(children, m.pad, 0, titleW, m.headerH, titleText, p.text, m.small, LEFT, m)
-
-  -- The profile, in dim text: it is the thing the pilot is tuning and the thing his undo lives
-  -- in, and the firmware's adjustments act on whichever one is active -- so it belongs where he
-  -- can see it without asking for it.
-  local profile = t("widgets.dashboard.inflight_profile", "PID profile") .. " "
+  -- The headline is the PROFILE, and that is the pilot's own ruling after the third radio round.
+  -- The firmware's adjustments act on whichever PID profile is active, he chooses that with a
+  -- switch of his own, and everything else on this surface is true of that one profile and of no
+  -- other -- so it is the one thing on the screen that must not need looking for. It used to be
+  -- dim text beside a title that said "TUNING - set: standard"; the set moved to the ground
+  -- surface, which is where it can be acted on, and the profile took the room.
+  local titleText = t("widgets.dashboard.inflight_title", "TUNING") .. " "
+    .. t("widgets.dashboard.inflight_profile", "profile") .. " "
     .. (snapshot.profile and formatValue(snapshot.profile) or UNKNOWN_VALUE)
+  local titleFont = m.large and m.font or m.small
+  titleText = fitText(titleText, math.floor(w * 0.60), titleFont)
+  local titleW = #titleText * charWidth(titleFont)
+  appendCentredLabel(children, m.pad, 0, titleW, m.headerH, titleText, p.text, titleFont, LEFT, m)
+
+  local profile = ""
   local backupText = nil
   if snapshot.backup ~= nil and snapshot.backup.profile ~= nil then
-    backupText = " (" .. t("widgets.dashboard.inflight_hdr_backup", "backup")
-      .. " " .. tostring(snapshot.backup.profile) .. ")"
+    backupText = t("widgets.dashboard.inflight_hdr_backup", "backup")
+      .. " " .. tostring(snapshot.backup.profile)
   end
 
-  local liveText = (snapshot.live == true) and t("widgets.dashboard.inflight_live", "LIVE")
-    or t("widgets.dashboard.inflight_ground", "GROUND")
-  local liveColor = (snapshot.live == true) and p.ok or p.dim
+  -- Which of the three phases this is, in one word. The switch is one, so the word is what says
+  -- which surface the pilot is looking at.
+  local liveText, liveColor
+  if snapshot.phase == "live" then
+    liveText, liveColor = t("widgets.dashboard.inflight_live", "LIVE"), p.ok
+  elseif snapshot.phase == "post" then
+    liveText, liveColor = t("widgets.dashboard.inflight_after", "AFTER"), p.accent
+  else
+    liveText, liveColor = t("widgets.dashboard.inflight_ground", "GROUND"), p.dim
+  end
   -- Wide enough for the LONGER of the two words in the SMALL font, which is what it is drawn in:
   -- in the middle font `GROUND` needs a hundred pixels and wrapped into `GRO` over `UND`, and the
   -- room to widen the box is room the profile beside it needs.
@@ -433,16 +438,18 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   }
   appendCentredLabel(children, liveX, 0, liveW, m.headerH, liveText, liveColor, m.small, LEFT, m)
 
-  -- The backup is dropped whole rather than cut in half where the header is too narrow for
-  -- both. On the shortest radio the box is 149 pixels and the pair needs 182, and a label that
-  -- does not fit wraps -- inside a header bar, onto a line that is not there.
+  -- The backup is dropped WHOLE rather than cut in half where the header is too narrow for it.
+  -- On the shortest radio the box between the title and the phase word is a hundred pixels, and a
+  -- label that does not fit wraps -- inside a header bar, onto a line that is not there.
   local profileX = m.pad * 2 + titleW
   local profileW = liveX - m.pad - dotR * 2 - m.pad - profileX
-  if backupText ~= nil and textFits(profile .. backupText, profileW, m.small) then
-    profile = profile .. backupText
+  if backupText ~= nil and profileW > 0 and textFits(backupText, profileW, m.small) then
+    profile = backupText
   end
-  appendCentredLabel(children, profileX, 0, profileW, m.headerH,
-    fitText(profile, profileW, m.small), p.dim, m.small, RIGHT, m)
+  if profile ~= "" then
+    appendCentredLabel(children, profileX, 0, profileW, m.headerH,
+      fitText(profile, profileW, m.small), p.dim, m.small, RIGHT, m)
+  end
 end
 
 --- The six bank chips, and one caption beside them.
@@ -595,40 +602,25 @@ local function appendActive(children, widget, m, t, p)
   local name = snapshot.activeName or t("widgets.dashboard.inflight_unassigned", "Unassigned")
   appendLabel(children, m.leftX, m.nameY, m.leftW, name, p.text, m.nameFont, LEFT)
 
-  local bankLabel = tostring(snapshot.bank)
-  if snapshot.setSource == "standard" then
-    bankLabel = Functions.STANDARD_BANK_LABELS[snapshot.bank or 0] or bankLabel
-  end
-  -- Where the parameter sits, and which trim moves it. The trim is the part that goes where the
-  -- line does not fit: the third hint under the step buttons names it too, and the row and the
-  -- bank are what the pilot cannot read anywhere else on the surface.
-  local caption = t("widgets.dashboard.inflight_row", "row") .. " " .. tostring(snapshot.row)
-    .. " - " .. t("widgets.dashboard.inflight_bank", "bank") .. " " .. bankLabel
-  local withTrim = caption
-  if snapshot.activeTrim ~= nil then
-    withTrim = caption .. " - " .. t("widgets.dashboard.inflight_trim", "trim") .. " " .. snapshot.activeTrim
-  end
-  -- The caption under the parameter name, and the ZONE screen's only place for the banner: there
-  -- are no chips beside it out there. Same closure, same clock, same reason.
+  -- The line under the name is EMPTY unless a profile banner stands in it.
+  --
+  -- It used to carry "row 2 - bank P - trim Ele" and the pilot's ruling after the third radio
+  -- round is that it goes: the row is highlighted in the list beside it, the bank is the lit chip
+  -- above it, and the trim is named under the step buttons -- so the sentence spelled out three
+  -- things the screen was already saying and took a line off the one number he was reading. The
+  -- SLOT stays, because the zone screen has no chip caption and the banner has to land somewhere.
   local captionW, captionFont = m.leftW, m.small
-  local captionText = pickText(withTrim, caption, captionW, captionFont)
-  local captionColor, bannerColor = p.dim, p.warn
+  local bannerColor = p.warn
   children[#children + 1] = {
     type = "label", x = m.leftX, y = m.captionY, w = captionW, align = LEFT, font = captionFont,
     text = function()
       local snap = state.inflight
-      if type(snap) ~= "table" then return captionText end
+      if type(snap) ~= "table" then return "" end
       local banner = profileBanner(snap, t, captionW, captionFont)
       if banner ~= nil then return fitText(banner, captionW, captionFont) end
-      return captionText
+      return ""
     end,
-    color = function()
-      local snap = state.inflight
-      if type(snap) == "table" and profileBanner(snap, t, captionW, captionFont) ~= nil then
-        return bannerColor
-      end
-      return captionColor
-    end
+    color = function() return bannerColor end
   }
 
   children[#children + 1] = {
@@ -647,24 +639,51 @@ local function appendActive(children, widget, m, t, p)
     end
   }
 
-  -- Where the parameter STARTED, beside where it is. Without it the pilot has a number and no way
-  -- of telling how far he has moved from the setting he took off with.
-  appendLabel(children, m.sideX, m.sideY, m.rowX - m.sideX - m.pad,
+  -- WHERE IT WAS a step ago, beside where it is. The pilot's own ask after the third radio round,
+  -- and it is the one number the surface could not answer: the big value moves when the board
+  -- reports a step, and a number that has just changed says nothing about which way it went or by
+  -- how much unless the previous one is beside it.
+  --
+  -- Reactive, and it has to be: it moves on exactly the events the value moves on, and baking it
+  -- into the tree would put the pair one rebuild out of step with each other -- the worst possible
+  -- state for two numbers a pilot is subtracting.
+  local sideW = m.rowX - m.sideX - m.pad
+  children[#children + 1] = {
+    type = "label", x = m.sideX, y = m.sideY, w = sideW, align = LEFT, font = m.small,
+    color = p.text,
+    text = function()
+      local snap = state.inflight
+      local was = (type(snap) == "table") and snap.activePrevious or nil
+      return t("widgets.dashboard.inflight_before", "before") .. " " .. formatValue(was)
+    end
+  }
+
+  -- And where it started, which is the other half: one says what the last press did, the other
+  -- how far the flight has moved from the setting the pilot took off with.
+  appendLabel(children, m.sideX, m.sideY + m.lineH, sideW,
     t("widgets.dashboard.inflight_primed_short", "primed") .. " " .. formatValue(snapshot.activePrimed),
     p.dim, m.small, LEFT)
 
-  -- And whether the adjustment teller had anything to say about THIS parameter. Two things have
-  -- to hold: the pilot has the announcement switched on, and the board has reported a step on
-  -- this function -- which is the only evidence the radio has that the telemetry preconditions
-  -- (sensor 99, custom telemetry) are actually met on this model.
-  local prefs = _G.rfsuite and _G.rfsuite.preferences
-  local events = type(prefs) == "table" and prefs.audio_events or nil
-  local teller = type(events) == "table" and events.adjustment_events == true
-  local heard = teller and snapshot.activeId ~= nil and snapshot.spokenId == snapshot.activeId
-  appendLabel(children, m.sideX, m.sideY + m.lineH, m.rowX - m.sideX - m.pad,
-    heard and t("widgets.dashboard.inflight_spoken_ok", "spoken: OK")
-      or t("widgets.dashboard.inflight_spoken_none", "spoken: -"),
-    heard and p.ok or p.dim, m.small, LEFT)
+  -- Why a press did nothing, for as long as it is worth saying. The pilot's report after three
+  -- rounds is "sometimes no step at all", and the cause his card log points at is a tap inside the
+  -- cool-down: the flight controller cannot tell two steps that close apart, so the drive refuses
+  -- the second -- correctly, silently, and indistinguishably from a control that is not wired up.
+  -- Read through the clock like the banner, so no rebuild puts it up and none takes it down.
+  local refusalText = t("widgets.dashboard.inflight_too_fast", "too fast - one step at a time")
+  local hintW = m.rowX - m.leftX - m.pad
+  children[#children + 1] = {
+    type = "label", x = m.leftX, y = m.sideY + m.lineH * 2, w = hintW, align = LEFT, font = m.small,
+    color = p.warn,
+    text = function()
+      local snap = state.inflight
+      if type(snap) ~= "table" then return "" end
+      local until_ = tonumber(snap.stepRefusedUntil)
+      if until_ == nil then return "" end
+      local clock = getTime
+      if type(clock) ~= "function" or clock() >= until_ then return "" end
+      return fitText(refusalText, hintW, m.small)
+    end
+  }
 end
 
 --- The six rows of the armed bank: number, the trim that drives it, its name and its value.
@@ -752,17 +771,33 @@ end
 -- The zone screen
 -- ---------------------------------------------------------------------------
 
---- The overlay in the widget's own zone, while the interlock is on. No controls: the trims drive
--- it and this is the read-out.
+--- The overlay in the widget's own zone, while the interlock is on.
+--
+-- No controls out here: the trims drive it and this is the read-out. WHICH read-out is the phase's
+-- to say, and that is the pilot's core change after the third radio round. The interlock is the
+-- one entry he has, and what it shows follows the flight rather than the switch -- the preflight
+-- read-out on the ground, the tuning surface in the air, and the delta and the undo on the ground
+-- after a flight that moved something. Three screens on one switch, and nothing to remember.
 function M.buildZone(children, widget)
   local w = (widget.zone and widget.zone.w) or LCD_W or 480
   local h = (widget.zone and widget.zone.h) or LCD_H or 272
   local t = translator(widget)
   local p = palette()
   local m = metrics(w, h, false)
+  local snapshot = widget.state.inflight or {}
 
   children[#children + 1] = { type = "rectangle", x = 0, y = 0, w = w, h = h, color = p.bg, filled = true }
   appendHeader(children, widget, m, w, t, p, 0)
+
+  if snapshot.phase == "post" then
+    M.buildPost(children, widget, m, w, h, t, p, false)
+    return
+  end
+  if snapshot.phase ~= "live" then
+    M.buildGround(children, widget, m, w, h, t, p, false)
+    return
+  end
+
   appendChips(children, widget, m, t, p, false)
   appendActive(children, widget, m, t, p)
   appendRows(children, widget, m, w, t, p, false)
@@ -868,10 +903,10 @@ end
 -- The ground surface
 -- ---------------------------------------------------------------------------
 
--- What the delta list is written to. There is no scrolling here -- the surface is a read-out a
--- pilot glances at between flights, not a table to be walked -- so what does not fit is COUNTED
--- rather than reachable, and the count is on the screen.
-local MAX_DELTA_ROWS = 8
+-- The cap on the delta list is gone with the pilot's third radio round. It used to be eight rows
+-- with "+9 more" under them, on a board that has ALREADY written all of them to its own storage --
+-- so the ones the cap hid were the ones nobody would ever see again. The postflight surface pages
+-- the whole list instead, with the walk trim; see M.buildPost.
 
 --- Where the ground half has got to, in one phrase.
 local function describePrime(snapshot, t)
@@ -880,7 +915,13 @@ local function describePrime(snapshot, t)
     return t("widgets.dashboard.inflight_prime_never", "Not primed")
   end
   if state.phase == "done" then
-    return t("widgets.dashboard.inflight_prime_done", "Primed")
+    -- With the wall clock where the radio has one. A pilot standing beside the machine wants to
+    -- know whether this read was this session or the last one, and "Primed" cannot tell him.
+    local at = snapshot.readAt
+    if type(at) == "string" then
+      return t("widgets.dashboard.inflight_prime_done_at", "Values read") .. " " .. at
+    end
+    return t("widgets.dashboard.inflight_prime_done", "Values read")
   end
   if state.phase == "error" then
     return t("widgets.dashboard.inflight_prime_failed", "Prime failed")
@@ -1002,6 +1043,7 @@ local function describeBackup(snapshot, t)
       text = text .. " (" .. t("widgets.dashboard.inflight_backup_from", "from") .. " "
         .. tostring(backup.source) .. ")"
     end
+    if type(backup.clock) == "string" then text = text .. " " .. backup.clock end
     return text
   end
   -- No backup, and the reason is usually that no profile has been chosen to keep one in. Saying
@@ -1022,111 +1064,63 @@ local function appendAction(children, m, x, y, width, label, p, press)
   appendCentredLabel(children, x, y, width, m.actionH, label, p.text, m.small, CENTER, m)
 end
 
---- What the flight changed: every parameter whose cached value has moved away from the snapshot
--- the backup was taken with, largest change first.
+--- The surface the pilot meets BEFORE a flight: what the overlay knows and what it can undo.
 --
--- Built into the tree rather than read by a closure. The list only moves when a value does, and
--- a value moving already moves the drive's epoch, which is in the render key -- so the rebuild
--- that puts a new list on screen is the one the key was going to cause anyway.
-local function appendDelta(children, widget, m, y, w, h, t, p)
-  local drive = widget._inflight
-  local Prime = prime()
-  appendLabel(children, m.pad, y, w - m.pad * 2,
-    t("widgets.dashboard.inflight_delta_title", "CHANGED SINCE THE BACKUP"), p.accent, m.small, LEFT)
-  y = y + m.lineH
-
-  local list = (drive ~= nil and Prime ~= nil) and Prime.delta(drive) or nil
-  if list == nil then
-    appendLabel(children, m.pad, y, w - m.pad * 2,
-      t("widgets.dashboard.inflight_delta_unprimed", "Prime first: there is nothing to compare against"),
-      p.text, m.small, LEFT)
-    return
-  end
-  if #list == 0 then
-    appendLabel(children, m.pad, y, w - m.pad * 2,
-      t("widgets.dashboard.inflight_delta_none", "Nothing has changed"), p.text, m.small, LEFT)
-    return
-  end
-
-  -- What the screen has room for, and never more than the cap: the shortest radio decides.
-  local room = math.floor((h - y - m.pad) / m.lineH)
-  if room > MAX_DELTA_ROWS then room = MAX_DELTA_ROWS end
-  if room < 1 then room = 1 end
-  local shown = (#list < room) and #list or room
-
-  for i = 1, shown do
-    local entry = list[i]
-    local rowY = y + (i - 1) * m.lineH
-    appendLabel(children, m.pad, rowY, math.floor(w * 0.55), entry.name, p.text, m.small, LEFT)
-    appendLabel(children, math.floor(w * 0.55), rowY, math.floor(w * 0.45) - m.pad,
-      formatValue(entry.old) .. " -> " .. formatValue(entry.new), p.accent, m.small, RIGHT)
-  end
-
-  if #list > shown then
-    appendLabel(children, m.pad, y + shown * m.lineH, w - m.pad * 2,
-      "+" .. tostring(#list - shown) .. " " .. t("widgets.dashboard.inflight_delta_more", "more"),
-      p.text, m.small, LEFT)
-  end
-end
-
---- The surface the pilot meets between flights: what the overlay knows, what it can undo, and
--- what the last flight moved.
+-- Four lines and, in full screen, three actions. Nothing steps here -- the phase machine keeps the
+-- controls in the air -- so the bank chips went with them: a strip saying which bank a step would
+-- land in is a strip about something that cannot happen on this screen.
 --
--- The tuning controls are not here on purpose. The interlock is open, so nothing could be sent
--- anyway, and the space that the row list would take is what the delta list needs on the shortest
--- screen the suite runs on. The chips ARE here, as a read-out: they are the one part of the live
--- surface that still says something on the ground -- which bank a step would land in.
-function M.buildGround(children, widget, m, w, h, t, p)
+-- The BACKUP is made without being asked for, on the interlock opening (inflight/prime.lua). The
+-- button stays because a pilot who has changed profile wants a fresh one on his own word, and
+-- because every refusal reads the same whichever of the two asked.
+function M.buildGround(children, widget, m, w, h, t, p, interactive)
   local drive = widget._inflight
   local Prime = prime()
   local armed = (widget.state and widget.state.armed) == true
   local state = widget.state
 
-  appendChips(children, widget, m, t, p, false)
+  local y = m.chipY
+  local lineW = w - m.pad * 2
 
-  local y = m.chipY + m.chipH + m.pad
-  appendLabel(children, m.pad, y, w - m.pad * 2,
+  -- 1: is this model wired up at all.
+  appendLabel(children, m.pad, y, lineW,
     t("widgets.dashboard.inflight_check", "SETUP") .. ": " .. M.describeCheck(M.checkVerdict(widget), t),
     p.text, m.small, LEFT)
   y = y + m.lineH
 
-  -- The two lines a run MOVES, drawn as reactive closures rather than as text baked into the tree.
-  --
-  -- This is the pilot's third radio round. A prime bumped the drive's epoch on every reply, the
-  -- epoch is in the widget's render key, and the surface is forty-five objects -- so the whole tree
-  -- came down and went up again once per reply while the replies were being parsed, and his radio
-  -- stopped answering mid-read with nothing in the fault log at all. A counter needs a string per
-  -- frame, not a tree, and that is what these two are.
+  -- 2: does the flight controller carry the set, and 3: when the values were read. Both reactive
+  -- rather than baked in, and that is the pilot's third radio round: a read used to bump the
+  -- drive's epoch on every reply, the epoch is in the widget's render key, and the whole tree came
+  -- down and went up again once per reply while his radio was answering them.
   children[#children + 1] = {
-    type = "label", x = m.pad, y = y, w = w - m.pad * 2,
-    color = p.text, align = LEFT, font = m.small,
+    type = "label", x = m.pad, y = y, w = lineW, color = p.text, align = LEFT, font = m.small,
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return "" end
-      return describePrime(snap, t) .. "  /  " .. describeSet(snap, t)
+      return describeSet(snap, t)
     end
   }
   y = y + m.lineH
 
   children[#children + 1] = {
-    type = "label", x = m.pad, y = y, w = w - m.pad * 2,
-    color = p.text, align = LEFT, font = m.small,
+    type = "label", x = m.pad, y = y, w = lineW, color = p.text, align = LEFT, font = m.small,
+    text = function()
+      local snap = state.inflight
+      if type(snap) ~= "table" then return "" end
+      return describePrime(snap, t)
+    end
+  }
+  y = y + m.lineH
+
+  -- 4: the undo. What it is, when it was made, or why the last attempt was refused.
+  children[#children + 1] = {
+    type = "label", x = m.pad, y = y, w = lineW, color = p.text, align = LEFT, font = m.small,
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return "" end
       return describeBackup(snap, t)
     end
   }
-  y = y + m.lineH
-
-  -- What to do here, in the order it is done in. The pilot met this screen with four buttons and
-  -- no idea which one comes first; the whole flow is four words and it is worth the line.
-  appendLabel(children, m.pad, y, w - m.pad * 2,
-    pickText(t("widgets.dashboard.inflight_flow",
-                "1 choose profile - 2 Backup - 3 fly - 4 Delta / Restore"),
-             t("widgets.dashboard.inflight_flow_short", "1 profile - 2 Backup - 3 fly - 4 Restore"),
-             w - m.pad * 2, m.small),
-    p.dim, m.small, LEFT)
   y = y + m.lineH + m.pad
 
   -- Why the ground half is refusing, when it is not simply that the board is armed. The one case
@@ -1138,48 +1132,146 @@ function M.buildGround(children, widget, m, w, h, t, p)
   if armed then
     -- Nothing here can reach the board while it is armed -- the MSP runtime clears its queue on
     -- every armed tick -- so the actions are absent rather than present and refusing.
-    appendCentredLabel(children, m.pad, y, w - m.pad * 2, m.actionH,
-      t("widgets.dashboard.inflight_ground_armed", "Disarm to prime or copy a profile"),
-      p.text, m.small, CENTER, m)
-  elseif refusal == "no_arm_sensor" then
-    appendCentredLabel(children, m.pad, y, w - m.pad * 2, m.actionH,
-      t("widgets.dashboard.inflight_ground_no_arm", "Arm sensor not seen: is telemetry sensor 99 (ARM) selected?"),
-      p.warn, m.small, CENTER, m)
-  elseif drive ~= nil and Prime ~= nil then
-    -- A profile nobody has chosen is a dash and not a zero. "Backup to 0" reads as a profile
-    -- number on a board whose profiles start at one, and the pilot read it as one.
-    local profile = math.floor(tonumber(drive.settings.backup_profile) or 0)
-    local slot = (profile > 0) and tostring(profile) or UNKNOWN_VALUE
-    local buttonW = math.floor((w - m.pad * 4) / 3)
-    appendAction(children, m, m.pad, y, buttonW,
-      t("widgets.dashboard.inflight_prime", "Prime"), p, function()
-        -- Refused while one is already running. A second press would put a second chain into the
-        -- same queue with no order between the two, and the surface has no way of showing which of
-        -- them the counter belongs to.
-        if Prime.isRunning(drive) then return end
-        Prime.start(widget, drive)
-        widget._tuningKeyDirty = true
-      end)
-    appendAction(children, m, m.pad * 2 + buttonW, y, buttonW,
-      t("widgets.dashboard.inflight_backup", "Backup to") .. " " .. slot, p, function()
-        Prime.backup(widget, drive)
-        widget._tuningKeyDirty = true
-      end)
-    appendAction(children, m, m.pad * 3 + buttonW * 2, y, buttonW,
-      t("widgets.dashboard.inflight_restore", "Restore from") .. " " .. slot, p, function()
-        Prime.restore(widget, drive)
-        widget._tuningKeyDirty = true
-      end)
+    appendLabel(children, m.pad, y, lineW,
+      t("widgets.dashboard.inflight_ground_armed", "Disarm to read or copy a profile"),
+      p.text, m.small, LEFT)
+    return
   end
-  y = y + m.actionH + m.pad
+  if refusal == "no_arm_sensor" then
+    appendLabel(children, m.pad, y, lineW,
+      fitText(t("widgets.dashboard.inflight_ground_no_arm", "Arm sensor not seen: is sensor 99 selected?"),
+              lineW, m.small),
+      p.warn, m.small, LEFT)
+    return
+  end
+  if not interactive then
+    -- The zone screen has no buttons at all -- whether an LVGL button in a widget zone even takes
+    -- a press is unmeasured -- so it says where the three actions are instead.
+    appendLabel(children, m.pad, y, lineW,
+      t("widgets.dashboard.inflight_hint_touch", "long press for touch controls"), p.dim, m.small, LEFT)
+    return
+  end
+  if drive == nil or Prime == nil then return end
 
-  -- The delta list is a DISARMED read-out and nothing else. Drawn while armed it is a table of
-  -- numbers on the screen a pilot is flying by, moving as the board reports each step -- and it
-  -- describes the flight that is happening rather than one that is over, so it is not even the
-  -- question it answers on the ground. What stands here while armed is the line above.
-  if not armed then
-    appendDelta(children, widget, m, y, w, h, t, p)
+  -- A profile nobody has chosen is a dash and not a zero. "Backup to 0" reads as a profile number
+  -- on a board whose profiles start at one, and the pilot read it as one.
+  local profile = math.floor(tonumber(drive.settings.backup_profile) or 0)
+  local slot = (profile > 0) and tostring(profile) or UNKNOWN_VALUE
+  local buttonW = math.floor((w - m.pad * 4) / 3)
+  appendAction(children, m, m.pad, y, buttonW,
+    t("widgets.dashboard.inflight_prime", "Read values"), p, function()
+      -- Refused while one is already running. A second press would put a second chain into the
+      -- same queue with no order between the two, and the surface has no way of showing which of
+      -- them the counter belongs to.
+      if Prime.isRunning(drive) then return end
+      Prime.start(widget, drive)
+      widget._tuningKeyDirty = true
+    end)
+  appendAction(children, m, m.pad * 2 + buttonW, y, buttonW,
+    t("widgets.dashboard.inflight_backup", "Back up to") .. " " .. slot, p, function()
+      Prime.backup(widget, drive)
+      widget._tuningKeyDirty = true
+    end)
+  appendAction(children, m, m.pad * 3 + buttonW * 2, y, buttonW,
+    t("widgets.dashboard.inflight_restore", "Restore from") .. " " .. slot, p, function()
+      Prime.restore(widget, drive)
+      widget._tuningKeyDirty = true
+    end)
+end
+
+-- ---------------------------------------------------------------------------
+-- The postflight surface
+-- ---------------------------------------------------------------------------
+
+--- What the flight changed, in full and readable, one page at a time.
+--
+-- The pilot's core ask after the third radio round. The delta used to be four lines at the bottom
+-- of the ground screen with "+9 more" under them -- a list that names the changes it has room for
+-- and hides the rest, on a board that has ALREADY written all of them to its own storage. The ones
+-- it hid were the ones nobody would ever see again. So it gets the whole screen, and the walk trim
+-- pages it: the same thumb and the same gesture that walked the parameters in the air.
+--
+-- Built into the tree rather than read by a closure. Disarmed, nothing moves a value, so the list
+-- only changes when the page does -- and the page moves the drive's epoch, which is in the render
+-- key, so the rebuild that shows the next page is the one the key was going to cause anyway.
+function M.buildPost(children, widget, m, w, h, t, p, interactive)
+  local drive = widget._inflight
+  local Prime = prime()
+  local lineW = w - m.pad * 2
+  local y = m.chipY
+
+  local list = (drive ~= nil and Prime ~= nil) and Prime.delta(drive) or nil
+
+  -- The footer first, because everything above it is measured against where it starts. It says the
+  -- one thing a pilot has to know standing there: the board has ALREADY written this to its own
+  -- storage, half a second after disarm, so the list is a record and not a pending change.
+  local footerY = h - m.lineH - 2
+  local footer = interactive
+    and t("widgets.dashboard.inflight_post_saved", "the board has saved this")
+    or t("widgets.dashboard.inflight_post_saved_zone", "board has saved - restore: full screen")
+  appendLabel(children, m.pad, footerY, lineW, fitText(footer, lineW, m.small), p.dim, m.small, LEFT)
+
+  local bottom = footerY - m.pad
+  if interactive then bottom = bottom - m.actionH - m.pad end
+
+  if list == nil then
+    appendLabel(children, m.pad, y, lineW,
+      fitText(t("widgets.dashboard.inflight_delta_unprimed", "Read the values first: nothing to compare against"),
+              lineW, m.small),
+      p.text, m.small, LEFT)
+    return
   end
+  if #list == 0 then
+    appendLabel(children, m.pad, y, lineW,
+      t("widgets.dashboard.inflight_delta_none", "Nothing has changed"), p.text, m.small, LEFT)
+    return
+  end
+
+  appendLabel(children, m.pad, y, lineW,
+    t("widgets.dashboard.inflight_delta_title", "CHANGED SINCE THE BACKUP"), p.accent, m.small, LEFT)
+  y = y + m.lineH
+
+  -- How many rows this radio's zone actually holds, and never fewer than one: a page of nothing
+  -- would page for ever.
+  local perPage = math.floor((bottom - y) / m.lineH)
+  if perPage < 1 then perPage = 1 end
+  local pages = math.ceil(#list / perPage)
+  -- Handed back to the drive, because how many rows fit is a property of THIS surface and the trim
+  -- that pages has no other way of knowing when to wrap.
+  if drive ~= nil then
+    drive.deltaPages = pages
+    if (drive.deltaPage or 1) > pages then drive.deltaPage = pages end
+  end
+  local page = (drive ~= nil and drive.deltaPage) or 1
+
+  local nameW = math.floor(w * 0.52)
+  local valueX = m.pad + nameW
+  local valueW = w - m.pad - valueX
+  local first = (page - 1) * perPage + 1
+  local last = first + perPage - 1
+  if last > #list then last = #list end
+  for i = first, last do
+    local entry = list[i]
+    local rowY = y + (i - first) * m.lineH
+    appendLabel(children, m.pad, rowY, nameW, fitText(entry.name or "?", nameW, m.small),
+      p.text, m.small, LEFT)
+    appendLabel(children, valueX, rowY, valueW,
+      formatValue(entry.old) .. " -> " .. formatValue(entry.new), p.accent, m.small, RIGHT)
+  end
+
+  if pages > 1 then
+    appendLabel(children, m.pad, footerY, lineW,
+      tostring(page) .. "/" .. tostring(pages), p.dim, m.small, RIGHT)
+  end
+
+  if not interactive or drive == nil or Prime == nil then return end
+  local profile = math.floor(tonumber(drive.settings.backup_profile) or 0)
+  local slot = (profile > 0) and tostring(profile) or UNKNOWN_VALUE
+  appendAction(children, m, m.pad, footerY - m.actionH - m.pad, math.floor((w - m.pad * 2) / 2),
+    t("widgets.dashboard.inflight_restore", "Restore from") .. " " .. slot, p, function()
+      Prime.restore(widget, drive)
+      widget._tuningKeyDirty = true
+    end)
 end
 
 --- The overlay with its controls. Reached by a long press while the interlock is on, and from the
@@ -1196,9 +1288,17 @@ function M.buildFullscreen(children, widget)
   appendHeader(children, widget, m, w, t, p, closeWidth(m))
   appendClose(children, widget, m, w, p)
 
+  -- The same three phases the zone screen picks between, with the touch controls added. Reached
+  -- from the quick settings menu as well, with the interlock OFF: there the drive is inert, the
+  -- phase is nil, and what stands is the ground surface -- which is exactly right, because the
+  -- ground actions are the only ones that could do anything without an interlock.
   local snapshot = widget.state.inflight or {}
-  if snapshot.live ~= true then
-    M.buildGround(children, widget, m, w, h, t, p)
+  if snapshot.phase == "post" then
+    M.buildPost(children, widget, m, w, h, t, p, true)
+    return
+  end
+  if snapshot.live ~= true or snapshot.phase ~= "live" then
+    M.buildGround(children, widget, m, w, h, t, p, true)
     return
   end
 

@@ -193,8 +193,89 @@ function M.newDrive(radio, settings)
   self.profileChanged = nil
   self.profileSettleAt = nil
   self.profileBannerUntil = nil
+  -- The three phases the one interlock switch shows, and the state behind them. `phase` is nil
+  -- while the overlay is not up; see Drive:setPhase for what each of them means.
+  self.phase = nil
+  self.fired = 0
+  self.post = false
+  self.deltaPage = 1
+  self.autoBackupWanted = false
+  self.stepRefusedUntil = nil
+  self.previous = {}
+  self.readAt = nil
   return self
 end
+
+-- The three phases, as the snapshot spells them.
+M.PHASE_GROUND = "ground"
+M.PHASE_LIVE = "live"
+M.PHASE_POST = "post"
+
+--- Which of the three the overlay is in, and everything that has to happen on a transition.
+--
+-- The interlock is the ONE entry the pilot has, and what it shows follows the FLIGHT rather than
+-- the switch: on the ground before a flight it is the preflight read-out, in the air it is the
+-- tuning surface, and on the ground after a flight that moved something it is the delta and the
+-- undo. A pilot who has to remember which of three screens a switch is on has one more thing to
+-- get wrong in the air than he has thumbs for.
+--
+-- The consequence worth stating plainly: NOTHING STEPS ON THE GROUND. The step controls and the
+-- trims are live in the `live` phase and in no other, because the ground surface carries neither
+-- a row list nor a step control and a step nobody can see land is a step nobody should be able to
+-- ask for.
+function Drive:setPhase(phase)
+  if self.phase == phase then return end
+  local was = self.phase
+  self.phase = phase
+  self.valueEpoch = self.valueEpoch + 1
+
+  if phase == M.PHASE_GROUND and was == nil then
+    -- The interlock has just been opened, on the ground, before a flight. That is the moment the
+    -- undo has to exist, so it is asked for here and nowhere else -- NOT on the interlock's own
+    -- rising edge, because an interlock opened IN THE AIR would then take its backup on landing
+    -- and overwrite the undo with the values the flight had already moved.
+    --
+    -- A request and no more: the drive sends no MSP and cannot see the link. The ground half takes
+    -- it on its next pass and applies every refusal the button applies.
+    self.autoBackupWanted = true
+  else
+    self.autoBackupWanted = false
+  end
+
+  if phase == M.PHASE_LIVE then
+    -- A new flight. What the last one changed is no longer the question, and the counter that
+    -- decides whether there will be a delta to show starts again.
+    self.post = false
+    self.fired = 0
+    self.deltaPage = 1
+  elseif was == M.PHASE_LIVE then
+    -- Out of the air. Whatever it left standing goes now, whichever transition was seen.
+    self:cleanup(false)
+    self.deltaPage = 1
+  end
+  -- `post` is the phase and nothing else: it is what tick reads on the next pass to keep the
+  -- postflight surface up, and endPost is what takes it down. Written here rather than inferred,
+  -- because a flag set on the transition and cleared at the bottom of the same function is how
+  -- the first cut of this managed to leave the phase at `ground` after every flight.
+  self.post = (phase == M.PHASE_POST)
+  logDrive("phase %s -> %s", tostring(was), tostring(phase))
+end
+
+--- Leave the postflight read-out, on any of the three things that end it.
+--
+-- The LIST is not dropped with it. The delta is computed against the backup's own snapshot, and
+-- that snapshot stands until the next backup replaces it -- so a pilot who cycles the interlock
+-- and goes back in finds the same list, which is the answer he expects and not a fresh empty one.
+function Drive:endPost(why)
+  if not self.post then return end
+  self.post = false
+  self.valueEpoch = self.valueEpoch + 1
+  logDrive("postflight ended: %s", tostring(why))
+end
+
+-- How long a refused press is said on the screen, in radio ticks. Long enough to read at arm's
+-- length, short enough to be gone before the next one.
+local REFUSAL_TICKS = 80
 
 function Drive:pulseTicks()
   local ms = tonumber(self.settings and self.settings.pulse_ms) or M.DEFAULTS.pulse_ms
@@ -245,6 +326,10 @@ function Drive:writeValue(value, fm)
   if value ~= 0 then
     self.written = value
     self.writtenFm = mode
+    -- What decides, after the flight, whether there is a delta screen at all. Counted on the
+    -- WRITE and not on the board's answer: AdjF needs sensor 99 and a custom telemetry mode, and
+    -- a pilot without those still moved his parameters and still wants the undo offered.
+    if self.phase == M.PHASE_LIVE then self.fired = self.fired + 1 end
     writeGvar(self, settings.value_gvar, mode, value)
   else
     writeGvar(self, settings.value_gvar, mode, 0)
@@ -315,7 +400,7 @@ end
 -- leaving the enable channel where it was -- puts the screen and the board on different
 -- parameters, which is the one state a tuning surface must never be in.
 function Drive:navigate(up)
-  if not self.live then return false, "not_live" end
+  if not self:tuning() then return false, "not_live" end
   if self.written ~= 0 then return false, "busy" end
   local bank, row = self:stepCell(up)
   if bank == nil then return false, "empty" end
@@ -338,9 +423,17 @@ end
 -- the flight controller needs REPEAT_DELAY between steps, and two taps closer together than that
 -- would look like one held position rather than two steps.
 function Drive:press(row, up)
-  if not self.live then return false, "not_live" end
+  if not self:tuning() then return false, "not_live" end
   local now = self.radio.now()
-  if self.pulseUntil ~= nil or now < (self.coolUntil or 0) then return false, "cooling" end
+  if self.pulseUntil ~= nil or now < (self.coolUntil or 0) then
+    -- Said on the screen rather than returned to a caller that drops it. The pilot's own report
+    -- after three rounds is "sometimes no step at all", and his card log shows what that is: a
+    -- tap inside the cool-down writes nothing, logs nothing and looks exactly like a control that
+    -- is not wired up. The cool-down is right -- the board cannot tell two steps that close apart
+    -- -- so what was missing is the sentence, not the step.
+    self.stepRefusedUntil = now + REFUSAL_TICKS
+    return false, "cooling"
+  end
   local code = Functions.rowCode(row or self.row, up)
   if code == nil then return false, "range" end
   self.row = row or self.row
@@ -424,6 +517,8 @@ function Drive:evaluateInterlock(now)
   if not settings or settings.enabled ~= true or (settings.switch or 0) == 0 then
     if self.live then
       self.live = false
+      self:setPhase(nil)
+      self:endPost("interlock_off")
       self:cleanup(false)
     end
     self.seeded = false
@@ -458,6 +553,11 @@ function Drive:evaluateInterlock(now)
     self.bankShown = nil
     logDrive("interlock on: bank ch%d value ch%d", settings.bank_ch, settings.value_ch)
   else
+    self:setPhase(nil)
+    -- One of the three things that end the postflight read-out. It is not the delta that ends:
+    -- the list stands until the next backup, so the same interlock brings the same list back.
+    self:endPost("interlock_off")
+    self.autoBackupWanted = false
     self:cleanup(false)
     logDrive("interlock off")
   end
@@ -511,6 +611,14 @@ function Drive:ensureTrims()
   return self.trims
 end
 
+--- Whether a step may be asked for at all: the overlay up AND the machine in the air.
+--
+-- One function rather than a test spelled at each control, because every one of them has to agree
+-- and a control that forgot the phase would be a step taken on a screen showing no rows.
+function Drive:tuning()
+  return self.live == true and self.phase == M.PHASE_LIVE
+end
+
 function Drive:navigateMode()
   local settings = self.settings
   return settings ~= nil and settings.trim_mode == M.TRIM_MODE_NAVIGATE
@@ -534,7 +642,7 @@ end
 -- thirty-six cells to reach the row beside the one it started on.
 function Drive:navigateRow(up)
   if not self:bankTrimActive() then return self:navigate(up) end
-  if not self.live then return false, "not_live" end
+  if not self:tuning() then return false, "not_live" end
   if self.written ~= 0 then return false, "busy" end
   local total = Functions.ROW_COUNT
   local index = self.row - 1
@@ -555,7 +663,7 @@ end
 -- channel under a value that sits inside a step window is how one press ends up counted against
 -- another parameter. A bank with no assigned cell at all is stepped over rather than shown empty.
 function Drive:navigateBank(up)
-  if not self.live then return false, "not_live" end
+  if not self:tuning() then return false, "not_live" end
   if self.written ~= 0 then return false, "busy" end
   local count = Functions.BANK_COUNT
   local bank = self.bank
@@ -621,6 +729,26 @@ function Drive:pollNavigate(now)
   if navTrim ~= nil then
     walkTrim(self, now, navTrim, "navDir", "navNextAt", Drive.navigateRow)
   end
+end
+
+--- The walk trim, out on the ground, paging the delta list.
+--
+-- The same trim and the same edge-and-repeat clock the walk uses in the air; only what it steps
+-- is different. `deltaPages` is put on the drive by the screen that laid the list out, because how
+-- many rows fit is a property of the surface and not of the drive -- and until a postflight surface
+-- has been built there is nothing to page.
+function Drive:pollDeltaPaging(now)
+  local settings = self.settings
+  if not settings or settings.trims ~= true then return end
+  local pages = math.floor(tonumber(self.deltaPages) or 0)
+  if pages < 2 then return end
+  local trims = self:ensureTrims()
+  if trims == nil then return end
+  local navTrim = Setup.trimEntry(trims, settings.nav_trim)
+  if navTrim == nil then return end
+  walkTrim(self, now, navTrim, "navDir", "navNextAt", function(drive, up)
+    drive:pageDelta(up, pages)
+  end)
 end
 
 --- Which row a held trim is asking for, read once per pass.
@@ -763,6 +891,11 @@ function Drive:fastTick(now)
   if adjF and adjF > 0 then
     local adjV = self.radio.sensor("AdjV")
     if adjV ~= nil and self.values[adjF] ~= adjV then
+      -- Where this parameter stood BEFORE the step the board has just reported. It is what the
+      -- live surface shows beside the value, and it is the only number that tells a pilot whether
+      -- the step that just landed went the way he asked -- the primed value is where the flight
+      -- started and says nothing about the last press.
+      self.previous[adjF] = self.values[adjF]
       self.values[adjF] = adjV
       self.valueEpoch = self.valueEpoch + 1
     end
@@ -776,10 +909,17 @@ function Drive:fastTick(now)
     end
   end
 
+  -- The postflight list is paged with the walk trim, and it is the ONLY thing a trim does out
+  -- there: a phase with no rows and no step controls must not have a thumb writing a magnitude.
+  if self.phase == M.PHASE_POST then
+    self:pollDeltaPaging(now)
+    return
+  end
+
   -- A running touch pulse suspends both trim paths: the pilot's thumb and the pilot's finger must
   -- not both be writing the same variable.
   local pulsing = (self.pulseUntil ~= nil) or (self.holdRow ~= nil)
-  if not pulsing then
+  if self:tuning() and not pulsing then
     self:pollNavigate(now)
     self:pollTrimStep(now)
   end
@@ -893,13 +1033,32 @@ end
 
 --- One pass of the drive. Everything with a cost is behind `live`; a widget whose pilot has the
 -- interlock off pays one switch read per pass and nothing else.
-function Drive:tick()
+function Drive:tick(armed)
   local now = self.radio.now()
   local wasLive = self.live
   self:evaluateInterlock(now)
   if not self.live then
     if wasLive then self.valueEpoch = self.valueEpoch + 1 end
     return false
+  end
+
+  -- Which of the three surfaces this pass belongs to. Armed is the pivot and everything else
+  -- follows from what the last flight did: a flight that moved nothing lands back on the ground
+  -- read-out, and only one that asked for a step earns the delta.
+  --
+  -- `armed` is the widget's own copy of the ARM sensor's bit 0. It is passed in rather than read
+  -- here because the drive touches no telemetry it does not have to, and because the ground half
+  -- already has a stricter reading of the same fact for the writes it makes.
+  if armed == true then
+    self:setPhase(M.PHASE_LIVE)
+  elseif self.phase == M.PHASE_LIVE then
+    -- The disarm. The delta is worth a screen only if this drive actually asked for a step: a
+    -- flight nobody tuned lands back on the ground read-out and not on an empty list.
+    self:setPhase((self.fired > 0) and M.PHASE_POST or M.PHASE_GROUND)
+  elseif self.post then
+    self:setPhase(M.PHASE_POST)
+  else
+    self:setPhase(M.PHASE_GROUND)
   end
 
   -- What the enable channel is actually doing. Read rather than assumed, so a six-position switch
@@ -915,6 +1074,22 @@ function Drive:tick()
   end
 
   self:fastTick(now)
+  return true
+end
+
+--- One page of the delta list forward or back, wrapping, from the walk trim.
+--
+-- The postflight list is the one screen a pilot reads standing beside the machine, and on a
+-- 272-pixel radio it holds four or five rows of a list that can be twenty long. The trim that
+-- walks the parameters in the air walks the pages here -- the same thumb, the same gesture, and
+-- nothing new to remember.
+function Drive:pageDelta(up, pages)
+  local total = math.floor(tonumber(pages) or 0)
+  if total < 1 then return false end
+  local page = ((self.deltaPage or 1) - 1 + (up and 1 or -1)) % total + 1
+  if page == self.deltaPage then return false end
+  self.deltaPage = page
+  self.valueEpoch = self.valueEpoch + 1
   return true
 end
 
@@ -1012,7 +1187,9 @@ local function publish(widget, drive)
   if type(snapshot) == "table" and snapshot.epoch == epoch and snapshot.live == drive.live
     and snapshot.bank == drive.bank and snapshot.row == drive.row
     and snapshot.holding == holding
+    and snapshot.phase == drive.phase
     and snapshot.primePhase == primePhase and snapshot.primeDone == primeDone
+    and snapshot.stepRefusedUntil == drive.stepRefusedUntil
     and snapshot.profileBannerUntil == drive.profileBannerUntil then
     return
   end
@@ -1081,7 +1258,9 @@ local function publish(widget, drive)
   if type(backup) == "table" then
     -- The profile the backup was taken FROM travels with it. A backup is an undo for that one
     -- profile and for no other, because the board's adjustments only ever moved that one.
-    backupState = { profile = backup.profile, at = backup.at, source = backup.source }
+    backupState = { profile = backup.profile, at = backup.at, source = backup.source,
+      -- The wall clock the copy was made at, so the ground line can say WHEN and not only THAT.
+      clock = backup.clock }
   end
 
   local transfer = drive.transfer
@@ -1107,6 +1286,12 @@ local function publish(widget, drive)
     epoch = epoch,
     enabled = drive.settings.enabled == true,
     live = drive.live,
+    -- Which of the three surfaces this is. It is on the snapshot AND in the widget's render key,
+    -- because a phase change is a different screen and not a different number on the same one.
+    phase = drive.phase,
+    -- How many pages the postflight list has and which one is showing. The screen writes the
+    -- first back onto the drive when it lays the list out; the trim reads it to page.
+    deltaPage = drive.deltaPage,
     -- True exactly while a step control is held down. The widget reads it and leaves the render
     -- key alone while it is true; see M.release above for what a rebuild would cost here.
     holding = holding,
@@ -1120,6 +1305,14 @@ local function publish(widget, drive)
     -- What the ground half read off the board before the flight, so the screen can show where a
     -- parameter started as well as where it is.
     activePrimed = activeId and type(drive.primedValues) == "table" and drive.primedValues[activeId] or nil,
+    -- Where this parameter stood before the last step the board reported. It is what the live
+    -- surface puts beside the value now that the caption line is gone.
+    activePrevious = activeId and drive.previous[activeId] or nil,
+    -- When a refused press stops being said on screen. Read through a closure against the clock,
+    -- the way the profile banner is, so nothing rebuilds to put it up or to take it down.
+    stepRefusedUntil = drive.stepRefusedUntil,
+    -- When the ground half last finished reading the board, as the radio's own wall clock.
+    readAt = drive.readAt,
     activeTrim = activeTrim,
     -- The last function the board reported having stepped. The screen holds it against the
     -- selected one to say whether the teller had anything to say about THIS parameter.
@@ -1169,7 +1362,7 @@ function M.tick(widget)
   if widget.state ~= nil and widget.state.fblConnected == true then
     drive:watchProfiles()
   end
-  local live = drive:tick()
+  local live = drive:tick(widget.state.armed == true)
   publish(widget, drive)
   return live == true
 end

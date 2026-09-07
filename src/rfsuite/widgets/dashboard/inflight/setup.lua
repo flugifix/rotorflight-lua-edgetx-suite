@@ -284,6 +284,21 @@ function M.radio()
       return tonumber((callGlobal("getValue", name)))
     end,
 
+    -- The radio's own wall clock, as "HH:MM", or nil where the firmware does not offer one.
+    --
+    -- The ground surface says WHEN it read the board and when the backup was made, and a tick
+    -- count cannot say that: getTime() counts from power-on, so "1470" is a number the pilot has
+    -- to subtract something from. It is read once per event and stored as the string, never per
+    -- frame -- a reactive closure that called into the firmware for a clock would be exactly the
+    -- probe the surface is forbidden.
+    clock = function()
+      local dt = callGlobal("getDateTime")
+      if type(dt) ~= "table" then return nil end
+      local hour, minute = tonumber(dt.hour), tonumber(dt.min)
+      if hour == nil or minute == nil then return nil end
+      return string.format("%02d:%02d", hour, minute)
+    end,
+
     -- getFlightMode() answers with the mode number AND its name, and getSourceIndex and
     -- getValue may grow a second return the same way, so every one of these calls is truncated to
     -- its first value before tonumber sees it. Unparenthesised, the second return lands on
