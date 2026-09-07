@@ -100,7 +100,7 @@ return {
     -- and nothing measures that.
     ["pass.tuning.state"] = { target = 13000, measured = 12583, proposed = 11000 },
     ["pass.tuning.prime"] = { target = 16700, measured = 16059 },
-    ["pass.job.tuning"] = { target = 15700, measured = 14247, proposed = 10600 },
+    ["pass.job.tuning"] = { target = 15700, measured = 15030, proposed = 10600 },
 
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of
