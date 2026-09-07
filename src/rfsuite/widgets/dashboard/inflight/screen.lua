@@ -373,16 +373,19 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   local setName = (snapshot.setSource == "standard")
     and t("widgets.dashboard.inflight_hdr_standard", "standard")
     or t("widgets.dashboard.inflight_hdr_custom", "custom")
-  local titleW = math.floor(w * 0.44)
   -- The title in the SMALL font, at every size, and it is the drawing's own proportion: twelve
   -- pixels of title in a thirty-four pixel bar. A header that has to hold the title, the profile,
   -- the backup, a marker and a close box in 480 pixels has room for one of them in a larger font
   -- and it is not this one.
-  appendCentredLabel(children, m.pad, 0, titleW, m.headerH,
-    pickText(t("widgets.dashboard.inflight_title", "TUNING") .. " - "
+  --
+  -- Its box is what its text NEEDS and not a fixed share of the header, because the profile
+  -- beside it starts where it ends: a fixed share reserves the long title's room on the radio
+  -- that shows the short one, and the profile then loses its own last word for nothing.
+  local titleText = pickText(t("widgets.dashboard.inflight_title", "TUNING") .. " - "
       .. t("widgets.dashboard.inflight_hdr_set", "set:") .. " " .. setName,
-      t("widgets.dashboard.inflight_title", "TUNING"), titleW, m.small),
-    p.text, m.small, LEFT, m)
+    t("widgets.dashboard.inflight_title", "TUNING"), math.floor(w * 0.44), m.small)
+  local titleW = #titleText * charWidth(m.small)
+  appendCentredLabel(children, m.pad, 0, titleW, m.headerH, titleText, p.text, m.small, LEFT, m)
 
   -- The profile, in dim text: it is the thing the pilot is tuning and the thing his undo lives
   -- in, and the firmware's adjustments act on whichever one is active -- so it belongs where he
@@ -398,19 +401,22 @@ local function appendHeader(children, widget, m, w, t, p, closeW)
   local liveText = (snapshot.live == true) and t("widgets.dashboard.inflight_live", "LIVE")
     or t("widgets.dashboard.inflight_ground", "GROUND")
   local liveColor = (snapshot.live == true) and p.ok or p.dim
-  local liveW = math.floor(w * 0.09)
+  -- Wide enough for the LONGER of the two words in the SMALL font, which is what it is drawn in:
+  -- in the middle font `GROUND` needs a hundred pixels and wrapped into `GRO` over `UND`, and the
+  -- room to widen the box is room the profile beside it needs.
+  local liveW = math.max(math.floor(w * 0.09), 6 * charWidth(m.small) + 6)
   local liveX = w - closeW - m.pad - liveW
   local dotR = math.max(3, math.floor(m.headerH * 0.12))
   children[#children + 1] = {
     type = "circle", x = liveX - m.pad - dotR, y = math.floor(m.headerH / 2),
     radius = dotR, color = liveColor, filled = true
   }
-  appendCentredLabel(children, liveX, 0, liveW, m.headerH, liveText, liveColor, m.font, LEFT, m)
+  appendCentredLabel(children, liveX, 0, liveW, m.headerH, liveText, liveColor, m.small, LEFT, m)
 
   -- The backup is dropped whole rather than cut in half where the header is too narrow for
   -- both. On the shortest radio the box is 149 pixels and the pair needs 182, and a label that
   -- does not fit wraps -- inside a header bar, onto a line that is not there.
-  local profileX = math.floor(w * 0.44)
+  local profileX = m.pad * 2 + titleW
   local profileW = liveX - m.pad - dotR * 2 - m.pad - profileX
   if backupText ~= nil and textFits(profile .. backupText, profileW, m.small) then
     profile = profile .. backupText
