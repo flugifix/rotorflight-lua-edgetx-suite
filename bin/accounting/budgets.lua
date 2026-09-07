@@ -88,12 +88,19 @@ return {
     -- The JOB pass builds the whole surface in one step, the way the menu does, and it covers
     -- two different builds: the tuning surface with its chips, rows and step buttons, and the
     -- ground surface with the three profile actions and the delta list at its cap. The setup
-    -- check, which walks the two mixer lines and both variables' details, is on both. Its target
-    -- rises because the prime's own progress is on the surface, so the build now also happens
-    -- while a run is in flight.
-    ["pass.tuning.state"] = { target = 13000, measured = 11674, proposed = 11000 },
-    ["pass.tuning.prime"] = { target = 16700, measured = 15056 },
-    ["pass.job.tuning"] = { target = 10600, measured = 8999, proposed = 9550 },
+    -- check, which walks the two mixer lines and both variables' details, is on the ground one.
+    --
+    -- Its target rises again because the surface itself grew, and it grew for a pilot who could
+    -- not read the old one: the chips carry letters, every row names the trim that drives it, the
+    -- parameter carries what it was primed at and whether it was announced, and the step buttons
+    -- carry their glyphs and three lines of hint. That is 72 nodes against 44, and at roughly 190
+    -- instructions a node the arithmetic is the whole of the rise. The margin is the check's 10 %
+    -- floor rather than the 15 % most rows carry, for the reason the prime's is: what the
+    -- firmware's own 20 000 has to hold after this is the LVGL sweep of the tree it just built,
+    -- and nothing measures that.
+    ["pass.tuning.state"] = { target = 13000, measured = 12583, proposed = 11000 },
+    ["pass.tuning.prime"] = { target = 16700, measured = 16059 },
+    ["pass.job.tuning"] = { target = 15700, measured = 14247, proposed = 10600 },
 
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of
