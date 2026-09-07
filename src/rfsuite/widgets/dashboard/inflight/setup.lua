@@ -66,9 +66,13 @@ M.DEFAULTS = {
   value_gvar = 0,
   pulse_ms = 150,
   trims = true,
-  trim_mode = "rows",
-  nav_trim = 2,
-  bank_trim = 0,
+  -- Walk-and-adjust with three trims is the arrangement the pilot flew and asked to keep, and it
+  -- is the one that works on every radio: the six-trim layout needs six trims, and the TX15, the
+  -- Boxer and the Pocket have four. Rudder walks the rows, elevator steps the bank, aileron
+  -- moves the value -- three thumbs' worth of gesture, throttle left alone.
+  trim_mode = "navigate",
+  nav_trim = 1,
+  bank_trim = 2,
   adj_trim = 4,
   row_trim_1 = 2,
   row_trim_2 = 4,
@@ -126,6 +130,13 @@ local TRIM_MODE_NONE = 31
 local MIX_WEIGHT_GVAR_BASE = 1024
 -- MLTPX_ADD, the multiplex mode a plain summed line has.
 local MIX_MULTIPLEX_ADD = 0
+
+--- The trim layout a store asks for, or the default when it asks for neither.
+local function trimMode(value)
+  if value == M.TRIM_MODE_NAVIGATE then return M.TRIM_MODE_NAVIGATE end
+  if value == M.TRIM_MODE_ROWS then return M.TRIM_MODE_ROWS end
+  return M.DEFAULTS.trim_mode
+end
 
 local function clampNumber(value, low, high, fallback)
   value = tonumber(value)
@@ -389,7 +400,11 @@ function M.loadSettings(modelPreferences)
     value_gvar = clampNumber(src.value_gvar, 0, M.GVAR_MAX_INDEX, M.DEFAULTS.value_gvar),
     pulse_ms = clampNumber(src.pulse_ms, M.PULSE_MS_MIN, M.PULSE_MS_MAX, M.DEFAULTS.pulse_ms),
     trims = src.trims ~= false,
-    trim_mode = (src.trim_mode == M.TRIM_MODE_NAVIGATE) and M.TRIM_MODE_NAVIGATE or M.TRIM_MODE_ROWS,
+    -- Named explicitly in both directions, so that the DEFAULT is what an unset store gets. Read
+    -- as "navigate or else rows" this silently pinned every store that had never been saved to
+    -- the layout that happened to be the fallback, and moving the default would have moved
+    -- nothing at all.
+    trim_mode = trimMode(src.trim_mode),
     -- Anything that is not the word `custom` is the standard set, which is what a store written
     -- by a build that did not have this setting yet reads as -- and is the right way round: the
     -- standard set names every cell without a round trip, while the custom one shows nothing at
