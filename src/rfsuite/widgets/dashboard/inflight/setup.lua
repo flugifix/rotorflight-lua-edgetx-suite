@@ -580,6 +580,18 @@ function M.trimsFromList(list)
     end
     trims[trim] = { name = name, minus = entry.swsrc, plus = plus.swsrc }
   end
+  -- A lookup from either position of a trim straight to its entry, built once here rather than
+  -- walked per read. The drive resolves up to eight settings against this block on every pass --
+  -- three navigate jobs, six rows, the row mask -- and a linear scan of both positions of six
+  -- trims for each of them is a hundred comparisons a pass for an answer that never moves.
+  -- Kept OFF the numeric part of the table, so `trims[1..6]` is still the semantic order and
+  -- everything that walks it is unchanged.
+  local byPosition = {}
+  for trim = 1, #trims do
+    byPosition[trims[trim].minus] = trims[trim]
+    byPosition[trims[trim].plus] = trims[trim]
+  end
+  trims.byPosition = byPosition
   return trims
 end
 
@@ -610,6 +622,10 @@ function M.trimEntry(trims, stored)
   local value = tonumber(stored)
   if value == nil or value == 0 then return nil end
   if value >= 1 and value <= M.TRIM_LEGACY_MAX then return trims[value] end
+  local byPosition = trims.byPosition
+  if type(byPosition) == "table" then return byPosition[value] end
+  -- A block assembled by hand rather than by the walk -- which is what a probe hands in -- has no
+  -- index, and the scan is what it falls back to.
   for index = 1, M.TRIM_COUNT do
     local entry = trims[index]
     if entry ~= nil and (entry.plus == value or entry.minus == value) then return entry end

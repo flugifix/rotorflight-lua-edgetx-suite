@@ -1174,9 +1174,17 @@ local function freshPreferences(widget)
   end
   widget._inflightStoreAt = now
 
-  local MP = requireModule("lib/model_preferences.lua")
-  if type(MP) ~= "table" or type(MP.loadByMcuId) ~= "function" then return widget._inflightPrefs end
-  local path = type(MP.buildPath) == "function" and MP.buildPath(mcuId) or nil
+  -- The path, resolved once per model and kept. It is a function of the MCU id alone -- the
+  -- store is named after it -- and resolving it walks every candidate root and builds a string,
+  -- which is not work to do once a second for an answer that cannot have changed.
+  local path = widget._inflightStorePath
+  if path == nil or widget._inflightStoreFor ~= mcuId then
+    local MPath = requireModule("lib/model_preferences.lua")
+    path = (type(MPath) == "table" and type(MPath.buildPath) == "function") and MPath.buildPath(mcuId) or false
+    widget._inflightStorePath = path
+    widget._inflightStoreFor = mcuId
+  end
+  if path == false then return widget._inflightPrefs end
   local stamp = storeStamp(path)
   -- No stamp at all: no file, or a firmware without fstat. Neither is a change, and re-reading on
   -- every pass because nothing can be measured is how a guard becomes the cost it was avoiding.
@@ -1184,6 +1192,8 @@ local function freshPreferences(widget)
   if stamp == widget._inflightStamp then return widget._inflightPrefs end
 
   widget._inflightStamp = stamp
+  local MP = requireModule("lib/model_preferences.lua")
+  if type(MP) ~= "table" or type(MP.loadByMcuId) ~= "function" then return widget._inflightPrefs end
   local prefs = MP.loadByMcuId(mcuId, true)
   if type(prefs) ~= "table" then return widget._inflightPrefs end
   widget._inflightPrefs = prefs

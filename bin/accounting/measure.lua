@@ -798,7 +798,31 @@ do
       .. "more than one reply", primePasses, #Functions.VALUE_READS))
   end
 
+  ----------------------------------------------------------------------------
+  -- THE LIVE SURFACE, which since the phase machine is the ARMED one.
+  --
+  -- One interlock switch, three surfaces, and the drive picks between them off the widget's own
+  -- arm reading: the ground read-out before a flight, the tuning surface in the air, the delta
+  -- after a flight that moved something. All three are the same job kind and their worst pass is
+  -- one row, so all three are driven here -- and the state has to be SET rather than assumed,
+  -- because a driver that armed nothing would have priced the ground surface three times over
+  -- and the row would have looked exactly the same.
+  --
+  -- The arm flag is moved on the SENSOR and not on the state: the widget's telemetry read puts
+  -- the sensor back over anything written there.
+  ----------------------------------------------------------------------------
   local worst = {}
+  Stubs.sensors["ARM"] = 1
+  -- The arming itself is spent before anything is measured, for the same reason the store swap
+  -- above is: the widget's own flight mode moves to `inflight` on that edge and it reloads the
+  -- theme, which is a dashboard cost that happens once and belongs to no overlay row. Measured,
+  -- it lands on the second pass of the loop and is worth about four thousand instructions.
+  for i = 1, 30 do
+    holdLinkBacklog()
+    releaseReplies()
+    feedLink(World.sensorIds, 800 + i)
+    widget.refresh(widget, nil, nil)
+  end
   for i = 1, 240 do
     holdLinkBacklog()
     releaseReplies()
@@ -807,6 +831,9 @@ do
     local class = passClass(widget)
     local n = count(widget.refresh, widget, nil, nil)
     if n > (worst[class] or 0) then worst[class] = n end
+  end
+  if drive.phase ~= "live" then
+    error("accounting: the live surface was priced in phase " .. tostring(drive.phase))
   end
 
   -- The same surface in fullscreen. `event` is an integer there and nil everywhere else, so this
@@ -821,28 +848,24 @@ do
     if n > (worst[class] or 0) then worst[class] = n end
   end
 
-  -- The GROUND surface, which is the same job kind and a different build: the interlock is open,
-  -- so the tuning controls are gone and what stands in their place is the setup check, the three
-  -- ground actions and the delta list. It is measured at its worst -- a prime still running and
-  -- more changed parameters than the list has room for, so the cap and its "+N more" are both
-  -- exercised -- because the rows below are one budget for both builds of this job.
+  ----------------------------------------------------------------------------
+  -- THE OTHER TWO SURFACES, on the same budget row.
+  --
+  -- Both are reached by DISARMING with the interlock still on, which is the pilot's whole flow:
+  -- the delta after a flight that fired a step, the ground read-out after one that did not. They
+  -- are two different trees and they are one job kind, so their worst pass goes into the same
+  -- `pass.job.tuning` as the live surface's -- named here rather than given a row of its own,
+  -- because a budget per tree would be three budgets for one dispatcher slot.
+  ----------------------------------------------------------------------------
 
-  -- The interlock falls, with the ordinary passes the drive's stability delay needs. Measured
-  -- passes start afterwards: the fall itself writes both variables back to 0 and belongs to the
-  -- live surface, not to this one.
-  Stubs.switchValues[1] = false
-  for i = 1, 60 do
-    holdLinkBacklog()
-    releaseReplies()
-    feedLink(World.sensorIds, 2000 + i)
-    widget.refresh(widget, nil, nil)
-  end
-  if drive.live ~= false then error("accounting: the interlock never opened") end
-
-  -- Twelve parameters away from the snapshot the backup was taken with, against a list that
-  -- shows eight. Written straight onto the drive rather than stepped in over MSP: what is being
-  -- priced is the BUILD of that list, and how the numbers got there does not change its shape.
-  local changed = { 14, 15, 16, 18, 19, 20, 22, 23, 24, 49, 50, 51 }
+  -- Twelve parameters away from the snapshot the backup was taken with, which is more than a
+  -- 272-pixel zone holds and therefore more than one page. Written straight onto the drive rather
+  -- than stepped in over MSP: what is being priced is the BUILD of that list, and how the numbers
+  -- got there does not change its shape.
+  local changed = {
+    14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+    39, 40, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 63, 66, 75, 80
+  }
   local baseline = {}
   for _, id in ipairs(changed) do
     baseline[id] = 50
@@ -851,14 +874,23 @@ do
   drive.backup = { profile = 2, at = 0, values = baseline }
   drive.primedValues = baseline
   drive.setSource = "board"
+  -- A flight that asked for a step, which is what earns the delta screen at all.
+  drive.fired = 1
 
+  Stubs.sensors["ARM"] = 0
+  -- and the DISARM is spent the same way the arming was: the widget's flight mode moves to
+  -- postflight on that edge and reloads the theme behind the overlay. Priced into a tuning row it
+  -- put four to six thousand instructions of somebody else's work on this feature's budget.
+  for i = 1, 30 do
+    holdLinkBacklog()
+    releaseReplies()
+    feedLink(World.sensorIds, 2800 + i)
+    widget.refresh(widget, nil, nil)
+  end
   for i = 1, 60 do
     holdLinkBacklog()
     releaseReplies()
     feedLink(World.sensorIds, 3000 + i)
-    -- A run still in flight on every pass, and an epoch that has moved: the epoch is what the
-    -- render key carries, so this is also what makes the surface rebuild rather than repaint.
-    drive.prime = { phase = "slots", done = 20, total = 53, skipped = {} }
     drive.valueEpoch = drive.valueEpoch + 1
     widget.inflightFullscreen = true
     invalidate(widget)
@@ -868,23 +900,59 @@ do
   end
 
   -- What was actually built, read back off the recorder. A surface that had quietly fallen back
-  -- to the dashboard scene would have measured a plausible number for the wrong tree, and the
-  -- row would have looked exactly the same.
+  -- to the dashboard scene -- or to the wrong phase -- would have measured a plausible number for
+  -- the wrong tree, and the row would have looked exactly the same.
+  if drive.phase ~= "post" then
+    error("accounting: the postflight surface was priced in phase " .. tostring(drive.phase))
+  end
   do
     local tree = Stubs.lvgl.trees[#Stubs.lvgl.trees]
-    local buttons, deltaRows, capped = 0, 0, false
+    local buttons, deltaRows, paged = 0, 0, false
     for _, node in ipairs(tree or {}) do
       if node.type == "button" then buttons = buttons + 1 end
       if type(node.text) == "string" then
         if string.find(node.text, " -> ", 1, true) then deltaRows = deltaRows + 1 end
-        if string.sub(node.text, 1, 1) == "+" and string.find(node.text, "more", 1, true) then capped = true end
+        if string.find(node.text, "/", 1, true) and #node.text <= 5 then paged = true end
       end
     end
-    -- The close box plus the three ground actions; a list that ran out of screen before it ran
-    -- out of parameters; and the line that says how many it could not show.
+    -- The close box plus the restore; a list that ran out of screen before it ran out of
+    -- parameters; and the page counter that says so.
+    if buttons ~= 2 then error("accounting: the postflight surface built " .. buttons .. " buttons, not 2") end
+    if deltaRows < 4 then error("accounting: the delta list built only " .. deltaRows .. " rows") end
+    if not paged then error("accounting: the delta list was not measured over more than one page") end
+  end
+
+  -- and the GROUND read-out, which is what the same disarmed state shows after a flight that
+  -- moved nothing. Four status lines and three actions, so it is the cheaper of the two -- priced
+  -- anyway, because "cheaper" is a reading and not an assumption.
+  drive.post = false
+  drive.fired = 0
+  for i = 1, 60 do
+    holdLinkBacklog()
+    releaseReplies()
+    feedLink(World.sensorIds, 4000 + i)
+    drive.prime = { phase = "slots", done = 20, total = 53, skipped = {} }
+    drive.valueEpoch = drive.valueEpoch + 1
+    widget.inflightFullscreen = true
+    invalidate(widget)
+    local class = passClass(widget)
+    local n = count(widget.refresh, widget, 0, nil)
+    if n > (worst[class] or 0) then worst[class] = n end
+  end
+  if drive.phase ~= "ground" then
+    error("accounting: the ground surface was priced in phase " .. tostring(drive.phase))
+  end
+  do
+    local tree = Stubs.lvgl.trees[#Stubs.lvgl.trees]
+    local buttons, reactive = 0, 0
+    for _, node in ipairs(tree or {}) do
+      if node.type == "button" then buttons = buttons + 1 end
+      if type(node.text) == "function" then reactive = reactive + 1 end
+    end
+    -- The close box plus read, back up and restore; and the three lines that move while a run is
+    -- on without anything rebuilding to move them.
     if buttons ~= 4 then error("accounting: the ground surface built " .. buttons .. " buttons, not 4") end
-    if deltaRows < 6 then error("accounting: the delta list built only " .. deltaRows .. " rows") end
-    if not capped then error("accounting: the delta list was not measured at its cap") end
+    if reactive < 3 then error("accounting: the ground surface built " .. reactive .. " reactive lines") end
   end
 
   removeDeferredLink()

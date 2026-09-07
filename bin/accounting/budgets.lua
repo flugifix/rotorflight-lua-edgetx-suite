@@ -98,9 +98,17 @@ return {
     -- floor rather than the 15 % most rows carry, for the reason the prime's is: what the
     -- firmware's own 20 000 has to hold after this is the LVGL sweep of the tree it just built,
     -- and nothing measures that.
-    ["pass.tuning.state"] = { target = 13000, measured = 12583, proposed = 11000 },
-    ["pass.tuning.prime"] = { target = 16700, measured = 16059 },
-    ["pass.job.tuning"] = { target = 15700, measured = 15048, proposed = 10600 },
+    --
+    -- `pass.tuning.state` was re-apportioned a second time when the interlock gained its phase
+    -- machine. What the pass carries now that it did not: the phase itself and the two things
+    -- that follow from it -- the fired counter and the postflight latch -- the two reference
+    -- values the live surface shows beside the number, and one `fstat` of the per-model store a
+    -- second, which is the overlay's own answer to a setting that needed a radio restart. The
+    -- steady pass was measured at 12 961 in the air and 13 080 on the ground; the target is set
+    -- above the second of those and not the first.
+    ["pass.tuning.state"] = { target = 14200, measured = 13080, proposed = 13000 },
+    ["pass.tuning.prime"] = { target = 16700, measured = 14855 },
+    ["pass.job.tuning"] = { target = 15700, measured = 13155, proposed = 10600 },
 
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of
