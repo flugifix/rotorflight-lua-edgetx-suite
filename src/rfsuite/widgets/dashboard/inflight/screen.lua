@@ -126,6 +126,25 @@ local function fontHeight(font)
   return FONT_H[font] or 12
 end
 
+-- How wide one character of each font is, on average. The firmware will not say, and a label
+-- whose text is wider than its box does not clip it -- it WRAPS, onto the row below and off the
+-- bottom of the screen. So text that cannot fit is cut here instead.
+--
+-- MEASURED on a rendered frame, per font, and not derived from the height by one ratio: the
+-- small font runs about 8.5 pixels against a box 14 tall and the middle one about 15 against a
+-- box of 30, so one ratio over-estimates the larger fonts by a third and cuts titles that fit.
+--
+-- Each figure is the WIDEST average a string of that font was measured at, not the mean one --
+-- `Yaw CCW Stop` runs 10.1 pixels a character where a lowercase sentence runs 8. A budget set at
+-- the mean cuts most strings correctly and lets the capital-heavy ones wrap, which is the failure
+-- it exists to prevent; set at the maximum it cuts a few strings a character early, which is not
+-- a failure at all.
+local FONT_W = { [SMLSIZE or -1] = 11, [MIDSIZE or -2] = 16, [DBLSIZE or -3] = 21, [XXLSIZE or -4] = 34 }
+
+local function charWidth(font)
+  return FONT_W[font] or 9
+end
+
 --- The layout, in fractions of the zone the widget was given.
 --
 -- Every number here is the concept drawing's own, divided by 480 or by 272: the drawing is the
@@ -180,12 +199,18 @@ local function metrics(w, h, fullscreen)
   m.rowTrimX = m.rowX + math.floor(m.rowW * 0.10 + 0.5)
   m.rowNameX = m.rowX + math.floor(m.rowW * 0.30 + 0.5)
   m.rowTrimW = m.rowNameX - m.rowTrimX - 2
-  m.rowValueW = math.floor(m.rowW * 0.22 + 0.5)
+  -- Four digits, because a head speed is four and a value cut to three would read as a plausible
+  -- number that is not the one on the board.
+  m.rowValueW = math.max(math.floor(m.rowW * 0.22 + 0.5), 4 * charWidth(m.small) + 4)
   m.rowNameW = (m.rowX + m.rowW) - m.rowValueW - m.rowNameX - 6
 
   m.leftX = math.floor(w * 0.025 + 0.5)
   m.leftW = m.rowX - m.leftX - m.pad
-  m.sideX = m.leftX + math.floor(w * 0.204 + 0.5)
+  -- Far enough right that four digits of the big value fit to its left. A fraction alone put the
+  -- primed and spoken lines on top of the third digit at 480 pixels, and the value -- being a
+  -- label like any other -- wrapped its last digit onto a line of its own.
+  m.sideX = m.leftX + math.max(math.floor(w * 0.204 + 0.5), 4 * charWidth(m.valueFont) + 6)
+  m.valueW = m.sideX - m.leftX - 4
 
   m.nameY = m.bodyY + 2
   m.captionY = m.nameY + m.nameH + 2
@@ -223,24 +248,6 @@ local function appendCentredLabel(children, x, y, w, boxH, text, color, font, al
     w, text, color, font, align)
 end
 
--- How wide one character of each font is, on average. The firmware will not say, and a label
--- whose text is wider than its box does not clip it -- it WRAPS, onto the row below and off the
--- bottom of the screen. So text that cannot fit is cut here instead.
---
--- MEASURED on a rendered frame, per font, and not derived from the height by one ratio: the
--- small font runs about 8.5 pixels against a box 14 tall and the middle one about 15 against a
--- box of 30, so one ratio over-estimates the larger fonts by a third and cuts titles that fit.
---
--- Each figure is the WIDEST average a string of that font was measured at, not the mean one --
--- `Yaw CCW Stop` runs 10.1 pixels a character where a lowercase sentence runs 8. A budget set at
--- the mean cuts most strings correctly and lets the capital-heavy ones wrap, which is the failure
--- it exists to prevent; set at the maximum it cuts a few strings a character early, which is not
--- a failure at all.
-local FONT_W = { [SMLSIZE or -1] = 11, [MIDSIZE or -2] = 16, [DBLSIZE or -3] = 21, [XXLSIZE or -4] = 34 }
-
-local function charWidth(font)
-  return FONT_W[font] or 9
-end
 
 --- `text`, cut to what fits in `width` at `font`. Cut without an ellipsis: three dots cost three
 -- of the characters that were the reason to cut, and on a parameter name the front is what
@@ -491,6 +498,10 @@ end
 -- allows -- and it is the reason the number can follow the board without a rebuild.
 local function appendActive(children, widget, m, t, p)
   local snapshot = widget.state.inflight or {}
+  -- Read out of the metrics HERE and not inside the closure: a reactive closure runs per frame on
+  -- whatever budget the refresh left over, and a table walk per frame is the cost this rule
+  -- exists to prevent.
+  local valueW, valueFont = m.valueW, m.valueFont
   local name = snapshot.activeName or t("widgets.dashboard.inflight_unassigned", "Unassigned")
   appendLabel(children, m.leftX, m.nameY, m.leftW, name, p.text, m.nameFont, LEFT)
 
@@ -513,14 +524,17 @@ local function appendActive(children, widget, m, t, p)
   local state = widget.state
   children[#children + 1] = {
     type = "label",
-    x = m.leftX, y = m.valueY, w = m.sideX - m.leftX - 4,
+    x = m.leftX, y = m.valueY, w = m.valueW,
     color = p.accent, align = LEFT, font = m.valueFont,
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return UNKNOWN_VALUE end
       local value = snap.activeValue
       if value == nil then return UNKNOWN_VALUE end
-      return tostring(math.floor(value + 0.5))
+      -- Cut rather than wrapped, for the reason every other string on this surface is: a label
+      -- whose text is wider than its box puts the overflow on a second line. Four digits fit by
+      -- construction, so this only ever bites on a five-digit head speed.
+      return fitText(tostring(math.floor(value + 0.5)), valueW, valueFont)
     end
   }
 
