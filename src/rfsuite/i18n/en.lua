@@ -2624,6 +2624,8 @@ return {
       inflight_refuse_no_active = "The profile being flown is unknown",
       inflight_refuse_no_link = "No link to the flight controller",
       inflight_refuse_armed = "Disarm first",
+      inflight_profile_banner = "PID profile",
+      inflight_profile_banner_tail = "active - values unknown",
       inflight_flow = "1 choose profile - 2 Backup - 3 fly - 4 Delta / Restore",
       inflight_flow_short = "1 profile - 2 Backup - 3 fly - 4 Restore",
       inflight_ground_armed = "Disarm to prime or copy a profile",

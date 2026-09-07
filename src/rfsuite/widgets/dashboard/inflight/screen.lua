@@ -430,6 +430,25 @@ end
 -- Labelled with the standard set's own letters -- P, I, D, F, O, B -- when that is the set, and
 -- with 1..6 when the set came off the board, where a letter would stand for nothing. `press` is
 -- nil on the zone and ground surfaces, which is what makes them read-outs there.
+--- The profile the board is now flying, while a change of it is fresh.
+--
+-- The firmware's adjustments act on the ACTIVE PID profile and the pilot chooses that with his own
+-- switch, so a profile change moves what the overlay is tuning without the overlay being told. The
+-- values it was showing describe a profile nobody is flying any more; they go to dashes, and a
+-- dash on its own does not say why.
+--
+-- Answers nil when no banner is standing, so a caller can fall back to whatever it normally draws.
+-- Read through the clock rather than through a flag somebody has to clear: the stamp is on the
+-- published snapshot, so the banner goes away by itself with no pass rebuilding anything for it.
+local function profileBanner(snapshot, t)
+  local until_ = tonumber(snapshot.profileBannerUntil)
+  if until_ == nil then return nil end
+  if getTime() >= until_ then return nil end
+  return t("widgets.dashboard.inflight_profile_banner", "PID profile") .. " "
+    .. tostring(snapshot.profile or "?") .. " "
+    .. t("widgets.dashboard.inflight_profile_banner_tail", "active - values unknown")
+end
+
 local function appendChips(children, widget, m, t, p, interactive)
   local snapshot = widget.state.inflight or {}
   local drive = widget._inflight
@@ -485,6 +504,12 @@ local function appendChips(children, widget, m, t, p, interactive)
   -- controller is not listening on is not one the highlight can describe -- and it is the same
   -- slot rather than a line of its own, which is where it used to be drawn over the parameter
   -- name on the shortest radio.
+  -- The slot beside the chips carries three things, and this is their order of precedence: the
+  -- profile banner while it stands, then the warning that no bank is armed, then the caption. It
+  -- is a CLOSURE because the banner has a clock and nothing else on this surface does -- the
+  -- alternative is a rebuild to put it up and a second one to take it down, which is exactly the
+  -- rebuild-per-event this round removed everywhere else.
+  local state = widget.state
   local captionText, captionColor
   if snapshot.live == true and snapshot.bankShown == nil then
     captionText = pickText(
@@ -499,8 +524,25 @@ local function appendChips(children, widget, m, t, p, interactive)
       m.chipCaptionW, m.small)
     captionColor = p.dim
   end
-  appendCentredLabel(children, m.chipEnd, m.chipY, m.chipCaptionW, m.chipH,
-    captionText, captionColor, m.small, LEFT, m)
+  local captionW, captionFont = m.chipCaptionW, m.small
+  local bannerColor = p.warn
+  children[#children + 1] = {
+    type = "label",
+    x = m.chipEnd, y = m.chipY + math.floor((m.chipH - fontHeight(captionFont)) / 2) + m.textOff,
+    w = captionW, align = LEFT, font = captionFont,
+    text = function()
+      local snap = state.inflight
+      if type(snap) ~= "table" then return captionText end
+      local banner = profileBanner(snap, t)
+      if banner ~= nil then return fitText(banner, captionW, captionFont) end
+      return captionText
+    end,
+    color = function()
+      local snap = state.inflight
+      if type(snap) == "table" and profileBanner(snap, t) ~= nil then return bannerColor end
+      return captionColor
+    end
+  }
 end
 
 --- The parameter the pilot is on: its name, where it sits, and its value in the accent, large.
@@ -510,6 +552,7 @@ end
 -- allows -- and it is the reason the number can follow the board without a rebuild.
 local function appendActive(children, widget, m, t, p)
   local snapshot = widget.state.inflight or {}
+  local state = widget.state
   -- Read out of the metrics HERE and not inside the closure: a reactive closure runs per frame on
   -- whatever budget the refresh left over, and a table walk per frame is the cost this rule
   -- exists to prevent.
@@ -530,10 +573,27 @@ local function appendActive(children, widget, m, t, p)
   if snapshot.activeTrim ~= nil then
     withTrim = caption .. " - " .. t("widgets.dashboard.inflight_trim", "trim") .. " " .. snapshot.activeTrim
   end
-  appendLabel(children, m.leftX, m.captionY, m.leftW,
-    pickText(withTrim, caption, m.leftW, m.small), p.dim, m.small, LEFT)
+  -- The caption under the parameter name, and the ZONE screen's only place for the banner: there
+  -- are no chips beside it out there. Same closure, same clock, same reason.
+  local captionW, captionFont = m.leftW, m.small
+  local captionText = pickText(withTrim, caption, captionW, captionFont)
+  local captionColor, bannerColor = p.dim, p.warn
+  children[#children + 1] = {
+    type = "label", x = m.leftX, y = m.captionY, w = captionW, align = LEFT, font = captionFont,
+    text = function()
+      local snap = state.inflight
+      if type(snap) ~= "table" then return captionText end
+      local banner = profileBanner(snap, t)
+      if banner ~= nil then return fitText(banner, captionW, captionFont) end
+      return captionText
+    end,
+    color = function()
+      local snap = state.inflight
+      if type(snap) == "table" and profileBanner(snap, t) ~= nil then return bannerColor end
+      return captionColor
+    end
+  }
 
-  local state = widget.state
   children[#children + 1] = {
     type = "label",
     x = m.leftX, y = m.valueY, w = m.valueW,

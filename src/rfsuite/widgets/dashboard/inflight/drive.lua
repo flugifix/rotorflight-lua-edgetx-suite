@@ -78,6 +78,22 @@ local STABILITY_TICKS = 30
 local NAV_REPEAT_DELAY_TICKS = 50
 local NAV_REPEAT_INTERVAL_TICKS = 33
 
+-- How long the two profile sensors have to agree with themselves before the ground half is told to
+-- read the board again. The pilot's own log is the measurement: three profile changes inside
+-- thirty seconds, and each of them fired the nine value reads -- twice, because `PID#` and `RTE#`
+-- arrive a pass apart and each of them counts as a change on its own. Two seconds is longer than a
+-- pilot's hand takes to cross a three-position switch and far shorter than the reads it saves.
+--
+-- What is NOT debounced is the INVALIDATION. A value read from a profile the board is no longer
+-- flying is wrong the instant the switch moves, and showing a dash is the honest answer while
+-- nothing has been read; only the re-READ waits.
+local PROFILE_SETTLE_TICKS = 200
+
+-- How long the banner naming the new profile stands. The pilot's question was what the overlay is
+-- tuning after he moves his profile switch, and the answer has to be on the screen he is looking
+-- at rather than in a value that has quietly gone to a dash.
+local PROFILE_BANNER_TICKS = 300
+
 -- ---------------------------------------------------------------------------
 -- The drive
 -- ---------------------------------------------------------------------------
@@ -150,6 +166,8 @@ function M.newDrive(radio, settings)
   self.profile = nil
   self.rateProfile = nil
   self.profileChanged = nil
+  self.profileSettleAt = nil
+  self.profileBannerUntil = nil
   return self
 end
 
@@ -787,10 +805,18 @@ end
 -- pilot change anything, and dropping a cache that is not there yet would only cost an epoch.
 function Drive:watchProfiles()
   local dropPid, dropRate = false, false
+  local now = self.radio.now()
 
   local pid = self.radio.sensor("PID#")
   if pid ~= nil and pid > 0 then
-    if self.profile ~= nil and self.profile ~= pid then dropPid = true end
+    if self.profile ~= nil and self.profile ~= pid then
+      dropPid = true
+      -- The banner, and only for the PID profile: the firmware's adjustments act on the ACTIVE
+      -- profile, the pilot chooses it with his own switch, and after he moves it every value the
+      -- overlay is showing describes a profile nobody is flying. It is set here whether or not
+      -- the overlay is live, because the surface that shows it decides that for itself.
+      self.profileBannerUntil = now + PROFILE_BANNER_TICKS
+    end
     if self.profile ~= pid then self.valueEpoch = self.valueEpoch + 1 end
     self.profile = pid
   end
@@ -800,6 +826,26 @@ function Drive:watchProfiles()
     if self.rateProfile ~= nil and self.rateProfile ~= rate then dropRate = true end
     if self.rateProfile ~= rate then self.valueEpoch = self.valueEpoch + 1 end
     self.rateProfile = rate
+  end
+
+  -- The banner is dropped by the pass it runs out on, so that the snapshot never carries a stamp
+  -- from a profile change the pilot has long since forgotten.
+  if self.profileBannerUntil ~= nil and now >= self.profileBannerUntil then
+    self.profileBannerUntil = nil
+  end
+
+  -- The RE-READ waits for the switch to stand still. Both sensors are watched, because either of
+  -- them moving is a profile change, and the pilot's log has them arriving one pass apart -- which
+  -- on its own doubled every re-read.
+  if dropPid or dropRate then self.profileSettleAt = now + PROFILE_SETTLE_TICKS end
+  if self.profileSettleAt ~= nil and now >= self.profileSettleAt then
+    self.profileSettleAt = nil
+    -- The ground half's signal to read the nine value commands again. It is a flag rather than a
+    -- call because this runs wherever the widget's pass happens to be -- including in the air,
+    -- where the one thing that must not happen is an MSP request.
+    self.profileChanged = true
+    logDrive("profile settled: pid %s rate %s, the value reads are due",
+      tostring(self.profile), tostring(self.rateProfile))
   end
 
   if not (dropPid or dropRate) then return false end
@@ -812,10 +858,6 @@ function Drive:watchProfiles()
       dropped = dropped + 1
     end
   end
-  -- The ground half's signal to read the nine value commands again. It is a flag rather than a
-  -- call because this runs wherever the widget's pass happens to be -- including in the air,
-  -- where the one thing that must not happen is an MSP request.
-  self.profileChanged = true
   logDrive("profile changed: pid %s rate %s, %d cached value(s) now unknown",
     tostring(self.profile), tostring(self.rateProfile), dropped)
   return true
@@ -942,7 +984,8 @@ local function publish(widget, drive)
   if type(snapshot) == "table" and snapshot.epoch == epoch and snapshot.live == drive.live
     and snapshot.bank == drive.bank and snapshot.row == drive.row
     and snapshot.holding == holding
-    and snapshot.primePhase == primePhase and snapshot.primeDone == primeDone then
+    and snapshot.primePhase == primePhase and snapshot.primeDone == primeDone
+    and snapshot.profileBannerUntil == drive.profileBannerUntil then
     return
   end
 
@@ -1053,6 +1096,10 @@ local function publish(widget, drive)
     navigate = drive:navigateMode(),
     profile = drive.profile,
     rateProfile = drive.rateProfile,
+    -- When the banner naming a just-changed PID profile runs out, as a radio tick. The surface
+    -- reads it in a closure and holds it against the clock, so the banner goes away on its own
+    -- without any pass having to rebuild anything to take it off.
+    profileBannerUntil = drive.profileBannerUntil,
     prime = primeState,
     -- The two scalars the guard above compares. They are the same numbers primeState carries; a
     -- copy of them sits here so that the guard reads one flat table rather than reaching into a

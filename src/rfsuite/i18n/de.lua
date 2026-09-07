@@ -2624,6 +2624,8 @@ return {
       inflight_refuse_no_active = "Das geflogene Profil ist unbekannt",
       inflight_refuse_no_link = "Keine Verbindung zum Flugregler",
       inflight_refuse_armed = "Erst entschaerfen",
+      inflight_profile_banner = "PID-Profil",
+      inflight_profile_banner_tail = "aktiv - Werte unbekannt",
       inflight_flow = "1 Profil waehlen - 2 Sichern - 3 fliegen - 4 Delta / Zurueck",
       inflight_flow_short = "1 Profil - 2 Sichern - 3 fliegen - 4 Zurueck",
       inflight_ground_armed = "Zum Auslesen oder Kopieren disarmen",
