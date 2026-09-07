@@ -49,6 +49,26 @@ local Functions = requireModule("widgets/dashboard/inflight/functions.lua")
 local Setup = requireModule("widgets/dashboard/inflight/setup.lua")
 local Log = requireModule("lib/log.lua")
 
+-- A dependency that did not load must not leave a WORKING-LOOKING module behind.
+--
+-- lib/require.lua caches whatever a chunk RETURNS. Its own load of a dependency goes through
+-- pcall, and a pcall catches the firmware's instruction-limit error like any other -- so a widget
+-- pass that runs out of budget while one of the files above is being read leaves the require
+-- answering nil, this chunk running on to its end with a nil upvalue, and the broken table cached
+-- for the rest of the session. Every call into it then raises
+--   ?:0: attempt to index a nil value (upvalue '?')
+-- on every pass, for ever, and the widget's refresh is abandoned each time. That is what the
+-- pilot's card log recorded 913 times after a start with no flight controller: the overlay's
+-- modules were first loaded on the pass the connect chain and the theme reload were already
+-- filling, and the load that lost the race was cached.
+--
+-- Raising here instead means the pcall in lib/require.lua fails, NOTHING is cached, and the next
+-- pass loads the file again on a budget that may well be quieter. A missing file behaves the same
+-- way and is answered by the caller, which keeps its own retry.
+if type(Functions) ~= "table" or type(Setup) ~= "table" then
+  error("inflight/prime.lua: a dependency did not load", 0)
+end
+
 local function logPrime(fmt, ...)
   if not (Log and type(Log.wanted) == "function" and Log.wanted("info")) then return end
   local msg = tostring(fmt)
@@ -1254,6 +1274,54 @@ end
 -- The widget's side
 -- ---------------------------------------------------------------------------
 
+-- What the previous pass may have cost before this one refuses to parse anything.
+--
+-- The pilot's widget_5.log ends mid-prime -- record 3 of the automatic run right after connect --
+-- on the ORDINARY dashboard with the interlock open and a heavy theme, on passes his own trace
+-- reports at 84 to 93 per cent of the instruction budget. So keeping the prime from REBUILDING the
+-- surface is not enough on a radio like that: the parse itself, priced at up to 933 instructions
+-- for a value reply and 151 for a slot record, plus the firmware's sweep of whatever tree is
+-- standing, lands on passes that are already close to the limit at start-up.
+--
+-- A pass killed by that limit is invisible to every sink in the tree -- the sweep runs outside the
+-- pcall the entry point wraps refresh in -- so the only witness is a log that stops.
+local PARSE_USAGE_LIMIT = 70
+
+-- and how long the gate may hold a run up before it takes a slice anyway.
+--
+-- Stated rather than left open, because a widget that sits above the limit for ever would leave a
+-- prime waiting for ever, and "Priming 3/44" on the screen with nothing moving is a worse answer
+-- than one slow slice. At the widget's 50 ms cadence this is five seconds.
+local PARSE_SKIP_LIMIT = 100
+
+--- Whether this pass has room for the one piece of optional work the ground half does.
+--
+-- Two things are asked, and the first is an INVARIANT restated rather than a new rule: the
+-- dispatcher in widgets/dashboard/runtime.lua serves a pending job and returns before it reaches
+-- the background half at all, so a job pass cannot get here today. It is checked anyway, because
+-- what it protects is a build sharing a call with a parse, and that is worth more than the two
+-- table reads it costs.
+--
+-- The second is what the last pass actually cost. Answers false to skip.
+function M.passHasRoom(widget)
+  if widget._job ~= nil then return false end
+
+  local last = tonumber(widget._usageLast)
+  if last == nil or last <= PARSE_USAGE_LIMIT then
+    widget._primeSkips = nil
+    return true
+  end
+
+  local skips = (widget._primeSkips or 0) + 1
+  if skips >= PARSE_SKIP_LIMIT then
+    widget._primeSkips = nil
+    logPrime("prime: %d busy pass(es) in a row, taking a slice anyway at %d%%", skips, last)
+    return true
+  end
+  widget._primeSkips = skips
+  return false
+end
+
 --- One pass of the ground half.
 --
 -- Costs two table reads while armed or disconnected, which is what it does for the whole of a
@@ -1274,6 +1342,14 @@ function M.tick(widget, drive)
     drive._primeAutoDone = false
     return
   end
+
+  -- Neither the parse below nor the derivation slice after it may go on a pass that is already
+  -- expensive. See M.passHasRoom: the pilot's widget_5.log stops mid-prime on an ordinary
+  -- dashboard with a heavy theme, on passes his own trace puts at 84 to 93 per cent.
+  --
+  -- Everything ABOVE this line stays unconditional. The armed check, the abandon and the link
+  -- check are what keep MSP away from a helicopter in the air, and they are three table reads.
+  if not M.passHasRoom(widget) then return end
 
   -- One stored reply, parsed here rather than where it arrived, and never more than one however
   -- many the link delivered into the same pass. This is the bound the whole section above exists

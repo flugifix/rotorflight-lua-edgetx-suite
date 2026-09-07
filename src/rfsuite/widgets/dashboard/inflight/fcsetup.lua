@@ -64,6 +64,26 @@ end
 local Functions = requireModule("widgets/dashboard/inflight/functions.lua")
 local Log = requireModule("lib/log.lua")
 
+-- A dependency that did not load must not leave a WORKING-LOOKING module behind.
+--
+-- lib/require.lua caches whatever a chunk RETURNS. Its own load of a dependency goes through
+-- pcall, and a pcall catches the firmware's instruction-limit error like any other -- so a widget
+-- pass that runs out of budget while one of the files above is being read leaves the require
+-- answering nil, this chunk running on to its end with a nil upvalue, and the broken table cached
+-- for the rest of the session. Every call into it then raises
+--   ?:0: attempt to index a nil value (upvalue '?')
+-- on every pass, for ever, and the widget's refresh is abandoned each time. That is what the
+-- pilot's card log recorded 913 times after a start with no flight controller: the overlay's
+-- modules were first loaded on the pass the connect chain and the theme reload were already
+-- filling, and the load that lost the race was cached.
+--
+-- Raising here instead means the pcall in lib/require.lua fails, NOTHING is cached, and the next
+-- pass loads the file again on a budget that may well be quieter. A missing file behaves the same
+-- way and is answered by the caller, which keeps its own retry.
+if type(Functions) ~= "table" then
+  error("inflight/fcsetup.lua: a dependency did not load", 0)
+end
+
 local function logSetup(fmt, ...)
   if not (Log and type(Log.wanted) == "function" and Log.wanted("info")) then return end
   local msg = tostring(fmt)

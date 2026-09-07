@@ -194,6 +194,15 @@ local function traceInstructionUsage(self)
   percent = tonumber(percent)
   if percent == nil then return end
 
+  -- What the LAST pass cost, kept where anything else on this pass can read it.
+  --
+  -- getUsage() answers the figure for the cycle that has just been billed, and this runs at the
+  -- very top of refresh -- so on THIS pass it describes the previous one, which is exactly what a
+  -- gate wants: work that is optional can look at what the widget has just been costing and stand
+  -- aside. The overlay's ground half is the one caller (inflight/prime.lua); nothing else reads it
+  -- and nothing decides anything about the dashboard from it.
+  self._usageLast = percent
+
   -- The cheap path, taken on all but one pass in fifty: two comparisons and a clock read.
   -- Sampling has to happen on every pass, because the peak is the point of the line.
   if percent > self._usageWindowPeak then self._usageWindowPeak = percent end
@@ -404,13 +413,34 @@ end
 -- The in-flight tuning overlay, loaded on first use rather than at the top of this file. It is
 -- off by default and the widget's cold start is the pass closest to the firmware's instruction
 -- limit, so a model that does not use it never pays for the module.
-local InflightDrive = nil
+--- A load that FAILED is not a load that will always fail.
+--
+-- These files are read the first time a pilot's model has the overlay switched on, which on a
+-- radio that came up without a flight controller is the pass the connect chain and the theme
+-- reload are already filling. lib/require.lua runs a chunk under pcall, and a pcall catches the
+-- firmware's instruction-limit error like any other -- so that pass can lose the load through no
+-- fault of the file. Latching the answer to `false` there turned one busy pass into an overlay
+-- that stayed off for the rest of the session.
+--
+-- So a failure is retried, and not on every pass: RETRY_TICKS apart, which on a radio's 10 ms tick
+-- is a second. A file that genuinely is not there then costs one load attempt per second and
+-- nothing else, and one that lost a race gets the next quiet pass.
+local INFLIGHT_RETRY_TICKS = 100
+
+local function loadInflightModule(cache, path)
+  if type(cache.module) == "table" then return cache.module end
+  local now = (type(getTime) == "function") and getTime() or 0
+  if cache.triedAt ~= nil and (now - cache.triedAt) < INFLIGHT_RETRY_TICKS then return nil end
+  cache.triedAt = now
+  local module = requireModule(path)
+  if type(module) ~= "table" then return nil end
+  cache.module = module
+  return module
+end
+
+local InflightDriveCache = {}
 local function inflightDrive()
-  if InflightDrive == nil then
-    InflightDrive = requireModule("widgets/dashboard/inflight/drive.lua") or false
-  end
-  if InflightDrive == false then return nil end
-  return InflightDrive
+  return loadInflightModule(InflightDriveCache, "widgets/dashboard/inflight/drive.lua")
 end
 
 local function inflightEnabled(self)
@@ -431,13 +461,17 @@ end
 
 -- The overlay's ground half, loaded on the same terms and separately from the drive: it speaks
 -- MSP and the drive does not, and a widget whose pilot has the feature off loads neither.
-local InflightPrime = nil
+local InflightPrimeCache = {}
 local function inflightPrime()
-  if InflightPrime == nil then
-    InflightPrime = requireModule("widgets/dashboard/inflight/prime.lua") or false
-  end
-  if InflightPrime == false then return nil end
-  return InflightPrime
+  return loadInflightModule(InflightPrimeCache, "widgets/dashboard/inflight/prime.lua")
+end
+
+-- The screen is loaded by the two tuning job steps, which already answer "nothing built this pass"
+-- when it is not there. It goes through the same gate so that a job pass cannot re-read the file
+-- on every pass either.
+local InflightScreenCache = {}
+local function inflightScreen()
+  return loadInflightModule(InflightScreenCache, "widgets/dashboard/inflight/screen.lua")
 end
 
 --- The clear the widget's entry point can reach when the widget itself has been shut down.
@@ -648,7 +682,7 @@ end
 -- The tuning overlay's two builds. Both complete in one step, like the menu: the tree is a fixed
 -- handful of nodes rather than a theme's box list, so there is nothing to spread over passes.
 local function tuningJobStep(self)
-  local screen = requireModule("widgets/dashboard/inflight/screen.lua")
+  local screen = inflightScreen()
   if not (screen and type(screen.buildZone) == "function") then return true end
   local children = {}
   screen.buildZone(children, self)
@@ -661,7 +695,7 @@ local function tuningJobStep(self)
 end
 
 local function tuningFullscreenJobStep(self)
-  local screen = requireModule("widgets/dashboard/inflight/screen.lua")
+  local screen = inflightScreen()
   if not (screen and type(screen.buildFullscreen) == "function") then return true end
   local children = {}
   screen.buildFullscreen(children, self)
