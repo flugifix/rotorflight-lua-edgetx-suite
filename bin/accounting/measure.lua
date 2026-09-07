@@ -664,6 +664,11 @@ do
   local widget = Runtime.new(ZONE, {})
   widget.preferences = widget.preferences or {}
   widget.preferences.dashboard = { theme_preflight = reference }
+  -- The overlay is a preview feature and the widget reads that switch beside the per-model
+  -- `enabled`: with it off no drive is built and the rows below would be measuring a dashboard.
+  -- It is a global preference, so it is staged here and not in the per-model store further down.
+  widget.preferences.general = widget.preferences.general or {}
+  widget.preferences.general.preview_inflight_tuning = true
 
   -- The enable channel, as a raw reading: 998 microseconds, the middle of the first band.
   Stubs.sensors["ch11"] = -1028
