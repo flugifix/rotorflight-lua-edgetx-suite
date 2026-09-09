@@ -3,7 +3,7 @@
 ### Features & Enhancements
 - **Background Custom-Telemetry Decoder (`SCRIPTS/FUNCTIONS/rfsbg.lua`)**:
   - Added an optional special-function script that runs the custom-telemetry drain and the adjustment announcements in the radio's script state, where a long call is yielded rather than cut off at a fixed instruction count, so every queued frame is decoded instead of only the newest few.
-  - While the script is running it publishes a moving counter in a shared-memory slot; the dashboard and service widgets read it and skip their own drain and announcements for as long as it moves, and resume within one second if it stops (a tool session, or a radio without the special function).
+  - While the script is taking frames off the wire it publishes a moving counter in a shared-memory slot; the dashboard and service widgets read it and skip their own drain and announcements for as long as it moves, and resume within one second if it stops (a tool session, a radio without the special function, or another permanent script consuming the frames first).
   - Extracted the drain into `tasks/events/telemetry_bg/drain.lua` so both hosts run the same decoder, frame accounting and publish-on-change throttle.
   - The suite adds that special function itself to a model that does not carry it, and decides by reading the model's own special-function slots. It keeps no record of its own, so it writes nothing to the preferences and asks the flight controller nothing.
 

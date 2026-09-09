@@ -111,12 +111,20 @@ local function run()
   refreshPreferences(now)
 
   if Drain then
-    -- Before the work, not after it. A reader has to be able to tell "this is running" from
-    -- "this last finished a pass", and only a bump ahead of the work keeps moving while a
-    -- pass is long. A pass that then fails stops the counter, which is exactly the signal the
-    -- other decoders fall back on.
-    Drain.publishLiveness()
-    Drain.wakeup(now, true)
+    -- After the work, and only for a pass that took frames. What the other decoders need to
+    -- know is not that this script is running -- it is whether the frames are being consumed
+    -- here, and those two come apart. Every permanent script on the radio shares one telemetry
+    -- queue, so another one popping first leaves this pass with nothing to do while it still
+    -- runs on every cycle; a counter bumped on being called would then hold the widget's own
+    -- drain down for as long as the radio is on, and nothing would decode at all.
+    --
+    -- The cost of the other order is one stale window on a long pass, and it is not a loss:
+    -- each Lua state is served its own copy of every frame, so a host that resumes early
+    -- decodes what it already had rather than taking anything from this one.
+    local popped = Drain.wakeup(now, true)
+    if (popped or 0) > 0 then
+      Drain.publishLiveness()
+    end
   end
 
   -- After the decode, never before it: what the teller reads is what the drain has just

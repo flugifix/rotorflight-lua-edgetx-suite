@@ -146,11 +146,19 @@ local liveness = 0
 local remoteValue = nil
 local remoteMovedAt = nil
 
---- Say that this Lua state is draining, for whoever else is watching the slot.
+--- Say that this Lua state is TAKING FRAMES OFF THE WIRE, for whoever is watching the slot.
 --
 -- A moving counter rather than a flag, because nothing ever clears the slots -- not a model
 -- change, not the interpreter being torn down. A flag left set by a state that has since
 -- disappeared would silence every other decoder on the radio for good.
+--
+-- The counter says that frames are being consumed here, and deliberately not that this host is
+-- alive. The two come apart whenever something else in the SAME Lua state pops the wire first:
+-- permanent scripts have no script manager of their own, so the firmware gives all of them one
+-- shared telemetry queue, and the first one whose drain empties it leaves the rest with nothing.
+-- A host that published on being called would then keep every other decoder on the radio stood
+-- down while decoding nothing itself. Published on frames taken, that failure closes itself: the
+-- counter stops within one stale window and whoever was standing aside resumes.
 function M.publishLiveness()
     if type(setShmVar) ~= "function" then return end
     liveness = liveness + 1
@@ -183,13 +191,18 @@ end
 
 --- One drain pass: pop what is waiting, decode it, publish what changed.
 --
+-- Returns how many frames the pass took off the wire. A caller that publishes liveness needs
+-- that number rather than the fact that it was called: a host can be running perfectly and
+-- receiving nothing, and the two have to be told apart by whoever is deciding whether to leave
+-- the drain to it.
+--
 -- `decodeAll` lifts DECODE_CAP. It is for a host whose long call is yielded rather than killed
 -- -- the radio's script state, where a permanent script runs -- and there dropping the older
 -- frames of a backlog buys nothing. A call billed against a hard per-call ceiling keeps the cap.
 function M.wakeup(now, decodeAll)
     if not RFSensors then
         RFSensors = loadModule("lib/rf2tlm_sensors.lua")
-        if not RFSensors then return end
+        if not RFSensors then return 0 end
     end
 
     -- Pop up to POP_CAP, keep the newest DECODE_CAP in arrival order, decode only those --
@@ -207,7 +220,7 @@ function M.wakeup(now, decodeAll)
         end
     end
 
-    if popped == 0 then return end
+    if popped == 0 then return 0 end
 
     for i = 1, #kept do
         decodeFrame(kept[i], now)
@@ -219,6 +232,7 @@ function M.wakeup(now, decodeAll)
     -- a discovery window nothing here creates them again. Once per wakeup: the publisher
     -- rate-limits itself, and per-frame publication was redundancy, not information.
     publishCounters(telemetryFrameCount, telemetryFrameSkip, now)
+    return popped
 end
 
 -- What a lost link invalidates, and nothing else. The liveness state above is deliberately not
