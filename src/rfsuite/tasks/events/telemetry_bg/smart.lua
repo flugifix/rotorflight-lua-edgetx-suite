@@ -7,18 +7,6 @@ local SENSOR_NAME_SMARTFUEL = "SmFt"
 local SENSOR_NAME_SMARTCONSUMPTION = "SmCp"
 local FORCE_REFRESH_INTERVAL = 2.0
 
-local MIRROR_FUEL_QUERIES = {
-  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x5007 },
-  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x0600 },
-  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x1014 }
-}
-
-local MIRROR_CONSUMPTION_QUERIES = {
-  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x5008 },
-  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x5250 },
-  { category = CATEGORY_TELEMETRY_SENSOR, appId = 0x1013 }
-}
-
 local Sensors = nil
 local MspRuntime = nil
 local Log = nil
@@ -128,29 +116,9 @@ local function getSensor(name)
   return Sensors.getValue(name)
 end
 
-local function readSourceValue(query)
-  if type(system) ~= "table" or type(system.getSource) ~= "function" then
-    return nil
-  end
-  local source = system.getSource(query)
-  if not source then return nil end
-  if source.state and source:state() == false then return nil end
-  return source:value()
-end
-
-local function readFirstSourceValue(queries)
-  for i = 1, #queries do
-    local value = readSourceValue(queries[i])
-    if type(value) == "number" then
-      return value
-    end
-  end
-  return nil
-end
-
 local function readFirmwareFuelValue()
   -- Avoid feedback loops: never use SmFt (smartfuel alias) as input for SmFt calculation.
-  -- Prefer direct FC fuel percentage first, then mirror appIds as fallback.
+  -- Prefer the direct FC fuel percentage, then the battery percentage sensor.
   local value = tonumber(getSensor("fuel"))
   if type(value) == "number" then
     return value, "fuel"
@@ -159,11 +127,6 @@ local function readFirmwareFuelValue()
   value = tonumber(getSensor("Bat%"))
   if type(value) == "number" then
     return value, "Bat%"
-  end
-
-  value = readFirstSourceValue(MIRROR_FUEL_QUERIES)
-  if type(value) == "number" then
-    return value, "mirror"
   end
 
   return nil, nil
@@ -353,14 +316,14 @@ end
 local function computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
   local consumption = tonumber(getSensor("consumption"))
   if not consumption then
-    if not stabilized then return nil, nil end
-    return fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve), nil
+    if not stabilized then return nil end
+    return fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve)
   end
 
   if state.startConsumptionOffset == nil then
     -- Wait for stable voltage before estimating starting capacity
     if not stabilized then
-       return nil, consumption
+       return nil
     end
     
     local startPercent = fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve) or 100
@@ -371,13 +334,13 @@ local function computeCurrentMode(voltage, cellCount, batteryConfig, usableCapac
   end
 
   if usableCapacity <= 0 then
-    return nil, consumption
+    return nil
   end
 
   local used = consumption - state.startConsumptionOffset
   local percentUsed = (used / usableCapacity) * 100
   local remaining = clamp(100 - percentUsed, 0, 100)
-  return remaining, consumption
+  return remaining
 end
 
 local function computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
@@ -540,16 +503,14 @@ function Smart.wakeup()
   end
 
   local fuelPercent = nil
-  local smartConsumption = nil
+  local virtualConsumption = nil
   if firmwareActive then
     local rawFuel, rawFuelSource = readFirmwareFuelValue()
-    local rawConsumption = readFirstSourceValue(MIRROR_CONSUMPTION_QUERIES)
     fuelPercent = Reserve.applyPercent(rawFuel, reserve)
-    smartConsumption = rawConsumption
     if type(fuelPercent) ~= "number" then
       if (now - (state.lastFirmwareFuelMissingLog or 0)) >= 5.0 then
         state.lastFirmwareFuelMissingLog = now
-        logSmart("smart firmware fuel missing mirror/sensor fallback (reserve=" .. tostring(reserve) .. ")", "warn")
+        logSmart("smart firmware fuel missing (reserve=" .. tostring(reserve) .. ")", "warn")
       end
     elseif (state.lastFirmwareFuelMissingLog or 0) ~= 0 then
       logSmart("smart firmware fuel recovered from " .. tostring(rawFuelSource) .. " raw=" .. tostring(rawFuel), "info")
@@ -557,9 +518,9 @@ function Smart.wakeup()
     end
   else
     if sourceMode == 1 then
-      fuelPercent, smartConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
+      fuelPercent, virtualConsumption = computeVoltageMode(now, voltage, cellCount, batteryConfig, usableCapacity, cfg, armed, reserve)
     else
-      fuelPercent, smartConsumption = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
+      fuelPercent = computeCurrentMode(voltage, cellCount, batteryConfig, usableCapacity, stabilized, reserve)
     end
   end
 
@@ -567,11 +528,11 @@ function Smart.wakeup()
     publishTelemetryValue(APPID_SMARTFUEL, clamp(fuelPercent, 0, 100), UNIT_PERCENT or 0, SENSOR_NAME_SMARTFUEL, "lastFuelValue", "lastFuelPush")
   end
 
-  if type(smartConsumption) ~= "number" then
-    smartConsumption = tonumber(getSensor("consumption"))
-  end
-  if type(smartConsumption) == "number" and smartConsumption >= 0 then
-    publishTelemetryValue(APPID_SMARTCONSUMPTION, math.max(0, smartConsumption), UNIT_MAH or 0, SENSOR_NAME_SMARTCONSUMPTION, "lastConsumptionValue", "lastConsumptionPush")
+  -- SmCp carries the virtual consumption computed in voltage mode and nothing else. On the other
+  -- paths the value would be the consumption the flight controller already publishes, so the
+  -- sensor would spend a second slot -- and one model write per push -- on a copy of it.
+  if type(virtualConsumption) == "number" and virtualConsumption >= 0 then
+    publishTelemetryValue(APPID_SMARTCONSUMPTION, math.max(0, virtualConsumption), UNIT_MAH or 0, SENSOR_NAME_SMARTCONSUMPTION, "lastConsumptionValue", "lastConsumptionPush")
   end
 end
 
