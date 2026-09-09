@@ -6,6 +6,7 @@
   - While the script is taking frames off the wire it publishes a moving counter in a shared-memory slot; the dashboard and service widgets read it and skip their own drain and announcements for as long as it moves, and resume within one second if it stops (a tool session, a radio without the special function, or another permanent script consuming the frames first).
   - Extracted the drain into `tasks/events/telemetry_bg/drain.lua` so both hosts run the same decoder, frame accounting and publish-on-change throttle.
   - The suite adds that special function itself to a model that does not carry it, and decides by reading the model's own special-function slots. It keeps no record of its own, so it writes nothing to the preferences and asks the flight controller nothing.
+  - A model that already runs another background decoder from a special function (Rotorflight's earlier Lua suite installs `rf2bg`) is left alone: every special-function script shares one telemetry queue, so a second decoder would occupy one of the radio's few script slots and receive nothing. The reason is written to the log, and the dashboard decodes for itself exactly as it does on a radio without the script.
 
 ### Bug Fixes & Improvements
 - **Preference watcher: a file that cannot be read is no longer reported as a file that changed (`widgets/dashboard/runtime.lua`)**:

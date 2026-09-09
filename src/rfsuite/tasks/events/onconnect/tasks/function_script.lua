@@ -38,6 +38,16 @@ local SCRIPT_NAME = "rfsbg"
 -- radio/src/dataconstants.h, MAX_SPECIAL_FUNCTIONS.
 local SPECIAL_FUNCTION_COUNT = 64
 
+-- Background decoders that are not ours and pop the same wire. A special-function script has no
+-- script manager of its own, so the firmware serves every one of them from a SINGLE telemetry
+-- queue (`lua/api_general.cpp`, getTelemetryQueue -- a script manager gets a private queue, a
+-- permanent script gets the shared one). The first script whose drain empties it leaves the rest
+-- with nothing at all, so a model that already carries one of these has no use for a second: it
+-- would take one of the radio's scarce script slots to run and decode nothing.
+--
+-- Rotorflight's own earlier Lua suite installs `rf2bg`, which reads the same frames.
+local COMPETING_DECODERS = { rf2bg = true }
+
 -- How many slots one wakeup reads. The whole connect chain runs inside a single widget pass and
 -- that pass is the closest any pass comes to the firmware's per-call instruction limit, so the
 -- walk is spread: the runner calls this task again on the next pass while it says it is not
@@ -53,6 +63,7 @@ local done = false
 local started = false
 local nextSlot = 0
 local firstFreeSlot = nil
+local competingDecoder = nil
 local taggedLog = nil
 
 -- The logging core's tagged emitter, bound on first use: the default level and the
@@ -84,6 +95,12 @@ local function walk()
     if ok and type(fn) == "table" then
       if fn.func == FUNC_PLAY_SCRIPT and fn.name == SCRIPT_NAME then
         return true
+      end
+      -- Only an ENABLED slot runs: the firmware tests `CFN_ACTIVE` before it calls a permanent
+      -- script and skips it entirely where that is 0 (`lua/interface.cpp`). A slot the pilot has
+      -- unticked therefore competes for nothing, and is not one.
+      if fn.func == FUNC_PLAY_SCRIPT and fn.active == 1 and COMPETING_DECODERS[fn.name] then
+        competingDecoder = fn.name
       end
       if firstFreeSlot == nil and fn.switch == 0 then
         firstFreeSlot = i
@@ -147,6 +164,17 @@ function M.wakeup()
   end
   if nextSlot < SPECIAL_FUNCTION_COUNT then return end
 
+  if competingDecoder then
+    -- Said out loud rather than passed over. Nothing here is broken by the other script -- the
+    -- widget keeps its own copy of every frame and decodes as it always did -- but a pilot who
+    -- expects this model to run the suite's decoder should know why it is not there.
+    finish("this model already runs '" .. tostring(competingDecoder) .. "', which reads the same "
+      .. "telemetry frames; every special-function script shares one queue, so a second decoder "
+      .. "would take a script slot and receive nothing. The background decoder was not installed "
+      .. "and the dashboard decodes for itself, as it does on a radio without it")
+    return
+  end
+
   if firstFreeSlot == nil then
     finish("every special function slot on this model is in use; the background decoder was " ..
       "not installed")
@@ -165,6 +193,7 @@ function M.reset()
   started = false
   nextSlot = 0
   firstFreeSlot = nil
+  competingDecoder = nil
 end
 
 return M
