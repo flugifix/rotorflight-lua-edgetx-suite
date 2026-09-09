@@ -518,12 +518,24 @@ M.STANDARD_SET = {
 --
 -- THE STEP IS THE PILOT'S, not this table's. It used to be part of the record -- 5 for the
 -- documented thirty and 10 for the head speed -- and the pilot's ruling after the third radio
--- round is that one setting decides it for every slot the setup action writes. So the numbers
+-- round is that ONE setting decides it for the slots the setup action writes. So the numbers
 -- below carry bounds only, and `M.DEFAULT_STEP` is what a caller that names no step gets: the
 -- documented 5, so a caller written before the setting existed still asks for the documented
--- line. The consequence worth stating: the head speed is written with the pilot's step like
--- every other slot, so at a step of 1 its ten thousand rpm take ten thousand presses.
+-- line.
+--
+-- ONE PARAMETER IS NOT ON THAT SETTING. The head speed's range is 0..10000 where no other cell of
+-- the set is bounded above 250 -- the documented thirty at 10..200, the five other fills at
+-- 0..250 -- so a step chosen to make a gain move by a feelable amount is useless on
+-- it: five rpm a press is two thousand presses across the range. It carries a SECOND setting of
+-- its own, on its own rungs, reaching that one function and no other cell of the set --
+-- `M.DEFAULT_HEADSPEED_STEP` is what a caller that names none gets.
 M.DEFAULT_STEP = 5
+M.DEFAULT_HEADSPEED_STEP = 50
+
+-- The one function of the set that takes the head speed's step. Named as a FUNCTION rather than
+-- matched on the bank and row it sits in: the wide range belongs to the function, and the cell it
+-- occupies is a property of a layout that could be rearranged.
+M.HEADSPEED_FUNCTION = 80
 
 local STANDARD_LIMITS_DOCUMENTED = { min = 10, max = 200 }
 
@@ -562,13 +574,29 @@ M.STANDARD_SLOT_ORDER = {
 -- this less the increment window's own edges.
 local MIRROR_US = CENTRE_US * 2
 
+local NO_STEPS = {}
+
+--- Which of the two steps a function takes, out of the pair a caller named.
+--
+-- `steps` is `{ step = ..., step_headspeed = ... }`, or nothing at all for a caller that names
+-- neither, and each half falls back on its own default independently -- so naming one of the two
+-- does not silently move the other. Resolved from the FUNCTION and not from the slot, so the
+-- answer does not depend on where in the set the cell happens to sit.
+local function stepFor(id, steps)
+  if type(steps) ~= "table" then steps = NO_STEPS end
+  if id == M.HEADSPEED_FUNCTION then
+    return math.floor(tonumber(steps.step_headspeed) or M.DEFAULT_HEADSPEED_STEP)
+  end
+  return math.floor(tonumber(steps.step) or M.DEFAULT_STEP)
+end
+
 --- What the standard set says a cell has to hold, in the shape
 -- tasks/msp/api/get_adjustment_range.lua decodes a record into.
 --
 -- One shape for both jobs on purpose: the comparison holds this against what the board answered,
 -- and the writer encodes this into the fifteen bytes MSP 53 takes. A second spelling of the same
 -- record would be a second place for the two to drift apart.
-function M.standardRecord(bank, row, enaField, adjField, step)
+function M.standardRecord(bank, row, enaField, adjField, steps)
   local id = (M.STANDARD_SET[bank] or {})[row]
   if id == nil then return nil end
   local band = M.REFERENCE_BANDS[bank]
@@ -584,19 +612,19 @@ function M.standardRecord(bank, row, enaField, adjField, step)
     adjRange2 = { start = inc.min, ["end"] = inc.max },
     adjMin = limits.min,
     adjMax = limits.max,
-    adjStep = math.floor(tonumber(step) or M.DEFAULT_STEP)
+    adjStep = stepFor(id, steps)
   }
 end
 
 --- The whole standard set as a list of slots, in the order they are written.
 --
 -- `enaField` and `adjField` are the caller's, because they come off the receiver map and nothing
--- in this file reads anything.
-function M.standardSlots(enaField, adjField, step)
+-- in this file reads anything. `steps` is the pair `M.standardRecord` describes.
+function M.standardSlots(enaField, adjField, steps)
   local out = {}
   for i = 1, #M.STANDARD_SLOT_ORDER do
     local cell = M.STANDARD_SLOT_ORDER[i]
-    local record = M.standardRecord(cell[1], cell[2], enaField, adjField, step)
+    local record = M.standardRecord(cell[1], cell[2], enaField, adjField, steps)
     if record ~= nil then
       out[#out + 1] = {
         slot0 = M.STANDARD_FIRST_SLOT + i - 1,
@@ -648,14 +676,14 @@ M.COMPARE_SLICE = 8
 --
 -- Answers nil when the configured channels have no field on this receiver map at all, which is
 -- not a verdict about the board and is reported as its own state rather than as a difference.
-function M.newComparison(records, map, bankChannel, valueChannel, step)
+function M.newComparison(records, map, bankChannel, valueChannel, steps)
   if type(records) ~= "table" then return nil end
   local enaField = M.wireToAuxField(bankChannel, map)
   local adjField = M.wireToAuxField(valueChannel, map)
   if enaField == nil or adjField == nil then return nil end
   return {
     records = records,
-    slots = M.standardSlots(enaField, adjField, step),
+    slots = M.standardSlots(enaField, adjField, steps),
     at = 0,
     empty = 0,
     differ = 0,
@@ -720,8 +748,8 @@ function M.compareStep(work, budget)
 end
 
 --- The same comparison, run whole. For a caller that is not on a widget pass.
-function M.compare(records, map, bankChannel, valueChannel, step)
-  local work = M.newComparison(records, map, bankChannel, valueChannel, step)
+function M.compare(records, map, bankChannel, valueChannel, steps)
+  local work = M.newComparison(records, map, bankChannel, valueChannel, steps)
   if work == nil then return nil end
   local done, result
   repeat

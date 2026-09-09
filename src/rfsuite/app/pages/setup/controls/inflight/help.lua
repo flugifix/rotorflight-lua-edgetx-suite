@@ -18,11 +18,11 @@ return function(ctx)
   local setupFc = tr(i18n, "help_setup_fc",
     "Writes the standard set into the adjustment slots, after showing what it overwrites. Standard layout only.")
 
-  -- The step is written INTO every slot, so changing it on the radio and not on the board leaves
+  -- The steps are written INTO the slots, so changing one on the radio and not on the board leaves
   -- the two disagreeing -- which the compare then reports, correctly and unhelpfully, unless the
   -- pilot has been told which button puts it right.
   local step = tr(i18n, "help_step",
-    "The step is part of every slot, so a changed step needs the flight controller set up again before it takes effect.")
+    "The steps are part of every slot, so a change needs the flight controller set up again. The head speed has its own.")
 
   -- The undo. It exists BEFORE the flight or not at all: the board writes an in-flight change to
   -- its own storage half a second after disarm, and there is nothing left to copy afterwards.

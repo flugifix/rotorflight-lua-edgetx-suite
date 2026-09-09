@@ -98,9 +98,15 @@ M.DEFAULTS = {
   backup_profile = 6,
   set_mode = "standard",
   -- What one press of a step control moves a parameter by, in the flight controller's own units.
-  -- It is written into every slot the setup action puts on the board, so a changed step means
-  -- setting the flight controller up again -- which the help says and the compare verdict reports.
-  step = 5
+  -- It is written into every slot the setup action puts on the board except the head speed's, so
+  -- a changed step means setting the flight controller up again -- which the help says and the
+  -- compare verdict reports.
+  step = 5,
+  -- The head speed's own, because it is the one cell of the set whose range is 0..10000 while no
+  -- other is bounded above 250: the step that makes a gain move by a feelable amount would take
+  -- two thousand presses to cross it. Its rungs start where the general ones stop, and it reaches
+  -- no other slot.
+  step_headspeed = 50
 }
 
 M.PULSE_MS_MIN = 100
@@ -113,6 +119,11 @@ M.PULSE_MS_MAX = 500
 -- nearest of the four rather than refused, so a hand-edited file cannot put a step on the board
 -- that the compare would then report as a mismatch for ever.
 M.STEP_CHOICES = { 1, 2, 5, 10 }
+
+-- The same four rungs for the head speed, moved up the scale its own range asks for: ten thousand
+-- rpm against the 250 no other cell of the set is bounded above, so the smallest rung here is the
+-- largest one there and a hundred is still a hundred presses across the range.
+M.HEADSPEED_STEP_CHOICES = { 10, 25, 50, 100 }
 M.CHANNEL_MIN = 5
 M.CHANNEL_MAX = 16
 -- F4 and F7 radios carry nine global variables, H7 fifteen. Nine is what every target has.
@@ -148,23 +159,34 @@ M.TRIM_MODE_NAVIGATE = "navigate"
 M.SET_MODE_STANDARD = "standard"
 M.SET_MODE_CUSTOM = "custom"
 
---- The rung of M.STEP_CHOICES a stored value means.
+--- The rung of `choices` a stored value means.
 --
--- Rounded to the nearest rather than refused, and the default where there is no number at all. A
+-- Rounded to the nearest rather than refused, and `fallback` where there is no number at all. A
 -- store is a text file a pilot can edit, and a step the overlay rejected would leave the board
 -- written with one number and compared against another with nothing on screen able to say why.
-function M.nearestStep(value)
+local function nearestChoice(value, choices, fallback)
   local wanted = tonumber(value)
-  if wanted == nil then return M.DEFAULTS.step end
-  local best, bestDistance = M.STEP_CHOICES[1], nil
-  for i = 1, #M.STEP_CHOICES do
-    local choice = M.STEP_CHOICES[i]
+  if wanted == nil then return fallback end
+  local best, bestDistance = choices[1], nil
+  for i = 1, #choices do
+    local choice = choices[i]
     local distance = math.abs(choice - wanted)
     if bestDistance == nil or distance < bestDistance then
       best, bestDistance = choice, distance
     end
   end
   return best
+end
+
+--- The rung of M.STEP_CHOICES a stored value means.
+function M.nearestStep(value)
+  return nearestChoice(value, M.STEP_CHOICES, M.DEFAULTS.step)
+end
+
+--- The rung of M.HEADSPEED_STEP_CHOICES a stored value means. The head speed's step is a setting
+-- of its own, so it is rounded onto its own rungs and never onto the general ones.
+function M.nearestHeadspeedStep(value)
+  return nearestChoice(value, M.HEADSPEED_STEP_CHOICES, M.DEFAULTS.step_headspeed)
 end
 
 -- TRIM_MODE_NONE, as model.getFlightMode reports it. A row driven from a trim needs the trim
@@ -472,6 +494,12 @@ function M.loadSettings(modelPreferences)
     -- all until the board has been read.
     set_mode = (src.set_mode == M.SET_MODE_CUSTOM) and M.SET_MODE_CUSTOM or M.SET_MODE_STANDARD,
     step = M.nearestStep(src.step),
+    -- A store written before the head speed had a step of its own holds nothing here and reads as
+    -- the default, which is the number that build wrote into the slot anyway only if the pilot
+    -- had left the general step alone -- so the compare may report the head speed's slot as
+    -- differing on the step until the flight controller is set up again. That is the verdict
+    -- doing its job: the board really does carry the other number.
+    step_headspeed = M.nearestHeadspeedStep(src.step_headspeed),
     -- The upper bound is the switch-position range and not the trim count: since the pilot's
     -- third radio round these hold the POSITION of a trim's `+`, which is a number well above six
     -- on every radio. A store written before that still holds an index of 1..6, and M.migrateTrims
@@ -506,6 +534,7 @@ function M.storeSettings(section, settings)
   section.trim_mode = settings.trim_mode or M.TRIM_MODE_ROWS
   section.set_mode = settings.set_mode or M.SET_MODE_STANDARD
   section.step = M.nearestStep(settings.step)
+  section.step_headspeed = M.nearestHeadspeedStep(settings.step_headspeed)
   section.nav_trim = settings.nav_trim or 0
   section.bank_trim = settings.bank_trim or 0
   section.adj_trim = settings.adj_trim or 0

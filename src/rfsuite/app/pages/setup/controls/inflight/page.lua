@@ -230,8 +230,22 @@ local function buildBoard(children, x, y, w, i18n)
   cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
     t(i18n, "step", "Step size"), stepOptions, Setup.nearestStep(ui.config.step),
     function(value) markValue("step", tonumber(value) or Setup.DEFAULTS.step) end)
+
+  -- The head speed apart from the rest, because it is the one cell whose range reaches 10000 where
+  -- no other is bounded above 250, and the step that suits a gain would take thousands of presses
+  -- to cross it.
+  local headspeedOptions = {}
+  for i = 1, #Setup.HEADSPEED_STEP_CHOICES do
+    local choice = Setup.HEADSPEED_STEP_CHOICES[i]
+    headspeedOptions[i] = { value = choice, label = tostring(choice) }
+  end
+  cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+    t(i18n, "step_headspeed", "Head speed step"), headspeedOptions,
+    Setup.nearestHeadspeedStep(ui.config.step_headspeed),
+    function(value) markValue("step_headspeed", tonumber(value) or Setup.DEFAULTS.step_headspeed) end)
   cursorY = cursorY + appendNote(children, x, cursorY, w,
-    t(i18n, "step_note", "Written into every slot, so a changed step needs the flight controller set up again."))
+    t(i18n, "step_note",
+      "Both steps are written into the slots, so a change needs the flight controller set up again."))
 
   -- The only thing on this page that writes the flight controller. Offered in the standard layout
   -- alone: in the custom one the set is whatever the board carries, and a button that overwrote it

@@ -489,7 +489,8 @@ function M.buildPlan(run)
   end
   plan.enaField, plan.adjField = enaField, adjField
 
-  local cells = Functions.standardSlots(enaField, adjField, settings.step)
+  local cells = Functions.standardSlots(enaField, adjField,
+    { step = settings.step, step_headspeed = settings.step_headspeed })
   if #cells == 0 then
     plan.refused = "no_set"
     return plan
