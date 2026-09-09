@@ -443,20 +443,25 @@ local function inflightDrive()
   return loadInflightModule(InflightDriveCache, "widgets/dashboard/inflight/drive.lua")
 end
 
--- Two switches, and they answer different questions. The preview switch under
+-- Three switches, and they answer different questions. The preview switch under
 -- Settings > General is the pilot saying he wants an unfinished feature on the radio at all;
--- the per-model `enabled` says which model it is set up for. Neither implies the other, so
--- both are read, and this is the one place the widget half asks: with either of them off the
--- drive is never constructed, no module of the overlay is loaded and no variable is written.
+-- the radio's own `enabled`, beside the interlock switch it belongs with, says he wants the
+-- overlay on this transmitter; the per-model `enabled` says which model it is set up for. None
+-- implies another, so all three are read, and this is the one place the widget half asks: with
+-- any of them off the drive is never constructed, no module of the overlay is loaded and no
+-- variable is written.
 --
 -- The global preferences the widget holds are re-read when the file changes, and that reload
--- is held back while the craft is armed -- so a preview switched off in the air is adopted
--- once it has landed, not during the flight it would take the surface away in.
+-- is held back while the craft is armed -- so a preview or a radio switch changed in the air is
+-- adopted once it has landed, not during the flight it would take the surface away in.
 local function inflightEnabled(self)
-  local general = self.preferences and self.preferences.general
+  local prefs = self.preferences
+  local general = prefs and prefs.general
   if not isTruthy(general and general.preview_inflight_tuning) then return false end
-  local prefs = self.modelPreferences
-  local section = (type(prefs) == "table") and prefs.inflight or nil
+  local radio = (type(prefs) == "table") and prefs.inflight or nil
+  if type(radio) ~= "table" or radio.enabled ~= true then return false end
+  local model = self.modelPreferences
+  local section = (type(model) == "table") and model.inflight or nil
   return type(section) == "table" and section.enabled == true
 end
 

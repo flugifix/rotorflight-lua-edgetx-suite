@@ -79,8 +79,13 @@ M.TRIM_MODE_NAVIGATE = Setup.TRIM_MODE_NAVIGATE
 M.STEP_CHOICES = Setup.STEP_CHOICES
 M.nearestStep = Setup.nearestStep
 M.radio = Setup.radio
-M.loadSettings = Setup.loadSettings
-M.storeSettings = Setup.storeSettings
+M.RADIO_KEYS = Setup.RADIO_KEYS
+M.MODEL_KEYS = Setup.MODEL_KEYS
+M.loadRadioSettings = Setup.loadRadioSettings
+M.loadModelSettings = Setup.loadModelSettings
+M.settings = Setup.settings
+M.storeRadioSettings = Setup.storeRadioSettings
+M.storeModelSettings = Setup.storeModelSettings
 M.resolveTrims = Setup.resolveTrims
 M.trimsFromList = Setup.trimsFromList
 M.trimEntry = Setup.trimEntry
@@ -154,7 +159,7 @@ end
 function M.newDrive(radio, settings)
   local self = setmetatable({}, Drive)
   self.radio = radio or M.radio()
-  self.settings = settings or M.loadSettings(nil)
+  self.settings = settings or M.settings(nil, nil)
   self.live = false
   self.seeded = false
   self.rawSwitch = nil
@@ -514,7 +519,10 @@ end
 -- evaluation only records what it saw.
 function Drive:evaluateInterlock(now)
   local settings = self.settings
-  if not settings or settings.enabled ~= true or (settings.switch or 0) == 0 then
+  -- BOTH switches, through the one answer M.settings computes: the radio's, which says the pilot
+  -- wants the overlay on this transmitter at all, and the model's, which says this machine is set
+  -- up for it. See inflight/setup.lua M.settings.
+  if not settings or settings.active ~= true or (settings.switch or 0) == 0 then
     if self.live then
       self.live = false
       self:setPhase(nil)
@@ -1102,7 +1110,8 @@ local function settingsSignature(settings)
   if type(settings) ~= "table" then return "" end
   local rows = settings.rowTrim or {}
   return table.concat({
-    tostring(settings.enabled), tostring(settings.switch), tostring(settings.bank_ch),
+    tostring(settings.radio_enabled), tostring(settings.model_enabled), tostring(settings.switch),
+    tostring(settings.bank_ch),
     tostring(settings.value_ch), tostring(settings.bank_gvar), tostring(settings.value_gvar),
     tostring(settings.pulse_ms), tostring(settings.trims), tostring(settings.backup_profile),
     tostring(settings.trim_mode), tostring(settings.nav_trim), tostring(settings.bank_trim),
@@ -1117,7 +1126,7 @@ end
 -- widget's own preference watcher already runs its stat at.
 local STORE_STAT_TICKS = 100
 
---- What the per-model store looks like on the card right now: its size and its modification time,
+--- What the PER-MODEL store looks like on the card right now: its size and its modification time,
 -- as one string.
 --
 -- A STATE and not a signal, and the difference is the whole of why this exists. A signal is
@@ -1160,10 +1169,19 @@ end
 -- `widget.modelPreferences` is left exactly where it was -- their theme reload still reads what it
 -- always read -- because a fix that reached into their state would be a second writer of it.
 --
+-- THIS GUARD IS THE MODEL HALF'S ALONE. The radio's settings live in the radio's own preferences
+-- file, and the runtime already watches that one and hands the new table down; opening a second
+-- watcher on it would be the very duplication the paragraph above refuses. Only the per-model
+-- store is stat'ed here.
+--
+-- And what it is gated on is the RADIO's switch, not the combined answer. The model's switch is
+-- IN the file being stat'ed, so gating the stat on it would mean a model switched on from the
+-- tool is never noticed by a widget that has already read the store once.
+--
 -- Answers the table to settle from, or nil for "use what the widget was given".
 local function freshPreferences(widget)
   local settings = widget._inflight and widget._inflight.settings
-  if settings ~= nil and settings.enabled ~= true then return nil end
+  if settings ~= nil and settings.radio_enabled ~= true then return nil end
 
   local session = _G.rfsuite and _G.rfsuite.session
   local mcuId = type(session) == "table" and session.mcu_id or nil
@@ -1226,10 +1244,18 @@ function M.get(widget)
   -- otherwise. See freshPreferences: the widget's copy is only refreshed by the runtime's own
   -- reload, and that reload is held back in the very states the overlay runs in.
   local prefs = freshPreferences(widget) or widget.modelPreferences
+  -- The radio's half, exactly as the runtime publishes it. Nothing of the overlay watches that
+  -- file: widgets/dashboard/runtime.lua re-reads it on its own signal and hands the new table
+  -- down, and that reload is deliberately held back while the craft is armed -- so a radio
+  -- setting changed in the air is adopted once it has landed. That is the clock the theme and the
+  -- preview switch already run on, and the overlay does not open a second one beside it.
+  local radioPrefs = widget.preferences
   local drive = widget._inflight
-  if drive ~= nil and drive._source == prefs then return drive end
+  if drive ~= nil and drive._source == prefs and drive._radioSource == radioPrefs then
+    return drive
+  end
 
-  local settings = M.loadSettings(prefs)
+  local settings = M.settings(radioPrefs, prefs)
   local signature = settingsSignature(settings)
   if drive == nil then
     drive = M.newDrive(nil, settings)
@@ -1255,6 +1281,7 @@ function M.get(widget)
     drive:seedSet()
   end
   drive._source = prefs
+  drive._radioSource = radioPrefs
   return drive
 end
 
@@ -1386,7 +1413,12 @@ local function publish(widget, drive)
   local activeId = drive:functionId(drive.bank, drive.row)
   state.inflight = {
     epoch = epoch,
-    enabled = drive.settings.enabled == true,
+    -- Both switches, and the conjunction the drive actually runs on. The two flags travel beside
+    -- it because a surface that says nothing is happening should be able to say which of them is
+    -- the one that is off.
+    active = drive.settings.active == true,
+    radioEnabled = drive.settings.radio_enabled == true,
+    modelEnabled = drive.settings.model_enabled == true,
     live = drive.live,
     -- Which of the three surfaces this is. It is on the snapshot AND in the widget's render key,
     -- because a phase change is a different screen and not a different number on the same one.
@@ -1453,7 +1485,7 @@ end
 function M.tick(widget)
   local drive = M.get(widget)
   if drive == nil then return false end
-  if drive.settings.enabled ~= true then
+  if drive.settings.active ~= true then
     if widget.state and widget.state.inflight ~= nil then widget.state.inflight = nil end
     return false
   end

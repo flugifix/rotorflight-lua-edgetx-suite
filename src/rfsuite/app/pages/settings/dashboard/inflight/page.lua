@@ -5,13 +5,21 @@
 -- Tuning after the pilot's third radio round. They are not one job: this page is a mixer, two
 -- global variables, a switch and six trims, and it is true of the radio whether or not anything is
 -- connected; the other cannot be looked at without a flight controller. He kept finding the button
--- that writes the board on a page he had opened to change a trim. The STORE does not move: both
--- pages are views of one `inflight` section, because every key in it is per model.
+-- that writes the board on a page he had opened to change a trim.
 --
--- Everything on this page is per MODEL: which switch arms the overlay, which channels and global
--- variables this model's mixer devotes to the adjustment pair, and which trims stand in for its
--- rows. So it writes into the model store keyed by the flight controller's MCU id, exactly as the
--- theme page's model override does, and says so when no flight controller is connected.
+-- Everything on this page belongs to the RADIO and applies to every model on it: which switch
+-- arms the overlay, which channels and global variables the transmitter's mixer devotes to the
+-- adjustment pair, how long a pulse stands, and which trims stand in for the rows. One
+-- transmitter has one set of those, and a pilot who set them up once should not meet them again
+-- on his next machine. So they are in the radio's own preferences file under [inflight], saved
+-- the way every other Settings page saves, and no flight controller has to be connected for any
+-- of it -- which is why this page carries no store gate and no note asking for a link.
+--
+-- The MODEL's half is on Setup > Controls > In-Flight Tuning: which parameters its flight
+-- controller offers, how far one press moves them, which PID profile is the undo, and a switch
+-- of its own saying the machine is set up for the overlay. BOTH switches have to be on before
+-- anything drives; the switch on this page is the master, and with it off nothing happens on any
+-- model.
 --
 -- Two things this page has learned the hard way, both from a radio and both worth stating here.
 --
@@ -87,17 +95,13 @@ local function ensureDeps()
   end
 end
 
-local function session()
-  if type(_G) ~= "table" or not _G.rfsuite then return nil end
-  if type(_G.rfsuite.session) ~= "table" then return nil end
-  return _G.rfsuite.session
-end
-
--- Per-model settings can only be stored while a flight controller is connected: the store is
--- keyed by its MCU id and there is no key without it.
-local function hasModelStore()
-  local s = session()
-  return s ~= nil and s.mcu_id ~= nil
+-- The radio's preferences, as the page context carries them. It is that table and no other: the
+-- suite's writer puts down the one the context holds, so a section written anywhere else is
+-- written into a copy nobody saves. Answers an empty table rather than nil so that a first visit
+-- on a card whose file has never been written still reads as the defaults.
+local function preferences(prefs)
+  if type(prefs) ~= "table" then return {} end
+  return prefs
 end
 
 --- One radio surface for the whole visit. It is a table of closures, so building a fresh one per
@@ -109,10 +113,9 @@ local function radio()
   return ui.radio
 end
 
-local function ensureLoaded()
+local function ensureLoaded(prefs)
   if ui.loaded then return end
-  local s = session()
-  ui.config = Setup.loadSettings(s and s.modelPreferences or nil)
+  ui.config = Setup.loadRadioSettings(preferences(prefs))
   ui.radio = nil
   ui.checkDone = false
   ui.checkResult = nil
@@ -263,16 +266,20 @@ local function markValue(key, value)
   ui.runtime.markValueChanged()
 end
 
-local function saveToStore()
-  local s = session()
-  if s == nil or s.mcu_id == nil then return false, "missing_mcu_id" end
-  if type(s.modelPreferences) ~= "table" then s.modelPreferences = {} end
-  if type(s.modelPreferences.inflight) ~= "table" then s.modelPreferences.inflight = {} end
-  Setup.storeSettings(s.modelPreferences.inflight, ui.config)
+--- Into the radio's own preferences, the way the other Settings pages do it.
+--
+-- The section is written in place on the published table and the suite's own writer puts the file
+-- down, so the widget learns of the change through the reload signal that writer raises -- the
+-- same route the theme and the preview switch already travel. Only this page's own keys are
+-- touched: see inflight/setup.lua M.storeRadioSettings.
+local function saveToStore(ctx)
+  local prefs = ctx and ctx.preferences
+  if type(prefs) ~= "table" then return false, "preferences" end
+  if type(prefs.inflight) ~= "table" then prefs.inflight = {} end
+  Setup.storeRadioSettings(prefs.inflight, ui.config)
 
-  local MP = loadModule("lib/model_preferences.lua")
-  if type(MP) ~= "table" or type(MP.saveByMcuId) ~= "function" then return false, "model_preferences" end
-  return MP.saveByMcuId(s.mcu_id, s.modelPreferences)
+  if type(ctx.savePreferences) ~= "function" then return false, "preferences" end
+  return ctx.savePreferences()
 end
 
 function M.getHeaderActions()
@@ -284,13 +291,13 @@ function M.onReload(ctx)
   ensureDeps()
   ui.loaded = false
   ui.dirty = false
-  ensureLoaded()
+  ensureLoaded(ctx and ctx.preferences)
   return true
 end
 
 function M.onSave(ctx)
   ensureDeps()
-  local ok, err = saveToStore()
+  local ok, err = saveToStore(ctx)
   if ctx and type(ctx.reportSave) == "function" then
     if ok then
       ui.dirty = false
@@ -455,9 +462,12 @@ local function buildGeneral(children, x, y, w, i18n)
   cursorY = cursorY + appendNote(children, x, cursorY, w,
     t(i18n, "pointer_fc", "The set layout, the step size and the undo profile are in Setup > Controls."))
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "enabled", "Enabled"),
+    t(i18n, "enabled", "In-flight tuning on this radio"),
     ui.runtime.getBoolGetter("enabled"),
     ui.runtime.getBoolSetter("enabled"))
+  cursorY = cursorY + appendNote(children, x, cursorY, w,
+    t(i18n, "enabled_note",
+      "The master switch. Each model has one of its own under Setup > Controls, and both have to be on."))
 
   -- The interlock. The picker stores a signed switch POSITION, which is what getSwitchValue takes,
   -- so nothing has to be resolved between what the pilot chose and what the overlay reads.
@@ -613,18 +623,13 @@ local SECTIONS = {
 
 function M.build(ctx)
   ensureDeps()
-  ensureLoaded()
+  ensureLoaded(ctx.preferences)
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
 
   local children = ctx.children
   local x, w = ctx.x, ctx.w
   local i18n = ctx.i18n
   local cursorY = ctx.y
-
-  if not hasModelStore() then
-    cursorY = cursorY + appendNote(children, x, cursorY, w,
-      t(i18n, "no_model", "Connect a flight controller: these settings are stored with the model."))
-  end
 
   for i = 1, #SECTIONS do
     local section = SECTIONS[i]

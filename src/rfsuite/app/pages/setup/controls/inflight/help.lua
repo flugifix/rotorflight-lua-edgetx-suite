@@ -13,6 +13,11 @@ return function(ctx)
   local intro = tr(i18n, "help_message",
     "The flight controller's half: which parameters it offers, how far one press moves them, and where the undo lives.")
 
+  -- Two switches, and the one on this page is the smaller of them. A pilot who turns this on and
+  -- finds nothing happening is looking at the master, which is on the radio.
+  local enabled = tr(i18n, "help_enabled",
+    "The switch at the top is this machine's own. The radio carries the master, and both have to be on.")
+
   -- The one button here that changes anything on the board, and the one thing about it that is
   -- not obvious: it overwrites a slot whichever switch that slot belongs to.
   local setupFc = tr(i18n, "help_setup_fc",
@@ -33,6 +38,7 @@ return function(ctx)
     "The switch, the channels, the variables and the trims are in Settings > Dashboard > In-Flight Tuning.")
 
   return {
-    message = intro .. "\n\n" .. step .. "\n\n" .. undo .. "\n\n" .. setupFc .. "\n\n" .. pointer
+    message = intro .. "\n\n" .. enabled .. "\n\n" .. step .. "\n\n" .. undo .. "\n\n"
+      .. setupFc .. "\n\n" .. pointer
   }
 end

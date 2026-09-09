@@ -664,11 +664,23 @@ do
   local widget = Runtime.new(ZONE, {})
   widget.preferences = widget.preferences or {}
   widget.preferences.dashboard = { theme_preflight = reference }
-  -- The overlay is a preview feature and the widget reads that switch beside the per-model
-  -- `enabled`: with it off no drive is built and the rows below would be measuring a dashboard.
-  -- It is a global preference, so it is staged here and not in the per-model store further down.
+  -- THREE switches decide whether there is an overlay at all, and the rows below measure a plain
+  -- dashboard if any of them is off. Two of them are the radio's and are staged here; the third
+  -- is the model's and is staged with the per-model store further down.
+  --
+  -- The preview switch is the pilot saying he wants an unfinished feature on the radio; the
+  -- [inflight] section's own `enabled` is the overlay's master switch, and the rest of that
+  -- section is the radio's half of the settings -- the interlock switch, the two channels and
+  -- variables, the pulse length and the trims. See widgets/dashboard/inflight/setup.lua.
   widget.preferences.general = widget.preferences.general or {}
   widget.preferences.general.preview_inflight_tuning = true
+  widget.preferences.inflight = {
+    enabled = true, switch = 1, bank_ch = 11, value_ch = 12,
+    bank_gvar = 1, value_gvar = 2, pulse_ms = 150, trims = true,
+    trim_mode = "rows", nav_trim = 2, adj_trim = 4,
+    row_trim_1 = 2, row_trim_2 = 4, row_trim_3 = 1,
+    row_trim_4 = 3, row_trim_5 = 5, row_trim_6 = 6
+  }
 
   -- The enable channel, as a raw reading: 998 microseconds, the middle of the first band.
   Stubs.sensors["ch11"] = -1028
@@ -695,9 +707,8 @@ do
   -- off -- which is what a first run of this driver did, silently, with a zero in the row.
   local store = {
     inflight = {
-      enabled = true, switch = 1, bank_ch = 11, value_ch = 12,
-      bank_gvar = 1, value_gvar = 2, pulse_ms = 150, trims = true,
-      trim_mode = "rows", nav_trim = 2, adj_trim = 4,
+      -- The model's own switch. The radio's two are staged above; all three have to be on.
+      enabled = true,
       -- The STANDARD set layout, which is the default and, measured, the dearer of the two here.
       --
       -- The two layouts differ in what the passes after the slot table does with it: the custom
@@ -708,8 +719,7 @@ do
       -- the custom one over 29, so the row bounds either. It is pinned to the one a pilot gets
       -- without changing anything, and the other is six instructions below it.
       set_mode = "standard",
-      row_trim_1 = 2, row_trim_2 = 4, row_trim_3 = 1,
-      row_trim_4 = 3, row_trim_5 = 5, row_trim_6 = 6, backup_profile = 0
+      step = 5, step_headspeed = 50, backup_profile = 0
     }
   }
   _G.rfsuite.session.modelPreferences = store
@@ -743,6 +753,14 @@ do
 
   local drive = widget._inflight
   if drive == nil then error("accounting: the tuning overlay never built a drive") end
+  -- Both halves reached the drive. The radio's settings are re-read from the card by the widget's
+  -- own preference reload, so a stage that the settle above quietly replaced would leave the rows
+  -- pricing an overlay that is switched off -- which is a zero in the row rather than an error.
+  if drive.settings.radio_enabled ~= true or drive.settings.model_enabled ~= true then
+    error("accounting: the tuning overlay settled with radio_enabled="
+      .. tostring(drive.settings.radio_enabled)
+      .. " model_enabled=" .. tostring(drive.settings.model_enabled))
+  end
 
   ----------------------------------------------------------------------------
   -- The GROUND HALF, priced as the window it occupies.

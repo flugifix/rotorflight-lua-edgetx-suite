@@ -53,11 +53,18 @@ end
 -- own now that the assembly past the gate lives here.
 M.log = logDrive
 
--- What the per-model store holds under [inflight], and what the overlay falls back to when it
--- holds nothing. No global variable is defaulted: a variable this overlay writes has to be one
--- the pilot declared, because writing an arbitrary one would move whatever it already drives.
--- The channels ARE defaulted, to the pair the project's own generic radio setup documents.
+-- What the two [inflight] sections hold, and what the overlay falls back to when they hold
+-- nothing. One table for both of them, keyed by M.RADIO_KEYS and M.MODEL_KEYS below: a default is
+-- a property of the setting rather than of the file it happens to live in, and two tables would
+-- be two places to change it.
+--
+-- No global variable is defaulted: a variable this overlay writes has to be one the pilot
+-- declared, because writing an arbitrary one would move whatever it already drives. The channels
+-- ARE defaulted, to the pair the project's own generic radio setup documents.
 M.DEFAULTS = {
+  -- Both sections carry a key of this name and both default to off, which is why one entry
+  -- serves them. The radio's says the pilot wants the overlay on this transmitter at all; the
+  -- model's says this machine is set up for it. See M.settings for how the two combine.
   enabled = false,
   switch = 0,
   bank_ch = 11,
@@ -169,6 +176,27 @@ M.TRIM_MODE_NAVIGATE = "navigate"
 -- the overlay can drive. It is the mode for a pilot whose adjustment configuration is his own.
 M.SET_MODE_STANDARD = "standard"
 M.SET_MODE_CUSTOM = "custom"
+
+-- Which setting belongs to which file, and the whole of the ownership rule in two lists.
+--
+-- A setting belongs to the RADIO when it is true of the transmitter whatever is plugged into it:
+-- the interlock switch, the two channels and the two global variables the mixer devotes to the
+-- adjustment pair, the pulse length, and which trims stand in for the rows. One transmitter has
+-- one set of those, and a pilot who set them up once should not meet them again on his next
+-- model. They live in the radio's own preferences file, section [inflight].
+--
+-- A setting belongs to the MODEL when it describes the machine: which set of parameters its
+-- flight controller offers, how far one press moves them, and which PID profile is the undo.
+-- Those stay in the per-model store, section [inflight], keyed by the flight controller's MCU id.
+--
+-- `enabled` is in BOTH lists, and deliberately: see M.settings.
+M.RADIO_KEYS = {
+  "enabled", "switch", "bank_ch", "value_ch", "bank_gvar", "value_gvar", "pulse_ms",
+  "trims", "trim_mode", "nav_trim", "bank_trim", "adj_trim",
+  "row_trim_1", "row_trim_2", "row_trim_3", "row_trim_4", "row_trim_5", "row_trim_6"
+}
+
+M.MODEL_KEYS = { "enabled", "set_mode", "step", "step_headspeed", "backup_profile" }
 
 --- The rung of `choices` a stored value means.
 --
@@ -473,17 +501,22 @@ M.SWITCH_WALK_LIMIT = SWITCH_WALK_LIMIT
 -- Settings
 -- ---------------------------------------------------------------------------
 
---- The [inflight] section of the per-model store, filled in and bounded.
+--- The [inflight] section of one of the two stores, or an empty table where there is none.
 --
 -- Reading is deliberately forgiving -- a store written by an older build is missing keys rather
--- than wrong -- and bounding is not: a channel or a variable index outside what the radio has
--- would be a write into something else entirely.
-function M.loadSettings(modelPreferences)
-  local src = nil
-  if type(modelPreferences) == "table" and type(modelPreferences.inflight) == "table" then
-    src = modelPreferences.inflight
-  end
-  src = src or {}
+-- than wrong -- and the two halves are read STRICTLY from their own file: a radio key found in a
+-- per-model store is left where it is and never read, and neither half falls back to the other.
+local function section(store)
+  if type(store) == "table" and type(store.inflight) == "table" then return store.inflight end
+  return {}
+end
+
+--- The radio's half of the [inflight] section, filled in and bounded.
+--
+-- Bounding is not forgiving: a channel or a variable index outside what the radio has would be a
+-- write into something else entirely.
+function M.loadRadioSettings(preferences)
+  local src = section(preferences)
 
   local settings = {
     enabled = src.enabled == true,
@@ -499,6 +532,30 @@ function M.loadSettings(modelPreferences)
     -- the layout that happened to be the fallback, and moving the default would have moved
     -- nothing at all.
     trim_mode = trimMode(src.trim_mode),
+    -- The upper bound is the switch-position range and not the trim count: since the pilot's
+    -- third radio round these hold the POSITION of a trim's `+`, which is a number well above six
+    -- on every radio. A store written before that still holds an index of 1..6, and M.migrateTrims
+    -- turns it into a position once the radio has said what its trims are.
+    nav_trim = clampNumber(src.nav_trim, 0, 1024, M.DEFAULTS.nav_trim),
+    bank_trim = clampNumber(src.bank_trim, 0, 1024, M.DEFAULTS.bank_trim),
+    adj_trim = clampNumber(src.adj_trim, 0, 1024, M.DEFAULTS.adj_trim)
+  }
+
+  settings.rowTrim = {}
+  for row = 1, M.TRIM_COUNT do
+    local key = "row_trim_" .. tostring(row)
+    settings.rowTrim[row] = clampNumber(src[key], 0, 1024, M.DEFAULTS[key])
+  end
+
+  return settings
+end
+
+--- The model's half of the [inflight] section, filled in and bounded.
+function M.loadModelSettings(modelPreferences)
+  local src = section(modelPreferences)
+
+  return {
+    enabled = src.enabled == true,
     -- Anything that is not the word `custom` is the standard set, which is what a store written
     -- by a build that did not have this setting yet reads as -- and is the right way round: the
     -- standard set names every cell without a round trip, while the custom one shows nothing at
@@ -511,48 +568,70 @@ function M.loadSettings(modelPreferences)
     -- differing on the step until the flight controller is set up again. That is the verdict
     -- doing its job: the board really does carry the other number.
     step_headspeed = M.nearestHeadspeedStep(src.step_headspeed),
-    -- The upper bound is the switch-position range and not the trim count: since the pilot's
-    -- third radio round these hold the POSITION of a trim's `+`, which is a number well above six
-    -- on every radio. A store written before that still holds an index of 1..6, and M.migrateTrims
-    -- turns it into a position once the radio has said what its trims are.
-    nav_trim = clampNumber(src.nav_trim, 0, 1024, M.DEFAULTS.nav_trim),
-    bank_trim = clampNumber(src.bank_trim, 0, 1024, M.DEFAULTS.bank_trim),
-    adj_trim = clampNumber(src.adj_trim, 0, 1024, M.DEFAULTS.adj_trim),
     backup_profile = clampNumber(src.backup_profile, 0, M.PROFILE_MAX, M.DEFAULTS.backup_profile)
   }
-
-  settings.rowTrim = {}
-  for row = 1, M.TRIM_COUNT do
-    local key = "row_trim_" .. tostring(row)
-    settings.rowTrim[row] = clampNumber(src[key], 0, 1024, M.DEFAULTS[key])
-  end
-
-  return settings
 end
 
---- Write the settings back into the shape the store keeps. Scalars only: lib/model_preferences.lua
--- serialises one level of tables and nothing below it.
-function M.storeSettings(section, settings)
-  if type(section) ~= "table" or type(settings) ~= "table" then return end
-  section.enabled = settings.enabled == true
-  section.switch = settings.switch or 0
-  section.bank_ch = settings.bank_ch
-  section.value_ch = settings.value_ch
-  section.bank_gvar = settings.bank_gvar
-  section.value_gvar = settings.value_gvar
-  section.pulse_ms = settings.pulse_ms
-  section.trims = settings.trims == true
-  section.trim_mode = settings.trim_mode or M.TRIM_MODE_ROWS
-  section.set_mode = settings.set_mode or M.SET_MODE_STANDARD
-  section.step = M.nearestStep(settings.step)
-  section.step_headspeed = M.nearestHeadspeedStep(settings.step_headspeed)
-  section.nav_trim = settings.nav_trim or 0
-  section.bank_trim = settings.bank_trim or 0
-  section.adj_trim = settings.adj_trim or 0
-  section.backup_profile = settings.backup_profile
-  for row = 1, M.TRIM_COUNT do
-    section["row_trim_" .. tostring(row)] = (settings.rowTrim and settings.rowTrim[row]) or 0
+--- Both halves in one table, plus the answer to the only question the drive asks of them.
+--
+-- TWO switches have to be on, and neither implies the other. The radio's says the pilot wants the
+-- overlay on this transmitter; with it off nothing happens on any model, and the model's switch
+-- has no effect at all. The model's says this machine is set up for it; a transmitter that flies
+-- six helicopters drives the one whose switch is on and leaves the other five alone. `active` is
+-- the conjunction, and it is what everything downstream tests -- the two flags travel beside it
+-- so that a surface can say WHICH of them is the one that is off.
+function M.settings(preferences, modelPreferences)
+  local radio = M.loadRadioSettings(preferences)
+  local model = M.loadModelSettings(modelPreferences)
+  local radioEnabled = radio.enabled == true
+
+  for i = 1, #M.MODEL_KEYS do
+    local key = M.MODEL_KEYS[i]
+    if key ~= "enabled" then radio[key] = model[key] end
   end
+
+  -- No merged key called `enabled`. The name means one thing in each file and nothing at all in
+  -- the union of them, so the drive is given the two it can tell apart and the answer it wants.
+  radio.enabled = nil
+  radio.radio_enabled = radioEnabled
+  radio.model_enabled = model.enabled == true
+  radio.active = radioEnabled and radio.model_enabled
+  return radio
+end
+
+--- Write the radio's half back into the shape its store keeps. Scalars only, like the model's.
+--
+-- Each writer touches ONLY the keys of its own half. One writer for both was what let the flight
+-- controller page rewrite the radio's keys and the radio page rewrite the board's, which is
+-- harmless while there is one file and a silent clobber once there are two.
+function M.storeRadioSettings(target, settings)
+  if type(target) ~= "table" or type(settings) ~= "table" then return end
+  target.enabled = settings.enabled == true
+  target.switch = settings.switch or 0
+  target.bank_ch = settings.bank_ch
+  target.value_ch = settings.value_ch
+  target.bank_gvar = settings.bank_gvar
+  target.value_gvar = settings.value_gvar
+  target.pulse_ms = settings.pulse_ms
+  target.trims = settings.trims == true
+  target.trim_mode = settings.trim_mode or M.TRIM_MODE_ROWS
+  target.nav_trim = settings.nav_trim or 0
+  target.bank_trim = settings.bank_trim or 0
+  target.adj_trim = settings.adj_trim or 0
+  for row = 1, M.TRIM_COUNT do
+    target["row_trim_" .. tostring(row)] = (settings.rowTrim and settings.rowTrim[row]) or 0
+  end
+end
+
+--- Write the model's half back into the shape the per-model store keeps. Scalars only:
+-- lib/model_preferences.lua serialises one level of tables and nothing below it.
+function M.storeModelSettings(target, settings)
+  if type(target) ~= "table" or type(settings) ~= "table" then return end
+  target.enabled = settings.enabled == true
+  target.set_mode = settings.set_mode or M.SET_MODE_STANDARD
+  target.step = M.nearestStep(settings.step)
+  target.step_headspeed = M.nearestHeadspeedStep(settings.step_headspeed)
+  target.backup_profile = settings.backup_profile
 end
 
 -- ---------------------------------------------------------------------------

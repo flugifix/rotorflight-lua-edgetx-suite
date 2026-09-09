@@ -10,9 +10,15 @@
 -- page these slots belong to and the page a pilot who wants to see what was written goes to. It
 -- is gated on the link and locked while armed, like every one of its neighbours.
 --
--- The STORE does not move. Every key stays in the model store's `inflight` section, because every
--- one of them is per model; the two pages are two views of one setting table, and each carries a
--- line naming the other.
+-- The STORE follows the split. What this page holds describes the MACHINE -- which parameters its
+-- flight controller offers, how far one press moves them, which PID profile is the undo, and a
+-- switch of its own saying the machine is set up for the overlay -- so it stays in the per-model
+-- store's `inflight` section, keyed by the flight controller's MCU id. What the other page holds
+-- describes the TRANSMITTER and lives in the radio's own preferences file. Each page writes only
+-- its own keys, and each carries a line naming the other.
+--
+-- BOTH switches have to be on before anything drives. The radio's is the master: with it off
+-- nothing happens on any model and the switch here has no effect at all.
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -76,10 +82,28 @@ local function hasModelStore()
   return s ~= nil and s.mcu_id ~= nil
 end
 
-local function ensureLoaded()
+-- The radio's preferences, as the page context carries them. This page edits none of them; it
+-- reads the two channels below and nothing else.
+local function preferences(prefs)
+  if type(prefs) ~= "table" then return {} end
+  return prefs
+end
+
+local function ensureLoaded(prefs)
   if ui.loaded then return end
   local s = session()
-  ui.config = Setup.loadSettings(s and s.modelPreferences or nil)
+  ui.config = Setup.loadModelSettings(s and s.modelPreferences or nil)
+
+  -- The one place the two halves meet, and it is worth being explicit about rather than hiding in
+  -- a merge. An adjustment slot is a function plus the CHANNEL it is read from, and those two
+  -- channels belong to the radio -- so the write this page's button makes needs them even though
+  -- nothing here may edit them. They are carried on the edited table for
+  -- widgets/dashboard/inflight/fcsetup.lua to find and are never written back: saveToStore puts
+  -- down the model's keys alone.
+  local radio = Setup.loadRadioSettings(preferences(prefs))
+  ui.config.bank_ch = radio.bank_ch
+  ui.config.value_ch = radio.value_ch
+
   ui.fcRun = nil
   ui.fcNotice = nil
   ui.fcProgress = nil
@@ -104,7 +128,7 @@ local function saveToStore()
   if s == nil or s.mcu_id == nil then return false, "missing_mcu_id" end
   if type(s.modelPreferences) ~= "table" then s.modelPreferences = {} end
   if type(s.modelPreferences.inflight) ~= "table" then s.modelPreferences.inflight = {} end
-  Setup.storeSettings(s.modelPreferences.inflight, ui.config)
+  Setup.storeModelSettings(s.modelPreferences.inflight, ui.config)
 
   local MP = loadModule("lib/model_preferences.lua")
   if type(MP) ~= "table" or type(MP.saveByMcuId) ~= "function" then return false, "model_preferences" end
@@ -119,7 +143,7 @@ end
 function M.onReload(ctx)
   ensureDeps()
   ui.loaded = false
-  ensureLoaded()
+  ensureLoaded(ctx and ctx.preferences)
   if ctx and ctx.requestRebuild then ctx.requestRebuild() end
 end
 
@@ -198,6 +222,18 @@ end
 
 local function buildBoard(children, x, y, w, i18n)
   local cursorY = y
+
+  -- The machine's own switch, and the first thing on the page because everything under it is
+  -- inert without it. It is not the only one: the radio carries the master, and this says which
+  -- of the machines on that radio the overlay is set up for.
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    t(i18n, "enabled", "In-flight tuning on this model"),
+    ui.runtime.getBoolGetter("enabled"),
+    ui.runtime.getBoolSetter("enabled"))
+  cursorY = cursorY + appendNote(children, x, cursorY, w,
+    t(i18n, "enabled_note",
+      "The switch on Settings > Dashboard > In-Flight Tuning has to be on as well."))
+
   cursorY = cursorY + appendNote(children, x, cursorY, w,
     t(i18n, "pointer_radio", "The switch, the channels, the variables and the trims are in Settings > Dashboard."))
 
@@ -296,7 +332,7 @@ local SECTIONS = {
 
 function M.build(ctx)
   ensureDeps()
-  ensureLoaded()
+  ensureLoaded(ctx.preferences)
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
 
   local children = ctx.children

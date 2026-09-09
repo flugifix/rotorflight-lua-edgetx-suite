@@ -152,6 +152,13 @@ local function defaultPreferences()
       -- nor a battery's cycle count. 0 logs every arm.
       min_seconds = 30,
     },
+    -- The radio's half of the in-flight tuning overlay: what is true of this transmitter whatever
+    -- is plugged into it. The machine's half -- which parameters its flight controller offers,
+    -- how far one press moves them, which PID profile is the undo -- is in the per-model store.
+    -- Off by default, like every preview surface: see app/pages/settings/dashboard/inflight.
+    inflight = {
+      enabled = false,
+    },
     dashboard = {
       theme_preflight = "system/default",
       -- Phase overrides on top of the theme above, read only while theme_per_phase is on.
