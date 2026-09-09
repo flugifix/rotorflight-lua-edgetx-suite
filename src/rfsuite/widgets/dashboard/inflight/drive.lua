@@ -1143,15 +1143,17 @@ end
 
 --- The per-model store, re-read off the card when the file on the card has moved.
 --
--- WHY THE OVERLAY DOES ITS OWN. The pilot set the backup profile on the settings page and only a
--- radio restart applied it. The chain, measured on his card log: the widget's own preference
--- watcher DID fire, and it re-reads through lib/model_preferences.lua `loadByMcuId` WITHOUT
--- `force` -- and that function serves a module-level cache whose only invalidation, `clearCache`,
--- nothing in the tree calls. The tool that saved the file runs in a different Lua state
--- (`lsWidgets` is its own `lua_newstate`, not a coroutine of the main one), so the save refreshed
--- the TOOL's copy of that cache and the widget's still held the file as it stood at connect. What
--- came back was a brand-new table containing the old content -- which defeats every identity test
--- downstream of it, ours included, because a different table is not a different setting.
+-- WHY THE OVERLAY DOES ITS OWN. The guard was written against a module-level cache in
+-- lib/model_preferences.lua that nothing invalidated: the tool that saves the settings file runs
+-- in a different Lua state (`lsWidgets` is its own `lua_newstate`, not a coroutine of the main
+-- one), so a save refreshed the TOOL's copy of that cache while the widget's still held the file
+-- as it stood at connect, and the widget's own preference watcher handed back a brand-new table
+-- containing the old content. That cache is gone -- `loadByMcuId` reads the disk on every call.
+--
+-- The guard stays for two reasons that outlive it. It is the path the overlay's
+-- settings-to-widget behaviour was measured on, and it does not depend on the runtime's own
+-- reload, which is deliberately held back while armed, while the widget is off-screen and after a
+-- flight with no link -- the states the overlay is live in.
 --
 -- So the overlay looks at the file itself. One `fstat` a second while the feature is enabled; on a
 -- change, one forced read that goes to the disk. Nothing of theirs is touched and
@@ -1192,12 +1194,11 @@ local function freshPreferences(widget)
   if stamp == widget._inflightStamp then return widget._inflightPrefs end
 
   -- The FIRST reading seeds and reads nothing. What the widget was handed at start-up came off
-  -- the card a moment earlier -- the runtime loads the store on the connect, and the cache that
-  -- defeats a later reload was fresh then -- so there is nothing to correct yet, and forcing a
-  -- read here puts a whole file parse on a cold-start pass. Measured on a radio: three runs out
-  -- of three raised `CPU limit` in this function about thirteen seconds in, on the pass this
-  -- seed replaces. A stamp is a state, so a seed loses nothing: the next real change still
-  -- differs from it.
+  -- the card a moment earlier -- the runtime loads the store on the connect -- so there is
+  -- nothing to correct yet, and forcing a read here puts a whole file parse on a cold-start pass.
+  -- Measured on a radio: three runs out of three raised `CPU limit` in this function about
+  -- thirteen seconds in, on the pass this seed replaces. A stamp is a state, so a seed loses
+  -- nothing: the next real change still differs from it.
   local seeding = (widget._inflightStamp == nil)
   widget._inflightStamp = stamp
   if seeding then return widget._inflightPrefs end
@@ -1222,8 +1223,8 @@ end
 function M.get(widget)
   if type(widget) ~= "table" then return nil end
   -- The overlay's own copy where the file has moved under the widget's, and the widget's
-  -- otherwise. See freshPreferences: the loader the widget's own reload goes through serves a
-  -- cache it never invalidates, so a table arriving from there can be new and stale at once.
+  -- otherwise. See freshPreferences: the widget's copy is only refreshed by the runtime's own
+  -- reload, and that reload is held back in the very states the overlay runs in.
   local prefs = freshPreferences(widget) or widget.modelPreferences
   local drive = widget._inflight
   if drive ~= nil and drive._source == prefs then return drive end
