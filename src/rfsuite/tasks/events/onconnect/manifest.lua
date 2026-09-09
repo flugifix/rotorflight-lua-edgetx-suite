@@ -29,7 +29,8 @@ return {
   -- After `name`, which fills session.modelName, and after the read above.
   { name = "model_name_sync", context = "widget" },
   -- Last, and `widget` for the same reason as the two above: it writes to the pilot's model.
-  -- It waits on no reply of its own -- only on session.mcu_id and the model preferences that
-  -- `uid` loads -- so putting it behind everything that does costs the connect nothing.
+  -- It waits on no reply at all and reads nothing off the session -- what it decides, the radio
+  -- answers on its own -- so putting it behind everything that does wait costs the connect
+  -- nothing, and it is the only ordering claim this entry makes.
   { name = "function_script", context = "widget" },
 }

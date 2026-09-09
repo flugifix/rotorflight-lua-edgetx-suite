@@ -1,13 +1,25 @@
 -- OnConnect task: give this model the special function that runs the background decoder.
 --
 -- SCRIPTS/FUNCTIONS/rfsbg.lua only runs if a special function calls it, and a pilot cannot be
--- expected to add one by hand for a script the suite installed. So the suite adds it, once per
--- model, on the first connect that model ever makes.
+-- expected to add one by hand for a script the suite installed. So the suite adds it when the
+-- model does not have it.
 --
--- Once, and never again for that model: the EdgeTX model file names it has written into are
--- remembered in the per-model preferences, and a name that is listed is never revisited. A
--- pilot who deletes the special function has said what they want, and this must not be a task
--- that puts it back on the next flight.
+-- **The slots are the answer, and nothing is remembered.** Whether this model already carries the
+-- special function is readable directly -- `model.getCustomFunction` over the 64 slots, which is
+-- what `walk` below does -- and it is a fact about the model on this transmitter. Any record of
+-- it would be a cache of something already legible, and this task used to keep one: a list of
+-- model file names in the per-model preferences, saved through the ordinary preference writer.
+-- That cost more than it saved, in two ways worth naming so the cache does not come back.
+--
+-- One: the ordinary preference writer signals a preference RELOAD to every running dashboard
+-- widget -- `lib/model_preferences.lua`'s `saveByMcuId` bumps the reload counter -- so
+-- bookkeeping that no pilot ever set announced itself as a settings change, and a widget answered
+-- it with a full reload at connect time.
+--
+-- Two: those preferences are keyed by the FLIGHT CONTROLLER's id, and which special functions a
+-- model has is a fact about the TRANSMITTER. Recording one under the other made the decision wait
+-- for a board to answer before it could be taken at all, and made the same model on a second
+-- board look untouched.
 --
 -- The slot becomes active the next time the model is loaded, because the firmware reads the
 -- special functions when it loads a model. That is the whole reason there is no on-screen
@@ -22,11 +34,6 @@ local M = {}
 -- The base name EdgeTX stores in the special function, and the file it looks for under
 -- SCRIPTS/FUNCTIONS. The firmware's field holds eight characters.
 local SCRIPT_NAME = "rfsbg"
-
--- Where the memory lives in the per-model preferences: one key, the model file names this has
--- installed into, comma separated.
-local PREF_SECTION = "functions"
-local PREF_KEY = "installed_models"
 
 -- radio/src/dataconstants.h, MAX_SPECIAL_FUNCTIONS.
 local SPECIAL_FUNCTION_COUNT = 64
@@ -46,17 +53,7 @@ local done = false
 local started = false
 local nextSlot = 0
 local firstFreeSlot = nil
-local modelFile = nil
 local taggedLog = nil
-
-local function loadModule(path)
-  local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
-  local chunk = loadScript(fullPath, "t")
-  if type(chunk) ~= "function" then return nil end
-  local ok, mod = pcall(chunk)
-  if not ok then return nil end
-  return mod
-end
 
 -- The logging core's tagged emitter, bound on first use: the default level and the
 -- console flag are lib/log.lua's, and this file states only its tag.
@@ -73,47 +70,6 @@ end
 local function finish(msg, level)
   if msg then log(msg, level or "info") end
   done = true
-end
-
---- The EdgeTX file this model is stored in, which is what identifies it here.
---
--- Not the model NAME: two models may carry the same name, and renaming one would make this
--- forget that it had already been here.
-local function currentModelFile()
-  if type(model) ~= "table" or type(model.getInfo) ~= "function" then return nil end
-  local ok, info = pcall(model.getInfo)
-  if not ok or type(info) ~= "table" then return nil end
-  local name = info.filename
-  if type(name) ~= "string" or name == "" then return nil end
-  return name
-end
-
-local function installedList(prefs)
-  local section = type(prefs) == "table" and prefs[PREF_SECTION] or nil
-  local value = type(section) == "table" and section[PREF_KEY] or nil
-  if value == nil then return "" end
-  return tostring(value)
-end
-
-local function listContains(list, name)
-  for entry in string.gmatch(list, "[^,]+") do
-    if entry == name then return true end
-  end
-  return false
-end
-
-local function remember(session, name)
-  local prefs = session.modelPreferences
-  if type(prefs) ~= "table" then return end
-
-  local list = installedList(prefs)
-  prefs[PREF_SECTION] = type(prefs[PREF_SECTION]) == "table" and prefs[PREF_SECTION] or {}
-  prefs[PREF_SECTION][PREF_KEY] = (list == "") and name or (list .. "," .. name)
-
-  local store = loadModule("lib/model_preferences.lua")
-  if store and type(store.saveByMcuId) == "function" then
-    pcall(store.saveByMcuId, session.mcu_id, prefs)
-  end
 end
 
 --- Read up to SLOTS_PER_WAKEUP slots; true if the script is already in one of them.
@@ -138,7 +94,7 @@ local function walk()
   return false
 end
 
-local function install(session)
+local function install()
   local switch = getSwitchIndex(ALWAYS_ON_SWITCH)
   if type(switch) ~= "number" or switch == 0 then
     finish("no always-on switch under the name '" .. ALWAYS_ON_SWITCH ..
@@ -160,7 +116,6 @@ local function install(session)
     return
   end
 
-  remember(session, modelFile)
   finish("background decoder installed in special function " .. tostring(firstFreeSlot + 1) ..
     ", active the next time this model is loaded")
 end
@@ -168,30 +123,12 @@ end
 function M.wakeup()
   if done then return end
 
-  local root = _G and _G.rfsuite
-  local session = type(root) == "table" and root.session or nil
-  if type(session) ~= "table" then return end
-  -- After `uid`, which is what fills both of these in.
-  if not session.mcu_id or session.mcu_id == "" then return end
-  if type(session.modelPreferences) ~= "table" then return end
-
   if not started then
     started = true
 
-    modelFile = currentModelFile()
-    if not modelFile then
-      finish("the radio does not name the model's file; the background decoder's special " ..
-        "function was not created")
-      return
-    end
-
-    -- The cheap path, and the one every connect after the first takes: this model has been
-    -- here before, so nothing is read and nothing is written.
-    if listContains(installedList(session.modelPreferences), modelFile) then
-      done = true
-      return
-    end
-
+    -- Nothing here asks the flight controller anything. What this task decides is which special
+    -- functions the model on this transmitter has, which the radio answers on its own -- so the
+    -- task neither waits for a board nor reads a session field.
     if type(model) ~= "table" or type(model.getCustomFunction) ~= "function"
       or type(model.setCustomFunction) ~= "function" or type(FUNC_PLAY_SCRIPT) ~= "number"
       or type(getSwitchIndex) ~= "function" then
@@ -203,8 +140,8 @@ function M.wakeup()
 
   local present = walk()
   if present then
-    -- Somebody already put it there. Nothing to do, and nothing to remember either: the memory
-    -- records what this task has written, so that what it wrote is never written twice.
+    -- Already there -- whether this task put it there on an earlier connect or the pilot did.
+    -- Either way the slot is the answer and there is nothing to write.
     done = true
     return
   end
@@ -216,7 +153,7 @@ function M.wakeup()
     return
   end
 
-  install(session)
+  install()
 end
 
 function M.isComplete()
@@ -228,7 +165,6 @@ function M.reset()
   started = false
   nextSlot = 0
   firstFreeSlot = nil
-  modelFile = nil
 end
 
 return M
