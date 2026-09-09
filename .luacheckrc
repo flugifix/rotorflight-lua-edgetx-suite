@@ -25,6 +25,7 @@ globals = {
   -- Telemetry/Sensors
   "getValue",
   "getSensor",
+  "setTelemetryValue",
   
   -- Display/LCD
   "lcd",
