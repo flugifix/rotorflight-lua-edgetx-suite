@@ -2161,6 +2161,7 @@ return {
         help_preview = "Einstellungen > Allgemein > Vorschau zeigt diese Funktion. Das Widget übernimmt eine Änderung nach der Landung.",
         help_flow = "Die Hälfte des Flugreglers steht unter Setup > Steuerung > In-Flight-Tuning.",
         help_trims = "Wechseln und Verstellen: Bank-Trimmung schaltet die Bank, Wechsel-Trimmung die Zeile, Verstell-Trimmung den Wert.",
+        help_link = "Bei einem ExpressLRS-Link den Switch-Modus Wide oder eine Full-Resolution-Paketrate verwenden: im Hybrid-Modus werden Wert- und Bankkanal mit 16 bzw. 6 Stufen übertragen, dadurch verfehlen mehrere Zeilen und zwei Bänke ihre Fenster und eine Zeile verstellt den Parameter der Nachbarzeile.",
         saved_title = "Gespeichert",
         saved_message = "In-Flight-Tuning-Einstellungen gespeichert",
         save_error_title = "Fehler",

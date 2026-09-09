@@ -2133,6 +2133,7 @@ return {
         help_preview = "Settings > General > Preview is what shows this feature. The widget takes a change to it after landing.",
         help_flow = "The flight controller's own half is in Setup > Controls > In-Flight Tuning.",
         help_trims = "Walk and adjust: the bank trim steps the bank, the walk trim the row in it, the adjust trim the value.",
+        help_link = "On an ExpressLRS link use the Wide switch mode or a full-resolution packet rate: in Hybrid mode the value and bank channels carry 16 and 6 positions, so several rows and two banks miss their windows and one row moves its neighbour's parameter.",
         saved_title = "Saved",
         saved_message = "In-flight tuning settings saved",
         save_error_title = "Error",

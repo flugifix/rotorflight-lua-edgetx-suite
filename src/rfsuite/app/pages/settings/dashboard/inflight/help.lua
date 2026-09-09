@@ -28,6 +28,14 @@ return function(ctx)
   local trims = tr(i18n, "help_trims",
     "Walk and adjust: the bank trim steps the bank, the walk trim the row in it, the adjust trim the value.")
 
+  -- The link carries these two channels, and an ExpressLRS switch mode quantises both of them to a
+  -- fixed number of positions. The windows the flight controller decodes are 50 microseconds wide,
+  -- so a quantised code can land in the gap beside its own window or inside the neighbouring row's.
+  local link = tr(i18n, "help_link",
+    "On an ExpressLRS link use the Wide switch mode or a full-resolution packet rate: in Hybrid " ..
+    "mode the value and bank channels carry 16 and 6 positions, so several rows and two banks " ..
+    "miss their windows and one row moves its neighbour's parameter.")
+
   -- Where the other half is. The split is the pilot's after the third radio round and the one
   -- thing it costs him is knowing which page a setting is on, so both pages say.
   local flow = tr(i18n, "help_flow",
@@ -40,6 +48,6 @@ return function(ctx)
     "Settings > General > Preview is what shows this feature. The widget takes a change to it after landing.")
 
   return {
-    message = intro .. NL .. trims .. NL .. setup .. NL .. flow .. NL .. preview
+    message = intro .. NL .. trims .. NL .. link .. NL .. setup .. NL .. flow .. NL .. preview
   }
 end
