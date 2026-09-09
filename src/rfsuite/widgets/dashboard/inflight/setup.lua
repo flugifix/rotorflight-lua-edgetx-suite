@@ -71,12 +71,17 @@ M.DEFAULTS = {
   -- reaches, and the model is walked to WARN that one of them is spoken for rather than to choose.
   bank_gvar = 6,
   value_gvar = 5,
-  -- Long enough that the flight controller sees the channel stand still. It counts no step until
-  -- the value has been steady inside one window for TRIGGER_DELAY, 100 ms, and repeats every
-  -- REPEAT_DELAY, 200 ms (fc/rc_adjustments.c) -- so 250 ms is clear of the first threshold and
-  -- short of the second, which is exactly one step. 150 ms cleared the first by 50 ms and left
-  -- nothing for a pass that ran late.
-  pulse_ms = 250,
+  -- Long enough that the flight controller sees the channel stand still, and short enough that it
+  -- does not count the stillness twice. It takes no step until the value has been steady inside
+  -- one window for TRIGGER_DELAY, 100 ms, and repeats every REPEAT_DELAY, 200 ms after that
+  -- (fc/rc_adjustments.c) -- so a press has to hold its plateau past 100 ms and let go before 300.
+  -- What the board sees is not this number, though: it is this number plus up to one widget pass,
+  -- since the pulse is cleared on the first pass at or AFTER its deadline, plus the link's own
+  -- jitter -- on a receiver sending the AUX channels round-robin at 250 Hz, some 32 ms either way.
+  -- 180 puts the plateau at 148..262 ms in the worst case, about 40 ms clear of both edges. The
+  -- earlier default of 250 sat on the upper one at 250..332 ms, over the repeat; 150 cleared the
+  -- lower by 50 ms and left nothing for a pass that ran late.
+  pulse_ms = 180,
   trims = true,
   -- Walk-and-adjust with three trims is the arrangement the pilot flew and asked to keep, and it
   -- is the one that works on every radio: the six-trim layout needs six trims, and the TX15, the
@@ -110,7 +115,13 @@ M.DEFAULTS = {
 }
 
 M.PULSE_MS_MIN = 100
-M.PULSE_MS_MAX = 500
+-- The largest setting whose own overrun cannot reach the board's SECOND step. The second step
+-- lands 300 ms into a held plateau (TRIGGER_DELAY 100 ms, then REPEAT_DELAY 200 ms counted from
+-- the first), and the overlay clears the pulse on the first pass at or AFTER its deadline, so a
+-- plateau stands for its setting plus up to one pass. 250 leaves that overrun the whole of the
+-- remaining 50 ms; anything longer would let one late pass turn a press into two steps, which is
+-- the failure a pilot cannot see happening. A stored value above this is clamped on load.
+M.PULSE_MS_MAX = 250
 
 -- What one press moves a parameter by on the board. Four rungs rather than a free number: the
 -- firmware stores the step in one byte per slot and the four cover the range a pilot asks for --
