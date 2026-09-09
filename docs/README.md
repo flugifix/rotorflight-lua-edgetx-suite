@@ -36,6 +36,11 @@ Every change a pilot can observe updates the file that describes it, in the same
 request. The rule is in [GEMINI.md](../GEMINI.md) under *Documentation Maintenance* and in
 `.agents/rules/documentation.md`, in the same shape as the rule for `Releases.md`.
 
+A pull request that changes `src/` and no file here has to say why in its body, on a line
+beginning with `Documentation:`. The `Documentation rule` job in `.github/workflows/pr.yml`
+checks for one or the other; what it cannot check, and does not try to, is whether the
+reason is a good one.
+
 ## Conventions
 
 - Plain CommonMark that renders on GitHub as it is: no MDX, no admonition syntax, no
