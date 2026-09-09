@@ -572,7 +572,11 @@ local function inflightMode(self, isInteractive)
     if snapshot.live == true or self.inflightFullscreen == true then return "fs" end
     return nil
   end
-  if snapshot.live == true then return "zone" end
+  -- `setupFault` is the interlock closed and the overlay refusing: the model's setup check found
+  -- something that would make a press move the wrong parameter. The zone surface comes up anyway
+  -- and its ground read-out names the fault, because a switch that does nothing and says nothing
+  -- is the one failure a pilot cannot act on.
+  if snapshot.live == true or snapshot.setupFault == true then return "zone" end
   return nil
 end
 

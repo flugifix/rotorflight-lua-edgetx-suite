@@ -342,12 +342,9 @@ end
 function M.checkVerdict(widget)
   local drive = widget and widget._inflight
   if drive == nil then return nil end
-  if drive.phase == Drive.PHASE_LIVE then return drive._checkResult end
-  if drive._checkedAt == nil then
-    drive._checkedAt = drive.radio.now()
-    drive._checkResult = Drive.check(drive)
-  end
-  return drive._checkResult
+  -- One cache, and the drive owns it: the same verdict decides whether the interlock may close at
+  -- all, so a walk of this screen's own would be a second answer to a question with one.
+  return Drive.verdict(drive)
 end
 
 --- The verdict in one sentence. Faults are grouped by what the pilot has to go and fix rather

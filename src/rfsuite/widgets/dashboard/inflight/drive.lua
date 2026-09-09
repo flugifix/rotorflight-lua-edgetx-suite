@@ -512,6 +512,32 @@ function Drive:cleanup(force)
   self.trimCoolUntil = 0
 end
 
+--- The cached setup verdict: a list of fault codes, the string "ok", or nil for "nothing about
+-- this model could be looked at".
+--
+-- The walk behind it reads the model's mixer lines, its global variable details and its trim
+-- modes. It is taken at most once per settings change and once per interlock closing, and NEVER
+-- while the craft is in the air: the airborne pass is the one driving the flight controller, and
+-- a verdict cannot change under a pilot who is flying.
+--
+-- The screen reads this same cache -- see inflight/screen.lua M.checkVerdict -- so the sentence
+-- on the ground surface and the refusal below are one answer and not two walks.
+function M.verdict(drive)
+  if type(drive) ~= "table" then return nil end
+  if drive.phase == M.PHASE_LIVE then return drive._checkResult end
+  if drive._checkedAt == nil then
+    drive._checkedAt = drive.radio.now()
+    drive._checkResult = Setup.check(drive)
+  end
+  return drive._checkResult
+end
+
+--- The verdict is about a model that has just changed, so it is taken again.
+function Drive:forgetVerdict()
+  self._checkedAt = nil
+  self._checkResult = nil
+end
+
 --- Where the interlock stands, with the first evaluation seeding rather than firing.
 --
 -- A widget that starts up with the switch already ON must not read that as the pilot having just
@@ -536,6 +562,36 @@ function Drive:evaluateInterlock(now)
 
   local raw = (self.radio.switchValue(settings.switch) == true)
 
+  -- The setup check, as a gate rather than as a sentence. What it names are the conditions under
+  -- which a press would move something other than the parameter on the screen: a bank and a value
+  -- pointed at one variable or one channel, so the board reads a step as a bank change and a bank
+  -- change as a step; a mixer line that is not there or carries the wrong weight, so the code
+  -- never reaches the board; a global variable whose range or precision cannot express the codes;
+  -- a trim the active flight mode still moves the stick neutral with. A FAULT therefore refuses.
+  --
+  -- An UNKNOWN does not. The walk answers nil when the radio's seam offered nothing to look at --
+  -- no mixer reader, no flight mode data -- and a check that could not run is not a check that
+  -- failed. Silencing the overlay on a radio that cannot answer the question would take the
+  -- feature away from it for good, which is a worse outcome than the one being guarded against.
+  if type(M.verdict(self)) == "table" then
+    if self.live then
+      self.live = false
+      self:setPhase(nil)
+      self:endPost("setup_fault")
+      self:cleanup(false)
+      logDrive("interlock refused: the model's setup check reports a fault")
+    end
+    -- The switch is still tracked while the gate refuses, so that letting it go re-takes the
+    -- verdict below and a pilot who has just repaired his model gets the new answer by switching
+    -- the interlock off and on. Nothing re-walks on a timer.
+    if raw ~= self.rawSwitch then
+      self.rawSwitch = raw
+      self.rawSince = now
+      if not raw then self:forgetVerdict() end
+    end
+    return false
+  end
+
   if not self.seeded then
     self.seeded = true
     self.rawSwitch = raw
@@ -547,6 +603,8 @@ function Drive:evaluateInterlock(now)
   if raw ~= self.rawSwitch then
     self.rawSwitch = raw
     self.rawSince = now
+    -- Released: the model is walked again on the next closing. See the gate above.
+    if not raw then self:forgetVerdict() end
     return self.live
   end
 
@@ -1265,11 +1323,9 @@ function M.get(widget)
     drive:cleanup(false)
     drive.settings = settings
     drive._signature = signature
-    -- and the setup verdict with it: the settings are the only thing that can change the answer
-    -- without the pilot leaving the screen it is shown on, and the screen walks the model once
-    -- and then reads this.
-    drive._checkedAt = nil
-    drive._checkResult = nil
+    -- and the setup verdict with it: a changed channel, variable or trim is a different question
+    -- for the walk, and the answer gates the drive as well as filling the line on the screen.
+    drive:forgetVerdict()
     drive.trimsResolved = false
     -- and with it whatever a walk in progress had collected: a half-read list belongs to the
     -- settings it was started under.
@@ -1417,6 +1473,10 @@ local function publish(widget, drive)
     -- it because a surface that says nothing is happening should be able to say which of them is
     -- the one that is off.
     active = drive.settings.active == true,
+    -- and the third reason nothing is happening: the model's own setup check refused. It is on
+    -- the snapshot because the widget decides from the snapshot alone which surface a pass
+    -- belongs to, and a refusal has to reach a surface that can say so.
+    setupFault = type(drive._checkResult) == "table",
     radioEnabled = drive.settings.radio_enabled == true,
     modelEnabled = drive.settings.model_enabled == true,
     live = drive.live,
@@ -1487,6 +1547,18 @@ function M.tick(widget)
   if drive == nil then return false end
   if drive.settings.active ~= true then
     if widget.state and widget.state.inflight ~= nil then widget.state.inflight = nil end
+    return false
+  end
+  -- The setup check as a gate, the second of the two places it stands. evaluateInterlock refuses
+  -- to close on a fault; this refuses the rest of the pass, so that a model the check has just
+  -- turned down is not primed over MSP and its profiles are not watched either. The call below is
+  -- that same refusal and not a second one: it drops `live`, takes both variables back to zero if
+  -- anything was standing in them, and tracks the switch so the next closing walks the model
+  -- again. The snapshot IS published, because the surface has to be able to say why the interlock
+  -- did nothing.
+  if type(M.verdict(drive)) == "table" then
+    drive:evaluateInterlock(drive.radio.now())
+    publish(widget, drive)
     return false
   end
   -- The two profile sensors, watched whether or not the overlay is up and gated on the link
