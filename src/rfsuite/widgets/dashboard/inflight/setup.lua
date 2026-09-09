@@ -58,6 +58,12 @@ M.log = logDrive
 -- a property of the setting rather than of the file it happens to live in, and two tables would
 -- be two places to change it.
 --
+-- The MODEL half of this table -- the keys M.MODEL_KEYS lists -- is duplicated in
+-- lib/model_preferences.lua, which seeds a new per-model store and cannot require a widget module
+-- to reach these. The two MUST agree; the same note sits on the other side. The radio half is not
+-- duplicated anywhere: lib/preferences.lua seeds the section and its switch, and every other radio
+-- key is filled in from here when the store does not hold it.
+--
 -- No global variable is defaulted: a variable this overlay writes has to be one the pilot
 -- declared, because writing an arbitrary one would move whatever it already drives. The channels
 -- ARE defaulted, to the pair the project's own generic radio setup documents.

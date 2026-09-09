@@ -176,36 +176,28 @@ local function defaultModelPreferences()
       model_theme_inflight = "nil",
       model_theme_postflight = "nil"
     },
-    -- The in-flight tuning overlay, per model because everything in it is: which switch arms it,
-    -- which channels and global variables this model's mixer devotes to the adjustment pair, and
-    -- which trims stand in for its rows.
+    -- The model's half of the in-flight tuning overlay: what describes THIS machine. Whether it is
+    -- set up for the overlay at all, which set of parameters its flight controller offers, how far
+    -- one press moves them, and which PID profile the undo restores.
     --
-    -- Off until a pilot switches it on. Everything else is defaulted to a working arrangement:
-    -- the channel pair the project's own generic radio setup documents, the two highest global
-    -- variables a helicopter model rarely reaches, and the last PID profile as the undo. The
-    -- settings page walks the model and WARNS when one of those variables is already spoken for.
+    -- What is true of the transmitter whatever is plugged into it -- the interlock switch, the two
+    -- channels and global variables the mixer devotes to the adjustment pair, the pulse length and
+    -- the trims -- belongs to the radio and is seeded in lib/preferences.lua, also under
+    -- [inflight]. Those keys are never read out of a per-model store, so seeding them here only
+    -- wrote them into every model file and showed a reader numbers nothing used.
+    --
+    -- These five MUST agree with the model half of M.DEFAULTS in
+    -- widgets/dashboard/inflight/setup.lua, which is what the overlay actually reads. They are
+    -- duplicated rather than shared because this library is loaded by the whole suite and must not
+    -- pull in a widget module to reach them; the same note sits on the other side.
     inflight = {
+      -- Off until a pilot says this machine is set up for it. The radio carries a switch of its
+      -- own and both have to be on before anything drives.
       enabled = false,
-      switch = 0,
-      bank_ch = 11,
-      value_ch = 12,
-      bank_gvar = 6,
-      value_gvar = 5,
-      pulse_ms = 250,
-      trims = true,
-      trim_mode = "navigate",
-      nav_trim = 1,
-      bank_trim = 2,
-      adj_trim = 4,
-      row_trim_1 = 2,
-      row_trim_2 = 4,
-      row_trim_3 = 1,
-      row_trim_4 = 3,
-      row_trim_5 = 5,
-      row_trim_6 = 6,
-      backup_profile = 6,
       set_mode = "standard",
-      step = 5
+      step = 5,
+      step_headspeed = 50,
+      backup_profile = 6
     },
     widgets = {}
   }
