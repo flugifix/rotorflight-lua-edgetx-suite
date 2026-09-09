@@ -1,5 +1,10 @@
 # 0.1.7
 
+### Features & Enhancements
+- **Background Custom-Telemetry Decoder (`SCRIPTS/FUNCTIONS/rfsbg.lua`)**:
+  - Added an optional special-function script that runs the custom-telemetry drain and the adjustment announcements in the radio's script state, where a long call is yielded rather than cut off at a fixed instruction count, so every queued frame is decoded instead of only the newest few.
+  - While the script is running it publishes a moving counter in a shared-memory slot; the dashboard and service widgets read it and skip their own drain and announcements for as long as it moves, and resume within one second if it stops (a tool session, or a radio without the special function).
+  - Extracted the drain into `tasks/events/telemetry_bg/drain.lua` so both hosts run the same decoder, frame accounting and publish-on-change throttle.
 ### Bug Fixes & Improvements
 - **Preference watcher: a file that cannot be read is no longer reported as a file that changed (`widgets/dashboard/runtime.lua`)**:
   - `preferencesStamp` dropped the per-model half of its stamp, or returned an empty string for the global half, whenever `fstat` raised or answered something unreadable. The shorter string then differed from the kept one, so a failed read arrived at the watcher as a change and cost a full reload -- preferences re-read, theme dropped, scene rebuilt -- and a second one when the file read again.

@@ -124,15 +124,77 @@ local function decodeFrame(data, now)
     end
 end
 
---- One drain pass: pop what is waiting, decode the newest of it, publish what changed.
-function M.wakeup(now)
+-- Which of EdgeTX's sixteen shared-memory slots carries the drain's liveness. The slots are a
+-- static array outside every Lua state, so they are the one channel a widget and a permanent
+-- script have between them; the last one is taken because the low ids are the ones a pilot's
+-- own script reaches for first.
+M.SHM_LIVENESS_ID = 16
+
+-- How long a counter that has stopped moving still counts as alive. It has to cover the gap
+-- between two turns of whatever is bumping it, and it is also how long a host keeps skipping
+-- its own drain after the other side has gone away -- so it is short: a tool session pauses
+-- the radio's permanent scripts for its whole length, and one stale window is the whole cost
+-- of noticing that.
+M.REMOTE_STALE_SECONDS = 1.0
+
+-- The counter wraps well inside the firmware's signed int, and it never lands on zero: a slot
+-- that was never written reads zero, and a writer that produced one would be indistinguishable
+-- from that.
+local LIVENESS_WRAP = 0x40000000
+
+local liveness = 0
+local remoteValue = nil
+local remoteMovedAt = nil
+
+--- Say that this Lua state is draining, for whoever else is watching the slot.
+--
+-- A moving counter rather than a flag, because nothing ever clears the slots -- not a model
+-- change, not the interpreter being torn down. A flag left set by a state that has since
+-- disappeared would silence every other decoder on the radio for good.
+function M.publishLiveness()
+    if type(setShmVar) ~= "function" then return end
+    liveness = liveness + 1
+    if liveness >= LIVENESS_WRAP then liveness = 1 end
+    setShmVar(M.SHM_LIVENESS_ID, liveness)
+end
+
+--- Is another Lua state draining right now?
+--
+-- The reader is deliberately without memory of anything but the last value it saw: it has to
+-- work out for itself whether the counter MOVES, because the value alone says nothing. Only a
+-- host that has seen it move, recently, may leave the drain to somebody else.
+function M.remoteAlive(now)
+    if type(getShmVar) ~= "function" then return false end
+    local value = getShmVar(M.SHM_LIVENESS_ID)
+    if type(value) ~= "number" then return false end
+
+    if remoteValue == nil then
+        -- The first read records and never counts. The slot outlives the state that wrote it,
+        -- so what is in it at the first read may be a leftover from a previous session.
+        remoteValue = value
+        return false
+    end
+    if value ~= remoteValue then
+        remoteValue = value
+        remoteMovedAt = now
+    end
+    return remoteMovedAt ~= nil and (now - remoteMovedAt) < M.REMOTE_STALE_SECONDS
+end
+
+--- One drain pass: pop what is waiting, decode it, publish what changed.
+--
+-- `decodeAll` lifts DECODE_CAP. It is for a host whose long call is yielded rather than killed
+-- -- the radio's script state, where a permanent script runs -- and there dropping the older
+-- frames of a backlog buys nothing. A call billed against a hard per-call ceiling keeps the cap.
+function M.wakeup(now, decodeAll)
     if not RFSensors then
         RFSensors = loadModule("lib/rf2tlm_sensors.lua")
         if not RFSensors then return end
     end
 
     -- Pop up to POP_CAP, keep the newest DECODE_CAP in arrival order, decode only those --
-    -- on a same-sensor conflict the newest value lands last.
+    -- on a same-sensor conflict the newest value lands last. POP_CAP bounds the pass whether
+    -- or not the decode is capped, so one call stays finite however far behind the queue is.
     local kept = {}
     local popped = 0
     while popped < POP_CAP do
@@ -140,7 +202,7 @@ function M.wakeup(now)
         if not data then break end
         popped = popped + 1
         kept[#kept + 1] = data
-        if #kept > DECODE_CAP then
+        if not decodeAll and #kept > DECODE_CAP then
             table.remove(kept, 1)
         end
     end
@@ -159,6 +221,9 @@ function M.wakeup(now)
     publishCounters(telemetryFrameCount, telemetryFrameSkip, now)
 end
 
+-- What a lost link invalidates, and nothing else. The liveness state above is deliberately not
+-- cleared: it is what another Lua state is doing, and that state does not restart because this
+-- one lost its flight controller.
 function M.reset()
     telemetryFrameId = 0
     telemetryFrameSkip = 0

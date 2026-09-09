@@ -118,6 +118,7 @@ $sourceCore = Join-Path $sourceRoot 'rfsuite'
 $sourceAudioRoot = Join-Path $sourceCore 'audio'
 $sourceToolEntrypoint = Join-Path $sourceRoot 'main.lua'
 $sourceWidgetRoot = Join-Path $sourceRoot 'widgets\rfsuite'
+$sourceFunctionRoot = Join-Path $sourceRoot 'functions'
 
 function Test-LikelyRadioRoot {
     param([Parameter(Mandatory = $true)][string]$Root)
@@ -204,6 +205,7 @@ $targetCore = Join-Path $toolsRoot 'rfsuite-core'
 $targetToolEntrypoint = Join-Path $toolsRoot 'rfsuite.lua'
 $targetUserRoot = Join-Path $toolsRoot 'rfsuite.user'
 $targetWidgetRoot = Join-Path $widgetsRoot 'rfsuite'
+$targetFunctionRoot = Join-Path $TargetRoot 'SCRIPTS\FUNCTIONS'
 $targetSoundsRoot = Join-Path $soundsRoot 'rf'
 
 $legacyToolFolder = Join-Path $toolsRoot 'rfsuite'
@@ -369,6 +371,16 @@ New-Item -ItemType Directory -Path $targetWidgetRoot -Force | Out-Null
 Copy-Item -Path (Join-Path $sourceWidgetRoot '*') -Destination $targetWidgetRoot -Recurse -Force
 Get-ChildItem -Path $targetWidgetRoot -Filter '*.luac' -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
+# Special-function scripts. EdgeTX offers every lua file directly under SCRIPTS\FUNCTIONS to a
+# "Play Script" special function, so the folder is flat -- and it is not emptied first, because
+# a pilot's own scripts live in it too.
+if (Test-Path $sourceFunctionRoot) {
+    if (-not (Test-Path $targetFunctionRoot)) {
+        New-Item -ItemType Directory -Path $targetFunctionRoot -Force | Out-Null
+    }
+    Copy-Item -Path (Join-Path $sourceFunctionRoot '*.lua') -Destination $targetFunctionRoot -Force
+}
+
 if (Test-Path $targetSoundsRoot) {
     Remove-Item -Path $targetSoundsRoot -Recurse -Force
 }
@@ -431,3 +443,4 @@ Write-Host "  Tool entrypoint: $targetToolEntrypoint"
 Write-Host "  Core package:    $targetCore"
 Write-Host "  User data:       $targetUserRoot"
 Write-Host "  Widget package:  $targetWidgetRoot"
+Write-Host "  Function scripts:$targetFunctionRoot"

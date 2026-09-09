@@ -22,6 +22,10 @@ globals = {
   -- Filesystem
   "fstat",
 
+  -- Shared memory between Lua states
+  "setShmVar",
+  "getShmVar",
+
   -- Telemetry/Sensors
   "getValue",
   "getSensor",

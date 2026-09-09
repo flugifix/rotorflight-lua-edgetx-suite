@@ -46,8 +46,19 @@ function M.wakeup()
         return
     end
 
-    if Drain then
-        Drain.wakeup(nowSeconds())
+    local now = nowSeconds()
+
+    -- The background function script drains and tells for the whole radio while it is running,
+    -- so this pass does neither: the sensors it would publish are already on the radio, and the
+    -- teller would announce the same adjustment a second time. Both are dropped together, never
+    -- one without the other.
+    --
+    -- Smart is NOT part of the handover. Its inputs are MSP-derived and its state is per Lua
+    -- state, so the script has no way to compute it for this one.
+    local remote = Drain and Drain.remoteAlive(now)
+
+    if Drain and not remote then
+        Drain.wakeup(now)
     end
 
     if Smart and type(Smart.wakeup) == "function" then
@@ -56,7 +67,7 @@ function M.wakeup()
 
     -- After the decode, never before it: what the teller reads is what the drain has just
     -- published, so the other order would announce one pass behind.
-    if Adjustments and type(Adjustments.wakeup) == "function" then
+    if not remote and Adjustments and type(Adjustments.wakeup) == "function" then
         Adjustments.wakeup()
     end
 end
