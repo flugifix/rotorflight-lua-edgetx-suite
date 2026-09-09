@@ -28,4 +28,8 @@ return {
   { name = "model_params_sync", context = "widget" },
   -- After `name`, which fills session.modelName, and after the read above.
   { name = "model_name_sync", context = "widget" },
+  -- Last, and `widget` for the same reason as the two above: it writes to the pilot's model.
+  -- It waits on no reply of its own -- only on session.mcu_id and the model preferences that
+  -- `uid` loads -- so putting it behind everything that does costs the connect nothing.
+  { name = "function_script", context = "widget" },
 }

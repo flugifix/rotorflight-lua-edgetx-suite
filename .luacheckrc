@@ -18,6 +18,8 @@ globals = {
   "getField",
   "setField",
   "getFieldInfo",
+  "getSwitchIndex",
+  "FUNC_PLAY_SCRIPT",
 
   -- Filesystem
   "fstat",
