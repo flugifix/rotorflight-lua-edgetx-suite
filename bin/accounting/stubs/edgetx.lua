@@ -10,6 +10,7 @@ local Stubs = {}
 
 local SRC_PREFIX = "/SCRIPTS/TOOLS/rfsuite-core/"
 local WIDGET_PREFIX = "/SCRIPTS/TOOLS/"
+local FUNCTION_PREFIX = "/SCRIPTS/FUNCTIONS/"
 
 -- Repo-relative remap targets; measure.lua chdir-independence comes from passing the
 -- repo root in.
@@ -22,10 +23,26 @@ local CLOCK_STEP_TICKS = 1
 
 -- Scripted answers, settable per scenario by measure.lua.
 Stubs.sensors = {}          -- name -> number (getValue / lib/sensors path)
-Stubs.modelInfo = { name = "Bench", bitmap = "" }
+Stubs.modelInfo = { name = "Bench", bitmap = "", filename = "bench.bin" }
 Stubs.telemetryFrames = {}  -- queue of { command, data } served to crossfireTelemetryPop
 Stubs.published = {}        -- what setTelemetryValue was called with, recorded
 Stubs.prefsStat = nil       -- what fstat answers for the preference files, or nil for absent
+
+-- The firmware's shared-memory slots: integers that live outside every Lua state and that
+-- nothing on the radio ever clears. reset() clears them here, so one scenario cannot inherit
+-- another's liveness -- on the radio that inheritance is the case the drain has to survive.
+Stubs.shmVars = {}
+
+-- The model's special functions. The connect chain installs one for the background decoder, so
+-- without this surface the task that does it would be measured returning on its first line.
+Stubs.customFunctions = {}  -- 0..MAX-1 -> the table model.getCustomFunction answers with
+Stubs.customFunctionWrites = {}
+
+local SPECIAL_FUNCTION_COUNT = 64
+
+-- What getSwitchIndex answers for the always-on switch. Nothing measured here depends on the
+-- value, only on its being a number other than zero.
+local ALWAYS_ON_SWITCH_INDEX = 121
 
 -- The far side of the link. stubs/fc.lua replaces this with a scripted flight controller;
 -- on its own the link accepts every frame and answers nothing, which is a radio with no
@@ -60,6 +77,14 @@ function Stubs.reset()
   Stubs.telemetryFrames = {}
   Stubs.published = {}
   Stubs.prefsStat = nil
+  Stubs.shmVars = {}
+  Stubs.customFunctions = {}
+  Stubs.customFunctionWrites = {}
+  for i = 0, SPECIAL_FUNCTION_COUNT - 1 do
+    -- An unused slot as the firmware hands it back: switch unset, and function zero, which is
+    -- a real function rather than "none".
+    Stubs.customFunctions[i] = { switch = 0, func = 0, active = 0, repetition = 0 }
+  end
   Stubs.lvgl.trees = {}
   Stubs.lvgl.refs = {}
 end
@@ -106,11 +131,39 @@ function Stubs.install(root)
 
   _G.getUsage = function() return 0 end
 
+  -- radio/src/lua/api_general.cpp, the etxcst constant table.
+  _G.FUNC_PLAY_SCRIPT = 24
+
   _G.model = {
     getInfo = function()
-      return { name = Stubs.modelInfo.name, bitmap = Stubs.modelInfo.bitmap }
+      return {
+        name = Stubs.modelInfo.name,
+        bitmap = Stubs.modelInfo.bitmap,
+        filename = Stubs.modelInfo.filename
+      }
+    end,
+    getCustomFunction = function(index)
+      return Stubs.customFunctions[index]
+    end,
+    setCustomFunction = function(index, value)
+      Stubs.customFunctions[index] = value
+      Stubs.customFunctionWrites[#Stubs.customFunctionWrites + 1] = { index = index, value = value }
     end,
   }
+
+  _G.getSwitchIndex = function(name)
+    if name == "ON" then return ALWAYS_ON_SWITCH_INDEX end
+    return nil
+  end
+
+  _G.setShmVar = function(id, value)
+    Stubs.shmVars[id] = value
+  end
+
+  -- Zero for a slot nothing has written, which is what the firmware's static array holds.
+  _G.getShmVar = function(id)
+    return Stubs.shmVars[id] or 0
+  end
 
   _G.getValue = function(name)
     return Stubs.sensors[name]
@@ -183,13 +236,17 @@ function Stubs.install(root)
     onEvent = function() end,
   }
 
-  -- loadScript remap: the deploy prefix -> src/rfsuite, widget entry prefix -> src/widgets.
+  -- loadScript remap: the deploy prefix -> src/rfsuite, widget entry prefix -> src/widgets,
+  -- special-function prefix -> src/functions -- each of them the path the installed tree uses,
+  -- so a source is reached here by the name it is reached by on a radio.
   -- Loads fail LOUDLY through the returned nil only when the file truly does not exist;
   -- a syntax error raises, exactly as measure.lua wants it to.
   _G.loadScript = function(path, mode)
     local rel
     if string.sub(path, 1, #SRC_PREFIX) == SRC_PREFIX then
       rel = repoRoot .. "/src/rfsuite/" .. string.sub(path, #SRC_PREFIX + 1)
+    elseif string.sub(path, 1, #FUNCTION_PREFIX) == FUNCTION_PREFIX then
+      rel = repoRoot .. "/src/functions/" .. string.sub(path, #FUNCTION_PREFIX + 1)
     elseif string.sub(path, 1, #WIDGET_PREFIX) == WIDGET_PREFIX then
       rel = repoRoot .. "/src/" .. string.sub(path, #WIDGET_PREFIX + 1)
     else
