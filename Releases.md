@@ -27,6 +27,10 @@
 - **Documentation rule checked in CI (`.github/workflows/pr.yml`, `bin/docs/verify_documentation_rule.py`)**:
   - Added a fourth PR job that fails when a pull request changes `src/` and no file under `docs/`, unless its body states on a line of its own why no documentation was needed. Tooling, CI and documentation-only changes are not asked.
   - The job proves the check can go red before it trusts a green one, like the instruction-budget and i18n jobs beside it.
+- **Translation coverage reported in CI (`.github/workflows/pr.yml`, `bin/i18n/check_translations.py`)**:
+  - Added a fifth PR job that lists the strings a locale build cannot translate: a literal in a `label`, `title` or `message` field, or in the label argument of a `Controls.append*` helper, that never reaches the translator; and a translation key assembled at runtime, which the precompiler cannot resolve and which therefore ships the English fallback in every locale.
+  - The report groups by literal and sorts by frequency, because the work is concentrated: 25 literals account for 46 % of the total.
+  - Both counts are held at a baseline rather than required to be zero, so the job is green on the tree it was written for and goes red only when a number grows. Names that stay English in every locale live in `bin/i18n/allowed_untranslated.txt`.
 - **Dashboard preference reload reads only the file that changed (`widgets/dashboard/runtime.lua`)**:
   - The watcher compares a stamp built from the global preferences file and the per-model one, and knows which of the two has moved -- but the reload then re-read both. A save made from a settings screen touches the per-model file alone, so the global file was parsed again on every such save even though its bytes had not changed, and that parse is the expensive half by a wide margin.
   - The reload now reads only the half the stamp says has moved. Where the signal does not name a file -- a forced reload, the rotating sequence file, a stamp that changed shape, or a changed half whose timestamp did not move (which is the case the sequence file exists for, and where an unchanged half proves nothing) -- both are read exactly as before.
