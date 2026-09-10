@@ -107,3 +107,22 @@ jobs:
       - name: Check the documentation rule
         run: |
           python bin/docs/verify_documentation_rule.py             --base '${{ github.event.pull_request.base.sha }}'             --body-file pr-body.txt
+
+  translation-coverage:
+    name: Translation coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prove the check can go red
+        run: python bin/i18n/check_translations.py --self-test
+
+      - name: Report the strings a locale build cannot translate
+        run: python bin/i18n/check_translations.py
