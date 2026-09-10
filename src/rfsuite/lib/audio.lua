@@ -820,6 +820,7 @@ function Audio.resetConnectionState(audioState)
   audioState.lqLevel = nil
   audioState.lqNotQualityLogged = nil
   audioState.packCheckDone = false
+  audioState.fuelDeferUntil = nil
 
   if type(audioState.lastValues) == "table" then
     for k in pairs(audioState.lastValues) do
@@ -1255,24 +1256,53 @@ function Audio.process(self, opts)
 
   -- Once the callout has fired it stays fired for the session.
   if not audioState.initialFuelAnnounced and audioState.initialized and initialFuelWanted(events) then
-    local fuel = tonumber(self.state and self.state.fuel)
-    -- Same reason as the battery capacity above: this announcement is meant once per
-    -- connection, and a caller that rebuilds its audio state for its own reasons has not
-    -- reconnected. The flag clears itself, so a real reconnect still speaks.
-    if type(fuel) == "number" and audioState.seedInitialFuel then
-      audioState.seedInitialFuel = nil
-      audioState.initialFuelAnnounced = true
-    elseif type(fuel) == "number" then
-      local now = nowSeconds()
-      if now >= (audioState.nextAllowedAt or 0) then
-        local isElectricModel = resolveSmartfuelModel(self)
-        local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
-        if tryPlayEventFile(audioState, now, calloutSound, opts) then
-          if type(playNumber) == "function" then
-            local ok, err = pcall(playNumber, fuel, unitPercent())
-            if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+    if self.state and self.state.fuelTelemetrySeen == true then
+      local fuel = tonumber(self.state.fuel)
+      -- Same reason as the battery capacity above: this announcement is meant once per
+      -- connection, and a caller that rebuilds its audio state for its own reasons has not
+      -- reconnected. The flag clears itself, so a real reconnect still speaks.
+      if type(fuel) == "number" and audioState.seedInitialFuel then
+        audioState.seedInitialFuel = nil
+        audioState.initialFuelAnnounced = true
+        audioState.fuelDeferUntil = nil
+      elseif type(fuel) == "number" then
+        local now = nowSeconds()
+        if not audioState.fuelDeferUntil then
+          local stabilizeDelay = 1.5
+          local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+          local bc = session and (session.batteryConfig or session.battery_config) or nil
+          if type(bc) == "table" and tonumber(bc.stabilize_delay) then
+            local sd = tonumber(bc.stabilize_delay)
+            if sd > 100 then sd = sd / 1000 end
+            if sd >= 0 and sd <= 10 then stabilizeDelay = sd end
           end
-          audioState.initialFuelAnnounced = true
+          audioState.fuelDeferUntil = now + math.max(8.0, stabilizeDelay + 3.5)
+        end
+
+        local expired = now >= audioState.fuelDeferUntil
+        local isReady = false
+        if expired then
+          isReady = true
+        else
+          local prevFuel = tonumber(self.state and self.state.previousSessionFuel)
+          local isCarriedOver = (prevFuel ~= nil and fuel == prevFuel)
+          if fuel > 0 and not isCarriedOver then
+            isReady = true
+          end
+        end
+
+        if isReady and now >= (audioState.nextAllowedAt or 0) then
+          local isElectricModel = resolveSmartfuelModel(self)
+          local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
+          if tryPlayEventFile(audioState, now, calloutSound, opts) then
+            if type(playNumber) == "function" then
+              local ok, err = pcall(playNumber, fuel, unitPercent())
+              if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+            end
+            audioState.initialFuelAnnounced = true
+            audioState.fuelDeferUntil = nil
+            if self.state then self.state.previousSessionFuel = nil end
+          end
         end
       end
     end

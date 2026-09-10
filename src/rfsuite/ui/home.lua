@@ -3158,6 +3158,9 @@ function M.run(event, touchState)
           state.audioState.initialized = false
           state.audioState.modelAnnounced = false
         end
+        if Sensors and type(Sensors.reset) == "function" then
+          Sensors.reset()
+        end
         -- Every field the block above writes is cleared here, one for one. A field left
         -- standing is read after the next connect as if it had just been measured, and
         -- the reading it carries belongs to the link that went away.
@@ -3166,6 +3169,7 @@ function M.run(event, touchState)
         state.telemetryState.batteryProfile = nil
         state.telemetryState.voltage = nil
         state.telemetryState.bec_voltage = nil
+        state.telemetryState.previousSessionFuel = state.telemetryState.fuel
         state.telemetryState.fuel = nil
         state.telemetryState.fuelTelemetrySeen = nil
         state.telemetryState.rpm = nil
