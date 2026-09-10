@@ -15,6 +15,12 @@
   - Documented in `docs/audio/events.md`, which now covers every announcement category.
 
 ### Bug Fixes & Improvements
+- **Dashboard text box colors & threshold evaluation (`widgets/dashboard/objects/`, `docs/dashboard/user-themes.md`) (fixes #213)**:
+  - Enabled dynamic threshold color evaluation (`thresholds`) on dashboard text boxes (`telemetry`, `stats`, `blackbox`, `governor`, `time`, and generic text), matching the reactive threshold behavior of gauge objects.
+  - Added named color string resolution (`"orange"`, `"red"`, `"blue"`, etc.) for text box `textcolor` properties via `normalizeColor`.
+  - Refactored `resolveThresholdColor` and temperature threshold conversions into `objects/common.lua` shared across gauge and text objects, with threshold compilation cached in a weak-keyed lookup.
+  - Added support for governor state threshold matching against both translated and untranslated state names.
+  - Documented dashboard box styling, named colors, and threshold formats in `docs/dashboard/user-themes.md`.
 - **Initial fuel announcement: gated until valid telemetry arrives and sensor promotion added (`lib/audio.lua`, `lib/sensors.lua`, `widgets/dashboard/runtime.lua`, `ui/home.lua`, `docs/audio/events.md`) (fixes #187)**:
   - Gated `initial_fuel` in `lib/audio.lua` with `self.state.fuelTelemetrySeen == true`. Previously, this check was missing while continuous `fuel_alerts` had it, causing startup audio to announce the pre-initialized seed value of `0` ("Battery 0%") before telemetry packets arrived.
   - Implemented dynamic deferral window based on `stabilize_delay` and detected carried-over readings from previous sessions (`previousSessionFuel`). If fresh, positive telemetry arrives within the window, the percentage is announced immediately; if the pack is genuinely empty (0%), the announcement proceeds once the ceiling expires.
