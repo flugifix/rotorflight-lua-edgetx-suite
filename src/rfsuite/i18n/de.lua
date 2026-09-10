@@ -751,6 +751,9 @@ return {
         governor_state_bailout = "Bailout",
         governor_state_bypass = "Bypass",
         voltage_alert = "Spannung",
+        voltage_hold = "Haltezeit (s)",
+        section_main_power = "Hauptstrom",
+        main_power_lost = "Hauptstrom verloren",
         pack_not_full = "Akku nicht voll",
         pack_not_full_margin = "Toleranz (mV/Zelle)",
         pid_profile = "PID-Profil",
@@ -759,6 +762,8 @@ return {
         esc_threshold = "Schwellwert (°)",
         esc_threshold_model = "Schwellwert (°) [Modell]",
         mcu_temperature = "MCU-Temperatur",
+        section_telemetry = "Telemetrie",
+        telemetry_lost = "Telemetrie verloren",
         lq_alert = "Linkqualitaet",
         lq_warn = "Warnung (%)",
         lq_critical = "Kritisch (%)",
@@ -790,7 +795,7 @@ return {
         help_message = "Ansage des Governor-Status. Der Hauptschalter schaltet die Ansagen ein; darunter waehlst du, welche Zustaende gesprochen werden. Ein Zustand wird erst angesagt, wenn er einen Moment anliegt, damit die Zustaende eines Hochlaufs nicht nacheinander vorgelesen werden."
       },
       settings_audio_events_voltage = {
-        help_message = "Ansage, wenn die Akkuspannung auf die in der Akkukonfiguration eingestellte Warnschwelle faellt. Die Warnung wiederholt sich alle 10 Sekunden, bis sich die Spannung erholt. Darunter meldet sich die Akkupruefung einmal beim Verbinden des Modells, wenn der Akku nicht voll ist, und sagt die Spannung pro Zelle an. Die Toleranz gibt an, wie weit ein Akku unter der Zellenspannung aus der Akkukonfiguration liegen darf und trotzdem als voll gilt, damit ein einen Tag lang gelagerter Akku sie nicht ausloest. Die Pruefung erfolgt einmal pro Verbindung und nie wieder im Flug."
+        help_message = "Ansage, wenn die Akkuspannung auf die in der Akkukonfiguration eingestellte Warnschwelle faellt, mit gesprochener Spannung. Der Wert muss die Haltezeit lang unter der Schwelle bleiben, bevor etwas gesagt wird, damit ein unter Last einbrechender Akku nicht als leerer Akku angesagt wird; danach wiederholt sich die Warnung alle 10 Sekunden, bis sich die Spannung erholt, und eine Haltezeit von 0 meldet wie bisher schon beim ersten Wert unter der Schwelle. Darunter meldet sich die Akkupruefung einmal beim Verbinden des Modells, wenn der Akku nicht voll ist, und sagt die Spannung pro Zelle an. Die Toleranz gibt an, wie weit ein Akku unter der Zellenspannung aus der Akkukonfiguration liegen darf und trotzdem als voll gilt, damit ein einen Tag lang gelagerter Akku sie nicht ausloest. Die Pruefung erfolgt einmal pro Verbindung und nie wieder im Flug. Der letzte Schalter meldet einen Hauptakku, der verschwunden ist, waehrend der Flugregler ueber BEC oder Stuetzakku weiterlaeuft; die Meldung wiederholt sich alle 10 Sekunden mit gesprochener BEC-Spannung und noch einmal, wenn der Akku zurueck ist."
       },
       settings_audio_events_profiles = {
         help_message = "Ansage des PID-Profils und des Raten-Profils bei einem Wechsel, mit der Nummer des neuen Profils."
@@ -808,7 +813,7 @@ return {
         help_message = "Ansage der Akku-Kapazitaet bei einem Wechsel des Akkuprofils und des Kraftstoffstands einmal beim Verbinden des Modells."
       },
       settings_audio_events_link = {
-        help_message = "Ansage der Linkqualitaet mit gesprochenem Prozentwert, auf einer Warnstufe und noch einmal auf einer kritischen Stufe. Eine Stufe wird beim Erreichen angesagt und danach alle 10 Sekunden, solange sie anliegt; die Erholung bleibt still. Bei einem Empfaenger, der keine Linkqualitaet meldet, bleibt die Warnung stumm, denn der Wert, der stattdessen ankommt, ist eine Signalstaerke in dBm und kein Prozentwert."
+        help_message = "Ansage der Linkqualitaet mit gesprochenem Prozentwert, auf einer Warnstufe und noch einmal auf einer kritischen Stufe. Eine Stufe wird beim Erreichen angesagt und danach alle 10 Sekunden, solange sie anliegt; die Erholung bleibt still. Bei einem Empfaenger, der keine Linkqualitaet meldet, bleibt die Warnung stumm, denn der Wert, der stattdessen ankommt, ist eine Signalstaerke in dBm und kein Prozentwert. Darunter meldet der Telemetrie-Schalter ein Modell, das im scharfen Zustand verloren ging, und meldet es erneut, wenn es wieder antwortet. Angesagt wird nur ein Flugregler, der bei stehender Funkverbindung aufhoert zu antworten: den verlorenen Link sagt das Funkgeraet selbst an, und dasselbe Ereignis zweimal zu hoeren ist schlechter als einmal. Dafuer werden zwei Dateien gebraucht, die dein Soundpaket noch nicht enthalten muss; ohne sie bleibt die Ansage still."
       },
       settings_audio_events_other = {
         help_message = "Ansage des Modellnamens beim Verbinden. Die Ansage ist eine WAV-Datei mit dem Namen des Modells im Ordner SOUNDS."

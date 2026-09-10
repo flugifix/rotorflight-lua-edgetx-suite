@@ -80,6 +80,27 @@ local RSSI_LINK_SOURCES = {
 -- would speak.
 local LQ_HYSTERESIS = 5
 
+-- How long a lost connection stays eligible for a recovery announcement. Past it the pending
+-- flag is dropped without a word: a model that answers again a quarter of an hour later is a
+-- new flight, and "telemetry recovered" belongs to the one that was interrupted.
+local CONNECTION_RECOVERY_WINDOW = 120
+
+-- What separates "the pack is gone" from "the pack is low". A disconnected main battery reads
+-- as no voltage at all, and the lowest a flight pack is ever taken to is far above this, so
+-- nothing a discharge can reach falls inside the window.
+local MAIN_POWER_LOST_VOLTS = 1.0
+
+-- The four files this adds. Two of them the sound packs do not carry yet, and neither one is
+-- borrowed from an existing alert: every shipped file names a different event, and announcing
+-- a lost connection in the words of a low battery is worse than saying nothing. The pack files
+-- that do exist are the fallback for the two power announcements, which have a near enough
+-- neighbour; the two connection announcements have none and stay silent until a pack gains
+-- them. Which pack answers is resolved once per session and cached.
+local CONNECTION_LOST_SOUND = "stat/alerts/telemetrylost.wav"
+local CONNECTION_OK_SOUND = "stat/alerts/telemetryok.wav"
+local MAIN_POWER_LOST_SOUNDS = { "stat/alerts/mainpower.wav", "stat/alerts/batteryempty.wav", "stat/alerts/lowvoltage.wav" }
+local MAIN_POWER_OK_SOUNDS = { "stat/alerts/mainpowerok.wav", "evt/battery.wav" }
+
 local function nowSeconds()
   if getTime then
     local ok, value = pcall(getTime)
@@ -263,10 +284,38 @@ local function precTwo()
   return 0
 end
 
+-- The same mechanism with one decimal place. A pack voltage is spoken as 23.4 volts rather
+-- than 23.45: the second decimal of a pack reading decides nothing and costs a syllable in
+-- the middle of a flight, while a per-cell voltage is judged on exactly that decimal.
+local function precOne()
+  if type(PREC1) == "number" then return PREC1 end
+  return 0
+end
+
 local function emitLog(opts, msg, level)
   if opts and type(opts.log) == "function" then
     opts.log(msg, level)
   end
+end
+
+-- Speak a voltage through the radio's own number teller, so that the digits and the unit come
+-- out in the language the pilot set on the radio rather than in the language of the sound pack.
+-- `decimals` is 1 for a pack or BEC reading and 2 for a per-cell one; on a firmware that
+-- exports neither precision attribute the value is rounded to whole volts rather than left
+-- unsaid, which is what a zero attribute means.
+local function playVoltage(volts, decimals, opts)
+  if type(playNumber) ~= "function" or type(volts) ~= "number" then return end
+  local attribute = (decimals == 2) and precTwo() or precOne()
+  local spoken
+  if attribute == 0 then
+    spoken = math.floor(volts + 0.5)
+  elseif decimals == 2 then
+    spoken = math.floor((volts * 100) + 0.5)
+  else
+    spoken = math.floor((volts * 10) + 0.5)
+  end
+  local ok, err = pcall(playNumber, spoken, unitVolts(), attribute)
+  if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
 end
 
 -- WHO decides that the initial fuel / capacity is announced:
@@ -327,6 +376,15 @@ local function resolveEventPath(relativePath)
 
   -- 3. If file not found in any locale, return nil to indicate failure
   resolvedEventPaths[relativePath] = false
+  return nil
+end
+
+-- The first candidate a sound pack actually carries. Every candidate is probed at most once
+-- per session, because resolveEventPath caches its answer, the misses included.
+local function firstResolvedSound(candidates)
+  for i = 1, #candidates do
+    if resolveEventPath(candidates[i]) then return candidates[i] end
+  end
   return nil
 end
 
@@ -740,14 +798,78 @@ local function announcePackNotFullEvent(self, events, opts)
     soundFile = "stat/alerts/voltage.wav"
   end
 
-  if tryPlayEventFile(audioState, now, soundFile, opts) and type(playNumber) == "function" then
-    local attribute = precTwo()
-    local spoken = math.floor((perCell * 100) + 0.5)
-    if attribute == 0 then
-      spoken = math.floor(perCell + 0.5)
+  if tryPlayEventFile(audioState, now, soundFile, opts) then
+    playVoltage(perCell, 2, opts)
+  end
+end
+
+-- The main pack is gone while the flight controller is still answering. That is what a backup
+-- guard or a separate receiver battery is for, and it is the one power failure telemetry can
+-- report at all: everything else keeps arriving, so nothing in the suite would otherwise
+-- notice that the machine is now flying on its reserve.
+--
+-- Three things have to be true together, and the second is what keeps a model whose pack is
+-- not measured at all quiet: the pack reads as gone rather than merely low, it has read a real
+-- voltage at some point this connection, and a BEC voltage is there beside it -- without one
+-- there is no evidence that anything is still being powered.
+--
+-- Announced again every 10 seconds while the condition holds, which is the interval every
+-- other repeating alert in this file uses, and once more when the pack comes back.
+local function announceMainPowerEvent(self, events, opts)
+  if not prefEnabled(events, "main_power_lost", false) then
+    return
+  end
+
+  local audioState = self.audioState
+  local voltage = tonumber(self.state and self.state.voltage)
+  if type(voltage) ~= "number" then
+    return
+  end
+
+  local now = nowSeconds()
+
+  if voltage > MAIN_POWER_LOST_VOLTS then
+    audioState.packVoltageSeen = true
+    if audioState.mainPowerLostActive then
+      audioState.mainPowerLostActive = false
+      audioState.lastAlertAt.main_power = 0
+      emitLog(opts, "main power back at " .. string.format("%.1f", voltage) .. " V", "info")
+      local soundFile = firstResolvedSound(MAIN_POWER_OK_SOUNDS)
+      if soundFile and tryPlayEventFile(audioState, now, soundFile, opts) then
+        playVoltage(voltage, 1, opts)
+      end
     end
-    local ok, err = pcall(playNumber, spoken, unitVolts(), attribute)
-    if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+    return
+  end
+
+  if audioState.packVoltageSeen ~= true then
+    return
+  end
+
+  local bec = tonumber(self.state and (self.state.bec_voltage or self.state.becVoltage))
+  if type(bec) ~= "number" or bec <= 0 then
+    return
+  end
+
+  if audioState.mainPowerLostActive and (now - (audioState.lastAlertAt.main_power or 0)) < 10 then
+    return
+  end
+
+  local soundFile = firstResolvedSound(MAIN_POWER_LOST_SOUNDS)
+  if not soundFile then
+    return
+  end
+
+  if tryPlayEventFile(audioState, now, soundFile, opts) then
+    -- The BEC voltage and not the pack's, because it is the reading that still means
+    -- something: it says how much is left of whatever is keeping the receiver alive.
+    playVoltage(bec, 1, opts)
+    if type(playHaptic) == "function" then
+      pcall(playHaptic, 15, 10, 3)
+    end
+    audioState.mainPowerLostActive = true
+    audioState.lastAlertAt.main_power = now
+    emitLog(opts, "main power lost, BEC at " .. string.format("%.1f", bec) .. " V", "warn")
   end
 end
 
@@ -780,6 +902,60 @@ local function linkIsQuality(self, audioState, lq, opts)
       .. " (source=" .. tostring(source) .. " value=" .. tostring(lq) .. ")", "debug")
   end
   return false
+end
+
+--- The connection to the model was lost. Called from the branch each caller already runs when
+--- its connection gate shuts, and before the state reset beside it.
+---
+--- `rfLinkUp` says whether the radio still had the model's telemetry at that moment, and it is
+--- what keeps this out of EdgeTX's way. The radio announces a lost RF LINK itself, so that half
+--- is deliberately not ours; what is ours is the case the radio cannot see, where the link is
+--- there and the flight controller has stopped answering. A pilot with the radio's own
+--- announcement enabled therefore never hears the same event twice.
+---
+--- A drop while disarmed is a normal power-off and says nothing, so the last armed state the
+--- pass saw is the gate. That state and the two flags set here outlive the reset the caller
+--- does next: the reset runs at the moment of the loss, and the recovery has to survive it.
+function Audio.announceConnectionLost(self, rfLinkUp, opts)
+  if type(self) ~= "table" or type(self.audioState) ~= "table" then
+    return
+  end
+
+  local audioState = self.audioState
+  -- Both callers reach their loss branch on more than one edge and then keep running it while
+  -- the connection is down, so everything below happens once per loss.
+  if audioState.connectionLostPending then
+    return
+  end
+
+  local events = (self.preferences and self.preferences.audio_events) or {}
+  if not prefEnabled(events, "telemetry_lost", false) then
+    return
+  end
+  if audioState.flightArmed ~= true then
+    return
+  end
+  if rfLinkUp ~= true then
+    emitLog(opts, "connection lost with the RF link, which the radio announces itself", "debug")
+    return
+  end
+
+  local now = nowSeconds()
+  audioState.connectionLostPending = true
+  audioState.connectionLostAt = now
+  emitLog(opts, "telemetry lost while armed, RF link still up", "info")
+
+  if not resolveEventPath(CONNECTION_LOST_SOUND) then
+    if not audioState.connectionSoundMissingLogged then
+      audioState.connectionSoundMissingLogged = true
+      emitLog(opts, "no " .. CONNECTION_LOST_SOUND .. " in this sound pack; nothing is spoken", "warn")
+    end
+    return
+  end
+
+  if tryPlayEventFile(audioState, now, CONNECTION_LOST_SOUND, opts) and type(playHaptic) == "function" then
+    pcall(playHaptic, 15, 10, 3)
+  end
 end
 
 --- Play one file out of the audio pack, by its path below `SOUNDS/rf/<locale>/`.
@@ -821,6 +997,15 @@ function Audio.resetConnectionState(audioState)
   audioState.lqNotQualityLogged = nil
   audioState.packCheckDone = false
   audioState.fuelDeferUntil = nil
+  audioState.packVoltageSeen = false
+  audioState.mainPowerLostActive = false
+  audioState.voltageLowSince = nil
+  audioState.connectionSoundMissingLogged = nil
+
+  -- `connectionLostPending`, `connectionLostAt` and `flightArmed` are deliberately NOT cleared
+  -- here. Every caller runs this function at the moment the connection goes down, which is
+  -- exactly when the loss announcement is decided and the recovery is armed; clearing them
+  -- would throw both away in the same pass that set them.
 
   if type(audioState.lastValues) == "table" then
     for k in pairs(audioState.lastValues) do
@@ -873,6 +1058,7 @@ function Audio.process(self, opts)
   audioState.lastAlertAt.flight_time = tonumber(audioState.lastAlertAt.flight_time) or 0
   audioState.lastAlertAt.lq = tonumber(audioState.lastAlertAt.lq) or 0
   audioState.lastAlertAt.mcu_temperature = tonumber(audioState.lastAlertAt.mcu_temperature) or 0
+  audioState.lastAlertAt.main_power = tonumber(audioState.lastAlertAt.main_power) or 0
   if type(audioState.lastValues) ~= "table" then
     audioState.lastValues = {
       arming_flags = nil,
@@ -898,6 +1084,23 @@ function Audio.process(self, opts)
 
   local events = (self.preferences and self.preferences.audio_events) or {}
 
+  -- Getting here at all is what a recovery is: both callers run this function only while their
+  -- connection gate is open. The window bounds it, so a model brought back to the bench long
+  -- after it went quiet does not open with an announcement about a flight that is over.
+  if audioState.connectionLostPending then
+    local since = now - (tonumber(audioState.connectionLostAt) or 0)
+    audioState.connectionLostPending = nil
+    audioState.connectionLostAt = nil
+    if since <= CONNECTION_RECOVERY_WINDOW then
+      emitLog(opts, "telemetry recovered after " .. string.format("%.1f", since) .. " s", "info")
+      if resolveEventPath(CONNECTION_OK_SOUND) then
+        tryPlayEventFile(audioState, now, CONNECTION_OK_SOUND, opts)
+      end
+    else
+      emitLog(opts, "telemetry back after " .. string.format("%.1f", since) .. " s, too late to call it a recovery", "debug")
+    end
+  end
+
   local governorEnabled = prefEnabled(events, "governor_state", true)
   if audioState.lastEnabled.governor_state ~= governorEnabled then
     audioState.lastEnabled.governor_state = governorEnabled
@@ -922,6 +1125,7 @@ function Audio.process(self, opts)
   -- Deliberately not gated on `initialized`: the first pass after a connect carries the pack's
   -- resting voltage, which is the reading this check is about.
   announcePackNotFullEvent(self, events, opts)
+  announceMainPowerEvent(self, events, opts)
 
   if prefEnabled(events, "voltage_alert", true) then
     -- Resolve cell count: prefer MSP batteryConfig, fall back to telemetry state,
@@ -953,17 +1157,35 @@ function Audio.process(self, opts)
       local voltage = tonumber(self.state.voltage)
       if type(voltage) == "number" and voltage > 0 then
         if voltage <= warn then
-          local lastAt = audioState.lastAlertAt.voltage or 0
-          local globalLast = getGlobalLowVoltageAt()
-          -- globaler Throttle (reload-sicher)
-          if now - globalLast >= 10 and now - lastAt >= 10 then
-            if tryPlayEventFile(audioState, now, "evt/lowvbat.wav", opts) then
-              audioState.lastAlertAt.voltage = now
-              setGlobalLowVoltageAt(now)
+          -- The reading has to STAY under the line for the hold before anything is said. A pack
+          -- sags under a hard collective pull and is back within a beat or two, and the alert
+          -- fired on the first sample of that sag; what is worth telling the pilot is a pack
+          -- that is actually down. The line itself is untouched -- it is the flight
+          -- controller's own vbatwarningcellvoltage, which is where that number belongs.
+          local hold = tonumber(events.voltage_hold) or 2
+          if hold < 0 then hold = 0 end
+          if type(audioState.voltageLowSince) ~= "number" then
+            audioState.voltageLowSince = now
+          end
+          if (now - audioState.voltageLowSince) >= hold then
+            local lastAt = audioState.lastAlertAt.voltage or 0
+            local globalLast = getGlobalLowVoltageAt()
+            -- globaler Throttle (reload-sicher)
+            if now - globalLast >= 10 and now - lastAt >= 10 then
+              if tryPlayEventFile(audioState, now, "evt/lowvbat.wav", opts) then
+                -- The value the line was crossed at. The alert said only THAT it had been
+                -- crossed, and a pilot deciding whether to land now wants to know by how far.
+                playVoltage(voltage, 1, opts)
+                audioState.lastAlertAt.voltage = now
+                setGlobalLowVoltageAt(now)
+              end
             end
           end
-        elseif voltage >= reset then
-          audioState.lastAlertAt.voltage = 0
+        else
+          audioState.voltageLowSince = nil
+          if voltage >= reset then
+            audioState.lastAlertAt.voltage = 0
+          end
         end
       end
     end

@@ -49,9 +49,16 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
-| Voltage alert | `voltage_alert` | On | Radio | Voice alert when cell or pack voltage drops below the warning threshold configured in the battery profile. |
+| Voltage alert | `voltage_alert` | On | Radio | Voice alert when cell or pack voltage drops below the warning threshold configured in the battery profile. The pack voltage the alert fired at is spoken with it. |
+| Hold | `voltage_hold` | 2 s | Radio | How long the reading has to stay below the warning threshold before the alert speaks (0 to 10 s). A hold of 0 announces on the first reading below the level, which is the behaviour before this setting existed. |
 | Pack not full | `pack_not_full` | Off | Radio | Spoken pre-flight warning on connection if the connected battery is not fully charged. |
 | Margin | `pack_not_full_margin` | 100 mV | Radio | Allowed voltage delta below full charge (10 to 500 mV per cell). Default is 100 mV/cell. |
+| Main power lost | `main_power_lost` | Off | Radio | Announces that the main pack has gone while the flight controller is still alive on a BEC or a backup battery, with the BEC voltage spoken. |
+
+#### Sag Under Load, and a Pack That Is Genuinely Gone
+- **Warning threshold:** it is not set on this page. It is the flight controller's own `vbatwarningcellvoltage` times the cell count, so the alert and the flight controller judge the same pack.
+- **Hold (`voltage_hold`):** a hard collective pull drags the reading under that line for a moment, and a pack that sags is not a pack that is down. The alert waits for the hold time, then repeats every 10 seconds while the voltage stays low, and arms again once the pack has recovered by half a volt.
+- **Main Power Lost (`main_power_lost`):** for a setup with a backup guard or a separate receiver battery. It needs the pack to have read a real voltage since the connection began, to read as gone rather than merely low, and a BEC voltage beside it -- without one there is nothing left to say anything is still powered. It repeats every 10 seconds while the pack stays away, and announces once more, with the pack voltage, when the pack comes back.
 
 ### 4. Arming
 
@@ -88,6 +95,10 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 | Link alert | `lq_alert` | Off | Radio | Spoken warning when RC link quality drops below defined levels. |
 | Warning level | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical level | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
+| Telemetry lost | `telemetry_lost` | Off | Radio | Announces that the model was lost while it was armed, and announces it again when it answers. |
+
+#### What Telemetry Lost Covers, and What It Leaves to the Radio
+Only a flight controller that stops answering while the radio link is still up is announced. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once. A drop while the model is disarmed is a normal power-off and stays silent. Both announcements need sound files a pack may not carry yet -- see *Sound Pack Files* below.
 
 ### 9. Adjustments
 
@@ -100,6 +111,29 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
 | Model announcement | `model_announcement` | Off | Radio | Plays a model-specific sound file (`/SOUNDS/<lang>/modelname.wav`) upon selecting the model. |
+
+---
+
+## Sound Pack Files
+
+Announcements are played from the sound pack under `/SOUNDS/rf/<language>/`. Numbers and their units are spoken by the radio itself, so they follow the language set on the radio rather than the language of the pack.
+
+Two announcements ask for files no pack ships yet, and stay silent without them:
+
+| File | Announcement |
+| --- | --- |
+| `stat/alerts/telemetrylost.wav` | Telemetry lost |
+| `stat/alerts/telemetryok.wav` | Telemetry recovered |
+
+Three prefer a file of their own and fall back to one that ships, so they work today:
+
+| Preferred file | Falls back to | Announcement |
+| --- | --- | --- |
+| `stat/alerts/mainpower.wav` | `stat/alerts/batteryempty.wav`, then `stat/alerts/lowvoltage.wav` | Main power lost |
+| `stat/alerts/mainpowerok.wav` | `evt/battery.wav` | Main power back |
+| `stat/alerts/notfull.wav` | `stat/alerts/voltage.wav` | Pack not full |
+
+`stat/alerts/batteryempty.wav` is currently in the English pack only.
 
 ---
 

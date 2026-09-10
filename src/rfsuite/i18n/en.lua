@@ -751,6 +751,9 @@ return {
         governor_state_bailout = "Bailout",
         governor_state_bypass = "Bypass",
         voltage_alert = "Voltage",
+        voltage_hold = "Hold (s)",
+        section_main_power = "Main Power",
+        main_power_lost = "Main Power Lost",
         pack_not_full = "Pack Not Full",
         pack_not_full_margin = "Margin (mV/cell)",
         pid_profile = "PID Profile",
@@ -759,6 +762,8 @@ return {
         esc_threshold = "Threshold (°)",
         esc_threshold_model = "Threshold (°) [Model]",
         mcu_temperature = "MCU Temperature",
+        section_telemetry = "Telemetry",
+        telemetry_lost = "Telemetry Lost",
         lq_alert = "Link Quality",
         lq_warn = "Warning (%)",
         lq_critical = "Critical (%)",
@@ -790,7 +795,7 @@ return {
         help_message = "Announce the governor's state. The main switch turns the announcements on; below it, choose which states are spoken. A state is announced once it has held for a moment, so the states a spool-up passes through are not read out one after another."
       },
       settings_audio_events_voltage = {
-        help_message = "Announce when the pack voltage falls to the warning level set in the battery configuration. The alert repeats every 10 seconds until the voltage recovers. Below it, the pack check speaks once when the model connects if the pack is not full, with the per-cell voltage read out. The margin is how far below the full-cell voltage of the battery configuration a pack may sit and still count as full, so that one left standing for a day does not trip it. The check is made once per connection and never again in flight."
+        help_message = "Announce when the pack voltage falls to the warning level set in the battery configuration, with the voltage spoken. The reading has to stay below that level for the hold time before anything is said, so that a pack sagging under load is not announced as a pack that is down; the alert then repeats every 10 seconds until the voltage recovers, and a hold of 0 announces on the first reading below the level as it did before. Below it, the pack check speaks once when the model connects if the pack is not full, with the per-cell voltage read out. The margin is how far below the full-cell voltage of the battery configuration a pack may sit and still count as full, so that one left standing for a day does not trip it. The check is made once per connection and never again in flight. The last switch announces a main pack that has gone while the flight controller stays alive on a BEC or a backup battery, repeating every 10 seconds with the BEC voltage spoken, and once more when the pack comes back."
       },
       settings_audio_events_profiles = {
         help_message = "Announce the PID profile and the rate profile when they change, with the new profile's number."
@@ -808,7 +813,7 @@ return {
         help_message = "Announce the battery capacity when the battery profile changes, and the fuel level once when the model connects."
       },
       settings_audio_events_link = {
-        help_message = "Announce the link quality with the percentage spoken, at a warning level and again at a critical one. A level is announced when it is first reached and then every 10 seconds while it holds; recovering is silent. On a receiver that reports no link quality the alert stays quiet, because the value that arrives instead is a signal strength in dBm and not a percentage."
+        help_message = "Announce the link quality with the percentage spoken, at a warning level and again at a critical one. A level is announced when it is first reached and then every 10 seconds while it holds; recovering is silent. On a receiver that reports no link quality the alert stays quiet, because the value that arrives instead is a signal strength in dBm and not a percentage. Below it, the telemetry switch announces a model that was lost while it was armed, and announces it again when it answers. Only a flight controller that stops answering while the radio link is still up is announced: a lost link is what the radio itself announces, and hearing the same event twice is worse than hearing it once. It needs two files that your sound pack may not carry yet, and stays silent without them."
       },
       settings_audio_events_other = {
         help_message = "Announce the model's name when it connects. The announcement is a WAV file named after the model in the SOUNDS folder."
