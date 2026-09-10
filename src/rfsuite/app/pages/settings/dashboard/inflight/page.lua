@@ -454,7 +454,22 @@ local function appendNote(children, x, y, w, text)
   children[#children + 1] = {
     type = "label", x = x, y = y, w = w, text = text, color = COLOR_THEME_PRIMARY1, font = SMLSIZE
   }
-  return 24
+  -- A label narrower than its text WRAPS rather than clipping, so a constant advance draws
+  -- the next row on top of the second line -- which is what the longest note on this page
+  -- did at 800 pixels, and what every note here would do on a 480-pixel screen. The library
+  -- has the answer already: ui/controls.lua measures a wrapped label, and its own comment is
+  -- about precisely this mistake. One line keeps the row height it always had, so nothing
+  -- that fitted moves.
+  local lines = 1
+  if Controls and type(Controls.estimateWrappedTextHeight) == "function" then
+    local total = Controls.estimateWrappedTextHeight(text, w, SMLSIZE)
+    local one = Controls.estimateWrappedTextHeight("Ag", w, SMLSIZE)
+    if type(total) == "number" and type(one) == "number" and one > 0 then
+      lines = math.floor((total / one) + 0.5)
+      if lines < 1 then lines = 1 end
+    end
+  end
+  return lines * 24
 end
 
 local function buildGeneral(children, x, y, w, i18n)
