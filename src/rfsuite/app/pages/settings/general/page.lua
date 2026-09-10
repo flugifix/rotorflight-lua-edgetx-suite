@@ -27,6 +27,7 @@ local CONFIG_SCHEMA = {
   { key = "reload_confirm",               type = "bool",   default = true   },
   { key = "preview_setup_wizard",         type = "bool",   default = false  },
   { key = "preview_flight_log",           type = "bool",   default = false  },
+  { key = "preview_inflight_tuning",      type = "bool",   default = false  },
   { key = "developer_tools",              type = "bool",   default = false  },
 }
 
@@ -173,6 +174,13 @@ local PREVIEW_ITEMS = {
     confirmFallback = "The flight log is not finished. What it records, and how the page presents it, can still change, and "
       .. "it keeps a file of its own on the card. Show it anyway?"
   },
+  {
+    key             = "preview_inflight_tuning",
+    labelKey        = "preview_inflight_tuning",
+    labelFallback   = "In-flight tuning",
+    confirmKey      = "preview_confirm_inflight_tuning",
+    confirmFallback = "Not finished, and it changes the flight controller's parameters in flight. Show it anyway?"
+  },
 }
 
 local ConfirmDialog = nil
@@ -293,6 +301,7 @@ function M.onSave(ctx)
       ctx.menu.setCondition("developerTools", ui.config.developer_tools == true)
       ctx.menu.setCondition("previewSetupWizard", ui.config.preview_setup_wizard == true)
       ctx.menu.setCondition("previewFlightLog", ui.config.preview_flight_log == true)
+      ctx.menu.setCondition("previewInflightTuning", ui.config.preview_inflight_tuning == true)
     end
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })

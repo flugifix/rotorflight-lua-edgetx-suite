@@ -105,6 +105,7 @@ local function defaultPreferences()
       -- preview features
       preview_setup_wizard         = false,
       preview_flight_log           = false,
+      preview_inflight_tuning      = false,
       -- development
       developer_tools              = false,
       continuous_memory_log        = false,
@@ -150,6 +151,13 @@ local function defaultPreferences()
       -- An arm shorter than this is a check rather than a flight, and reaches neither the log
       -- nor a battery's cycle count. 0 logs every arm.
       min_seconds = 30,
+    },
+    -- The radio's half of the in-flight tuning overlay: what is true of this transmitter whatever
+    -- is plugged into it. The machine's half -- which parameters its flight controller offers,
+    -- how far one press moves them, which PID profile is the undo -- is in the per-model store.
+    -- Off by default, like every preview surface: see app/pages/settings/dashboard/inflight.
+    inflight = {
+      enabled = false,
     },
     dashboard = {
       theme_preflight = "system/default",

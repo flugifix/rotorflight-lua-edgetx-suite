@@ -105,6 +105,18 @@ end
 -- replaces, which is what a restriction has to do.
 files["src/rfsuite/widgets/dashboard/objects"] = { new_globals = object_globals }
 files["src/rfsuite/widgets/dashboard/objects/common.lua"] = { new_globals = globals }
+-- The in-flight tuning surface hands lvgl.build the same kind of value closures and is under the
+-- same rule for the same reason: they run per frame in the reactive sweep, on the leftover budget,
+-- outside the pcall. It reads the snapshot its own drive publishes and probes nothing.
+--
+-- The same set of names as the objects rule above, and it names them directly because there is
+-- one file rather than a directory: `not_globals` subtracts from the inherited list, which is
+-- what a single-file restriction needs, and `new_globals` would have to repeat the whole list
+-- to take four names out of it. Verified in both directions -- a planted `model` read in this
+-- file reports "accessing undefined variable 'model'", and removing the entry silences it.
+files["src/rfsuite/widgets/dashboard/inflight/screen.lua"] = {
+  not_globals = { "model", "getValue", "getSensor", "getFieldInfo", "fstat" }
+}
 
 -- Code style rules
 max_line_length = 140

@@ -176,6 +176,29 @@ local function defaultModelPreferences()
       model_theme_inflight = "nil",
       model_theme_postflight = "nil"
     },
+    -- The model's half of the in-flight tuning overlay: what describes THIS machine. Whether it is
+    -- set up for the overlay at all, which set of parameters its flight controller offers, how far
+    -- one press moves them, and which PID profile the undo restores.
+    --
+    -- What is true of the transmitter whatever is plugged into it -- the interlock switch, the two
+    -- channels and global variables the mixer devotes to the adjustment pair, the pulse length and
+    -- the trims -- belongs to the radio and is seeded in lib/preferences.lua, also under
+    -- [inflight]. Those keys are never read out of a per-model store, so seeding them here only
+    -- wrote them into every model file and showed a reader numbers nothing used.
+    --
+    -- These five MUST agree with the model half of M.DEFAULTS in
+    -- widgets/dashboard/inflight/setup.lua, which is what the overlay actually reads. They are
+    -- duplicated rather than shared because this library is loaded by the whole suite and must not
+    -- pull in a widget module to reach them; the same note sits on the other side.
+    inflight = {
+      -- Off until a pilot says this machine is set up for it. The radio carries a switch of its
+      -- own and both have to be on before anything drives.
+      enabled = false,
+      set_mode = "standard",
+      step = 5,
+      step_headspeed = 50,
+      backup_profile = 6
+    },
     widgets = {}
   }
 end

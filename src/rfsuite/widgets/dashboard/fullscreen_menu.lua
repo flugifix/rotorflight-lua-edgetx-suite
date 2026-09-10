@@ -149,8 +149,39 @@ function M.build(children, widget)
     text=t("widgets.dashboard.erase_blackbox", "ERASE BLACKBOX"), color=WHITE, align=CENTER, font=titleFont
   }
 
-  contentY = contentY + btnH + titleGap
-  
+  contentY = contentY + btnH + gapY
+
+  -- 4a2. In-flight tuning, only for a model that has it switched on and only while the
+  -- preview switch is on.
+  --
+  -- The snapshot alone would very nearly do -- the drive that publishes it is not built with
+  -- the preview off -- but the menu is built from the preferences of this pass and the
+  -- snapshot is what the last one left behind. Reading the switch here means the button
+  -- cannot offer a route into a feature the runtime has already stopped driving.
+  --
+  -- It is reachable here with the interlock OPEN on purpose: the setup check and the parameter
+  -- grid are what a pilot wants to see on the ground, and the interlock is what decides whether
+  -- anything is sent. The screen the button opens is inert until the switch is thrown.
+  local previewOn = widget.preferences and widget.preferences.general
+    and widget.preferences.general.preview_inflight_tuning == true
+  if previewOn and type(widget.state.inflight) == "table" then
+    children[#children+1] = {
+      type = "button", x=dX + paddingX, y=contentY, w=eraseBtnW, h=btnH, color=btn_color,
+      press = function()
+        widget.inflightFullscreen = true
+        widget.built = false
+        widget.renderKey = nil
+      end
+    }
+    children[#children+1] = {
+      type = "label", x=dX + paddingX, y=contentY + math.floor((btnH - fontH)/2) + btnTextOffY, w=eraseBtnW,
+      text=t("widgets.dashboard.inflight_open", "IN-FLIGHT TUNING"), color=WHITE, align=CENTER, font=titleFont
+    }
+    contentY = contentY + btnH + gapY
+  end
+
+  contentY = contentY + titleGap - gapY
+
   -- 4b. Battery Profile Section Title
   children[#children+1] = {
     type = "label", x=dX + paddingX, y=contentY, w=dW-(paddingX*2), 

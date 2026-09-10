@@ -66,6 +66,49 @@ return {
     -- regression detector, and as the price of decoding a whole backlog instead of
     -- its newest quarter.
     ["pass.function"] = { target = 7300, measured = 5808 },
+    -- The in-flight tuning overlay, in three rows: the pass that drives it, the pass a reply of
+    -- its ground half lands on, and the build of its screens.
+    --
+    -- `pass.tuning.state` is the STEADY state -- the overlay driving the radio with nothing
+    -- outstanding on the wire. One switch read, the trims, the enable channel, the pulse; less
+    -- than the theme render key it displaces, which is why it sits below the dashboard's own
+    -- STATE pass.
+    --
+    -- `pass.tuning.prime` is the ground half, and it is a row of its own because it is a
+    -- different pass and not a worse day of the same one. Before a flight the overlay reads the
+    -- receiver map, the board's slot table one record at a time and nine value replies, and the
+    -- pass a reply lands on pays that reply's parse -- 42 to 933 instructions depending on the
+    -- command -- on top of the drive, the progress the screen shows and the poll the outstanding
+    -- request keeps busy. It is bounded by inflight/prime.lua parsing AT MOST ONE reply per pass;
+    -- without that bound the row is not a number at all, because what a pass costs then depends
+    -- on how many answers the link happened to deliver into it. The margin here is the check's
+    -- 10 % floor rather than the 15 % most rows carry: this pass is close enough to the
+    -- firmware's own 20 000 that a wider target would be widening the wrong thing.
+    --
+    -- The JOB pass builds the whole surface in one step, the way the menu does, and it covers
+    -- two different builds: the tuning surface with its chips, rows and step buttons, and the
+    -- ground surface with the three profile actions and the delta list at its cap. The setup
+    -- check, which walks the two mixer lines and both variables' details, is on the ground one.
+    --
+    -- Its target rises again because the surface itself grew, and it grew for a pilot who could
+    -- not read the old one: the chips carry letters, every row names the trim that drives it, the
+    -- parameter carries what it was primed at and whether it was announced, and the step buttons
+    -- carry their glyphs and three lines of hint. That is 72 nodes against 44, and at roughly 190
+    -- instructions a node the arithmetic is the whole of the rise. The margin is the check's 10 %
+    -- floor rather than the 15 % most rows carry, for the reason the prime's is: what the
+    -- firmware's own 20 000 has to hold after this is the LVGL sweep of the tree it just built,
+    -- and nothing measures that.
+    --
+    -- `pass.tuning.state` was re-apportioned a second time when the interlock gained its phase
+    -- machine. What the pass carries now that it did not: the phase itself and the two things
+    -- that follow from it -- the fired counter and the postflight latch -- the two reference
+    -- values the live surface shows beside the number, and one `fstat` of the per-model store a
+    -- second, which is the overlay's own answer to a setting that needed a radio restart. The
+    -- steady pass was measured at 12 961 in the air and 13 080 on the ground; the target is set
+    -- above the second of those and not the first.
+    ["pass.tuning.state"] = { target = 14200, measured = 13080, proposed = 13000 },
+    ["pass.tuning.prime"] = { target = 16700, measured = 14855 },
+    ["pass.job.tuning"] = { target = 15700, measured = 13155, proposed = 10600 },
 
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of

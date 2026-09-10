@@ -85,11 +85,27 @@ local function update(widget, options)
   end
 end
 
+-- A widget that is holding something the radio must not be left holding, given the chance to let
+-- go while it is backed off.
+--
+-- A back-off is not a pause. The dashboard's in-flight tuning overlay drives the flight
+-- controller by writing two of the radio's global variables, and every path that takes them back
+-- to zero lives inside widget.refresh or widget.background -- neither of which is called for the
+-- 1.2 s below. Left standing, the flight controller goes on stepping that parameter roughly five
+-- times a second with nothing driving it. The widget installs this closure itself and it does
+-- nothing at all when there is nothing standing; the pcall is because a widget that has just
+-- failed must not be able to fail here as well.
+local function letGoWhileBackedOff(widget)
+  local release = widget and widget._inflightPanic
+  if type(release) == "function" then pcall(release) end
+end
+
 local function refresh(widget, event, touchState)
   if widget and widget.refresh then
     local now = nowSeconds()
     local backoffUntil = tonumber(widget._cpuBackoffUntil) or 0
     if backoffUntil > 0 and now < backoffUntil then
+      letGoWhileBackedOff(widget)
       return
     end
 
@@ -98,6 +114,7 @@ local function refresh(widget, event, touchState)
       logFault("widget.refresh", err)
       if isCpuLimitError(err) then
         widget._cpuBackoffUntil = now + 1.2
+        letGoWhileBackedOff(widget)
       end
       widget.built = false
     end
