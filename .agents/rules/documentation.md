@@ -11,4 +11,4 @@ Whenever changes are made to the codebase that a pilot can observe (a new config
    - Reference the affected module / page path and the issue / PR number where applicable.
 2. **Include the documentation change in the PR**:
    - The updated documentation must be committed as part of the PR so `docs/` stays in sync with master at all times.
-   - If a change genuinely needs no documentation update, say so explicitly in the PR body and give the reason.
+   - If a change genuinely needs no documentation update, say so explicitly in the PR body and give the reason, on a line of its own beginning with `Documentation:` (a bullet and bold markers are allowed, for example `- **Documentation.** No page: ...`). The `Documentation rule` job in `.github/workflows/pr.yml` reads that line; it does not judge the reason, it only makes sure the rule cannot be skipped in silence.

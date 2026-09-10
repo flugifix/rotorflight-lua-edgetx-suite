@@ -165,7 +165,7 @@ whitespace-only diff buries the change a reviewer is looking for.
 
 | Workflow | Trigger | What it produces |
 | --- | --- | --- |
-| `pr.yml` | pull request | The per-locale installation archives as a build check, plus the instruction-budget gate (`bin/accounting/measure.lua --check`) and the i18n precompiler test |
+| `pr.yml` | pull request | The per-locale installation archives as a build check, plus the instruction-budget gate (`bin/accounting/measure.lua --check`), the i18n precompiler test and the documentation-rule check (`bin/docs/verify_documentation_rule.py`) |
 | `push.yml` | push | The per-locale installation archives |
 | `snapshot.yml` | tag `snapshot/*` | A snapshot release with the per-locale archives |
 | `release.yml` | tag `release/*` | A GitHub release, with notes extracted from `Releases.md` |

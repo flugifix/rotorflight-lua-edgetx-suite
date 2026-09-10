@@ -102,7 +102,7 @@ off the console while it still reaches the log ring, the card sink and serial; o
 - **Mandatory PR Requirement**: With every new page, new or removed setting, changed behaviour a pilot can observe, new widget or theme option, new audio announcement, or removed feature, the documentation under `docs/` must be kept up to date.
 - Update the file of the page that changed (`docs/pages/<page path>.md`, mirroring `src/rfsuite/app/pages/`), and the index `docs/pages/README.md` whenever a page is added or removed. A surface that is not a page has its file under `docs/dashboard/`, `docs/audio/` or `docs/reference/`.
 - Keep `help.lua` and the page file in agreement: the in-app help is the short explanation behind the `?` button, the page file is the same explanation with the settings enumerated. A change that makes the two disagree updates both in the same PR.
-- A PR that changes behaviour without a documentation change states in its body why none was needed.
+- A PR that changes behaviour without a documentation change states in its body why none was needed, on a line of its own beginning with `Documentation:` — for example `Documentation: no page — this only renames a local variable.` The `Documentation rule` job in `.github/workflows/pr.yml` checks that a PR touching `src/` either updates `docs/` or carries that line (`bin/docs/verify_documentation_rule.py`).
 - Always commit the updated documentation as part of the PR.
 
 ## CLI & PowerShell Execution Guidelines
