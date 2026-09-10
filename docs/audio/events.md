@@ -40,8 +40,8 @@ Configures recurring callouts and low-fuel alarms during flight based on the est
 | --- | --- | --- | --- | --- |
 | Fuel alerts | `fuel_alerts` | On | Radio | Master switch for spoken remaining fuel percentage callouts and low-fuel alarms. |
 | Callout step | `fuel_callout_percent` | 10% | Radio | Interval step for descending percentage callouts (options: 5%, 10%, 15%, 20%, 25%). |
-| Repeat below zero | `fuel_repeat_below_zero` | 1 | Radio | Number of times the empty battery / fuel alarm repeats once fuel reaches 0% (1 to 10). |
-| Haptic below zero | `fuel_haptic_below_zero` | Off | Radio | Activates transmitter vibration alongside the low-fuel voice alert. |
+| Repeat | `fuel_repeat_below_zero` | Once | Radio | How often the empty battery / fuel alarm speaks while fuel is at 0% -- *Until cleared*, or 1 to 10 announcements ten seconds apart. The descending percentage callouts are not repeated: each step is spoken once as it is passed. |
+| Haptic | `fuel_haptic_below_zero` | Off | Radio | Transmitter vibration alongside the empty alarm. |
 
 ### 3. Voltage
 
@@ -54,6 +54,8 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 | Pack not full | `pack_not_full` | Off | Radio | Spoken pre-flight warning on connection if the connected battery is not fully charged. |
 | Margin | `pack_not_full_margin` | 100 mV | Radio | Allowed voltage delta below full charge (10 to 500 mV per cell). Default is 100 mV/cell. |
 | Main power lost | `main_power_lost` | Off | Radio | Announces that the main pack has gone while the flight controller is still alive on a BEC or a backup battery, with the BEC voltage spoken. |
+| Repeat | `voltage_repeat` | Until cleared | Radio | How often an alert on this page speaks while its condition holds -- see *Repeat and Haptic* below. |
+| Haptic | `voltage_haptic` | On | Radio | Transmitter vibration alongside the voltage, main power and BEC / receiver alerts. |
 
 #### Sag Under Load, and a Pack That Is Genuinely Gone
 - **Warning threshold:** it is not set on this page. It is the flight controller's own `vbatwarningcellvoltage` times the cell count, so the alert and the flight controller judge the same pack.
@@ -87,6 +89,8 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 | ESC threshold | `esc_threshold` | 90 °C | Model | Maximum allowed ESC temperature (60 to 300 °C). Configured per model. |
 | MCU temperature | `mcu_temperature` | Off | Radio | Alerts when the flight controller MCU temperature exceeds the threshold. |
 | MCU threshold | `mcu_threshold` | 80 °C | Radio | Maximum allowed MCU temperature (40 to 150 °C). Global radio setting. |
+| Repeat | `esc_repeat` | Until cleared | Radio | How often either temperature alert speaks while the reading stays at or above its threshold -- see *Repeat and Haptic* below. |
+| Haptic | `esc_haptic` | On | Radio | Transmitter vibration alongside the ESC and MCU temperature alerts. |
 
 ### 8. Link Quality
 
@@ -96,6 +100,8 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 | Warning level | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical level | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
 | Telemetry lost | `telemetry_lost` | Off | Radio | Announces that the model was lost while it was armed, and announces it again when it answers. |
+| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality alert speaks while it stays at a level -- see *Repeat and Haptic* below. |
+| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality alert at its **critical** level, and alongside the lost telemetry announcement. |
 
 #### What Telemetry Lost Covers, and What It Leaves to the Radio
 Only a flight controller that stops answering while the radio link is still up is announced. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once. A drop while the model is disarmed is a normal power-off and stays silent. Both announcements need sound files a pack may not carry yet -- see *Sound Pack Files* below.
@@ -111,6 +117,36 @@ Only a flight controller that stops answering while the radio link is still up i
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
 | Model announcement | `model_announcement` | Off | Radio | Plays a model-specific sound file (`/SOUNDS/<lang>/modelname.wav`) upon selecting the model. |
+
+---
+
+## Repeat and Haptic
+
+An alert that reports a *condition* -- a voltage that is too low, a temperature that is too
+high, a link that has fallen to a level -- keeps speaking while that condition lasts. Two
+settings say how, and they belong to the **category page** rather than to one announcement:
+the page that switches an alert on is the page that says how it behaves.
+
+| Category page | Repeat / Haptic keys | The alerts they govern |
+| --- | --- | --- |
+| Voltage | `voltage_repeat`, `voltage_haptic` | Low pack voltage, Main power lost, and the BEC / receiver alert set up under *Setup* → *Power* → *Alerts*. |
+| Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost. |
+| ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature, MCU temperature. |
+| Fuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
+
+- **Repeat** is *Until cleared*, or a count from 1 to 10. Announcements are ten seconds apart
+  either way; a count simply stops after that many and starts over once the condition has
+  cleared. *Until cleared* is what every alert did before this setting existed, and is the
+  default everywhere except Fuel, which kept the single announcement it already had.
+- **Haptic** is the transmitter's vibration alongside the voice. It defaults to on for the
+  three categories whose alerts already buzzed with no way of switching it off, and to off for
+  Fuel, which already had this setting and keeps its value.
+- **Two alerts have their own rule inside the category, and a setting does not overrule it.**
+  The link quality alert buzzes at its *critical* level only, never at the warning level. The
+  lost telemetry announcement says itself once per loss, so it takes the haptic and ignores the
+  repeat.
+- **The pack check is not in the table**, because it has no condition to hold: it speaks once
+  when the model connects and is latched for the rest of that connection.
 
 ---
 

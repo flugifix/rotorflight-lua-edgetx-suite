@@ -101,6 +101,54 @@ local CONNECTION_OK_SOUND = "stat/alerts/telemetryok.wav"
 local MAIN_POWER_LOST_SOUNDS = { "stat/alerts/mainpower.wav", "stat/alerts/batteryempty.wav", "stat/alerts/lowvoltage.wav" }
 local MAIN_POWER_OK_SOUNDS = { "stat/alerts/mainpowerok.wav", "evt/battery.wav" }
 
+-- How long an alert whose condition still holds waits before it speaks again. Every repeating
+-- alert in this file already waited exactly this long, with the number written out at each of
+-- them; one constant is what lets the repeat count below mean the same thing everywhere.
+local ALERT_REPEAT_SECONDS = 10
+
+-- How long the transmitter buzzes for an alert that asks for it, and how often. The same
+-- three numbers stood at seven call sites, none of which the pilot could turn off.
+local ALERT_HAPTIC_STRENGTH = 15
+local ALERT_HAPTIC_DURATION = 10
+local ALERT_HAPTIC_PAUSE = 3
+
+-- Whether an alert repeats, and whether it buzzes, are properties of an alert CATEGORY rather
+-- than of one alert: Settings > Audio > Events draws one page per category, and the alerts a
+-- page switches on are the alerts its two behaviour rows govern. That is one pair of controls
+-- per page instead of one pair per announcement, and it is the difference between four new
+-- settings and twenty.
+--
+-- `repeatDefault` 0 means the alert keeps speaking for as long as its condition holds, which
+-- is what every alert in this file did before these settings existed; 1 to 10 caps it at that
+-- many announcements per episode and then stays quiet until the condition clears. The fuel
+-- pair keeps the two keys it already had -- the ones that used to be the only alert in the
+-- file with either property -- so a preferences.ini written before this reads exactly as it
+-- did, and the two settings are replaced rather than joined by six more.
+local ALERT_BEHAVIOUR = {
+  voltage = { repeatKey = "voltage_repeat", repeatDefault = 0, hapticKey = "voltage_haptic", hapticDefault = true },
+  link    = { repeatKey = "link_repeat",    repeatDefault = 0, hapticKey = "link_haptic",    hapticDefault = true },
+  esc     = { repeatKey = "esc_repeat",     repeatDefault = 0, hapticKey = "esc_haptic",     hapticDefault = true },
+  fuel    = { repeatKey = "fuel_repeat_below_zero", repeatDefault = 1,
+              hapticKey = "fuel_haptic_below_zero", hapticDefault = false }
+}
+
+-- Which category's behaviour each alert takes. The name on the left is the key the alert
+-- already uses in audioState.lastAlertAt, so a timestamp and a repeat count are filed under
+-- the same name. The pack check is deliberately absent: it speaks once when the model
+-- connects and is latched for the rest of the connection, so neither property has anything
+-- to act on.
+local ALERT_CATEGORY = {
+  voltage         = "voltage",
+  main_power      = "voltage",
+  bec_voltage     = "voltage",
+  rx_voltage      = "voltage",
+  lq              = "link",
+  telemetry_lost  = "link",
+  esc_temperature = "esc",
+  mcu_temperature = "esc",
+  fuel_empty      = "fuel"
+}
+
 local function nowSeconds()
   if getTime then
     local ok, value = pcall(getTime)
@@ -124,6 +172,101 @@ local function prefEnabled(events, key, defaultValue)
   local value = events and events[key]
   if value == nil then return defaultValue end
   return isTruthy(value)
+end
+
+local function alertBehaviour(alertKey)
+  local category = ALERT_CATEGORY[alertKey]
+  if not category then return nil end
+  return ALERT_BEHAVIOUR[category]
+end
+
+-- How many times an alert may speak while one episode of its condition lasts. 0 is "for as
+-- long as it holds"; anything above 10 is brought back to 10, which is the range the control
+-- offers, so a hand-edited preferences.ini cannot ask for a number the page could not.
+local function alertRepeatLimit(events, alertKey)
+  local behaviour = alertBehaviour(alertKey)
+  if not behaviour then return 0 end
+  local limit = tonumber(events and events[behaviour.repeatKey])
+  if limit == nil then return behaviour.repeatDefault end
+  limit = math.floor(limit)
+  if limit < 0 then return 0 end
+  if limit > 10 then return 10 end
+  return limit
+end
+
+local function alertHapticWanted(events, alertKey)
+  local behaviour = alertBehaviour(alertKey)
+  if not behaviour then return false end
+  return prefEnabled(events, behaviour.hapticKey, behaviour.hapticDefault)
+end
+
+local function alertRepeatCounts(audioState)
+  local counts = audioState.alertRepeats
+  if type(counts) ~= "table" then
+    counts = {}
+    audioState.alertRepeats = counts
+  end
+  return counts
+end
+
+--- May an alert whose condition holds speak now?
+---
+--- Two questions, and the second is where each alert's own history comes in. The repeat count
+--- is spent per episode. The interval is measured from the last announcement, and an alert
+--- that zeroes its timestamp when its condition clears -- as the voltage, BEC and RX alerts do
+--- -- therefore speaks at once when the condition returns, while one that keeps its timestamp
+--- -- as the ESC and MCU alerts do -- waits the interval out even across a dip below the
+--- threshold. Both behaviours are the ones those alerts already had.
+local function alertMaySpeak(audioState, events, alertKey, now)
+  local limit = alertRepeatLimit(events, alertKey)
+  if limit > 0 then
+    local counts = audioState.alertRepeats
+    if counts ~= nil and (counts[alertKey] or 0) >= limit then
+      return false
+    end
+  end
+
+  local last = tonumber(audioState.lastAlertAt and audioState.lastAlertAt[alertKey]) or 0
+  if last > 0 and (now - last) < ALERT_REPEAT_SECONDS then
+    return false
+  end
+
+  return true
+end
+
+--- Book an announcement that was made, and buzz if the pilot asked this category to.
+---
+--- `haptic` is false for an announcement whose own severity rule says no even when the
+--- category is set to buzz: the link alert buzzes at its critical level and not at its
+--- warning one, which is a distinction inside that alert rather than a setting.
+local function alertSpoken(audioState, events, alertKey, now, haptic)
+  -- Audio.process builds this table on its first pass, and every alert but the lost-connection
+  -- one is reached from inside that pass. That one is called from the caller's own loss branch.
+  if type(audioState.lastAlertAt) ~= "table" then
+    audioState.lastAlertAt = {}
+  end
+  audioState.lastAlertAt[alertKey] = now
+  local counts = alertRepeatCounts(audioState)
+  counts[alertKey] = (counts[alertKey] or 0) + 1
+  if haptic ~= false and alertHapticWanted(events, alertKey) and type(playHaptic) == "function" then
+    pcall(playHaptic, ALERT_HAPTIC_STRENGTH, ALERT_HAPTIC_DURATION, ALERT_HAPTIC_PAUSE)
+  end
+end
+
+--- The condition is over, so the next episode starts with a full repeat count.
+---
+--- The timestamp is deliberately left alone. Whether an alert that has just cleared may speak
+--- again immediately is that alert's own decision, taken where it clears, and this function
+--- must not overrule it in either direction.
+---
+--- On the quiet path -- an alert whose condition is NOT true clears it on every pass -- so it
+--- reads the table rather than building one. There is nothing to clear before anything has
+--- been counted, and a pass in which no alert fires must not pay for one.
+local function alertCleared(audioState, alertKey)
+  local counts = audioState.alertRepeats
+  if counts ~= nil then
+    counts[alertKey] = nil
+  end
 end
 
 local function roundProfileValue(value)
@@ -833,6 +976,7 @@ local function announceMainPowerEvent(self, events, opts)
     if audioState.mainPowerLostActive then
       audioState.mainPowerLostActive = false
       audioState.lastAlertAt.main_power = 0
+      alertCleared(audioState, "main_power")
       emitLog(opts, "main power back at " .. string.format("%.1f", voltage) .. " V", "info")
       local soundFile = firstResolvedSound(MAIN_POWER_OK_SOUNDS)
       if soundFile and tryPlayEventFile(audioState, now, soundFile, opts) then
@@ -851,7 +995,7 @@ local function announceMainPowerEvent(self, events, opts)
     return
   end
 
-  if audioState.mainPowerLostActive and (now - (audioState.lastAlertAt.main_power or 0)) < 10 then
+  if not alertMaySpeak(audioState, events, "main_power", now) then
     return
   end
 
@@ -864,11 +1008,8 @@ local function announceMainPowerEvent(self, events, opts)
     -- The BEC voltage and not the pack's, because it is the reading that still means
     -- something: it says how much is left of whatever is keeping the receiver alive.
     playVoltage(bec, 1, opts)
-    if type(playHaptic) == "function" then
-      pcall(playHaptic, 15, 10, 3)
-    end
+    alertSpoken(audioState, events, "main_power", now)
     audioState.mainPowerLostActive = true
-    audioState.lastAlertAt.main_power = now
     emitLog(opts, "main power lost, BEC at " .. string.format("%.1f", bec) .. " V", "warn")
   end
 end
@@ -953,8 +1094,10 @@ function Audio.announceConnectionLost(self, rfLinkUp, opts)
     return
   end
 
-  if tryPlayEventFile(audioState, now, CONNECTION_LOST_SOUND, opts) and type(playHaptic) == "function" then
-    pcall(playHaptic, 15, 10, 3)
+  -- Booked through the same path as every other alert so that the pilot's haptic setting for
+  -- the link category reaches it. It says itself once per loss, so nothing reads the count.
+  if tryPlayEventFile(audioState, now, CONNECTION_LOST_SOUND, opts) then
+    alertSpoken(audioState, events, "telemetry_lost", now)
   end
 end
 
@@ -984,9 +1127,6 @@ function Audio.resetConnectionState(audioState)
   audioState.nextAllowedAt = 0
   audioState.nextProcessAt = 0
   audioState.fuelSeenPositive = false
-  audioState.lowFuelActive = false
-  audioState.lowFuelLastAt = 0
-  audioState.lowFuelRepeatCount = 0
   audioState.lastFuelCallout = nil
   audioState.smartfuelModelType = nil
   audioState.smartfuelCellCount = nil
@@ -1031,6 +1171,18 @@ function Audio.resetConnectionState(audioState)
     audioState.lastAlertAt.flight_time = 0
     audioState.lastAlertAt.lq = 0
     audioState.lastAlertAt.mcu_temperature = 0
+    -- Was missing from this list while it was read by one alert only, which is why a
+    -- reconnect after a main-power announcement used to carry that alert's timestamp into
+    -- the new connection. The interval is now measured for every alert here.
+    audioState.lastAlertAt.main_power = 0
+    audioState.lastAlertAt.fuel_empty = 0
+  end
+
+  -- A new connection is a new episode of everything, so every repeat count starts over.
+  if type(audioState.alertRepeats) == "table" then
+    for k in pairs(audioState.alertRepeats) do
+      audioState.alertRepeats[k] = nil
+    end
   end
 end
 
@@ -1059,6 +1211,7 @@ function Audio.process(self, opts)
   audioState.lastAlertAt.lq = tonumber(audioState.lastAlertAt.lq) or 0
   audioState.lastAlertAt.mcu_temperature = tonumber(audioState.lastAlertAt.mcu_temperature) or 0
   audioState.lastAlertAt.main_power = tonumber(audioState.lastAlertAt.main_power) or 0
+  audioState.lastAlertAt.fuel_empty = tonumber(audioState.lastAlertAt.fuel_empty) or 0
   if type(audioState.lastValues) ~= "table" then
     audioState.lastValues = {
       arming_flags = nil,
@@ -1168,15 +1321,16 @@ function Audio.process(self, opts)
             audioState.voltageLowSince = now
           end
           if (now - audioState.voltageLowSince) >= hold then
-            local lastAt = audioState.lastAlertAt.voltage or 0
+            -- A throttle that survives a reload of the module, beside the per-alert interval:
+            -- the tool and the widget each hold their own audio state, and this is what keeps
+            -- one from repeating what the other has just said.
             local globalLast = getGlobalLowVoltageAt()
-            -- globaler Throttle (reload-sicher)
-            if now - globalLast >= 10 and now - lastAt >= 10 then
+            if now - globalLast >= ALERT_REPEAT_SECONDS and alertMaySpeak(audioState, events, "voltage", now) then
               if tryPlayEventFile(audioState, now, "evt/lowvbat.wav", opts) then
                 -- The value the line was crossed at. The alert said only THAT it had been
                 -- crossed, and a pilot deciding whether to land now wants to know by how far.
                 playVoltage(voltage, 1, opts)
-                audioState.lastAlertAt.voltage = now
+                alertSpoken(audioState, events, "voltage", now)
                 setGlobalLowVoltageAt(now)
               end
             end
@@ -1185,6 +1339,7 @@ function Audio.process(self, opts)
           audioState.voltageLowSince = nil
           if voltage >= reset then
             audioState.lastAlertAt.voltage = 0
+            alertCleared(audioState, "voltage")
           end
         end
       end
@@ -1198,17 +1353,17 @@ function Audio.process(self, opts)
     local escTemp = tonumber(self.state.escTemp)
     if type(escTemp) == "number" then
       if escTemp >= threshold then
-        local lastAt = audioState.lastAlertAt.esc_temperature or 0
-        if now - lastAt >= 10 then
+        if alertMaySpeak(audioState, events, "esc_temperature", now) then
           if tryPlayEventFile(audioState, now, "evt/esctemp.wav", opts) then
-            if type(playHaptic) == "function" then
-              pcall(playHaptic, 15, 10, 3)
-            end
-            audioState.lastAlertAt.esc_temperature = now
+            alertSpoken(audioState, events, "esc_temperature", now)
           end
         end
       else
-        -- kein hartes Rücksetzen, damit Cooldown erhalten bleibt
+        -- The repeat count starts over, so a temperature that comes back up is a new episode
+        -- and a capped repeat can speak for it. The timestamp is deliberately kept: a reading
+        -- resting on the threshold would otherwise announce on every dip and rise instead of
+        -- once per interval, which is the reason this branch has always left it standing.
+        alertCleared(audioState, "esc_temperature")
       end
     end
   end
@@ -1220,20 +1375,21 @@ function Audio.process(self, opts)
   if prefEnabled(events, "mcu_temperature", false) then
     local threshold = tonumber(events.mcu_threshold) or 80
     local mcuTemp = tonumber(self.state.mcuTemp)
-    if type(mcuTemp) == "number" and mcuTemp >= threshold then
-      local lastAt = audioState.lastAlertAt.mcu_temperature or 0
-      if now - lastAt >= 10 then
+    if type(mcuTemp) ~= "number" then
+      -- nothing to judge this pass
+    elseif mcuTemp >= threshold then
+      if alertMaySpeak(audioState, events, "mcu_temperature", now) then
         if tryPlayEventFile(audioState, now, "stat/alerts/mcu.wav", opts) then
           if type(playNumber) == "function" then
             local ok, err = pcall(playNumber, math.floor(mcuTemp + 0.5), unitCelsius())
             if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
           end
-          if type(playHaptic) == "function" then
-            pcall(playHaptic, 15, 10, 3)
-          end
-          audioState.lastAlertAt.mcu_temperature = now
+          alertSpoken(audioState, events, "mcu_temperature", now)
         end
       end
+    else
+      -- The same reading as the ESC alert above, for the same reason.
+      alertCleared(audioState, "mcu_temperature")
     end
   end
 
@@ -1264,19 +1420,28 @@ function Audio.process(self, opts)
       end
 
       if level < spoken then
-        -- Recovering is not announced; the next fall is.
+        -- Recovering is not announced; the next fall is, and it starts with a full repeat
+        -- count because the level it fell from has been left.
         audioState.lqLevel = level
-      elseif level > 0 and (level > spoken or now - (audioState.lastAlertAt.lq or 0) >= 10) then
-        if tryPlayEventFile(audioState, now, "stat/alerts/lq.wav", opts) then
-          if type(playNumber) == "function" then
-            local ok, err = pcall(playNumber, math.floor(lq + 0.5), unitPercent())
-            if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+        alertCleared(audioState, "lq")
+      elseif level > 0 then
+        if level > spoken then
+          -- A quality that has got worse is announced at once rather than at the next
+          -- interval, and the level it has entered gets its own repeats.
+          audioState.lastAlertAt.lq = 0
+          alertCleared(audioState, "lq")
+        end
+        if alertMaySpeak(audioState, events, "lq", now) then
+          if tryPlayEventFile(audioState, now, "stat/alerts/lq.wav", opts) then
+            if type(playNumber) == "function" then
+              local ok, err = pcall(playNumber, math.floor(lq + 0.5), unitPercent())
+              if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+            end
+            -- The warning level does not buzz even when the category is set to, which is the
+            -- distinction this alert has always drawn between its two levels.
+            alertSpoken(audioState, events, "lq", now, level >= 2)
+            audioState.lqLevel = level
           end
-          if level >= 2 and type(playHaptic) == "function" then
-            pcall(playHaptic, 15, 10, 3)
-          end
-          audioState.lqLevel = level
-          audioState.lastAlertAt.lq = now
         end
       end
     end
@@ -1303,40 +1468,41 @@ function Audio.process(self, opts)
       local alertType = tonumber(batteryPrefs and batteryPrefs.alert_type) or 0
       if type(bec) == "number" and bec > 0 and (alertType == 1 or alertType == 2) then
         local avgBEC = pushBecAverage(audioState, bec)
-        local interval = 10
 
+        -- Switched on under Setup > Power > Alerts rather than here, but they are voltage
+        -- announcements and take the voltage category's repeat and haptic like the rest of it.
         if alertType == 1 then
           local threshold = normalizeAlertVoltage(batteryPrefs and batteryPrefs.becalertvalue, 6.5)
           if avgBEC < threshold then
-            local lastAt = audioState.lastAlertAt.bec_voltage or 0
-            if now - lastAt >= interval and tryPlayEventFile(audioState, now, "evt/becvolt.wav", opts) then
-              if type(playHaptic) == "function" then
-                pcall(playHaptic, 15, 10, 3)
-              end
-              audioState.lastAlertAt.bec_voltage = now
+            if alertMaySpeak(audioState, events, "bec_voltage", now)
+              and tryPlayEventFile(audioState, now, "evt/becvolt.wav", opts) then
+              alertSpoken(audioState, events, "bec_voltage", now)
             end
           else
             audioState.lastAlertAt.bec_voltage = 0
+            alertCleared(audioState, "bec_voltage")
           end
           audioState.lastAlertAt.rx_voltage = 0
+          alertCleared(audioState, "rx_voltage")
         elseif alertType == 2 then
           local threshold = normalizeAlertVoltage(batteryPrefs and batteryPrefs.rxalertvalue, 7.4)
           if avgBEC < threshold then
-            local lastAt = audioState.lastAlertAt.rx_voltage or 0
-            if now - lastAt >= interval and tryPlayEventFile(audioState, now, "evt/rxvolt.wav", opts) then
-              if type(playHaptic) == "function" then
-                pcall(playHaptic, 15, 10, 3)
-              end
-              audioState.lastAlertAt.rx_voltage = now
+            if alertMaySpeak(audioState, events, "rx_voltage", now)
+              and tryPlayEventFile(audioState, now, "evt/rxvolt.wav", opts) then
+              alertSpoken(audioState, events, "rx_voltage", now)
             end
           else
             audioState.lastAlertAt.rx_voltage = 0
+            alertCleared(audioState, "rx_voltage")
           end
           audioState.lastAlertAt.bec_voltage = 0
+          alertCleared(audioState, "bec_voltage")
         end
       else
         audioState.lastAlertAt.bec_voltage = 0
         audioState.lastAlertAt.rx_voltage = 0
+        alertCleared(audioState, "bec_voltage")
+        alertCleared(audioState, "rx_voltage")
       end
 
       local targetSeconds = tonumber(batteryPrefs and batteryPrefs.flighttime) or 0
@@ -1370,15 +1536,16 @@ function Audio.process(self, opts)
     else
       audioState.lastAlertAt.bec_voltage = 0
       audioState.lastAlertAt.rx_voltage = 0
+      alertCleared(audioState, "bec_voltage")
+      alertCleared(audioState, "rx_voltage")
     end
   end
 
   if prefEnabled(events, "fuel_alerts", true) then
     if self.state.fuelTelemetrySeen ~= true then
       -- Skip fuel/empty alerts until we have seen at least one real fuel telemetry sample.
-      audioState.lowFuelActive = false
-      audioState.lowFuelLastAt = 0
-      audioState.lowFuelRepeatCount = 0
+      audioState.lastAlertAt.fuel_empty = 0
+      alertCleared(audioState, "fuel_empty")
       audioState.lastFuelCallout = nil
       audioState.fuelSeenPositive = false
       goto fuel_alerts_done
@@ -1415,26 +1582,15 @@ function Audio.process(self, opts)
         )
       end
 
-      local repeats = tonumber(events.fuel_repeat_below_zero) or 1
-      if repeats < 1 then repeats = 1 end
-      if repeats > 10 then repeats = 10 end
-
       if fuelValue <= 0 and audioState.fuelSeenPositive == true then
-        local canRepeat = (now - (audioState.lowFuelLastAt or 0)) >= 10
-        if (not audioState.lowFuelActive) or (audioState.lowFuelRepeatCount < repeats and canRepeat) then
+        if alertMaySpeak(audioState, events, "fuel_empty", now) then
           if tryPlayEventFile(audioState, now, emptyFuelSound, opts) then
-            if events.fuel_haptic_below_zero == true and type(playHaptic) == "function" then
-              pcall(playHaptic, 15, 10, 3)
-            end
-            audioState.lowFuelActive = true
-            audioState.lowFuelLastAt = now
-            audioState.lowFuelRepeatCount = (audioState.lowFuelRepeatCount or 0) + 1
+            alertSpoken(audioState, events, "fuel_empty", now)
           end
         end
       else
-        audioState.lowFuelActive = false
-        audioState.lowFuelLastAt = 0
-        audioState.lowFuelRepeatCount = 0
+        audioState.lastAlertAt.fuel_empty = 0
+        alertCleared(audioState, "fuel_empty")
 
         local currentRounded = roundProfileValue(fuelValue)
         if currentRounded and currentRounded >= 0 then
@@ -1469,9 +1625,8 @@ function Audio.process(self, opts)
     end
     ::fuel_alerts_done::
   else
-    audioState.lowFuelActive = false
-    audioState.lowFuelLastAt = 0
-    audioState.lowFuelRepeatCount = 0
+    audioState.lastAlertAt.fuel_empty = 0
+    alertCleared(audioState, "fuel_empty")
     audioState.lastFuelCallout = nil
     audioState.fuelSeenPositive = false
   end
