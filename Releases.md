@@ -12,6 +12,11 @@
 - **Preference watcher: a file that cannot be read is no longer reported as a file that changed (`widgets/dashboard/runtime.lua`)**:
   - `preferencesStamp` dropped the per-model half of its stamp, or returned an empty string for the global half, whenever `fstat` raised or answered something unreadable. The shorter string then differed from the kept one, so a failed read arrived at the watcher as a change and cost a full reload -- preferences re-read, theme dropped, scene rebuilt -- and a second one when the file read again.
   - A failure to measure is now `nil`, which both callers already treat as "no comparison this pass". A session with no per-model file is unchanged and still stamps the global half alone.
+- **SmartFuel Consumption Export (`tasks/events/telemetry_bg/smart.lua`)**:
+  - Removed the Ethos-only `system.getSource` mirror fallback and its two query tables; the EdgeTX script environment registers no global `system`, so that step could never run.
+  - `SmCp` is now published only in voltage mode, where the suite computes the virtual consumption itself. Where the flight controller reports consumption, the sensor was a duplicate of it and cost a telemetry slot plus a model write per push.
+- **Stale Sensors No Longer Shadow Live Ones (`lib/sensors.lua`)**:
+  - A sensor a model still carries but the radio no longer receives reads as `0` through `getValue()` and used to win its search path ahead of the live sensor behind it; that reading is now treated as a miss.
 
 ### Performance, Memory & Build System
 - **Dashboard preference reload reads only the file that changed (`widgets/dashboard/runtime.lua`)**:
