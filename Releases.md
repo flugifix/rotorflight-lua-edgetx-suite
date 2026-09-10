@@ -42,6 +42,11 @@
 - **Dashboard preference reload reads only the file that changed (`widgets/dashboard/runtime.lua`)**:
   - The watcher compares a stamp built from the global preferences file and the per-model one, and knows which of the two has moved -- but the reload then re-read both. A save made from a settings screen touches the per-model file alone, so the global file was parsed again on every such save even though its bytes had not changed, and that parse is the expensive half by a wide margin.
   - The reload now reads only the half the stamp says has moved. Where the signal does not name a file -- a forced reload, the rotating sequence file, a stamp that changed shape, or a changed half whose timestamp did not move (which is the case the sequence file exists for, and where an unchanged half proves nothing) -- both are read exactly as before.
+- **The announcement pack is generated from a word list again (`bin/sound-generator/`)**:
+  - Every WAV under `src/rfsuite/audio/` is synthesised, but this repository carried no way to make one: adding an announcement meant adding a binary nobody else could produce or review. The generator from the Ethos suite is now here, adapted to write this tree's layout and the 16-bit PCM the firmware plays, with the word lists in `bin/sound-generator/json/en.json` and `de.json`.
+  - `--check` needs no credentials and is the mode for reviewing a change: it reports files declared with nothing on disk, files on disk declared nowhere, and entries with no translation. It reports one of each today -- `stat/alerts/notfull.wav` is asked for by the pack-not-full alert and is in no pack, and `en/stat/alerts/batteryempty.wav` is a file with no entry.
+  - `update-missing-translations.py` propagates a new line from `en.json` to every other language, keeping existing translations.
+  - Documented in `bin/sound-generator/README.md` and in `docs/developer/audio-announcements.md`, which also covers the settings schema, the i18n keys and the packager's folders.
 - **Release Version (`lib/version.lua`)**:
   - Bumped the Rotorflight Lua EdgeTX Suite version to `0.1.7`.
 # 0.1.6
