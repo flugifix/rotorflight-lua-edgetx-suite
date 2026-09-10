@@ -37,6 +37,10 @@ local CONFIG_SCHEMA = {
   { key = "arming_flags",      type = "bool", default = true,  section = "arming" },
   { key = "governor_state",    type = "bool", default = true,  section = "governor" },
   { key = "voltage_alert",     type = "bool", default = true,  section = "voltage" },
+  -- Seconds the pack voltage has to stay below the warning line before the alert speaks. 0 is
+  -- the behaviour this setting was added to, where the first sample under the line announces.
+  { key = "voltage_hold",      type = "number", default = 2, min = 0, max = 10, section = "voltage" },
+  { key = "main_power_lost",   type = "bool", default = false, section = "voltage" },
   { key = "pack_not_full",     type = "bool", default = false, section = "voltage" },
   -- Millivolts per cell, so the number reads the same whatever the pack is: 100 is a tenth of
   -- a volt below the configured full-cell voltage.
@@ -57,6 +61,7 @@ local CONFIG_SCHEMA = {
   { key = "lq_alert",          type = "bool", default = false, section = "link" },
   { key = "lq_warn",           type = "number", default = 70, min = 1, max = 100, section = "link" },
   { key = "lq_critical",       type = "number", default = 50, min = 1, max = 100, section = "link" },
+  { key = "telemetry_lost",    type = "bool", default = false, section = "link" },
   { key = "adjustment_events", type = "bool", default = false, section = "adjustment" },
   { key = "fuel_alerts",       type = "bool", default = true,  section = "fuel" },
   -- No range: the callout step is a choice out of FUEL_CALLOUT_VALUES below, not a free number.
@@ -111,9 +116,15 @@ local SECTIONS = {
     titleFallback = "Voltage",
     items = {
       { key = "voltage_alert", labelKey = "voltage_alert", labelFallback = "Voltage" },
+      { kind = "number", key = "voltage_hold", labelKey = "voltage_hold", labelFallback = "Hold (s)",
+        suffix = " s", enabledBy = "voltage_alert" },
       { kind = "bool", key = "pack_not_full", labelKey = "pack_not_full", labelFallback = "Pack Not Full" },
       { kind = "number", key = "pack_not_full_margin", labelKey = "pack_not_full_margin", labelFallback = "Margin (mV/cell)",
         suffix = " mV", enabledBy = "pack_not_full" },
+      -- Its own subheader, because it is not a threshold on the pack voltage above but a
+      -- different event that happens to be read off the same sensor.
+      { kind = "subheader", labelKey = "section_main_power", labelFallback = "Main Power" },
+      { kind = "bool", key = "main_power_lost", labelKey = "main_power_lost", labelFallback = "Main Power Lost" },
     },
   },
   profiles = {
@@ -149,6 +160,8 @@ local SECTIONS = {
         enabledBy = "lq_alert" },
       { kind = "number", key = "lq_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
         enabledBy = "lq_alert" },
+      { kind = "subheader", labelKey = "section_telemetry", labelFallback = "Telemetry" },
+      { kind = "bool", key = "telemetry_lost", labelKey = "telemetry_lost", labelFallback = "Telemetry Lost" },
     },
   },
   adjustment = {

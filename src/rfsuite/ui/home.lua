@@ -3042,7 +3042,8 @@ function M.run(event, touchState)
       
       local lqReading = Sensors and Sensors.getValue("link")
       local lq = lqReading or 0
-      local vbat = Sensors and Sensors.getValue("voltage") or 0
+      local vbatReading = Sensors and Sensors.getValue("voltage")
+      local vbat = vbatReading or 0
       local fuel = Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")) or -1
 
       if type(fuel) == "number" and fuel >= 0 then
@@ -3128,7 +3129,14 @@ function M.run(event, touchState)
         ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
       end
 
-      state.telemetryState.voltage = vbat > 0 and vbat or state.telemetryState.voltage
+      -- The reading, and not the readiness fallback beside it -- the same rule `lq` above
+      -- follows, and for the same reason. A pack that is disconnected while the flight
+      -- controller stays alive on its BEC reads as zero volts, and storing the last positive
+      -- value instead would report the pack that is gone as still being there. The alerts that
+      -- read this field all require a voltage above zero, so writing the zero costs none of
+      -- them anything; what it buys is that the widget and the tool now describe the same
+      -- machine, which is what the field exists for.
+      state.telemetryState.voltage = (type(vbatReading) == "number") and vbatReading or state.telemetryState.voltage
       state.telemetryState.fuel = fuel >= 0 and fuel or state.telemetryState.fuel
       if fuel >= 0 then
         -- The fuel alerts stay silent until a real reading has arrived, so that the seeded
@@ -3152,6 +3160,19 @@ function M.run(event, touchState)
         audioContext.modelName = modelName
         Audio.process(audioContext, { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
       else
+        -- The connection is gone. `rfReady` is an instantaneous reading rather than a latch, so
+        -- it says WHICH half went away, and the announcement is only made for the half the
+        -- radio's own telemetry alert cannot see: the link is still there and the flight
+        -- controller has stopped answering. The call is made before the reset below, which
+        -- clears the state it reads.
+        if Audio and type(Audio.announceConnectionLost) == "function" then
+          local audioContext = state.audioContext
+          audioContext.audioState = state.audioState
+          audioContext.preferences = state.preferences
+          audioContext.state = state.telemetryState
+          Audio.announceConnectionLost(audioContext, rfReady,
+            { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
+        end
         if Audio and type(Audio.resetConnectionState) == "function" then
           Audio.resetConnectionState(state.audioState)
         else
