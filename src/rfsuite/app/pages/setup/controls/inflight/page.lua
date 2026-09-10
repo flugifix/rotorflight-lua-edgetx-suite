@@ -286,7 +286,10 @@ local function buildBoard(children, x, y, w, i18n)
   -- The only thing on this page that writes the flight controller. Offered in the standard layout
   -- alone: in the custom one the set is whatever the board carries, and a button that overwrote it
   -- would overwrite the very thing being read.
-  local btnW = math.min(240, w)
+  -- Wider than the 240 the other action buttons take, because a button LABEL is clipped rather
+  -- than wrapped: at 240 this one lost a character at each end of its English text, which is
+  -- the longest label of the two pages and the one every locale falls back to.
+  local btnW = math.min(320, w)
   local btnH = (lvgl and lvgl.UI_ELEMENT_HEIGHT) or Controls.CTRL_H or 32
   children[#children + 1] = {
     type = "button",
