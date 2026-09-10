@@ -151,11 +151,13 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
         src_root = os.path.join(WORKSPACE_ROOT, "src")
         src_core = os.path.join(src_root, "rfsuite")
         src_widgets = os.path.join(src_root, "widgets")
+        src_functions = os.path.join(src_root, "functions")
         src_user = os.path.join(src_root, "rfsuite.user")
         src_audio = os.path.join(src_core, "audio")
 
         staging_tools = os.path.join(temp_dir, "SCRIPTS", "TOOLS")
         staging_core = os.path.join(staging_tools, "rfsuite-core")
+        staging_functions = os.path.join(temp_dir, "SCRIPTS", "FUNCTIONS")
         staging_widgets = os.path.join(temp_dir, "WIDGETS")
         staging_sounds = os.path.join(temp_dir, "SOUNDS", "rf")
         staging_user = os.path.join(staging_tools, "rfsuite.user")
@@ -195,6 +197,16 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
                 if os.path.isdir(s):
                     shutil.copytree(s, os.path.join(staging_widgets, widget_dir), dirs_exist_ok=True)
 
+        # Copy special-function scripts. EdgeTX offers every lua file directly under
+        # /SCRIPTS/FUNCTIONS to a "Play Script" special function, by base name, so the
+        # directory is flat and nothing below it is packaged.
+        if os.path.isdir(src_functions):
+            os.makedirs(staging_functions, exist_ok=True)
+            for name in sorted(os.listdir(src_functions)):
+                s = os.path.join(src_functions, name)
+                if os.path.isfile(s) and name.endswith(".lua"):
+                    shutil.copy2(s, os.path.join(staging_functions, name))
+
         # Copy model templates. EdgeTX lists each directory under /TEMPLATES as a category in
         # its "New model" dialog; a template is the yml the model is created from, a txt shown
         # beside it, and an optional lua the radio fires right after applying the yml.
@@ -225,6 +237,9 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
             subprocess.run([python_exe, py_precompile, "--root", staging_widgets], check=True)
             subprocess.run([python_exe, py_resolve, "--json", lang_file, "--root", staging_tools], check=True)
             subprocess.run([python_exe, py_resolve, "--json", lang_file, "--root", staging_widgets], check=True)
+            if os.path.isdir(staging_functions):
+                subprocess.run([python_exe, py_precompile, "--root", staging_functions], check=True)
+                subprocess.run([python_exe, py_resolve, "--json", lang_file, "--root", staging_functions], check=True)
             # The templates carry markers too -- their lua and the txt files EdgeTX shows in
             # the template picker -- so each locale's ZIP ships them in its own language.
             staging_templates = os.path.join(temp_dir, "TEMPLATES")

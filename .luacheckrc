@@ -18,13 +18,20 @@ globals = {
   "getField",
   "setField",
   "getFieldInfo",
+  "getSwitchIndex",
+  "FUNC_PLAY_SCRIPT",
 
   -- Filesystem
   "fstat",
 
+  -- Shared memory between Lua states
+  "setShmVar",
+  "getShmVar",
+
   -- Telemetry/Sensors
   "getValue",
   "getSensor",
+  "setTelemetryValue",
   
   -- Display/LCD
   "lcd",

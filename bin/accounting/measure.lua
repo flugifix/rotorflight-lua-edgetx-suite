@@ -450,16 +450,90 @@ end
 ------------------------------------------------------------------------------
 -- Per unit: the telemetry drain, the MSP poll quantum, the largest parse.
 ------------------------------------------------------------------------------
+--- Warm telemetry_bg's staggered lazy loads, and prove they are warm.
+--
+-- tasks.lua loads at most one module per wakeup and RETURNS, so a fixed number of warm-up calls
+-- is a number that goes stale the moment another module joins that chain -- and the symptom is
+-- silent: the measured call returns on a load instead of draining, and the row reports the load.
+-- Warm until a call actually consumes a frame, and fail where none ever does.
+local function warmTelemetryBg(Events)
+  for _ = 1, 10 do
+    Stubs.telemetryFrames = {}
+    Stubs.pushFrame(0x88, buildTelemetryFrame(0, sensorIds))
+    Events.wakeup()
+    if #Stubs.telemetryFrames == 0 then return end
+  end
+  error("accounting: telemetry_bg never consumed a frame; the drain row would measure a load")
+end
+
 World.reset()
 do
   local Events = World.require("tasks/events/telemetry_bg/tasks.lua")
-  -- Warm the module's own lazy loads; they are a cold-start cost, not a drain.
-  Events.wakeup()
+  warmTelemetryBg(Events)
   for i = 1, FRAME_BACKLOG do
     Stubs.pushFrame(0x88, buildTelemetryFrame(i, sensorIds))
   end
   addRow("unit.telemetry.drain", count(Events.wakeup),
     FRAME_BACKLOG .. " frames queued, " .. #sensorIds .. " sensors per frame")
+end
+
+-- The same wakeup while the background function script is draining: the liveness counter in the
+-- shared-memory slot moves, so this pass leaves the drain and the adjustment teller to that
+-- script and does only what stays its own. The difference against the row above is what the
+-- widget gains by handing over.
+World.reset()
+do
+  local Events = World.require("tasks/events/telemetry_bg/tasks.lua")
+  local Drain = World.require("tasks/events/telemetry_bg/drain.lua")
+  warmTelemetryBg(Events)
+
+  -- The liveness reader's FIRST read only records, so the pass that establishes the handover is
+  -- not the pass to measure: bump, spend a pass on it, bump again, then measure.
+  Drain.publishLiveness()
+  Events.wakeup()
+  Drain.publishLiveness()
+
+  for i = 1, FRAME_BACKLOG do
+    Stubs.pushFrame(0x88, buildTelemetryFrame(i, sensorIds))
+  end
+  local queued = #Stubs.telemetryFrames
+  local billed = count(Events.wakeup)
+  -- The control this row cannot do without: a pass that drained after all would still produce a
+  -- plausible number, and it would be the number of the row above under a different name.
+  if #Stubs.telemetryFrames ~= queued then
+    error("accounting: the handoff row drained the queue; it is measuring the wrong pass")
+  end
+  addRow("unit.telemetry.handoff", billed,
+    FRAME_BACKLOG .. " frames queued, left to the background script")
+end
+
+-- The background script's own pass. It is the host the drain moves to, and it is billed
+-- differently -- a call there is yielded on a task period rather than cut off at an instruction
+-- count -- so it decodes the whole backlog. What that costs belongs in this table beside the
+-- widget's capped pass rather than in nobody's.
+World.reset()
+do
+  -- By the path the installed tree carries it under, through the stub's own remap, so the
+  -- script is reached here the way it is reached on a radio.
+  local script = assert(loadScript("/SCRIPTS/FUNCTIONS/rfsbg.lua", "bt"))()
+  if type(script) ~= "table" or type(script.run) ~= "function" then
+    error("accounting: src/functions/rfsbg.lua does not return a run function")
+  end
+  -- The first run only loads; the second is the first that drains, and it pulls in the decoder
+  -- table and the CRSF multiplexer while doing it. Both are cold-start cost.
+  script.run()
+  Stubs.pushFrame(0x88, buildTelemetryFrame(0, sensorIds))
+  script.run()
+
+  for i = 1, FRAME_BACKLOG do
+    Stubs.pushFrame(0x88, buildTelemetryFrame(i, sensorIds))
+  end
+  local queued = #Stubs.telemetryFrames
+  local billed = count(script.run)
+  if #Stubs.telemetryFrames >= queued then
+    error("accounting: the function script drained nothing; the row would measure an idle pass")
+  end
+  addRow("pass.function", billed, FRAME_BACKLOG .. " frames queued, every one decoded")
 end
 
 World.reset()

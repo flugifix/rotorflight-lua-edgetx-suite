@@ -58,6 +58,15 @@ return {
     -- build and no sweep of a theme mixed into it.
     ["pass.service"] = { target = 1600, measured = 1251 },
 
+    -- One run() of SCRIPTS/FUNCTIONS/rfsbg.lua with a full frame backlog waiting,
+    -- every frame of it decoded. This row is NOT a share of the widget ceiling
+    -- above and must not be read as one: a call in the radio's script state is
+    -- yielded once it has held the interpreter for a task period and resumed on
+    -- the next turn, rather than cut off at an instruction count. It is here as a
+    -- regression detector, and as the price of decoding a whole backlog instead of
+    -- its newest quarter.
+    ["pass.function"] = { target = 7300, measured = 5808 },
+
     ----------------------------------------------------------------------------
     -- The ceiling, and the row that carries the safety argument: the worst pass of
     -- this theme plus one full sweep of the tree it leaves standing. The margin to
@@ -124,8 +133,13 @@ return {
     ["unit.events.wakeup"] = { target = 5600, measured = 4457 },
     -- The custom-telemetry drain with a full frame backlog waiting: POP_CAP frames
     -- popped and accounted, DECODE_CAP of them walked through the per-sensor
-    -- decoders. This is what the two counts in telemetry_bg/tasks.lua buy.
-    ["unit.telemetry.drain"] = { target = 3300, measured = 2610 },
+    -- decoders. This is what the two counts in telemetry_bg/drain.lua buy.
+    ["unit.telemetry.drain"] = { target = 3300, measured = 2557 },
+    -- The same wakeup while the background function script is draining for the
+    -- whole radio: the drain and the adjustment teller are skipped and SmartFuel
+    -- is not, so what is left is what only this Lua state can compute. The gap to
+    -- the row above is what a pass saves by handing over.
+    ["unit.telemetry.handoff"] = { target = 350, measured = 241 },
     ["unit.msp.pump"] = { target = 300, measured = 218 },
     -- The API-layer parse of the largest reply the suite scripts, in one piece. It
     -- lands in whatever pass completes the reassembly.
