@@ -45,7 +45,11 @@ reported as a margin to widen rather than a pass to celebrate.
 
 ## Determinism
 
-- `getTime` advances a fixed step per call; nothing reads a wall clock.
+- `getTime` advances a fixed step once per measured pass, driven by `measure.lua` through
+  `Stubs.tick()`; nothing reads a wall clock. Per PASS rather than per call, because a step
+  per call makes a second worth however many times the code under test happens to ask the
+  time -- so anything the suite does on a cadence, a read every 0.5 s or a cooldown or a
+  throttle, fires in almost every pass or in almost none, and cannot be priced at all.
 - Sensor, model and telemetry answers come from scripted tables in the stubs.
 - `collectgarbage("stop")` brackets every measured section: the events runtime triggers
   collections, and GC steps would land in the count nondeterministically.
