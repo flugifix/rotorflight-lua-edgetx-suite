@@ -83,6 +83,57 @@ local function resolveBattery(FlightLog, session, record)
   return FlightLog.storedBatteryId(session.modelPreferences)
 end
 
+-- The flight record onto the log's statistics columns.
+--
+-- The record is closed by the first task of this manifest, which runs a wakeup before this one, so
+-- `last` here is the flight that has just ended and `current` is already the empty one waiting for
+-- the next arm. Reading `current` would log nothing.
+--
+-- The columns this cannot fill are left out, and `statField` writes an empty field for each: the
+-- headspeed extrema are per PID profile and the record keeps one set for the whole flight, and the
+-- suite has no voltage-sag detector at all. The header carries all 22 columns either way, so a
+-- partly filled row is a valid row of the format rather than a new one.
+--
+-- Per-cell voltage needs a cell count, and the one already published in this Lua state is the
+-- flight controller's battery configuration, which the `battery_config` event task keeps on the
+-- session. Where that has not been read, the two per-cell columns stay empty rather than being
+-- divided by a guess.
+local function flightStats(session)
+  local flight = type(session) == "table" and session.flight or nil
+  local record = type(flight) == "table" and flight.last or nil
+  if type(record) ~= "table" then return nil end
+
+  local stats = {}
+  local any = false
+  local function put(column, value)
+    if type(value) == "number" then
+      stats[column] = value
+      any = true
+    end
+  end
+
+  put("mah", record.maxConsumedMah)
+  put("curr_min", record.minCurrent)
+  put("curr_max", record.maxCurrent)
+  put("tesc_min", record.minEscTemp)
+  put("tesc_max", record.maxEscTemp)
+  put("vbec_min", record.minBecVoltage)
+  put("vbec_max", record.maxBecVoltage)
+
+  local config = session.batteryConfig or session.battery_config
+  local cells = type(config) == "table" and tonumber(config.batteryCellCount) or nil
+  if cells ~= nil and cells > 0 then
+    if type(record.minVoltage) == "number" then put("vcel_min", record.minVoltage / cells) end
+    if type(record.maxVoltage) == "number" then put("vcel_max", record.maxVoltage / cells) end
+  end
+
+  -- Nothing was recorded -- telemetry was gone for the whole armed window. `nil` rather than a
+  -- table of nils, so the line stays the five-column form it has always been rather than becoming
+  -- seventeen empty columns that say the same thing at more length.
+  if not any then return nil end
+  return stats
+end
+
 function M.wakeup()
   if done then return end
   done = true
@@ -124,7 +175,7 @@ function M.wakeup()
   local batteryId = resolveBattery(FlightLog, session, record)
 
   local ok, written = pcall(FlightLog.appendFlight, record.startDate, record.model or "",
-    batteryId or "", seconds, nil)
+    batteryId or "", seconds, flightStats(session))
   if not ok or written ~= true then
     -- The append verifies by the bytes the file grew, so this is a line that did not land -- a
     -- full or a missing card. Said out loud, because the gap it leaves explains nothing.
