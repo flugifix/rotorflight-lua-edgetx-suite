@@ -41,6 +41,11 @@
   - Both settings pages lay their explanatory notes out for the room they take. A label narrower than its text wraps rather than clipping, and the pages advanced by a constant after each note, so the longest of them was drawn over by the line that follows it. The action button on the flight controller page is wider for the same reason: a button label is clipped rather than wrapped, and 240 pixels cut a character off each end of its English text.
 
 ### Bug Fixes & Improvements
+- **Flight statistics declared once (`widgets/dashboard/runtime.lua`, `widgets/dashboard/objects/common.lua`, `widgets/dashboard/objects/text/stats.lua`, `widgets/dashboard/objects/gauge.lua`) (fixes #248)**:
+  - The per-flight extremes are one table with a row per statistic -- the state field it samples, which extremes it records, and the condition under which it records them -- and one loop over that table at each of the five places that used to spell the whole set out by hand. Adding a statistic is a row, not five edits.
+  - Both objects that show the record resolve a box `source` through one shared mapping in `objects/common.lua`, so a source means the same statistic in a stats text box as in a gauge's maximum label. The `temp_esc` and `temp_mcu` spellings the gauge has always accepted are part of that mapping and now work on a stats box too.
+  - Every recorded field keeps the name it had, including the older `lastMinVoltage`, `lastMinBecVoltage` and `lastMinLq` spellings, so a user theme reading the widget state directly is unaffected.
+  - A stats text box with a threshold color no longer calls a resolver that does not exist.
 - **Dashboard text box colors & threshold evaluation (`widgets/dashboard/objects/`, `docs/dashboard/user-themes.md`) (fixes #213)**:
   - Enabled dynamic threshold color evaluation (`thresholds`) on dashboard text boxes (`telemetry`, `stats`, `blackbox`, `governor`, `time`, and generic text), matching the reactive threshold behavior of gauge objects.
   - Added named color string resolution (`"orange"`, `"red"`, `"blue"`, etc.) for text box `textcolor` properties via `normalizeColor`.

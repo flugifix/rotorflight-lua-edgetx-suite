@@ -272,6 +272,80 @@ function Utils.mapTelemetrySource(source, state)
   return nil
 end
 
+-- Flight statistics: the per-flight extremes widgets/dashboard/runtime.lua records, and the
+-- one place a box source is resolved to them. One row per statistic, mirroring the FLIGHT_STATS
+-- table that produces them -- `key` is the same name suffix, `sources` are the box sources that
+-- mean that statistic, and a direction is readable when its column is present.
+--
+-- Both consumers go through Utils.statFields, so a source resolves to the same record everywhere
+-- rather than to whichever of two hand-written chains happens to be asked.
+local FLIGHT_STATS = {
+  { key = "ThrottlePercent", sources = { "throttle_percent" }, max = true },
+  { key = "Rpm",             sources = { "rpm" },              max = true, min = true },
+  { key = "Current",         sources = { "current" },          max = true, min = true },
+  { key = "Watts",           sources = { "watts" },            max = true },
+  { key = "Altitude",        sources = { "altitude" },         max = true },
+  { key = "EscTemp",         sources = { "esc_temp", "temp_esc" }, max = true },
+  { key = "McuTemp",         sources = { "mcu_temp", "temp_mcu" }, max = true },
+  { key = "Fuel",            sources = { "fuel", "smartfuel" }, min = true },
+  { key = "Voltage",         sources = { "voltage" },          max = true, min = true,
+    readMin = { "currentFlightMinVoltage", "lastMinVoltage" } },
+  { key = "BecVoltage",      sources = { "bec_voltage" },      min = true,
+    -- lastMinBecVoltage carries the same value as lastFlightMinBecVoltage; it is read last so
+    -- that a user theme which has only ever seen the older spelling keeps working.
+    readMin = { "currentFlightMinBecVoltage", "lastFlightMinBecVoltage", "lastMinBecVoltage" } },
+  { key = "Lq",              sources = { "link" },             max = true, min = true,
+    readMin = { "currentFlightMinLq", "lastMinLq" } },
+}
+
+-- source -> stattype -> the state fields to read, in order: the flight in progress first, the
+-- flight that has ended after it. Built once, at load time.
+local STAT_SOURCES = {}
+for i = 1, #FLIGHT_STATS do
+  local stat = FLIGHT_STATS[i]
+  local entry = {}
+  if stat.max then
+    entry.max = stat.readMax or { "currentFlightMax" .. stat.key, "lastFlightMax" .. stat.key }
+  end
+  if stat.min then
+    entry.min = stat.readMin or { "currentFlightMin" .. stat.key, "lastFlightMin" .. stat.key }
+  end
+  for _, source in ipairs(stat.sources) do
+    STAT_SOURCES[source] = entry
+  end
+end
+
+--- The flight statistic a box asks for, or nil when that pair is not one.
+--
+-- `stattype` is the box's own wording: "min" and "max" are the recorded extremes, and every
+-- other stattype a box may carry (a consumed total, a per-cell derivation, a live count) is
+-- not a flight statistic and is resolved by the object that understands it.
+--- The state fields a box source resolves to, in the order they are read: the flight in
+--- progress first, the flight that has ended after it, and a historical spelling of the same
+--- name last where one exists. Returns nothing when the pair is not a recorded extreme.
+---
+--- Objects resolve the names ONCE, where the box is rendered, and the value closure the
+--- reactive sweep calls per frame then reads two fields it already holds. A closure that
+--- resolved a source per frame would pay this lookup on every frame of every stats box.
+function Utils.statFields(source, stattype)
+  local entry = STAT_SOURCES[source]
+  local fields = entry and entry[stattype] or nil
+  if fields == nil then return nil end
+  return fields[1], fields[2], fields[3]
+end
+
+--- The flight statistic a box asks for, for a caller that wants the value rather than the
+--- names. Same mapping, one read.
+function Utils.statValue(state, source, stattype)
+  local cur, last, alias = Utils.statFields(source, stattype)
+  if cur == nil or type(state) ~= "table" then return nil end
+  local value = state[cur]
+  if value ~= nil then return value end
+  value = state[last]
+  if value ~= nil or alias == nil then return value end
+  return state[alias]
+end
+
 function Utils.applyTransform(value, transform)
   if value == nil then return value end
   if transform == "floor" and type(value) == "number" then

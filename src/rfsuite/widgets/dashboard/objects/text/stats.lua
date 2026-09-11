@@ -1,5 +1,8 @@
 local Render = {}
 
+-- A value no box source or stattype can be equal to, so that "not resolved yet" needs no flag.
+local UNRESOLVED = {}
+
 -- Sensor-backed values come out of the derived snapshot, never from a probe: this runs
 -- per frame in the reactive sweep, where a probe is forbidden (see GEMINI.md, "Dashboard
 -- reactive closures").
@@ -31,6 +34,12 @@ local function resolveCellCount(state, themeCommon)
   return 6
 end
 
+-- The two sources below name one statistic each, so their fields are resolved on first use and
+-- kept for the module: a value closure that ran Utils.statFields per frame would pay the lookup
+-- on every frame of every postflight page.
+local minLinkCur, minLinkLast
+local minVoltageCur, minVoltageLast
+
 local function useFahrenheit()
   local prefs = type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences or nil
   local localizations = prefs and prefs.localizations or nil
@@ -61,12 +70,29 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
   local lastStatInput = nil
   local cachedText = nil
 
+  -- The fields the box's (source, stattype) pair resolves to. A theme may give either as a
+  -- function, so the pair is still read per frame, but the mapping is only consulted again when
+  -- one of the two has actually changed. UNRESOLVED is a value no source can equal, so the
+  -- first frame resolves without a second flag to test.
+  local statSource, statStattype = UNRESOLVED, UNRESOLVED
+  local statCur, statLast, statAlias
+
   local textGetter = function()
-    local source = utils.resolveValue(box.source, box, state)
+    -- resolveValue is the identity for anything that is not a function, and this getter runs per
+    -- frame in the reactive sweep: the test is inlined so that the common case -- a theme naming
+    -- its source outright -- costs a type check instead of a call. A theme that computes its
+    -- source still goes through resolveValue, and the field is re-read every frame, so a box
+    -- whose source is replaced between frames behaves exactly as before.
+    local source = box.source
+    if type(source) == "function" then
+      source = utils.resolveValue(source, box, state)
+    end
     local raw = nil
 
     if source == "min_link" then
-      local val = state and (state.currentFlightMinLq or state.lastMinLq)
+      if minLinkCur == nil then minLinkCur, minLinkLast = utils.statFields("link", "min") end
+      local val = state[minLinkCur]
+      if val == nil then val = state[minLinkLast] end
       if source == lastSource and val == lastStatInput and cachedText ~= nil then
         return cachedText
       end
@@ -80,7 +106,9 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         raw = (val ~= nil) and (tostring(math.floor(tonumber(val) or 0)) .. "%") or "--"
       end
     elseif source == "min_voltage_cell" then
-      local val = state and (state.currentFlightMinVoltage or state.lastMinVoltage)
+      if minVoltageCur == nil then minVoltageCur, minVoltageLast = utils.statFields("voltage", "min") end
+      local val = state[minVoltageCur]
+      if val == nil then val = state[minVoltageLast] end
       if source == lastSource and val == lastStatInput and cachedText ~= nil then
         return cachedText
       end
@@ -99,47 +127,35 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         end
       end
     else
-      local stattype = utils.resolveValue(box.stattype, box, state)
+      local stattype = box.stattype
+      if type(stattype) == "function" then
+        stattype = utils.resolveValue(stattype, box, state)
+      end
 
+      if source ~= statSource or stattype ~= statStattype then
+        statSource, statStattype = source, stattype
+        statCur = nil
+        -- A box with no stattype -- which is most of them -- cannot name an extreme, so it never
+        -- reaches the mapping at all, not even on the one frame that resolves.
+        if stattype ~= nil and stattype ~= "" then
+          statCur, statLast, statAlias = utils.statFields(source, stattype)
+        end
+      end
+
+      -- A recorded extreme is two field reads on names already resolved. What is left below is
+      -- the stattypes that are not an extreme: a running total, a per-cell derivation, a live
+      -- value off the derived snapshot.
       local statValue = nil
-      if stattype == "max" then
-        if source == "throttle_percent" then
-          statValue = state and (state.currentFlightMaxThrottlePercent or state.lastFlightMaxThrottlePercent)
-        elseif source == "rpm" then
-          statValue = state and (state.currentFlightMaxRpm or state.lastFlightMaxRpm)
-        elseif source == "current" then
-          statValue = state and (state.currentFlightMaxCurrent or state.lastFlightMaxCurrent)
-        elseif source == "mcu_temp" then
-          statValue = state and (state.currentFlightMaxMcuTemp or state.lastFlightMaxMcuTemp)
-        elseif source == "watts" then
-          statValue = state and (state.currentFlightMaxWatts or state.lastFlightMaxWatts)
-        elseif source == "altitude" then
-          statValue = state and (state.currentFlightMaxAltitude or state.lastFlightMaxAltitude)
-        elseif source == "esc_temp" then
-          statValue = state and (state.currentFlightMaxEscTemp or state.lastFlightMaxEscTemp)
-        elseif source == "smartconsumption" then
-          statValue = state and state.consumedMah
-        elseif source == "voltage" then
-          statValue = state and (state.currentFlightMaxVoltage or state.lastFlightMaxVoltage)
-        elseif source == "link" then
-          statValue = state and (state.currentFlightMaxLq or state.lastFlightMaxLq)
+      if statCur ~= nil then
+        statValue = state[statCur]
+        if statValue == nil then
+          statValue = state[statLast]
+          if statValue == nil and statAlias ~= nil then
+            statValue = state[statAlias]
+          end
         end
-      elseif stattype == "min" then
-        if source == "fuel" or source == "smartfuel" then
-          statValue = state and (state.currentFlightMinFuel or state.lastFlightMinFuel)
-        elseif source == "rpm" then
-          statValue = state and (state.currentFlightMinRpm or state.lastFlightMinRpm)
-        elseif source == "current" then
-          statValue = state and (state.currentFlightMinCurrent or state.lastFlightMinCurrent)
-        elseif source == "voltage" then
-          statValue = state and (state.currentFlightMinVoltage or state.lastMinVoltage)
-        elseif source == "bec_voltage" then
-          -- lastMinBecVoltage == lastFlightMinBecVoltage (same source in runtime.lua:1105-1106);
-          -- the third term is unreachable but kept so user themes reading state directly do not break.
-          statValue = state and (state.currentFlightMinBecVoltage or state.lastFlightMinBecVoltage or state.lastMinBecVoltage)
-        elseif source == "link" then
-          statValue = state and (state.currentFlightMinLq or state.lastMinLq)
-        end
+      elseif stattype == "max" and source == "smartconsumption" then
+        statValue = state and state.consumedMah
       elseif stattype == "last" then
         if source == "voltage" then
           statValue = state and state.lastFlightEndingVoltage
@@ -156,9 +172,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
             statValue = voltage / cellCount
           end
         end
-      elseif stattype == "count" then
-        statValue = readDerived(state, source)
-      elseif stattype == "time" then
+      elseif stattype == "count" or stattype == "time" then
         statValue = readDerived(state, source)
       end
 
@@ -199,7 +213,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
       local stattype = box and box.stattype
       local statValue = nil
       if type(source) == "string" and type(stattype) == "string" and stattype ~= "" then
-        statValue = readStat(state, source, stattype)
+        statValue = utils.statValue(state, source, stattype)
       end
       local allowsLiveFallback = (themeCommon and themeCommon.allowStatsLiveFallback and themeCommon.allowStatsLiveFallback(source, stattype)) or
                                  stattype == nil or stattype == ""

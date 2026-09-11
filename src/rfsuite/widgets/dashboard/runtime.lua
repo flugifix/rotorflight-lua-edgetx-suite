@@ -1356,6 +1356,204 @@ local function normalizeCellVoltage(value, fallback)
   return v
 end
 
+-- Flight statistics: one row per tracked extreme. This table is the only place that knows the
+-- set -- a new statistic is a row here rather than an edit at five separate sites -- and all
+-- five sites are driven from it: the state declaration, the arm-edge reset, the per-pass update,
+-- the disarm-edge copy and the disarm-edge clear.
+--
+--   key         the name suffix: state.currentFlightMax<key>, state.lastFlightMax<key>
+--   field       the state field sampled while armed
+--   min / max   which extremes of it are recorded
+--   gate        what the value has to be for the statistic to take it at all; absent means
+--               any number will do, which is the test the field has carried
+--   minGate     a further condition on the minimum alone -- rpm has always recorded a maximum
+--               of whatever it was given and a minimum only above zero
+--   publishMin  the names the disarm edge publishes the extreme under, where they are not
+--   publishMax  lastFlight<Min|Max><key>. The spellings without "Flight" are historical and
+--               are still written, because user themes read `state` directly.
+--
+-- A gate is a constant rather than a predicate, because the one site that runs per pass tests it
+-- without calling anything: see the trackers below.
+local GATE_ANY = 0        -- any number the field carries, which is what most of them take
+local GATE_POSITIVE = 1   -- above zero
+local GATE_FUEL_SEEN = 2  -- only once a fuel sensor has answered
+-- Track link quality only when the active sensor reports a 0–100 % value.
+-- Receivers without an RQly sensor fall back to 1RSS/2RSS (RSSI in dBm, always
+-- negative); if the sensor is known to be an RSSI source or the value falls
+-- outside 0 < lq <= 100 (e.g. 0 on sensor age-out), skip tracking.
+-- Using lqSource as the discriminator matches linkIsQuality() in lib/audio.lua.
+local GATE_LINK_QUALITY = 3
+
+local FLIGHT_STATS = {
+  { key = "ThrottlePercent", field = "throttlePercent", max = true },
+  { key = "Rpm",             field = "rpm",             max = true, min = true, minGate = GATE_POSITIVE },
+  { key = "Current",         field = "current",         max = true, min = true },
+  { key = "Watts",           field = "watts",           max = true },
+  { key = "Altitude",        field = "altitude",        max = true },
+  { key = "EscTemp",         field = "escTemp",         max = true },
+  { key = "McuTemp",         field = "mcuTemp",         max = true },
+  { key = "Fuel",            field = "fuel",                         min = true, gate = GATE_FUEL_SEEN },
+  { key = "Voltage",         field = "voltage",         max = true, min = true, gate = GATE_POSITIVE,
+    publishMin = { "lastMinVoltage" } },
+  { key = "BecVoltage",      field = "bec_voltage",                  min = true, gate = GATE_POSITIVE,
+    publishMin = { "lastFlightMinBecVoltage", "lastMinBecVoltage" } },
+  { key = "Lq",              field = "lq",              max = true, min = true, gate = GATE_LINK_QUALITY,
+    publishMin = { "lastMinLq" } },
+}
+
+-- The four cold sites -- declaration, arm reset, disarm copy, disarm clear -- read FLIGHT_STATS
+-- directly, once per flight or once per widget. The per-pass update is the one site that runs
+-- inside an armed widget pass, so it reads the table in a compiled form instead: at load each row
+-- picks one of the trackers below and is turned into a closure holding its own field names, which
+-- leaves the per-pass work with no column to fetch, no absent direction to test for and no gate
+-- to dispatch. Adding a statistic is still one row; adding a gate or a direction it has never had
+-- before is one more tracker beside these.
+--
+-- Measured against the code this replaces: the whole extrema block costs 212-226 instructions per
+-- armed pass in which telemetry changed, against 134-148 written out by hand. The difference is
+-- the indirection itself -- eleven calls, and a field name held as an upvalue rather than as a
+-- constant -- and it is what buys the single declaration above. It is paid on armed passes in
+-- which telemetry moved, and on no other pass class.
+
+--- The trackers. One per shape a row can declare, and the compile loop below picks between them
+--- by reading the row's own columns; none of them names a statistic.
+local function trackMax(src, maxName)
+  return function(state)
+    local v = state[src]
+    if type(v) == "number" then
+      local b = state[maxName]
+      if b == nil or v > b then state[maxName] = v end
+    end
+  end
+end
+
+local function trackMaxMin(src, maxName, minName)
+  return function(state)
+    local v = state[src]
+    if type(v) == "number" then
+      local b = state[maxName]
+      if b == nil or v > b then state[maxName] = v end
+      b = state[minName]
+      if b == nil or v < b then state[minName] = v end
+    end
+  end
+end
+
+--- A maximum that takes any number beside a minimum that only takes one above zero: rpm, whose
+--- minimum has never recorded the spool-down to zero.
+local function trackMaxMinPositiveMin(src, maxName, minName)
+  return function(state)
+    local v = state[src]
+    if type(v) == "number" then
+      local b = state[maxName]
+      if b == nil or v > b then state[maxName] = v end
+      if v > 0 then
+        b = state[minName]
+        if b == nil or v < b then state[minName] = v end
+      end
+    end
+  end
+end
+
+local function trackMaxMinPositive(src, maxName, minName)
+  return function(state)
+    local v = state[src]
+    if type(v) == "number" and v > 0 then
+      local b = state[maxName]
+      if b == nil or v > b then state[maxName] = v end
+      b = state[minName]
+      if b == nil or v < b then state[minName] = v end
+    end
+  end
+end
+
+local function trackMinPositive(src, minName)
+  return function(state)
+    local v = state[src]
+    if type(v) == "number" and v > 0 then
+      local b = state[minName]
+      if b == nil or v < b then state[minName] = v end
+    end
+  end
+end
+
+--- Fuel, which is only recorded once a fuel sensor has answered at least once this flight.
+local function trackMinFuel(src, minName)
+  return function(state)
+    local v = state[src]
+    if type(v) == "number" and state.fuelTelemetrySeen == true then
+      local b = state[minName]
+      if b == nil or v < b then state[minName] = v end
+    end
+  end
+end
+
+--- Link quality: only when the active sensor reports a 0–100 % value. Receivers without an RQly
+--- sensor fall back to 1RSS/2RSS, which carry an RSSI in dBm and are always negative, so a value
+--- outside the range or a known RSSI source is not a link quality and is not recorded.
+local function trackLink(src, maxName, minName)
+  return function(state)
+    local v = state[src]
+    if type(v) == "number" and v > 0 and v <= 100
+       and not (type(state.lqSource) == "string" and RSSI_LINK_SOURCES[state.lqSource]) then
+      local b = state[maxName]
+      if b == nil or v > b then state[maxName] = v end
+      b = state[minName]
+      if b == nil or v < b then state[minName] = v end
+    end
+  end
+end
+
+-- Compile the rows: resolve every field name once, and pick each row's tracker from the shape
+-- the row declares. Nothing below builds a string or reads this table again.
+local TRACK = {}
+local TRACK_COUNT = #FLIGHT_STATS
+
+for i = 1, TRACK_COUNT do
+  local stat = FLIGHT_STATS[i]
+  if stat.max then
+    stat.currentMax = "currentFlightMax" .. stat.key
+    stat.publishMax = stat.publishMax or { "lastFlightMax" .. stat.key }
+  end
+  if stat.min then
+    stat.currentMin = "currentFlightMin" .. stat.key
+    stat.publishMin = stat.publishMin or { "lastFlightMin" .. stat.key }
+  end
+  local gate = stat.gate or GATE_ANY
+  local minGate = stat.minGate or GATE_ANY
+  local src, maxName, minName = stat.field, stat.currentMax, stat.currentMin
+  local built
+  if gate == GATE_LINK_QUALITY then
+    built = trackLink(src, maxName, minName)
+  elseif gate == GATE_FUEL_SEEN then
+    built = trackMinFuel(src, minName)
+  elseif gate == GATE_POSITIVE and maxName and minName then
+    built = trackMaxMinPositive(src, maxName, minName)
+  elseif gate == GATE_POSITIVE then
+    built = trackMinPositive(src, minName)
+  elseif maxName and minName and minGate == GATE_POSITIVE then
+    built = trackMaxMinPositiveMin(src, maxName, minName)
+  elseif maxName and minName then
+    built = trackMaxMin(src, maxName, minName)
+  else
+    built = trackMax(src, maxName)
+  end
+  TRACK[i] = built
+end
+
+--- Drop the extremes of the flight in progress. Both edges start a fresh record this way.
+local function clearFlightStats(state)
+  for i = 1, #FLIGHT_STATS do
+    local stat = FLIGHT_STATS[i]
+    if stat.max then
+      state[stat.currentMax] = nil
+    end
+    if stat.min then
+      state[stat.currentMin] = nil
+    end
+  end
+end
+
 local function updateDerivedFlightState(state)
   local now = nowSeconds()
   local lastTick = state.lastTickAt or now
@@ -1370,21 +1568,7 @@ local function updateDerivedFlightState(state)
 
   if isArmed and not wasArmed then
     state.currentFlightSeconds = 0
-    state.currentFlightMinVoltage = nil
-    state.currentFlightMaxVoltage = nil
-    state.currentFlightMinLq = nil
-    state.currentFlightMaxLq = nil
-    state.currentFlightMaxThrottlePercent = nil
-    state.currentFlightMaxRpm = nil
-    state.currentFlightMinRpm = nil
-    state.currentFlightMaxCurrent = nil
-    state.currentFlightMinCurrent = nil
-    state.currentFlightMaxWatts = nil
-    state.currentFlightMaxAltitude = nil
-    state.currentFlightMaxEscTemp = nil
-    state.currentFlightMaxMcuTemp = nil
-    state.currentFlightMinFuel = nil
-    state.currentFlightMinBecVoltage = nil
+    clearFlightStats(state)
     state.lastFlightEndingVoltage = nil
     state.hadArmedFlight = true
   end
@@ -1393,111 +1577,10 @@ local function updateDerivedFlightState(state)
     state.currentFlightSeconds = (state.currentFlightSeconds or 0) + delta
     state.totalFlightSeconds = (state.totalFlightSeconds or 0) + delta
 
-    if type(state.throttlePercent) == "number" then
-      local currentMaxThrottle = state.currentFlightMaxThrottlePercent
-      if currentMaxThrottle == nil or state.throttlePercent > currentMaxThrottle then
-        state.currentFlightMaxThrottlePercent = state.throttlePercent
-      end
-    end
-
-    if type(state.rpm) == "number" then
-      local currentMaxRpm = state.currentFlightMaxRpm
-      if currentMaxRpm == nil or state.rpm > currentMaxRpm then
-        state.currentFlightMaxRpm = state.rpm
-      end
-
-      if state.rpm > 0 then
-        local currentMinRpm = state.currentFlightMinRpm
-        if currentMinRpm == nil or state.rpm < currentMinRpm then
-          state.currentFlightMinRpm = state.rpm
-        end
-      end
-    end
-
-    if type(state.current) == "number" then
-      local currentMaxCurrent = state.currentFlightMaxCurrent
-      if currentMaxCurrent == nil or state.current > currentMaxCurrent then
-        state.currentFlightMaxCurrent = state.current
-      end
-
-      local currentMinCurrent = state.currentFlightMinCurrent
-      if currentMinCurrent == nil or state.current < currentMinCurrent then
-        state.currentFlightMinCurrent = state.current
-      end
-    end
-
-    if type(state.watts) == "number" then
-      local currentMaxWatts = state.currentFlightMaxWatts
-      if currentMaxWatts == nil or state.watts > currentMaxWatts then
-        state.currentFlightMaxWatts = state.watts
-      end
-    end
-
-    if type(state.altitude) == "number" then
-      local currentMaxAltitude = state.currentFlightMaxAltitude
-      if currentMaxAltitude == nil or state.altitude > currentMaxAltitude then
-        state.currentFlightMaxAltitude = state.altitude
-      end
-    end
-
-    if type(state.escTemp) == "number" then
-      local currentMaxEscTemp = state.currentFlightMaxEscTemp
-      if currentMaxEscTemp == nil or state.escTemp > currentMaxEscTemp then
-        state.currentFlightMaxEscTemp = state.escTemp
-      end
-    end
-
-    if type(state.mcuTemp) == "number" then
-      local currentMaxMcuTemp = state.currentFlightMaxMcuTemp
-      if currentMaxMcuTemp == nil or state.mcuTemp > currentMaxMcuTemp then
-        state.currentFlightMaxMcuTemp = state.mcuTemp
-      end
-    end
-
-    if state.fuelTelemetrySeen == true and type(state.fuel) == "number" then
-      local currentMinFuel = state.currentFlightMinFuel
-      if currentMinFuel == nil or state.fuel < currentMinFuel then
-        state.currentFlightMinFuel = state.fuel
-      end
-    end
-
-    if type(state.voltage) == "number" and state.voltage > 0 then
-      local currentMinVoltage = state.currentFlightMinVoltage
-      if currentMinVoltage == nil or state.voltage < currentMinVoltage then
-        state.currentFlightMinVoltage = state.voltage
-      end
-      local currentMaxVoltage = state.currentFlightMaxVoltage
-      if currentMaxVoltage == nil or state.voltage > currentMaxVoltage then
-        state.currentFlightMaxVoltage = state.voltage
-      end
-    end
-
-    if type(state.bec_voltage) == "number" and state.bec_voltage > 0 then
-      local currentMinBecVoltage = state.currentFlightMinBecVoltage
-      if currentMinBecVoltage == nil or state.bec_voltage < currentMinBecVoltage then
-        state.currentFlightMinBecVoltage = state.bec_voltage
-      end
-    end
-
-    -- Track link quality only when the active sensor reports a 0–100 % value.
-    -- Receivers without an RQly sensor fall back to 1RSS/2RSS (RSSI in dBm, always
-    -- negative); if the sensor is known to be an RSSI source or the value falls
-    -- outside 0 < lq <= 100 (e.g. 0 on sensor age-out), skip tracking.
-    -- Using lqSource as the discriminator matches linkIsQuality() in lib/audio.lua.
-    local lq = state.lq
-    local lqIsQuality = type(lq) == "number" and lq > 0 and lq <= 100
-    if lqIsQuality and type(state.lqSource) == "string" and RSSI_LINK_SOURCES[state.lqSource] then
-      lqIsQuality = false
-    end
-    if lqIsQuality then
-      local currentMinLq = state.currentFlightMinLq
-      if currentMinLq == nil or lq < currentMinLq then
-        state.currentFlightMinLq = lq
-      end
-      local currentMaxLq = state.currentFlightMaxLq
-      if currentMaxLq == nil or lq > currentMaxLq then
-        state.currentFlightMaxLq = lq
-      end
+    -- One call per statistic, against a block per statistic before. Each of these knows its
+    -- own two field names and its own gate, and nothing here knows which statistics exist.
+    for i = 1, TRACK_COUNT do
+      TRACK[i](state)
     end
   elseif wasArmed then
     state.lastFlightSeconds = state.currentFlightSeconds or 0
@@ -1506,43 +1589,30 @@ local function updateDerivedFlightState(state)
     end
     state.lastDisarmAt = now
     state.hadArmedFlight = true
-    state.lastFlightMaxThrottlePercent = state.currentFlightMaxThrottlePercent
-    state.lastFlightMaxRpm = state.currentFlightMaxRpm
-    state.lastFlightMinRpm = state.currentFlightMinRpm
-    state.lastFlightMaxCurrent = state.currentFlightMaxCurrent
-    state.lastFlightMinCurrent = state.currentFlightMinCurrent
-    state.lastFlightMaxWatts = state.currentFlightMaxWatts
-    state.lastFlightMaxAltitude = state.currentFlightMaxAltitude
-    state.lastFlightMaxEscTemp = state.currentFlightMaxEscTemp
-    state.lastFlightMaxMcuTemp = state.currentFlightMaxMcuTemp
-    state.lastFlightMinFuel = state.currentFlightMinFuel
-    state.lastMinVoltage = state.currentFlightMinVoltage
-    state.lastFlightMaxVoltage = state.currentFlightMaxVoltage
-    state.lastMinBecVoltage = state.currentFlightMinBecVoltage
-    state.lastFlightMinBecVoltage = state.currentFlightMinBecVoltage
-    state.lastMinLq = state.currentFlightMinLq
-    state.lastFlightMaxLq = state.currentFlightMaxLq
+    for i = 1, #FLIGHT_STATS do
+      local stat = FLIGHT_STATS[i]
+      if stat.max then
+        local value = state[stat.currentMax]
+        local names = stat.publishMax
+        for j = 1, #names do
+          state[names[j]] = value
+        end
+      end
+      if stat.min then
+        local value = state[stat.currentMin]
+        local names = stat.publishMin
+        for j = 1, #names do
+          state[names[j]] = value
+        end
+      end
+    end
     -- Capture the ending (landing) voltage as the last known live voltage
     if type(state.voltage) == "number" and state.voltage > 0 then
       state.lastFlightEndingVoltage = state.voltage
     end
     state.currentFlightSeconds = 0
-    state.currentFlightMinVoltage = nil
-    state.currentFlightMaxVoltage = nil
-    state.currentFlightMinBecVoltage = nil
-    state.currentFlightMinLq = nil
-    state.currentFlightMaxLq = nil
+    clearFlightStats(state)
     state.fuelTelemetrySeen = false
-    state.currentFlightMaxThrottlePercent = nil
-    state.currentFlightMaxRpm = nil
-    state.currentFlightMinRpm = nil
-    state.currentFlightMaxCurrent = nil
-    state.currentFlightMinCurrent = nil
-    state.currentFlightMaxWatts = nil
-    state.currentFlightMaxAltitude = nil
-    state.currentFlightMaxEscTemp = nil
-    state.currentFlightMaxMcuTemp = nil
-    state.currentFlightMinFuel = nil
   end
 
   if isArmed then
@@ -1971,21 +2041,10 @@ function Runtime.new(zone, options)
       watts = 0,
       altitude = 0,
       consumedMah = 0,
-      currentFlightMaxThrottlePercent = nil,
-      currentFlightMaxRpm = nil,
-      currentFlightMinRpm = nil,
-      currentFlightMaxCurrent = nil,
-      currentFlightMinCurrent = nil,
-      currentFlightMaxWatts = nil,
-      currentFlightMaxAltitude = nil,
-      currentFlightMaxEscTemp = nil,
-      currentFlightMaxMcuTemp = nil,
-      currentFlightMinFuel = nil,
-      currentFlightMinVoltage = nil,
-      currentFlightMaxVoltage = nil,
-      currentFlightMinLq = nil,
-      currentFlightMaxLq = nil,
-      currentFlightMinBecVoltage = nil,
+      -- The per-flight extremes belong here too -- currentFlightMax.../currentFlightMin...
+      -- while a flight is running, lastFlightMax.../lastMin... once it has ended -- but a
+      -- `= nil` entry in a table constructor creates no key. FLIGHT_STATS declares the set,
+      -- and the loops that maintain it are the only code that has to know it.
       flights = 0,
       lq = 0,
       rss1 = 0,
@@ -1999,23 +2058,7 @@ function Runtime.new(zone, options)
       fuelTelemetrySeen = false,
       batteryTelemetrySeen = false,
       rfTelemetrySeen = false,
-      lastMinVoltage = nil,
-      lastFlightMaxVoltage = nil,
-      lastMinBecVoltage = nil,
-      lastFlightMinBecVoltage = nil,
-      lastMinLq = nil,
-      lastFlightMaxLq = nil,
       lastFlightEndingVoltage = nil,
-      lastFlightMinCurrent = nil,
-      lastFlightMaxCurrent = nil,
-      lastFlightMaxThrottlePercent = nil,
-      lastFlightMaxRpm = nil,
-      lastFlightMinRpm = nil,
-      lastFlightMaxWatts = nil,
-      lastFlightMaxAltitude = nil,
-      lastFlightMaxEscTemp = nil,
-      lastFlightMaxMcuTemp = nil,
-      lastFlightMinFuel = nil,
       lastDisarmAt = nil,
       themeConfig = { v_min = 18.0, v_max = 25.2 }
     },
