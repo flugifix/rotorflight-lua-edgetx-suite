@@ -188,7 +188,7 @@ local function getArcValueColor(value, state, box, themeCommon, utils, isTemp, f
   return ARC_OK_COLOR
 end
 
--- The sources a gauge labels with the flight maximum. Which fields one resolves to is
+-- The sources a gauge labels with the flight maximum. Which statistic one resolves to is
 -- utils.statFields' job, the same mapping the stats text object reads; this set is what keeps
 -- the label to the sources a gauge has always offered it for.
 local GAUGE_MAX_SOURCES = {
@@ -200,8 +200,8 @@ local GAUGE_MAX_SOURCES = {
   watts = true,
 }
 
---- The two fields a gauge's maximum label reads, resolved where the gauge is rendered. The
---- label's own getter then runs per frame on the pair, without a lookup.
+--- The record key a gauge's maximum label reads, resolved where the gauge is rendered. The
+--- label's own getter then runs per frame on that key, without a lookup.
 local function maxFields(source, utils)
   if GAUGE_MAX_SOURCES[source] == nil then return nil end
   return utils.statFields(source, "max")
@@ -816,13 +816,9 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     
     local lastRawMax = nil
     local cachedMaxText = nil
-    local maxCur, maxLast = maxFields(source, utils)
+    local maxKey = maxFields(source, utils)
     local maxTextGetter = function()
-      local maxValue = nil
-      if maxCur ~= nil then
-        maxValue = state[maxCur]
-        if maxValue == nil then maxValue = state[maxLast] end
-      end
+      local maxValue = utils.statFromRecord(state.flight, maxKey)
       if maxValue == lastRawMax and cachedMaxText ~= nil then
         return cachedMaxText
       end

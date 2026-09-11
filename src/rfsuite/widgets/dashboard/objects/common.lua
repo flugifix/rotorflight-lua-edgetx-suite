@@ -277,8 +277,9 @@ end
 -- table that produces them -- `key` is the same name suffix, `sources` are the box sources that
 -- mean that statistic, and a direction is readable when its column is present.
 --
--- Both consumers go through Utils.statFields, so a source resolves to the same record everywhere
--- rather than to whichever of two hand-written chains happens to be asked.
+-- Both consumers go through Utils.statFields, so a source resolves to the same statistic
+-- everywhere rather than to whichever of two hand-written chains happens to be asked. The record
+-- the key is read from is tasks/events/telemetry/flight_record.lua's, under rfsuite.session.flight.
 local FLIGHT_STATS = {
   { key = "ThrottlePercent", sources = { "throttle_percent" }, max = true },
   { key = "Rpm",             sources = { "rpm" },              max = true, min = true },
@@ -288,62 +289,54 @@ local FLIGHT_STATS = {
   { key = "EscTemp",         sources = { "esc_temp", "temp_esc" }, max = true },
   { key = "McuTemp",         sources = { "mcu_temp", "temp_mcu" }, max = true },
   { key = "Fuel",            sources = { "fuel", "smartfuel" }, min = true },
-  { key = "Voltage",         sources = { "voltage" },          max = true, min = true,
-    readMin = { "currentFlightMinVoltage", "lastMinVoltage" } },
-  { key = "BecVoltage",      sources = { "bec_voltage" },      min = true,
-    -- lastMinBecVoltage carries the same value as lastFlightMinBecVoltage; it is read last so
-    -- that a user theme which has only ever seen the older spelling keeps working.
-    readMin = { "currentFlightMinBecVoltage", "lastFlightMinBecVoltage", "lastMinBecVoltage" } },
-  { key = "Lq",              sources = { "link" },             max = true, min = true,
-    readMin = { "currentFlightMinLq", "lastMinLq" } },
+  { key = "Voltage",         sources = { "voltage" },          max = true, min = true },
+  { key = "BecVoltage",      sources = { "bec_voltage" },      min = true },
+  { key = "Lq",              sources = { "link" },             max = true, min = true },
 }
 
--- source -> stattype -> the state fields to read, in order: the flight in progress first, the
--- flight that has ended after it. Built once, at load time.
+-- source -> stattype -> the record's key for that statistic. Built once, at load time.
 local STAT_SOURCES = {}
 for i = 1, #FLIGHT_STATS do
   local stat = FLIGHT_STATS[i]
   local entry = {}
-  if stat.max then
-    entry.max = stat.readMax or { "currentFlightMax" .. stat.key, "lastFlightMax" .. stat.key }
-  end
-  if stat.min then
-    entry.min = stat.readMin or { "currentFlightMin" .. stat.key, "lastFlightMin" .. stat.key }
-  end
+  if stat.max then entry.max = "max" .. stat.key end
+  if stat.min then entry.min = "min" .. stat.key end
   for _, source in ipairs(stat.sources) do
     STAT_SOURCES[source] = entry
   end
 end
 
---- The flight statistic a box asks for, or nil when that pair is not one.
---
--- `stattype` is the box's own wording: "min" and "max" are the recorded extremes, and every
--- other stattype a box may carry (a consumed total, a per-cell derivation, a live count) is
--- not a flight statistic and is resolved by the object that understands it.
---- The state fields a box source resolves to, in the order they are read: the flight in
---- progress first, the flight that has ended after it, and a historical spelling of the same
---- name last where one exists. Returns nothing when the pair is not a recorded extreme.
+--- The record key a box source and stattype resolve to, or nil when the pair is not a recorded
+--- extreme.
 ---
---- Objects resolve the names ONCE, where the box is rendered, and the value closure the
---- reactive sweep calls per frame then reads two fields it already holds. A closure that
---- resolved a source per frame would pay this lookup on every frame of every stats box.
+--- `stattype` is the box's own wording: "min" and "max" are the recorded extremes, and every
+--- other stattype a box may carry (a consumed total, a per-cell derivation, a live count) is not
+--- a flight statistic and is resolved by the object that understands it.
+---
+--- Objects resolve the key ONCE, where the box is rendered, and the value closure the reactive
+--- sweep calls per frame then reads the record with a key it already holds.
 function Utils.statFields(source, stattype)
   local entry = STAT_SOURCES[source]
-  local fields = entry and entry[stattype] or nil
-  if fields == nil then return nil end
-  return fields[1], fields[2], fields[3]
+  return entry and entry[stattype] or nil
 end
 
---- The flight statistic a box asks for, for a caller that wants the value rather than the
---- names. Same mapping, one read.
-function Utils.statValue(state, source, stattype)
-  local cur, last, alias = Utils.statFields(source, stattype)
-  if cur == nil or type(state) ~= "table" then return nil end
-  local value = state[cur]
+--- The value of one statistic out of a flight record: the flight in progress if it has taken a
+--- value for it, the flight that ended otherwise. `flight` is rfsuite.session.flight, which the
+--- dashboard also publishes on its own state.
+function Utils.statFromRecord(flight, key)
+  if key == nil or type(flight) ~= "table" then return nil end
+  local record = flight.current
+  local value = record and record[key]
   if value ~= nil then return value end
-  value = state[last]
-  if value ~= nil or alias == nil then return value end
-  return state[alias]
+  record = flight.last
+  return record and record[key]
+end
+
+--- The flight statistic a box asks for, for a caller that has a state rather than a key. Same
+--- mapping, one read.
+function Utils.statValue(state, source, stattype)
+  if type(state) ~= "table" then return nil end
+  return Utils.statFromRecord(state.flight, Utils.statFields(source, stattype))
 end
 
 function Utils.applyTransform(value, transform)

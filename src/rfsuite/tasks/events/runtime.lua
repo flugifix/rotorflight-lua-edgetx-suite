@@ -26,6 +26,7 @@ local MspRuntime = nil
 local Log = nil
 local Env = nil
 local ModelNameStore = nil
+local FlightRecord = nil
 
 -- Per-category task runners cache will be stored at `_G.rfsuite.tasks.events`
 local function ensureEventRunner(name)
@@ -131,6 +132,11 @@ local function publishConnected(val)
     -- anything here can tell, a fresh pack, so the record is dropped rather than carried into
     -- it. A record still open goes with it -- nothing disarmed, so there is no honest duration.
     session.flightlog = nil
+    -- The statistics belong to the connection in the same way: a link that comes back is a fresh
+    -- pack and a fresh session, and a record still open has no honest end to it.
+    if FlightRecord and type(FlightRecord.reset) == "function" then
+      pcall(FlightRecord.reset)
+    end
     -- The tool and each widget are separate Lua states holding their own copy of what the card
     -- said, and the state that renames is usually not the state that puts the name back. One
     -- that first read the file while it was still empty would answer "nothing to do" for the
@@ -349,6 +355,25 @@ function Events.wakeup()
     if state.edgeRunner then
       if not driveEdgeRunner(state.edgeRunner, context) then
         state.edgeRunner = nil
+      end
+    end
+
+    -- The flight record, last: on the arm edge the runner above has just opened it in this same
+    -- wakeup, so the first sample belongs to the new flight and not to the one before it; on the
+    -- disarm edge it has just been closed, and `armed` is already false, so nothing is sampled
+    -- into a record that has been put away.
+    --
+    -- Widget context only. The record belongs to the widget that runs this work; the tool has a
+    -- clock of its own and is not a second writer.
+    if context == "widget" then
+      if FlightRecord == nil then
+        FlightRecord = loadModule("tasks/events/telemetry/flight_record.lua") or false
+      end
+      if FlightRecord then
+        local ok, err = pcall(FlightRecord.wakeup, armed)
+        if not ok and Log and type(Log.emit) == "function" then
+          pcall(Log.emit, "rfsuite.events", "flight_record.wakeup error: " .. tostring(err), "error")
+        end
       end
     end
   end
