@@ -49,6 +49,11 @@ and nothing needs to be configured.
 - **It cannot be seen from the suite if it is configured as a global function** rather than on
   the model. The radio offers no way for a script to read the global special functions, so a
   background decoder installed there is invisible to the check above.
+- **It watches the dashboard widget and records the moment it stops.** A widget that uses more
+  than its share of a cycle is not called again by the radio, so it cannot write down that this
+  happened to it; this script runs outside the widgets and can. With the debug level at *DEBUG* or
+  above its log then carries a line naming how long the dashboard has been silent and what its
+  last cycle cost. A model without this script has nothing that can report that.
 - **It writes a log of its own** when *Log Session To Card* is on, under the `function_` prefix,
   beside the tool's and the widgets'. Because this script is paused and resumed rather than cut
   off, it keeps writing where a widget that overran its instruction budget cannot, and its

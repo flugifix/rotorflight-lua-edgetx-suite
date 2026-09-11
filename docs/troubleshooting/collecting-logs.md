@@ -49,6 +49,27 @@ Each of those writes **two files**, and they answer different questions:
 
 `<prefix>_seq.txt` is only the counter that decides which slot is next.
 
+## The two lines worth reading first
+
+**`widget_step.txt` says what the dashboard was doing.** While the suite connects it names the
+task it is on; afterwards it names the class of work of the last screen it built — *splash*,
+*scene*, *menu* or one of the tuning surfaces. So a radio found stopped tells you which of those
+it was in the middle of.
+
+**`function_step.txt` says whether the dashboard is still running at all**, which is the one thing
+the dashboard cannot say about itself. When a widget uses more than its share of a cycle the radio
+stops calling it, and it cannot write down that this happened to it. The background decoder runs
+outside the widgets and keeps watching, so its line reads:
+
+```
+dashboard widget silent 3.0 s, last pass 56 %
+```
+
+The percentage is what the dashboard's last cycle cost, out of what it is allowed. Near or above
+100 is the reading that explains a dashboard that stopped drawing.
+
+Both need the background decoder on the model and the debug level at *DEBUG* or above.
+
 ## What to attach
 
 Take the card out and copy the whole `logs` folder. If that is too much, the useful minimum is:
