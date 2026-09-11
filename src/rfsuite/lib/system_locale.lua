@@ -18,51 +18,111 @@ local function normalizeLanguage(value)
   return nil
 end
 
--- Read the preferred language from RFSuite's preferences.ini.
--- Only the [localizations] section's `language` key is scanned so that this
--- function can be called very early in the boot sequence, before the full
--- preferences module is loaded.
+local PREF_PATH = "/SCRIPTS/TOOLS/rfsuite.user/preferences.lua"
+
+-- The store is read through lib/config_store.lua with a schema naming the one key this needs,
+-- rather than through lib/preferences.lua: this runs very early in the boot sequence, before
+-- the rest of the suite is up, and it has no business pulling in the whole settings module or
+-- its root probing to answer one question.
 --
--- io.read() on EdgeTX returns at most the requested byte count (it is a chunk
--- read, not a line read), so we accumulate chunks and then split on newlines
--- — the same idiom used by lib/preferences.lua:loadFileAsString().
-local function readLanguageFromPrefs()
-  local PREF_PATH = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
-  local ok, f = pcall(io.open, PREF_PATH, "r")
-  if not ok or not f then return nil end
+-- Built once and kept, because resolveSystemLanguage below is reached from the dashboard's
+-- reactive closures -- a theme's t() resolves the locale on every call -- and a module load
+-- with a table construction after it would then happen once per frame.
+local cachedStore = nil
 
-  -- Accumulate the whole file first.
-  local parts = {}
-  while true do
-    local ok2, chunk = pcall(io.read, f, 128)
-    if not ok2 or chunk == nil or chunk == "" then break end
-    parts[#parts + 1] = chunk
-  end
-  pcall(io.close, f)
+-- And the answer itself is kept beside it, for the same reason and one step further up: a
+-- theme's t() resolves the locale on EVERY call, so without this the radio reads a file per
+-- frame whatever that read costs. The window is short because it is also what a language
+-- changed in the configuration tool waits before the dashboard speaks it, and two seconds is
+-- well inside the reload that settings change triggers anyway.
+--
+-- getTime() counts hundredths of a second since the radio came up. Where it is not there at all
+-- nothing is cached, which is the old behaviour rather than a stale answer.
+local LANGUAGE_CACHE_TICKS = 200
+local cachedLanguage = nil
+local cachedLanguageFor = nil
+local cachedLanguageAt = nil
 
-  local content = table.concat(parts)
-  if content == "" then return nil end
-
-  -- Scan line by line for [localizations] > language = <value>.
-  local inSection = false
-  for line in string.gmatch(content, "[^\r\n]+") do
-    local trimmed = string.match(line, "^%s*(.-)%s*$")
-    if trimmed == "[localizations]" then
-      inSection = true
-    elseif string.sub(trimmed, 1, 1) == "[" then
-      if inSection then break end -- left the section without finding the key
-    elseif inSection then
-      local k, v = string.match(trimmed, "^([%w_]+)%s*=%s*(.+)$")
-      if k and string.lower(k) == "language" then
-        local norm = normalizeLanguage(v)
-        if norm then
-          trace("language from prefs: " .. norm)
-          return norm
-        end
-      end
-    end
-  end
+local function nowTicks()
+  if type(getTime) ~= "function" then return nil end
+  local ok, v = pcall(getTime)
+  if ok and type(v) == "number" then return v end
   return nil
+end
+
+local function languageStore()
+  if cachedStore then return cachedStore end
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/config_store.lua", "t")
+  if type(chunk) ~= "function" then return nil end
+  local okMod, ConfigStore = pcall(chunk)
+  if not okMod or type(ConfigStore) ~= "table" then return nil end
+  cachedStore = ConfigStore.new({
+    name = "preferences",
+    schema = { localizations = { optional = { "language" } } },
+  })
+  return cachedStore
+end
+
+-- What this reader asks of the store, and both flags keep work off a path a theme's t() reaches.
+--
+-- `recover = false`: an interrupted save is the settings module's to finish, not this reader's.
+-- This is called from a widget's reactive sweep, where renaming a file has no business being.
+--
+-- `legacy = false`: the store alone, so that a card which has not been brought across yet does
+-- not pay the former file's parse on every read. That file is read once instead, below.
+local STORE_OPTS = { recover = false, legacy = false }
+local LEGACY_OPTS = { recover = false }
+
+-- Read the preferred language out of the radio-wide store. Answers the language and whether the
+-- store was there at all, which is what decides whether the former file is consulted below.
+local function readLanguageFromStore()
+  local store = languageStore()
+  if not store then return nil, false end
+  local ok, prefs, info = pcall(store.load, store, PREF_PATH, STORE_OPTS)
+  if not ok or type(prefs) ~= "table" then return nil, false end
+
+  local loc = prefs.localizations
+  local norm = normalizeLanguage(loc and loc.language)
+  if norm then
+    trace("language from prefs: " .. norm)
+    return norm, true
+  end
+  return nil, (type(info) == "table" and info.found) or false
+end
+
+-- The former format, for a card whose store has not been brought across yet: without this the
+-- language would flip back to the radio's for the one boot before the migration runs. It goes
+-- through the same store, which is the only thing in the suite that still reads that format.
+--
+-- READ AT MOST ONCE PER LUA STATE, which is what makes it affordable here. Nothing in the suite
+-- writes the former file -- the migration only ever renames it away -- so its answer cannot
+-- change while this state runs, and parsing it is by a wide margin the most expensive thing on
+-- a path that a theme's t() reaches. A miss is remembered for the same reason.
+local legacyRead = false
+local legacyLanguage = nil
+
+local function readLanguageFromLegacy()
+  if legacyRead then return legacyLanguage end
+  legacyRead = true
+
+  local store = languageStore()
+  if not store then return nil end
+  local ok, prefs = pcall(store.load, store, PREF_PATH, LEGACY_OPTS)
+  if not ok or type(prefs) ~= "table" then return nil end
+
+  local loc = prefs.localizations
+  legacyLanguage = normalizeLanguage(loc and loc.language)
+  if legacyLanguage then trace("language from prefs: " .. legacyLanguage) end
+  return legacyLanguage
+end
+
+local function readLanguageFromPrefs()
+  local fromStore, storeFound = readLanguageFromStore()
+  if fromStore then return fromStore end
+  -- A store that is there and carries no language means "auto", so there is nothing the former
+  -- file could add. Only a card whose store has not been brought across yet reaches it.
+  if storeFound then return nil end
+  return readLanguageFromLegacy()
 end
 
 -- Resolve the EdgeTX system language via getGeneralSettings().language.
@@ -100,8 +160,8 @@ local isBaked = (BAKED ~= "@i18n_" .. "language@")
 -- so that operators can override a German package when running on an English
 -- radio, or vice-versa.  When no explicit preference exists, packaged builds
 -- fall back to the baked locale; simulator / source builds query the radio.
-function M.resolveSystemLanguage(defaultLang)
-  -- 1. Explicit user preference stored in preferences.ini.
+local function resolveUncached(defaultLang)
+  -- 1. Explicit user preference stored in the radio-wide settings file.
   local fromPrefs = readLanguageFromPrefs()
   if fromPrefs then return fromPrefs end
 
@@ -116,6 +176,25 @@ function M.resolveSystemLanguage(defaultLang)
 
   -- 3. Caller-supplied default (usually "en").
   return normalizeLanguage(defaultLang) or "en"
+end
+
+function M.resolveSystemLanguage(defaultLang)
+  -- The caller's default is part of what the answer depends on -- it is step 3 above -- so a
+  -- cached answer only stands for the caller that asked with the same one.
+  local now = nowTicks()
+  if now and cachedLanguage and cachedLanguageFor == defaultLang
+      and (now - cachedLanguageAt) < LANGUAGE_CACHE_TICKS then
+    return cachedLanguage
+  end
+
+  local lang = resolveUncached(defaultLang)
+
+  if now then
+    cachedLanguage = lang
+    cachedLanguageFor = defaultLang
+    cachedLanguageAt = now
+  end
+  return lang
 end
 
 function M.resolveAudioFolder(defaultFolder)

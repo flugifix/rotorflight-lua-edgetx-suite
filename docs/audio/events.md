@@ -10,7 +10,7 @@ The suite provides spoken voice alerts and tone callouts for flight telemetry, b
 
 *System* → *Settings* → *Audio* → *Events*
 
-The ten category pages share a common configuration table (`preferences.audio_events`), stored globally in `/RADIO/rfsuite.ini` with model-specific overrides (such as the ESC temperature threshold) in each model's preference file.
+The ten category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature threshold) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
 
 ---
 

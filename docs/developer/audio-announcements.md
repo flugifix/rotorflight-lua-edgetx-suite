@@ -54,8 +54,10 @@ Nothing else is needed: the loading, clamping, saving and per-page split are gen
 marked `scope = "model"` is stored with the model rather than with the radio.
 
 The engine reads the same keys through `prefEnabled(events, "key", default)`, and **the default
-passed there must match the schema's**, because a `preferences.ini` written before your key
-existed has no value for it.
+passed there must match the schema's**, because a settings file written before your key existed
+has no value for it. `[audio_events]` is an open section of the radio-wide store
+(`lib/preferences.lua`), so a key this page adds is kept without being declared a second time
+there.
 
 ## The words
 

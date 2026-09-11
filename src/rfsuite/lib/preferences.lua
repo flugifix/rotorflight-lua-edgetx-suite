@@ -1,6 +1,6 @@
 local M = {}
 
-local PREF_PATH        = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
+local PREF_PATH        = "/SCRIPTS/TOOLS/rfsuite.user/preferences.lua"
 -- Reload request file monitored by the dashboard widget via fstat size.
 -- Uses a rotating byte counter (1..32 bytes) so changes are reliably detected
 -- where fstat is available even without an RTC or when the INI byte-size doesn't change,
@@ -63,41 +63,26 @@ local function bumpReloadCounter(userRoot)
   end
 end
 
--- How much is asked for per io.read() call. It is a chunk size, not a limit: the reader
--- below keeps going until the file ends.
-local READ_CHUNK = 2048
-
-local function trim(s)
-  local asString = tostring(s or "")
-  asString = string.gsub(asString, "^%s+", "")
-  asString = string.gsub(asString, "%s+$", "")
-  return asString
-end
-
-local function parseValue(v)
-  local t = trim(v)
-  local lower = string.lower(t)
-  if lower == "true" then return true end
-  if lower == "false" then return false end
-  local n = tonumber(t)
-  if n ~= nil then return n end
-  return t
-end
-
-local function serializeValue(v)
-  local vt = type(v)
-  if vt == "boolean" then
-    return v and "true" or "false"
+local function loadConfigStore()
+  if _G.rfsuite and _G.rfsuite.require then
+    return _G.rfsuite.require("lib/config_store.lua")
   end
-  if vt == "number" then
-    return tostring(v)
-  end
-  return tostring(v)
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/config_store.lua", mode)
+  if not chunk then return nil end
+  local ok, mod = pcall(chunk)
+  if ok and type(mod) == "table" then return mod end
+  return nil
 end
 
-local function defaultPreferences()
-  return {
-    general = {
+-- The one place the radio-wide settings are declared: a section's `keys` carry the defaults
+-- and are written on every save, `optional` names a key that exists in the file only once
+-- something has set it, and an `open` section keeps the keys it is handed even though no
+-- schema can name them. Anything a save is handed that is declared nowhere here is dropped,
+-- which is how a key outliving the code that read it leaves the file again.
+local SCHEMA = {
+  general = {
+    keys = {
       -- safety & prompts
       save_confirm                 = true,
       save_armed_warning           = true,
@@ -114,16 +99,25 @@ local function defaultPreferences()
       log_to_card                  = false,
       debug_level                  = "off",
     },
-    localizations = {
-      -- NOTE: `language` is intentionally not seeded here.
-      -- Absence of the key means "auto": system_locale.lua will fall through
-      -- to the baked package locale (release builds) or getGeneralSettings()
-      -- (source / simulator).  Only set it once the user makes an explicit
-      -- choice via Settings › Localization.
+    -- Read by the connect tasks that copy the craft's name and parameters onto the radio, and
+    -- written by Setup > Model. They carry no default because neither is a setting of the
+    -- radio's: absence is the same as off, and seeding them would write a flag into every
+    -- pilot's file for a feature most of them never turn on.
+    optional = { "syncname", "syncparams" },
+  },
+  localizations = {
+    keys = {
       temperature_unit = 0,
       altitude_unit    = 0,
     },
-    audio_events = {
+    -- `language` carries no default on purpose. Absence of the key means "auto":
+    -- system_locale.lua then falls through to the baked package locale (release builds) or
+    -- to getGeneralSettings() (source / simulator). It appears only once the pilot has made
+    -- an explicit choice in Settings > Localization.
+    optional = { "language" },
+  },
+  audio_events = {
+    keys = {
       arming_flags = true,
       governor_state = true,
       voltage_alert = true,
@@ -144,7 +138,14 @@ local function defaultPreferences()
       model_announcement = false,
       initial_fuel = true,
     },
-    flightlog = {
+    -- The keys above are what a fresh install starts with. The full set the announcement pages
+    -- offer is larger and partly built in a loop -- one enable per governor state -- and it is
+    -- declared where it is offered, in app/pages/settings/audio/events/. This section therefore
+    -- keeps what it is handed rather than holding a second copy of that list.
+    open = true,
+  },
+  flightlog = {
+    keys = {
       -- Off by default, and deliberately so: a suite that starts writing files to every pilot's
       -- card without being asked has made a decision that is the pilot's.
       enabled = false,
@@ -152,23 +153,102 @@ local function defaultPreferences()
       -- nor a battery's cycle count. 0 logs every arm.
       min_seconds = 30,
     },
-    -- The radio's half of the in-flight tuning overlay: what is true of this transmitter whatever
-    -- is plugged into it. The machine's half -- which parameters its flight controller offers,
-    -- how far one press moves them, which PID profile is the undo -- is in the per-model store.
-    -- Off by default, like every preview surface: see app/pages/settings/dashboard/inflight.
-    inflight = {
+  },
+  -- The radio's half of the in-flight tuning overlay: what is true of this transmitter whatever
+  -- is plugged into it. The machine's half -- which parameters its flight controller offers,
+  -- how far one press moves them, which PID profile is the undo -- is in the per-model store.
+  -- Off by default, like every preview surface: see app/pages/settings/dashboard/inflight.
+  inflight = {
+    keys = {
       enabled = false,
     },
-    dashboard = {
+    -- Everything else the transmitter's half holds -- the interlock switch, the channel and
+    -- global-variable pair, the pulse length and the trim assignment -- is declared and
+    -- defaulted by widgets/dashboard/inflight/setup.lua, which states that the radio half is
+    -- duplicated nowhere. Keeping the section open is what honours that.
+    open = true,
+  },
+  dashboard = {
+    keys = {
       theme_preflight = "system/default",
       -- Phase overrides on top of the theme above, read only while theme_per_phase is on.
       theme_inflight = "nil",
       theme_postflight = "nil",
       theme_per_phase = false,
-      theme_config_target = "system/default",
-      connection_guard = true,
-    }
-  }
+    },
+    -- A theme's own configuration is stored here under keys built from the theme's path
+    -- (app/pages/settings/dashboard/lib.lua), so the set of key names is not knowable from
+    -- a schema and the section keeps whatever it is handed.
+    open = true,
+    -- Two keys nothing in the suite has ever read. An open section would carry them for the
+    -- life of the card otherwise, since no schema names them to begin with.
+    retired = { "theme_config_target", "connection_guard" },
+  },
+  -- Written by nothing: the developer pages read it so that a value can be put there by hand.
+  -- Declared so that such a value is not thrown away by the next save.
+  developer = { open = true },
+}
+
+local ConfigStore = loadConfigStore()
+local store = ConfigStore and ConfigStore.new({ name = "preferences", schema = SCHEMA })
+
+-- What is answered when lib/config_store.lua could not be loaded at all -- a truncated install,
+-- a card pulled mid-read. The empty table this used to answer with is the worst of both: every
+-- caller that reaches rfsuite.preferences.general or .flightlog indexes nil and raises, at a
+-- point that says nothing about why. The schema is right here, so a section per section of it
+-- with its declared keys costs one walk and leaves every reader something to read.
+local function schemaDefaults()
+  local out = {}
+  for name, spec in pairs(SCHEMA) do
+    local section = {}
+    local keys = spec.keys
+    if keys then
+      for k, v in pairs(keys) do section[k] = v end
+    end
+    out[name] = section
+  end
+  return out
+end
+
+-- Said at error level and not swallowed: the suite is running on its built-in answers, nothing
+-- the pilot changes will be kept, and there is no other sign of it on the screen.
+local function reportNoStore(what)
+  local L = _G.rfsuite and _G.rfsuite.Log
+  if L and type(L.emitf) == "function" then
+    L.emitf("rfsuite.preferences", "error",
+      "%s: lib/config_store.lua could not be loaded -- the built-in settings are used and nothing is saved",
+      tostring(what))
+  end
+end
+
+-- Puts the freshly read settings where the log looks for its level, and ONLY where nothing has
+-- put a table there yet.
+--
+-- Every host of the suite assigns the answer of this function to rfsuite.preferences within a
+-- line or two of asking for it, so on a first load this publishes the same table a moment early
+-- and nothing observable changes. A state that already has one is left alone: a reload is the
+-- caller's to adopt, and publishing it here would hand the widgets a new settings table before
+-- the code that asked for it had decided to keep it.
+local function publishIfUnclaimed(prefs)
+  if type(_G) ~= "table" then return end
+  local root = _G.rfsuite
+  if type(root) ~= "table" then return end
+  if root.preferences == nil then
+    root.preferences = prefs
+  end
+end
+
+-- The store's messages, written now that the level gate has something to read.
+--
+-- Log.emit rather than emitf: the text is already formatted, and a file name carrying a percent
+-- sign would be read as a format directive by the second one.
+local function emitDeferred(messages)
+  if type(messages) ~= "table" then return end
+  local L = _G.rfsuite and _G.rfsuite.Log
+  if type(L) ~= "table" or type(L.emit) ~= "function" then return end
+  for i = 1, #messages do
+    pcall(L.emit, "rfsuite.config", messages[i].text, messages[i].level)
+  end
 end
 
 function M.getPath(safeId)
@@ -183,70 +263,46 @@ function M.getPath(safeId)
   return PREF_PATH
 end
 
--- The one place the defaults are declared. Callers that need them without touching the
--- card -- ui/preferences.lua is one -- ask for them here rather than keeping a copy.
+-- The declared defaults, without touching the card. Callers that need them -- ui/preferences.lua
+-- is one -- ask for them here rather than keeping a copy of their own.
 function M.defaults()
-  return defaultPreferences()
+  if not store then return schemaDefaults() end
+  return store:defaults()
 end
 
-local function loadFileAsString(path)
-  local f = io.open(path, "r")
-  if not f then
-    return nil
-  end
-
-  -- io.read() hands back at most the number of bytes asked for and "" once the file is
-  -- exhausted, so a single call stops wherever that count lands. Stopping there is not
-  -- merely a short read: M.save() writes the whole table back, so everything the parser
-  -- never saw is dropped from the file by the next save.
-  local parts = {}
-  while true do
-    local chunk = io.read(f, READ_CHUNK)
-    if chunk == nil or chunk == "" then break end
-    parts[#parts + 1] = chunk
-  end
-  io.close(f)
-
-  local content = table.concat(parts)
-  if content == "" then
-    return nil
-  end
-
-  return content
-end
-
+--- Reads the radio-wide settings. Answers the table and whether the file was there; the table
+--- is usable either way, and a corrupt file gives the declared defaults and a logged error.
+---
+--- Every section the schema declares is present in the answer whatever happened, because the
+--- callers read `preferences.general.<key>` without asking first and a missing section raises
+--- where a wrong value would only misbehave.
 function M.load()
-  local prefs = defaultPreferences()
+  if not store then
+    reportNoStore(PREF_PATH)
+    return schemaDefaults(), false
+  end
   local path = M.getPath()
-  local content = loadFileAsString(path)
-  if not content then
-    return prefs, false
-  end
 
-  local section = nil
-  for line in string.gmatch(content, "[^\r\n]+") do
-    local normalized = trim(line)
-    if normalized ~= "" and string.sub(normalized, 1, 1) ~= ";" and string.sub(normalized, 1, 1) ~= "#" then
-      local sec = string.match(normalized, "^%[(.-)%]$")
-      if sec then
-        section = trim(sec)
-        if prefs[section] == nil then
-          prefs[section] = {}
-        end
-      else
-        local k, v = string.match(normalized, "^([^=]+)=(.*)$")
-        if k and v and section then
-          prefs[section][trim(k)] = parseValue(v)
-        end
-      end
-    end
-  end
+  -- The store is told to hand its messages back rather than write them, because on the first
+  -- load of a Lua state there is nothing yet that would print them. The log's level gate reads
+  -- rfsuite.preferences.general.debug_level, and while that field is absent it answers "off"
+  -- and refuses every line at every level -- and this very call is what fetches it. So the one
+  -- report that matters most, the error saying a broken settings file was replaced by the
+  -- declared defaults, was the one report that never appeared.
+  local opts = { messages = {} }
 
-  return prefs, true
+  -- A card written by an earlier release carries the former format. Bringing it across is a
+  -- one-off, and after it the probe below costs one failed open. It happens only in a Lua state
+  -- that is yielded rather than cut off at an instruction count, so this call does nothing in a
+  -- widget; there the load below reads the former file into memory instead and writes nothing.
+  store:migrate(path, ConfigStore.legacyPath(path), opts)
+  local prefs, info = store:load(path, opts)
+
+  publishIfUnclaimed(prefs)
+  emitDeferred(opts.messages)
+
+  return prefs, info.found
 end
-
--- Writes ALL sections and keys from prefs to the INI file.
--- No field list to maintain — adding a key to prefs automatically persists it.
 
 -- The install carries no directory entries, so /SCRIPTS/TOOLS/rfsuite.user exists on a card
 -- only because a file was unpacked into it, and io.open(path, "w") does not create a missing
@@ -273,30 +329,25 @@ local function ensureUserDir(targetPath)
   makeDir(userRoot)
 end
 
+--- Writes the radio-wide settings and tells the widgets that they changed. What is written is
+--- the schema above, so a key nothing declares any more leaves the file here.
 function M.save(prefs)
+  if not store then
+    reportNoStore(PREF_PATH)
+    return false, "unavailable"
+  end
   local path = M.getPath()
   ensureUserDir(path)
 
-  local f, err = io.open(path, "w")
-  if not f then
-    logD("Preferences.save: FAILED to open %s for write: %s", path, tostring(err))
+  local ok, err = store:save(path, prefs)
+  if not ok then
+    logD("Preferences.save: FAILED to write %s: %s", path, tostring(err))
     return false, err
   end
 
-  for section, values in pairs(prefs or {}) do
-    if type(values) == "table" then
-      io.write(f, "[" .. tostring(section) .. "]\n")
-      for k, v in pairs(values) do
-        io.write(f, tostring(k) .. "=" .. serializeValue(v) .. "\n")
-      end
-    end
-  end
-
-  io.close(f)
-
   -- Signal the dashboard widget that preferences have changed via rotating
   -- sequence length in reload.req. Multi-reader safe, armed-safe, and independent
-  -- of RTC timestamp or INI file size equality.
+  -- of RTC timestamp or file size equality.
   local userRoot = string.match(path, "^(.*)/[^/]+$")
   bumpReloadCounter(userRoot)
   logD("Preferences.save: saved to %s", path)

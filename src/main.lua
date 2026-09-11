@@ -38,6 +38,13 @@ if requireChunk then
   requireChunk()
 end
 
+-- This is the tool, and the radio runs it in the script state: a call there is yielded once it
+-- has held the interpreter for one task period, never cut off at an instruction count. So this
+-- is one of the two places allowed to bring a card written by an earlier release across; the
+-- widgets read such a card without writing to it. Guarded because an older core has no such
+-- module and the tool still has to come up.
+pcall(function() return _G.rfsuite.require("lib/config_store.lua").allowMigration() end)
+
 local chunk = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/ui/home.lua", "t"))
 return chunk()
 

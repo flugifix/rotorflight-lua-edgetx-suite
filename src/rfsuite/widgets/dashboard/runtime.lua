@@ -397,7 +397,7 @@ end
 
 --- The files the tool writes when a preference changes, and how often they are looked at.
 -- One second is the rate the old signal was polled at, so nothing gets slower here.
-local PREFERENCES_FILE  = "/SCRIPTS/TOOLS/rfsuite.user/preferences.ini"
+local PREFERENCES_FILE  = "/SCRIPTS/TOOLS/rfsuite.user/preferences.lua"
 -- Rotating sequence file written by lib/preferences.lua and lib/model_preferences.lua.
 -- The file contains between 1 and 32 bytes ('x'). Each save cycles the size by 1.
 -- The widget inspects fstat(RELOAD_REQ_FILE).size without modifying or deleting the file.
@@ -822,17 +822,40 @@ end
 -- A nil `modelPath` is deliberately NOT one of them. It says the session has no per-model file,
 -- which is a fact about the model rather than a failed read, and the stamp is then the global
 -- half alone.
+--- One preference file's stamp, or the stamp of the file it is brought across from where the
+--- former has not been written yet.
+--
+-- A card written by an earlier release carries only the file in the previous format, and this
+-- widget is not the one that brings it across: that costs more instructions than a widget call
+-- is allowed, so it belongs to the configuration tool and to the background decoder. Stamping
+-- only the current name would therefore leave nothing to compare on such a card -- and, worse,
+-- would take the FIRST stamp after the migration, which the caller reads as a baseline rather
+-- than as the change it is. The two files have different sizes, so the swap moves the stamp.
+--
+-- The second call is made only when the first misses, so a card that has already been brought
+-- across pays exactly one fstat per file, as before.
+local function stampOfEither(path)
+  if type(path) ~= "string" then return nil end
+
+  local ok, info = pcall(fstat, path)
+  local stamp = ok and stampOf(info) or nil
+  if stamp then return stamp end
+
+  local former = string.gsub(path, "%.lua$", ".ini")
+  if former == path then return nil end
+  ok, info = pcall(fstat, former)
+  return ok and stampOf(info) or nil
+end
+
 local function preferencesStamp(modelPath)
   if type(fstat) ~= "function" then return nil end
 
-  local okg, g = pcall(fstat, preferencesFile())
-  local globalStamp = okg and stampOf(g) or nil
+  local globalStamp = stampOfEither(preferencesFile())
   if not globalStamp then return nil end
 
   if not modelPath then return globalStamp end
 
-  local okm, m = pcall(fstat, modelPath)
-  local modelStamp = okm and stampOf(m) or nil
+  local modelStamp = stampOfEither(modelPath)
   if not modelStamp then return nil end
 
   return globalStamp .. "|" .. modelStamp
@@ -2534,7 +2557,7 @@ function Runtime.new(zone, options)
     self._cachedRenderKey = nil
     self._lastUIRefresh = 0
     -- Reporting starts over, which is what makes switching tracing on mid-session work: changing
-    -- the debug level rewrites preferences.ini, which reloadPreferencesIfNeeded watches,
+    -- the debug level rewrites the settings file, which reloadPreferencesIfNeeded watches,
     -- so the reload lands at exactly the moment a user is asked to turn tracing on.
     self._usagePeak = -1
     self._usageWindowPeak = -1

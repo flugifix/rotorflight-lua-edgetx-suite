@@ -93,6 +93,11 @@ local function init()
 
   Log = loadModule("lib/log.lua")
   Preferences = loadModule("lib/preferences.lua")
+  -- This state is the radio's script state, where a call is yielded rather than cut off at an
+  -- instruction count, so it is one of the two allowed to bring a card written by an earlier
+  -- release across. Said before the first read below, and guarded because an older core has no
+  -- such module and this script must still run against it.
+  pcall(function() return loadModule("lib/config_store.lua").allowMigration() end)
   Drain = loadModule("tasks/events/telemetry_bg/drain.lua")
   Adjustments = loadModule("tasks/events/telemetry_bg/adjustments.lua")
   initialized = true
