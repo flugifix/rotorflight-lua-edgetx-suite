@@ -22,9 +22,15 @@
 -- Read together they answer the question a frozen radio poses: the session file says what led
 -- up to it, the step file says what was being done when it stopped.
 --
--- One sink per Lua state. The suite runs in two -- the tool in its own, the dashboard widget
--- and the service widget sharing another -- and both hold a ring of their own, so each names
--- its own pair of files instead of two writers appending to one path.
+-- One sink per Lua state. The suite runs in three -- the tool in its own, the dashboard widget
+-- and the service widget sharing another, and the background decoder's special function in the
+-- radio's script state -- and each holds a ring of its own, so each names its own pair of files
+-- instead of three writers appending to one path.
+--
+-- The third one is the only one that keeps running when the widgets do not. A widget whose pass
+-- overruns its instruction budget is not called again, so it cannot write down that it stopped;
+-- the script state is yielded rather than cut off, and its step file's timestamp is what says
+-- how far a radio got.
 
 local Sink = {}
 

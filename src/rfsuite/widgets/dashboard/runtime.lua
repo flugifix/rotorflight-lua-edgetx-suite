@@ -159,6 +159,22 @@ end
 -- refreshing.
 local USAGE_REPORT_INTERVAL = 5
 
+-- Which shared-memory slot carries this widget's heartbeat, and how the two figures are packed
+-- into the one integer it holds.
+--
+-- **The map of the sixteen slots is in tasks/events/telemetry_bg/drain.lua**, which allocates
+-- them; these are literals rather than a read of that module because nothing on this pass loads
+-- it and pulling in the decoder's subtree for two constants would cost more than the feature.
+-- Keeping them in step is therefore a manual obligation, and the map is the authority.
+--
+-- The wrap stays far inside the firmware's `int`: `shmVar` is a plain C int array
+-- (radio/src/lua/api_general.cpp), so the packed value must not reach 2^31. It also never lands
+-- on zero, because a slot that was never written reads zero and a writer that produced one would
+-- be indistinguishable from that.
+local SHM_PASS_ID = 15
+local SHM_PASS_SHIFT = 256
+local SHM_PASS_WRAP = 0x400000
+
 --- Report how much of the per-pass instruction ceiling this widget is consuming.
 --
 -- EdgeTX gives the widget Lua state a fixed instruction budget per pass, and
@@ -208,9 +224,43 @@ local function traceInstructionUsage(self)
   if percent > self._usageWindowPeak then self._usageWindowPeak = percent end
   if percent > self._usagePeak then self._usagePeak = percent end
 
+  -- The heartbeat, for a reader outside this Lua state.
+  --
+  -- A widget whose pass overruns the instruction budget is not called again, so THIS function
+  -- cannot report the pass that ends it and no line in the widget's own log can be the failing
+  -- one. What says it stopped is that the counter below stops moving, and only something outside
+  -- this state can see that -- the shared-memory slots are the one channel there is.
+  --
+  -- A moving counter rather than a flag, and never zero: nothing clears the slots, not a model
+  -- change and not the interpreter being torn down, so a flag left set by a state that has gone
+  -- away would mislead for as long as the radio is on, and a slot that was never written reads
+  -- zero. It counts PASSES rather than saying "I am alive", which is also what makes it the rate
+  -- a reader wants: the difference between two samples over the time between them is the pass
+  -- rate, and a widget at twelve per cent of budget and thirty passes a second is a different
+  -- machine from one at twelve per cent and four.
+  --
+  -- The gate is sampled on the report window below and cached, not asked per pass: this is a
+  -- diagnostic, it belongs behind the debug level like every other, and asking the preferences
+  -- for it thirty times a second would be the diagnostic becoming the cost.
+  -- Sampled once on the first pass and then on the report window below. Without the first
+  -- sample the heartbeat would not start until five seconds in -- and a widget that dies inside
+  -- those five seconds is exactly the case worth recording, since the cold-start pass is the
+  -- most expensive one this widget has.
+  if self._shmOn == nil then
+    self._shmOn = Log and type(Log.wanted) == "function" and Log.wanted("debug") or false
+  end
+
+  self._shmPass = (self._shmPass or 0) + 1
+  if self._shmPass >= SHM_PASS_WRAP then self._shmPass = 1 end
+  if self._shmOn and type(setShmVar) == "function" then
+    setShmVar(SHM_PASS_ID, self._shmPass * SHM_PASS_SHIFT + (percent > 255 and 255 or percent))
+  end
+
   local now = nowSeconds()
   if now < self._usageReportAt then return end
   self._usageReportAt = now + USAGE_REPORT_INTERVAL
+
+  self._shmOn = Log and type(Log.wanted) == "function" and Log.wanted("debug") or false
 
   if Log and type(Log.emitf) == "function" then
     Log.emitf("rfsuite.widget", "trace",
@@ -2492,6 +2542,22 @@ function Runtime.new(zone, options)
     -- widget-state bounds -- counts per pass, never wall clock -- by reading it, and
     -- without the bracket a JOB pass would silently run them under the tool rules.
     if self._job then
+      -- A step line naming the work class this pass is about to do, so the card says what the
+      -- widget was doing when it stopped rather than what the connect sequence last did.
+      --
+      -- Without it this file is not empty, which is worse than empty: the event runner leaves a
+      -- line per task while connecting and then nothing, so it stands frozen at whatever the
+      -- connect sequence last did, minutes or hours before the fault. That looks like an answer.
+      --
+      -- The KEY is the constant "wgt job" and the kind travels in the LABEL. That is the whole
+      -- discipline `Sink.step` documents: it throttles a caller repeating the same KIND, so a key
+      -- that varied with the work -- or was left to default to a label carrying a counter -- would
+      -- look like news on every call and the file would be rewritten as fast as the widget
+      -- renders. The label is a bounded set of five strings, not a formatted one, so nothing is
+      -- built on the pass either.
+      local step = _G.rfsuite and _G.rfsuite.logStep
+      if step then step("widget job: " .. tostring(self._job.kind), false, "wgt job") end
+
       if MspRuntime and type(MspRuntime.pump) == "function" then
         if type(_G) == "table" then
           _G.rfsuite = _G.rfsuite or {}
