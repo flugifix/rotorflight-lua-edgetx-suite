@@ -45,8 +45,18 @@ local HEAP_REPORT_INTERVAL_SECONDS = 30
 -- asks the card for more, so it takes the conservative interval always.
 local USE_LONG_FLUSH_CADENCE = true
 
+-- How long the dashboard widget's heartbeat may stand still before this script writes down that
+-- it has stopped. It has to outlast the slowest legitimate gap -- a widget is not called at all
+-- while another screen page is in front, and a build pass is long -- so it is generous: what is
+-- being recorded is a widget that is GONE, not one that is busy.
+local WIDGET_STALE_SECONDS = 3.0
+
 local lastPreferencesLoad = nil
 local lastHeapReport = nil
+local widgetValue = nil
+local widgetMovedAt = nil
+local widgetWasMoving = false
+local widgetReported = false
 
 local function nowSeconds()
   if type(getTime) == "function" then
@@ -161,6 +171,19 @@ local function reportHeap(now, sink)
     Log.emitf("rfsuite.functions", "trace", "heap %d kB", memKb)
   end
 
+  -- Once the dashboard widget has been reported gone, the routine line below keeps SAYING so.
+  --
+  -- The step file holds one line and is truncated on every write, so without this the most
+  -- important line it will ever carry is erased by the least important one on the next interval
+  -- -- measured, not feared: a run recorded the widget's stop and thirty seconds later the file
+  -- said only that the decoder was running. The session file still has the history, but its
+  -- promise is a loss window of one flush cadence, and the case this whole arrangement is for is
+  -- the one where the radio does not survive that long.
+  local tail = ""
+  if widgetReported and widgetMovedAt then
+    tail = string.format(", dashboard widget silent since %.0f s", now - widgetMovedAt)
+  end
+
   -- The same figure in the step file, which is the half that survives a radio that has stopped
   -- answering: its timestamp is then the last moment this script ran, and that is a question
   -- nothing else on the card can answer once the widgets are gone. One write per interval, into
@@ -172,7 +195,61 @@ local function reportHeap(now, sink)
   -- Asked again on every write, not only at load: lowering the level has to stop the writing,
   -- and the module cannot be unloaded once it is in.
   if sink and type(sink.step) == "function" and cardRecordWanted() then
-    pcall(sink.step, string.format("background decoder running, heap %d kB", memKb), false, "function heap")
+    pcall(sink.step, string.format("background decoder running, heap %d kB%s", memKb, tail),
+      false, "function heap")
+  end
+end
+
+--- Watch the dashboard widget's heartbeat and record the moment it stops.
+--
+-- This is the half a widget cannot do for itself. Past its instruction budget the firmware stops
+-- calling the widget's refresh altogether, so the pass that fails can never report itself and no
+-- line in the widget's own log is the failing one. From here it is visible: the slot stops moving
+-- and its last value still carries what that final pass cost.
+--
+-- The reader keeps no memory but the last value it saw, and works out for itself whether the
+-- counter MOVES -- the value alone says nothing, because nothing ever clears the slots and what
+-- stands in one at the first read may be a leftover from a previous session. So a stop is only
+-- reported after the counter has been SEEN moving; a slot that was dead from the start is a radio
+-- with no dashboard widget on screen, which is not a fault and is not written down.
+--
+-- One line per stop, not one per pass: `widgetReported` is the edge, and it is cleared when the
+-- counter moves again so that a widget which comes back and dies twice is recorded twice.
+local function watchWidget(now, sink)
+  if type(getShmVar) ~= "function" or not Drain then return end
+  local id = Drain.SHM_WIDGET_PASS_ID
+  if not id then return end
+
+  local value = getShmVar(id)
+  if type(value) ~= "number" or value == 0 then return end
+
+  if value ~= widgetValue then
+    if widgetValue ~= nil then
+      widgetWasMoving = true
+      widgetReported = false
+    end
+    widgetValue = value
+    widgetMovedAt = now
+    return
+  end
+
+  if not (widgetWasMoving and widgetMovedAt) or widgetReported then return end
+  local still = now - widgetMovedAt
+  if still < WIDGET_STALE_SECONDS then return end
+  widgetReported = true
+
+  -- The low eight bits are what the widget's LAST pass cost, as a percentage of the instruction
+  -- budget. Past 255 the firmware's own counter wraps, so a figure at the ceiling is reported as
+  -- "at or past" rather than as an exact number it cannot be.
+  local usage = value % (Drain.SHM_WIDGET_PASS_SHIFT or 256)
+  local text = string.format("dashboard widget silent %.1f s, last pass %s%d %%",
+    still, usage >= 255 and ">=" or "", usage)
+
+  if Log and type(Log.emitf) == "function" then
+    Log.emitf("rfsuite.functions", "warn", "%s", text)
+  end
+  if sink and type(sink.step) == "function" and cardRecordWanted() then
+    pcall(sink.step, text, true, "widget silent")
   end
 end
 
@@ -209,6 +286,7 @@ local function run()
   end
 
   local sink = ensureLogSink()
+  watchWidget(now, sink)
   reportHeap(now, sink)
 
   -- Last, so the lines this pass produced go out with it rather than one pass later.

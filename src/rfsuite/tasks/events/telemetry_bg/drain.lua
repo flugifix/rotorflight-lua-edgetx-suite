@@ -130,6 +130,19 @@ end
 -- own script reaches for first.
 M.SHM_LIVENESS_ID = 16
 
+-- And which one carries the DASHBOARD WIDGET's heartbeat, for whoever is watching from outside
+-- that Lua state. Allocated here rather than where it is used, because the sixteen slots are a
+-- radio-wide resource and a map kept in two files is a collision waiting to happen. Counting
+-- down from the top for the same reason the one above does: a pilot's own script reaches for the
+-- low ids first.
+--
+-- The slot carries `pass * 256 + usage`: the widget's pass counter in the high bits and the
+-- percentage of the instruction budget its previous pass cost in the low eight. Eight bits is
+-- exactly what the firmware can report -- luaGetUsage stores it in a uint8_t -- so nothing is
+-- lost by packing, and one integer means one write per pass instead of two.
+M.SHM_WIDGET_PASS_ID = 15
+M.SHM_WIDGET_PASS_SHIFT = 256
+
 -- How long a counter that has stopped moving still counts as alive. It has to cover the gap
 -- between two turns of whatever is bumping it, and it is also how long a host keeps skipping
 -- its own drain after the other side has gone away -- so it is short: a tool session pauses
