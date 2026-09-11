@@ -2545,6 +2545,22 @@ function Runtime.new(zone, options)
     -- widget-state bounds -- counts per pass, never wall clock -- by reading it, and
     -- without the bracket a JOB pass would silently run them under the tool rules.
     if self._job then
+      -- A step line naming the work class this pass is about to do, so the card says what the
+      -- widget was doing when it stopped rather than what the connect sequence last did.
+      --
+      -- Without it this file is not empty, which is worse than empty: the event runner leaves a
+      -- line per task while connecting and then nothing, so it stands frozen at whatever the
+      -- connect sequence last did, minutes or hours before the fault. That looks like an answer.
+      --
+      -- The KEY is the constant "wgt job" and the kind travels in the LABEL. That is the whole
+      -- discipline `Sink.step` documents: it throttles a caller repeating the same KIND, so a key
+      -- that varied with the work -- or was left to default to a label carrying a counter -- would
+      -- look like news on every call and the file would be rewritten as fast as the widget
+      -- renders. The label is a bounded set of five strings, not a formatted one, so nothing is
+      -- built on the pass either.
+      local step = _G.rfsuite and _G.rfsuite.logStep
+      if step then step("widget job: " .. tostring(self._job.kind), false, "wgt job") end
+
       if MspRuntime and type(MspRuntime.pump) == "function" then
         if type(_G) == "table" then
           _G.rfsuite = _G.rfsuite or {}
