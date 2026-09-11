@@ -1974,9 +1974,6 @@ function Runtime.new(zone, options)
       nextAllowedAt = 0,
       modelAnnounced = false,
       lastFuelCallout = nil,
-      lowFuelActive = false,
-      lowFuelLastAt = 0,
-      lowFuelRepeatCount = 0,
       lastValues = {
         arming_flags = nil,
         governor_state = nil,

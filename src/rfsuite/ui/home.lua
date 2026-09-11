@@ -592,9 +592,6 @@ state = {
     nextAllowedAt = 0,
     modelAnnounced = false,
     lastFuelCallout = nil,
-    lowFuelActive = false,
-    lowFuelLastAt = 0,
-    lowFuelRepeatCount = 0,
     -- This table is rebuilt every time the tool is started, which is not the same thing as
     -- the craft having reconnected. The fuel level, the battery capacity and the pack check
     -- happen once per connection, so without these flags the pilot hears all three again on

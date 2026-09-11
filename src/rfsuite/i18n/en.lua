@@ -741,6 +741,12 @@ return {
         section_fuel = "Fuel",
         section_battery = "Battery",
         section_other = "Other",
+        section_alert_behaviour = "Alert Behaviour",
+        alert_repeat = "Repeat",
+        alert_haptic = "Haptic",
+        alert_repeat_until_cleared = "Until cleared",
+        alert_repeat_once = "Once",
+        alert_repeat_times = "x",
         arming_flags = "Arming Flags",
         governor_state = "Governor State",
         section_governor_states = "Announced states",
@@ -774,8 +780,6 @@ return {
         adjustment_events = "Adjustment Announcements",
         fuel_alerts = "Fuel",
         fuel_callout_percent = "Callout %",
-        fuel_repeat_below_zero = "Repeats below 0%",
-        fuel_haptic_below_zero = "Haptic below 0%",
         fuel_callout_only_10 = "Only at 10%",
         fuel_callout_default = "Only at 10%",
         fuel_callout_5 = "Every 5%",
@@ -799,25 +803,25 @@ return {
         help_message = "Announce the governor's state. The main switch turns the announcements on; below it, choose which states are spoken. A state is announced once it has held for a moment, so the states a spool-up passes through are not read out one after another."
       },
       settings_audio_events_voltage = {
-        help_message = "Announce when the pack voltage falls to the warning level set in the battery configuration, with the voltage spoken. The reading has to stay below that level for the hold time before anything is said, so that a pack sagging under load is not announced as a pack that is down; the alert then repeats every 10 seconds until the voltage recovers, and a hold of 0 announces on the first reading below the level as it did before. Below it, the pack check speaks once when the model connects if the pack is not full, with the per-cell voltage read out. The margin is how far below the full-cell voltage of the battery configuration a pack may sit and still count as full, so that one left standing for a day does not trip it. The check is made once per connection and never again in flight. The last switch announces a main pack that has gone while the flight controller stays alive on a BEC or a backup battery, repeating every 10 seconds with the BEC voltage spoken, and once more when the pack comes back."
+        help_message = "Announce when the pack voltage falls to the warning level set in the battery configuration, with the voltage spoken. The reading has to stay below that level for the hold time before anything is said, so that a pack sagging under load is not announced as a pack that is down; the alert then repeats every 10 seconds until the voltage recovers, and a hold of 0 announces on the first reading below the level as it did before. Below it, the pack check speaks once when the model connects if the pack is not full, with the per-cell voltage read out. The margin is how far below the full-cell voltage of the battery configuration a pack may sit and still count as full, so that one left standing for a day does not trip it. The check is made once per connection and never again in flight. The last switch announces a main pack that has gone while the flight controller stays alive on a BEC or a backup battery, repeating every 10 seconds with the BEC voltage spoken, and once more when the pack comes back. At the bottom, Repeat says how often an alert on this page speaks while its condition lasts, and Haptic whether the transmitter buzzes with it. Both cover the voltage alert, the main power alert and the BEC or receiver alert set up under Setup, Power, Alerts; the pack check speaks once when the model connects and takes neither."
       },
       settings_audio_events_profiles = {
         help_message = "Announce the PID profile and the rate profile when they change, with the new profile's number."
       },
       settings_audio_events_esc = {
-        help_message = "Announce when the ESC temperature reaches the threshold. The threshold belongs to the model: with a flight controller connected it is stored with that model, otherwise it is the radio-wide default. Below it, the flight controller's own MCU temperature has its own switch and threshold. That one is radio-wide, because the same controller is rated the same in every aircraft. Either alert repeats every 10 seconds while the temperature stays at or above its threshold."
+        help_message = "Announce when the ESC temperature reaches the threshold. The threshold belongs to the model: with a flight controller connected it is stored with that model, otherwise it is the radio-wide default. Below it, the flight controller's own MCU temperature has its own switch and threshold. That one is radio-wide, because the same controller is rated the same in every aircraft. At the bottom, Repeat says how often either alert speaks while the temperature stays at or above its threshold, and Haptic whether the transmitter buzzes with it. Until cleared is one announcement every 10 seconds for as long as it is too hot; a count stops after that many and starts over once the temperature has come back down."
       },
       settings_audio_events_adjustment = {
         help_message = "Announce a value changed through an adjustment function, as the flight controller reports it."
       },
       settings_audio_events_fuel = {
-        help_message = "Announce the remaining fuel as it falls past the chosen steps, and repeat the empty warning below 0%, with an optional haptic pulse."
+        help_message = "Announce the remaining fuel as it falls past the chosen steps. At the bottom, Repeat says how often the empty warning below 0% speaks, and Haptic whether the transmitter buzzes with it. The descending callouts are not repeated: each step is spoken once as it is passed."
       },
       settings_audio_events_battery = {
         help_message = "Announce the battery capacity when the battery profile changes, and the fuel level once when the model connects."
       },
       settings_audio_events_link = {
-        help_message = "Announce the link quality with the percentage spoken, at a warning level and again at a critical one. A level is announced when it is first reached and then every 10 seconds while it holds; recovering is silent. On a receiver that reports no link quality the alert stays quiet, because the value that arrives instead is a signal strength in dBm and not a percentage. Below it, the telemetry switch announces a model that was lost while it was armed, and announces it again when it answers. Only a flight controller that stops answering while the radio link is still up is announced: a lost link is what the radio itself announces, and hearing the same event twice is worse than hearing it once. It needs two files that your sound pack may not carry yet, and stays silent without them."
+        help_message = "Announce the link quality with the percentage spoken, at a warning level and again at a critical one. A level is announced when it is first reached and then every 10 seconds while it holds; recovering is silent. On a receiver that reports no link quality the alert stays quiet, because the value that arrives instead is a signal strength in dBm and not a percentage. Below it, the telemetry switch announces a model that was lost while it was armed, and announces it again when it answers. Only a flight controller that stops answering while the radio link is still up is announced: a lost link is what the radio itself announces, and hearing the same event twice is worse than hearing it once. It needs two files that your sound pack may not carry yet, and stays silent without them. At the bottom, Repeat says how often the link quality alert speaks while it stays at a level, and Haptic whether the transmitter buzzes with it. The buzz is for the critical level only, whatever the quality alert is set to; the lost telemetry announcement buzzes too but says itself once per loss, so Repeat does not reach it."
       },
       settings_audio_events_other = {
         help_message = "Announce the model's name when it connects. The announcement is a WAV file named after the model in the SOUNDS folder."

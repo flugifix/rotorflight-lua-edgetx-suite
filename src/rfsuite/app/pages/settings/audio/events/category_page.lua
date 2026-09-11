@@ -45,6 +45,14 @@ local CONFIG_SCHEMA = {
   -- Millivolts per cell, so the number reads the same whatever the pack is: 100 is a tenth of
   -- a volt below the configured full-cell voltage.
   { key = "pack_not_full_margin", type = "number", default = 100, min = 10, max = 500, section = "voltage" },
+  -- Whether an alert repeats and whether it buzzes belong to a CATEGORY rather than to one
+  -- alert: this page is where the pilot switches its alerts on, so it is where they say how
+  -- those alerts behave. A repeat of 0 is "for as long as the condition holds", which is what
+  -- every alert did before these settings existed, and the haptic defaults to on because most
+  -- of the alerts they cover already buzzed with no way of stopping them. lib/audio.lua holds
+  -- the map from an alert to the category it takes these two from.
+  { key = "voltage_repeat",    type = "number", default = 0, min = 0, max = 10, section = "voltage" },
+  { key = "voltage_haptic",    type = "bool", default = true,  section = "voltage" },
   { key = "pid_profile",       type = "bool", default = true,  section = "profiles" },
   { key = "rate_profile",      type = "bool", default = true,  section = "profiles" },
   { key = "esc_temperature",   type = "bool", default = false, section = "esc" },
@@ -58,15 +66,24 @@ local CONFIG_SCHEMA = {
   -- same silicon with the same rating in every aircraft, so a copy of this limit per model
   -- would be one more place to keep in step and nothing else.
   { key = "mcu_threshold",     type = "number", default = 80, min = 40, max = 150, section = "esc" },
+  { key = "esc_repeat",        type = "number", default = 0, min = 0, max = 10, section = "esc" },
+  { key = "esc_haptic",        type = "bool", default = true,  section = "esc" },
   { key = "lq_alert",          type = "bool", default = false, section = "link" },
   { key = "lq_warn",           type = "number", default = 70, min = 1, max = 100, section = "link" },
   { key = "lq_critical",       type = "number", default = 50, min = 1, max = 100, section = "link" },
   { key = "telemetry_lost",    type = "bool", default = false, section = "link" },
+  { key = "link_repeat",       type = "number", default = 0, min = 0, max = 10, section = "link" },
+  { key = "link_haptic",       type = "bool", default = true,  section = "link" },
   { key = "adjustment_events", type = "bool", default = false, section = "adjustment" },
   { key = "fuel_alerts",       type = "bool", default = true,  section = "fuel" },
   -- No range: the callout step is a choice out of FUEL_CALLOUT_VALUES below, not a free number.
   { key = "fuel_callout_percent", type = "number", default = 10, section = "fuel" },
-  { key = "fuel_repeat_below_zero", type = "number", default = 1, min = 1, max = 10, section = "fuel" },
+  -- The fuel category's pair of the two above. They keep the keys and the defaults they were
+  -- given when this alert was the only one in the tree that had either property, so an
+  -- existing preferences.ini reads exactly as it did; what changed is that the same two
+  -- properties now exist for the other categories rather than for this one alone. The range
+  -- starts at 0 like the others, which is the value that was not expressible before.
+  { key = "fuel_repeat_below_zero", type = "number", default = 1, min = 0, max = 10, section = "fuel" },
   { key = "fuel_haptic_below_zero", type = "bool", default = false, section = "fuel" },
   { key = "battery_profile",   type = "bool", default = true,  section = "battery" },
   { key = "initial_fuel",      type = "bool", default = true,  section = "battery" },
@@ -125,6 +142,9 @@ local SECTIONS = {
       -- different event that happens to be read off the same sensor.
       { kind = "subheader", labelKey = "section_main_power", labelFallback = "Main Power" },
       { kind = "bool", key = "main_power_lost", labelKey = "main_power_lost", labelFallback = "Main Power Lost" },
+      { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
+      { kind = "choice", key = "voltage_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
+      { kind = "bool", key = "voltage_haptic", labelKey = "alert_haptic", labelFallback = "Haptic" },
     },
   },
   profiles = {
@@ -149,6 +169,9 @@ local SECTIONS = {
       -- the row's own key, so this one carries no [Model] marker.
       { kind = "number", key = "mcu_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", suffix = "°",
         enabledBy = "mcu_temperature" },
+      { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
+      { kind = "choice", key = "esc_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
+      { kind = "bool", key = "esc_haptic", labelKey = "alert_haptic", labelFallback = "Haptic" },
     },
   },
   link = {
@@ -162,6 +185,9 @@ local SECTIONS = {
         enabledBy = "lq_alert" },
       { kind = "subheader", labelKey = "section_telemetry", labelFallback = "Telemetry" },
       { kind = "bool", key = "telemetry_lost", labelKey = "telemetry_lost", labelFallback = "Telemetry Lost" },
+      { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
+      { kind = "choice", key = "link_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
+      { kind = "bool", key = "link_haptic", labelKey = "alert_haptic", labelFallback = "Haptic" },
     },
   },
   adjustment = {
@@ -177,9 +203,13 @@ local SECTIONS = {
     items = {
       { kind = "bool", key = "fuel_alerts", labelKey = "fuel_alerts", labelFallback = "Fuel" },
       { kind = "choice", key = "fuel_callout_percent", labelKey = "fuel_callout_percent", labelFallback = "Callout %" },
-      { kind = "number", key = "fuel_repeat_below_zero", labelKey = "fuel_repeat_below_zero", labelFallback = "Repeats below 0%",
-        suffix = "x", enabledBy = "fuel_alerts" },
-      { kind = "bool", key = "fuel_haptic_below_zero", labelKey = "fuel_haptic_below_zero", labelFallback = "Haptic below 0%" },
+      -- The same two rows the other categories carry, under the same subheader. The empty
+      -- alert is the only one on this page that has a condition to hold, so the pair reads
+      -- the same as the "below 0%" wording it replaces and means exactly what it did.
+      { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
+      { kind = "choice", key = "fuel_repeat_below_zero", labelKey = "alert_repeat", labelFallback = "Repeat",
+        enabledBy = "fuel_alerts" },
+      { kind = "bool", key = "fuel_haptic_below_zero", labelKey = "alert_haptic", labelFallback = "Haptic" },
     },
   },
   battery = {
@@ -271,6 +301,8 @@ function M.new(sectionKey)
       numberEnabled = nil,
       numberGetters = nil,
       numberSetters = nil,
+      repeatGetters = nil,
+      repeatSetters = nil,
       fuelCalloutGet = nil,
       fuelCalloutSet = nil,
       fuelHapticGet = nil,
@@ -397,6 +429,50 @@ function M.new(sectionKey)
       end
     end
     return ui.runtime.fuelCalloutSet
+  end
+
+  -- The repeat rows all offer the same list, because the number means the same thing on every
+  -- page: how many times an alert speaks while one episode of its condition lasts. 0 is the
+  -- behaviour every alert had before the setting existed and is spelled out rather than shown
+  -- as a zero, which is the one value a pilot could not read off a plain number.
+  local function getRepeatOptions(i18n)
+    local options = {
+      { value = 0, label = t(i18n, "alert_repeat_until_cleared", "Until cleared") },
+      { value = 1, label = t(i18n, "alert_repeat_once", "Once") }
+    }
+    local times = t(i18n, "alert_repeat_times", "x")
+    for n = 2, 10 do
+      options[#options + 1] = { value = n, label = tostring(n) .. " " .. times }
+    end
+    return options
+  end
+
+  local function getRepeatGetter(key)
+    local cache = numberCache("repeatGetters")
+    if cache[key] then return cache[key] end
+    cache[key] = function()
+      local value = tonumber(ui.config[key]) or 0
+      if value < 0 then value = 0 end
+      if value > 10 then value = 10 end
+      return math.floor(value)
+    end
+    return cache[key]
+  end
+
+  local function getRepeatSetter(key, enabledBy)
+    local cache = numberCache("repeatSetters")
+    if cache[key] then return cache[key] end
+    cache[key] = function(value)
+      if type(enabledBy) == "string" and ui.config[enabledBy] ~= true then return end
+      local nextValue = tonumber(value) or 0
+      if nextValue < 0 then nextValue = 0 end
+      if nextValue > 10 then nextValue = 10 end
+      if ui.config[key] ~= nextValue then
+        ui.config[key] = nextValue
+        ui.runtime.markDirty()
+      end
+    end
+    return cache[key]
   end
 
   local function getFuelHapticGetter()
@@ -615,14 +691,20 @@ function M.new(sectionKey)
         cursorY = cursorY + 10
         Controls.appendStaticSectionHeader(children, x, cursorY, w, t(i18n, item.labelKey, item.labelFallback))
         cursorY = cursorY + Controls.STATIC_SECTION_H
-      elseif item.kind == "choice" and k == "fuel_callout_percent" then
+      elseif item.kind == "choice" then
         local labelText = t(i18n, item.labelKey, item.labelFallback)
+        local options, selected, onSelect
+        if k == "fuel_callout_percent" then
+          options, selected, onSelect = getFuelCalloutOptions(i18n), getFuelCalloutGetter()(), getFuelCalloutSetter()
+        else
+          options, selected, onSelect = getRepeatOptions(i18n), getRepeatGetter(k)(), getRepeatSetter(k, item.enabledBy)
+        end
         cursorY = cursorY + Controls.appendComboSelect(
           children, x, cursorY, w,
           labelText,
-          getFuelCalloutOptions(i18n),
-          getFuelCalloutGetter()(),
-          getFuelCalloutSetter()
+          options,
+          selected,
+          onSelect
         )
       elseif item.kind == "number" then
         local field = SCHEMA_BY_KEY[k]
