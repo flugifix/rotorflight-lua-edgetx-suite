@@ -16,10 +16,16 @@ local FUNCTION_PREFIX = "/SCRIPTS/FUNCTIONS/"
 -- repo root in.
 local repoRoot = "."
 
--- Fixed-step clock: 10 ms of getTime() ticks per call (getTime is in 10 ms units on the
--- radio). Never the wall clock -- determinism is what makes two runs comparable.
+-- Fixed-step clock, advanced once per PASS by the caller rather than once per call. getTime is
+-- in 10 ms units on the radio, and a widget pass is about 100 ms, so one pass is ten ticks.
+--
+-- It used to advance on every call, which is deterministic but makes a second worth however many
+-- times the code under test happens to ask the time. Anything the suite does on a cadence -- a
+-- read every 0.5 s, a cooldown, a throttle -- then fires almost every pass or almost never
+-- depending on that count, and cannot be priced. Never the wall clock either way: determinism is
+-- what makes two runs comparable.
 local clockTicks = 0
-local CLOCK_STEP_TICKS = 1
+local CLOCK_STEP_TICKS = 10
 
 -- Scripted answers, settable per scenario by measure.lua.
 Stubs.sensors = {}          -- name -> number (getValue / lib/sensors path)
@@ -85,7 +91,13 @@ local function collectRefs(node, refs)
   end
 end
 
+--- One pass of the host clock. Called by measure.lua once per measured pass.
+function Stubs.tick()
+  clockTicks = clockTicks + CLOCK_STEP_TICKS
+end
+
 function Stubs.reset()
+  clockTicks = 0
   clockTicks = 0
   Stubs.sensors = {}
   Stubs.telemetryFrames = {}
@@ -137,7 +149,6 @@ function Stubs.install(root)
   end
 
   _G.getTime = function()
-    clockTicks = clockTicks + CLOCK_STEP_TICKS
     return clockTicks
   end
 

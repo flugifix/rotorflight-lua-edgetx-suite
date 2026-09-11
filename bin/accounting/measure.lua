@@ -69,6 +69,8 @@ end
 -- wherever the allocator happens to be. The firmware's own incremental collection is part
 -- of what the budget margin covers.
 local function count(fn, ...)
+  -- One pass of the host clock per measured call. The stub's clock does not run by itself.
+  Stubs.tick()
   local n = 0
   collectgarbage("collect")
   collectgarbage("stop")
@@ -285,6 +287,11 @@ end
 -- of 31 is the first that clears it, so 40 keeps ten passes of margin.
 local SETTLE_TAIL = 40
 
+-- The pass budgets handed to settle() and to the prime loop below are ten times what they were
+-- under the per-call clock. Nothing waits longer in seconds: a pass is now worth a fixed 100 ms of
+-- clock rather than however many ticks that pass happened to ask for, so the same elapsed time is
+-- reached in about ten times the passes. The budgets are a guard against a loop that never
+-- finishes, so they are scaled with the clock rather than tuned to a run.
 local function settle(widget, sensorIds, maxPasses)
   local coldWorst = 0
   local startupWorst = {}
@@ -321,7 +328,7 @@ local function runScenario(themePath, passes)
   widget.preferences = widget.preferences or {}
   widget.preferences.dashboard = { theme_preflight = themePath }
 
-  local coldWorst, settlePasses, startupWorst = settle(widget, sensorIds, 400)
+  local coldWorst, settlePasses, startupWorst = settle(widget, sensorIds, 4000)
 
   local worst = {}
   for i = 1, passes do
@@ -697,7 +704,7 @@ do
   Stubs.sensors["AdjV"] = 100
   Stubs.sensors["PID#"] = 1
 
-  settle(widget, World.sensorIds, 400)
+  settle(widget, World.sensorIds, 4000)
 
   -- The per-model store, as the widget reads it.
   --
@@ -748,6 +755,7 @@ do
     holdLinkBacklog()
     releaseReplies()
     feedLink(World.sensorIds, 900 + i)
+    Stubs.tick()
     widget.refresh(widget, nil, nil)
   end
 
@@ -784,7 +792,7 @@ do
     error("accounting: the overlay's ground half did not load")
   end
 
-  for i = 1, 400 do
+  for i = 1, 4000 do
     holdLinkBacklog()
     releaseReplies()
     feedLink(World.sensorIds, 5000 + i)
@@ -813,7 +821,7 @@ do
     end
   end
   if type(drive.prime) ~= "table" or drive.prime.phase ~= Prime.PHASE_DONE then
-    error("accounting: the prime never finished in 400 passes")
+    error("accounting: the prime never finished in 4000 passes")
   end
   if primePasses < #Functions.VALUE_READS then
     error(string.format(
@@ -844,6 +852,7 @@ do
     holdLinkBacklog()
     releaseReplies()
     feedLink(World.sensorIds, 800 + i)
+    Stubs.tick()
     widget.refresh(widget, nil, nil)
   end
   for i = 1, 240 do
@@ -908,6 +917,7 @@ do
     holdLinkBacklog()
     releaseReplies()
     feedLink(World.sensorIds, 2800 + i)
+    Stubs.tick()
     widget.refresh(widget, nil, nil)
   end
   for i = 1, 60 do
