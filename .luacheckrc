@@ -19,10 +19,16 @@ globals = {
   "setField",
   "getFieldInfo",
   "getSwitchIndex",
+  "getGeneralSettings",
   "FUNC_PLAY_SCRIPT",
 
-  -- Filesystem
+  -- Filesystem. These are bare globals of the firmware's filesystem library, not members of an
+  -- os table -- this Lua has none -- so a guard written as os.remove can never pass and the
+  -- name has to be spelled the way the radio publishes it.
   "fstat",
+  "del",
+  "rename",
+  "mkdir",
 
   -- Shared memory between Lua states
   "setShmVar",
@@ -93,6 +99,9 @@ local probe_globals = {
   -- Reading the card is a probe like any other: derived.lua stats /IMAGES/ for the model
   -- picture, and an object doing the same would do it once per frame.
   ["fstat"] = true,
+  -- And writing to it is worse than reading it, so the three that do are subtracted here too.
+  -- Without this, naming them above would have quietly widened what an object may do.
+  ["del"] = true, ["rename"] = true, ["mkdir"] = true,
 }
 local object_globals = {}
 for _, g in ipairs(globals) do
@@ -115,7 +124,8 @@ files["src/rfsuite/widgets/dashboard/objects/common.lua"] = { new_globals = glob
 -- to take four names out of it. Verified in both directions -- a planted `model` read in this
 -- file reports "accessing undefined variable 'model'", and removing the entry silences it.
 files["src/rfsuite/widgets/dashboard/inflight/screen.lua"] = {
-  not_globals = { "model", "getValue", "getSensor", "getFieldInfo", "fstat" }
+  not_globals = { "model", "getValue", "getSensor", "getFieldInfo", "fstat",
+                  "del", "rename", "mkdir" }
 }
 
 -- Code style rules

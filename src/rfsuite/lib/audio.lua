@@ -178,7 +178,7 @@ local function readBatteryPrefs()
 end
 
 -- The ESC's temperature limit describes the aircraft, so the model's own store wins over
--- the radio-wide default in preferences.ini. Reached the same way readBatteryPrefs above
+-- the radio-wide default in the transmitter's own store. Reached the same way readBatteryPrefs above
 -- reaches the other half of the same file.
 local function readAudioEventPrefs()
   local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
