@@ -62,6 +62,9 @@ function M.wakeup(args)
       local stats = flightStats.parse(buf)
       if stats and stats.flightcount then
         session.flightcount = stats.flightcount
+        -- Armed seconds the board has counted. The flight record publishes it as the total,
+        -- with the flight in progress added to it.
+        session.totalflighttime = stats.totalflighttime
       end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then

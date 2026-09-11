@@ -64,10 +64,6 @@ end
 
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
 local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
-local RSSI_LINK_SOURCES = {
-  ["1RSS"] = true,
-  ["2RSS"] = true,
-}
 local THROTTLE_INFLIGHT_THRESHOLD = 35
 local THROTTLE_INFLIGHT_THRESHOLD_DIRECT = 8
 local RPM_INFLIGHT_THRESHOLD_DIRECT = 500
@@ -1379,273 +1375,57 @@ local function normalizeCellVoltage(value, fallback)
   return v
 end
 
--- Flight statistics: one row per tracked extreme. This table is the only place that knows the
--- set -- a new statistic is a row here rather than an edit at five separate sites -- and all
--- five sites are driven from it: the state declaration, the arm-edge reset, the per-pass update,
--- the disarm-edge copy and the disarm-edge clear.
---
---   key         the name suffix: state.currentFlightMax<key>, state.lastFlightMax<key>
---   field       the state field sampled while armed
---   min / max   which extremes of it are recorded
---   gate        what the value has to be for the statistic to take it at all; absent means
---               any number will do, which is the test the field has carried
---   minGate     a further condition on the minimum alone -- rpm has always recorded a maximum
---               of whatever it was given and a minimum only above zero
---   publishMin  the names the disarm edge publishes the extreme under, where they are not
---   publishMax  lastFlight<Min|Max><key>. The spellings without "Flight" are historical and
---               are still written, because user themes read `state` directly.
---
--- A gate is a constant rather than a predicate, because the one site that runs per pass tests it
--- without calling anything: see the trackers below.
-local GATE_ANY = 0        -- any number the field carries, which is what most of them take
-local GATE_POSITIVE = 1   -- above zero
-local GATE_FUEL_SEEN = 2  -- only once a fuel sensor has answered
--- Track link quality only when the active sensor reports a 0–100 % value.
--- Receivers without an RQly sensor fall back to 1RSS/2RSS (RSSI in dBm, always
--- negative); if the sensor is known to be an RSSI source or the value falls
--- outside 0 < lq <= 100 (e.g. 0 on sensor age-out), skip tracking.
--- Using lqSource as the discriminator matches linkIsQuality() in lib/audio.lua.
-local GATE_LINK_QUALITY = 3
+-- Flight statistics: this file no longer keeps them. They are recorded by
+-- tasks/events/telemetry/flight_record.lua, which runs from the event runtimes in the widget
+-- context, and published under rfsuite.session.flight -- so the record survives a model with no
+-- dashboard on any screen, and a dashboard reads it instead of being the only thing that has it.
+-- What is left here is the reading, below, plus the compatibility mapping at the end of this
+-- file for a user theme that still reaches for the old flat field names.
 
-local FLIGHT_STATS = {
-  { key = "ThrottlePercent", field = "throttlePercent", max = true },
-  { key = "Rpm",             field = "rpm",             max = true, min = true, minGate = GATE_POSITIVE },
-  { key = "Current",         field = "current",         max = true, min = true },
-  { key = "Watts",           field = "watts",           max = true },
-  { key = "Altitude",        field = "altitude",        max = true },
-  { key = "EscTemp",         field = "escTemp",         max = true },
-  { key = "McuTemp",         field = "mcuTemp",         max = true },
-  { key = "Fuel",            field = "fuel",                         min = true, gate = GATE_FUEL_SEEN },
-  { key = "Voltage",         field = "voltage",         max = true, min = true, gate = GATE_POSITIVE,
-    publishMin = { "lastMinVoltage" } },
-  { key = "BecVoltage",      field = "bec_voltage",                  min = true, gate = GATE_POSITIVE,
-    publishMin = { "lastFlightMinBecVoltage", "lastMinBecVoltage" } },
-  { key = "Lq",              field = "lq",              max = true, min = true, gate = GATE_LINK_QUALITY,
-    publishMin = { "lastMinLq" } },
-}
-
--- The four cold sites -- declaration, arm reset, disarm copy, disarm clear -- read FLIGHT_STATS
--- directly, once per flight or once per widget. The per-pass update is the one site that runs
--- inside an armed widget pass, so it reads the table in a compiled form instead: at load each row
--- picks one of the trackers below and is turned into a closure holding its own field names, which
--- leaves the per-pass work with no column to fetch, no absent direction to test for and no gate
--- to dispatch. Adding a statistic is still one row; adding a gate or a direction it has never had
--- before is one more tracker beside these.
---
--- Measured against the code this replaces: the whole extrema block costs 212-226 instructions per
--- armed pass in which telemetry changed, against 134-148 written out by hand. The difference is
--- the indirection itself -- eleven calls, and a field name held as an upvalue rather than as a
--- constant -- and it is what buys the single declaration above. It is paid on armed passes in
--- which telemetry moved, and on no other pass class.
-
---- The trackers. One per shape a row can declare, and the compile loop below picks between them
---- by reading the row's own columns; none of them names a statistic.
-local function trackMax(src, maxName)
-  return function(state)
-    local v = state[src]
-    if type(v) == "number" then
-      local b = state[maxName]
-      if b == nil or v > b then state[maxName] = v end
-    end
-  end
-end
-
-local function trackMaxMin(src, maxName, minName)
-  return function(state)
-    local v = state[src]
-    if type(v) == "number" then
-      local b = state[maxName]
-      if b == nil or v > b then state[maxName] = v end
-      b = state[minName]
-      if b == nil or v < b then state[minName] = v end
-    end
-  end
-end
-
---- A maximum that takes any number beside a minimum that only takes one above zero: rpm, whose
---- minimum has never recorded the spool-down to zero.
-local function trackMaxMinPositiveMin(src, maxName, minName)
-  return function(state)
-    local v = state[src]
-    if type(v) == "number" then
-      local b = state[maxName]
-      if b == nil or v > b then state[maxName] = v end
-      if v > 0 then
-        b = state[minName]
-        if b == nil or v < b then state[minName] = v end
-      end
-    end
-  end
-end
-
-local function trackMaxMinPositive(src, maxName, minName)
-  return function(state)
-    local v = state[src]
-    if type(v) == "number" and v > 0 then
-      local b = state[maxName]
-      if b == nil or v > b then state[maxName] = v end
-      b = state[minName]
-      if b == nil or v < b then state[minName] = v end
-    end
-  end
-end
-
-local function trackMinPositive(src, minName)
-  return function(state)
-    local v = state[src]
-    if type(v) == "number" and v > 0 then
-      local b = state[minName]
-      if b == nil or v < b then state[minName] = v end
-    end
-  end
-end
-
---- Fuel, which is only recorded once a fuel sensor has answered at least once this flight.
-local function trackMinFuel(src, minName)
-  return function(state)
-    local v = state[src]
-    if type(v) == "number" and state.fuelTelemetrySeen == true then
-      local b = state[minName]
-      if b == nil or v < b then state[minName] = v end
-    end
-  end
-end
-
---- Link quality: only when the active sensor reports a 0–100 % value. Receivers without an RQly
---- sensor fall back to 1RSS/2RSS, which carry an RSSI in dBm and are always negative, so a value
---- outside the range or a known RSSI source is not a link quality and is not recorded.
-local function trackLink(src, maxName, minName)
-  return function(state)
-    local v = state[src]
-    if type(v) == "number" and v > 0 and v <= 100
-       and not (type(state.lqSource) == "string" and RSSI_LINK_SOURCES[state.lqSource]) then
-      local b = state[maxName]
-      if b == nil or v > b then state[maxName] = v end
-      b = state[minName]
-      if b == nil or v < b then state[minName] = v end
-    end
-  end
-end
-
--- Compile the rows: resolve every field name once, and pick each row's tracker from the shape
--- the row declares. Nothing below builds a string or reads this table again.
-local TRACK = {}
-local TRACK_COUNT = #FLIGHT_STATS
-
-for i = 1, TRACK_COUNT do
-  local stat = FLIGHT_STATS[i]
-  if stat.max then
-    stat.currentMax = "currentFlightMax" .. stat.key
-    stat.publishMax = stat.publishMax or { "lastFlightMax" .. stat.key }
-  end
-  if stat.min then
-    stat.currentMin = "currentFlightMin" .. stat.key
-    stat.publishMin = stat.publishMin or { "lastFlightMin" .. stat.key }
-  end
-  local gate = stat.gate or GATE_ANY
-  local minGate = stat.minGate or GATE_ANY
-  local src, maxName, minName = stat.field, stat.currentMax, stat.currentMin
-  local built
-  if gate == GATE_LINK_QUALITY then
-    built = trackLink(src, maxName, minName)
-  elseif gate == GATE_FUEL_SEEN then
-    built = trackMinFuel(src, minName)
-  elseif gate == GATE_POSITIVE and maxName and minName then
-    built = trackMaxMinPositive(src, maxName, minName)
-  elseif gate == GATE_POSITIVE then
-    built = trackMinPositive(src, minName)
-  elseif maxName and minName and minGate == GATE_POSITIVE then
-    built = trackMaxMinPositiveMin(src, maxName, minName)
-  elseif maxName and minName then
-    built = trackMaxMin(src, maxName, minName)
-  else
-    built = trackMax(src, maxName)
-  end
-  TRACK[i] = built
-end
-
---- Drop the extremes of the flight in progress. Both edges start a fresh record this way.
-local function clearFlightStats(state)
-  for i = 1, #FLIGHT_STATS do
-    local stat = FLIGHT_STATS[i]
-    if stat.max then
-      state[stat.currentMax] = nil
-    end
-    if stat.min then
-      state[stat.currentMin] = nil
-    end
-  end
-end
-
+--- What this widget still keeps for itself across an arm edge, and the reading of what it does
+--- not. The statistics and the flight clock come from the record; the three fields below are the
+--- dashboard's own, because they are about this widget's screen rather than about the flight:
+--- `hadArmedFlight` holds the postflight page up while the link is down, `lastFlightEndingVoltage`
+--- is the landing voltage a tile shows, and `lastDisarmAt` times the postflight switch.
+---
+--- This still uses the widget's own armed reading. That is deliberate: the record's arm edge is
+--- the event runtime's, and these three follow the screen, not the record.
 local function updateDerivedFlightState(state)
-  local now = nowSeconds()
-  local lastTick = state.lastTickAt or now
-  local delta = now - lastTick
-  if delta < 0 or delta > 5 then
-    delta = 0
-  end
-  state.lastTickAt = now
-
   local wasArmed = state.wasArmed == true
   local isArmed = state.armed == true
 
   if isArmed and not wasArmed then
-    state.currentFlightSeconds = 0
-    clearFlightStats(state)
     state.lastFlightEndingVoltage = nil
     state.hadArmedFlight = true
-  end
-
-  if isArmed then
-    state.currentFlightSeconds = (state.currentFlightSeconds or 0) + delta
-    state.totalFlightSeconds = (state.totalFlightSeconds or 0) + delta
-
-    -- One call per statistic, against a block per statistic before. Each of these knows its
-    -- own two field names and its own gate, and nothing here knows which statistics exist.
-    for i = 1, TRACK_COUNT do
-      TRACK[i](state)
-    end
-  elseif wasArmed then
-    state.lastFlightSeconds = state.currentFlightSeconds or 0
-    if (state.currentFlightSeconds or 0) >= 1 then
-      state.flights = (state.flights or 0) + 1
-    end
-    state.lastDisarmAt = now
+  elseif wasArmed and not isArmed then
+    state.lastDisarmAt = nowSeconds()
     state.hadArmedFlight = true
-    for i = 1, #FLIGHT_STATS do
-      local stat = FLIGHT_STATS[i]
-      if stat.max then
-        local value = state[stat.currentMax]
-        local names = stat.publishMax
-        for j = 1, #names do
-          state[names[j]] = value
-        end
-      end
-      if stat.min then
-        local value = state[stat.currentMin]
-        local names = stat.publishMin
-        for j = 1, #names do
-          state[names[j]] = value
-        end
-      end
-    end
     -- Capture the ending (landing) voltage as the last known live voltage
     if type(state.voltage) == "number" and state.voltage > 0 then
       state.lastFlightEndingVoltage = state.voltage
     end
-    state.currentFlightSeconds = 0
-    clearFlightStats(state)
-    state.fuelTelemetrySeen = false
-  end
-
-  if isArmed then
-    state.flightSeconds = state.currentFlightSeconds or 0
-  else
-    state.flightSeconds = state.lastFlightSeconds or 0
   end
 
   state.prevArmed = wasArmed
   state.wasArmed = isArmed
+end
+
+--- Read the record. Once per pass, whatever the telemetry did: the flight clock advances on the
+--- owner's wakeups, not on this widget's reads, and a tile showing the time should follow it.
+---
+--- The four scalars stay on `state` under the names they have always had, because `lib/audio.lua`
+--- and the time objects read them there.
+local function readFlightRecord(state)
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local flight = type(session) == "table" and session.flight or nil
+  if type(flight) ~= "table" then return end
+
+  state.flight = flight
+  state.flights = flight.flights or 0
+  state.lastFlightSeconds = flight.lastSeconds or 0
+  state.totalFlightSeconds = flight.totalSeconds or 0
+  state.flightSeconds = flight.armed and (flight.seconds or 0) or (flight.lastSeconds or 0)
+
 end
 
 local function loadDashboardLib()
@@ -1961,6 +1741,7 @@ local function readTelemetry(state)
   setField("rss2", rss2)
 
   if telemetryChanged then updateDerivedFlightState(state) end
+  readFlightRecord(state)
 end
 
 local function computeFlightMode(state)
@@ -2005,6 +1786,56 @@ local function computeFlightMode(state)
 
   return "preflight"
 end
+
+-- Compatibility for a user theme that reads the record off `state` under its old flat names.
+--
+-- The record moved to rfsuite.session.flight and its field names went with it. A theme that has
+-- always read `state.currentFlightMaxRpm` keeps working through the map below, which is built
+-- from the record's OWN row list so that it cannot drift from the set. It is reached only for a
+-- name that is not on the state table, which is no shipped theme and no code in this tree.
+--
+-- Deprecated: the record is `state.flight` for a theme, and rfsuite.session.flight for anything
+-- outside the widget. See docs/reference/flight-statistics.md.
+local compatNames = {}
+local compatBuilt = false
+
+local function buildCompatNames()
+  if compatBuilt then return end
+  compatBuilt = true
+  local Record = nil
+  if _G.rfsuite and type(_G.rfsuite.require) == "function" then
+    local ok, mod = pcall(_G.rfsuite.require, "tasks/events/telemetry/flight_record.lua")
+    if ok then Record = mod end
+  end
+  local rows = type(Record) == "table" and Record.stats or nil
+  if type(rows) ~= "table" then return end
+  for i = 1, #rows do
+    local stat = rows[i]
+    if stat.max then
+      compatNames["currentFlightMax" .. stat.key] = { "current", "max" .. stat.key }
+      compatNames["lastFlightMax" .. stat.key] = { "last", "max" .. stat.key }
+    end
+    if stat.min then
+      compatNames["currentFlightMin" .. stat.key] = { "current", "min" .. stat.key }
+      compatNames["lastFlightMin" .. stat.key] = { "last", "min" .. stat.key }
+    end
+  end
+  -- The three older spellings without "Flight", which the record was also published under and
+  -- which a theme is at least as likely to have copied as the longer ones.
+  compatNames["lastMinVoltage"] = { "last", "minVoltage" }
+  compatNames["lastMinBecVoltage"] = { "last", "minBecVoltage" }
+  compatNames["lastMinLq"] = { "last", "minLq" }
+end
+
+local stateCompatMeta = {
+  __index = function(state, key)
+    local entry = compatNames[key]
+    if entry == nil then return nil end
+    local flight = rawget(state, "flight")
+    local record = flight and flight[entry[1]]
+    return record and record[entry[2]]
+  end,
+}
 
 function Runtime.new(zone, options)
   local dashboardLib = loadDashboardLib()
@@ -2064,10 +1895,11 @@ function Runtime.new(zone, options)
       watts = 0,
       altitude = 0,
       consumedMah = 0,
-      -- The per-flight extremes belong here too -- currentFlightMax.../currentFlightMin...
-      -- while a flight is running, lastFlightMax.../lastMin... once it has ended -- but a
-      -- `= nil` entry in a table constructor creates no key. FLIGHT_STATS declares the set,
-      -- and the loops that maintain it are the only code that has to know it.
+      -- The per-flight extremes are not here any more: they are the record's, under
+      -- rfsuite.session.flight, and `state.flight` below points at it. The four scalars that
+      -- follow are read from the record once per pass and kept under the names they have
+      -- always had, because lib/audio.lua and the time objects read them here.
+      flight = nil,
       flights = 0,
       lq = 0,
       rss1 = 0,
@@ -2136,6 +1968,9 @@ function Runtime.new(zone, options)
   if widget.i18n then
     widget.state.i18n = widget.i18n
   end
+
+  -- The old flat names of the record answer through this, and nothing else does: __index is
+  -- reached only for a key the state table does not hold.
 
   local function resolveVoltageCellCount(state)
     local cells = tonumber(state and state.batteryCellCount)
@@ -2306,6 +2141,19 @@ function Runtime.new(zone, options)
     self.state.themeConfig = nextConfig
     updateVoltageThemeConfig(self)
     self.theme = loadThemeModuleForState(selectedTheme, self.flightMode)
+
+    -- A theme of the pilot's own may read the flight record under the names it carried before it
+    -- moved to the session table. The mapping goes on HERE -- with the theme, in the same call,
+    -- ahead of the build below that is the first thing to read it -- rather than on a later pass,
+    -- where that first build would see nothing. A radio running the shipped themes never reaches
+    -- this: the mapping answers every read of a key the state table does not hold, which is not
+    -- free, and no shipped theme asks for one.
+    if not self.flightCompat and parseThemePath(selectedTheme) ~= "system" then
+      self.flightCompat = true
+      buildCompatNames()
+      setmetatable(self.state, stateCompatMeta)
+    end
+
     self.built = false
     self.renderKey = nil
     -- A pending job may belong to the theme just torn down; drop it. The next STATE
@@ -2426,9 +2274,8 @@ function Runtime.new(zone, options)
       -- a new flight controller is a new answer to that question.
       self.state.armedSeen = false
       self.state.batteryCellCount = 0
-      self.state.currentFlightSeconds = 0
-      self.state.lastFlightSeconds = 0
-      self.state.flightSeconds = 0
+      -- The flight clock and the statistics are the record's; the event runtime drops them on
+      -- the same disconnect that brings this branch about, and the next pass reads what is left.
       self.state.lastDisarmAt = nil
       self.state.profile = nil
       self.state.rateProfile = nil

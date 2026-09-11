@@ -351,6 +351,63 @@ local function runScenario(themePath, passes)
   }
 end
 
+--- Run one scenario ARMED, with telemetry that moves between passes.
+--
+-- Every steady-state row of this report is measured disarmed and against a frozen sensor set,
+-- which is the right shape for what those rows price. It does mean that two things are never
+-- entered in a measured pass: the derived half of the telemetry read, which runs only where a
+-- value has actually changed, and everything a flight costs -- the record of the flight's own
+-- statistics among it. A row measured there would be a zero that reads as free.
+--
+-- So: arm the model, and move the values a flight moves. The arm edge itself is settled out
+-- first, because the widget changes flight mode on it and reloads the theme behind it, and that
+-- is a build rather than the steady state this measures.
+local function runArmedScenario(themePath, passes)
+  World.reset()
+  local sensorIds = World.sensorIds
+  local Runtime = World.require("widgets/dashboard/runtime.lua")
+  local widget = Runtime.new(ZONE, {})
+  widget.preferences = widget.preferences or {}
+  widget.preferences.dashboard = { theme_preflight = themePath }
+
+  settle(widget, sensorIds, 400)
+
+  Stubs.sensors["ARM"] = 1
+  for i = 1, SETTLE_TAIL do
+    feedLink(sensorIds, 10000 + i)
+    widget.refresh(widget, nil, nil)
+  end
+
+  local worst = {}
+  local eventsWorst = 0
+  local Events = World.require("tasks/events/runtime.lua")
+  local session = _G.rfsuite.session
+  for i = 1, passes do
+    feedLink(sensorIds, 20000 + i)
+    -- What a flight does to the values the record tracks. A sensor set that does not move
+    -- leaves telemetryChanged false, and then this scenario measures the same thing as the
+    -- disarmed rows above.
+    local k = i % 8
+    Stubs.sensors["Hspd"] = 1500 + k * 100
+    Stubs.sensors["Curr"] = 10 + k
+    Stubs.sensors["Vbat"] = 23 + k / 10
+    Stubs.sensors["EscT"] = 40 + k
+    Stubs.sensors["Thr%"] = 20 + k * 5
+
+    local class = passClass(widget)
+    local n = count(widget.refresh, widget, nil, nil)
+    if n > (worst[class] or 0) then worst[class] = n end
+
+    session.event_context = "widget"
+    local e = count(Events.wakeup)
+    session.event_context = nil
+    if e > eventsWorst then eventsWorst = e end
+  end
+
+  Stubs.sensors["ARM"] = 0
+  return worst, eventsWorst
+end
+
 -- ---------------------------------------------------------------------------
 -- Report and gate
 -- ---------------------------------------------------------------------------
@@ -442,6 +499,15 @@ do
     if n > worst then worst = n end
   end
   addRow("unit.events.wakeup", worst)
+end
+
+------------------------------------------------------------------------------
+-- The armed pass, with telemetry that moves. See runArmedScenario.
+------------------------------------------------------------------------------
+do
+  local armedWorst, armedEvents = runArmedScenario(reference, 240)
+  addRow("pass.state.armed", armedWorst.state or 0, "armed, telemetry moving between passes")
+  addRow("unit.events.wakeup.armed", armedEvents, "same wakeup, armed and moving")
 end
 
 ------------------------------------------------------------------------------

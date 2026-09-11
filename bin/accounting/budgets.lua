@@ -34,6 +34,11 @@ return {
     -- 14 000 less the largest shipped theme's sweep -- rather than chosen.
     ----------------------------------------------------------------------------
     ["pass.state"] = { target = 12200, measured = 11437, proposed = 8000 },
+    -- The same class of pass with the model ARMED and telemetry moving between passes.
+    -- It shares pass.state's ceiling because it is the same class of pass; it has a row
+    -- of its own because every other steady-state row here is measured disarmed against
+    -- a frozen sensor set, and a flight is neither.
+    ["pass.state.armed"] = { target = 12200, measured = 10506 },
     ["pass.job.prepare"] = { target = 1250, measured = 1021 },
     ["pass.job.build"] = { target = 5700, measured = 5057, proposed = 10000 },
     ["pass.swap"] = { target = 3400, measured = 2737, proposed = 6000 },
@@ -174,6 +179,16 @@ return {
     -- custom-telemetry drain and the arm/disarm edges. The largest single term in
     -- a STATE pass, at roughly two fifths of it.
     ["unit.events.wakeup"] = { target = 5600, measured = 4457 },
+    -- The same wakeup with the model ARMED and telemetry moving, which is the only
+    -- shape in which the flight record does its work: it advances the flight clock on
+    -- every wakeup and samples the tracked sensors on its own 0.5 s cadence, so the
+    -- worst wakeup of a flight is one that samples. The target below is not the 5600 it
+    -- shares with the row above: that figure was written while the clock advanced per
+    -- CALL, under which the 0.5 s sample landed in a measured wakeup only by accident.
+    -- With the clock advancing per pass the sample is in the worst wakeup by
+    -- construction, which is what this row is for, and it costs 6137. The previous
+    -- figure is kept in `proposed` so the report says so on every run.
+    ["unit.events.wakeup.armed"] = { target = 7700, measured = 6137, proposed = 5600 },
     -- The custom-telemetry drain with a full frame backlog waiting: POP_CAP frames
     -- popped and accounted, DECODE_CAP of them walked through the per-sensor
     -- decoders. This is what the two counts in telemetry_bg/drain.lua buy.
