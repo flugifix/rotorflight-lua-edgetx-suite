@@ -49,3 +49,8 @@ and nothing needs to be configured.
 - **It cannot be seen from the suite if it is configured as a global function** rather than on
   the model. The radio offers no way for a script to read the global special functions, so a
   background decoder installed there is invisible to the check above.
+- **It writes a log of its own** when *Log Session To Card* is on, under the `function_` prefix,
+  beside the tool's and the widgets'. Because this script is paused and resumed rather than cut
+  off, it keeps writing where a widget that overran its instruction budget cannot, and its
+  one-line step file says when it last ran. See
+  [collecting logs](../troubleshooting/collecting-logs.md).

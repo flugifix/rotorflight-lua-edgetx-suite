@@ -18,6 +18,7 @@
 local BASE_PATH = "/SCRIPTS/TOOLS/rfsuite-core/"
 
 local Log = nil
+local LogSink = nil
 local Preferences = nil
 local Drain = nil
 local Adjustments = nil
@@ -25,14 +26,24 @@ local initialized = false
 
 -- Tasks read their settings from rfsuite.preferences, and that table belongs to one Lua state.
 -- Re-read on an interval so a setting changed in the configuration tool takes effect without a
--- restart. There is no armed gate: nothing in this state knows whether the model is armed, and
--- a read that is yielded rather than killed costs nothing that matters here.
+-- restart. It is not held back while the model is armed: a read that is yielded rather than
+-- killed costs nothing that matters here.
 local PREFERENCES_INTERVAL_SECONDS = 30
 
 -- How often the heap line below is written. It is the figure the whole arrangement has to be
 -- judged on: the firmware sums the script state and the widget state against one Lua memory
 -- ceiling, so work moved from one to the other relieves nothing by itself.
 local HEAP_REPORT_INTERVAL_SECONDS = 30
+
+-- The card sink takes the longer of its two flush cadences here, unconditionally.
+--
+-- Its argument only chooses between two intervals and never stops the writing, and this state
+-- cannot observe arming without loading the sensor module. That is not a free read: nothing else
+-- in the script state pulls lib/sensors.lua in, so asking it here would put a second module into
+-- a state the firmware bills against the same Lua memory ceiling as every widget -- to choose ten
+-- seconds over three. A script that is called on every radio cycle should not be the thing that
+-- asks the card for more, so it takes the conservative interval always.
+local USE_LONG_FLUSH_CADENCE = true
 
 local lastPreferencesLoad = nil
 local lastHeapReport = nil
@@ -77,6 +88,53 @@ local function init()
   initialized = true
 end
 
+-- What this state writes to the card is a DEBUG-level record, and it is gated like one.
+--
+-- The step file is a diagnostic, so it belongs behind the same switch as every other diagnostic
+-- in the suite rather than beside it: a subsystem that writes while the configured level says
+-- `off` is a surprise, and a surprise in somebody's log directory is a defect however useful the
+-- file is. `Log.wanted` is their own predicate for exactly this -- a call site that would pay to
+-- build a message asks first.
+local function cardRecordWanted()
+  if not (Log and type(Log.wanted) == "function") then return false end
+  local ok, wanted = pcall(Log.wanted, "debug")
+  return ok and wanted == true
+end
+
+-- The card sink, loaded the first time it is actually wanted and never before.
+--
+-- Not in init() above, and that is a memory decision rather than a style one: the module and the
+-- session state behind it hold tens of kilobytes in a Lua state the firmware bills against the
+-- same ceiling as every widget, both switches are off on a shipped radio, and a pilot who never
+-- turns them on should not be paying for it on every flight.
+--
+-- Once loaded it stays, and it keeps being ticked afterwards whatever the two switches then say.
+-- Both are deliberate: Lua cannot give the module back, and a session already open has to be
+-- closed, which is the tick's own job.
+--
+-- The name is this state's own, so its files sit beside the tool's and the widgets' instead of
+-- three writers appending to one path.
+local function ensureLogSink()
+  if LogSink ~= nil then
+    return LogSink or nil
+  end
+
+  local prefs = _G.rfsuite and _G.rfsuite.preferences
+  local general = type(prefs) == "table" and prefs.general or nil
+  if not (type(general) == "table" and general.log_to_card == true) then
+    return nil
+  end
+  if not cardRecordWanted() then
+    return nil
+  end
+
+  LogSink = loadModule("lib/log_sink.lua") or false
+  if LogSink and type(LogSink.configure) == "function" then
+    LogSink.configure("function")
+  end
+  return LogSink or nil
+end
+
 local function refreshPreferences(now)
   if not Preferences or type(Preferences.load) ~= "function" then return end
   if lastPreferencesLoad and (now - lastPreferencesLoad) < PREFERENCES_INTERVAL_SECONDS then return end
@@ -93,12 +151,29 @@ end
 -- a float that is not an exact integer in this Lua -- so it is floored here rather than left to
 -- raise inside the formatter, where the message would silently come out as its own format
 -- string.
-local function traceHeap(now)
-  if not Log or type(Log.emitf) ~= "function" then return end
+local function reportHeap(now, sink)
   if lastHeapReport and (now - lastHeapReport) < HEAP_REPORT_INTERVAL_SECONDS then return end
   lastHeapReport = now
 
-  Log.emitf("rfsuite.functions", "trace", "heap %d kB", math.floor(collectgarbage("count")))
+  local memKb = math.floor(collectgarbage("count"))
+
+  if Log and type(Log.emitf) == "function" then
+    Log.emitf("rfsuite.functions", "trace", "heap %d kB", memKb)
+  end
+
+  -- The same figure in the step file, which is the half that survives a radio that has stopped
+  -- answering: its timestamp is then the last moment this script ran, and that is a question
+  -- nothing else on the card can answer once the widgets are gone. One write per interval, into
+  -- a file that is truncated on every open and never grows past the line.
+  --
+  -- The heap figure is in the label and NOT in the key: a key that changed on every write would
+  -- never look like a repeat, and the throttle that keeps this file affordable would never
+  -- apply.
+  -- Asked again on every write, not only at load: lowering the level has to stop the writing,
+  -- and the module cannot be unloaded once it is in.
+  if sink and type(sink.step) == "function" and cardRecordWanted() then
+    pcall(sink.step, string.format("background decoder running, heap %d kB", memKb), false, "function heap")
+  end
 end
 
 local function run()
@@ -133,7 +208,13 @@ local function run()
     Adjustments.wakeup()
   end
 
-  traceHeap(now)
+  local sink = ensureLogSink()
+  reportHeap(now, sink)
+
+  -- Last, so the lines this pass produced go out with it rather than one pass later.
+  if sink and type(sink.tick) == "function" then
+    pcall(sink.tick, USE_LONG_FLUSH_CADENCE)
+  end
 end
 
 return { run = run }
