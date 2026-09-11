@@ -42,7 +42,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     local adjustedValue = value
     local unit = utils.resolveValue(box.unit, box, state)
 
-    if src == "esc_temp" or src == "mcu_temp" then
+    if src == "esc_temp" or src == "mcu_temp" or src == "temp_esc" or src == "temp_mcu" then
       if useFahrenheit() and type(adjustedValue) == "number" then
         adjustedValue = (adjustedValue * 9 / 5) + 32
         unit = "°F"
@@ -206,11 +206,16 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
       if statValue == nil and allowsLiveFallback and type(source) == "string" then
         statValue = readDerived(state, source)
       end
+      local isTemp = (source == "esc_temp" or source == "mcu_temp" or source == "temp_esc" or source == "temp_mcu")
+      local isFahr = isTemp and useFahrenheit()
+      if isTemp and isFahr and type(statValue) == "number" then
+        statValue = (statValue * 9 / 5) + 32
+      end
       if statValue == lastColorInput and cachedColor ~= nil then
         return cachedColor
       end
       lastColorInput = statValue
-      cachedColor = utils.resolveTextColor(box, state, WHITE, statValue)
+      cachedColor = utils.resolveTextColor(box, state, WHITE, statValue, isFahr)
       return cachedColor
     end
   end
