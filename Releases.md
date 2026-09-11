@@ -1,6 +1,11 @@
 # 0.1.7
 
 ### Features & Enhancements
+- **The flight log records each flight's statistics (`tasks/events/ondisarm/tasks/flight_log.lua`, `tasks/events/telemetry/flight_record.lua`, `docs/pages/tools/flight_log.md`) (fixes #250)**:
+  - The log has always declared columns for a flight's capacity, voltages, current, ESC temperature and BEC voltage, and has always written them empty because nothing could reach the numbers. They are filled now, from the flight record the event runtimes keep, so a line in the log says what the flight actually did rather than only how long it lasted.
+  - Per-cell voltage uses the flight controller's battery cell count; where that has not been read, those two columns stay empty rather than being divided by a guess. The headspeed-per-profile and voltage-sag columns stay empty, because the suite records neither yet.
+  - A flight that produced no statistics at all is still written as the five-field line it has always been, rather than as a line of empty columns.
+  - The flight log now has a documentation page, which is also the first page under Tools to get one.
 - **Flight statistics are recorded without a dashboard on screen (`tasks/events/telemetry/flight_record.lua`, `widgets/dashboard/runtime.lua`, `docs/reference/flight-statistics.md`) (fixes #249)**:
   - The extremes of a flight and its armed time are kept by the event runtimes rather than by a dashboard widget, and published under `rfsuite.session.flight`. A model that does not use the dashboard -- one running the service widget so that other widgets have the MSP surface -- now records its flights all the same, and a dashboard placed afterwards shows the last one.
   - A flight now starts and ends on one definition of the arm edge, the flight controller's arm flag as the event runtimes read it, which is the edge the flight log and the post-disarm reads already fire on. The record is closed first of everything on that edge, so a task behind it reads a finished flight.

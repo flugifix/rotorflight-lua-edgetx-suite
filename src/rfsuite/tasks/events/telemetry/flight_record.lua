@@ -71,12 +71,16 @@ local FLIGHT_STATS = {
   { key = "Current",         source = "current",         max = true, min = true },
   { key = "Watts",           source = "watts",           max = true },
   { key = "Altitude",        source = "altitude",        max = true },
-  { key = "EscTemp",         source = "escTemp",         max = true },
+  { key = "EscTemp",         source = "escTemp",         max = true, min = true },
   { key = "McuTemp",         source = "mcuTemp",         max = true },
   { key = "Fuel",            source = "fuel",                        min = true, gate = GATE_FUEL_SEEN },
   { key = "Voltage",         source = "voltage",         max = true, min = true, gate = GATE_POSITIVE },
-  { key = "BecVoltage",      source = "becVoltage",                  min = true, gate = GATE_POSITIVE },
+  { key = "BecVoltage",      source = "becVoltage",      max = true, min = true, gate = GATE_POSITIVE },
   { key = "Lq",              source = "lq",              max = true, min = true, gate = GATE_LINK_QUALITY },
+  -- Consumed capacity only ever grows within a flight, so its maximum IS what the flight
+  -- used. It is recorded rather than read at the disarm edge because a telemetry drop just
+  -- before the edge would otherwise lose the whole figure.
+  { key = "ConsumedMah",     source = "consumedMah",     max = true },
 }
 
 Record.stats = FLIGHT_STATS
@@ -100,6 +104,7 @@ local values = {
   current = 0,
   watts = 0,
   altitude = 0,
+  consumedMah = 0,
   escTemp = 0,
   mcuTemp = 0,
   fuel = 0,
@@ -321,6 +326,7 @@ local function readSources()
   values.current = current or values.current
   values.watts = watts or values.watts
   values.altitude = get("altitude") or values.altitude
+  values.consumedMah = get("smartconsumption") or values.consumedMah
   if type(voltage) == "number" then values.voltage = voltage end
 
   local fuel = get("smartfuel") or get("fuel")
