@@ -1130,6 +1130,8 @@ function M.start(widget, drive)
   -- that table again. Leaving the old one up would show a board as matching while its own answer
   -- was still on the wire.
   drive.compare = nil
+  -- The wait the pass gate counts belongs to the run that is starting.
+  widget._primeSkips = nil
   -- A full run reads the nine value commands as well, so a profile change waiting for a re-read of
   -- its own is answered by this one and must not send it a second time afterwards.
   if drive.profileChanged == true then profileChangeAnswered(drive) end
@@ -1143,18 +1145,48 @@ end
 --- Read the values again, without the slot table. What a restore puts back on the board is a set
 -- of values, not a layout, so re-reading 42 slot records to learn them would be 42 round trips
 -- spent on something that cannot have moved.
+--
+-- A FRESH run table, and not the previous one under a new phase. `stillCurrent` tells a reply which
+-- run it belongs to by the IDENTITY of this table -- it is the only thing that can, since the
+-- callbacks close over the run they were made for -- so a refresh that reused the table accepted a
+-- late reply of the PREVIOUS run into the new one: the answer to a read the queue had given up on,
+-- retried and delivered after the refresh had gone out, counted as one of the nine and written into
+-- the cache as whatever the board held before. Of everything the fourth radio round turned up, that
+-- is the one mechanism that would genuinely read as "he only ever reads PARTS of it".
+--
+-- What carries over is what the refresh does not read: the slot table, the derivation's own
+-- leavings and the status reply. All three describe a LAYOUT or the board itself, and neither moves
+-- when a profile does.
 function M.refreshValues(widget, drive)
   if type(widget) ~= "table" or type(drive) ~= "table" then return false, "no_drive" end
   if isArmed(widget) then return false, "armed" end
-  local prime = drive.prime
-  if type(prime) ~= "table" or type(prime.records) ~= "table" then return M.start(widget, drive) end
+  local previous = drive.prime
+  if type(previous) ~= "table" or type(previous.records) ~= "table" then
+    return M.start(widget, drive)
+  end
   if queueOf() == nil then return false, "no_link" end
-  prime.error = nil
-  prime.done = 0
-  prime.total = #Functions.VALUE_READS
-  -- Anything stored for the run being restarted here belongs to nothing: the phase it was read
-  -- in is over and the counters it would have moved have just been reset.
-  dropStored(prime)
+  local prime = {
+    phase = M.PHASE_IDLE,
+    done = 0,
+    total = #Functions.VALUE_READS,
+    records = previous.records,
+    skipped = previous.skipped,
+    slotList = previous.slotList,
+    slotAt = previous.slotAt,
+    rangeApi = previous.rangeApi,
+    map = previous.map,
+    status = previous.status,
+    valueAt = 1,
+    mapped = 0,
+    unmapped = 0,
+    pending = {},
+    pendingHead = 1,
+    pendingTail = 0,
+    chainPaused = false
+  }
+  drive.prime = prime
+  -- The wait this gate counts belongs to the run that is starting, not to the one before it.
+  widget._primeSkips = nil
   return startValues(widget, drive, prime)
 end
 
@@ -1448,19 +1480,27 @@ local PARSE_SKIP_LIMIT = 100
 -- table reads it costs.
 --
 -- The second is what the last pass actually cost. Answers false to skip.
-function M.passHasRoom(widget)
+--
+-- The skips are counted as a TOTAL for the run being held up and not as a streak, and that is the
+-- difference between an escape that fires and one that cannot. A streak was reset by every cheap
+-- pass, so a widget alternating between an expensive pass and a cheap one -- which is the ordinary
+-- shape of a dashboard that rebuilds something on one pass in two -- skipped every other pass for
+-- as long as the run lasted and never came within reach of the limit. With no run in progress there
+-- is nothing being held up, so the streak reading is kept for that case: it is what lets the
+-- automatic run start at all on a widget that never comes below the limit.
+function M.passHasRoom(widget, drive)
   if widget._job ~= nil then return false end
 
   local last = tonumber(widget._usageLast)
   if last == nil or last <= PARSE_USAGE_LIMIT then
-    widget._primeSkips = nil
+    if drive == nil or not M.isRunning(drive) then widget._primeSkips = nil end
     return true
   end
 
   local skips = (widget._primeSkips or 0) + 1
   if skips >= PARSE_SKIP_LIMIT then
     widget._primeSkips = nil
-    logPrime("prime: %d busy pass(es) in a row, taking a slice anyway at %d%%", skips, last)
+    logPrime("prime: %d busy pass(es) waited out, taking a slice anyway at %d%%", skips, last)
     return true
   end
   widget._primeSkips = skips
@@ -1497,7 +1537,7 @@ function M.tick(widget, drive)
   --
   -- Everything ABOVE this line stays unconditional. The armed check, the abandon and the link
   -- check are what keep MSP away from a helicopter in the air, and they are three table reads.
-  if not M.passHasRoom(widget) then return end
+  if not M.passHasRoom(widget, drive) then return end
 
   -- One stored reply, parsed here rather than where it arrived, and never more than one however
   -- many the link delivered into the same pass. This is the bound the whole section above exists
