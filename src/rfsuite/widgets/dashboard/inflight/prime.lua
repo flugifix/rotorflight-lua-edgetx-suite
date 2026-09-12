@@ -1154,9 +1154,18 @@ end
 -- the cache as whatever the board held before. Of everything the fourth radio round turned up, that
 -- is the one mechanism that would genuinely read as "he only ever reads PARTS of it".
 --
--- What carries over is what the refresh does not read: the slot table, the derivation's own
--- leavings and the status reply. All three describe a LAYOUT or the board itself, and neither moves
--- when a profile does.
+-- What carries over is what the refresh does not read: the slot table and the derivation's own
+-- leavings. Both describe a LAYOUT, and a layout does not move when a profile does.
+--
+-- THE STATUS REPLY IS NOT AMONG THEM, and the first cut of this had it there with the reasoning that
+-- a profile change moves none of the three. That was wrong about exactly one field: the status reply
+-- is where the ACTIVE PROFILE INDEX comes from, so it is the one thing a profile change does move,
+-- and carrying it across the re-read that answers that change carried the answer to the question
+-- being asked. Measured against a real board: with the PID# sensor momentarily not delivering, the
+-- undo was copied from the profile the board had been on BEFORE the change. Dropped here, the reply
+-- this run holds is either the one that answered the change or nothing at all -- and nothing is
+-- refused by name. The profile COUNT, which no profile change moves, comes from their own status
+-- task's copy on the session in that window (see M.profileCount).
 function M.refreshValues(widget, drive)
   if type(widget) ~= "table" or type(drive) ~= "table" then return false, "no_drive" end
   if isArmed(widget) then return false, "armed" end
@@ -1175,7 +1184,6 @@ function M.refreshValues(widget, drive)
     slotAt = previous.slotAt,
     rangeApi = previous.rangeApi,
     map = previous.map,
-    status = previous.status,
     valueAt = 1,
     mapped = 0,
     unmapped = 0,
@@ -1199,9 +1207,23 @@ end
 -- The telemetry sensor counts from 1, the way the pilot's own menus do; the status reply counts
 -- from 0, the way the wire does. The sensor is preferred because it is live even when nothing has
 -- been primed this session.
+--
+-- A SENSOR THE RADIO IS NOT DELIVERING ANSWERS 0, AND NEVER NIL. That is EdgeTX's getValue, and it
+-- is the whole of a defect measured against a real board: one profile change on the ground produced
+-- two copies, the second of them naming the profile the pilot had just left. Read as a number, 0 is
+-- not nil, so the question went PAST the last good reading the drive kept and landed on the status
+-- reply -- and a status reply is the one thing in this module that can be older than the profile
+-- change itself. 0 is not a profile either way: the pilot's menus and the firmware's own adjustment
+-- range for this parameter both start at 1. So it is treated as no answer, which is what sends the
+-- question on to the reading the drive kept, which is the freshest thing there is after the sensor.
+--
+-- The status reply stays as the LAST resort, for a model whose telemetry list has no PID# at all.
+-- What makes it safe is at the other end: a value refresh no longer carries the previous run's
+-- status (see M.refreshValues), so the reply this reads is either the one that answered the change
+-- or nothing -- and nothing is refused by name rather than guessed at.
 function M.activeProfile0(drive)
   local sensor = tonumber(drive.radio.sensor("PID#"))
-  if sensor == nil then sensor = tonumber(drive.profile) end
+  if sensor == nil or sensor < 1 then sensor = tonumber(drive.profile) end
   if sensor ~= nil and sensor >= 1 then return math.floor(sensor) - 1 end
   local status = drive.prime and drive.prime.status or nil
   local index = status and tonumber(status.current_pid_profile_index) or nil
