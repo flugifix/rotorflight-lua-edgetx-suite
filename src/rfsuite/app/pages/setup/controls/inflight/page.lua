@@ -182,6 +182,11 @@ local function offerFcSetup(i18n)
   FcAction.offer({
     i18n = i18n,
     t = t,
+    -- The settings module, so the action can build its own text helper from this page's key
+    -- rather than borrow this one. Its own file has to carry the pageT call for the locale
+    -- precompiler to see a prefix at all; loading a second copy of common.lua to get at it would
+    -- be paid in the heap this page is split up to save.
+    common = Common,
     config = ui.config,
     state = ui,
     repaint = requestRepaint
