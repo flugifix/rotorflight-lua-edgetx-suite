@@ -1244,9 +1244,12 @@ end
 
 --- Every parameter whose cached value has moved away from the snapshot, largest change first.
 --
--- Cached against the drive's value epoch, the way the setup check is cached against the clock: the
--- list is built into the tree rather than read by a closure, so it is wanted once per rebuild and
--- a rebuild happens exactly when that epoch moves.
+-- Cached against BOTH of the drive's counters, the way the setup check is cached against the
+-- clock: the list is built into the tree rather than read by a closure, so it is wanted once per
+-- rebuild and a rebuild happens exactly when the layout epoch moves. The report counter is in the
+-- key as well because it is the one that moves when the board answers -- a last step reported just
+-- after the disarm moves the values without moving the layout epoch, and a list cached against
+-- that epoch alone would show the flight one step short.
 --
 -- Answers nil when there is no snapshot to measure against, which is a different thing from an
 -- empty list and is said differently on screen.
@@ -1257,7 +1260,8 @@ function M.delta(drive)
   -- board is a table with nothing in it, and measuring against it yields an empty list -- which
   -- the screen reads as "nothing has changed", a wrong answer where a missing one was wanted.
   if type(reference) ~= "table" or next(reference) == nil then return nil end
-  if drive._deltaEpoch == drive.valueEpoch and drive._deltaList ~= nil then return drive._deltaList end
+  if drive._deltaEpoch == drive.valueEpoch and drive._deltaReport == drive.reportEpoch
+    and drive._deltaList ~= nil then return drive._deltaList end
 
   local list = {}
   for id, value in pairs(drive.values) do
@@ -1280,6 +1284,7 @@ function M.delta(drive)
   end)
 
   drive._deltaEpoch = drive.valueEpoch
+  drive._deltaReport = drive.reportEpoch
   drive._deltaList = list
   return list
 end

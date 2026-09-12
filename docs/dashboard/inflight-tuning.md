@@ -72,7 +72,9 @@ One parameter at a time, not a grid:
   A tap is refused while a step is still on the wire.
 - **The parameter**, large, with the value it had before the last step and the value it was
   primed with. The value comes from the cache: read on the ground, then kept current by every
-  step the flight controller reports back over its adjustment telemetry.
+  step the flight controller reports back over its adjustment telemetry. The surface updates
+  those numbers in place -- a step never rebuilds the screen, so the board's answer to a press
+  cannot arrive at the cost of the pass that ends the pulse.
 - **The row list** on the right is the six rows of the bank. A tap selects the row the step
   controls act on; the trims act on them directly.
 - **The step controls** at the bottom. One tap is one pulse is one step. Held, the flight

@@ -15,9 +15,12 @@
 -- worse on a tuning screen than no control at all: there the pilot's trims are the input and the
 -- screen is the read-out.
 --
--- Only two things here are reactive closures -- the active value and the active row's colour --
--- and both read the precomputed snapshot on `widget.state.inflight` and nothing else. Everything
--- else is laid down at build time and replaced when the render key moves. That is the rule from
+-- What is reactive here is what the FLIGHT CONTROLLER moves -- the value, the value it stepped
+-- from, the six row values, the active row's colour and the lines that expire on the clock -- and
+-- every one of them reads the precomputed snapshot on `widget.state.inflight` and nothing else.
+-- Everything else is laid down at build time and replaced when the render key moves. The division
+-- is not a style: the board answers a step while the radio is still holding the pulse that asked
+-- for it, and a rebuild in that window costs the pilot a second step he did not ask for. That is the rule from
 -- GEMINI.md: a closure handed to lvgl.build runs per frame, on whatever instruction budget
 -- refresh() left over, outside the widget's own pcall.
 
@@ -775,8 +778,19 @@ local function appendRows(children, widget, m, w, t, p, interactive)
         fitText(label, m.rowNameW, m.small), isActive and p.text or p.dim, m.small, LEFT, m)
       -- Four pixels clear of the row's own frame, which is two pixels wide and was taking the
       -- last column of every value's last digit.
+      --
+      -- REACTIVE, like the big value above the list, and for the same reason the pair up there is:
+      -- this column is what the board's own report moves, the report lands while the pulse that
+      -- asked for the step is still on the value variable, and a rebuild to put the new number in
+      -- would spend that window. The closure reads the snapshot's own row table -- replaced whole
+      -- whenever a value moves -- so the number follows the board per frame and the tree stands.
       appendCentredLabel(children, m.rowX + m.rowW - m.rowValueW - 4, rowY, m.rowValueW, m.rowH - 2,
-        formatValue(entry.value), isActive and p.text or p.dim, m.small, RIGHT, m)
+        function()
+          local snap = state.inflight
+          local list = (type(snap) == "table") and snap.rows or nil
+          local current = (type(list) == "table") and list[row] or nil
+          return formatValue(current and current.value or nil)
+        end, isActive and p.text or p.dim, m.small, RIGHT, m)
     end
   end
 end

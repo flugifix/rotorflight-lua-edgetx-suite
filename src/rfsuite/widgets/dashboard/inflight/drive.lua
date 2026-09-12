@@ -192,7 +192,13 @@ function M.newDrive(radio, settings)
   self.bankNextAt = nil
   self.fastAt = nil
   self.values = {}
+  -- TWO counters over the same value table, because two different readers want two different
+  -- things. `valueEpoch` is the LAYOUT epoch: the widget's render key carries it, so every bump
+  -- is a tree the surface throws away and builds again. `reportEpoch` says only that a number
+  -- the surface reads through a closure has moved, and no render key follows it. See the AdjF
+  -- block in fastTick for why the board's own answers travel on the second one.
   self.valueEpoch = 0
+  self.reportEpoch = 0
   self.profile = nil
   self.rateProfile = nil
   self.profileChanged = nil
@@ -963,16 +969,28 @@ function Drive:fastTick(now)
       -- started and says nothing about the last press.
       self.previous[adjF] = self.values[adjF]
       self.values[adjF] = adjV
-      self.valueEpoch = self.valueEpoch + 1
+      -- The REPORT counter and not the layout epoch, and that one word is the whole of this fix.
+      --
+      -- The board answers a step 300-400 ms after the press, which is while the pulse that asked
+      -- for it is still standing on the value variable. The layout epoch is in the widget's
+      -- render key, so bumping it here tore the live surface down and built it again inside the
+      -- pulse window -- and the pass that ENDS the pulse is a widget pass. EdgeTX hands those out
+      -- in fixed slots from its menus task and never catches up (radio/src/tasks.cpp,
+      -- MENU_TASK_PERIOD; the call site is LuaWidget::refresh in lua_widget.cpp): a pass that
+      -- overruns its slot loses the next ones rather than running twice, so the clear arrived
+      -- late, the magnitude stood on the wire past the firmware's own repeat window, and the
+      -- board counted a second step the pilot never asked for.
+      --
+      -- Nothing a report carries is layout. The value, the value it stepped from and the six row
+      -- values are all read off the snapshot by closures, so a fresh snapshot is published, the
+      -- numbers follow the board on the next frame, and the tree is left standing.
+      self.reportEpoch = self.reportEpoch + 1
     end
-    -- Which function the board last reported, kept even when its value did not move. It is the
-    -- one witness the radio has that the adjustment teller had something to speak about THIS
-    -- parameter, and the screen says so rather than leaving the pilot to wonder whether the
-    -- silence was the sensor or the setting.
-    if adjF ~= self.spokenId then
-      self.spokenId = adjF
-      self.valueEpoch = self.valueEpoch + 1
-    end
+    -- Which function the board last reported, kept even when its value did not move: the one
+    -- witness the radio has that the adjustment teller had something to say about THIS parameter.
+    -- No epoch either: which function was reported is a field on the snapshot, and the guard in
+    -- `publish` watches it, so it travels on the next published snapshot without a rebuild.
+    self.spokenId = adjF
   end
 
   -- The postflight list is paged with the walk trim, and it is the ONLY thing a trim does out
@@ -1355,6 +1373,10 @@ local function publish(widget, drive)
   if type(state) ~= "table" then return end
   local snapshot = state.inflight
   local epoch = drive.valueEpoch
+  -- The board's own answers, which move numbers and no layout. They have to be in the guard --
+  -- the closures read this table and a stale one would leave the pilot looking at the value
+  -- before his step -- and they must NOT be in the widget's render key; see fastTick.
+  local reportEpoch = drive.reportEpoch
   -- Whether a control is being HELD, which is the one thing on here that no epoch bump reports:
   -- a press and a release both leave the value cache alone. It is on the snapshot because the
   -- widget's render key must not move while a finger is down -- the rebuild would delete the very
@@ -1369,7 +1391,10 @@ local function publish(widget, drive)
   local prime = drive.prime
   local primePhase, primeDone = nil, nil
   if type(prime) == "table" then primePhase, primeDone = prime.phase, prime.done end
-  if type(snapshot) == "table" and snapshot.epoch == epoch and snapshot.live == drive.live
+  if type(snapshot) == "table" and snapshot.epoch == epoch
+    and snapshot.reportEpoch == reportEpoch
+    and snapshot.spokenId == drive.spokenId
+    and snapshot.live == drive.live
     and snapshot.bank == drive.bank and snapshot.row == drive.row
     and snapshot.holding == holding
     and snapshot.phase == drive.phase
@@ -1469,6 +1494,9 @@ local function publish(widget, drive)
   local activeId = drive:functionId(drive.bank, drive.row)
   state.inflight = {
     epoch = epoch,
+    -- The report counter travels beside the layout epoch so that the guard above reads one flat
+    -- table. Nothing in the widget's render key may ever be derived from it.
+    reportEpoch = reportEpoch,
     -- Both switches, and the conjunction the drive actually runs on. The two flags travel beside
     -- it because a surface that says nothing is happening should be able to say which of them is
     -- the one that is off.
@@ -1508,8 +1536,9 @@ local function publish(widget, drive)
     -- When the ground half last finished reading the board, as the radio's own wall clock.
     readAt = drive.readAt,
     activeTrim = activeTrim,
-    -- The last function the board reported having stepped. The screen holds it against the
-    -- selected one to say whether the teller had anything to say about THIS parameter.
+    -- The last function the board reported having stepped, for a surface to hold against the
+    -- selected one. It moves no epoch: the guard above watches it, so it reaches the snapshot on
+    -- the next publish and no tree is rebuilt to carry it.
     spokenId = drive.spokenId,
     navigate = drive:navigateMode(),
     profile = drive.profile,
