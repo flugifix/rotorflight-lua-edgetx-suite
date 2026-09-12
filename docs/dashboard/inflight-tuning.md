@@ -59,8 +59,21 @@ and nine reads that between them answer every parameter of the set. It happens b
 per connect and after a profile change, or on demand. A parameter that has never been read
 shows `--` in the air rather than a number nobody measured.
 
+Arming during a read gives that read up — nothing may be sent to a machine in the air — and
+the line keeps reporting the values it already has, with the time they were read at and a note
+that the attempt to read them again was interrupted. The read is taken again by itself on the
+ground; the values already in the cache are not thrown away by an attempt that did not
+replace them.
+
 The backup is taken by itself when the interlock goes on with the machine on the ground, the
-link up and the values read.
+link up and the values read. It is **one slot and it belongs to the profile it was copied
+from**: change the PID profile on the ground and a fresh copy of the new profile is taken, and
+the line under the buttons names the profile it came from. That replaces the previous
+profile's undo, which is what one slot means. When the backup was copied from a profile other
+than the one being flown the line says so, and the restore refuses until the pilot has
+switched back to it — a copy put back over another profile would overwrite values he never
+flew there. A backup whose source is not known at all — the record is kept in memory, so a
+restart leaves the slot holding a copy of something — is refused for the same reason.
 
 ### In the air
 
@@ -94,12 +107,22 @@ Every parameter that has left the backup, largest change first, old to new, page
 trim that walks the parameters in the air. There is nothing to save: the flight controller
 writes its own storage shortly after disarm. The one action is the restore.
 
+If the backup was copied from another profile than the one now active, there is no comparison
+to make: the board's adjustments only ever moved the active profile, so the two lists would
+differ by everything the two profiles disagree about. The surface says which profile the
+backup is from and which one is active instead of listing that as something the flight
+changed.
+
 ## Notes
 
 - The way back in the air is the PID profile switch, not the overlay: the backup profile
   holds what the flight started from, so switching to it is instant and needs no MSP.
 - Releasing the interlock, closing the fullscreen, backgrounding the widget or losing the
-  link all take the value variable back to zero, in the flight mode it was written in.
+  link all take the value variable back to zero, in the flight mode it was written in, and
+  end whichever of the three surfaces was up. The next opening of the interlock is an opening
+  again, with the undo it asks for.
+- The rate and PID profile are two of the parameters the set can carry, and they are counted
+  from 1 wherever they appear — the header, the backup line, and their own rows.
 - On an ExpressLRS link use the *Wide* switch mode or a full-resolution packet rate: in
   *Hybrid* mode the two channels carry 16 and 6 positions, and several of the windows the
   flight controller decodes are missed.
