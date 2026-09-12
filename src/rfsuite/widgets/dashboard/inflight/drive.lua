@@ -254,8 +254,12 @@ function Drive:setPhase(phase)
     self.fired = 0
     self.deltaPage = 1
   elseif was == M.PHASE_LIVE then
-    -- Out of the air. Whatever it left standing goes now, whichever transition was seen.
-    self:cleanup(false)
+    -- Out of the air. Whatever MAGNITUDE it left standing goes now, whichever transition was seen --
+    -- but not the bank, which the interlock is still on for and which the surface goes on showing.
+    -- See Drive:cleanup's `keepBank`: the interlock falling, the fullscreen closing, the widget
+    -- going to background and the link dropping all still take it to 0, and this is the one
+    -- transition that does not.
+    self:cleanup(false, true)
     self.deltaPage = 1
   end
   -- `post` is the phase and nothing else: it is what tick reads on the next pass to keep the
@@ -370,6 +374,41 @@ function Drive:armBank(bank)
   return true
 end
 
+--- The enable channel carries the SELECTED bank for as long as the interlock is on.
+--
+-- armBank on its own is EDGE work: the chip, the bank trim and a walk that crosses a bank each
+-- call it once, and nothing calls it on the way into the air. The interlock's own defensive
+-- cleanup(true) then takes the bank variable to 0 while `self.bank` keeps its value, and 1500 us
+-- -- what the mixer line puts on the channel for 0 -- sits inside no band the firmware watches.
+-- Between the interlock closing and the pilot's first bank gesture the screen therefore showed a
+-- bank the wire did not carry, and every step went out against an enable channel outside every
+-- adjustment's window: the board saw a value move and had no function to apply it to.
+--
+-- So the selection is asserted rather than followed. Called once per pass for as long as the
+-- interlock is closed -- in all three phases, because all three name a bank on the screen -- it
+-- costs one comparison when the variable already holds what the selection says, and it repairs the
+-- defensive cleanup, an arming, a landing, a row walk and the entry point's emergency clear alike.
+-- None of those is a bank CHANGE, which is why none of them had a writer.
+--
+-- It is the bank variable only. The value variable is still 0 whenever no pulse is running and
+-- nothing is held, on every path out of the overlay, which is the rule at the top of this file: a
+-- parked enable channel with the value channel at rest steps nothing, and the firmware needs a
+-- magnitude inside an increment window before it counts anything at all.
+--
+-- Refused, silently, while a value stands on the wire: moving the enable channel under a
+-- magnitude that sits inside a step window is how one press ends up counted against another
+-- parameter. That is the same refusal the chip and the bank trim make, and the write lands on the
+-- first pass after the pulse has gone.
+function Drive:ensureBankArmed()
+  local settings = self.settings
+  if not settings or (settings.bank_gvar or 0) <= 0 then return false, "no_gvar" end
+  local want = self.bankValues and self.bankValues[self.bank]
+  if want == nil then return false, "no_band" end
+  if self.bankWritten == want then return false, "armed" end
+  if self.written ~= 0 then return false, "busy" end
+  return self:armBank(self.bank)
+end
+
 --- A bank chosen by hand, from a chip on the fullscreen screen.
 --
 -- Refused while the value variable is not 0: moving the enable channel under a value that is
@@ -409,11 +448,13 @@ function Drive:navigate(up)
   if self.written ~= 0 then return false, "busy" end
   local bank, row = self:stepCell(up)
   if bank == nil then return false, "empty" end
-  local crossed = (bank ~= self.bank)
   self.bank = bank
   self.row = row
   self.valueEpoch = self.valueEpoch + 1
-  if crossed then self:armBank(bank) end
+  -- Unconditional, where this used to write only when the step crossed a bank boundary. A walk
+  -- inside one bank is not a bank change and still has to leave the wire carrying that bank, which
+  -- it does not when the interlock's cleanup was the last thing to touch the variable.
+  self:ensureBankArmed()
   return true
 end
 
@@ -471,7 +512,14 @@ end
 -- widget going to background, on the link dropping, and once defensively on the interlock rising.
 -- `force` writes even when the drive believes the variables are already clear, which is what the
 -- rising edge needs -- what a previous session left behind is not knowable from here.
-function Drive:cleanup(force)
+--
+-- `keepBank` leaves the enable channel alone, and exactly one caller passes it: the transition OUT
+-- of the air. The value variable going to 0 there is the safety rule this whole file is built
+-- around and stays unconditional. The bank variable is not a magnitude, steps nothing on its own,
+-- and while the interlock is still on it has to go on saying which bank the surface has selected --
+-- so clearing it on the landing and writing it straight back on the next pass would be a pair of
+-- model writes that cancel out.
+function Drive:cleanup(force, keepBank)
   local settings = self.settings
   local fm = self.writtenFm
   if fm == nil then fm = self.radio.flightMode() end
@@ -497,17 +545,19 @@ function Drive:cleanup(force)
   self.written = 0
   self.writtenFm = nil
 
-  if settings and (settings.bank_gvar or 0) > 0 and (force or (self.bankWritten or 0) ~= 0) then
-    -- The mode the bank was ARMED in, not the mode the radio happens to be in now. Cleared in the
-    -- wrong one, the write goes to a different slot -- or is redirected by a "same as FMx" link --
-    -- and the enable channel stays parked in a band nobody chose.
-    local bankFm = self.bankFm
-    if bankFm == nil then bankFm = self.radio.flightMode() end
-    writeGvar(self, settings.bank_gvar, bankFm, 0)
-    logDrive("cleanup: bank gvar %d fm %d <- 0", settings.bank_gvar, bankFm)
+  if not keepBank then
+    if settings and (settings.bank_gvar or 0) > 0 and (force or (self.bankWritten or 0) ~= 0) then
+      -- The mode the bank was ARMED in, not the mode the radio happens to be in now. Cleared in the
+      -- wrong one, the write goes to a different slot -- or is redirected by a "same as FMx" link --
+      -- and the enable channel stays parked in a band nobody chose.
+      local bankFm = self.bankFm
+      if bankFm == nil then bankFm = self.radio.flightMode() end
+      writeGvar(self, settings.bank_gvar, bankFm, 0)
+      logDrive("cleanup: bank gvar %d fm %d <- 0", settings.bank_gvar, bankFm)
+    end
+    self.bankWritten = 0
+    self.bankFm = nil
   end
-  self.bankWritten = 0
-  self.bankFm = nil
   self.coolUntil = 0
   self.trimCoolUntil = 0
 end
@@ -717,6 +767,9 @@ function Drive:navigateRow(up)
     if self:functionId(self.bank, index + 1) ~= nil then
       self.row = index + 1
       self.valueEpoch = self.valueEpoch + 1
+      -- The bank does not move here, and that is precisely why the assertion belongs in it: a
+      -- pilot who walks rows with a bank trim configured never makes a bank change at all.
+      self:ensureBankArmed()
       return true
     end
   end
@@ -1135,9 +1188,28 @@ function Drive:tick(armed)
     self.bankShown = shown
     self.valueEpoch = self.valueEpoch + 1
   end
-  if shown ~= nil and shown ~= self.bank then
+  -- The reading is ADOPTED only while the drive has put nothing on the variable itself. Once it
+  -- has, the selection is what the wire is being driven from and the channel is an echo of it --
+  -- one frame behind, on a radio whose mixer and channel output do not run on this pass's clock.
+  -- Adopting that echo would let a lagging frame drag the selection back into the band it has just
+  -- left, and the assertion below would then write the wrong bank rather than repair it. So the two
+  -- do not overlap: the wire is believed where nothing of ours drives it, the selection everywhere
+  -- else. `bankShown` is unaffected either way -- what the channel carries is still shown, which is
+  -- how a missing mixer line stays visible.
+  if shown ~= nil and shown ~= self.bank and (self.bankWritten or 0) == 0 then
     self.bank = shown
   end
+
+  -- The bank the pilot has selected belongs on the wire for the whole time the interlock is on, not
+  -- only on the pass a bank changed and not only in the air. One comparison once it is there.
+  --
+  -- Unconditional at this point on purpose: everything above has already established that the
+  -- interlock is closed and that the setup check allows it -- evaluateInterlock returns early and
+  -- clears both variables where either is untrue -- and all three phases the interlock shows are
+  -- phases in which the surface names a bank. Gating it on the air instead would leave the ground
+  -- read-out and the postflight list showing a bank the wire does not carry, and would put the
+  -- repair of the interlock's own defensive clear a whole arming away.
+  self:ensureBankArmed()
 
   self:fastTick(now)
   return true
