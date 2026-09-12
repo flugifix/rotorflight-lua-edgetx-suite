@@ -2182,6 +2182,7 @@ return {
         fc_board_unknown = "The flight controller has not been compared.",
         fc_done = "Flight controller set up",
         fc_verify_differs = "Written, but the read-back does not match",
+        fc_verify_step_only = "Written, but the flight controller kept another step",
         fc_failed = "The flight controller write failed",
         fc_armed = "The model is armed.",
         fc_arm_unknown = "The arming state cannot be read, so nothing is written.",

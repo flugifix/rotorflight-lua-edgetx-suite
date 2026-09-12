@@ -227,6 +227,14 @@ function M.offer(ctx)
     if report.verdict == "match" then
       settle(string.format("%s (%d)",
         t(i18n, "fc_done", "Flight controller set up"), report.written))
+    elseif report.stepOnly == true then
+      -- Every slot holds the right function on the right channels through the right windows and
+      -- the STEP alone disagrees, which is worth its own sentence: it is the one field of a slot
+      -- this page's own setting decides, so naming it names the remedy as well. A count of
+      -- differing slots would be the same fact in a form nobody can act on.
+      settle(string.format("%s (%d)",
+        t(i18n, "fc_verify_step_only", "Written, but the flight controller kept another step"),
+        report.steps))
     else
       -- The write said yes to every slot and the read-back disagrees, which is the one outcome
       -- worth spelling out: it is not a failure the queue reported and it is not a success.

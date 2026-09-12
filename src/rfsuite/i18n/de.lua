@@ -2210,6 +2210,7 @@ return {
         fc_board_unknown = "Der Flugregler wurde nicht verglichen.",
         fc_done = "Flugregler eingerichtet",
         fc_verify_differs = "Geschrieben, aber das Zurückgelesene stimmt nicht",
+        fc_verify_step_only = "Geschrieben, aber der Flugregler hat eine andere Schrittweite behalten",
         fc_failed = "Das Schreiben auf den Flugregler ist fehlgeschlagen",
         fc_armed = "Das Modell ist scharf.",
         fc_arm_unknown = "Der Scharf-Zustand ist nicht lesbar, es wird nichts geschrieben.",
