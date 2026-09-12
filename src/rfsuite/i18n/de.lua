@@ -2662,6 +2662,12 @@ return {
       inflight_post_saved = "der Flugregler hat das gespeichert",
       inflight_post_saved_zone = "gespeichert - zurückholen: Vollbild",
       inflight_prime_interrupted = "Lesen abgebrochen",
+      inflight_restore_unknown_profile = "Unbekannt, aus welchem Profil die Sicherung stammt: neu sichern",
+      inflight_backup_not_active = "ein anderes Profil ist aktiv",
+      inflight_backup_not_active_short = "nicht aktiv",
+      inflight_delta_no_compare = "KEIN VERGLEICH",
+      inflight_delta_backup_profile = "Sicherung aus Profil",
+      inflight_delta_active = "aktiv ist",
       inflight_backup_reading = "Der Flugregler wird gelesen: einen Moment"
     },
     governor = {

@@ -1279,8 +1279,18 @@ function M.restore(widget, drive)
   -- different one it would not undo anything: it would overwrite a profile the copy never
   -- described, with values the pilot never flew there. Refused by name rather than silently, so
   -- the screen can say which profile to switch back to.
+  --
+  -- With NO RECORD AT ALL the answer is that refusal and not permission, which is the half this
+  -- test used to get wrong. The record lives in memory and the per-model store beside it keeps the
+  -- slot number alone, so after a restart -- or after any session that did not make the copy
+  -- itself -- the spare profile holds a copy of SOME profile and nothing on the radio knows which.
+  -- Allowing the restore there allowed exactly the write this guard exists to prevent, in the one
+  -- state where nothing could warn the pilot about it.
   local source = (type(drive.backup) == "table") and tonumber(drive.backup.source) or nil
-  if source ~= nil and active0 ~= nil and (source - 1) ~= active0 then
+  if source == nil then
+    return refuseTransfer(drive, "restore", "unknown_profile")
+  end
+  if active0 == nil or (source - 1) ~= active0 then
     return refuseTransfer(drive, "restore", "other_profile")
   end
 
@@ -1301,14 +1311,35 @@ end
 -- a rebuild happens exactly when that epoch moves.
 --
 -- Answers nil when there is no snapshot to measure against, which is a different thing from an
--- empty list and is said differently on screen.
+-- empty list and is said differently on screen. A second return value names the reason where there
+-- is one to name: today the reference belonging to another profile, which is a refusal to compare
+-- rather than an absence of anything to compare.
 function M.delta(drive)
   if type(drive) ~= "table" then return nil end
-  local reference = (type(drive.backup) == "table" and drive.backup.values) or drive.primedValues
+  local backup = (type(drive.backup) == "table") and drive.backup or nil
+  local reference = (backup ~= nil and backup.values) or drive.primedValues
   -- An EMPTY reference is no reference. A snapshot taken before anything had been read off the
   -- board is a table with nothing in it, and measuring against it yields an empty list -- which
   -- the screen reads as "nothing has changed", a wrong answer where a missing one was wanted.
   if type(reference) ~= "table" or next(reference) == nil then return nil end
+
+  -- And a reference taken from ANOTHER PROFILE is not a reference either. This is the test the
+  -- restore above has had all along and this comparison did not: the board's adjustments only ever
+  -- moved the profile that was active, so a backup of profile 1 held against the values of profile
+  -- 2 reports the difference between two profiles as though the flight had made it. The pilot's
+  -- fourth radio round photographed exactly that -- twelve rows of "changed" after a flight that
+  -- moved one of them, the rest of the list being what the two profiles disagree about.
+  --
+  -- Only a BACKUP can be from elsewhere. `primedValues` is this session's own read of whichever
+  -- profile is active, and finishValues takes it again on every read while no backup stands.
+  if backup ~= nil then
+    local source = tonumber(backup.source)
+    local active0 = M.activeProfile0(drive)
+    if source ~= nil and active0 ~= nil and (source - 1) ~= active0 then
+      return nil, "other_profile"
+    end
+  end
+
   if drive._deltaEpoch == drive.valueEpoch and drive._deltaList ~= nil then return drive._deltaList end
 
   local list = {}

@@ -2662,6 +2662,12 @@ return {
       inflight_post_saved = "the board has saved this",
       inflight_post_saved_zone = "board has saved - restore: full screen",
       inflight_prime_interrupted = "re-read interrupted",
+      inflight_restore_unknown_profile = "Which profile the backup holds is not known: take a fresh one",
+      inflight_backup_not_active = "another profile is active",
+      inflight_backup_not_active_short = "not active",
+      inflight_delta_no_compare = "NO COMPARISON",
+      inflight_delta_backup_profile = "Backup from profile",
+      inflight_delta_active = "active is",
       inflight_backup_reading = "The board is being read: try again in a moment"
     },
     governor = {

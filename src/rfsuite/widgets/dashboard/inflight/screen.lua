@@ -1043,6 +1043,10 @@ local function refusalWords(reason, t)
     return t("widgets.dashboard.inflight_restore_other_profile",
       "The backup was taken from another profile: switch back to it first")
   end
+  if reason == "unknown_profile" then
+    return t("widgets.dashboard.inflight_restore_unknown_profile",
+      "Which profile the backup holds is not known: take a fresh one")
+  end
   if reason == "unprimed" then
     return t("widgets.dashboard.inflight_backup_unprimed", "Read the board before taking a backup")
   end
@@ -1074,7 +1078,7 @@ end
 -- button the pilot pressed. The delta line says its own thing about the same state -- that there
 -- is nothing to compare a flight with -- and the two are deliberately both on the screen: one
 -- answers "why did that button do nothing", the other answers "why is this list empty".
-local function describeBackup(snapshot, t)
+local function describeBackup(snapshot, t, ground)
   local transfer = snapshot.transfer
   if type(transfer) == "table" and transfer.state == "busy" then
     return t("widgets.dashboard.inflight_transfer_busy", "Copying profile")
@@ -1094,6 +1098,25 @@ local function describeBackup(snapshot, t)
     if backup.source ~= nil then
       text = text .. " (" .. t("widgets.dashboard.inflight_backup_from", "from") .. " "
         .. tostring(backup.source) .. ")"
+    end
+    -- and whether that profile is the one being flown, which until now the pilot had to work out
+    -- for himself by holding this line against the profile in the header. It is the same fact the
+    -- restore refuses on, and the photograph of it was a backup line reading "from 1" under a
+    -- header reading "profile 2" with nothing saying the two disagreed.
+    --
+    -- It costs the WALL CLOCK on a narrow zone, and that is the trade rather than an oversight: a
+    -- backup that cannot be put back where the pilot is standing is worth more said than timed,
+    -- and the long form keeps both wherever it fits.
+    local active = tonumber(snapshot.profile)
+    if backup.source ~= nil and active ~= nil and active ~= tonumber(backup.source) then
+      local width = (type(ground) == "table") and ground.width or 0
+      local font = (type(ground) == "table") and ground.font or nil
+      local timed = text
+      if type(backup.clock) == "string" then timed = timed .. " " .. backup.clock end
+      return pickText(
+        timed .. " - " .. t("widgets.dashboard.inflight_backup_not_active", "another profile is active"),
+        text .. " - " .. t("widgets.dashboard.inflight_backup_not_active_short", "not active"),
+        width, font)
     end
     if type(backup.clock) == "string" then text = text .. " " .. backup.clock end
     return text
@@ -1159,7 +1182,7 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
     and textFits(checkText, lineW, m.font)
     and textFits(describeSet(snapNow, t), lineW, m.font)
     and textFits(describePrime(snapNow, t, ground), lineW, m.font)
-    and textFits(describeBackup(snapNow, t), lineW, m.font) then
+    and textFits(describeBackup(snapNow, t, ground), lineW, m.font) then
     lineFont = m.font
   end
   -- The rung the block was actually drawn in, so the second clause of the line above is chosen
@@ -1200,7 +1223,7 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return "" end
-      return fitText(describeBackup(snap, t), lineW, lineFont)
+      return fitText(describeBackup(snap, t, ground), lineW, lineFont)
     end
   }
   y = y + m.statusLineH + m.pad
@@ -1291,7 +1314,8 @@ function M.buildPost(children, widget, m, w, h, t, p, interactive)
   local lineW = w - m.pad * 2
   local y = m.chipY
 
-  local list = (drive ~= nil and Prime ~= nil) and Prime.delta(drive) or nil
+  local list, verdict = nil, nil
+  if drive ~= nil and Prime ~= nil then list, verdict = Prime.delta(drive) end
 
   -- The footer first, because everything above it is measured against where it starts. It says the
   -- one thing a pilot has to know standing there: the board has ALREADY written this to its own
@@ -1306,6 +1330,24 @@ function M.buildPost(children, widget, m, w, h, t, p, interactive)
   if interactive then bottom = bottom - m.actionH - m.pad end
 
   if list == nil then
+    -- A comparison REFUSED reads nothing like a comparison that has nothing to measure against,
+    -- and the pilot acts on the two differently: one is answered by switching the profile back or
+    -- taking a fresh undo, the other by reading the board. So the verdict gets the title line the
+    -- list itself would have had, and the profiles it is refusing to compare go under it -- two
+    -- lines, because on a 480-pixel zone the sentence does not fit on one.
+    if verdict == "other_profile" then
+      appendLabel(children, m.pad, y, lineW,
+        t("widgets.dashboard.inflight_delta_no_compare", "NO COMPARISON"), p.accent, m.small, LEFT)
+      local source = (type(drive.backup) == "table") and tonumber(drive.backup.source) or nil
+      local active0 = Prime.activeProfile0(drive)
+      local text = t("widgets.dashboard.inflight_delta_backup_profile", "Backup from profile")
+        .. " " .. (source and tostring(source) or UNKNOWN_VALUE) .. ", "
+        .. t("widgets.dashboard.inflight_delta_active", "active is")
+        .. " " .. (active0 and tostring(active0 + 1) or UNKNOWN_VALUE)
+      appendLabel(children, m.pad, y + m.lineH, lineW, fitText(text, lineW, m.small),
+        p.text, m.small, LEFT)
+      return
+    end
     appendLabel(children, m.pad, y, lineW,
       fitText(t("widgets.dashboard.inflight_delta_unprimed", "Read the values first: nothing to compare against"),
               lineW, m.small),
