@@ -155,6 +155,16 @@ end
 -- refreshing.
 local USAGE_REPORT_INTERVAL = 5
 
+-- How long a hole between two passes has to be before it is worth a line.
+--
+-- Three quanta. The firmware calls a widget's refresh() from its menus task on a fixed period and
+-- never catches up (radio/src/tasks.cpp, MENU_TASK_PERIOD; the call site is LuaWidget::refresh in
+-- lua_widget.cpp), so a pass that overruns its slot costs the NEXT slots rather than running
+-- twice, and every gap is a multiple of that period. Two slots in a row is ordinary on a busy
+-- start-up; a hole this long is what anything timed from a pass overruns by, and on this widget
+-- the shortest deadline of the lot is the in-flight overlay's value pulse.
+local PASS_GAP_REPORT = 0.15
+
 -- Which shared-memory slot carries this widget's heartbeat, and how the two figures are packed
 -- into the one integer it holds.
 --
@@ -253,6 +263,35 @@ local function traceInstructionUsage(self)
   end
 
   local now = nowSeconds()
+
+  -- THE REFRESH CADENCE, which is the firmware's and not this widget's.
+  --
+  -- Nothing inside a pass can see the hole in front of it, and the hole is what every deadline
+  -- the widget keeps is really measured against: the in-flight overlay writes a magnitude to a
+  -- global variable and clears it a set number of milliseconds later, from a pass, so a pass that
+  -- does not come leaves the magnitude standing and the flight controller repeats the step.
+  --
+  -- Two clock reads separate the two halves of such a hole. This one is the top of the pass and
+  -- the end of refresh writes the other, so the line can say how much of the gap this widget
+  -- spent inside its own refresh and how much of it went elsewhere in the radio -- another Lua
+  -- state, a background script, the card. A pass that never reached the end of refresh leaves no
+  -- second read behind and the line says -1 rather than guessing: killed by the instruction limit
+  -- is exactly the case worth telling apart.
+  --
+  -- The cost on an ordinary pass is one field read, one field write and one comparison; the
+  -- arithmetic and the formatting are inside the branch, which on a healthy radio is never taken.
+  local lastPassAt = self._passAt
+  self._passAt = now
+  if lastPassAt and (now - lastPassAt) > PASS_GAP_REPORT
+    and Log and type(Log.emitf) == "function" then
+    local endAt = self._passEndAt
+    local inside = (endAt and endAt >= lastPassAt) and (endAt - lastPassAt) or -0.001
+    Log.emitf("rfsuite.widget", "debug",
+      "pass gap %d ms, %d ms of it inside refresh, previous pass %s",
+      math.floor((now - lastPassAt) * 1000 + 0.5), math.floor(inside * 1000 + 0.5),
+      tostring(self._passWork))
+  end
+
   if now < self._usageReportAt then return end
   self._usageReportAt = now + USAGE_REPORT_INTERVAL
 
@@ -2471,6 +2510,12 @@ function Runtime.new(zone, options)
       local step = _G.rfsuite and _G.rfsuite.logStep
       if step then step("widget job: " .. tostring(self._job.kind), false, "wgt job") end
 
+      -- and the same word for the gap line at the top of the NEXT pass, which is where a pass is
+      -- charged for the slots it overran into. A build is the expensive work class this widget
+      -- has, so a hole that follows one is a different finding from a hole that follows a state
+      -- pass.
+      self._passWork = self._job.kind
+
       if MspRuntime and type(MspRuntime.pump) == "function" then
         if type(_G) == "table" then
           _G.rfsuite = _G.rfsuite or {}
@@ -2485,6 +2530,11 @@ function Runtime.new(zone, options)
       if self._job.step(self) then
         self._job = nil
       end
+      -- The second of the two clock reads the gap line is built from; see traceInstructionUsage.
+      -- This exit and the end of the function carry it, which are the two a widget that is up
+      -- takes. The cold-start exits below deliberately do not: a pass that returned there has not
+      -- done the work the line is about, and -1 says so.
+      self._passEndAt = nowSeconds()
       return
     end
 
@@ -2509,6 +2559,9 @@ function Runtime.new(zone, options)
     -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
     local isInteractive = (event ~= nil)
     local tuningMode = inflightMode(self, isInteractive)
+    -- See the gap line in traceInstructionUsage: a state pass is named by the surface it is for,
+    -- so a hole measured while the tuning surface was up can be told from one on the dashboard.
+    self._passWork = tuningMode or "state"
     if not isInteractive then
       -- Leaving fullscreen is the one exit the firmware does not always report -- a long press on
       -- RTN closes it and Lua may never see the key -- so the ground surface is dropped whenever a
@@ -2517,7 +2570,7 @@ function Runtime.new(zone, options)
     end
     local nextRenderKey = nil
     if tuningMode then
-      -- The same 2 Hz throttle the scene key is under. The value and the armed row are reactive
+      -- The same 2 Hz throttle the scene key is under. The values and the armed row are reactive
       -- closures and follow the state per frame; everything the key covers is layout, and
       -- rebuilding that at the pass rate would spend the budget those closures live on.
       --
@@ -2525,10 +2578,13 @@ function Runtime.new(zone, options)
       -- control is HELD the key is left exactly where it is. A rebuild calls lvgl.clear(), which
       -- deletes the momentary button under the pilot's finger, and EdgeTX raises that button's
       -- release handler only as LV_EVENT_RELEASED on the object itself -- so a deleted button
-      -- never reports its release and the drive would keep writing the row's magnitude. The
-      -- rebuild during a hold is the NORMAL case, not a corner: the flight controller's first
-      -- step arrives on AdjF/AdjV, the value cache moves, the drive's epoch bumps, and the epoch
-      -- is in the key below. When the hold ends the next recompute happens as it always did.
+      -- never reports its release and the drive would keep writing the row's magnitude. What can
+      -- still rebuild under a finger is what changes the LAYOUT -- a bank or a row the trims moved,
+      -- the trim walk finishing, the flown profile changing -- and no longer the flight
+      -- controller's answer to the step being made: a report moves the drive's report counter
+      -- instead of the epoch below, and the number it carries reaches the screen through a closure
+      -- (widgets/dashboard/inflight/drive.lua, the AdjF block in fastTick). When the hold ends the
+      -- next recompute happens as it always did.
       local snapshot = self.state.inflight
       local holding = (type(snapshot) == "table") and snapshot.holding == true
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
@@ -2589,6 +2645,9 @@ function Runtime.new(zone, options)
         self._job = { kind = "scene", step = sceneJobStep }
       end
     end
+
+    -- The second clock read; see the job pass above and traceInstructionUsage.
+    self._passEndAt = nowSeconds()
   end
 
   function widget.background(self)
