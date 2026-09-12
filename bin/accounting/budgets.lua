@@ -40,7 +40,11 @@ return {
     -- a frozen sensor set, and a flight is neither.
     ["pass.state.armed"] = { target = 12200, measured = 10506 },
     ["pass.job.prepare"] = { target = 1250, measured = 1021 },
-    ["pass.job.build"] = { target = 5700, measured = 5057, proposed = 10000 },
+    -- Raised from 5700 when the object renderers began compiling a box's thresholds where the
+    -- box is rendered instead of on the first value change in the sweep. The build is chunked at
+    -- eight boxes per pass and the sweep that follows the swap is not, so this is the cheaper of
+    -- the two passes to carry it. The margin is held at the ~10% the row already had.
+    ["pass.job.build"] = { target = 6200, measured = 5557, proposed = 5700 },
     ["pass.swap"] = { target = 3400, measured = 2737, proposed = 6000 },
 
     -- The splash pass is the one JOB pass that runs while the connect chain still has
@@ -135,33 +139,41 @@ return {
     -- through these two rows, which is what makes a new theme priceable before it
     -- is built.
     --
-    -- Five of these rows carry a `proposed` that is their PREVIOUS target rather than a
-    -- pre-measurement guess, and they are the rows where resolving a constant colour or font
-    -- once at build moved work out of the sweep and into the render. The trade is deliberate:
-    -- a render happens once per scene, a sweep on every foreground pass. Per box type the
-    -- render grows by 47 to 146 instructions and the sweep falls by 27 to 136, so the change
-    -- has paid for itself after one to two passes and every pass after that is profit --
-    -- which is why the `theme.*` rows, the ones the safety argument rests on, all fall.
+    -- Ten of these rows carry a `proposed` that is their PREVIOUS target rather than a
+    -- pre-measurement guess, and they are the rows where work that used to be done in the sweep
+    -- is now done in the render. The trade is deliberate: a render happens once per scene, a
+    -- sweep on every foreground pass.
+    --
+    -- Five of them are the constant colour and font resolved once at build. The other five are
+    -- the box's thresholds, compiled where the box is rendered rather than on the first value
+    -- change after it: the fixtures below declare literal thresholds, so what moves for them is
+    -- only WHEN the list is compiled -- out of the first sweep, which the `sweep.*` rows do not
+    -- measure, and into the render, which `box.*` does. Where a theme gives a threshold limit as
+    -- a function the list used to be compiled again on EVERY value change, and that is the cost
+    -- this removes: on a shipped arc whose warning level comes from the theme configuration the
+    -- colour reference falls from 301 instructions and 528 bytes per change to 141 and none.
+    --
+    -- Which is why the `theme.*` rows, the ones the safety argument rests on, all fall or hold.
     ----------------------------------------------------------------------------
     ["box.dial"] = { target = 200, measured = 121 },
     ["sweep.dial"] = { target = 50, measured = 0 },
     ["box.gauge"] = { target = 960, measured = 748, proposed = 800 },
     ["sweep.gauge"] = { target = 400, measured = 180 },
-    ["box.gauge/arc"] = { target = 1150, measured = 971 },
+    ["box.gauge/arc"] = { target = 1650, measured = 1281, proposed = 1150 },
     ["sweep.gauge/arc"] = { target = 450, measured = 262 },
-    ["box.gauge/bar"] = { target = 1300, measured = 1073 },
+    ["box.gauge/bar"] = { target = 1580, measured = 1226, proposed = 1300 },
     ["sweep.gauge/bar"] = { target = 350, measured = 224 },
     ["box.image/image"] = { target = 200, measured = 159 },
     ["sweep.image/image"] = { target = 50, measured = 0 },
     ["box.image/model"] = { target = 400, measured = 306 },
     ["sweep.image/model"] = { target = 50, measured = 0 },
-    ["box.text/blackbox"] = { target = 600, measured = 528 },
+    ["box.text/blackbox"] = { target = 740, measured = 577, proposed = 600 },
     ["sweep.text/blackbox"] = { target = 500, measured = 352 },
-    ["box.text/governor"] = { target = 600, measured = 537 },
+    ["box.text/governor"] = { target = 720, measured = 556, proposed = 600 },
     ["sweep.text/governor"] = { target = 500, measured = 339 },
     ["box.text/stats"] = { target = 470, measured = 365, proposed = 300 },
     ["sweep.text/stats"] = { target = 300, measured = 109 },
-    ["box.text/telemetry"] = { target = 600, measured = 520 },
+    ["box.text/telemetry"] = { target = 740, measured = 570, proposed = 600 },
     ["sweep.text/telemetry"] = { target = 450, measured = 301 },
     ["box.time/count"] = { target = 700, measured = 545, proposed = 600 },
     ["sweep.time/count"] = { target = 300, measured = 177 },
