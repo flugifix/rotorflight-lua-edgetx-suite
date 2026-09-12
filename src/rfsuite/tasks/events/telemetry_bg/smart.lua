@@ -15,7 +15,6 @@ local Reserve = nil
 
 local lastWake = 0
 local wakeInterval = 1.0
-local dischargeCurveTable = nil
 
 local state = {
   batterySignature = nil,
@@ -94,17 +93,26 @@ local function resetComputedState()
   resetVoltageTracking()
 end
 
-local function ensureCurve()
-  if dischargeCurveTable then return end
-  dischargeCurveTable = {}
-  for i = 0, 120 do
-    local v = 3.00 + i * 0.01
-    local a = 12
-    local b = 3.7
-    local percent = 100 / (1 + math.exp(-a * (v - b)))
-    dischargeCurveTable[i + 1] = math.floor(clamp(percent, 0, 100) + 0.5)
-  end
-end
+-- The discharge curve: percent(v) = 100 / (1 + exp(-12 * (v - 3.7))), rounded to a whole
+-- percent, over cell voltages 3.00 V to 4.20 V in steps of 0.01 V -- 121 entries, index 1 at
+-- 3.00 V. Those two constants and that grid are its only inputs, so the curve is a constant
+-- and is written as one. Built in a widget pass instead, it cost 3406 instructions in
+-- whichever pass first estimated fuel from voltage, on top of whatever that pass already
+-- carried and against the 20000 a widget call is billed at; as a table constructor it is one
+-- to two instructions per entry, paid once when this module is loaded.
+local dischargeCurveTable = {
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,
+    1,   1,   1,   2,   2,   2,   2,   3,   3,   3,   4,
+    4,   5,   5,   6,   7,   7,   8,   9,  10,  12,  13,
+   14,  16,  17,  19,  21,  23,  25,  28,  30,  33,  35,
+   38,  41,  44,  47,  50,  53,  56,  59,  62,  65,  67,
+   70,  72,  75,  77,  79,  81,  83,  84,  86,  87,  88,
+   90,  91,  92,  93,  93,  94,  95,  95,  96,  96,  97,
+   97,  97,  98,  98,  98,  98,  99,  99,  99,  99,  99,
+   99,  99,  99,  99,  99, 100, 100, 100, 100, 100, 100,
+}
 
 local function getSession()
   local root = _G and _G.rfsuite
@@ -247,7 +255,6 @@ end
 
 local function fuelPercentageFromVoltage(voltage, cellCount, batteryConfig, reserve)
   if not cellCount or cellCount <= 0 then return nil end
-  ensureCurve()
 
   local minV = (tonumber(batteryConfig and batteryConfig.vbatmincellvoltage) or 330) / 100
   local fullV = (tonumber(batteryConfig and batteryConfig.vbatfullcellvoltage) or 410) / 100
