@@ -503,12 +503,21 @@ function Utils.compiledThresholds(box, thresholds, isFahrenheit, state)
   return list
 end
 
-function Utils.resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit, box, state, colorKey)
+function Utils.resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit, box, state, colorKey, compiled)
   if value == nil or type(thresholds) ~= "table" or #thresholds == 0 then
     return defaultColor
   end
 
-  local list = Utils.compiledThresholds(box, thresholds, isFahrenheit == true, state)
+  -- `compiled` is what Utils.renderThresholds produced for this box when the scene was built. It
+  -- is used only while it still describes this very threshold table under this temperature unit,
+  -- so a caller that hands over the wrong one, or none at all, compiles here exactly as before.
+  local fahrenheit = isFahrenheit == true
+  local list
+  if type(compiled) == "table" and compiled.src == thresholds and compiled.fahrenheit == fahrenheit then
+    list = compiled.list
+  else
+    list = Utils.compiledThresholds(box, thresholds, fahrenheit, state)
+  end
   for i = 1, #list do
     local item = list[i]
     local matched = false
@@ -538,12 +547,20 @@ function Utils.resolveThresholdColor(value, thresholds, defaultColor, isFahrenhe
   return defaultColor
 end
 
-function Utils.resolveTextColor(box, state, fallback, value, isFahrenheit)
+function Utils.resolveTextColor(box, state, fallback, value, isFahrenheit, compiled)
   if value ~= nil and type(box) == "table" and type(box.thresholds) == "table" and #box.thresholds > 0 then
-    local threshColor = Utils.resolveThresholdColor(value, box.thresholds, nil, isFahrenheit == true, box, state, "textcolor")
+    local threshColor =
+      Utils.resolveThresholdColor(value, box.thresholds, nil, isFahrenheit == true, box, state, "textcolor", compiled)
     if threshColor ~= nil then
       return threshColor
     end
+  end
+
+  -- The colour no threshold decides, where this render has already resolved it: renderThresholds
+  -- fills that in only when box.textcolor and box.bgcolor are both literals, so the chain below
+  -- cannot answer differently for as long as this scene is the one on screen.
+  if type(compiled) == "table" and compiled.default ~= nil then
+    return compiled.default
   end
 
   local color = Utils.resolveValue(box and box.textcolor, box, state)
@@ -609,6 +626,48 @@ function Utils.staticFont(box, state, defaultFont, fontProp, lowResFontProp)
     return nil
   end
   return Utils.resolveFont(box, state, defaultFont, fontProp, lowResFontProp)
+end
+
+--- Everything a box's colours need that a drawn scene cannot change, resolved once, where the box
+--- is rendered.
+--
+-- Returns nil when the box declares no thresholds -- Utils.staticTextColor already answers that
+-- case with a plain number -- and otherwise a record the object holds in the closure it gives
+-- lvgl and hands back to resolveTextColor / resolveThresholdColor on every frame:
+--
+--   list        the compiled thresholds
+--   src         the threshold table they were compiled from
+--   fahrenheit  the temperature unit they were compiled under
+--   default     the colour a value falls back to when no threshold matches it, left nil while
+--               box.textcolor or box.bgcolor is a function and so can still move
+--
+-- Utils.compiledThresholds caches its result on the box, but only while every limit and every
+-- colour in the list is a literal: one threshold whose `value` is a function marks the list
+-- dynamic, the cache is skipped, and the whole list is rebuilt and re-normalised on every value
+-- change -- in the reactive sweep, on whatever instruction budget refresh() left over. What such a
+-- function reads is the theme's own configuration, and nothing can change that under a scene that
+-- is already drawn: widgets/dashboard/runtime.lua's reloadActiveTheme is the only writer that can
+-- put a different configuration on the state, and it clears `built` and `renderKey` in the same
+-- call; applyThemeConfig, the one other writer, is reached only from updateVoltageThemeConfig,
+-- whose next configuration is a copy of the current one with v_min and v_max rewritten, and it
+-- clears those same two fields whenever either of them moves.
+--
+-- Compiling here also takes the FIRST resolution of a string threshold and of a named colour out
+-- of the sweep that follows the swap, which is the pass with the least budget left.
+function Utils.renderThresholds(box, state, isFahrenheit, fallback)
+  local thresholds = type(box) == "table" and box.thresholds or nil
+  if type(thresholds) ~= "table" or #thresholds == 0 then return nil end
+
+  local fahrenheit = isFahrenheit == true
+  local compiled = {
+    src = thresholds,
+    fahrenheit = fahrenheit,
+    list = Utils.compiledThresholds(box, thresholds, fahrenheit, state)
+  }
+  if type(box.textcolor) ~= "function" and type(box.bgcolor) ~= "function" then
+    compiled.default = Utils.resolveTextColor(box, state, fallback)
+  end
+  return compiled
 end
 
 function Utils.pushLabel(nodes, x, y, w, text, color, align, font)

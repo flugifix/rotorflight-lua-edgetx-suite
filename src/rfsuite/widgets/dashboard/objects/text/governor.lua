@@ -140,7 +140,7 @@ local function governorText(state)
   return translate(state, "widgets.governor." .. key, key)
 end
 
-local function governorColor(state, box, utils)
+local function governorColor(state, box, utils, compiled)
   local armed = resolveArmedState(state)
   local value = tonumber(state and state.governor)
   if armFlagsToIsArmed(state and state.armFlags) == false then
@@ -150,16 +150,17 @@ local function governorColor(state, box, utils)
   if type(box and box.thresholds) == "table" and #box.thresholds > 0 and utils and type(utils.resolveThresholdColor) == "function" then
     local govText = governorText(state)
     local govKey = GOVERNOR_LABELS[value]
-    local threshColor = utils.resolveThresholdColor(govText, box.thresholds, nil, false, box, state)
+    local threshColor = utils.resolveThresholdColor(govText, box.thresholds, nil, false, box, state, nil, compiled)
     if threshColor == nil and govKey ~= nil then
-      threshColor = utils.resolveThresholdColor(govKey, box.thresholds, nil, false, box, state)
+      threshColor = utils.resolveThresholdColor(govKey, box.thresholds, nil, false, box, state, nil, compiled)
     end
     if threshColor ~= nil then
       return threshColor
     end
   end
 
-  local defaultText = (utils and utils.resolveTextColor and utils.resolveTextColor(box, state, WHITE)) or (box and box.textcolor) or WHITE
+  local defaultText = (utils and utils.resolveTextColor
+    and utils.resolveTextColor(box, state, WHITE, nil, nil, compiled)) or (box and box.textcolor) or WHITE
   local warningColor = box and box.warningcolor or COLOR_THEME_WARNING or RED or defaultText
   local activeColor = box and box.activecolor or COLOR_THEME_PRIMARY1 or GREEN or defaultText
   if utils and utils.normalizeColor then
@@ -217,6 +218,10 @@ function Render.render(nodes, rect, box, state, _, utils)
     return cachedText
   end
 
+  -- Compiled once, here where the box is rendered, rather than on every value change in the
+  -- reactive sweep -- the argument for why that is the same answer is on Utils.renderThresholds.
+  local compiledThresholds = utils.renderThresholds(box, state, false, WHITE)
+
   local lastColorArmFlags = nil
   local lastColorArmed = nil
   local lastColorGov = nil
@@ -235,7 +240,7 @@ function Render.render(nodes, rect, box, state, _, utils)
     lastColorArmed = armed
     lastColorGov = gov
 
-    cachedColor = governorColor(state, box, utils)
+    cachedColor = governorColor(state, box, utils, compiledThresholds)
     return cachedColor
   end
 

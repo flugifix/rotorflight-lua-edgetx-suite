@@ -63,6 +63,33 @@ Thresholds are evaluated in order (`value <= threshold.value`). Gauge fill thres
 
 For temperature sources (`esc_temp`, `temp_esc`, `mcu_temp`, `temp_mcu`), threshold values are defined in Celsius (°C) in the theme and automatically converted when the radio is configured for Fahrenheit (°F).
 
+#### When a threshold is resolved
+
+A `value`, a `textcolor` and a `fillcolor` may each be given as a function, so that a limit can
+come out of the theme's own configuration rather than being written into the box:
+
+```lua
+{
+  type = "gauge",
+  subtype = "arc",
+  source = "bec_voltage",
+  thresholds = {
+    { value = function(_, state) return (state.themeConfig or {}).bec_warn or 6.0 end, fillcolor = "red" },
+    { value = 1000, fillcolor = "green" },
+  }
+}
+```
+
+The list is resolved **once, when the box is built**, and the box then matches every value it is
+given against the list that resolution produced. So anything such a function reads has to be
+something that rebuilds the screen when it changes. The theme configuration is: saving it reloads
+the active theme, which builds the boxes again. Live telemetry is not, and does not belong in a
+threshold limit -- the box already re-evaluates the whole list against the current reading on
+every change, which is what thresholds are for.
+
+The same holds for the named colour strings above: they are mapped to a colour number when the
+box is built, not on the first reading that arrives.
+
 #### Governor state thresholds
 For governor status boxes (`type = "text"`, `source = "governor"`), thresholds can match against governor state labels:
 

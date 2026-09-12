@@ -69,9 +69,9 @@ local function readDerived(state, source)
   return derived[source]
 end
 
-local function resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit, box, state, utils)
+local function resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit, box, state, utils, compiled)
   if utils and type(utils.resolveThresholdColor) == "function" then
-    return utils.resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit, box, state, "fillcolor")
+    return utils.resolveThresholdColor(value, thresholds, defaultColor, isFahrenheit, box, state, "fillcolor", compiled)
   end
   return defaultColor
 end
@@ -241,6 +241,9 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
   local unit = utils.resolveValue(box.unit, box, state)
   local isTemp = isTempSource(source) or unit == "°C" or unit == "°F"
   local fahrenheit = isTemp and useFahrenheit()
+  -- Compiled once, here where the box is rendered, rather than on every value change in the
+  -- reactive sweep -- the argument for why that is the same answer is on Utils.renderThresholds.
+  local compiledThresholds = utils.renderThresholds(box, state, fahrenheit, WHITE)
   local rawValue = readDerived(state, source)
   local hasValue = type(rawValue) == "number"
   local gaugeValue = utils.toNumber(rawValue, 0)
@@ -276,7 +279,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local thresholds = box.thresholds or {}
     local barColor = box.fillcolor or BAR_OK_COLOR
     if hasValue then
-      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box, state, utils)
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box, state, utils, compiledThresholds)
     end
     
     -- Background bar (vertical)
@@ -375,7 +378,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local colorRef = utils.staticTextColor(box, state, WHITE)
     if colorRef == nil then
       colorRef = function()
-        return utils.resolveTextColor(box, state, WHITE)
+        return utils.resolveTextColor(box, state, WHITE, nil, nil, compiledThresholds)
       end
     end
 
@@ -403,7 +406,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local thresholds = box.thresholds or {}
     local barColor = box.fillcolor or BAR_OK_COLOR
     if hasValue then
-      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box, state, utils)
+      barColor = resolveThresholdColor(gaugeValue, thresholds, barColor, fahrenheit, box, state, utils, compiledThresholds)
     end
     
     -- Background bar
@@ -476,7 +479,7 @@ local function renderBar(nodes, rect, box, state, themeCommon, utils)
     local colorRef = utils.staticTextColor(box, state, WHITE)
     if colorRef == nil then
       colorRef = function()
-        return utils.resolveTextColor(box, state, WHITE)
+        return utils.resolveTextColor(box, state, WHITE, nil, nil, compiledThresholds)
       end
     end
 
@@ -591,6 +594,9 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
   local unit = utils.resolveValue(box.unit, box, state)
   local isTemp = isTempSource(source) or unit == "°C" or unit == "°F"
   local fahrenheit = isTemp and useFahrenheit()
+  -- Compiled once, here where the box is rendered, rather than on every value change in the
+  -- reactive sweep -- the argument for why that is the same answer is on Utils.renderThresholds.
+  local compiledThresholds = utils.renderThresholds(box, state, fahrenheit, WHITE)
 
   local defaultMin = isTemp and 20 or 18.0
   local defaultMax = isTemp and 140 or 25.2
@@ -664,7 +670,8 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
     local arcValueColor = box.fillcolor
     if not arcValueColor then
       if type(box.thresholds) == "table" and #box.thresholds > 0 and curHasValue then
-        arcValueColor = resolveThresholdColor(curVal, box.thresholds, ARC_OK_COLOR, fahrenheit, box, state, utils)
+        arcValueColor =
+          resolveThresholdColor(curVal, box.thresholds, ARC_OK_COLOR, fahrenheit, box, state, utils, compiledThresholds)
       else
         arcValueColor = getArcValueColor(curVal, state, box, themeCommon, utils, isTemp, fahrenheit, curHasValue, gaugeMax, unit, source)
       end
@@ -756,13 +763,14 @@ local function renderArc(nodes, rect, box, state, themeCommon, utils)
       end
       local valueColor = nil
       if curHasValue and type(box.thresholds) == "table" and #box.thresholds > 0 then
-        valueColor = utils.resolveThresholdColor(curVal, box.thresholds, nil, fahrenheit, box, state, "textcolor")
+        valueColor =
+          utils.resolveThresholdColor(curVal, box.thresholds, nil, fahrenheit, box, state, "textcolor", compiledThresholds)
       end
       if valueColor == nil then
         if unit == "%" and curHasValue then
           valueColor = getArcValueColor(curVal, state, box, themeCommon, utils, isTemp, fahrenheit, curHasValue, gaugeMax, unit, source)
         else
-          valueColor = utils.resolveTextColor(box, state, WHITE)
+          valueColor = utils.resolveTextColor(box, state, WHITE, nil, nil, compiledThresholds)
         end
       end
       cachedValColor = valueColor
