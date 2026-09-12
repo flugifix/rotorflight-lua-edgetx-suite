@@ -34,10 +34,16 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 | Set layout | *Standard* (default): six banks of six parameters, the layout the generic radio setup documents. The board's own slot table is read and held against it, so the page can say where the two differ. *Custom*: the set is whatever the board carries, derived from the enable and increment windows of the slots on this model's channels — nothing is ever written to it. |
 | Step size | What one press moves a parameter by, in the flight controller's own units. 1, 2, 5 or 10; default 5. |
 | Head speed step | The same, for the governor head speed alone. 10, 25, 50 or 100; default 50. It has a step of its own because its range is 0 to 10000 rpm where no other parameter of the set is bounded above 250. |
-| Set up the flight controller | Reads the board in two replies, shows what each slot holds and what it would hold, writes one adjustment range per slot once that is confirmed, follows it with a single EEPROM write, and reads every written slot back field by field. Offered in the *Standard* layout only: in *Custom* the set is what the board carries, and writing it would overwrite the very thing being read. |
+| Set up the flight controller | Reads the board in two replies, shows what each slot holds and what it would hold, writes one adjustment range per slot once that is confirmed, follows it with a single EEPROM write, and reads every written slot back field by field against the set it was asked for, both step sizes included. Offered in the *Standard* layout only: in *Custom* the set is what the board carries, and writing it would overwrite the very thing being read. |
 
 Both steps are written into the slots, so changing one means setting the flight controller up
 again. The board comparison reports that by name.
+
+The read-back after a write holds each slot against the record the write was built from, the two
+step sizes among the fields it compares. Where a slot holds the right function on the right
+channels and only the step disagrees — a flight controller that took the record and kept a step of
+its own — the page says so instead of counting differing slots, since the step is the one field of
+a slot these settings decide.
 
 ### Undo
 
@@ -57,6 +63,9 @@ ground, the link up and the values read — once per profile.
 
 - Nothing on this page is written to the flight controller by saving. The one thing that
   writes it is *Set up the flight controller*, and it asks first.
+- Saving reports its outcome in the suite's own save overlay. These settings are stored with
+  the model and keyed by the flight controller's MCU id, so a save made without one, or one the
+  card refused, is named rather than passed over.
 - The profile switch is the undo in the air: the backup profile holds what the flight started
   from, so switching to it is instant and speaks no MSP. A restore into a profile other than
   the one the backup was taken from is refused.
