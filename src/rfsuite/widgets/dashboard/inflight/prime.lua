@@ -117,6 +117,13 @@ local DERIVE_SLICE = 8
 -- settle on top of it.
 local AUTO_DELAY_TICKS = 100
 
+-- The drive's GROUND phase, as widgets/dashboard/inflight/drive.lua spells it.
+--
+-- Not required from there: the two modules are loaded beside each other rather than one under the
+-- other -- this one speaks MSP and the drive does not -- and one word is not worth a dependency
+-- edge between them.
+local DRIVE_PHASE_GROUND = "ground"
+
 -- How many times the automatic prime is started again after a run that FAILED, within one link.
 --
 -- A run that was ABANDONED is retried without a limit: an abandon is the pilot arming, which is
@@ -1053,6 +1060,30 @@ local function takeReply(widget, drive)
   return true
 end
 
+--- A profile change has been answered by a read, and on the ground the undo is due with it.
+--
+-- The backup is scoped to a PROFILE: the board's adjustments only ever move the one that is active,
+-- so the spare slot holds a copy of the profile that was being flown before the change and is not
+-- an undo for the one the pilot is about to fly. One slot and one undo is the shape this feature
+-- has, so the fresh copy REPLACES it -- the ground line then names the new source, and the previous
+-- profile's undo is gone. That is the trade the single slot makes, and it is the one the pilot
+-- chose.
+--
+-- A request and no more, exactly as the interlock's own edge raises it: whether anything goes out
+-- is M.tick's decision, and every refusal the button has applies there unchanged. A RATE profile
+-- change moves no PID profile and this cannot tell the two apart, so the request is raised for
+-- both and the existence test sends nothing for the one that changed nothing.
+--
+-- Raised where the change is ANSWERED rather than where it is seen. The flag it follows stands
+-- until a read can serve it, so a test on the flag alone would raise this again on every pass of
+-- that wait.
+local function profileChangeAnswered(drive)
+  if drive.phase ~= DRIVE_PHASE_GROUND then return end
+  if drive.autoBackupWanted == true then return end
+  drive.autoBackupWanted = true
+  logPrime("profile changed on the ground: a fresh undo is due")
+end
+
 --- Read the board: the receiver map, the slot table, and the nine value reads.
 --
 -- Refused while armed and without a link. The counters start at the whole table's length and are
@@ -1085,6 +1116,7 @@ function M.start(widget, drive)
   drive.compare = nil
   -- A full run reads the nine value commands as well, so a profile change waiting for a re-read of
   -- its own is answered by this one and must not send it a second time afterwards.
+  if drive.profileChanged == true then profileChangeAnswered(drive) end
   drive.profileChanged = nil
   drive.primeInterrupted = nil
   bump(drive)
@@ -1489,6 +1521,7 @@ function M.tick(widget, drive)
   if drive.profileChanged == true and not M.isRunning(drive) then
     if type(drive.prime) == "table" and drive.prime.phase == M.PHASE_DONE then
       drive.profileChanged = nil
+      profileChangeAnswered(drive)
       logPrime("profile changed: the nine value reads are sent again")
       M.refreshValues(widget, drive)
       return
