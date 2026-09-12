@@ -196,6 +196,13 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     return cachedText
   end
 
+  -- Compiled once, here where the box is rendered, rather than on every value change in the
+  -- reactive sweep -- the argument for why that is the same answer is on Utils.renderThresholds.
+  local renderSource = box and box.source
+  local renderIsTemp = (renderSource == "esc_temp" or renderSource == "mcu_temp" or
+                        renderSource == "temp_esc" or renderSource == "temp_mcu")
+  local compiledThresholds = utils.renderThresholds(box, state, renderIsTemp and useFahrenheit(), WHITE)
+
   local colorRef = utils.staticTextColor(box, state, WHITE)
   if colorRef == nil then
     local lastColorInput = nil
@@ -221,7 +228,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         return cachedColor
       end
       lastColorInput = statValue
-      cachedColor = utils.resolveTextColor(box, state, WHITE, statValue, isFahr)
+      cachedColor = utils.resolveTextColor(box, state, WHITE, statValue, isFahr, compiledThresholds)
       return cachedColor
     end
   end

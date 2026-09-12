@@ -71,6 +71,13 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
     end
   end
 
+  -- Compiled once, here where the box is rendered, rather than on every value change in the
+  -- reactive sweep -- the argument for why that is the same answer is on Utils.renderThresholds.
+  local compiledThresholds = nil
+  if utils and type(utils.renderThresholds) == "function" then
+    compiledThresholds = utils.renderThresholds(box, state, false, WHITE)
+  end
+
   local colorRef = nil
   if utils and type(utils.staticTextColor) == "function" then
     colorRef = utils.staticTextColor(box, state, WHITE)
@@ -89,7 +96,7 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
       end
       lastColorPct = pct
       if utils and type(utils.resolveTextColor) == "function" then
-        cachedColor = utils.resolveTextColor(box, state, WHITE, pct)
+        cachedColor = utils.resolveTextColor(box, state, WHITE, pct, nil, compiledThresholds)
         return cachedColor
       end
       cachedColor = (box and box.textcolor) or WHITE
