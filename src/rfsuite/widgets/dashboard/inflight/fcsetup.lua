@@ -711,12 +711,25 @@ function M.stepVerify(run, handlers)
   local slot = run.slotList[run.slotAt]
   if slot == nil then
     local settings = run.settings or {}
-    local result = Functions.compare(run.verifyRecords, run.map, settings.bank_ch, settings.value_ch)
+    -- Held against the set the write was built from, STEPS INCLUDED. The step is one of the
+    -- fields recordMatches compares and one of the fields the write puts in the record, so a
+    -- comparison that does not name the pair falls back on functions.lua's own defaults and
+    -- reports every slot written with any other step as a difference -- thirty-five of thirty-six
+    -- on a board this very run has just written byte for byte. buildPlan names them at the same
+    -- two keys; a read-back that named fewer would be measuring a different set.
+    local steps = { step = settings.step, step_headspeed = settings.step_headspeed }
+    local result = Functions.compare(run.verifyRecords, run.map, settings.bank_ch, settings.value_ch,
+      steps)
     run.report = {
       written = run.written,
       verdict = (result and result.verdict) or "unmapped",
       count = (result and result.count) or 0,
       total = (result and result.total) or 0,
+      -- The step is the one field of a slot a SETTING on the radio decides, so a difference in it
+      -- alone is a difference the pilot can act on. Carried here rather than left in the
+      -- comparison, because the screen that has to name it only ever sees this report.
+      steps = (result and result.steps) or 0,
+      stepOnly = (result and result.stepOnly) == true,
       slots = (result and result.slots) or {}
     }
     run.phase = M.PHASE_DONE
