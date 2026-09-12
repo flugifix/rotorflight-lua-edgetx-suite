@@ -538,6 +538,48 @@ function Drive:forgetVerdict()
   self._checkResult = nil
 end
 
+--- The tuning session is over: the pilot has closed the feature while standing on the ground.
+--
+-- His ruling after the fourth radio round is that closing it on the ground or after the flight
+-- starts everything fresh, so the next opening of the interlock is a NEW session and not a
+-- continuation of this one -- the board is read again and a fresh undo is laid down over whichever
+-- profile is active then.
+--
+-- What goes is everything that describes the session that has just ended. The record of the undo
+-- goes with it: the board still holds the copy in its spare profile, but a copy nobody can say the
+-- source or the age of is not an undo, and the restore refuses without that record rather than
+-- writing a profile it cannot describe. So do the snapshot the comparison was measured against, the
+-- cached values and the evidence that they were ever read, the counter that decides whether a flight
+-- earned a comparison at all, and the outcome of the last profile copy -- which would otherwise open
+-- the next session with the previous one's refusal on its first line.
+--
+-- What STAYS is what the board answered about itself: the derived set, the verdict on its slot table
+-- and the run that read it. Those describe a LAYOUT and a flight controller rather than a session,
+-- and nothing a switch does can move one -- which is why the read the next opening asks for is the
+-- nine value commands and not forty-odd round trips. See inflight/prime.lua, M.refreshValues.
+--
+-- NOT reached when the widget goes to the background, nor when the feature is switched off in the
+-- settings. Neither of those is the pilot closing the overlay on the flight line, and a theme
+-- reload or a tool session would otherwise throw his undo away between two flights.
+function Drive:endSession()
+  self.backup = nil
+  self.primedValues = nil
+  self.transfer = nil
+  self.values = {}
+  self.previous = {}
+  self.valuesRead = nil
+  self.readAt = nil
+  self.fired = 0
+  self.deltaPage = 1
+  self._deltaList = nil
+  self._deltaEpoch = nil
+  -- The nine value reads are due, and the ground half sends them once the surface is back on the
+  -- ground -- never while the feature is closed, which is what the interlock promises.
+  self.readAgain = true
+  self.valueEpoch = self.valueEpoch + 1
+  logDrive("tuning session ended: the undo, the values and the comparison go with it")
+end
+
 --- Where the interlock stands, with the first evaluation seeding rather than firing.
 --
 -- A widget that starts up with the switch already ON must not read that as the pilot having just
@@ -619,12 +661,22 @@ function Drive:evaluateInterlock(now)
     self.bankShown = nil
     logDrive("interlock on: bank ch%d value ch%d", settings.bank_ch, settings.value_ch)
   else
+    -- Closed. On the GROUND -- before a flight or after one -- that ends the tuning session, and
+    -- everything the session stood on goes with it; see Drive:endSession. In the AIR it ends
+    -- nothing: nothing may be sent to a flying machine, and the comparison the landing is going to
+    -- show is measured against a snapshot that has to survive the cycle.
+    --
+    -- The phase read here is the one the previous pass left, and that is what tells the two apart:
+    -- Drive:tick evaluates the interlock before it decides which surface the pass belongs to.
+    local closedOnGround = (self.phase == M.PHASE_GROUND or self.phase == M.PHASE_POST)
     self:setPhase(nil)
-    -- One of the three things that end the postflight read-out. It is not the delta that ends:
-    -- the list stands until the next backup, so the same interlock brings the same list back.
+    -- One of the three things that end the postflight read-out. In the air the list itself stands --
+    -- it is measured against the backup's own snapshot -- so the same interlock brings the same list
+    -- back; on the ground the line above has just taken that snapshot away with the session.
     self:endPost("interlock_off")
     self.autoBackupWanted = false
     self:cleanup(false)
+    if closedOnGround then self:endSession() end
     logDrive("interlock off")
   end
   return self.live

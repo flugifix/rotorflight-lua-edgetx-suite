@@ -117,6 +117,13 @@ changed.
 
 - The way back in the air is the PID profile switch, not the overlay: the backup profile
   holds what the flight started from, so switching to it is instant and needs no MSP.
+- **Releasing the interlock on the ground ends the tuning session.** The read, the backup line
+  and the comparison go with it, and the next closing of the interlock reads the board again
+  and lays down a fresh backup of whichever profile is active then. Releasing it *in the air*
+  ends nothing: nothing can be sent to a flying machine, and the comparison the landing is
+  about to show is measured against a snapshot that has to survive the switch. What the new
+  read costs is the nine value reads and not the whole slot table — a layout does not change
+  because a switch moved.
 - Releasing the interlock, closing the fullscreen, backgrounding the widget or losing the
   link all take the value variable back to zero, in the flight mode it was written in, and
   end whichever of the three surfaces was up. The next opening of the interlock is an opening

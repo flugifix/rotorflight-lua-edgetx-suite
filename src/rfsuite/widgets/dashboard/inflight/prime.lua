@@ -1584,6 +1584,28 @@ function M.tick(widget, drive)
     end
   end
 
+  -- The session was closed on the ground and has been opened again, so the board is read once more
+  -- before anything else: the pilot's ruling is that closing the feature on the ground starts
+  -- everything fresh, and the drive has already dropped the cache, the undo and the comparison
+  -- (inflight/drive.lua, Drive:endSession).
+  --
+  -- Only the nine VALUE commands. The slot table describes a layout, a switch cannot move one, and
+  -- re-reading forty records would be forty round trips on the one queue the connect chain shares
+  -- for an answer that cannot have changed -- the same reasoning the re-read after a profile change
+  -- and the re-read after a restore already run on. M.refreshValues falls back to a whole run by
+  -- itself where no slot table has been read yet, so there is no second branch to keep in step.
+  --
+  -- Held until the surface is back ON THE GROUND: while the feature is closed this half sends
+  -- nothing, which is the whole promise of the interlock. The flag is a STATE and is spent only by a
+  -- read that actually went out, so a pass that could not serve it leaves it standing.
+  if drive.readAgain == true and drive.phase == DRIVE_PHASE_GROUND and not M.isRunning(drive) then
+    if M.refreshValues(widget, drive) then
+      drive.readAgain = nil
+      logPrime("the session was opened again: the value reads are sent")
+      return
+    end
+  end
+
   -- The undo, made without being asked for.
   --
   -- The pilot's ruling after the third radio round: the interlock is the one entry, so turning it

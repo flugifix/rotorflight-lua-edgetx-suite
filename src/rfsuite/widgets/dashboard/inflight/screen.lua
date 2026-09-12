@@ -945,10 +945,20 @@ end
 local function describePrime(snapshot, t, ground)
   local state = snapshot.prime
   local phase = (type(state) == "table") and state.phase or nil
-  if phase == "done" then
-    return readWords(snapshot, t)
+
+  -- Whether a read STANDS, which a finished run is no longer evidence of on its own: a session
+  -- closed on the ground drops the cache and the evidence with it, while the run that filled it
+  -- remains the last one there ever was. Where no caller supplied the drive's answer, the run's own
+  -- phase is all there is.
+  local hasRead, interrupted, width, font
+  if type(ground) == "table" then
+    hasRead = ground.hasRead == true
+    interrupted, width, font = ground.interrupted == true, ground.width or 0, ground.font
+  else
+    hasRead, interrupted, width, font = (phase == "done"), false, 0, nil
   end
-  if phase ~= nil and phase ~= "idle" and phase ~= "error" then
+
+  if phase ~= nil and phase ~= "idle" and phase ~= "error" and phase ~= "done" then
     return t("widgets.dashboard.inflight_prime_running", "Priming") .. " "
       .. tostring(state.done or 0) .. "/" .. tostring(state.total or 0)
   end
@@ -960,16 +970,16 @@ local function describePrime(snapshot, t, ground)
   -- reported, with what happened to the attempt after it as a second clause WHERE THERE IS ROOM:
   -- on a 480-pixel zone the two together are within a character or two of the width, and a line cut
   -- in the middle of the clause would lose the read time as well on the next translation.
-  if type(ground) == "table" and ground.hasRead == true then
+  if hasRead then
     local text = readWords(snapshot, t)
     local tail = nil
-    if ground.interrupted == true then
+    if interrupted then
       tail = t("widgets.dashboard.inflight_prime_interrupted", "re-read interrupted")
     elseif phase == "error" then
       tail = t("widgets.dashboard.inflight_prime_failed", "Prime failed")
     end
     if tail == nil then return text end
-    return pickText(text .. " - " .. tail, text, ground.width or 0, ground.font)
+    return pickText(text .. " - " .. tail, text, width, font)
   end
 
   if phase == "error" then
