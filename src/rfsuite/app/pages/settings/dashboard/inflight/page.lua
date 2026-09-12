@@ -122,6 +122,8 @@ local function ensureLoaded(prefs)
   ui.trimNames = nil
   ui.gvarWalkDone = false
   ui.gvarConflicts = nil
+  ui.gvarNamesDone = false
+  ui.gvarNames = nil
   ui.planNotice = nil
   ui.loaded = true
 end
@@ -149,6 +151,20 @@ local function gvarConflicts()
   ui.gvarWalkDone = true
   ui.gvarConflicts = Setup.gvarConflicts(radio(), ui.config)
   return ui.gvarConflicts
+end
+
+--- Which other variables of this model carry one of the two names the setup writes.
+--
+-- A separate question from the walk above, and the walk above cannot answer it: a model set up once
+-- against a different pair keeps the names on the variables it used then, and a variable nothing
+-- refers to any more has no reference for a mixer walk to find. Nine detail reads, on the same
+-- terms as the check -- once per visit, and again only when one of the two variables is changed.
+local function gvarNameClashes()
+  if not ui.gvarNamesDone then
+    ui.gvarNamesDone = true
+    ui.gvarNames = Setup.gvarNameClashes(radio(), ui.config)
+  end
+  return ui.gvarNames
 end
 
 local function trimNames()
@@ -230,6 +246,11 @@ local function describeCheck(i18n, result)
   if type(result) ~= "table" then return "" end
 
   local unset, mix, gvar, trim, claim = false, false, false, false, false
+  -- The two halves pointed at one variable or one channel are not an unset field, and reading as
+  -- one sent the pilot looking for something he had already filled in. They are the most dangerous
+  -- verdict on this page -- the parameter that moves is not the one on the screen -- so each says
+  -- what it is.
+  local sameGvar, sameChannel = false, false
   for i = 1, #result do
     local code = result[i]
     if string.find(code, "mix", 1, true) then
@@ -240,6 +261,10 @@ local function describeCheck(i18n, result)
       trim = true
     elseif code == "no_nav_trim" or code == "trim_claimed_twice" then
       claim = true
+    elseif code == "same_gvar" then
+      sameGvar = true
+    elseif code == "same_channel" then
+      sameChannel = true
     else
       unset = true
     end
@@ -247,6 +272,12 @@ local function describeCheck(i18n, result)
 
   local parts = {}
   if unset then parts[#parts + 1] = t(i18n, "check_unset", "Switch or variables not set") end
+  if sameGvar then
+    parts[#parts + 1] = t(i18n, "check_same_gvar", "Bank and value point at the same variable")
+  end
+  if sameChannel then
+    parts[#parts + 1] = t(i18n, "check_same_channel", "Bank and value point at the same channel")
+  end
   if mix then parts[#parts + 1] = t(i18n, "check_mix", "Mixer line missing or wrong") end
   if gvar then parts[#parts + 1] = t(i18n, "check_gvar", "Variable range or precision") end
   if trim then parts[#parts + 1] = t(i18n, "check_trim", "Trim still active in this flight mode") end
@@ -261,7 +292,10 @@ local function markValue(key, value)
   ui.checkDone = false
   -- The conflict warning names the variable that was configured when the walk ran, so a changed
   -- variable makes it a sentence about a setting nobody holds any more.
-  if key == "value_gvar" or key == "bank_gvar" then ui.gvarWalkDone = false end
+  if key == "value_gvar" or key == "bank_gvar" then
+    ui.gvarWalkDone = false
+    ui.gvarNamesDone = false
+  end
   ui.planNotice = nil
   ui.runtime.markValueChanged()
 end
@@ -328,6 +362,13 @@ end
 local function planQuestion(i18n, plan)
   local lines = {}
 
+  -- The plan is built from the fields as they stand, which is not the same as the file on the card:
+  -- a channel or a variable edited and not yet saved is what gets written. Saying so is cheaper than
+  -- refusing, and it is the truthful half -- a pilot who wants the saved values presses save first.
+  lines[#lines + 1] = t(i18n, "plan_from_page",
+    "It writes the values as they are set on this page, saved or not.")
+  lines[#lines + 1] = ""
+
   local removals = 0
   for i = 1, #plan.channels do
     local entry = plan.channels[i]
@@ -393,9 +434,21 @@ end
 -- re-check both happen inside the confirmation's own callback, which is where the pilot's answer
 -- is; nothing outside this function reaches applyPlan.
 local function offerSetup(i18n)
-  local plan = Setup.plan(radio(), ui.config)
+  -- The resolved trim block goes with the settings, exactly as it does into the check: a stored trim
+  -- is a switch POSITION, and the plan's trim half indexes the firmware's own trim-mode table by the
+  -- semantic number behind it. Without it no trim fault the check raises could be fixed here.
+  local plan = Setup.plan(radio(), ui.config, trimNames())
   if type(plan) ~= "table" or plan.ok ~= true then
     ui.planNotice = refusalText(i18n, type(plan) == "table" and plan.refused or nil)
+    ui.runtime.markDirty()
+    return
+  end
+
+  -- Nothing to write, so there is nothing to confirm. The dialog used to come up on a model that
+  -- already matched and offer to delete the line it had written itself.
+  if plan.nothing == true then
+    ui.planNotice = t(i18n, "plan_nothing",
+      "The model already carries this setup; nothing to write.")
     ui.runtime.markDirty()
     return
   end
@@ -562,6 +615,22 @@ local function buildWiring(children, x, y, w, i18n)
         .. t(i18n, "gvar_in_use", "is in use by") .. " " .. tostring(conflicts[i].where)
     end
     cursorY = cursorY + appendNote(children, x, cursorY, w, table.concat(parts, " / "))
+  end
+
+  -- And the other trace a variable can carry: the name, on a variable this setup does not drive. A
+  -- model set up once against a different pair shows two VALs and two BNKs on the radio's own pages,
+  -- and only one of each pair does anything.
+  local named = gvarNameClashes()
+  if type(named) == "table" and #named > 0 then
+    local parts = {}
+    for i = 1, #named do
+      -- Spelled the way the reference warning above it is, out of fragments rather than through a
+      -- format string: a translated format a locale spelled differently would raise here, inside a
+      -- page build, and a warning is not worth a screen that does not come up.
+      parts[#parts + 1] = "GV" .. tostring(named[i].index) .. " " .. tostring(named[i].name)
+        .. " " .. t(i18n, "gvar_name_clash", "is not the variable this setup drives")
+    end
+    cursorY = cursorY + appendNote(children, x, cursorY, w, table.concat(parts, " "))
   end
   return cursorY
 end
