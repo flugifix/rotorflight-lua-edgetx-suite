@@ -147,20 +147,40 @@ function M.onReload(ctx)
   if ctx and ctx.requestRebuild then ctx.requestRebuild() end
 end
 
+--- The outcome goes back through the suite's own save flow, not through a dialog of this page's.
+--
+-- ui/home.lua drives every page's save the same way: it puts up the overlay, calls this in one
+-- pcall, and shows whatever `ctx.reportSave` was handed. There is no `ctx.showDialog` in that
+-- context and never was, so a store write that failed -- no MCU id to key the model's settings by,
+-- or a write the card refused -- was swallowed and the save looked as though it had worked. What
+-- this page stores is per-model and keyed by the flight controller's MCU id, so the failure that
+-- matters is exactly the one a pilot cannot see any other way.
 function M.onSave(ctx)
   ensureDeps()
   local ok, err = saveToStore()
-  if ok then
-    ui.dirty = false
-    if ctx and ctx.showDialog then
-      ctx.showDialog(t(ctx.i18n, "saved_title", "Saved"),
-        t(ctx.i18n, "saved_message", "In-flight tuning settings saved"))
+  if not ok then
+    if ctx and type(ctx.reportSave) == "function" then
+      ctx.reportSave({
+        ok = false,
+        title = t(ctx.i18n, "save_error_title", "Error"),
+        message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io")
+      })
     end
-  elseif ctx and ctx.showDialog then
-    ctx.showDialog(t(ctx.i18n, "save_error_title", "Error"),
-      t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err))
+    -- Nothing was stored and nothing on the page changed, so there is nothing to draw again. The
+    -- flow reads this as "do not rebuild", which is what their adjustments page answers too.
+    return false
+  end
+
+  ui.dirty = false
+  if ctx and type(ctx.reportSave) == "function" then
+    ctx.reportSave({
+      ok = true,
+      title = t(ctx.i18n, "saved_title", "Saved"),
+      message = t(ctx.i18n, "saved_message", "In-flight tuning settings saved")
+    })
   end
   if ctx and ctx.requestRebuild then ctx.requestRebuild() end
+  return true
 end
 
 local function requestRepaint()
