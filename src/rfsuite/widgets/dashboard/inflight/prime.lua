@@ -1003,13 +1003,29 @@ local function parseValues(widget, drive, prime, record)
   local parsed = record.api.parse(record.buf)
   if type(parsed) == "table" then
     local fields = record.fields
+    -- The status reply counts the profiles the way the WIRE does, from 0. Everything else on this
+    -- screen that shows one of those two numbers counts them the way the pilot's own menus do: the
+    -- header reads the PID profile off the PID# telemetry sensor, the backup line records both
+    -- 1-based, and the range this build declares for the two ids is 1 to 6 -- which is the
+    -- firmware's own (fc/rc_adjustments.c, ADJ_ENTRY(RATE_PROFILE, 1, 6) and its PID sibling). Left
+    -- as they arrive, the two rows read one less than the header above them and than the row a step
+    -- would land on.
+    --
+    -- They are moved onto that count here, at the one place they enter the cache, and there is no
+    -- second writer to keep in step with: the same firmware file leaves all four profile
+    -- adjustments out of the report AdjF and AdjV carry (updateAdjustmentData), so the live
+    -- surface's own adoption path can never put a raw one in beside them.
+    --
+    -- `prime.status` below keeps the reply exactly as it came. The undo reads the active index off
+    -- it and MSP_COPY_PROFILE has to be told the wire's own number.
+    local base = (record.command == CMD_STATUS) and 1 or 0
     for i = 1, #fields do
       local entry = fields[i]
       local value = tonumber(parsed[entry.field])
       if value == nil then
         prime.unmapped = (prime.unmapped or 0) + 1
       else
-        drive.values[entry.id] = value
+        drive.values[entry.id] = value + base
         prime.mapped = (prime.mapped or 0) + 1
       end
     end
