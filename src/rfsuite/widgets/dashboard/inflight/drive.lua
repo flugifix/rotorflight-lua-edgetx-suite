@@ -1613,13 +1613,33 @@ end
 
 --- Everything off, from a widget that is going away. Never allocates a drive that does not
 -- already exist: a widget that never ran the overlay has nothing to clean up.
+--
+-- The PHASE goes with it, and that is a defect measured on a radio rather than a tidying up. This
+-- is reached on every pass that is not a foreground pass of an enabled overlay, so a widget put
+-- into the background after a flight came back with `live` false and the phase still `post`: the
+-- next closing of the interlock was then not a nil -> ground transition, it raised no request for
+-- an undo, and the postflight surface stood across two interlock cycles -- 79 seconds of them in
+-- the pilot's own card log, neither of which could have asked for a backup.
+--
+-- Ended the way the interlock's falling edge ends it, because that is this file's own contract for
+-- leaving: setPhase writes the phase and takes the postflight flag down with it, and endPost is the
+-- defensive second half of the same statement.
 function M.cleanup(widget)
   if type(widget) ~= "table" then return end
   local drive = widget._inflight
   if drive == nil then return end
+  local wasLive, wasPhase = drive.live, drive.phase
   drive.live = false
   drive.seeded = false
+  drive:setPhase(nil)
+  drive:endPost("cleanup")
   drive:cleanup(false)
+  -- Once per exit rather than once per pass. What is worth a line here is the pass that actually
+  -- took the overlay down: a backgrounded widget was invisible in the card log until now, and a
+  -- trace that simply stops reads like a widget that died.
+  if wasLive == true or wasPhase ~= nil then
+    logDrive("overlay off: was live %s, phase %s", tostring(wasLive == true), tostring(wasPhase))
+  end
   if widget.state then widget.state.inflight = nil end
 end
 
