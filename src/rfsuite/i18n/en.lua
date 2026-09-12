@@ -2660,7 +2660,9 @@ return {
       inflight_prime_done_at = "Values read",
       inflight_board_step = "step differs: set the board up again",
       inflight_post_saved = "the board has saved this",
-      inflight_post_saved_zone = "board has saved - restore: full screen"
+      inflight_post_saved_zone = "board has saved - restore: full screen",
+      inflight_prime_interrupted = "re-read interrupted",
+      inflight_backup_reading = "The board is being read: try again in a moment"
     },
     governor = {
       ACTIVE = "ACTIVE",

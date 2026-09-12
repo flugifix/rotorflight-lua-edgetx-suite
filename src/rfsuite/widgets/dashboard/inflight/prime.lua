@@ -117,6 +117,14 @@ local DERIVE_SLICE = 8
 -- settle on top of it.
 local AUTO_DELAY_TICKS = 100
 
+-- How many times the automatic prime is started again after a run that FAILED, within one link.
+--
+-- A run that was ABANDONED is retried without a limit: an abandon is the pilot arming, which is
+-- allowed and which he may do as often as he likes. A FAILURE can be permanent -- a board that
+-- answers an error answers it again -- so it is retried this many times and then left alone with
+-- the error on the screen rather than asked the same question for the rest of the session.
+local AUTO_RETRY_LIMIT = 2
+
 -- How many profiles a board has, when neither the status read nor the session says. Their own
 -- status reply carries `pid_profile_count`, which is where the real number comes from; this is
 -- only what the refusal falls back on, and it is the count every current target ships.
@@ -233,6 +241,23 @@ function M.isRunning(drive)
   return type(prime) == "table" and RUNNING[prime.phase] == true
 end
 
+--- Whether the board HAS BEEN READ, which is not the same question as what the last run did.
+--
+-- The evidence is a completed read that left something in the cache, and everything that used to
+-- ask `prime.phase == PHASE_DONE` asks this instead. The difference is a defect measured on a
+-- radio: a re-read that was abandoned when the pilot armed -- the MSP runtime clears its whole
+-- queue on every armed tick, which this module takes as the abandon it is -- set the phase back to
+-- idle over a full cache, and from there the backup refused as `unprimed` and the surface said the
+-- values had never been read. An abandoned read invalidates nothing: what it did not do is REPLACE
+-- values that were already there.
+--
+-- `readAt` is not the flag, deliberately. It is the radio's wall clock and a radio that answers
+-- none leaves it nil, so a read would stop counting on exactly the models whose clock is not set.
+function M.hasRead(drive)
+  if type(drive) ~= "table" or drive.valuesRead ~= true then return false end
+  return type(drive.values) == "table" and next(drive.values) ~= nil
+end
+
 local function bump(drive)
   drive.valueEpoch = (drive.valueEpoch or 0) + 1
 end
@@ -269,6 +294,9 @@ local function fail(drive, prime, reason)
   -- A reply already stored is a parse this run will never make. Dropping it here is what keeps
   -- the passes after a failure free of work for a run that is over.
   dropStored(prime)
+  -- Counted so that the automatic run can be offered again a bounded number of times. See
+  -- AUTO_RETRY_LIMIT: an abandon is not counted here, because it is not a failure of the board's.
+  drive._primeFails = (drive._primeFails or 0) + 1
   bump(drive)
   logPrime("prime failed in %s: %s", tostring(prime.failedIn or "?"), prime.error)
   return false
@@ -282,6 +310,10 @@ local function abandon(drive, prime, why)
   prime.phase = M.PHASE_IDLE
   prime.error = nil
   dropStored(prime)
+  -- Recorded on the DRIVE and not on the run, because the run it describes is over and the two
+  -- questions it answers are about the next one: whether the automatic run may start again, and
+  -- what the ground surface says beside a read that is older than the last attempt at one.
+  drive.primeInterrupted = true
   bump(drive)
   logPrime("prime abandoned: %s", tostring(why))
 end
@@ -632,6 +664,11 @@ local function finishValues(drive, prime)
   -- pilot standing beside the machine wants to know whether that was this session or the last
   -- one, and a tick count cannot tell him.
   drive.readAt = drive.radio.clock and drive.radio.clock() or nil
+  -- and the evidence that it happened at all, which the line above cannot carry on a radio whose
+  -- clock answers nothing. See M.hasRead.
+  drive.valuesRead = true
+  -- Whatever the last attempt did, this one finished: nothing is left to say about it.
+  drive.primeInterrupted = nil
   bump(drive)
   logPrime("prime done: %d value(s) cached, %d id(s) unanswered", prime.mapped or 0, prime.unmapped or 0)
 end
@@ -1046,6 +1083,10 @@ function M.start(widget, drive)
   -- that table again. Leaving the old one up would show a board as matching while its own answer
   -- was still on the wire.
   drive.compare = nil
+  -- A full run reads the nine value commands as well, so a profile change waiting for a re-read of
+  -- its own is answered by this one and must not send it a second time afterwards.
+  drive.profileChanged = nil
+  drive.primeInterrupted = nil
   bump(drive)
   logPrime("prime started")
   return sendRxMap(widget, drive, prime)
@@ -1186,9 +1227,20 @@ function M.backup(widget, drive)
   -- "nothing has changed" for a flight that changed everything -- a wrong answer where a missing
   -- one was wanted, and the worst of the three states this screen can be in. An undo is only an
   -- undo once there is something to compare the flight with.
-  local prime = drive.prime
-  if type(prime) ~= "table" or prime.phase ~= M.PHASE_DONE then
+  --
+  -- The question is whether the board HAS BEEN READ and not what the last run did, which is the
+  -- whole of M.hasRead: a read the pilot armed into abandoned the run and left the cache alone,
+  -- and refusing the undo for the rest of that link is refusing it for the flights it exists for.
+  if not M.hasRead(drive) then
     return refuseTransfer(drive, "backup", "unprimed")
+  end
+
+  -- A read that is still on the wire is half of one answer and half of another. The snapshot is
+  -- taken here, in this pass, and a cache being refilled parameter by parameter would put the
+  -- values of two different profiles into it -- so the copy waits for the run rather than racing
+  -- it. The request that asked for it is a state and survives the wait.
+  if M.isRunning(drive) then
+    return refuseTransfer(drive, "backup", "reading")
   end
 
   local backup0 = math.floor(tonumber(drive.settings.backup_profile) or 0) - 1
@@ -1354,6 +1406,9 @@ function M.tick(widget, drive)
   if widget.state.fblConnected ~= true then
     drive._primeLinkSince = nil
     drive._primeAutoDone = false
+    -- The retry budget is per link session, like the latch above it: a new board is a new answer
+    -- to the question of whether it can be read at all.
+    drive._primeFails = nil
     return
   end
 
@@ -1392,11 +1447,17 @@ function M.tick(widget, drive)
   -- AdjV, which is the honest answer while nothing may be asked.
   --
   -- The flag is left standing while a run is on the wire: that run was started under the old
-  -- profile and the next idle pass sends the reads again. If nothing has been primed at all it is
-  -- dropped, because the automatic run below reads everything anyway.
+  -- profile and the next idle pass sends the reads again. It is left standing just as much when
+  -- there is no finished run to refresh -- a read that was abandoned, one that failed, or none at
+  -- all -- and that is a defect this round measured rather than reasoned about. It used to be
+  -- cleared here whatever the phase was, so a profile change that arrived while a read was being
+  -- abandoned was consumed by the one pass that could do nothing with it, and the new profile's
+  -- values stayed unknown for the rest of the link. What answers it in that state is the automatic
+  -- run the block below offers again, and M.start drops the flag itself because it reads the nine
+  -- value commands too.
   if drive.profileChanged == true and not M.isRunning(drive) then
-    drive.profileChanged = nil
     if type(drive.prime) == "table" and drive.prime.phase == M.PHASE_DONE then
+      drive.profileChanged = nil
       logPrime("profile changed: the nine value reads are sent again")
       M.refreshValues(widget, drive)
       return
@@ -1426,8 +1487,10 @@ function M.tick(widget, drive)
   -- one for this profile already, or until the phase leaves the ground -- which is where the
   -- drive clears it, on every transition that is not into `ground`.
   if drive.autoBackupWanted == true then
-    local prime = drive.prime
-    if type(prime) == "table" and prime.phase == M.PHASE_DONE then
+    -- The EVIDENCE of a read, and a run still on the wire waited out: both are M.backup's own
+    -- conditions, restated here so that a pass which cannot serve the request leaves it standing
+    -- instead of spending it.
+    if M.hasRead(drive) and not M.isRunning(drive) then
       local active0 = M.activeProfile0(drive)
       local have = type(drive.backup) == "table" and tonumber(drive.backup.source) or nil
       if active0 ~= nil and have ~= nil and (have - 1) == active0 then
@@ -1440,6 +1503,26 @@ function M.tick(widget, drive)
         M.backup(widget, drive)
         return
       end
+    end
+  end
+
+  -- A run that did not finish must not latch the automatic one off for the rest of the link.
+  --
+  -- `_primeAutoDone` is the once-per-connect latch, and until this round the only thing that reset
+  -- it was the link going down. So an arming DURING a read left the phase idle with the latch
+  -- still set, and nothing sent another read or another backup for the whole session: the pilot's
+  -- own card log has two interlock cycles after such an abandon with no prime and no undo in
+  -- either of them, and dashes where the profile-scoped values had stood.
+  --
+  -- An abandon is retried without a limit and a failure a bounded number of times; see
+  -- AUTO_RETRY_LIMIT. Both go through the settle below rather than starting here, so a read is
+  -- never sent on the pass the pilot disarmed on.
+  if drive._primeAutoDone == true and not M.isRunning(drive) then
+    local phase = (type(drive.prime) == "table") and drive.prime.phase or nil
+    if phase == M.PHASE_IDLE and drive.primeInterrupted == true then
+      drive._primeAutoDone = false
+    elseif phase == M.PHASE_ERROR and (drive._primeFails or 0) <= AUTO_RETRY_LIMIT then
+      drive._primeAutoDone = false
     end
   end
 

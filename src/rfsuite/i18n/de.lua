@@ -2660,7 +2660,9 @@ return {
       inflight_prime_done_at = "Werte gelesen",
       inflight_board_step = "Schrittweite weicht ab: Flugregler neu einrichten",
       inflight_post_saved = "der Flugregler hat das gespeichert",
-      inflight_post_saved_zone = "gespeichert - zurückholen: Vollbild"
+      inflight_post_saved_zone = "gespeichert - zurückholen: Vollbild",
+      inflight_prime_interrupted = "Lesen abgebrochen",
+      inflight_backup_reading = "Der Flugregler wird gelesen: einen Moment"
     },
     governor = {
       ACTIVE = "AKTIV",
