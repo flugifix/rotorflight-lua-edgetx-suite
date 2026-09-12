@@ -460,6 +460,24 @@ function Sensors.getMetadata(source)
   return nil
 end
 
+-- How long a source that answered nowhere is left alone before its whole name search runs
+-- again. It used to be a flat 2 s, and a radio that carries no sensor for a source -- no
+-- altimeter, no BEC voltage, no ESC temperature -- pays that search for the whole flight.
+-- readTelemetry in widgets/dashboard/runtime.lua asks for every source in one pass, so all of
+-- those searches expire on the same boundary and land in the same pass together. The wait
+-- doubles with each further miss up to the cap below, which leaves the first retry exactly where
+-- it was and makes the steady state of an absent source fifteen times rarer.
+--
+-- Bounded rather than permanent, because a sensor can still appear: EdgeTX adds one when its
+-- first frame arrives, and the suite publishes SmFt and SmCp itself from
+-- tasks/events/telemetry_bg/smart.lua. Both happen shortly after the link comes up, and both
+-- edges of that link call Sensors.reset() below, which puts every source back on the first wait.
+local SEARCH_MISS_SECONDS = 2.0
+local SEARCH_MISS_MAX_SECONDS = 30.0
+-- Module-local, like fieldInfoCache and valueMisses above and unlike Sensors.active_paths: it is
+-- a timer of this file's own and nothing outside reads it. Sensors.reset() clears it.
+local searchWaits = {}
+
 function Sensors.getValue(source)
   if type(source) ~= "string" then return nil end
 
@@ -533,9 +551,26 @@ function Sensors.getValue(source)
 
   local now = nowSeconds()
   Sensors.search_misses = Sensors.search_misses or {}
-  if now - (Sensors.search_misses[source] or 0) < 2.0 then
+  if now - (Sensors.search_misses[source] or 0) < (searchWaits[source] or SEARCH_MISS_SECONDS) then
     return nil
   end
+
+  local previousWait = searchWaits[source]
+
+  -- One REPEATED search per pass. readTelemetry asks for every source in one pass, so all of the
+  -- absent ones would otherwise search in the same pass -- and that pass is the one against the
+  -- firmware's per-call instruction limit. This is the throttle the simulator half of this file
+  -- has always applied to its own searches, for the same reason (Sensors.sim_last_search above).
+  -- A source that has not missed yet is never held back, so the pass that first asks still
+  -- resolves everything the radio actually carries.
+  if previousWait ~= nil then
+    if Sensors.last_search == now then return nil end
+    Sensors.last_search = now
+  end
+
+  -- Taken away for the duration of the search and written back only by the miss tail below, so
+  -- that every path which adopts a source and returns clears the back-off on its way out.
+  searchWaits[source] = nil
 
   local paths = Sensors.search_paths[source]
   if paths then
@@ -569,6 +604,13 @@ function Sensors.getValue(source)
   end
 
   Sensors.search_misses[source] = now
+  if previousWait == nil then
+    searchWaits[source] = SEARCH_MISS_SECONDS
+  else
+    local wait = previousWait * 2
+    if wait > SEARCH_MISS_MAX_SECONDS then wait = SEARCH_MISS_MAX_SECONDS end
+    searchWaits[source] = wait
+  end
   return nil
 end
 
@@ -584,11 +626,15 @@ function Sensors.reset()
       Sensors.search_misses[k] = nil
     end
   end
+  for k in pairs(searchWaits) do
+    searchWaits[k] = nil
+  end
   if Sensors.probe_times then
     for k in pairs(Sensors.probe_times) do
       Sensors.probe_times[k] = nil
     end
   end
+  Sensors.last_search = nil
   if fieldInfoCache then
     for k in pairs(fieldInfoCache) do
       fieldInfoCache[k] = nil
