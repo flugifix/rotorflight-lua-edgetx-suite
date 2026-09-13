@@ -7,9 +7,9 @@
 -- it drags widgets/dashboard/inflight/fcsetup.lua and the whole adjustment function table behind
 -- it. So it is read off the card then, and not before.
 --
--- Everything it touches comes in through the context table: the page's own text helper, the
--- settings being edited, the page state it reports into, and the repaint it asks for. It reaches
--- for nothing on its own except the two modules it drives.
+-- Everything it touches comes in through the context table: the settings module its own text
+-- helper is built from, the settings being edited, the page state it reports into, and the repaint
+-- it asks for. It reaches for nothing on its own except the two modules it drives.
 
 local M = {}
 
@@ -22,9 +22,32 @@ end
 local FcSetup = nil
 local ConfirmDialog = nil
 
--- The page's text helper, handed over on the press. A module-level local because the sentence
--- builders below are module-level too: they are built once per load rather than once per press.
+-- This file's text helper. A module-level local because the sentence builders below are
+-- module-level too: they are built once per load rather than once per press.
 local t = nil
+
+--- The helper, built HERE from the page key rather than borrowed from the page's context.
+--
+-- .vscode/scripts/precompile_i18n.py derives a file's key prefix from the file it REWRITES, and
+-- takes it from a pageT call in that file. A module whose `t` arrives from somewhere else has no
+-- prefix to derive, so every one of the t(i18n, ...) calls below survives precompilation as a
+-- runtime lookup -- and a packaged install carries no locale bundle for one to resolve against
+-- (bin/package/build_package.py writes the sources and the fonts, not i18n/), so every string in
+-- this file would fall back to its English text whatever the radio's language is. Their
+-- check_translations.py cannot see it either: the calls name literal keys, which is what it looks
+-- for, in a file it cannot work out a prefix for.
+--
+-- The page key is the one app/pages/setup/controls/inflight/page.lua names, since these strings
+-- live in that page's own block.
+local function textHelper(ctx)
+  local Common = ctx.common
+  if type(Common) == "table" and type(Common.pageT) == "function" then
+    return Common.pageT("setup_controls_inflight")
+  end
+  -- Nothing to build one from: the caller's own, which resolves the same keys the same way. What
+  -- is lost is the precompilation, not the lookup.
+  return ctx.t
+end
 
 -- How many slots are named one by one in the question. Past this the rest are counted instead: a
 -- confirmation nobody reads to the end is not a confirmation.
@@ -163,7 +186,7 @@ function M.offer(ctx)
   local i18n = ctx.i18n
   local ui = ctx.state
   local requestRepaint = ctx.repaint
-  t = ctx.t
+  t = textHelper(ctx)
 
   if FcSetup == nil then
     FcSetup = loadModule("widgets/dashboard/inflight/fcsetup.lua")
@@ -227,6 +250,14 @@ function M.offer(ctx)
     if report.verdict == "match" then
       settle(string.format("%s (%d)",
         t(i18n, "fc_done", "Flight controller set up"), report.written))
+    elseif report.stepOnly == true then
+      -- Every slot holds the right function on the right channels through the right windows and
+      -- the STEP alone disagrees, which is worth its own sentence: it is the one field of a slot
+      -- this page's own setting decides, so naming it names the remedy as well. A count of
+      -- differing slots would be the same fact in a form nobody can act on.
+      settle(string.format("%s (%d)",
+        t(i18n, "fc_verify_step_only", "Written, but the flight controller kept another step"),
+        report.steps))
     else
       -- The write said yes to every slot and the read-back disagrees, which is the one outcome
       -- worth spelling out: it is not a failure the queue reported and it is not a success.
