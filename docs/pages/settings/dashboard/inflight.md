@@ -32,7 +32,18 @@ Hidden until *System* → *Settings* → *General* → *Preview* → *In-flight 
 | In-flight tuning on this radio | The master switch. With it off nothing drives on any model. Each model has one of its own on the flight controller page, and both have to be on. Off by default. |
 | Interlock switch | The switch that brings the surface up and makes it live. *None* by default, which leaves the overlay unreachable. |
 | *(the line under it)* | What the setup check found when it last walked the model: *Setup OK*, *Setup not checked*, or the faults it names. A fault refuses the interlock, so the surface does not go live while one stands. |
-| Set up the model | Writes the two mixer lines, the global variable details and the trim modes this model needs. It shows what it would remove and what it would add first, and writes nothing until that is confirmed. |
+| Set up the model | Writes the two mixer lines, the global variable details and the trim modes this model needs — and only the ones that differ from what the model already carries. It shows what it would remove and what it would add first, and writes nothing until that is confirmed. Where the model already carries all of it, it says so instead of asking. It writes the values as they stand on the page, saved or not. |
+
+*Set up the model* is a comparator, not a rewrite. A channel that already carries nothing but
+the line the overlay needs is left alone; a variable whose name, range, precision and unit are
+already right is not written; a flight mode whose claimed trims are already off is not touched.
+So the button is only ever offered work that is left, and on a model that is fully set up it
+reports *The model already carries this setup; nothing to write.*
+
+Every write is read back before it is counted. The radio's Lua writers answer nothing and do
+nothing when a mixer table is full or an index is out of range, so a line is counted as written
+only once it has been read off the model again — the number in *Model set up (n)* is the number
+of changes that are demonstrably on the model.
 
 ### Channels and variables
 
@@ -48,6 +59,12 @@ One mixer line per channel: `MAX` at the named variable's weight, added, no swit
 
 A variable already driven by another mixer line is named under the fields as a warning, not a
 refusal: a pilot who knows what that line does may still want it.
+
+A second warning names any *other* global variable carrying one of the two names this setup
+writes, `VAL` or `BNK`. A model set up once against a different pair keeps those names on the
+variables it used then, and nothing takes them off, so the radio's own pages show two of each
+with only one pair driving anything. A warning and not a refusal — which of them to rename is
+the pilot's business.
 
 ![The channels and variables, with a warning naming the mixer lines that already use them](../../../images/inflight/settings-radio-channels.png)
 

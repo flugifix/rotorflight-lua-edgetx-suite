@@ -298,6 +298,29 @@ local function modelApi(name)
   return fn
 end
 
+-- The mixer readers again, straight off the firmware rather than through the radio table below.
+--
+-- The WRITE wrappers need them: api_model.cpp's luaModelInsertMix and luaModelDeleteMix return
+-- nothing at all, and they do nothing -- without raising -- when the mixer table is full, when the
+-- channel is out of range or when the line index is past the end of the channel. So the only thing
+-- that can say whether a mixer write happened is the model read back afterwards, and a wrapper
+-- inside the table cannot reach the table's own readers while that table is still being built.
+local function mixesCountOf(channel0)
+  local fn = modelApi("getMixesCount")
+  if not fn then return nil end
+  local ok, count = pcall(fn, channel0)
+  if not ok then return nil end
+  return tonumber(count)
+end
+
+local function mixLineOf(channel0, line0)
+  local fn = modelApi("getMix")
+  if not fn then return nil end
+  local ok, mix = pcall(fn, channel0, line0)
+  if not ok or type(mix) ~= "table" then return nil end
+  return mix
+end
+
 --- The radio surface the drive uses, and the only place in this file that touches a global.
 --
 -- Every member answers nil when the firmware does not provide it, so a radio without one of them
@@ -456,27 +479,58 @@ function M.radio()
     -- The write half. Every one of these is wrapped where it is CALLED as well, because a plan
     -- reports which of its steps went through and a false here is one of the two ways a step can
     -- fail -- the other being a firmware that does not offer the call at all.
+    --
+    -- What a true from these means is the point, and it is not "the call did not raise". None of
+    -- the four writers raises on a refusal: luaModelInsertMix, luaModelDeleteMix and
+    -- luaModelSetGlobalVariableDetails return nothing and do nothing when an index is out of range
+    -- or the mixer table is full, and luaModelSetFlightMode answers 0 for done and 2 for a flight
+    -- mode this model does not have. So the firmware's own answer is returned where it gives one,
+    -- and where it gives none the write is READ BACK -- and a write that cannot be read back is
+    -- reported as not made rather than as made.
     setGlobalVariableDetails = function(index0, details)
       local fn = modelApi("setGlobalVariableDetails")
       if not fn then return false, "unsupported" end
       local ok, err = pcall(fn, index0, details)
       if not ok then return false, tostring(err) end
+      local read = modelApi("getGlobalVariableDetails")
+      if not read then return false, "unverified" end
+      local okRead, have = pcall(read, index0)
+      if not okRead or type(have) ~= "table" then return false, "unverified" end
+      -- Every key that was handed over, and only those: the writer walks the table it is given, so
+      -- a key it was not given is a field the caller never claimed anything about.
+      for key, wanted in pairs(details) do
+        local got = have[key]
+        if type(wanted) == "number" then got = tonumber(got) end
+        if got ~= wanted then return false, "not written: " .. tostring(key) end
+      end
       return true
     end,
 
     insertMix = function(channel, line0, value)
       local fn = modelApi("insertMix")
       if not fn then return false, "unsupported" end
+      local before = mixesCountOf(channel - 1)
       local ok, err = pcall(fn, channel - 1, line0, value)
       if not ok then return false, tostring(err) end
+      if before == nil then return false, "unverified" end
+      if mixesCountOf(channel - 1) ~= before + 1 then return false, "not inserted" end
+      local have = mixLineOf(channel - 1, line0)
+      if have == nil then return false, "unverified" end
+      if tonumber(have.source) ~= tonumber(value.source)
+          or tonumber(have.weight) ~= tonumber(value.weight) then
+        return false, "wrong line"
+      end
       return true
     end,
 
     deleteMix = function(channel, line0)
       local fn = modelApi("deleteMix")
       if not fn then return false, "unsupported" end
+      local before = mixesCountOf(channel - 1)
       local ok, err = pcall(fn, channel - 1, line0)
       if not ok then return false, tostring(err) end
+      if before == nil then return false, "unverified" end
+      if mixesCountOf(channel - 1) ~= before - 1 then return false, "not deleted" end
       return true
     end,
 
@@ -486,8 +540,12 @@ function M.radio()
     setFlightMode = function(fm, data)
       local fn = modelApi("setFlightMode")
       if not fn then return false, "unsupported" end
-      local ok, err = pcall(fn, fm, data)
-      if not ok then return false, tostring(err) end
+      local ok, answer = pcall(fn, fm, data)
+      if not ok then return false, tostring(answer) end
+      -- 0 is done, 2 is a flight mode this model does not have. A firmware that answers nothing is
+      -- taken at its word, there being nothing here to read back that the caller did not send.
+      local code = tonumber(answer)
+      if code ~= nil and code ~= 0 then return false, "refused " .. tostring(code) end
       return true
     end,
 
@@ -862,6 +920,23 @@ local function checkMixLine(radio, channel, gvarIndex, faults, prefix)
   if tonumber(mix.switch) ~= 0 then
     faults[#faults + 1] = prefix .. "_mix_switch"
   end
+  -- Three more fields the line has to carry, each held against it only where the reader answered at
+  -- all -- the same terms the source and the weight above are read on. An offset shifts every code
+  -- away from the window the board decodes; a curve reshapes them; and flightModes is a mask of the
+  -- modes the line is DISABLED in (mixer.cpp), so anything but zero is a mode in which a press
+  -- moves nothing at all -- the mode being flown among them, whenever its own bit is set.
+  local offset = tonumber(mix.offset)
+  if offset ~= nil and offset ~= 0 then
+    faults[#faults + 1] = prefix .. "_mix_offset"
+  end
+  local curveType = tonumber(mix.curveType)
+  if curveType ~= nil and curveType ~= 0 then
+    faults[#faults + 1] = prefix .. "_mix_curve"
+  end
+  local flightModes = tonumber(mix.flightModes)
+  if flightModes ~= nil and flightModes ~= 0 then
+    faults[#faults + 1] = prefix .. "_mix_modes"
+  end
   return true
 end
 
@@ -1164,6 +1239,39 @@ local GVAR_DETAIL_UNIT = 1
 -- EdgeTX carries nine flight modes. A model using fewer answers nil past its last one.
 local MAX_FLIGHT_MODES = 9
 
+--- Which OTHER global variables carry one of the two names this setup writes.
+--
+-- A model that was set up once against a different pair keeps VAL and BNK on the variables it used
+-- then, and nothing takes them off: the radio's own mixer and global-variable pages show two of
+-- each name, only one pair of which drives anything. The reference walk cannot see it -- a variable
+-- nothing refers to any more has no reference to find -- so the name is the only trace left.
+--
+-- A warning and never a refusal: a name is cosmetic, and which of the two the pilot renames is his
+-- business. Answers a list of { index, name }, empty where there is nothing to say, and nil where
+-- the details could not be read at all.
+function M.gvarNameClashes(radio, settings)
+  if type(radio) ~= "table" or type(settings) ~= "table" then return nil end
+  if type(radio.globalVariableDetails) ~= "function" then return nil end
+  local bank = settings.bank_gvar or 0
+  local value = settings.value_gvar or 0
+  local out = {}
+  local looked = false
+  for n = 1, M.GVAR_MAX_INDEX do
+    if n ~= bank and n ~= value then
+      local details = radio.globalVariableDetails(n - 1)
+      if type(details) == "table" then
+        looked = true
+        local name = tostring(details.name or "")
+        if name == GVAR_NAME_VALUE or name == GVAR_NAME_BANK then
+          out[#out + 1] = { index = n, name = name }
+        end
+      end
+    end
+  end
+  if not looked then return nil end
+  return out
+end
+
 --- One mixer line, spelled the way the radio's own mixer page spells it, so that a line this plan
 -- offers to delete can be recognised on the screen it will disappear from.
 local function describeMix(radio, mix)
@@ -1226,6 +1334,44 @@ local function gvarMixLine(radio, gvarIndex)
   }
 end
 
+--- Whether a variable already carries exactly the details the setup would write.
+--
+-- Compared on every field the write sets, which is more than the check looks at. The two questions
+-- are different ones: the check asks whether the overlay can WORK, so it reads the precision and
+-- the range; this asks whether there is anything left to write, so a variable with the right range
+-- under a different name is still one write -- offered once, and then never again.
+local function gvarDetailsAlreadySet(radio, index, details)
+  if type(radio.globalVariableDetails) ~= "function" then return false end
+  local have = radio.globalVariableDetails(index - 1)
+  if type(have) ~= "table" then return false end
+  if tostring(have.name or "") ~= details.name then return false end
+  if tonumber(have.min) ~= details.min then return false end
+  if tonumber(have.max) ~= details.max then return false end
+  if tonumber(have.prec) ~= details.prec then return false end
+  if tonumber(have.unit) ~= details.unit then return false end
+  return true
+end
+
+--- Whether a channel already carries nothing but the line the overlay needs.
+--
+-- The fields M.check's own checkMixLine compares, read on the same terms: a field the reader does
+-- not answer is not held against the line. That is what keeps the check and the plan from
+-- disagreeing about a model neither of them can see all of -- a plan that demanded more than the
+-- check reads would offer a rewrite of a model the screen above the button had just called correct.
+local function channelAlreadySet(radio, channel, mix)
+  if radio.mixesCount(channel) ~= 1 then return false end
+  local have = radio.mix(channel, 0)
+  if type(have) ~= "table" then return false end
+  if tonumber(have.source) ~= tonumber(mix.source) then return false end
+  if tonumber(have.weight) ~= tonumber(mix.weight) then return false end
+  if tonumber(have.multiplex) ~= MIX_MULTIPLEX_ADD then return false end
+  if tonumber(have.switch) ~= 0 then return false end
+  if (tonumber(have.offset) or 0) ~= 0 then return false end
+  if (tonumber(have.curveType) or 0) ~= 0 then return false end
+  if (tonumber(have.flightModes) or 0) ~= 0 then return false end
+  return true
+end
+
 --- Everything the write would do, as a list, before any of it is done.
 --
 -- The plan exists so that the destructive half can be READ before it is agreed to. The overlay
@@ -1235,8 +1381,20 @@ end
 -- go are listed one by one, named as the mixer page names them, and counted in the sentence the
 -- confirmation asks its question with.
 --
+-- The plan is also a COMPARATOR, and that is what keeps it from being a rewrite. Everything it
+-- queues is something this model does not already carry: a variable whose details differ, a channel
+-- that does not carry exactly the one line, a flight mode that still trims a claimed trim. A plan
+-- that queued them unconditionally asked the pilot to confirm a delete-and-reinsert of the very
+-- line its last run had written, on every press, on a model the check beside the button had just
+-- called correct. When nothing is left to queue it says so through plan.nothing.
+--
+-- `trims` is the resolved trim block, the same one M.check takes: without it a stored trim SETTING
+-- is a switch position that cannot be turned into the semantic number the firmware's trim-mode
+-- table is indexed by, so no trim fault could be answered -- which is how the trim half of this
+-- plan came to be unreachable for every trim the check can raise a fault about.
+--
 -- Nothing here writes. M.applyPlan does, and only what this returned.
-function M.plan(radio, settings)
+function M.plan(radio, settings, trims)
   if type(radio) ~= "table" or type(settings) ~= "table" then return nil end
 
   local plan = { gvars = {}, deletions = {}, insertions = {}, trims = {}, channels = {} }
@@ -1260,24 +1418,21 @@ function M.plan(radio, settings)
     return plan
   end
 
-  plan.gvars[#plan.gvars + 1] = {
-    index = valueGvar,
-    role = "value",
-    name = GVAR_NAME_VALUE,
-    details = {
-      name = GVAR_NAME_VALUE, min = GVAR_DETAIL_MIN, max = GVAR_DETAIL_MAX,
+  -- The value variable first, and only where a write would change something.
+  local wantedGvars = {
+    { index = valueGvar, role = "value", name = GVAR_NAME_VALUE },
+    { index = bankGvar, role = "bank", name = GVAR_NAME_BANK }
+  }
+  for i = 1, #wantedGvars do
+    local entry = wantedGvars[i]
+    entry.details = {
+      name = entry.name, min = GVAR_DETAIL_MIN, max = GVAR_DETAIL_MAX,
       prec = GVAR_DETAIL_PREC, unit = GVAR_DETAIL_UNIT
     }
-  }
-  plan.gvars[#plan.gvars + 1] = {
-    index = bankGvar,
-    role = "bank",
-    name = GVAR_NAME_BANK,
-    details = {
-      name = GVAR_NAME_BANK, min = GVAR_DETAIL_MIN, max = GVAR_DETAIL_MAX,
-      prec = GVAR_DETAIL_PREC, unit = GVAR_DETAIL_UNIT
-    }
-  }
+    if not gvarDetailsAlreadySet(radio, entry.index, entry.details) then
+      plan.gvars[#plan.gvars + 1] = entry
+    end
+  end
 
   -- The two configured channels, and nothing else on this model is looked at, let alone written.
   -- Within a channel the deletions are listed HIGHEST INDEX FIRST, which is the order they have to
@@ -1293,36 +1448,40 @@ function M.plan(radio, settings)
       plan.refused = "unsupported"
       return plan
     end
-    plan.channels[#plan.channels + 1] = {
-      channel = entry.channel, role = entry.role, removed = count
-    }
-    for line0 = count - 1, 0, -1 do
-      plan.deletions[#plan.deletions + 1] = {
-        channel = entry.channel,
-        line0 = line0,
-        text = describeMix(radio, radio.mix(entry.channel, line0))
-      }
-    end
     local mix = gvarMixLine(radio, entry.gvar)
     if mix == nil then
       plan.refused = "unsupported"
       return plan
     end
-    plan.insertions[#plan.insertions + 1] = {
-      channel = entry.channel,
-      line0 = 0,
-      gvar = entry.gvar,
-      role = entry.role,
-      mix = mix,
-      text = describeMix(radio, mix)
-    }
+    -- A channel already carrying nothing but this line is not touched, and does not appear among
+    -- the channels the question counts removals from either.
+    if not channelAlreadySet(radio, entry.channel, mix) then
+      plan.channels[#plan.channels + 1] = {
+        channel = entry.channel, role = entry.role, removed = count
+      }
+      for line0 = count - 1, 0, -1 do
+        plan.deletions[#plan.deletions + 1] = {
+          channel = entry.channel,
+          line0 = line0,
+          text = describeMix(radio, radio.mix(entry.channel, line0))
+        }
+      end
+      plan.insertions[#plan.insertions + 1] = {
+        channel = entry.channel,
+        line0 = 0,
+        gvar = entry.gvar,
+        role = entry.role,
+        mix = mix,
+        text = describeMix(radio, mix)
+      }
+    end
   end
 
   -- A trim that still trims is a trim that moves the stick neutral the flight controller was
   -- calibrated against, with the very press that is meant to move a parameter. It has to be off in
   -- EVERY flight mode, not only the active one, because the pilot will fly in the others.
   if settings.trims == true then
-    local claimed = M.claimedTrims(settings)
+    local claimed = M.claimedTrims(settings, trims)
     for fm = 0, MAX_FLIGHT_MODES - 1 do
       local data = radio.flightModeData(fm)
       if type(data) ~= "table" or type(data.trimsModes) ~= "table" then break end
@@ -1340,6 +1499,12 @@ function M.plan(radio, settings)
         plan.trims[#plan.trims + 1] = { fm = fm, modes = modes, indexes = indexes }
       end
     end
+  end
+
+  -- Nothing queued means the model already is what the write would make it, and the button says so
+  -- instead of putting up a confirmation for a write with no content in it.
+  if #plan.gvars == 0 and #plan.deletions == 0 and #plan.insertions == 0 and #plan.trims == 0 then
+    plan.nothing = true
   end
 
   plan.ok = true

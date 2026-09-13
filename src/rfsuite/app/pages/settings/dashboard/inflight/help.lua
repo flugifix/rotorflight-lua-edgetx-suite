@@ -25,7 +25,7 @@ return function(ctx)
   -- writes and that it asks first. Its counterpart -- the one that writes the flight controller's
   -- own adjustment slots -- went to the page that owns the flight controller's half.
   local setup = tr(i18n, "help_setup",
-    "Set up the model writes the mixer lines, the variables and the trim modes, after showing what it removes.")
+    "Set up the model writes only what differs from the model, after showing it, and says so when nothing does.")
 
   -- The trim layout is the one setting a pilot meets with his thumbs rather than his eyes, so
   -- the help says what each of the three trims does rather than leaving the field labels to
