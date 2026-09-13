@@ -69,7 +69,10 @@ link up and the values read.
 One parameter at a time, not a grid:
 
 - **The bank chips** across the top choose which of the six banks the enable channel sits in.
-  A tap is refused while a step is still on the wire.
+  A tap is refused while a step is still on the wire. The enable channel carries the selected
+  bank for as long as the interlock is on — on the ground, in the air and on the read-out after
+  the flight — and not only just after a bank has been changed, so the first step of a flight
+  lands on the same parameter as every one after it.
 - **The parameter**, large, with the value it had before the last step and the value it was
   primed with. The value comes from the cache: read on the ground, then kept current by every
   step the flight controller reports back over its adjustment telemetry.
@@ -99,7 +102,9 @@ writes its own storage shortly after disarm. The one action is the restore.
 - The way back in the air is the PID profile switch, not the overlay: the backup profile
   holds what the flight started from, so switching to it is instant and needs no MSP.
 - Releasing the interlock, closing the fullscreen, backgrounding the widget or losing the
-  link all take the value variable back to zero, in the flight mode it was written in.
+  link all take the value variable back to zero, in the flight mode it was written in. Those
+  four take the bank variable back to zero as well; landing does not, because the surface is
+  still up and still showing that bank.
 - On an ExpressLRS link use the *Wide* switch mode or a full-resolution packet rate: in
   *Hybrid* mode the two channels carry 16 and 6 positions, and several of the windows the
   flight controller decodes are missed.
