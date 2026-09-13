@@ -117,6 +117,21 @@ local DERIVE_SLICE = 8
 -- settle on top of it.
 local AUTO_DELAY_TICKS = 100
 
+-- The drive's GROUND phase, as widgets/dashboard/inflight/drive.lua spells it.
+--
+-- Not required from there: the two modules are loaded beside each other rather than one under the
+-- other -- this one speaks MSP and the drive does not -- and one word is not worth a dependency
+-- edge between them.
+local DRIVE_PHASE_GROUND = "ground"
+
+-- How many times the automatic prime is started again after a run that FAILED, within one link.
+--
+-- A run that was ABANDONED is retried without a limit: an abandon is the pilot arming, which is
+-- allowed and which he may do as often as he likes. A FAILURE can be permanent -- a board that
+-- answers an error answers it again -- so it is retried this many times and then left alone with
+-- the error on the screen rather than asked the same question for the rest of the session.
+local AUTO_RETRY_LIMIT = 2
+
 -- How many profiles a board has, when neither the status read nor the session says. Their own
 -- status reply carries `pid_profile_count`, which is where the real number comes from; this is
 -- only what the refusal falls back on, and it is the count every current target ships.
@@ -233,6 +248,23 @@ function M.isRunning(drive)
   return type(prime) == "table" and RUNNING[prime.phase] == true
 end
 
+--- Whether the board HAS BEEN READ, which is not the same question as what the last run did.
+--
+-- The evidence is a completed read that left something in the cache, and everything that used to
+-- ask `prime.phase == PHASE_DONE` asks this instead. The difference is a defect measured on a
+-- radio: a re-read that was abandoned when the pilot armed -- the MSP runtime clears its whole
+-- queue on every armed tick, which this module takes as the abandon it is -- set the phase back to
+-- idle over a full cache, and from there the backup refused as `unprimed` and the surface said the
+-- values had never been read. An abandoned read invalidates nothing: what it did not do is REPLACE
+-- values that were already there.
+--
+-- `readAt` is not the flag, deliberately. It is the radio's wall clock and a radio that answers
+-- none leaves it nil, so a read would stop counting on exactly the models whose clock is not set.
+function M.hasRead(drive)
+  if type(drive) ~= "table" or drive.valuesRead ~= true then return false end
+  return type(drive.values) == "table" and next(drive.values) ~= nil
+end
+
 local function bump(drive)
   drive.valueEpoch = (drive.valueEpoch or 0) + 1
 end
@@ -269,6 +301,9 @@ local function fail(drive, prime, reason)
   -- A reply already stored is a parse this run will never make. Dropping it here is what keeps
   -- the passes after a failure free of work for a run that is over.
   dropStored(prime)
+  -- Counted so that the automatic run can be offered again a bounded number of times. See
+  -- AUTO_RETRY_LIMIT: an abandon is not counted here, because it is not a failure of the board's.
+  drive._primeFails = (drive._primeFails or 0) + 1
   bump(drive)
   logPrime("prime failed in %s: %s", tostring(prime.failedIn or "?"), prime.error)
   return false
@@ -282,6 +317,10 @@ local function abandon(drive, prime, why)
   prime.phase = M.PHASE_IDLE
   prime.error = nil
   dropStored(prime)
+  -- Recorded on the DRIVE and not on the run, because the run it describes is over and the two
+  -- questions it answers are about the next one: whether the automatic run may start again, and
+  -- what the ground surface says beside a read that is older than the last attempt at one.
+  drive.primeInterrupted = true
   bump(drive)
   logPrime("prime abandoned: %s", tostring(why))
 end
@@ -632,6 +671,11 @@ local function finishValues(drive, prime)
   -- pilot standing beside the machine wants to know whether that was this session or the last
   -- one, and a tick count cannot tell him.
   drive.readAt = drive.radio.clock and drive.radio.clock() or nil
+  -- and the evidence that it happened at all, which the line above cannot carry on a radio whose
+  -- clock answers nothing. See M.hasRead.
+  drive.valuesRead = true
+  -- Whatever the last attempt did, this one finished: nothing is left to say about it.
+  drive.primeInterrupted = nil
   bump(drive)
   logPrime("prime done: %d value(s) cached, %d id(s) unanswered", prime.mapped or 0, prime.unmapped or 0)
 end
@@ -959,13 +1003,29 @@ local function parseValues(widget, drive, prime, record)
   local parsed = record.api.parse(record.buf)
   if type(parsed) == "table" then
     local fields = record.fields
+    -- The status reply counts the profiles the way the WIRE does, from 0. Everything else on this
+    -- screen that shows one of those two numbers counts them the way the pilot's own menus do: the
+    -- header reads the PID profile off the PID# telemetry sensor, the backup line records both
+    -- 1-based, and the range this build declares for the two ids is 1 to 6 -- which is the
+    -- firmware's own (fc/rc_adjustments.c, ADJ_ENTRY(RATE_PROFILE, 1, 6) and its PID sibling). Left
+    -- as they arrive, the two rows read one less than the header above them and than the row a step
+    -- would land on.
+    --
+    -- They are moved onto that count here, at the one place they enter the cache, and there is no
+    -- second writer to keep in step with: the same firmware file leaves all four profile
+    -- adjustments out of the report AdjF and AdjV carry (updateAdjustmentData), so the live
+    -- surface's own adoption path can never put a raw one in beside them.
+    --
+    -- `prime.status` below keeps the reply exactly as it came. The undo reads the active index off
+    -- it and MSP_COPY_PROFILE has to be told the wire's own number.
+    local base = (record.command == CMD_STATUS) and 1 or 0
     for i = 1, #fields do
       local entry = fields[i]
       local value = tonumber(parsed[entry.field])
       if value == nil then
         prime.unmapped = (prime.unmapped or 0) + 1
       else
-        drive.values[entry.id] = value
+        drive.values[entry.id] = value + base
         prime.mapped = (prime.mapped or 0) + 1
       end
     end
@@ -1016,6 +1076,30 @@ local function takeReply(widget, drive)
   return true
 end
 
+--- A profile change has been answered by a read, and on the ground the undo is due with it.
+--
+-- The backup is scoped to a PROFILE: the board's adjustments only ever move the one that is active,
+-- so the spare slot holds a copy of the profile that was being flown before the change and is not
+-- an undo for the one the pilot is about to fly. One slot and one undo is the shape this feature
+-- has, so the fresh copy REPLACES it -- the ground line then names the new source, and the previous
+-- profile's undo is gone. That is the trade the single slot makes, and it is the one the pilot
+-- chose.
+--
+-- A request and no more, exactly as the interlock's own edge raises it: whether anything goes out
+-- is M.tick's decision, and every refusal the button has applies there unchanged. A RATE profile
+-- change moves no PID profile and this cannot tell the two apart, so the request is raised for
+-- both and the existence test sends nothing for the one that changed nothing.
+--
+-- Raised where the change is ANSWERED rather than where it is seen. The flag it follows stands
+-- until a read can serve it, so a test on the flag alone would raise this again on every pass of
+-- that wait.
+local function profileChangeAnswered(drive)
+  if drive.phase ~= DRIVE_PHASE_GROUND then return end
+  if drive.autoBackupWanted == true then return end
+  drive.autoBackupWanted = true
+  logPrime("profile changed on the ground: a fresh undo is due")
+end
+
 --- Read the board: the receiver map, the slot table, and the nine value reads.
 --
 -- Refused while armed and without a link. The counters start at the whole table's length and are
@@ -1046,6 +1130,13 @@ function M.start(widget, drive)
   -- that table again. Leaving the old one up would show a board as matching while its own answer
   -- was still on the wire.
   drive.compare = nil
+  -- The wait the pass gate counts belongs to the run that is starting.
+  widget._primeSkips = nil
+  -- A full run reads the nine value commands as well, so a profile change waiting for a re-read of
+  -- its own is answered by this one and must not send it a second time afterwards.
+  if drive.profileChanged == true then profileChangeAnswered(drive) end
+  drive.profileChanged = nil
+  drive.primeInterrupted = nil
   bump(drive)
   logPrime("prime started")
   return sendRxMap(widget, drive, prime)
@@ -1054,18 +1145,56 @@ end
 --- Read the values again, without the slot table. What a restore puts back on the board is a set
 -- of values, not a layout, so re-reading 42 slot records to learn them would be 42 round trips
 -- spent on something that cannot have moved.
+--
+-- A FRESH run table, and not the previous one under a new phase. `stillCurrent` tells a reply which
+-- run it belongs to by the IDENTITY of this table -- it is the only thing that can, since the
+-- callbacks close over the run they were made for -- so a refresh that reused the table accepted a
+-- late reply of the PREVIOUS run into the new one: the answer to a read the queue had given up on,
+-- retried and delivered after the refresh had gone out, counted as one of the nine and written into
+-- the cache as whatever the board held before. Of everything the fourth radio round turned up, that
+-- is the one mechanism that would genuinely read as "he only ever reads PARTS of it".
+--
+-- What carries over is what the refresh does not read: the slot table and the derivation's own
+-- leavings. Both describe a LAYOUT, and a layout does not move when a profile does.
+--
+-- THE STATUS REPLY IS NOT AMONG THEM, and the first cut of this had it there with the reasoning that
+-- a profile change moves none of the three. That was wrong about exactly one field: the status reply
+-- is where the ACTIVE PROFILE INDEX comes from, so it is the one thing a profile change does move,
+-- and carrying it across the re-read that answers that change carried the answer to the question
+-- being asked. Measured against a real board: with the PID# sensor momentarily not delivering, the
+-- undo was copied from the profile the board had been on BEFORE the change. Dropped here, the reply
+-- this run holds is either the one that answered the change or nothing at all -- and nothing is
+-- refused by name. The profile COUNT, which no profile change moves, comes from their own status
+-- task's copy on the session in that window (see M.profileCount).
 function M.refreshValues(widget, drive)
   if type(widget) ~= "table" or type(drive) ~= "table" then return false, "no_drive" end
   if isArmed(widget) then return false, "armed" end
-  local prime = drive.prime
-  if type(prime) ~= "table" or type(prime.records) ~= "table" then return M.start(widget, drive) end
+  local previous = drive.prime
+  if type(previous) ~= "table" or type(previous.records) ~= "table" then
+    return M.start(widget, drive)
+  end
   if queueOf() == nil then return false, "no_link" end
-  prime.error = nil
-  prime.done = 0
-  prime.total = #Functions.VALUE_READS
-  -- Anything stored for the run being restarted here belongs to nothing: the phase it was read
-  -- in is over and the counters it would have moved have just been reset.
-  dropStored(prime)
+  local prime = {
+    phase = M.PHASE_IDLE,
+    done = 0,
+    total = #Functions.VALUE_READS,
+    records = previous.records,
+    skipped = previous.skipped,
+    slotList = previous.slotList,
+    slotAt = previous.slotAt,
+    rangeApi = previous.rangeApi,
+    map = previous.map,
+    valueAt = 1,
+    mapped = 0,
+    unmapped = 0,
+    pending = {},
+    pendingHead = 1,
+    pendingTail = 0,
+    chainPaused = false
+  }
+  drive.prime = prime
+  -- The wait this gate counts belongs to the run that is starting, not to the one before it.
+  widget._primeSkips = nil
   return startValues(widget, drive, prime)
 end
 
@@ -1078,9 +1207,23 @@ end
 -- The telemetry sensor counts from 1, the way the pilot's own menus do; the status reply counts
 -- from 0, the way the wire does. The sensor is preferred because it is live even when nothing has
 -- been primed this session.
+--
+-- A SENSOR THE RADIO IS NOT DELIVERING ANSWERS 0, AND NEVER NIL. That is EdgeTX's getValue, and it
+-- is the whole of a defect measured against a real board: one profile change on the ground produced
+-- two copies, the second of them naming the profile the pilot had just left. Read as a number, 0 is
+-- not nil, so the question went PAST the last good reading the drive kept and landed on the status
+-- reply -- and a status reply is the one thing in this module that can be older than the profile
+-- change itself. 0 is not a profile either way: the pilot's menus and the firmware's own adjustment
+-- range for this parameter both start at 1. So it is treated as no answer, which is what sends the
+-- question on to the reading the drive kept, which is the freshest thing there is after the sensor.
+--
+-- The status reply stays as the LAST resort, for a model whose telemetry list has no PID# at all.
+-- What makes it safe is at the other end: a value refresh no longer carries the previous run's
+-- status (see M.refreshValues), so the reply this reads is either the one that answered the change
+-- or nothing -- and nothing is refused by name rather than guessed at.
 function M.activeProfile0(drive)
   local sensor = tonumber(drive.radio.sensor("PID#"))
-  if sensor == nil then sensor = tonumber(drive.profile) end
+  if sensor == nil or sensor < 1 then sensor = tonumber(drive.profile) end
   if sensor ~= nil and sensor >= 1 then return math.floor(sensor) - 1 end
   local status = drive.prime and drive.prime.status or nil
   local index = status and tonumber(status.current_pid_profile_index) or nil
@@ -1186,9 +1329,20 @@ function M.backup(widget, drive)
   -- "nothing has changed" for a flight that changed everything -- a wrong answer where a missing
   -- one was wanted, and the worst of the three states this screen can be in. An undo is only an
   -- undo once there is something to compare the flight with.
-  local prime = drive.prime
-  if type(prime) ~= "table" or prime.phase ~= M.PHASE_DONE then
+  --
+  -- The question is whether the board HAS BEEN READ and not what the last run did, which is the
+  -- whole of M.hasRead: a read the pilot armed into abandoned the run and left the cache alone,
+  -- and refusing the undo for the rest of that link is refusing it for the flights it exists for.
+  if not M.hasRead(drive) then
     return refuseTransfer(drive, "backup", "unprimed")
+  end
+
+  -- A read that is still on the wire is half of one answer and half of another. The snapshot is
+  -- taken here, in this pass, and a cache being refilled parameter by parameter would put the
+  -- values of two different profiles into it -- so the copy waits for the run rather than racing
+  -- it. The request that asked for it is a state and survives the wait.
+  if M.isRunning(drive) then
+    return refuseTransfer(drive, "backup", "reading")
   end
 
   local backup0 = math.floor(tonumber(drive.settings.backup_profile) or 0) - 1
@@ -1227,8 +1381,18 @@ function M.restore(widget, drive)
   -- different one it would not undo anything: it would overwrite a profile the copy never
   -- described, with values the pilot never flew there. Refused by name rather than silently, so
   -- the screen can say which profile to switch back to.
+  --
+  -- With NO RECORD AT ALL the answer is that refusal and not permission, which is the half this
+  -- test used to get wrong. The record lives in memory and the per-model store beside it keeps the
+  -- slot number alone, so after a restart -- or after any session that did not make the copy
+  -- itself -- the spare profile holds a copy of SOME profile and nothing on the radio knows which.
+  -- Allowing the restore there allowed exactly the write this guard exists to prevent, in the one
+  -- state where nothing could warn the pilot about it.
   local source = (type(drive.backup) == "table") and tonumber(drive.backup.source) or nil
-  if source ~= nil and active0 ~= nil and (source - 1) ~= active0 then
+  if source == nil then
+    return refuseTransfer(drive, "restore", "unknown_profile")
+  end
+  if active0 == nil or (source - 1) ~= active0 then
     return refuseTransfer(drive, "restore", "other_profile")
   end
 
@@ -1249,14 +1413,35 @@ end
 -- a rebuild happens exactly when that epoch moves.
 --
 -- Answers nil when there is no snapshot to measure against, which is a different thing from an
--- empty list and is said differently on screen.
+-- empty list and is said differently on screen. A second return value names the reason where there
+-- is one to name: today the reference belonging to another profile, which is a refusal to compare
+-- rather than an absence of anything to compare.
 function M.delta(drive)
   if type(drive) ~= "table" then return nil end
-  local reference = (type(drive.backup) == "table" and drive.backup.values) or drive.primedValues
+  local backup = (type(drive.backup) == "table") and drive.backup or nil
+  local reference = (backup ~= nil and backup.values) or drive.primedValues
   -- An EMPTY reference is no reference. A snapshot taken before anything had been read off the
   -- board is a table with nothing in it, and measuring against it yields an empty list -- which
   -- the screen reads as "nothing has changed", a wrong answer where a missing one was wanted.
   if type(reference) ~= "table" or next(reference) == nil then return nil end
+
+  -- And a reference taken from ANOTHER PROFILE is not a reference either. This is the test the
+  -- restore above has had all along and this comparison did not: the board's adjustments only ever
+  -- moved the profile that was active, so a backup of profile 1 held against the values of profile
+  -- 2 reports the difference between two profiles as though the flight had made it. The pilot's
+  -- fourth radio round photographed exactly that -- twelve rows of "changed" after a flight that
+  -- moved one of them, the rest of the list being what the two profiles disagree about.
+  --
+  -- Only a BACKUP can be from elsewhere. `primedValues` is this session's own read of whichever
+  -- profile is active, and finishValues takes it again on every read while no backup stands.
+  if backup ~= nil then
+    local source = tonumber(backup.source)
+    local active0 = M.activeProfile0(drive)
+    if source ~= nil and active0 ~= nil and (source - 1) ~= active0 then
+      return nil, "other_profile"
+    end
+  end
+
   if drive._deltaEpoch == drive.valueEpoch and drive._deltaList ~= nil then return drive._deltaList end
 
   local list = {}
@@ -1317,19 +1502,27 @@ local PARSE_SKIP_LIMIT = 100
 -- table reads it costs.
 --
 -- The second is what the last pass actually cost. Answers false to skip.
-function M.passHasRoom(widget)
+--
+-- The skips are counted as a TOTAL for the run being held up and not as a streak, and that is the
+-- difference between an escape that fires and one that cannot. A streak was reset by every cheap
+-- pass, so a widget alternating between an expensive pass and a cheap one -- which is the ordinary
+-- shape of a dashboard that rebuilds something on one pass in two -- skipped every other pass for
+-- as long as the run lasted and never came within reach of the limit. With no run in progress there
+-- is nothing being held up, so the streak reading is kept for that case: it is what lets the
+-- automatic run start at all on a widget that never comes below the limit.
+function M.passHasRoom(widget, drive)
   if widget._job ~= nil then return false end
 
   local last = tonumber(widget._usageLast)
   if last == nil or last <= PARSE_USAGE_LIMIT then
-    widget._primeSkips = nil
+    if drive == nil or not M.isRunning(drive) then widget._primeSkips = nil end
     return true
   end
 
   local skips = (widget._primeSkips or 0) + 1
   if skips >= PARSE_SKIP_LIMIT then
     widget._primeSkips = nil
-    logPrime("prime: %d busy pass(es) in a row, taking a slice anyway at %d%%", skips, last)
+    logPrime("prime: %d busy pass(es) waited out, taking a slice anyway at %d%%", skips, last)
     return true
   end
   widget._primeSkips = skips
@@ -1354,6 +1547,9 @@ function M.tick(widget, drive)
   if widget.state.fblConnected ~= true then
     drive._primeLinkSince = nil
     drive._primeAutoDone = false
+    -- The retry budget is per link session, like the latch above it: a new board is a new answer
+    -- to the question of whether it can be read at all.
+    drive._primeFails = nil
     return
   end
 
@@ -1363,7 +1559,7 @@ function M.tick(widget, drive)
   --
   -- Everything ABOVE this line stays unconditional. The armed check, the abandon and the link
   -- check are what keep MSP away from a helicopter in the air, and they are three table reads.
-  if not M.passHasRoom(widget) then return end
+  if not M.passHasRoom(widget, drive) then return end
 
   -- One stored reply, parsed here rather than where it arrived, and never more than one however
   -- many the link delivered into the same pass. This is the bound the whole section above exists
@@ -1392,13 +1588,42 @@ function M.tick(widget, drive)
   -- AdjV, which is the honest answer while nothing may be asked.
   --
   -- The flag is left standing while a run is on the wire: that run was started under the old
-  -- profile and the next idle pass sends the reads again. If nothing has been primed at all it is
-  -- dropped, because the automatic run below reads everything anyway.
+  -- profile and the next idle pass sends the reads again. It is left standing just as much when
+  -- there is no finished run to refresh -- a read that was abandoned, one that failed, or none at
+  -- all -- and that is a defect this round measured rather than reasoned about. It used to be
+  -- cleared here whatever the phase was, so a profile change that arrived while a read was being
+  -- abandoned was consumed by the one pass that could do nothing with it, and the new profile's
+  -- values stayed unknown for the rest of the link. What answers it in that state is the automatic
+  -- run the block below offers again, and M.start drops the flag itself because it reads the nine
+  -- value commands too.
   if drive.profileChanged == true and not M.isRunning(drive) then
-    drive.profileChanged = nil
     if type(drive.prime) == "table" and drive.prime.phase == M.PHASE_DONE then
+      drive.profileChanged = nil
+      profileChangeAnswered(drive)
       logPrime("profile changed: the nine value reads are sent again")
       M.refreshValues(widget, drive)
+      return
+    end
+  end
+
+  -- The session was closed on the ground and has been opened again, so the board is read once more
+  -- before anything else: the pilot's ruling is that closing the feature on the ground starts
+  -- everything fresh, and the drive has already dropped the cache, the undo and the comparison
+  -- (inflight/drive.lua, Drive:endSession).
+  --
+  -- Only the nine VALUE commands. The slot table describes a layout, a switch cannot move one, and
+  -- re-reading forty records would be forty round trips on the one queue the connect chain shares
+  -- for an answer that cannot have changed -- the same reasoning the re-read after a profile change
+  -- and the re-read after a restore already run on. M.refreshValues falls back to a whole run by
+  -- itself where no slot table has been read yet, so there is no second branch to keep in step.
+  --
+  -- Held until the surface is back ON THE GROUND: while the feature is closed this half sends
+  -- nothing, which is the whole promise of the interlock. The flag is a STATE and is spent only by a
+  -- read that actually went out, so a pass that could not serve it leaves it standing.
+  if drive.readAgain == true and drive.phase == DRIVE_PHASE_GROUND and not M.isRunning(drive) then
+    if M.refreshValues(widget, drive) then
+      drive.readAgain = nil
+      logPrime("the session was opened again: the value reads are sent")
       return
     end
   end
@@ -1426,8 +1651,10 @@ function M.tick(widget, drive)
   -- one for this profile already, or until the phase leaves the ground -- which is where the
   -- drive clears it, on every transition that is not into `ground`.
   if drive.autoBackupWanted == true then
-    local prime = drive.prime
-    if type(prime) == "table" and prime.phase == M.PHASE_DONE then
+    -- The EVIDENCE of a read, and a run still on the wire waited out: both are M.backup's own
+    -- conditions, restated here so that a pass which cannot serve the request leaves it standing
+    -- instead of spending it.
+    if M.hasRead(drive) and not M.isRunning(drive) then
       local active0 = M.activeProfile0(drive)
       local have = type(drive.backup) == "table" and tonumber(drive.backup.source) or nil
       if active0 ~= nil and have ~= nil and (have - 1) == active0 then
@@ -1440,6 +1667,26 @@ function M.tick(widget, drive)
         M.backup(widget, drive)
         return
       end
+    end
+  end
+
+  -- A run that did not finish must not latch the automatic one off for the rest of the link.
+  --
+  -- `_primeAutoDone` is the once-per-connect latch, and until this round the only thing that reset
+  -- it was the link going down. So an arming DURING a read left the phase idle with the latch
+  -- still set, and nothing sent another read or another backup for the whole session: the pilot's
+  -- own card log has two interlock cycles after such an abandon with no prime and no undo in
+  -- either of them, and dashes where the profile-scoped values had stood.
+  --
+  -- An abandon is retried without a limit and a failure a bounded number of times; see
+  -- AUTO_RETRY_LIMIT. Both go through the settle below rather than starting here, so a read is
+  -- never sent on the pass the pilot disarmed on.
+  if drive._primeAutoDone == true and not M.isRunning(drive) then
+    local phase = (type(drive.prime) == "table") and drive.prime.phase or nil
+    if phase == M.PHASE_IDLE and drive.primeInterrupted == true then
+      drive._primeAutoDone = false
+    elseif phase == M.PHASE_ERROR and (drive._primeFails or 0) <= AUTO_RETRY_LIMIT then
+      drive._primeAutoDone = false
     end
   end
 

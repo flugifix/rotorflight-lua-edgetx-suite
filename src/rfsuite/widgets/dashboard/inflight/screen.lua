@@ -922,26 +922,70 @@ end
 -- so the ones the cap hid were the ones nobody would ever see again. The postflight surface pages
 -- the whole list instead, with the walk trim; see M.buildPost.
 
+--- That the values are in, and when -- with the wall clock where the radio has one.
+--
+-- A pilot standing beside the machine wants to know whether this read was this session or the last
+-- one, and "Primed" cannot tell him.
+local function readWords(snapshot, t)
+  local at = snapshot.readAt
+  if type(at) == "string" then
+    return t("widgets.dashboard.inflight_prime_done_at", "Values read") .. " " .. at
+  end
+  return t("widgets.dashboard.inflight_prime_done", "Values read")
+end
+
 --- Where the ground half has got to, in one phrase.
-local function describePrime(snapshot, t)
+--
+-- `ground` carries what the snapshot cannot: whether the board HAS BEEN READ and whether the last
+-- attempt at reading it again was given up, both read off the drive once when the surface is built,
+-- and the width this line has to fit. The two facts move only when a read finishes or is given up,
+-- and both of those bump the value epoch the widget's render key carries -- so a build is exactly
+-- the moment they are answered again. What the closure needs from pass to pass is the COUNTER, and
+-- that is on the snapshot where it has always been.
+local function describePrime(snapshot, t, ground)
   local state = snapshot.prime
-  if type(state) ~= "table" or state.phase == nil or state.phase == "idle" then
-    return t("widgets.dashboard.inflight_prime_never", "Not primed")
+  local phase = (type(state) == "table") and state.phase or nil
+
+  -- Whether a read STANDS, which a finished run is no longer evidence of on its own: a session
+  -- closed on the ground drops the cache and the evidence with it, while the run that filled it
+  -- remains the last one there ever was. Where no caller supplied the drive's answer, the run's own
+  -- phase is all there is.
+  local hasRead, interrupted, width, font
+  if type(ground) == "table" then
+    hasRead = ground.hasRead == true
+    interrupted, width, font = ground.interrupted == true, ground.width or 0, ground.font
+  else
+    hasRead, interrupted, width, font = (phase == "done"), false, 0, nil
   end
-  if state.phase == "done" then
-    -- With the wall clock where the radio has one. A pilot standing beside the machine wants to
-    -- know whether this read was this session or the last one, and "Primed" cannot tell him.
-    local at = snapshot.readAt
-    if type(at) == "string" then
-      return t("widgets.dashboard.inflight_prime_done_at", "Values read") .. " " .. at
+
+  if phase ~= nil and phase ~= "idle" and phase ~= "error" and phase ~= "done" then
+    return t("widgets.dashboard.inflight_prime_running", "Priming") .. " "
+      .. tostring(state.done or 0) .. "/" .. tostring(state.total or 0)
+  end
+
+  -- Nothing is running, and what the LAST RUN did is not the question a pilot is asking: whether
+  -- the board has been read is. A re-read he armed into leaves the run idle over a full cache, and
+  -- a line reading "values not read" above an intact backup line -- which is what the fourth radio
+  -- round photographed -- describes the run rather than the screen it is on. So the read is
+  -- reported, with what happened to the attempt after it as a second clause WHERE THERE IS ROOM:
+  -- on a 480-pixel zone the two together are within a character or two of the width, and a line cut
+  -- in the middle of the clause would lose the read time as well on the next translation.
+  if hasRead then
+    local text = readWords(snapshot, t)
+    local tail = nil
+    if interrupted then
+      tail = t("widgets.dashboard.inflight_prime_interrupted", "re-read interrupted")
+    elseif phase == "error" then
+      tail = t("widgets.dashboard.inflight_prime_failed", "Prime failed")
     end
-    return t("widgets.dashboard.inflight_prime_done", "Values read")
+    if tail == nil then return text end
+    return pickText(text .. " - " .. tail, text, width, font)
   end
-  if state.phase == "error" then
+
+  if phase == "error" then
     return t("widgets.dashboard.inflight_prime_failed", "Prime failed")
   end
-  return t("widgets.dashboard.inflight_prime_running", "Priming") .. " "
-    .. tostring(state.done or 0) .. "/" .. tostring(state.total or 0)
+  return t("widgets.dashboard.inflight_prime_never", "Not primed")
 end
 
 --- Where the rows came from, and whether the flight controller agrees with them.
@@ -1009,8 +1053,16 @@ local function refusalWords(reason, t)
     return t("widgets.dashboard.inflight_restore_other_profile",
       "The backup was taken from another profile: switch back to it first")
   end
+  if reason == "unknown_profile" then
+    return t("widgets.dashboard.inflight_restore_unknown_profile",
+      "Which profile the backup holds is not known: take a fresh one")
+  end
   if reason == "unprimed" then
     return t("widgets.dashboard.inflight_backup_unprimed", "Read the board before taking a backup")
+  end
+  if reason == "reading" then
+    return t("widgets.dashboard.inflight_backup_reading",
+      "The board is being read: try again in a moment")
   end
   if reason == "range" then
     return t("widgets.dashboard.inflight_refuse_range",
@@ -1036,7 +1088,7 @@ end
 -- button the pilot pressed. The delta line says its own thing about the same state -- that there
 -- is nothing to compare a flight with -- and the two are deliberately both on the screen: one
 -- answers "why did that button do nothing", the other answers "why is this list empty".
-local function describeBackup(snapshot, t)
+local function describeBackup(snapshot, t, ground)
   local transfer = snapshot.transfer
   if type(transfer) == "table" and transfer.state == "busy" then
     return t("widgets.dashboard.inflight_transfer_busy", "Copying profile")
@@ -1056,6 +1108,25 @@ local function describeBackup(snapshot, t)
     if backup.source ~= nil then
       text = text .. " (" .. t("widgets.dashboard.inflight_backup_from", "from") .. " "
         .. tostring(backup.source) .. ")"
+    end
+    -- and whether that profile is the one being flown, which until now the pilot had to work out
+    -- for himself by holding this line against the profile in the header. It is the same fact the
+    -- restore refuses on, and the photograph of it was a backup line reading "from 1" under a
+    -- header reading "profile 2" with nothing saying the two disagreed.
+    --
+    -- It costs the WALL CLOCK on a narrow zone, and that is the trade rather than an oversight: a
+    -- backup that cannot be put back where the pilot is standing is worth more said than timed,
+    -- and the long form keeps both wherever it fits.
+    local active = tonumber(snapshot.profile)
+    if backup.source ~= nil and active ~= nil and active ~= tonumber(backup.source) then
+      local width = (type(ground) == "table") and ground.width or 0
+      local font = (type(ground) == "table") and ground.font or nil
+      local timed = text
+      if type(backup.clock) == "string" then timed = timed .. " " .. backup.clock end
+      return pickText(
+        timed .. " - " .. t("widgets.dashboard.inflight_backup_not_active", "another profile is active"),
+        text .. " - " .. t("widgets.dashboard.inflight_backup_not_active_short", "not active"),
+        width, font)
     end
     if type(backup.clock) == "string" then text = text .. " " .. backup.clock end
     return text
@@ -1105,16 +1176,28 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
   -- grow between two builds. The PITCH does not depend on this choice (see m.statusLineH), so the
   -- block and the actions under it stand in the same place whichever rung is picked.
   local snapNow = (type(state.inflight) == "table") and state.inflight or nil
+  -- What the ground half has actually achieved, as opposed to what its last run did. Read here,
+  -- once per build, for the reason describePrime gives: neither of them can move without the epoch
+  -- moving with it, and the epoch is what brings this builder back.
+  local ground = {
+    hasRead = (drive ~= nil and Prime ~= nil and type(Prime.hasRead) == "function")
+      and Prime.hasRead(drive) or false,
+    interrupted = (drive ~= nil) and drive.primeInterrupted == true or false,
+    width = lineW, font = m.font
+  }
   local checkText = t("widgets.dashboard.inflight_check", "SETUP") .. ": "
     .. M.describeCheck(M.checkVerdict(widget), t)
   local lineFont = m.small
   if m.font ~= m.small and snapNow ~= nil
     and textFits(checkText, lineW, m.font)
     and textFits(describeSet(snapNow, t), lineW, m.font)
-    and textFits(describePrime(snapNow, t), lineW, m.font)
-    and textFits(describeBackup(snapNow, t), lineW, m.font) then
+    and textFits(describePrime(snapNow, t, ground), lineW, m.font)
+    and textFits(describeBackup(snapNow, t, ground), lineW, m.font) then
     lineFont = m.font
   end
+  -- The rung the block was actually drawn in, so the second clause of the line above is chosen
+  -- against the font it will be measured in rather than against the one that was offered.
+  ground.font = lineFont
 
   -- 1: is this model wired up at all.
   appendLabel(children, m.pad, y, lineW, fitText(checkText, lineW, lineFont), p.text, lineFont, LEFT)
@@ -1139,7 +1222,7 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return "" end
-      return fitText(describePrime(snap, t), lineW, lineFont)
+      return fitText(describePrime(snap, t, ground), lineW, lineFont)
     end
   }
   y = y + m.statusLineH
@@ -1150,7 +1233,7 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return "" end
-      return fitText(describeBackup(snap, t), lineW, lineFont)
+      return fitText(describeBackup(snap, t, ground), lineW, lineFont)
     end
   }
   y = y + m.statusLineH + m.pad
@@ -1241,7 +1324,8 @@ function M.buildPost(children, widget, m, w, h, t, p, interactive)
   local lineW = w - m.pad * 2
   local y = m.chipY
 
-  local list = (drive ~= nil and Prime ~= nil) and Prime.delta(drive) or nil
+  local list, verdict = nil, nil
+  if drive ~= nil and Prime ~= nil then list, verdict = Prime.delta(drive) end
 
   -- The footer first, because everything above it is measured against where it starts. It says the
   -- one thing a pilot has to know standing there: the board has ALREADY written this to its own
@@ -1256,6 +1340,24 @@ function M.buildPost(children, widget, m, w, h, t, p, interactive)
   if interactive then bottom = bottom - m.actionH - m.pad end
 
   if list == nil then
+    -- A comparison REFUSED reads nothing like a comparison that has nothing to measure against,
+    -- and the pilot acts on the two differently: one is answered by switching the profile back or
+    -- taking a fresh undo, the other by reading the board. So the verdict gets the title line the
+    -- list itself would have had, and the profiles it is refusing to compare go under it -- two
+    -- lines, because on a 480-pixel zone the sentence does not fit on one.
+    if verdict == "other_profile" then
+      appendLabel(children, m.pad, y, lineW,
+        t("widgets.dashboard.inflight_delta_no_compare", "NO COMPARISON"), p.accent, m.small, LEFT)
+      local source = (type(drive.backup) == "table") and tonumber(drive.backup.source) or nil
+      local active0 = Prime.activeProfile0(drive)
+      local text = t("widgets.dashboard.inflight_delta_backup_profile", "Backup from profile")
+        .. " " .. (source and tostring(source) or UNKNOWN_VALUE) .. ", "
+        .. t("widgets.dashboard.inflight_delta_active", "active is")
+        .. " " .. (active0 and tostring(active0 + 1) or UNKNOWN_VALUE)
+      appendLabel(children, m.pad, y + m.lineH, lineW, fitText(text, lineW, m.small),
+        p.text, m.small, LEFT)
+      return
+    end
     appendLabel(children, m.pad, y, lineW,
       fitText(t("widgets.dashboard.inflight_delta_unprimed", "Read the values first: nothing to compare against"),
               lineW, m.small),
