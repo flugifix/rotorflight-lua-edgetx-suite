@@ -107,6 +107,7 @@ end
 
 local function queueRpmRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
+  ui.runtime.readComplete = false
   if not MspRuntime or not MotorConfigApi or not FeatureConfigApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -117,6 +118,7 @@ local function queueRpmRead(isAutoReload)
     return false, "msp_queue_unavailable"
   end
 
+  local readValid = type(getSession()) == "table"
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true
@@ -132,6 +134,7 @@ local function queueRpmRead(isAutoReload)
     simulatorResponse = MotorConfigApi.simulatorResponse,
     processReply = function(self, buf)
       local parsedMotor = MotorConfigApi.parse(buf)
+      if type(parsedMotor) ~= "table" then return Common.failPageRead(ui) end
       if parsedMotor then
         ui.config.motor_pwm_protocol = parsedMotor.motor_pwm_protocol or 0
         ui.config.use_dshot_telemetry = parsedMotor.use_dshot_telemetry or 0
@@ -150,6 +153,7 @@ local function queueRpmRead(isAutoReload)
         simulatorResponse = FeatureConfigApi.simulatorResponse,
         processReply = function(self, buf2)
           local parsedFeat = FeatureConfigApi.parse(buf2)
+          if type(parsedFeat) ~= "table" then return Common.failPageRead(ui) end
           if parsedFeat then
             ui.config.enabledFeatures = parsedFeat.enabledFeatures or 0
           end
@@ -174,11 +178,13 @@ local function queueRpmRead(isAutoReload)
           ui.loading = false
           ui.dirty = false
           ui.progress = 100
+          ui.runtime.readComplete = readValid
           if type(ui.runtime.requestRebuild) == "function" then
             ui.runtime.requestRebuild()
           end
         end,
         errorHandler = function()
+          readValid = false
           ui.runtime.readPending = false
           ui.loading = false
           if type(ui.runtime.requestRebuild) == "function" then
@@ -188,6 +194,7 @@ local function queueRpmRead(isAutoReload)
       })
     end,
     errorHandler = function()
+      readValid = false
       ui.runtime.readPending = false
       ui.loading = false
       if type(ui.runtime.requestRebuild) == "function" then
@@ -482,7 +489,12 @@ function M.build(ctx)
   end
 end
 
+function M.canSave()
+  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
+  if not M.canSave() then return false, "loaded_data_missing" end
   local ok, err = queueRpmWrite(ctx and ctx.requestRebuild)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then

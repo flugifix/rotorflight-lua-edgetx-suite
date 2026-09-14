@@ -5,6 +5,8 @@ sidebar_label: Pages
 
 # Configuration pages
 
+For the shared Save action, read [Saving configuration](../reference/saving.md).
+
 One file per page, at the path of the page under `src/rfsuite/app/pages/` with `.md`
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.

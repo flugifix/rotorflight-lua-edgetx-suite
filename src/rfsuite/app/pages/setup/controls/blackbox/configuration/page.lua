@@ -184,6 +184,7 @@ end
 
 local function queueBlackboxRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
+  ui.runtime.readComplete = false
   if not MspRuntime or not BlackboxConfigApi or not FeatureConfigApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -194,6 +195,7 @@ local function queueBlackboxRead(isAutoReload)
     return false, "msp_queue_unavailable"
   end
 
+  local readValid = true
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true
@@ -215,12 +217,14 @@ local function queueBlackboxRead(isAutoReload)
         processReply = function(self, buf)
           if not ui.runtime or not ui.runtime.readPending then return end
           local status = StatusApi.parse(buf)
+          if type(status) ~= "table" then return Common.failPageRead(ui) end
           if status and status.task_delta_time_pid then
             ui.pidDeltaUs = status.task_delta_time_pid
           end
           step2()
         end,
         errorHandler = function()
+          readValid = false
           if not ui.runtime or not ui.runtime.readPending then return end
           step2()
         end
@@ -239,10 +243,12 @@ local function queueBlackboxRead(isAutoReload)
       processReply = function(self, buf)
         if not ui.runtime or not ui.runtime.readPending then return end
         local reply = FeatureConfigApi.parse(buf)
+        if type(reply) ~= "table" then return Common.failPageRead(ui) end
         ui.featureBitmap = (reply and reply.enabledFeatures) or 0
         step3()
       end,
       errorHandler = function()
+        readValid = false
         if not ui.runtime or not ui.runtime.readPending then return end
         step3()
       end
@@ -258,6 +264,7 @@ local function queueBlackboxRead(isAutoReload)
       processReply = function(self, buf)
         if not ui.runtime or not ui.runtime.readPending then return end
         local parsed = BlackboxConfigApi.parse(buf)
+        if type(parsed) ~= "table" then return Common.failPageRead(ui) end
         if parsed then
           ui.cfg.blackbox_supported = parsed.blackbox_supported or 0
           ui.cfg.device = parsed.device or 0
@@ -271,6 +278,7 @@ local function queueBlackboxRead(isAutoReload)
         step4()
       end,
       errorHandler = function()
+        readValid = false
         if not ui.runtime or not ui.runtime.readPending then return end
         step4()
       end
@@ -287,6 +295,7 @@ local function queueBlackboxRead(isAutoReload)
         processReply = function(self, buf)
           if not ui.runtime or not ui.runtime.readPending then return end
           local parsed = DebugConfigApi.parse(buf)
+          if type(parsed) ~= "table" then return Common.failPageRead(ui) end
           if parsed then
             ui.debug.debug_count = parsed.debug_count or 8
             ui.debug.debug_value_count = parsed.debug_value_count or 8
@@ -296,6 +305,7 @@ local function queueBlackboxRead(isAutoReload)
           finalizeRead()
         end,
         errorHandler = function()
+          readValid = false
           if not ui.runtime or not ui.runtime.readPending then return end
           finalizeRead()
         end
@@ -342,6 +352,7 @@ local function queueBlackboxRead(isAutoReload)
     ui.loading = false
     ui.dirty = false
     ui.progress = 100
+    ui.runtime.readComplete = readValid
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
     end
@@ -810,7 +821,12 @@ function M.build(ctx)
   end
 end
 
+function M.canSave()
+  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
+  if not M.canSave() then return false, "loaded_data_missing" end
   local ok, err = queueBlackboxWrite(ctx and ctx.requestRebuild)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then

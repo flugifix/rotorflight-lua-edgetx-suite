@@ -104,6 +104,7 @@ end
 
 local function queueBeeperConfigRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
+  ui.runtime.readComplete = false
   if not MspRuntime or not BeeperConfigApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -114,6 +115,7 @@ local function queueBeeperConfigRead(isAutoReload)
     return false, "msp_queue_unavailable"
   end
 
+  local readValid = true
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true
@@ -128,6 +130,7 @@ local function queueBeeperConfigRead(isAutoReload)
     simulatorResponse = BeeperConfigApi.simulatorResponse,
     processReply = function(self, buf)
       local parsed = BeeperConfigApi.parse(buf)
+      if type(parsed) ~= "table" then return Common.failPageRead(ui) end
       if parsed then
         ui.config.beeper_off_flags = parsed.beeper_off_flags or 0
         ui.config.dshotBeaconTone = parsed.dshotBeaconTone or 1
@@ -149,11 +152,13 @@ local function queueBeeperConfigRead(isAutoReload)
       ui.loading = false
       ui.dirty = false
       ui.progress = 100
+      ui.runtime.readComplete = readValid
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
     end,
     errorHandler = function()
+      readValid = false
       ui.runtime.readPending = false
       ui.loading = false
       if type(ui.runtime.requestRebuild) == "function" then
@@ -390,7 +395,12 @@ function M.build(ctx)
   end
 end
 
+function M.canSave()
+  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
+  if not M.canSave() then return false, "loaded_data_missing" end
   local ok, err = queueBeeperConfigWrite(ctx and ctx.requestRebuild)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then

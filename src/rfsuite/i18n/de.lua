@@ -40,7 +40,9 @@ return {
       done_message = "Einstellungen gespeichert.",
       failed_title = "Nicht gespeichert",
       failed_message = "Der Flugcontroller hat die Einstellungen nicht bestätigt.",
-      eeprom_pending = "Gespeichert, aber der EEPROM-Schreibvorgang steht noch aus:"
+      eeprom_pending = "Gespeichert, aber der EEPROM-Schreibvorgang steht noch aus:",
+      read_required = "Konfiguration zuerst vollständig lesen. Bitte das Laden abwarten oder mit Neu laden erneut versuchen.",
+      page_changed = "Die Seite wurde gewechselt. Bitte zur Seite zurückkehren und erneut speichern."
     },
     closing_rfsuite = "RFSuite wird beendet...",
     model_armed_title = "Modell Armed",
