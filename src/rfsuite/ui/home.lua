@@ -32,6 +32,7 @@ local DisplayProfile = nil
 local manifest = nil
 local MenuRegistry = nil
 local PageRegistry = nil
+local getActivePageModule
 local HelpRegistryFactory = nil
 local HelpRegistry = nil
 local Tiles = nil
@@ -343,6 +344,7 @@ local SAVE_TEXT = {
   failed_title    = "@i18n(app.save.failed_title)@",
   failed_message  = "@i18n(app.save.failed_message)@",
   eeprom_pending  = "@i18n(app.save.eeprom_pending)@",
+  read_required   = "@i18n(app.save.read_required)@",
 }
 
 -- getTime() ticks, at 10 ms each. How long a notice reporting a SUCCESSFUL save stays up
@@ -1614,6 +1616,23 @@ local function onReload()
   })
 end
 
+-- Read-backed pages own the completion condition: a loading overlay disappearing is not
+-- proof that every record needed by their write was received and accepted.
+local function checkPageSaveReady(page)
+  if type(page.canSave) ~= "function" then return true end
+  local ok, ready = pcall(page.canSave)
+  if not ok then
+    reportHookCrash("activePage.canSave", state.activePageMenuId, ready)
+  end
+  if ok and ready == true then return true end
+  reportSaveOutcome({
+    ok = false,
+    title = SAVE_TEXT.failed_title,
+    message = SAVE_TEXT.read_required
+  })
+  return false
+end
+
 local function onSave()
   local armedWarningPref = state.preferences and state.preferences.general and state.preferences.general.save_armed_warning
   if isModelArmed() and not isLocalSettingsPage() then
@@ -1629,12 +1648,21 @@ local function onSave()
 
   local page = getActivePageModule()
   if page and page.onSave then
+    if not checkPageSaveReady(page) then return end
     closeHelpDialogIfOpen()
 
     -- Runs save in the next tick so the save overlay can render first.
     local function queuePageSave()
       state.saveOutcome = nil
       state.pendingSaveAction = function()
+        -- A confirmation and the overlay both yield to later ticks. Recheck the page and
+        -- its read state at dispatch, before either its writes or the host EEPROM commit.
+        if page ~= getActivePageModule() then return end
+        if not checkPageSaveReady(page) then return end
+        if isModelArmed() and not isLocalSettingsPage() then
+          showArmedNotice()
+          return
+        end
         local ok, shouldRebuild = pcall(page.onSave, {
           i18n = state.i18n,
           preferences = state.preferences,

@@ -134,6 +134,7 @@ local function queueBatteryRead()
 	if ui.runtime.readPending then
 		return false
 	end
+	ui.runtime.readComplete = false
 	if not MspRuntime or not BatteryConfigApi or type(MspRuntime.getState) ~= "function" then
 		return false
 	end
@@ -145,6 +146,7 @@ local function queueBatteryRead()
 		return false
 	end
 
+	local readValid = type(getSession()) == "table"
 	ui.runtime.readPending = true
 	ui.loading = true
 	ui.progress = 0
@@ -159,6 +161,7 @@ local function queueBatteryRead()
 			ui.progress = 1
 			if type(session) == "table" then
 				local parsed = BatteryConfigApi.parse and BatteryConfigApi.parse(buf) or nil
+				if type(parsed) ~= "table" then return Common.failPageRead(ui) end
 				if type(parsed) == "table" then
 					session.battery_config = parsed
 					session.batteryConfig = parsed
@@ -167,11 +170,13 @@ local function queueBatteryRead()
 			if not ui.dirty then
 				loadFromSession()
 			end
+			ui.runtime.readComplete = readValid
 			if type(ui.runtime.requestRebuild) == "function" then
 				ui.runtime.requestRebuild()
 			end
 		end,
 		errorHandler = function()
+			readValid = false
 			ui.runtime.readPending = false
 			ui.loading = false
 			ui.progress = 1
@@ -278,7 +283,12 @@ function M.onReload()
 	return false
 end
 
+function M.canSave()
+	return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
+	if not M.canSave() then return false, "loaded_data_missing" end
 	ensureDeps()
 	ensureLoaded()
 

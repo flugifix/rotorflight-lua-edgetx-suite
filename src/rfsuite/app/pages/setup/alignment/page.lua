@@ -260,6 +260,7 @@ end
 
 local function queueAlignmentRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
+  ui.runtime.readComplete = false
   if not MspRuntime or not BoardAlignmentApi or not SensorAlignmentApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -270,6 +271,7 @@ local function queueAlignmentRead(isAutoReload)
     return false, "msp_queue_unavailable"
   end
 
+  local readValid = type(getSession()) == "table"
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true
@@ -285,6 +287,7 @@ local function queueAlignmentRead(isAutoReload)
     simulatorResponse = BoardAlignmentApi.simulatorResponse,
     processReply = function(self, buf)
       local parsed = BoardAlignmentApi.parse(buf)
+      if type(parsed) ~= "table" then return Common.failPageRead(ui) end
       if parsed then
         local roll = toSigned16(parsed.roll_degrees)
         local pitch = toSigned16(parsed.pitch_degrees)
@@ -309,6 +312,7 @@ local function queueAlignmentRead(isAutoReload)
         simulatorResponse = SensorAlignmentApi.simulatorResponse,
         processReply = function(self2, buf2)
           local parsed2 = SensorAlignmentApi.parse(buf2)
+          if type(parsed2) ~= "table" then return Common.failPageRead(ui) end
           if parsed2 then
             ui.display.gyro_1_alignment = math.max(0, math.min(255, tonumber(parsed2.gyro_1_alignment) or 0))
             ui.display.gyro_2_alignment = math.max(0, math.min(255, tonumber(parsed2.gyro_2_alignment) or 0))
@@ -320,11 +324,13 @@ local function queueAlignmentRead(isAutoReload)
           ui.loading = false
           ui.dirty = false
           ui.progress = 100
+          ui.runtime.readComplete = readValid
           if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
             ui.runtime.requestRebuild()
           end
         end,
         errorHandler = function()
+          readValid = false
           if ui.runtime then ui.runtime.readPending = false end
           ui.loading = false
           if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
@@ -334,6 +340,7 @@ local function queueAlignmentRead(isAutoReload)
       })
     end,
     errorHandler = function()
+      readValid = false
       if ui.runtime then ui.runtime.readPending = false end
       ui.loading = false
       if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
@@ -1102,7 +1109,12 @@ function M.build(ctx)
   drawLine3D(children, strutLBTop, strutRBTop, mx, my, scale, cx, sx, cy, sy, cz, sz, mainColor)
 end
 
+function M.canSave()
+  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
+  if not M.canSave() then return false, "loaded_data_missing" end
   local ok, err = queueAlignmentWrite()
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then

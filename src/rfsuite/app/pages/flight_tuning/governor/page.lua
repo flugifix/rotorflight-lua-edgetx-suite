@@ -241,6 +241,7 @@ local function queueGovRead(isAutoReload)
 	if ui.runtime.readPending then
 		return false, "read_pending"
 	end
+	ui.runtime.readComplete = false
 	if not GovernorApi or not GovernorConfigApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
 		return false, "msp_runtime_unavailable"
 	end
@@ -252,6 +253,7 @@ local function queueGovRead(isAutoReload)
 		return false, "msp_queue_unavailable"
 	end
 
+	local readValid = type(getSession()) == "table"
 	ui.runtime.readPending = true
 	if not isAutoReload then
 		ui.loading = true
@@ -267,6 +269,7 @@ local function queueGovRead(isAutoReload)
 		timeout = 5.0,
 		processReply = function(_, buf)
 			local parsedConfig = GovernorConfigApi.parse and GovernorConfigApi.parse(buf) or nil
+			if type(parsedConfig) ~= "table" then return Common.failPageRead(ui) end
 			if type(session) == "table" and type(parsedConfig) == "table" then
 				session.governor_config = parsedConfig
 				session.governorMode = parsedConfig.gov_mode
@@ -281,17 +284,20 @@ local function queueGovRead(isAutoReload)
 					ui.loading = false
 					ui.progress = 1
 					local parsed = GovernorApi.parse and GovernorApi.parse(buf) or nil
+					if type(parsed) ~= "table" then return Common.failPageRead(ui) end
 					if type(session) == "table" and type(parsed) == "table" then
 						session.governor_profile = parsed
 					end
 					if not ui.dirty then
 						loadFromSession()
 					end
+					ui.runtime.readComplete = readValid
 					if type(ui.runtime.requestRebuild) == "function" then
 						ui.runtime.requestRebuild()
 					end
 				end,
 				errorHandler = function()
+					readValid = false
 					ui.runtime.readPending = false
 					ui.loading = false
 					ui.progress = 1
@@ -302,6 +308,7 @@ local function queueGovRead(isAutoReload)
 			})
 		end,
 		errorHandler = function()
+			readValid = false
 			ui.runtime.readPending = false
 			ui.loading = false
 			ui.progress = 1
@@ -557,7 +564,12 @@ function M.onReload()
 	return false
 end
 
+function M.canSave()
+	return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
+	if not M.canSave() then return false, "loaded_data_missing" end
 	ensureDeps()
 	ensureLoaded()
 

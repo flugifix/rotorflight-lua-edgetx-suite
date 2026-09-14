@@ -195,6 +195,7 @@ local function queuePidRead()
 	if ui.runtime.readPending then
 		return false, "read_pending"
 	end
+	ui.runtime.readComplete = false
 	if not PidTuningApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
 		return false, "msp_runtime_unavailable"
 	end
@@ -206,6 +207,7 @@ local function queuePidRead()
 		return false, "msp_queue_unavailable"
 	end
 
+	local readValid = type(getSession()) == "table"
 	ui.runtime.readPending = true
 	ui.loading = true
 	ui.progress = 0
@@ -218,6 +220,7 @@ local function queuePidRead()
 			ui.loading = false
 			ui.progress = 1
 			local parsed = PidTuningApi.parse and PidTuningApi.parse(buf) or nil
+			if type(parsed) ~= "table" then return Common.failPageRead(ui) end
 			if type(session) == "table" and type(parsed) == "table" then
 				session.pid_tuning = parsed
 				session.pidTuning = parsed
@@ -225,11 +228,13 @@ local function queuePidRead()
 			if not ui.dirty then
 				loadFromSession()
 			end
+			ui.runtime.readComplete = readValid
 			if type(ui.runtime.requestRebuild) == "function" then
 				ui.runtime.requestRebuild()
 			end
 		end,
 		errorHandler = function()
+			readValid = false
 			ui.runtime.readPending = false
 			ui.loading = false
 			ui.progress = 1
@@ -481,7 +486,12 @@ function M.onReload()
 	return false
 end
 
+function M.canSave()
+	return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
+	if not M.canSave() then return false, "loaded_data_missing" end
 	ensureDeps()
 	ensureLoaded()
 

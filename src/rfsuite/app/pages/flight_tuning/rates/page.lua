@@ -265,6 +265,7 @@ end
 
 local function queueRcRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
+  ui.runtime.readComplete = false
   if not RcTuningApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -279,6 +280,7 @@ local function queueRcRead(isAutoReload)
     return false, "msp_queue_unavailable"
   end
 
+  local readValid = type(getSession()) == "table"
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true
@@ -294,6 +296,7 @@ local function queueRcRead(isAutoReload)
     timeout = 5.0,
     processReply = function(self, buf)
       local parsed = RcTuningApi.parse(buf)
+      if type(parsed) ~= "table" then return Common.failPageRead(ui) end
       if parsed then
         local session = getSession()
         if session then
@@ -308,6 +311,7 @@ local function queueRcRead(isAutoReload)
           ui.loading = false
           ui.dirty = false
           ui.progress = 100
+          ui.runtime.readComplete = readValid
           
           if not isAutoReload or oldRatesType ~= parsed.rates_type then
             if type(ui.runtime.requestRebuild) == "function" then
@@ -318,6 +322,7 @@ local function queueRcRead(isAutoReload)
       end
     end,
     errorHandler = function()
+      readValid = false
       ui.runtime.readPending = false
       ui.loading = false
       ui.progress = 1
@@ -614,7 +619,12 @@ function M.onReload(ctx)
   return true
 end
 
+function M.canSave()
+  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
+  if not M.canSave() then return false, "loaded_data_missing" end
   local session = getSession()
   if session then
     applyConfigToSession(session)

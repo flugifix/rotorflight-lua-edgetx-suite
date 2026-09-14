@@ -191,6 +191,18 @@ function M.createProfileAwareRuntime(options)
   return runtime
 end
 
+-- A received reply can still be rejected by its parser. Leave the page reloadable, but
+-- never let the defaults left on screen become a write to the flight controller.
+function M.failPageRead(ui)
+  if type(ui.runtime) ~= "table" then return end
+  ui.runtime.readComplete = false
+  ui.runtime.readPending = false
+  ui.loading = false
+  if type(ui.runtime.requestRebuild) == "function" then
+    ui.runtime.requestRebuild()
+  end
+end
+
 -- Shared teardown helper for page modules.
 -- Keeps close/reset behavior consistent across pages.
 function M.resetPageState(ui, opts)

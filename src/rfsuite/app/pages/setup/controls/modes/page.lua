@@ -544,6 +544,8 @@ end
 
 local function startLoad(requestRebuild)
   if ui.runtime.readPending then return false end
+  ui.runtime.readComplete = false
+  local readValid = type(getSession()) == "table"
   ui.runtime.readPending = true
   ui.loading = true
   ui.progress = 0
@@ -566,6 +568,7 @@ local function startLoad(requestRebuild)
   end
 
   local function failed(reason)
+    readValid = false
     ui.runtime.readPending = false
     ui.loading = false
     ui.progress = 0
@@ -578,6 +581,7 @@ local function startLoad(requestRebuild)
     simulatorResponse = BoxIdsApi.simulatorResponse,
     processReply = function(self, buf)
       local parsedObj = BoxIdsApi.parse(buf)
+      if type(parsedObj) ~= "table" then return Common.failPageRead(ui) end
       if parsedObj and parsedObj.box_ids then
         ui.boxIds = parsedObj.box_ids
       end
@@ -590,6 +594,7 @@ local function startLoad(requestRebuild)
         simulatorResponse = BoxNamesApi.simulatorResponse,
         processReply = function(self2, buf2)
           local parsedObj2 = BoxNamesApi.parse(buf2)
+          if type(parsedObj2) ~= "table" then return Common.failPageRead(ui) end
           if parsedObj2 and parsedObj2.box_names then
             ui.boxNames = parsedObj2.box_names
           end
@@ -602,6 +607,7 @@ local function startLoad(requestRebuild)
             simulatorResponse = ModeRangesApi.simulatorResponse,
             processReply = function(self3, buf3)
               local parsedObj3 = ModeRangesApi.parse(buf3)
+              if type(parsedObj3) ~= "table" then return Common.failPageRead(ui) end
               if parsedObj3 and parsedObj3.mode_ranges then
                 ui.modeRanges = parsedObj3.mode_ranges
               end
@@ -614,6 +620,7 @@ local function startLoad(requestRebuild)
                 simulatorResponse = ModeRangesExtraApi.simulatorResponse,
                 processReply = function(self4, buf4)
                   local parsedObj4 = ModeRangesExtraApi.parse(buf4)
+                  if type(parsedObj4) ~= "table" then return Common.failPageRead(ui) end
                   if parsedObj4 and parsedObj4.mode_ranges_extra then
                     ui.modeRangesExtra = parsedObj4.mode_ranges_extra
                   end
@@ -626,6 +633,7 @@ local function startLoad(requestRebuild)
                     simulatorResponse = RxMapApi.simulatorResponse,
                     processReply = function(self5, buf5)
                       local rxParsed = RxMapApi.parse(buf5)
+                      if type(rxParsed) ~= "table" then return Common.failPageRead(ui) end
                       if rxParsed then
                         local session = getSession()
                         if session then
@@ -640,6 +648,7 @@ local function startLoad(requestRebuild)
                       ui.loading = false
                       ui.dirty = false
                       ui.progress = 100
+                      ui.runtime.readComplete = readValid
                       triggerRebuild()
                     end,
                     errorHandler = failed
@@ -1058,7 +1067,12 @@ function M.build(ctx)
   end
 end
 
+function M.canSave()
+  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
+  if not M.canSave() then return false, "loaded_data_missing" end
   local ok, err = queueModesWrite(ctx and ctx.requestRebuild, ctx and ctx.i18n, ctx)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then
