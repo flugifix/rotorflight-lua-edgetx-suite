@@ -93,7 +93,7 @@ local function queueStatsRead(isAutoReload)
     return false, "msp_queue_unavailable"
   end
 
-  local readValid = type(getSession()) == "table"
+  local readValid = true
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true

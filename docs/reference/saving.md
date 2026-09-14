@@ -16,8 +16,10 @@ page writes nor the host EEPROM commit. Wait for loading to finish, or use **Rel
 again. A reload invalidates the previous completion until its own reads succeed.
 
 The check also runs after a save confirmation, immediately before the deferred save executes.
-A page change cancels that pending save, and arming continues to prevent FC writes. Local radio
-settings do not need an FC read and keep their existing save behaviour.
+A page change cancels that pending save and reports **Not saved**, asking you to return to the
+page and save again. Arming continues to prevent FC writes. Both checks of the arming state use
+the configured warning style: the notice, or the transient banner when the armed warning is
+disabled. Local radio settings do not need an FC read and keep their existing save behaviour.
 
 ## Pages covered
 

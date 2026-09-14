@@ -345,6 +345,7 @@ local SAVE_TEXT = {
   failed_message  = "@i18n(app.save.failed_message)@",
   eeprom_pending  = "@i18n(app.save.eeprom_pending)@",
   read_required   = "@i18n(app.save.read_required)@",
+  page_changed    = "@i18n(app.save.page_changed)@",
 }
 
 -- getTime() ticks, at 10 ms each. How long a notice reporting a SUCCESSFUL save stays up
@@ -1633,7 +1634,7 @@ local function checkPageSaveReady(page)
   return false
 end
 
-local function onSave()
+local function blockSaveWhileArmed()
   local armedWarningPref = state.preferences and state.preferences.general and state.preferences.general.save_armed_warning
   if isModelArmed() and not isLocalSettingsPage() then
     if armedWarningPref ~= false then
@@ -1643,8 +1644,14 @@ local function onSave()
       state.armedFeedbackText = ARMED_SAVE_BLOCKED_TEXT
       scheduleBuildUI(false)
     end
-    return
+    return true
   end
+
+  return false
+end
+
+local function onSave()
+  if blockSaveWhileArmed() then return end
 
   local page = getActivePageModule()
   if page and page.onSave then
@@ -1657,12 +1664,16 @@ local function onSave()
       state.pendingSaveAction = function()
         -- A confirmation and the overlay both yield to later ticks. Recheck the page and
         -- its read state at dispatch, before either its writes or the host EEPROM commit.
-        if page ~= getActivePageModule() then return end
-        if not checkPageSaveReady(page) then return end
-        if isModelArmed() and not isLocalSettingsPage() then
-          showArmedNotice()
+        if page ~= getActivePageModule() then
+          reportSaveOutcome({
+            ok = false,
+            title = SAVE_TEXT.failed_title,
+            message = SAVE_TEXT.page_changed
+          })
           return
         end
+        if not checkPageSaveReady(page) then return end
+        if blockSaveWhileArmed() then return end
         local ok, shouldRebuild = pcall(page.onSave, {
           i18n = state.i18n,
           preferences = state.preferences,

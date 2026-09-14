@@ -41,7 +41,8 @@ return {
       failed_title = "Not saved",
       failed_message = "The flight controller did not confirm the settings.",
       eeprom_pending = "Saved, but the EEPROM write is pending:",
-        read_required = "Read the complete configuration before saving. Wait for loading to finish, or use Reload to try again."
+      read_required = "Read the complete configuration before saving. Wait for loading to finish, or use Reload to try again.",
+      page_changed = "The page changed. Return to the page and save again."
     },
     closing_rfsuite = "Closing RFSuite...",
     model_armed_title = "Model Armed",
