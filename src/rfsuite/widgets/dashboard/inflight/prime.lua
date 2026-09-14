@@ -425,7 +425,7 @@ function M.newDerivation(records, map, bankChannel, valueChannel)
     phase = "scan", at = 0,
     usable = {}, skipped = {},
     bands = {}, bandSeen = {}, rows = {}, rowSeen = {},
-    set = {}, placed = 0
+    set = {}, rowValues = {}, placed = 0
   }
 end
 
@@ -520,13 +520,18 @@ function M.deriveStep(work, budget)
         -- first -- so guessing the other one here would only disagree with the flight controller.
         if work.set[bank][row] == nil then
           work.set[bank][row] = math.floor(tonumber(record.adjFunction) or 0)
+          work.rowValues[bank] = work.rowValues[bank] or {}
+          work.rowValues[bank][row] = {
+            up = Functions.windowCode(record.adjRange2),
+            down = Functions.windowCode(record.adjRange1)
+          }
           work.placed = work.placed + 1
         end
       end
     end
     if work.placed == 0 then return true, nil, work.skipped end
     return true, { bands = work.outBands, bankValues = work.bankValues,
-                   set = work.set, placed = work.placed }, work.skipped
+                   set = work.set, rowValues = work.rowValues, placed = work.placed }, work.skipped
   end
 
   return true, nil, work.skipped
@@ -536,6 +541,7 @@ end
 local function applySet(drive, prime, derived, skipped)
   prime.skipped = skipped or {}
   if derived == nil then
+    drive.rowValues = {}
     drive.setSource = "reference"
     logPrime("slot table yielded nothing usable; the documented layout stands")
     return
@@ -544,6 +550,7 @@ local function applySet(drive, prime, derived, skipped)
   drive.bands = derived.bands
   drive.bankValues = derived.bankValues
   drive.set = derived.set
+  drive.rowValues = derived.rowValues
   drive.setSource = "board"
   -- The one place inside a run that must move the epoch. Everything else a prime does travels on
   -- the snapshot and is read by a closure, but the SET is the row list itself -- six names built

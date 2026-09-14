@@ -39,6 +39,11 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 Both steps are written into the slots, so changing one means setting the flight controller up
 again. The board comparison reports that by name.
 
+In **Custom**, plus and minus use the selected slot's own increment and decrement windows.
+The windows need not be mirrored. The overlay reads them on the ground and refuses a step
+whose window is missing or outside the model's standard channel travel; it never substitutes
+a Standard-layout value for an unread Custom slot.
+
 The read-back after a write holds each slot against the record the write was built from, the two
 step sizes among the fields it compares. Where a slot holds the right function on the right
 channels and only the step disagrees — a flight controller that took the record and kept a step of

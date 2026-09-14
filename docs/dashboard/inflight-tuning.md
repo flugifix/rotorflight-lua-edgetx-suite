@@ -41,6 +41,13 @@ Two pages, one for each half:
 Both switches have to be on, and the model's setup check has to pass: a fault refuses the
 interlock rather than letting a press move a parameter other than the one on the screen.
 
+In the **Custom** set layout, the board's adjustment slots determine both the parameter names
+and the channel values used to step them. Plus and minus use the increment and decrement
+windows independently, including when they are not mirrored about channel centre. Touch
+buttons and trims use the same values for the selected bank and row. Read the slot table on
+the ground first: until it has been read, custom steps are refused. A missing or unreachable
+step window is also refused rather than replaced by a standard-layout value.
+
 ## The three surfaces
 
 The interlock switch is the only way in, and what it shows follows the flight rather than the

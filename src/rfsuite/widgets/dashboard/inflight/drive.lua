@@ -145,10 +145,13 @@ function Drive:seedSet()
   local standard = (self.settings and self.settings.set_mode) ~= Setup.SET_MODE_CUSTOM
   self.bands = Functions.REFERENCE_BANDS
   self.bankValues = Functions.REFERENCE_BAND_GV
+  -- An empty custom map refuses steps until the board supplies the matching windows.
+  self.rowValues = nil
   if standard then
     self.set = Functions.STANDARD_SET
     self.setSource = "standard"
   else
+    self.rowValues = {}
     self.set = Functions.REFERENCE_SET
     self.setSource = "reference"
   end
@@ -486,7 +489,7 @@ function Drive:press(row, up)
     self.stepRefusedUntil = now + REFUSAL_TICKS
     return false, "cooling"
   end
-  local code = Functions.rowCode(row or self.row, up)
+  local code = Functions.rowCode(row or self.row, up, self.rowValues, self.bank)
   if code == nil then return false, "range" end
   self.row = row or self.row
   self.pulseCode = code
@@ -998,7 +1001,7 @@ function Drive:pollTrimStep(now)
       -- The same thumb moved to another row without coming up. The magnitude follows the new row
       -- rather than finishing the old one's pulse: the screen has already followed the pilot and
       -- the wire has to agree with the screen.
-      if self.trimHold == true then self.trimCode = Functions.rowCode(row, up) end
+      if self.trimHold == true then self.trimCode = Functions.rowCode(row, up, self.rowValues, self.bank) end
     end
   end
 
@@ -1010,7 +1013,8 @@ function Drive:pollTrimStep(now)
   -- ONE pulse between them, which is the point of having it.
   if now < (self.trimCoolUntil or 0) then return end
 
-  self.trimCode = Functions.rowCode(row, up)
+  self.trimCode = Functions.rowCode(row, up, self.rowValues, self.bank)
+  if self.trimCode == nil then return end
   self.trimPulseUntil = now + self:pulseTicks()
   self.trimHold = true
 end
@@ -1131,11 +1135,11 @@ function Drive:fastTick(now)
   if self.pulseUntil ~= nil then
     want = self.pulseCode or 0
   elseif self.holdRow ~= nil then
-    want = Functions.rowCode(self.holdRow, self.holdUp) or 0
+    want = Functions.rowCode(self.holdRow, self.holdUp, self.rowValues, self.bank) or 0
   elseif self.trimPulseUntil ~= nil then
     want = self.trimCode or 0
   elseif self.trimHold == true and self.trimRow ~= nil then
-    want = Functions.rowCode(self.trimRow, self.trimUp) or 0
+    want = Functions.rowCode(self.trimRow, self.trimUp, self.rowValues, self.bank) or 0
   end
 
   if want ~= self.written then
