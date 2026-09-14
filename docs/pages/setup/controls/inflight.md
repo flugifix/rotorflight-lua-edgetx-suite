@@ -44,6 +44,11 @@ The windows need not be mirrored. The overlay reads them on the ground and refus
 whose window is missing or outside the model's standard channel travel; it never substitutes
 a Standard-layout value for an unread Custom slot.
 
+A refused custom step shows **Custom layout not read** until the ground read completes, or
+**Row cannot be stepped** when the selected window is unusable. An empty slot read shows
+**No usable Custom rows** and clears the old row names. Moving a held trim to an unusable row
+ends the hold; a pulse already started finishes before returning to neutral.
+
 The read-back after a write holds each slot against the record the write was built from, the two
 step sizes among the fields it compares. Where a slot holds the right function on the right
 channels and only the step disagrees — a flight controller that took the record and kept a step of

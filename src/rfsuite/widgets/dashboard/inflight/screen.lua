@@ -686,8 +686,12 @@ local function appendActive(children, widget, m, t, p)
   -- cool-down: the flight controller cannot tell two steps that close apart, so the drive refuses
   -- the second -- correctly, silently, and indistinguishably from a control that is not wired up.
   -- Read through the clock like the banner, so no rebuild puts it up and none takes it down.
-  local refusalText = t("widgets.dashboard.inflight_too_fast", "too fast - one step at a time")
   local hintW = m.rowX - m.leftX - m.pad
+  local refusalText = {
+    cooling = fitText(t("widgets.dashboard.inflight_too_fast", "too fast - one step at a time"), hintW, m.small),
+    unread = fitText(t("widgets.dashboard.inflight_custom_unread", "Custom layout not read"), hintW, m.small),
+    range = fitText(t("widgets.dashboard.inflight_custom_range", "Row cannot be stepped"), hintW, m.small)
+  }
   children[#children + 1] = {
     type = "label", x = m.leftX, y = m.sideY + m.lineH * 2, w = hintW, align = LEFT, font = m.small,
     color = p.warn,
@@ -698,7 +702,7 @@ local function appendActive(children, widget, m, t, p)
       if until_ == nil then return "" end
       local clock = getTime
       if type(clock) ~= "function" or clock() >= until_ then return "" end
-      return fitText(refusalText, hintW, m.small)
+      return refusalText[snap.stepRefusedReason] or refusalText.cooling
     end
   }
 end
@@ -1039,6 +1043,10 @@ local function describeSet(snapshot, t)
   local text
   if snapshot.setSource == "board" then
     text = t("widgets.dashboard.inflight_set_board", "Set from the board")
+  elseif snapshot.setSource == "unread" then
+    text = t("widgets.dashboard.inflight_custom_unread", "Custom layout not read")
+  elseif snapshot.setSource == "unavailable" then
+    text = t("widgets.dashboard.inflight_custom_empty", "No usable Custom rows")
   else
     text = t("widgets.dashboard.inflight_set_reference", "Documented layout")
   end

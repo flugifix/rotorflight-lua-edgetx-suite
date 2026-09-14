@@ -153,7 +153,7 @@ function Drive:seedSet()
   else
     self.rowValues = {}
     self.set = Functions.REFERENCE_SET
-    self.setSource = "reference"
+    self.setSource = "unread"
   end
   self.compare = nil
 end
@@ -294,6 +294,13 @@ end
 -- How long a refused press is said on the screen, in radio ticks. Long enough to read at arm's
 -- length, short enough to be gone before the next one.
 local REFUSAL_TICKS = 80
+
+--- Publish a step refusal through the snapshot; button callbacks do not consume return reasons.
+function Drive:refuseStep(reason, now)
+  if reason == "range" and self.setSource == "unread" then reason = "unread" end
+  self.stepRefusedReason = reason
+  self.stepRefusedUntil = now + REFUSAL_TICKS
+end
 
 function Drive:pulseTicks()
   local ms = tonumber(self.settings and self.settings.pulse_ms) or M.DEFAULTS.pulse_ms
@@ -486,11 +493,15 @@ function Drive:press(row, up)
     -- tap inside the cool-down writes nothing, logs nothing and looks exactly like a control that
     -- is not wired up. The cool-down is right -- the board cannot tell two steps that close apart
     -- -- so what was missing is the sentence, not the step.
-    self.stepRefusedUntil = now + REFUSAL_TICKS
+    self:refuseStep("cooling", now)
     return false, "cooling"
   end
   local code = Functions.rowCode(row or self.row, up, self.rowValues, self.bank)
-  if code == nil then return false, "range" end
+  if code == nil then
+    self:refuseStep("range", now)
+    return false, "range"
+  end
+  self.stepRefusedUntil, self.stepRefusedReason = nil, nil
   self.row = row or self.row
   self.pulseCode = code
   self.pulseUntil = now + self:pulseTicks()
@@ -529,6 +540,7 @@ end
 -- so clearing it on the landing and writing it straight back on the next pass would be a pair of
 -- model writes that cancel out.
 function Drive:cleanup(force, keepBank)
+  self.stepRefusedUntil, self.stepRefusedReason = nil, nil
   local settings = self.settings
   local fm = self.writtenFm
   if fm == nil then fm = self.radio.flightMode() end
@@ -1001,7 +1013,18 @@ function Drive:pollTrimStep(now)
       -- The same thumb moved to another row without coming up. The magnitude follows the new row
       -- rather than finishing the old one's pulse: the screen has already followed the pilot and
       -- the wire has to agree with the screen.
-      if self.trimHold == true then self.trimCode = Functions.rowCode(row, up, self.rowValues, self.bank) end
+      if self.trimHold == true then
+        local code = Functions.rowCode(row, up, self.rowValues, self.bank)
+        if code == nil then
+          -- End the hold, but let an already-started pulse finish with its original value.
+          self.trimHold = false
+          self.trimCoolUntil = now + self:pulseTicks()
+          self:refuseStep("range", now)
+          return
+        end
+        self.trimCode = code
+        self.stepRefusedUntil, self.stepRefusedReason = nil, nil
+      end
     end
   end
 
@@ -1014,7 +1037,12 @@ function Drive:pollTrimStep(now)
   if now < (self.trimCoolUntil or 0) then return end
 
   self.trimCode = Functions.rowCode(row, up, self.rowValues, self.bank)
-  if self.trimCode == nil then return end
+  if self.trimCode == nil then
+    self.trimCoolUntil = now + self:pulseTicks()
+    self:refuseStep("range", now)
+    return
+  end
+  self.stepRefusedUntil, self.stepRefusedReason = nil, nil
   self.trimPulseUntil = now + self:pulseTicks()
   self.trimHold = true
 end
@@ -1528,6 +1556,7 @@ local function publish(widget, drive)
     and snapshot.phase == drive.phase
     and snapshot.primePhase == primePhase and snapshot.primeDone == primeDone
     and snapshot.stepRefusedUntil == drive.stepRefusedUntil
+    and snapshot.stepRefusedReason == drive.stepRefusedReason
     and snapshot.profileBannerUntil == drive.profileBannerUntil then
     return
   end
@@ -1661,6 +1690,7 @@ local function publish(widget, drive)
     -- When a refused press stops being said on screen. Read through a closure against the clock,
     -- the way the profile banner is, so nothing rebuilds to put it up or to take it down.
     stepRefusedUntil = drive.stepRefusedUntil,
+    stepRefusedReason = drive.stepRefusedReason,
     -- When the ground half last finished reading the board, as the radio's own wall clock.
     readAt = drive.readAt,
     activeTrim = activeTrim,

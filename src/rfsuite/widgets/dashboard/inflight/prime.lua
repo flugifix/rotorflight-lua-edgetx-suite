@@ -542,8 +542,10 @@ local function applySet(drive, prime, derived, skipped)
   prime.skipped = skipped or {}
   if derived == nil then
     drive.rowValues = {}
-    drive.setSource = "reference"
-    logPrime("slot table yielded nothing usable; the documented layout stands")
+    drive.set = {}
+    drive.setSource = "unavailable"
+    bump(drive)
+    logPrime("slot table yielded nothing usable; custom steps are unavailable")
     return
   end
 

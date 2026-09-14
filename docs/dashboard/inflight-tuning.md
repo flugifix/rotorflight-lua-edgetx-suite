@@ -48,6 +48,11 @@ buttons and trims use the same values for the selected bank and row. Read the sl
 the ground first: until it has been read, custom steps are refused. A missing or unreachable
 step window is also refused rather than replaced by a standard-layout value.
 
+A refused custom step shows **Custom layout not read** until the ground read completes, or
+**Row cannot be stepped** when the selected window is unusable. An empty slot read shows
+**No usable Custom rows** and clears the old row names. Moving a held trim to an unusable row
+ends the hold; a pulse already started finishes before returning to neutral.
+
 ## The three surfaces
 
 The interlock switch is the only way in, and what it shows follows the flight rather than the
