@@ -29,7 +29,6 @@ function M.wakeup(args)
   if type(session) ~= "table" then return end
 
   if requestSent then return end
-  requestSent = true
 
   -- MSP battery_config API laden
   if not batteryConfigApi then
@@ -39,13 +38,18 @@ function M.wakeup(args)
     MspRuntime = loadModule("tasks/msp/runtime.lua") or false
   end
   local msp = MspRuntime or nil
-  if not msp or not batteryConfigApi then return end
+  if not msp or not batteryConfigApi then
+    done = true
+    return
+  end
 
   local mspState = type(msp.getState) == "function" and msp.getState()
   if not mspState or not mspState.queue then
     done = true
     return
   end
+
+  requestSent = true
 
   if type(Log) == "table" and type(Log.emit) == "function" then
     pcall(Log.emit, "rfsuite.tasks.battery", "MSP request for battery_config (cmd=" .. tostring(batteryConfigApi.command) .. ") via queue", "debug")
@@ -68,7 +72,14 @@ function M.wakeup(args)
         pcall(Log.emit, "rfsuite.tasks.battery", "battery_config received", "debug")
       end
     end,
-    errorHandler = function()
+    errorHandler = function(msg, reason)
+      -- "cleared" is the queue dropping this request, not the flight controller refusing it:
+      -- nothing was sent, so the request is still owed. Leaving the task incomplete with its latch
+      -- open is what lets the runner ask for it again on a later pass.
+      if reason == "cleared" then
+        requestSent = false
+        return
+      end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.battery", "battery_config read failed", "warn") end
     end

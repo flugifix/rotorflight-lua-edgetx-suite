@@ -72,7 +72,14 @@ function M.wakeup(args)
       end
       done = true
     end,
-    errorHandler = function()
+    errorHandler = function(msg, reason)
+      -- "cleared" is the queue dropping this request, not the flight controller refusing it:
+      -- nothing was sent, so the request is still owed. Leaving the task incomplete with its latch
+      -- open is what lets the runner ask for it again on a later pass.
+      if reason == "cleared" then
+        requestSent = false
+        return
+      end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
         pcall(Log.emit, "rfsuite.tasks.esc_sensor_config", "esc_sensor_config read failed", "warn")
