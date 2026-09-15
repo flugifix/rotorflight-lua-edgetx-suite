@@ -20,75 +20,204 @@ local t = nil
 
 M.eepromWrite = true
 
+-- Every cell carries the limits of its own rate type, in the RAW units the MSP field uses.
+-- Two sources, because the two disagree and each is binding somewhere:
+--   * The flight controller trims roll, pitch and yaw to its own per-type table at the EEPROM
+--     write every Save performs -- validateAndFixRatesSettings, src/main/config/config.c,
+--     against ratesSettingLimits in src/main/fc/rc_rates.c -- so a cell above that is a value
+--     the pilot reads back changed after a save. Its loop runs FD_ROLL..FD_YAW and stops short
+--     of FD_COLL, so the collective row is not trimmed and that bound has to come from
+--     somewhere else.
+--   * The Rotorflight Configurator applies its own limits to the same fields
+--     (src/js/tabs/rates.js, tab.initRatesSystem), which is what a pilot sees on the other tool.
+-- Roll, pitch and yaw take the narrower of the two; the collective takes the Configurator's.
+-- Both are converted out of display units with this cell's own scale and mult -- raw = display
+-- * scale / mult, the arithmetic parseValue below performs. Stating them here is what keeps a
+-- cell inside the single byte the field occupies on the wire (tasks/msp/api/rc_tuning.lua,
+-- FIELD_SPEC); without them the cell falls back to 0..1000. Rate type 0 drives nothing and its
+-- cells are read-only, so they carry the byte's own range rather than a limit taken from a
+-- curve that is never applied.
 local RATE_TABLES = {
   [0] = { -- None
     nameKey = "none",
     cols = { "rc_rate", "rate", "expo" },
     fields = {
-      { { apikey="rcRates_1", scale=1 }, { apikey="rates_1", scale=1 }, { apikey="rcExpo_1", scale=1 } },
-      { { apikey="rcRates_2", scale=1 }, { apikey="rates_2", scale=1 }, { apikey="rcExpo_2", scale=1 } },
-      { { apikey="rcRates_3", scale=1 }, { apikey="rates_3", scale=1 }, { apikey="rcExpo_3", scale=1 } },
-      { { apikey="rcRates_4", scale=1 }, { apikey="rates_4", scale=1 }, { apikey="rcExpo_4", scale=1 } }
+      {
+        { apikey="rcRates_1", scale=1, min=0, max=255 },
+        { apikey="rates_1", scale=1, min=0, max=255 },
+        { apikey="rcExpo_1", scale=1, min=0, max=255 }
+      },
+      {
+        { apikey="rcRates_2", scale=1, min=0, max=255 },
+        { apikey="rates_2", scale=1, min=0, max=255 },
+        { apikey="rcExpo_2", scale=1, min=0, max=255 }
+      },
+      {
+        { apikey="rcRates_3", scale=1, min=0, max=255 },
+        { apikey="rates_3", scale=1, min=0, max=255 },
+        { apikey="rcExpo_3", scale=1, min=0, max=255 }
+      },
+      {
+        { apikey="rcRates_4", scale=1, min=0, max=255 },
+        { apikey="rates_4", scale=1, min=0, max=255 },
+        { apikey="rcExpo_4", scale=1, min=0, max=255 }
+      }
     }
   },
   [1] = { -- Betaflight
     nameKey = "betaflight",
     cols = { "rc_rate", "superrate", "expo" },
     fields = {
-      { { apikey="rcRates_1", scale=100 }, { apikey="rates_1", scale=100 }, { apikey="rcExpo_1", scale=100 } },
-      { { apikey="rcRates_2", scale=100 }, { apikey="rates_2", scale=100 }, { apikey="rcExpo_2", scale=100 } },
-      { { apikey="rcRates_3", scale=100 }, { apikey="rates_3", scale=100 }, { apikey="rcExpo_3", scale=100 } },
-      { { apikey="rcRates_4", scale=100 }, { apikey="rates_4", scale=100 }, { apikey="rcExpo_4", scale=100 } }
+      {
+        { apikey="rcRates_1", scale=100, min=1, max=255 },
+        { apikey="rates_1", scale=100, min=0, max=90 },
+        { apikey="rcExpo_1", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_2", scale=100, min=1, max=255 },
+        { apikey="rates_2", scale=100, min=0, max=90 },
+        { apikey="rcExpo_2", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_3", scale=100, min=1, max=255 },
+        { apikey="rates_3", scale=100, min=0, max=90 },
+        { apikey="rcExpo_3", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_4", scale=100, min=1, max=220 },
+        { apikey="rates_4", scale=100, min=0, max=99 },
+        { apikey="rcExpo_4", scale=100, min=0, max=100 }
+      }
     }
   },
   [2] = { -- Raceflight
     nameKey = "raceflight",
     cols = { "rc_rate", "acroplus", "expo" },
     fields = {
-      { { apikey="rcRates_1", scale=1, mult=10 }, { apikey="rates_1", scale=1 }, { apikey="rcExpo_1", scale=1 } },
-      { { apikey="rcRates_2", scale=1, mult=10 }, { apikey="rates_2", scale=1 }, { apikey="rcExpo_2", scale=1 } },
-      { { apikey="rcRates_3", scale=1, mult=10 }, { apikey="rates_3", scale=1 }, { apikey="rcExpo_3", scale=1 } },
-      { { apikey="rcRates_4", scale=4 }, { apikey="rates_4", scale=1 }, { apikey="rcExpo_4", scale=1 } }
+      {
+        { apikey="rcRates_1", scale=1, mult=10, min=1, max=100 },
+        { apikey="rates_1", scale=1, min=0, max=255 },
+        { apikey="rcExpo_1", scale=1, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_2", scale=1, mult=10, min=1, max=100 },
+        { apikey="rates_2", scale=1, min=0, max=255 },
+        { apikey="rcExpo_2", scale=1, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_3", scale=1, mult=10, min=1, max=100 },
+        { apikey="rates_3", scale=1, min=0, max=255 },
+        { apikey="rcExpo_3", scale=1, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_4", scale=4, min=0, max=100 },
+        { apikey="rates_4", scale=1, min=0, max=255 },
+        { apikey="rcExpo_4", scale=1, min=0, max=100 }
+      }
     }
   },
   [3] = { -- KISS
     nameKey = "kiss",
     cols = { "rc_rate", "rate", "rc_curve" },
     fields = {
-      { { apikey="rcRates_1", scale=100 }, { apikey="rates_1", scale=100 }, { apikey="rcExpo_1", scale=100 } },
-      { { apikey="rcRates_2", scale=100 }, { apikey="rates_2", scale=100 }, { apikey="rcExpo_2", scale=100 } },
-      { { apikey="rcRates_3", scale=100 }, { apikey="rates_3", scale=100 }, { apikey="rcExpo_3", scale=100 } },
-      { { apikey="rcRates_4", scale=100 }, { apikey="rates_4", scale=100 }, { apikey="rcExpo_4", scale=100 } }
+      {
+        { apikey="rcRates_1", scale=100, min=1, max=255 },
+        { apikey="rates_1", scale=100, min=0, max=90 },
+        { apikey="rcExpo_1", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_2", scale=100, min=1, max=255 },
+        { apikey="rates_2", scale=100, min=0, max=90 },
+        { apikey="rcExpo_2", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_3", scale=100, min=1, max=255 },
+        { apikey="rates_3", scale=100, min=0, max=90 },
+        { apikey="rcExpo_3", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_4", scale=100, min=1, max=255 },
+        { apikey="rates_4", scale=100, min=0, max=99 },
+        { apikey="rcExpo_4", scale=100, min=0, max=100 }
+      }
     }
   },
   [4] = { -- Actual
     nameKey = "actual",
     cols = { "center_sensitivity", "max_rate", "expo" },
     fields = {
-      { { apikey="rcRates_1", scale=1, mult=10 }, { apikey="rates_1", scale=1, mult=10 }, { apikey="rcExpo_1", scale=100 } },
-      { { apikey="rcRates_2", scale=1, mult=10 }, { apikey="rates_2", scale=1, mult=10 }, { apikey="rcExpo_2", scale=100 } },
-      { { apikey="rcRates_3", scale=1, mult=10 }, { apikey="rates_3", scale=1, mult=10 }, { apikey="rcExpo_3", scale=100 } },
-      { { apikey="rcRates_4", scale=4, step=2 }, { apikey="rates_4", scale=4, step=2 }, { apikey="rcExpo_4", scale=100 } }
+      {
+        { apikey="rcRates_1", scale=1, mult=10, min=1, max=100 },
+        { apikey="rates_1", scale=1, mult=10, min=0, max=100 },
+        { apikey="rcExpo_1", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_2", scale=1, mult=10, min=1, max=100 },
+        { apikey="rates_2", scale=1, mult=10, min=0, max=100 },
+        { apikey="rcExpo_2", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_3", scale=1, mult=10, min=1, max=100 },
+        { apikey="rates_3", scale=1, mult=10, min=0, max=100 },
+        { apikey="rcExpo_3", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_4", scale=4, step=2, min=0, max=100 },
+        { apikey="rates_4", scale=4, step=2, min=0, max=100 },
+        { apikey="rcExpo_4", scale=100, min=0, max=100 }
+      }
     }
   },
   [5] = { -- Quick
     nameKey = "quick",
     cols = { "rc_rate", "max_rate", "expo" },
     fields = {
-      { { apikey="rcRates_1", scale=100 }, { apikey="rates_1", scale=1, mult=10 }, { apikey="rcExpo_1", scale=100 } },
-      { { apikey="rcRates_2", scale=100 }, { apikey="rates_2", scale=1, mult=10 }, { apikey="rcExpo_2", scale=100 } },
-      { { apikey="rcRates_3", scale=100 }, { apikey="rates_3", scale=1, mult=10 }, { apikey="rcExpo_3", scale=100 } },
-      { { apikey="rcRates_4", scale=100 }, { apikey="rates_4", scale=1, mult=4.807 }, { apikey="rcExpo_4", scale=100 } }
+      {
+        { apikey="rcRates_1", scale=100, min=1, max=255 },
+        { apikey="rates_1", scale=1, mult=10, min=0, max=100 },
+        { apikey="rcExpo_1", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_2", scale=100, min=1, max=255 },
+        { apikey="rates_2", scale=1, mult=10, min=0, max=100 },
+        { apikey="rcExpo_2", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_3", scale=100, min=1, max=255 },
+        { apikey="rates_3", scale=1, mult=10, min=0, max=100 },
+        { apikey="rcExpo_3", scale=100, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_4", scale=100, min=1, max=255 },
+        { apikey="rates_4", scale=1, mult=4.807, min=0, max=208 },
+        { apikey="rcExpo_4", scale=100, min=0, max=100 }
+      }
     }
   },
   [6] = { -- Rotorflight
     nameKey = "rotorflight",
     cols = { "rate", "shape", "expo" },
     fields = {
-      { { apikey="rcRates_1", scale=1, mult=5 }, { apikey="rates_1", scale=1 }, { apikey="rcExpo_1", scale=1 } },
-      { { apikey="rcRates_2", scale=1, mult=5 }, { apikey="rates_2", scale=1 }, { apikey="rcExpo_2", scale=1 } },
-      { { apikey="rcRates_3", scale=1, mult=5 }, { apikey="rates_3", scale=1 }, { apikey="rcExpo_3", scale=1 } },
-      { { apikey="rcRates_4", scale=40, mult=5, step=2 }, { apikey="rates_4", scale=1 }, { apikey="rcExpo_4", scale=1 } }
+      {
+        { apikey="rcRates_1", scale=1, mult=5, min=2, max=200 },
+        { apikey="rates_1", scale=1, min=0, max=100 },
+        { apikey="rcExpo_1", scale=1, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_2", scale=1, mult=5, min=2, max=200 },
+        { apikey="rates_2", scale=1, min=0, max=100 },
+        { apikey="rcExpo_2", scale=1, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_3", scale=1, mult=5, min=2, max=200 },
+        { apikey="rates_3", scale=1, min=0, max=100 },
+        { apikey="rcExpo_3", scale=1, min=0, max=100 }
+      },
+      {
+        { apikey="rcRates_4", scale=40, mult=5, step=2, min=0, max=200 },
+        { apikey="rates_4", scale=1, min=0, max=127 },
+        { apikey="rcExpo_4", scale=1, min=0, max=100 }
+      }
     }
   }
 }
