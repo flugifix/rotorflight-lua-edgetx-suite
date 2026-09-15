@@ -319,7 +319,23 @@ function Events.wakeup()
 
     -- Defer telemetry_bg until onconnect tasks are done to avoid blocking the Lua VM during startup
     -- Also run telemetry_bg when armed so CRSF custom frames are parsed to keep telemetry active and update disarm state
-    if state.linkStableUp and (not onconnectActive or armed) then
+    --
+    -- The deferral is a WIDGET one, and the third term is what keeps it from reaching the tool.
+    -- What it protects is the per-call instruction ceiling the firmware puts on a widget:
+    -- lua_widget.cpp arms lsWidgets with a count hook of 20000/100 before every call, and
+    -- standalone_lua.cpp creates lsStandalone with no count hook at all, so a tool call is not
+    -- billed against that ceiling and has nothing to be deferred out of.
+    --
+    -- What a tool does have instead is a monopoly on the interpreter. Starting a standalone
+    -- script sets luaState = INTERPRETER_PAUSED ("Pause function and mixer scripts"), and
+    -- interface.cpp runs nothing in that state -- so SCRIPTS/FUNCTIONS/rfsbg.lua, which decodes
+    -- the same custom telemetry frames for the rest of the radio, is stopped for as long as the
+    -- tool is open. This drain is then the only decoder there is, and while it is deferred the
+    -- tool publishes no sensor from frame 0x88 at all. The one that costs something is ARM:
+    -- tasks/msp/runtime.lua reads the armed state off that sensor and empties the MSP queue on
+    -- it, so with the drain deferred the gate cannot fire for the whole connect sequence and the
+    -- sequence keeps sending -- including MSP_SET_RTC -- to a flight controller that has armed.
+    if state.linkStableUp and (not onconnectActive or armed or context == "tool") then
       local telemetry_bg = ensureEventRunner("telemetry_bg")
       if telemetry_bg and type(telemetry_bg.wakeup) == "function" then
         local ok, err = pcall(telemetry_bg.wakeup)

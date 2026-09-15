@@ -45,7 +45,10 @@ and nothing needs to be configured.
   second decoder receives nothing at all. Where the suite sees such an entry on the model it
   installs nothing and writes the reason to the log; the dashboard then decodes for itself.
 - **Opening a tool pauses it**, together with every other permanent script, for as long as the
-  tool is open. The dashboard notices within a second and takes the decoding back.
+  tool is open. Whoever is running then decodes for itself: the dashboard notices within a
+  second and takes the decoding back, and the tool decodes from its own first pass -- including
+  while it is still reading the flight controller's configuration, which is when it has to be
+  able to see the model arm.
 - **It cannot be seen from the suite if it is configured as a global function** rather than on
   the model. The radio offers no way for a script to read the global special functions, so a
   background decoder installed there is invisible to the check above.
