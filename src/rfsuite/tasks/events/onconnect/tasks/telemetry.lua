@@ -88,7 +88,14 @@ function M.wakeup()
       done = true
       pending = false
     end,
-    errorHandler = function()
+    errorHandler = function(msg, reason)
+      -- "cleared" is the queue dropping this request, not the flight controller refusing it:
+      -- nothing was sent, so the request is still owed. Leaving the task incomplete with its latch
+      -- open is what lets the runner ask for it again on a later pass.
+      if reason == "cleared" then
+        pending = false
+        return
+      end
       log("errorHandler: MSP 73 failed", "warn")
       done = true
       pending = false

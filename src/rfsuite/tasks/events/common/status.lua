@@ -85,7 +85,14 @@ function M.wakeup(args)
         pcall(Log.emit, "rfsuite.tasks.status", "status received: PID profile=" .. tostring(parsed and parsed.current_pid_profile_index) .. ", Rate profile=" .. tostring(parsed and parsed.current_control_rate_profile_index), "debug")
       end
     end,
-    errorHandler = function()
+    errorHandler = function(msg, reason)
+      -- "cleared" is the queue dropping this request, not the flight controller refusing it:
+      -- nothing was sent, so the request is still owed. Leaving the task incomplete with its latch
+      -- open is what lets the runner ask for it again on a later pass.
+      if reason == "cleared" then
+        requestSent = false
+        return
+      end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks.status", "status read failed", "warn") end
     end
