@@ -248,6 +248,12 @@ function M.new(category)
         task.nextEligibleAt = now + backoff
         task.initialized = false
         task.startTime = nil
+        -- The module instance goes with the attempt, or the next one sends nothing. Every task
+        -- latches its request in a module-local flag and returns on its first line while that
+        -- flag is set, so a re-queue that kept the instance re-ran a wakeup that does nothing
+        -- and the line below announced work that never happened. Releasing it with its reset is
+        -- what the complete and the give-up branches around this one already do.
+        releaseTaskModule(task, true)
         if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, string.format("Task '%s' timed out. Re-queueing (attempt %d/%d) in %.1fs.", task.name, task.attempts, MAX_RETRIES, backoff), "info") end
       else
         task.failed = true

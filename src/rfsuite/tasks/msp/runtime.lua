@@ -478,7 +478,17 @@ local function enqueueVersionReads(now)
       publish()
     end,
     errorHandler = function(msg, reason)
-      if reason == "cleared" then return end
+      if reason == "cleared" then
+        -- The request was taken off the queue, not refused by the board: nothing was sent, so
+        -- there is no failure to count and no error to report. The read itself is still owed.
+        -- enqueueVersionReads() clears this flag before it queues and consults nothing else, so
+        -- without this line the handshake is over for the rest of the Lua state. It belongs
+        -- here rather than beside any one caller of Queue:clear, because every caller has the
+        -- same effect on this read: the armed gate in tick(), a developer page clearing the
+        -- whole queue, and the unsupported-API path in the reply handler above.
+        state.pendingVersionRead = true
+        return
+      end
       state.consecutiveApiVersionFailures = (state.consecutiveApiVersionFailures or 0) + 1
       local backoff = math.min(30, 2 + state.consecutiveApiVersionFailures * 2)
       state.requestBackoffUntil = nowSeconds() + backoff
@@ -551,7 +561,12 @@ local function enqueueUidRead(now)
       publish()
     end,
     errorHandler = function(msg, reason)
-      if reason == "cleared" then return end
+      if reason == "cleared" then
+        -- As for the API version read above: dropped rather than answered, so the read is still
+        -- owed and the flag enqueueUidRead() gates on has to say so.
+        state.pendingUidRead = true
+        return
+      end
       state.consecutiveUidFailures = (state.consecutiveUidFailures or 0) + 1
       local backoff = math.min(30, 2 + state.consecutiveUidFailures * 2)
       state.requestBackoffUntil = nowSeconds() + backoff
