@@ -73,7 +73,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | ESC & Motors → RPM | `setup/esc_motors/rpm.md` | yes | read-only while armed | to write |
 | ESC & Motors → ESC Tools → AM32 | `setup/esc_motors/esc_tools/escmfg/am32.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
 | ESC & Motors → ESC Tools → BLHeli_S | `setup/esc_motors/esc_tools/escmfg/blheli_s.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
-| ESC & Motors → ESC Tools → Bluejay | `setup/esc_motors/esc_tools/escmfg/bluejay.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
+| ESC & Motors → ESC Tools → Bluejay | [setup/esc_motors/esc_tools/escmfg/bluejay.md](setup/esc_motors/esc_tools/escmfg/bluejay.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → Flyrotor | `setup/esc_motors/esc_tools/escmfg/flrtr.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
 | ESC & Motors → ESC Tools → Hobbywing V5 | `setup/esc_motors/esc_tools/escmfg/hw5.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
 | ESC & Motors → ESC Tools → OMP | `setup/esc_motors/esc_tools/escmfg/omp.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
