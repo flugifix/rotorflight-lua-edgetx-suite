@@ -45,13 +45,15 @@ In the **Custom** set layout, the board's adjustment slots determine both the pa
 and the channel values used to step them. Plus and minus use the increment and decrement
 windows independently, including when they are not mirrored about channel centre. Touch
 buttons and trims use the same values for the selected bank and row. Read the slot table on
-the ground first: until it has been read, custom steps are refused. A missing or unreachable
-step window is also refused rather than replaced by a standard-layout value.
+the ground first: until it has been read, custom steps are refused. A step window that is
+missing, unreachable, outside the range the flight controller reads, or shared with another
+slot of the same bank is refused rather than replaced by a standard-layout value, so one press
+never steps two parameters.
 
 A refused custom step shows **Custom layout not read** until the ground read completes, or
 **Row cannot be stepped** when the selected window is unusable. An empty slot read shows
 **No usable Custom rows** and clears the old row names. Moving a held trim to an unusable row
-ends the hold; a pulse already started finishes before returning to neutral.
+ends the hold and returns the channel to neutral at once.
 
 ## The three surfaces
 

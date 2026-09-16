@@ -298,6 +298,7 @@ local REFUSAL_TICKS = 80
 --- Publish a step refusal through the snapshot; button callbacks do not consume return reasons.
 function Drive:refuseStep(reason, now)
   if reason == "range" and self.setSource == "unread" then reason = "unread" end
+  if reason == "range" and self.setSource == "unavailable" then reason = "empty" end
   self.stepRefusedReason = reason
   self.stepRefusedUntil = now + REFUSAL_TICKS
 end
@@ -1016,8 +1017,12 @@ function Drive:pollTrimStep(now)
       if self.trimHold == true then
         local code = Functions.rowCode(row, up, self.rowValues, self.bank)
         if code == nil then
-          -- End the hold, but let an already-started pulse finish with its original value.
+          -- The new row cannot be stepped, so the wire has nothing to say for it. The hold ends
+          -- and the pulse with it: as on a move to a usable row, the old row's value is not kept
+          -- on the wire once the screen has stopped naming it, or the board would step the row
+          -- the pilot just left. The cool-down still separates this from the next pulse.
           self.trimHold = false
+          self.trimPulseUntil = nil
           self.trimCoolUntil = now + self:pulseTicks()
           self:refuseStep("range", now)
           return

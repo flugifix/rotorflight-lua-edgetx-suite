@@ -425,7 +425,7 @@ function M.newDerivation(records, map, bankChannel, valueChannel)
     phase = "scan", at = 0,
     usable = {}, skipped = {},
     bands = {}, bandSeen = {}, rows = {}, rowSeen = {},
-    set = {}, rowValues = {}, placed = 0
+    set = {}, rowValues = {}, cellRecord = {}, bankWindows = {}, cells = {}, placed = 0
   }
 end
 
@@ -513,11 +513,22 @@ function M.deriveStep(work, budget)
       local record = work.usable[work.at]
       local bank = work.bandIndex[windowKey(record.enaRange) or ""]
       local row = work.rowIndex[windowKey(record.adjRange2) or ""]
+      if bank ~= nil then
+        -- Both windows of every usable slot of the bank, placed or not, as the board reads them:
+        -- the cross-check below has to see them all, because the board fires every slot whose
+        -- window holds the value.
+        local windows = work.bankWindows[bank] or {}
+        work.bankWindows[bank] = windows
+        local low, high = Functions.windowBounds(record.adjRange1)
+        if low ~= nil then windows[#windows + 1] = { low = low, high = high, slot = record, down = true } end
+        low, high = Functions.windowBounds(record.adjRange2)
+        if low ~= nil then windows[#windows + 1] = { low = low, high = high, slot = record, down = false } end
+      end
       if bank ~= nil and row ~= nil then
         work.set[bank] = work.set[bank] or {}
-        -- The first slot wins a cell it shares. Two slots on the same window pair are a
-        -- configuration the board itself cannot resolve either -- it fires whichever it reaches
-        -- first -- so guessing the other one here would only disagree with the flight controller.
+        -- The first slot names a cell it shares. Two slots on the same window pair are a
+        -- configuration the board answers by stepping BOTH, so the cross-check below refuses the
+        -- step rather than guessing which of the two names the pilot meant.
         if work.set[bank][row] == nil then
           work.set[bank][row] = math.floor(tonumber(record.adjFunction) or 0)
           work.rowValues[bank] = work.rowValues[bank] or {}
@@ -525,11 +536,48 @@ function M.deriveStep(work, budget)
             up = Functions.windowCode(record.adjRange2),
             down = Functions.windowCode(record.adjRange1)
           }
+          work.cellRecord[bank] = work.cellRecord[bank] or {}
+          work.cellRecord[bank][row] = record
+          work.cells[#work.cells + 1] = { bank = bank, row = row }
           work.placed = work.placed + 1
         end
       end
     end
     if work.placed == 0 then return true, nil, work.skipped end
+    work.phase = "cross"
+    work.at = 0
+    return false, nil, nil
+  end
+
+  if work.phase == "cross" then
+    -- A value the board would read as a SECOND slot of the same bank is refused. The flight
+    -- controller visits every slot whose enable window is active and fires each one whose window
+    -- holds the channel value, decrement window first (fc/rc_adjustments.c), so a value aimed at
+    -- one window that also sits inside another would step two parameters at once -- the very
+    -- thing this map exists to rule out. The row says it cannot be stepped instead.
+    while work.at < #work.cells do
+      if budget ~= nil and taken >= budget then return false, nil, nil end
+      work.at = work.at + 1
+      taken = taken + 1
+      local cell = work.cells[work.at]
+      local values = work.rowValues[cell.bank][cell.row]
+      local own = work.cellRecord[cell.bank][cell.row]
+      local usUp = values.up ~= nil and Functions.gvarToUs(values.up) or nil
+      local usDown = values.down ~= nil and Functions.gvarToUs(values.down) or nil
+      local windows = work.bankWindows[cell.bank]
+      for i = 1, #windows do
+        local window = windows[i]
+        local foreign = window.slot ~= own
+        -- The slot's own increment window holds its increment value by construction; its own
+        -- decrement window holding it is a decrement, because the board tests that one first.
+        if usUp ~= nil and (foreign or window.down) and usUp >= window.low and usUp < window.high then
+          values.up, usUp = nil, nil
+        end
+        if usDown ~= nil and foreign and usDown >= window.low and usDown < window.high then
+          values.down, usDown = nil, nil
+        end
+      end
+    end
     return true, { bands = work.outBands, bankValues = work.bankValues,
                    set = work.set, rowValues = work.rowValues, placed = work.placed }, work.skipped
   end

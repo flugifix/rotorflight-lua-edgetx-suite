@@ -31,7 +31,7 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 | Setting | What it does |
 | --- | --- |
 | In-flight tuning on this model | The model's own switch. Off by default, and the radio's master switch has to be on as well. |
-| Set layout | *Standard* (default): six banks of six parameters, the layout the generic radio setup documents. The board's own slot table is read and held against it, so the page can say where the two differ. *Custom*: the set is whatever the board carries, derived from the enable and increment windows of the slots on this model's channels — nothing is ever written to it. |
+| Set layout | *Standard* (default): six banks of six parameters, the layout the generic radio setup documents. The board's own slot table is read and held against it, so the page can say where the two differ. *Custom*: the set is whatever the board carries, derived from the enable, increment and decrement windows of the slots on this model's channels — nothing is ever written to it. |
 | Step size | What one press moves a parameter by, in the flight controller's own units. 1, 2, 5 or 10; default 5. |
 | Head speed step | The same, for the governor head speed alone. 10, 25, 50 or 100; default 50. It has a step of its own because its range is 0 to 10000 rpm where no other parameter of the set is bounded above 250. |
 | Set up the flight controller | Reads the board in two replies, shows what each slot holds and what it would hold, writes one adjustment range per slot once that is confirmed, follows it with a single EEPROM write, and reads every written slot back field by field against the set it was asked for, both step sizes included. Offered in the *Standard* layout only: in *Custom* the set is what the board carries, and writing it would overwrite the very thing being read. |
@@ -41,13 +41,15 @@ again. The board comparison reports that by name.
 
 In **Custom**, plus and minus use the selected slot's own increment and decrement windows.
 The windows need not be mirrored. The overlay reads them on the ground and refuses a step
-whose window is missing or outside the model's standard channel travel; it never substitutes
-a Standard-layout value for an unread Custom slot.
+whose window is missing, beyond the channel's travel, outside the range the flight controller
+reads at all, or wrapped around the channel's centre; it never substitutes a Standard-layout
+value for an unread Custom slot. A value that would also fall inside another slot's window of
+the same bank is refused as well, because the flight controller would step both parameters.
 
 A refused custom step shows **Custom layout not read** until the ground read completes, or
 **Row cannot be stepped** when the selected window is unusable. An empty slot read shows
 **No usable Custom rows** and clears the old row names. Moving a held trim to an unusable row
-ends the hold; a pulse already started finishes before returning to neutral.
+ends the hold and returns the channel to neutral at once.
 
 The read-back after a write holds each slot against the record the write was built from, the two
 step sizes among the fields it compares. Where a slot holds the right function on the right
