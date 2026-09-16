@@ -362,14 +362,56 @@ function M.bandMidGv(band)
 end
 
 --- The value-channel magnitude that lands inside row `row`'s increment or decrement window.
+-- Custom layouts supply a bank/row map compiled from both windows of the board's own slots.
+-- A missing custom entry is not a request to fall back to the standard ladder.
 -- The rows are 15 percent apart and row 1 is the outermost, which is exactly what the shipped
 -- template's summed trims produce: 90, 75, 60, 45, 30, 15.
-function M.rowCode(row, up)
+function M.rowCode(row, up, rowValues, bank)
+  if rowValues ~= nil then
+    local rows = rowValues[bank]
+    local values = rows and rows[row]
+    if values == nil then return nil end
+    if up then return values.up end
+    return values.down
+  end
   row = tonumber(row)
   if row == nil or row < 1 or row > M.ROW_COUNT then return nil end
   local magnitude = (M.ROW_COUNT + 1 - row) * 15
   if up then return magnitude end
   return -magnitude
+end
+
+-- The widest window the flight controller reads at all: range steps of -125..125, five
+-- microseconds each (fc/rc_modes.h, isRangeUsable). A slot whose window reaches past that is
+-- never active whatever the channel carries, so a value aimed at it would step nothing.
+local FIRMWARE_WINDOW_MIN_US = 875
+local FIRMWARE_WINDOW_MAX_US = 2125
+
+--- A window's microsecond bounds as the flight controller reads them, or nil for a window it
+-- never reads: malformed, empty, reversed, or reaching past the range above.
+function M.windowBounds(window)
+  if type(window) ~= "table" then return nil end
+  local low, high = tonumber(window.start), tonumber(window["end"])
+  if low == nil or high == nil or low >= high then return nil end
+  if low < FIRMWARE_WINDOW_MIN_US or high > FIRMWARE_WINDOW_MAX_US then return nil end
+  return low, high
+end
+
+--- The channel value, in microseconds, that a global variable value puts on the wire.
+function M.gvarToUs(value)
+  return CENTRE_US + value * US_PER_GVAR_UNIT
+end
+
+--- A step value inside the board's window, or nil if the mixer cannot reach it.
+-- Increment and decrement windows are independent; a custom decrement need not mirror the
+-- increment about centre. Never let clamping turn an unreachable window into another row.
+function M.windowCode(window)
+  local low, high = M.windowBounds(window)
+  if low == nil then return nil end
+  local value = M.bandMidGv({ min = low, max = high })
+  local us = M.gvarToUs(value)
+  if value == 0 or us < low or us >= high then return nil end
+  return value
 end
 
 --- A raw channel reading, as microseconds. EdgeTX answers getValue("chN") on -1024..1024 around
