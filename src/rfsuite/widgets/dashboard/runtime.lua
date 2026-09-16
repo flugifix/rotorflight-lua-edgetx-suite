@@ -2314,7 +2314,11 @@ function Runtime.new(zone, options)
       self.state.armedSeen = false
       self.state.batteryCellCount = 0
       -- The flight clock and the statistics are the record's; the event runtime drops them on
-      -- the same disconnect that brings this branch about, and the next pass reads what is left.
+      -- the connect edge of its own link detector, which follows this one once the link has held
+      -- for its CONNECT_STABLE_SECONDS -- not on the disconnect before it, which the post-flight
+      -- page has to outlive -- and the passes after that read what is left. Nothing shows them in
+      -- between: this branch has just torn the scene down, and the splash stands until the
+      -- connect chain has run.
       self.state.lastDisarmAt = nil
       self.state.profile = nil
       self.state.rateProfile = nil
