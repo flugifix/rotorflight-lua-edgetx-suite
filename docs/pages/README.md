@@ -24,7 +24,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
 | PIDs | `flight_tuning/pids.md` | yes | read-only while armed | to write |
-| Rates | `flight_tuning/rates.md` | yes | read-only while armed | to write |
+| Rates | [flight_tuning/rates.md](flight_tuning/rates.md) | yes | read-only while armed | written |
 | Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
 | Advanced → Filters | `flight_tuning/advanced/filters.md` | yes | read-only while armed | to write |
 | Advanced → PID Controller | `flight_tuning/advanced/pid_controller.md` | yes | read-only while armed | to write |
