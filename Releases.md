@@ -162,6 +162,9 @@
   - `SmCp` is now published only in voltage mode, where the suite computes the virtual consumption itself. Where the flight controller reports consumption, the sensor was a duplicate of it and cost a telemetry slot plus a model write per push.
 - **Stale Sensors No Longer Shadow Live Ones (`lib/sensors.lua`)**:
   - A sensor a model still carries but the radio no longer receives reads as `0` through `getValue()` and used to win its search path ahead of the live sensor behind it; that reading is now treated as a miss.
+- **The Volume tile draws an icon (`app/pages/settings/audio/volume/icon.png`) (fixes #324)**:
+  - Every page registered in `app/pages/init.lua` is given `<page folder>/icon.png` as its tile icon, and nothing checks that the file is there. `Settings > Audio > Volume` was the one tile in the tree that carried neither that file nor an icon of its own in `app/manifest.lua`, so it rendered as a label with an empty icon slot beside `Events`.
+  - The icon is a 40x40 8-bit grayscale PNG, which is the size and the encoding `.vscode/scripts/optimize_icons.py` keeps for a monochrome source, and it is drawn to sit with the existing tile set rather than taken from one.
 
 ### Performance, Memory & Build System
 - **A box's thresholds are compiled where the box is rendered (`widgets/dashboard/objects/`, `bin/accounting/budgets.lua`, `docs/dashboard/user-themes.md`)**:
