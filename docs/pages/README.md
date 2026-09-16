@@ -63,7 +63,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Controls → Blackbox → Status | `setup/controls/blackbox/status.md` | yes | read-only while armed | to write |
 | Controls → Stats | `setup/controls/stats.md` | yes | read-only while armed | to write |
 | Controls → In-Flight Tuning | [setup/controls/inflight.md](setup/controls/inflight.md) | yes | preview switch *In-flight tuning*, needs the flight controller, read-only while armed | written |
-| Power → Battery | `setup/power/battery.md` | yes | read-only while armed | to write |
+| Power → Battery | [setup/power/battery.md](setup/power/battery.md) | yes | read-only while armed | written |
 | Power → Alerts | `setup/power/alerts.md` | yes | always available | to write |
 | Power → Sources | `setup/power/sources.md` | yes | read-only while armed | to write |
 | Power → SmartFuel | [setup/power/smartfuel.md](setup/power/smartfuel.md) | yes | read-only while armed, needs MSP API 12.09 | written |
