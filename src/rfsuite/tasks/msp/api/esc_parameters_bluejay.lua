@@ -74,8 +74,15 @@ local FIELD_SPEC = {
     {"reserved_3f", "U8"}
 }
 
+-- The 66 bytes FIELD_SPEC declares; a shorter block is rejected by Api.parse. Layout revision
+-- 209, so the two PWM-frequency thresholds are live: bytes 46 and 47 hold 170 and 85, which the
+-- page shows as 67 % and 33 %. The bytes at power_rating and force_edt_arm had gone missing,
+-- which left the block short of its declared length and moved the two thresholds two places
+-- forward onto them; the same block is in rotorflight-lua-scripts with them in place.
 local SIM_RESPONSE = {
-    193,0,0,22,209,255,51,0,0,5,255,9,24,1,255,85,170,255,255,255,255,255,255,4,255,255,255,255,255,40,80,4,255,2,255,255,255,0,1,255,255,0,0,170,85,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    193,0,0,22,209,255,51,0,0,5,255,9,24,1,255,85,170,255,255,255,255,255,
+    255,4,255,255,255,255,255,40,80,4,255,2,255,255,255,0,1,255,255,0,0,2,
+    0,170,85,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 }
 
 local TYPE_LEN = {U8 = 1, S8 = 1, U16 = 2, S16 = 2}
@@ -132,6 +139,19 @@ local function encodeThreshold(value)
     return clamp(round((value * 255) / 100), 0, 255)
 end
 
+-- The fields whose stored value is not the byte the ESC sent. Two of the pairs above round
+-- 256 bytes into a coarser range and one aliases 192 onto 0, so several bytes share a value
+-- and the encoder cannot tell which of them the value came from. Api.parse therefore keeps
+-- the byte beside the value, and Api.buildWritePayload writes that byte back whenever the
+-- value still normalizes to it.
+local TRANSFORMS = {
+    {"startup_power_min", normalizeStartupPowerMin, encodeStartupPowerMin},
+    {"startup_power_max", normalizeStartupPowerMax, encodeStartupPowerMax},
+    {"pwm_frequency", normalizePwmFrequency, encodePwmFrequency},
+    {"threshold_48to24", normalizeThreshold, encodeThreshold},
+    {"threshold_96to48", normalizeThreshold, encodeThreshold}
+}
+
 local function resolveTimeout(state, isWrite)
     if state and state.timeout ~= nil then return state.timeout end
     local protocolRef = rfsuite.tasks and rfsuite.tasks.msp and rfsuite.tasks.msp.protocol
@@ -187,21 +207,17 @@ function Api.parse(buf)
         end
     end
 
-    if parsed.startup_power_min ~= nil then
-        parsed.startup_power_min = normalizeStartupPowerMin(parsed.startup_power_min)
+    -- `raw` is not a field of FIELD_SPEC, so it is carried through the write path and
+    -- dropped again when the payload bytes are laid out.
+    local raw = {}
+    for _, t in ipairs(TRANSFORMS) do
+        local name, normalize = t[1], t[2]
+        if parsed[name] ~= nil then
+            raw[name] = parsed[name]
+            parsed[name] = normalize(parsed[name])
+        end
     end
-    if parsed.startup_power_max ~= nil then
-        parsed.startup_power_max = normalizeStartupPowerMax(parsed.startup_power_max)
-    end
-    if parsed.pwm_frequency ~= nil then
-        parsed.pwm_frequency = normalizePwmFrequency(parsed.pwm_frequency)
-    end
-    if parsed.threshold_48to24 ~= nil then
-        parsed.threshold_48to24 = normalizeThreshold(parsed.threshold_48to24)
-    end
-    if parsed.threshold_96to48 ~= nil then
-        parsed.threshold_96to48 = normalizeThreshold(parsed.threshold_96to48)
-    end
+    parsed.raw = raw
 
     return parsed
 end
@@ -218,11 +234,21 @@ function Api.buildWritePayload(payloadData, _, _, state)
         local cloned = {}
         for k, v in pairs(effectivePayload) do cloned[k] = v end
 
-        if cloned.startup_power_min ~= nil then cloned.startup_power_min = encodeStartupPowerMin(cloned.startup_power_min) end
-        if cloned.startup_power_max ~= nil then cloned.startup_power_max = encodeStartupPowerMax(cloned.startup_power_max) end
-        if cloned.pwm_frequency ~= nil then cloned.pwm_frequency = encodePwmFrequency(cloned.pwm_frequency) end
-        if cloned.threshold_48to24 ~= nil then cloned.threshold_48to24 = encodeThreshold(cloned.threshold_48to24) end
-        if cloned.threshold_96to48 ~= nil then cloned.threshold_96to48 = encodeThreshold(cloned.threshold_96to48) end
+        -- A field whose value still normalizes to the byte it was read from was not changed,
+        -- so that byte goes back unaltered; anything else is encoded from the value.
+        local raw = type(effectivePayload.raw) == "table" and effectivePayload.raw or nil
+        for _, t in ipairs(TRANSFORMS) do
+            local name, normalize, encode = t[1], t[2], t[3]
+            local value = cloned[name]
+            if value ~= nil then
+                local rawValue = raw and raw[name]
+                if rawValue ~= nil and normalize(rawValue) == value then
+                    cloned[name] = rawValue
+                else
+                    cloned[name] = encode(value)
+                end
+            end
+        end
         if cloned.threshold_96to48 ~= nil and cloned.threshold_48to24 ~= nil and cloned.threshold_96to48 > cloned.threshold_48to24 then
             cloned.threshold_96to48 = cloned.threshold_48to24
         end
