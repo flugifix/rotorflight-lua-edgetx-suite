@@ -20,8 +20,10 @@
 -- because this is a file the pilot maintains by hand and a truncating in-place rewrite that is
 -- interrupted loses all of it.
 --
--- io.write reports nothing when the card is full, so every write is verified through fstat by
--- the number of bytes the file grew.
+-- io.write answers the file handle on success and nil plus a message on a short write, so a
+-- failing write is not silent. Every write here is verified through fstat all the same, by the
+-- number of bytes the file grew: that is the stricter check and it is independent of what the
+-- call reported, since the size is what the card actually holds afterwards.
 
 local M = {}
 
@@ -244,32 +246,36 @@ end
 -- Flight lines
 -- ---------------------------------------------------------------------------
 
+-- An integer column is rounded down here rather than at whichever source filled it: the format
+-- table is what declares the column integral, so this is the one place that knows. "%d" raises
+-- for a number with no integer representation, and the capacity a pilot's own sensor
+-- configuration publishes with decimals is exactly that -- two of the shipped dashboard themes
+-- already floor the same source. A value too large to be an integer leaves the column empty
+-- rather than costing the line it stands in.
 local function statField(stats, key)
   local value = stats and stats[key]
   if type(value) ~= "number" then return "" end
-  return string.format(STAT_FORMAT[key] or "%s", value)
+  local format = STAT_FORMAT[key] or "%s"
+  if format == "%d" then
+    value = math.tointeger(math.floor(value))
+    if value == nil then return "" end
+  end
+  return string.format(format, value)
 end
 
 -- Appends one flight. `dt` is the getDateTime() table taken when the craft armed, so the line
 -- carries the flight's start rather than its end. `stats` may be nil, and then the line is the
 -- five-column form.
 --
--- Returns true only when the file grew by exactly the bytes written: on a full card io.write
--- reports nothing at all, and a caller that believes it wrote a line it did not is the one
--- thing this file cannot afford.
+-- The whole line is built before the file is opened, and nothing between the open and the close
+-- may raise: a raise there leaves the handle unclosed and, on a new file, a header with no line
+-- under it, and the caller has closed the flight record by then so nothing tries again.
+--
+-- Returns true only when the file grew by exactly the bytes written, which is the check that
+-- holds whatever io.write answered, since the size is what the card actually took. A size that
+-- could not be established is a refusal and not a pass: the second return names the step that
+-- refused, so a caller can say which of them it was.
 function M.appendFlight(dt, modelName, batteryId, seconds, stats)
-  ensureDir()
-  local path = M.csvPath()
-  local before = fileSize(path) or 0
-  local f = io.open(path, "a")
-  if not f then return false end
-
-  local expected = before
-  if before == 0 then
-    io.write(f, CSV_HEADER)
-    expected = expected + #CSV_HEADER
-  end
-
   -- A comma in free text would open a column that is not there.
   local model = string.gsub(tostring(modelName or ""), ",", " ")
   local battery = string.gsub(tostring(batteryId or ""), ",", " ")
@@ -281,11 +287,37 @@ function M.appendFlight(dt, modelName, batteryId, seconds, stats)
     end
   end
   line = line .. "\n"
+
+  ensureDir()
+  local path = M.csvPath()
+
+  -- fstat answers nil for a file that is not there and for a file it could not measure, and the
+  -- two want opposite responses: the first is every pilot's first flight, the second must refuse,
+  -- because a header appended into the middle of an existing log is a line the parser drops and
+  -- a write that cannot be measured afterwards cannot be verified either. Opening for append
+  -- creates the file, so a second look at a file that now certainly exists tells them apart.
+  local before = fileSize(path)
+  if before == nil then
+    local created = io.open(path, "a")
+    if not created then return false, "open" end
+    io.close(created)
+    before = fileSize(path)
+    if before == nil then return false, "unmeasurable" end
+  end
+
+  local f = io.open(path, "a")
+  if not f then return false, "open" end
+
+  local expected = before
+  if before == 0 then
+    io.write(f, CSV_HEADER)
+    expected = expected + #CSV_HEADER
+  end
   io.write(f, line)
   io.close(f)
 
   local after = fileSize(path)
-  if after ~= nil and after ~= expected + #line then return false end
+  if after == nil or after ~= expected + #line then return false, "unverified" end
   return true
 end
 
@@ -421,8 +453,9 @@ local function atomicReplace(path, content, allowCreate)
   io.write(f, content)
   io.close(f)
 
-  -- Verified before the original is touched: io.write says nothing on a full card, and the
-  -- size is the only signal there is.
+  -- Verified before the original is touched. io.write does report a short write, but what has
+  -- to hold here is that the replacement is complete on the card, and the file's size is the
+  -- only thing that says so -- so it is checked whatever the write answered.
   local written = fileSize(newPath)
   if written == nil or written ~= #content then return false end
   if type(rename) ~= "function" then return false end
@@ -445,10 +478,20 @@ end
 -- Reads the registry for a rewrite. The second return is the distinct refusal a caller has to
 -- be able to explain: a file above the cap is read short, and a short read written back is the
 -- rest of the pilot's registry deleted.
+--
+-- The size is not always there to be checked, and then the read itself answers: readAll stops at
+-- the cap and nowhere else, so a result shorter than the cap ended at the end of the file and is
+-- whole. Only a read that filled the cap with no size to hold it against is refused, which is
+-- the narrowest refusal that closes the loss -- a registry of the size a pilot keeps stays
+-- editable on a card whose fstat has stopped answering. What it does not cover is a read that
+-- ended early on a card error: this interpreter returns the same empty string for that as for
+-- the end of the file.
 local function guardedRead(path)
   local size = fileSize(path)
   if size ~= nil and size > READ_CAP then return nil, "toobig" end
-  return readAll(path, READ_CAP), nil
+  local data = readAll(path, READ_CAP)
+  if size == nil and data ~= nil and #data >= READ_CAP then return nil, "toobig" end
+  return data, nil
 end
 
 -- Walks the file by byte offset and answers where the first non-comment line carrying `want` as
@@ -543,9 +586,10 @@ end
 -- and losing one must never cost the flight line that was just written.
 function M.markUsed(batteryId, dt)
   local path = M.registryPath()
-  local size = fileSize(path)
-  if size ~= nil and size > READ_CAP then return false end
-  local data = readAll(path, READ_CAP)
+  -- The same guarded read the editing calls use: a rewrite may never be built on a read that
+  -- could have been cut short, and there is no reason for this one to guard itself differently.
+  local data, err = guardedRead(path)
+  if err ~= nil then return false, err end
   if data == nil then return false end
   local want = trim(batteryId)
   if want == "" then return false end

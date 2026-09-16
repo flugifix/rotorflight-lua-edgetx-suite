@@ -134,6 +134,20 @@ local function flightStats(session)
   return stats
 end
 
+-- The data core names the step that refused, where it can tell one from another. Without a name
+-- the line would read the same for a card that is full and for a card that will not say how large
+-- a file on it is, and those need different things done about them.
+local REFUSAL = {
+  open = "the card did not open the log file",
+  unmeasurable = "the card did not say how large the log file is",
+  unverified = "the card did not confirm the line",
+  toobig = "the registry is at or above the size that can be rewritten safely"
+}
+
+local function refusal(reason, fallback)
+  return REFUSAL[reason] or fallback
+end
+
 function M.wakeup()
   if done then return end
   done = true
@@ -174,12 +188,13 @@ function M.wakeup()
 
   local batteryId = resolveBattery(FlightLog, session, record)
 
-  local ok, written = pcall(FlightLog.appendFlight, record.startDate, record.model or "",
+  local ok, written, reason = pcall(FlightLog.appendFlight, record.startDate, record.model or "",
     batteryId or "", seconds, flightStats(session))
   if not ok or written ~= true then
     -- The append verifies by the bytes the file grew, so this is a line that did not land -- a
-    -- full or a missing card. Said out loud, because the gap it leaves explains nothing.
-    logLine("flight NOT logged: " .. ((not ok) and tostring(written) or "the card did not take the line"), "warn")
+    -- full or a missing card, or one that will not say how large a file on it is. Said out loud,
+    -- because the gap it leaves explains nothing.
+    logLine("flight NOT logged: " .. ((not ok) and tostring(written) or refusal(reason, "the card did not take the line")), "warn")
   else
     logLine(string.format("flight logged: %ds, battery=%s", seconds, tostring(batteryId or "-")), "info")
   end
@@ -189,10 +204,10 @@ function M.wakeup()
   -- cycle. The id is remembered rather than a flag, so swapping to another pack counts again.
   if batteryId ~= nil and record.countedFor ~= batteryId then
     record.countedFor = batteryId
-    local okMark, marked = pcall(FlightLog.markUsed, batteryId, record.startDate)
+    local okMark, marked, markReason = pcall(FlightLog.markUsed, batteryId, record.startDate)
     if not okMark or marked ~= true then
       logLine("battery cycle not counted for " .. tostring(batteryId) .. ": "
-        .. ((not okMark) and tostring(marked) or "registry unchanged or the replace failed"), "warn")
+        .. ((not okMark) and tostring(marked) or refusal(markReason, "registry unchanged or the replace failed")), "warn")
     end
   end
 

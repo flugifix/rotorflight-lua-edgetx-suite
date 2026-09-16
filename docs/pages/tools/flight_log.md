@@ -38,7 +38,7 @@ some of them or none.
 
 | Column | What it is |
 | --- | --- |
-| `mah` | Capacity used, as the flight controller reported it |
+| `mah` | Capacity used, as the flight controller reported it, rounded down to whole mAh |
 | `vcel_min`, `vcel_max` | Lowest and highest pack voltage, per cell |
 | `curr_min`, `curr_max` | Lowest and highest current |
 | `tesc_min`, `tesc_max` | Lowest and highest ESC temperature |
@@ -61,5 +61,12 @@ leaves the rest of the file alone.
 
 The battery registry beside it is the same kind of file. A pack picked under *Batteries* goes into
 the flight's line, and that pack's first flight of a session counts one cycle against it.
+
+A flight counts as logged only once the file on the card has grown by exactly the bytes its line
+takes. Where the card will not say how large a file on it is, the flight is not written at all and
+the log says which step refused, rather than a line being appended to a file whose contents cannot
+be established. The registry is held to the same standard: a pack's cycle count and the edits made
+under *Batteries* are refused, with a message on the screen, rather than rewriting the file from a
+read that may have been cut short. A registry of the size a pilot keeps is unaffected either way.
 
 *Documented against RFSuite 0.1.7.*
