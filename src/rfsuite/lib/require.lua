@@ -16,6 +16,12 @@ _G.rfsuite.modules = _G.rfsuite.modules or {}
 -- source that has no bytecode yet, and compiling it writes the .luac for the next start.
 -- lib/precompile.lua fills the tree in at start time so that first compile does not fall on
 -- the first page that happens to need it.
+--
+-- The tool replaces _G.loadScript with a wrapper that substitutes this for whatever mode a
+-- caller passed (src/main.lua). A widget state has no such wrapper -- _G there is shared with
+-- every other widget on the radio, so the suite does not own that function -- and neither has
+-- the special-function state. A call site those states reach therefore has to name this mode
+-- itself, or the bytecode beside the source is never read.
 _G.rfsuite.loadMode = "bt"
 
 local modules = _G.rfsuite.modules

@@ -52,7 +52,8 @@ end
 
 local function languageStore()
   if cachedStore then return cachedStore end
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/config_store.lua", "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/config_store.lua", mode)
   if type(chunk) ~= "function" then return nil end
   local okMod, ConfigStore = pcall(chunk)
   if not okMod or type(ConfigStore) ~= "table" then return nil end
