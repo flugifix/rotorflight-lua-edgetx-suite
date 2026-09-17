@@ -3,7 +3,8 @@ local function loadTransport(protocol)
     return nil
   end
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/transports/" .. protocol .. ".lua"
-  local chunk = loadScript(fullPath, "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript(fullPath, mode)
   if type(chunk) ~= "function" then return nil end
   local ok, transport = pcall(chunk)
   if not ok or type(transport) ~= "table" then return nil end
