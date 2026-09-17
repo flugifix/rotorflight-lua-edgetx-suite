@@ -213,8 +213,14 @@ Api.simulatorResponse = {
     2   -- item 16: startup_power
 }
 
+-- The block this layout reads: two header bytes, three 16-byte strings and one 15-byte
+-- string of device information, then the sixteen parameter bytes read at buf[66]..buf[81].
+-- A shorter reply does not fail to parse -- the absent bytes read as 0 -- and those zeros
+-- become a write on the next save.
+local PAYLOAD_LEN = 81
+
 function Api.parse(buf)
-    if type(buf) ~= "table" or #buf < 2 then return nil end
+    if type(buf) ~= "table" or #buf < PAYLOAD_LEN then return nil end
     local signature = tonumber(buf[1]) or 0
     if signature ~= 253 then
         return nil

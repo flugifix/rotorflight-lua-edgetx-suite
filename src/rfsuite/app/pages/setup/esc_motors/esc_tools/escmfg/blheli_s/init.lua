@@ -7,15 +7,10 @@ local MSP_API = "ESC_PARAMETERS_BLHELI_S"
 local toolName = "BLHeli_S"
 local ESC1_TARGET = 0
 local ESC2_TARGET = 1
-local BLHELI_S_MAIN_REVISION = 16
 
 local function getPageValue(page, index)
     if type(page) ~= "table" then return nil end
     return page[index]
-end
-
-local function getMainRevision(buffer)
-    return getPageValue(buffer, 3)
 end
 
 local function getEscModel(buffer)
@@ -41,22 +36,11 @@ local function getEscFirmware(buffer)
     return "FW" .. tostring(major) .. "." .. tostring(minor)
 end
 
-local function isCompatibleEsc(buffer, api)
-    if api and api.readValue then
-        local mainRevision = api.readValue("main_revision")
-        if mainRevision ~= nil then
-            return mainRevision == BLHELI_S_MAIN_REVISION
-        end
-    end
-    return getMainRevision(buffer) == BLHELI_S_MAIN_REVISION
-end
-
 return {
     mspapi = MSP_API,
     toolName = toolName,
     escSensorProtocolId = 1,
     escSensorProtocolPotential = true,
-    isCompatibleEsc = isCompatibleEsc,
     mspBufferCache = true,
     force4WaySwitchOnEntry = true,
     esc4wayEsc1Target = ESC1_TARGET,

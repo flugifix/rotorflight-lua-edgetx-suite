@@ -77,6 +77,16 @@ is read and written.
   a Save with nothing edited changes nothing in the ESC.
 - *Threshold 96to48* is held at or below *Threshold 48to24* when the block is written, since
   the ESC steps down through both.
+- A BLHeli_S ESC answers with the same ESC family byte and the same block length as a Bluejay
+  one, so the page decides on the main revision the ESC reports: 0 is Bluejay, 16 is BLHeli_S.
+  A block from a BLHeli_S ESC is refused rather than shown here: the two layouts share five
+  header fields and then diverge, so that ESC's governor I gain, governor mode and low
+  voltage limit would appear as *Min Startup Power*, *Startup Beep* and *Dithering* -- and a
+  Save would write them back with those meanings. Use the *BLHeli_S* page for that ESC.
+- Save is refused until the ESC has been read, and says so. The write is the whole block, so
+  without a read every setting the page does not itself show would go to the ESC as zero.
+- Leaving the page drops what the ESC answered -- the block, its firmware and version, and
+  the values in the list -- so the next visit shows nothing until its own read lands.
 - The ESC is read when the page opens. Switching *ESC Target* reads the newly chosen ESC;
   switching *Section* does not.
 
