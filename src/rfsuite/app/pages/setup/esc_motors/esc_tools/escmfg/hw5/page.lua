@@ -95,23 +95,6 @@ local function pageText(i18n, key, fallback)
   return fallback
 end
 
-local function nowSeconds()
-  if type(getTime) == "function" then
-    local ok, ticks = pcall(getTime)
-    if ok and type(ticks) == "number" then
-      return ticks / 100
-    end
-  end
-  return 0
-end
-
-local function logMsg(msg, level)
-  local Log = loadModule("lib/log.lua")
-  if Log and type(Log.emit) == "function" then
-    Log.emit("rfsuite.hw5", msg, level or "debug")
-  end
-end
-
 -- `retryOnError` is set only for the read that FOLLOWS a write. The firmware invalidates
 -- its parameter cache on a successful commit and answers both the read and the next write
 -- with an error until a fresh readback from the ESC has been cached, so that first refusal
@@ -297,56 +280,6 @@ local function loadFromSession()
   return false
 end
 
-local motorConfigRetryCount = 0
-
-local function queueMotorConfigRead()
-  ensureDeps()
-  local MotorConfigApi = loadModule("tasks/msp/api/motor_config.lua")
-  if not MotorConfigApi then
-    logMsg("queueMotorConfigRead: MotorConfigApi module missing", "warn")
-    return
-  end
-
-  local mspState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState()
-  local queue = mspState and mspState.queue
-  if not queue then
-    logMsg("queueMotorConfigRead: msp queue missing", "warn")
-    return
-  end
-
-  logMsg("queueMotorConfigRead: queueing motor config read (cmd 131)")
-  queue:add({
-    command = MotorConfigApi.command,
-    isWrite = false,
-    simulatorResponse = { 10, 10, 10, 5, 0, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 },
-    processReply = function(self, buf)
-      logMsg("queueMotorConfigRead processReply: buf_len=" .. tostring(buf and #buf or 0))
-      local parsed = MotorConfigApi.parse(buf)
-      if parsed and parsed.motor_count_blheli and parsed.motor_count_blheli > 0 then
-        logMsg("queueMotorConfigRead parsed: motor_count_blheli=" .. tostring(parsed.motor_count_blheli) .. ", use_dshot_telemetry=" .. tostring(parsed.use_dshot_telemetry))
-        local count = tonumber(parsed.motor_count_blheli) or 1
-        ui.motorCount = count
-        local session = getSession()
-        if session then session.esc4WayMotorCount = count end
-        if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
-          ui.runtime.requestRebuild()
-        end
-      else
-        logMsg("queueMotorConfigRead: empty buffer or parse failure", "warn")
-        if (buf == nil or #buf == 0) and motorConfigRetryCount < 3 then
-          motorConfigRetryCount = motorConfigRetryCount + 1
-          logMsg("queueMotorConfigRead: scheduling retry " .. tostring(motorConfigRetryCount) .. "/3 on next wakeup", "info")
-          ui.motorConfigRetryPending = true
-          ui.motorConfigRetryTimer = nowSeconds()
-        end
-      end
-    end,
-    errorHandler = function()
-      logMsg("queueMotorConfigRead: MSP read command 131 failed", "warn")
-    end
-  })
-end
-
 local function ensureLoaded()
   if ui.loaded then return end
 
@@ -360,18 +293,6 @@ local function ensureLoaded()
   ui.loading = false
   ui.saving = false
   ui.runtime.readPending = false
-  if ui.escTarget == nil then
-    ui.escTarget = 0
-  end
-
-  local session = getSession()
-  if session and session.esc4WayMotorCount then
-    ui.motorCount = session.esc4WayMotorCount
-  else
-    ui.motorCount = nil
-    queueMotorConfigRead()
-  end
-
   ui.loaded = true
   ui.dirty = false
   ui.runtime.lastSessionSignature = buildSessionSignature()
@@ -411,14 +332,6 @@ function M.wakeup(ctx)
     ui.runtime.lastSessionSignature = signature
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
-    end
-  end
-
-  if ui.motorConfigRetryPending and ui.motorConfigRetryTimer then
-    if nowSeconds() - ui.motorConfigRetryTimer >= 0.5 then
-      ui.motorConfigRetryPending = false
-      ui.motorConfigRetryTimer = nil
-      queueMotorConfigRead()
     end
   end
 end
@@ -550,28 +463,6 @@ function M.build(ctx)
   end
 
   local rowH
-  local hasMultipleEscs = (ui.motorCount == nil) or (ui.motorCount >= 2)
-  if hasMultipleEscs then
-    local escOptions = {
-      { value = 0, label = "ESC 1" },
-      { value = 1, label = "ESC 2" }
-    }
-    local escTargetVal = ui.escTarget or 0
-    local targetLabel = pageText(i18n, "esc_target", "ESC Target")
-    rowH = Controls.appendComboSelect(children, x, cursorY, w, targetLabel, escOptions, escTargetVal, function(val)
-      local targetVal = tonumber(val) or 0
-      if ui.escTarget ~= targetVal then
-        ui.escTarget = targetVal
-        ui.connState = 0
-        ui.connTimer = nil
-        ui.loaded = false
-        ui.dirty = false
-        queueHw5Read(false)
-      end
-    end)
-    cursorY = cursorY + rowH
-  end
-
   local sectionOptions = {
     { value = 1, label = "Basic" },
     { value = 2, label = "Advanced" }
@@ -838,10 +729,6 @@ function M.build(ctx)
 end
 
 function M.onClose()
-  ui.escTarget = nil
-  ui.motorCount = nil
-  ui.motorConfigRetryPending = nil
-  ui.motorConfigRetryTimer = nil
   if Common and type(Common.resetPageState) == "function" then
     Common.resetPageState(ui, {
       resetLoaded = true,
