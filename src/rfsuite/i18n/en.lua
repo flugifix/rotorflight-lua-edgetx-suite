@@ -509,6 +509,7 @@ return {
         tail_torque_assist = "Tail Torque Assist",
         tta_gain = "Gain",
         tta_limit = "Limit",
+        tta_unavailable = "Tail Torque Assist unavailable — governor profile could not be read. PID settings can still be saved.",
         loading_title = "Loading",
         loading_message = "Reading Tail Rotor settings",
         help_title = "Tail Rotor Help",
@@ -1974,7 +1975,8 @@ return {
       },
       diagnostics_session_logs = {
         no_logs = "No logs available",
-        loading = "Loading logs..."
+        loading = "Loading logs...",
+        help_message = "Shows the last log lines this script kept in memory, newest at the bottom, coloured by level. The page updates itself as lines arrive, and RELOAD only draws it again. The list lives in memory and is gone when the script stops, so switch on Log Session To Card under Developer > Settings to keep a copy for a report."
       },
       diagnostics_smartfuel = {
         protocol = "Protocol",

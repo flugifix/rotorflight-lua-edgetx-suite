@@ -19,14 +19,16 @@ local UI_INTERVAL_SECONDS = 0.5
 
 local requireModule = (_G.rfsuite and _G.rfsuite.require)
 if not requireModule then
-  local rChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local rChunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/require.lua", mode)
   if rChunk then
     requireModule = rChunk()
   end
 end
 requireModule = requireModule or function(path)
   local fullPath = string.sub(path, 1, 1) == "/" and path or ("/SCRIPTS/TOOLS/rfsuite-core/" .. path)
-  local chunk = loadScript(fullPath, "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript(fullPath, mode)
   if chunk then
     local ok, mod = pcall(chunk)
     if ok and type(mod) == "table" then return mod end
@@ -445,7 +447,8 @@ function Runtime.new(zone, options)
 
   if I18nModule and type(I18nModule.new) == "function" then
     local locale = nil
-    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", "t")
+    local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", mode)
     if chunk then
       local ok, localeMod = pcall(chunk)
       if ok and type(localeMod) == "table" and type(localeMod.resolveSystemLanguage) == "function" then
