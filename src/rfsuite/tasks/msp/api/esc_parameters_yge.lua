@@ -113,6 +113,14 @@ Api.simulatorResponse = SIM_RESPONSE
 
 function Api.parse(buf)
     if type(buf)~='table' then return nil end
+    -- The flight controller puts the ESC family it detected in the first byte of the block.
+    -- A reply from another family decodes into this layout without error, the page adopts it
+    -- as the ESC's state, and a save writes it back; refuse it instead, which the caller
+    -- already treats as 'no data'.
+    -- There is no length test to go with it: an OpenYGE block is two header bytes plus two
+    -- per parameter, sized from the count the ESC itself reports, so a shorter reply is a
+    -- smaller ESC rather than a truncated one.
+    if tonumber(buf[1]) ~= Api.mspSignature then return nil end
     local pos=1; local out={}
     for _, f in ipairs(FIELD_SPEC) do
         local name, typ = f[1], f[2]

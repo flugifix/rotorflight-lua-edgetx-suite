@@ -16,10 +16,6 @@ local function getPageValue(page, index)
     return page[index]
 end
 
-local function getMainRevision(buffer)
-    return getPageValue(buffer, 3)
-end
-
 local function getLayoutRevision(buffer)
     return getPageValue(buffer, 5)
 end
@@ -61,16 +57,6 @@ local function getEscFirmware(buffer)
     return "FW" .. tostring(major) .. "." .. tostring(minor)
 end
 
-local function isCompatibleEsc(buffer, api)
-    if api and api.readValue then
-        local mainRevision = api.readValue("main_revision")
-        if mainRevision ~= nil then
-            return mainRevision == BLUEJAY_MAIN_REVISION
-        end
-    end
-    return getMainRevision(buffer) == BLUEJAY_MAIN_REVISION
-end
-
 local function supportsLedControl(buffer)
     local prefix = getLayoutNamePrefix(buffer)
     return prefix == "E" or prefix == "J" or prefix == "M" or prefix == "Q" or prefix == "U"
@@ -81,7 +67,6 @@ return {
     toolName = toolName,
     escSensorProtocolId = 1,
     escSensorProtocolPotential = true,
-    isCompatibleEsc = isCompatibleEsc,
     force4WaySwitchOnEntry = true,
     esc4wayEsc1Target = ESC1_TARGET,
     esc4wayEsc2Target = ESC2_TARGET,

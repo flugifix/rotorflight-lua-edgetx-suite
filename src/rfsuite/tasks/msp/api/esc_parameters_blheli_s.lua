@@ -7,6 +7,11 @@ local Api = {
   mspHeaderBytes = 2
 }
 
+-- BLHeli_S and Bluejay answer with the same signature and the same block length, so the
+-- signature cannot tell the two apart. The main revision at byte 3 is what does: BLHeli_S
+-- reports 16, Bluejay 0.
+local MAIN_REVISION = 16
+
 local FIELD_SPEC = {
     {"esc_signature", "U8"},
     {"esc_command", "U8"},
@@ -190,6 +195,12 @@ function Api.parse(buf)
   if type(buf) ~= "table" then return nil end
   local need = expected_bytes(FIELD_SPEC)
   if #buf < need then return nil end
+  -- A reply from another ESC family, and a Bluejay block, both decode into this layout
+  -- without error: bytes 7, 8 and 9 of a Bluejay block are its minimum startup power, its
+  -- startup beep and its dithering, and this layout reads them as the governor I gain, the
+  -- governor mode and the low voltage limit -- which a save then writes back as such.
+  if tonumber(buf[1]) ~= Api.mspSignature then return nil end
+  if tonumber(buf[3]) ~= MAIN_REVISION then return nil end
 
   local pos = 1
   local parsed = {}

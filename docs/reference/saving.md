@@ -37,9 +37,33 @@ A chained load must finish successfully even if an earlier error allowed the pag
 reading other records. Previously read session values alone do not grant permission to save.
 The page's existing parameter help and save/reboot sequence are otherwise unchanged.
 
+## ESC Configurator pages
+
+*Setup* > *ESC & Motors* > *ESC Tools* opens one page per ESC firmware. These pages do not use
+the shared Save action above; each writes the ESC's whole parameter block over MSP, not the
+settings that were changed. Two rules follow from that.
+
+A page reads the block only if it is that ESC's. The flight controller names the ESC family it
+detected in the first byte of the block, and the *BLHeli_S*, *Bluejay*, *Hobbywing V5*, *OMP*,
+*Scorpion*, *XDFly*, *YGE* and *ZTW* pages refuse a reply from another family rather than
+decoding it with their own field list. BLHeli_S and Bluejay report the same family, so those
+two decide on the ESC's main revision instead. A refused read leaves the page on its own
+initial values; use *Reload* after selecting the page for the ESC that is actually fitted.
+
+On those same pages, Save is refused until a read has succeeded, and reports the reason. A block that was never read
+cannot be written back: every setting the page does not itself show would go to the ESC as
+zero. The block is dropped when the next read starts and when the page is left, so a read
+that fails -- a different ESC, another *ESC Target*, an ESC that did not answer -- cannot be
+saved from the block the previous one sent.
+
+The ESC Tools grid lights AM32, BLHeli_S and Bluejay together, because what lights them is the
+ESC telemetry protocol, which all three share. Which of the three pages fits is still the
+pilot's choice; on the BLHeli_S and Bluejay pages these checks make a wrong choice visible
+instead of writing it to the ESC.
+
 ## Scope
 
-This check protects the shared Save action from absent page data. It does not change wire
+The shared check protects the Save action from absent page data. It does not change wire
 encodings, validate every field inside an accepted parser result, or alter the transport policy
 for writes already queued. ESC encoding and telemetry-catalog issues have separate fixes.
 

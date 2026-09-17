@@ -60,6 +60,12 @@ local SIM_RESPONSE = {
 
 local TYPE_LEN = {U8=1,S8=1,U16=2,S16=2,U24=3,U32=4,U64=8,U120=15,U128=16}
 
+-- How many bytes FIELD_SPEC describes. A shorter reply does not fail to parse: read_unsigned
+-- substitutes 0 for a byte that is not there, so the tail of the block comes out zero -- and
+-- buildWritePayload writes those zeros straight back on the next save.
+local PAYLOAD_LEN = 0
+for _, f in ipairs(FIELD_SPEC) do PAYLOAD_LEN = PAYLOAD_LEN + (TYPE_LEN[f[2]] or 1) end
+
 local function has_big_flag(field)
     for _, v in ipairs(field) do if v == "big" then return true end end
     return false
@@ -116,6 +122,11 @@ Api.simulatorResponse = SIM_RESPONSE
 
 function Api.parse(buf)
     if type(buf) ~= 'table' then return nil end
+    -- The flight controller sizes this block from its own parameter table and puts the ESC
+    -- family it detected in the first byte. A short reply, and a reply from another family,
+    -- both decode into this layout without error and both become a write on the next save.
+    if #buf < PAYLOAD_LEN then return nil end
+    if tonumber(buf[1]) ~= Api.mspSignature then return nil end
     local pos = 1
     local out = {}
     for _, f in ipairs(FIELD_SPEC) do
