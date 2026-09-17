@@ -1975,7 +1975,8 @@ return {
       },
       diagnostics_session_logs = {
         no_logs = "Keine Protokolle verfügbar",
-        loading = "Lade Protokolle..."
+        loading = "Lade Protokolle...",
+        help_message = "Zeigt die letzten Log-Zeilen, die dieses Skript im Speicher hält, die neueste unten, nach Stufe eingefärbt. Die Seite aktualisiert sich selbst, sobald Zeilen eintreffen; RELOAD zeichnet sie nur neu. Die Liste liegt im Speicher und ist weg, sobald das Skript endet - schalte dafür Log Session To Card unter Developer > Settings ein, um eine Kopie für einen Bericht zu behalten."
       },
       diagnostics_smartfuel = {
         protocol = "Protokoll",
