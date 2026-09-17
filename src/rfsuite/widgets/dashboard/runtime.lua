@@ -1468,7 +1468,8 @@ local function readFlightRecord(state)
 end
 
 local function loadDashboardLib()
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/app/pages/settings/dashboard/lib.lua", "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/app/pages/settings/dashboard/lib.lua", mode)
   if not chunk then return nil end
   local ok, lib = pcall(chunk)
   if not ok or type(lib) ~= "table" then return nil end
@@ -1476,7 +1477,8 @@ local function loadDashboardLib()
 end
 
 local function loadDashboardEngine()
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/engine.lua", "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/engine.lua", mode)
   if not chunk then return nil end
   local ok, engine = pcall(chunk)
   if not ok or type(engine) ~= "table" then return nil end
@@ -1499,10 +1501,21 @@ local function parseThemePath(raw)
   return source, folder
 end
 
+-- A theme under the user directory is a file the pilot edits on the card, and nothing
+-- precompiles or sweeps that tree: lib/precompile.lua walks the two shipped roots only, so a
+-- .luac left beside an edited theme would be preferred whenever the two timestamps tie at the
+-- two-second resolution a FAT card stores. It is read from source for the same reason
+-- lib/sensors.lua reads a user simulated-sensor file from source. A shipped theme takes the
+-- mode the suite publishes, like every other shipped module.
+local function themeLoadMode(base)
+  if base == USER_THEME_BASE then return "t" end
+  return (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+end
+
 local function loadThemeInit(themePath)
   local source, folder = parseThemePath(themePath)
   local base = source == "user" and USER_THEME_BASE or SYSTEM_THEME_BASE
-  local initChunk = loadScript(base .. folder .. "/init.lua", "t")
+  local initChunk = loadScript(base .. folder .. "/init.lua", themeLoadMode(base))
   if not initChunk then return nil, base, folder end
   local ok, initTable = pcall(initChunk)
   if not ok or type(initTable) ~= "table" then return nil, base, folder end
@@ -1525,7 +1538,7 @@ local function loadThemeModuleForState(themePath, flightMode)
     scriptPath = base .. folder .. "/widget.lua"
   end
 
-  local chunk = loadScript(scriptPath, "t")
+  local chunk = loadScript(scriptPath, themeLoadMode(base))
   if chunk then
     local ok, theme = pcall(chunk)
     if ok and type(theme) == "table" and (
@@ -1539,9 +1552,10 @@ local function loadThemeModuleForState(themePath, flightMode)
   end
 
   local fallbackPath = SYSTEM_THEME_BASE .. "default/" .. stateKey .. ".lua"
-  local fallbackChunk = loadScript(fallbackPath, "t")
+  local fallbackChunk = loadScript(fallbackPath, themeLoadMode(SYSTEM_THEME_BASE))
   if not fallbackChunk then
-    fallbackChunk = loadScript(SYSTEM_THEME_BASE .. "default/preflight.lua", "t")
+    fallbackChunk = loadScript(SYSTEM_THEME_BASE .. "default/preflight.lua",
+                               themeLoadMode(SYSTEM_THEME_BASE))
   end
   if not fallbackChunk then return nil end
   local ok, theme = pcall(fallbackChunk)
@@ -1988,7 +2002,8 @@ function Runtime.new(zone, options)
   -- Initialize i18n context for the widget using system locale
   if I18nModule and type(I18nModule.new) == "function" then
     local locale = nil
-    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", "t")
+    local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", mode)
     if chunk then
       local ok, localeMod = pcall(chunk)
       if ok and type(localeMod) == "table" and type(localeMod.resolveSystemLanguage) == "function" then

@@ -6,7 +6,8 @@ local INDEX_PATH = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/settings/dashboard/the
 local Log = nil
 local themesCache = nil
 do
-  local okLoad, chunk = pcall(loadScript, "/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local okLoad, chunk = pcall(loadScript, "/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", mode)
   if okLoad and type(chunk) == "function" then
     local okMod, mod = pcall(chunk)
     if okMod and type(mod) == "table" and type(mod.emit) == "function" then

@@ -6,18 +6,23 @@ sidebar_position: 40
 
 # User themes
 
-RFSuite loads dashboard themes from `/SCRIPTS/TOOLS/rfsuite/widgets/dashboard/themes/` and from the user folder at `/SCRIPTS/TOOLS/rfsuite.user/dashboard/themes/`. Themes placed in the user folder override shipped themes with the same name, or appear as standalone choices in the theme selector under *System* → *Settings* → *Dashboard* → *Design*.
+RFSuite loads dashboard themes from two folders: the shipped ones from `/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/`, and yours from the user folder at `/SCRIPTS/TOOLS/rfsuite.user/dashboard/`. A theme folder goes directly in there — `/SCRIPTS/TOOLS/rfsuite.user/dashboard/mytheme/init.lua`, with no `themes` level in between.
+
+Both folders are listed, so a theme in the user folder is an additional choice in the theme selector under *System* → *Settings* → *Dashboard* → *Design* rather than a replacement: a copy that keeps the original's `name` appears in the list twice, once for each folder. Give a copy a name of its own.
 
 ## Structure of a theme
 
 A theme is a folder containing an `init.lua` manifest and one module per flight phase:
 
-- `init.lua`: theme metadata, name, author, supported display profiles, and optional configuration descriptor (`configure.lua`).
-- `preflight.lua`: layout and boxes displayed before arming while telemetry is connected.
-- `inflight.lua`: layout and boxes active during flight.
-- `postflight.lua`: summary boxes shown after disarming.
+- `init.lua`: the theme's name, the file name of each of the three phase modules, and optionally the configuration page (`configure.lua`). Those are the only keys that are read.
+- `preflight.lua`: layout and boxes shown on the ground — before arming, and while an armed model has not spooled up yet.
+- `inflight.lua`: layout and boxes shown once the model is flying.
+- `postflight.lua`: summary boxes shown after a flight, from the disarm onwards.
+- `icon.png`: the picture the theme selector draws for the theme. A theme without one is still selectable and shows an empty tile.
 
 Each phase module returns a table with `layout` options (margins, grid dimensions) and a list of `boxes`.
+
+Which of the three modules is on screen is not a setting: the widget computes the phase from the flight controller's own telemetry, and arming alone does not leave preflight. [Adding a dashboard theme](../developer/dashboard-themes.md) gives the manifest keys, the exact phase triggers and the full box vocabulary.
 
 ## Box types and text styling
 
