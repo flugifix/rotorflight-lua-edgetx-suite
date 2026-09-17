@@ -1000,7 +1000,13 @@ local function makeChannelProcedure(channel, order)
           if record and tonumber(record.adjFunction) ~= 0 then
             found[tonumber(record.adjFunction)] = { slot = index, record = record }
           elseif record then
-            found.free = found.free or index
+            -- EVERY empty slot, in the order the board reports them, not just the first.
+            -- A table whose empty slots are not contiguous -- an adjustment configured after
+            -- an empty one -- is the case that decides this: with only the first one recorded,
+            -- the second function was allocated to `first + 1`, which on such a table is
+            -- somebody's own adjustment.
+            found.free = found.free or {}
+            found.free[#found.free + 1] = index
           end
           readNext()
         end)
@@ -1341,6 +1347,10 @@ end
 local function plannedActions(w)
   local actions = {}
   local takenSlots = {}
+  -- The cursor into the list of empty adjustment slots, hoisted for the same reason
+  -- `takenSlots` is: the whole plan is derived from one read, so a second action reading the
+  -- list from the start would promise a slot the first one has already taken.
+  local nextFreeAdj = 1
   for _, entry in ipairs(w.radio.CHANNELS) do
     if wanted(w, entry) then
       local swsrc = w.data.picked and w.data.picked[entry.channel]
@@ -1366,15 +1376,19 @@ local function plannedActions(w)
           action.slots = {}
           local found = w.data.adjustments
           if type(found) == "table" then
-            local nextFree = found.free
+            local free = type(found.free) == "table" and found.free or nil
             for _, fn in ipairs(role.functions) do
               local hit = found[fn]
               if hit then
                 action.slots[fn] = hit.slot
-              elseif nextFree then
-                action.slots[fn] = nextFree
-                nextFree = nextFree + 1
+              elseif free and free[nextFreeAdj] then
+                action.slots[fn] = free[nextFreeAdj]
+                nextFreeAdj = nextFreeAdj + 1
               end
+              -- No slot is left unassigned quietly: `actionBlocked` reads exactly this and
+              -- blocks the row, which is what a board with no second empty slot has to do.
+              -- The list is built by the enumeration, so it can never name a slot past the
+              -- end of the table either.
             end
           end
         end
