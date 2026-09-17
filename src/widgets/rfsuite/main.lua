@@ -132,13 +132,27 @@ local function refresh(widget, event, touchState)
   end
 end
 
+-- The back-off is honoured here as well as in refresh(), because this is the path that can
+-- loop. A background pass that hits the instruction limit is called again on the very next
+-- host cycle with the same work in front of it, so a flag that is only read by refresh()
+-- suppresses the pass the pilot is looking at and leaves the one that failed running. The
+-- release is for the same reason it is in refresh(): a back-off is not a pause, and whatever
+-- the widget was holding when it failed must not be left standing for the duration.
 local function background(widget)
   if widget and widget.background then
+    local now = nowSeconds()
+    local backoffUntil = tonumber(widget._cpuBackoffUntil) or 0
+    if backoffUntil > 0 and now < backoffUntil then
+      letGoWhileBackedOff(widget)
+      return
+    end
+
     local ok, err = pcall(widget.background, widget)
     if not ok then
       logFault("widget.background", err)
       if isCpuLimitError(err) then
-        widget._cpuBackoffUntil = nowSeconds() + 0.8
+        widget._cpuBackoffUntil = now + 0.8
+        letGoWhileBackedOff(widget)
       end
     end
   end
