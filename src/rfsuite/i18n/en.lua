@@ -1091,6 +1091,8 @@ return {
         saving_data = "Saving ESC parameters...",
         save_failed_title = "Save Failed",
         save_failed_message = "ESC did not respond / write timed out.",
+        save_error_not_read = "Read the ESC before saving.",
+        save_error_invalid_payload = "ESC data could not be built. Re-read the ESC before saving.",
         title_motor_override = "Motor Override",
         motor = "Motor",
         motor_override_note = "Blades off and the craft secured. The motor turns as soon as the throttle leaves zero.",
