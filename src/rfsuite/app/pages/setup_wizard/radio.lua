@@ -207,6 +207,36 @@ function M.getOutput(channel)
   return out
 end
 
+-- The output stage, in the units `model.getOutput` reports it: end points in tenths of a
+-- percent, so full travel either way is -1000 and 1000.
+local OUTPUT_FULL = 1000
+
+-- Is this channel's output stage the one the absolute windows are written against?
+--
+-- Everything this assistant tells the flight controller is in microseconds -- the mode window
+-- of `windowFor`, the adjustment travel of `travelRange` -- and what the channel actually puts
+-- on the wire is the mixer value AFTER the output stage: the output curve, the subtrim, the end
+-- points and the centre. At the defaults, full deflection is 988 and 2012 microseconds, which is
+-- exactly the travel those two windows are written against; at end points of 40 % it is about
+-- 1700, which is the EDGE of the arming window.
+--
+-- `revert` is deliberately not part of this test. It is a SIGN, and the sign is the one thing
+-- the assistant does author -- it goes into the input's weight, see `writeConditionChannel`.
+-- The other four are magnitudes no weight can compensate.
+--
+-- Takes the table rather than the channel so the caller that already has it does not read the
+-- model twice, and so the completion criterion and the write plan cannot drift apart.
+function M.outputCarriesTravel(output)
+  if type(output) ~= "table" then return nil end
+  if tonumber(output.min) ~= -OUTPUT_FULL then return false end
+  if tonumber(output.max) ~= OUTPUT_FULL then return false end
+  if tonumber(output.offset) ~= 0 then return false end
+  if tonumber(output.ppmCenter) ~= 0 then return false end
+  -- `model.getOutput` omits the field entirely where no output curve is set.
+  if output.curve ~= nil then return false end
+  return true
+end
+
 -- A switch position, as the radio's own picker returns it. Positions are grouped three to a
 -- switch from the first switch onward, which is what lets a single field carry both halves of
 -- the answer: which switch, and which of its states.
@@ -468,6 +498,10 @@ function M.channelFooting(entry)
   if tonumber(line.trimSource) ~= M.TRIM_OFF then return false end
   local output = M.getOutput(entry.channel)
   if output == nil or output.name ~= entry.channelName then return false end
+  -- The output STAGE, not only the name on it. A channel whose end points, subtrim, centre or
+  -- output curve have been moved does not produce the microseconds the flight controller is
+  -- being told to expect, and used to be reported as laid out anyway.
+  if M.outputCarriesTravel(output) ~= true then return false end
   return true
 end
 
@@ -601,6 +635,16 @@ function M.writeConditionChannel(entry, swsrc)
   -- goes into the INPUT's weight. The mixer line is then the plain one the pilot would draw.
   local high = M.pickedReadsHigh(swsrc)
   if high == nil then return false, "switch_unreadable" end
+
+  -- The switch reading is one stage short of the answer, and so is the channel reading that
+  -- looks like the obvious instrument: `getValue("chN")` is the mixer output BEFORE the output
+  -- stage (`ex_chans` in the firmware's mixer), so neither of them can see a reverted channel.
+  -- The direction is therefore read where it is stored. Without this, a channel reverted by an
+  -- earlier setup turns the position the pilot named into the BOTTOM of the travel and puts the
+  -- other position inside the window that arms the craft.
+  local output = M.getOutput(entry.channel)
+  if output == nil then return false, "no_output" end
+  if tonumber(output.revert) ~= 0 then high = not high end
 
   local mixSource, err = writeChannelInput(entry, swsrc, high and 100 or -100)
   if mixSource == nil then return false, err end

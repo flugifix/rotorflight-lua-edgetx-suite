@@ -1466,6 +1466,7 @@ return {
         pick_empty = "-",
         pick_needs_three = "This switch has two positions. The profile channel needs three, one per profile. Pick a three-position switch.",
         pick_none = "No switch picked yet. Pick one here; the step cannot be continued until you do.",
+        output_not_default = "This channel's output is not at full travel. Set its end points back to -100 and +100, with no subtrim, centre offset or curve.",
         marker_off = "off",
         marker_on = "on",
         verify_intro = "Values from the flight controller. Move the switches: every row has to follow what you settled.",

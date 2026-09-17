@@ -1120,6 +1120,16 @@ local function makeChannelProcedure(channel, order)
               "Setting this channel up replaces the mixer lines already on it."))
         end
 
+        -- The output STAGE of this channel, which is what finally decides the microseconds on
+        -- the wire. A channel that cannot produce the window is refused by the write plan, so
+        -- the reason belongs on the screen the pilot is standing on -- and the way out of it is
+        -- the transmitter's own outputs page, not anything here.
+        if w.radio.outputCarriesTravel(w.radio.getOutput(entry.channel)) == false then
+          y = y + 6 + w.paragraph(children, area.x, y + 6, area.w,
+            t(i18n, "output_not_default",
+              "This channel's output is not at full travel. Set its end points back to -100 and +100, with no subtrim, centre offset or curve."))
+        end
+
         local hint = channelHint(i18n, entry.key)
         if hint then
           y = y + 4 + w.paragraph(children, area.x, y + 4, area.w, hint)
@@ -1362,7 +1372,10 @@ local function plannedActions(w)
           swsrc = swsrc,
           govSwsrc = w.data.pickedGov and w.data.pickedGov[entry.channel] or nil,
           switchName = w.radio.switchPositionName(swsrc),
-          aux = w.msp.wireChannelToAux(entry.channel, w.data.rxMap)
+          aux = w.msp.wireChannelToAux(entry.channel, w.data.rxMap),
+          -- Whether this channel can produce the microseconds the board is about to be told
+          -- to expect. Read here rather than at the write, so the row can say so first.
+          outputOk = w.radio.outputCarriesTravel(w.radio.getOutput(entry.channel))
         }
         if role and role.kind == "condition" then
           action.boxId = boxIdFor(w, role.box)
@@ -1405,6 +1418,10 @@ local function actionBlocked(action)
   -- No switch, nothing to write. This is the case that used to be absent from the list rather
   -- than blocked in it.
   if action.swsrc == nil or action.swsrc == 0 then return true end
+  -- The windows this assistant writes are absolute microseconds, so a channel whose output
+  -- stage cannot produce them is refused rather than written with a window it will never
+  -- reach. `nil` is a model that could not be read and is not a refusal.
+  if action.outputOk == false then return true end
   -- The throttle needs BOTH its answers: without the governor the reference construction has
   -- no second line to carry the travel.
   if role.kind == "throttle" and (action.govSwsrc == nil or action.govSwsrc == 0) then

@@ -1466,6 +1466,7 @@ return {
         pick_empty = "-",
         pick_needs_three = "Dieser Schalter hat zwei Stellungen. Der Profilkanal braucht drei, eine je Profil - nimm einen Dreistellungsschalter.",
         pick_none = "Noch kein Schalter gewählt. Wähle hier einen; vorher geht es nicht weiter.",
+        output_not_default = "Der Ausgang dieses Kanals steht nicht auf vollem Weg. Setze die Endpunkte auf -100 und +100 zurück, ohne Subtrimm, Mittenversatz oder Kurve.",
         marker_off = "aus",
         marker_on = "an",
         verify_intro = "Werte vom Flugregler. Beweg die Schalter - jede Zeile muss dem folgen, was du festgelegt hast.",
