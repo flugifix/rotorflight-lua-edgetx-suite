@@ -40,6 +40,19 @@ local procs = {}
 
 local SW_SWITCH = 1
 local SW_NONE = 1 << 20
+
+-- The switch filter for a SOURCE picker, and it is not a global.
+--
+-- EdgeTX registers it inside the `lvgl` table -- `radio/src/lua/api_colorlcd_lvgl.cpp`,
+-- `LROT_NUMENTRY(SRC_SWITCH, SRC_SWITCH|SRC_FUNC_SWITCH)` inside `LROT_BEGIN(lvgllib, ...)` --
+-- so a bare `SRC_SWITCH` is nil and the fallback beside it is what the picker actually got.
+-- That fallback is `0xFFFFFFFF`, which the same table declares as `SRC_ALL`: sticks, pots,
+-- trims, logical switches, channels, GVARs and telemetry sensors, all offered where only a
+-- switch can be answered. The switch POSITION picker further down was never affected -- it
+-- takes the `SW_*` constants declared above, which are real numbers.
+--
+-- The spelling is the one `templates/5.Rotorflight/Rotorflight.lua` already uses.
+local SRC_SWITCH_FILTER = (lvgl ~= nil and lvgl.SRC_SWITCH) or 0xFFFFFFFF
 local MAX_SWITCH_POSITIONS = 96
 local CHAIN_MOVE_US = 150
 
@@ -1147,7 +1160,7 @@ local function makeChannelProcedure(channel, order)
             -- It came across unnoticed when this field stopped being a choice, and neither the
             -- gate nor the layout bench can see it -- the one is a compiler and the other never
             -- reaches a real LVGL object.
-            filter = (SRC_SWITCH or 0xFFFFFFFF),
+            filter = SRC_SWITCH_FILTER,
             get = function()
               local picked = w.data.picked and w.data.picked[channel]
               if picked == nil or picked == 0 then return 0 end
@@ -1167,12 +1180,19 @@ local function makeChannelProcedure(channel, order)
           -- them all -- so the shortfall is said in words rather than left as a Next that will
           -- not press. Nothing is refused here; the gate on the step already does that.
           local picked = w.data.picked and w.data.picked[channel]
-          local positions = picked ~= nil and picked ~= 0
-            and (w.radio.switchPositionCount(picked) or 0) or nil
-          if positions ~= nil and entry.needsPositions and positions < entry.needsPositions then
+          if picked == nil or picked == 0 then
+            -- Nothing picked, and this is the branch that drew nothing at all. The step's gate
+            -- refuses an empty answer, so without a line here Next is simply inert.
             w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
-              t(i18n, "pick_needs_three",
-                "This switch has two positions. The profile channel needs three, one per profile. Pick a three-position switch."))
+              t(i18n, "pick_none",
+                "No switch picked yet. Pick one here; the step cannot be continued until you do."))
+          else
+            local positions = w.radio.switchPositionCount(picked) or 0
+            if entry.needsPositions and positions < entry.needsPositions then
+              w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
+                t(i18n, "pick_needs_three",
+                  "This switch has two positions. The profile channel needs three, one per profile. Pick a three-position switch."))
+            end
           end
           return
         end
@@ -1229,7 +1249,7 @@ local function makeChannelProcedure(channel, order)
             x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
             -- No `title`; the source picker does not carry the property (see the profile
             -- channel's note).
-            filter = (SRC_SWITCH or 0xFFFFFFFF),
+            filter = SRC_SWITCH_FILTER,
             get = function()
               local picked = w.data.pickedGov[channel]
               if picked == nil or picked == 0 then return 0 end
@@ -1246,8 +1266,13 @@ local function makeChannelProcedure(channel, order)
           -- Three positions, because all three carry values -- off, spool-up, flight. Said in
           -- words where a narrower switch is picked; the step's gate refuses it.
           local govPicked = w.data.pickedGov[channel]
-          if govPicked ~= nil and govPicked ~= 0
-             and (w.radio.switchPositionCount(govPicked) or 0) < 3 then
+          if govPicked == nil or govPicked == 0 then
+            -- Same as the profile channel: an unanswered picker is the case that needs the
+            -- sentence most, because the step's gate refuses it and says nothing.
+            y = y + 4 + w.paragraph(children, area.x, y + 4, area.w,
+              t(i18n, "gov_none",
+                "No governor switch picked yet. Pick one here; the step cannot be continued until you do."))
+          elseif (w.radio.switchPositionCount(govPicked) or 0) < 3 then
             y = y + 4 + w.paragraph(children, area.x, y + 4, area.w,
               t(i18n, "gov_needs_three", "This switch has two positions. The governor needs three: off, spool-up, flight."))
           end
