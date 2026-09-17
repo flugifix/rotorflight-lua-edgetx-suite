@@ -583,7 +583,8 @@ local function getLocaleModule()
     return localeModule
   end
 
-  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", "t")
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/system_locale.lua", mode)
   if chunk then
     local ok, mod = pcall(chunk)
     if ok and type(mod) == "table" then

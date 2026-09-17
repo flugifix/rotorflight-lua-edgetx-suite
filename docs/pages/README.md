@@ -31,7 +31,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Advanced → PID Bandwidth | `flight_tuning/advanced/pid_bandwidth.md` | yes | read-only while armed | to write |
 | Advanced → Autolevel | `flight_tuning/advanced/autolevel.md` | yes | read-only while armed | to write |
 | Advanced → Main Rotor | `flight_tuning/advanced/main_rotor.md` | yes | read-only while armed | to write |
-| Advanced → Tail Rotor | `flight_tuning/advanced/tail_rotor.md` | yes | read-only while armed | to write |
+| Advanced → Tail Rotor | [flight_tuning/advanced/tail_rotor.md](flight_tuning/advanced/tail_rotor.md) | yes | read-only while armed | written |
 | Advanced → Rescue | `flight_tuning/advanced/rescue.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Advanced | `flight_tuning/advanced/rates_advanced/advanced.md` | yes | read-only while armed | to write |
 | Advanced → Rates (Advanced) → Cyclic Behaviour | `flight_tuning/advanced/rates_advanced/cyclic_behaviour.md` | yes | read-only while armed | to write |
@@ -79,7 +79,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | ESC & Motors → ESC Tools → OMP | `setup/esc_motors/esc_tools/escmfg/omp.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
 | ESC & Motors → ESC Tools → Scorpion | `setup/esc_motors/esc_tools/escmfg/scorp.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
 | ESC & Motors → ESC Tools → XDFly | `setup/esc_motors/esc_tools/escmfg/xdfly.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
-| ESC & Motors → ESC Tools → YGE | `setup/esc_motors/esc_tools/escmfg/yge.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
+| ESC & Motors → ESC Tools → YGE | [setup/esc_motors/esc_tools/escmfg/yge.md](setup/esc_motors/esc_tools/escmfg/yge.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → ZTW | `setup/esc_motors/esc_tools/escmfg/ztw.md` | no | read-only while armed, lit for one ESC telemetry protocol | to write |
 | ESC & Motors → ESC Tools → ESC Configurator (the shared run page) | `setup/esc_motors/esc_tools/run.md` | no | read-only while armed | to write |
 | ESC & Motors → Motor Override | `setup/esc_motors/motor_override.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
@@ -108,7 +108,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Diagnostics → ELRS Link | [tools/diagnostics/elrs_link.md](tools/diagnostics/elrs_link.md) | yes | read-only while armed | written |
 | Diagnostics → Validate Sensors | `tools/diagnostics/validate_sensors.md` | yes | needs the flight controller, read-only while armed | to write |
 | Diagnostics → SmartFuel | `tools/diagnostics/smartfuel.md` | no | needs the flight controller, read-only while armed, needs MSP API 12.09 | to write |
-| Diagnostics → Session Logs | `tools/diagnostics/session_logs.md` | no | always available | to write |
+| Diagnostics → Session Logs | [tools/diagnostics/session_logs.md](tools/diagnostics/session_logs.md) | yes | always available | written |
 | Diagnostics → Info | `tools/diagnostics/info.md` | yes | read-only while armed | to write |
 
 ## System → Logs
