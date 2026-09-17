@@ -40,6 +40,19 @@ local procs = {}
 
 local SW_SWITCH = 1
 local SW_NONE = 1 << 20
+
+-- The switch filter for a SOURCE picker, and it is not a global.
+--
+-- EdgeTX registers it inside the `lvgl` table -- `radio/src/lua/api_colorlcd_lvgl.cpp`,
+-- `LROT_NUMENTRY(SRC_SWITCH, SRC_SWITCH|SRC_FUNC_SWITCH)` inside `LROT_BEGIN(lvgllib, ...)` --
+-- so a bare `SRC_SWITCH` is nil and the fallback beside it is what the picker actually got.
+-- That fallback is `0xFFFFFFFF`, which the same table declares as `SRC_ALL`: sticks, pots,
+-- trims, logical switches, channels, GVARs and telemetry sensors, all offered where only a
+-- switch can be answered. The switch POSITION picker further down was never affected -- it
+-- takes the `SW_*` constants declared above, which are real numbers.
+--
+-- The spelling is the one `templates/5.Rotorflight/Rotorflight.lua` already uses.
+local SRC_SWITCH_FILTER = (lvgl ~= nil and lvgl.SRC_SWITCH) or 0xFFFFFFFF
 local MAX_SWITCH_POSITIONS = 96
 local CHAIN_MOVE_US = 150
 
@@ -799,13 +812,19 @@ local function throttleComplete(w, channel)
   local maxSource = w.radio.plainSource("MAX")
   if maxSource == nil then return nil end
 
+  -- The same sign the write carries, from the same function: a reverted channel stores both
+  -- weights negated, and a criterion that did not know it would report a correctly laid out
+  -- channel as wrong for ever.
+  local sign = w.radio.outputSign(channel)
+  if sign == nil then return nil end
+
   local hold = w.radio.getInput(entry.input, 0)
   local gov = w.radio.getInput(entry.input, 1)
   if hold == nil or gov == nil then return false end
   if tonumber(hold.source) ~= maxSource then return false end
-  if (tonumber(hold.weight) or 0) ~= -100 then return false end
+  if (tonumber(hold.weight) or 0) ~= -100 * sign then return false end
   if (tonumber(hold.switch) or 0) == 0 then return false end
-  if (tonumber(gov.weight) or 0) ~= 100 then return false end
+  if (tonumber(gov.weight) or 0) ~= 100 * sign then return false end
   if (tonumber(gov.switch) or 0) ~= 0 then return false end
 
   -- Checked against the answers only where they are known: the criterion is asked from the
@@ -949,10 +968,17 @@ local function makeChannelProcedure(channel, order)
             if role and role.kind == "condition" then
               local line = entry.input ~= nil and w.radio.getInput(entry.input, 0) or nil
               local weight = line and tonumber(line.weight) or nil
-              if weight == 100 then
-                picked = picked + w.radio.POSITION_DOWN
-              elseif weight ~= -100 then
+              -- The exact inverse of what `writeConditionChannel` stored, and it has to carry
+              -- the same sign: the weight records the direction the picked position produces
+              -- AFTER the output stage, so on a reverted channel the stored sign is the
+              -- opposite of the one the switch reads. Without this the assistant proposes the
+              -- OTHER position back on the next run, and one press then rewrites the channel so
+              -- that the wrong position arms.
+              local sign = w.radio.outputSign(channel)
+              if sign == nil or (weight ~= 100 and weight ~= -100) then
                 picked = nil
+              elseif weight == 100 * sign then
+                picked = picked + w.radio.POSITION_DOWN
               end
             end
             break
@@ -987,7 +1013,13 @@ local function makeChannelProcedure(channel, order)
           if record and tonumber(record.adjFunction) ~= 0 then
             found[tonumber(record.adjFunction)] = { slot = index, record = record }
           elseif record then
-            found.free = found.free or index
+            -- EVERY empty slot, in the order the board reports them, not just the first.
+            -- A table whose empty slots are not contiguous -- an adjustment configured after
+            -- an empty one -- is the case that decides this: with only the first one recorded,
+            -- the second function was allocated to `first + 1`, which on such a table is
+            -- somebody's own adjustment.
+            found.free = found.free or {}
+            found.free[#found.free + 1] = index
           end
           readNext()
         end)
@@ -1101,6 +1133,16 @@ local function makeChannelProcedure(channel, order)
               "Setting this channel up replaces the mixer lines already on it."))
         end
 
+        -- The output STAGE of this channel, which is what finally decides the microseconds on
+        -- the wire. A channel that cannot produce the window is refused by the write plan, so
+        -- the reason belongs on the screen the pilot is standing on -- and the way out of it is
+        -- the transmitter's own outputs page, not anything here.
+        if w.radio.outputCarriesTravel(w.radio.getOutput(entry.channel)) == false then
+          y = y + 6 + w.paragraph(children, area.x, y + 6, area.w,
+            t(i18n, "output_not_default",
+              "This channel's output is not at full travel. Set its end points back to -100 and +100, with no subtrim, centre offset or curve."))
+        end
+
         local hint = channelHint(i18n, entry.key)
         if hint then
           y = y + 4 + w.paragraph(children, area.x, y + 4, area.w, hint)
@@ -1147,7 +1189,7 @@ local function makeChannelProcedure(channel, order)
             -- It came across unnoticed when this field stopped being a choice, and neither the
             -- gate nor the layout bench can see it -- the one is a compiler and the other never
             -- reaches a real LVGL object.
-            filter = (SRC_SWITCH or 0xFFFFFFFF),
+            filter = SRC_SWITCH_FILTER,
             get = function()
               local picked = w.data.picked and w.data.picked[channel]
               if picked == nil or picked == 0 then return 0 end
@@ -1167,12 +1209,19 @@ local function makeChannelProcedure(channel, order)
           -- them all -- so the shortfall is said in words rather than left as a Next that will
           -- not press. Nothing is refused here; the gate on the step already does that.
           local picked = w.data.picked and w.data.picked[channel]
-          local positions = picked ~= nil and picked ~= 0
-            and (w.radio.switchPositionCount(picked) or 0) or nil
-          if positions ~= nil and entry.needsPositions and positions < entry.needsPositions then
+          if picked == nil or picked == 0 then
+            -- Nothing picked, and this is the branch that drew nothing at all. The step's gate
+            -- refuses an empty answer, so without a line here Next is simply inert.
             w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
-              t(i18n, "pick_needs_three",
-                "This switch has two positions. The profile channel needs three, one per profile. Pick a three-position switch."))
+              t(i18n, "pick_none",
+                "No switch picked yet. Pick one here; the step cannot be continued until you do."))
+          else
+            local positions = w.radio.switchPositionCount(picked) or 0
+            if entry.needsPositions and positions < entry.needsPositions then
+              w.paragraph(children, area.x, y + w.ROW_H + 6, area.w,
+                t(i18n, "pick_needs_three",
+                  "This switch has two positions. The profile channel needs three, one per profile. Pick a three-position switch."))
+            end
           end
           return
         end
@@ -1229,7 +1278,7 @@ local function makeChannelProcedure(channel, order)
             x = area.x + area.w - pickerW, y = y + 2, w = pickerW, h = w.ROW_H - 6,
             -- No `title`; the source picker does not carry the property (see the profile
             -- channel's note).
-            filter = (SRC_SWITCH or 0xFFFFFFFF),
+            filter = SRC_SWITCH_FILTER,
             get = function()
               local picked = w.data.pickedGov[channel]
               if picked == nil or picked == 0 then return 0 end
@@ -1246,8 +1295,13 @@ local function makeChannelProcedure(channel, order)
           -- Three positions, because all three carry values -- off, spool-up, flight. Said in
           -- words where a narrower switch is picked; the step's gate refuses it.
           local govPicked = w.data.pickedGov[channel]
-          if govPicked ~= nil and govPicked ~= 0
-             and (w.radio.switchPositionCount(govPicked) or 0) < 3 then
+          if govPicked == nil or govPicked == 0 then
+            -- Same as the profile channel: an unanswered picker is the case that needs the
+            -- sentence most, because the step's gate refuses it and says nothing.
+            y = y + 4 + w.paragraph(children, area.x, y + 4, area.w,
+              t(i18n, "gov_none",
+                "No governor switch picked yet. Pick one here; the step cannot be continued until you do."))
+          elseif (w.radio.switchPositionCount(govPicked) or 0) < 3 then
             y = y + 4 + w.paragraph(children, area.x, y + 4, area.w,
               t(i18n, "gov_needs_three", "This switch has two positions. The governor needs three: off, spool-up, flight."))
           end
@@ -1316,6 +1370,10 @@ end
 local function plannedActions(w)
   local actions = {}
   local takenSlots = {}
+  -- The cursor into the list of empty adjustment slots, hoisted for the same reason
+  -- `takenSlots` is: the whole plan is derived from one read, so a second action reading the
+  -- list from the start would promise a slot the first one has already taken.
+  local nextFreeAdj = 1
   for _, entry in ipairs(w.radio.CHANNELS) do
     if wanted(w, entry) then
       local swsrc = w.data.picked and w.data.picked[entry.channel]
@@ -1327,7 +1385,10 @@ local function plannedActions(w)
           swsrc = swsrc,
           govSwsrc = w.data.pickedGov and w.data.pickedGov[entry.channel] or nil,
           switchName = w.radio.switchPositionName(swsrc),
-          aux = w.msp.wireChannelToAux(entry.channel, w.data.rxMap)
+          aux = w.msp.wireChannelToAux(entry.channel, w.data.rxMap),
+          -- Whether this channel can produce the microseconds the board is about to be told
+          -- to expect. Read here rather than at the write, so the row can say so first.
+          outputOk = w.radio.outputCarriesTravel(w.radio.getOutput(entry.channel))
         }
         if role and role.kind == "condition" then
           action.boxId = boxIdFor(w, role.box)
@@ -1341,14 +1402,18 @@ local function plannedActions(w)
           action.slots = {}
           local found = w.data.adjustments
           if type(found) == "table" then
-            local nextFree = found.free
+            -- A function that gets no slot is left unassigned, and `actionBlocked` reads
+            -- exactly that and blocks the row -- which is what a board with no second empty
+            -- slot has to do. The list is built by the enumeration, which walks
+            -- `1..ADJ_SLOT_COUNT`, so it can never name a slot past the end of the table.
+            local free = type(found.free) == "table" and found.free or nil
             for _, fn in ipairs(role.functions) do
               local hit = found[fn]
               if hit then
                 action.slots[fn] = hit.slot
-              elseif nextFree then
-                action.slots[fn] = nextFree
-                nextFree = nextFree + 1
+              elseif free and free[nextFreeAdj] then
+                action.slots[fn] = free[nextFreeAdj]
+                nextFreeAdj = nextFreeAdj + 1
               end
             end
           end
@@ -1366,6 +1431,10 @@ local function actionBlocked(action)
   -- No switch, nothing to write. This is the case that used to be absent from the list rather
   -- than blocked in it.
   if action.swsrc == nil or action.swsrc == 0 then return true end
+  -- The windows this assistant writes are absolute microseconds, so a channel whose output
+  -- stage cannot produce them is refused rather than written with a window it will never
+  -- reach. `nil` is a model that could not be read and is not a refusal.
+  if action.outputOk == false then return true end
   -- The throttle needs BOTH its answers: without the governor the reference construction has
   -- no second line to carry the travel.
   if role.kind == "throttle" and (action.govSwsrc == nil or action.govSwsrc == 0) then

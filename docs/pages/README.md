@@ -94,7 +94,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
-| Full initial setup (Complete run / Radio / Flight controller) | `setup_wizard.md` | yes | preview switch *Setup Assistant*, read-only while armed | to write |
+| Full initial setup (Complete run / Radio / Flight controller) | [setup_wizard.md](setup_wizard.md) | yes | preview switch *Setup Assistant*, read-only while armed | written |
 
 ## System → Tools
 
