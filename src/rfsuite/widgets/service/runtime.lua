@@ -39,6 +39,7 @@ local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local EventsRuntime = requireModule("tasks/events/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")
 local PreferencesModule = requireModule("lib/preferences.lua")
+local ModelPreferences = requireModule("lib/model_preferences.lua")
 local LogSink = requireModule("lib/log_sink.lua")
 if LogSink and type(LogSink.configure) == "function" then
   -- This state's ring and this state's files. The tool holds a ring of its own and names its
@@ -49,9 +50,10 @@ end
 -- Tasks read their settings from rfsuite.preferences, and that table is per Lua state: the tool
 -- publishes it in the script state and the dashboard widget in the widget state. Without a
 -- publisher here, a task that asks whether a feature is switched on gets nothing and behaves as
--- if it were off -- in exactly the arrangement this widget exists for. Re-read on an interval
+-- if it were off -- in exactly the arrangement this widget exists for. Looked at on an interval
 -- rather than once, so a setting changed in the tool takes effect without a restart, and never
--- while armed.
+-- while armed. What the interval costs when nothing has changed is three fstats: see
+-- refreshPreferences below.
 local PREFERENCES_INTERVAL_SECONDS = 30
 
 local function nowSeconds()
@@ -123,20 +125,129 @@ local function isArmed()
   return type(runtimeState) == "table" and runtimeState.lastArmed == true
 end
 
+-- What an fstat that ANSWERED, on a file that is not there, is recorded as. It is deliberately
+-- a value and not nil: on a card where the pilot has never saved a setting there is no
+-- preferences.lua at all -- lib/preferences.lua writes it only from save() -- and that is a
+-- state, not a failure to look. Recording it as nil would mean re-reading a file that is known
+-- not to exist every 30 s for as long as the pilot leaves the settings alone, which on this
+-- widget is the default install.
+local NO_PREFERENCES_FILE = "absent"
+
+--- What the settings file looks like from the outside, as a string, or nil where that could
+--- not be established.
+--
+-- The two are not the same answer. A file nobody could LOOK AT is not a file that has not
+-- changed, and the caller treats those differently: no stamp at all means the parse happens
+-- exactly as it did before this gate existed. Only the absence of `fstat` itself answers nil,
+-- because that is the one case in which nothing here can tell the two apart.
+--
+-- `fstat` returns the modification time as a TABLE -- year, mon, day, hour, min, sec -- so
+-- tostring() on it is a table address that differs on every call. The fields are what identify
+-- the file, so the fields are what the stamp is built from, and the size carries the rest:
+-- FAT stores seconds in two-second steps, which bounds how close together two writes can be
+-- and still be told apart.
+local function preferencesStamp()
+  if type(fstat) ~= "function" then return nil end
+  if not PreferencesModule or type(PreferencesModule.getPath) ~= "function" then return nil end
+
+  local okPath, path = pcall(PreferencesModule.getPath)
+  if not okPath or type(path) ~= "string" then return nil end
+
+  local ok, info = pcall(fstat, path)
+  if not ok then return nil end
+  if type(info) ~= "table" then return NO_PREFERENCES_FILE end
+
+  local t = info.time
+  if type(t) ~= "table" then
+    return tostring(info.size) .. ":" .. tostring(t)
+  end
+  return string.format("%s:%s-%s-%s.%s.%s.%s",
+    tostring(info.size), tostring(t.year), tostring(t.mon), tostring(t.day),
+    tostring(t.hour), tostring(t.min), tostring(t.sec))
+end
+
+--- Has the rotating counter beside the settings file moved since the last look?
+--
+-- lib/preferences.lua's save() bumps it on every write and it rotates 1..32, so it moves on
+-- every save whatever the clock and whatever the new file's size -- which is the case a stamp
+-- alone cannot see. It is inspected and never consumed, so every reader observes the same
+-- change. Answers the sizes it read as well, so the caller only adopts them once the reload
+-- has actually happened.
+local function reloadSequences()
+  if type(fstat) ~= "function" then return nil end
+  local paths = ModelPreferences and type(ModelPreferences.reloadRequestPaths) == "function"
+    and ModelPreferences.reloadRequestPaths() or nil
+  if type(paths) ~= "table" then return nil end
+
+  local seqs = {}
+  for i = 1, #paths do
+    local ok, info = pcall(fstat, paths[i])
+    seqs[paths[i]] = (ok and type(info) == "table" and info.size) or 0
+  end
+  return seqs
+end
+
+--- Re-read the settings, but only when they can be shown to have moved.
+--
+-- Answers true when the store was actually parsed, so the caller can leave the rest of the
+-- pass to the next one.
+--
+-- The 30 s tick is what it always was; what it costs when nothing has changed is now three
+-- fstats instead of a read of the whole file, a compile of it and a merge of every schema
+-- section -- lib/config_store.lua's load() holds no memo, so that is the price of every call.
+-- Two signals rather than one, and they are the two the dashboard widget already watches: the
+-- file's own stamp, and the counter every writer bumps. One fstat goes to the settings file
+-- and one to each reload.req the user roots can hold.
+--
+-- Where nothing can be read at all -- no fstat -- the parse happens as it did before. A gate
+-- that skipped it there would be skipping it blind, and the radio that cannot answer is
+-- exactly the radio nobody can measure. This is a weaker default than the dashboard's, which
+-- reloads only on a positive signal and so treats "could not measure" as "nothing changed";
+-- the difference is deliberate, because the dashboard has always worked that way while this
+-- widget has always re-read unconditionally, and a cost saving is not worth taking a setting
+-- away from a radio that cannot be measured.
 local function refreshPreferences(self, force)
-  if not PreferencesModule or type(PreferencesModule.load) ~= "function" then return end
+  if not PreferencesModule or type(PreferencesModule.load) ~= "function" then return false end
 
   local now = nowSeconds()
-  if not force and (now - (self._lastPreferencesLoad or 0)) < PREFERENCES_INTERVAL_SECONDS then return end
-  if not force and isArmed() then return end
+  if not force and (now - (self._lastPreferencesLoad or 0)) < PREFERENCES_INTERVAL_SECONDS then return false end
+  if not force and isArmed() then return false end
   self._lastPreferencesLoad = now
 
-  local ok, prefs = pcall(PreferencesModule.load)
-  if ok and type(prefs) == "table" then
-    self.preferences = prefs
-    _G.rfsuite = _G.rfsuite or {}
-    _G.rfsuite.preferences = prefs
+  local stamp = preferencesStamp()
+  local seqs = reloadSequences()
+
+  if not force and stamp ~= nil and self._lastPreferencesStamp ~= nil then
+    local moved = (stamp ~= self._lastPreferencesStamp)
+    if not moved and seqs and self._lastReloadSeqs then
+      for path, seq in pairs(seqs) do
+        if self._lastReloadSeqs[path] ~= seq then
+          moved = true
+          break
+        end
+      end
+    end
+    if not moved then return false end
   end
+
+  local ok, prefs = pcall(PreferencesModule.load)
+  if not ok or type(prefs) ~= "table" then
+    -- A load that FAILED is not a load that will always fail, and this pcall catches the
+    -- firmware's instruction-limit error like any other. Adopting the stamp here would record
+    -- a busy pass as a pass that read the new file, and the setting the pilot just changed
+    -- would then never be picked up again for the life of this Lua state. So nothing is
+    -- adopted and nothing is deferred: the next 30 s tick finds the signals still moved and
+    -- tries again, which is what this widget did before the gate existed.
+    return false
+  end
+
+  self.preferences = prefs
+  _G.rfsuite = _G.rfsuite or {}
+  _G.rfsuite.preferences = prefs
+
+  self._lastPreferencesStamp = stamp
+  self._lastReloadSeqs = seqs
+  return true
 end
 
 -- One pass of the background work: the same two calls the dashboard makes, bracketed by the same
@@ -151,7 +262,16 @@ local function tickRuntimes(self)
   if (now - (self._lastLogicTick or 0)) < TICK_INTERVAL_SECONDS then return end
   self._lastLogicTick = now
 
-  refreshPreferences(self, false)
+  -- A pass that re-read the settings ends there, so the work below starts on a fresh
+  -- instruction budget instead of behind the parse. The logic tick has already been taken, so
+  -- this costs one 0.1 s turn of the background service, and only on a pass in which the
+  -- settings actually changed.
+  --
+  -- widgets/dashboard/runtime.lua defers after its own reload for the same reason and in the
+  -- other order: it does the link work first and returns before the theme build, because the
+  -- expensive phase there comes AFTER the reload. Here the link work is the only phase there
+  -- is, so deferring it is the only way to keep the parse off the pass that carries it.
+  if refreshPreferences(self, false) then return end
 
   -- This widget owns the card sink for the widget state. It is the better owner of the two that
   -- run here: background() keeps calling this while it is off screen, so the ring keeps reaching
@@ -314,6 +434,8 @@ function Runtime.new(zone, options)
     _lastLogicTick = 0,
     _lastUIRefresh = 0,
     _lastPreferencesLoad = 0,
+    _lastPreferencesStamp = nil,
+    _lastReloadSeqs = nil,
     _usagePeak = -1,
     _usageWindowPeak = -1,
     _usageReportAt = 0
