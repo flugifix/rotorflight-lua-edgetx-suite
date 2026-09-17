@@ -221,8 +221,8 @@ local OUTPUT_FULL = 1000
 -- 1700, which is the EDGE of the arming window.
 --
 -- `revert` is deliberately not part of this test. It is a SIGN, and the sign is the one thing
--- the assistant does author -- it goes into the input's weight, see `writeConditionChannel`.
--- The other four are magnitudes no weight can compensate.
+-- the assistant does author: every line it writes is multiplied by `M.outputSign` below. The
+-- other four are magnitudes no weight can compensate.
 --
 -- Takes the table rather than the channel so the caller that already has it does not read the
 -- model twice, and so the completion criterion and the write plan cannot drift apart.
@@ -235,6 +235,23 @@ function M.outputCarriesTravel(output)
   -- `model.getOutput` omits the field entirely where no output curve is set.
   if output.curve ~= nil then return false end
   return true
+end
+
+-- The sign EVERY line this assistant writes on a channel has to carry.
+--
+-- `revert` negates the whole channel after the mixer, so a channel written without accounting
+-- for it delivers the mirror image of what the flight controller was told to expect. Every line
+-- this file writes is linear, at offset zero and without a curve, so negating each line's weight
+-- cancels the revert exactly.
+--
+-- It is one function because the three writers and the two read-backs have to agree: a weight
+-- stored by one and interpreted by the other is the same fact twice, and two copies of it drift.
+-- `nil` where the model cannot be read -- a sign that cannot be established is not guessed.
+function M.outputSign(channel)
+  local output = M.getOutput(channel)
+  if output == nil then return nil end
+  if tonumber(output.revert) ~= 0 then return -1 end
+  return 1
 end
 
 -- A switch position, as the radio's own picker returns it. Positions are grouped three to a
@@ -600,7 +617,11 @@ end
 function M.writeTravelChannel(entry, swsrc)
   local insert = modelApi("insertMix")
   if not insert then return false, "no_model_api" end
-  local mixSource, err = writeChannelInput(entry, swsrc)
+  -- A reverted channel mirrors the travel, so the switch position the pilot expects to select
+  -- the first profile selects the last one instead.
+  local sign = M.outputSign(entry.channel)
+  if sign == nil then return false, "no_output" end
+  local mixSource, err = writeChannelInput(entry, swsrc, 100 * sign)
   if mixSource == nil then return false, err end
   if not M.clearChannel(entry.channel) then return false, "clear_failed" end
   local ok = pcall(insert, entry.channel - 1, 0, {
@@ -642,11 +663,10 @@ function M.writeConditionChannel(entry, swsrc)
   -- The direction is therefore read where it is stored. Without this, a channel reverted by an
   -- earlier setup turns the position the pilot named into the BOTTOM of the travel and puts the
   -- other position inside the window that arms the craft.
-  local output = M.getOutput(entry.channel)
-  if output == nil then return false, "no_output" end
-  if tonumber(output.revert) ~= 0 then high = not high end
+  local sign = M.outputSign(entry.channel)
+  if sign == nil then return false, "no_output" end
 
-  local mixSource, err = writeChannelInput(entry, swsrc, high and 100 or -100)
+  local mixSource, err = writeChannelInput(entry, swsrc, (high and 100 or -100) * sign)
   if mixSource == nil then return false, err end
   if not M.clearChannel(entry.channel) then return false, "clear_failed" end
 
@@ -682,6 +702,12 @@ function M.writeThrottleChannel(entry, lockSwsrc, govSwsrc)
   if entry.input == nil then return false, "no_input" end
   if govSwsrc == nil or govSwsrc == 0 then return false, "no_gov" end
 
+  -- The hold line pins the motor by forcing MAX to the BOTTOM of the travel. On a reverted
+  -- channel an unsigned -100 arrives at the top of it instead -- full throttle in exactly the
+  -- position the pilot named as the lock -- so this is the channel where the sign matters most.
+  local sign = M.outputSign(entry.channel)
+  if sign == nil then return false, "no_output" end
+
   local maxSource = M.plainSource("MAX")
   if maxSource == nil then return false, "no_max" end
   local govSource = M.switchSource(govSwsrc)
@@ -710,10 +736,10 @@ function M.writeThrottleChannel(entry, lockSwsrc, govSwsrc)
   for _ = 1, count do
     if not pcall(deleteInput, entry.input, 0) then return false, "clear_input_failed" end
   end
-  if not pcall(insertInput, entry.input, 0, line(maxSource, -100, lockSwsrc, "Hold")) then
+  if not pcall(insertInput, entry.input, 0, line(maxSource, -100 * sign, lockSwsrc, "Hold")) then
     return false, "insert_input_failed"
   end
-  if not pcall(insertInput, entry.input, 1, line(govSource, 100, 0, "GOV")) then
+  if not pcall(insertInput, entry.input, 1, line(govSource, 100 * sign, 0, "GOV")) then
     return false, "insert_input_failed"
   end
 

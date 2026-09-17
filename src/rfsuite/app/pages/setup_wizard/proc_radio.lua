@@ -812,13 +812,19 @@ local function throttleComplete(w, channel)
   local maxSource = w.radio.plainSource("MAX")
   if maxSource == nil then return nil end
 
+  -- The same sign the write carries, from the same function: a reverted channel stores both
+  -- weights negated, and a criterion that did not know it would report a correctly laid out
+  -- channel as wrong for ever.
+  local sign = w.radio.outputSign(channel)
+  if sign == nil then return nil end
+
   local hold = w.radio.getInput(entry.input, 0)
   local gov = w.radio.getInput(entry.input, 1)
   if hold == nil or gov == nil then return false end
   if tonumber(hold.source) ~= maxSource then return false end
-  if (tonumber(hold.weight) or 0) ~= -100 then return false end
+  if (tonumber(hold.weight) or 0) ~= -100 * sign then return false end
   if (tonumber(hold.switch) or 0) == 0 then return false end
-  if (tonumber(gov.weight) or 0) ~= 100 then return false end
+  if (tonumber(gov.weight) or 0) ~= 100 * sign then return false end
   if (tonumber(gov.switch) or 0) ~= 0 then return false end
 
   -- Checked against the answers only where they are known: the criterion is asked from the
@@ -962,10 +968,17 @@ local function makeChannelProcedure(channel, order)
             if role and role.kind == "condition" then
               local line = entry.input ~= nil and w.radio.getInput(entry.input, 0) or nil
               local weight = line and tonumber(line.weight) or nil
-              if weight == 100 then
-                picked = picked + w.radio.POSITION_DOWN
-              elseif weight ~= -100 then
+              -- The exact inverse of what `writeConditionChannel` stored, and it has to carry
+              -- the same sign: the weight records the direction the picked position produces
+              -- AFTER the output stage, so on a reverted channel the stored sign is the
+              -- opposite of the one the switch reads. Without this the assistant proposes the
+              -- OTHER position back on the next run, and one press then rewrites the channel so
+              -- that the wrong position arms.
+              local sign = w.radio.outputSign(channel)
+              if sign == nil or (weight ~= 100 and weight ~= -100) then
                 picked = nil
+              elseif weight == 100 * sign then
+                picked = picked + w.radio.POSITION_DOWN
               end
             end
             break
@@ -1389,6 +1402,10 @@ local function plannedActions(w)
           action.slots = {}
           local found = w.data.adjustments
           if type(found) == "table" then
+            -- A function that gets no slot is left unassigned, and `actionBlocked` reads
+            -- exactly that and blocks the row -- which is what a board with no second empty
+            -- slot has to do. The list is built by the enumeration, which walks
+            -- `1..ADJ_SLOT_COUNT`, so it can never name a slot past the end of the table.
             local free = type(found.free) == "table" and found.free or nil
             for _, fn in ipairs(role.functions) do
               local hit = found[fn]
@@ -1398,10 +1415,6 @@ local function plannedActions(w)
                 action.slots[fn] = free[nextFreeAdj]
                 nextFreeAdj = nextFreeAdj + 1
               end
-              -- No slot is left unassigned quietly: `actionBlocked` reads exactly this and
-              -- blocks the row, which is what a board with no second empty slot has to do.
-              -- The list is built by the enumeration, so it can never name a slot past the
-              -- end of the table either.
             end
           end
         end

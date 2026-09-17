@@ -45,14 +45,16 @@ both sides is shown as done rather than asked again.
 - **The channels the assistant lays out are CH5 to CH8 and the four stick channels.** It replaces
   every mixer line and every input line on the channels it writes, which the channel screen says
   before it does so.
-- **The output stage of those channels has to be at its defaults.** The assistant tells the flight
-  controller absolute microsecond windows, and what a channel finally puts on the wire is the
-  mixer value after its output stage. A channel whose end points, subtrim, centre offset or output
-  curve have been moved cannot produce those microseconds: it is refused on the Write screen, it is
-  not counted as laid out, and the channel screen says so. Set the end points back to -100 and
-  +100 with no subtrim, centre offset or curve on the transmitter's own outputs page. A reverted
-  channel is the exception and needs nothing: the assistant reads the direction and writes the
-  mixer weight to match it.
+- **The output stage of CH5 to CH8 has to be at its defaults**, and only of those four. The
+  assistant tells the flight controller absolute microsecond windows, and what a channel finally
+  puts on the wire is the mixer value after its output stage. A channel whose end points, subtrim,
+  centre offset or output curve have been moved cannot produce those microseconds: it is refused on
+  the Write screen, it is not counted as laid out, and the channel screen says so. Set the end
+  points back to -100 and +100 with no subtrim, centre offset or curve on the transmitter's own
+  outputs page. A reverted channel is the exception and needs nothing: the assistant reads the
+  direction and writes every line's weight to match it.
+  **The four stick channels are not covered by this** -- their output stage is the pilot's servo
+  travel and the assistant neither reads it nor asks for it back.
 - **Nothing is written before the Write step.** Every earlier screen reads, proposes or measures.
   The one exception is the Sticks step, which writes the four stick channels because its own check
   is what proves them.
