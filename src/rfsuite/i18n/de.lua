@@ -509,6 +509,7 @@ return {
         tail_torque_assist = "Heck-Drehm.-Assist.",
         tta_gain = "Verst.",
         tta_limit = "Limit",
+        tta_unavailable = "Heck-Drehmoment-Unterstützung nicht verfügbar — Governorprofil konnte nicht gelesen werden. PID-Einstellungen können weiterhin gespeichert werden.",
         loading_title = "Laden",
         loading_message = "Lese Heckrotoreinstellungen",
         help_title = "Heckrotor-Hilfe",
@@ -1090,6 +1091,8 @@ return {
         saving_data = "Speichere Regler-Parameter...",
         save_failed_title = "Speichern fehlgeschlagen",
         save_failed_message = "ESC antwortet nicht / Zeitüberschreitung beim Schreiben.",
+        save_error_not_read = "ESC vor dem Speichern lesen.",
+        save_error_invalid_payload = "ESC-Daten konnten nicht erstellt werden. ESC vor dem Speichern erneut lesen.",
         title_motor_override = "Motor-Override",
         motor = "Motor",
         motor_override_note = "Blätter ab und Modell gesichert. Der Motor dreht, sobald das Gas die Null verlässt.",
@@ -1974,7 +1977,8 @@ return {
       },
       diagnostics_session_logs = {
         no_logs = "Keine Protokolle verfügbar",
-        loading = "Lade Protokolle..."
+        loading = "Lade Protokolle...",
+        help_message = "Zeigt die letzten Log-Zeilen, die dieses Skript im Speicher hält, die neueste unten, nach Stufe eingefärbt. Die Seite aktualisiert sich selbst, sobald Zeilen eintreffen; RELOAD zeichnet sie nur neu. Die Liste liegt im Speicher und ist weg, sobald das Skript endet - schalte dafür Log Session To Card unter Developer > Settings ein, um eine Kopie für einen Bericht zu behalten."
       },
       diagnostics_smartfuel = {
         protocol = "Protokoll",
