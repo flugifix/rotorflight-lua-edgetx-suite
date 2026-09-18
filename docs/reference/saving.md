@@ -55,9 +55,9 @@ succeeded, and reports the reason. A block that was never read cannot be written
 setting the page does not itself show would go to the ESC as zero. The page is kept between
 visits, so a block read on an earlier one does not authorise a save on a later one: a read that
 fails -- a different ESC, another *ESC Target*, an ESC that did not answer -- cannot be saved
-from what the previous one sent. On all of these pages except *FlyRotor*, the settings on screen,
-the ESC's name and its firmware also go back to the page's own initial ones when the page is
-left, so a visit whose read fails does not show the previous ESC's either.
+from what the previous one sent. The settings on screen, the ESC's name and its firmware go back
+to the page's own initial ones when the page is left as well, so a visit whose read fails does not
+show the previous ESC's either.
 
 The ESC Tools grid lights AM32, BLHeli_S and Bluejay together, because what lights them is the
 ESC telemetry protocol, which all three share. Which of the three pages fits is still the
