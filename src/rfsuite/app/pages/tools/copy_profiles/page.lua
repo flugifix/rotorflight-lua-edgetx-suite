@@ -86,8 +86,16 @@ function M.getModuleTitle()
   return "Copy Profile"
 end
 
+-- SAVE is offered only while the two lists name different profiles. A copy of a profile onto
+-- itself has nothing to do, so the button is greyed out rather than asked about and then refused;
+-- the header reads this when the page is built, and the two combos below rebuild it when the
+-- answer changes.
 function M.getHeaderActions()
-  return { reload = false, save = not state.isSaving, help = true }
+  return {
+    reload = false,
+    save = not state.isSaving and state.sourceIndex ~= state.destIndex,
+    help = true
+  }
 end
 
 function M.isPageOpen()
@@ -227,7 +235,11 @@ function M.build(ctx)
     profileOptions,
     state.sourceIndex,
     function(val)
+      local wasSame = state.sourceIndex == state.destIndex
       state.sourceIndex = val
+      if (state.sourceIndex == state.destIndex) ~= wasSame and type(state.requestRebuild) == "function" then
+        state.requestRebuild()
+      end
     end
   )
 
@@ -238,7 +250,11 @@ function M.build(ctx)
     profileOptions,
     state.destIndex,
     function(val)
+      local wasSame = state.sourceIndex == state.destIndex
       state.destIndex = val
+      if (state.sourceIndex == state.destIndex) ~= wasSame and type(state.requestRebuild) == "function" then
+        state.requestRebuild()
+      end
     end
   )
 

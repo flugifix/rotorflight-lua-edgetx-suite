@@ -42,7 +42,9 @@ on; to fly the one that has just been written, switch to it under *Tools* → *S
 exception is copying **onto the PID profile that is currently active** while the model is
 disarmed, which the board applies straight away.
 
-**Source and destination must differ.** A copy of a profile onto itself is refused and says so.
+**Source and destination must differ.** SAVE is greyed out while both lists name the same profile,
+which is how the page opens; pick a different destination and it comes back. A copy of a profile
+onto itself that is asked for anyway is refused and says so.
 
 ## Related
 
