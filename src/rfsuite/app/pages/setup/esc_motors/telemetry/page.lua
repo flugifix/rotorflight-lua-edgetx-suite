@@ -350,7 +350,15 @@ function M.build(ctx)
 
   local hasPinSwap = ApiVersion.isAtLeast(rawApiVersion, {12, 0, 7})
   local hasCorrections = ApiVersion.isAtLeast(rawApiVersion, {12, 0, 8})
+  local hasXdfly = ApiVersion.isAtLeast(rawApiVersion, {12, 0, 8})
+  local hasFbus = ApiVersion.isAtLeast(rawApiVersion, {12, 0, 9})
+  local hasSrxl2 = ApiVersion.isAtLeast(rawApiVersion, {12, 0, 10})
 
+  -- These numbers are the flight controller's own protocol enum and a board stores whatever
+  -- it is sent, so an entry the board does not have is not an unused label: it is a different
+  -- protocol's number. The head is fixed. XDFLY, FrSky F.BUS and SRXL2 were each added in
+  -- front of RECORD, which has been the last entry since before any of them, so RECORD's own
+  -- number moves with them and is taken from what was appended rather than written down.
   local protocolOptions = {
     { label = "NONE", value = 0 },
     { label = "BLHELI32", value = 1 },
@@ -363,11 +371,18 @@ function M.build(ctx)
     { label = "APD", value = 8 },
     { label = "OPENYGE", value = 9 },
     { label = "FLYROTOR", value = 10 },
-    { label = "GRAUPNER", value = 11 },
-    { label = "XDFLY", value = 12 },
-    { label = "FrSky F.BUS", value = 13 },
-    { label = "RECORD", value = 14 }
+    { label = "GRAUPNER", value = 11 }
   }
+
+  local function appendProtocol(label)
+    local value = #protocolOptions
+    protocolOptions[value + 1] = { label = label, value = value }
+  end
+
+  if hasXdfly then appendProtocol("XDFLY") end
+  if hasFbus then appendProtocol("FrSky F.BUS") end
+  if hasSrxl2 then appendProtocol("SRXL2") end
+  appendProtocol("RECORD")
 
   local proto = ui.config.protocol
 

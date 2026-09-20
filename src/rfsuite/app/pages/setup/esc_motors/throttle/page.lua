@@ -278,33 +278,71 @@ function M.getHeaderActions()
   }
 end
 
-local function isPwmRateEnabled(proto, hasCastle)
+-- Protocol numbers of the two entries that are not always present. Both sit at a fixed
+-- position in the flight controller's enum once the firmware has them; only the entries
+-- behind them move. See PROTOCOL_HEAD below.
+local PROTO_CASTLE = 9
+local PROTO_SRXL2 = 10
+
+local function isPwmRateEnabled(proto, hasCastle, hasSrxl2)
   if proto == 0 or proto == 1 or proto == 2 or proto == 3 or proto == 4 then return true end
-  if hasCastle and proto == 9 then return true end
+  if hasCastle and proto == PROTO_CASTLE then return true end
+  if hasSrxl2 and proto == PROTO_SRXL2 then return true end
   return false
 end
 
-local function isMincommandEnabled(proto, hasCastle)
+local function isMincommandEnabled(proto, hasCastle, hasSrxl2)
   if proto == 0 or proto == 1 or proto == 2 or proto == 3 or proto == 4 then return true end
-  if hasCastle and proto == 9 then return true end
+  if hasCastle and proto == PROTO_CASTLE then return true end
+  if hasSrxl2 and proto == PROTO_SRXL2 then return true end
   return false
 end
 
-local function isMinthrottleEnabled(proto, hasCastle)
+local function isMinthrottleEnabled(proto, hasCastle, hasSrxl2)
   if proto == 0 or proto == 1 or proto == 2 or proto == 3 or proto == 4 then return true end
-  if hasCastle and proto == 9 then return true end
+  if hasCastle and proto == PROTO_CASTLE then return true end
+  if hasSrxl2 and proto == PROTO_SRXL2 then return true end
   return false
 end
 
-local function isMaxthrottleEnabled(proto, hasCastle)
+local function isMaxthrottleEnabled(proto, hasCastle, hasSrxl2)
   if proto == 0 or proto == 1 or proto == 2 or proto == 3 or proto == 4 then return true end
-  if hasCastle and proto == 9 then return true end
+  if hasCastle and proto == PROTO_CASTLE then return true end
+  if hasSrxl2 and proto == PROTO_SRXL2 then return true end
   return false
 end
 
-local function isUnsyncedEnabled(proto, hasCastle)
+local function isUnsyncedEnabled(proto)
   if proto == 1 or proto == 2 or proto == 3 or proto == 4 then return true end
   return false
+end
+
+-- The combo writes the position in this list, so the list has to be the flight controller's
+-- own protocol enum: the same entries, in the same order, and no longer than the board's.
+-- Both CASTLE and SRXL2 were added in front of DISABLED as the firmware gained them, which
+-- moves DISABLED's number, so the tail is appended entry by entry instead of being written
+-- out twice. A conditional entry in the middle of a positional list makes its gate part of
+-- the wire format: a gate one release early shifts every number from the insertion point up,
+-- in both directions at once.
+local PROTOCOL_HEAD = {
+  "PWM", "ONESHOT125", "ONESHOT42", "MULTISHOT", "BRUSHED",
+  "DSHOT150", "DSHOT300", "DSHOT600", "PROSHOT"
+}
+
+local function buildProtocolOptions(hasCastle, hasSrxl2)
+  local labels = {}
+  for i = 1, #PROTOCOL_HEAD do
+    labels[i] = PROTOCOL_HEAD[i]
+  end
+  if hasCastle then labels[#labels + 1] = "CASTLE" end
+  if hasSrxl2 then labels[#labels + 1] = "SRXL2" end
+  labels[#labels + 1] = "DISABLED"
+
+  local options = {}
+  for idx, label in ipairs(labels) do
+    options[idx] = { label = label, value = idx - 1 }
+  end
+  return options
 end
 
 function M.build(ctx)
@@ -348,20 +386,16 @@ function M.build(ctx)
   local session = getSession()
   local rawApiVersion = session and session.apiVersion
   local hasCastle = false
+  local hasSrxl2 = false
   if rawApiVersion and ApiVersion then
-    hasCastle = ApiVersion.isAtLeast(rawApiVersion, {12, 0, 7})
+    -- CASTLE reached the firmware while the API was already at 12.8, SRXL2 while it was at
+    -- 12.9 and before the bump to 12.10. These are the two floors the Configurator gates the
+    -- same list on.
+    hasCastle = ApiVersion.isAtLeast(rawApiVersion, {12, 0, 8})
+    hasSrxl2 = ApiVersion.isAtLeast(rawApiVersion, {12, 0, 10})
   end
 
-  local protocolOptions = {}
-  local protocolValues = {}
-  if hasCastle then
-    protocolValues = {"PWM", "ONESHOT125", "ONESHOT42", "MULTISHOT", "BRUSHED", "DSHOT150", "DSHOT300", "DSHOT600", "PROSHOT", "CASTLE", "DISABLED"}
-  else
-    protocolValues = {"PWM", "ONESHOT125", "ONESHOT42", "MULTISHOT", "BRUSHED", "DSHOT150", "DSHOT300", "DSHOT600", "PROSHOT", "DISABLED"}
-  end
-  for idx, val in ipairs(protocolValues) do
-    protocolOptions[idx] = { label = val, value = idx - 1 }
-  end
+  local protocolOptions = buildProtocolOptions(hasCastle, hasSrxl2)
 
   local proto = ui.config.motor_pwm_protocol
 
@@ -391,7 +425,7 @@ function M.build(ctx)
       min = 50,
       max = 8000,
       suffix = "Hz",
-      active = function() return isPwmRateEnabled(proto, hasCastle) end,
+      active = function() return isPwmRateEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.motor_pwm_rate end,
       set = function(v)
         ui.config.motor_pwm_rate = tonumber(v) or 250
@@ -408,7 +442,7 @@ function M.build(ctx)
       min = 50,
       max = 2250,
       suffix = "us",
-      active = function() return isMincommandEnabled(proto, hasCastle) end,
+      active = function() return isMincommandEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.mincommand end,
       set = function(v)
         ui.config.mincommand = tonumber(v) or 1000
@@ -425,7 +459,7 @@ function M.build(ctx)
       min = 50,
       max = 2250,
       suffix = "us",
-      active = function() return isMinthrottleEnabled(proto, hasCastle) end,
+      active = function() return isMinthrottleEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.minthrottle end,
       set = function(v)
         ui.config.minthrottle = tonumber(v) or 1070
@@ -442,7 +476,7 @@ function M.build(ctx)
       min = 50,
       max = 2250,
       suffix = "us",
-      active = function() return isMaxthrottleEnabled(proto, hasCastle) end,
+      active = function() return isMaxthrottleEnabled(proto, hasCastle, hasSrxl2) end,
       get = function() return ui.config.maxthrottle end,
       set = function(v)
         ui.config.maxthrottle = tonumber(v) or 2000
@@ -460,7 +494,7 @@ function M.build(ctx)
       ui.config.use_unsynced_pwm = nextBool and 1 or 0
       ui.dirty = true
     end,
-    function() return isUnsyncedEnabled(proto, hasCastle) end
+    function() return isUnsyncedEnabled(proto) end
   )
 
   if ui.dirty then
