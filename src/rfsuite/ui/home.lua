@@ -1761,7 +1761,10 @@ local function onSave()
           message = message,
           onConfirm = queuePageSave,
           onCancel = function() end,
-          onFallback = queuePageSave
+          -- The module runs onFallback itself when no dialog can be shown and reports the call
+          -- as handled, so a required question must not hand it the write: with no fallback the
+          -- module reports false and the refusal below is what happens instead.
+          onFallback = not confirmRequired and queuePageSave or nil
         })
         if ok and res == true then return end
       end
