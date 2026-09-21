@@ -11,10 +11,33 @@ Everything you change in the suite is kept in two files on the radio's SD card, 
 | File | What is in it |
 | --- | --- |
 | `preferences.lua` | The settings that belong to the transmitter: the announcements, the units and language, the preview switches, the logging level, which dashboard theme is shown. |
-| `<mcu id>.lua` | The settings that belong to one flight controller, named after the board's own id — the battery, the per-model theme override and its configuration, the in-flight tuning setup, what the setup assistant has been told about the machine. One file per board. |
+| `<mcu id>.lua` | The settings that belong to one flight controller, named after the board's own id — the battery, the per-model theme override and its configuration, the in-flight tuning setup, what the setup assistant has been told about the machine, and the name the board calls itself by. One file per board. |
 
 You do not have to touch either of them. They are written when you press *Save*, and reading
 them is all the suite needs at startup.
+
+## Which file belongs to which helicopter
+
+A per-flight-controller file is named after the board's own id, which is a long hexadecimal
+number and tells you nothing about the machine it is bolted into. So the suite writes the
+model name the flight controller reports into the file as well, the first time it connects to
+a board with the configuration tool open or with the [background telemetry
+decoder](background-decoder.md) running:
+
+```lua
+  craft = {
+    name = "Goblin 630",
+  },
+```
+
+That is the name set in the flight controller — the one the *Synchronize Model Name* setting
+puts on the radio's model — and not the name of the radio model. It is written again whenever
+it changes, and not otherwise.
+
+**A flight controller that has no name set gets no such line.** The suite does not invent one,
+because a placeholder in the file could not be told apart from a helicopter actually called
+that, and it would then never be corrected. So a file without a `craft` block simply belongs to
+a board that has not been given a name.
 
 ## They are Lua, not INI
 

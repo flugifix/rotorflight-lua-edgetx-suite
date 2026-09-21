@@ -6,6 +6,7 @@ local requestSent = false
 local NameApi = nil
 local Log = nil
 local MspRuntime = nil
+local ModelPreferences = nil
 
 local function loadModule(path)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
@@ -67,6 +68,21 @@ function M.wakeup(args)
       local data = NameApi.parse(buf)
       if data and data.name then
         session.modelName = data.name
+        -- Put the name into the board's own store as well, so a card can be read without a
+        -- board to ask which file belongs to which helicopter. It happens HERE rather than
+        -- where the store is loaded because this is the first moment the name exists: `uid`
+        -- runs at the head of the manifest and loads the store, this task runs well after it,
+        -- and the store is the same table the session is holding.
+        --
+        -- The library decides whether anything is written: an empty name and a name the file
+        -- already carries write nothing, and neither does a Lua state that may not write --
+        -- which is what keeps this out of the widgets, where the same task runs.
+        if ModelPreferences == nil then
+          ModelPreferences = loadModule("lib/model_preferences.lua") or false
+        end
+        if type(ModelPreferences) == "table" and type(ModelPreferences.recordModelName) == "function" then
+          pcall(ModelPreferences.recordModelName, session.mcu_id, session.modelPreferences, data.name)
+        end
       end
       done = true
       if type(Log) == "table" and type(Log.emit) == "function" then
