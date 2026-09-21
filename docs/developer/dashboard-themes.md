@@ -485,6 +485,62 @@ resolved at render time but is not in the list, so unless some other box names t
 as a literal, it resolves against a snapshot that does not carry it and the box shows `--`.
 Give `source` as a plain string.
 
+## `sources`: telemetry no box of yours names
+
+A phase module may carry a `sources` key beside `boxes` or `build`: a plain list of source
+strings the module reads and the boxes do not name.
+
+```lua
+local M = {}
+
+M.sources = { "TPWR", "TPWR+", "RQly", "RQly-", "Tmcu+" }
+
+function M.build(zone, state)
+  local peak = function() return (state.derived or {})["TPWR+"] end
+  ...
+end
+
+return M
+```
+
+Everything in the list is resolved into `state.derived` on the same cadence as the collected box
+sources -- twice a second, in the widget's own pass -- and is read from there by name. It is the
+only way a **free-form** theme gets at anything beyond the fixed state fields, because a
+free-form theme declares no boxes for the widget to walk. A declarative theme needs it wherever
+one tile shows more than one reading: a box has a single `source`, so a tile drawing a session
+minimum and maximum beside a live value names the other two here.
+
+`sources` may also be a function `(box, state)` returning the list, called once per theme load
+exactly like `boxes` -- which is how a theme whose `configure.lua` lets the pilot choose what to
+show builds the list from its own configuration.
+
+**It is per phase, and that is structural rather than a setting.** The list belongs to the phase
+module, the widget loads only the module for the phase it is drawing, and it rebuilds the list on
+every phase change. A source a statistics screen needs after the flight therefore costs nothing
+while the aircraft is in the air. A theme that covers all three phases from one `widget.lua`
+declares one list, which is read in all three.
+
+**What may go in the list.** The source vocabulary of `source` above, and any telemetry sensor of
+the radio's by its own name -- the flight controller's custom sensors (`Vesc`, `Iesc`, `EscF`,
+`Es2T` and the rest; see [telemetry sensors](../reference/telemetry-sensors.md)), and the link
+statistics the radio makes itself (`RQly`, `1RSS`, `TPWR`, `RSNR`, `RFMD`). A name may carry a
+trailing `-` or `+` for the session minimum or maximum the radio keeps for every sensor, which is
+what the example above reads. A name the model has no sensor for resolves to `nil` and is then
+searched for less and less often rather than on every pass; a tile reading it draws `--`.
+
+**What it costs.** One resolved read per source per telemetry pass, and nothing per frame -- the
+sweep reads the snapshot and never probes. Declaring nothing costs exactly what it did before:
+the list is only walked when the module carries one. Declared sources do **not** enter the render
+key, so a value changing redraws rather than rebuilding the scene.
+
+`Sensors.getMetadata(name)` in `lib/sensors.lua` answers the unit and the number of decimals a
+sensor is sent with, for the names the suite catalogues. Ask it when the theme builds, not per
+frame, and title the tile in your own translated string -- the catalogue holds no labels.
+
+**One case where a declared source stands still.** After a flight, once the flight controller has
+stopped answering, the widget stops reading telemetry altogether so that the post-flight numbers
+do not decay into zeroes. The snapshot is frozen with them, declared sources included.
+
 ## A value given as a function
 
 Almost every field of a box may be a function `(box, state)` instead of a value, and the two
