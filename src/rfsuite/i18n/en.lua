@@ -2770,6 +2770,8 @@ return {
       DISARMED = "DISARMED",
       IDLE = "IDLE",
       LOSTHS = "LOST-HS",
+      MODE_LIMIT = "Gov. Limit",
+      MODE_OFF = "Gov. Off",
       OFF = "OFF",
       RECOVERY = "RECOVERY",
       SPOOLUP = "SPOOLUP",
