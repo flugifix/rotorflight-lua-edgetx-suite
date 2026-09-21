@@ -52,6 +52,59 @@ local RSSI_LINK_SOURCES = {
   ["2RSS"] = true,
 }
 
+-- What "powered" means, and it is only ever asked about a statistic that records a FLOOR.
+--
+-- A minimum taken across the whole armed window is a minimum of the spool-up and the spool-down
+-- rather than of the flight: a pilot arms first and spools up afterwards, so the first readings
+-- inside an armed window are the lowest ones that window will ever carry, and they stay the
+-- minimum for the rest of the flight. The maxima keep the broad window on purpose -- nothing
+-- about a ramp can raise them, and a reading taken outside the powered band is still the
+-- highest the flight reached.
+--
+-- The flight controller's own governor state is the reading that says when the rotor is under
+-- power at a settled headspeed, and two of its ten states qualify:
+--
+--   4  ACTIVE    the governor is holding the requested headspeed
+--   9  BYPASS    the governor is bypassed and the throttle curve drives the head directly
+--
+-- Every other state is a ramp or is not driving the head: throttle off (0), throttle idle (1),
+-- spool-up (2), recovery (3), throttle hold (5), autorotation (7) and bailout (8) all carry a
+-- headspeed or a current below anything the flight holds. Fallback (6) is left out for a
+-- different reason: the flight controller enters it when the motor rpm signal has failed, so a
+-- headspeed sampled there is not a headspeed.
+local POWERED_GOVERNOR_STATE = {
+  [4] = true,
+  [9] = true,
+}
+
+-- The governor state is only maintained for the modes that run a governor state machine. With
+-- the governor off, or limiting the throttle only, the flight controller leaves the state at the
+-- value it was initialised with, so a gate on the state alone would take no minimum at all on
+-- those models -- and on a model whose receiver is not sending the state sensor either. The
+-- state is therefore trusted only once a value inside its own range has been seen in this
+-- flight; until then the gate is what a model without a governor still has, which is that the
+-- head is turning and something is driving it. The second half of that is the rule this suite
+-- already applies to the same question over a logged flight, in app/pages/logs/graph.lua.
+local SPINNING_RPM = 100
+local DRIVEN_THROTTLE_PERCENT = 25
+local DRIVEN_CURRENT = 1.5
+
+-- How long the gate has to hold before a minimum is taken. The flight controller enters ACTIVE
+-- at 99 % of the requested headspeed or 95 % of the spool-up throttle, so the readings behind
+-- the transition are already flight readings; this is what keeps a single sample taken on the
+-- edge of one out of them.
+local POWERED_HOLD_SECONDS = 2
+local POWERED_HOLD_SAMPLES = math.floor(POWERED_HOLD_SECONDS / UPDATE_INTERVAL)
+
+-- Without a governor state the gate is held on its falling edge as well: a reading is taken only
+-- once the gate has also held for this many samples after it. The head can slow before the
+-- current falls -- a spool-down, a head bogging -- and while the current is still drawn the
+-- fallback cannot tell such a reading from flight, so the last 2 s of a driven stretch never
+-- count. This is the depth of the four readings each powered tracker holds back (p1..p4). The
+-- governor state needs none of it: the flight controller leaves ACTIVE and BYPASS on the
+-- throttle input itself, before the head has had time to slow.
+local POWERED_TAIL_SAMPLES = 4
+
 -- One row per tracked statistic. This table is the only place that knows the set: the record's
 -- keys are built from it, and so is the per-pass work.
 --
@@ -60,15 +113,19 @@ local RSSI_LINK_SOURCES = {
 --   min / max  which extremes are recorded
 --   gate   what the value has to be for the statistic to take it at all
 --   minGate  a further condition on the minimum alone
+--   minPositive  the minimum also has to be above zero
 local GATE_ANY = 0        -- any number the sensor gives, which is what most of them take
 local GATE_POSITIVE = 1   -- above zero
 local GATE_FUEL_SEEN = 2  -- only once a fuel sensor has answered
 local GATE_LINK_QUALITY = 3
+local GATE_POWERED = 4    -- only while the rotor is under power, as defined above
 
 local FLIGHT_STATS = {
   { key = "ThrottlePercent", source = "throttlePercent", max = true },
-  { key = "Rpm",             source = "rpm",             max = true, min = true, minGate = GATE_POSITIVE },
-  { key = "Current",         source = "current",         max = true, min = true },
+  { key = "Rpm",             source = "rpm",             max = true, min = true,
+    minGate = GATE_POWERED, minPositive = true },
+  { key = "Current",         source = "current",         max = true, min = true,
+    minGate = GATE_POWERED },
   { key = "Watts",           source = "watts",           max = true },
   { key = "Altitude",        source = "altitude",        max = true },
   { key = "EscTemp",         source = "escTemp",         max = true, min = true },
@@ -111,9 +168,47 @@ local values = {
   voltage = 0,
   becVoltage = 0,
   lq = 0,
+  govState = 0,
   lqSource = nil,
   fuelSeen = false,
+  -- Not sampled: the powered gate's own state, computed from the sampled values once per
+  -- sample and read by every tracker that records a floor.
+  govStateSeen = false,
+  poweredSamples = 0,
+  powered = false,
 }
+
+--- The powered gate, back to the state a fresh flight starts in.
+local function resetPowered()
+  values.govStateSeen = false
+  values.poweredSamples = 0
+  values.powered = false
+end
+
+--- Whether the rotor is under power, decided once per sample rather than once per statistic.
+local function updatePowered()
+  local gov = values.govState
+  if gov >= 1 and gov <= 9 then values.govStateSeen = true end
+
+  local gate, need
+  if values.govStateSeen then
+    gate = POWERED_GOVERNOR_STATE[gov] == true
+    need = POWERED_HOLD_SAMPLES
+  else
+    gate = values.rpm >= SPINNING_RPM
+      and (values.throttlePercent >= DRIVEN_THROTTLE_PERCENT or values.current >= DRIVEN_CURRENT)
+    need = POWERED_HOLD_SAMPLES + POWERED_TAIL_SAMPLES
+  end
+
+  if gate then
+    local held = values.poweredSamples + 1
+    values.poweredSamples = held
+    values.powered = held >= need
+  else
+    values.poweredSamples = 0
+    values.powered = false
+  end
+end
 
 --- The trackers. One per shape a row can declare; the compile loop picks between them by reading
 --- the row's own columns, and none of them names a statistic.
@@ -139,15 +234,43 @@ local function trackMaxMin(src, maxKey, minKey)
   end
 end
 
---- A maximum that takes any number beside a minimum that only takes one above zero: rpm, whose
---- minimum has never recorded the spool-down to zero.
-local function trackMaxMinPositiveMin(src, maxKey, minKey)
+--- A maximum across the whole armed window beside a minimum taken only while the rotor is under
+--- power: the floor of a flight rather than the floor of its spool-up. Without a governor state
+--- the minimum is offered the reading of POWERED_TAIL_SAMPLES samples ago, and the gate only
+--- opens once that reading has the hold window behind it and the tail window after it.
+--- p1..p4 are not cleared at a flight edge: they are read only once the gate has held for eight
+--- samples in a row, and every flight edge resets that count, so by then they hold this flight's.
+local function trackMaxMinPowered(src, maxKey, minKey)
+  local p1, p2, p3, p4
   return function(rec)
     local v = values[src]
     if type(v) == "number" then
       local b = rec[maxKey]
       if b == nil or v > b then rec[maxKey] = v end
-      if v > 0 then
+      if not values.govStateSeen then
+        v, p1, p2, p3, p4 = p1, p2, p3, p4, v
+      end
+      if values.powered then
+        b = rec[minKey]
+        if b == nil or v < b then rec[minKey] = v end
+      end
+    end
+  end
+end
+
+--- The same with a minimum that also has to be above zero: headspeed, whose sensor answers zero
+--- where the flight controller has no rpm to report.
+local function trackMaxMinPoweredPositive(src, maxKey, minKey)
+  local p1, p2, p3, p4
+  return function(rec)
+    local v = values[src]
+    if type(v) == "number" then
+      local b = rec[maxKey]
+      if b == nil or v > b then rec[maxKey] = v end
+      if not values.govStateSeen then
+        v, p1, p2, p3, p4 = p1, p2, p3, p4, v
+      end
+      if values.powered and v > 0 then
         b = rec[minKey]
         if b == nil or v < b then rec[minKey] = v end
       end
@@ -223,8 +346,12 @@ for i = 1, TRACK_COUNT do
     built = trackMaxMinPositive(src, maxKey, minKey)
   elseif gate == GATE_POSITIVE then
     built = trackMinPositive(src, minKey)
-  elseif maxKey and minKey and minGate == GATE_POSITIVE then
-    built = trackMaxMinPositiveMin(src, maxKey, minKey)
+  elseif maxKey and minKey and minGate == GATE_POWERED then
+    if stat.minPositive then
+      built = trackMaxMinPoweredPositive(src, maxKey, minKey)
+    else
+      built = trackMaxMinPowered(src, maxKey, minKey)
+    end
   elseif maxKey and minKey then
     built = trackMaxMin(src, maxKey, minKey)
   else
@@ -332,6 +459,11 @@ local function readSources()
   values.consumedMah = (smart and smart.consumption) or get("smartconsumption") or values.consumedMah
   if type(voltage) == "number" then values.voltage = voltage end
 
+  -- The governor state decides the powered gate below, so it is held to being a number here
+  -- rather than tested on every comparison the gate makes.
+  local govState = get("governor")
+  if type(govState) == "number" then values.govState = govState end
+
   local fuel = (smart and smart.fuel) or get("smartfuel") or get("fuel")
   if type(fuel) == "number" then
     if fuel < 0 then fuel = 0 end
@@ -366,6 +498,7 @@ function Record.open()
   flight.seconds = 0
   flight.armed = true
   values.fuelSeen = false
+  resetPowered()
   lastSampleAt = nil
   lastTickAt = nil
 end
@@ -385,6 +518,7 @@ function Record.close()
   flight.seconds = 0
   flight.armed = false
   values.fuelSeen = false
+  resetPowered()
   lastSampleAt = nil
   lastTickAt = nil
 end
@@ -424,6 +558,7 @@ function Record.wakeup(armed)
     if lastSampleAt == nil or (now - lastSampleAt) >= UPDATE_INTERVAL then
       lastSampleAt = now
       if readSources() then
+        updatePowered()
         local rec = flight.current
         for i = 1, TRACK_COUNT do
           TRACK[i](rec)
@@ -453,6 +588,7 @@ function Record.reset()
   flight.lastSeconds = 0
   flight.armed = false
   values.fuelSeen = false
+  resetPowered()
   lastSampleAt = nil
   lastTickAt = nil
 end
