@@ -2385,6 +2385,7 @@ return {
         never_used = "Nie",
         new_battery = "Neuer Akku",
         edit = "Bearbeiten",
+        edit_battery = "Akku bearbeiten",
         delete = "Loeschen",
         save = "Speichern",
         cancel = "Abbrechen",
@@ -2403,7 +2404,8 @@ return {
         help_p2 = "Ein Flug ist die Zeit zwischen Scharfschalten und Entschaerfen. Ein kuerzeres Scharfschalten ist keiner.",
         help_p3 = "Ein gewaehlter Akku steht in der Zeile des Fluges, sein erster Flug zaehlt einen Zyklus.",
         help_p4 = "Ein Akku ohne Modellliste gilt fuer jedes Modell, sonst nur fuer die genannten Namen.",
-        help_p5 = "Beide Dateien sind reiner Text. Eine Aenderung schreibt nur die eine Zeile neu."
+        help_p5 = "Beide Dateien sind reiner Text. Eine Aenderung schreibt nur die eine Zeile neu.",
+        help_p6 = "Der aktuelle Reiter ist markiert. Ein Akku wird im ganzen Bildschirm bearbeitet, bis Speichern oder Abbrechen."
       },
       logs = {
         title = "Protokolle",

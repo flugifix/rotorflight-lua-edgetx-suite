@@ -695,10 +695,23 @@ function M.sanitizeName(value)
   return string.sub(trim(cleaned), 1, 24)
 end
 
--- A comma separates the model list, so it goes the same way a ";" does.
-function M.sanitizeModel(value)
-  local cleaned = string.gsub(tostring(value or ""), "[,;%c]", "")
-  return string.sub(trim(cleaned), 1, 32)
+-- The `models` field of a pack is a LIST, so the two characters that carry its meaning survive:
+-- "," separates the names and "*" stands for every model. Only ";", which separates the fields of
+-- a registry line, and control characters are removed. Each name is trimmed on its own, so
+-- "a, b" and "a,b" are the same list, and an empty one is dropped rather than kept as a name that
+-- nothing can ever match.
+function M.sanitizeModelList(value)
+  local cleaned = string.gsub(tostring(value or ""), "[;%c]", "")
+  local names = {}
+  local from = 1
+  while true do
+    local at = string.find(cleaned, ",", from, true)
+    local name = trim(at and string.sub(cleaned, from, at - 1) or string.sub(cleaned, from))
+    if name ~= "" then names[#names + 1] = name end
+    if at == nil then break end
+    from = at + 1
+  end
+  return string.sub(table.concat(names, ","), 1, 32)
 end
 
 M.trim = trim
