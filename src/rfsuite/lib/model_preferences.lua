@@ -472,4 +472,144 @@ function M.recordModelName(mcuId, prefs, name)
   return M.saveByMcuId(safeId, target)
 end
 
+-- The files in a user root that are NOT a per-board store, and they are named rather than
+-- guessed at: these are what the suite itself writes there.
+--
+--   preferences.lua / .ini        lib/preferences.lua, the settings belonging to the transmitter
+--   model_name_restore.lua / .ini lib/model_name_store.lua, the name a rename replaced
+--   the reload request            this file, above
+--
+-- The rest of what a root holds is excluded by the pattern below rather than by name: the
+-- directories (dashboard, logs, flightlog, sim), lib/precompile.lua's stamp, an `.ini.bak` left
+-- by a migration, and a `.lua.tmp` left by a save that was interrupted.
+local NOT_A_STORE = {
+  ["preferences.lua"] = true,
+  ["preferences.ini"] = true,
+  ["model_name_restore.lua"] = true,
+  ["model_name_restore.ini"] = true,
+  [RELOAD_REQ_FILE] = true,
+}
+
+-- Listing a directory, in the shape app/pages/settings/dashboard/lib.lua already uses for the
+-- theme folders: dir() is an iterator where the firmware has one, system.listFiles is the
+-- fallback, and a radio with neither is answered with nothing at all rather than with an error.
+-- The shape is followed rather than shared, because that is a page module and this library is
+-- loaded by the whole suite.
+local function listDirectory(path)
+  if type(dir) == "function" then
+    local ok, iterator = pcall(dir, path)
+    if not ok or type(iterator) ~= "function" then return nil end
+    local entries = {}
+    local walked = pcall(function()
+      for name in iterator do
+        entries[#entries + 1] = name
+      end
+    end)
+    if not walked then return nil end
+    return entries
+  end
+
+  if system and type(system.listFiles) == "function" then
+    local ok, entries = pcall(system.listFiles, path)
+    if ok and type(entries) == "table" then return entries end
+    return nil
+  end
+
+  return nil
+end
+
+-- What one entry of such a listing is called, whether the firmware hands back a bare name, a
+-- path, or a directory with a separator on the end.
+local function entryName(entry)
+  if type(entry) ~= "string" or entry == "" then return nil end
+  local trimmed = string.gsub(entry, "[/\\]+$", "")
+  return string.match(trimmed, "([^/\\]+)$")
+end
+
+--- The stores this card holds, one record per board, WITH NOTHING CONNECTED. This is the only
+--- call in here that does not need an MCU id, because finding the ids is what it is for.
+---
+--- One record per file, sorted by id:
+---
+---   mcuId  the board id the file is named after
+---   name   what the board called itself, or nil where the file does not say
+---   path   the file
+---   root   the user root it was found in
+---   error  why the file could not be read, where it could not be
+---
+--- A name of nil is the ordinary case and not an error: a store written before this release
+--- carries no name, and a board that has none never gets one. Producing something to display
+--- for such a record is the caller's.
+---
+--- WHAT IT COSTS, because this is not a call to make on a cadence. Per store: one directory
+--- entry matched, one file read, one compile and one table constructor. The listing is one
+--- call per user root. So it is a card read per known board, which is a tool-session cost --
+--- the same class as opening a page, and not something to put in a widget pass or a wakeup.
+--- Nothing is cached: the answer is a fact about the card, and the caller knows when it asked.
+---
+--- It writes nothing. `recover = false` is what makes that true even where a save was
+--- interrupted: finishing one renames a file, and a call that only lists may not.
+function M.listKnownModels()
+  local out = {}
+  if not ConfigStore or type(ConfigStore.new) ~= "function" then return out end
+
+  local ids = {}
+  local rootOf = {}
+  local roots = orderedRoots(nil)
+
+  for i = 1, #roots do
+    local userRoot = roots[i]
+    local entries = listDirectory(userRoot)
+    if type(entries) == "table" then
+      for j = 1, #entries do
+        local entry = entryName(entries[j])
+        if entry and not NOT_A_STORE[entry] then
+          -- Exactly the shape normalizeMcuId produces, which is what keeps everything else in
+          -- the root out without a second list to maintain.
+          local id = string.match(entry, "^([%w_-]+)%.lua$")
+          if id and not rootOf[id] then
+            rootOf[id] = userRoot
+            ids[#ids + 1] = id
+          end
+        end
+      end
+    end
+  end
+
+  -- The bare sort, as the store's own serialiser does it: the comparison happens in C, and a
+  -- comparator would also make the order depend on the string-hash seed.
+  table.sort(ids)
+
+  -- A reader of its own, declaring only the section this call reads. Two reasons, and the first
+  -- is not a saving: Store:load takes the generation counter out of the file it read, so
+  -- scanning every store on the card with the store that also SAVES would leave the connected
+  -- board's counter standing at whatever the last file scanned happened to carry, and a reader
+  -- watching that board for a change would miss the next save. The second is that merging one
+  -- section is cheaper than merging all of them, per file.
+  local reader = ConfigStore.new({
+    name = "model preferences",
+    schema = { [CRAFT_SECTION] = MODEL_SCHEMA[CRAFT_SECTION] },
+  })
+
+  for i = 1, #ids do
+    local id = ids[i]
+    local path = buildPathForRoot(rootOf[id], id)
+    -- The complaint about a store that will not parse goes into the record rather than into the
+    -- log: one line per unreadable file would bury the answer this call was made for.
+    local prefs, info = reader:load(path, { recover = false, messages = {} })
+    local section = type(prefs) == "table" and prefs[CRAFT_SECTION] or nil
+    local name = type(section) == "table" and section[CRAFT_NAME_KEY] or nil
+    if type(name) ~= "string" or name == "" then name = nil end
+    out[#out + 1] = {
+      mcuId = id,
+      name = name,
+      path = path,
+      root = rootOf[id],
+      error = info and info.error or nil,
+    }
+  end
+
+  return out
+end
+
 return M
