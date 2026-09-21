@@ -20,8 +20,9 @@ return function(ctx)
   local help_p3 = t(i18n, "help_p3", "A pack picked under Batteries goes into the flight's line and its first flight counts one cycle.")
   local help_p4 = t(i18n, "help_p4", "A pack with no model list is offered for every craft, otherwise only for the names listed.")
   local help_p5 = t(i18n, "help_p5", "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone.")
+  local help_p6 = t(i18n, "help_p6", "The tab you are on is marked. Editing a pack takes the whole screen until Save or Cancel.")
 
-  local parts = { help_p1, help_p2, help_p3, help_p4, help_p5 }
+  local parts = { help_p1, help_p2, help_p3, help_p4, help_p5, help_p6 }
 
   return {
     title = t(i18n, "help_title", "Flight Log Help"),

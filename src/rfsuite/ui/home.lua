@@ -323,6 +323,7 @@ local SAVE_TEXT = {
   eeprom_pending  = "@i18n(app.save.eeprom_pending)@",
   read_required   = "@i18n(app.save.read_required)@",
   page_changed    = "@i18n(app.save.page_changed)@",
+  confirm_required = "@i18n(app.save.confirm_required)@",
 }
 
 -- getTime() ticks, at 10 ms each. How long a notice reporting a SUCCESSFUL save stays up
@@ -873,6 +874,14 @@ local function onBack(source, ev)
     return
   end
   state.backGestureActive = true
+
+  -- Stamped as soon as the press is accepted rather than only where it ends up. There is more
+  -- than one route to this function, so one press can still be delivered twice on a radio or a
+  -- screen that produces both; leaveCurrentPage used to be the only place that stamped, which
+  -- left every branch above it undebounced -- a page's own back hook included, and that is the
+  -- one that owns a multi-level ladder. A press that is dropped by the test above returns
+  -- before this line, so the window does not keep sliding while a key is held.
+  state.lastBackTick = now
 
   -- A save that reboots holds the page: the values are on their way to a flight controller that
   -- is about to restart, and leaving would put a page on screen showing what it read before.
@@ -1611,6 +1620,22 @@ local function checkPageSaveReady(page)
   return false
 end
 
+-- A page whose save destroys something that cannot be read back afterwards may put its own
+-- question in place of the generic one, and may require it where the preference would switch the
+-- generic one off. The page supplies the words only: when the write happens stays here, so the
+-- re-checks at dispatch below still stand between the answer and the flight controller.
+-- Returns { title, message, always } or nil.
+local function getPageSaveConfirm(page)
+  if type(page) ~= "table" or type(page.getSaveConfirm) ~= "function" then return nil end
+  local ok, confirm = pcall(page.getSaveConfirm, { i18n = state.i18n })
+  if not ok then
+    reportHookCrash("activePage.getSaveConfirm", state.activePageMenuId, confirm)
+    return nil
+  end
+  if type(confirm) ~= "table" then return nil end
+  return confirm
+end
+
 local function blockSaveWhileArmed()
   local armedWarningPref = state.preferences and state.preferences.general and state.preferences.general.save_armed_warning
   if isModelArmed() and not isLocalSettingsPage() then
@@ -1699,7 +1724,9 @@ local function onSave()
     -- asked whatever the preference says, because the alternative is writing to a flight
     -- controller that may be armed without anybody having been told the check did not run.
     local armedUnknown = armedStateIsUncertain()
-    if (savePref == true or armedUnknown) and lvgl then
+    local pageConfirm = getPageSaveConfirm(page)
+    local confirmRequired = pageConfirm ~= nil and pageConfirm.always == true
+    if (savePref == true or armedUnknown or confirmRequired) and lvgl then
       local function tr(key, fallback)
         if state and state.i18n and type(state.i18n.t) == "function" then
           local ok, val = pcall(state.i18n.t, key)
@@ -1714,6 +1741,18 @@ local function onSave()
       local message = tr("app.dialogs.confirm_save", "Save changes?")
       if armedUnknown then
         message = tr("app.dialogs.confirm_save_arm_unknown", "Cannot read the arming state. Disarmed?")
+      end
+      if pageConfirm then
+        if type(pageConfirm.title) == "string" then title = pageConfirm.title end
+        if type(pageConfirm.message) == "string" then
+          -- The arming warning is not replaced by the page's question. A pilot who cannot be told
+          -- whether the model is armed has to read both of them.
+          if armedUnknown then
+            message = message .. "\n" .. pageConfirm.message
+          else
+            message = pageConfirm.message
+          end
+        end
       end
 
       pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug")
@@ -1730,14 +1769,35 @@ local function onSave()
           message = message,
           onConfirm = queuePageSave,
           onCancel = function() end,
-          onFallback = queuePageSave
+          -- The module runs onFallback itself when no dialog can be shown and reports the call
+          -- as handled, so a required question must not hand it the write: with no fallback the
+          -- module reports false and the refusal below is what happens instead.
+          onFallback = not confirmRequired and queuePageSave or nil
         })
         if ok and res == true then return end
       end
 
-      -- Fallback: no confirm API available — proceed with save.
+      -- Fallback: no confirm API available — proceed with save, unless the page said its
+      -- question is not optional. Then there is no answer to act on and nothing is written.
+      if confirmRequired then
+        reportSaveOutcome({
+          ok = false,
+          title = SAVE_TEXT.failed_title,
+          message = SAVE_TEXT.confirm_required
+        })
+        return
+      end
       pcall(Log.emit, "rfsuite", "no confirm API available; performing save fallback", "debug")
       queuePageSave()
+      return
+    end
+
+    if confirmRequired then
+      reportSaveOutcome({
+        ok = false,
+        title = SAVE_TEXT.failed_title,
+        message = SAVE_TEXT.confirm_required
+      })
       return
     end
 
@@ -2560,20 +2620,42 @@ local BACK_KEY_CANDIDATES = {
   _G.KEY_ESC
 }
 
+-- The RELEASE edge and the long press, never the press edge.
+--
+-- One press of the back key reaches this script twice. Going down it arrives as a raw generated
+-- event; coming up it arrives as the page element's own `back` callback, or -- on a screen that
+-- holds nothing focusable -- as a raw break event. Acting on both ran the handler twice for one
+-- press, and the second run stepped a further level out of any page whose own back hook had
+-- just handled the first: a pack detail view went to the flight list instead of the pack list,
+-- and an open editor was abandoned AND its tab changed.
+--
+-- The press edge is also the one that arrives while the on-screen keyboard is up: the release
+-- goes to the keyboard, which closes itself and forwards nothing, so a press-edge back reached
+-- the page while the pilot was still typing and threw the form away under the keyboard.
 local BACK_EVENT_GENERATORS = {
   _G.EVT_KEY_BREAK,
-  _G.EVT_KEY_FIRST,
   _G.EVT_KEY_LONG
 }
+
+-- Which edge a key event carries sits in its flag bits rather than in its name, so the press
+-- edge can be told apart without knowing which of the EVT_* names a given radio exports -- and
+-- the raw value 1537 that used to be special-cased here is simply one of them, RTN pressed.
+local KEY_EDGE_STEP = 0x0200
+local KEY_EDGE_FIELD = 0x0E00
+local KEY_EDGE_PRESS = 0x0600
+
+local function isKeyPressEdge(ev)
+  if type(ev) ~= "number" or ev == 0 then
+    return false
+  end
+  -- The flag bits are contiguous, so two remainders isolate them without needing bit32.
+  local edge = ev % (KEY_EDGE_FIELD + KEY_EDGE_STEP) - ev % KEY_EDGE_STEP
+  return edge == KEY_EDGE_PRESS
+end
 
 local function isGeneratedBackEvent(ev)
   if type(ev) ~= "number" or ev == 0 then
     return false
-  end
-
-  -- Observed on some radios/pages: RTN can arrive as raw generated event 1537.
-  if ev == 1537 then
-    return true
   end
 
   local keyCandidates = BACK_KEY_CANDIDATES
@@ -2598,17 +2680,19 @@ local function isGeneratedBackEvent(ev)
 end
 
 local function isBackEvent(ev)
+  -- Checked before the names, because a name can carry the press edge too.
+  if isKeyPressEdge(ev) then
+    return false
+  end
+
   if isEvent(
     ev,
     EVT_VIRTUAL_EXIT,
     EVT_VIRTUAL_EXIT_BREAK,
-    EVT_VIRTUAL_EXIT_FIRST,
     EVT_VIRTUAL_EXIT_LONG,
     EVT_EXIT_BREAK,
-    EVT_EXIT_FIRST,
     EVT_EXIT_LONG,
     EVT_RTN_BREAK,
-    EVT_RTN_FIRST,
     EVT_RTN_LONG
   ) then
     return true

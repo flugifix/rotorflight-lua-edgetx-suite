@@ -42,7 +42,8 @@ return {
       failed_message = "The flight controller did not confirm the settings.",
       eeprom_pending = "Saved, but the EEPROM write is pending:",
       read_required = "Read the complete configuration before saving. Wait for loading to finish, or use Reload to try again.",
-      page_changed = "The page changed. Return to the page and save again."
+      page_changed = "The page changed. Return to the page and save again.",
+      confirm_required = "This save has to be confirmed, and the confirmation could not be shown. Nothing was written."
     },
     closing_rfsuite = "Closing RFSuite...",
     model_armed_title = "Model Armed",
@@ -1967,8 +1968,10 @@ return {
         help_title = "Copy Profile",
         help_p1 = "Copy settings between profiles.",
         help_p2 = "Select the type (PID or Rate) and the source/destination profiles.",
+        help_p3 = "SAVE asks which profile is about to be overwritten: the destination keeps none of its own settings afterwards and there is no undo. Only the profiles the flight controller reports are offered.",
         msgbox_save = "Copy Profile",
-        msgbox_msg = "Are you sure you want to copy the selected profile?",
+        msgbox_msg = "Overwrite %s profile %d with profile %d? This cannot be undone.",
+        msp_unavailable = "No connection to the flight controller.",
         warn_same_profile = "Source and destination profiles are the same."
       },
       diagnostics_profile_select = {
@@ -2382,6 +2385,7 @@ return {
         never_used = "Never",
         new_battery = "New battery",
         edit = "Edit",
+        edit_battery = "Edit battery",
         delete = "Delete",
         save = "Save",
         cancel = "Cancel",
@@ -2400,7 +2404,8 @@ return {
         help_p2 = "A flight is the time between arming and disarming. An arm shorter than the minimum is not one.",
         help_p3 = "A pack picked under Batteries goes into the flight's line and its first flight counts one cycle.",
         help_p4 = "A pack with no model list is offered for every craft, otherwise only for the names listed.",
-        help_p5 = "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone."
+        help_p5 = "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone.",
+        help_p6 = "The tab you are on is marked. Editing a pack takes the whole screen until Save or Cancel."
       },
       logs = {
         title = "Logs",

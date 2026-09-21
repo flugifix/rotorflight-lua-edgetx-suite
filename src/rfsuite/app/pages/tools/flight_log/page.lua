@@ -59,7 +59,6 @@ local ui = {
   editMode = nil,
   editError = nil,
   config = { enabled = false, min_seconds = 30 },
-  dirty = false,
   requestRebuild = nil
 }
 
@@ -207,7 +206,6 @@ end
 local function ensureLoaded(preferences)
   if ui.loaded then return end
   ui.loaded = true
-  ui.dirty = false
   loadConfig(preferences)
   ui.loadPending = true
   ui.loading = true
@@ -301,9 +299,13 @@ function M.onReload(ctx)
   ui.edit = nil
   ui.editMode = nil
   ui.editError = nil
+  -- A view that shows a record which has just been cleared has to go back to its list. The pack
+  -- detail re-resolves its id against the reloaded registry and says so when the pack is really
+  -- gone; a flight detail has no id to re-resolve, so it would draw the empty-log notice on a
+  -- radio whose log is full.
+  if ui.view == "flight" then ui.view = "flights" end
   ui.loadPending = true
   ui.loading = true
-  ui.dirty = false
   requestRebuild()
   return true
 end
@@ -355,7 +357,6 @@ function M.onSave(ctx)
   if type(ctx.savePreferences) ~= "function" then return false end
   local ok, err = ctx.savePreferences()
   if ok then
-    ui.dirty = false
     return true
   end
   if type(ctx.reportSave) == "function" then
@@ -430,7 +431,9 @@ local function appendDivider(children, x, y, w)
   }
 end
 
-local function appendButton(children, x, y, w, h, text, press)
+-- `checked` is the firmware's own active state for a text button and may be left out; a button
+-- that never passes it is drawn exactly as it was before.
+local function appendButton(children, x, y, w, h, text, press, checked)
   children[#children + 1] = {
     type = "button",
     x = x,
@@ -438,11 +441,17 @@ local function appendButton(children, x, y, w, h, text, press)
     w = w,
     h = h,
     text = text,
-    press = press
+    press = press,
+    checked = checked
   }
 end
 
 local TABS = { "flights", "models", "batteries", "settings" }
+
+-- The tab row's own height and the gap below it. Both are named because the body is laid out
+-- before the row is appended -- see M.build.
+local TAB_ROW_H = 30
+local TAB_ROW_GAP = 8
 
 local function tabLabel(i18n, view)
   if view == "flights" then return pageText(i18n, "tab_flights", "Flights") end
@@ -451,12 +460,34 @@ local function tabLabel(i18n, view)
   return pageText(i18n, "tab_settings", "Settings")
 end
 
+-- Which tab a view belongs under. A single flight and a list filtered to one model are still the
+-- flights tab, and a pack's own detail is still the batteries tab.
+local function activeTab()
+  if ui.view == "flight" then return "flights" end
+  if ui.view == "battery" then return "batteries" end
+  return ui.view
+end
+
+-- Whether a press on this tab would write the state the page is already in.
+local function tabIsCurrent(view)
+  return ui.view == view and ui.page == 0 and ui.edit == nil
+    and ui.flight == nil and ui.batteryId == nil and ui.filterModel == nil
+end
+
 local function makeTabPress(view)
   return function()
+    -- Nothing to do, so nothing is rebuilt. The firmware takes a press handler's return value as
+    -- the button's new checked state (ButtonBase::onPress in gui/colorlcd/libui/button.cpp), so
+    -- the answer has to be 1: returning nothing would clear the active mark and leave it cleared,
+    -- because only a rebuild sets it again.
+    if tabIsCurrent(view) then return 1 end
     ui.view = view
     ui.page = 0
     ui.flight = nil
     ui.batteryId = nil
+    -- A tab leads to its own list. The model filter is part of what the flights tab is showing,
+    -- so it goes the same way the page number and the open record do.
+    ui.filterModel = nil
     ui.edit = nil
     ui.editMode = nil
     ui.editError = nil
@@ -468,12 +499,12 @@ local function appendTabs(children, x, y, w, i18n)
   local gap = 4
   local count = #TABS
   local btnW = math.floor((w - (count - 1) * gap) / count)
-  local btnH = 30
+  local active = activeTab()
   for i = 1, count do
     local view = TABS[i]
-    appendButton(children, x + (i - 1) * (btnW + gap), y, btnW, btnH, tabLabel(i18n, view), makeTabPress(view))
+    appendButton(children, x + (i - 1) * (btnW + gap), y, btnW, TAB_ROW_H,
+      tabLabel(i18n, view), makeTabPress(view), view == active)
   end
-  return btnH + 8
 end
 
 -- ---------------------------------------------------------------------------
@@ -606,8 +637,13 @@ local function buildFlight(children, x, y, w, h, i18n)
     return
   end
 
-  cursorY = cursorY + appendField(children, x, cursorY, w, pageText(i18n, "field_date", "Date"), row.date)
-  cursorY = cursorY + appendField(children, x, cursorY, w, pageText(i18n, "field_time", "Time"), row.time)
+  -- A single flight is not one of the tabs, so nothing in the row above says which one is open:
+  -- its heading has to. The date and the time are what identify it, and they are here rather than
+  -- repeated as two rows of their own below.
+  appendLabel(children, x + 6, cursorY, w - 12,
+    string.format("%s %s", row.date, row.time), COLOR_THEME_PRIMARY1)
+  cursorY = cursorY + 22
+
   cursorY = cursorY + appendField(children, x, cursorY, w, pageText(i18n, "field_model", "Model"),
     row.model ~= "" and row.model or "-")
   cursorY = cursorY + appendField(children, x, cursorY, w, pageText(i18n, "field_battery", "Battery"),
@@ -755,6 +791,14 @@ local function saveEdit(i18n)
   end
 
   loadRegistry()
+
+  -- The pack for the next flight is remembered by id, so a rename has to take the choice with it.
+  -- Left behind, the old id names no pack: the list offers it as unknown and refuses to re-select
+  -- it, and the flight is logged against an id the registry no longer has.
+  if edit.originalId ~= nil and edit.originalId ~= id and selectedBatteryId() == edit.originalId then
+    selectBattery(id)
+  end
+
   ui.edit = nil
   ui.editMode = nil
   ui.editError = nil
@@ -769,7 +813,7 @@ local function buildBatteryForm(children, x, y, w, h, i18n)
 
   appendLabel(children, x + 6, cursorY, w - 12,
     ui.editMode == "create" and pageText(i18n, "new_battery", "New battery")
-      or pageText(i18n, "edit", "Edit"), COLOR_THEME_PRIMARY1)
+      or pageText(i18n, "edit_battery", "Edit battery"), COLOR_THEME_PRIMARY1)
   cursorY = cursorY + 22
 
   if ui.editError ~= nil then
@@ -805,7 +849,7 @@ local function buildBatteryForm(children, x, y, w, h, i18n)
     pageText(i18n, "battery_models", "Models"), {
       length = 32,
       get = function() return edit.models end,
-      set = function(value) edit.models = FlightLog.sanitizeModel(value) end
+      set = function(value) edit.models = FlightLog.sanitizeModelList(value) end
     })
 
   cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
@@ -850,6 +894,9 @@ local function confirmDelete(entry, i18n)
       ui.editError = errorText(i18n, result)
     else
       loadRegistry()
+      -- Same reason as a rename: the pack for the next flight cannot be one that has just been
+      -- removed from the registry.
+      if selectedBatteryId() == entry.id then selectBattery(nil) end
       ui.batteryId = nil
       ui.view = "batteries"
     end
@@ -876,14 +923,20 @@ local function buildBattery(children, x, y, w, h, i18n)
     return
   end
 
+  -- A pack's detail is not one of the tabs either, so it says which pack it is showing. The name
+  -- is the heading and is not repeated as a row of its own; a pack that has none is headed by its
+  -- id, which is what the rest of the suite calls it by anyway.
+  appendLabel(children, x + 6, cursorY, w - 12,
+    (type(entry.name) == "string" and entry.name ~= "") and entry.name or entry.id,
+    COLOR_THEME_PRIMARY1)
+  cursorY = cursorY + 22
+
   if ui.editError ~= nil then
     appendLabel(children, x + 6, cursorY, w - 12, ui.editError, COLOR_THEME_WARNING)
     cursorY = cursorY + 22
   end
 
   cursorY = cursorY + appendField(children, x, cursorY, w, pageText(i18n, "battery_id", "Id"), entry.id)
-  cursorY = cursorY + appendField(children, x, cursorY, w, pageText(i18n, "battery_name", "Name"),
-    entry.name or "-")
   cursorY = cursorY + appendField(children, x, cursorY, w, pageText(i18n, "battery_capacity", "Capacity"),
     entry.cap and (tostring(math.floor(entry.cap)) .. " mAh") or "-")
   cursorY = cursorY + appendField(children, x, cursorY, w, pageText(i18n, "battery_models", "Models"),
@@ -969,7 +1022,6 @@ local function buildSettings(children, x, y, w, h, i18n)
     function() return ui.config.enabled == true end,
     function(value)
       ui.config.enabled = value == true
-      ui.dirty = true
     end)
 
   cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
@@ -981,7 +1033,6 @@ local function buildSettings(children, x, y, w, h, i18n)
       get = function() return math.floor(tonumber(ui.config.min_seconds) or 30) end,
       set = function(value)
         ui.config.min_seconds = math.floor(tonumber(value) or 30)
-        ui.dirty = true
       end
     })
 
@@ -1011,24 +1062,36 @@ function M.build(ctx)
     return
   end
 
-  local cursorY = y
-  cursorY = cursorY + appendTabs(children, x, cursorY, w, i18n)
-  local bodyH = h - (cursorY - y)
+  -- The editor is the whole page while it is open, and the tab row is left out of it: one press
+  -- on a tab throws the form away, and a pack half typed in is not something to lose to the press
+  -- that was meant to move the cursor. Back cancels the form, which is the way out of it.
+  local formOpen = ui.edit ~= nil
+  local bodyY = formOpen and y or (y + TAB_ROW_H + TAB_ROW_GAP)
+  local bodyH = h - (bodyY - y)
 
-  if ui.edit ~= nil then
-    buildBatteryForm(children, x, cursorY, w, bodyH, i18n)
+  if formOpen then
+    buildBatteryForm(children, x, bodyY, w, bodyH, i18n)
   elseif ui.view == "flight" then
-    buildFlight(children, x, cursorY, w, bodyH, i18n)
+    buildFlight(children, x, bodyY, w, bodyH, i18n)
   elseif ui.view == "models" then
-    buildModels(children, x, cursorY, w, bodyH, i18n)
+    buildModels(children, x, bodyY, w, bodyH, i18n)
   elseif ui.view == "battery" then
-    buildBattery(children, x, cursorY, w, bodyH, i18n)
+    buildBattery(children, x, bodyY, w, bodyH, i18n)
   elseif ui.view == "batteries" then
-    buildBatteries(children, x, cursorY, w, bodyH, i18n)
+    buildBatteries(children, x, bodyY, w, bodyH, i18n)
   elseif ui.view == "settings" then
-    buildSettings(children, x, cursorY, w, bodyH, i18n)
+    buildSettings(children, x, bodyY, w, bodyH, i18n)
   else
-    buildFlights(children, x, cursorY, w, bodyH, i18n)
+    buildFlights(children, x, bodyY, w, bodyH, i18n)
+  end
+
+  -- Appended last although it is drawn first, and the order is what matters rather than the
+  -- position. A build hands its children to lvgl.build in order, each focusable object joins the
+  -- keypad group as it is created, and LVGL focuses the first object to enter an empty group --
+  -- which every rebuild produces, because the previous scene is cleared. A tab row appended first
+  -- therefore takes the focus ring on every rebuild, whatever the body below it is for.
+  if not formOpen then
+    appendTabs(children, x, y, w, i18n)
   end
 end
 
