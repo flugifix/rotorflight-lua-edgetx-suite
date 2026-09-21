@@ -40,6 +40,8 @@ local ui = {
   themes = nil,
   configurableThemes = nil,
   activeThemeConfigPath = nil,
+  activePageId = nil,
+  activePage = nil,
   activeTheme = nil,
   activeModule = nil,
 }
@@ -74,13 +76,45 @@ local function hexDecode(input)
   return table.concat(out)
 end
 
+-- The menu id carries the theme, and for a theme that splits its settings it carries the page
+-- as well. The theme token is hexadecimal and so holds no underscore, which is what keeps the
+-- two apart however many underscores a page id has.
 local function themePathFromMenu(ctx)
   local menu = ctx and ctx.menu
   local menuId = menu and menu.getCurrentMenuId and menu.getCurrentMenuId() or nil
   if type(menuId) ~= "string" then return nil end
+
   local token = string.match(menuId, "^settings_dashboard_settings_([0-9a-f]+)_page$")
-  if not token then return nil end
-  return hexDecode(token)
+  if token then return hexDecode(token) end
+
+  local pageToken, pageId = string.match(menuId, "^settings_dashboard_settings_([0-9a-f]+)_([a-z0-9_]+)_page$")
+  if pageToken then return hexDecode(pageToken), pageId end
+
+  return nil
+end
+
+-- What the theme declared for the page this menu id names, so the module is told the page by
+-- the same title the tile was drawn with. A page id the theme no longer declares resolves to
+-- nothing, and the module is then called exactly as a theme without pages is.
+local function findThemePage(theme, pageId)
+  if type(pageId) ~= "string" or type(theme) ~= "table" or type(theme.pages) ~= "table" then
+    return nil
+  end
+  for i = 1, #theme.pages do
+    local page = theme.pages[i]
+    if page.id == pageId then
+      return { id = page.id, title = page.title }
+    end
+  end
+  return nil
+end
+
+-- Every context the theme's module is handed carries the page, not only the factory's: a module
+-- returned as a plain table never sees the factory context, and reads the page inside `build`.
+local function setContextPage(ctx)
+  if type(ctx) == "table" then
+    ctx.page = ui.activePage
+  end
 end
 
 local function ensureThemes()
@@ -99,22 +133,29 @@ end
 local function loadThemeModule(ctx)
   ensureThemes()
 
-  local path = themePathFromMenu(ctx)
+  local path, pageId = themePathFromMenu(ctx)
   if type(path) ~= "string" or path == "" then
     ui.activeThemeConfigPath = nil
+    ui.activePageId = nil
+    ui.activePage = nil
     ui.activeTheme = nil
     ui.activeModule = nil
+    setContextPage(ctx)
     return nil
   end
 
-  if ui.activeThemeConfigPath == path and ui.activeModule ~= nil then
+  if ui.activeThemeConfigPath == path and ui.activePageId == pageId and ui.activeModule ~= nil then
+    setContextPage(ctx)
     return ui.activeModule
   end
 
   local theme = DashboardLib.getThemeByPath(ui.configurableThemes, path)
   ui.activeThemeConfigPath = path
+  ui.activePageId = pageId
+  ui.activePage = findThemePage(theme, pageId)
   ui.activeTheme = theme
   ui.activeModule = false
+  setContextPage(ctx)
 
   if not theme or type(theme.configurePath) ~= "string" or theme.configurePath == "" then
     return nil
@@ -124,6 +165,7 @@ local function loadThemeModule(ctx)
   if type(loaded) == "function" then
     local createdOk, created = pcall(loaded, {
       theme = theme,
+      page = ui.activePage,
       preferences = ctx and ctx.preferences or nil,
       i18n = ctx and ctx.i18n or nil,
       dashboardLib = DashboardLib,
@@ -153,6 +195,8 @@ function M.onReload(ctx)
   ui.themes = nil
   ui.configurableThemes = nil
   ui.activeThemeConfigPath = nil
+  ui.activePageId = nil
+  ui.activePage = nil
   ui.activeTheme = nil
   ui.activeModule = nil
 
@@ -227,6 +271,8 @@ function M.onClose()
   ui.themes = nil
   ui.configurableThemes = nil
   ui.activeThemeConfigPath = nil
+  ui.activePageId = nil
+  ui.activePage = nil
   ui.activeTheme = nil
   ui.activeModule = nil
   Common = nil

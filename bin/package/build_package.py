@@ -41,6 +41,59 @@ def get_available_languages():
     return langs if langs else ["en"]
 
 
+PAGE_ID_RE = re.compile(r"^[a-z0-9_]+$")
+PAGE_ENTRY_RE = re.compile(r"\{([^{}]*)\}")
+
+
+def parse_theme_pages(content):
+    """The optional `pages` list a theme declares in its init.lua.
+
+    A theme may split its settings page into pages, and a radio without directory enumeration
+    reads them out of the generated theme index rather than out of init.lua, so the packager
+    has to carry them across. init.lua is read as text here rather than executed, exactly as
+    the keys above it are; the list is found by its key and taken by brace balance, and each
+    entry is validated the way the runtime validates it -- a page id becomes part of a menu id,
+    a title is what the tile reads, and an entry missing either is dropped rather than fatal.
+    """
+    key = re.search(r"\bpages\s*=\s*\{", content)
+    if not key:
+        return []
+
+    start = key.end() - 1
+    depth = 0
+    end = None
+    for i in range(start, len(content)):
+        if content[i] == "{":
+            depth += 1
+        elif content[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    if end is None:
+        return []
+
+    pages = []
+    seen = set()
+    for entry in PAGE_ENTRY_RE.finditer(content[start + 1:end]):
+        body = entry.group(1)
+        id_m = re.search(r'\bid\s*=\s*"([^"]*)"', body)
+        title_m = re.search(r'\btitle\s*=\s*"([^"]*)"', body)
+        if not id_m or not title_m or not title_m.group(1):
+            continue
+        page_id = id_m.group(1)
+        if not PAGE_ID_RE.match(page_id) or page_id in seen:
+            continue
+        seen.add(page_id)
+        icon_m = re.search(r'\bicon\s*=\s*"([^"]+)"', body)
+        pages.append({
+            "id": page_id,
+            "title": title_m.group(1),
+            "icon": icon_m.group(1) if icon_m else None
+        })
+    return pages
+
+
 def get_theme_metadata(theme_dir, source_name):
     init_file = os.path.join(theme_dir, "init.lua")
     if not os.path.isfile(init_file):
@@ -57,8 +110,24 @@ def get_theme_metadata(theme_dir, source_name):
         "source": source_name,
         "folder": os.path.basename(theme_dir),
         "configure": config_m.group(1) if config_m else None,
-        "standalone": stand_m.group(1) == "true" if stand_m else False
+        "standalone": stand_m.group(1) == "true" if stand_m else False,
+        "pages": parse_theme_pages(content)
     }
+
+
+def lua_escape(value):
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def lua_pages_table(pages):
+    """The `pages` list as an index row carries it. A theme without pages adds nothing."""
+    if not pages:
+        return ""
+    items = []
+    for page in pages:
+        icon = f', icon = "{lua_escape(page["icon"])}"' if page.get("icon") else ""
+        items.append(f'{{ id = "{lua_escape(page["id"])}", title = "{lua_escape(page["title"])}"{icon} }}')
+    return ", pages = { " + ", ".join(items) + " }"
 
 
 def generate_theme_index(target_core_dir, target_user_dir):
@@ -85,11 +154,13 @@ def generate_theme_index(target_core_dir, target_user_dir):
     os.makedirs(os.path.dirname(out_file), exist_ok=True)
     lines = ["return {"]
     for e in entries:
-        safe_name = e["name"].replace("\\", "\\\\").replace('"', '\\"')
-        safe_folder = e["folder"].replace("\\", "\\\\").replace('"', '\\"')
+        safe_name = lua_escape(e["name"])
+        safe_folder = lua_escape(e["folder"])
         cfg_val = f'"{e["configure"]}"' if e["configure"] else "nil"
         stand_val = "true" if e["standalone"] else "false"
-        lines.append(f'  {{ name = "{safe_name}", source = "{e["source"]}", folder = "{safe_folder}", configure = {cfg_val}, standalone = {stand_val} }},')
+        pages_val = lua_pages_table(e.get("pages"))
+        lines.append(f'  {{ name = "{safe_name}", source = "{e["source"]}", folder = "{safe_folder}", '
+                     f'configure = {cfg_val}, standalone = {stand_val}{pages_val} }},')
     lines.append("}\n")
     with open(out_file, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
@@ -273,9 +344,87 @@ def build_package_for_language(lang, version, output_dir, artifact_name=None):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+SELF_TEST_INIT = '''return {
+  name = "Example Theme",
+  preflight = "preflight.lua",
+  inflight = "inflight.lua",
+  postflight = "postflight.lua",
+  configure = "configure.lua",
+  standalone = false,
+  pages = {
+    { id = "look",  title = "Look",       icon = "icons/look.png" },
+    { id = "rows",  title = "Value Rows", icon = "icons/rows.png" },
+    { id = "look",  title = "Repeated",   icon = "icons/look.png" },
+    { id = "notit" },
+    { title = "No Id" },
+    { id = "Upper", title = "Rejected" },
+    { id = "plain", title = "Plain" },
+  },
+}
+'''
+
+SELF_TEST_NO_PAGES = '''return {
+  name = "Example Theme",
+  configure = "configure.lua",
+  standalone = false,
+}
+'''
+
+
+def self_test():
+    """Hold the page parser against a theme that declares pages and one that does not.
+
+    No theme in this repository declares `pages`, so a packaging run over the tree exercises
+    none of this: it would emit the same index with the parser removed. The block below is what
+    says the parser reads a declaration, drops a repeated id, an entry missing a title or an id,
+    and an id that is not usable in a menu id -- and the controls are what say it can answer no.
+    """
+    failures = []
+
+    def check(label, got, want):
+        if got == want:
+            print(f"[self-test] ok   {label}")
+        else:
+            print(f"[self-test] FAIL {label}: got {got!r}, wanted {want!r}")
+            failures.append(label)
+
+    pages = parse_theme_pages(SELF_TEST_INIT)
+    check("three valid entries survive", [p["id"] for p in pages], ["look", "rows", "plain"])
+    check("titles are carried", [p["title"] for p in pages], ["Look", "Value Rows", "Plain"])
+    check("an icon is optional", [p["icon"] for p in pages],
+          ["icons/look.png", "icons/rows.png", None])
+    check("a theme without pages declares none", parse_theme_pages(SELF_TEST_NO_PAGES), [])
+    check("a truncated list is not a list", parse_theme_pages('return { pages = { { id = "a", title = "A" },'), [])
+    check("the index row carries the pages", lua_pages_table(pages),
+          ', pages = { { id = "look", title = "Look", icon = "icons/look.png" }, '
+          '{ id = "rows", title = "Value Rows", icon = "icons/rows.png" }, '
+          '{ id = "plain", title = "Plain" } }')
+    check("a theme without pages adds nothing to its row", lua_pages_table([]), "")
+
+    # The controls: the same checks against a parser that answers wrongly have to go red, or a
+    # green above says nothing about whether anything was read at all.
+    control_ok = parse_theme_pages(SELF_TEST_INIT.replace("pages", "sheets")) == []
+    print(f"[self-test] control: a renamed key reads as no pages -- {'red as wanted' if control_ok else 'NOT RED'}")
+    if not control_ok:
+        failures.append("control: renamed key")
+
+    control_ok = parse_theme_pages(SELF_TEST_NO_PAGES) != parse_theme_pages(SELF_TEST_INIT)
+    print(f"[self-test] control: the two blocks differ -- {'red as wanted' if control_ok else 'NOT RED'}")
+    if not control_ok:
+        failures.append("control: blocks differ")
+
+    if failures:
+        print(f"[self-test] {len(failures)} check(s) failed")
+        return False
+    print("[self-test] all checks passed")
+    return True
+
+
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--lang", required=True, help="Locale to package (e.g. en, de)")
+    p.add_argument("--lang", help="Locale to package (e.g. en, de)")
+    p.add_argument("--self-test", action="store_true",
+                   help="Check the theme page parser against a sample manifest and exit")
     p.add_argument("--artifact-version", default=None, help="Version string baked into the default zip filename (defaults to version.lua)")
     p.add_argument("--artifact-name", default=None, help="Output zip filename (defaults to rfsuite-radio-install-v<version>_<lang>.zip)")
     p.add_argument("--output-dir", default="dist", help="Directory to write the finished zip into (default: dist)")
@@ -284,6 +433,11 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.self_test:
+        sys.exit(0 if self_test() else 1)
+    if not args.lang:
+        print("[package] --lang is required unless --self-test is given")
+        sys.exit(2)
     lang = args.lang
     version = args.artifact_version or get_suite_version()
     output_dir = os.path.abspath(args.output_dir)
