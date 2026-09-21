@@ -323,6 +323,7 @@ local SAVE_TEXT = {
   eeprom_pending  = "@i18n(app.save.eeprom_pending)@",
   read_required   = "@i18n(app.save.read_required)@",
   page_changed    = "@i18n(app.save.page_changed)@",
+  confirm_required = "@i18n(app.save.confirm_required)@",
 }
 
 -- getTime() ticks, at 10 ms each. How long a notice reporting a SUCCESSFUL save stays up
@@ -1619,6 +1620,22 @@ local function checkPageSaveReady(page)
   return false
 end
 
+-- A page whose save destroys something that cannot be read back afterwards may put its own
+-- question in place of the generic one, and may require it where the preference would switch the
+-- generic one off. The page supplies the words only: when the write happens stays here, so the
+-- re-checks at dispatch below still stand between the answer and the flight controller.
+-- Returns { title, message, always } or nil.
+local function getPageSaveConfirm(page)
+  if type(page) ~= "table" or type(page.getSaveConfirm) ~= "function" then return nil end
+  local ok, confirm = pcall(page.getSaveConfirm, { i18n = state.i18n })
+  if not ok then
+    reportHookCrash("activePage.getSaveConfirm", state.activePageMenuId, confirm)
+    return nil
+  end
+  if type(confirm) ~= "table" then return nil end
+  return confirm
+end
+
 local function blockSaveWhileArmed()
   local armedWarningPref = state.preferences and state.preferences.general and state.preferences.general.save_armed_warning
   if isModelArmed() and not isLocalSettingsPage() then
@@ -1707,7 +1724,9 @@ local function onSave()
     -- asked whatever the preference says, because the alternative is writing to a flight
     -- controller that may be armed without anybody having been told the check did not run.
     local armedUnknown = armedStateIsUncertain()
-    if (savePref == true or armedUnknown) and lvgl then
+    local pageConfirm = getPageSaveConfirm(page)
+    local confirmRequired = pageConfirm ~= nil and pageConfirm.always == true
+    if (savePref == true or armedUnknown or confirmRequired) and lvgl then
       local function tr(key, fallback)
         if state and state.i18n and type(state.i18n.t) == "function" then
           local ok, val = pcall(state.i18n.t, key)
@@ -1722,6 +1741,18 @@ local function onSave()
       local message = tr("app.dialogs.confirm_save", "Save changes?")
       if armedUnknown then
         message = tr("app.dialogs.confirm_save_arm_unknown", "Cannot read the arming state. Disarmed?")
+      end
+      if pageConfirm then
+        if type(pageConfirm.title) == "string" then title = pageConfirm.title end
+        if type(pageConfirm.message) == "string" then
+          -- The arming warning is not replaced by the page's question. A pilot who cannot be told
+          -- whether the model is armed has to read both of them.
+          if armedUnknown then
+            message = message .. "\n" .. pageConfirm.message
+          else
+            message = pageConfirm.message
+          end
+        end
       end
 
       pcall(Log.emit, "rfsuite", "onSave invoked; savePref=true", "debug")
@@ -1738,14 +1769,35 @@ local function onSave()
           message = message,
           onConfirm = queuePageSave,
           onCancel = function() end,
-          onFallback = queuePageSave
+          -- The module runs onFallback itself when no dialog can be shown and reports the call
+          -- as handled, so a required question must not hand it the write: with no fallback the
+          -- module reports false and the refusal below is what happens instead.
+          onFallback = not confirmRequired and queuePageSave or nil
         })
         if ok and res == true then return end
       end
 
-      -- Fallback: no confirm API available — proceed with save.
+      -- Fallback: no confirm API available — proceed with save, unless the page said its
+      -- question is not optional. Then there is no answer to act on and nothing is written.
+      if confirmRequired then
+        reportSaveOutcome({
+          ok = false,
+          title = SAVE_TEXT.failed_title,
+          message = SAVE_TEXT.confirm_required
+        })
+        return
+      end
       pcall(Log.emit, "rfsuite", "no confirm API available; performing save fallback", "debug")
       queuePageSave()
+      return
+    end
+
+    if confirmRequired then
+      reportSaveOutcome({
+        ok = false,
+        title = SAVE_TEXT.failed_title,
+        message = SAVE_TEXT.confirm_required
+      })
       return
     end
 
