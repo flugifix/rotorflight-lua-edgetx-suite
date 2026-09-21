@@ -27,6 +27,22 @@ return {
       model_params_sync = "Synchronisiere Modellparameter",
       model_name_sync = "Synchronisiere den Modellnamen"
     },
+    home_status = {
+      title_no_link = "Nicht verbunden",
+      title_connecting = "Verbinde",
+      title_connected = "Verbunden",
+      title_error = "Verbindungsfehler",
+      no_link = "Der Sender empfängt keine Telemetrie von diesem Modell.",
+      handshake = "Telemetrie kommt an. Warte auf die Antwort des Flight Controllers.",
+      api_unsupported = "Der Flight Controller meldet eine MSP-API-Version, die diese Suite nicht unterstützt.",
+      no_reply = "Telemetrie kommt an, aber der Flight Controller antwortet nicht.",
+      reading = "Lese die Konfiguration",
+      step = "%s (%d/%d)",
+      ready = "Verbunden.",
+      rf_version = "Rotorflight %s",
+      api_version = "MSP-API %s",
+      steps_failed = "Verbindungsschritte nicht abgeschlossen: %d"
+    },
     saving_settings = "Einstellungen werden angewendet",
     save = {
       rebooting = "Flugcontroller startet neu...",
@@ -237,7 +253,11 @@ return {
       reload = "\xEF\x80\xA1",
       star = "*",
       help = "?",
-      close = "Schließen"
+      close = "Schließen",
+      connection_offline = "\xEF\x80\x8D",
+      connection_working = "\xEF\x81\xB9",
+      connection_ready = "\xEF\x80\x8C",
+      connection_error = "\xEF\x81\xB1"
     },
 
     dialogs = {

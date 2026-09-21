@@ -27,6 +27,22 @@ return {
       model_params_sync = "Synchronizing model parameters",
       model_name_sync = "Synchronizing the model name"
     },
+    home_status = {
+      title_no_link = "Not connected",
+      title_connecting = "Connecting",
+      title_connected = "Connected",
+      title_error = "Connection error",
+      no_link = "The radio is not receiving telemetry from this model.",
+      handshake = "Telemetry is arriving. Waiting for the flight controller to answer.",
+      api_unsupported = "The flight controller answered with an MSP API version this suite does not support.",
+      no_reply = "Telemetry is arriving, but the flight controller is not answering.",
+      reading = "Reading the configuration",
+      step = "%s (%d/%d)",
+      ready = "Connected.",
+      rf_version = "Rotorflight %s",
+      api_version = "MSP API %s",
+      steps_failed = "Connect steps not completed: %d"
+    },
     saving_settings = "Applying settings",
     save = {
       rebooting = "Restarting the flight controller...",
@@ -237,7 +253,11 @@ return {
       reload = "\xEF\x80\xA1",
       star = "*",
       help = "?",
-      close = "Close"
+      close = "Close",
+      connection_offline = "\xEF\x80\x8D",
+      connection_working = "\xEF\x81\xB9",
+      connection_ready = "\xEF\x80\x8C",
+      connection_error = "\xEF\x81\xB1"
     },
 
     dialogs = {

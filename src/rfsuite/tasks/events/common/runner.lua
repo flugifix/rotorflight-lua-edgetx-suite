@@ -283,11 +283,23 @@ function M.new(category)
     return nil
   end
 
+  -- `failed` and `pending` are reported beside the count, off the same walk.
+  --
+  -- A task that gave up counts towards `done`, because the queue has moved past it and the
+  -- chain is no longer waiting on it. That makes `done == total` mean "nothing is still
+  -- running" rather than "everything was read", and a caller reporting the chain as finished
+  -- had no way to learn the difference. `failed` is that difference.
+  --
+  -- `pending` is the same task getPendingTaskName() returns. It is taken from this walk so a
+  -- caller that wants the count and the name -- which is what reporting progress needs -- walks
+  -- the queue once instead of twice.
   function runner.getProgress()
     ensureEnv()
     local currentEnv = Env and Env.get() or "tool"
     local total = 0
     local done = 0
+    local failed = 0
+    local pending = nil
     for i = 1, #tasksQueue do
       local t = tasksQueue[i]
       local eligible = false
@@ -302,10 +314,13 @@ function M.new(category)
         total = total + 1
         if t.complete or t.failed then
           done = done + 1
+          if t.failed then failed = failed + 1 end
+        elseif pending == nil and type(t.name) == "string" and t.name ~= "" then
+          pending = t.name
         end
       end
     end
-    return { done = done, total = total }
+    return { done = done, total = total, failed = failed, pending = pending }
   end
 
   return runner
