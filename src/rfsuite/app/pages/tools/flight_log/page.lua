@@ -791,6 +791,14 @@ local function saveEdit(i18n)
   end
 
   loadRegistry()
+
+  -- The pack for the next flight is remembered by id, so a rename has to take the choice with it.
+  -- Left behind, the old id names no pack: the list offers it as unknown and refuses to re-select
+  -- it, and the flight is logged against an id the registry no longer has.
+  if edit.originalId ~= nil and edit.originalId ~= id and selectedBatteryId() == edit.originalId then
+    selectBattery(id)
+  end
+
   ui.edit = nil
   ui.editMode = nil
   ui.editError = nil
@@ -886,6 +894,9 @@ local function confirmDelete(entry, i18n)
       ui.editError = errorText(i18n, result)
     else
       loadRegistry()
+      -- Same reason as a rename: the pack for the next flight cannot be one that has just been
+      -- removed from the registry.
+      if selectedBatteryId() == entry.id then selectBattery(nil) end
       ui.batteryId = nil
       ui.view = "batteries"
     end
