@@ -841,7 +841,7 @@ local function buildBatteryForm(children, x, y, w, h, i18n)
     pageText(i18n, "battery_models", "Models"), {
       length = 32,
       get = function() return edit.models end,
-      set = function(value) edit.models = FlightLog.sanitizeModel(value) end
+      set = function(value) edit.models = FlightLog.sanitizeModelList(value) end
     })
 
   cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
