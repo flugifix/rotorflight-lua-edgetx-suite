@@ -30,6 +30,49 @@ temperature -- would otherwise be searched for on every pass, for the whole flig
 are spaced out instead: the first retry comes after about two seconds and the wait doubles up to
 half a minute.
 
+## Asking for a sensor by its own name
+
+Everything above is about the suite's own values, each with a list of names behind it. A name
+that is not one of those -- a flight controller sensor the suite has no value for, or one of the
+link statistics -- is read straight from the model's sensor of that name, and the same spacing
+applies: a name the model carries no sensor for is retried after about two seconds and then less
+and less often, not on every pass.
+
+Two things come with that.
+
+**The session minimum and maximum.** The radio keeps the lowest and the highest reading of every
+sensor, and offers them under the sensor's name with a trailing `-` or `+`: `Hspd+` is the
+highest headspeed, `RQly-` the worst link quality. They are the radio's figures rather than the
+suite's, so they cover everything received since the radio last reset telemetry -- when the model
+was loaded, when the radio was switched on, or on *Reset Telemetry* -- and not one flight.
+[Flight statistics](flight-statistics.md) are the per-flight ones. One oddity is worth knowing:
+on a **voltage** sensor the radio resets the minimum whenever a new maximum arrives, on the
+assumption that a higher voltage means a fresh battery.
+
+**The link statistics are the radio's sensors, not the flight controller's.** The CRSF driver
+creates them from the link frames themselves, so they are there on every model flown on a
+Crossfire or ELRS link, whether or not a flight controller is answering:
+
+| Name | Unit | What it is |
+| --- | --- | --- |
+| `1RSS`, `2RSS` | dB | Signal strength at the receiver, per antenna. |
+| `RQly` | % | Link quality up to the aircraft -- the share of packets that arrived. |
+| `RSNR` | dB | Signal-to-noise ratio at the receiver. |
+| `ANT` | — | Which receiver antenna is active. |
+| `RFMD` | — | The RF mode, as the module's own number. |
+| `TPWR` | mW | Transmit power the module is using. |
+| `TRSS` | dB | Signal strength of the downlink, at the radio. |
+| `TQly` | % | Link quality down from the aircraft. |
+| `TSNR` | dB | Signal-to-noise ratio at the radio. |
+| `RRSP`, `TRSP` | % | The two signal strengths again as percentages, where the module sends them. |
+| `RPWR` | dBm | The receiver's transmit power, where the module sends it. |
+| `TFPS` | Hz | Downlink frame rate, where the module sends it. |
+
+Which of them a model actually has is the module's decision and not the suite's; the last four
+come from extended frames that only some modules send. The flight controller's own custom
+sensors are a separate set and are described under
+[telemetry sensors](telemetry-sensors.md).
+
 ## Why a sensor the radio has never sent is not a reading of zero
 
 A model keeps the sensors it has ever seen. Load a model that flew with a sensor the radio is no
