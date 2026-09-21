@@ -2382,6 +2382,7 @@ return {
         never_used = "Never",
         new_battery = "New battery",
         edit = "Edit",
+        edit_battery = "Edit battery",
         delete = "Delete",
         save = "Save",
         cancel = "Cancel",
@@ -2400,7 +2401,8 @@ return {
         help_p2 = "A flight is the time between arming and disarming. An arm shorter than the minimum is not one.",
         help_p3 = "A pack picked under Batteries goes into the flight's line and its first flight counts one cycle.",
         help_p4 = "A pack with no model list is offered for every craft, otherwise only for the names listed.",
-        help_p5 = "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone."
+        help_p5 = "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone.",
+        help_p6 = "The tab you are on is marked. Editing a pack takes the whole screen until Save or Cancel."
       },
       logs = {
         title = "Logs",
