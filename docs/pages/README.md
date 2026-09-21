@@ -11,7 +11,7 @@ One file per page, at the path of the page under `src/rfsuite/app/pages/` with `
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
 
-**Status:** 93 reachable pages, 25 written. 73 of them carry an in-app help text behind the
+**Status:** 93 reachable pages, 27 written. 73 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
@@ -68,8 +68,8 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Power → Sources | `setup/power/sources.md` | yes | read-only while armed | to write |
 | Power → SmartFuel | [setup/power/smartfuel.md](setup/power/smartfuel.md) | yes | read-only while armed, needs MSP API 12.09 | written |
 | Power → Preferences | `setup/power/preferences.md` | yes | always available | to write |
-| ESC & Motors → Throttle | `setup/esc_motors/throttle.md` | yes | read-only while armed | to write |
-| ESC & Motors → Telemetry | `setup/esc_motors/telemetry.md` | yes | read-only while armed | to write |
+| ESC & Motors → Throttle | [setup/esc_motors/throttle.md](setup/esc_motors/throttle.md) | yes | read-only while armed | written |
+| ESC & Motors → Telemetry | [setup/esc_motors/telemetry.md](setup/esc_motors/telemetry.md) | yes | read-only while armed | written |
 | ESC & Motors → RPM | `setup/esc_motors/rpm.md` | yes | read-only while armed | to write |
 | ESC & Motors → ESC Tools → AM32 | [setup/esc_motors/esc_tools/escmfg/am32.md](setup/esc_motors/esc_tools/escmfg/am32.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → BLHeli_S | [setup/esc_motors/esc_tools/escmfg/blheli_s.md](setup/esc_motors/esc_tools/escmfg/blheli_s.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
