@@ -51,6 +51,7 @@ the widget to find the module for the phase it is in.
 | `inflight` | string | File name of the inflight module. |
 | `postflight` | string | File name of the postflight module. |
 | `configure` | string | File name of the per-theme settings module. Omit it and the theme has no settings page. |
+| `pages` | table | Optional. Splits the theme's settings into pages, one tile each. See [Splitting the settings into pages](#splitting-the-settings-into-pages). |
 | `standalone` | boolean | `true` keeps the theme off the *Dashboard* → *Settings* page even if it declares `configure`. |
 
 Beside it, `icon.png` is the tile the theme selector draws. The path is built from the folder
@@ -268,6 +269,56 @@ write did not silently loses the setting.
 
 The widget hands the resolved configuration to the theme as `state.themeConfig`, which is where
 a box's `min`, `max` or threshold limit reads it from.
+
+## Splitting the settings into pages
+
+A theme with more settings than one screen carries may declare `pages` in its `init.lua`. Its
+tile under *Dashboard* → *Settings* then opens a grid of those pages instead of the settings
+page itself, and each tile opens the same `configure.lua` with the page it stands for named on
+the context. There is one level of it: a page holds settings, never a further grid.
+
+```lua
+pages = {
+  { id = "look", title = "Look",       icon = "icons/look.png" },
+  { id = "rows", title = "Value Rows", icon = "icons/rows.png" },
+},
+```
+
+| Key | Type | What it does |
+| --- | --- | --- |
+| `id` | string | Lowercase letters, digits and underscores. It becomes part of the menu id, and it is what the module reads to tell the pages apart. Unique within the theme; a repeat of one is dropped. |
+| `title` | string | The tile label and the page's header title. Required, and it takes the same `@i18n(key)@` form a theme's `name` takes. |
+| `icon` | string | Optional, relative to the theme folder. |
+
+**Fewer than two usable entries and the theme behaves as though it declared none**, because a
+grid holding a single tile is a press a pilot pays for nothing. An entry missing its `id` or
+`title`, or carrying an `id` the menu cannot hold, is dropped rather than costing the theme its
+settings page.
+
+Icons are resolved against the folder the theme was found in and looked up before use: a page
+icon that is not there falls back to the theme's own `icon.png`, and that to the settings
+icon of the tool. The theme's own tile follows the same chain, so a configurable theme is now
+listed under *Settings* with its `icon.png` rather than with the settings icon.
+
+The page is handed to `configure.lua` as `ctx.page` — on the factory context beside `theme`,
+and on the context of every `build`, `onReload` and `onSave` call, because a module returned as
+a plain table never sees a factory context:
+
+```lua
+ctx.page = { id = "rows", title = "Value Rows" }   -- nil when the theme declares no pages
+```
+
+Each page loads and saves the whole configuration: `loadConfig` and `saveConfig` are unchanged,
+and a page is expected to build the controls belonging to `ctx.page.id` and to leave the rest of
+the values as it found them. **Leaving a page discards the module.** The page registry drops the
+settings module when the menu id changes (`app/pages/init.lua`, `closePageModule`), so switching
+between two pages of one theme re-loads `configure.lua` and calls the factory again — an edit
+that has not been saved is gone. Save before leaving a page, or keep what must survive in the
+preferences.
+
+A radio that offers no directory enumeration reads the theme list from
+`theme_index.lua` instead of from `init.lua`, and the packager copies the declared pages into
+it, so the split is there as well.
 
 ## Checklist for a theme shipped in this repository
 
