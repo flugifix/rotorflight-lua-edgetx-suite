@@ -55,6 +55,66 @@ local function asThemePath(source, folder)
   return source .. "/" .. folder
 end
 
+local ICON_FILE = "icon.png"
+
+-- A settings page split into pages needs at least two of them: with one, a pilot would press a
+-- tile to reach a grid holding the single tile that opens the page.
+local MIN_THEME_PAGES = 2
+
+-- An icon is looked up rather than assumed, so a theme that ships none falls back to the tool's
+-- own icon instead of drawing an empty tile. Only the theme scan calls this, and that fills a
+-- cache, so the card is read once per menu build rather than once per frame.
+local function iconExists(path)
+  if type(path) ~= "string" or path == "" then return false end
+  local file = io.open(path, "r")
+  if not file then return false end
+  io.close(file)
+  return true
+end
+
+local function themeIconPath(loadBasePath, folder)
+  local path = loadBasePath .. folder .. "/" .. ICON_FILE
+  if iconExists(path) then return path end
+  return nil
+end
+
+-- The optional `pages` list a theme declares in its init.lua, validated. An entry needs an `id`
+-- of lowercase letters, digits and underscores -- it becomes part of a menu id -- and a
+-- non-empty `title`; ids are unique within the theme and an `icon` is relative to the theme
+-- folder. An entry that fails any of it is dropped rather than costing the theme its page, and
+-- a list that ends up shorter than two entries is dropped altogether, so everywhere else the
+-- presence of the list is what says the theme is split.
+local function themePages(declared, loadBasePath, folder)
+  if type(declared) ~= "table" then return nil end
+
+  local pages = {}
+  local seen = {}
+  for i = 1, #declared do
+    local entry = declared[i]
+    local id = (type(entry) == "table") and entry.id or nil
+    local title = (type(entry) == "table") and entry.title or nil
+    if type(id) == "string" and string.match(id, "^[a-z0-9_]+$")
+      and type(title) == "string" and title ~= "" and not seen[id] then
+      seen[id] = true
+      local iconPath = nil
+      if type(entry.icon) == "string" and entry.icon ~= "" then
+        local candidate = loadBasePath .. folder .. "/" .. entry.icon
+        if iconExists(candidate) then iconPath = candidate end
+      end
+      pages[#pages + 1] = { id = id, title = title, iconPath = iconPath }
+    else
+      debugLog("page entry dropped folder=" .. tostring(folder) .. " index=" .. tostring(i) .. " id=" .. tostring(id))
+    end
+  end
+
+  if #pages < MIN_THEME_PAGES then
+    debugLog("pages ignored folder=" .. tostring(folder) .. " valid=" .. tostring(#pages))
+    return nil
+  end
+
+  return pages
+end
+
 local function appendTheme(themes, nextId, entry, loadBasePath)
   if type(entry) ~= "table" then return nextId end
   if type(entry.name) ~= "string" or entry.name == "" then return nextId end
@@ -73,7 +133,8 @@ local function appendTheme(themes, nextId, entry, loadBasePath)
     path = asThemePath(entry.source, entry.folder),
     configure = entry.configure,
     configurePath = configurePath,
-    iconPath = loadBasePath .. entry.folder .. "/icon.png",
+    iconPath = themeIconPath(loadBasePath, entry.folder),
+    pages = themePages(entry.pages, loadBasePath, entry.folder),
     standalone = entry.standalone == true
   }
   return nextId + 1
@@ -182,7 +243,8 @@ local function scanThemes(listBasePath, loadBasePath, source, themes, nextId)
               path = asThemePath(source, folder),
               configure = initTable.configure,
               configurePath = configurePath,
-              iconPath = loadBasePath .. folder .. "/icon.png",
+              iconPath = themeIconPath(loadBasePath, folder),
+              pages = themePages(initTable.pages, loadBasePath, folder),
               standalone = initTable.standalone == true
             }
             debugLog("accepted theme name=" .. tostring(initTable.name) .. " path=" .. tostring(source) .. "/" .. tostring(folder) .. " configure=" .. tostring(initTable.configure) .. " configurePath=" .. tostring(configurePath))
@@ -239,7 +301,8 @@ function M.listThemes(forceRefresh)
           path = defaultPath,
           configure = initTable.configure,
           configurePath = configurePath,
-          iconPath = SYSTEM_THEMES_LOAD_PATH .. "default/icon.png",
+          iconPath = themeIconPath(SYSTEM_THEMES_LOAD_PATH, "default"),
+          pages = themePages(initTable.pages, SYSTEM_THEMES_LOAD_PATH, "default"),
           standalone = initTable.standalone == true
         }
         debugLog("fallback default accepted")

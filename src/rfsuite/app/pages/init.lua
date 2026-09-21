@@ -125,7 +125,14 @@ local closePageModule
 
 local function isDynamicDashboardSettingsPage(menuId)
   if type(menuId) ~= "string" then return false end
-  return string.match(menuId, "^settings_dashboard_settings_[0-9a-f]+_page$") ~= nil
+  if string.match(menuId, "^settings_dashboard_settings_[0-9a-f]+_page$") ~= nil then
+    return true
+  end
+  -- A theme that splits its settings into pages puts the page id between the theme token and
+  -- the suffix. The grid holding those pages ends in `_menu` and is deliberately not a page:
+  -- the menu id that answers with a page module here is the one that renders as a page, so a
+  -- grid answering would replace itself with the settings page of its first theme.
+  return string.match(menuId, "^settings_dashboard_settings_[0-9a-f]+_[a-z0-9_]+_page$") ~= nil
 end
 
 local function isCacheableMenuId(menuId)

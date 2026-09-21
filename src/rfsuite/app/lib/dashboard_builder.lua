@@ -28,6 +28,42 @@ local function hexEncode(input)
   return result
 end
 
+-- The grid a theme's own tile opens when the theme declares pages: one tile per page, laid out
+-- like the theme grid above it. Each tile opens the same settings page under a menu id that
+-- carries the page id, which is how the page knows which half of the theme it is showing.
+local function buildThemePageMenu(t, token, themeIcon, menus)
+  local menuId = "settings_dashboard_settings_" .. token .. "_menu"
+  local pages = {}
+
+  for i = 1, #t.pages do
+    local page = t.pages[i]
+    local pageMenuId = "settings_dashboard_settings_" .. token .. "_" .. page.id .. "_page"
+    debugLog("page entry theme=" .. tostring(t.path) .. " page=" .. tostring(page.id) .. " menuId=" .. tostring(pageMenuId))
+    pages[#pages + 1] = {
+      id = "dashboard_settings_" .. token .. "_" .. page.id,
+      title = page.title,
+      menuId = pageMenuId,
+      icon = page.iconPath or themeIcon,
+      row = math.floor((i - 1) / 6) + 1,
+      col = ((i - 1) % 6) + 1,
+      themePath = t.path
+    }
+    menus[pageMenuId] = {
+      title = page.title,
+      pages = {},
+      themePath = t.path
+    }
+  end
+
+  menus[menuId] = {
+    title = t.name,
+    pages = pages,
+    themePath = t.path
+  }
+
+  return menuId
+end
+
 local function buildDashboardSettingsThemeMenus()
   local themes = DashboardLib.getConfigurableThemes(DashboardLib.listThemes())
   debugLog("buildDashboardSettingsThemeMenus configurable count=" .. tostring(#themes))
@@ -38,20 +74,26 @@ local function buildDashboardSettingsThemeMenus()
   for i = 1, #themes do
     local t = themes[i]
     local token = hexEncode(t.path)
-    local menuId = "settings_dashboard_settings_" .. token .. "_page"
+    local themeIcon = t.iconPath or FALLBACK_ICON
+    local menuId
+    if type(t.pages) == "table" then
+      menuId = buildThemePageMenu(t, token, themeIcon, menus)
+    else
+      menuId = "settings_dashboard_settings_" .. token .. "_page"
+      menus[menuId] = {
+        title = t.name,
+        pages = {},
+        themePath = t.path
+      }
+    end
     debugLog("menu entry name=" .. tostring(t.name) .. " path=" .. tostring(t.path) .. " menuId=" .. tostring(menuId))
     entries[#entries + 1] = {
       id = "dashboard_settings_" .. token,
       title = t.name,
       menuId = menuId,
-      icon = FALLBACK_ICON,
+      icon = themeIcon,
       row = math.floor((i - 1) / 6) + 1,
       col = ((i - 1) % 6) + 1,
-      themePath = t.path
-    }
-    menus[menuId] = {
-      title = t.name,
-      pages = {},
       themePath = t.path
     }
   end
