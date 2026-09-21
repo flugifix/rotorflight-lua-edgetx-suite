@@ -35,6 +35,11 @@ Two sequences run, and both have to finish before everything is available:
    governor configuration, the model name, the clock, and the rest. Most of them are one MSP
    round trip, so the sequence takes a few seconds on a healthy link.
 
+The connection button in the header says which of the two is running, and pressing it names the
+step of the second one -- see [The connection status button](../reference/connection-status.md).
+That is the quickest way to tell a flight controller that never answered from one whose
+configuration is still being read.
+
 ## Arming during those few seconds
 
 **Configuration traffic is not sent while the model is armed.** On the first armed pass the MSP
