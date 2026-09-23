@@ -326,10 +326,13 @@ local function readSources()
   values.current = current or values.current
   values.watts = watts or values.watts
   values.altitude = get("altitude") or values.altitude
-  values.consumedMah = get("smartconsumption") or values.consumedMah
+  -- Ahead of the sensor for the same reason the dashboard's read is: SmartFuel runs in this
+  -- Lua state and hands the two values over directly.
+  local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
+  values.consumedMah = (smart and smart.consumption) or get("smartconsumption") or values.consumedMah
   if type(voltage) == "number" then values.voltage = voltage end
 
-  local fuel = get("smartfuel") or get("fuel")
+  local fuel = (smart and smart.fuel) or get("smartfuel") or get("fuel")
   if type(fuel) == "number" then
     if fuel < 0 then fuel = 0 end
     if fuel > 100 then fuel = 100 end

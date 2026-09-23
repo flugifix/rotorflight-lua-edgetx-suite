@@ -125,6 +125,46 @@ local function getSensor(name)
   return Sensors.getValue(name)
 end
 
+-- Hand a computed value to the rest of this Lua state, under rfsuite.session.smartfuel.
+--
+-- Everything inside the suite that wants these two numbers runs in the same Lua state as the
+-- code that computes them: the dashboard widget's telemetry read, the flight record, and the
+-- tool's own audio path each drive this module through tasks/events/runtime.lua. Writing the
+-- value out as a telemetry sensor and reading it straight back is therefore a detour through
+-- the radio, and it costs what any detour through the sensor table costs -- a model write per
+-- publication, and a value that has been through a sensor of precision 0.
+--
+-- The sensor stays. It is the export for everything OUTSIDE this state, which the hand-over
+-- cannot reach and which has no other way to the value: logical switches, special functions,
+-- the stock telemetry screens and the radio's own telemetry log. SmFt in particular is not
+-- interchangeable with Bat% there, because the reserve is already applied to it.
+--
+-- The fuel percentage is handed over as it was computed. Consumption is handed over rounded,
+-- as the sensor publishes it: it is a milliamp-hour count, and no consumer of it asks for a
+-- fraction.
+-- Both keys are written together, and a key the pass did not compute is written as nil. A
+-- value that is no longer being produced must not shadow the sensor chain behind it: the local
+-- source can be switched from voltage to current mid-session, and the consumption the voltage
+-- path estimates then stops existing while the flight controller's own count carries on.
+local function handOver(fuel, consumption)
+  local session = getSession()
+  if type(session) ~= "table" then return end
+  local values = session.smartfuel
+  if type(values) ~= "table" then
+    values = {}
+    session.smartfuel = values
+  end
+  values.fuel = fuel
+  values.consumption = consumption
+end
+
+local function clearHandOver()
+  local session = getSession()
+  if type(session) == "table" then
+    session.smartfuel = nil
+  end
+end
+
 local function readFirmwareFuelValue()
   -- Avoid feedback loops: never use SmFt (smartfuel alias) as input for SmFt calculation.
   -- Prefer the direct FC fuel percentage, then the battery percentage sensor.
@@ -532,19 +572,31 @@ function Smart.wakeup()
     end
   end
 
+  local percent = nil
   if type(fuelPercent) == "number" then
-    publishTelemetryValue(APPID_SMARTFUEL, clamp(fuelPercent, 0, 100), UNIT_PERCENT or 0, SENSOR_NAME_SMARTFUEL, "lastFuelValue", "lastFuelPush")
+    percent = clamp(fuelPercent, 0, 100)
+    publishTelemetryValue(APPID_SMARTFUEL, percent, UNIT_PERCENT or 0, SENSOR_NAME_SMARTFUEL, "lastFuelValue", "lastFuelPush")
   end
 
   -- SmCp carries the virtual consumption computed in voltage mode and nothing else. On the other
   -- paths the value would be the consumption the flight controller already publishes, so the
   -- sensor would spend a second slot -- and one model write per push -- on a copy of it.
+  local consumed = nil
   if type(virtualConsumption) == "number" and virtualConsumption >= 0 then
-    publishTelemetryValue(APPID_SMARTCONSUMPTION, math.max(0, virtualConsumption), UNIT_MAH or 0, SENSOR_NAME_SMARTCONSUMPTION, "lastConsumptionValue", "lastConsumptionPush")
+    local mah = math.max(0, virtualConsumption)
+    consumed = roundInt(mah)
+    publishTelemetryValue(APPID_SMARTCONSUMPTION, mah, UNIT_MAH or 0, SENSOR_NAME_SMARTCONSUMPTION,
+      "lastConsumptionValue", "lastConsumptionPush")
   end
+
+  -- Only a wakeup that got this far writes the hand-over. One that returned earlier -- no
+  -- battery configuration yet, no pack voltage, or simply inside the wakeup interval -- leaves
+  -- the last pair standing, which is what the two sensors do as well.
+  handOver(percent, consumed)
 end
 
 function Smart.reset()
+  clearHandOver()
   state.batterySignature = nil
   state.sourceMode = nil
   state.stabilizeUntil = 0

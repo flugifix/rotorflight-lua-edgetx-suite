@@ -1797,7 +1797,11 @@ function Audio.process(self, opts)
           local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
           if tryPlayEventFile(audioState, now, calloutSound, opts) then
             if type(playNumber) == "function" then
-              local ok, err = pcall(playNumber, fuel, unitPercent(), audio_volume)
+              -- playNumber takes an integer and raises on a number it cannot convert to one.
+              -- The fuel percentage is no longer rounded on its way here, so without this the
+              -- alert tone would play and the percentage behind it would go unspoken. Same
+              -- rounding as the MCU temperature and the link quality above.
+              local ok, err = pcall(playNumber, math.floor(fuel + 0.5), unitPercent(), audio_volume)
               if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
             end
             audioState.initialFuelAnnounced = true

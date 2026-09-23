@@ -51,6 +51,39 @@ and selecting a sensor that firmware has added. The fix is to update the suite. 
 workaround is to untick the unrecognised sensor on the Telemetry page, which restores everything
 that was sitting behind it.
 
+## The two sensors the suite computes itself
+
+Besides decoding what the flight controller sends, the suite works out the remaining fuel of
+the pack and publishes two sensors of its own. What they are computed from is on the
+[SmartFuel page](../pages/setup/power/smartfuel.md); what matters here is that they are the
+suite's own values rather than the flight controller's.
+
+| Sensor | What it holds |
+| --- | --- |
+| `SmFt` | remaining fuel in percent, **with the reserve already taken off** |
+| `SmCp` | the consumption the suite estimates, in mAh — published only where the suite estimates it from the pack voltage, because on the other paths the flight controller's own `Capa` already says it |
+
+**`SmFt` is not the same number as `Bat%`.** The reserve is applied on the way to `SmFt` and not
+on the way to `Bat%`, so `SmFt` reaches 0 while the pack still holds the reserve. That is what makes it worth building a logical switch,
+a special function or a warning on, and it is why `Bat%` is not a substitute for one.
+
+**The sensors are the export, not the route the value takes inside the suite.** The dashboard,
+the per-flight statistics and the spoken announcements read the value the suite computed, in
+the same script that computed it. The two sensors exist for everything the suite cannot hand a
+value to directly: logical switches, special functions, the radio's own telemetry screens, and
+the telemetry log on the card.
+
+Two things follow that are worth knowing:
+
+- **A model has to carry the sensor before anything on the radio can use it.** As with any
+  telemetry sensor, the value reaches a logical switch or a telemetry screen only once the
+  model has the sensor; discover it once on the radio's own telemetry page. The dashboard does
+  not depend on that and shows the right value either way.
+- **The dashboard is no longer limited to whole percent.** A telemetry sensor here carries no
+  decimals, so `SmFt` is a whole number; the value the dashboard works from is not rounded, and
+  it can therefore differ from `SmFt` by one. What a gauge or a readout prints is the theme's
+  decision, and the themes shipped here show whole percent.
+
 ## The two counters the decoder adds
 
 Besides the flight controller's own values, the decoder creates two sensors of its own:
@@ -67,6 +100,7 @@ rows — nothing in the suite depends on them being visible.
 
 ## Related
 
+- [SmartFuel page](../pages/setup/power/smartfuel.md) — where `SmFt` and `SmCp` are configured
 - [Telemetry page](../pages/setup/telemetry.md) — where the sensors are selected
 - [Background decoder](background-decoder.md) — where the decoding runs
 - [Rotorflight documentation](https://www.rotorflight.org/docs/) — what each value means
