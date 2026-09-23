@@ -67,7 +67,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Power → Alerts | `setup/power/alerts.md` | yes | always available | to write |
 | Power → Sources | `setup/power/sources.md` | yes | read-only while armed | to write |
 | Power → SmartFuel | [setup/power/smartfuel.md](setup/power/smartfuel.md) | yes | read-only while armed, needs MSP API 12.09 | written |
-| Power → Preferences | `setup/power/preferences.md` | yes | always available | to write |
+| Power → Preferences | [setup/power/preferences.md](setup/power/preferences.md) | yes | always available | written |
 | ESC & Motors → Throttle | [setup/esc_motors/throttle.md](setup/esc_motors/throttle.md) | yes | read-only while armed | written |
 | ESC & Motors → Telemetry | [setup/esc_motors/telemetry.md](setup/esc_motors/telemetry.md) | yes | read-only while armed | written |
 | ESC & Motors → RPM | `setup/esc_motors/rpm.md` | yes | read-only while armed | to write |

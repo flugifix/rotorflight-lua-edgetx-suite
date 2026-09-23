@@ -54,9 +54,13 @@ that was sitting behind it.
 ## The two sensors the suite computes itself
 
 Besides decoding what the flight controller sends, the suite works out the remaining fuel of
-the pack and publishes two sensors of its own. What they are computed from is on the
-[SmartFuel page](../pages/setup/power/smartfuel.md); what matters here is that they are the
+the pack, and it can publish two sensors of its own for it. What they are computed from is on
+the [SmartFuel page](../pages/setup/power/smartfuel.md); what matters here is that they are the
 suite's own values rather than the flight controller's.
+
+**They are on by default, and can be switched off per flight controller** under *Configuration*
+→ *Setup* → *Power* → *[Preferences](../pages/setup/power/preferences.md)*, with *Publish
+SmFt / SmCp* — worth doing on a machine whose sensors nothing reads.
 
 | Sensor | What it holds |
 | --- | --- |
@@ -69,16 +73,20 @@ a special function or a warning on, and it is why `Bat%` is not a substitute for
 
 **The sensors are the export, not the route the value takes inside the suite.** The dashboard,
 the per-flight statistics and the spoken announcements read the value the suite computed, in
-the same script that computed it. The two sensors exist for everything the suite cannot hand a
-value to directly: logical switches, special functions, the radio's own telemetry screens, and
-the telemetry log on the card.
+the same script that computed it, and they work whether the sensors are published or not. The
+two sensors exist for everything the suite cannot hand a value to directly: logical switches,
+special functions, the radio's own telemetry screens, and the telemetry log on the card. That is
+also why they can be switched off: each one occupies a telemetry slot and every update of it
+moves the model file's write deadline forward, which is a price worth nothing on a machine where
+nothing reads them.
 
 Two things follow that are worth knowing:
 
 - **A model has to carry the sensor before anything on the radio can use it.** As with any
   telemetry sensor, the value reaches a logical switch or a telemetry screen only once the
-  model has the sensor; discover it once on the radio's own telemetry page. The dashboard does
-  not depend on that and shows the right value either way.
+  model has the sensor — discover it once on the radio's own telemetry page. The dashboard does not depend on that and shows the right value either way.
+- **Switching it off again does not delete the sensor.** It stops being updated and ages out
+  like any sensor that has stopped arriving; the row goes away on the radio's telemetry page.
 - **The dashboard is no longer limited to whole percent.** A telemetry sensor here carries no
   decimals, so `SmFt` is a whole number; the value the dashboard works from is not rounded, and
   it can therefore differ from `SmFt` by one. What a gauge or a readout prints is the theme's

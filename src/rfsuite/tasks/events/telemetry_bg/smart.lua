@@ -134,10 +134,12 @@ end
 -- the radio, and it costs what any detour through the sensor table costs -- a model write per
 -- publication, and a value that has been through a sensor of precision 0.
 --
--- The sensor stays. It is the export for everything OUTSIDE this state, which the hand-over
--- cannot reach and which has no other way to the value: logical switches, special functions,
--- the stock telemetry screens and the radio's own telemetry log. SmFt in particular is not
--- interchangeable with Bat% there, because the reserve is already applied to it.
+-- The sensor is the export for everything OUTSIDE this state, which the hand-over cannot reach
+-- and which has no other way to the value: logical switches, special functions, the stock
+-- telemetry screens and the radio's own telemetry log. SmFt in particular is not interchangeable
+-- with Bat% there, because the reserve is already applied on the way to it and not on the way to
+-- Bat%. It is published only where the model asks for it -- see `publishSensors` above -- because
+-- once it is no longer the transport it is a cost paid for a reader who may not exist.
 --
 -- The fuel percentage is handed over as it was computed. Consumption is handed over rounded,
 -- as the sensor publishes it: it is a milliamp-hour count, and no consumer of it asks for a
@@ -262,6 +264,17 @@ local function getSmartConfig(session)
   return {
     firmwareSource = getFirmwareSource(),
     source = source,
+    -- Whether the two sensors are published at all. Read from the model's own preferences and
+    -- deliberately NOT through `pick`: `pick` lets the flight controller's SmartFuel
+    -- configuration win, and what the radio exports to its own logical switches and telemetry
+    -- screens is not the board's to decide.
+    --
+    -- Absent means ON: this is what the suite has always done, and the setting exists to turn
+    -- it off rather than to turn it on. Only an explicit `false` stops the publication, so a
+    -- store written before the setting existed keeps publishing and a warning a pilot has built
+    -- on SmFt survives the update. Nothing inside the suite depends on it either way -- those
+    -- consumers are served by the hand-over below.
+    publishSensors = (batteryPrefs and batteryPrefs.smartfuel_publish) ~= false,
     stabilizeDelaySeconds = scaleField(pick("stabilize_delay"), 1.5, 0, 10, 1000),
     stableWindowVolts = scaleField(pick("stable_window"), 0.15, 0, 1, 100),
     voltageFallPerSecond = voltageFallPerSecond,
@@ -575,7 +588,9 @@ function Smart.wakeup()
   local percent = nil
   if type(fuelPercent) == "number" then
     percent = clamp(fuelPercent, 0, 100)
-    publishTelemetryValue(APPID_SMARTFUEL, percent, UNIT_PERCENT or 0, SENSOR_NAME_SMARTFUEL, "lastFuelValue", "lastFuelPush")
+    if cfg.publishSensors then
+      publishTelemetryValue(APPID_SMARTFUEL, percent, UNIT_PERCENT or 0, SENSOR_NAME_SMARTFUEL, "lastFuelValue", "lastFuelPush")
+    end
   end
 
   -- SmCp carries the virtual consumption computed in voltage mode and nothing else. On the other
@@ -585,8 +600,10 @@ function Smart.wakeup()
   if type(virtualConsumption) == "number" and virtualConsumption >= 0 then
     local mah = math.max(0, virtualConsumption)
     consumed = roundInt(mah)
-    publishTelemetryValue(APPID_SMARTCONSUMPTION, mah, UNIT_MAH or 0, SENSOR_NAME_SMARTCONSUMPTION,
-      "lastConsumptionValue", "lastConsumptionPush")
+    if cfg.publishSensors then
+      publishTelemetryValue(APPID_SMARTCONSUMPTION, mah, UNIT_MAH or 0, SENSOR_NAME_SMARTCONSUMPTION,
+        "lastConsumptionValue", "lastConsumptionPush")
+    end
   end
 
   -- Only a wakeup that got this far writes the hand-over. One that returned earlier -- no
