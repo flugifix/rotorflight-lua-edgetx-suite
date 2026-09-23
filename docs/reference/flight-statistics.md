@@ -116,6 +116,39 @@ every wakeup, so a flight's duration does not depend on how often the statistics
 a single step of that clock is capped at one second — a widget can be suspended for a whole tool
 session, and the wakeup after that must not credit the flight with all of it.
 
+## The readings a sampling pass offers, once
+
+The record runs from the event runtimes, and a widget drives those at the top of its own pass —
+before it reads any telemetry for itself. So on a pass where the record samples, it asks the
+sensors first and the dashboard then asks for most of the same names a second time. A second read
+inside one pass cannot answer anything the first did not: a pass runs to completion without
+yielding, so a telemetry value does not move inside it.
+
+The record therefore offers what it has just read, and the dashboard takes it instead of asking
+again:
+
+```lua
+rfsuite.session.telemetryRead = {
+  values = { rpm = 2050, voltage = 22.4, ... },  -- this pass's raw answers, by sensor name
+  pass   = 4711,   -- counted by the reader, once per pass, before the runtimes are driven
+  at     = 4711,   -- the pass `values` was filled in
+}
+```
+
+Three properties make it safe to read, and they are the whole of the contract:
+
+- **`values` is raw.** It is the sensor's own answer, before the record's rounding, its watts
+  inference and its fuel clamp — so a reader applies its own derivations and keeps its own
+  numbers. A name the sensor answered nothing for is absent, which is what a reader has to see.
+  So are `smartconsumption`, `smartfuel` and `fuel` whenever SmartFuel has handed consumption and
+  fuel over in the same Lua state: the record does not ask those sensors then, and the dashboard
+  takes the hand-over ahead of them as well.
+- **`at == pass` is what makes an offer this pass's.** The reader counts the pass before the
+  runtimes are driven, so a fill from a wakeup anywhere else in the same Lua state — a second
+  widget's background work — carries the pass before it and can never be taken for this one's.
+- **The table is created by a reader and by nobody else.** On a model that keeps the record from
+  the service widget there is no such reader, nothing creates it, and the record offers nothing.
+
 ## When a flight starts and ends
 
 On the flight controller's arm flag, as the event runtimes read it — the same edge the flight log

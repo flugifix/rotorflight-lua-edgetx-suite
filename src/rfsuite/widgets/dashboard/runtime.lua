@@ -1754,6 +1754,32 @@ local sensorCache = {}
 local telemetryTarget = nil
 local telemetryChanged = false
 
+-- What the flight record has already read this pass.
+--
+-- The record runs from the event runtimes, which this widget drives at the top of its own pass,
+-- so on a pass where it samples it has asked the sensors for most of the names below before
+-- this read is reached -- and a second read of the same name inside one pass cannot answer
+-- anything the first did not. Counting the pass for it is what lets it offer those readings and
+-- what tells this pass's offer from the one before it; the offer's schema is
+-- tasks/events/telemetry/flight_record.lua's.
+local sharedRead = nil
+
+--- Count this pass for the record, before the event runtimes are driven.
+local function countSharedPass()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session
+  if type(session) ~= "table" then
+    sharedRead = nil
+    return
+  end
+  local shared = session.telemetryRead
+  if type(shared) ~= "table" then
+    shared = { values = {}, pass = 0, at = -1 }
+    session.telemetryRead = shared
+  end
+  shared.pass = shared.pass + 1
+  sharedRead = shared
+end
+
 local function getSensor(name)
   if sensorCache[name] == nil then sensorCache[name] = Sensors.getValue(name) end
   return sensorCache[name]
@@ -1771,6 +1797,16 @@ local function readTelemetry(state, audioState)
   telemetryTarget = state
   telemetryChanged = false
   for name in pairs(sensorCache) do sensorCache[name] = nil end
+
+  -- Seed the pass cache with what the record read in this same pass. Only this pass's stamp is
+  -- taken, and only names the sensors actually answered for are in the table -- a name that
+  -- answered nothing is absent, so it is asked for below exactly as it always was.
+  local shared = sharedRead
+  if shared and shared.at == shared.pass then
+    for name, value in pairs(shared.values) do
+      sensorCache[name] = value
+    end
+  end
 
   setField("rpm", getSensor("rpm"))
   setField("lq", getSensor("link"))
@@ -2417,6 +2453,9 @@ function Runtime.new(zone, options)
       _G.rfsuite.session = _G.rfsuite.session or {}
       _G.rfsuite.session.event_context = "widget"
     end
+    -- Ahead of the runtimes, because the record samples inside them: the count is what tells
+    -- this pass's readings from the pass before it.
+    countSharedPass()
     tickMspRuntime(self)
     
     local reloaded = (reloadPreferencesIfNeeded(self, false, isBackground) == true)
