@@ -776,6 +776,145 @@ local function menuJobStep(self)
   return true
 end
 
+-- ---------------------------------------------------------------------------
+-- The battery prompt
+-- ---------------------------------------------------------------------------
+
+-- `state.batteryPick` is a TABLE from the first pass on and is replaced rather than cleared on
+-- the reconnect edge: a theme's closures read it in the reactive sweep, outside the widget's
+-- pcall, where indexing a nil field is the whole screen gone.
+local function newBatteryPickState()
+  return {
+    loaded = false,
+    pending = false,
+    candidates = {},
+    selectedId = nil,
+    selectedName = nil,
+    boardProfile = nil,
+    dismissed = false,
+    applied = nil
+  }
+end
+
+local function batteryPickEntry(pick, id)
+  if id == nil then return nil end
+  local list = pick.candidates
+  for i = 1, #list do
+    if list[i].id == id then return list[i] end
+  end
+  return nil
+end
+
+--- Read the registry and ask the board which profile it is on. Once per FBL session.
+--
+-- `loaded` is raised before the card is touched rather than after: a step that raises is caught
+-- by the dispatcher and the slot is cleared, so a flag set at the end would have this job
+-- enqueued again on every pass for the rest of the session.
+local function batteryPickLoadStep(self)
+  local pick = self.state.batteryPick
+  pick.loaded = true
+
+  local BatteryPick = requireModule("lib/battery_pick.lua")
+  if type(BatteryPick) ~= "table" then return true end
+
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local list = BatteryPick.candidates(session)
+  local cfg = self.state.battery_config
+  for i = 1, #list do
+    list[i].targetProfile = BatteryPick.targetProfile(list[i], cfg)
+  end
+  pick.candidates = list
+
+  local id = BatteryPick.selectedId(session)
+  pick.selectedId = id
+  local entry = batteryPickEntry(pick, id)
+  pick.selectedName = entry and entry.name or nil
+
+  local ask = BatteryPick.settings(self.preferences)
+  pick.pending = (ask == true) and (#list > 0) and (pick.dismissed ~= true) and (self._batteryPickPicked ~= true)
+
+  -- The reply writes into THIS table rather than into whatever `state.batteryPick` is by the
+  -- time it arrives: a reply that outlives its connection then lands in a table nothing reads,
+  -- instead of reporting the previous board's profile as the new one's.
+  BatteryPick.readProfile(function(index0) pick.boardProfile = index0 end)
+
+  -- The registry is read whole off the card; GEMINI.md asks for an explicit collect after that.
+  collectgarbage("collect")
+  return true
+end
+
+--- Perform a pick: record it, and write the pack's battery profile when that is switched on.
+local function batteryPickApplyStep(self)
+  local request = self._batteryPickRequest
+  self._batteryPickRequest = nil
+  if request == nil then return true end
+  -- `false` is the "no battery" answer; nil would be indistinguishable from no request at all.
+  -- An empty string is taken the same way, because that is how the flight log page stores
+  -- "none" in the model's preference file, and a theme may hand that form on.
+  local id = (request ~= false and request ~= "") and request or nil
+
+  local pick = self.state.batteryPick
+  local BatteryPick = requireModule("lib/battery_pick.lua")
+  if type(BatteryPick) ~= "table" then return true end
+
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  BatteryPick.select(session, id)
+
+  self._batteryPickPicked = true
+  pick.pending = false
+  pick.selectedId = id
+  pick.applied = nil
+
+  local entry = batteryPickEntry(pick, id)
+  pick.selectedName = entry and entry.name or nil
+
+  local _, setsProfile = BatteryPick.settings(self.preferences)
+  if entry == nil or setsProfile ~= true then return true end
+
+  -- Resolved again here rather than reused from the load: the board's battery configuration
+  -- may have arrived in between, and that is what turns a `cap=` into a profile.
+  local target = BatteryPick.targetProfile(entry, self.state.battery_config)
+  entry.targetProfile = target
+  if target == nil then
+    pick.applied = "skipped"
+    return true
+  end
+  -- Where the board has answered and is already on that profile, nothing is sent. Where it has
+  -- NOT answered, the write goes out all the same: it is idempotent, and refusing it would lose
+  -- the feature entirely on a board whose profile read never came back.
+  if pick.boardProfile ~= nil and target == pick.boardProfile then
+    pick.applied = "skipped"
+    return true
+  end
+
+  local queued, why = BatteryPick.applyProfile(target, { reason = "battery pick" })
+  pick.applied = queued and "queued" or ("refused:" .. tostring(why))
+  -- A queued write carries no reply handler and can still be dropped (retries exhausted, the
+  -- queue cleared on arming or on a link loss), so the board's answer from the load no longer
+  -- says which profile it is on. Forgotten rather than set to the target: the next pick then
+  -- always writes.
+  if queued then pick.boardProfile = nil end
+  return true
+end
+
+--- Draw the picker: the theme's own surface when it has one, the generic one otherwise.
+local function batteryPickJobStep(self)
+  local children = {}
+  local theme = self.theme
+  if theme and type(theme.batteryPick) == "function" then
+    theme.batteryPick(children, self)
+  else
+    local menu = requireModule("widgets/dashboard/battery_pick_menu.lua")
+    if not (menu and type(menu.build) == "function") then return true end
+    menu.build(children, self)
+  end
+  lvgl.clear()
+  lvgl.build(children)
+  self.built = true
+  self._lastChildCount = #children
+  return true
+end
+
 --- A step control that is still held, let go before the object holding it is destroyed.
 --
 -- EdgeTX's momentary button reports a release only as LV_EVENT_RELEASED on the object itself
@@ -2056,6 +2195,9 @@ function Runtime.new(zone, options)
       batteryProfile = 1,
       armFlags = 0,
       armDisableFlags = 0,
+      -- The flight log's battery prompt. A table from here on, never nil: see
+      -- newBatteryPickState above.
+      batteryPick = newBatteryPickState(),
       governor = 0,
       -- The governor mode, carried over from the session in readTelemetry; nil until the
       -- connect chain has read it.
@@ -2516,6 +2658,14 @@ function Runtime.new(zone, options)
       -- `esc_status_live` shares this table and is not latched at all, so dropping it costs that
       -- reading nothing: the next pass decodes the two sensors again and answers afresh.
       self.state.escStatusCache = nil
+      -- The battery prompt is per connection: which packs this model has, which one was picked
+      -- for it, what the board answered, and whether the pilot has already been asked. A link
+      -- that comes back is a fresh pack as far as anything here can tell, which is the same
+      -- reading the event runtime takes when it drops the flight log's pending entry.
+      self.state.batteryPick = newBatteryPickState()
+      self._batteryPickRequest = nil
+      self._batteryPickPicked = nil
+      self.batteryPickOpen = nil
       self.modelPreferences = nil
       -- Clear the reference so the identity check fails on the next frame
       -- and the slow-path signature comparison is triggered.  Keep the
@@ -2797,6 +2947,10 @@ function Runtime.new(zone, options)
       -- RTN closes it and Lua may never see the key -- so the ground surface is dropped whenever a
       -- pass arrives without an event rather than when a close is observed.
       self.inflightFullscreen = nil
+      -- Re-opening the picker from the quick menu is a fullscreen state and is dropped on the
+      -- way out for the same reason the tuning surface is: a long press on RTN closes
+      -- fullscreen without Lua ever seeing the key.
+      self.batteryPickOpen = nil
     end
     local nextRenderKey = nil
     if tuningMode then
@@ -2837,7 +2991,22 @@ function Runtime.new(zone, options)
     elseif isInteractive then
       self._cachedTuningKey = nil
       self._tuningKeyDirty = nil
-      nextRenderKey = "fullscreen_menu"
+      -- The prompt takes fullscreen ahead of the quick menu, because fullscreen is the only
+      -- surface a widget has that can be pressed: a widget zone gets no touch, and Lua can
+      -- leave fullscreen but not enter it. "On connect" therefore means "what fullscreen shows
+      -- once the connect chain has run", until the pilot answers or closes it.
+      local pick = self.state.batteryPick
+      -- A theme's own picker may close by setting `dismissed` alone rather than through
+      -- rfsuite.batteryPick.dismiss(); that answer is honoured here, on the one pass that
+      -- can be about the picker, so a closed prompt is never drawn a second time.
+      if pick.dismissed == true and pick.pending == true then
+        pick.pending = false
+      end
+      if pick.pending == true or self.batteryPickOpen == true then
+        nextRenderKey = "battery_pick"
+      else
+        nextRenderKey = "fullscreen_menu"
+      end
     else
       self._cachedTuningKey = nil
       self._tuningKeyDirty = nil
@@ -2870,9 +3039,24 @@ function Runtime.new(zone, options)
       elseif tuningMode == "fs" then
         self._job = { kind = "tuning_fs", step = tuningFullscreenJobStep }
       elseif isInteractive then
-        self._job = { kind = "menu", step = menuJobStep }
+        if self.renderKey == "battery_pick" then
+          self._job = { kind = "battery_pick", step = batteryPickJobStep }
+        else
+          self._job = { kind = "menu", step = menuJobStep }
+        end
       else
         self._job = { kind = "scene", step = sceneJobStep }
+      end
+    end
+
+    -- The battery prompt's own work, last and only into a free slot: the registry read and the
+    -- pick both touch the card, and neither is worth delaying a build for. The steady state
+    -- past the load is three table reads.
+    if self._job == nil then
+      if self._batteryPickRequest ~= nil then
+        self._job = { kind = "battery_pick_apply", step = batteryPickApplyStep }
+      elseif self.state.batteryPick.loaded ~= true and self.state.tasksDone == true then
+        self._job = { kind = "battery_pick_load", step = batteryPickLoadStep }
       end
     end
 
@@ -2886,6 +3070,42 @@ function Runtime.new(zone, options)
     self._foreground = false
     performBackgroundWork(self, true)
     return 0
+  end
+
+  -- The battery prompt's handle for anything that is not this widget: a theme drawing its own
+  -- picker, another widget, the tool. It records a REQUEST exactly as a press in the picker
+  -- does and performs nothing itself, so a caller cannot put a card write or a queue turn into
+  -- a frame that has no budget for it.
+  --
+  -- It is bound to this instance, and the last instance built wins. That is the honest scope:
+  -- jobs are dispatched from `refresh`, so only the widget the pilot is looking at runs them,
+  -- and a radio carrying two dashboard widgets has two of everything below anyway.
+  if type(_G) == "table" then
+    _G.rfsuite = _G.rfsuite or {}
+    _G.rfsuite.batteryPick = {
+      select = function(id)
+        -- `false` is "no battery" and nil is "no request"; see battery_pick_menu.lua for why
+        -- this cannot be written as an `and`/`or` pair.
+        if id == nil then
+          widget._batteryPickRequest = false
+        else
+          widget._batteryPickRequest = id
+        end
+      end,
+      dismiss = function()
+        local pick = widget.state.batteryPick
+        pick.dismissed = true
+        pick.pending = false
+        widget.batteryPickOpen = nil
+        widget.built = false
+        widget.renderKey = nil
+      end,
+      open = function()
+        widget.batteryPickOpen = true
+        widget.built = false
+        widget.renderKey = nil
+      end
+    }
   end
 
   reloadActiveTheme(widget)

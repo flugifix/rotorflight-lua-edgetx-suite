@@ -58,7 +58,7 @@ local ui = {
   edit = nil,
   editMode = nil,
   editError = nil,
-  config = { enabled = false, min_seconds = 30 },
+  config = { enabled = false, min_seconds = 30, ask_on_connect = false, set_fc_profile = false },
   requestRebuild = nil
 }
 
@@ -197,9 +197,13 @@ local function loadConfig(preferences)
   if type(section) == "table" then
     ui.config.enabled = section.enabled == true
     ui.config.min_seconds = tonumber(section.min_seconds) or 30
+    ui.config.ask_on_connect = section.ask_on_connect == true
+    ui.config.set_fc_profile = section.set_fc_profile == true
   else
     ui.config.enabled = false
     ui.config.min_seconds = 30
+    ui.config.ask_on_connect = false
+    ui.config.set_fc_profile = false
   end
 end
 
@@ -226,26 +230,16 @@ end
 
 -- The choice is kept twice on purpose: in the session, where the arm edge reads it, and in the
 -- model's own store, so that the same pack is offered again next time this craft is connected.
+--
+-- The recording itself is lib/battery_pick.lua's, and there is one implementation of it: the
+-- dashboard's picker writes the same two places from the same code, so a pack picked here and a
+-- pack picked there cannot end up recorded differently.
 local function selectBattery(id)
   local session = getSession()
   if type(session) ~= "table" then return end
-
-  -- Written into the session as well as into the store, for the case where the tool and the
-  -- widget share one Lua state: the disarm task then already has the choice and does not have to
-  -- go back to the card for it.
-  if type(session.flightlog) ~= "table" then session.flightlog = {} end
-  session.flightlog.batteryId = id
-
-  if type(session.modelPreferences) ~= "table" or session.mcu_id == nil then return end
-  if type(session.modelPreferences.flightlog) ~= "table" then
-    session.modelPreferences.flightlog = {}
-  end
-  session.modelPreferences.flightlog.battery = id or ""
-
-  local ModelPreferences = loadModule("lib/model_preferences.lua")
-  if type(ModelPreferences) == "table" and type(ModelPreferences.saveByMcuId) == "function" then
-    pcall(ModelPreferences.saveByMcuId, session.mcu_id, session.modelPreferences)
-  end
+  local BatteryPick = loadModule("lib/battery_pick.lua")
+  if type(BatteryPick) ~= "table" or type(BatteryPick.select) ~= "function" then return end
+  BatteryPick.select(session, id)
 end
 
 -- ---------------------------------------------------------------------------
@@ -353,6 +347,8 @@ function M.onSave(ctx)
   if type(ctx.preferences.flightlog) ~= "table" then ctx.preferences.flightlog = {} end
   ctx.preferences.flightlog.enabled = ui.config.enabled == true
   ctx.preferences.flightlog.min_seconds = math.floor(tonumber(ui.config.min_seconds) or 30)
+  ctx.preferences.flightlog.ask_on_connect = ui.config.ask_on_connect == true
+  ctx.preferences.flightlog.set_fc_profile = ui.config.set_fc_profile == true
 
   if type(ctx.savePreferences) ~= "function" then return false end
   local ok, err = ctx.savePreferences()
@@ -1035,6 +1031,20 @@ local function buildSettings(children, x, y, w, h, i18n)
         ui.config.min_seconds = math.floor(tonumber(value) or 30)
       end
     })
+
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    pageText(i18n, "setting_ask_on_connect", "Ask which pack after connecting"),
+    function() return ui.config.ask_on_connect == true end,
+    function(value)
+      ui.config.ask_on_connect = value == true
+    end)
+
+  cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+    pageText(i18n, "setting_set_fc_profile", "Set the pack's battery profile"),
+    function() return ui.config.set_fc_profile == true end,
+    function(value)
+      ui.config.set_fc_profile = value == true
+    end)
 
   cursorY = cursorY + 8
   appendLabel(children, x + 6, cursorY, w - 12, FlightLog.dataPath(), COLOR_THEME_DISABLED)
