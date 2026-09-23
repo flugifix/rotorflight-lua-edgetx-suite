@@ -9,6 +9,8 @@ local i18nContext = nil
 local i18nLocale = nil
 local resolvedLocale = nil
 local sensorsModule = nil
+local linkRatesModule = nil
+local crsfModule = nil
 local localeModule = nil
 local titleCache = {}
 
@@ -205,6 +207,148 @@ function Utils.toNumber(value, fallback)
   return fallback
 end
 
+-- A core module, through the loader if there is one and off the card if there is not. Lifted
+-- out of mapTelemetrySource unchanged, because the link sources below need the sensor module
+-- on a pass that never reaches the sensor fall-through at the end of it.
+local function loadCoreModule(path)
+  if _G.rfsuite and type(_G.rfsuite.require) == "function" then
+    local mod = _G.rfsuite.require(path)
+    if mod and type(mod) == "table" then return mod end
+  end
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, mode)
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then return mod end
+  end
+  return nil
+end
+
+local function getSensorsModule()
+  if not sensorsModule then sensorsModule = loadCoreModule("lib/sensors.lua") end
+  return sensorsModule
+end
+
+local function getLinkRatesModule()
+  if not linkRatesModule then linkRatesModule = loadCoreModule("lib/link_rates.lua") end
+  return linkRatesModule
+end
+
+-- One sensor read per widget pass, shared by the link sources that want the same field.
+--
+-- `getTime` is the radio's 10 ms tick and a pass that spans no tick boundary reads the same
+-- value twice, which is the test lib/sensors.lua and widgets/dashboard/runtime.lua already
+-- throttle their own per-pass work with. Where the clock is not there the memo never hits, so
+-- each source reads for itself -- more instructions, the same answer.
+--
+-- Nothing here runs for a theme that declares none of these sources: they are resolved from
+-- the derived snapshot's own list, so an absent name costs the comparisons below and no more.
+local function passTick()
+  if type(getTime) ~= "function" then return nil end
+  local ok, ticks = pcall(getTime)
+  if ok and type(ticks) == "number" then return ticks end
+  return nil
+end
+
+--- The `RFMD` reading this pass, memoised on the state.
+local function linkRfMode(state)
+  if type(state) ~= "table" then return nil end
+  local tick = passTick()
+  if tick ~= nil and state.linkRfModeTick == tick then return state.linkRfMode end
+  local sensors = getSensorsModule()
+  local mode = nil
+  if sensors and type(sensors.getValue) == "function" then
+    local value = sensors.getValue("RFMD")
+    if type(value) == "number" then mode = value end
+  end
+  state.linkRfModeTick = tick
+  state.linkRfMode = mode
+  return mode
+end
+
+local function getCrsfModule()
+  if not crsfModule then crsfModule = loadCoreModule("lib/crsf.lua") end
+  return crsfModule
+end
+
+--- The ExpressLRS generation of the transmitter module -- 3, 4, or 0 for anything else -- or
+--- nil while it is not known.
+---
+--- The `RFMD` byte means different rates on ExpressLRS 3.x and 4.x and does not say which, so
+--- the module is asked: one device ping, and the device-information frame it answers with names
+--- the release (lib/link_rates.lua). Only a theme that declares one of the two rate sources ever
+--- gets here, and only once the link is up and `RFMD` has a reading, so a theme without them, a
+--- link that is down and a link that carries no link statistics send nothing.
+---
+--- lib/crsf.lua is the one frame multiplexer of this Lua state: asking it for 0x29 before the
+--- ping is what makes it keep the answer when another consumer drains the queue first, and it
+--- keeps every other consumer's frames while this one drains.
+local function linkGeneration(state, rates)
+  if state.linkGeneration ~= nil then return state.linkGeneration end
+  local crsf = getCrsfModule()
+  if not (crsf and type(crsf.popFrame) == "function") then return nil end
+  while true do
+    local data = crsf.popFrame(rates.FRAME_DEVICE_INFO)
+    if data == nil then break end
+    local generation = rates.generationFromDeviceInfo(data)
+    if generation ~= nil then
+      state.linkGeneration = generation
+      return generation
+    end
+  end
+  local push = _G.crossfireTelemetryPush
+  if state.linkPingSent or type(push) ~= "function" then return nil end
+  local ok, queued = pcall(push, rates.FRAME_DEVICE_PING, rates.PING_PAYLOAD)
+  if not ok then return nil end
+  -- Nil is EdgeTX saying no module runs the CRSF protocol, so nothing will answer and nothing
+  -- ExpressLRS is there. False is a full output buffer, which the next pass tries again.
+  if queued == nil then
+    state.linkGeneration = 0
+    return 0
+  end
+  if queued == true then state.linkPingSent = true end
+  return nil
+end
+
+--- What the link is running, as a row of lib/link_rates.lua, or nil.
+---
+--- Nil while the link is down, too: EdgeTX answers `getValue` with 0 for every telemetry source
+--- while telemetry is not streaming, and 0 is an air rate in both tables.
+local function packetRateRow(state)
+  if type(state) ~= "table" or state.rfConnected ~= true then return nil end
+  local rates = getLinkRatesModule()
+  if not (rates and type(rates.forMode) == "function") then return nil end
+  local mode = linkRfMode(state)
+  if mode == nil then return nil end
+  local generation = linkGeneration(state, rates)
+  if generation == nil then return nil end
+  return rates.forMode(mode, generation)
+end
+
+--- 1 once the readings have proved a second antenna, 0 while they have not, nil until the
+--- receiver has reported the fields at all.
+---
+--- Latched for the session and never lowered: a switched-diversity receiver spends most of its
+--- packets on one antenna, so a pass that sees only the first one is not evidence against the
+--- second. The runtime clears it where it starts a new flight-controller session, which is the
+--- point at which the receiver may be a different one.
+local function linkDiversity(state)
+  if type(state) ~= "table" then return nil end
+  if state.linkDiversity == 1 then return 1 end
+  local tick = passTick()
+  if tick ~= nil and state.linkDiversityTick == tick then return state.linkDiversity end
+  state.linkDiversityTick = tick
+  local sensors = getSensorsModule()
+  local rates = getLinkRatesModule()
+  if not (sensors and type(sensors.getValue) == "function") then return state.linkDiversity end
+  if not (rates and type(rates.latchDiversity) == "function") then return state.linkDiversity end
+  -- `ANT` is in every link-statistics frame, so it answering is what says the receiver reports
+  -- these fields at all. The rule that turns the pair into the flag is lib/link_rates.lua's,
+  -- where it can be checked without a radio.
+  state.linkDiversity = rates.latchDiversity(state.linkDiversity, sensors.getValue("2RSS"), sensors.getValue("ANT"))
+  return state.linkDiversity
+end
+
 function Utils.mapTelemetrySource(source, state)
   if type(source) ~= "string" then return nil end
 
@@ -244,28 +388,36 @@ function Utils.mapTelemetrySource(source, state)
   if source == "smartfuel" then return state and state.fuel end
   if source == "smartconsumption" then return state and state.consumedMah end
 
-  -- Load sensors module lazily
-  if not sensorsModule then
-    if _G.rfsuite and type(_G.rfsuite.require) == "function" then
-      local mod = _G.rfsuite.require("lib/sensors.lua")
-      if mod and type(mod) == "table" then
-        sensorsModule = mod
-      end
-    end
-    if not sensorsModule then
-      local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
-      local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors.lua", mode)
-      if chunk then
-        local ok, mod = pcall(chunk)
-        if ok and type(mod) == "table" then
-          sensorsModule = mod
-        end
-      end
-    end
+  -- The link's own three, derived from the CRSF link-statistics frame rather than read as a
+  -- value. They sit at the end of this chain on purpose: the comparisons are paid by the
+  -- sources that fall through to a sensor, and by none of the ones above.
+  --
+  -- The air rate the link runs at, as the name ExpressLRS gives it. Nil while the link is down,
+  -- while the transmitter module has not yet said which ExpressLRS generation it runs, where it
+  -- is not ExpressLRS 3.x or 4.x, and where the byte is one that generation leaves unused.
+  --
+  -- "packet rate" and not "link rate": `session.crsfTelemetryConfig.linkRate` is already the
+  -- flight controller's telemetry link rate in hertz, off MSP telemetry_config, and
+  -- app/pages/tools/diagnostics/elrs_link reads the air rate under the name `packetRate`. This
+  -- is the same quantity as that one, off the link-statistics frame rather than off the module's
+  -- parameter list, so it takes the same word.
+  if source == "link_packet_rate" then
+    local row = packetRateRow(state)
+    return row and row.rate
   end
+  -- The receiver sensitivity that rate is specified down to, in dBm and negative. Nil wherever
+  -- the rate is, and also for a rate whose figure is not a function of the byte -- configured by
+  -- no radio target, or on 3.x given a different figure per band -- so a box can draw a rate
+  -- whose floor is unknown.
+  if source == "link_floor" then
+    local row = packetRateRow(state)
+    return row and row.floor
+  end
+  if source == "link_diversity" then return linkDiversity(state) end
 
-  if sensorsModule and type(sensorsModule.getValue) == "function" then
-    local value = sensorsModule.getValue(source)
+  local sensors = getSensorsModule()
+  if sensors and type(sensors.getValue) == "function" then
+    local value = sensors.getValue(source)
     if type(value) == "number" then return value end
   end
 

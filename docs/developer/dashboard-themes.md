@@ -200,8 +200,88 @@ The value a box reads is `source`, and the names are resolved in
 `widgets/dashboard/objects/common.lua`, `mapTelemetrySource`: a fixed set that comes straight
 off the widget state — `voltage`, `bec_voltage`, `current`, `watts`, `rpm`, `fuel`,
 `smartfuel`, `smartconsumption`, `altitude`, `governor`, `esc_temp`, `mcu_temp`,
-`throttle_percent`, `link`, `pid_profile`, `rate_profile`, `battery_profile`, `model_name` —
-and, for anything else, the sensor of that name from `lib/sensors.lua`.
+`throttle_percent`, `link`, `pid_profile`, `rate_profile`, `battery_profile`, `model_name`,
+`link_packet_rate`, `link_floor`, `link_diversity` — and, for anything else, the sensor of that name
+from `lib/sensors.lua`.
+
+### `link_packet_rate`, `link_floor`, `link_diversity`
+
+Not sensors. The three are read out of the CRSF link-statistics frame the *transmitter module*
+sends the radio — the frame the radio creates `1RSS`, `2RSS`, `RSNR`, `ANT`, `RFMD`, `TPWR`,
+`TRSS`, `TQly` and `TSNR` from — and they say what the link is doing rather than what the
+helicopter is doing.
+
+**`link_packet_rate` rather than `link_rate`, and the name is deliberate.** *Link rate* is
+already taken in this repository for something else: `session.crsfTelemetryConfig.linkRate` is
+the flight controller's own telemetry link rate in hertz, read over MSP `telemetry_config` and
+set from *Tools* → *Diagnostics* → *ELRS Link*. The air rate is what that same page calls
+`packetRate`, reading it off the module's parameter list rather than off the link-statistics
+frame, so this source takes the page's word for the same quantity.
+
+| source | type | what it is | nil when |
+| --- | --- | --- | --- |
+| `link_packet_rate` | string | the air rate the link is running, spelled as ExpressLRS spells it: `50Hz`, `150Hz`, `100Hz Full`, `D250`, `F1000`, `K1000` | the link is down; no `RFMD` reading; the transmitter module has not yet said which ExpressLRS it runs, or is not ExpressLRS 3.x or 4.x; a byte that release leaves unused |
+| `link_floor` | number | the receiver sensitivity that rate is specified down to, in dBm and negative (`-108`) | the rate is unknown; a rate ExpressLRS declares and ships no radio configuration for; on 3.x, a rate whose figure depends on the band (see below) |
+| `link_diversity` | number | `1` once the readings have proved a second antenna, `0` while they have not | the receiver has reported neither `2RSS` nor `ANT`, so there is nothing to say yet |
+
+**`link_packet_rate` and `link_floor` need to know which ExpressLRS the transmitter module runs,
+and the frame does not say.** `RFMD` carries an enumeration value whose meaning belongs to
+whichever module filled it, and ExpressLRS renumbered that enumeration between 3.x and 4.x: the
+same byte is a different rate on each, and the common rates are exactly where the two overlap
+(byte 10 is `D250` on 3.x and `D50Hz` on 4.x). So the widget asks the module. Once the link is
+up and `RFMD` has a reading — and only for a theme that declares one of these two sources — it
+sends the transmitter module one CRSF device ping, and the device-information frame the module
+answers with carries its release number. `lib/link_rates.lua` holds a table for each generation
+(3.0.0 to 3.6.4, and 4.0.0 to 4.1.0; neither changed within its generation) and names its
+sources line by line.
+
+What follows from that, for a theme author:
+
+- **Both sources draw `--` until the module has answered.** That is normally the first pass
+  after the ping, but it is a pass, and it is repeated when the widget starts a new
+  flight-controller session.
+- **A module that is not ExpressLRS 3.x or 4.x resolves to nothing**, rather than to a rate it is
+  not running: another make of CRSF module, ExpressLRS 2.x, or a radio with no CRSF module at all.
+- **On 3.x, `50Hz` and `250Hz` carry no floor.** In the 3.x numbering those two rates share one
+  value across the 900 MHz and 2.4 GHz bands, with a different sensitivity on each (`-120` against
+  `-115` dBm, and `-111` against `-108` dBm from 3.4.0), and the band is not in the frame. 4.x put
+  the band into the value, which is why every configured 4.x rate has one floor.
+- **Nothing is resolved while the link is down.** The radio answers every telemetry value with `0`
+  then, and `0` is an air rate in both tables.
+- The ping is the same device ping a module's own configuration script sends when it opens,
+  addressed to the transmitter module only. ExpressLRS answers it the same way, and — as it does
+  when that script opens — clears the module's critical-warning flags.
+
+**The headroom arithmetic is the theme's.** `link_floor` is the floor as ExpressLRS states it, a
+negative dBm figure, and nothing here divides anything. `1RSS`, `2RSS` and `TRSS` carry the same
+sign: the CRSF field is specified as `dBm × -1`, and the transmitter module negates it on the way
+to the handset for exactly this reason — *"OpenTX's value is signed and will display +dBm and
+-dBm properly"* — so both numbers are negative dBm and directly comparable. `rssi - floor` is
+therefore the headroom in dB, and `(rssi - floor) / (-30 - floor)` a fraction of the way from the
+floor to a -30 dBm best case. A theme clamps that itself: an RSSI below the floor is a link that
+is still working past what the rate is specified for, which happens.
+
+**`link_diversity` only ever rises, and that is deliberate.** A receiver with one radio and two
+antennas spends most of its packets on one of them, so a pass that sees only the first antenna
+is not evidence against the second; the value latches at `1` and is cleared where the widget
+starts a new flight-controller session. `ANT` alone is not evidence either — the field is in
+every frame and a single-antenna receiver reports a constant `0` in it, so what counts is a
+reading only a second antenna can produce: a non-zero `2RSS`, or `ANT` naming the second one.
+The test is `ANT ~= 0` and never `ANT == 1`: the specification counts the antennas from nought
+(*"Diversity active antenna ( enum ant. 1 = 0, ant. 2 )"*), and nought is the value that means
+nothing has been proved whatever the numbering above it turns out to be. `2RSS` is the half of
+the test that does not depend on that at all.
+
+**What they cost.** Nothing at all on a theme that names none of them: they resolve at the end
+of `mapTelemetrySource`, so an absent name is never compared for, and no ping is ever sent. A
+theme that names one pays one sensor read per telemetry pass, and a theme that names both
+`link_packet_rate` and `link_floor` pays the same one — the reading is memoised on the widget
+state for the pass. Until the module has answered, a pass also looks for the answer in the
+widget's CRSF frame queue. No box, no threshold and no formatter changed, and no shipped theme
+declares any of the three.
+
+Give a `link_floor` box `unit = "dBm"` and a `link_packet_rate` box no unit; `link_diversity` is a flag
+rather than a reading and reads better through a threshold colour than as a number.
 
 The rest of a box is presentation and is shared across the types that can use it: `title`,
 `titlepos`, `titlealign`, `titlecolor`, `textcolor`, `bgcolor`, `font`, `unit`, `decimals`,
