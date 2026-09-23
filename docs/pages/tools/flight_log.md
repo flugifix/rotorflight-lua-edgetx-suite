@@ -81,7 +81,7 @@ some of them or none.
 | `curr_min`, `curr_max` | Lowest and highest current |
 | `tesc_min`, `tesc_max` | Lowest and highest ESC temperature |
 | `vbec_min`, `vbec_max` | Lowest and highest BEC voltage |
-| `hs1_min` … `hs3_max` | Headspeed per PID profile — not recorded yet, always empty |
+| `hs1_min` … `hs3_max` | Lowest and highest headspeed on PID profiles 1, 2 and 3 |
 | `sags`, `sag_min` | How many times the pack sagged to the flight controller's minimum cell voltage, and the deepest per-cell voltage it reached |
 
 Per-cell voltage needs a cell count, which comes from the flight controller's battery
@@ -94,6 +94,12 @@ below 1 V is the main power gone rather than a sag and is not counted. `sags` is
 pack was watched and nothing happened, and empty where it could not be watched at all — no cell
 count, or no minimum cell voltage from the board. The statistics are sampled every 0.5 s, so a dip
 shorter than that can fall between two samples.
+
+The headspeed columns are taken only while the rotor is under power, so they are the band the
+governor held rather than the band the spool-up passed through; a profile the flight was never
+flown on leaves its pair empty. A flight controller with more than 256 kB of flash has six PID
+profiles and this file has columns for three — a flight on profile 4, 5 or 6 leaves all three
+pairs empty.
 
 A flight that produced no statistics at all — telemetry gone for the whole armed window — is
 written as the five-field line it has always been, rather than as a line of empty columns.
