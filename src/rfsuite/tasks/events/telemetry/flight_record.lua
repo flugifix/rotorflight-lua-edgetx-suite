@@ -105,6 +105,24 @@ local POWERED_HOLD_SAMPLES = math.floor(POWERED_HOLD_SECONDS / UPDATE_INTERVAL)
 -- throttle input itself, before the head has had time to slow.
 local POWERED_TAIL_SAMPLES = 4
 
+-- The voltage sag detector.
+--
+-- A pack that dips to the flight controller's own minimum cell voltage under load and comes back
+-- is a different thing from a pack that ends the flight low, and the flight log has carried the
+-- two columns for it since it was written. The line is the board's `vbatmincellvoltage` -- one
+-- physical fact, already configured on the Battery page, not a second threshold of this suite's
+-- own -- and MSP BATTERY_CONFIG carries it in centi-volts, which is what the arithmetic below
+-- stays in so that a pack sitting exactly on the line is not decided by a rounding step.
+--
+-- It takes a hysteresis, because a helicopter hovering with its pack on the line otherwise
+-- produces an episode per sample rather than the one the pilot would recognise.
+local SAG_HYSTERESIS_CENTIVOLTS = 5
+
+-- A pack reading at or below this is the main power gone, not a sag: the lowest a flight pack is
+-- ever taken to is far above it, so nothing a discharge can reach falls inside the window. The
+-- same fact and the same number stand behind the main-power-lost announcement in lib/audio.lua.
+local MAIN_POWER_LOST_VOLTS = 1.0
+
 -- One row per tracked statistic. This table is the only place that knows the set: the record's
 -- keys are built from it, and so is the per-pass work.
 --
@@ -114,11 +132,13 @@ local POWERED_TAIL_SAMPLES = 4
 --   gate   what the value has to be for the statistic to take it at all
 --   minGate  a further condition on the minimum alone
 --   minPositive  the minimum also has to be above zero
+--   count    the record key an episode counter is kept under, for the sag detector
 local GATE_ANY = 0        -- any number the sensor gives, which is what most of them take
 local GATE_POSITIVE = 1   -- above zero
 local GATE_FUEL_SEEN = 2  -- only once a fuel sensor has answered
 local GATE_LINK_QUALITY = 3
 local GATE_POWERED = 4    -- only while the rotor is under power, as defined above
+local GATE_SAG = 5        -- the voltage-sag detector, which is a statistic of its own shape
 
 local FLIGHT_STATS = {
   { key = "ThrottlePercent", source = "throttlePercent", max = true },
@@ -134,6 +154,10 @@ local FLIGHT_STATS = {
   { key = "Voltage",         source = "voltage",         max = true, min = true, gate = GATE_POSITIVE },
   { key = "BecVoltage",      source = "becVoltage",      max = true, min = true, gate = GATE_POSITIVE },
   { key = "Lq",              source = "lq",              max = true, min = true, gate = GATE_LINK_QUALITY },
+  -- The voltage sag detector: how often the pack went at or below the flight controller's own
+  -- minimum cell voltage, and the deepest per-cell voltage it reached while it was there.
+  { key = "SagCellVoltage",  source = "voltage",                     min = true, gate = GATE_SAG,
+    count = "sagCount" },
   -- Consumed capacity only ever grows within a flight, so its maximum IS what the flight
   -- used. It is recorded rather than read at the disarm edge because a telemetry drop just
   -- before the edge would otherwise lose the whole figure.
@@ -149,6 +173,7 @@ function Record.keys()
     local stat = FLIGHT_STATS[i]
     if stat.max then out[#out + 1] = "max" .. stat.key end
     if stat.min then out[#out + 1] = "min" .. stat.key end
+    if stat.count then out[#out + 1] = stat.count end
   end
   return out
 end
@@ -176,7 +201,20 @@ local values = {
   govStateSeen = false,
   poweredSamples = 0,
   powered = false,
+  -- Not sampled: the pack the sag detector is judging, resolved once per flight.
+  cells = 0,
+  sagEnter = nil,
+  sagLeave = nil,
+  sagIn = false,
 }
+
+--- The sag detector, back to the state a fresh flight starts in.
+local function resetSagDetector()
+  values.cells = 0
+  values.sagEnter = nil
+  values.sagLeave = nil
+  values.sagIn = false
+end
 
 --- The powered gate, back to the state a fresh flight starts in.
 local function resetPowered()
@@ -278,6 +316,46 @@ local function trackMaxMinPoweredPositive(src, maxKey, minKey)
   end
 end
 
+--- The voltage sag detector: how often the pack went at or below the flight controller's own
+--- minimum cell voltage, and the deepest per-cell voltage it reached while it was there.
+---
+--- The comparison is on the PACK reading against a line that was multiplied out once, so a
+--- sample costs two comparisons and divides by the cell count only inside an episode.
+local function trackSag(src, minKey, countKey)
+  return function(rec)
+    local enter = values.sagEnter
+    if enter == nil then return end
+
+    local v = values[src]
+    if type(v) ~= "number" or v <= MAIN_POWER_LOST_VOLTS then
+      -- The main pack is gone rather than low. An episode open across it is dropped rather
+      -- than counted as one that ended.
+      values.sagIn = false
+      return
+    end
+
+    -- The detector could run on this sample, so the count says "none seen" from here on rather
+    -- than staying absent, which is what a reader is told when it could not run at all.
+    if rec[countKey] == nil then rec[countKey] = 0 end
+
+    if values.sagIn then
+      if v >= values.sagLeave then
+        values.sagIn = false
+        return
+      end
+    elseif v <= enter then
+      values.sagIn = true
+      rec[countKey] = rec[countKey] + 1
+    else
+      return
+    end
+
+    local perCell = v / values.cells
+    local b = rec[minKey]
+    if b == nil or perCell < b then rec[minKey] = perCell end
+  end
+end
+
 local function trackMaxMinPositive(src, maxKey, minKey)
   return function(rec)
     local v = values[src]
@@ -344,6 +422,8 @@ for i = 1, TRACK_COUNT do
     built = trackMinFuel(src, minKey)
   elseif gate == GATE_POSITIVE and maxKey and minKey then
     built = trackMaxMinPositive(src, maxKey, minKey)
+  elseif gate == GATE_SAG then
+    built = trackSag(src, minKey, stat.count)
   elseif gate == GATE_POSITIVE then
     built = trackMinPositive(src, minKey)
   elseif maxKey and minKey and minGate == GATE_POWERED then
@@ -426,6 +506,34 @@ local function ensureFlight()
 end
 
 Record.ensure = ensureFlight
+
+--- What the sag detector needs to know about the pack, resolved once and kept: a pack cannot be
+--- changed while the craft is armed.
+---
+--- The cell count is the flight controller's own where it has one; a configured count of zero is
+--- the board saying it detects the count itself, and then telemetry answers instead. That is the
+--- rule lib/audio.lua already applies to the same question, and the flight log takes the per-cell
+--- columns beside these two from the same configuration. Where neither answers, nothing is
+--- resolved and the detector stays silent rather than dividing by a guess.
+local function resolvePack(get)
+  local session = _G.rfsuite and _G.rfsuite.session
+  local config = session and (session.batteryConfig or session.battery_config) or nil
+  if type(config) ~= "table" then return end
+
+  local cells = tonumber(config.batteryCellCount)
+  if cells == nil or cells <= 0 then cells = tonumber(get("battery_cell_count")) end
+  if cells == nil or cells <= 0 then return end
+  cells = math.floor(cells + 0.5)
+
+  -- Centi-volts, as tasks/msp/api/battery_config.lua parses it and the Battery page displays it.
+  -- Outside the range that page allows, the value is not a cell voltage and nothing is judged.
+  local crit = tonumber(config.vbatmincellvoltage)
+  if crit == nil or crit < 250 or crit > 500 then return end
+
+  values.cells = cells
+  values.sagEnter = (crit * cells) / 100
+  values.sagLeave = ((crit + SAG_HYSTERESIS_CENTIVOLTS) * cells) / 100
+end
 
 -- The raw readings of a sampling pass, offered to a second reader in the SAME pass.
 --
@@ -531,6 +639,8 @@ local function readSources()
   values.consumedMah = handedConsumption or consumedMah or values.consumedMah
   if type(voltage) == "number" then values.voltage = voltage end
 
+  if values.cells == 0 then resolvePack(get) end
+
   -- The governor state decides the powered gate below, so it is held to being a number here
   -- rather than tested on every comparison the gate makes.
   if type(govState) == "number" then values.govState = govState end
@@ -570,6 +680,7 @@ function Record.open()
   flight.armed = true
   values.fuelSeen = false
   resetPowered()
+  resetSagDetector()
   lastSampleAt = nil
   lastTickAt = nil
 end
@@ -590,6 +701,7 @@ function Record.close()
   flight.armed = false
   values.fuelSeen = false
   resetPowered()
+  resetSagDetector()
   lastSampleAt = nil
   lastTickAt = nil
 end
@@ -679,6 +791,7 @@ function Record.reset()
   values.govState = 0
   values.lqSource = nil
   resetPowered()
+  resetSagDetector()
   lastSampleAt = nil
   lastTickAt = nil
 end

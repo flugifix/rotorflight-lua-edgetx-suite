@@ -1,6 +1,12 @@
 # 0.1.7
 
 ### Features & Enhancements
+- **The flight record counts voltage sags, so the flight log's `sags` and `sag_min` columns are filled (`tasks/events/telemetry/flight_record.lua`, `tasks/events/ondisarm/tasks/flight_log.lua`, `lib/flight_log.lua`, `docs/reference/flight-statistics.md`, `docs/pages/tools/flight_log.md`)**:
+  - `sags` and `sag_min` have been in the log's header since it was written and have always been empty, because the suite had no sag detector. A logged flight now says whether the pack went down under load and how far.
+  - **A voltage sag** is a dip to or below the flight controller's own minimum cell voltage — its `vbatmincellvoltage`, one physical fact rather than a second threshold of the suite's — counted once per dip, with 0.05 V a cell of hysteresis so that hovering on the line counts once rather than once a sample. A reading at or below 1 V is the main power gone rather than a sag and is not counted, and the deepest per-cell voltage of a sag is kept beside the count on the record as `minSagCellVoltage`.
+  - The cell count is the board's, and telemetry's where the board's is set to auto-detect; where neither answers, nothing is judged and the columns stay empty rather than saying zero. The resolution is the record's 0.5 s sampling interval, which is documented.
+  - `sags` is `0` where the pack was watched and nothing happened and empty where it could not be watched at all, so a reader can tell the two apart.
+  - The two sag keys deliberately get no box `source`: the dashboard's source table maps a live telemetry reading to that reading's recorded extreme, and a sag count is not one. A theme reads them off `state.flight` by name, which is documented with an example.
 - **A theme can draw "main power lost" (`lib/audio.lua`, `widgets/dashboard/runtime.lua`, `docs/developer/dashboard-themes.md`)**:
   - The suite could already tell that the main pack is gone while the flight controller is still answering on a BEC or a backup battery, but only inside the *Main power lost* announcement and only while that announcement was switched on. A theme that wants to say so on screen had nothing to read.
   - The three tests behind it are now one function (`Audio.mainPowerLost`), which the announcement calls and which the dashboard calls once per telemetry read, publishing the answer as `state.mainPowerLost`. One definition, so a screen and the voice cannot disagree; and the state field is there whether or not the announcement is enabled.
