@@ -97,6 +97,7 @@ local function buildSessionSignature()
 	local batteryPrefs = getBatteryPrefs(session)
 	if not batteryPrefs then return "nil" end
 	return tostring(batteryPrefs.smartfuel_model_type or "") .. "|" .. tostring(batteryPrefs.smartfuel_source or batteryPrefs.calc_local or "")
+		.. "|" .. tostring(batteryPrefs.smartfuel_publish == true)
 end
 
 local function markDirty()
@@ -121,6 +122,9 @@ local function loadFromSession()
 
 	ui.config.smartfuel_model_type = clampInt(batteryPrefs and batteryPrefs.smartfuel_model_type, MODEL_TYPE_MIN, MODEL_TYPE_MAX, 0)
 	ui.config.smartfuel_source = clampInt((batteryPrefs and batteryPrefs.smartfuel_source) or (batteryPrefs and batteryPrefs.calc_local), LOCAL_SOURCE_MIN, LOCAL_SOURCE_MAX, 0)
+	-- Absent means on: a store written before this setting existed describes a suite that
+	-- published, and only an explicit `false` turns it off.
+	ui.config.smartfuel_publish = (batteryPrefs and batteryPrefs.smartfuel_publish) ~= false
 end
 
 local function ensureLoaded()
@@ -159,6 +163,17 @@ local function getLocalSourceSetter()
 		markDirty()
 	end
 	return ui.runtime.localSourceSet
+end
+
+local function getPublishSetter()
+	if ui.runtime.publishSet then return ui.runtime.publishSet end
+	ui.runtime.publishSet = function(value)
+		local nextValue = value == true
+		if ui.config.smartfuel_publish == nextValue then return end
+		ui.config.smartfuel_publish = nextValue
+		markDirty()
+	end
+	return ui.runtime.publishSet
 end
 
 local function buildModelTypeOptions(i18n)
@@ -208,6 +223,7 @@ function M.onSave(ctx)
 	batteryPrefs.smartfuel_model_type = clampInt(ui.config.smartfuel_model_type, MODEL_TYPE_MIN, MODEL_TYPE_MAX, 0)
 	batteryPrefs.smartfuel_source = clampInt(ui.config.smartfuel_source, LOCAL_SOURCE_MIN, LOCAL_SOURCE_MAX, 0)
 	batteryPrefs.calc_local = batteryPrefs.smartfuel_source
+	batteryPrefs.smartfuel_publish = ui.config.smartfuel_publish == true
 
 	local okPrefs, errPrefs = saveModelPreferences(session)
 	if not okPrefs then
@@ -280,7 +296,7 @@ function M.build(ctx)
 		}
 	)
 
-	Controls.appendComboSelect(
+	cursorY = cursorY + Controls.appendComboSelect(
 		children, x, cursorY, w,
 		pageText(i18n, "calcfuel_local", "Local SmartFuel Source"),
 		buildLocalSourceOptions(i18n),
@@ -289,6 +305,18 @@ function M.build(ctx)
 		{
 			helpText = optionalPageHelpText(i18n, "help_calcfuel_local"),
 			helpTitle = pageText(i18n, "calcfuel_local", "Local SmartFuel Source"),
+			onHelp = getInlineHelpHandler()
+		}
+	)
+
+	Controls.appendRadioSwitch(
+		children, x, cursorY, w,
+		pageText(i18n, "publish_sensors", "Publish SmFt / SmCp"),
+		ui.config.smartfuel_publish,
+		getPublishSetter(),
+		{
+			helpText = optionalPageHelpText(i18n, "help_publish_sensors"),
+			helpTitle = pageText(i18n, "publish_sensors", "Publish SmFt / SmCp"),
 			onHelp = getInlineHelpHandler()
 		}
 	)

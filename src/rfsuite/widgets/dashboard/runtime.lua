@@ -1736,9 +1736,16 @@ local function readTelemetry(state)
   setField("current", currentValue or state.current)
   setField("watts", wattsValue or state.watts)
   setField("altitude", getSensor("altitude") or state.altitude)
-  setField("consumedMah", getSensor("smartconsumption") or state.consumedMah)
+  -- SmartFuel computes these two in this same Lua state and hands them over there
+  -- (tasks/events/telemetry_bg/smart.lua), so neither has to travel out to a telemetry sensor
+  -- and back in again. The sensor search stays behind the hand-over rather than instead of it:
+  -- it answers for a value this state did not compute, and it is what carries the reading
+  -- before SmartFuel has one -- on an older flight controller, and in the window before the
+  -- pack voltage has settled.
+  local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
+  setField("consumedMah", (smart and smart.consumption) or getSensor("smartconsumption") or state.consumedMah)
 
-  local fuel = getSensor("smartfuel") or getSensor("fuel")
+  local fuel = (smart and smart.fuel) or getSensor("smartfuel") or getSensor("fuel")
   if type(fuel) == "number" then
     local f = fuel
     if f < 0 then f = 0 end

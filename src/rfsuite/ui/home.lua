@@ -3459,7 +3459,13 @@ function M.run(event, touchState)
       local lq = lqReading or 0
       local vbatReading = Sensors and Sensors.getValue("voltage")
       local vbat = vbatReading or 0
-      local fuel = Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")) or -1
+      -- The tool drives tasks/events/telemetry_bg in its own Lua state as well, so SmartFuel's
+      -- hand-over is available here exactly as it is in the dashboard widget, and is preferred
+      -- over the sensor for the same reason.
+      local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
+      local fuel = (smart and smart.fuel)
+        or (Sensors and (Sensors.getValue("smartfuel") or Sensors.getValue("fuel")))
+        or -1
 
       if type(fuel) == "number" and fuel >= 0 then
         if fuel > 100 then fuel = 100 end
@@ -3507,7 +3513,7 @@ function M.run(event, touchState)
         ts.current = currentValue or ts.current
         ts.watts = wattsValue or ts.watts
         ts.altitude = Sensors.getValue("altitude") or ts.altitude
-        ts.consumedMah = Sensors.getValue("smartconsumption") or ts.consumedMah
+        ts.consumedMah = (smart and smart.consumption) or Sensors.getValue("smartconsumption") or ts.consumedMah
 
         local cellCountValue = Sensors.getValue("battery_cell_count")
         if type(cellCountValue) == "number" and cellCountValue > 0 then
