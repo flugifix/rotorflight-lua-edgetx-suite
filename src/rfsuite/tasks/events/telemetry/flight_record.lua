@@ -588,6 +588,25 @@ function Record.reset()
   flight.lastSeconds = 0
   flight.armed = false
   values.fuelSeen = false
+  -- Every sampled reading belongs to the session that ended. A sensor that answers nothing leaves
+  -- the previous reading standing, so a model connected without it would inherit the reading:
+  -- into its statistics, and into the powered gate -- a state such as throttle hold would keep
+  -- the gate shut for the whole session, a headspeed and a throttle would open it on a head that
+  -- is not driven. The readings go back to the values a fresh start has.
+  values.throttlePercent = 0
+  values.rpm = 0
+  values.current = 0
+  values.watts = 0
+  values.altitude = 0
+  values.consumedMah = 0
+  values.escTemp = 0
+  values.mcuTemp = 0
+  values.fuel = 0
+  values.voltage = 0
+  values.becVoltage = 0
+  values.lq = 0
+  values.govState = 0
+  values.lqSource = nil
   resetPowered()
   lastSampleAt = nil
   lastTickAt = nil

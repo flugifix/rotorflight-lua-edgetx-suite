@@ -129,6 +129,14 @@ the flight time and the flight count stay as they were for as long as the link i
 is dropped when the next session begins — when a link comes up again, which is, as far as anything
 here can tell, a fresh pack — and the next arm edge opens a fresh `current` as it always has.
 
+The readings the statistics are taken from are dropped at the same moment. Within a session a
+sensor that answers nothing in a pass leaves its previous reading standing; across a new connection
+it does not, so a model connected without a sensor the session before it had records nothing for
+that sensor rather than the previous session's last value. Until this was changed, a reconnect
+cleared the statistics but kept those readings, and a missing sensor's last value from the session
+before went into the new flight's maxima and minima. The powered gate above reads the same values,
+so an inherited throttle-hold state would have kept it shut for the whole session.
+
 ## The two totals — what changed, and why they can go down
 
 **The total flight time now means something else than it used to, and a tile showing it will jump.**
