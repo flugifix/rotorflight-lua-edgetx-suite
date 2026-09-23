@@ -1701,7 +1701,7 @@ local function setField(field, value)
   end
 end
 
-local function readTelemetry(state)
+local function readTelemetry(state, audioState)
   if not (Sensors and type(Sensors.getValue) == "function") then return end
   telemetryTarget = state
   telemetryChanged = false
@@ -1756,6 +1756,16 @@ local function readTelemetry(state)
 
   if type(voltageValue) == "number" then
     setField("voltage", voltageValue)
+  end
+
+  -- Published rather than computed here, because the announcement in lib/audio.lua decides the
+  -- same question and a second reading of it would drift. The audio state is handed in as the
+  -- memo the test needs, so the one piece of history behind it is cleared on the connection
+  -- edges that already clear it and nowhere else. Plain assignment and not setField: this is
+  -- derived from readings that have just been taken, not a reading of its own, and nothing about
+  -- it should look to the rest of the pass like telemetry that changed.
+  if DashboardAudio and type(DashboardAudio.mainPowerLost) == "function" then
+    state.mainPowerLost = DashboardAudio.mainPowerLost(state, audioState)
   end
 
   local batteryCellCountValue = getSensor("battery_cell_count")
@@ -1973,6 +1983,10 @@ function Runtime.new(zone, options)
       fuelTelemetrySeen = false,
       batteryTelemetrySeen = false,
       rfTelemetrySeen = false,
+      -- The main pack is gone while the board is still answering, decided in lib/audio.lua and
+      -- published here so a theme can draw it. False rather than nil before the first read: a
+      -- theme asking the question before any telemetry has arrived is not being told yes.
+      mainPowerLost = false,
       lastFlightEndingVoltage = nil,
       lastDisarmAt = nil,
       themeConfig = { v_min = 18.0, v_max = 25.2 }
@@ -2299,7 +2313,7 @@ function Runtime.new(zone, options)
     if not isPostflightOffline then
       if (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS then
         self._lastTelemetryReadAt = now
-        readTelemetry(self.state)
+        readTelemetry(self.state, self.audioState)
         -- The snapshot the reactive closures read, rebuilt on the same cadence as the
         -- telemetry read that feeds it -- probing is legal here and nowhere in the sweep.
         if DerivedSnapshot and type(DerivedSnapshot.build) == "function" then
