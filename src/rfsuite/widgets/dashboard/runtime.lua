@@ -2055,6 +2055,15 @@ function Runtime.new(zone, options)
     return nil
   end
 
+  -- The pack bounds the flight controller's cell limits give for this cell count.
+  local function normalizedVoltageBounds(cells)
+    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+    local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+    local minCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmincellvoltage, 3.3)
+    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
+    return cells * minCellVoltage, cells * maxCellVoltage
+  end
+
   -- Defined once per widget rather than once per updateVoltageThemeConfig call: that function
   -- runs on every logic tick, and two fresh closures per tick is steady-state garbage in the
   -- shared Lua state.
@@ -2105,11 +2114,12 @@ function Runtime.new(zone, options)
     local currentConfig = self.state.themeConfig or {}
 
     -- The steady-state pass allocates nothing. When the bounds in hand are already numeric,
-    -- the three branches below that would end in a value-identical config -- custom bounds,
-    -- no cell count, or plausible bounds kept -- are decided here on the numbers alone, the
-    -- existing table is kept, and only the (deduplicated, developer-gated) log line is still
-    -- offered. Every path that can CHANGE a value falls through to the full copy below, so
-    -- what the function computes is exactly what it computed before.
+    -- the four branches below that would end in a value-identical config -- custom bounds,
+    -- no cell count, plausible bounds kept, or a normalization that lands on the bounds
+    -- already held -- are decided here on the numbers alone, the existing table is kept, and
+    -- only the (deduplicated, developer-gated) log line is still offered. Every path that can
+    -- CHANGE a value falls through to the full copy below, so what the function computes is
+    -- exactly what it computed before.
     local curMin = tonumber(currentConfig.v_min)
     local curMax = tonumber(currentConfig.v_max)
     if curMin ~= nil and curMax ~= nil then
@@ -2132,6 +2142,15 @@ function Runtime.new(zone, options)
       )
       if (not isExactDefault) and (not looksInvalidForCells) then
         logVoltageThemeDecision(self, "keep", cells, currentConfig.v_min, currentConfig.v_max, curMin, curMax)
+        return
+      end
+      -- A normalization can land on exactly the bounds in hand: 6S with 3.0/4.2 V cell limits
+      -- gives 18.0/25.2 V, the pair isExactDefault reads as an unnormalized default, so without
+      -- this every pass would copy the table only to write the same two numbers back. The raw
+      -- values are compared, not curMin/curMax, so bounds held as strings still get converted.
+      local nextMin, nextMax = normalizedVoltageBounds(cells)
+      if currentConfig.v_min == nextMin and currentConfig.v_max == nextMax then
+        logVoltageThemeDecision(self, "normalize", cells, currentConfig.v_min, currentConfig.v_max, nextMin, nextMax)
         return
       end
     end
@@ -2174,13 +2193,7 @@ function Runtime.new(zone, options)
       return
     end
 
-    local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
-    local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
-    local minCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmincellvoltage, 3.3)
-    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
-
-    nextConfig.v_min = cells * minCellVoltage
-    nextConfig.v_max = cells * maxCellVoltage
+    nextConfig.v_min, nextConfig.v_max = normalizedVoltageBounds(cells)
     applyThemeConfig(self, nextConfig)
     logVoltageThemeDecision(self, "normalize", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
   end
