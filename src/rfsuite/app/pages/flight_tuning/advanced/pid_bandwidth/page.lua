@@ -332,16 +332,6 @@ local function appendBandwidthRow(children, x, y, w, i18n, labelText, key0, key1
   return rowH + 1
 end
 
-function M.onLoad()
-  ensureDeps()
-  ensureLoaded()
-end
-
-function M.onActivate()
-  ensureDeps()
-  ensureLoaded()
-end
-
 function M.wakeup(ctx)
   ensureDeps()
   ensureLoaded()

@@ -662,16 +662,6 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
   return rowH + 1
 end
 
-function M.onLoad()
-  ensureDeps()
-  ensureLoaded()
-end
-
-function M.onActivate()
-  ensureDeps()
-  ensureLoaded()
-end
-
 function M.wakeup(ctx)
   ensureDeps()
   ensureLoaded()

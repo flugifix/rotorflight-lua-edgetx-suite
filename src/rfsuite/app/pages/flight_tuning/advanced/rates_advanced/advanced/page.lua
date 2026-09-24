@@ -483,16 +483,6 @@ local function drawGrid(children, x, y, w, i18n, layoutParams, rowsConfig)
   return cursorY
 end
 
-function M.onLoad()
-  ensureDeps()
-  ensureLoaded()
-end
-
-function M.onActivate()
-  ensureDeps()
-  ensureLoaded()
-end
-
 function M.wakeup(ctx)
   ensureDeps()
   ensureLoaded()

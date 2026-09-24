@@ -288,14 +288,6 @@ local function requestOverride(i18n, enabled)
   })
 end
 
-function M.onLoad()
-  ensureDeps()
-end
-
-function M.onActivate()
-  ensureDeps()
-end
-
 function M.wakeup(ctx)
   ensureDeps()
 

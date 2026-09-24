@@ -701,14 +701,6 @@ local function ensureLoaded()
   end
 end
 
-function M.onLoad()
-  ensureDeps()
-end
-
-function M.onActivate()
-  ensureDeps()
-end
-
 function M.wakeup(ctx)
   ensureDeps()
   ensureLoaded()

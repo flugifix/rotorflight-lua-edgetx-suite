@@ -1068,16 +1068,6 @@ local function ensureLoaded()
   startLoad(ui.runtime.requestRebuild)
 end
 
-function M.onLoad()
-  ensureDeps()
-  ensureLoaded()
-end
-
-function M.onActivate()
-  ensureDeps()
-  ensureLoaded()
-end
-
 local function nowSeconds()
   if type(getTime) == "function" then
     local ok, value = pcall(getTime)
