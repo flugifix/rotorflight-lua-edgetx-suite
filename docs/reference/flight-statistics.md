@@ -27,8 +27,8 @@ A key of `current` or `last` is **absent until that statistic has taken a value*
 | key | from | recorded |
 |---|---|---|
 | `maxThrottlePercent` | throttle % | maximum |
-| `maxRpm`, `minRpm` | headspeed | maximum of any reading; minimum only above zero, so the spool-down is not the minimum |
-| `maxCurrent`, `minCurrent` | current | both, any reading |
+| `maxRpm`, `minRpm` | headspeed | maximum of any reading; minimum only while the rotor is powered (below) and above zero |
+| `maxCurrent`, `minCurrent` | current | maximum of any reading; minimum only while the rotor is powered (below) |
 | `maxWatts` | power, measured or voltage × current | maximum |
 | `maxAltitude` | altitude | maximum |
 | `maxEscTemp` | ESC temperature | maximum |
@@ -37,6 +37,71 @@ A key of `current` or `last` is **absent until that statistic has taken a value*
 | `maxVoltage`, `minVoltage` | pack voltage | both, above zero only |
 | `minBecVoltage` | BEC voltage | minimum, above zero only |
 | `maxLq`, `minLq` | link quality | both, and only for a 0–100 % reading from a sensor that is not a known RSSI source — a receiver without an RQly sensor falls back to 1RSS/2RSS, which carry dBm |
+
+## When a minimum is taken: the rotor has to be under power
+
+A pilot arms first and spools up afterwards, so the first readings inside an armed window are the
+lowest ones that window will ever carry — and on a minimum tracked across the whole window they
+stay the minimum for the rest of the flight. The lowest headspeed then comes from the spool-up or
+the spool-down rather than from the flight, and the lowest current is the current at arming, which
+is in practice zero.
+
+**`minRpm` and `minCurrent` are therefore taken only while the rotor is under power.** The maxima
+beside them keep the whole armed window on purpose: nothing about a ramp can raise them.
+
+The flight controller's own **governor state** is what says the rotor is under power, and two of
+its states qualify:
+
+| state | |
+|---|---|
+| `ACTIVE` | the governor is holding the requested headspeed |
+| `BYPASS` | the governor is bypassed and the throttle curve drives the head directly |
+
+Every other state is a ramp or is not driving the head — throttle off, throttle idle, spool-up,
+recovery, throttle hold, autorotation and bailout all carry a headspeed or a current below
+anything the flight holds. `FALLBACK` is left out for a different reason: the flight controller
+enters it when the motor rpm signal has failed, so a headspeed sampled there is not a headspeed.
+
+The gate has to **hold for 2 s** — four samples — before a minimum is taken. The flight controller
+enters `ACTIVE` at 99 % of the requested headspeed, so the readings behind the transition are
+already flight readings; the wait is what keeps a single sample taken on the edge of one out of
+them.
+
+### Where there is no governor state
+
+The governor state is only maintained for the governor modes that run a governor state machine.
+With the governor **off**, or **limiting the throttle only**, the flight controller leaves the
+state at the value it started with and it never moves — and a model whose receiver is not sending
+the governor state sensor at all reads nothing. On those models a gate on the state alone would
+take no minimum for the whole flight.
+
+So the state is trusted only once a value inside its own range has been seen in this flight. Until
+then the gate is the reading a model without a governor still has:
+
+* headspeed at or above **100 rpm**, and
+* throttle at or above **25 %**, or current at or above **1.5 A**.
+
+The second line is the rule the suite already applies to the same question when it draws a logged
+flight (`app/pages/logs/graph.lua`); the headspeed threshold is added here.
+
+**Without a governor state the gate is held on its way out as well.** A reading is taken only once
+the gate has also held for **another 2 s after it**, so the last 2 s of a driven stretch never
+count. The head can slow before the current falls — at the start of a spool-down, or a head bogging
+under load — and as long as current is still drawn such a reading passes the gate; only the wait
+after it tells it from flight. Two things follow on such a model: a driven stretch shorter than
+4 s leaves no minimum at all, and a low reading inside the last 2 s before the gate closes is not
+taken either.
+
+The governor state needs none of this. The flight controller leaves `ACTIVE` and `BYPASS` on the
+throttle input itself — the throttle cut, or the throttle falling below the handover point — and
+the headspeed only falls after that, so the reading that ends a powered stretch is already outside
+the gate. A headspeed that falls while the governor stays `ACTIVE` is the governor holding under
+load, which is a flight reading.
+
+**Its limit, said plainly:** without a governor state there is nothing that says the head has
+*settled*, only that it is turning and something is driving it. A slow spool-up can therefore
+still put its own low reading into the minimum on such a model; the 2 s wait on the way in clips
+the tail of that band and not the whole of it.
 
 ## Who keeps it
 
@@ -63,6 +128,14 @@ pack, and the post-flight page has to outlive that: its tiles read this record, 
 the flight time and the flight count stay as they were for as long as the link is down. The record
 is dropped when the next session begins — when a link comes up again, which is, as far as anything
 here can tell, a fresh pack — and the next arm edge opens a fresh `current` as it always has.
+
+The readings the statistics are taken from are dropped at the same moment. Within a session a
+sensor that answers nothing in a pass leaves its previous reading standing; across a new connection
+it does not, so a model connected without a sensor the session before it had records nothing for
+that sensor rather than the previous session's last value. Until this was changed, a reconnect
+cleared the statistics but kept those readings, and a missing sensor's last value from the session
+before went into the new flight's maxima and minima. The powered gate above reads the same values,
+so an inherited throttle-hold state would have kept it shut for the whole session.
 
 ## The two totals — what changed, and why they can go down
 
