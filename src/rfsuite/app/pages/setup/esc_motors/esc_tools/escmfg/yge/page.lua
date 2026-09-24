@@ -16,6 +16,7 @@ local EscParametersYgeApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local YgeInit = nil
+local EscCurrentLimit = nil
 local t = nil
 
 local ui = {
@@ -87,6 +88,7 @@ local function ensureDeps()
   -- The model table, which this page used to keep a second copy of. Loaded the way the omp,
   -- xdfly and ztw pages already load their own init module.
   if not YgeInit then YgeInit = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/yge/init.lua") end
+  if not EscCurrentLimit then EscCurrentLimit = loadModule("app/pages/setup/esc_motors/esc_tools/esc_current_limit.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -155,6 +157,11 @@ local function queueYgeReadActual(queue)
         ui.escFirmware = escFirmware
 
         local session = getSession()
+        -- Hundredths of an amp in the block, which is the unit the row on this page displays
+        -- and divides by; the store keeps whole amps.
+        if session and EscCurrentLimit then
+          EscCurrentLimit.remember(session, (tonumber(ui.config.current_limit) or 0) / 100)
+        end
         if session then
           session.setup_esc_motors_esc_tools_yge = {
             config = {},
@@ -802,6 +809,7 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   YgeInit = nil
+  EscCurrentLimit = nil
   t = nil
 end
 
