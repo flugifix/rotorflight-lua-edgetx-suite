@@ -119,6 +119,8 @@ For governor status boxes (`type = "text"`, `source = "governor"`), thresholds c
 
 Values match either translated labels or internal state names, ensuring custom color schemes function across all radio languages.
 
+In governor modes OFF and LIMIT the flight controller keeps no governor state, so while the model is armed the box shows the mode instead, and its internal names are `MODE_OFF` and `MODE_LIMIT`. A threshold on a state name such as `OFF` does not match there.
+
 ## Notes
 
 - User themes in `/SCRIPTS/TOOLS/rfsuite.user/` are preserved across suite updates.
