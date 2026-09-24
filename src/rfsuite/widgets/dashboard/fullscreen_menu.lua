@@ -131,7 +131,8 @@ function M.entries(widget)
     -- rather than when the list is made, so an entry stays a description of what it offers.
     options = function(w)
       local options = {}
-      local config = w.state.battery_config
+      local state = w and w.state or {}
+      local config = state.battery_config
       if config then
         for i=0,5 do
           local cap = config["batteryCapacity_"..i] or 0
@@ -140,7 +141,7 @@ function M.entries(widget)
               label = tostring(cap).." mAh",
               -- Highlight active battery profile
               -- FIX: Telemetry sensor BatP is 1-based (1 to 6)
-              current = (w.state.batteryProfile == (i + 1)),
+              current = (state.batteryProfile == (i + 1)),
               press = function()
                 local mspModule = requireModule("tasks/msp/runtime.lua")
                 if mspModule and mspModule.getState then
@@ -198,7 +199,7 @@ function M.build(children, widget, entries)
   local dX = 0
   local dY = 0
   
-  local t = (widget.i18n and type(widget.i18n.t) == "function") and widget.i18n.t or function(k, f) return f or k end
+  local t = translator(widget)
 
   local bg_color = COLOR_THEME_PRIMARY3 or BLACK
   if bg_color == BLACK and lcd and type(lcd.RGB) == "function" then
@@ -331,6 +332,9 @@ function M.build(children, widget, entries)
              type = "label", x=bx, y=textY, w=btnW, text=option.label, color=tColor, align=CENTER, font=titleFont
            }
         end
+
+        -- The next row starts below the whole grid, the way an action row leaves room for itself.
+        contentY = listY + math.ceil(#options / cols) * (btnH + gapY)
       else
         -- 4a. A single button.
         children[#children+1] = {
