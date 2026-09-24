@@ -1,6 +1,12 @@
 # 0.1.7
 
 ### Features & Enhancements
+- **A dashboard box can show ESC load (`widgets/dashboard/runtime.lua`, `widgets/dashboard/objects/common.lua`, `app/pages/setup/esc_motors/esc_tools/esc_current_limit.lua`, `app/pages/setup/power/preferences/page.lua`, `docs/pages/setup/power/preferences.md`)**:
+  - New box source `esc_load`: the current as a percentage of the current limit the speed controller is set to allow. It is a figure a pilot can judge without knowing what the controller is rated for, which a reading in amps is not, and a value above 100 % says the controller is being asked for more than it allows.
+  - The limit is not asked for where it can be read. AM32, Scorpion and YGE carry it in their own parameter block, and opening that family's page under *ESC Tools* -- which reads the block anyway -- stores it for that flight controller, in amps, in the same step. Nothing is asked of the flight controller for it, nothing is added to the connect sequence, and a visit that finds the same limit writes nothing.
+  - The other seven ESC families report no limit, so *Setup* → *Power* → *Preferences* gains an *ESC Current Limit* row for it. It defaults to *NOT SET*, and with no limit on file an `esc_load` box shows `--` rather than a reading.
+  - It costs one division on a pass that has both a limit and a current reading, and a pair of comparisons on a pass that has neither; no telemetry sensor is read for it.
+  - Those three ESC pages also gain the in-app help text behind the `?` that they were shipped without.
 - **The dashboard computes two further flight phases, `armed` and `offline` (`widgets/dashboard/runtime.lua`, `docs/developer/dashboard-themes.md`, `docs/dashboard/user-themes.md`)**:
   - `armed` is the model armed and not yet flying — from the arm until the governor comes up or the throttle passes its threshold. It used to be reported as `preflight`, so the ground screen covered both a model sitting on the bench and a model that is live with the blades turning.
   - `offline` is the post-flight phase once the flight controller has stopped answering. The widget already stopped reading telemetry there so the summary would not decay; the phase now says so, which lets a theme distinguish a model still on the link and armable from one whose numbers can no longer change. What causes it — an unplugged battery, the model out of range, the link gone — the widget cannot tell apart, and the documentation says so rather than naming one of them.

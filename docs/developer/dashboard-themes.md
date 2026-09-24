@@ -235,8 +235,25 @@ The value a box reads is `source`, and the names are resolved in
 `widgets/dashboard/objects/common.lua`, `mapTelemetrySource`: a fixed set that comes straight
 off the widget state — `voltage`, `bec_voltage`, `current`, `watts`, `rpm`, `fuel`,
 `smartfuel`, `smartconsumption`, `altitude`, `governor`, `esc_temp`, `mcu_temp`,
-`throttle_percent`, `link`, `pid_profile`, `rate_profile`, `battery_profile`, `model_name` —
-and, for anything else, the sensor of that name from `lib/sensors.lua`.
+`throttle_percent`, `link`, `pid_profile`, `rate_profile`, `battery_profile`, `model_name`,
+`esc_load` — and, for anything else, the sensor of that name from `lib/sensors.lua`.
+
+### `esc_load`
+
+Not a sensor. It is the current as a percentage of the current limit the speed controller is
+set to allow, and it exists so that a tile can show a figure a pilot can judge without knowing
+the controller. The limit is kept per flight controller, in its preferences file on the radio: an AM32, Scorpion or
+YGE controller reports its own and the suite takes it from the parameter block when that
+family's page is opened, and for the other seven families it is typed in under *Setup* →
+*Power* → *Preferences* ([page](../pages/setup/power/preferences.md)).
+
+Where no limit is on file the source resolves to `nil`, which a box draws as `--`. That is the
+state every model is in until one of the two routes has supplied a figure, so a theme shipping
+an `esc_load` box should expect `--` to be what most radios show.
+
+Give the box `unit = "%"`, and for a gauge a range of `min = 0, max = 150`: the interesting part
+is above 100, where the controller is being asked for more than it is set to allow, and a gauge
+ending at 100 has nowhere to draw that.
 
 The rest of a box is presentation and is shared across the types that can use it: `title`,
 `titlepos`, `titlealign`, `titlecolor`, `textcolor`, `bgcolor`, `font`, `unit`, `decimals`,
