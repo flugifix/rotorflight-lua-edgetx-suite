@@ -289,7 +289,11 @@ function Engine.renderKey(state, _)
   local themeMax = Utils.toNumber(state and state.themeConfig and state.themeConfig.v_max, 0)
   local zoneW = Utils.toNumber(state and state.zoneW, 0)
   local zoneH = Utils.toNumber(state and state.zoneH, 0)
-  local flightMode = tostring((state and state.flightMode) or "")
+  -- The module that is drawn, not the phase the widget is in. A phase that falls back to
+  -- another phase's module draws the same scene, and keying on the phase name would rebuild
+  -- that scene into itself -- a torn-down LVGL tree for no visible change. `state.flightMode`
+  -- is still the phase, and a theme whose boxes depend on it keys its own renderKey on it.
+  local flightMode = tostring((state and state.themePhase) or (state and state.flightMode) or "")
 
   return string.format("%s|%dx%d|%d|%d|%d",
     flightMode,
