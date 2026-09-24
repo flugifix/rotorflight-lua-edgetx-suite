@@ -14,6 +14,15 @@ local GOVERNOR_LABELS = {
   [101] = "DISARMED"
 }
 
+-- The flight controller's governor MODES, in the order it numbers them (govMode_e: NONE,
+-- LIMIT, DIRECT, ELECTRIC, NITRO). Only the first two are named here, and only because they are
+-- the two in which the board never runs a governor state machine at all: it leaves the state
+-- sensor this box otherwise shows standing at THROTTLE_OFF for the whole flight, so the box
+-- would report "throttle off" over a hovering helicopter. In DIRECT and above the state sensor
+-- is maintained and is what the box should show, exactly as it does today.
+local GOV_MODE_NONE = 0
+local GOV_MODE_LIMIT = 1
+
 local ARMING_DISABLE_FLAG_LABELS = {
   [0] = "No Gyro",
   [1] = "Fail Safe",
@@ -130,6 +139,16 @@ local function governorText(state)
   if not armed then
     return translate(state, "widgets.governor.DISARMED", GOVERNOR_LABELS[101])
   end
+  -- The mode decides before the state does, because in these two there is no state to read.
+  -- The wording follows the configurator's own names for the modes, so that a pilot reads the
+  -- same word here as on the page the mode was set on.
+  local mode = tonumber(state and state.governorMode)
+  if mode == GOV_MODE_NONE then
+    return translate(state, "widgets.governor.MODE_OFF", "Gov. Off")
+  end
+  if mode == GOV_MODE_LIMIT then
+    return translate(state, "widgets.governor.MODE_LIMIT", "Gov. Limit")
+  end
   if raw == nil then
     return translate(state, "widgets.governor.UNKNOWN", "UNKNOWN")
   end
@@ -149,7 +168,20 @@ local function governorColor(state, box, utils, compiled)
 
   if type(box and box.thresholds) == "table" and #box.thresholds > 0 and utils and type(utils.resolveThresholdColor) == "function" then
     local govText = governorText(state)
+    -- The untranslated key tried when the text matches no threshold. While armed in the two
+    -- modes that keep no state it is the mode's, MODE_OFF or MODE_LIMIT, which is also the name
+    -- a user theme matches the mode label by. The state sensor's constant 0 would otherwise
+    -- match a threshold on the OFF state in a bundle whose translation of OFF is "OFF" and in
+    -- no other.
     local govKey = GOVERNOR_LABELS[value]
+    if armed then
+      local mode = tonumber(state and state.governorMode)
+      if mode == GOV_MODE_NONE then
+        govKey = "MODE_OFF"
+      elseif mode == GOV_MODE_LIMIT then
+        govKey = "MODE_LIMIT"
+      end
+    end
     local threshColor = utils.resolveThresholdColor(govText, box.thresholds, nil, false, box, state, nil, compiled)
     if threshColor == nil and govKey ~= nil then
       threshColor = utils.resolveThresholdColor(govKey, box.thresholds, nil, false, box, state, nil, compiled)
@@ -195,6 +227,7 @@ function Render.render(nodes, rect, box, state, _, utils)
   local lastArmFlags = nil
   local lastArmed = nil
   local lastGov = nil
+  local lastMode = nil
   local cachedText = nil
 
   local textGetter = function()
@@ -202,8 +235,10 @@ function Render.render(nodes, rect, box, state, _, utils)
     local armFlags = state and state.armFlags
     local armed = state and state.armed
     local gov = state and state.governor
+    local mode = state and state.governorMode
 
-    if flags == lastFlags and armFlags == lastArmFlags and armed == lastArmed and gov == lastGov and cachedText ~= nil then
+    if flags == lastFlags and armFlags == lastArmFlags and armed == lastArmed and gov == lastGov
+        and mode == lastMode and cachedText ~= nil then
       return cachedText
     end
 
@@ -211,6 +246,7 @@ function Render.render(nodes, rect, box, state, _, utils)
     lastArmFlags = armFlags
     lastArmed = armed
     lastGov = gov
+    lastMode = mode
 
     local valueText = governorText(state)
     valueText = utils.applyLowResMaxChars(valueText, box, state, "max_chars_lowres")
@@ -225,20 +261,26 @@ function Render.render(nodes, rect, box, state, _, utils)
   local lastColorArmFlags = nil
   local lastColorArmed = nil
   local lastColorGov = nil
+  -- The mode belongs in this key as well as in the text one: where a box carries thresholds,
+  -- governorColor matches them against the text, and the text now depends on the mode.
+  local lastColorMode = nil
   local cachedColor = nil
 
   local colorGetter = function()
     local armFlags = state and state.armFlags
     local armed = state and state.armed
     local gov = state and state.governor
+    local mode = state and state.governorMode
 
-    if armFlags == lastColorArmFlags and armed == lastColorArmed and gov == lastColorGov and cachedColor ~= nil then
+    if armFlags == lastColorArmFlags and armed == lastColorArmed and gov == lastColorGov
+        and mode == lastColorMode and cachedColor ~= nil then
       return cachedColor
     end
 
     lastColorArmFlags = armFlags
     lastColorArmed = armed
     lastColorGov = gov
+    lastColorMode = mode
 
     cachedColor = governorColor(state, box, utils, compiledThresholds)
     return cachedColor

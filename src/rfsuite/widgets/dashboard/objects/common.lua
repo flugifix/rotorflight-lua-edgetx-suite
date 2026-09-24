@@ -243,6 +243,9 @@ function Utils.mapTelemetrySource(source, state)
   if source == "altitude" then return state and state.altitude end
   if source == "smartfuel" then return state and state.fuel end
   if source == "smartconsumption" then return state and state.consumedMah end
+  -- Derived rather than measured: the current as a percentage of the speed controller's own
+  -- current limit. Nil where no limit is on file for the model, which a box draws as `--`.
+  if source == "esc_load" then return state and state.escLoad end
 
   -- Load sensors module lazily
   if not sensorsModule then

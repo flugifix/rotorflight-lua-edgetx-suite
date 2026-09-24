@@ -1778,6 +1778,13 @@ local function readTelemetry(state, audioState)
     setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
   end
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
+  -- The governor MODE, which is configuration rather than telemetry: the connect chain reads it
+  -- once over MSP (tasks/events/common/governor_config.lua) and leaves it on the session. It is
+  -- carried onto the state here so that an object needing it reads precomputed state, which is
+  -- what the reactive sweep is allowed to do; reaching into the session from a render closure is
+  -- not. Nil until the chain has answered, and a consumer has to cope with that.
+  local rfRoot = type(_G) == "table" and _G.rfsuite or nil
+  setField("governorMode", rfRoot and rfRoot.session and rfRoot.session.governorMode)
   setField("mcuTemp", roundInt(getSensor("temp_mcu") or state.mcuTemp, state.mcuTemp or 0))
   setField("escTemp", roundInt(getSensor("temp_esc") or state.escTemp, state.escTemp or 0))
   setField("bec_voltage", getSensor("bec_voltage") or state.bec_voltage)
@@ -1791,6 +1798,25 @@ local function readTelemetry(state, audioState)
 
   setField("current", currentValue or state.current)
   setField("watts", wattsValue or state.watts)
+
+  -- ESC load: the current as a share of the limit the speed controller is set to allow. Derived
+  -- here beside the watts above rather than read from anywhere: one division on a pass that has
+  -- both a limit and a reading, and a pair of comparisons on a pass that has neither.
+  --
+  -- Nil and not zero where the limit is unknown, and assigned rather than set through setField:
+  -- a load of nought is a reading and "no limit on file" is not, and setField never clears, so a
+  -- limit taken away again would leave its last percentage standing for the rest of the session.
+  --
+  -- The reading this pass produced and not the value kept from the last one, which is where this
+  -- differs from `watts` above: watts is a figure the flight statistics record extremes of and is
+  -- worth holding across a pass that answered nothing, while a percentage nobody records is
+  -- better absent for that pass than a frame old.
+  local escLimit = state.escCurrentLimit
+  if type(escLimit) == "number" and escLimit > 0 and type(currentValue) == "number" then
+    state.escLoad = currentValue / escLimit * 100
+  else
+    state.escLoad = nil
+  end
   setField("altitude", getSensor("altitude") or state.altitude)
   -- SmartFuel computes these two in this same Lua state and hands them over there
   -- (tasks/events/telemetry_bg/smart.lua), so neither has to travel out to a telemetry sensor
@@ -2022,6 +2048,9 @@ function Runtime.new(zone, options)
       armFlags = 0,
       armDisableFlags = 0,
       governor = 0,
+      -- The governor mode, carried over from the session in readTelemetry; nil until the
+      -- connect chain has read it.
+      governorMode = nil,
       throttlePercent = 0,
       mcuTemp = 0,
       escTemp = 0,
@@ -2407,6 +2436,22 @@ function Runtime.new(zone, options)
         self.modelPreferences = _G.rfsuite.session.modelPreferences
       end
     end
+
+    -- The speed controller's current limit, lifted off the per-model store once per table rather
+    -- than once per pass: a reload replaces the table, so the identity test above is what says
+    -- the figure may have moved, and a steady-state pass pays one comparison. Reading the store
+    -- itself here would be two table lookups and a tonumber on every pass for a value that
+    -- changes when a pilot changes it and at no other time.
+    --
+    -- Both routes the preferences arrive by end in this reference: the widget's own disk read,
+    -- and the connect chain leaving the table on the session.
+    if self._escLimitSource ~= self.modelPreferences then
+      self._escLimitSource = self.modelPreferences
+      local battery = self.modelPreferences and self.modelPreferences.battery
+      local limit = tonumber(battery and battery.esc_current_limit) or 0
+      self.state.escCurrentLimit = (limit > 0) and limit or nil
+    end
+
     updateVoltageThemeConfig(self)
     if isFblConnected and not wasFblConnected then
       -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
