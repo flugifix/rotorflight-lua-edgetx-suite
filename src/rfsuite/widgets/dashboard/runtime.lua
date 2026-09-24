@@ -1778,6 +1778,13 @@ local function readTelemetry(state)
     setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
   end
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
+  -- The governor MODE, which is configuration rather than telemetry: the connect chain reads it
+  -- once over MSP (tasks/events/common/governor_config.lua) and leaves it on the session. It is
+  -- carried onto the state here so that an object needing it reads precomputed state, which is
+  -- what the reactive sweep is allowed to do; reaching into the session from a render closure is
+  -- not. Nil until the chain has answered, and a consumer has to cope with that.
+  local rfRoot = type(_G) == "table" and _G.rfsuite or nil
+  setField("governorMode", rfRoot and rfRoot.session and rfRoot.session.governorMode)
   setField("mcuTemp", roundInt(getSensor("temp_mcu") or state.mcuTemp, state.mcuTemp or 0))
   setField("escTemp", roundInt(getSensor("temp_esc") or state.escTemp, state.escTemp or 0))
   setField("bec_voltage", getSensor("bec_voltage") or state.bec_voltage)
@@ -2031,6 +2038,9 @@ function Runtime.new(zone, options)
       armFlags = 0,
       armDisableFlags = 0,
       governor = 0,
+      -- The governor mode, carried over from the session in readTelemetry; nil until the
+      -- connect chain has read it.
+      governorMode = nil,
       throttlePercent = 0,
       mcuTemp = 0,
       escTemp = 0,

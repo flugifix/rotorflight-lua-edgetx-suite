@@ -2776,6 +2776,8 @@ return {
       DISARMED = "DISARMED",
       IDLE = "LEERLAUF",
       LOSTHS = "KEIN SIGNAL",
+      MODE_LIMIT = "Gov. Limit",
+      MODE_OFF = "Gov. Aus",
       OFF = "AUS",
       RECOVERY = "ERHOLUNG",
       SPOOLUP = "HOCHLAUF",
