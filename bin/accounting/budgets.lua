@@ -65,7 +65,14 @@ return {
 
     -- The service widget's background pass: the same two runtimes, with no scene
     -- build and no sweep of a theme mixed into it.
-    ["pass.service"] = { target = 1600, measured = 1251 },
+    --
+    -- Its worst pass is the one that also carries the 30 s look at the settings store
+    -- (widgets/service/runtime.lua, PREFERENCES_INTERVAL_SECONDS): the settings path is
+    -- resolved and three fstat calls are made, and the store is parsed only where one of
+    -- them has moved or fstat is missing altogether. Raised from 1600 when the measured
+    -- window was widened to contain that pass -- until then it ended at 20 s and the row had
+    -- never seen it.
+    ["pass.service"] = { target = 2000, measured = 1797, proposed = 1600 },
 
     -- One run() of SCRIPTS/FUNCTIONS/rfsbg.lua with a full frame backlog waiting,
     -- every frame of it decoded. This row is NOT a share of the widget ceiling

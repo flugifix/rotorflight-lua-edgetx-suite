@@ -1065,13 +1065,20 @@ end
 
 ------------------------------------------------------------------------------
 -- The service widget's background pass: the pure background half, no build.
+--
+-- The window has to be longer than the slowest cadence in the code it measures, or the row
+-- cannot contain the pass that cadence lands in. widgets/service/runtime.lua looks at the
+-- settings store every PREFERENCES_INTERVAL_SECONDS, which is 30 s; at the stub clock's 0.1 s
+-- per pass, 600 passes are 60 s and hold that look twice. At 200 passes the window ended at
+-- 20 s, before the first one.
 ------------------------------------------------------------------------------
 World.reset()
 do
+  local SERVICE_PASSES = 600
   local Service = World.require("widgets/service/runtime.lua")
   local widget = Service.new({ x = 0, y = 0, w = 200, h = 100 }, {})
   local worst = 0
-  for i = 1, 200 do
+  for i = 1, SERVICE_PASSES do
     feedLink(World.sensorIds, i)
     local n = count(widget.background, widget)
     if i > 60 and n > worst then worst = n end
