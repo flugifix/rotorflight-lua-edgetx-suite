@@ -509,6 +509,12 @@ end
 
 local function ensureLoaded()
   if ui.loaded then return end
+  -- A save whose overlay was dismissed finished without a screen. Its outcome was held back
+  -- rather than raised over whatever page the user went to; claim it now that this one is open.
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and type(SavePipeline.takeResult) == "function" then
+    SavePipeline.takeResult("setup_ports")
+  end
   loadFromSession()
   ui.loaded = true
   ui.dirty = false
@@ -664,11 +670,6 @@ end
 function M.onActivate()
   ensureDeps()
   ensureLoaded()
-  -- A save whose overlay was dismissed finished without a screen. Its outcome was held
-  -- back rather than raised over whatever page the user went to; claim it now.
-  if SavePipeline and type(SavePipeline.takeResult) == "function" then
-    SavePipeline.takeResult("setup_ports")
-  end
 end
 
 function M.wakeup(ctx)

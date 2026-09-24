@@ -648,13 +648,21 @@ function M.getProgress()
 end
 
 --- Claim the outcome of a save that finished while nobody was looking, once. Called by a page
--- when it is entered; it reports through the same callback the save was started with, so there
--- is one reporting path rather than two.
+-- when it is entered. The outcome goes into the same box a save that was watched to the end
+-- reports in (see finish()), which the host draws over the page that is now on screen; the
+-- callback the save was started with is then run as it would have been, for the page's own state.
 function M.takeResult(pageId)
   local key = pageId or ""
   local entry = S.pending[key]
   if type(entry) ~= "table" then return nil end
   S.pending[key] = nil
+  local result = entry.result
+  if type(result) == "table" then
+    S.outcome = { status = result.status, result = result }
+    if result.status == "done" then
+      S.outcome.clearAt = nowSeconds() + OUTCOME_LINGER_SECONDS
+    end
+  end
   if type(entry.onDone) == "function" then
     local ok, err = pcall(entry.onDone, entry.result)
     if not ok then
