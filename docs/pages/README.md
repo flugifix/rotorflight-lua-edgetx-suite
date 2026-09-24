@@ -11,7 +11,7 @@ One file per page, at the path of the page under `src/rfsuite/app/pages/` with `
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
 
-**Status:** 93 reachable pages, 30 written. 73 of them carry an in-app help text behind the
+**Status:** 93 reachable pages, 31 written. 76 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
@@ -71,15 +71,15 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | ESC & Motors → Throttle | [setup/esc_motors/throttle.md](setup/esc_motors/throttle.md) | yes | read-only while armed | written |
 | ESC & Motors → Telemetry | [setup/esc_motors/telemetry.md](setup/esc_motors/telemetry.md) | yes | read-only while armed | written |
 | ESC & Motors → RPM | `setup/esc_motors/rpm.md` | yes | read-only while armed | to write |
-| ESC & Motors → ESC Tools → AM32 | [setup/esc_motors/esc_tools/escmfg/am32.md](setup/esc_motors/esc_tools/escmfg/am32.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
+| ESC & Motors → ESC Tools → AM32 | [setup/esc_motors/esc_tools/escmfg/am32.md](setup/esc_motors/esc_tools/escmfg/am32.md) | yes | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → BLHeli_S | [setup/esc_motors/esc_tools/escmfg/blheli_s.md](setup/esc_motors/esc_tools/escmfg/blheli_s.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → Bluejay | [setup/esc_motors/esc_tools/escmfg/bluejay.md](setup/esc_motors/esc_tools/escmfg/bluejay.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → Flyrotor | [setup/esc_motors/esc_tools/escmfg/flrtr.md](setup/esc_motors/esc_tools/escmfg/flrtr.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → Hobbywing V5 | [setup/esc_motors/esc_tools/escmfg/hw5.md](setup/esc_motors/esc_tools/escmfg/hw5.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → OMP | [setup/esc_motors/esc_tools/escmfg/omp.md](setup/esc_motors/esc_tools/escmfg/omp.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
-| ESC & Motors → ESC Tools → Scorpion | [setup/esc_motors/esc_tools/escmfg/scorp.md](setup/esc_motors/esc_tools/escmfg/scorp.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
+| ESC & Motors → ESC Tools → Scorpion | [setup/esc_motors/esc_tools/escmfg/scorp.md](setup/esc_motors/esc_tools/escmfg/scorp.md) | yes | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → XDFly | [setup/esc_motors/esc_tools/escmfg/xdfly.md](setup/esc_motors/esc_tools/escmfg/xdfly.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
-| ESC & Motors → ESC Tools → YGE | [setup/esc_motors/esc_tools/escmfg/yge.md](setup/esc_motors/esc_tools/escmfg/yge.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
+| ESC & Motors → ESC Tools → YGE | [setup/esc_motors/esc_tools/escmfg/yge.md](setup/esc_motors/esc_tools/escmfg/yge.md) | yes | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → ZTW | [setup/esc_motors/esc_tools/escmfg/ztw.md](setup/esc_motors/esc_tools/escmfg/ztw.md) | no | read-only while armed, lit for one ESC telemetry protocol | written |
 | ESC & Motors → ESC Tools → ESC Configurator (the shared run page) | `setup/esc_motors/esc_tools/run.md` | no | read-only while armed | to write |
 | ESC & Motors → Motor Override | `setup/esc_motors/motor_override.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
