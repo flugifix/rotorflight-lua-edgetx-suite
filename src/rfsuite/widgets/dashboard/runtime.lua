@@ -2450,6 +2450,18 @@ function Runtime.new(zone, options)
       -- a new flight controller is a new answer to that question.
       self.state.armedSeen = false
       self.state.batteryCellCount = 0
+      -- What the link sources derived for the last session. The diversity latch above all:
+      -- it only ever rises, so carrying it over would report a second antenna on a receiver
+      -- that has none. The packet-rate memo goes with it so that the first pass of the new
+      -- session reads the rate rather than answering out of the previous one's cache. The
+      -- transmitter module's ExpressLRS generation goes too, so the new session asks again: the
+      -- module may have been reflashed or swapped while nothing was connected.
+      self.state.linkDiversity = nil
+      self.state.linkDiversityTick = nil
+      self.state.linkRfMode = nil
+      self.state.linkRfModeTick = nil
+      self.state.linkGeneration = nil
+      self.state.linkPingSent = nil
       -- The flight clock and the statistics are the record's; the event runtime drops them on
       -- the connect edge of its own link detector, which follows this one once the link has held
       -- for its CONNECT_STABLE_SECONDS -- not on the disconnect before it, which the post-flight
