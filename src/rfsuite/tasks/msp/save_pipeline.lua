@@ -652,6 +652,9 @@ end
 -- reports in (see finish()), which the host draws over the page that is now on screen; the
 -- callback the save was started with is then run as it would have been, for the page's own state.
 function M.takeResult(pageId)
+  -- While another save runs, the box shows that save's progress, and its own finish() would
+  -- replace an outcome put there now. The entry stays held for the next time the page is entered.
+  if S.run then return nil end
   local key = pageId or ""
   local entry = S.pending[key]
   if type(entry) ~= "table" then return nil end
