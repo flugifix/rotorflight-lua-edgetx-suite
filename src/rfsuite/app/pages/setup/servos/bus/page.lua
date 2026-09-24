@@ -714,7 +714,6 @@ function M.wakeup(ctx)
   ensureLoaded()
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
-  ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
 
   local session = getSession()
   local signature = session and session.signature or nil
@@ -747,7 +746,6 @@ function M.build(ctx)
   ensureLoaded()
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
-  ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
 
   local children = ctx.children
   local x = ctx.x
