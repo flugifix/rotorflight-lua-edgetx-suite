@@ -211,11 +211,14 @@ the box behaves as it always did. The earlier branches are unchanged and still c
 arming-disabled reason, and the disarmed label while the model is not armed.
 
 Two things follow for a theme. A box with a `thresholds` list matching governor state names will
-not match in these modes, because the text is no longer a state name — on an English radio the
-untranslated state key is still tried as a fallback and `OFF` still matches, but in a translated
-bundle it does not. And the mode is configuration, not a reading: it changes only when the
-flight controller is reconfigured, so it costs one comparison per value change and nothing per
-frame.
+not match in these modes, in any language: the text is no longer a state name, and the
+untranslated key tried after the text is the mode's (`MODE_OFF`, `MODE_LIMIT`), not the state
+sensor's `OFF`. Such a box falls back to its plain text colour. A theme that wants to colour the
+two modes adds a threshold for them: a shipped theme on `@i18n(widgets.governor.MODE_OFF)@` or
+`@i18n(widgets.governor.MODE_LIMIT)@`, which the packager turns into the label as shown, and a
+user theme on the names `MODE_OFF` and `MODE_LIMIT`, the way it names the states. And the mode is
+configuration, not a reading: it changes only when the flight controller is reconfigured, so it
+costs one comparison per value change and nothing per frame.
 
 The value a box reads is `source`, and the names are resolved in
 `widgets/dashboard/objects/common.lua`, `mapTelemetrySource`: a fixed set that comes straight

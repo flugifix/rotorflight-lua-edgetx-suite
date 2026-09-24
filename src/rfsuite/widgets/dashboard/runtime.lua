@@ -1954,6 +1954,9 @@ function Runtime.new(zone, options)
       armFlags = 0,
       armDisableFlags = 0,
       governor = 0,
+      -- The governor mode, carried over from the session in readTelemetry; nil until the
+      -- connect chain has read it.
+      governorMode = nil,
       throttlePercent = 0,
       mcuTemp = 0,
       escTemp = 0,

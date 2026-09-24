@@ -168,7 +168,20 @@ local function governorColor(state, box, utils, compiled)
 
   if type(box and box.thresholds) == "table" and #box.thresholds > 0 and utils and type(utils.resolveThresholdColor) == "function" then
     local govText = governorText(state)
+    -- The untranslated key tried when the text matches no threshold. While armed in the two
+    -- modes that keep no state it is the mode's, MODE_OFF or MODE_LIMIT, which is also the name
+    -- a user theme matches the mode label by. The state sensor's constant 0 would otherwise
+    -- match a threshold on the OFF state in a bundle whose translation of OFF is "OFF" and in
+    -- no other.
     local govKey = GOVERNOR_LABELS[value]
+    if armed then
+      local mode = tonumber(state and state.governorMode)
+      if mode == GOV_MODE_NONE then
+        govKey = "MODE_OFF"
+      elseif mode == GOV_MODE_LIMIT then
+        govKey = "MODE_LIMIT"
+      end
+    end
     local threshColor = utils.resolveThresholdColor(govText, box.thresholds, nil, false, box, state, nil, compiled)
     if threshColor == nil and govKey ~= nil then
       threshColor = utils.resolveThresholdColor(govKey, box.thresholds, nil, false, box, state, nil, compiled)
