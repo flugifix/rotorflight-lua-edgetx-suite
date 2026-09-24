@@ -649,8 +649,9 @@ end
 
 --- Claim the outcome of a save that finished while nobody was looking, once. Called by a page
 -- when it is entered. The outcome goes into the same box a save that was watched to the end
--- reports in (see finish()), which the host draws over the page that is now on screen; the
--- callback the save was started with is then run as it would have been, for the page's own state.
+-- reports in (see finish()), which the host draws over the page that is now on screen. The
+-- callback the save was started with is still called, but the page has just reloaded, so what it
+-- does to the page's own state is not what reports the outcome.
 function M.takeResult(pageId)
   -- While another save runs, the box shows that save's progress, and its own finish() would
   -- replace an outcome put there now. The entry stays held for the next time the page is entered.
