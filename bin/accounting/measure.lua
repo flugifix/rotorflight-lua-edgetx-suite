@@ -1071,19 +1071,32 @@ end
 -- settings store every PREFERENCES_INTERVAL_SECONDS, which is 30 s; at the stub clock's 0.1 s
 -- per pass, 600 passes are 60 s and hold that look twice. At 200 passes the window ended at
 -- 20 s, before the first one.
+--
+-- The block counts the looks it drove and refuses a window that held fewer than two: moving
+-- the stub clock's step, the warm-up or the interval would otherwise shorten the window again
+-- and leave the row measuring a cheaper pass with --check still green.
 ------------------------------------------------------------------------------
 World.reset()
 do
   local SERVICE_PASSES = 600
   local Service = World.require("widgets/service/runtime.lua")
   local widget = Service.new({ x = 0, y = 0, w = 200, h = 100 }, {})
-  local worst = 0
+  local worst, worstAt = 0, 0
+  local lastLoad, looks = widget._lastPreferencesLoad, 0
   for i = 1, SERVICE_PASSES do
     feedLink(World.sensorIds, i)
     local n = count(widget.background, widget)
-    if i > 60 and n > worst then worst = n end
+    if widget._lastPreferencesLoad ~= lastLoad then
+      lastLoad = widget._lastPreferencesLoad
+      looks = looks + 1
+    end
+    if i > 60 and n > worst then worst, worstAt = n, i end
   end
-  addRow("pass.service", worst)
+  if looks < 2 then
+    error(string.format("accounting: the service window held %d settings look(s), expected 2 -- "
+      .. "pass.service would be measuring a cheaper pass than the one it bounds", looks))
+  end
+  addRow("pass.service", worst, string.format("worst at pass %d of %d", worstAt, SERVICE_PASSES))
 end
 
 ------------------------------------------------------------------------------
