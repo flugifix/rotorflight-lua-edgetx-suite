@@ -854,6 +854,14 @@ local function batteryPickApplyStep(self)
   if request == nil then return true end
 
   local pick = self.state.batteryPick
+  -- Refused while armed, here as well as by hiding BATTERY: a picker that was already open when
+  -- the model armed, or a caller of rfsuite.batteryPick, still arrives at this step, and a pack
+  -- recorded now would be written against the flight in progress.
+  if self.state.armed == true then
+    widgetLog(self, "battery pick refused: the model is armed", "warn")
+    pick.applied = "refused:armed"
+    return true
+  end
   local BatteryPick = requireModule("lib/battery_pick.lua")
   if type(BatteryPick) ~= "table" then return true end
   -- Normalised here, before the candidate lookup below, and not only inside select(): an id

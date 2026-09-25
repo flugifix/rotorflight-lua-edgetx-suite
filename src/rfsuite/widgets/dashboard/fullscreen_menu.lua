@@ -46,8 +46,10 @@ function CONDITIONS.previewInflightTuning(widget)
 end
 
 -- The battery prompt, re-opened: only where the registry has a pack for this model, so a pilot
--- who keeps no registry never sees a button that opens an empty list.
+-- who keeps no registry never sees a button that opens an empty list, and only while the model
+-- is disarmed, because a pack chosen in the air would be recorded against the flight in progress.
 function CONDITIONS.batteryPickHasPacks(widget)
+  if widget.state and widget.state.armed == true then return false end
   local pick = widget.state and widget.state.batteryPick or nil
   local candidates = (type(pick) == "table" and type(pick.candidates) == "table") and pick.candidates or nil
   return candidates ~= nil and #candidates > 0
