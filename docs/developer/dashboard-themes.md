@@ -366,6 +366,16 @@ The rest of a box is presentation and is shared across the types that can use it
 temperature limit is converted for a radio set to Fahrenheit — are described once, in
 [user themes](../dashboard/user-themes.md); they behave identically in a shipped theme.
 
+### Facts on `state` that are not a box source
+
+A free-form module is handed the widget state and may read more than the value list above. One
+of those is worth naming, because nothing else in the tree says it and a theme that works it out
+for itself will not agree with the announcement that speaks it:
+
+| Field | What it says |
+| --- | --- |
+| `state.mainPowerLost` | The main pack is gone while the flight controller is still answering — it reads as gone rather than merely low, it had read a real voltage earlier in this connection, and a BEC voltage is there beside it. It is the test `lib/audio.lua` makes for its *Main power lost* announcement, decided in one place (`Audio.mainPowerLost`) and published here; it does **not** depend on that announcement being switched on. A theme drawing it would show the voltage slot as running on the reserve and the fuel reading as unknown, because neither is being measured any more. It is refreshed on the telemetry cadence, so like every other reading it stands still on a post-flight screen whose link is gone. |
+
 **`source` is read as a literal, once, at theme load.** When a theme is loaded the widget walks
 its boxes and collects every `source` that is a string into the list the derived snapshot is
 built from, and it is that snapshot a box reads per frame. A `source` given as a function is

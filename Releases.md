@@ -1,6 +1,10 @@
 # 0.1.7
 
 ### Features & Enhancements
+- **A theme can draw "main power lost" (`lib/audio.lua`, `widgets/dashboard/runtime.lua`, `docs/developer/dashboard-themes.md`)**:
+  - The suite could already tell that the main pack is gone while the flight controller is still answering on a BEC or a backup battery, but only inside the *Main power lost* announcement and only while that announcement was switched on. A theme that wants to say so on screen had nothing to read.
+  - The three tests behind it are now one function (`Audio.mainPowerLost`), which the announcement calls and which the dashboard calls once per telemetry read, publishing the answer as `state.mainPowerLost`. One definition, so a screen and the voice cannot disagree; and the state field is there whether or not the announcement is enabled.
+  - Nothing about the announcement changes: the condition, the 10-second repeat and the call when the pack comes back are what they were, and `mainPowerLostActive` stays what it always was -- a record of what has been spoken, which is why it is not the fact being published.
 - **Three dashboard box sources for the radio link itself (`lib/link_rates.lua`, `widgets/dashboard/objects/common.lua`, `widgets/dashboard/runtime.lua`, `docs/developer/dashboard-themes.md`)**:
   - `link_packet_rate` names the air rate the link is running at -- `150Hz`, `100Hz Full`, `F1000` -- out of the `RFMD` field of the CRSF link-statistics frame, in the words ExpressLRS itself uses for those rates, for ExpressLRS 3.x and 4.x alike. It is not called `link_rate` because that name is already the flight controller's telemetry link rate in hertz (`session.crsfTelemetryConfig.linkRate`); *ELRS Link* under *Diagnostics* calls this quantity `packetRate` and this follows it.
   - `link_floor` is the receiver sensitivity that rate is specified down to, in dBm, so a theme can turn an RSSI reading into headroom with plain arithmetic instead of a table of its own. The arithmetic stays the theme's; nothing is divided here.
