@@ -1,6 +1,11 @@
 # 0.1.7
 
 ### Features & Enhancements
+- **"Main power lost" as a dashboard box source (`widgets/dashboard/objects/common.lua`, `docs/developer/dashboard-themes.md`)**:
+  - `main_power_lost` is `1` while the main pack is gone and the flight controller is still answering, and `0` otherwise, so a declarative theme can show the state with a plain box and a threshold colour instead of a module of its own. It reads `state.mainPowerLost`, the same answer the *Main power lost* announcement uses.
+  - A number and not the boolean, because threshold limits and gauges take numbers and strings only; the same shape as `link_diversity`. It is never `nil`, so before any telemetry it reads `0`, not `--`.
+  - It sits at the end of the source list, just before the sensor fall-through, so none of the named sources pays for it; the one comparison is paid by each declared source that falls through to a sensor. `bin/accounting/measure.lua` reports no change on any row.
+  - `docs/developer/dashboard-themes.md` lists `esc_load` among the sources again and drops a stray half-sentence below the link section, both left by merging the `esc_load` and link-source changes.
 - **The flight record counts voltage sags, so the flight log's `sags` and `sag_min` columns are filled (`tasks/events/telemetry/flight_record.lua`, `tasks/events/ondisarm/tasks/flight_log.lua`, `lib/flight_log.lua`, `docs/reference/flight-statistics.md`, `docs/pages/tools/flight_log.md`)**:
   - `sags` and `sag_min` have been in the log's header since it was written and have always been empty, because the suite had no sag detector. A logged flight now says whether the pack went down under load and how far.
   - **A voltage sag** is a dip to or below the flight controller's own minimum cell voltage — its `vbatmincellvoltage`, one physical fact rather than a second threshold of the suite's — counted once per dip, with 0.05 V a cell of hysteresis so that hovering on the line counts once rather than once a sample. A reading at or below 1 V is the main power gone rather than a sag and is not counted, and the deepest per-cell voltage of a sag is kept beside the count on the record as `minSagCellVoltage`.

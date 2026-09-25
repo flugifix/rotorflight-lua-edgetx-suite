@@ -361,6 +361,32 @@ Give the box `unit = "%"`, and for a gauge a range of `min = 0, max = 150`: the 
 is above 100, where the controller is being asked for more than it is set to allow, and a gauge
 ending at 100 has nowhere to draw that.
 
+### `main_power_lost`
+
+Not a sensor. It is `1` while the main pack is gone and the flight controller is still
+answering, and `0` otherwise: the pack reads as gone rather than merely low, it had read a real
+voltage earlier in this connection, and a BEC voltage is there beside it. It is the test
+`lib/audio.lua` makes for its *Main power lost* announcement, decided in one place
+(`Audio.mainPowerLost`); it does **not** depend on that announcement being switched on. It is
+refreshed on the telemetry cadence, so like every other reading it stands still on a post-flight
+screen whose link is gone.
+
+It is never `nil`, so it never draws `--`: before any telemetry has arrived it is `0`, because
+the field it reads starts out as *not lost*.
+
+It is a number rather than a yes or no because a threshold limit takes a number or a string, and
+a gauge a number only. Like `link_diversity` it is a flag rather than a reading, so it reads
+better as a colour than as a digit. Give it both limits: thresholds match with `<=`, so a list
+holding only `{ value = 1 }` colours `0` as well. For example:
+
+```lua
+{ type = "text", source = "main_power_lost", title = "MAIN PACK",
+  thresholds = { { value = 0, textcolor = "green" }, { value = 1, textcolor = "red" } } }
+```
+
+A free-form module is handed the widget state and reads the same fact as `state.mainPowerLost`,
+a boolean. A theme drawing it would show the voltage slot as running on the reserve and the fuel
+reading as unknown, because neither is being measured any more.
 ### The speed controller's health: two pairs, and which one a surface owes
 
 The speed controller's health, in words. There are four names and they are **two pairs**. In each
