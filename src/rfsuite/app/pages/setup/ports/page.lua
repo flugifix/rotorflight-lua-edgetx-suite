@@ -117,8 +117,15 @@ local function pageText(i18n, key, fallback)
   return fallback
 end
 
+-- The function list never changes while the page is open, and every lookup below goes through
+-- it: one build of an N-port page asked for it about N x (N + 2) times. So it is built on the
+-- first call and kept until onClose drops it, which is also what lets a reopened page resolve the
+-- names again with the i18n it is opened with.
+local portFunctions = nil
+
 local function getPortFunctionsList(i18n)
-  return {
+  if portFunctions then return portFunctions end
+  portFunctions = {
     {id = 0, excl = 0, name = pageText(i18n, "function_disabled", "Disabled"), type = PORT_TYPE_DISABLED},
     {id = 1, excl = 1, name = "MSP", type = PORT_TYPE_MSP},
     {id = 2, excl = 2, name = "GPS", type = PORT_TYPE_GPS},
@@ -135,6 +142,7 @@ local function getPortFunctionsList(i18n)
     {id = 512, excl = 4668, name = pageText(i18n, "function_telem_mavlink", "Telemetry MAVLink"), type = PORT_TYPE_MAVLINK},
     {id = 16, excl = 4668, name = pageText(i18n, "function_telem_ltm", "Telemetry LTM"), type = PORT_TYPE_TELEM}
   }
+  return portFunctions
 end
 
 local function getPortFunctionById(i18n, functionMask)
@@ -811,6 +819,7 @@ function M.onClose()
   ApiVersion = nil
   LoadingOverlay = nil
   t = nil
+  portFunctions = nil
 end
 
 return M
