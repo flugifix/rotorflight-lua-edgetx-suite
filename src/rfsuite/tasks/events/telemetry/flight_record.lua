@@ -427,6 +427,34 @@ end
 
 Record.ensure = ensureFlight
 
+-- The raw readings of a sampling pass, offered to a second reader in the SAME pass.
+--
+-- The event runtimes are driven at the top of a widget's pass, ahead of that widget's own
+-- telemetry read, so on a sampling pass this record asks the sensors first and the dashboard
+-- then asks for most of the same names a second time. The read is what those passes cost, and
+-- the second one cannot answer anything the first did not: a pass runs to completion without
+-- yielding, so a telemetry value does not move inside it.
+--
+--   rfsuite.session.telemetryRead = {
+--     values = { <sensor name> = number, ... },  -- this pass's raw answers
+--     pass   = number,  -- counted by the READER, once per pass, before the runtimes are driven
+--     at     = number,  -- the pass `values` was filled in
+--   }
+--
+-- `values` is the sensor's own answer, raw -- before the rounding, the watts inference and the
+-- fuel clamp below, so a reader applies its own derivations and keeps its own numbers. A name
+-- the sensor answered nothing for is absent, which is what Sensors.getValue returns and what a
+-- reader has to see. So is a name that was not asked at all because SmartFuel handed its value
+-- over in this state: the dashboard's read takes that hand-over ahead of the sensor too.
+--
+-- The table is created by the reader and by nobody else, so a record with no such reader -- a
+-- model that runs the suite's background work from the service widget -- publishes nothing and
+-- pays one comparison for the offer it never makes.
+--
+-- `at == pass` is what makes an offer this pass's. A wakeup from anywhere else in the same Lua
+-- state -- a second widget's background work -- stamps the pass before it, and the reader counts
+-- the next one before the runtimes are driven again, so a stale fill can never match.
+
 --- Read the tracked sensors. A sensor that answers nothing leaves the previous reading standing,
 --- which is what the dashboard's telemetry read has always done, and the derivations below --
 --- rounding the two temperatures and the throttle, inferring watts, clamping fuel -- are that
@@ -436,35 +464,78 @@ local function readSources()
   if not Sensors or type(Sensors.getValue) ~= "function" then return false end
   local get = Sensors.getValue
 
-  values.rpm = get("rpm") or values.rpm
-  values.lq = get("link") or values.lq
-  values.lqSource = Sensors.active_paths and Sensors.active_paths.link or values.lqSource
-  values.mcuTemp = roundInt(get("temp_mcu"), values.mcuTemp)
-  values.escTemp = roundInt(get("temp_esc"), values.escTemp)
-  values.becVoltage = get("bec_voltage") or values.becVoltage
-  values.throttlePercent = roundInt(get("throttle_percent"), values.throttlePercent)
-
+  -- Read into locals in the order the sensors have always been asked in -- a search is throttled
+  -- per pass and a path is adopted on first answer, so the order is part of what a read does --
+  -- and derive from them below exactly as before.
+  local rpm = get("rpm")
+  local lq = get("link")
+  local lqSource = Sensors.active_paths and Sensors.active_paths.link
+  local mcuTemp = get("temp_mcu")
+  local escTemp = get("temp_esc")
+  local becVoltage = get("bec_voltage")
+  local throttlePercent = get("throttle_percent")
   local current = get("current")
   local voltage = get("voltage")
-  local watts = get("watts")
+  local wattsRead = get("watts")
+  local altitude = get("altitude")
+  -- Ahead of the sensor for the same reason the dashboard's read is: SmartFuel runs in this
+  -- Lua state and hands the two values over directly. The sensor behind a value that was handed
+  -- over is not asked at all.
+  local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
+  local handedConsumption = smart and smart.consumption
+  local consumedMah = nil
+  if handedConsumption == nil then consumedMah = get("smartconsumption") end
+  local govState = get("governor")
+  local handedFuel = smart and smart.fuel
+  local smartFuel, plainFuel = nil, nil
+  if handedFuel == nil then
+    smartFuel = get("smartfuel")
+    if smartFuel == nil then plainFuel = get("fuel") end
+  end
+
+  local shared = _G.rfsuite.session.telemetryRead
+  if shared ~= nil then
+    local v = shared.values
+    v.rpm = rpm
+    v.link = lq
+    v.temp_mcu = mcuTemp
+    v.temp_esc = escTemp
+    v.bec_voltage = becVoltage
+    v.throttle_percent = throttlePercent
+    v.current = current
+    v.voltage = voltage
+    v.watts = wattsRead
+    v.altitude = altitude
+    v.smartconsumption = consumedMah
+    v.governor = govState
+    v.smartfuel = smartFuel
+    v.fuel = plainFuel
+    shared.at = shared.pass
+  end
+
+  values.rpm = rpm or values.rpm
+  values.lq = lq or values.lq
+  values.lqSource = lqSource or values.lqSource
+  values.mcuTemp = roundInt(mcuTemp, values.mcuTemp)
+  values.escTemp = roundInt(escTemp, values.escTemp)
+  values.becVoltage = becVoltage or values.becVoltage
+  values.throttlePercent = roundInt(throttlePercent, values.throttlePercent)
+
+  local watts = wattsRead
   if type(watts) ~= "number" and type(current) == "number" and type(voltage) == "number" then
     watts = voltage * current
   end
   values.current = current or values.current
   values.watts = watts or values.watts
-  values.altitude = get("altitude") or values.altitude
-  -- Ahead of the sensor for the same reason the dashboard's read is: SmartFuel runs in this
-  -- Lua state and hands the two values over directly.
-  local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
-  values.consumedMah = (smart and smart.consumption) or get("smartconsumption") or values.consumedMah
+  values.altitude = altitude or values.altitude
+  values.consumedMah = handedConsumption or consumedMah or values.consumedMah
   if type(voltage) == "number" then values.voltage = voltage end
 
   -- The governor state decides the powered gate below, so it is held to being a number here
   -- rather than tested on every comparison the gate makes.
-  local govState = get("governor")
   if type(govState) == "number" then values.govState = govState end
 
-  local fuel = (smart and smart.fuel) or get("smartfuel") or get("fuel")
+  local fuel = handedFuel or smartFuel or plainFuel
   if type(fuel) == "number" then
     if fuel < 0 then fuel = 0 end
     if fuel > 100 then fuel = 100 end
