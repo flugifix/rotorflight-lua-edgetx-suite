@@ -417,6 +417,11 @@ function Utils.mapTelemetrySource(source, state)
     return row and row.floor
   end
   if source == "link_diversity" then return linkDiversity(state) end
+  -- `state.mainPowerLost` as a flag a box can draw and colour: 1 while the main pack is gone
+  -- and the flight controller still answers, 0 otherwise. A number rather than the boolean,
+  -- because threshold limits and the gauge take numbers and strings only. Never nil: the field
+  -- is false before the first read, so no telemetry reads as 0, not as lost.
+  if source == "main_power_lost" then return (state and state.mainPowerLost) and 1 or 0 end
 
   local sensors = getSensorsModule()
   if sensors and type(sensors.getValue) == "function" then

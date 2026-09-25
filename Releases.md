@@ -1,6 +1,11 @@
 # 0.1.7
 
 ### Features & Enhancements
+- **"Main power lost" as a dashboard box source (`widgets/dashboard/objects/common.lua`, `docs/developer/dashboard-themes.md`)**:
+  - `main_power_lost` is `1` while the main pack is gone and the flight controller is still answering, and `0` otherwise, so a declarative theme can show the state with a plain box and a threshold colour instead of a module of its own. It reads `state.mainPowerLost`, the same answer the *Main power lost* announcement uses.
+  - A number and not the boolean, because threshold limits and gauges take numbers and strings only; the same shape as `link_diversity`. It is never `nil`, so before any telemetry it reads `0`, not `--`.
+  - It sits at the end of the source list, just before the sensor fall-through, so none of the named sources pays for it; the one comparison is paid by each declared source that falls through to a sensor. `bin/accounting/measure.lua` reports no change on any row.
+  - `docs/developer/dashboard-themes.md` lists `esc_load` among the sources again and drops a stray half-sentence below the link section, both left by merging the `esc_load` and link-source changes.
 - **A theme can draw "main power lost" (`lib/audio.lua`, `widgets/dashboard/runtime.lua`, `docs/developer/dashboard-themes.md`)**:
   - The suite could already tell that the main pack is gone while the flight controller is still answering on a BEC or a backup battery, but only inside the *Main power lost* announcement and only while that announcement was switched on. A theme that wants to say so on screen had nothing to read.
   - The three tests behind it are now one function (`Audio.mainPowerLost`), which the announcement calls and which the dashboard calls once per telemetry read, publishing the answer as `state.mainPowerLost`. One definition, so a screen and the voice cannot disagree; and the state field is there whether or not the announcement is enabled.

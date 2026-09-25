@@ -260,8 +260,8 @@ The value a box reads is `source`, and the names are resolved in
 off the widget state — `voltage`, `bec_voltage`, `current`, `watts`, `rpm`, `fuel`,
 `smartfuel`, `smartconsumption`, `altitude`, `governor`, `esc_temp`, `mcu_temp`,
 `throttle_percent`, `link`, `pid_profile`, `rate_profile`, `battery_profile`, `model_name`,
-`link_packet_rate`, `link_floor`, `link_diversity` — and, for anything else, the sensor of that name
-from `lib/sensors.lua`.
+`esc_load`, `link_packet_rate`, `link_floor`, `link_diversity`, `main_power_lost` — and, for
+anything else, the sensor of that name from `lib/sensors.lua`.
 
 ### `link_packet_rate`, `link_floor`, `link_diversity`
 
@@ -341,7 +341,6 @@ declares any of the three.
 
 Give a `link_floor` box `unit = "dBm"` and a `link_packet_rate` box no unit; `link_diversity` is a flag
 rather than a reading and reads better through a threshold colour than as a number.
-`esc_load` — and, for anything else, the sensor of that name from `lib/sensors.lua`.
 
 ### `esc_load`
 
@@ -360,21 +359,38 @@ Give the box `unit = "%"`, and for a gauge a range of `min = 0, max = 150`: the 
 is above 100, where the controller is being asked for more than it is set to allow, and a gauge
 ending at 100 has nowhere to draw that.
 
+### `main_power_lost`
+
+Not a sensor. It is `1` while the main pack is gone and the flight controller is still
+answering, and `0` otherwise: the pack reads as gone rather than merely low, it had read a real
+voltage earlier in this connection, and a BEC voltage is there beside it. It is the test
+`lib/audio.lua` makes for its *Main power lost* announcement, decided in one place
+(`Audio.mainPowerLost`); it does **not** depend on that announcement being switched on. It is
+refreshed on the telemetry cadence, so like every other reading it stands still on a post-flight
+screen whose link is gone.
+
+It is never `nil`, so it never draws `--`: before any telemetry has arrived it is `0`, because
+the field it reads starts out as *not lost*.
+
+It is a number rather than a yes or no because a threshold limit takes a number or a string, and
+a gauge a number only. Like `link_diversity` it is a flag rather than a reading, so it reads
+better as a colour than as a digit. Give it both limits: thresholds match with `<=`, so a list
+holding only `{ value = 1 }` colours `0` as well. For example:
+
+```lua
+{ type = "text", source = "main_power_lost", title = "MAIN PACK",
+  thresholds = { { value = 0, textcolor = "green" }, { value = 1, textcolor = "red" } } }
+```
+
+A free-form module is handed the widget state and reads the same fact as `state.mainPowerLost`,
+a boolean. A theme drawing it would show the voltage slot as running on the reserve and the fuel
+reading as unknown, because neither is being measured any more.
+
 The rest of a box is presentation and is shared across the types that can use it: `title`,
 `titlepos`, `titlealign`, `titlecolor`, `textcolor`, `bgcolor`, `font`, `unit`, `decimals`,
 `transform`, `autosize_chars`, `thresholds`. Thresholds — the dynamic colour lists and how a
 temperature limit is converted for a radio set to Fahrenheit — are described once, in
 [user themes](../dashboard/user-themes.md); they behave identically in a shipped theme.
-
-### Facts on `state` that are not a box source
-
-A free-form module is handed the widget state and may read more than the value list above. One
-of those is worth naming, because nothing else in the tree says it and a theme that works it out
-for itself will not agree with the announcement that speaks it:
-
-| Field | What it says |
-| --- | --- |
-| `state.mainPowerLost` | The main pack is gone while the flight controller is still answering — it reads as gone rather than merely low, it had read a real voltage earlier in this connection, and a BEC voltage is there beside it. It is the test `lib/audio.lua` makes for its *Main power lost* announcement, decided in one place (`Audio.mainPowerLost`) and published here; it does **not** depend on that announcement being switched on. A theme drawing it would show the voltage slot as running on the reserve and the fuel reading as unknown, because neither is being measured any more. It is refreshed on the telemetry cadence, so like every other reading it stands still on a post-flight screen whose link is gone. |
 
 **`source` is read as a literal, once, at theme load.** When a theme is loaded the widget walks
 its boxes and collects every `source` that is a string into the list the derived snapshot is
