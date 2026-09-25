@@ -121,10 +121,6 @@ local function requestData()
   })
 end
 
-function M.getModuleTitle()
-  return "FBL Sensors"
-end
-
 function M.getHeaderActions()
   return { reload = true, save = false, help = false }
 end

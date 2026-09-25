@@ -45,6 +45,16 @@ function CONDITIONS.previewInflightTuning(widget)
   return previewOn == true and type(widget.state.inflight) == "table"
 end
 
+-- The battery prompt, re-opened: only where the registry has a pack for this model, so a pilot
+-- who keeps no registry never sees a button that opens an empty list, and only while the model
+-- is disarmed, because a pack chosen in the air would be recorded against the flight in progress.
+function CONDITIONS.batteryPickHasPacks(widget)
+  if widget.state and widget.state.armed == true then return false end
+  local pick = widget.state and widget.state.batteryPick or nil
+  local candidates = (type(pick) == "table" and type(pick.candidates) == "table") and pick.candidates or nil
+  return candidates ~= nil and #candidates > 0
+end
+
 local function isEntryVisible(entry, widget)
   local conditionKey = entry.visibleWhen
   if conditionKey == nil then return true end
@@ -123,6 +133,20 @@ function M.entries(widget)
     end
   }
 
+  -- The prompt comes up on its own once per connection; this is the way back to it after it
+  -- has been answered or closed. It stays full screen, the picker taking the menu's place.
+  list[#list+1] = {
+    id = "battery_pick",
+    kind = "action",
+    title = t("widgets.dashboard.battery_pick_open", "BATTERY"),
+    visibleWhen = "batteryPickHasPacks",
+    press = function()
+        widget.batteryPickOpen = true
+        widget.built = false
+        widget.renderKey = nil
+    end
+  }
+
   list[#list+1] = {
     id = "battery_profile",
     kind = "choice",
@@ -155,6 +179,11 @@ function M.entries(widget)
                           payload = api.buildWritePayload({ batteryProfile = i }),
                           simulatorResponse = {}
                        })
+                       -- The battery prompt keeps the profile the board reported on connecting
+                       -- and skips a pick that matches it. After this write that report is
+                       -- stale, so it is dropped and the next pick writes.
+                       local batteryPick = w.state and w.state.batteryPick or nil
+                       if type(batteryPick) == "table" then batteryPick.boardProfile = nil end
                      end
                      -- 2. Save to EEPROM so the FC applies and broadcasts the change
                      local eepromApi = requireModule("tasks/msp/api/eeprom_write.lua")

@@ -13,7 +13,8 @@ to the radio. Nothing in a theme draws anything itself.
 
 This page is the contract: the folder, the manifest keys, **what puts the widget into each
 flight phase**, the shape a phase module returns, the box vocabulary, the rule for a value
-given as a function, and the per-theme settings page. What a pilot needs in order to copy and
+given as a function, the per-theme settings page, and what a theme can read of the battery
+prompt. What a pilot needs in order to copy and
 edit a theme is [user themes](../dashboard/user-themes.md); this page is the source-level
 version of the same thing, plus what a theme shipped in this repository additionally owes.
 
@@ -260,8 +261,9 @@ The value a box reads is `source`, and the names are resolved in
 off the widget state — `voltage`, `bec_voltage`, `current`, `watts`, `rpm`, `fuel`,
 `smartfuel`, `smartconsumption`, `altitude`, `governor`, `esc_temp`, `mcu_temp`,
 `throttle_percent`, `link`, `pid_profile`, `rate_profile`, `battery_profile`, `model_name`,
-`esc_load`, `link_packet_rate`, `link_floor`, `link_diversity`, `main_power_lost` — and, for
-anything else, the sensor of that name from `lib/sensors.lua`.
+`link_packet_rate`, `link_floor`, `link_diversity`, `esc_load`,
+`esc_status`, `esc_status_level`, `esc_status_live`, `esc_status_live_level` — and, for anything
+else, the sensor of that name from `lib/sensors.lua`.
 
 ### `link_packet_rate`, `link_floor`, `link_diversity`
 
@@ -385,12 +387,88 @@ holding only `{ value = 1 }` colours `0` as well. For example:
 A free-form module is handed the widget state and reads the same fact as `state.mainPowerLost`,
 a boolean. A theme drawing it would show the voltage slot as running on the reserve and the fuel
 reading as unknown, because neither is being measured any more.
+### The speed controller's health: two pairs, and which one a surface owes
+
+The speed controller's health, in words. There are four names and they are **two pairs**. In each
+pair the first is a translated **string** for a `text` box — the same shape `model_name` already
+has — and the second is a **number** for colouring it: 1 nothing wrong, 2 a warning, 3 a fault,
+and `nil` where nothing answered, which is the same reading as the string being `nil`. There is no
+level 0.
+
+| Source | Level source | What it answers |
+| --- | --- | --- |
+| `esc_status` | `esc_status_level` | the worst the controller has reported since the flight controller connected |
+| `esc_status_live` | `esc_status_live_level` | what the controller is reporting on this pass |
+
+All four come out of one decode, so a theme may declare any of them, or all of them, without
+paying for the sensors more than once.
+
+Neither is a sensor. Both are decoded from two that the flight controller publishes — `Esc#`,
+which says which telemetry protocol the controller speaks, and `EscF`, its status word — and the
+layouts are in `lib/esc_status.lua`, one table per protocol. There is no common layout, which is
+why the signature is needed to read the word at all, and why several protocols decode to *no
+status*: they fill no status word, so their zero is not a clean bill of health. Which protocols
+those are, and what the two sensors need on the flight controller before they exist on the radio,
+is in [ESC status](../reference/esc-status.md).
+
+Three properties a theme has to know:
+
+- **`esc_status` keeps the worst reading.** What that box shows is the worst the controller has
+  reported since the flight controller connected, not what it is reporting this second, and it is
+  dropped where the widget starts a new session with a flight controller. A fault the controller
+  has since cleared is still the reason a flight ended early, and a pass is slower than a fault.
+- **`esc_status_live` keeps nothing.** It follows the status word down as well as up, so a fault
+  the controller has cleared stops being shown on the next pass. A request to restart the
+  controller — which the flight controller withdraws on the very next telemetry frame, and which
+  is therefore never put on file — is part of this reading and of no other.
+- **`nil` where nothing answered**, on both pairs, which a box draws as `--`: no controller, or
+  neither sensor on this radio.
+
+**Pick by what the surface promises, and do not treat one as a cheaper version of the other.** A
+line a pilot reads as *what is wrong now* takes the live pair, or it holds an alarm the controller
+withdrew. A row a pilot reads as *what this flight has seen* takes the pair on file, or it loses
+the fault that ended the flight. A theme wanting both shows both, and pays one decode for it.
+
+The level is a separate source rather than a threshold on the text, because thresholds match a
+value and the value here is already translated. Colour a box from it with a `textcolor` function:
+
+```lua
+{
+  col = 1, row = 1, type = "text", subtype = "telemetry",
+  source = "esc_status",
+  title = "ESC",
+  textcolor = function(box, state)
+    local level = state.derived and state.derived.esc_status_level
+    if level == 3 then return RED end
+    if level == 2 then return COLOR_THEME_WARNING end
+    return WHITE
+  end
+}
+```
+
+That closure runs in the reactive sweep, so it reads `state.derived` and nothing else. **Naming
+either half of a pair declares both halves of that pair**: they are one reading, so a box that
+shows the text can colour itself from the level without declaring it separately, and the level
+costs a cache read on the pass that resolved the text rather than a second pair of sensor reads.
+**The two pairs stand alone**, so naming `esc_status_live` does not also resolve `esc_status`; a
+theme that wants both names both. A theme that names none of the four reaches none of it and reads
+neither sensor.
 
 The rest of a box is presentation and is shared across the types that can use it: `title`,
 `titlepos`, `titlealign`, `titlecolor`, `textcolor`, `bgcolor`, `font`, `unit`, `decimals`,
 `transform`, `autosize_chars`, `thresholds`. Thresholds — the dynamic colour lists and how a
 temperature limit is converted for a radio set to Fahrenheit — are described once, in
 [user themes](../dashboard/user-themes.md); they behave identically in a shipped theme.
+
+### Facts on `state` that are not a box source
+
+A free-form module is handed the widget state and may read more than the value list above. One
+of those is worth naming, because nothing else in the tree says it and a theme that works it out
+for itself will not agree with the announcement that speaks it:
+
+| Field | What it says |
+| --- | --- |
+| `state.mainPowerLost` | The main pack is gone while the flight controller is still answering — it reads as gone rather than merely low, it had read a real voltage earlier in this connection, and a BEC voltage is there beside it. It is the test `lib/audio.lua` makes for its *Main power lost* announcement, decided in one place (`Audio.mainPowerLost`) and published here; it does **not** depend on that announcement being switched on. A theme drawing it would show the voltage slot as running on the reserve and the fuel reading as unknown, because neither is being measured any more. It is refreshed on the telemetry cadence, so like every other reading it stands still on a post-flight screen whose link is gone. |
 
 **`source` is read as a literal, once, at theme load.** When a theme is loaded the widget walks
 its boxes and collects every `source` that is a string into the list the derived snapshot is
@@ -502,6 +580,47 @@ preferences.
 A radio that offers no directory enumeration reads the theme list from
 `theme_index.lua` instead of from `init.lua`, and the packager copies the declared pages into
 it, so the split is there as well.
+
+## The battery prompt
+
+With *Ask which pack after connecting* on (the [Flight Log](../pages/tools/flight_log.md) page,
+*Settings*), the widget offers the pilot's battery registry once per connection — in fullscreen,
+because a widget zone receives no touch and Lua can leave fullscreen but not enter it. The
+picker is drawn by the widget for every theme, so its way out is always there; a theme may read
+what the prompt knows, and anything on the radio may drive it.
+
+### `state.batteryPick`
+
+A table from the widget's first pass on, replaced rather than emptied on a reconnect, so a
+closure may index it without guarding. A theme reads it and never writes it.
+
+| Field | |
+| --- | --- |
+| `loaded` | the registry has been read for this connection |
+| `pending` | the prompt is on, this model has packs, and this connection the pilot has neither picked nor closed it and the model has not been armed |
+| `candidates` | the registry entries for this model: `id`, `name`, `cap`, `profile`, `cycles`, `last`, plus `targetProfile` |
+| `selectedId`, `selectedName` | the pack picked this connection, else the one stored for the model, else `nil` |
+| `boardProfile` | the battery profile the flight controller reported on connecting, 0-based; `nil` until it has answered, and again after any profile write, which is not confirmed |
+| `dismissed` | the pilot closed the picker without picking, this connection |
+| `applied` | what became of the profile write: `nil`, `"queued"`, `"skipped"` or `"refused:<why>"` |
+
+`targetProfile` is 0-based like `boardProfile`, and is `nil` where the pack names no profile and
+no board profile is set to its capacity. The BatP telemetry sensor is 1-based and is a different
+number; do not mix the two.
+
+### `rfsuite.batteryPick`
+
+Three actions for anything on the radio that is not the picker itself — a theme, or another
+widget:
+
+| | |
+| --- | --- |
+| `rfsuite.batteryPick.select(id)` | record a pick; `nil` is *no battery* |
+| `rfsuite.batteryPick.dismiss()` | close the prompt for this connection |
+| `rfsuite.batteryPick.open()` | put the picker back on screen the next time fullscreen is entered |
+
+They are bound to the dashboard widget that published them last, and they record rather than
+perform, exactly as a press does.
 
 ## Checklist for a theme shipped in this repository
 

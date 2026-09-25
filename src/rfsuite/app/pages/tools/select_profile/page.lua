@@ -175,10 +175,6 @@ local function requestInitialData()
   })
 end
 
-function M.getModuleTitle()
-  return "Select Profile"
-end
-
 function M.getHeaderActions()
   return { reload = true, save = not state.isSaving, help = true }
 end
