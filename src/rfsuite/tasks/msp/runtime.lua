@@ -63,7 +63,10 @@ local state = {
   pendingUidRead = true,
   versionReadCompleted = false,
   lastArmed = nil,
-  lastConnected = nil
+  lastConnected = nil,
+  -- The identity `session.signature` was last built from; see publish().
+  signatureApiVersion = nil,
+  signatureMcuId = nil
 }
 
 local function nowSeconds()
@@ -214,6 +217,21 @@ local function publish()
   elseif session.modelPreferences == nil then
     session.modelPreferences = state.values.modelPreferences
     session.modelPreferencesFile = state.values.modelPreferencesFile
+  end
+  -- Which board the session's values came from. Pages keep what they read for as long as this
+  -- stays the same and read again when it changes, so it names the board rather than the link:
+  -- it moves when a flight controller identifies itself with another API version or MCU id, and
+  -- stays put while none is identified, so a link that drops and comes back to the same board
+  -- does not discard edits that have not been saved yet.
+  local apiVersion = state.values.apiVersion
+  local mcuId = state.values.mcuId
+  if mcuId ~= nil and apiVersion ~= nil and apiVersion ~= "" and apiVersion ~= "0" then
+    if mcuId ~= state.signatureMcuId or apiVersion ~= state.signatureApiVersion
+      or session.signature == nil then
+      state.signatureMcuId = mcuId
+      state.signatureApiVersion = apiVersion
+      session.signature = tostring(apiVersion) .. ":" .. tostring(mcuId)
+    end
   end
   session.apiSupported = not state.unsupportedApi
   session.apiLimited = state.limitedApi == true

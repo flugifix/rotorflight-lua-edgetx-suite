@@ -219,10 +219,6 @@ local function requestData(i18n)
   end
 end
 
-function M.getModuleTitle()
-  return "FBL Status"
-end
-
 function M.getHeaderActions()
   return { reload = true, save = false, help = false }
 end

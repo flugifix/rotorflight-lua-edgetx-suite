@@ -359,10 +359,6 @@ local function ensureLoaded()
   end
 end
 
-function M.getModuleTitle()
-  return "Validate Sensors"
-end
-
 function M.getHeaderActions()
   return { reload = false, save = false, help = true }
 end
