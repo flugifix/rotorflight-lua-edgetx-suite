@@ -14,8 +14,13 @@ Put the *RFSuite* widget full screen the way EdgeTX puts any widget full screen 
 own context menu on the screen it sits on, then *Full screen*. The quick menu is what full
 screen shows; there is no other way in and no way for the widget to open it by itself.
 
-The one exception is the [in-flight tuning overlay](inflight-tuning.md): while the interlock
+One exception is the [in-flight tuning overlay](inflight-tuning.md): while the interlock
 switch has brought it up, it takes full screen instead and the quick menu is not drawn.
+
+The other is the battery prompt. With *Ask which pack after connecting* on (the
+[Flight Log](../pages/tools/flight_log.md) page, *Settings*), full screen shows the battery
+picker instead of the quick menu once per connection, until the pilot has picked a pack,
+closed it or armed the model.
 
 The menu's colours are the radio's, not the dashboard theme's. It uses the same theme colours
 EdgeTX gives every script, so it looks the same whichever dashboard theme is selected.
@@ -26,6 +31,7 @@ EdgeTX gives every script, so it looks the same whichever dashboard theme is sel
 | --- | --- |
 | **ERASE BLACKBOX** | Erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now. Closes the menu and leaves full screen. |
 | **IN-FLIGHT TUNING** | Opens the in-flight tuning surface at full size. It stays full screen rather than closing. Only listed while the feature is switched on — see below. |
+| **BATTERY** | Brings the battery prompt back, with this model's packs. It stays full screen, the picker taking the menu's place. Only listed while the battery registry has a pack for this model and the model is disarmed. |
 | **BATTERY PROFILE** | A grid of the model's battery profiles; pressing one makes it the profile in force. |
 
 **IN-FLIGHT TUNING is a preview entry.** It appears only while *System* → *Settings* →
@@ -55,8 +61,8 @@ fit is not drawn.
 ## Closing it
 
 The **X** in the header closes the menu and leaves full screen. So does every entry except
-in-flight tuning, which swaps one full-screen surface for another. EdgeTX's own way out of full
-screen — a long press on the return key — works as it does anywhere else.
+in-flight tuning and BATTERY, which swap one full-screen surface for another. EdgeTX's own way
+out of full screen — a long press on the return key — works as it does anywhere else.
 
 ## For contributors
 
@@ -90,7 +96,9 @@ Two things are worth knowing before adding an entry:
 
 ## Related
 
-- [In-flight tuning overlay](inflight-tuning.md) — the other surface full screen can show.
+- [In-flight tuning overlay](inflight-tuning.md) — another surface full screen can show.
+- [Flight Log](../pages/tools/flight_log.md) — the battery prompt, and the battery registry it
+  offers.
 - [Rotorflight documentation](https://www.rotorflight.org/docs/) — battery profiles and the
   blackbox themselves: what a profile holds, and what the flight controller records.
 
