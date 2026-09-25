@@ -1,11 +1,9 @@
 -- The battery picker the dashboard shows in fullscreen when the flight log's prompt is on and
 -- the pilot has not answered it yet for this connection.
 --
--- This is the fallback surface: a theme that wants the picker in its own palette exports
--- `batteryPick(children, widget)` and the runtime calls that instead (see
--- docs/developer/dashboard-themes.md). What is drawn here is deliberately the same layout
--- profile as fullscreen_menu.lua, so that a radio at either resolution gets rows of the size it
--- already gets from the quick menu.
+-- It is the one picker surface, drawn for every theme, so its close box is always there. What
+-- is drawn here is deliberately the same layout profile as fullscreen_menu.lua, so that a radio
+-- at either resolution gets rows of the size it already gets from the quick menu.
 --
 -- A press records a REQUEST on the widget and nothing else. The pick, the card write and the
 -- flight controller write all happen in the runtime's job pass: an LVGL press callback runs

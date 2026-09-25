@@ -13,8 +13,8 @@ to the radio. Nothing in a theme draws anything itself.
 
 This page is the contract: the folder, the manifest keys, **what puts the widget into each
 flight phase**, the shape a phase module returns, the box vocabulary, the rule for a value
-given as a function, the per-theme settings page, and the battery prompt a theme may draw for
-itself. What a pilot needs in order to copy and
+given as a function, the per-theme settings page, and what a theme can read of the battery
+prompt. What a pilot needs in order to copy and
 edit a theme is [user themes](../dashboard/user-themes.md); this page is the source-level
 version of the same thing, plus what a theme shipped in this repository additionally owes.
 
@@ -559,8 +559,9 @@ it, so the split is there as well.
 
 With *Ask which pack after connecting* on (the [Flight Log](../pages/tools/flight_log.md) page,
 *Settings*), the widget offers the pilot's battery registry once per connection — in fullscreen,
-because a widget zone receives no touch and Lua can leave fullscreen but not enter it. A theme
-may read what the prompt knows, draw the picker itself, or drive it from elsewhere.
+because a widget zone receives no touch and Lua can leave fullscreen but not enter it. The
+picker is drawn by the widget for every theme, so its way out is always there; a theme may read
+what the prompt knows, and anything on the radio may drive it.
 
 ### `state.batteryPick`
 
@@ -570,7 +571,7 @@ closure may index it without guarding. A theme reads it and never writes it.
 | Field | |
 | --- | --- |
 | `loaded` | the registry has been read for this connection |
-| `pending` | the prompt is on, this model has packs, and the pilot has neither picked nor closed it this connection |
+| `pending` | the prompt is on, this model has packs, and this connection the pilot has neither picked nor closed it and the model has not been armed |
 | `candidates` | the registry entries for this model: `id`, `name`, `cap`, `profile`, `cycles`, `last`, plus `targetProfile` |
 | `selectedId`, `selectedName` | the pack picked this connection, else the one stored for the model, else `nil` |
 | `boardProfile` | the battery profile the flight controller reported on connecting, 0-based; `nil` until it has answered, and again after any profile write, which is not confirmed |
@@ -581,52 +582,10 @@ closure may index it without guarding. A theme reads it and never writes it.
 no board profile is set to its capacity. The BatP telemetry sensor is 1-based and is a different
 number; do not mix the two.
 
-### `batteryPick(children, widget)`
-
-Optional. A phase module that exports it draws the picker in place of the generic one
-(`widgets/dashboard/battery_pick_menu.lua`), in the same way `build` draws the dashboard: append
-nodes to `children`, return nothing. It is called from a job pass of its own, so it may cost a
-build; it is not a reactive closure and must precompute its strings, since anything it hands
-`lvgl.build` as a function is.
-
-The widget object it is given carries `widget.zone` (`w`, `h`), `widget.i18n.t(key, fallback)`,
-`widget.state`, `widget.preferences` and `widget._batteryPickRequest`. `lcd.exitFullScreen()` is
-how a press leaves the picker.
-
-A press must do nothing but record a request:
-
-```lua
-function Theme.batteryPick(children, widget)
-  -- ... the background, the title, the close box ...
-  for i = 1, #widget.state.batteryPick.candidates do
-    local entry = widget.state.batteryPick.candidates[i]
-    local id = entry.id                              -- captured, not read in the callback
-    children[#children+1] = {
-      type = "button", x = bx, y = by, w = bw, h = bh, color = c,
-      press = function()
-        widget._batteryPickRequest = id              -- `false` for "no battery"
-        widget.built = false
-        widget.renderKey = nil
-        lcd.exitFullScreen()
-      end
-    }
-  end
-end
-```
-
-`_batteryPickRequest` is read by the runtime on the next pass, which records the pick and
-queues the profile write. Nothing else may be done from the callback: it runs inside the
-firmware's event dispatch, where a card write or an MSP queue turn belongs to no pass's budget.
-`nil` means *no request*, so the answer that clears the pack is `false`.
-
-The close box calls `rfsuite.batteryPick.dismiss()` and then `lcd.exitFullScreen()`. A theme
-that only sets `state.batteryPick.dismissed = true` is still honoured: the runtime takes that as
-the end of the prompt on the next fullscreen pass, so the closed picker is not drawn again.
-
 ### `rfsuite.batteryPick`
 
-The same three actions, for a caller that is not the theme's own picker — another widget, or a
-box that offers the packs on the dashboard itself:
+Three actions for anything on the radio that is not the picker itself — a theme, or another
+widget:
 
 | | |
 | --- | --- |

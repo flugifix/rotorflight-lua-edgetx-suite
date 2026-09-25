@@ -78,7 +78,9 @@ It appears **in fullscreen only**. A widget on the main screen receives no touch
 way for it to take an answer there; the prompt is what fullscreen shows instead of the quick
 settings menu. It is offered **once per connection**: after a pick, or after closing it with the
 box in its corner, fullscreen returns to the quick menu, and the menu then carries a *BATTERY*
-button that brings the picker back. Unplugging the pack and plugging in another is a new
+button that brings the picker back. Arming ends an unanswered prompt as well: fullscreen during
+the flight and after it shows what it would without the prompt, and *BATTERY* still brings the
+picker back. Unplugging the pack and plugging in another is a new
 connection, so the question is asked again. The quick menu itself is described on
 [its own page](../../dashboard/quick-menu.md).
 

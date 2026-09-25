@@ -830,8 +830,11 @@ local function batteryPickLoadStep(self)
   local entry = batteryPickEntry(pick, id)
   pick.selectedName = entry and entry.name or nil
 
+  -- Not raised while armed: a model armed before this step ran has already passed the arm edge
+  -- that ends the prompt, and would otherwise be asked in flight.
   local ask = BatteryPick.settings(self.preferences)
   pick.pending = (ask == true) and (#list > 0) and (pick.dismissed ~= true) and (self._batteryPickPicked ~= true)
+    and (self.state.armed ~= true)
 
   -- The reply writes into THIS table rather than into whatever `state.batteryPick` is by the
   -- time it arrives: a reply that outlives its connection then lands in a table nothing reads,
@@ -847,15 +850,16 @@ end
 local function batteryPickApplyStep(self)
   local request = self._batteryPickRequest
   self._batteryPickRequest = nil
-  if request == nil then return true end
   -- `false` is the "no battery" answer; nil would be indistinguishable from no request at all.
-  -- An empty string is taken the same way, because that is how the flight log page stores
-  -- "none" in the model's preference file, and a theme may hand that form on.
-  local id = (request ~= false and request ~= "") and request or nil
+  if request == nil then return true end
 
   local pick = self.state.batteryPick
   local BatteryPick = requireModule("lib/battery_pick.lua")
   if type(BatteryPick) ~= "table" then return true end
+  -- Normalised here, before the candidate lookup below, and not only inside select(): an id
+  -- handed in as a number would otherwise be recorded and still match no candidate, so the
+  -- pack's profile would never be written. `false` and "" both come back as nil.
+  local id = BatteryPick.normalizeId(request)
 
   local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
   BatteryPick.select(session, id)
@@ -897,17 +901,14 @@ local function batteryPickApplyStep(self)
   return true
 end
 
---- Draw the picker: the theme's own surface when it has one, the generic one otherwise.
+--- Draw the picker. It is the widget's own surface for every theme, so its way out is always
+--- drawn; a theme reads `state.batteryPick` and may drive the prompt through
+--- rfsuite.batteryPick, but draws no part of it.
 local function batteryPickJobStep(self)
+  local menu = requireModule("widgets/dashboard/battery_pick_menu.lua")
+  if not (menu and type(menu.build) == "function") then return true end
   local children = {}
-  local theme = self.theme
-  if theme and type(theme.batteryPick) == "function" then
-    theme.batteryPick(children, self)
-  else
-    local menu = requireModule("widgets/dashboard/battery_pick_menu.lua")
-    if not (menu and type(menu.build) == "function") then return true end
-    menu.build(children, self)
-  end
+  menu.build(children, self)
   lvgl.clear()
   lvgl.build(children)
   self.built = true
@@ -1584,6 +1585,11 @@ local function updateDerivedFlightState(state)
   if isArmed and not wasArmed then
     state.lastFlightEndingVoltage = nil
     state.hadArmedFlight = true
+    -- An unanswered battery prompt ends with the arming: the pack is on the craft by then, and
+    -- fullscreen during the flight and after it shows what it would show without the prompt.
+    -- BATTERY in the quick menu still brings the picker back.
+    local pick = state.batteryPick
+    if pick then pick.pending = false end
   elseif wasArmed and not isArmed then
     state.lastDisarmAt = nowSeconds()
     state.hadArmedFlight = true
@@ -2995,14 +3001,7 @@ function Runtime.new(zone, options)
       -- surface a widget has that can be pressed: a widget zone gets no touch, and Lua can
       -- leave fullscreen but not enter it. "On connect" therefore means "what fullscreen shows
       -- once the connect chain has run", until the pilot answers or closes it.
-      local pick = self.state.batteryPick
-      -- A theme's own picker may close by setting `dismissed` alone rather than through
-      -- rfsuite.batteryPick.dismiss(); that answer is honoured here, on the one pass that
-      -- can be about the picker, so a closed prompt is never drawn a second time.
-      if pick.dismissed == true and pick.pending == true then
-        pick.pending = false
-      end
-      if pick.pending == true or self.batteryPickOpen == true then
+      if self.state.batteryPick.pending == true or self.batteryPickOpen == true then
         nextRenderKey = "battery_pick"
       else
         nextRenderKey = "fullscreen_menu"
@@ -3072,8 +3071,8 @@ function Runtime.new(zone, options)
     return 0
   end
 
-  -- The battery prompt's handle for anything that is not this widget: a theme drawing its own
-  -- picker, another widget, the tool. It records a REQUEST exactly as a press in the picker
+  -- The battery prompt's handle for anything that is not this widget: a theme, another widget,
+  -- the tool. It records a REQUEST exactly as a press in the picker
   -- does and performs nothing itself, so a caller cannot put a card write or a queue turn into
   -- a frame that has no budget for it.
   --

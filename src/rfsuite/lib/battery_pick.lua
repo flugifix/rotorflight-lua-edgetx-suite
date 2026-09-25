@@ -99,6 +99,19 @@ function M.selectedId(session)
   return FlightLog.storedBatteryId((type(session) == "table") and session.modelPreferences or nil)
 end
 
+--- A pack id in the one form the registry and the model store use: a non-empty string, or nil.
+--
+-- `false` and "" are the "no battery" answer ("" is how the model store keeps "none"), and a
+-- number is spelled the way the registry would spell it, so `1` and "1" are the same pack.
+function M.normalizeId(id)
+  if type(id) == "number" then
+    if id % 1 == 0 then return tostring(math.floor(id)) end
+    return tostring(id)
+  end
+  if type(id) ~= "string" or id == "" then return nil end
+  return id
+end
+
 --- Record the pick, in both places that read it.
 --
 -- The session is where the arm edge looks, and the model's store is what survives the
@@ -107,6 +120,7 @@ end
 --
 -- `id` nil clears the choice, which is the "no battery" answer rather than a failure.
 function M.select(session, id)
+  id = M.normalizeId(id)
   if type(session) ~= "table" then
     log("select refused: no session", "warn")
     return false
