@@ -21,8 +21,17 @@ local function loadModule(path)
   return mod
 end
 
+-- The logger and the MSP runtime are one instance per Lua state. The runner drops this module when
+-- its task completes and loads it again the next time the event fires, so a bare loadScript here
+-- would read and compile those files again every time; lib/require.lua hands back the loaded one.
+local function loadShared(path)
+  local req = _G.rfsuite and _G.rfsuite.require
+  if type(req) == "function" then return req(path) end
+  return loadModule(path)
+end
+
 local function logLine(message, level)
-  local Log = loadModule("lib/log.lua")
+  local Log = loadShared("lib/log.lua")
   if type(Log) == "table" and type(Log.emit) == "function" then
     pcall(Log.emit, "rfsuite.tasks.flight_log", message, level or "info")
   end
