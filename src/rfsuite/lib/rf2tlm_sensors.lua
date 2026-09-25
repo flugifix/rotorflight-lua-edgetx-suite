@@ -1,5 +1,5 @@
 -- Map of CRSF Custom Telemetry IDs to sensor definitions
-local requestedSensorsById = ...
+local requestedSensorsById, due = ...
 
 local function decNil(data, pos)
     return nil, pos
@@ -46,9 +46,18 @@ local function decCellV(data, pos)
     return val > 0 and val + 200 or 0, ptr
 end
 
+-- The decoders below yield several sensors and publish them themselves. `due` is the loader's
+-- publish throttle, handed over once as the chunk's second argument rather than to every decoder
+-- call, so the single-value decoders are called exactly as before. It is asked with the bytes the
+-- group was decoded from, and a group it declines is not published at all. Without it -- sensor
+-- registration, or a loader that passes none -- every call is made, as before.
 local function decCells(data, pos)
     local cnt,val,vol
+    local first = pos
     cnt,pos = decU8(data,pos)
+    if due and not due(0x102F, data, first, pos + cnt) then
+        return nil, pos + cnt
+    end
     setTelemetryValue(0x1020, 0, 0, cnt, UNIT_RAW, 0, "Cel#")
     for i = 1, cnt
     do
@@ -64,8 +73,10 @@ local function decLatLong(data, pos)
     local UNIT_GPS_LONGITUDE = 43
     local UNIT_GPS_LATITUDE = 44
     local lat,lon
+    local first = pos
     lat,pos = decS32(data,pos)
     lon,pos = decS32(data,pos)
+    if due and not due(0x1125, data, first, pos) then return nil, pos end
     setTelemetryValue(0x1125, 0, 0, 0, UNIT_GPS, 0, "GPS")
     setTelemetryValue(0x1125, 0, 0, lat/10, UNIT_GPS_LATITUDE)
     setTelemetryValue(0x1125, 0, 0, lon/10, UNIT_GPS_LONGITUDE)
@@ -74,8 +85,10 @@ end
 
 local function decAdjFunc(data, pos)
     local fun,val
+    local first = pos
     fun,pos = decU16(data,pos)
     val,pos = decS32(data,pos)
+    if due and not due(0x1220, data, first, pos) then return nil, pos end
     setTelemetryValue(0x1221, 0, 0, fun, UNIT_RAW, 0, "AdjF")
     setTelemetryValue(0x1222, 0, 0, val, UNIT_RAW, 0, "AdjV")
     return nil, pos
@@ -83,10 +96,12 @@ end
 
 local function decControl(data, pos)
     local roll, pitch, yaw, coll
+    local first = pos
     roll,pos = decS16(data,pos)
     pitch,pos = decS16(data,pos)
     yaw,pos = decS16(data,pos)
     coll,pos = decS16(data,pos)
+    if due and not due(0x1030, data, first, pos) then return nil, pos end
     setTelemetryValue(0x1030, 0, 0, 0, UNIT_RAW, 0, "Ctrl")
     setTelemetryValue(0x1031, 0, 0, pitch, UNIT_DEGREE, 1, "CPtc")
     setTelemetryValue(0x1032, 0, 0, roll, UNIT_DEGREE, 1, "CRol")
@@ -97,9 +112,11 @@ end
 
 local function decAttitude(data, pos)
     local pitch, roll, yaw
+    local first = pos
     pitch,pos = decS16(data,pos)
     roll,pos = decS16(data,pos)
     yaw,pos = decS16(data,pos)
+    if due and not due(0x1100, data, first, pos) then return nil, pos end
     setTelemetryValue(0x1100, 0, 0, 0, UNIT_DEGREE, 1, "Attd")
     setTelemetryValue(0x1101, 0, 0, pitch, UNIT_DEGREE, 0, "Ptch")
     setTelemetryValue(0x1102, 0, 0, roll, UNIT_DEGREE, 0, "Roll")
@@ -109,9 +126,11 @@ end
 
 local function decAccel(data, pos)
     local x, y, z
+    local first = pos
     x,pos = decS16(data,pos)
     y,pos = decS16(data,pos)
     z,pos = decS16(data,pos)
+    if due and not due(0x1110, data, first, pos) then return nil, pos end
     setTelemetryValue(0x1110, 0, 0, 0, UNIT_G, 2, "Accl")
     setTelemetryValue(0x1111, 0, 0, x, UNIT_G, 1, "AccX")
     setTelemetryValue(0x1112, 0, 0, y, UNIT_G, 1, "AccY")

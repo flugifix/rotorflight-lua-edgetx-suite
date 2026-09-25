@@ -368,16 +368,6 @@ local function appendDualFieldRow(children, x, y, w, rowLabel, label1, key1, spe
   return rowH + 1
 end
 
-function M.onLoad()
-  ensureDeps()
-  ensureLoaded()
-end
-
-function M.onActivate()
-  ensureDeps()
-  ensureLoaded()
-end
-
 function M.wakeup(ctx)
   ensureDeps()
   ensureLoaded()

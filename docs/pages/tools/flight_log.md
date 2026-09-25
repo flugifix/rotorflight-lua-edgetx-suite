@@ -37,6 +37,8 @@ written.
 | --- | --- |
 | Write a flight log | Off by default. While it is off nothing is written, and this page stays empty. |
 | Minimum flight length | An arm shorter than this is a spool-up check rather than a flight, and is not logged. 30 s by default; 0 logs every arm. |
+| Ask which pack after connecting | Off by default. The dashboard widget offers this model's packs once per connection, in fullscreen. See *The prompt on connect* below. |
+| Set the pack's battery profile | Off by default. A pick in the dashboard's prompt also moves the flight controller onto that pack's battery profile. *Battery for the next flight* on this page records the pack and leaves the profile alone. Never writes while the model is armed. |
 
 ## Batteries
 
@@ -65,6 +67,49 @@ and *Delete*. Deleting asks first.
 Renaming a pack's id, or deleting it, takes the *battery for the next flight* with it: the choice
 follows the new id, or goes back to *None*.
 
+## The prompt on connect
+
+With *Ask which pack after connecting* on, the dashboard widget asks which pack is on the craft
+once the connect sequence has finished. The packs offered are this model's entries in the
+registry under *Batteries* — an entry with no model list is offered for every craft — and the
+answer is recorded exactly as *Battery for the next flight* records it.
+
+It appears **in fullscreen only**. A widget on the main screen receives no touch, so there is no
+way for it to take an answer there; the prompt is what fullscreen shows instead of the quick
+settings menu. It is offered **once per connection**: after a pick, or after closing it with the
+box in its corner, fullscreen returns to the quick menu, and the menu then carries a *BATTERY*
+button that brings the picker back. Arming ends an unanswered prompt as well: fullscreen during
+the flight and after it shows what it would without the prompt, and *BATTERY* brings the picker
+back once the model is disarmed. No pack is recorded from the picker while the model is armed:
+*BATTERY* is not listed then, and a pick that still arrives is refused and logged. Unplugging the
+pack and plugging in another is a new
+connection, so the question is asked again. The quick menu itself is described on
+[its own page](../../dashboard/quick-menu.md).
+
+*NO BATTERY* is an answer like any other. It clears the choice, and the flight's line is written
+with its battery column empty. It always has the bottom row of the picker to itself; where this
+model has more packs than fit above it, the rest are not offered there. This page can still
+record one of them under *Battery for the next flight*, but a pick made there does not switch
+the flight controller's battery profile.
+
+### The battery profile
+
+With *Set the pack's battery profile* on as well, a pick in the prompt also tells the flight
+controller which of its six battery profiles this pack belongs to. Which one that is comes from
+the registry entry and from nowhere else:
+
+1. `profile=1` … `profile=6` on the entry — the pilot saying it outright — is used as it stands.
+2. Otherwise the entry's `cap=` is matched against the capacities the flight controller publishes
+   for its own six profiles, and an **exact** match selects that profile.
+3. Where the entry names no profile and no board profile is set to its capacity, **nothing is
+   written**. A guessed profile would move the next flight's low-voltage cut.
+
+The write is `MSP_SET_BATTERY_PROFILE` followed by the EEPROM write that makes the board apply
+and broadcast the change — the same pair the dashboard's *BATTERY PROFILE* buttons send. It is
+**refused while the model is armed**, and it is skipped when the board reported that profile on
+connecting and no profile has been written since — by a pick or by the *BATTERY PROFILE*
+buttons. The log says which of those happened, under the tag `rfsuite.battery_pick`.
+
 ## What a line holds
 
 The first five fields are always there: the date and time the craft armed, the model name, the pack
@@ -81,12 +126,25 @@ some of them or none.
 | `curr_min`, `curr_max` | Lowest and highest current |
 | `tesc_min`, `tesc_max` | Lowest and highest ESC temperature |
 | `vbec_min`, `vbec_max` | Lowest and highest BEC voltage |
-| `hs1_min` … `hs3_max` | Headspeed per PID profile — not recorded yet, always empty |
-| `sags`, `sag_min` | Voltage-sag events — not recorded yet, always empty |
+| `hs1_min` … `hs3_max` | Lowest and highest headspeed on PID profiles 1, 2 and 3 |
+| `sags`, `sag_min` | How many times the pack sagged to the flight controller's minimum cell voltage, and the deepest per-cell voltage it reached |
 
 Per-cell voltage needs a cell count, which comes from the flight controller's battery
 configuration. On a model where that has not been read, the two per-cell columns stay empty rather
 than being divided by a guess.
+
+A sag is a dip to or below the flight controller's own *Min cell voltage*, counted once per dip:
+the pack has to come back 0.05 V a cell above the line before the next one counts. A reading at or
+below 1 V is the main power gone rather than a sag and is not counted. `sags` is `0` where the
+pack was watched and nothing happened, and empty where it could not be watched at all — no cell
+count, or no minimum cell voltage from the board. The statistics are sampled every 0.5 s, so a dip
+shorter than that can fall between two samples.
+
+The headspeed columns are taken only while the rotor is under power, so they are the band the
+governor held rather than the band the spool-up passed through; a profile the flight was never
+flown on leaves its pair empty. A flight controller with more than 256 kB of flash has six PID
+profiles and this file has columns for three — a flight on profile 4, 5 or 6 leaves all three
+pairs empty.
 
 A flight that produced no statistics at all — telemetry gone for the whole armed window — is
 written as the five-field line it has always been, rather than as a line of empty columns.

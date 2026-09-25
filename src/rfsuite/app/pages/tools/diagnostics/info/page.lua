@@ -573,10 +573,6 @@ local function pollPacketRateLive()
   })
 end
 
-function M.getModuleTitle()
-  return "Info"
-end
-
 function M.getHeaderActions()
   return { reload = true, save = false, help = true }
 end

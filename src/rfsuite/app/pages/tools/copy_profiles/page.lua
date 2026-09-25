@@ -82,10 +82,6 @@ local function reportRefusal(ctx, message)
   })
 end
 
-function M.getModuleTitle()
-  return "Copy Profile"
-end
-
 -- SAVE is offered only while the two lists name different profiles. A copy of a profile onto
 -- itself has nothing to do, so the button is greyed out rather than asked about and then refused;
 -- the header reads this when the page is built, and the two combos below rebuild it when the

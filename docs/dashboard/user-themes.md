@@ -14,15 +14,20 @@ Both folders are listed, so a theme in the user folder is an additional choice i
 
 A theme is a folder containing an `init.lua` manifest and one module per flight phase:
 
-- `init.lua`: the theme's name, the file name of each of the three phase modules, and optionally the configuration page (`configure.lua`). Those are the only keys that are read.
-- `preflight.lua`: layout and boxes shown on the ground — before arming, and while an armed model has not spooled up yet.
+- `init.lua`: the theme's name, the file name of each of the three phase modules and of the two optional ones below, and optionally the configuration page (`configure.lua`). Those are the only keys that are read.
+- `preflight.lua`: layout and boxes shown on the ground, before arming.
 - `inflight.lua`: layout and boxes shown once the model is flying.
 - `postflight.lua`: summary boxes shown after a flight, from the disarm onwards.
+
+Two further modules are optional, and a theme that does not carry them loses nothing:
+
+- `armed.lua`: shown from the arm until the model spools up. Without it that phase shows `preflight.lua`.
+- `offline.lua`: shown after a flight once the flight controller has stopped answering — an unplugged battery, or the model out of range. Without it that phase shows `postflight.lua`.
 - `icon.png`: the picture the theme selector draws for the theme. A theme without one is still selectable and shows an empty tile.
 
 Each phase module returns a table with `layout` options (margins, grid dimensions) and a list of `boxes`.
 
-Which of the three modules is on screen is not a setting: the widget computes the phase from the flight controller's own telemetry, and arming alone does not leave preflight. [Adding a dashboard theme](../developer/dashboard-themes.md) gives the manifest keys, the exact phase triggers and the full box vocabulary.
+Which module is on screen is not a setting: the widget computes the phase from the flight controller's own telemetry, and arming alone does not put the model in flight. [Adding a dashboard theme](../developer/dashboard-themes.md) gives the manifest keys, the exact phase triggers and the full box vocabulary.
 
 ## Box types and text styling
 
@@ -113,6 +118,8 @@ For governor status boxes (`type = "text"`, `source = "governor"`), thresholds c
 ```
 
 Values match either translated labels or internal state names, ensuring custom color schemes function across all radio languages.
+
+In governor modes OFF and LIMIT the flight controller keeps no governor state, so while the model is armed the box shows the mode instead, and its internal names are `MODE_OFF` and `MODE_LIMIT`. A threshold on a state name such as `OFF` does not match there.
 
 ## Notes
 

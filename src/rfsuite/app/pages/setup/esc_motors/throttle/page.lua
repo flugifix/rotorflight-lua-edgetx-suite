@@ -211,6 +211,12 @@ end
 
 local function ensureLoaded()
   if ui.loaded then return end
+  -- A save whose overlay was dismissed finished without a screen. Its outcome was held back
+  -- rather than raised over whatever page the user went to; claim it now that this one is open.
+  if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
+  if SavePipeline and type(SavePipeline.takeResult) == "function" then
+    SavePipeline.takeResult("setup_esc_motors_throttle")
+  end
 
   if not ui.runtime then
     ui.runtime = {
@@ -239,27 +245,11 @@ local function ensureLoaded()
   queueThrottleRead(false)
 end
 
-function M.onLoad()
-  ensureDeps()
-  ensureLoaded()
-end
-
-function M.onActivate()
-  ensureDeps()
-  ensureLoaded()
-  -- A save whose overlay was dismissed finished without a screen. Its outcome was held
-  -- back rather than raised over whatever page the user went to; claim it now.
-  if SavePipeline and type(SavePipeline.takeResult) == "function" then
-    SavePipeline.takeResult("setup_esc_motors_throttle")
-  end
-end
-
 function M.wakeup(ctx)
   ensureDeps()
   ensureLoaded()
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
-  ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
 
   local signature = buildSessionSignature()
   if signature ~= ui.runtime.lastSessionSignature then
@@ -350,7 +340,6 @@ function M.build(ctx)
   ensureLoaded()
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
-  ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
 
   local children = ctx.children
   local x = ctx.x

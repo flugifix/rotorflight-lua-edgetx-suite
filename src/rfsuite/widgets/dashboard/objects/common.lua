@@ -9,6 +9,10 @@ local i18nContext = nil
 local i18nLocale = nil
 local resolvedLocale = nil
 local sensorsModule = nil
+local linkRatesModule = nil
+local crsfModule = nil
+local escStatusModule = nil
+local escStatusModuleMissing = false
 local localeModule = nil
 local titleCache = {}
 
@@ -205,6 +209,273 @@ function Utils.toNumber(value, fallback)
   return fallback
 end
 
+-- A core module, through the loader if there is one and off the card if there is not. Lifted
+-- out of mapTelemetrySource unchanged, because the link sources below need the sensor module
+-- on a pass that never reaches the sensor fall-through at the end of it.
+local function loadCoreModule(path)
+  if _G.rfsuite and type(_G.rfsuite.require) == "function" then
+    local mod = _G.rfsuite.require(path)
+    if mod and type(mod) == "table" then return mod end
+  end
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, mode)
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then return mod end
+  end
+  return nil
+end
+
+local function getSensorsModule()
+  if not sensorsModule then sensorsModule = loadCoreModule("lib/sensors.lua") end
+  return sensorsModule
+end
+
+local function getLinkRatesModule()
+  if not linkRatesModule then linkRatesModule = loadCoreModule("lib/link_rates.lua") end
+  return linkRatesModule
+end
+
+-- One sensor read per widget pass, shared by the link sources that want the same field.
+--
+-- `getTime` is the radio's 10 ms tick and a pass that spans no tick boundary reads the same
+-- value twice, which is the test lib/sensors.lua and widgets/dashboard/runtime.lua already
+-- throttle their own per-pass work with. Where the clock is not there the memo never hits, so
+-- each source reads for itself -- more instructions, the same answer.
+--
+-- Nothing here runs for a theme that declares none of these sources: they are resolved from
+-- the derived snapshot's own list, so an absent name costs the comparisons below and no more.
+local function passTick()
+  if type(getTime) ~= "function" then return nil end
+  local ok, ticks = pcall(getTime)
+  if ok and type(ticks) == "number" then return ticks end
+  return nil
+end
+
+--- The `RFMD` reading this pass, memoised on the state.
+local function linkRfMode(state)
+  if type(state) ~= "table" then return nil end
+  local tick = passTick()
+  if tick ~= nil and state.linkRfModeTick == tick then return state.linkRfMode end
+  local sensors = getSensorsModule()
+  local mode = nil
+  if sensors and type(sensors.getValue) == "function" then
+    local value = sensors.getValue("RFMD")
+    if type(value) == "number" then mode = value end
+  end
+  state.linkRfModeTick = tick
+  state.linkRfMode = mode
+  return mode
+end
+
+local function getCrsfModule()
+  if not crsfModule then crsfModule = loadCoreModule("lib/crsf.lua") end
+  return crsfModule
+end
+
+--- The ExpressLRS generation of the transmitter module -- 3, 4, or 0 for anything else -- or
+--- nil while it is not known.
+---
+--- The `RFMD` byte means different rates on ExpressLRS 3.x and 4.x and does not say which, so
+--- the module is asked: one device ping, and the device-information frame it answers with names
+--- the release (lib/link_rates.lua). Only a theme that declares one of the two rate sources ever
+--- gets here, and only once the link is up and `RFMD` has a reading, so a theme without them, a
+--- link that is down and a link that carries no link statistics send nothing.
+---
+--- lib/crsf.lua is the one frame multiplexer of this Lua state: asking it for 0x29 before the
+--- ping is what makes it keep the answer when another consumer drains the queue first, and it
+--- keeps every other consumer's frames while this one drains.
+local function linkGeneration(state, rates)
+  if state.linkGeneration ~= nil then return state.linkGeneration end
+  local crsf = getCrsfModule()
+  if not (crsf and type(crsf.popFrame) == "function") then return nil end
+  while true do
+    local data = crsf.popFrame(rates.FRAME_DEVICE_INFO)
+    if data == nil then break end
+    local generation = rates.generationFromDeviceInfo(data)
+    if generation ~= nil then
+      state.linkGeneration = generation
+      return generation
+    end
+  end
+  local push = _G.crossfireTelemetryPush
+  if state.linkPingSent or type(push) ~= "function" then return nil end
+  local ok, queued = pcall(push, rates.FRAME_DEVICE_PING, rates.PING_PAYLOAD)
+  if not ok then return nil end
+  -- Nil is EdgeTX saying no module runs the CRSF protocol, so nothing will answer and nothing
+  -- ExpressLRS is there. False is a full output buffer, which the next pass tries again.
+  if queued == nil then
+    state.linkGeneration = 0
+    return 0
+  end
+  if queued == true then state.linkPingSent = true end
+  return nil
+end
+
+--- What the link is running, as a row of lib/link_rates.lua, or nil.
+---
+--- Nil while the link is down, too: EdgeTX answers `getValue` with 0 for every telemetry source
+--- while telemetry is not streaming, and 0 is an air rate in both tables.
+local function packetRateRow(state)
+  if type(state) ~= "table" or state.rfConnected ~= true then return nil end
+  local rates = getLinkRatesModule()
+  if not (rates and type(rates.forMode) == "function") then return nil end
+  local mode = linkRfMode(state)
+  if mode == nil then return nil end
+  local generation = linkGeneration(state, rates)
+  if generation == nil then return nil end
+  return rates.forMode(mode, generation)
+end
+
+--- 1 once the readings have proved a second antenna, 0 while they have not, nil until the
+--- receiver has reported the fields at all.
+---
+--- Latched for the session and never lowered: a switched-diversity receiver spends most of its
+--- packets on one antenna, so a pass that sees only the first one is not evidence against the
+--- second. The runtime clears it where it starts a new flight-controller session, which is the
+--- point at which the receiver may be a different one.
+local function linkDiversity(state)
+  if type(state) ~= "table" then return nil end
+  if state.linkDiversity == 1 then return 1 end
+  local tick = passTick()
+  if tick ~= nil and state.linkDiversityTick == tick then return state.linkDiversity end
+  state.linkDiversityTick = tick
+  local sensors = getSensorsModule()
+  local rates = getLinkRatesModule()
+  if not (sensors and type(sensors.getValue) == "function") then return state.linkDiversity end
+  if not (rates and type(rates.latchDiversity) == "function") then return state.linkDiversity end
+  -- `ANT` is in every link-statistics frame, so it answering is what says the receiver reports
+  -- these fields at all. The rule that turns the pair into the flag is lib/link_rates.lua's,
+  -- where it can be checked without a radio.
+  state.linkDiversity = rates.latchDiversity(state.linkDiversity, sensors.getValue("2RSS"), sensors.getValue("ANT"))
+  return state.linkDiversity
+end
+
+-- A string a library produced carries its translation as a build marker, because a library has
+-- no route to the locale bundle. Packaging rewrites the marker, so on a radio this is one search
+-- that finds nothing; an unpackaged tree still gets the wording from the widget's own context.
+local function resolveBuildMarker(state, raw)
+  if type(raw) ~= "string" then return raw end
+  if not string.find(raw, "@i18n(", 1, true) then return raw end
+  local i18n = state and state.i18n
+  if i18n and type(i18n.resolve) == "function" then
+    local ok, resolved = pcall(i18n.resolve, raw)
+    if ok and type(resolved) == "string" and resolved ~= "" then return resolved end
+  end
+  return raw
+end
+
+-- The speed controller's health: the one box source that is two sensors rather than one.
+-- lib/esc_status.lua holds the per-protocol layouts; what is here is when to read them, when to
+-- decode again, and how long a fault is remembered. Three things it has to get right, and each
+-- of them costs something if it does not:
+--
+--   * one decode answers four sources. `esc_status`/`esc_status_level` are the worst reading on
+--     file, `esc_status_live`/`esc_status_live_level` what the controller is saying on this pass;
+--     each name is a text and a severity, and all four come out of the same snapshot build, so
+--     the pair of sensor reads is keyed on the radio's own tick and every source after the first
+--     pays a comparison.
+--   * the layout is read again only when a byte moved. The status word is identical on almost
+--     every pass of a healthy flight, and walking a 24-bit layout for an answer that cannot have
+--     changed is exactly the cost that stays invisible until a theme declares the source.
+--   * the worst the controller has reported since the flight controller answered is kept. A
+--     fault the controller has since cleared is still the reason a flight ended early, and a
+--     pass is slower than a fault. The latch is dropped where the runtime starts a new session
+--     with a flight controller (widgets/dashboard/runtime.lua clears `state.escStatusCache`).
+--
+-- Both readings exist because they answer different questions and neither substitutes for the
+-- other: a status line is read as "what is wrong now" and would lie if it held a fault the
+-- controller has cleared, while a value row is read as "what has this flight seen" and would
+-- lose the fault that ended it. A surface picks the one its own wording promises.
+local function resolveEscStatus(state, sensors)
+  if type(state) ~= "table" then return nil end
+  if type(sensors) ~= "table" or type(sensors.getValue) ~= "function" then return nil end
+
+  if escStatusModule == nil and not escStatusModuleMissing then
+    if _G.rfsuite and type(_G.rfsuite.require) == "function" then
+      local mod = _G.rfsuite.require("lib/esc_status.lua")
+      if type(mod) == "table" then escStatusModule = mod end
+    end
+    if escStatusModule == nil then
+      local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+      local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/esc_status.lua", mode)
+      if chunk then
+        local ok, mod = pcall(chunk)
+        if ok and type(mod) == "table" then escStatusModule = mod end
+      end
+    end
+    if escStatusModule == nil then escStatusModuleMissing = true end
+  end
+  if escStatusModule == nil or type(escStatusModule.decode) ~= "function" then return nil end
+
+  local cache = state.escStatusCache
+  if cache == nil then
+    cache = {}
+    state.escStatusCache = cache
+  end
+
+  local tick = (type(getTime) == "function") and getTime() or nil
+  if tick ~= nil and cache.sampled and cache.tick == tick then
+    return cache.verdict
+  end
+  cache.tick = tick
+  cache.sampled = true
+
+  local signature = sensors.getValue("Esc#")
+  local word = sensors.getValue("EscF")
+  if cache.decoded and signature == cache.signature and word == cache.word then
+    return cache.verdict
+  end
+  cache.decoded = true
+  cache.signature = signature
+  cache.word = word
+
+  local ok, decoded = pcall(escStatusModule.decode, signature, word)
+  if not ok then decoded = nil end
+
+  if decoded == nil then
+    -- Nothing answered for the speed controller, or neither sensor is on this radio. A box draws
+    -- `--` for it; the latch is kept rather than cleared, so a link that drops and comes back
+    -- does not lose what it had already seen.
+    cache.verdict = nil
+    return nil
+  end
+
+  -- What the controller says on this pass, taken before the latch is consulted. A request to
+  -- restart the controller belongs here: it is withdrawn by the next telemetry frame, which is
+  -- exactly what an unlatched reading is for, and a surface that shows it while it stands is
+  -- showing the truth about this second.
+  local liveText, liveLevel = decoded.text, decoded.level
+
+  local text, level = decoded.text, decoded.level
+  if decoded.transient then
+    -- Withdrawn by the next telemetry frame, so it is never written into the latch -- and it
+    -- gives way to a fault already on file, which is the worse news of the two.
+    if cache.latchLevel ~= nil and cache.latchLevel > level then
+      text, level = cache.latchText, cache.latchLevel
+    end
+  elseif decoded.word == nil then
+    -- No status word behind the reading: the model byte has arrived and the word has not, or
+    -- has stopped arriving, or the signature is not one we can read a word against. That says
+    -- nothing about the controller's health, so it is never written into the latch either --
+    -- written there at the same severity as OK, the first healthy word could never replace it.
+    -- A record already on file stands; without one, the reading is shown as it is.
+    if cache.latchLevel ~= nil then
+      text, level = cache.latchText, cache.latchLevel
+    end
+  elseif cache.latchLevel == nil or level > cache.latchLevel then
+    cache.latchText, cache.latchLevel = text, level
+  else
+    text, level = cache.latchText, cache.latchLevel
+  end
+
+  cache.verdict = {
+    text = resolveBuildMarker(state, text), level = level,
+    liveText = resolveBuildMarker(state, liveText), liveLevel = liveLevel,
+  }
+  return cache.verdict
+end
+
 function Utils.mapTelemetrySource(source, state)
   if type(source) ~= "string" then return nil end
 
@@ -243,29 +514,54 @@ function Utils.mapTelemetrySource(source, state)
   if source == "altitude" then return state and state.altitude end
   if source == "smartfuel" then return state and state.fuel end
   if source == "smartconsumption" then return state and state.consumedMah end
+  -- Derived rather than measured: the current as a percentage of the speed controller's own
+  -- current limit. Nil where no limit is on file for the model, which a box draws as `--`.
+  if source == "esc_load" then return state and state.escLoad end
 
-  -- Load sensors module lazily
-  if not sensorsModule then
-    if _G.rfsuite and type(_G.rfsuite.require) == "function" then
-      local mod = _G.rfsuite.require("lib/sensors.lua")
-      if mod and type(mod) == "table" then
-        sensorsModule = mod
-      end
-    end
-    if not sensorsModule then
-      local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
-      local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/sensors.lua", mode)
-      if chunk then
-        local ok, mod = pcall(chunk)
-        if ok and type(mod) == "table" then
-          sensorsModule = mod
-        end
-      end
-    end
+  -- The link's own three, derived from the CRSF link-statistics frame rather than read as a
+  -- value. They sit at the end of this chain on purpose: the comparisons are paid by the
+  -- sources that fall through to a sensor, and by none of the ones above.
+  --
+  -- The air rate the link runs at, as the name ExpressLRS gives it. Nil while the link is down,
+  -- while the transmitter module has not yet said which ExpressLRS generation it runs, where it
+  -- is not ExpressLRS 3.x or 4.x, and where the byte is one that generation leaves unused.
+  --
+  -- "packet rate" and not "link rate": `session.crsfTelemetryConfig.linkRate` is already the
+  -- flight controller's telemetry link rate in hertz, off MSP telemetry_config, and
+  -- app/pages/tools/diagnostics/elrs_link reads the air rate under the name `packetRate`. This
+  -- is the same quantity as that one, off the link-statistics frame rather than off the module's
+  -- parameter list, so it takes the same word.
+  if source == "link_packet_rate" then
+    local row = packetRateRow(state)
+    return row and row.rate
+  end
+  -- The receiver sensitivity that rate is specified down to, in dBm and negative. Nil wherever
+  -- the rate is, and also for a rate whose figure is not a function of the byte -- configured by
+  -- no radio target, or on 3.x given a different figure per band -- so a box can draw a rate
+  -- whose floor is unknown.
+  if source == "link_floor" then
+    local row = packetRateRow(state)
+    return row and row.floor
+  end
+  if source == "link_diversity" then return linkDiversity(state) end
+
+  local sensors = getSensorsModule()
+
+  -- Derived, and from two sensors rather than one, so it is resolved here where the sensors
+  -- module is already in hand rather than in the fast-path block above. A theme that names none
+  -- of the four reaches none of this and reads neither sensor.
+  if source == "esc_status" or source == "esc_status_level"
+    or source == "esc_status_live" or source == "esc_status_live_level" then
+    local verdict = resolveEscStatus(state, sensors)
+    if verdict == nil then return nil end
+    if source == "esc_status" then return verdict.text end
+    if source == "esc_status_level" then return verdict.level end
+    if source == "esc_status_live" then return verdict.liveText end
+    return verdict.liveLevel
   end
 
-  if sensorsModule and type(sensorsModule.getValue) == "function" then
-    local value = sensorsModule.getValue(source)
+  if sensors and type(sensors.getValue) == "function" then
+    local value = sensors.getValue(source)
     if type(value) == "number" then return value end
   end
 

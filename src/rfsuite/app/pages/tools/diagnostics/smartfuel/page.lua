@@ -340,10 +340,6 @@ local function rebuildRows(i18n)
   return true
 end
 
-function M.getModuleTitle()
-  return "SmartFuel Status"
-end
-
 function M.getHeaderActions()
   return { reload = true, save = false, help = false }
 end

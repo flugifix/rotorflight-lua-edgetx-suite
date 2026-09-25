@@ -16,6 +16,7 @@ local EscParametersAm32Api = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local Am32Init = nil
+local EscCurrentLimit = nil
 local t = nil
 
 local ui = {
@@ -93,6 +94,7 @@ local function ensureDeps()
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not Am32Init then Am32Init = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/am32/init.lua") end
+  if not EscCurrentLimit then EscCurrentLimit = loadModule("app/pages/setup/esc_motors/esc_tools/esc_current_limit.lua") end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 
   if type(ui.runtime) ~= "table" then
@@ -149,6 +151,11 @@ local function queueAm32ReadActual(queue)
         ui.escFirmware = escFirmware
 
         local session = getSession()
+        -- Amps as they stand: the block carries the limit in whole amps (the API module doubles
+        -- the byte the ESC sends), so nothing is converted here.
+        if session and EscCurrentLimit then
+          EscCurrentLimit.remember(session, ui.config.current_limit)
+        end
         if session then
           session.setup_esc_motors_esc_tools_am32 = {
             config = {},
@@ -507,22 +514,11 @@ local function ensureLoaded()
   queueAm32Read(false)
 end
 
-function M.onLoad()
-  ensureDeps()
-  ensureLoaded()
-end
-
-function M.onActivate()
-  ensureDeps()
-  ensureLoaded()
-end
-
 function M.wakeup(ctx)
   ensureDeps()
   ensureLoaded()
   
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
-  ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
 
   local signature = buildSessionSignature()
   if signature ~= ui.runtime.lastSessionSignature then
@@ -610,7 +606,6 @@ function M.build(ctx)
   ensureLoaded()
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
-  ui.runtime.syncHeaderTitle = ctx and ctx.syncHeaderTitle or nil
   ui.i18n = ctx and ctx.i18n or nil
 
   local children = ctx.children
@@ -1084,6 +1079,7 @@ function M.onClose()
   LoadingOverlay = nil
   ConfirmDialog = nil
   Am32Init = nil
+  EscCurrentLimit = nil
   t = nil
 end
 

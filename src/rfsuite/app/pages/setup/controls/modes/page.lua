@@ -888,16 +888,6 @@ local function ensureLoaded()
   startLoad(ui.runtime.requestRebuild)
 end
 
-function M.onLoad()
-  ensureDeps()
-  ensureLoaded()
-end
-
-function M.onActivate()
-  ensureDeps()
-  ensureLoaded()
-end
-
 local lastCheckTime = 0
 function M.wakeup(ctx)
   ensureDeps()

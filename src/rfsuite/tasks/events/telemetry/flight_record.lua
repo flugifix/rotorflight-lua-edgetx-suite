@@ -52,6 +52,82 @@ local RSSI_LINK_SOURCES = {
   ["2RSS"] = true,
 }
 
+-- What "powered" means, and it is asked about a statistic that records a FLOOR and about the
+-- headspeed band kept per PID profile.
+--
+-- A minimum taken across the whole armed window is a minimum of the spool-up and the spool-down
+-- rather than of the flight: a pilot arms first and spools up afterwards, so the first readings
+-- inside an armed window are the lowest ones that window will ever carry, and they stay the
+-- minimum for the rest of the flight. The maxima keep the broad window on purpose -- nothing
+-- about a ramp can raise them, and a reading taken outside the powered band is still the
+-- highest the flight reached.
+--
+-- A headspeed extreme kept PER PID PROFILE is gated on both ends instead: it is a statement
+-- about what the governor held under that profile, so a reading taken while the governor was
+-- not holding anything belongs to no profile in particular.
+--
+-- The flight controller's own governor state is the reading that says when the rotor is under
+-- power at a settled headspeed, and two of its ten states qualify:
+--
+--   4  ACTIVE    the governor is holding the requested headspeed
+--   9  BYPASS    the governor is bypassed and the throttle curve drives the head directly
+--
+-- Every other state is a ramp or is not driving the head: throttle off (0), throttle idle (1),
+-- spool-up (2), recovery (3), throttle hold (5), autorotation (7) and bailout (8) all carry a
+-- headspeed or a current below anything the flight holds. Fallback (6) is left out for a
+-- different reason: the flight controller enters it when the motor rpm signal has failed, so a
+-- headspeed sampled there is not a headspeed.
+local POWERED_GOVERNOR_STATE = {
+  [4] = true,
+  [9] = true,
+}
+
+-- The governor state is only maintained for the modes that run a governor state machine. With
+-- the governor off, or limiting the throttle only, the flight controller leaves the state at the
+-- value it was initialised with, so a gate on the state alone would take no minimum at all on
+-- those models -- and on a model whose receiver is not sending the state sensor either. The
+-- state is therefore trusted only once a value inside its own range has been seen in this
+-- flight; until then the gate is what a model without a governor still has, which is that the
+-- head is turning and something is driving it. The second half of that is the rule this suite
+-- already applies to the same question over a logged flight, in app/pages/logs/graph.lua.
+local SPINNING_RPM = 100
+local DRIVEN_THROTTLE_PERCENT = 25
+local DRIVEN_CURRENT = 1.5
+
+-- How long the gate has to hold before a minimum is taken. The flight controller enters ACTIVE
+-- at 99 % of the requested headspeed or 95 % of the spool-up throttle, so the readings behind
+-- the transition are already flight readings; this is what keeps a single sample taken on the
+-- edge of one out of them.
+local POWERED_HOLD_SECONDS = 2
+local POWERED_HOLD_SAMPLES = math.floor(POWERED_HOLD_SECONDS / UPDATE_INTERVAL)
+
+-- Without a governor state the gate is held on its falling edge as well: a reading is taken only
+-- once the gate has also held for this many samples after it. The head can slow before the
+-- current falls -- a spool-down, a head bogging -- and while the current is still drawn the
+-- fallback cannot tell such a reading from flight, so the last 2 s of a driven stretch never
+-- count. This is the depth of the four readings each powered tracker holds back (p1..p4). The
+-- governor state needs none of it: the flight controller leaves ACTIVE and BYPASS on the
+-- throttle input itself, before the head has had time to slow.
+local POWERED_TAIL_SAMPLES = 4
+
+-- The voltage sag detector.
+--
+-- A pack that dips to the flight controller's own minimum cell voltage under load and comes back
+-- is a different thing from a pack that ends the flight low, and the flight log has carried the
+-- two columns for it since it was written. The line is the board's `vbatmincellvoltage` -- one
+-- physical fact, already configured on the Battery page, not a second threshold of this suite's
+-- own -- and MSP BATTERY_CONFIG carries it in centi-volts, which is what the arithmetic below
+-- stays in so that a pack sitting exactly on the line is not decided by a rounding step.
+--
+-- It takes a hysteresis, because a helicopter hovering with its pack on the line otherwise
+-- produces an episode per sample rather than the one the pilot would recognise.
+local SAG_HYSTERESIS_CENTIVOLTS = 5
+
+-- A pack reading at or below this is the main power gone, not a sag: the lowest a flight pack is
+-- ever taken to is far above it, so nothing a discharge can reach falls inside the window. The
+-- same fact and the same number stand behind the main-power-lost announcement in lib/audio.lua.
+local MAIN_POWER_LOST_VOLTS = 1.0
+
 -- One row per tracked statistic. This table is the only place that knows the set: the record's
 -- keys are built from it, and so is the per-pass work.
 --
@@ -60,15 +136,38 @@ local RSSI_LINK_SOURCES = {
 --   min / max  which extremes are recorded
 --   gate   what the value has to be for the statistic to take it at all
 --   minGate  a further condition on the minimum alone
+--   minPositive  the minimum also has to be above zero
+--   count    the record key an episode counter is kept under, for the sag detector
+--   profiles  how many PID profiles the row is kept for, one key pair each: max<key>1, min<key>1
 local GATE_ANY = 0        -- any number the sensor gives, which is what most of them take
 local GATE_POSITIVE = 1   -- above zero
 local GATE_FUEL_SEEN = 2  -- only once a fuel sensor has answered
 local GATE_LINK_QUALITY = 3
+local GATE_POWERED = 4    -- only while the rotor is under power, as defined above
+local GATE_SAG = 5        -- the voltage-sag detector, which is a statistic of its own shape
+local GATE_PROFILE = 6    -- powered, and on this row's own PID profile
 
 local FLIGHT_STATS = {
   { key = "ThrottlePercent", source = "throttlePercent", max = true },
-  { key = "Rpm",             source = "rpm",             max = true, min = true, minGate = GATE_POSITIVE },
-  { key = "Current",         source = "current",         max = true, min = true },
+  { key = "Rpm",             source = "rpm",             max = true, min = true,
+    minGate = GATE_POWERED, minPositive = true },
+  { key = "Current",         source = "current",         max = true, min = true,
+    minGate = GATE_POWERED },
+  -- Headspeed per PID profile: maxRpmP1/minRpmP1 .. maxRpmP3/minRpmP3. A pilot flies a profile
+  -- per flying style, so the headspeed band of a flight is three bands rather than one, and the
+  -- flight log has carried a column pair per profile since it was written. Powered on both ends
+  -- rather than only on the minimum: the row says what the head was held at under that profile,
+  -- and a reading taken while the governor was not holding it belongs to no profile in
+  -- particular.
+  --
+  -- One row for the three, resolved through a key table: three rows would be three closure
+  -- calls per sample where the profile picks exactly one of them.
+  --
+  -- Three, because the flight log has three column pairs. A flight controller with more than
+  -- 256 kB of flash offers six PID profiles; a reading from profile 4, 5 or 6 goes into the
+  -- overall headspeed extremes as it always has and into no per-profile row.
+  { key = "RpmP",            source = "rpm",             max = true, min = true, gate = GATE_PROFILE,
+    profiles = 3 },
   { key = "Watts",           source = "watts",           max = true },
   { key = "Altitude",        source = "altitude",        max = true },
   { key = "EscTemp",         source = "escTemp",         max = true, min = true },
@@ -77,6 +176,10 @@ local FLIGHT_STATS = {
   { key = "Voltage",         source = "voltage",         max = true, min = true, gate = GATE_POSITIVE },
   { key = "BecVoltage",      source = "becVoltage",      max = true, min = true, gate = GATE_POSITIVE },
   { key = "Lq",              source = "lq",              max = true, min = true, gate = GATE_LINK_QUALITY },
+  -- The voltage sag detector: how often the pack went at or below the flight controller's own
+  -- minimum cell voltage, and the deepest per-cell voltage it reached while it was there.
+  { key = "SagCellVoltage",  source = "voltage",                     min = true, gate = GATE_SAG,
+    count = "sagCount" },
   -- Consumed capacity only ever grows within a flight, so its maximum IS what the flight
   -- used. It is recorded rather than read at the disarm edge because a telemetry drop just
   -- before the edge would otherwise lose the whole figure.
@@ -90,8 +193,16 @@ function Record.keys()
   local out = {}
   for i = 1, #FLIGHT_STATS do
     local stat = FLIGHT_STATS[i]
-    if stat.max then out[#out + 1] = "max" .. stat.key end
-    if stat.min then out[#out + 1] = "min" .. stat.key end
+    if stat.profiles then
+      for p = 1, stat.profiles do
+        if stat.max then out[#out + 1] = "max" .. stat.key .. p end
+        if stat.min then out[#out + 1] = "min" .. stat.key .. p end
+      end
+    else
+      if stat.max then out[#out + 1] = "max" .. stat.key end
+      if stat.min then out[#out + 1] = "min" .. stat.key end
+      if stat.count then out[#out + 1] = stat.count end
+    end
   end
   return out
 end
@@ -111,9 +222,61 @@ local values = {
   voltage = 0,
   becVoltage = 0,
   lq = 0,
+  govState = 0,
+  pidProfile = 0,
   lqSource = nil,
   fuelSeen = false,
+  -- Not sampled: the powered gate's own state, computed from the sampled values once per
+  -- sample and read by every tracker that records a floor.
+  govStateSeen = false,
+  poweredSamples = 0,
+  powered = false,
+  -- Not sampled: the pack the sag detector is judging, resolved once per flight.
+  cells = 0,
+  sagEnter = nil,
+  sagLeave = nil,
+  sagIn = false,
 }
+
+--- The sag detector, back to the state a fresh flight starts in.
+local function resetSagDetector()
+  values.cells = 0
+  values.sagEnter = nil
+  values.sagLeave = nil
+  values.sagIn = false
+end
+
+--- The powered gate, back to the state a fresh flight starts in.
+local function resetPowered()
+  values.govStateSeen = false
+  values.poweredSamples = 0
+  values.powered = false
+end
+
+--- Whether the rotor is under power, decided once per sample rather than once per statistic.
+local function updatePowered()
+  local gov = values.govState
+  if gov >= 1 and gov <= 9 then values.govStateSeen = true end
+
+  local gate, need
+  if values.govStateSeen then
+    gate = POWERED_GOVERNOR_STATE[gov] == true
+    need = POWERED_HOLD_SAMPLES
+  else
+    gate = values.rpm >= SPINNING_RPM
+      and (values.throttlePercent >= DRIVEN_THROTTLE_PERCENT or values.current >= DRIVEN_CURRENT)
+    need = POWERED_HOLD_SAMPLES + POWERED_TAIL_SAMPLES
+  end
+
+  if gate then
+    local held = values.poweredSamples + 1
+    values.poweredSamples = held
+    values.powered = held >= need
+  else
+    values.poweredSamples = 0
+    values.powered = false
+  end
+end
 
 --- The trackers. One per shape a row can declare; the compile loop picks between them by reading
 --- the row's own columns, and none of them names a statistic.
@@ -139,19 +302,119 @@ local function trackMaxMin(src, maxKey, minKey)
   end
 end
 
---- A maximum that takes any number beside a minimum that only takes one above zero: rpm, whose
---- minimum has never recorded the spool-down to zero.
-local function trackMaxMinPositiveMin(src, maxKey, minKey)
+--- A maximum across the whole armed window beside a minimum taken only while the rotor is under
+--- power: the floor of a flight rather than the floor of its spool-up. Without a governor state
+--- the minimum is offered the reading of POWERED_TAIL_SAMPLES samples ago, and the gate only
+--- opens once that reading has the hold window behind it and the tail window after it.
+--- p1..p4 are not cleared at a flight edge: they are read only once the gate has held for eight
+--- samples in a row, and every flight edge resets that count, so by then they hold this flight's.
+local function trackMaxMinPowered(src, maxKey, minKey)
+  local p1, p2, p3, p4
   return function(rec)
     local v = values[src]
     if type(v) == "number" then
       local b = rec[maxKey]
       if b == nil or v > b then rec[maxKey] = v end
-      if v > 0 then
+      if not values.govStateSeen then
+        v, p1, p2, p3, p4 = p1, p2, p3, p4, v
+      end
+      if values.powered then
         b = rec[minKey]
         if b == nil or v < b then rec[minKey] = v end
       end
     end
+  end
+end
+
+--- The same with a minimum that also has to be above zero: headspeed, whose sensor answers zero
+--- where the flight controller has no rpm to report.
+local function trackMaxMinPoweredPositive(src, maxKey, minKey)
+  local p1, p2, p3, p4
+  return function(rec)
+    local v = values[src]
+    if type(v) == "number" then
+      local b = rec[maxKey]
+      if b == nil or v > b then rec[maxKey] = v end
+      if not values.govStateSeen then
+        v, p1, p2, p3, p4 = p1, p2, p3, p4, v
+      end
+      if values.powered and v > 0 then
+        b = rec[minKey]
+        if b == nil or v < b then rec[minKey] = v end
+      end
+    end
+  end
+end
+
+--- Both extremes of the PID profile the flight controller is on, taken only while the rotor is
+--- under power. `keys` is the compiled key pair per profile, so a sample costs one table lookup
+--- and picks the pair rather than testing each profile in turn; a profile the table does not
+--- cover falls out at that lookup.
+---
+--- Without a governor state the reading is held back exactly as the powered minima hold theirs,
+--- and the profile it was read on is held back beside it (q1..q4), so a reading is booked to the
+--- profile it was taken on rather than to the one reported POWERED_TAIL_SAMPLES samples later.
+--- Neither register is cleared at a flight edge, for the reason the powered minima give.
+local function trackProfiles(src, keys)
+  local p1, p2, p3, p4
+  local q1, q2, q3, q4
+  return function(rec)
+    local v = values[src]
+    local profile = values.pidProfile
+    if not values.govStateSeen then
+      v, p1, p2, p3, p4 = p1, p2, p3, p4, v
+      profile, q1, q2, q3, q4 = q1, q2, q3, q4, profile
+    end
+    if values.powered then
+      local pair = keys[profile]
+      if pair ~= nil and type(v) == "number" and v > 0 then
+        local maxKey, minKey = pair[1], pair[2]
+        local b = rec[maxKey]
+        if b == nil or v > b then rec[maxKey] = v end
+        b = rec[minKey]
+        if b == nil or v < b then rec[minKey] = v end
+      end
+    end
+  end
+end
+
+--- The voltage sag detector: how often the pack went at or below the flight controller's own
+--- minimum cell voltage, and the deepest per-cell voltage it reached while it was there.
+---
+--- The comparison is on the PACK reading against a line that was multiplied out once, so a
+--- sample costs two comparisons and divides by the cell count only inside an episode.
+local function trackSag(src, minKey, countKey)
+  return function(rec)
+    local enter = values.sagEnter
+    if enter == nil then return end
+
+    local v = values[src]
+    if type(v) ~= "number" or v <= MAIN_POWER_LOST_VOLTS then
+      -- The main pack is gone rather than low. An episode open across it is dropped rather
+      -- than counted as one that ended.
+      values.sagIn = false
+      return
+    end
+
+    -- The detector could run on this sample, so the count says "none seen" from here on rather
+    -- than staying absent, which is what a reader is told when it could not run at all.
+    if rec[countKey] == nil then rec[countKey] = 0 end
+
+    if values.sagIn then
+      if v >= values.sagLeave then
+        values.sagIn = false
+        return
+      end
+    elseif v <= enter then
+      values.sagIn = true
+      rec[countKey] = rec[countKey] + 1
+    else
+      return
+    end
+
+    local perCell = v / values.cells
+    local b = rec[minKey]
+    if b == nil or perCell < b then rec[minKey] = perCell end
   end
 end
 
@@ -221,10 +484,22 @@ for i = 1, TRACK_COUNT do
     built = trackMinFuel(src, minKey)
   elseif gate == GATE_POSITIVE and maxKey and minKey then
     built = trackMaxMinPositive(src, maxKey, minKey)
+  elseif gate == GATE_SAG then
+    built = trackSag(src, minKey, stat.count)
+  elseif gate == GATE_PROFILE then
+    local keys = {}
+    for p = 1, stat.profiles do
+      keys[p] = { "max" .. stat.key .. p, "min" .. stat.key .. p }
+    end
+    built = trackProfiles(src, keys)
   elseif gate == GATE_POSITIVE then
     built = trackMinPositive(src, minKey)
-  elseif maxKey and minKey and minGate == GATE_POSITIVE then
-    built = trackMaxMinPositiveMin(src, maxKey, minKey)
+  elseif maxKey and minKey and minGate == GATE_POWERED then
+    if stat.minPositive then
+      built = trackMaxMinPoweredPositive(src, maxKey, minKey)
+    else
+      built = trackMaxMinPowered(src, maxKey, minKey)
+    end
   elseif maxKey and minKey then
     built = trackMaxMin(src, maxKey, minKey)
   else
@@ -300,6 +575,62 @@ end
 
 Record.ensure = ensureFlight
 
+--- What the sag detector needs to know about the pack, resolved once and kept: a pack cannot be
+--- changed while the craft is armed.
+---
+--- The cell count is the flight controller's own where it has one; a configured count of zero is
+--- the board saying it detects the count itself, and then telemetry answers instead. That is the
+--- rule lib/audio.lua already applies to the same question, and the flight log takes the per-cell
+--- columns beside these two from the same configuration. Where neither answers, nothing is
+--- resolved and the detector stays silent rather than dividing by a guess.
+local function resolvePack(get)
+  local session = _G.rfsuite and _G.rfsuite.session
+  local config = session and (session.batteryConfig or session.battery_config) or nil
+  if type(config) ~= "table" then return end
+
+  local cells = tonumber(config.batteryCellCount)
+  if cells == nil or cells <= 0 then cells = tonumber(get("battery_cell_count")) end
+  if cells == nil or cells <= 0 then return end
+  cells = math.floor(cells + 0.5)
+
+  -- Centi-volts, as tasks/msp/api/battery_config.lua parses it and the Battery page displays it.
+  -- Outside the range that page allows, the value is not a cell voltage and nothing is judged.
+  local crit = tonumber(config.vbatmincellvoltage)
+  if crit == nil or crit < 250 or crit > 500 then return end
+
+  values.cells = cells
+  values.sagEnter = (crit * cells) / 100
+  values.sagLeave = ((crit + SAG_HYSTERESIS_CENTIVOLTS) * cells) / 100
+end
+
+-- The raw readings of a sampling pass, offered to a second reader in the SAME pass.
+--
+-- The event runtimes are driven at the top of a widget's pass, ahead of that widget's own
+-- telemetry read, so on a sampling pass this record asks the sensors first and the dashboard
+-- then asks for most of the same names a second time. The read is what those passes cost, and
+-- the second one cannot answer anything the first did not: a pass runs to completion without
+-- yielding, so a telemetry value does not move inside it.
+--
+--   rfsuite.session.telemetryRead = {
+--     values = { <sensor name> = number, ... },  -- this pass's raw answers
+--     pass   = number,  -- counted by the READER, once per pass, before the runtimes are driven
+--     at     = number,  -- the pass `values` was filled in
+--   }
+--
+-- `values` is the sensor's own answer, raw -- before the rounding, the watts inference and the
+-- fuel clamp below, so a reader applies its own derivations and keeps its own numbers. A name
+-- the sensor answered nothing for is absent, which is what Sensors.getValue returns and what a
+-- reader has to see. So is a name that was not asked at all because SmartFuel handed its value
+-- over in this state: the dashboard's read takes that hand-over ahead of the sensor too.
+--
+-- The table is created by the reader and by nobody else, so a record with no such reader -- a
+-- model that runs the suite's background work from the service widget -- publishes nothing and
+-- pays one comparison for the offer it never makes.
+--
+-- `at == pass` is what makes an offer this pass's. A wakeup from anywhere else in the same Lua
+-- state -- a second widget's background work -- stamps the pass before it, and the reader counts
+-- the next one before the runtimes are driven again, so a stale fill can never match.
+
 --- Read the tracked sensors. A sensor that answers nothing leaves the previous reading standing,
 --- which is what the dashboard's telemetry read has always done, and the derivations below --
 --- rounding the two temperatures and the throttle, inferring watts, clamping fuel -- are that
@@ -309,30 +640,84 @@ local function readSources()
   if not Sensors or type(Sensors.getValue) ~= "function" then return false end
   local get = Sensors.getValue
 
-  values.rpm = get("rpm") or values.rpm
-  values.lq = get("link") or values.lq
-  values.lqSource = Sensors.active_paths and Sensors.active_paths.link or values.lqSource
-  values.mcuTemp = roundInt(get("temp_mcu"), values.mcuTemp)
-  values.escTemp = roundInt(get("temp_esc"), values.escTemp)
-  values.becVoltage = get("bec_voltage") or values.becVoltage
-  values.throttlePercent = roundInt(get("throttle_percent"), values.throttlePercent)
-
+  -- Read into locals in the order the sensors have always been asked in -- a search is throttled
+  -- per pass and a path is adopted on first answer, so the order is part of what a read does --
+  -- and derive from them below exactly as before.
+  local rpm = get("rpm")
+  local lq = get("link")
+  local lqSource = Sensors.active_paths and Sensors.active_paths.link
+  local mcuTemp = get("temp_mcu")
+  local escTemp = get("temp_esc")
+  local becVoltage = get("bec_voltage")
+  local throttlePercent = get("throttle_percent")
   local current = get("current")
   local voltage = get("voltage")
-  local watts = get("watts")
+  local wattsRead = get("watts")
+  local altitude = get("altitude")
+  -- Ahead of the sensor for the same reason the dashboard's read is: SmartFuel runs in this
+  -- Lua state and hands the two values over directly. The sensor behind a value that was handed
+  -- over is not asked at all.
+  local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
+  local handedConsumption = smart and smart.consumption
+  local consumedMah = nil
+  if handedConsumption == nil then consumedMah = get("smartconsumption") end
+  local govState = get("governor")
+  local pidProfile = get("pid_profile")
+  local handedFuel = smart and smart.fuel
+  local smartFuel, plainFuel = nil, nil
+  if handedFuel == nil then
+    smartFuel = get("smartfuel")
+    if smartFuel == nil then plainFuel = get("fuel") end
+  end
+
+  local shared = _G.rfsuite.session.telemetryRead
+  if shared ~= nil then
+    local v = shared.values
+    v.rpm = rpm
+    v.link = lq
+    v.temp_mcu = mcuTemp
+    v.temp_esc = escTemp
+    v.bec_voltage = becVoltage
+    v.throttle_percent = throttlePercent
+    v.current = current
+    v.voltage = voltage
+    v.watts = wattsRead
+    v.altitude = altitude
+    v.smartconsumption = consumedMah
+    v.governor = govState
+    v.pid_profile = pidProfile
+    v.smartfuel = smartFuel
+    v.fuel = plainFuel
+    shared.at = shared.pass
+  end
+
+  values.rpm = rpm or values.rpm
+  values.lq = lq or values.lq
+  values.lqSource = lqSource or values.lqSource
+  values.mcuTemp = roundInt(mcuTemp, values.mcuTemp)
+  values.escTemp = roundInt(escTemp, values.escTemp)
+  values.becVoltage = becVoltage or values.becVoltage
+  values.throttlePercent = roundInt(throttlePercent, values.throttlePercent)
+
+  local watts = wattsRead
   if type(watts) ~= "number" and type(current) == "number" and type(voltage) == "number" then
     watts = voltage * current
   end
   values.current = current or values.current
   values.watts = watts or values.watts
-  values.altitude = get("altitude") or values.altitude
-  -- Ahead of the sensor for the same reason the dashboard's read is: SmartFuel runs in this
-  -- Lua state and hands the two values over directly.
-  local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
-  values.consumedMah = (smart and smart.consumption) or get("smartconsumption") or values.consumedMah
+  values.altitude = altitude or values.altitude
+  values.consumedMah = handedConsumption or consumedMah or values.consumedMah
   if type(voltage) == "number" then values.voltage = voltage end
 
-  local fuel = (smart and smart.fuel) or get("smartfuel") or get("fuel")
+  if values.cells == 0 then resolvePack(get) end
+
+  -- The governor state decides the powered gate below, so it is held to being a number here
+  -- rather than tested on every comparison the gate makes.
+  if type(govState) == "number" then values.govState = govState end
+  -- The PID profile is 1-based on the wire: the flight controller sends its own index plus one.
+  if type(pidProfile) == "number" then values.pidProfile = pidProfile end
+
+  local fuel = handedFuel or smartFuel or plainFuel
   if type(fuel) == "number" then
     if fuel < 0 then fuel = 0 end
     if fuel > 100 then fuel = 100 end
@@ -366,6 +751,8 @@ function Record.open()
   flight.seconds = 0
   flight.armed = true
   values.fuelSeen = false
+  resetPowered()
+  resetSagDetector()
   lastSampleAt = nil
   lastTickAt = nil
 end
@@ -385,6 +772,8 @@ function Record.close()
   flight.seconds = 0
   flight.armed = false
   values.fuelSeen = false
+  resetPowered()
+  resetSagDetector()
   lastSampleAt = nil
   lastTickAt = nil
 end
@@ -424,6 +813,7 @@ function Record.wakeup(armed)
     if lastSampleAt == nil or (now - lastSampleAt) >= UPDATE_INTERVAL then
       lastSampleAt = now
       if readSources() then
+        updatePowered()
         local rec = flight.current
         for i = 1, TRACK_COUNT do
           TRACK[i](rec)
@@ -453,6 +843,29 @@ function Record.reset()
   flight.lastSeconds = 0
   flight.armed = false
   values.fuelSeen = false
+  -- Every sampled reading belongs to the session that ended. A sensor that answers nothing leaves
+  -- the previous reading standing, so a model connected without it would inherit the reading:
+  -- into its statistics, and into the powered gate -- a state such as throttle hold would keep
+  -- the gate shut for the whole session, a headspeed and a throttle would open it on a head that
+  -- is not driven -- and its samples would land in the last session's profile. The readings go
+  -- back to the values a fresh start has.
+  values.throttlePercent = 0
+  values.rpm = 0
+  values.current = 0
+  values.watts = 0
+  values.altitude = 0
+  values.consumedMah = 0
+  values.escTemp = 0
+  values.mcuTemp = 0
+  values.fuel = 0
+  values.voltage = 0
+  values.becVoltage = 0
+  values.lq = 0
+  values.govState = 0
+  values.pidProfile = 0
+  values.lqSource = nil
+  resetPowered()
+  resetSagDetector()
   lastSampleAt = nil
   lastTickAt = nil
 end

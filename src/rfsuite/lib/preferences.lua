@@ -172,6 +172,14 @@ local SCHEMA = {
       -- An arm shorter than this is a check rather than a flight, and reaches neither the log
       -- nor a battery's cycle count. 0 logs every arm.
       min_seconds = 30,
+      -- Offer the registry's packs for this model once the connect chain has run, in the
+      -- dashboard widget's fullscreen. Off by default: a pilot who keeps no registry would be
+      -- asked a question with no answers in it.
+      ask_on_connect = false,
+      -- A pick also moves the flight controller onto that pack's battery profile. Off by
+      -- default and deliberately so: it writes to the board, and which profile a pack belongs
+      -- to is a statement the pilot makes in the registry rather than one this suite can infer.
+      set_fc_profile = false,
     },
   },
   -- The radio's half of the in-flight tuning overlay: what is true of this transmitter whatever
