@@ -38,8 +38,9 @@ local READ_CHUNK = 4096
 M.READ_CAP = READ_CAP
 
 -- The columns that may follow flight_s, as one ordered list so the writer, the header and the
--- parser cannot drift apart. Nothing in this suite fills them yet; they are here because the
--- file format is shared with tools that already read them.
+-- parser cannot drift apart. They are filled from the flight record the event runtimes keep; a
+-- column that record took no value for is written empty, and the six per-PID-profile headspeed
+-- columns have nothing filling them yet.
 M.STAT_KEYS = {
   "mah",
   "vcel_min", "vcel_max",

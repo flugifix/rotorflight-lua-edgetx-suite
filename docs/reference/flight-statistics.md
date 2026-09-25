@@ -37,6 +37,32 @@ A key of `current` or `last` is **absent until that statistic has taken a value*
 | `maxVoltage`, `minVoltage` | pack voltage | both, above zero only |
 | `minBecVoltage` | BEC voltage | minimum, above zero only |
 | `maxLq`, `minLq` | link quality | both, and only for a 0–100 % reading from a sensor that is not a known RSSI source — a receiver without an RQly sensor falls back to 1RSS/2RSS, which carry dBm |
+| `sagCount` | pack voltage | how many voltage sags the flight had (below). `0` where the pack was watched and nothing happened; absent where it could not be watched |
+| `minSagCellVoltage` | pack voltage | the deepest per-cell voltage reached inside a sag; absent where there was none |
+
+## Voltage sags
+
+A pack that dips under load and comes back is a different thing from a pack that ends the flight
+low, and the second is already `minVoltage`. `sagCount` counts the first.
+
+* The line is the flight controller's own **minimum cell voltage** (*Setup* → *Power* → *Battery*
+  → *Min cell voltage*), multiplied by the cell count. A reading **at or below** it opens an
+  episode.
+* An episode ends when the pack is back **0.05 V per cell above** the line. Without that
+  hysteresis a helicopter hovering with its pack on the line produces one episode per sample
+  instead of the one the pilot would recognise.
+* A pack reading **at or below 1 V** is the main power gone rather than a sag. Nothing is counted
+  for it and an episode open across it is dropped.
+* `minSagCellVoltage` is the deepest per-cell voltage seen inside an episode.
+
+The cell count is the flight controller's own where it has one; a configured count of zero means
+the board detects it itself, and then telemetry answers instead. Where neither answers, or where
+the board has not reported a minimum cell voltage, **nothing is judged**: `sagCount` is absent
+rather than `0`, which is how a reader tells "watched, none" from "could not watch".
+
+**The resolution is the sampling interval.** The statistics are read every 0.5 s, so a dip
+shorter than that can fall between two samples and be missed entirely, and the deepest voltage is
+the deepest *sampled* voltage rather than the deepest the pack reached.
 
 ## When a minimum is taken: the rotor has to be under power
 
@@ -168,7 +194,9 @@ it does not, so a model connected without a sensor the session before it had rec
 that sensor rather than the previous session's last value. Until this was changed, a reconnect
 cleared the statistics but kept those readings, and a missing sensor's last value from the session
 before went into the new flight's maxima and minima. The powered gate above reads the same values,
-so an inherited throttle-hold state would have kept it shut for the whole session.
+so an inherited throttle-hold state would have kept it shut for the whole session. The voltage-sag
+detector's pack — its cell count and its line — is cleared with them, and is resolved again on the
+next arm edge.
 
 ## The two totals — what changed, and why they can go down
 
@@ -204,6 +232,18 @@ A dashboard theme reads the record through the box's own `stattype`, which is th
 
 A theme that reaches into the widget state directly can use `state.flight`, which is the same table
 as `rfsuite.session.flight`.
+
+`stattype` resolves a **box source** — a telemetry reading — to that reading's recorded extreme,
+so it does not reach the two sag keys: a sag count is not an extreme of anything the pilot can put
+on a tile as a live value. A theme that wants them reads them off the record by name:
+
+```lua
+{ type = "text", value = function(_, state)
+    local flight = state and state.flight
+    local record = flight and (flight.current.sagCount ~= nil and flight.current or flight.last)
+    return record and record.sagCount
+  end }
+```
 
 **Deprecated:** before the record had an owner it lived on the dashboard widget's state as flat
 fields — `currentFlightMaxRpm`, `lastFlightMaxRpm`, `lastMinVoltage` and the rest. Those names still

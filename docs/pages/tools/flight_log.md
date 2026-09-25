@@ -82,11 +82,18 @@ some of them or none.
 | `tesc_min`, `tesc_max` | Lowest and highest ESC temperature |
 | `vbec_min`, `vbec_max` | Lowest and highest BEC voltage |
 | `hs1_min` … `hs3_max` | Headspeed per PID profile — not recorded yet, always empty |
-| `sags`, `sag_min` | Voltage-sag events — not recorded yet, always empty |
+| `sags`, `sag_min` | How many times the pack sagged to the flight controller's minimum cell voltage, and the deepest per-cell voltage it reached |
 
 Per-cell voltage needs a cell count, which comes from the flight controller's battery
 configuration. On a model where that has not been read, the two per-cell columns stay empty rather
 than being divided by a guess.
+
+A sag is a dip to or below the flight controller's own *Min cell voltage*, counted once per dip:
+the pack has to come back 0.05 V a cell above the line before the next one counts. A reading at or
+below 1 V is the main power gone rather than a sag and is not counted. `sags` is `0` where the
+pack was watched and nothing happened, and empty where it could not be watched at all — no cell
+count, or no minimum cell voltage from the board. The statistics are sampled every 0.5 s, so a dip
+shorter than that can fall between two samples.
 
 A flight that produced no statistics at all — telemetry gone for the whole armed window — is
 written as the five-field line it has always been, rather than as a line of empty columns.

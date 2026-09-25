@@ -90,15 +90,19 @@ end
 -- `last` here is the flight that has just ended and `current` is already the empty one waiting for
 -- the next arm. Reading `current` would log nothing.
 --
--- The columns this cannot fill are left out, and `statField` writes an empty field for each: the
--- headspeed extrema are per PID profile and the record keeps one set for the whole flight, and the
--- suite has no voltage-sag detector at all. The header carries all 22 columns either way, so a
--- partly filled row is a valid row of the format rather than a new one.
+-- A column the record did not take a value for is left out, and `statField` writes an empty field
+-- for it: the headspeed extrema are per PID profile and the record keeps one set for the whole
+-- flight, so those six stay empty. The header carries all 22 columns either way, so a partly
+-- filled row is a valid row of the format rather than a new one.
 --
 -- Per-cell voltage needs a cell count, and the one already published in this Lua state is the
 -- flight controller's battery configuration, which the `battery_config` event task keeps on the
 -- session. Where that has not been read, the two per-cell columns stay empty rather than being
 -- divided by a guess.
+--
+-- `sags` is `0` rather than empty where the record could watch the pack and saw nothing, and
+-- empty where it could not watch at all -- no cell count, or no minimum cell voltage from the
+-- board -- and `sag_min` comes with it.
 local function flightStats(session)
   local flight = type(session) == "table" and session.flight or nil
   local record = type(flight) == "table" and flight.last or nil
@@ -120,6 +124,8 @@ local function flightStats(session)
   put("tesc_max", record.maxEscTemp)
   put("vbec_min", record.minBecVoltage)
   put("vbec_max", record.maxBecVoltage)
+  put("sags", record.sagCount)
+  put("sag_min", record.minSagCellVoltage)
 
   local config = session.batteryConfig or session.battery_config
   local cells = type(config) == "table" and tonumber(config.batteryCellCount) or nil
