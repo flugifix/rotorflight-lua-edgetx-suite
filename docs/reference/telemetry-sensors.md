@@ -51,6 +51,22 @@ and selecting a sensor that firmware has added. The fix is to update the suite. 
 workaround is to untick the unrecognised sensor on the Telemetry page, which restores everything
 that was sitting behind it.
 
+## An unchanged value is not sent again with every frame
+
+The decoder hands a sensor to the radio when its value changes, and otherwise repeats it every two
+seconds, well inside the time the radio keeps a sensor valid, so a hand-over that carries nothing
+new is not repeated at frame rate.
+
+Some sensors arrive together and are handed over as a group: the cell voltages (`Cel#` and
+`Cels`), the GPS position, the adjustment pair (`AdjF`, `AdjV`), the control angles (`Ctrl`,
+`CPtc`, `CRol`, `CYaw`, `CCol`), the attitude (`Attd`, `Ptch`, `Roll`, `Yaw`) and the
+acceleration (`Accl`, `AccX`, `AccY`, `AccZ`). When anything in a group changes, the whole group
+is sent again. That is deliberate: the radio works out the total of `Cels` only when the last
+cell arrives, so sending just the cell that changed would leave the total behind.
+
+A group whose values move in every frame is therefore sent as often as it arrives; the difference
+shows where values hold still, on the bench and while the model stands.
+
 ## The two sensors the suite computes itself
 
 Besides decoding what the flight controller sends, the suite works out the remaining fuel of
@@ -76,9 +92,8 @@ the per-flight statistics and the spoken announcements read the value the suite 
 the same script that computed it, and they work whether the sensors are published or not. The
 two sensors exist for everything the suite cannot hand a value to directly: logical switches,
 special functions, the radio's own telemetry screens, and the telemetry log on the card. That is
-also why they can be switched off: each one occupies a telemetry slot and every update of it
-moves the model file's write deadline forward, which is a price worth nothing on a machine where
-nothing reads them.
+also why they can be switched off: each one occupies a telemetry slot, which is a price worth
+nothing on a machine where nothing reads them.
 
 Two things follow that are worth knowing:
 

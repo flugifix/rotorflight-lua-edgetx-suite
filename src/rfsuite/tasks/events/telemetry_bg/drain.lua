@@ -10,12 +10,12 @@ local M = {}
 
 local RFSensors = nil
 
-local function loadModule(path)
+local function loadModule(path, ...)
   local fullPath = "/SCRIPTS/TOOLS/rfsuite-core/" .. path
   local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
   local chunk = loadScript(fullPath, mode)
   if type(chunk) ~= "function" then return nil end
-  local ok, mod = pcall(chunk)
+  local ok, mod = pcall(chunk, ...)
   if not ok then return nil end
   return mod
 end
@@ -25,12 +25,11 @@ local telemetryFrameSkip = 0
 local telemetryFrameCount = 0
 
 -- A published sensor stays valid on the radio for TELEMETRY_SENSOR_TIMEOUT_START, so an
--- unchanged value does not have to be re-sent every frame. It matters because every
--- setTelemetryValue() call marks the model dirty, which moves the model file's write
--- deadline forward rather than the write itself: publishing every sensor of every frame
--- starves the flush for as long as telemetry flows, and a setting the pilot changes in
--- that window is not persisted. Publish on change, and refresh an unchanged sensor well
--- inside its timeout. Same contract as publishTelemetryValue() in smart.lua.
+-- unchanged value does not have to be re-sent every frame, and every setTelemetryValue() call
+-- has the firmware look the sensor up among the model's sensor slots before it stores the
+-- value. (It does not mark the model dirty: the firmware does that only when the call creates
+-- a sensor.) Publish on change, and refresh an unchanged sensor well inside its timeout. Same
+-- contract as publishTelemetryValue() in smart.lua.
 local FORCE_REFRESH_INTERVAL = 2.0
 
 local lastPublishedValue = {}
@@ -59,6 +58,41 @@ local function publishSensorValue(sid, value, sensor, now)
     setTelemetryValue(sid, 0, 0, value, sensor.unit or 0, sensor.prec or 0, sensor.name or "")
     lastPublishedValue[sid] = value
     lastPublishedAt[sid] = now
+end
+
+-- A decoder that yields several sensors cannot hand them back through its one return value, so
+-- it publishes them itself -- and asks this first, with the span of bytes it decoded. Equal bytes
+-- are equal values, so a group goes out on the same contract as publishSensorValue: when any of
+-- it changed, or when it is due for a refresh. It goes out WHOLE, never sensor by sensor: the
+-- radio forms a cell sensor's total only when the last cell arrives, and the GPS fix is three
+-- calls on one id, so publishing only the parts that changed would leave the total or the fix
+-- behind. What it compares against is the frame the group was last published from:
+-- crossfireTelemetryPop() hands out a table of its own for every frame and nothing here writes
+-- into one, so keeping a reference and an offset costs neither a copy nor an allocation.
+-- `lastPublishedValue` holds that frame for a group's id, the two tables below where in it the
+-- group started and how long it was.
+local lastGroupFirst = {}
+local lastGroupLength = {}
+
+-- The time of the frame being decoded, set once per frame by decodeFrame: groupDue is handed to
+-- the decoder module once, at load, so it cannot take the time as an argument.
+local decodeNow = 0
+
+local function groupDue(sid, data, first, last)
+    local now = decodeNow
+    local frame = lastPublishedValue[sid]
+    if frame and lastGroupLength[sid] == last - first
+        and (now - (lastPublishedAt[sid] or 0)) < FORCE_REFRESH_INTERVAL then
+        local offset = lastGroupFirst[sid] - first
+        local i = first
+        while i < last and frame[i + offset] == data[i] do i = i + 1 end
+        if i == last then return false end
+    end
+    lastPublishedValue[sid] = data
+    lastGroupFirst[sid] = first
+    lastGroupLength[sid] = last - first
+    lastPublishedAt[sid] = now
+    return true
 end
 
 local function decU8(data, pos)
@@ -110,6 +144,7 @@ end
 -- was consumed by popAndAccount, so the walk starts at byte 4.
 local function decodeFrame(data, now)
     local sid, val
+    decodeNow = now
     local ptr = 4
     while ptr < #data do
         sid,ptr = decU16(data, ptr)
@@ -215,7 +250,7 @@ end
 -- frames of a backlog buys nothing. A call billed against a hard per-call ceiling keeps the cap.
 function M.wakeup(now, decodeAll)
     if not RFSensors then
-        RFSensors = loadModule("lib/rf2tlm_sensors.lua")
+        RFSensors = loadModule("lib/rf2tlm_sensors.lua", nil, groupDue)
         if not RFSensors then return 0 end
     end
 
@@ -258,6 +293,8 @@ function M.reset()
     telemetryFrameCount = 0
     lastPublishedValue = {}
     lastPublishedAt = {}
+    lastGroupFirst = {}
+    lastGroupLength = {}
     lastCounterAt = 0
 end
 
