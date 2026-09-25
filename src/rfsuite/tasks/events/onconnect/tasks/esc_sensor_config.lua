@@ -16,9 +16,18 @@ local function loadModule(path)
   return mod
 end
 
+-- The logger and the MSP runtime are one instance per Lua state. The runner drops this module when
+-- its task completes and loads it again the next time the event fires, so a bare loadScript here
+-- would read and compile those files again every time; lib/require.lua hands back the loaded one.
+local function loadShared(path)
+  local req = _G.rfsuite and _G.rfsuite.require
+  if type(req) == "function" then return req(path) end
+  return loadModule(path)
+end
+
 function M.wakeup(args)
   if Log == nil then
-    Log = loadModule("lib/log.lua") or false
+    Log = loadShared("lib/log.lua") or false
   end
 
   if done then return end
@@ -35,7 +44,7 @@ function M.wakeup(args)
     EscSensorConfigApi = loadModule("tasks/msp/api/esc_sensor_config.lua")
   end
   if MspRuntime == nil then
-    MspRuntime = loadModule("tasks/msp/runtime.lua") or false
+    MspRuntime = loadShared("tasks/msp/runtime.lua") or false
   end
   local msp = MspRuntime or nil
   if not msp or not EscSensorConfigApi then

@@ -13,6 +13,15 @@ local function loadModule(path)
   return mod
 end
 
+-- The logger and the MSP runtime are one instance per Lua state. The runner drops this module when
+-- its task completes and loads it again the next time the event fires, so a bare loadScript here
+-- would read and compile those files again every time; lib/require.lua hands back the loaded one.
+local function loadShared(path)
+  local req = _G.rfsuite and _G.rfsuite.require
+  if type(req) == "function" then return req(path) end
+  return loadModule(path)
+end
+
 local done = false
 
 local function nowSeconds()
@@ -27,7 +36,7 @@ end
 function M.wakeup()
   if done then return end
   if Log == nil then
-    Log = loadModule("lib/log.lua") or false
+    Log = loadShared("lib/log.lua") or false
   end
 
   local root = _G and _G.rfsuite
@@ -36,13 +45,13 @@ function M.wakeup()
   if type(session) ~= "table" then return end
 
   -- Bound once, in the module slot above, the way ensureDeps in tasks/events/runtime.lua
-  -- already binds this same module. `loadModule` here is a bare loadScript with no cache, and
-  -- this call sits ahead of the `return` below that the task takes on every wakeup it spends
-  -- waiting for the API version -- so acquiring it inline meant re-reading and recompiling the
-  -- whole MSP runtime once per wakeup for the length of the connect phase, and again after
-  -- every M.reset().
+  -- already binds this same module. This call sits ahead of the `return` below that the task
+  -- takes on every wakeup it spends waiting for the API version, and where lib/require.lua is
+  -- absent `loadShared` falls back to a bare loadScript with no cache -- so acquiring it inline
+  -- would mean re-reading and recompiling the whole MSP runtime once per wakeup for the length
+  -- of the connect phase, and again after every M.reset().
   if MspRuntime == nil then
-    MspRuntime = loadModule("tasks/msp/runtime.lua") or false
+    MspRuntime = loadShared("tasks/msp/runtime.lua") or false
   end
   local msp = MspRuntime or nil
   local mspState = msp and type(msp.getState) == "function" and msp.getState()
