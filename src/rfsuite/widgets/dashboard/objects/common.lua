@@ -11,6 +11,8 @@ local resolvedLocale = nil
 local sensorsModule = nil
 local linkRatesModule = nil
 local crsfModule = nil
+local escStatusModule = nil
+local escStatusModuleMissing = false
 local localeModule = nil
 local titleCache = {}
 
@@ -349,6 +351,131 @@ local function linkDiversity(state)
   return state.linkDiversity
 end
 
+-- A string a library produced carries its translation as a build marker, because a library has
+-- no route to the locale bundle. Packaging rewrites the marker, so on a radio this is one search
+-- that finds nothing; an unpackaged tree still gets the wording from the widget's own context.
+local function resolveBuildMarker(state, raw)
+  if type(raw) ~= "string" then return raw end
+  if not string.find(raw, "@i18n(", 1, true) then return raw end
+  local i18n = state and state.i18n
+  if i18n and type(i18n.resolve) == "function" then
+    local ok, resolved = pcall(i18n.resolve, raw)
+    if ok and type(resolved) == "string" and resolved ~= "" then return resolved end
+  end
+  return raw
+end
+
+-- The speed controller's health: the one box source that is two sensors rather than one.
+-- lib/esc_status.lua holds the per-protocol layouts; what is here is when to read them, when to
+-- decode again, and how long a fault is remembered. Three things it has to get right, and each
+-- of them costs something if it does not:
+--
+--   * one decode answers four sources. `esc_status`/`esc_status_level` are the worst reading on
+--     file, `esc_status_live`/`esc_status_live_level` what the controller is saying on this pass;
+--     each name is a text and a severity, and all four come out of the same snapshot build, so
+--     the pair of sensor reads is keyed on the radio's own tick and every source after the first
+--     pays a comparison.
+--   * the layout is read again only when a byte moved. The status word is identical on almost
+--     every pass of a healthy flight, and walking a 24-bit layout for an answer that cannot have
+--     changed is exactly the cost that stays invisible until a theme declares the source.
+--   * the worst the controller has reported since the flight controller answered is kept. A
+--     fault the controller has since cleared is still the reason a flight ended early, and a
+--     pass is slower than a fault. The latch is dropped where the runtime starts a new session
+--     with a flight controller (widgets/dashboard/runtime.lua clears `state.escStatusCache`).
+--
+-- Both readings exist because they answer different questions and neither substitutes for the
+-- other: a status line is read as "what is wrong now" and would lie if it held a fault the
+-- controller has cleared, while a value row is read as "what has this flight seen" and would
+-- lose the fault that ended it. A surface picks the one its own wording promises.
+local function resolveEscStatus(state, sensors)
+  if type(state) ~= "table" then return nil end
+  if type(sensors) ~= "table" or type(sensors.getValue) ~= "function" then return nil end
+
+  if escStatusModule == nil and not escStatusModuleMissing then
+    if _G.rfsuite and type(_G.rfsuite.require) == "function" then
+      local mod = _G.rfsuite.require("lib/esc_status.lua")
+      if type(mod) == "table" then escStatusModule = mod end
+    end
+    if escStatusModule == nil then
+      local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+      local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/esc_status.lua", mode)
+      if chunk then
+        local ok, mod = pcall(chunk)
+        if ok and type(mod) == "table" then escStatusModule = mod end
+      end
+    end
+    if escStatusModule == nil then escStatusModuleMissing = true end
+  end
+  if escStatusModule == nil or type(escStatusModule.decode) ~= "function" then return nil end
+
+  local cache = state.escStatusCache
+  if cache == nil then
+    cache = {}
+    state.escStatusCache = cache
+  end
+
+  local tick = (type(getTime) == "function") and getTime() or nil
+  if tick ~= nil and cache.sampled and cache.tick == tick then
+    return cache.verdict
+  end
+  cache.tick = tick
+  cache.sampled = true
+
+  local signature = sensors.getValue("Esc#")
+  local word = sensors.getValue("EscF")
+  if cache.decoded and signature == cache.signature and word == cache.word then
+    return cache.verdict
+  end
+  cache.decoded = true
+  cache.signature = signature
+  cache.word = word
+
+  local ok, decoded = pcall(escStatusModule.decode, signature, word)
+  if not ok then decoded = nil end
+
+  if decoded == nil then
+    -- Nothing answered for the speed controller, or neither sensor is on this radio. A box draws
+    -- `--` for it; the latch is kept rather than cleared, so a link that drops and comes back
+    -- does not lose what it had already seen.
+    cache.verdict = nil
+    return nil
+  end
+
+  -- What the controller says on this pass, taken before the latch is consulted. A request to
+  -- restart the controller belongs here: it is withdrawn by the next telemetry frame, which is
+  -- exactly what an unlatched reading is for, and a surface that shows it while it stands is
+  -- showing the truth about this second.
+  local liveText, liveLevel = decoded.text, decoded.level
+
+  local text, level = decoded.text, decoded.level
+  if decoded.transient then
+    -- Withdrawn by the next telemetry frame, so it is never written into the latch -- and it
+    -- gives way to a fault already on file, which is the worse news of the two.
+    if cache.latchLevel ~= nil and cache.latchLevel > level then
+      text, level = cache.latchText, cache.latchLevel
+    end
+  elseif decoded.word == nil then
+    -- No status word behind the reading: the model byte has arrived and the word has not, or
+    -- has stopped arriving, or the signature is not one we can read a word against. That says
+    -- nothing about the controller's health, so it is never written into the latch either --
+    -- written there at the same severity as OK, the first healthy word could never replace it.
+    -- A record already on file stands; without one, the reading is shown as it is.
+    if cache.latchLevel ~= nil then
+      text, level = cache.latchText, cache.latchLevel
+    end
+  elseif cache.latchLevel == nil or level > cache.latchLevel then
+    cache.latchText, cache.latchLevel = text, level
+  else
+    text, level = cache.latchText, cache.latchLevel
+  end
+
+  cache.verdict = {
+    text = resolveBuildMarker(state, text), level = level,
+    liveText = resolveBuildMarker(state, liveText), liveLevel = liveLevel,
+  }
+  return cache.verdict
+end
+
 function Utils.mapTelemetrySource(source, state)
   if type(source) ~= "string" then return nil end
 
@@ -419,6 +546,20 @@ function Utils.mapTelemetrySource(source, state)
   if source == "link_diversity" then return linkDiversity(state) end
 
   local sensors = getSensorsModule()
+
+  -- Derived, and from two sensors rather than one, so it is resolved here where the sensors
+  -- module is already in hand rather than in the fast-path block above. A theme that names none
+  -- of the four reaches none of this and reads neither sensor.
+  if source == "esc_status" or source == "esc_status_level"
+    or source == "esc_status_live" or source == "esc_status_live_level" then
+    local verdict = resolveEscStatus(state, sensors)
+    if verdict == nil then return nil end
+    if source == "esc_status" then return verdict.text end
+    if source == "esc_status_level" then return verdict.level end
+    if source == "esc_status_live" then return verdict.liveText end
+    return verdict.liveLevel
+  end
+
   if sensors and type(sensors.getValue) == "function" then
     local value = sensors.getValue(source)
     if type(value) == "number" then return value end

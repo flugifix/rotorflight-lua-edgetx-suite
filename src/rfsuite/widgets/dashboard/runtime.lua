@@ -64,6 +64,15 @@ end
 
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
 local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
+-- Box sources that are a text and the severity of it: naming either declares both, because a
+-- colour closure can read only what the derived snapshot carries. The two rows are the speed
+-- controller's health on file since the flight controller connected and what it is reporting on
+-- this pass; they are separate pairs on purpose, so a surface asking for one is not handed the
+-- other. Built once rather than per theme load, and walked where the sources are collected.
+local PAIRED_SOURCES = {
+  { "esc_status", "esc_status_level" },
+  { "esc_status_live", "esc_status_live_level" },
+}
 local THROTTLE_INFLIGHT_THRESHOLD = 35
 local THROTTLE_INFLIGHT_THRESHOLD_DIRECT = 8
 local RPM_INFLIGHT_THRESHOLD_DIRECT = 500
@@ -2365,6 +2374,20 @@ function Runtime.new(zone, options)
       collect(self.theme.boxes)
       -- Header boxes stand in the same tree and their closures read the same snapshot.
       collect(self.theme.header_boxes)
+      -- A status and the severity of it are one reading used together: the text goes in the box
+      -- and the level colours it, and a colour closure can read only what the snapshot carries.
+      -- So naming either half of a pair declares both. The second one costs a cache read on the
+      -- pass that already resolved the first rather than a second pair of sensor reads, and a
+      -- theme that names no half of a pair reaches none of it. Each pair stands alone: asking for
+      -- the reading on file does not also resolve the live one, or the other way about.
+      for i = 1, #PAIRED_SOURCES do
+        local pair = PAIRED_SOURCES[i]
+        if (seen[pair[1]] == nil) ~= (seen[pair[2]] == nil) then
+          local missing = (seen[pair[1]] == nil) and pair[1] or pair[2]
+          seen[missing] = true
+          sources[#sources + 1] = missing
+        end
+      end
     end
     self.boxSources = sources
     -- One immediate build, so a theme switch never leaves the new tree a tick of "--"
@@ -2486,6 +2509,13 @@ function Runtime.new(zone, options)
       self.state.profile = nil
       self.state.rateProfile = nil
       self.state.batteryProfile = nil
+      -- The worst the speed controller has reported since it was last asked, kept by the
+      -- `esc_status` box source in widgets/dashboard/objects/common.lua. A new flight controller
+      -- is a new answer to that question, and nothing else clears it -- a fault the controller
+      -- has since stopped reporting is deliberately still on file for the rest of the session.
+      -- `esc_status_live` shares this table and is not latched at all, so dropping it costs that
+      -- reading nothing: the next pass decodes the two sensors again and answers afresh.
+      self.state.escStatusCache = nil
       self.modelPreferences = nil
       -- Clear the reference so the identity check fails on the next frame
       -- and the slow-path signature comparison is triggered.  Keep the
