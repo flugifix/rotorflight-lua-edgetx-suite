@@ -349,6 +349,8 @@ local function linkDiversity(state)
   -- where it can be checked without a radio.
   state.linkDiversity = rates.latchDiversity(state.linkDiversity, sensors.getValue("2RSS"), sensors.getValue("ANT"))
   return state.linkDiversity
+end
+
 -- A string a library produced carries its translation as a build marker, because a library has
 -- no route to the locale bundle. Packaging rewrites the marker, so on a radio this is one search
 -- that finds nothing; an unpackaged tree still gets the wording from the widget's own context.
@@ -450,6 +452,15 @@ local function resolveEscStatus(state, sensors)
     -- Withdrawn by the next telemetry frame, so it is never written into the latch -- and it
     -- gives way to a fault already on file, which is the worse news of the two.
     if cache.latchLevel ~= nil and cache.latchLevel > level then
+      text, level = cache.latchText, cache.latchLevel
+    end
+  elseif decoded.word == nil then
+    -- No status word behind the reading: the model byte has arrived and the word has not, or
+    -- has stopped arriving, or the signature is not one we can read a word against. That says
+    -- nothing about the controller's health, so it is never written into the latch either --
+    -- written there at the same severity as OK, the first healthy word could never replace it.
+    -- A record already on file stands; without one, the reading is shown as it is.
+    if cache.latchLevel ~= nil then
       text, level = cache.latchText, cache.latchLevel
     end
   elseif cache.latchLevel == nil or level > cache.latchLevel then

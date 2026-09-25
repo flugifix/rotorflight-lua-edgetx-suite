@@ -94,7 +94,9 @@ switching the model off and on, not landing.
 restarted before parameters just written to it take effect reports that in place of its model
 byte, and the flight controller withdraws it again on the very next telemetry frame. That is a
 passing request rather than a state, so it is never put on file, and a fault already on file
-outranks it.
+outranks it. Nor is a *NO STATUS* that only means the status word has not arrived yet — the
+model byte can arrive first — so the first real reading replaces it, and a status word that
+stops arriving leaves the record as it was.
 
 **The live reading is what the controller is saying on this pass, and nothing more.** It follows
 the status word down as well as up, so a fault the controller has cleared stops being shown; the
