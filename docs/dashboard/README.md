@@ -16,7 +16,7 @@ is the starting point; these files carry the detail.
 | `theme-settings.md` | The per-theme settings page under *Dashboard* → *Settings*: the voltage range a theme's gauges span, stored per model. | theme `configure.lua` sources | to write |
 | [user-themes.md](user-themes.md) | Copying a shipped theme into `/SCRIPTS/TOOLS/rfsuite.user/dashboard/`, editing it, box styling, named colors, dynamic thresholds, and why a copy keeps its own settings. | nowhere yet | written |
 | [developer/dashboard-themes.md](../developer/dashboard-themes.md) | For contributors: the same thing at source level — the manifest keys, what puts the widget into each phase, the grid and box vocabulary, the `configure.lua` factory, and what a theme shipped in this repository owes. | source | written |
-| `quick-menu.md` | The fullscreen quick menu: erasing the blackbox and picking the battery profile. | nowhere yet | to write |
+| [quick-menu.md](quick-menu.md) | The fullscreen quick menu: how it is reached, its three entries — erasing the blackbox, opening the in-flight tuning surface, picking the battery profile — the close button, and the entry list it builds from. | source | written |
 | [inflight-tuning.md](inflight-tuning.md) | The in-flight tuning overlay: what the interlock switch brings up on the ground, in the air and after landing, and how it drives the flight controller's adjustment functions through two global variables. | the two settings pages and the overlay sources | written |
 | `model-image.md` | Where the model picture comes from, the per-cell-count variant and the accepted file types. | README | to write |
 | `service-widget.md` | What *RFSuite Service* keeps alive when the tool is closed, and where to place it. | README | to write |

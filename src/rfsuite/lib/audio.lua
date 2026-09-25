@@ -1062,8 +1062,38 @@ end
 -- voltage at some point this connection, and a BEC voltage is there beside it -- without one
 -- there is no evidence that anything is still being powered.
 --
+-- `memo` carries the only history the test needs, the second of the three, and it is the
+-- caller's table so that it is cleared on the same edge everything else about a connection is.
+function Audio.mainPowerLost(state, memo)
+  local voltage = tonumber(state and state.voltage)
+  if type(voltage) ~= "number" then
+    return false
+  end
+
+  if voltage > MAIN_POWER_LOST_VOLTS then
+    if type(memo) == "table" then memo.packVoltageSeen = true end
+    return false
+  end
+
+  if not (type(memo) == "table" and memo.packVoltageSeen == true) then
+    return false
+  end
+
+  local bec = tonumber(state and (state.bec_voltage or state.becVoltage))
+  if type(bec) ~= "number" or bec <= 0 then
+    return false
+  end
+
+  return true
+end
+
 -- Announced again every 10 seconds while the condition holds, which is the interval every
 -- other repeating alert in this file uses, and once more when the pack comes back.
+--
+-- The three tests are Audio.mainPowerLost above, so that a screen can show the same fact this
+-- announcement speaks without a second reading of it. `mainPowerLostActive` stays here and is
+-- not that fact: it is set only where the sound actually played, so it says what has been
+-- announced rather than what is true.
 local function announceMainPowerEvent(self, events, opts)
   if not prefEnabled(events, "main_power_lost", false) then
     return
@@ -1076,10 +1106,10 @@ local function announceMainPowerEvent(self, events, opts)
   end
 
   local now = nowSeconds()
+  local lost = Audio.mainPowerLost(self.state, audioState)
 
-  if voltage > MAIN_POWER_LOST_VOLTS then
-    audioState.packVoltageSeen = true
-    if audioState.mainPowerLostActive then
+  if not lost then
+    if voltage > MAIN_POWER_LOST_VOLTS and audioState.mainPowerLostActive then
       audioState.mainPowerLostActive = false
       audioState.lastAlertAt.main_power = 0
       alertCleared(audioState, "main_power")
@@ -1092,14 +1122,7 @@ local function announceMainPowerEvent(self, events, opts)
     return
   end
 
-  if audioState.packVoltageSeen ~= true then
-    return
-  end
-
   local bec = tonumber(self.state and (self.state.bec_voltage or self.state.becVoltage))
-  if type(bec) ~= "number" or bec <= 0 then
-    return
-  end
 
   if not alertMaySpeak(audioState, events, "main_power", now) then
     return

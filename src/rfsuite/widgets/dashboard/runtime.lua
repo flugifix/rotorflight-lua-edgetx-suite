@@ -64,6 +64,15 @@ end
 
 local RSS1_SOURCES = { "1RSS", "RSS1", "rssi1" }
 local RSS2_SOURCES = { "2RSS", "RSS2", "rssi2" }
+-- Box sources that are a text and the severity of it: naming either declares both, because a
+-- colour closure can read only what the derived snapshot carries. The two rows are the speed
+-- controller's health on file since the flight controller connected and what it is reporting on
+-- this pass; they are separate pairs on purpose, so a surface asking for one is not handed the
+-- other. Built once rather than per theme load, and walked where the sources are collected.
+local PAIRED_SOURCES = {
+  { "esc_status", "esc_status_level" },
+  { "esc_status_live", "esc_status_live_level" },
+}
 local THROTTLE_INFLIGHT_THRESHOLD = 35
 local THROTTLE_INFLIGHT_THRESHOLD_DIRECT = 8
 local RPM_INFLIGHT_THRESHOLD_DIRECT = 500
@@ -1522,9 +1531,53 @@ local function loadThemeInit(themePath)
   return initTable, base, folder
 end
 
+-- The phases the widget computes, and for each one the phase it refines. A theme declares as
+-- many of them as it wants to draw differently; a phase it does not declare resolves along this
+-- chain, so `armed` falls back to the ground screen and `offline` to the post-flight one. A
+-- theme that declares only the three original phases therefore draws exactly what it drew
+-- before the other two existed, and needs no new file.
+local PHASE_FALLBACK = {
+  preflight  = false,
+  armed      = "preflight",
+  inflight   = false,
+  postflight = false,
+  offline    = "postflight",
+}
+
+-- The phase whose module a theme actually draws for `flightMode`. It walks the chain above
+-- until the theme declares a module, and ends on the last phase of the chain when the theme
+-- declares none -- which is the phase the shipped default theme has a file for, so the fallback
+-- at the end of loadThemeModuleForState keeps resolving.
+local function themeStateKey(declared, flightMode)
+  local key = flightMode
+  if PHASE_FALLBACK[key] == nil then key = "preflight" end
+  while true do
+    if type(declared) == "table" and type(declared[key]) == "string" and declared[key] ~= "" then
+      return key
+    end
+    local fallback = PHASE_FALLBACK[key]
+    if not fallback then return key end
+    key = fallback
+  end
+end
+
+-- The same answer for every phase at once, taken when a theme loads, so that a phase change
+-- compares one lookup rather than walking the chain again on the pass that changes phase.
+local function themeStateKeys(declared)
+  local keys = {}
+  for phase in pairs(PHASE_FALLBACK) do
+    keys[phase] = themeStateKey(declared, phase)
+  end
+  return keys
+end
+
+-- Returns the theme module, the phase key it was resolved for, and the theme's own init table.
+-- The caller keeps the last two so that a phase change can be told from a MODULE change without
+-- reading init.lua off the card again: a phase that falls back to the module already on screen
+-- must not tear the scene down and build it again for no visible difference.
 local function loadThemeModuleForState(themePath, flightMode)
   local initTable, base, folder = loadThemeInit(themePath)
-  local stateKey = (flightMode == "inflight" or flightMode == "postflight") and flightMode or "preflight"
+  local stateKey = themeStateKey(initTable, flightMode)
 
   local stateScript = nil
   if initTable and type(initTable[stateKey]) == "string" and initTable[stateKey] ~= "" then
@@ -1547,7 +1600,7 @@ local function loadThemeModuleForState(themePath, flightMode)
       type(theme.boxes) == "table" or
       type(theme.boxes) == "function"
     ) then
-      return theme
+      return theme, stateKey, initTable
     end
   end
 
@@ -1557,7 +1610,7 @@ local function loadThemeModuleForState(themePath, flightMode)
     fallbackChunk = loadScript(SYSTEM_THEME_BASE .. "default/preflight.lua",
                                themeLoadMode(SYSTEM_THEME_BASE))
   end
-  if not fallbackChunk then return nil end
+  if not fallbackChunk then return nil, stateKey, initTable end
   local ok, theme = pcall(fallbackChunk)
   if ok and type(theme) == "table" and (
     type(theme.build) == "function" or
@@ -1565,9 +1618,9 @@ local function loadThemeModuleForState(themePath, flightMode)
     type(theme.boxes) == "table" or
     type(theme.boxes) == "function"
   ) then
-    return theme
+    return theme, stateKey, initTable
   end
-  return nil
+  return nil, stateKey, initTable
 end
 
 -- A stored path is a selection only if it names a theme: an empty select is written as the
@@ -1578,9 +1631,21 @@ local function selectedThemePath(value)
 end
 
 local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
+  -- `armed` and `offline` refine the ground and the post-flight screen rather than standing
+  -- beside them, so they have no slot of their own: each resolves through the theme chosen for
+  -- the phase it refines, and the Design page keeps the three selects it has. The answer below
+  -- depends on the slot alone, so the memo is keyed on the slot too, and arming answers from it
+  -- instead of resolving the same path again.
+  local slotMode = flightMode
+  if slotMode == "armed" then
+    slotMode = "preflight"
+  elseif slotMode == "offline" then
+    slotMode = "postflight"
+  end
+
   if themePathMemo.dashboard == dashboard
     and themePathMemo.modelPrefs == modelPrefs
-    and themePathMemo.flightMode == flightMode then
+    and themePathMemo.slotMode == slotMode then
     return themePathMemo.chosen
   end
 
@@ -1594,10 +1659,10 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
   local key = nil
   local modelKey = nil
   if dashboard and dashboard.theme_per_phase == true then
-    if flightMode == "inflight" then
+    if slotMode == "inflight" then
       key = "theme_inflight"
       modelKey = "model_theme_inflight"
-    elseif flightMode == "postflight" then
+    elseif slotMode == "postflight" then
       key = "theme_postflight"
       modelKey = "model_theme_postflight"
     end
@@ -1647,7 +1712,7 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
 
   themePathMemo.dashboard = dashboard
   themePathMemo.modelPrefs = modelPrefs
-  themePathMemo.flightMode = flightMode
+  themePathMemo.slotMode = slotMode
   themePathMemo.chosen = chosen
 
   return chosen
@@ -1689,6 +1754,32 @@ local sensorCache = {}
 local telemetryTarget = nil
 local telemetryChanged = false
 
+-- What the flight record has already read this pass.
+--
+-- The record runs from the event runtimes, which this widget drives at the top of its own pass,
+-- so on a pass where it samples it has asked the sensors for most of the names below before
+-- this read is reached -- and a second read of the same name inside one pass cannot answer
+-- anything the first did not. Counting the pass for it is what lets it offer those readings and
+-- what tells this pass's offer from the one before it; the offer's schema is
+-- tasks/events/telemetry/flight_record.lua's.
+local sharedRead = nil
+
+--- Count this pass for the record, before the event runtimes are driven.
+local function countSharedPass()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session
+  if type(session) ~= "table" then
+    sharedRead = nil
+    return
+  end
+  local shared = session.telemetryRead
+  if type(shared) ~= "table" then
+    shared = { values = {}, pass = 0, at = -1 }
+    session.telemetryRead = shared
+  end
+  shared.pass = shared.pass + 1
+  sharedRead = shared
+end
+
 local function getSensor(name)
   if sensorCache[name] == nil then sensorCache[name] = Sensors.getValue(name) end
   return sensorCache[name]
@@ -1701,11 +1792,21 @@ local function setField(field, value)
   end
 end
 
-local function readTelemetry(state)
+local function readTelemetry(state, audioState)
   if not (Sensors and type(Sensors.getValue) == "function") then return end
   telemetryTarget = state
   telemetryChanged = false
   for name in pairs(sensorCache) do sensorCache[name] = nil end
+
+  -- Seed the pass cache with what the record read in this same pass. Only this pass's stamp is
+  -- taken, and only names the sensors actually answered for are in the table -- a name that
+  -- answered nothing is absent, so it is asked for below exactly as it always was.
+  local shared = sharedRead
+  if shared and shared.at == shared.pass then
+    for name, value in pairs(shared.values) do
+      sensorCache[name] = value
+    end
+  end
 
   setField("rpm", getSensor("rpm"))
   setField("lq", getSensor("link"))
@@ -1722,6 +1823,13 @@ local function readTelemetry(state)
     setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
   end
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
+  -- The governor MODE, which is configuration rather than telemetry: the connect chain reads it
+  -- once over MSP (tasks/events/common/governor_config.lua) and leaves it on the session. It is
+  -- carried onto the state here so that an object needing it reads precomputed state, which is
+  -- what the reactive sweep is allowed to do; reaching into the session from a render closure is
+  -- not. Nil until the chain has answered, and a consumer has to cope with that.
+  local rfRoot = type(_G) == "table" and _G.rfsuite or nil
+  setField("governorMode", rfRoot and rfRoot.session and rfRoot.session.governorMode)
   setField("mcuTemp", roundInt(getSensor("temp_mcu") or state.mcuTemp, state.mcuTemp or 0))
   setField("escTemp", roundInt(getSensor("temp_esc") or state.escTemp, state.escTemp or 0))
   setField("bec_voltage", getSensor("bec_voltage") or state.bec_voltage)
@@ -1735,6 +1843,25 @@ local function readTelemetry(state)
 
   setField("current", currentValue or state.current)
   setField("watts", wattsValue or state.watts)
+
+  -- ESC load: the current as a share of the limit the speed controller is set to allow. Derived
+  -- here beside the watts above rather than read from anywhere: one division on a pass that has
+  -- both a limit and a reading, and a pair of comparisons on a pass that has neither.
+  --
+  -- Nil and not zero where the limit is unknown, and assigned rather than set through setField:
+  -- a load of nought is a reading and "no limit on file" is not, and setField never clears, so a
+  -- limit taken away again would leave its last percentage standing for the rest of the session.
+  --
+  -- The reading this pass produced and not the value kept from the last one, which is where this
+  -- differs from `watts` above: watts is a figure the flight statistics record extremes of and is
+  -- worth holding across a pass that answered nothing, while a percentage nobody records is
+  -- better absent for that pass than a frame old.
+  local escLimit = state.escCurrentLimit
+  if type(escLimit) == "number" and escLimit > 0 and type(currentValue) == "number" then
+    state.escLoad = currentValue / escLimit * 100
+  else
+    state.escLoad = nil
+  end
   setField("altitude", getSensor("altitude") or state.altitude)
   -- SmartFuel computes these two in this same Lua state and hands them over there
   -- (tasks/events/telemetry_bg/smart.lua), so neither has to travel out to a telemetry sensor
@@ -1756,6 +1883,16 @@ local function readTelemetry(state)
 
   if type(voltageValue) == "number" then
     setField("voltage", voltageValue)
+  end
+
+  -- Published rather than computed here, because the announcement in lib/audio.lua decides the
+  -- same question and a second reading of it would drift. The audio state is handed in as the
+  -- memo the test needs, so the one piece of history behind it is cleared on the connection
+  -- edges that already clear it and nowhere else. Plain assignment and not setField: this is
+  -- derived from readings that have just been taken, not a reading of its own, and nothing about
+  -- it should look to the rest of the pass like telemetry that changed.
+  if DashboardAudio and type(DashboardAudio.mainPowerLost) == "function" then
+    state.mainPowerLost = DashboardAudio.mainPowerLost(state, audioState)
   end
 
   local batteryCellCountValue = getSensor("battery_cell_count")
@@ -1808,11 +1945,12 @@ local function computeFlightMode(state)
   local isArmed = state.armed == true
   local wasArmed = state.prevArmed == true
 
-  -- Match Ethos behavior: after arming, stay in preflight until governor becomes active
-  -- (or throttle rises above a safety threshold).
+  -- Arming is not flight: the governor is not up and the throttle has not risen, so the phase
+  -- is neither the ground screen nor the in-flight one. It is its own phase, and a theme that
+  -- does not draw it separately resolves it back to the ground screen.
   if isArmed and not wasArmed then
     state.hadInflightFlight = false
-    return "preflight"
+    return "armed"
   end
 
   if isArmed then
@@ -1837,10 +1975,18 @@ local function computeFlightMode(state)
       return "inflight"
     end
 
-    return "preflight"
+    return "armed"
   end
 
   if state.hadInflightFlight == true then
+    -- After the flight the link is what separates the two phases. While the board still
+    -- answers, the summary stands beside a model that is live and can be armed again; once it
+    -- stops answering, readTelemetry is skipped on purpose and every number on the screen is
+    -- the last flight's. The two are the same picture only until a theme says otherwise, so
+    -- `offline` falls back to the post-flight module.
+    if state.rfConnected ~= true then
+      return "offline"
+    end
     return "postflight"
   end
 
@@ -1947,6 +2093,9 @@ function Runtime.new(zone, options)
       armFlags = 0,
       armDisableFlags = 0,
       governor = 0,
+      -- The governor mode, carried over from the session in readTelemetry; nil until the
+      -- connect chain has read it.
+      governorMode = nil,
       throttlePercent = 0,
       mcuTemp = 0,
       escTemp = 0,
@@ -1973,6 +2122,10 @@ function Runtime.new(zone, options)
       fuelTelemetrySeen = false,
       batteryTelemetrySeen = false,
       rfTelemetrySeen = false,
+      -- The main pack is gone while the board is still answering, decided in lib/audio.lua and
+      -- published here so a theme can draw it. False rather than nil before the first read: a
+      -- theme asking the question before any telemetry has arrived is not being told yes.
+      mainPowerLost = false,
       lastFlightEndingVoltage = nil,
       lastDisarmAt = nil,
       themeConfig = { v_min = 18.0, v_max = 25.2 }
@@ -2201,7 +2354,12 @@ function Runtime.new(zone, options)
     self.themePath = selectedTheme
     self.state.themeConfig = nextConfig
     updateVoltageThemeConfig(self)
-    self.theme = loadThemeModuleForState(selectedTheme, self.flightMode)
+    -- The phase key, and the key every other phase resolves to for this theme, are kept so that
+    -- the pass below can compare MODULES rather than phase names: a phase change that resolves
+    -- to the module already on screen is not a reason to tear the scene down.
+    local declares
+    self.theme, self.themeStateKey, declares = loadThemeModuleForState(selectedTheme, self.flightMode)
+    self.themeStateKeys = themeStateKeys(declares)
 
     -- A theme of the pilot's own may read the flight record under the names it carried before it
     -- moved to the session table. The mapping goes on HERE -- with the theme, in the same call,
@@ -2252,6 +2410,20 @@ function Runtime.new(zone, options)
       collect(self.theme.boxes)
       -- Header boxes stand in the same tree and their closures read the same snapshot.
       collect(self.theme.header_boxes)
+      -- A status and the severity of it are one reading used together: the text goes in the box
+      -- and the level colours it, and a colour closure can read only what the snapshot carries.
+      -- So naming either half of a pair declares both. The second one costs a cache read on the
+      -- pass that already resolved the first rather than a second pair of sensor reads, and a
+      -- theme that names no half of a pair reaches none of it. Each pair stands alone: asking for
+      -- the reading on file does not also resolve the live one, or the other way about.
+      for i = 1, #PAIRED_SOURCES do
+        local pair = PAIRED_SOURCES[i]
+        if (seen[pair[1]] == nil) ~= (seen[pair[2]] == nil) then
+          local missing = (seen[pair[1]] == nil) and pair[1] or pair[2]
+          seen[missing] = true
+          sources[#sources + 1] = missing
+        end
+      end
     end
     self.boxSources = sources
     -- One immediate build, so a theme switch never leaves the new tree a tick of "--"
@@ -2281,6 +2453,9 @@ function Runtime.new(zone, options)
       _G.rfsuite.session = _G.rfsuite.session or {}
       _G.rfsuite.session.event_context = "widget"
     end
+    -- Ahead of the runtimes, because the record samples inside them: the count is what tells
+    -- this pass's readings from the pass before it.
+    countSharedPass()
     tickMspRuntime(self)
     
     local reloaded = (reloadPreferencesIfNeeded(self, false, isBackground) == true)
@@ -2299,7 +2474,7 @@ function Runtime.new(zone, options)
     if not isPostflightOffline then
       if (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS then
         self._lastTelemetryReadAt = now
-        readTelemetry(self.state)
+        readTelemetry(self.state, self.audioState)
         -- The snapshot the reactive closures read, rebuilt on the same cadence as the
         -- telemetry read that feeds it -- probing is legal here and nowhere in the sweep.
         if DerivedSnapshot and type(DerivedSnapshot.build) == "function" then
@@ -2323,6 +2498,22 @@ function Runtime.new(zone, options)
         self.modelPreferences = _G.rfsuite.session.modelPreferences
       end
     end
+
+    -- The speed controller's current limit, lifted off the per-model store once per table rather
+    -- than once per pass: a reload replaces the table, so the identity test above is what says
+    -- the figure may have moved, and a steady-state pass pays one comparison. Reading the store
+    -- itself here would be two table lookups and a tonumber on every pass for a value that
+    -- changes when a pilot changes it and at no other time.
+    --
+    -- Both routes the preferences arrive by end in this reference: the widget's own disk read,
+    -- and the connect chain leaving the table on the session.
+    if self._escLimitSource ~= self.modelPreferences then
+      self._escLimitSource = self.modelPreferences
+      local battery = self.modelPreferences and self.modelPreferences.battery
+      local limit = tonumber(battery and battery.esc_current_limit) or 0
+      self.state.escCurrentLimit = (limit > 0) and limit or nil
+    end
+
     updateVoltageThemeConfig(self)
     if isFblConnected and not wasFblConnected then
       -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
@@ -2335,6 +2526,18 @@ function Runtime.new(zone, options)
       -- a new flight controller is a new answer to that question.
       self.state.armedSeen = false
       self.state.batteryCellCount = 0
+      -- What the link sources derived for the last session. The diversity latch above all:
+      -- it only ever rises, so carrying it over would report a second antenna on a receiver
+      -- that has none. The packet-rate memo goes with it so that the first pass of the new
+      -- session reads the rate rather than answering out of the previous one's cache. The
+      -- transmitter module's ExpressLRS generation goes too, so the new session asks again: the
+      -- module may have been reflashed or swapped while nothing was connected.
+      self.state.linkDiversity = nil
+      self.state.linkDiversityTick = nil
+      self.state.linkRfMode = nil
+      self.state.linkRfModeTick = nil
+      self.state.linkGeneration = nil
+      self.state.linkPingSent = nil
       -- The flight clock and the statistics are the record's; the event runtime drops them on
       -- the connect edge of its own link detector, which follows this one once the link has held
       -- for its CONNECT_STABLE_SECONDS -- not on the disconnect before it, which the post-flight
@@ -2345,6 +2548,13 @@ function Runtime.new(zone, options)
       self.state.profile = nil
       self.state.rateProfile = nil
       self.state.batteryProfile = nil
+      -- The worst the speed controller has reported since it was last asked, kept by the
+      -- `esc_status` box source in widgets/dashboard/objects/common.lua. A new flight controller
+      -- is a new answer to that question, and nothing else clears it -- a fault the controller
+      -- has since stopped reporting is deliberately still on file for the rest of the session.
+      -- `esc_status_live` shares this table and is not latched at all, so dropping it costs that
+      -- reading nothing: the next pass decodes the two sensors again and answers afresh.
+      self.state.escStatusCache = nil
       self.modelPreferences = nil
       -- Clear the reference so the identity check fails on the next frame
       -- and the slow-path signature comparison is triggered.  Keep the
@@ -2432,12 +2642,17 @@ function Runtime.new(zone, options)
       return ready
     end
 
-    if nextMode ~= self.flightMode then
-      self.flightMode = nextMode
-      reloadActiveTheme(self)
-    elseif selectedTheme ~= self.themePath or modelPrefsChanged then
-      reloadActiveTheme(self)
-    elseif not self.theme then
+    -- A phase change only rebuilds when it changes the module that is drawn. A theme that does
+    -- not declare `armed` or `offline` resolves them to the ground and the post-flight module
+    -- it already has on screen, and a rebuild there would be a torn-down LVGL tree for no
+    -- visible difference -- once per arm, and again on every link transition after a flight.
+    local modeChanged = (nextMode ~= self.flightMode)
+    self.flightMode = nextMode
+
+    if selectedTheme ~= self.themePath
+      or modelPrefsChanged
+      or not self.theme
+      or (modeChanged and self.themeStateKeys[nextMode] ~= self.themeStateKey) then
       reloadActiveTheme(self)
     end
     
@@ -2510,6 +2725,10 @@ function Runtime.new(zone, options)
       self.state.zoneY = self.zone.y or 0
     end
     self.state.flightMode = self.flightMode
+    -- The phase whose module is actually on screen. It differs from the phase above whenever a
+    -- phase falls back to another one's module, and it is what the engine's render key is built
+    -- from, so a fallback phase does not rebuild the scene it is already showing.
+    self.state.themePhase = self.themeStateKey or self.flightMode
 
     -- JOB pass: serve the link with the minimal queue quantum, then run one job step.
     -- pump() is the queue half of tick() and nothing else, so in-flight MSP transfers
@@ -2589,7 +2808,9 @@ function Runtime.new(zone, options)
     -- STATE pass: the background half, then invalidation checks that only enqueue.
     local ready = performBackgroundWork(self, false)
 
-    if not ready and self.flightMode ~= "postflight" then
+    -- `offline` is the post-flight phase with the link already gone, which is exactly the case
+    -- this splash must not cover: the summary is what the pilot walked back to the bench for.
+    if not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline" then
       local statusLine = self.statusLine or "Please wait..."
       local splashKey = "splash|" .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
       if self.renderKey ~= splashKey then

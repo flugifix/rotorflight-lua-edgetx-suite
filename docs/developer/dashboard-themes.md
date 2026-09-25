@@ -11,8 +11,8 @@ says what the theme is called and which module belongs to which phase; each modu
 grid and a list of boxes, and the engine turns that into the LVGL node list the widget hands
 to the radio. Nothing in a theme draws anything itself.
 
-This page is the contract: the folder, the manifest keys, **what puts the widget into each of
-the three phases**, the shape a phase module returns, the box vocabulary, the rule for a value
+This page is the contract: the folder, the manifest keys, **what puts the widget into each
+flight phase**, the shape a phase module returns, the box vocabulary, the rule for a value
 given as a function, and the per-theme settings page. What a pilot needs in order to copy and
 edit a theme is [user themes](../dashboard/user-themes.md); this page is the source-level
 version of the same thing, plus what a theme shipped in this repository additionally owes.
@@ -48,8 +48,10 @@ the widget to find the module for the phase it is in.
 | --- | --- | --- |
 | `name` | string | The name in the theme selector. Required: a table without it is not a theme. |
 | `preflight` | string | File name of the preflight module, relative to the theme folder. |
+| `armed` | string | Optional. File name of the module for the armed-but-not-flying phase. Omit it and that phase draws the preflight module. |
 | `inflight` | string | File name of the inflight module. |
 | `postflight` | string | File name of the postflight module. |
+| `offline` | string | Optional. File name of the module for the post-flight phase once the flight controller has stopped answering. Omit it and that phase draws the postflight module. |
 | `configure` | string | File name of the per-theme settings module. Omit it and the theme has no settings page. |
 | `pages` | table | Optional. Splits the theme's settings into pages, one tile each. See [Splitting the settings into pages](#splitting-the-settings-into-pages). |
 | `standalone` | boolean | `true` keeps the theme off the *Dashboard* → *Settings* page even if it declares `configure`. |
@@ -83,15 +85,23 @@ previous pass's value beside it, so an arm and a disarm are edges rather than st
 
 | Phase | Reached when |
 | --- | --- |
-| `preflight` | Not armed and no inflight phase has been reached in this armed session. This is also the phase the widget starts in, the phase on the pass the model arms, and the phase an armed model stays in until one of the inflight conditions below is met. |
+| `preflight` | Not armed and no inflight phase has been reached in this armed session. This is also the phase the widget starts in, and the phase a model returns to after an arm that never spooled up. |
+| `armed` | Armed, and none of the inflight conditions below has been met yet. The arm edge itself enters this phase and clears the inflight latch. |
 | `inflight` | Armed, and — on a later pass than the arm edge — the governor is active, or the throttle is above its threshold, or the direct-drive condition is met. |
-| `postflight` | Not armed, and the inflight phase had been reached in the armed session that just ended. |
+| `postflight` | Not armed, the inflight phase had been reached in the armed session that just ended, and the flight controller is still answering. |
+| `offline` | As `postflight`, but the flight controller has stopped answering — the battery is unplugged, the model is out of range, or the radio's link to it is gone. The widget cannot tell those apart. |
 
-**Arming alone does not leave preflight.** The pass on which the arm flag goes from false to
-true returns `preflight` and clears the inflight latch, so the ground screen stays up through
-spool-up. This matches what the same dashboard does on the other radio platform, and it is why
-a model that is armed on the bench and never spooled shows the preflight screen the whole time
-and produces no postflight screen on disarm.
+**Two of the five are refinements, and a theme does not have to draw them.** `armed` refines the
+ground screen and `offline` refines the post-flight one; a theme that declares no module for
+them draws the module it declares for the phase they refine. A theme written against the three
+original phases therefore keeps behaving exactly as it did, and the widget does not rebuild the
+scene for a phase change that resolves to the module already on screen.
+
+**Arming is not flight.** The pass on which the arm flag goes from false to true enters `armed`
+and clears the inflight latch, so the model is up, the blades may be turning and the phase is
+still not `inflight`. A model armed on the bench that never spools up therefore stays in `armed`
+for the whole arming and returns to `preflight` on disarm — it produces no postflight screen,
+because there was no flight.
 
 The three inflight conditions, any one of which is enough:
 
@@ -103,36 +113,58 @@ The three inflight conditions, any one of which is enough:
 
 Once any of them has been true, a latch is set and the phase stays `inflight` for the rest of
 the armed session — a governor dropping out or the throttle coming back through the threshold
-in autorotation does not send the screen back to preflight. The latch is cleared on the next
+in autorotation does not send the screen back to `armed`. The latch is cleared on the next
 arm edge, and on the flight controller reconnect edge; the disarm hands it to the postflight
 phase, which is what makes a landing produce a summary screen and a bench arm not produce one.
 
 Two consequences worth knowing before writing a theme:
 
-- **The postflight screen outlives the link.** While the inflight latch is set and the flight
-  controller is no longer answering, the widget stops reading telemetry rather than letting the
-  values decay, so the summary a pilot walks back to the bench with keeps standing. A postflight
-  module can rely on the last flight's numbers still being there; it cannot rely on anything live.
+- **The post-flight screen outlives the link, and that is what `offline` names.** While the
+  inflight latch is set and the flight controller is no longer answering, the widget stops
+  reading telemetry rather than letting the values decay, so the summary a pilot walks back to
+  the bench with keeps standing. A postflight or offline module can rely on the last flight's
+  numbers still being there; it cannot rely on anything live. The split exists so that a theme
+  can say which of the two it is showing — in `postflight` the model is still on the link and
+  can be armed again, in `offline` nothing on the screen can change any more.
 - **A model that never publishes `armflags` never leaves preflight.** The arm reading is what
   every phase decision is built on, and the widget deliberately distinguishes *read as disarmed*
   from *never read at all*.
 
 ### What a phase change costs
 
-A phase change is a full theme reload, not a redraw. The widget resolves the theme path for the
-new phase, loads that phase's module, rebuilds the box list and tears the standing LVGL tree
-down; the scene is then built in chunks of eight boxes, one chunk per pass, and swapped in at
-the end. So the three modules of one theme are three independent screens that share nothing at
-runtime except what they both read off the state table.
+A phase change that changes the module is a full theme reload, not a redraw. The widget resolves
+the theme path for the new phase, loads that phase's module, rebuilds the box list and tears the
+standing LVGL tree down; the scene is then built in chunks of eight boxes, one chunk per pass,
+and swapped in at the end. So the modules of one theme are independent screens that share
+nothing at runtime except what they both read off the state table.
+
+A phase change that resolves to the *same* module does not reload anything, and does not rebuild
+the scene either. That is what keeps the two optional phases free for a theme that does not
+declare them: entering `armed` on a theme without an `armed` module leaves the preflight scene
+standing rather than rebuilding it into itself.
+
+Two state fields carry this, and they are not the same question:
+
+| Field | What it says |
+| --- | --- |
+| `state.flightMode` | The phase the widget is in — one of the five above. This is what a theme reads to know what the model is doing. |
+| `state.themePhase` | The phase whose module is on screen, after the fallback. The engine's render key is built from this one, which is why a fallback phase costs no rebuild. |
+
+So a declarative theme whose box *values* depend on the phase — one that draws the same boxes in
+`preflight` and `armed` but wants a different text in each — has to say so, by giving its module
+a `renderKey(zone, state)` function that includes `state.flightMode`. Without that, the scene it
+built for the previous phase keeps standing, which is exactly the saving described above.
 
 The path is resolved per phase as well (`resolveThemePathForState`), which is what the
-*Per-Phase Themes* switch under *System* → *Settings* → *Dashboard* → *Design* acts on. With it
-off, one theme covers all three phases and the phase keys keep their values for whoever turns
-it back on. With it on, the first of these that names a theme wins: the model's phase override,
-then the model's own theme — both only while that model overrides the global choice — then the
-global phase override, then the global theme, then `system/default`. A model theme is a context
-of its own, so an unset phase override falls back to the model's theme rather than jumping to
-the global one.
+*Per-Phase Themes* switch under *System* → *Settings* → *Dashboard* → *Design* acts on. There
+are three theme slots, not five: `armed` resolves through the preflight slot and `offline`
+through the postflight one, because each is a refinement of that screen rather than a screen
+beside it. With the switch off, one theme covers every phase and the phase keys keep their
+values for whoever turns it back on. With it on, the first of these that names a theme wins: the
+model's phase override, then the model's own theme — both only while that model overrides the
+global choice — then the global phase override, then the global theme, then `system/default`. A
+model theme is a context of its own, so an unset phase override falls back to the model's theme
+rather than jumping to the global one.
 
 ## What a phase module returns
 
@@ -153,7 +185,10 @@ A module that carries neither is not a theme: the loader falls through to
 `system/default/<phase>.lua`, and to `system/default/preflight.lua` if even that is missing.
 The same fallback catches a module that fails to compile. A theme whose `init.lua` names no
 module for the phase is looked for under `widget.lua` in the theme folder first — which is how
-a single-screen theme covers all three phases with one file.
+a single-screen theme covers every phase with one file. The two optional phases resolve before
+any of this: `armed` looks for the theme's `armed` module and then for its `preflight` one,
+`offline` for its `offline` module and then for its `postflight` one, so what reaches the
+loader is always one of the three phases every theme declares.
 
 ### `layout`
 
@@ -184,7 +219,7 @@ Every box takes its place from four fields — `col`, `row`, `colspan`, `rowspan
 | `type` | `subtype` | Shows |
 | --- | --- | --- |
 | `text` | `telemetry` (default) | A telemetry value, formatted. |
-| `text` | `governor` | The governor state as a label. |
+| `text` | `governor` | The governor state as a label — or, in the two modes that have no state, the mode. See below. |
 | `text` | `blackbox` | Blackbox usage. |
 | `text` | `stats` | One flight statistic, chosen with `stattype`. |
 | `text` | `text` | Nothing — a decorative container. |
@@ -196,18 +231,217 @@ Every box takes its place from four fields — `col`, `row`, `colspan`, `rowspan
 An unknown `type` draws a container with `--` in it, which is the shape a typo takes on the
 radio.
 
+### `text` / `governor`, and the two modes that have no state
+
+The box reads the governor STATE sensor and shows its name. The flight controller runs a
+governor state machine in modes DIRECT, ELECTRIC and NITRO only; in OFF and LIMIT it never
+enters one, and the state sensor stays at its initial value — throttle off — from power-up to
+the end of the flight. Read literally, the box would report a hovering helicopter as having its
+throttle off, and there would be nothing on screen to say why.
+
+So in those two modes the box shows the mode instead, `Gov. Off` and `Gov. Limit`, under the
+names the mode is set by. It reads `state.governorMode`, which the widget carries over from the
+`gov_mode` the connect chain reads once over MSP; until that has answered the field is `nil` and
+the box behaves as it always did. The earlier branches are unchanged and still come first: an
+arming-disabled reason, and the disarmed label while the model is not armed.
+
+Two things follow for a theme. A box with a `thresholds` list matching governor state names will
+not match in these modes, in any language: the text is no longer a state name, and the
+untranslated key tried after the text is the mode's (`MODE_OFF`, `MODE_LIMIT`), not the state
+sensor's `OFF`. Such a box falls back to its plain text colour. A theme that wants to colour the
+two modes adds a threshold for them: a shipped theme on `@i18n(widgets.governor.MODE_OFF)@` or
+`@i18n(widgets.governor.MODE_LIMIT)@`, which the packager turns into the label as shown, and a
+user theme on the names `MODE_OFF` and `MODE_LIMIT`, the way it names the states. And the mode is
+configuration, not a reading: it changes only when the flight controller is reconfigured, so it
+costs one comparison per value change and nothing per frame.
+
 The value a box reads is `source`, and the names are resolved in
 `widgets/dashboard/objects/common.lua`, `mapTelemetrySource`: a fixed set that comes straight
 off the widget state — `voltage`, `bec_voltage`, `current`, `watts`, `rpm`, `fuel`,
 `smartfuel`, `smartconsumption`, `altitude`, `governor`, `esc_temp`, `mcu_temp`,
-`throttle_percent`, `link`, `pid_profile`, `rate_profile`, `battery_profile`, `model_name` —
-and, for anything else, the sensor of that name from `lib/sensors.lua`.
+`throttle_percent`, `link`, `pid_profile`, `rate_profile`, `battery_profile`, `model_name`,
+`link_packet_rate`, `link_floor`, `link_diversity`, `esc_load`,
+`esc_status`, `esc_status_level`, `esc_status_live`, `esc_status_live_level` — and, for anything
+else, the sensor of that name from `lib/sensors.lua`.
+
+### `link_packet_rate`, `link_floor`, `link_diversity`
+
+Not sensors. The three are read out of the CRSF link-statistics frame the *transmitter module*
+sends the radio — the frame the radio creates `1RSS`, `2RSS`, `RSNR`, `ANT`, `RFMD`, `TPWR`,
+`TRSS`, `TQly` and `TSNR` from — and they say what the link is doing rather than what the
+helicopter is doing.
+
+**`link_packet_rate` rather than `link_rate`, and the name is deliberate.** *Link rate* is
+already taken in this repository for something else: `session.crsfTelemetryConfig.linkRate` is
+the flight controller's own telemetry link rate in hertz, read over MSP `telemetry_config` and
+set from *Tools* → *Diagnostics* → *ELRS Link*. The air rate is what that same page calls
+`packetRate`, reading it off the module's parameter list rather than off the link-statistics
+frame, so this source takes the page's word for the same quantity.
+
+| source | type | what it is | nil when |
+| --- | --- | --- | --- |
+| `link_packet_rate` | string | the air rate the link is running, spelled as ExpressLRS spells it: `50Hz`, `150Hz`, `100Hz Full`, `D250`, `F1000`, `K1000` | the link is down; no `RFMD` reading; the transmitter module has not yet said which ExpressLRS it runs, or is not ExpressLRS 3.x or 4.x; a byte that release leaves unused |
+| `link_floor` | number | the receiver sensitivity that rate is specified down to, in dBm and negative (`-108`) | the rate is unknown; a rate ExpressLRS declares and ships no radio configuration for; on 3.x, a rate whose figure depends on the band (see below) |
+| `link_diversity` | number | `1` once the readings have proved a second antenna, `0` while they have not | the receiver has reported neither `2RSS` nor `ANT`, so there is nothing to say yet |
+
+**`link_packet_rate` and `link_floor` need to know which ExpressLRS the transmitter module runs,
+and the frame does not say.** `RFMD` carries an enumeration value whose meaning belongs to
+whichever module filled it, and ExpressLRS renumbered that enumeration between 3.x and 4.x: the
+same byte is a different rate on each, and the common rates are exactly where the two overlap
+(byte 10 is `D250` on 3.x and `D50Hz` on 4.x). So the widget asks the module. Once the link is
+up and `RFMD` has a reading — and only for a theme that declares one of these two sources — it
+sends the transmitter module one CRSF device ping, and the device-information frame the module
+answers with carries its release number. `lib/link_rates.lua` holds a table for each generation
+(3.0.0 to 3.6.4, and 4.0.0 to 4.1.0; neither changed within its generation) and names its
+sources line by line.
+
+What follows from that, for a theme author:
+
+- **Both sources draw `--` until the module has answered.** That is normally the first pass
+  after the ping, but it is a pass, and it is repeated when the widget starts a new
+  flight-controller session.
+- **A module that is not ExpressLRS 3.x or 4.x resolves to nothing**, rather than to a rate it is
+  not running: another make of CRSF module, ExpressLRS 2.x, or a radio with no CRSF module at all.
+- **On 3.x, `50Hz` and `250Hz` carry no floor.** In the 3.x numbering those two rates share one
+  value across the 900 MHz and 2.4 GHz bands, with a different sensitivity on each (`-120` against
+  `-115` dBm, and `-111` against `-108` dBm from 3.4.0), and the band is not in the frame. 4.x put
+  the band into the value, which is why every configured 4.x rate has one floor.
+- **Nothing is resolved while the link is down.** The radio answers every telemetry value with `0`
+  then, and `0` is an air rate in both tables.
+- The ping is the same device ping a module's own configuration script sends when it opens,
+  addressed to the transmitter module only. ExpressLRS answers it the same way, and — as it does
+  when that script opens — clears the module's critical-warning flags.
+
+**The headroom arithmetic is the theme's.** `link_floor` is the floor as ExpressLRS states it, a
+negative dBm figure, and nothing here divides anything. `1RSS`, `2RSS` and `TRSS` carry the same
+sign: the CRSF field is specified as `dBm × -1`, and the transmitter module negates it on the way
+to the handset for exactly this reason — *"OpenTX's value is signed and will display +dBm and
+-dBm properly"* — so both numbers are negative dBm and directly comparable. `rssi - floor` is
+therefore the headroom in dB, and `(rssi - floor) / (-30 - floor)` a fraction of the way from the
+floor to a -30 dBm best case. A theme clamps that itself: an RSSI below the floor is a link that
+is still working past what the rate is specified for, which happens.
+
+**`link_diversity` only ever rises, and that is deliberate.** A receiver with one radio and two
+antennas spends most of its packets on one of them, so a pass that sees only the first antenna
+is not evidence against the second; the value latches at `1` and is cleared where the widget
+starts a new flight-controller session. `ANT` alone is not evidence either — the field is in
+every frame and a single-antenna receiver reports a constant `0` in it, so what counts is a
+reading only a second antenna can produce: a non-zero `2RSS`, or `ANT` naming the second one.
+The test is `ANT ~= 0` and never `ANT == 1`: the specification counts the antennas from nought
+(*"Diversity active antenna ( enum ant. 1 = 0, ant. 2 )"*), and nought is the value that means
+nothing has been proved whatever the numbering above it turns out to be. `2RSS` is the half of
+the test that does not depend on that at all.
+
+**What they cost.** Nothing at all on a theme that names none of them: they resolve at the end
+of `mapTelemetrySource`, so an absent name is never compared for, and no ping is ever sent. A
+theme that names one pays one sensor read per telemetry pass, and a theme that names both
+`link_packet_rate` and `link_floor` pays the same one — the reading is memoised on the widget
+state for the pass. Until the module has answered, a pass also looks for the answer in the
+widget's CRSF frame queue. No box, no threshold and no formatter changed, and no shipped theme
+declares any of the three.
+
+Give a `link_floor` box `unit = "dBm"` and a `link_packet_rate` box no unit; `link_diversity` is a flag
+rather than a reading and reads better through a threshold colour than as a number.
+
+### `esc_load`
+
+Not a sensor. It is the current as a percentage of the current limit the speed controller is
+set to allow, and it exists so that a tile can show a figure a pilot can judge without knowing
+the controller. The limit is kept per flight controller, in its preferences file on the radio: an AM32, Scorpion or
+YGE controller reports its own and the suite takes it from the parameter block when that
+family's page is opened, and for the other seven families it is typed in under *Setup* →
+*Power* → *Preferences* ([page](../pages/setup/power/preferences.md)).
+
+Where no limit is on file the source resolves to `nil`, which a box draws as `--`. That is the
+state every model is in until one of the two routes has supplied a figure, so a theme shipping
+an `esc_load` box should expect `--` to be what most radios show.
+
+Give the box `unit = "%"`, and for a gauge a range of `min = 0, max = 150`: the interesting part
+is above 100, where the controller is being asked for more than it is set to allow, and a gauge
+ending at 100 has nowhere to draw that.
+
+### The speed controller's health: two pairs, and which one a surface owes
+
+The speed controller's health, in words. There are four names and they are **two pairs**. In each
+pair the first is a translated **string** for a `text` box — the same shape `model_name` already
+has — and the second is a **number** for colouring it: 1 nothing wrong, 2 a warning, 3 a fault,
+and `nil` where nothing answered, which is the same reading as the string being `nil`. There is no
+level 0.
+
+| Source | Level source | What it answers |
+| --- | --- | --- |
+| `esc_status` | `esc_status_level` | the worst the controller has reported since the flight controller connected |
+| `esc_status_live` | `esc_status_live_level` | what the controller is reporting on this pass |
+
+All four come out of one decode, so a theme may declare any of them, or all of them, without
+paying for the sensors more than once.
+
+Neither is a sensor. Both are decoded from two that the flight controller publishes — `Esc#`,
+which says which telemetry protocol the controller speaks, and `EscF`, its status word — and the
+layouts are in `lib/esc_status.lua`, one table per protocol. There is no common layout, which is
+why the signature is needed to read the word at all, and why several protocols decode to *no
+status*: they fill no status word, so their zero is not a clean bill of health. Which protocols
+those are, and what the two sensors need on the flight controller before they exist on the radio,
+is in [ESC status](../reference/esc-status.md).
+
+Three properties a theme has to know:
+
+- **`esc_status` keeps the worst reading.** What that box shows is the worst the controller has
+  reported since the flight controller connected, not what it is reporting this second, and it is
+  dropped where the widget starts a new session with a flight controller. A fault the controller
+  has since cleared is still the reason a flight ended early, and a pass is slower than a fault.
+- **`esc_status_live` keeps nothing.** It follows the status word down as well as up, so a fault
+  the controller has cleared stops being shown on the next pass. A request to restart the
+  controller — which the flight controller withdraws on the very next telemetry frame, and which
+  is therefore never put on file — is part of this reading and of no other.
+- **`nil` where nothing answered**, on both pairs, which a box draws as `--`: no controller, or
+  neither sensor on this radio.
+
+**Pick by what the surface promises, and do not treat one as a cheaper version of the other.** A
+line a pilot reads as *what is wrong now* takes the live pair, or it holds an alarm the controller
+withdrew. A row a pilot reads as *what this flight has seen* takes the pair on file, or it loses
+the fault that ended the flight. A theme wanting both shows both, and pays one decode for it.
+
+The level is a separate source rather than a threshold on the text, because thresholds match a
+value and the value here is already translated. Colour a box from it with a `textcolor` function:
+
+```lua
+{
+  col = 1, row = 1, type = "text", subtype = "telemetry",
+  source = "esc_status",
+  title = "ESC",
+  textcolor = function(box, state)
+    local level = state.derived and state.derived.esc_status_level
+    if level == 3 then return RED end
+    if level == 2 then return COLOR_THEME_WARNING end
+    return WHITE
+  end
+}
+```
+
+That closure runs in the reactive sweep, so it reads `state.derived` and nothing else. **Naming
+either half of a pair declares both halves of that pair**: they are one reading, so a box that
+shows the text can colour itself from the level without declaring it separately, and the level
+costs a cache read on the pass that resolved the text rather than a second pair of sensor reads.
+**The two pairs stand alone**, so naming `esc_status_live` does not also resolve `esc_status`; a
+theme that wants both names both. A theme that names none of the four reaches none of it and reads
+neither sensor.
 
 The rest of a box is presentation and is shared across the types that can use it: `title`,
 `titlepos`, `titlealign`, `titlecolor`, `textcolor`, `bgcolor`, `font`, `unit`, `decimals`,
 `transform`, `autosize_chars`, `thresholds`. Thresholds — the dynamic colour lists and how a
 temperature limit is converted for a radio set to Fahrenheit — are described once, in
 [user themes](../dashboard/user-themes.md); they behave identically in a shipped theme.
+
+### Facts on `state` that are not a box source
+
+A free-form module is handed the widget state and may read more than the value list above. One
+of those is worth naming, because nothing else in the tree says it and a theme that works it out
+for itself will not agree with the announcement that speaks it:
+
+| Field | What it says |
+| --- | --- |
+| `state.mainPowerLost` | The main pack is gone while the flight controller is still answering — it reads as gone rather than merely low, it had read a real voltage earlier in this connection, and a BEC voltage is there beside it. It is the test `lib/audio.lua` makes for its *Main power lost* announcement, decided in one place (`Audio.mainPowerLost`) and published here; it does **not** depend on that announcement being switched on. A theme drawing it would show the voltage slot as running on the reserve and the fuel reading as unknown, because neither is being measured any more. It is refreshed on the telemetry cadence, so like every other reading it stands still on a post-flight screen whose link is gone. |
 
 **`source` is read as a literal, once, at theme load.** When a theme is loaded the widget walks
 its boxes and collects every `source` that is a string into the list the derived snapshot is
