@@ -56,6 +56,10 @@ function M.new(category)
     view = nil
   end
 
+  local function readOnly()
+    error("onconnect progress is read-only", 2)
+  end
+
   local Log = nil
   local Env = nil
   local lastStartedTask = nil
@@ -164,9 +168,11 @@ function M.new(category)
     return false
   end
 
-  -- The next eligible task and the progress counts, off one walk. `progress` is handed to callers
-  -- as it is and is therefore read-only to them: a change builds a new table, it never edits the
-  -- one a caller may still hold.
+  -- The next eligible task and the progress counts, off one walk. `progress` is shared by every
+  -- caller until the next walk, so it is handed out as a read-only proxy: one caller's write must
+  -- not become the next reader's answer. A `__newindex` on the table itself would not catch it,
+  -- because Lua overwrites a key that is already there without consulting the hook. A change
+  -- builds a new table; it never edits the one a caller may still hold.
   local function queueView(currentEnv)
     local v = view
     if v and v.env == currentEnv then return v end
@@ -193,7 +199,10 @@ function M.new(category)
     v = {
       env = currentEnv,
       task = nextTask,
-      progress = { done = done, total = total, failed = failed, pending = pending },
+      progress = setmetatable({}, {
+        __index = { done = done, total = total, failed = failed, pending = pending },
+        __newindex = readOnly,
+      }),
     }
     view = v
     return v
@@ -328,7 +337,7 @@ function M.new(category)
   -- `pending` is the same task getPendingTaskName() returns.
   --
   -- The table is the one the last walk built, and the same table is returned until a task's
-  -- state, the queue or the asking context changes. Read it; do not write to it.
+  -- state, the queue or the asking context changes. It is read-only: a write raises.
   function runner.getProgress()
     ensureEnv()
     local currentEnv = Env and Env.get() or "tool"
