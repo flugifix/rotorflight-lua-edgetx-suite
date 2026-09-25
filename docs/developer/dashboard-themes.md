@@ -13,7 +13,8 @@ to the radio. Nothing in a theme draws anything itself.
 
 This page is the contract: the folder, the manifest keys, **what puts the widget into each
 flight phase**, the shape a phase module returns, the box vocabulary, the rule for a value
-given as a function, and the per-theme settings page. What a pilot needs in order to copy and
+given as a function, the per-theme settings page, and what a theme can read of the battery
+prompt. What a pilot needs in order to copy and
 edit a theme is [user themes](../dashboard/user-themes.md); this page is the source-level
 version of the same thing, plus what a theme shipped in this repository additionally owes.
 
@@ -553,6 +554,47 @@ preferences.
 A radio that offers no directory enumeration reads the theme list from
 `theme_index.lua` instead of from `init.lua`, and the packager copies the declared pages into
 it, so the split is there as well.
+
+## The battery prompt
+
+With *Ask which pack after connecting* on (the [Flight Log](../pages/tools/flight_log.md) page,
+*Settings*), the widget offers the pilot's battery registry once per connection — in fullscreen,
+because a widget zone receives no touch and Lua can leave fullscreen but not enter it. The
+picker is drawn by the widget for every theme, so its way out is always there; a theme may read
+what the prompt knows, and anything on the radio may drive it.
+
+### `state.batteryPick`
+
+A table from the widget's first pass on, replaced rather than emptied on a reconnect, so a
+closure may index it without guarding. A theme reads it and never writes it.
+
+| Field | |
+| --- | --- |
+| `loaded` | the registry has been read for this connection |
+| `pending` | the prompt is on, this model has packs, and this connection the pilot has neither picked nor closed it and the model has not been armed |
+| `candidates` | the registry entries for this model: `id`, `name`, `cap`, `profile`, `cycles`, `last`, plus `targetProfile` |
+| `selectedId`, `selectedName` | the pack picked this connection, else the one stored for the model, else `nil` |
+| `boardProfile` | the battery profile the flight controller reported on connecting, 0-based; `nil` until it has answered, and again after any profile write, which is not confirmed |
+| `dismissed` | the pilot closed the picker without picking, this connection |
+| `applied` | what became of the profile write: `nil`, `"queued"`, `"skipped"` or `"refused:<why>"` |
+
+`targetProfile` is 0-based like `boardProfile`, and is `nil` where the pack names no profile and
+no board profile is set to its capacity. The BatP telemetry sensor is 1-based and is a different
+number; do not mix the two.
+
+### `rfsuite.batteryPick`
+
+Three actions for anything on the radio that is not the picker itself — a theme, or another
+widget:
+
+| | |
+| --- | --- |
+| `rfsuite.batteryPick.select(id)` | record a pick; `nil` is *no battery* |
+| `rfsuite.batteryPick.dismiss()` | close the prompt for this connection |
+| `rfsuite.batteryPick.open()` | put the picker back on screen the next time fullscreen is entered |
+
+They are bound to the dashboard widget that published them last, and they record rather than
+perform, exactly as a press does.
 
 ## Checklist for a theme shipped in this repository
 

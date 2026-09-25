@@ -726,10 +726,6 @@ local function drawGrid(children, x, y, w, i18n, layoutParams, tableDef, rowsCon
   return cursorY
 end
 
-function M.getModuleTitle()
-  return ui.baseTitle or "Rates"
-end
-
 function M.isPageOpen()
   return true
 end

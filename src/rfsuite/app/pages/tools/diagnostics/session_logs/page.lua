@@ -114,10 +114,6 @@ end
 
 -- ---------------------------------------------------------------------------
 
-function M.getModuleTitle()
-  return "Session Logs"
-end
-
 function M.getHeaderActions()
   return { reload = true, save = false, help = true }
 end

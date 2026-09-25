@@ -52,7 +52,8 @@ local RSSI_LINK_SOURCES = {
   ["2RSS"] = true,
 }
 
--- What "powered" means, and it is only ever asked about a statistic that records a FLOOR.
+-- What "powered" means, and it is asked about a statistic that records a FLOOR and about the
+-- headspeed band kept per PID profile.
 --
 -- A minimum taken across the whole armed window is a minimum of the spool-up and the spool-down
 -- rather than of the flight: a pilot arms first and spools up afterwards, so the first readings
@@ -60,6 +61,10 @@ local RSSI_LINK_SOURCES = {
 -- minimum for the rest of the flight. The maxima keep the broad window on purpose -- nothing
 -- about a ramp can raise them, and a reading taken outside the powered band is still the
 -- highest the flight reached.
+--
+-- A headspeed extreme kept PER PID PROFILE is gated on both ends instead: it is a statement
+-- about what the governor held under that profile, so a reading taken while the governor was
+-- not holding anything belongs to no profile in particular.
 --
 -- The flight controller's own governor state is the reading that says when the rotor is under
 -- power at a settled headspeed, and two of its ten states qualify:
@@ -133,12 +138,14 @@ local MAIN_POWER_LOST_VOLTS = 1.0
 --   minGate  a further condition on the minimum alone
 --   minPositive  the minimum also has to be above zero
 --   count    the record key an episode counter is kept under, for the sag detector
+--   profiles  how many PID profiles the row is kept for, one key pair each: max<key>1, min<key>1
 local GATE_ANY = 0        -- any number the sensor gives, which is what most of them take
 local GATE_POSITIVE = 1   -- above zero
 local GATE_FUEL_SEEN = 2  -- only once a fuel sensor has answered
 local GATE_LINK_QUALITY = 3
 local GATE_POWERED = 4    -- only while the rotor is under power, as defined above
 local GATE_SAG = 5        -- the voltage-sag detector, which is a statistic of its own shape
+local GATE_PROFILE = 6    -- powered, and on this row's own PID profile
 
 local FLIGHT_STATS = {
   { key = "ThrottlePercent", source = "throttlePercent", max = true },
@@ -146,6 +153,21 @@ local FLIGHT_STATS = {
     minGate = GATE_POWERED, minPositive = true },
   { key = "Current",         source = "current",         max = true, min = true,
     minGate = GATE_POWERED },
+  -- Headspeed per PID profile: maxRpmP1/minRpmP1 .. maxRpmP3/minRpmP3. A pilot flies a profile
+  -- per flying style, so the headspeed band of a flight is three bands rather than one, and the
+  -- flight log has carried a column pair per profile since it was written. Powered on both ends
+  -- rather than only on the minimum: the row says what the head was held at under that profile,
+  -- and a reading taken while the governor was not holding it belongs to no profile in
+  -- particular.
+  --
+  -- One row for the three, resolved through a key table: three rows would be three closure
+  -- calls per sample where the profile picks exactly one of them.
+  --
+  -- Three, because the flight log has three column pairs. A flight controller with more than
+  -- 256 kB of flash offers six PID profiles; a reading from profile 4, 5 or 6 goes into the
+  -- overall headspeed extremes as it always has and into no per-profile row.
+  { key = "RpmP",            source = "rpm",             max = true, min = true, gate = GATE_PROFILE,
+    profiles = 3 },
   { key = "Watts",           source = "watts",           max = true },
   { key = "Altitude",        source = "altitude",        max = true },
   { key = "EscTemp",         source = "escTemp",         max = true, min = true },
@@ -171,9 +193,16 @@ function Record.keys()
   local out = {}
   for i = 1, #FLIGHT_STATS do
     local stat = FLIGHT_STATS[i]
-    if stat.max then out[#out + 1] = "max" .. stat.key end
-    if stat.min then out[#out + 1] = "min" .. stat.key end
-    if stat.count then out[#out + 1] = stat.count end
+    if stat.profiles then
+      for p = 1, stat.profiles do
+        if stat.max then out[#out + 1] = "max" .. stat.key .. p end
+        if stat.min then out[#out + 1] = "min" .. stat.key .. p end
+      end
+    else
+      if stat.max then out[#out + 1] = "max" .. stat.key end
+      if stat.min then out[#out + 1] = "min" .. stat.key end
+      if stat.count then out[#out + 1] = stat.count end
+    end
   end
   return out
 end
@@ -194,6 +223,7 @@ local values = {
   becVoltage = 0,
   lq = 0,
   govState = 0,
+  pidProfile = 0,
   lqSource = nil,
   fuelSeen = false,
   -- Not sampled: the powered gate's own state, computed from the sampled values once per
@@ -316,6 +346,38 @@ local function trackMaxMinPoweredPositive(src, maxKey, minKey)
   end
 end
 
+--- Both extremes of the PID profile the flight controller is on, taken only while the rotor is
+--- under power. `keys` is the compiled key pair per profile, so a sample costs one table lookup
+--- and picks the pair rather than testing each profile in turn; a profile the table does not
+--- cover falls out at that lookup.
+---
+--- Without a governor state the reading is held back exactly as the powered minima hold theirs,
+--- and the profile it was read on is held back beside it (q1..q4), so a reading is booked to the
+--- profile it was taken on rather than to the one reported POWERED_TAIL_SAMPLES samples later.
+--- Neither register is cleared at a flight edge, for the reason the powered minima give.
+local function trackProfiles(src, keys)
+  local p1, p2, p3, p4
+  local q1, q2, q3, q4
+  return function(rec)
+    local v = values[src]
+    local profile = values.pidProfile
+    if not values.govStateSeen then
+      v, p1, p2, p3, p4 = p1, p2, p3, p4, v
+      profile, q1, q2, q3, q4 = q1, q2, q3, q4, profile
+    end
+    if values.powered then
+      local pair = keys[profile]
+      if pair ~= nil and type(v) == "number" and v > 0 then
+        local maxKey, minKey = pair[1], pair[2]
+        local b = rec[maxKey]
+        if b == nil or v > b then rec[maxKey] = v end
+        b = rec[minKey]
+        if b == nil or v < b then rec[minKey] = v end
+      end
+    end
+  end
+end
+
 --- The voltage sag detector: how often the pack went at or below the flight controller's own
 --- minimum cell voltage, and the deepest per-cell voltage it reached while it was there.
 ---
@@ -424,6 +486,12 @@ for i = 1, TRACK_COUNT do
     built = trackMaxMinPositive(src, maxKey, minKey)
   elseif gate == GATE_SAG then
     built = trackSag(src, minKey, stat.count)
+  elseif gate == GATE_PROFILE then
+    local keys = {}
+    for p = 1, stat.profiles do
+      keys[p] = { "max" .. stat.key .. p, "min" .. stat.key .. p }
+    end
+    built = trackProfiles(src, keys)
   elseif gate == GATE_POSITIVE then
     built = trackMinPositive(src, minKey)
   elseif maxKey and minKey and minGate == GATE_POWERED then
@@ -594,6 +662,7 @@ local function readSources()
   local consumedMah = nil
   if handedConsumption == nil then consumedMah = get("smartconsumption") end
   local govState = get("governor")
+  local pidProfile = get("pid_profile")
   local handedFuel = smart and smart.fuel
   local smartFuel, plainFuel = nil, nil
   if handedFuel == nil then
@@ -616,6 +685,7 @@ local function readSources()
     v.altitude = altitude
     v.smartconsumption = consumedMah
     v.governor = govState
+    v.pid_profile = pidProfile
     v.smartfuel = smartFuel
     v.fuel = plainFuel
     shared.at = shared.pass
@@ -644,6 +714,8 @@ local function readSources()
   -- The governor state decides the powered gate below, so it is held to being a number here
   -- rather than tested on every comparison the gate makes.
   if type(govState) == "number" then values.govState = govState end
+  -- The PID profile is 1-based on the wire: the flight controller sends its own index plus one.
+  if type(pidProfile) == "number" then values.pidProfile = pidProfile end
 
   local fuel = handedFuel or smartFuel or plainFuel
   if type(fuel) == "number" then
@@ -775,7 +847,8 @@ function Record.reset()
   -- the previous reading standing, so a model connected without it would inherit the reading:
   -- into its statistics, and into the powered gate -- a state such as throttle hold would keep
   -- the gate shut for the whole session, a headspeed and a throttle would open it on a head that
-  -- is not driven. The readings go back to the values a fresh start has.
+  -- is not driven -- and its samples would land in the last session's profile. The readings go
+  -- back to the values a fresh start has.
   values.throttlePercent = 0
   values.rpm = 0
   values.current = 0
@@ -789,6 +862,7 @@ function Record.reset()
   values.becVoltage = 0
   values.lq = 0
   values.govState = 0
+  values.pidProfile = 0
   values.lqSource = nil
   resetPowered()
   resetSagDetector()

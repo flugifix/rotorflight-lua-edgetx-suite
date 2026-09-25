@@ -39,9 +39,15 @@ gets a message instead of the settings.
   and cannot be selected; that is a flight controller newer than the suite.
 - The telemetry wire itself is assigned on *Setup* → *Ports*; this page only says what is
   expected on it.
+- Saving reboots the flight controller. Once the settings are stored the notice can be closed
+  and the page left; the outcome is then shown the next time the page is opened. The page also
+  reads again if a different flight controller answers while it is open. Both are described in
+  [Saving configuration](../../../reference/saving.md).
 
 ## Related
 
+- [Saving configuration](../../../reference/saving.md) — the save that restarts the flight
+  controller, and what a different flight controller does to an open page.
 - [Rotorflight documentation](https://www.rotorflight.org/docs/)
 
 *Documented against RFSuite 0.1.7.*

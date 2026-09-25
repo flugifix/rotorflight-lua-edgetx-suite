@@ -490,16 +490,6 @@ local function appendSingleChoiceRow(children, x, y, w, labelText, key, options)
   return rowH + 1
 end
 
-function M.onLoad()
-  ensureDeps()
-  ensureLoaded()
-end
-
-function M.onActivate()
-  ensureDeps()
-  ensureLoaded()
-end
-
 function M.wakeup(ctx)
   ensureDeps()
   ensureLoaded()

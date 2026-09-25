@@ -39,6 +39,7 @@ A key of `current` or `last` is **absent until that statistic has taken a value*
 | `maxLq`, `minLq` | link quality | both, and only for a 0–100 % reading from a sensor that is not a known RSSI source — a receiver without an RQly sensor falls back to 1RSS/2RSS, which carry dBm |
 | `sagCount` | pack voltage | how many voltage sags the flight had (below). `0` where the pack was watched and nothing happened; absent where it could not be watched |
 | `minSagCellVoltage` | pack voltage | the deepest per-cell voltage reached inside a sag; absent where there was none |
+| `maxRpmP1`, `minRpmP1` … `maxRpmP3`, `minRpmP3` | headspeed | both, per PID profile, and only while the rotor is powered (below) |
 
 ## Voltage sags
 
@@ -73,7 +74,8 @@ the spool-down rather than from the flight, and the lowest current is the curren
 is in practice zero.
 
 **`minRpm` and `minCurrent` are therefore taken only while the rotor is under power.** The maxima
-beside them keep the whole armed window on purpose: nothing about a ramp can raise them.
+beside them keep the whole armed window on purpose: nothing about a ramp can raise them. The
+headspeed band kept per PID profile uses the same gate on both of its ends (below).
 
 The flight controller's own **governor state** is what says the rotor is under power, and two of
 its states qualify:
@@ -128,6 +130,23 @@ load, which is a flight reading.
 *settled*, only that it is turning and something is driving it. A slow spool-up can therefore
 still put its own low reading into the minimum on such a model; the 2 s wait on the way in clips
 the tail of that band and not the whole of it.
+
+## Headspeed per PID profile
+
+A pilot flies a PID profile per flying style, so the headspeed band of a flight is up to three
+bands rather than one. `maxRpmP1`/`minRpmP1` to `maxRpmP3`/`minRpmP3` are those bands, taken from
+the PID profile the flight controller reports while the reading is being sampled.
+
+Three, because that is what the flight log's columns carry. A flight controller with more than
+256 kB of flash offers six PID profiles; a reading taken on profile 4, 5 or 6 goes into the
+overall `maxRpm` and `minRpm` like any other reading, and into no per-profile key.
+
+**Both ends are gated on the rotor being powered**, not only the minimum: the pair says what the
+head was held at under that profile, and a reading taken while the governor was not holding it
+belongs to no profile in particular. The gate is the one above, unchanged — the governor state
+where there is one, and where there is not, the fallback with its wait on both sides of a reading.
+On that fallback path a reading is booked to the PID profile it was read on, not to the one the
+flight controller reports once the wait after it has passed.
 
 ## Who keeps it
 
@@ -234,8 +253,10 @@ A theme that reaches into the widget state directly can use `state.flight`, whic
 as `rfsuite.session.flight`.
 
 `stattype` resolves a **box source** — a telemetry reading — to that reading's recorded extreme,
-so it does not reach the two sag keys: a sag count is not an extreme of anything the pilot can put
-on a tile as a live value. A theme that wants them reads them off the record by name:
+so it reaches `maxRpm` and `minRpm` but not the two sag keys or the per-profile headspeed keys: a
+sag count is not an extreme of anything the pilot can put on a tile as a live value, and there is
+no telemetry reading called "headspeed on PID profile 1". A theme that wants them reads them off
+the record by name — `sagCount` here, `maxRpmP1` and the rest the same way:
 
 ```lua
 { type = "text", value = function(_, state)

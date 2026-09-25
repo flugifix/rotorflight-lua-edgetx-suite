@@ -43,6 +43,23 @@ function M.new(category)
   local tasksLoaded = false
   local tasksDoneLogged = false
 
+  -- What the queries below answer -- the next task to run, and the done/total/failed/pending
+  -- counts -- can only change when a task is marked complete or failed, when the queue is reset
+  -- or loaded, or when the context asking changes. Once the chain is through, the dashboard asks
+  -- all three on every logic tick and the events wakeup asks `active()` twice more around its own
+  -- `wakeup()`, and each of those walked a queue whose answer could not have moved. One walk now
+  -- serves all of them: `view` is dropped wherever a task's state changes, and it carries the
+  -- context it was taken for, so a different context walks again.
+  local view = nil
+
+  local function invalidateView()
+    view = nil
+  end
+
+  local function readOnly()
+    error("onconnect progress is read-only", 2)
+  end
+
   local Log = nil
   local Env = nil
   local lastStartedTask = nil
@@ -141,33 +158,61 @@ function M.new(category)
       t.startTime = nil
     end
     tasksDoneLogged = false
+    invalidateView()
   end
 
-  local function findNextEligibleTask(currentEnv)
+  local function isEligible(t, currentEnv)
+    if t.context == "both" then return true end
+    if t.context == "tool" and currentEnv == "tool" then return true end
+    if t.context == "widget" and currentEnv == "widget" then return true end
+    return false
+  end
+
+  -- The next eligible task and the progress counts, off one walk. `progress` is shared by every
+  -- caller until the next walk, so it is handed out as a read-only proxy: one caller's write must
+  -- not become the next reader's answer. A `__newindex` on the table itself would not catch it,
+  -- because Lua overwrites a key that is already there without consulting the hook. A change
+  -- builds a new table; it never edits the one a caller may still hold.
+  local function queueView(currentEnv)
+    local v = view
+    if v and v.env == currentEnv then return v end
+    local total = 0
+    local done = 0
+    local failed = 0
+    local nextTask = nil
     for i = 1, #tasksQueue do
       local t = tasksQueue[i]
-      if not t.complete and not t.failed then
-        local eligible = false
-        if t.context == "both" then
-          eligible = true
-        elseif t.context == "tool" and currentEnv == "tool" then
-          eligible = true
-        elseif t.context == "widget" and currentEnv == "widget" then
-          eligible = true
-        end
-
-        if eligible then
-          return t, i
+      if isEligible(t, currentEnv) then
+        total = total + 1
+        if t.complete or t.failed then
+          done = done + 1
+          if t.failed then failed = failed + 1 end
+        elseif nextTask == nil then
+          nextTask = t
         end
       end
     end
-    return nil
+    local pending = nil
+    if nextTask and type(nextTask.name) == "string" and nextTask.name ~= "" then
+      pending = nextTask.name
+    end
+    v = {
+      env = currentEnv,
+      task = nextTask,
+      progress = setmetatable({}, {
+        __index = { done = done, total = total, failed = failed, pending = pending },
+        __newindex = readOnly,
+      }),
+    }
+    view = v
+    return v
   end
 
   function runner.findTasks()
     if tasksLoaded then return end
     clearTaskEntries()
     loadManifest()
+    invalidateView()
   end
 
   function runner.resetAllTasks()
@@ -185,7 +230,7 @@ function M.new(category)
 
     ensureEnv()
     local currentEnv = Env and Env.get() or "tool"
-    local task, idx = findNextEligibleTask(currentEnv)
+    local task = queueView(currentEnv).task
 
     if not task then
       if not tasksDoneLogged then
@@ -204,6 +249,7 @@ function M.new(category)
     local module, err = ensureTaskModule(task)
     if not module then
       task.failed = true
+      invalidateView()
       task.startTime = nil
       task.nextEligibleAt = 0
       if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, "failed to load task " .. tostring(task.name) .. ": " .. tostring(err or "?"), "info") end
@@ -236,6 +282,7 @@ function M.new(category)
 
     if module.isComplete and module.isComplete() then
       task.complete = true
+      invalidateView()
       task.startTime = nil
       task.nextEligibleAt = 0
       releaseTaskModule(task, false)
@@ -260,6 +307,7 @@ function M.new(category)
         if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, string.format("Task '%s' timed out. Re-queueing (attempt %d/%d) in %.1fs.", task.name, task.attempts, MAX_RETRIES, backoff), "info") end
       else
         task.failed = true
+        invalidateView()
         task.startTime = nil
         releaseTaskModule(task, false)
         if Log and type(Log.emit) == "function" then pcall(Log.emit, "rfsuite.tasks." .. category, string.format("Task '%s' failed after %d attempts. Skipping.", task.name, MAX_RETRIES), "info") end
@@ -270,57 +318,30 @@ function M.new(category)
   function runner.active()
     ensureEnv()
     local currentEnv = Env and Env.get() or "tool"
-    return findNextEligibleTask(currentEnv) ~= nil
+    return queueView(currentEnv).task ~= nil
   end
 
   function runner.getPendingTaskName()
     ensureEnv()
     local currentEnv = Env and Env.get() or "tool"
-    local task = findNextEligibleTask(currentEnv)
-    if task and type(task.name) == "string" and task.name ~= "" then
-      return task.name
-    end
-    return nil
+    return queueView(currentEnv).progress.pending
   end
 
-  -- `failed` and `pending` are reported beside the count, off the same walk.
+  -- `failed` and `pending` are reported beside the count.
   --
   -- A task that gave up counts towards `done`, because the queue has moved past it and the
   -- chain is no longer waiting on it. That makes `done == total` mean "nothing is still
   -- running" rather than "everything was read", and a caller reporting the chain as finished
   -- had no way to learn the difference. `failed` is that difference.
   --
-  -- `pending` is the same task getPendingTaskName() returns. It is taken from this walk so a
-  -- caller that wants the count and the name -- which is what reporting progress needs -- walks
-  -- the queue once instead of twice.
+  -- `pending` is the same task getPendingTaskName() returns.
+  --
+  -- The table is the one the last walk built, and the same table is returned until a task's
+  -- state, the queue or the asking context changes. It is read-only: a write raises.
   function runner.getProgress()
     ensureEnv()
     local currentEnv = Env and Env.get() or "tool"
-    local total = 0
-    local done = 0
-    local failed = 0
-    local pending = nil
-    for i = 1, #tasksQueue do
-      local t = tasksQueue[i]
-      local eligible = false
-      if t.context == "both" then
-        eligible = true
-      elseif t.context == "tool" and currentEnv == "tool" then
-        eligible = true
-      elseif t.context == "widget" and currentEnv == "widget" then
-        eligible = true
-      end
-      if eligible then
-        total = total + 1
-        if t.complete or t.failed then
-          done = done + 1
-          if t.failed then failed = failed + 1 end
-        elseif pending == nil and type(t.name) == "string" and t.name ~= "" then
-          pending = t.name
-        end
-      end
-    end
-    return { done = done, total = total, failed = failed, pending = pending }
+    return queueView(currentEnv).progress
   end
 
   return runner

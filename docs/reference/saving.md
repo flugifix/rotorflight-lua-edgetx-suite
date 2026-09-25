@@ -41,6 +41,23 @@ nothing anywhere holds what was there before. Answering *No* writes nothing.
 The re-checks described above are unaffected either way: the page, its read state and the arming
 state are all checked again after the answer and immediately before anything is written.
 
+## A save that restarts the flight controller
+
+A save on Configuration, Alignment, GPS, Ports, Radio Config, and ESC/Motors RPM, Telemetry and
+Throttle restarts the flight controller after writing; on Swash and Tail it does so when the swash
+type or the tail mode was changed. While the settings are being written the page cannot be left.
+Once the flight controller has confirmed they are stored, the notice can be closed and the page
+left, and the save finishes on its own. Its outcome is shown the next time that page is opened, in
+the same box a save reports in when it is watched to the end.
+
+## When a different flight controller answers
+
+Adjustments, Beepers, Blackbox, Failsafe and Stats under Setup > Controls, the four Governor pages,
+both Servos pages, and ESC/Motors Motor Override, RPM, Telemetry and Throttle keep what they have
+read while they are open. If the link drops and comes back from a different flight controller --
+another board, or one reporting a different MSP API version -- such a page reads again. A link that drops and comes back to the same
+board does not make it read again, so values edited and not yet saved stay on the page.
+
 ## Pages covered
 
 - Flight Tuning: PIDs, Rates and Governor.

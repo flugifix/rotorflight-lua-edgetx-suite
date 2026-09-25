@@ -237,10 +237,6 @@ local function rebuildRows(i18n)
   return true
 end
 
-function M.getModuleTitle()
-  return "Rotorflight Status"
-end
-
 function M.getHeaderActions()
   return { reload = false, save = false, help = false }
 end
