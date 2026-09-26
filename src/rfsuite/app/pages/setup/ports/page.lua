@@ -20,6 +20,7 @@ local PortLabels = nil
 local ApiVersion = nil
 local LoadingOverlay = nil
 local t = nil
+local portFunctions = nil
 
 local PORT_TYPE_DISABLED = 0
 local PORT_TYPE_MSP = 1
@@ -118,11 +119,9 @@ local function pageText(i18n, key, fallback)
 end
 
 -- The function list never changes while the page is open, and every lookup below goes through
--- it: one build of an N-port page asked for it about N x (N + 2) times. So it is built on the
--- first call and kept until onClose drops it, which is also what lets a reopened page resolve the
--- names again with the i18n it is opened with.
-local portFunctions = nil
-
+-- it: one build of an N-port page asked for it N + 3 times per port (N + 2 for a disabled one).
+-- So it is built on the first call and kept in portFunctions until onClose drops it, which is also
+-- what lets a reopened page resolve the names again with the i18n it is opened with.
 local function getPortFunctionsList(i18n)
   if portFunctions then return portFunctions end
   portFunctions = {
