@@ -554,7 +554,10 @@ local function enqueueUidRead(now)
     state.uidReadSettled = true
     return true
   end
-  if not state.queue or not state.queue:isProcessed() then
+  -- Unlike the version read, this one does not wait for an idle queue. The onconnect `uid` task
+  -- waits on this read and holds the connect sequence behind it, so a page that keeps the queue
+  -- busy would otherwise hold both. Queued behind that page's reads, it goes out in turn.
+  if not state.queue then
     return true
   end
   if state.requestBackoffUntil and now < state.requestBackoffUntil then
