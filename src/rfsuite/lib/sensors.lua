@@ -94,12 +94,15 @@ end
 local fieldInfoCache = {}
 local valueMisses = {}
 
-local function readTelemetryValue(name)
+-- `now` is the caller's clock reading. Sensors.getValue reads the clock once and hands it to every
+-- candidate it tries, instead of each candidate reading it again: a search after Sensors.reset()
+-- tries every name on a source's list, and the clock is only compared here against a 1 s miss
+-- window.
+local function readTelemetryValue(name, now)
   if type(name) ~= "string" then return nil end
   local getV = _G.getValue
   if type(getV) ~= "function" then return nil end
 
-  local now = nowSeconds()
   if now - (valueMisses[name] or 0) < 1.0 then return nil end
 
   local getFInfo = _G.getFieldInfo
@@ -522,17 +525,19 @@ function Sensors.getValue(source)
     return nil
   end
 
+  -- One clock reading for the whole call, handed to every candidate below.
+  local now = nowSeconds()
+
   local activePath = Sensors.active_paths and Sensors.active_paths[source]
   if activePath then
     local paths = Sensors.search_paths[source]
     local primaryPath = paths and paths[1]
     if primaryPath and activePath ~= primaryPath then
-      local now = nowSeconds()
       Sensors.probe_times = Sensors.probe_times or {}
       local lastProbe = Sensors.probe_times[source] or 0
       if now - lastProbe >= 3.0 then
         Sensors.probe_times[source] = now
-        local primaryVal = readTelemetryValue(primaryPath)
+        local primaryVal = readTelemetryValue(primaryPath, now)
         if type(primaryVal) == "number" and (primaryVal ~= 0 or telemetryValueIsLive(primaryPath)) then
           Sensors.active_paths = Sensors.active_paths or {}
           Sensors.active_paths[source] = primaryPath
@@ -542,14 +547,13 @@ function Sensors.getValue(source)
       end
     end
 
-    local val = readTelemetryValue(activePath)
+    local val = readTelemetryValue(activePath, now)
     if type(val) == "number" then
       if debugWanted() then debugLog("telemetry-hit-cached:" .. source, "hit " .. activePath .. " = " .. tostring(val)) end
       return val
     end
   end
 
-  local now = nowSeconds()
   Sensors.search_misses = Sensors.search_misses or {}
   if now - (Sensors.search_misses[source] or 0) < (searchWaits[source] or SEARCH_MISS_SECONDS) then
     return nil
@@ -575,7 +579,7 @@ function Sensors.getValue(source)
   local paths = Sensors.search_paths[source]
   if paths then
     for i = 1, #paths do
-      local val = readTelemetryValue(paths[i])
+      local val = readTelemetryValue(paths[i], now)
       if type(val) == "number" and (val ~= 0 or telemetryValueIsLive(paths[i])) then
         Sensors.active_paths = Sensors.active_paths or {}
         Sensors.active_paths[source] = paths[i]
@@ -588,7 +592,7 @@ function Sensors.getValue(source)
   if resolved then
     -- The alias is the first search path for most sources, so without this test the loop above
     -- rejects a dead sensor and this retries the same name and adopts it at 0 for the session.
-    local value = readTelemetryValue(resolved)
+    local value = readTelemetryValue(resolved, now)
     if type(value) == "number" and (value ~= 0 or telemetryValueIsLive(resolved)) then
       Sensors.active_paths = Sensors.active_paths or {}
       Sensors.active_paths[source] = resolved
@@ -597,7 +601,7 @@ function Sensors.getValue(source)
     end
   end
 
-  local direct = readTelemetryValue(source)
+  local direct = readTelemetryValue(source, now)
   if type(direct) == "number" and (direct ~= 0 or telemetryValueIsLive(source)) then
     Sensors.active_paths = Sensors.active_paths or {}
     Sensors.active_paths[source] = source
