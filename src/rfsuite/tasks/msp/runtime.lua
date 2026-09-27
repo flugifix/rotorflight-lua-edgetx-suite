@@ -63,6 +63,8 @@ local state = {
   pendingUidRead = true,
   -- True once this link's UID read has an outcome: answered, given up after its retries, or not
   -- possible at all. The onconnect `uid` task waits on it instead of sending a read of its own.
+  -- "Given up" means at least once, not for good: the read is re-armed after its backoff, and a
+  -- later answer still reaches the session through applyModelPreferencesForMcu() and publish().
   uidReadSettled = false,
   versionReadCompleted = false,
   lastArmed = nil,
@@ -656,7 +658,10 @@ local function doDisconnect(now, reason, keepLink)
   end
   state.pendingVersionRead = true
   state.pendingUidRead = true
-  state.uidReadSettled = false
+  -- A refusal (`keepLink`) is an outcome for the UID read as well: tick() stops at the
+  -- unsupported-API check before enqueueUidRead() for as long as this link stays up, so no read
+  -- follows, and the connect task waiting on this flag would otherwise wait out its timeout.
+  state.uidReadSettled = keepLink == true
   state.versionReadCompleted = false
   state.limitedApi = false
   state.consecutiveApiVersionFailures = 0
