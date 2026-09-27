@@ -61,6 +61,11 @@ local state = {
   mspLastErrorAt = 0,
   pendingVersionRead = true,
   pendingUidRead = true,
+  -- True once this link's UID read has an outcome: answered, given up after its retries, or not
+  -- possible at all. The onconnect `uid` task waits on it instead of sending a read of its own.
+  -- "Given up" means at least once, not for good: the read is re-armed after its backoff, and a
+  -- later answer still reaches the session through applyModelPreferencesForMcu() and publish().
+  uidReadSettled = false,
   versionReadCompleted = false,
   lastArmed = nil,
   lastConnected = nil,
@@ -546,19 +551,27 @@ local function enqueueUidRead(now)
     return true
   end
   if not state.values.apiVersion or state.values.apiVersion == "" or state.values.apiVersion == "0" then
+    -- The version read finished without a version it could parse, and nothing reads it again
+    -- on this link, so no UID read follows either.
+    state.uidReadSettled = true
     return true
   end
-  if not state.queue or not state.queue:isProcessed() then
+  -- Unlike the version read, this one does not wait for an idle queue. The onconnect `uid` task
+  -- waits on this read and holds the connect sequence behind it, so a page that keeps the queue
+  -- busy would otherwise hold both. Queued behind that page's reads, it goes out in turn.
+  if not state.queue then
     return true
   end
   if state.requestBackoffUntil and now < state.requestBackoffUntil then
     return true
   end
   if not ensureUidDep() then
+    state.uidReadSettled = true
     return false
   end
   if not UidApi or type(UidApi.parse) ~= "function" then
     state.pendingUidRead = false
+    state.uidReadSettled = true
     return true
   end
 
@@ -576,6 +589,7 @@ local function enqueueUidRead(now)
         state.values.mcuId = tostring(parsed.mcuId)
         applyModelPreferencesForMcu(state.values.mcuId)
       end
+      state.uidReadSettled = true
       publish()
     end,
     errorHandler = function(msg, reason)
@@ -589,7 +603,8 @@ local function enqueueUidRead(now)
       local backoff = math.min(30, 2 + state.consecutiveUidFailures * 2)
       state.requestBackoffUntil = nowSeconds() + backoff
       state.pendingUidRead = true
-      log("UID read failed (cmd=2); backoff " .. tostring(backoff) .. "s", "warn")
+      state.uidReadSettled = true
+      log("UID read failed (cmd=160); backoff " .. tostring(backoff) .. "s", "warn")
       publish()
     end
   })
@@ -643,6 +658,10 @@ local function doDisconnect(now, reason, keepLink)
   end
   state.pendingVersionRead = true
   state.pendingUidRead = true
+  -- A refusal (`keepLink`) is an outcome for the UID read as well: tick() stops at the
+  -- unsupported-API check before enqueueUidRead() for as long as this link stays up, so no read
+  -- follows, and the connect task waiting on this flag would otherwise wait out its timeout.
+  state.uidReadSettled = keepLink == true
   state.versionReadCompleted = false
   state.limitedApi = false
   state.consecutiveApiVersionFailures = 0
@@ -825,6 +844,7 @@ function Runtime.tick()
       log("MSP link connected", "info")
       state.pendingVersionRead = true
       state.pendingUidRead = true
+      state.uidReadSettled = false
     else
       -- A real loss of the link. `lastConnected` is already false from the line above, so the
       -- refusal form is not wanted here.
