@@ -2547,6 +2547,15 @@ function Runtime.new(zone, options)
 
     self.built = false
     self.renderKey = nil
+    -- The scene is to be keyed on the module this call has just loaded. refresh() copies the phase
+    -- onto the state only at the top of a pass, and the 2 Hz throttle may hand back the key of the
+    -- previous module; a scene queued under that key is built again once the throttle computes
+    -- the new one. So the two fields refresh() copies are written here too, and the throttle is
+    -- opened, which makes the next key computed the new module's. The cached key is left alone:
+    -- the throttle overwrites it, and a surface that takes the throttle first falls back to it.
+    self.state.flightMode = self.flightMode
+    self.state.themePhase = self.themeStateKey or self.flightMode
+    self._lastUIRefresh = 0
     -- A pending job may belong to the theme just torn down; drop it. The next STATE
     -- pass re-detects and enqueues a build against the new theme, in a pass of its own.
     self._job = nil
