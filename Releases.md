@@ -412,6 +412,11 @@
   - Every page registered in `app/pages/init.lua` is given `<page folder>/icon.png` as its tile icon, and nothing checks that the file is there. `Settings > Audio > Volume` was the one tile in the tree that carried neither that file nor an icon of its own in `app/manifest.lua`, so it rendered as a label with an empty icon slot beside `Events`.
   - The icon is a 40x40 8-bit grayscale PNG, which is the size and the encoding `.vscode/scripts/optimize_icons.py` keeps for a monochrome source, and it is drawn to sit with the existing tile set rather than taken from one.
 
+- **The arming state is searched on the first read after a sensor reset again (`lib/sensors.lua`, `widgets/dashboard/runtime.lua`, `docs/reference/sensor-selection.md`) (follows #424)**:
+  - #424 limits the first searches after `Sensors.reset()` to four per pass. The dashboard widget asks for `armflags` after five other sources, so after every reset it was held back for one read and the widget knew the arming state about half a second later than before. `armflags` is now exempt from that limit: it is the one source whose absence reads as "not armed", and its list is five names long.
+  - A long press on RTN that leaves fullscreen on a pass that waits for a theme reload now drops the tuning surface and the battery picker on that pass rather than the next one.
+  - `docs/reference/sensor-selection.md` described the widget and the configuration tool together; the tool forgets its sensor choice on every audio tick while its connection is not ready, and now has a bullet of its own.
+
 ### Performance, Memory & Build System
 - **The dashboard's "Please wait" pass on connect no longer searches every telemetry source at once (`lib/sensors.lua`, `widgets/dashboard/runtime.lua`, `docs/reference/sensor-selection.md`) (fixes #402)**:
   - After `Sensors.reset()` -- when the widget starts, and on both edges of the flight controller link -- no source had a miss on record, and a source with no miss was exempt from the one-search-per-pass throttle, so the next telemetry read searched every source's whole list in one pass. With CRSF custom telemetry every sensor exists but carries no value until the suite's own decoder publishes it, so every candidate of every list was paid for, in the pass the connect chain also runs in.
