@@ -3061,8 +3061,23 @@ function Runtime.new(zone, options)
       return
     end
 
-    -- A theme reload waits for the next logic tick (see performBackgroundWork). Queuing a scene job here
-    -- would build against the theme that reload is about to replace, and run ahead of it.
+    -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
+    local isInteractive = (event ~= nil)
+    if not isInteractive then
+      -- Leaving fullscreen is the one exit the firmware does not always report -- a long press on
+      -- RTN closes it and Lua may never see the key -- so the ground surface is dropped whenever a
+      -- pass arrives without an event rather than when a close is observed. Ahead of the two
+      -- early returns below, so a pass that returns there drops it as well.
+      self.inflightFullscreen = nil
+      -- Re-opening the picker from the quick menu is a fullscreen state and is dropped on the
+      -- way out for the same reason the tuning surface is: a long press on RTN closes
+      -- fullscreen without Lua ever seeing the key.
+      self.batteryPickOpen = nil
+    end
+
+    -- A theme reload that fell on a read pass waits for the next logic tick; the deferral itself
+    -- is in performBackgroundWork. Queuing a scene job here would build against the theme that
+    -- reload is about to replace, and run ahead of it. widget.background queues no scene jobs.
     if self._themeReloadPending then
       self._passEndAt = nowSeconds()
       return
@@ -3070,22 +3085,10 @@ function Runtime.new(zone, options)
 
     if not self.theme then return end
 
-    -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
-    local isInteractive = (event ~= nil)
     local tuningMode = inflightMode(self, isInteractive)
     -- See the gap line in traceInstructionUsage: a state pass is named by the surface it is for,
     -- so a hole measured while the tuning surface was up can be told from one on the dashboard.
     self._passWork = tuningMode or "state"
-    if not isInteractive then
-      -- Leaving fullscreen is the one exit the firmware does not always report -- a long press on
-      -- RTN closes it and Lua may never see the key -- so the ground surface is dropped whenever a
-      -- pass arrives without an event rather than when a close is observed.
-      self.inflightFullscreen = nil
-      -- Re-opening the picker from the quick menu is a fullscreen state and is dropped on the
-      -- way out for the same reason the tuning surface is: a long press on RTN closes
-      -- fullscreen without Lua ever seeing the key.
-      self.batteryPickOpen = nil
-    end
     local nextRenderKey = nil
     if tuningMode then
       -- The same 2 Hz throttle the scene key is under. The values and the armed row are reactive
