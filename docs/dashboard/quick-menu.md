@@ -80,17 +80,19 @@ menus:
 | `title` | The text on the row, already translated. |
 | `kind` | `action` for a single button, `choice` for a title over a grid of options. |
 | `visibleWhen` | The name of a condition that decides whether the row exists at all. Omitted, the row is always there. |
-| `press` | What an `action` does when it is pressed. |
-| `options` | For a `choice`: a list, or a function of the widget returning one, of `{ label, current, press }`. The battery-profile grid is this and nothing else. |
+| `press` | The work an `action` does when it is pressed, and nothing else. Optional: a row whose whole effect is its `after` has none. |
+| `after` | What follows the press, as data: `done`, `openView:<id>`, `closeView`, `exitFullscreen` or `none`. Missing means `none`. The actions are described in [dashboard views](../developer/dashboard-views.md). |
+| `options` | For a `choice`: a list, or a function of the widget returning one, of `{ label, current, press, after }`. The battery-profile grid is this and nothing else. |
 
 Two things are worth knowing before adding an entry:
 
 - **A title is resolved in `entries()`, from a complete literal key.** The translation
   precompiler rewrites the keys it can read and leaves alone the ones it cannot, so a key
   assembled from parts ships the English fallback in every language with nothing reporting it.
-- **A `visibleWhen` name is resolved in the same file, and an unknown name hides its row** —
-  the same way an unresolvable condition hides a tool menu entry in
-  `src/rfsuite/app/menu_registry.lua`. `enabledWhen`, `lockedWhileArmed` and `confirm` belong
+- **A `visibleWhen` name is resolved in `src/rfsuite/widgets/dashboard/views.lua`, and an
+  unknown name hides its row** — the same way an unresolvable condition hides a tool menu entry
+  in `src/rfsuite/app/menu_registry.lua`. It is the same list a fullscreen view's `openWhen`
+  is resolved against. `enabledWhen`, `lockedWhileArmed` and `confirm` belong
   to the same vocabulary and no entry uses one yet, so the first entry that needs one brings
   its resolver with it.
 

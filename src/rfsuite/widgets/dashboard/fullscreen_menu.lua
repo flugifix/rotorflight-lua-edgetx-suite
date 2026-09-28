@@ -18,49 +18,26 @@ local function translator(widget)
   return function(k, f) return f or k end
 end
 
--- The conditions an entry's `visibleWhen` may name. The menu is built from the state of the
--- pass it is drawn in, so a condition is a function of the widget rather than a flag in a
--- table prepared beforehand; a name that is not here hides its entry, which is what an
--- unresolvable condition does in `app/menu_registry.lua` as well.
---
--- Only the vocabulary an entry below actually uses is resolved. `enabledWhen`,
--- `lockedWhileArmed` and `confirm` are part of the same manifest vocabulary and nothing here
--- sets one, so the first entry that needs one brings its resolver with it.
-local CONDITIONS = {}
+-- The fullscreen views' shared vocabulary: the conditions a `visibleWhen` may name, and the
+-- actions an `after` may name.
+local Views = requireModule("widgets/dashboard/views.lua")
 
--- In-flight tuning, only for a model that has it switched on and only while the preview
--- switch is on.
---
--- The snapshot alone would very nearly do -- the drive that publishes it is not built with
--- the preview off -- but the menu is built from the preferences of this pass and the
--- snapshot is what the last one left behind. Reading the switch here means the entry cannot
--- offer a route into a feature the runtime has already stopped driving.
---
--- The entry is offered with the interlock OPEN on purpose: the setup check and the parameter
--- grid are what a pilot wants to see on the ground, and the interlock is what decides whether
--- anything is sent. The screen the entry opens is inert until the switch is thrown.
-function CONDITIONS.previewInflightTuning(widget)
-  local previewOn = widget.preferences and widget.preferences.general
-    and widget.preferences.general.preview_inflight_tuning == true
-  return previewOn == true and type(widget.state.inflight) == "table"
-end
-
--- The battery prompt, re-opened: only where the registry has a pack for this model, so a pilot
--- who keeps no registry never sees a button that opens an empty list, and only while the model
--- is disarmed, because a pack chosen in the air would be recorded against the flight in progress.
-function CONDITIONS.batteryPickHasPacks(widget)
-  if widget.state and widget.state.armed == true then return false end
-  local pick = widget.state and widget.state.batteryPick or nil
-  local candidates = (type(pick) == "table" and type(pick.candidates) == "table") and pick.candidates or nil
-  return candidates ~= nil and #candidates > 0
-end
-
+-- An entry without `visibleWhen` is always there. A named condition is resolved in views.lua,
+-- where a name that is not known is false and hides its entry, which is what an unresolvable
+-- condition does in `app/menu_registry.lua` as well.
 local function isEntryVisible(entry, widget)
   local conditionKey = entry.visibleWhen
   if conditionKey == nil then return true end
-  local condition = CONDITIONS[conditionKey]
-  if type(condition) ~= "function" then return false end
-  return condition(widget) == true
+  if not (Views and type(Views.condition) == "function") then return false end
+  return Views.condition(conditionKey, widget) == true
+end
+
+-- A button's press: the row's own work, if it has any, and then the action that follows it.
+local function pressFor(widget, work, after)
+  return function()
+    if type(work) == "function" then work() end
+    if Views and type(Views.navigate) == "function" then Views.navigate(widget, after) end
+  end
 end
 
 --- What the menu offers, as a list rather than as drawing code.
@@ -69,6 +46,10 @@ end
 -- `id`, `title`, `kind`, `visibleWhen` and `press`. `kind` is what the builder makes of the
 -- row -- `action` is a single button, `choice` is a title over a grid of options -- so the
 -- battery-profile grid is a row of this list rather than a special case inside the builder.
+--
+-- `press` does the row's work and nothing else. What follows it -- leaving fullscreen, opening
+-- another view, or nothing -- is the row's `after`, an action views.lua performs; an option of a
+-- `choice` carries its own.
 --
 -- The title is resolved here, and it is resolved from a complete literal key: the translation
 -- precompiler rewrites what it can read, and a key assembled from parts ships the English
@@ -112,15 +93,12 @@ function M.entries(widget)
                end
             end
          end
-
-         widget.built = false
-         widget.renderKey = nil
-         if lcd and type(lcd.exitFullScreen) == "function" then
-            lcd.exitFullScreen()
-         end
-    end
+    end,
+    after = "done"
   }
 
+  -- The tuning surface is not a view on the stack: it takes fullscreen ahead of every view while
+  -- its own flag is up, so the press raises the flag and nothing follows it.
   list[#list+1] = {
     id = "inflight_tuning",
     kind = "action",
@@ -130,7 +108,8 @@ function M.entries(widget)
         widget.inflightFullscreen = true
         widget.built = false
         widget.renderKey = nil
-    end
+    end,
+    after = "none"
   }
 
   -- The prompt comes up on its own once per connection; this is the way back to it after it
@@ -140,11 +119,7 @@ function M.entries(widget)
     kind = "action",
     title = t("widgets.dashboard.battery_pick_open", "BATTERY"),
     visibleWhen = "batteryPickHasPacks",
-    press = function()
-        widget.batteryPickOpen = true
-        widget.built = false
-        widget.renderKey = nil
-    end
+    after = "openView:battery_pick"
   }
 
   list[#list+1] = {
@@ -197,14 +172,9 @@ function M.entries(widget)
                      end
                   end
                 end
-
-                -- Close after selection
-                w.built = false
-                w.renderKey = nil
-                if lcd and type(lcd.exitFullScreen) == "function" then
-                   lcd.exitFullScreen()
-                end
-              end
+              end,
+              -- Close after selection
+              after = "done"
             }
           end
         end
@@ -296,13 +266,7 @@ function M.build(children, widget, entries)
   
   children[#children+1] = {
     type = "button", x=cx, y=cy, w=closeSize, h=closeSize, color=COLOR_THEME_SECONDARY1 or RED,
-    press = function()
-      widget.built = false
-      widget.renderKey = nil
-      if lcd and type(lcd.exitFullScreen) == "function" then
-         lcd.exitFullScreen()
-      end
-    end
+    press = pressFor(widget, nil, "done")
   }
   
   children[#children+1] = {
@@ -352,7 +316,8 @@ function M.build(children, widget, entries)
 
            -- Button (Interactive layer)
            children[#children+1] = {
-             type = "button", x=bx, y=by, w=btnW, h=btnH, color=bColor, press = option.press
+             type = "button", x=bx, y=by, w=btnW, h=btnH, color=bColor,
+             press = pressFor(widget, option.press, option.after)
            }
 
            -- Label (visual only)
@@ -368,7 +333,7 @@ function M.build(children, widget, entries)
         -- 4a. A single button.
         children[#children+1] = {
           type = "button", x=dX + paddingX, y=contentY, w=entryW, h=btnH, color=btn_color,
-          press = entry.press
+          press = pressFor(widget, entry.press, entry.after)
         }
         children[#children+1] = {
           type = "label", x=dX + paddingX, y=contentY + math.floor((btnH - fontH)/2) + btnTextOffY, w=entryW,

@@ -854,8 +854,8 @@ local function appendClose(children, widget, m, w, p)
   children[#children + 1] = {
     type = "button", x = x, y = y, w = size, h = size, color = COLOR_THEME_SECONDARY1 or RED,
     press = function()
-      -- The same three lines widgets/dashboard/fullscreen_menu.lua closes with: drop what is
-      -- built, drop the render key, leave fullscreen.
+      -- Drop what is built, drop the render key, leave fullscreen: the exit
+      -- widgets/dashboard/views.lua performs for the fullscreen views, which this surface is not.
       widget.built = false
       widget.renderKey = nil
       if lcd and type(lcd.exitFullScreen) == "function" then

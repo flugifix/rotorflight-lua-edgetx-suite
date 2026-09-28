@@ -677,7 +677,7 @@ end
 -- The job slot. At most one job is pending per widget, held in `self._job` as
 -- { kind, step }: `kind` names the job for the log line, `step(self)` runs the work
 -- against the CURRENT state (never a snapshot taken at enqueue time) and returns true
--- when the job is complete. The splash and menu jobs complete in one step; the scene job
+-- when the job is complete. The splash and view jobs complete in one step; the scene job
 -- returns false to keep the slot and spread its build over several passes -- prepare,
 -- a bounded chunk per pass, then the swap. The STATE pass enqueues, the JOB pass
 -- executes -- see the dispatcher in widget.refresh.
@@ -764,11 +764,34 @@ local function sceneJobStep(self)
   return true
 end
 
-local function menuJobStep(self)
-  local menu = requireModule("widgets/dashboard/fullscreen_menu.lua")
-  if not (menu and type(menu.build) == "function") then return true end
+-- The fullscreen views (widgets/dashboard/views.lua): which surface fullscreen shows, and what
+-- follows a press on it. Loaded on the first fullscreen pass rather than at the top of this
+-- file, through the same retrying loader as the overlay, so a dashboard that is never put full
+-- screen never pays for it and a load lost to a busy pass is tried again.
+local ViewsCache = {}
+local function viewsModule()
+  return loadInflightModule(ViewsCache, "widgets/dashboard/views.lua")
+end
+
+--- Draw the fullscreen view the job is named after: the quick menu, or the battery picker.
+---
+--- The view's module is loaded here, on the job pass, and kept on this widget's registry entry,
+--- which is where the state pass reads a view's own render key from. The picker is the widget's
+--- own surface for every theme, so its way out is always drawn; a theme reads
+--- `state.batteryPick` and may drive the prompt through rfsuite.batteryPick, but draws no part
+--- of it.
+local function viewJobStep(self)
+  local Views = viewsModule()
+  local entry = Views and Views.find(self, self._job.kind) or nil
+  if entry == nil then return true end
+  local view = entry.loaded
+  if view == nil then
+    view = requireModule(entry.module)
+    if not (type(view) == "table" and type(view.build) == "function") then return true end
+    entry.loaded = view
+  end
   local children = {}
-  menu.build(children, self)
+  view.build(children, self)
   lvgl.clear()
   lvgl.build(children)
   self.built = true
@@ -906,21 +929,6 @@ local function batteryPickApplyStep(self)
   -- says which profile it is on. Forgotten rather than set to the target: the next pick then
   -- always writes.
   if queued then pick.boardProfile = nil end
-  return true
-end
-
---- Draw the picker. It is the widget's own surface for every theme, so its way out is always
---- drawn; a theme reads `state.batteryPick` and may drive the prompt through
---- rfsuite.batteryPick, but draws no part of it.
-local function batteryPickJobStep(self)
-  local menu = requireModule("widgets/dashboard/battery_pick_menu.lua")
-  if not (menu and type(menu.build) == "function") then return true end
-  local children = {}
-  menu.build(children, self)
-  lvgl.clear()
-  lvgl.build(children)
-  self.built = true
-  self._lastChildCount = #children
   return true
 end
 
@@ -2272,6 +2280,12 @@ function Runtime.new(zone, options)
     -- The pending job, at most one: { kind, step } or nil. See the job steps above and
     -- the dispatcher in widget.refresh.
     _job = nil,
+    -- The fullscreen views, see widgets/dashboard/views.lua: the stack of open views, nil when
+    -- none is open; the base layer under it, which nothing sets yet; and the view the last
+    -- interactive pass resolved, which the job it enqueues is named after.
+    _viewStack = nil,
+    _viewBase = nil,
+    _viewId = nil,
     _lastReloadSeqs = nil,
     _reloadPending = nil,
     themePath = "system/default",
@@ -2782,7 +2796,7 @@ function Runtime.new(zone, options)
       self.state.batteryPick = newBatteryPickState()
       self._batteryPickRequest = nil
       self._batteryPickPicked = nil
-      self.batteryPickOpen = nil
+      self._viewStack = nil
       self.modelPreferences = nil
       -- Clear the reference so the identity check fails on the next frame
       -- and the slow-path signature comparison is triggered.  Keep the
@@ -3078,10 +3092,10 @@ function Runtime.new(zone, options)
       -- pass arrives without an event rather than when a close is observed. Ahead of the two
       -- early returns below, so a pass that returns there drops it as well.
       self.inflightFullscreen = nil
-      -- Re-opening the picker from the quick menu is a fullscreen state and is dropped on the
-      -- way out for the same reason the tuning surface is: a long press on RTN closes
-      -- fullscreen without Lua ever seeing the key.
-      self.batteryPickOpen = nil
+      -- The fullscreen views that are open are a fullscreen state and are dropped on the way
+      -- out for the same reason the tuning surface is: a long press on RTN closes fullscreen
+      -- without Lua ever seeing the key. The whole stack is this one field.
+      self._viewStack = nil
     end
 
     -- A theme reload that fell on a read pass waits for the next logic tick; the deferral itself
@@ -3140,12 +3154,14 @@ function Runtime.new(zone, options)
       -- The prompt takes fullscreen ahead of the quick menu, because fullscreen is the only
       -- surface a widget has that can be pressed: a widget zone gets no touch, and Lua can
       -- leave fullscreen but not enter it. "On connect" therefore means "what fullscreen shows
-      -- once the connect chain has run", until the pilot answers or closes it.
-      if self.state.batteryPick.pending == true or self.batteryPickOpen == true then
-        nextRenderKey = "battery_pick"
-      else
-        nextRenderKey = "fullscreen_menu"
-      end
+      -- once the connect chain has run", until the pilot answers or closes it. Which view that
+      -- is -- the picker, opened by its own condition, or the quick menu -- is views.lua's to say;
+      -- a views module that could not be loaded shows no view and builds nothing.
+      local Views = viewsModule()
+      local viewId, viewKey = nil, nil
+      if Views then viewId, viewKey = Views.resolve(self) end
+      self._viewId = viewId
+      nextRenderKey = viewKey
     else
       self._cachedTuningKey = nil
       self._tuningKeyDirty = nil
@@ -3178,10 +3194,10 @@ function Runtime.new(zone, options)
       elseif tuningMode == "fs" then
         self._job = { kind = "tuning_fs", step = tuningFullscreenJobStep }
       elseif isInteractive then
-        if self.renderKey == "battery_pick" then
-          self._job = { kind = "battery_pick", step = batteryPickJobStep }
-        else
-          self._job = { kind = "menu", step = menuJobStep }
+        -- The job is named after the view, so the job log line reads "menu" and "battery_pick"
+        -- as it always has, and the menu keeps its pass class in bin/accounting/measure.lua.
+        if self._viewId ~= nil then
+          self._job = { kind = self._viewId, step = viewJobStep }
         end
       else
         self._job = { kind = "scene", step = sceneJobStep }
@@ -3231,16 +3247,23 @@ function Runtime.new(zone, options)
           widget._batteryPickRequest = id
         end
       end,
+      -- The two below run outside the widget's pcall, so the views module is reached through its
+      -- loader, which returns nil rather than raising. Without the module dismiss() still ends
+      -- the prompt, and open() only forces the rebuild.
       dismiss = function()
         local pick = widget.state.batteryPick
         pick.dismissed = true
         pick.pending = false
-        widget.batteryPickOpen = nil
+        local Views = viewsModule()
+        if Views and Views.top(widget) == "battery_pick" then
+          Views.navigate(widget, "closeView")
+        end
         widget.built = false
         widget.renderKey = nil
       end,
       open = function()
-        widget.batteryPickOpen = true
+        local Views = viewsModule()
+        if Views then Views.navigate(widget, "openView:battery_pick") end
         widget.built = false
         widget.renderKey = nil
       end
