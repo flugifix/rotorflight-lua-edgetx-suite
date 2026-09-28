@@ -602,6 +602,11 @@ state = {
   connStatusNoticeTitle = nil,
   connStatusNoticeMessage = nil,
   lastAudioTick = 0,
+  -- Whether the audio block's readiness test held on the previous audio tick. The clean-up on
+  -- the other side of that test runs on the ready-to-not-ready edge, and this is what remembers
+  -- the edge. It belongs to the audio block alone and is read and written on no other tick, so
+  -- the per-frame work above cannot move it behind the block's back.
+  lastAudioReady = false,
   audioState = {
     initialized = false,
     nextAllowedAt = 0,
@@ -3471,105 +3476,123 @@ function M.run(event, touchState)
         if fuel > 100 then fuel = 100 end
       end
 
-      -- lib/audio.lua is shared: the dashboard widget hands it the state its own readTelemetry
-      -- builds (widgets/dashboard/runtime.lua), the tool hands it this table. An announcement is
-      -- written once against a field name, so it can only behave the same on both paths if both
-      -- callers supply the same fields under the same names and with the same normalisation --
-      -- which is what the block below mirrors, rounding included.
-      if Sensors then
-        local ts = state.telemetryState
-        local armFlagsValue = Sensors.getValue("armflags")
-
-        ts.rpm = Sensors.getValue("rpm") or ts.rpm
-        -- Only a reading is stored. `lq` above falls back to 0 for the readiness test
-        -- further down, and writing that fallback here would report a link quality of
-        -- zero as a measurement on a setup whose battery telemetry keeps this loop
-        -- running while no link sensor is present.
-        ts.lq = lqReading or ts.lq
-        -- Which sensor answered for `link`, so that a consumer can tell a quality in percent
-        -- from an RSSI in dBm: the search path in lib/sensors.lua ends in 1RSS and 2RSS.
-        -- Sensors.active_paths is filled on the telemetry path only, so this stays nil under
-        -- the simulator and a consumer has to cope with not being told.
-        ts.lqSource = (Sensors.active_paths and Sensors.active_paths.link) or ts.lqSource
-        ts.profile = roundInt(Sensors.getValue("pid_profile") or ts.profile, ts.profile or 1)
-        ts.rateProfile = roundInt(Sensors.getValue("rate_profile") or ts.rateProfile, ts.rateProfile or 1)
-        ts.batteryProfile = roundInt(Sensors.getValue("battery_profile") or ts.batteryProfile, ts.batteryProfile or 1)
-        ts.armFlags = roundInt(armFlagsValue or ts.armFlags, ts.armFlags or 0)
-        local armDisableFlagsValue = Sensors.getValue("armdisableflags")
-        if type(armDisableFlagsValue) == "number" then
-          ts.armDisableFlags = math.max(0, math.floor(armDisableFlagsValue + 0.5))
-        end
-        ts.governor = roundInt(Sensors.getValue("governor") or ts.governor, ts.governor or 0)
-        ts.mcuTemp = roundInt(Sensors.getValue("temp_mcu") or ts.mcuTemp, ts.mcuTemp or 0)
-        ts.escTemp = roundInt(Sensors.getValue("temp_esc") or ts.escTemp, ts.escTemp or 0)
-        ts.bec_voltage = Sensors.getValue("bec_voltage") or ts.bec_voltage
-        ts.throttlePercent = roundInt(Sensors.getValue("throttle_percent") or ts.throttlePercent, ts.throttlePercent or 0)
-
-        local currentValue = Sensors.getValue("current")
-        local wattsValue = Sensors.getValue("watts")
-        if type(wattsValue) ~= "number" and type(currentValue) == "number" and vbat > 0 then
-          wattsValue = vbat * currentValue
-        end
-        ts.current = currentValue or ts.current
-        ts.watts = wattsValue or ts.watts
-        ts.altitude = Sensors.getValue("altitude") or ts.altitude
-        ts.consumedMah = (smart and smart.consumption) or Sensors.getValue("smartconsumption") or ts.consumedMah
-
-        local cellCountValue = Sensors.getValue("battery_cell_count")
-        if type(cellCountValue) == "number" and cellCountValue > 0 then
-          ts.batteryCellCount = roundInt(cellCountValue, ts.batteryCellCount or 0)
-        elseif vbat > 0 then
-          -- No cell-count sensor: infer it from the pack voltage and the battery config's
-          -- maximum cell voltage, the default being a 4.2 V chemistry.
-          local session = _G.rfsuite and _G.rfsuite.session or nil
-          local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
-          local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
-          local inferredCells = math.max(1, math.floor((vbat / maxCellVoltage) + 0.5))
-          local existingCells = tonumber(ts.batteryCellCount)
-          if not existingCells or existingCells <= 0 then
-            ts.batteryCellCount = inferredCells
-          else
-            local perCell = vbat / existingCells
-            -- Reconnect-safe: a cell count carried over from another pack shows up as an
-            -- implausible per-cell voltage, and is replaced rather than kept.
-            if perCell < 2.5 or perCell > 4.5 then
-              ts.batteryCellCount = inferredCells
-            end
-          end
-        end
-
-        if type(armFlagsValue) == "number" then
-          if type(bit32) == "table" and type(bit32.btest) == "function" then
-            ts.armed = bit32.btest(armFlagsValue, 1)
-          else
-            ts.armed = armFlagsValue ~= 0
-          end
-        end
-
-        ts.rss1 = readFirstSensorNumber(RSS1_SOURCES, ts.rss1)
-        ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
-      end
-
-      -- The reading, and not the readiness fallback beside it -- the same rule `lq` above
-      -- follows, and for the same reason. A pack that is disconnected while the flight
-      -- controller stays alive on its BEC reads as zero volts, and storing the last positive
-      -- value instead would report the pack that is gone as still being there. The alerts that
-      -- read this field all require a voltage above zero, so writing the zero costs none of
-      -- them anything; what it buys is that the widget and the tool now describe the same
-      -- machine, which is what the field exists for.
-      state.telemetryState.voltage = (type(vbatReading) == "number") and vbatReading or state.telemetryState.voltage
-      state.telemetryState.fuel = fuel >= 0 and fuel or state.telemetryState.fuel
-      if fuel >= 0 then
-        -- The fuel alerts stay silent until a real reading has arrived, so that the seeded
-        -- default cannot be announced as a measurement.
-        state.telemetryState.fuelTelemetrySeen = true
-      end
-
       local batteryReady = (vbat > 0) or (fuel >= 0)
       local rfReady = (lq ~= 0)
       local connected = readFblConnected()
+      local telemetryReady = connected and batteryReady and rfReady
+      -- The test is a reading and not a latch, and this branch used to run on every audio tick
+      -- for as long as it failed: five times a second, with no model powered up, while the
+      -- connect chain had not finished, or with the link up and no battery reading arrived. The
+      -- three reads that decide the test stay per tick -- they are the edge -- and so does the
+      -- master volume in the last branch below. The clean-up belongs to the transition, the way
+      -- the dashboard widget has it already (widgets/dashboard/runtime.lua:2807-2831), and on
+      -- both sides that is what the calls mean. `Sensors.reset()` empties every matched path,
+      -- every miss record, every back-off and the field-info cache
+      -- (lib/sensors.lua:646-680), so on each of those ticks it threw away what the tick
+      -- before had learned and sent the next one back to the top of each source's list. The
+      -- back-off lib/sensors.lua keeps for a source this radio does not carry (#260) had no
+      -- chance to act in between: it was cleared before the next tick read.
+      local wasTelemetryReady = state.lastAudioReady == true
 
-      if connected and batteryReady and rfReady then
+      if telemetryReady then
+        -- The reading, and not the readiness fallback beside it -- the same rule `lq` above
+        -- follows, and for the same reason. A pack that is disconnected while the flight
+        -- controller stays alive on its BEC reads as zero volts, and storing the last positive
+        -- value instead would report the pack that is gone as still being there. The alerts that
+        -- read this field all require a voltage above zero, so writing the zero costs none of
+        -- them anything; what it buys is that the widget and the tool now describe the same
+        -- machine, which is what the field exists for.
+        state.telemetryState.voltage = (type(vbatReading) == "number") and vbatReading or state.telemetryState.voltage
+        state.telemetryState.fuel = fuel >= 0 and fuel or state.telemetryState.fuel
+        if fuel >= 0 then
+          -- The fuel alerts stay silent until a real reading has arrived, so that the seeded
+          -- default cannot be announced as a measurement.
+          state.telemetryState.fuelTelemetrySeen = true
+        end
+
+        -- lib/audio.lua is shared: the dashboard widget hands it the state its own readTelemetry
+        -- builds (widgets/dashboard/runtime.lua), the tool hands it this table. An announcement is
+        -- written once against a field name, so it can only behave the same on both paths if both
+        -- callers supply the same fields under the same names and with the same normalisation --
+        -- which is what the block below mirrors, rounding included.
+        --
+        -- Polled only while telemetryReady holds. That avoids polling 18 absent sensors at 5 Hz
+        -- while disconnected, and keeps state.telemetryState clean until real values arrive
+        -- rather than seeding it with roundInt(nil, fallback) defaults on every offline tick.
+        if Sensors then
+          local ts = state.telemetryState
+          local armFlagsValue = Sensors.getValue("armflags")
+
+          ts.rpm = Sensors.getValue("rpm") or ts.rpm
+          -- Only a reading is stored. `lq` above falls back to 0 for the readiness test
+          -- further down, and writing that fallback here would report a link quality of
+          -- zero as a measurement on a setup whose battery telemetry keeps this loop
+          -- running while no link sensor is present.
+          ts.lq = lqReading or ts.lq
+          -- Which sensor answered for `link`, so that a consumer can tell a quality in percent
+          -- from an RSSI in dBm: the search path in lib/sensors.lua ends in 1RSS and 2RSS.
+          -- Sensors.active_paths is filled on the telemetry path only, so this stays nil under
+          -- the simulator and a consumer has to cope with not being told.
+          ts.lqSource = (Sensors.active_paths and Sensors.active_paths.link) or ts.lqSource
+          ts.profile = roundInt(Sensors.getValue("pid_profile") or ts.profile, ts.profile or 1)
+          ts.rateProfile = roundInt(Sensors.getValue("rate_profile") or ts.rateProfile, ts.rateProfile or 1)
+          ts.batteryProfile = roundInt(Sensors.getValue("battery_profile") or ts.batteryProfile, ts.batteryProfile or 1)
+          ts.armFlags = roundInt(armFlagsValue or ts.armFlags, ts.armFlags or 0)
+          local armDisableFlagsValue = Sensors.getValue("armdisableflags")
+          if type(armDisableFlagsValue) == "number" then
+            ts.armDisableFlags = math.max(0, math.floor(armDisableFlagsValue + 0.5))
+          end
+          ts.governor = roundInt(Sensors.getValue("governor") or ts.governor, ts.governor or 0)
+          ts.mcuTemp = roundInt(Sensors.getValue("temp_mcu") or ts.mcuTemp, ts.mcuTemp or 0)
+          ts.escTemp = roundInt(Sensors.getValue("temp_esc") or ts.escTemp, ts.escTemp or 0)
+          ts.bec_voltage = Sensors.getValue("bec_voltage") or ts.bec_voltage
+          ts.throttlePercent = roundInt(Sensors.getValue("throttle_percent") or ts.throttlePercent, ts.throttlePercent or 0)
+
+          local currentValue = Sensors.getValue("current")
+          local wattsValue = Sensors.getValue("watts")
+          if type(wattsValue) ~= "number" and type(currentValue) == "number" and vbat > 0 then
+            wattsValue = vbat * currentValue
+          end
+          ts.current = currentValue or ts.current
+          ts.watts = wattsValue or ts.watts
+          ts.altitude = Sensors.getValue("altitude") or ts.altitude
+          ts.consumedMah = (smart and smart.consumption) or Sensors.getValue("smartconsumption") or ts.consumedMah
+
+          local cellCountValue = Sensors.getValue("battery_cell_count")
+          if type(cellCountValue) == "number" and cellCountValue > 0 then
+            ts.batteryCellCount = roundInt(cellCountValue, ts.batteryCellCount or 0)
+          elseif vbat > 0 then
+            -- No cell-count sensor: infer it from the pack voltage and the battery config's
+            -- maximum cell voltage, the default being a 4.2 V chemistry.
+            local session = _G.rfsuite and _G.rfsuite.session or nil
+            local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+            local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
+            local inferredCells = math.max(1, math.floor((vbat / maxCellVoltage) + 0.5))
+            local existingCells = tonumber(ts.batteryCellCount)
+            if not existingCells or existingCells <= 0 then
+              ts.batteryCellCount = inferredCells
+            else
+              local perCell = vbat / existingCells
+              -- Reconnect-safe: a cell count carried over from another pack shows up as an
+              -- implausible per-cell voltage, and is replaced rather than kept.
+              if perCell < 2.5 or perCell > 4.5 then
+                ts.batteryCellCount = inferredCells
+              end
+            end
+          end
+
+          if type(armFlagsValue) == "number" then
+            if type(bit32) == "table" and type(bit32.btest) == "function" then
+              ts.armed = bit32.btest(armFlagsValue, 1)
+            else
+              ts.armed = armFlagsValue ~= 0
+            end
+          end
+
+          ts.rss1 = readFirstSensorNumber(RSS1_SOURCES, ts.rss1)
+          ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
+        end
+
         local modelName = nil
         if _G.rfsuite and _G.rfsuite.session then
           modelName = _G.rfsuite.session.modelName
@@ -3581,12 +3604,20 @@ function M.run(event, touchState)
         audioContext.state = state.telemetryState
         audioContext.modelName = modelName
         Audio.process(audioContext, { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
-      else
-        -- The connection is gone. `rfReady` is an instantaneous reading rather than a latch, so
+      elseif wasTelemetryReady then
+        -- The connection is gone, and it was there a moment ago -- the edge, not the state.
+        -- `rfReady` is an instantaneous reading rather than a latch, so
         -- it says WHICH half went away, and the announcement is only made for the half the
         -- radio's own telemetry alert cannot see: the link is still there and the flight
         -- controller has stopped answering. The call is made before the reset below, which
         -- clears the state it reads.
+        --
+        -- Once per loss is also what the announcement itself is written for. It latches on
+        -- `connectionLostPending` (lib/audio.lua:1197-1199), but `Audio.resetConnectionState`
+        -- drops that latch again once the recovery window has passed
+        -- (lib/audio.lua:1254-1261), so on every tick this branch used to run it was set and
+        -- then taken away again -- which is to say the sound came back once per
+        -- CONNECTION_RECOVERY_WINDOW for as long as the tool sat in this state.
         if Audio and type(Audio.announceConnectionLost) == "function" then
           local audioContext = state.audioContext
           audioContext.audioState = state.audioState
@@ -3633,7 +3664,39 @@ function M.run(event, touchState)
         state.telemetryState.batteryCellCount = nil
         state.telemetryState.rss1 = nil
         state.telemetryState.rss2 = nil
+      else
+        -- Still not ready, and not the edge either -- the stretch in between. Nothing here is
+        -- connection state, so there is nothing to announce and nothing to clear, but the
+        -- master volume is a radio-side effect and has to keep following the pilot's setting
+        -- while the tool waits. `Audio.process` drives it while the connection is up and the
+        -- reset above drives it on the edge, which is what the dashboard widget relies on: it
+        -- runs `process` whether or not the link is up, and passes itself in
+        -- (widgets/dashboard/runtime.lua:346). Gating the whole pass on the edge had left the
+        -- variable written once per loss and then not again at all.
+        --
+        -- It settles on the same level it always did, and that is worth saying plainly rather
+        -- than claiming a difference. `resetConnectionState` refreshes the volume with no
+        -- `self` (lib/audio.lua:1263), so `is_rf_connected` reads
+        -- `_G.rfsuite.session.rfConnected`; `publishConnected` writes that field from the same
+        -- `session.isConnected` this tool copies into `state.rfConnected` at
+        -- ui/home.lua:1384 (tasks/events/runtime.lua:125-126), and both of those come from the
+        -- one RSSI reading behind `mspState.lastConnected` (tasks/msp/runtime.lua:425, :832).
+        -- The two agree today. Passing the state says which of them the tool means instead of
+        -- leaving it to a field another module happens to write, and it is the call the widget
+        -- already makes.
+        if Audio and type(Audio.refreshConnectionVolume) == "function" then
+          local audioContext = state.audioContext
+          audioContext.audioState = state.audioState
+          audioContext.preferences = state.preferences
+          state.telemetryState.rfConnected = state.rfConnected
+          audioContext.state = state.telemetryState
+          Audio.refreshConnectionVolume(audioContext)
+        end
       end
+
+      -- Read at the end of the block, so both sides of the test have been through it once
+      -- before the next audio tick compares against it.
+      state.lastAudioReady = telemetryReady
     end
 
     if not transitionedMenuThisTick then
