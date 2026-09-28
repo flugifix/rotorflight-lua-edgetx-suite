@@ -66,15 +66,15 @@ return {
     -- The service widget's background pass: the same two runtimes, with no scene
     -- build and no sweep of a theme mixed into it.
     --
-    -- Its worst pass is the one that also carries the 30 s look at the settings store
-    -- (widgets/service/runtime.lua, PREFERENCES_INTERVAL_SECONDS): the settings path is
-    -- resolved and three fstat calls are made, and the store is parsed only where one of
-    -- them has moved or fstat is missing altogether. Raised from 1600 when the measured
-    -- window was widened to contain that pass -- until then it ended at 20 s and the row had
-    -- never seen it. The target leaves room for the dearer forms of the same look that this
-    -- block does not drive: fstat answering, and a save inside the window that makes the
-    -- look parse the store.
-    ["pass.service"] = { target = 2200, measured = 1784, proposed = 1600 },
+    -- With the connect sequence through, every pass runs the events wakeup and with it the
+    -- custom-telemetry drain on a pass's worth of frames, and that is most of what the row
+    -- prices; the dearest pass is a one-off early in the window. The window is 60 s so that
+    -- it also holds the 30 s look at the settings store (widgets/service/runtime.lua,
+    -- PREFERENCES_INTERVAL_SECONDS), which adds a few hundred instructions to its pass and
+    -- is no longer the worst one. Raised from 2200 when the world rebuild stopped handing
+    -- this block the previous scenario's runtimes, whose connect sequence never finished and
+    -- so never let the drain run here.
+    ["pass.service"] = { target = 6000, measured = 5314, proposed = 2200 },
 
     -- One run() of SCRIPTS/FUNCTIONS/rfsbg.lua with a full frame backlog waiting,
     -- every frame of it decoded. This row is NOT a share of the widget ceiling

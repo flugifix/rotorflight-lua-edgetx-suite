@@ -57,9 +57,13 @@ reported as a margin to widen rather than a pass to celebrate.
   reactive ref and the runner calls them in a plain loop. The loop's own overhead is
   measured once against an empty closure and printed as the control; a run whose control
   drifts from the value in `budgets.lua` fails itself.
-- The world is rebuilt between scenarios, so no measurement inherits another's caches,
-  and the API reply index is built from a sorted file list, so two hosts resolve a
-  command claimed by two modules the same way.
+- The world is rebuilt between scenarios, and the rebuild reaches the module singletons the
+  suite parks in globals (`__rfsuite*`) as well as the stubs' own state, so no measurement
+  inherits another's caches, another's connect state or another's link. Without that, every
+  scenario after the first ran on the previous one's runtimes, and its connect chain stopped
+  on the `telemetry` task with the telemetry drain never started. The API reply index is
+  built from a sorted file list, so two hosts resolve a command claimed by two modules the
+  same way.
 
 Three consecutive runs produce byte-identical reports.
 
