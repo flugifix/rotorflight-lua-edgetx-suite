@@ -2681,10 +2681,12 @@ function Runtime.new(zone, options)
     -- Only where logic ticks come closer together than the read interval, because only there is
     -- the next tick one that does not read: where they are that far apart -- every pass of a scene
     -- build in between, or a widget called that rarely -- every tick reads, and carrying would put
-    -- the work on the next read a whole interval later. It also means the work is never carried
-    -- twice in a row. Whether this pass reads is decided below, after the connection state has been
-    -- updated; this is the same test on the state the previous pass left, so at a link transition
-    -- it can be one tick off in either direction, which moves the carried work by one tick.
+    -- the work on the next read a whole interval later.
+    --
+    -- SmartFuel's wake runs inside the event runtime, before the connection state is updated and
+    -- the read is decided below, so its flag is the same test on the state the previous pass left.
+    -- At a link transition that can be one tick off in either direction, which moves the wake by a
+    -- tick. The announcements run after the read and use the decision itself (see there).
     local carry = sinceLastTick < TELEMETRY_READ_SECONDS
       and (self.state.hadInflightFlight ~= true or self.state.rfConnected == true)
       and (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS
@@ -2852,7 +2854,11 @@ function Runtime.new(zone, options)
     local nextMode = computeFlightMode(self.state)
     if statusLine ~= nil then self.statusLine = statusLine end
 
-    if self.startupComplete and not carry then
+    -- The read has been decided by now, so this is exact rather than predicted: a pass that read
+    -- while logic ticks come closer together than the read interval leaves the announcements to
+    -- the next tick. That tick either does not read (the read stamp is this pass) or comes a read
+    -- interval later, and runs them either way, so they are never put off twice in a row.
+    if self.startupComplete and not (readThisPass and sinceLastTick < TELEMETRY_READ_SECONDS) then
       processAudioEvents(self)
     end
 
