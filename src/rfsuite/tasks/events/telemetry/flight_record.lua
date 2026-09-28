@@ -615,6 +615,8 @@ end
 --     values = { <sensor name> = number, ... },  -- this pass's raw answers
 --     pass   = number,  -- counted by the READER, once per pass, before the runtimes are driven
 --     at     = number,  -- the pass `values` was filled in
+--     now    = number,  -- the reader's clock for this pass, in seconds, set with `pass`
+--     reads  = boolean, -- whether the reader's read falls due in this pass, set with `pass`
 --   }
 --
 -- `values` is the sensor's own answer, raw -- before the rounding, the watts inference and the
@@ -630,6 +632,17 @@ end
 -- `at == pass` is what makes an offer this pass's. A wakeup from anywhere else in the same Lua
 -- state -- a second widget's background work -- stamps the pass before it, and the reader counts
 -- the next one before the runtimes are driven again, so a stale fill can never match.
+--
+-- An offer is only taken if the record samples on a pass that reads, and its own 0.5 s clock
+-- starts at the arm, in whatever phase of the reader's 0.5 s read that happens to be -- and with
+-- both at the same interval, that phase then holds for the whole flight. So while a reader is
+-- counting passes the record takes its `now` and `reads`: it samples on the passes on which the
+-- read falls due, and measures its interval on the reader's clock: the reader's `now` is taken at the top of the pass
+-- and the record's own a little later, and a tick between the two would otherwise put a sample one
+-- pass ahead of the read. The interval still applies, so a reader that says `reads` on every pass
+-- -- one that skips its read and so never moves its clock -- does not make the record sample on
+-- every pass. A table whose `now` is older than one interval has no reader counting any more, and
+-- then, as without a table, the record keeps its own clock.
 
 --- Read the tracked sensors. A sensor that answers nothing leaves the previous reading standing,
 --- which is what the dashboard's telemetry read has always done, and the derivations below --
@@ -810,8 +823,14 @@ function Record.wakeup(armed)
     end
     flight.seconds = flight.seconds + delta
 
-    if lastSampleAt == nil or (now - lastSampleAt) >= UPDATE_INTERVAL then
-      lastSampleAt = now
+    -- On the passes a counting reader reads, and on its clock; see the offer above.
+    local sampleAt, due = now, true
+    local shared = session.telemetryRead
+    if shared ~= nil and shared.now ~= nil and (now - shared.now) < UPDATE_INTERVAL then
+      sampleAt, due = shared.now, shared.reads
+    end
+    if due and (lastSampleAt == nil or (sampleAt - lastSampleAt) >= UPDATE_INTERVAL) then
+      lastSampleAt = sampleAt
       if readSources() then
         updatePowered()
         local rec = flight.current

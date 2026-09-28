@@ -177,6 +177,8 @@ rfsuite.session.telemetryRead = {
   values = { rpm = 2050, voltage = 22.4, ... },  -- this pass's raw answers, by sensor name
   pass   = 4711,   -- counted by the reader, once per pass, before the runtimes are driven
   at     = 4711,   -- the pass `values` was filled in
+  now    = 2355.5, -- the reader's clock for this pass, in seconds, set with `pass`
+  reads  = true,   -- whether the reader's read falls due in this pass, set with `pass`
 }
 ```
 
@@ -193,6 +195,21 @@ Three properties make it safe to read, and they are the whole of the contract:
   widget's background work — carries the pass before it and can never be taken for this one's.
 - **The table is created by a reader and by nobody else.** On a model that keeps the record from
   the service widget there is no such reader, nothing creates it, and the record offers nothing.
+
+An offer is only taken on a pass where the reader reads as well. So while a reader is counting
+passes — its `now` is less than one sampling interval old — the record **samples on the passes on which
+the reader's read falls due**, and measures its 0.5 s on the reader's clock rather than its own: the
+reader takes the time at the top of the pass and the record a little later, and a clock tick
+between the two would otherwise put a sample one pass ahead of the read. The interval still
+applies, so a reader whose read is due on every pass — the dashboard skips its read while it
+shows a finished flight with the link gone, and its read clock then stands still — does not make
+the record sample on every pass. Without a counting reader the record keeps its own clock.
+
+The first sample of a flight is therefore taken on the first read after the arm rather than on
+the arm itself: normally within about half a second. Until then a box showing a statistic of the
+flight in progress falls back to the previous flight's value, and a flight shorter than that
+records nothing. No background work runs while the dashboard builds a scene, so on a theme that
+draws the armed phase with a module of its own, the first sample follows that scene's build.
 
 ## When a flight starts and ends
 
