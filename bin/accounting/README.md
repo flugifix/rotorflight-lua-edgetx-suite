@@ -17,6 +17,7 @@ lua5.3 bin/accounting/measure.lua              # report only
 lua5.3 bin/accounting/measure.lua --check      # gate: non-zero exit on any breach
 lua5.3 bin/accounting/measure.lua --self-test  # proves the check can go red
 lua5.3 bin/accounting/measure.lua --emit       # print the budgets.lua table of this run
+lua5.3 bin/accounting/measure.lua --phases     # the arm and disarm edges at every phase
 ```
 
 `--check` is what CI runs, after `--self-test`. The self-test poisons one target and
@@ -42,6 +43,22 @@ reported as a margin to widen rather than a pass to celebrate.
   which is what makes a new box type ship its cost with the PR that adds it.
 - **Per unit**: the whole background wakeup, the custom-telemetry drain with a full frame
   backlog, one MSP pump, and the API-layer parse of the largest scripted reply.
+
+## The phase sweep
+
+`pass.state.armed` is the worst STATE pass of one run in which the model is armed at a fixed
+pass. The widget's work is a set of periodic items -- the 0.5 s telemetry read, the flight
+record's 0.5 s sample, SmartFuel's 1 s wake, the audio pass -- and an arm or disarm edge
+lands on whichever of them fall on the same pass. So that row prices one phase of the
+cadence grid, and a change that moves the timeline by one pass can move it by thousands
+without the edge code changing (#440).
+
+`--phases` runs the armed scenario again with the arm moved by 0-9 passes, and separately
+the disarm, and prints for every phase the worst pass of the first 16 armed passes, of
+armed passes 21-240 and of the first 16 post-flight passes, with the pass it was, whether
+it ran the telemetry read, and the window's sum; the arm and disarm tables add the whole
+run's sum and how many passes ran the announcements. It is a report: it adds no row,
+checks nothing, and leaves `--check` byte-identical. The run takes under a minute.
 
 ## Determinism
 

@@ -23,7 +23,7 @@ local function nowSeconds()
     return 0
 end
 
-function M.wakeup()
+function M.wakeup(carry)
     -- One module per wakeup: each of these pulls in a subtree of its own -- smart.lua alone
     -- reaches the sensor library, the reserve helper and the logger, and drain.lua reaches
     -- the decoder table and the CRSF multiplexer -- and loading them together puts every one
@@ -62,7 +62,11 @@ function M.wakeup()
         Drain.wakeup(now)
     end
 
-    if Smart and type(Smart.wakeup) == "function" then
+    -- Not on a pass the dashboard is spending on its telemetry read (`carry`, handed on by
+    -- tasks/events/runtime.lua). SmartFuel keeps its own 1.0 s interval and wakes on the next
+    -- logic tick instead, so the read that picks its value up is at most 0.4 s after the wake --
+    -- the same as in every phase where the two did not coincide.
+    if not carry and Smart and type(Smart.wakeup) == "function" then
         Smart.wakeup()
     end
 

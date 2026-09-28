@@ -7,6 +7,7 @@
 --   lua5.3 bin/accounting/measure.lua              report only
 --   lua5.3 bin/accounting/measure.lua --check      gate: non-zero exit on any breach
 --   lua5.3 bin/accounting/measure.lua --self-test  proves the gate can go red
+--   lua5.3 bin/accounting/measure.lua --phases     the arm and disarm edges at every phase
 --
 -- Nothing here reads a wall clock, and no pcall swallows a failure: a stub that is missing
 -- or a source that raises fails the run, because in a measurement a silence is a zero that
@@ -417,6 +418,99 @@ local function runArmedScenario(themePath, passes)
   return worst, eventsWorst
 end
 
+--- The armed scenario again, with the arm or the disarm moved across the cadence grid.
+--
+-- The widget's work is a set of periodic items -- the 0.5 s telemetry read, the flight record's
+-- 0.5 s sample, SmartFuel's 1 s wake, the audio pass -- and an arm or disarm edge lands on
+-- whichever of them fall on the same pass. So a run with the edge at one fixed pass prices one
+-- phase of that grid, and moving the edge by a pass can move the figure by thousands (#440).
+-- This settles, runs `armPad` disarmed passes, arms for 240 passes with the values moving, flies
+-- for 120, runs `disarmPad` more, disarms, and runs 240 post-flight passes. It hands back every
+-- counted pass, so the edge windows can be read off at each phase.
+--
+-- Only widget.refresh is called per pass. runArmedScenario also calls Events.wakeup between
+-- passes, and that would run anything a widget pass has left for the next tick.
+local function runPhaseScenario(themePath, armPad, disarmPad)
+  World.reset()
+  local sensorIds = World.sensorIds
+  local Runtime = World.require("widgets/dashboard/runtime.lua")
+  local widget = Runtime.new(ZONE, {})
+  widget.preferences = widget.preferences or {}
+  widget.preferences.dashboard = { theme_preflight = themePath }
+
+  settle(widget, sensorIds, 400)
+
+  local passes = {}
+
+  local function moving(i, throttle)
+    local k = i % 8
+    Stubs.sensors["Hspd"] = 1500 + k * 100
+    Stubs.sensors["Curr"] = 10 + k
+    Stubs.sensors["Vbat"] = 23 + k / 10
+    Stubs.sensors["EscT"] = 40 + k
+    Stubs.sensors["Thr%"] = throttle + k
+  end
+
+  local function drive(tag, passCount, frameBase, perPass)
+    for i = 1, passCount do
+      holdLinkBacklog()
+      releaseReplies()
+      feedLink(sensorIds, frameBase + i)
+      if perPass then perPass(i) end
+      local class = passClass(widget)
+      local readAt = widget._lastTelemetryReadAt
+      local audioAt = widget.audioState and widget.audioState.nextProcessAt
+      local n = count(widget.refresh, widget, nil, nil)
+      passes[#passes + 1] = {
+        tag = tag, i = i, class = class, n = n,
+        read = widget._lastTelemetryReadAt ~= readAt,
+        -- Audio.process moves its own throttle stamp when it runs past the throttle.
+        audio = (widget.audioState and widget.audioState.nextProcessAt) ~= audioAt,
+      }
+    end
+  end
+
+  installDeferredLink()
+  drive("pre", armPad, 39000)
+  Stubs.sensors["Gov"] = 2
+  Stubs.sensors["ARM"] = 1
+  drive("armed", 240, 40000, function(i) moving(i, 20) end)
+  Stubs.sensors["Gov"] = 4
+  drive("inflight", 120, 41000, function(i) moving(i, 40) end)
+  drive("pad", disarmPad, 41500, function(i) moving(i, 40) end)
+  Stubs.sensors["ARM"] = 0
+  Stubs.sensors["Gov"] = 0
+  Stubs.sensors["Thr%"] = 0
+  drive("post", 240, 42000)
+  removeDeferredLink()
+
+  return passes
+end
+
+--- The worst pass and the sum of the passes `first`..`last` of one section of a phase run.
+local function phaseWindow(passes, tag, first, last)
+  local w = { worst = 0, at = 0, read = false, sum = 0 }
+  for _, p in ipairs(passes) do
+    if p.tag == tag and p.i >= first and p.i <= last then
+      w.sum = w.sum + p.n
+      if p.n > w.worst then
+        w.worst, w.at, w.read = p.n, p.i, p.read
+      end
+    end
+  end
+  return w
+end
+
+--- Every counted pass of a phase run, summed, and how many of them ran the announcements.
+local function runTotal(passes)
+  local total, audio = 0, 0
+  for _, p in ipairs(passes) do
+    total = total + p.n
+    if p.audio then audio = audio + 1 end
+  end
+  return total, audio
+end
+
 -- ---------------------------------------------------------------------------
 -- Report and gate
 -- ---------------------------------------------------------------------------
@@ -517,6 +611,65 @@ do
   local armedWorst, armedEvents = runArmedScenario(reference, 240)
   addRow("pass.state.armed", armedWorst.state or 0, "armed, telemetry moving between passes")
   addRow("unit.events.wakeup.armed", armedEvents, "same wakeup, armed and moving")
+end
+
+------------------------------------------------------------------------------
+-- --phases: the arm and disarm edges at every phase of the cadence grid, and nothing else.
+--
+-- A report, not a gate: no row is added and nothing is checked. Ten phases cover the 1 s grid
+-- at the 100 ms pass clock. The arm is moved with the disarm at phase 0, and the disarm with the
+-- arm at phase 0, so the phase-0 run serves both. Windows: the first 16 armed passes (the arm
+-- edge), armed passes 21-240 (steady armed), and the first 16 post-flight passes (the disarm
+-- edge). Each prints its worst pass, the pass it was, whether that pass ran the telemetry read,
+-- and the window's sum, so work carried to another pass shows as a total and not only as a peak;
+-- the arm and disarm tables also print the whole run's sum, every pass after the settle, and how
+-- many of those passes ran the announcements.
+------------------------------------------------------------------------------
+if args["--phases"] then
+  local PHASES = 10
+  local budget = Budgets.rows["pass.state.armed"]
+  local target = budget and budget.target or 0
+  local windows = { arm = {}, steady = {}, disarm = {} }
+  for k = 0, PHASES - 1 do
+    local armRun = runPhaseScenario(reference, k, 0)
+    windows.arm[k] = phaseWindow(armRun, "armed", 1, 16)
+    windows.arm[k].run, windows.arm[k].audio = runTotal(armRun)
+    windows.steady[k] = phaseWindow(armRun, "armed", 21, 240)
+    local disarmRun = (k == 0) and armRun or runPhaseScenario(reference, 0, k)
+    windows.disarm[k] = phaseWindow(disarmRun, "post", 1, 16)
+    windows.disarm[k].run, windows.disarm[k].audio = runTotal(disarmRun)
+  end
+
+  print("offline instruction accounting -- phase sweep")
+  print(string.format("  interpreter        %s, count hook at 1 instruction", _VERSION))
+  print(string.format("  phases             %d, the edge moved by one 100 ms pass each", PHASES))
+  print(string.format("  target             %d (pass.state.armed)", target))
+  print("")
+  local order = {
+    { "arm", "arm: armed passes 1-16" },
+    { "steady", "steady: armed passes 21-240" },
+    { "disarm", "disarm: post-flight passes 1-16" },
+  }
+  for _, o in ipairs(order) do
+    local key, title = o[1], o[2]
+    print("  " .. title)
+    print(string.format("  %5s %9s %6s %5s %10s %11s %6s", "phase", "worst", "pass", "read", "sum", "run", "audio"))
+    local lo, hi, over, total = nil, 0, 0, 0
+    for k = 0, PHASES - 1 do
+      local w = windows[key][k]
+      print(string.format("  %5d %9d %6d %5s %10d %11s %6s", k, w.worst, w.at, w.read and "R" or "-", w.sum,
+        w.run and tostring(w.run) or "", w.audio and tostring(w.audio) or ""))
+      lo = (lo == nil or w.worst < lo) and w.worst or lo
+      if w.worst > hi then hi = w.worst end
+      if target > 0 and w.worst > target then over = over + 1 end
+      total = total + w.sum
+    end
+    print(string.format("  worst %d-%d, over %d in %d of %d phases, window sums %d",
+      lo, hi, target, over, PHASES, total))
+    print("")
+  end
+  -- The rest of the report is not what was asked for, and nothing in it depends on this.
+  return
 end
 
 ------------------------------------------------------------------------------

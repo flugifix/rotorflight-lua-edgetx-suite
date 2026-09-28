@@ -378,7 +378,7 @@ local function tickCardSink(self)
   pcall(LogSink.tick, armed)
 end
 
-local function tickMspRuntime(self)
+local function tickMspRuntime(self, carry)
   tickCardSink(self)
 
   if not MspRuntime then
@@ -397,7 +397,7 @@ local function tickMspRuntime(self)
   MspRuntime.tick()
   
   if EventsRuntime and type(EventsRuntime.wakeup) == "function" then
-    pcall(EventsRuntime.wakeup)
+    pcall(EventsRuntime.wakeup, carry)
   end
 
   -- The wakeup above is what FILLS the queue while the connect chain runs. Without a second
@@ -2676,7 +2676,8 @@ function Runtime.new(zone, options)
     -- whole steady state of a bench radio.
     local starting = (self.state.rfConnected == true) and (self.connectionReady ~= true)
     local logicTick = starting and LOGIC_TICK_STARTING_SECONDS or LOGIC_TICK_SECONDS
-    if (now - self._lastLogicTick) < logicTick then return self.connectionReady end
+    local sinceLastTick = now - self._lastLogicTick
+    if sinceLastTick < logicTick then return self.connectionReady end
     self._lastLogicTick = now
 
     -- Set event context to 'widget' before events wakeup
@@ -2685,10 +2686,29 @@ function Runtime.new(zone, options)
       _G.rfsuite.session = _G.rfsuite.session or {}
       _G.rfsuite.session.event_context = "widget"
     end
+    -- The announcements and SmartFuel's wake run on cadences of their own (0.25-0.6 s and 1.0 s),
+    -- are independent of the telemetry read, and drift onto the read tick; on an arm or disarm
+    -- edge they land there together with the drain, the edge runner and the read itself. So a
+    -- pass that is going to read carries both to the next logic tick, the way a theme reload is
+    -- carried further down.
+    --
+    -- Only where logic ticks come closer together than the read interval, because only there is
+    -- the next tick one that does not read: where they are that far apart -- every pass of a scene
+    -- build in between, or a widget called that rarely -- every tick reads, and carrying would put
+    -- the work on the next read a whole interval later.
+    --
+    -- SmartFuel's wake runs inside the event runtime, before the connection state is updated and
+    -- the read is decided below, so its flag is the same test on the state the previous pass left.
+    -- At a link transition that can be one tick off in either direction, which moves the wake by a
+    -- tick. The announcements run after the read and use the decision itself (see there).
+    local carry = sinceLastTick < TELEMETRY_READ_SECONDS
+      and (self.state.hadInflightFlight ~= true or self.state.rfConnected == true)
+      and (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS
+
     -- Ahead of the runtimes, because the record samples inside them: the count is what tells
     -- this pass's readings from the pass before it.
     countSharedPass()
-    tickMspRuntime(self)
+    tickMspRuntime(self, carry)
     
     local reloaded = (reloadPreferencesIfNeeded(self, false, isBackground) == true)
     self.state.zoneW = self.zone and self.zone.w or 0
@@ -2848,7 +2868,11 @@ function Runtime.new(zone, options)
     local nextMode = computeFlightMode(self.state)
     if statusLine ~= nil then self.statusLine = statusLine end
 
-    if self.startupComplete then
+    -- The read has been decided by now, so this is exact rather than predicted: a pass that read
+    -- while logic ticks come closer together than the read interval leaves the announcements to
+    -- the next tick. That tick either does not read (the read stamp is this pass) or comes a read
+    -- interval later, and runs them either way, so they are never put off twice in a row.
+    if self.startupComplete and not (readThisPass and sinceLastTick < TELEMETRY_READ_SECONDS) then
       processAudioEvents(self)
     end
 

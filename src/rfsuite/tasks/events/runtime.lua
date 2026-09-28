@@ -267,7 +267,12 @@ function Events.getOnconnectPendingTaskName()
   return nil
 end
 
-function Events.wakeup()
+--- One pass of the event runtime.
+--
+-- `carry` is the dashboard widget's: true on a pass that also runs its telemetry read, so that the
+-- work in here that need not share that pass waits one logic tick -- today SmartFuel's wake, in
+-- telemetry_bg/tasks.lua. Every other caller passes nothing.
+function Events.wakeup(carry)
   ensureDeps()
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then return end
   local mspState = MspRuntime.getState()
@@ -357,7 +362,7 @@ function Events.wakeup()
     if state.linkStableUp and (not onconnectActive or armed or context == "tool") then
       local telemetry_bg = ensureEventRunner("telemetry_bg")
       if telemetry_bg and type(telemetry_bg.wakeup) == "function" then
-        local ok, err = pcall(telemetry_bg.wakeup)
+        local ok, err = pcall(telemetry_bg.wakeup, carry)
         if not ok and Log and type(Log.emit) == "function" then
           pcall(Log.emit, "rfsuite.events", "telemetry_bg.wakeup error: " .. tostring(err), "error")
         end
