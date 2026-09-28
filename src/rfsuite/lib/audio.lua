@@ -1039,8 +1039,8 @@ local function announcePackNotFullEvent(self, events, opts)
   emitLog(opts, "pack not full: " .. tostring(perCell) .. " V/cell against " .. tostring(fullCell)
     .. " V less a " .. tostring(margin) .. " mV margin", "info")
 
-  -- notfull.wav is the one file this announcement would like the sound packs to gain. Every
-  -- pack ships voltage.wav, so one without it still says something rather than nothing, and
+  -- notfull.wav is this announcement's own file. Every pack ships voltage.wav, so a pack that
+  -- predates notfull.wav still says something rather than nothing, and
   -- resolveEventPath caches the answer, so the probe costs one open per session.
   local soundFile = "stat/alerts/notfull.wav"
   if not resolveEventPath(soundFile) then
