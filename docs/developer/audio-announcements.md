@@ -17,7 +17,7 @@ both locales, and the WAV file. This page is the checklist for all four.
 
 | Caller | When |
 | --- | --- |
-| `widgets/dashboard/runtime.lua`, `processAudioEvents` | every logic tick while `startupComplete` |
+| `widgets/dashboard/runtime.lua`, `processAudioEvents` | every logic tick while `startupComplete`, except a tick that runs the telemetry read while logic ticks come closer together than the read interval: that call is made on the next tick instead (#439) |
 | `ui/home.lua`, the audio block | every 200 ms while the tool has a connection |
 
 `self` carries `audioState` (the engine's own memory), `preferences` (the radio's settings) and
@@ -27,8 +27,11 @@ symmetry is the reason the tool builds its `telemetryState` the way the widget's
 does, rounding included; if you read a new field, check both sides write it.
 
 `Audio.process` throttles itself to 0.25–0.60 s depending on the screen height, so it is cheap to
-call and you do not need a throttle of your own. What you do need is a re-alert interval: every
-repeating alert in the file uses **10 seconds**, kept in `audioState.lastAlertAt.<key>`.
+call and you do not need a throttle of your own. Under the widget a call that would share a pass
+with the telemetry read waits one logic tick (0.1 s), so two passes can be that much further apart
+than the throttle says, and an announcement can come one tick later than it otherwise would.
+What you do need is a re-alert interval: every repeating alert in the file uses **10 seconds**,
+kept in `audioState.lastAlertAt.<key>`.
 
 `Audio.resetConnectionState(audioState)` runs when a connection goes down. Anything your
 announcement latches — "already said once this session", "the threshold is currently breached" —
