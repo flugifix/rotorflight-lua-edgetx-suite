@@ -163,7 +163,7 @@ Two announcements ask for files no pack ships yet, and stay silent without them:
 | `stat/alerts/telemetrylost.wav` | Telemetry lost |
 | `stat/alerts/telemetryok.wav` | Telemetry recovered |
 
-Three prefer a file of their own and fall back to one that ships, so they work today:
+Three have a file of their own in both packs, and fall back to another file in an older pack that lacks it:
 
 | Preferred file | Falls back to | Announcement |
 | --- | --- | --- |
@@ -171,7 +171,7 @@ Three prefer a file of their own and fall back to one that ships, so they work t
 | `stat/alerts/mainpowerok.wav` | `evt/battery.wav` | Main power back |
 | `stat/alerts/notfull.wav` | `stat/alerts/voltage.wav` | Pack not full |
 
-`stat/alerts/batteryempty.wav` is currently in the English pack only.
+`stat/alerts/batteryempty.wav` is in the English pack only, so a German pack that lacks `stat/alerts/mainpower.wav` falls back straight to `stat/alerts/lowvoltage.wav`.
 
 ---
 

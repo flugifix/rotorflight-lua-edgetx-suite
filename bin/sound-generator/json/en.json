@@ -432,6 +432,12 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/batteryempty.wav",
+    "english": "Battery Empty",
+    "translation": "Battery Empty",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/current.wav",
     "english": "Current",
     "translation": "Current",
@@ -477,6 +483,18 @@
     "file": "stat/alerts/lq.wav",
     "english": "Link Quality",
     "translation": "Link Quality",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/mainpower.wav",
+    "english": "Main Power Lost",
+    "translation": "Main Power Lost",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/mainpowerok.wav",
+    "english": "Main Power Restored",
+    "translation": "Main Power Restored",
     "needs_translation": false
   },
   {
