@@ -53,8 +53,8 @@ M.STACK_LIMIT = 4
 -- What an empty stack shows when there is no base layer.
 M.DEFAULT_VIEW = "menu"
 
--- The views the widget ships, in the order their `openWhen` is asked. Where several are true on
--- the same pass the first one wins, so the battery prompt comes ahead of the quick menu.
+-- The views the widget ships, in the order their `openWhen` is asked. Only the first one whose
+-- condition holds is opened on a pass, so the battery prompt comes ahead of the quick menu.
 local CORE_VIEWS = {
   { id = "battery_pick", module = "widgets/dashboard/battery_pick_menu.lua", openWhen = "batteryPickPending" },
   { id = "menu", module = "widgets/dashboard/fullscreen_menu.lua" },

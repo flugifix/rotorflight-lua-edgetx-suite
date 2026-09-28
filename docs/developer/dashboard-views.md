@@ -84,9 +84,11 @@ in this order:
    closed again. That is what keeps the battery prompt the way it was: it shows while it is
    pending, and three places end the pending state without closing anything — arming
    (`updateDerivedFlightState`), a pick (`batteryPickApplyStep`) and a reconnect.
-2. The first view in registry order whose `openWhen` holds is opened, unless it is already on
-   the stack. Only one is considered per pass, so where several hold, the one listed first
-   wins; the picker is listed before the menu.
+2. The first view in registry order whose `openWhen` holds is the only one considered on that
+   pass: it is opened unless it is already on the stack. A view already on the stack is left
+   where it is and is not raised over what lies above it, and no view listed after it is
+   opened while its condition holds. So where several hold, the one listed first is the one
+   that opens, not necessarily the one on top; the picker is listed before the menu.
 3. The top of the stack is shown; with the stack empty, the base layer, or with none the quick
    menu.
 
