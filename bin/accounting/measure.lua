@@ -30,6 +30,13 @@ local Stubs = assert(loadfile(HERE .. "/stubs/edgetx.lua"))()
 local FC = assert(loadfile(HERE .. "/stubs/fc.lua"))()
 local Budgets = assert(loadfile(HERE .. "/budgets.lua"))()
 
+-- The card this run is given is emptied before anything is measured. The suite addresses its
+-- settings by absolute card path, and under the stubs that used to mean the host's own
+-- /SCRIPTS -- so a run that died on a control it could not satisfy left a settings file
+-- behind, and the next run read it. Nothing on the host can reach the measurement now, and
+-- nothing the measurement writes survives it.
+Stubs.clearCard()
+
 local API_DIR = ROOT .. "/src/rfsuite/tasks/msp/api"
 local THEMES_DIR = ROOT .. "/src/rfsuite/widgets/dashboard/themes"
 local OBJECTS_DIR = ROOT .. "/src/rfsuite/widgets/dashboard/objects"
@@ -37,8 +44,10 @@ local OBJECTS_DIR = ROOT .. "/src/rfsuite/widgets/dashboard/objects"
 local ZONE = { x = 0, y = 0, w = 800, h = 458 }
 
 -- ---------------------------------------------------------------------------
--- Directory listing. `ls -1` is the one external call in here; everything else
--- is the interpreter. Sorted, because two hosts must enumerate in one order.
+-- Directory listing. `ls -1` is the one external call in the measurement itself;
+-- everything else here is the interpreter. Sorted, because two hosts must
+-- enumerate in one order. (The card the run is given in stubs/edgetx.lua shells
+-- out to `mkdir` and `rmdir` as well, to make and to empty that directory.)
 -- ---------------------------------------------------------------------------
 local function listDir(path)
   local pipe = io.popen("ls -1 " .. path .. " 2>/dev/null")
@@ -1107,6 +1116,26 @@ end
 ------------------------------------------------------------------------------
 -- Check and report.
 ------------------------------------------------------------------------------
+-- The card is emptied and then handed back here rather than at the end of the file: nothing
+-- below reads it, and from here on every exit runs through here, os.exit in the self-test
+-- included. Emptied rather than removed, because the self-test below writes to the card after
+-- this point; the release that gives the name back happens on the way out of every exit below.
+Stubs.clearCard()
+
+-- The card is handed back on every exit from here on, which is why the release is installed
+-- here rather than written before each os.exit: there are five exits in the tail, and the next
+-- one added would otherwise leave a card behind in the temp folder. Nothing the measured tree
+-- loads calls os.exit, so the wrapper is invisible to the measurement -- if that ever changes,
+-- this is the line to look at.
+do
+  local realExit = os.exit
+  os.exit = function(code)
+    Stubs.releaseCard()
+    realExit(code)
+  end
+end
+
+
 local unanswered = {}
 for cmd, n in pairs(FC.unanswered) do
   unanswered[#unanswered + 1] = string.format("%d(x%d)", cmd, n)
@@ -1215,6 +1244,15 @@ end
 print("")
 for _, w in ipairs(warnings) do print("WARN: " .. w) end
 if selfTest then
+  -- The card first: a card that is written to the wrong directory, whose deepest directory
+  -- was never made, or that is not emptied leaves every row below exactly as it was, so
+  -- the report cannot see any of it. Proved on the gate, then on the card.
+  local cardFailures = Stubs.selfTest()
+  for _, f in ipairs(cardFailures) do print("(self-test) card: " .. f) end
+  if #cardFailures > 0 then
+    print("SELF-TEST FAILED: the card this run is given does not behave")
+    os.exit(1)
+  end
   local sawPoisoned, sawHidden = false, false
   for _, f in ipairs(failures) do
     if poisoned and string.find(f, poisoned, 1, true)
@@ -1235,7 +1273,7 @@ if selfTest then
     print("SELF-TEST FAILED: a row with its budget removed did not turn the check red")
     os.exit(1)
   end
-  print("SELF-TEST PASSED: both a breached target and a missing budget row turn the check red")
+  print("SELF-TEST PASSED: the card behaves, and both a breached target and a missing budget row turn the check red")
   os.exit(0)
 end
 
@@ -1246,3 +1284,8 @@ if #failures > 0 then
 else
   print(string.format("%d rows, 0 failures", #rows))
 end
+
+-- The green path ends the file rather than exiting, so the wrapper above never sees it. A
+-- --check that passes is the common case, and leaving a card behind on every one of them is
+-- how a temp directory fills up.
+Stubs.releaseCard()

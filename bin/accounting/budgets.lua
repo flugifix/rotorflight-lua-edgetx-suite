@@ -74,6 +74,15 @@ return {
     -- is no longer the worst one. Raised from 2200 when the world rebuild stopped handing
     -- this block the previous scenario's runtimes, whose connect sequence never finished and
     -- so never let the drain run here.
+    --
+    -- The card the run is given (stubs/edgetx.lua) does not move this row, and the reason is
+    -- not the one this comment used to give. It used to say the settings store is now written
+    -- and that the 30 s look at pass 300 parses one. A traced --check run writes no card path
+    -- at all, on master as much as here, so nothing is written and nothing is parsed. What the
+    -- card costs is the Lua wrapper every io.open now goes through, counted under the hook and
+    -- billed to the suite -- and even that stops short of this row: removing the io.open wrapper
+    -- puts all four rows that move back on master's figures, and this is not one of them. The
+    -- dearest pass of this block is an early one-off rather than a look at the store.
     ["pass.service"] = { target = 6000, measured = 5314, proposed = 2200 },
 
     -- One run() of SCRIPTS/FUNCTIONS/rfsbg.lua with a full frame backlog waiting,
