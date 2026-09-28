@@ -8,12 +8,33 @@
 -- A press records a REQUEST on the widget and nothing else. The pick, the card write and the
 -- flight controller write all happen in the runtime's job pass: an LVGL press callback runs
 -- inside the firmware's event dispatch, where a card write or a queue turn is the one thing a
--- widget must not do.
+-- widget must not do. What follows the press is an action views.lua performs.
 --
 -- Every string the tree carries is built here, once, while the menu is built. Nothing below is
 -- a closure, so nothing below runs in the reactive sweep.
 
 local M = {}
+
+local requireModule = (_G.rfsuite and _G.rfsuite.require) or function(path)
+  local fullPath = string.sub(path, 1, 1) == "/" and path or ("/SCRIPTS/TOOLS/rfsuite-core/" .. path)
+  local chunk = loadScript(fullPath, "t")
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then return mod end
+  end
+  return nil
+end
+
+local Views = requireModule("widgets/dashboard/views.lua")
+
+-- What follows each press. A pick and the close box both finish the interaction: the prompt has
+-- been answered or closed, so fullscreen is left, as it always has been.
+local AFTER_PICK = "done"
+local AFTER_CLOSE = "done"
+
+local function navigate(widget, after)
+  if Views and type(Views.navigate) == "function" then Views.navigate(widget, after) end
+end
 
 local function requestPick(widget, id)
   -- `false` rather than nil for "no battery": nil is what the runtime reads as "no request at
@@ -25,24 +46,15 @@ local function requestPick(widget, id)
   else
     widget._batteryPickRequest = id
   end
-  widget.built = false
-  widget.renderKey = nil
-  if lcd and type(lcd.exitFullScreen) == "function" then
-    lcd.exitFullScreen()
-  end
 end
 
+-- Closing without a pick ends the prompt for this connection. `pending` is the condition that
+-- opens the picker on its own, so it is cleared here, or the picker would open again at once.
 local function dismiss(widget)
   local pick = widget.state and widget.state.batteryPick or nil
   if type(pick) == "table" then
     pick.dismissed = true
     pick.pending = false
-  end
-  widget.batteryPickOpen = nil
-  widget.built = false
-  widget.renderKey = nil
-  if lcd and type(lcd.exitFullScreen) == "function" then
-    lcd.exitFullScreen()
   end
 end
 
@@ -112,7 +124,7 @@ function M.build(children, widget)
   local cy = dY + math.floor((headerH - closeSize)/2)
   children[#children+1] = {
     type = "button", x=cx, y=cy, w=closeSize, h=closeSize, color=COLOR_THEME_SECONDARY1 or RED,
-    press = function() dismiss(widget) end
+    press = function() dismiss(widget); navigate(widget, AFTER_CLOSE) end
   }
   children[#children+1] = {
     type = "label", x=cx, y=cy + math.floor((closeSize - fontH)/2) + closeTextOffY, w=closeSize,
@@ -172,7 +184,7 @@ function M.build(children, widget)
     local id = entry.id
     children[#children+1] = {
       type = "button", x=bx, y=by, w=btnW, h=btnH, color=bColor,
-      press = function() requestPick(widget, id) end
+      press = function() requestPick(widget, id); navigate(widget, AFTER_PICK) end
     }
     children[#children+1] = {
       type = "label", x=bx, y=by + (isLarge and 8 or 3), w=btnW,
@@ -189,7 +201,7 @@ function M.build(children, widget)
   local noneW = math.floor(dW - paddingX * 2)
   children[#children+1] = {
     type = "button", x=dX + paddingX, y=noneY, w=noneW, h=btnH, color=btn_color,
-    press = function() requestPick(widget, nil) end
+    press = function() requestPick(widget, nil); navigate(widget, AFTER_PICK) end
   }
   children[#children+1] = {
     type = "label", x=dX + paddingX, y=noneY + math.floor((btnH - fontH)/2), w=noneW,
