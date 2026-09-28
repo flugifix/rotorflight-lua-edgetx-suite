@@ -1975,10 +1975,14 @@ local telemetryChanged = false
 -- anything the first did not. Counting the pass for it is what lets it offer those readings and
 -- what tells this pass's offer from the one before it; the offer's schema is
 -- tasks/events/telemetry/flight_record.lua's.
+--
+-- The pass also tells the record its clock and whether this read falls due in it, so that the
+-- record takes its samples on the passes that read rather than on a clock of its own that starts
+-- at the arm and may sit in any phase of this read's.
 local sharedRead = nil
 
 --- Count this pass for the record, before the event runtimes are driven.
-local function countSharedPass()
+local function countSharedPass(now, reads)
   local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session
   if type(session) ~= "table" then
     sharedRead = nil
@@ -1990,6 +1994,8 @@ local function countSharedPass()
     session.telemetryRead = shared
   end
   shared.pass = shared.pass + 1
+  shared.now = now
+  shared.reads = reads
   sharedRead = shared
 end
 
@@ -2706,8 +2712,11 @@ function Runtime.new(zone, options)
       and (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS
 
     -- Ahead of the runtimes, because the record samples inside them: the count is what tells
-    -- this pass's readings from the pass before it.
-    countSharedPass()
+    -- this pass's readings from the pass before it, and whether the read below is due is what
+    -- lets the record sample on this pass rather than on one that does not read. Nothing between
+    -- here and the read moves the read clock, so this is the test the read itself uses.
+    local readDue = (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS
+    countSharedPass(now, readDue)
     tickMspRuntime(self, carry)
     
     local reloaded = (reloadPreferencesIfNeeded(self, false, isBackground) == true)
@@ -2725,7 +2734,7 @@ function Runtime.new(zone, options)
     local isPostflightOffline = (self.state.hadInflightFlight == true) and (self.state.rfConnected ~= true)
     local readThisPass = false
     if not isPostflightOffline then
-      if (now - (self._lastTelemetryReadAt or 0)) >= TELEMETRY_READ_SECONDS then
+      if readDue then
         self._lastTelemetryReadAt = now
         readThisPass = true
         readTelemetry(self.state, self.audioState)
