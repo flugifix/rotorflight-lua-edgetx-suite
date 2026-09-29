@@ -838,11 +838,25 @@ do
   if type(script) ~= "table" or type(script.run) ~= "function" then
     error("accounting: src/functions/rfsbg.lua does not return a run function")
   end
-  -- The first run only loads; the second is the first that drains, and it pulls in the decoder
-  -- table and the CRSF multiplexer while doing it. Both are cold-start cost.
+  -- The first run only loads. After it, run until a run takes a frame off the queue: the drain
+  -- loads its decoder table on a run of its own, and the first run that drains also pulls in the
+  -- CRSF multiplexer and publishes every sensor for the first time. All of that is cold-start
+  -- cost, and a fixed number of warm-up runs goes stale the moment that chain grows -- the same
+  -- reason warmTelemetryBg above counts to a consumed frame rather than to a number.
   script.run()
-  Stubs.pushFrame(0x88, buildTelemetryFrame(0, sensorIds))
-  script.run()
+  local warmed = false
+  for _ = 1, 10 do
+    Stubs.telemetryFrames = {}
+    Stubs.pushFrame(0x88, buildTelemetryFrame(0, sensorIds))
+    script.run()
+    if #Stubs.telemetryFrames == 0 then
+      warmed = true
+      break
+    end
+  end
+  if not warmed then
+    error("accounting: the function script never consumed a frame; the row would measure a load")
+  end
 
   for i = 1, FRAME_BACKLOG do
     Stubs.pushFrame(0x88, buildTelemetryFrame(i, sensorIds))
