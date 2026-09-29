@@ -36,8 +36,11 @@ With no row to show, the page says the model uses the standard values.
 
 - **Only what differs is stored.** Saving a theme's page for this model stores the values that
   differ from the standard — the radio's value where it has one, the theme's default otherwise —
-  and removes the ones that are equal. The list therefore shows exactly what the model changes,
-  and a later change of the standard reaches every value the model does not change.
+  and removes the ones that are equal. The list therefore shows what the model changes, and a
+  later change of the standard reaches every value the model does not change.
+- A card from an earlier version stored every value of a theme saved while a flight controller
+  was connected, so its list can show rows whose value equals the standard. Saving that theme
+  once from here, or resetting the rows, removes them.
 - A reset does not turn overrides off: the model keeps *Overrides for this model* on, and its
   theme choice on *Design* is not touched. Turning overrides off is done on *Design*, and keeps
   the values.
