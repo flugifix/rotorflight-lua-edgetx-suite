@@ -193,7 +193,7 @@ The handle the widget publishes for a theme or another widget
 
 | Call | What it does here |
 | --- | --- |
-| `open()` | `openView:battery_pick`. |
+| `open()` | `openView:battery_pick`, and a request of its own on `state.batteryPick`, stamped with the last disarm. The stack is fullscreen state and is dropped by the next pass without an event, so a call made in the zone would otherwise never reach the screen; the next fullscreen pass takes the request as an explicit `openView:battery_pick`. It lapses where the model is armed or has disarmed since the call, and a reconnect drops it with the table. |
 | `dismiss()` | Ends the prompt for this connection (`dismissed`, and `pending` cleared), then `closeView` if the picker is the view on top. |
 | `select(id)` | Records the pick, as before; it opens and closes nothing. |
 

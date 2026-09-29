@@ -950,6 +950,17 @@ local function batteryPickLoadStep(self)
   return true
 end
 
+--- An `rfsuite.batteryPick.open()` that is still waiting, taken by a fullscreen pass: the picker
+--- is opened explicitly, as the call itself does in fullscreen. Dropped instead where the model is
+--- armed or has disarmed since the call, because a pack chosen then would not be the one the call
+--- was about. Taken once either way.
+local function takeBatteryPickOpen(self, Views, pick)
+  local request = pick.openRequest
+  pick.openRequest = nil
+  if self.state.armed == true or request.disarmAt ~= self.state.lastDisarmAt then return end
+  if Views.top(self) ~= "battery_pick" then Views.navigate(self, "openView:battery_pick") end
+end
+
 --- Perform a pick: record it, and write the pack's battery profile when that is switched on.
 local function batteryPickApplyStep(self)
   local request = self._batteryPickRequest
@@ -3381,6 +3392,8 @@ function Runtime.new(zone, options)
         -- takeFullscreenMode. Its mode is taken once per theme, here rather than at the load.
         local modeOf = self._fullscreenModeOf
         if modeOf == nil or modeOf[1] ~= self.theme then takeFullscreenMode(self) end
+        local pick = self.state.batteryPick
+        if pick.openRequest ~= nil then takeBatteryPickOpen(self, Views, pick) end
         viewId, viewKey = Views.resolve(self)
         if self._viewBase ~= nil then viewId, viewKey = resolveThemeMode(self, viewId, viewKey) end
       end
@@ -3492,6 +3505,12 @@ function Runtime.new(zone, options)
       open = function()
         local Views = viewsModule()
         if Views then Views.navigate(widget, "openView:battery_pick") end
+        -- and kept as a request of its own for the next fullscreen pass, because the stack the
+        -- line above writes to is fullscreen state: the next pass without an event drops it, and
+        -- a call made while the widget is in its zone -- the only place a theme runs -- would
+        -- never reach the screen. The request is stamped with the last disarm, so it lapses once
+        -- the model has flown since; it lapses while armed, and with the table on a reconnect.
+        widget.state.batteryPick.openRequest = { disarmAt = widget.state.lastDisarmAt }
         widget.built = false
         widget.renderKey = nil
       end

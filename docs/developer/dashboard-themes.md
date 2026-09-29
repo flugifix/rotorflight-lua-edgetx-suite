@@ -697,7 +697,7 @@ widget:
 | --- | --- |
 | `rfsuite.batteryPick.select(id)` | record a pick; `nil` is *no battery* |
 | `rfsuite.batteryPick.dismiss()` | close the prompt for this connection |
-| `rfsuite.batteryPick.open()` | put the picker back on screen the next time fullscreen is entered |
+| `rfsuite.batteryPick.open()` | put the picker on screen: at once while the widget is fullscreen, otherwise the next time fullscreen is entered — unless the model is armed by then or has flown since the call, or the link has been re-established |
 
 They are bound to the dashboard widget that published them last, and they record rather than
 perform, exactly as a press does.
