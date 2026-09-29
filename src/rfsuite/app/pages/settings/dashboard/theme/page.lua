@@ -26,7 +26,8 @@ local ui = {
     theme_preflight = nil,
     theme_inflight = nil,
     theme_postflight = nil,
-    model_override = false,
+    model_overrides = false,
+    overrides = false,
     model_theme_preflight = "nil",
     model_theme_inflight = "nil",
     model_theme_postflight = "nil",
@@ -93,6 +94,36 @@ local function ensureValidSelections()
   end
 end
 
+-- Per-model preferences are keyed by the flight controller's MCU id, so the
+-- model override can only be stored while a flight controller is connected.
+local function hasModelStore()
+  if type(_G) ~= "table" or not _G.rfsuite then return false end
+  if type(_G.rfsuite.session) ~= "table" then return false end
+  return _G.rfsuite.session.mcu_id ~= nil
+end
+
+-- The name the connected model goes by: the flight controller's craft name where it has one,
+-- the name its store recorded for it, and the radio's model name otherwise.
+local function connectedModelName()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  if type(session) == "table" then
+    if type(session.modelName) == "string" and session.modelName ~= "" then
+      return session.modelName
+    end
+    local craft = type(session.modelPreferences) == "table" and session.modelPreferences.craft or nil
+    if type(craft) == "table" and type(craft.name) == "string" and craft.name ~= "" then
+      return craft.name
+    end
+  end
+  if type(model) == "table" and type(model.getInfo) == "function" then
+    local ok, info = pcall(model.getInfo)
+    if ok and type(info) == "table" and type(info.name) == "string" and info.name ~= "" then
+      return info.name
+    end
+  end
+  return nil
+end
+
 local function ensureLoaded(prefs)
   if ui.loaded then return end
 
@@ -109,16 +140,26 @@ local function ensureLoaded(prefs)
     end
   end
 
-  local modelOverride = false
-  if type(modelSrc) == "table" and modelSrc.model_override ~= nil then
-    modelOverride = modelSrc.model_override == true
+  -- What the two switches show is what the dashboard does with them (lib.lua). An absent radio
+  -- switch allows overrides, and is shown as whatever the connected model already does, so a
+  -- card written before the switch existed opens on a page that matches what it draws; with no
+  -- model to ask, it is shown off.
+  local modelOverridesOn = DashboardLib.modelOverridesOn(modelSrc)
+  local allowed
+  if src.model_overrides ~= nil then
+    allowed = src.model_overrides == true
+  elseif hasModelStore() then
+    allowed = modelOverridesOn
+  else
+    allowed = false
   end
 
   ui.config.theme_preflight = src.theme_preflight or defaultPath
   ui.config.theme_inflight = src.theme_inflight or "nil"
   ui.config.theme_postflight = src.theme_postflight or "nil"
   ui.config.theme_per_phase = src.theme_per_phase == true
-  ui.config.model_override = modelOverride
+  ui.config.model_overrides = allowed
+  ui.config.overrides = modelOverridesOn
   ui.config.model_theme_preflight = (modelSrc and modelSrc.model_theme_preflight) or "nil"
   ui.config.model_theme_inflight = (modelSrc and modelSrc.model_theme_inflight) or "nil"
   ui.config.model_theme_postflight = (modelSrc and modelSrc.model_theme_postflight) or "nil"
@@ -186,20 +227,14 @@ local function appendPhaseOverrides(children, x, y, w, i18n, prefix, options, ac
   return used
 end
 
--- Per-model preferences are keyed by the flight controller's MCU id, so the
--- model override can only be stored while a flight controller is connected.
-local function hasModelStore()
-  if type(_G) ~= "table" or not _G.rfsuite then return false end
-  if type(_G.rfsuite.session) ~= "table" then return false end
-  return _G.rfsuite.session.mcu_id ~= nil
-end
-
 local function saveToPreferences(prefs)
   if not prefs.dashboard then prefs.dashboard = {} end
   prefs.dashboard.theme_preflight = ui.config.theme_preflight
   prefs.dashboard.theme_inflight = ui.config.theme_inflight
   prefs.dashboard.theme_postflight = ui.config.theme_postflight
   prefs.dashboard.theme_per_phase = ui.config.theme_per_phase == true
+  -- Written as the page shows it: once saved, the switch is the answer and nothing is inferred.
+  prefs.dashboard.model_overrides = ui.config.model_overrides == true
   -- Ensure legacy model_override keys are not stored in global preferences
   prefs.dashboard.model_override = nil
   prefs.dashboard.model_theme_preflight = nil
@@ -216,16 +251,14 @@ local function saveToPreferences(prefs)
       if type(session.modelPreferences.dashboard) ~= "table" then session.modelPreferences.dashboard = {} end
       local mDashboard = session.modelPreferences.dashboard
 
-      mDashboard.model_override = ui.config.model_override == true
-      if ui.config.model_override == true then
-        mDashboard.model_theme_preflight = ui.config.model_theme_preflight
-        mDashboard.model_theme_inflight = ui.config.model_theme_inflight
-        mDashboard.model_theme_postflight = ui.config.model_theme_postflight
-      else
-        mDashboard.model_theme_preflight = "nil"
-        mDashboard.model_theme_inflight = "nil"
-        mDashboard.model_theme_postflight = "nil"
-      end
+      -- `model_override` mirrors the switch because a build that predates `overrides` reads
+      -- that key. Switching off keeps the model's theme choice: it is ignored until the switch
+      -- is turned on again, exactly as its theme settings are.
+      mDashboard.overrides = ui.config.overrides == true
+      mDashboard.model_override = ui.config.overrides == true
+      mDashboard.model_theme_preflight = ui.config.model_theme_preflight
+      mDashboard.model_theme_inflight = ui.config.model_theme_inflight
+      mDashboard.model_theme_postflight = ui.config.model_theme_postflight
 
       -- Save model preferences using ModelPreferences module
       modelOk, modelErr = false, "model_preferences"
@@ -293,6 +326,24 @@ function M.onSave(ctx)
   return true
 end
 
+-- A line of explanation, and the height it takes. A label narrower than its text wraps rather
+-- than clipping, so the advance is measured instead of assumed.
+local function appendNote(children, x, y, w, text)
+  children[#children + 1] = {
+    type = "label", x = x, y = y, w = w, text = text, color = COLOR_THEME_PRIMARY1, font = SMLSIZE
+  }
+  local lines = 1
+  if type(Controls.estimateWrappedTextHeight) == "function" then
+    local total = Controls.estimateWrappedTextHeight(text, w, SMLSIZE)
+    local one = Controls.estimateWrappedTextHeight("Ag", w, SMLSIZE)
+    if type(total) == "number" and type(one) == "number" and one > 0 then
+      lines = math.floor((total / one) + 0.5)
+      if lines < 1 then lines = 1 end
+    end
+  end
+  return lines * 24
+end
+
 function M.build(ctx)
   ensureDeps()
   ensureLoaded(ctx.preferences)
@@ -353,45 +404,53 @@ function M.build(ctx)
 
   cursorY = cursorY + 10
   Controls.appendSectionHeader(children, x, cursorY, w,
-    t(i18n, "section_dashboard_theme_model", "Model Override"), true, function() end)
+    t(i18n, "section_model_overrides", "Model Overrides"), true, function() end)
   cursorY = cursorY + Controls.SECTION_H
 
-  local modelStoreReady = hasModelStore()
-  local modelStoreActive = function() return modelStoreReady end
+  cursorY = cursorY + appendNote(children, x, cursorY, w,
+    t(i18n, "model_overrides_note",
+      "Lets each model use its own theme and theme settings. Stored on the SD card for the connected flight controller."))
 
-  if not modelStoreReady then
-    children[#children + 1] = {
-      type = "label",
-      x = x,
-      y = cursorY,
-      w = w,
-      text = t(i18n, "model_override_unavailable", "Connect a flight controller to store a per-model theme"),
-      color = COLOR_THEME_PRIMARY1,
-      font = SMLSIZE
-    }
-    cursorY = cursorY + 24
-  end
-
+  -- The radio's switch. Off, every model draws the theme and the settings above, whatever its
+  -- own file holds.
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "model_override", "Model Override"),
-    ui.runtime.getBoolGetter("model_override"),
-    ui.runtime.getBoolSetter("model_override"),
-    modelStoreActive
+    t(i18n, "model_overrides", "Allow model overrides"),
+    ui.runtime.getBoolGetter("model_overrides"),
+    ui.runtime.getBoolSetter("model_overrides")
   )
 
-  if ui.config.model_override == true then
-    -- The theme of the connected model, again for all three of its phases.
-    cursorY = cursorY + Controls.appendComboSelect(
-      children, x, cursorY, w,
-      t(i18n, "theme", "Theme"),
-      modelOptions,
-      getOptionalThemeId(ui.config.model_theme_preflight),
-      function(id) setOptionalThemeFromId("model_theme_preflight", id) end,
-      { active = modelStoreActive }
-    )
+  if ui.config.model_overrides == true then
+    if not hasModelStore() then
+      cursorY = cursorY + appendNote(children, x, cursorY, w,
+        t(i18n, "model_overrides_unavailable",
+          "Connect a flight controller to set this model's own theme and theme settings"))
+    else
+      local name = connectedModelName()
+      if name then
+        cursorY = cursorY + appendNote(children, x, cursorY, w,
+          t(i18n, "model_name", "Model") .. ": " .. name)
+      end
 
-    if perPhase then
-      cursorY = cursorY + appendPhaseOverrides(children, x, cursorY, w, i18n, "model_theme_", overrideOptions, modelStoreActive)
+      -- The connected model's switch, and below it the model's theme for all three phases.
+      cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+        t(i18n, "model_overrides_this", "Overrides for this model"),
+        ui.runtime.getBoolGetter("overrides"),
+        ui.runtime.getBoolSetter("overrides")
+      )
+
+      if ui.config.overrides == true then
+        cursorY = cursorY + Controls.appendComboSelect(
+          children, x, cursorY, w,
+          t(i18n, "theme", "Theme"),
+          modelOptions,
+          getOptionalThemeId(ui.config.model_theme_preflight),
+          function(id) setOptionalThemeFromId("model_theme_preflight", id) end
+        )
+
+        if perPhase then
+          cursorY = cursorY + appendPhaseOverrides(children, x, cursorY, w, i18n, "model_theme_", overrideOptions, nil)
+        end
+      end
     end
   end
 

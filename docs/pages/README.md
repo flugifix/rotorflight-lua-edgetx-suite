@@ -11,7 +11,7 @@ One file per page, at the path of the page under `src/rfsuite/app/pages/` with `
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
 
-**Status:** 93 reachable pages, 32 written. 76 of them carry an in-app help text behind the
+**Status:** 94 reachable pages, 35 written. 78 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
@@ -122,8 +122,9 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
 | General | `settings/general.md` | yes | always available | to write |
-| Dashboard → Design | `settings/dashboard/theme.md` | yes | always available | to write |
+| Dashboard → Design | [settings/dashboard/theme.md](settings/dashboard/theme.md) | yes | always available | written |
 | Dashboard → Settings (one page per configurable theme) | [settings/dashboard/settings.md](settings/dashboard/settings.md) | yes | always available | written |
+| Dashboard → Settings → Model Overrides (and each theme's settings for the model) | [settings/dashboard/overrides.md](settings/dashboard/overrides.md) | yes | shown only while a flight controller is connected and model overrides are on for its model | written |
 | Dashboard → In-Flight Tuning | [settings/dashboard/inflight.md](settings/dashboard/inflight.md) | yes | preview switch *In-flight tuning* | written |
 | Localization | [settings/localization.md](settings/localization.md) | yes | always available | written |
 | Audio → Volume | [settings/audio/volume.md](settings/audio/volume.md) | yes | always available | written |

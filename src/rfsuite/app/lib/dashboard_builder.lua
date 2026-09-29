@@ -28,19 +28,27 @@ local function hexEncode(input)
   return result
 end
 
+-- Every theme is reachable in two scopes, and the menu id says which: the grid of the Settings
+-- tile edits the radio's standard values, the model overrides page edits the connected model's.
+-- The settings page reads the scope off the id's prefix, so the two never share a cached module.
+local STANDARD_SCOPE = { menuPrefix = "settings_dashboard_settings_", idPrefix = "dashboard_settings_" }
+local MODEL_SCOPE = { menuPrefix = "settings_dashboard_model_", idPrefix = "dashboard_model_" }
+local OVERRIDES_MENU_ID = "settings_dashboard_overrides_page"
+local OVERRIDES_TITLE = "@i18n(app.modules.dashboard_overrides.name)@"
+
 -- The grid a theme's own tile opens when the theme declares pages: one tile per page, laid out
 -- like the theme grid above it. Each tile opens the same settings page under a menu id that
 -- carries the page id, which is how the page knows which half of the theme it is showing.
-local function buildThemePageMenu(t, token, themeIcon, menus)
-  local menuId = "settings_dashboard_settings_" .. token .. "_menu"
+local function buildThemePageMenu(t, token, themeIcon, menus, scope)
+  local menuId = scope.menuPrefix .. token .. "_menu"
   local pages = {}
 
   for i = 1, #t.pages do
     local page = t.pages[i]
-    local pageMenuId = "settings_dashboard_settings_" .. token .. "_" .. page.id .. "_page"
+    local pageMenuId = scope.menuPrefix .. token .. "_" .. page.id .. "_page"
     debugLog("page entry theme=" .. tostring(t.path) .. " page=" .. tostring(page.id) .. " menuId=" .. tostring(pageMenuId))
     pages[#pages + 1] = {
-      id = "dashboard_settings_" .. token .. "_" .. page.id,
+      id = scope.idPrefix .. token .. "_" .. page.id,
       title = page.title,
       menuId = pageMenuId,
       icon = page.iconPath or themeIcon,
@@ -64,37 +72,78 @@ local function buildThemePageMenu(t, token, themeIcon, menus)
   return menuId
 end
 
+-- One theme's entry in a scope's list, with the menus it opens registered beside it.
+local function buildThemeEntry(t, index, menus, scope)
+  local token = hexEncode(t.path)
+  local themeIcon = t.iconPath or FALLBACK_ICON
+  local menuId
+  if type(t.pages) == "table" then
+    menuId = buildThemePageMenu(t, token, themeIcon, menus, scope)
+  else
+    menuId = scope.menuPrefix .. token .. "_page"
+    menus[menuId] = {
+      title = t.name,
+      pages = {},
+      themePath = t.path
+    }
+  end
+  debugLog("menu entry name=" .. tostring(t.name) .. " path=" .. tostring(t.path) .. " menuId=" .. tostring(menuId))
+  return {
+    id = scope.idPrefix .. token,
+    title = t.name,
+    menuId = menuId,
+    icon = themeIcon,
+    row = math.floor((index - 1) / 6) + 1,
+    col = ((index - 1) % 6) + 1,
+    themePath = t.path
+  }
+end
+
+-- The model overrides tile exists only while it has something to edit: a flight controller is
+-- connected, so the model's store can be addressed, and overrides are on for that model and
+-- allowed on this radio. Asked whenever the grid is drawn or entered, so turning overrides on
+-- under Design shows the tile the next time the grid is opened.
+local function modelOverridesVisible()
+  local root = type(_G) == "table" and _G.rfsuite or nil
+  local session = root and root.session
+  if type(session) ~= "table" or session.mcu_id == nil then return false end
+  local modelPrefs = session.modelPreferences
+  if type(modelPrefs) ~= "table" then return false end
+  local prefs = root.preferences
+  local dashboard = type(prefs) == "table" and prefs.dashboard or nil
+  return DashboardLib.modelOverridesActive(dashboard, modelPrefs.dashboard) == true
+end
+
 local function buildDashboardSettingsThemeMenus()
   local themes = DashboardLib.getConfigurableThemes(DashboardLib.listThemes())
   debugLog("buildDashboardSettingsThemeMenus configurable count=" .. tostring(#themes))
 
   local entries = {}
+  local modelEntries = {}
   local menus = {}
 
   for i = 1, #themes do
     local t = themes[i]
-    local token = hexEncode(t.path)
-    local themeIcon = t.iconPath or FALLBACK_ICON
-    local menuId
-    if type(t.pages) == "table" then
-      menuId = buildThemePageMenu(t, token, themeIcon, menus)
-    else
-      menuId = "settings_dashboard_settings_" .. token .. "_page"
-      menus[menuId] = {
-        title = t.name,
-        pages = {},
-        themePath = t.path
-      }
-    end
-    debugLog("menu entry name=" .. tostring(t.name) .. " path=" .. tostring(t.path) .. " menuId=" .. tostring(menuId))
-    entries[#entries + 1] = {
-      id = "dashboard_settings_" .. token,
-      title = t.name,
-      menuId = menuId,
-      icon = themeIcon,
-      row = math.floor((i - 1) / 6) + 1,
-      col = ((i - 1) % 6) + 1,
-      themePath = t.path
+    entries[#entries + 1] = buildThemeEntry(t, i, menus, STANDARD_SCOPE)
+    modelEntries[#modelEntries + 1] = buildThemeEntry(t, i, menus, MODEL_SCOPE)
+  end
+
+  -- The overview is a page, and its theme entries are what its buttons open: the menu registry
+  -- opens an entry of the current menu id's list, and that id is the page's own.
+  if #themes > 0 then
+    menus[OVERRIDES_MENU_ID] = {
+      title = OVERRIDES_TITLE,
+      pages = modelEntries
+    }
+    local index = #entries + 1
+    entries[index] = {
+      id = "dashboard_overrides",
+      title = OVERRIDES_TITLE,
+      menuId = OVERRIDES_MENU_ID,
+      icon = FALLBACK_ICON,
+      row = math.floor((index - 1) / 6) + 1,
+      col = ((index - 1) % 6) + 1,
+      visibleWhen = modelOverridesVisible
     }
   end
 

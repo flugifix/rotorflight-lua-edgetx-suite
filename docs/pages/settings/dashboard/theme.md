@@ -1,0 +1,70 @@
+---
+title: Design
+sidebar_label: Design
+sidebar_position: 10
+---
+
+# Design
+
+Which dashboard theme the widget shows, and whether a model may use a theme and theme settings
+of its own. The theme chosen here is the one every model shows unless it has overrides.
+
+## Where to find it
+
+*System* → *Settings* → *Dashboard* → *Design*
+
+Always available. The rows for the connected model need a flight controller that has been read,
+because a model's own values are stored in the file named after that flight controller.
+
+## Settings
+
+### Dashboard Theme
+
+| Setting | What it does |
+| --- | --- |
+| Theme | The dashboard theme of every model without overrides. A theme covers all three flight phases — before, during and after the flight — itself. |
+| Inflight Override, Postflight Override | Only while *Per-Phase Themes* is on. A different theme for that one phase; left at *Use theme above*, the phase keeps the theme above. |
+
+### Model Overrides
+
+| Setting | What it does |
+| --- | --- |
+| Allow model overrides | Whether any model on this radio may use its own theme and its own theme settings. Off, every model shows the theme above with the standard theme settings, whatever its own file holds. |
+| *(a note)* | Only while *Allow model overrides* is on and no flight controller has been read: a model's values cannot be set without one. |
+| *Model:* and the name | Only while *Allow model overrides* is on and a flight controller is connected: the craft name the flight controller reports, or the radio's model name where it reports none. |
+| Overrides for this model | Only while *Allow model overrides* is on and a flight controller is connected. Turns the connected model's own theme and theme settings on. |
+| Theme | Only while *Overrides for this model* is on. The connected model's theme; *Disabled* keeps the theme of the section above. |
+| Inflight Override, Postflight Override | Only while *Overrides for this model* and *Per-Phase Themes* are on. The same phase overrides as above, for this model. |
+
+The model's own theme settings are edited under
+[*Dashboard* → *Settings* → *Model Overrides*](overrides.md).
+
+### Advanced
+
+| Setting | What it does |
+| --- | --- |
+| Per-Phase Themes | Adds the inflight and postflight overrides to both theme sections. Off by default; turning it off keeps the overrides stored and ignores them. |
+
+## Notes
+
+- **Switching off keeps the values.** Turning *Allow model overrides* or *Overrides for this
+  model* off does not delete anything: the model's theme and theme settings stay in its file and
+  are ignored until the switch is on again.
+- **A card from an earlier version** has neither switch stored. Until this page is saved, a
+  model keeps what it already used: one that had a theme of its own (the former *Model Override*
+  switch) or any theme setting of its own still uses them. The page shows *Allow model
+  overrides* as whatever the connected model does — off when no flight controller is connected —
+  and saving stores what the page shows. Saving it off therefore switches the per-model values
+  off for every model on this radio, without deleting them.
+- *Overrides for this model* is also written under the key the former *Model Override* switch
+  used, so an older version of the suite on the same card still shows the model's theme.
+- Saving writes the radio's file and, with a flight controller connected, the model's file. The
+  page reports *Saved* only when both were written.
+
+## Related
+
+- [Settings](settings.md) — the theme settings, standard and per model.
+- [Dashboard themes](../../../dashboard/README.md) — what the widget shows and which themes ship
+  with the suite.
+
+*Documented against RFSuite 0.1.7.*
