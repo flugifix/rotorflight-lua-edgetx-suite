@@ -50,12 +50,12 @@ The model's own theme settings are edited under
 - **Switching off keeps the values.** Turning *Allow model overrides* or *Overrides for this
   model* off does not delete anything: the model's theme and theme settings stay in its file and
   are ignored until the switch is on again.
-- **A card from an earlier version** has neither switch stored. Until this page is saved, a
-  model keeps what it already used: one that had a theme of its own (the former *Model Override*
-  switch) or any theme setting of its own still uses them. The page shows *Allow model
-  overrides* as whatever the connected model does — off when no flight controller is connected —
-  and saving stores what the page shows. Saving it off therefore switches the per-model values
-  off for every model on this radio, without deleting them.
+- **A card from an earlier version** has neither switch stored. A model keeps what it already
+  used: one that had a theme of its own (the former *Model Override* switch) or any theme setting
+  of its own still uses them. The page shows *Allow model overrides* as whatever the connected
+  model does — off when no flight controller is connected — and stores it only once it is
+  changed, so saving the page for another reason leaves every model as it was. Switching it off
+  and saving turns the per-model values off for every model on this radio, without deleting them.
 - *Overrides for this model* is also written under the key the former *Model Override* switch
   used, so an older version of the suite on the same card still shows the model's theme.
 - Saving writes the radio's file and, with a flight controller connected, the model's file. The

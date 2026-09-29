@@ -153,6 +153,10 @@ local function ensureLoaded(prefs)
   else
     allowed = false
   end
+  -- An inferred switch is only a picture of it; saving the page for another reason must not
+  -- turn that picture into a decision (see saveToPreferences).
+  ui.modelOverridesInferred = src.model_overrides == nil
+  ui.modelOverridesShown = allowed
 
   ui.config.theme_preflight = src.theme_preflight or defaultPath
   ui.config.theme_inflight = src.theme_inflight or "nil"
@@ -233,8 +237,13 @@ local function saveToPreferences(prefs)
   prefs.dashboard.theme_inflight = ui.config.theme_inflight
   prefs.dashboard.theme_postflight = ui.config.theme_postflight
   prefs.dashboard.theme_per_phase = ui.config.theme_per_phase == true
-  -- Written as the page shows it: once saved, the switch is the answer and nothing is inferred.
-  prefs.dashboard.model_overrides = ui.config.model_overrides == true
+  -- Once written, the switch is the answer and nothing is inferred. An absent one is written only
+  -- when the pilot changed it: with no flight controller connected it is shown off, and writing
+  -- that picture back would switch off every model that already carries its own values.
+  if not (ui.modelOverridesInferred and (ui.config.model_overrides == true) == (ui.modelOverridesShown == true)) then
+    prefs.dashboard.model_overrides = ui.config.model_overrides == true
+    ui.modelOverridesInferred = false
+  end
   -- Ensure legacy model_override keys are not stored in global preferences
   prefs.dashboard.model_override = nil
   prefs.dashboard.model_theme_preflight = nil
