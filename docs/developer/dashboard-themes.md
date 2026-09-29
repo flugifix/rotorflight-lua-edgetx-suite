@@ -58,6 +58,7 @@ the widget to find the module for the phase it is in.
 | `pages` | table | Optional. Splits the theme's settings into pages, one tile each. See [Splitting the settings into pages](#splitting-the-settings-into-pages). |
 | `standalone` | boolean | `true` keeps the theme off the *Dashboard* → *Settings* page even if it declares `configure`. |
 | `fullscreen` | string | Optional. `"theme"` makes fullscreen show this theme at the fullscreen size instead of the quick menu. See [A theme that takes fullscreen](#a-theme-that-takes-fullscreen). Omit it and fullscreen is what it has always been. |
+| `fullscreenExit` | string | Optional, read only by `bin/themes/validate.lua`. `"longRtn"` declares that the theme binds no control that leaves fullscreen and relies on a long press on RTN. |
 
 Beside it, `icon.png` is the tile the theme selector draws. The path is built from the folder
 name and is not checked before use, so a theme without one shows an empty tile rather than an
@@ -632,14 +633,22 @@ fullscreen.** Two duties come with that:
 
 - **A way into the quick menu.** It is where ERASE BLACKBOX, BATTERY and the battery profiles
   are; the page keys reach it on a radio that has them, but a touch radio needs a control.
-- **A way out of fullscreen** — a control with `exitFullscreen` — or the author's decision to
-  rely on a long press on RTN, which always leaves fullscreen in the firmware.
+- **A way out of fullscreen** — a control with `exitFullscreen`, or RTN bound to it with
+  `ctx.keys.exit = "exitFullscreen"` (every radio has RTN) — or the author's decision to rely on
+  a long press on RTN, which always leaves fullscreen in the firmware.
 
 A fullscreen tree that binds **no press anywhere** gets the widget's own two controls, appended
 after the theme's nodes so they lie above them: a menu glyph that opens the quick menu over the
 theme, and an X, where the quick menu's X is, that leaves fullscreen. A declarative theme always
 gets them, since a box cannot take a tap. A theme that binds even one press gets neither, and
 owes both duties itself.
+
+`bin/themes/validate.lua` checks a theme folder for both duties offline, fires every press, and
+refuses a `rectangle` drawn over a pressable node and an action the widget does not know, in a
+press or in `ctx.keys`; see `bin/themes/README.md`. A press that opens the menu is the menu
+access it looks for. A press with `exitFullscreen` or `ctx.keys.exit = "exitFullscreen"` is a way
+out; a theme that relies on a long press on RTN instead declares it with
+`fullscreenExit = "longRtn"` in its `init.lua`.
 
 ### Keys
 
@@ -658,8 +667,8 @@ the in-flight tuning surface or the connect splash is up.
 
 The quick menu's X, and every entry that used to leave fullscreen, now close the menu and put
 the theme back. The battery picker's packs, NO BATTERY and its X do the same. Only a control
-that says `exitFullscreen` — the widget's own X on the theme, or one of the theme's — and a long
-press on RTN leave fullscreen.
+that says `exitFullscreen` — the widget's own X on the theme, or one of the theme's — a short
+press on RTN where the theme bound `ctx.keys.exit` to it, and a long press on RTN leave fullscreen.
 
 ## The battery prompt
 
