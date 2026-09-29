@@ -14,7 +14,7 @@ Both folders are listed, so a theme in the user folder is an additional choice i
 
 A theme is a folder containing an `init.lua` manifest and one module per flight phase:
 
-- `init.lua`: the theme's name, the file name of each of the three phase modules and of the two optional ones below, and optionally the configuration page (`configure.lua`). Those are the only keys that are read.
+- `init.lua`: the theme's name, the file name of each of the three phase modules and of the two optional ones below, optionally the configuration page (`configure.lua`), and optionally `fullscreen = "theme"`, which makes full screen show the theme itself, with the quick menu opening over it, instead of the quick menu ([details](../developer/dashboard-themes.md#a-theme-that-takes-fullscreen)). Those are the only keys that are read.
 - `preflight.lua`: layout and boxes shown on the ground, before arming.
 - `inflight.lua`: layout and boxes shown once the model is flying.
 - `postflight.lua`: summary boxes shown after a flight, from the disarm onwards.

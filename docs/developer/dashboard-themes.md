@@ -9,12 +9,13 @@ sidebar_position: 60
 A dashboard theme is a folder with a manifest and one module per flight phase. The manifest
 says what the theme is called and which module belongs to which phase; each module declares a
 grid and a list of boxes, and the engine turns that into the LVGL node list the widget hands
-to the radio. Nothing in a theme draws anything itself.
+to the radio. A declarative theme draws nothing itself; a free-form one (below) builds its own
+node list.
 
 This page is the contract: the folder, the manifest keys, **what puts the widget into each
 flight phase**, the shape a phase module returns, the box vocabulary, the rule for a value
-given as a function, the per-theme settings page, and what a theme can read of the battery
-prompt. What a pilot needs in order to copy and
+given as a function, the per-theme settings page, **a theme that takes fullscreen**, and what a
+theme can read of the battery prompt. What a pilot needs in order to copy and
 edit a theme is [user themes](../dashboard/user-themes.md); this page is the source-level
 version of the same thing, plus what a theme shipped in this repository additionally owes.
 
@@ -56,6 +57,7 @@ the widget to find the module for the phase it is in.
 | `configure` | string | File name of the per-theme settings module. Omit it and the theme has no settings page. |
 | `pages` | table | Optional. Splits the theme's settings into pages, one tile each. See [Splitting the settings into pages](#splitting-the-settings-into-pages). |
 | `standalone` | boolean | `true` keeps the theme off the *Dashboard* → *Settings* page even if it declares `configure`. |
+| `fullscreen` | string | Optional. `"theme"` makes fullscreen show this theme at the fullscreen size instead of the quick menu. See [A theme that takes fullscreen](#a-theme-that-takes-fullscreen). Omit it and fullscreen is what it has always been. |
 
 Beside it, `icon.png` is the tile the theme selector draws. The path is built from the folder
 name and is not checked before use, so a theme without one shows an empty tile rather than an
@@ -182,7 +184,8 @@ hands the result to LVGL, and because it renders box by box it can spread a buil
 passes.
 
 **Free-form** — a `build(zone, state)` function returning an LVGL node list. The widget calls
-it and builds the result in one step. Nothing chunks it, so the whole scene is constructed
+it and builds the result in one step. For a theme that takes fullscreen, the fullscreen build
+passes a third argument, `ctx`; the zone build never does. Nothing chunks it, so the whole scene is constructed
 inside a single instruction budget; a free-form theme of any size is the surest way to a CPU
 limit fault on a slower radio.
 
@@ -584,6 +587,79 @@ preferences.
 A radio that offers no directory enumeration reads the theme list from
 `theme_index.lua` instead of from `init.lua`, and the packager copies the declared pages into
 it, so the split is there as well.
+
+## A theme that takes fullscreen
+
+By default fullscreen shows the widget's own [quick menu](../dashboard/quick-menu.md), whatever
+the theme. A theme whose `init.lua` says `fullscreen = "theme"` is shown there itself instead,
+built at the fullscreen size, and the quick menu and the battery picker open **over** it. In the
+terms of [dashboard views](dashboard-views.md) the theme is the base layer under the view stack.
+A theme without the key is not affected in any way: its zone, its fullscreen and every key are
+exactly what they were.
+
+The mode follows the theme's `init.lua`, not the module on screen: a phase whose module falls
+back to the default theme's inside a theme that opted in is drawn full screen as well.
+
+The build is the theme's own. A declarative theme is built by the engine from the same boxes as
+in the zone, at the larger size; a free-form theme's `build(zone, state, ctx)` receives the
+fullscreen zone and a third argument, `ctx`, which it never receives in the zone. The render key
+is the theme's, taken at the fullscreen size and under the same 2 Hz throttle as in the zone.
+
+### `ctx`
+
+One per widget, handed to every fullscreen build of the theme, and made new when the theme on
+screen changes:
+
+| | |
+| --- | --- |
+| `ctx.action(after)` | performs an action: `openView:<id>`, `closeView`, `done`, `exitFullscreen` or `none` (see [what follows a press](dashboard-views.md#what-follows-a-press)) |
+| `ctx.keys` | a table the theme fills with actions for the keys, `exit`, `pageDown` and `pageUp`; see below |
+| `ctx.condition(name)` | whether a named condition holds, from the list in [dashboard views](dashboard-views.md#conditions) |
+| `ctx.entries()` | the quick menu's entries, as `fullscreen_menu.lua` returns them |
+| `ctx.menu(children, entries)` | the quick menu's builder: appends the menu for `entries` (the menu's own when omitted) to `children` |
+
+A control is a node with a `press` that calls `ctx.action`, for example
+`{ type = "button", x = ..., y = ..., w = 44, h = 44, press = function() ctx.action("openView:menu") end }`.
+A press does its own work and then names what follows, the same way the quick menu's entries
+do. Draw a glyph or a label over a button as `label` or `line` nodes, not as a `rectangle`: a
+rectangle built in fullscreen takes the press and hands it to its parent, so it swallows every
+press that lands on it.
+
+### The controls, and what a theme owes
+
+**The theme decides which controls it shows and what they do, including whether one leaves
+fullscreen.** Two duties come with that:
+
+- **A way into the quick menu.** It is where ERASE BLACKBOX, BATTERY and the battery profiles
+  are; the page keys reach it on a radio that has them, but a touch radio needs a control.
+- **A way out of fullscreen** — a control with `exitFullscreen` — or the author's decision to
+  rely on a long press on RTN, which always leaves fullscreen in the firmware.
+
+A fullscreen tree that binds **no press anywhere** gets the widget's own two controls, appended
+after the theme's nodes so they lie above them: a menu glyph that opens the quick menu over the
+theme, and an X, where the quick menu's X is, that leaves fullscreen. A declarative theme always
+gets them, since a box cannot take a tap. A theme that binds even one press gets neither, and
+owes both duties itself.
+
+### Keys
+
+In this mode the widget answers three keys (a theme without the key answers none, as before):
+
+| Key | With a view on top | With the theme showing |
+| --- | --- | --- |
+| PAGE down, PAGE up | the quick menu on top: close it; any other view: open the menu over it | `ctx.keys.pageDown` / `ctx.keys.pageUp` if set, else open the menu |
+| RTN, short | the view's `back` — the picker: its close box; the menu: close it | `ctx.keys.exit` if set, else nothing |
+| RTN, long | leaves fullscreen, in the firmware | leaves fullscreen, in the firmware |
+
+Both page keys do the same because some radios have only one. The keys are not answered while
+the in-flight tuning surface or the connect splash is up.
+
+### What the pilot sees
+
+The quick menu's X, and every entry that used to leave fullscreen, now close the menu and put
+the theme back. The battery picker's packs, NO BATTERY and its X do the same. Only a control
+that says `exitFullscreen` — the widget's own X on the theme, or one of the theme's — and a long
+press on RTN leave fullscreen.
 
 ## The battery prompt
 
