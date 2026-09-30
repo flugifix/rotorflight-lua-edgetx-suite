@@ -1686,8 +1686,22 @@ function Audio.process(self, opts)
       end
 
       local targetSeconds = tonumber(batteryPrefs and batteryPrefs.flighttime) or 0
-      if targetSeconds > 0 then
-        local elapsed = tonumber(self.state and self.state.flightSeconds)
+      -- The dashboard hands over its flight record (tasks/events/telemetry/flight_record.lua),
+      -- and that record is the clock this callout reads. `armed` above can come from a telemetry
+      -- read that saw the ARM sensor before the record's own arm edge, and the record's copy in
+      -- `flightSeconds` is refreshed on telemetry reads only; in between, that copy still holds
+      -- the previous flight's duration. So with a record, nothing is judged (and nothing reset)
+      -- until it is open, and its seconds are read live.
+      local record = self.state and self.state.flight
+      if type(record) ~= "table" then record = nil end
+      local recordOpen = record == nil or record.armed == true
+      if targetSeconds > 0 and recordOpen then
+        local elapsed
+        if record then
+          elapsed = tonumber(record.seconds)
+        else
+          elapsed = tonumber(self.state and self.state.flightSeconds)
+        end
         if type(elapsed) ~= "number" then
           if type(audioState.flightTimerStartAt) ~= "number" then
             audioState.flightTimerStartAt = now
@@ -1710,7 +1724,7 @@ function Audio.process(self, opts)
         else
           audioState.flightTimerTriggered = false
         end
-      else
+      elseif targetSeconds <= 0 then
         audioState.flightTimerTriggered = false
       end
     else
