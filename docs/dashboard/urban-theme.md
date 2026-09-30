@@ -94,8 +94,9 @@ sensor of that name and a declared name that is absent is still searched for.
 
 ## What it does not do yet
 
-- **Not priced by `bin/accounting/measure.lua`.** The instrument cannot settle a dashboard that
-  draws a free-form theme, so the theme carries no budget row.
+- **Priced only with the accounting fix that settles a free-form theme.** `bin/accounting/budgets.lua`
+  carries a `theme.urban` row, measured with that fix; without it `bin/accounting/measure.lua`
+  never settles a dashboard drawing this theme.
 - **No colour for a pack that was not full when it was plugged in.** The gauge is green above
   20 %, yellow at 20 % and below and red at nothing left. Telling a part-used pack apart needs a
   verdict taken at the connect, and a theme has no pass of its own to take it in.
