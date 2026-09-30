@@ -889,9 +889,16 @@ end
 -- prefix and the twenty-six reason names of the package's language -- so each one is fitted to
 -- the bar HERE, at build time, through Common.fitLabel, whose answers are kept with the zone's
 -- other measurements. The closure below only looks the fitted text up and makes no firmware call.
-local function armingOverride(nodes, state, x, y, w, fontH, font)
-  local list = Common.armDisableList(state)
-  local textW = w - 2 * CARD_PAD
+--
+-- The fitted texts depend on nothing but the face and the width, so the set of the last build
+-- is kept and handed to the next one that asks for the same pair. A rebuild in the same zone
+-- then joins and looks up none of the twenty-six texts again.
+local armingFit = { font = nil, w = nil, texts = nil }
+
+local function armingTexts(font, textW)
+  if armingFit.texts ~= nil and armingFit.font == font and armingFit.w == textW then
+    return armingFit.texts
+  end
   local fitted = {}
   local names = Common.armFlagNames()
   for i = 1, #names do
@@ -900,6 +907,14 @@ local function armingOverride(nodes, state, x, y, w, fontH, font)
       fitted[name] = Common.fitLabel(font, T.arming_disabled .. name, textW)
     end
   end
+  armingFit.font, armingFit.w, armingFit.texts = font, textW, fitted
+  return fitted
+end
+
+local function armingOverride(nodes, state, x, y, w, fontH, font)
+  local list = Common.armDisableList(state)
+  local textW = w - 2 * CARD_PAD
+  local fitted = armingTexts(font, textW)
   local index, since, lastList, lastText, lastName = 1, nil, nil, "", nil
   Common.label(nodes, x + CARD_PAD, y, textW, fontH, function()
     local l = list()
