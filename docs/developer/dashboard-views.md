@@ -82,10 +82,12 @@ pass.
 Which view is on screen is a stack of view ids, held in one field, `widget._viewStack`. Each
 entry is `{ id = <id>, auto = true | nil }`. The same table is the **session** of one visit to
 full screen: what else belongs to the visit — the outcome of the work a theme ran through
-`ctx.run` ([dashboard themes](dashboard-themes.md#the-theme-draws-the-widget-acts)) — is kept
-on it beside the views and goes with it. Once a visit has one, it stays a table while the visit
-lasts, empty or not: closing the last view leaves an empty stack, not `nil`. `done` and
-`exitFullscreen` start a new session, and so do the two clears below.
+`ctx.run` ([dashboard themes](dashboard-themes.md#the-theme-draws-the-widget-acts)), and what
+each view's `openWhen` answered on the last pass ([below](#views-that-open-themselves)) — is
+kept on it beside the views and goes with it. Once a visit has one, it stays a table while the
+visit lasts, empty or not: closing the last view leaves an empty stack, not `nil`. `done` and
+`exitFullscreen` start a new session — `done` carrying over only what the conditions last
+answered — and so do the two clears below.
 
 - The view on top of the stack is the one shown.
 - Opening a view that is already on the stack returns to it — everything above it is closed —
@@ -111,32 +113,47 @@ for the surface that was on top, so the old surface is not put up once more befo
 
 ## Views that open themselves
 
-A view with `openWhen` opens on its own while that condition holds. On every fullscreen pass,
-in this order:
+A view with `openWhen` opens on its own when that condition **rises**. On every fullscreen pass
+every view's `openWhen` is asked once, in registry order — the widget's views, then the
+theme's in the order it lists them — and the answer is kept on the session for the next pass.
+Then, in this order:
 
 1. A view that its own condition opened (`auto = true`) and whose condition no longer holds is
    closed again. That is what keeps the battery prompt the way it was: it shows while it is
    pending, and three places end the pending state without closing anything — arming
    (`updateDerivedFlightState`), a pick (`batteryPickApplyStep`) and a reconnect.
-2. The first view in registry order whose `openWhen` holds is the only one considered on that
-   pass: it is opened unless it is already on the stack. A view already on the stack is left
-   where it is and is not raised over what lies above it, and no view listed after it is
-   opened while its condition holds. So where several hold, the one listed first is the one
-   that opens, not necessarily the one on top; the picker is listed before the menu.
+2. A view whose condition has risen — false on the last pass, true on this one — is opened, or,
+   where it is already on the stack, **brought to the top**: it is moved there, and the views
+   that were above it stay open under it. Entering full screen with a condition already true is
+   a rise, because a visit starts with nothing remembered. A condition that merely holds forces
+   nothing. Where several rise on the same pass, each is brought up in turn, so the last of them
+   in registry order ends on top: a theme's view rising together with the battery prompt lies
+   above the picker, and the picker shows again when it is closed.
 3. The top of the stack is shown; with the stack empty, the base layer, or with none the quick
    menu.
 
 A view opened explicitly — by a button or by `rfsuite.batteryPick.open()` — carries no `auto`
 mark, and opening a view explicitly that its condition had already opened takes the mark off.
-Such a view stays open when its condition falls, until it is closed.
+Such a view stays open when its condition falls, until it is closed. An explicit open returns
+to a view already on the stack and closes what lies above it; a rise moves it and closes
+nothing.
 
-**The rule for a condition that opens a view: whoever sets it clears it when the view is
-answered or closed.** A view whose condition still holds when it is closed opens again on the
-very next pass. The battery prompt follows it: its registry load raises `pending`, and a pick,
-the picker's close box, `rfsuite.batteryPick.dismiss()`, arming and a reconnect all clear it. A
-pick clears it in two steps — the press records the request, and `pending` falls when the
-runtime has applied it a few passes later — so `batteryPickPending` is false as soon as a
-request is recorded; over a base layer the picker would otherwise open again at once.
+**What a condition that holds does not do.** A view opened over one that its condition holds
+open — the menu over a switch's view — stays on top and usable; the view under it is not raised
+while the condition merely holds. A view closed while its condition still holds stays closed,
+and so does a view of the theme's that the pilot has left with `done`: the new session `done`
+starts carries over what the theme's views' conditions last answered, so none of them counts as
+a rise until its condition has fallen and risen again. The widget's own views are not carried
+over: the battery prompt, still waiting for an answer, rises again after `done` and comes back
+— the menu's X pressed over the picker brings the prompt back, as closing the menu with a page
+key does. Leaving full screen and a reconnect forget it all, so the next visit starts over.
+
+**Whoever sets a condition that opens a view still clears it when the view is answered or
+closed**, because that is what closes a view its condition opened. The battery prompt follows
+it: its registry load raises `pending`, and a pick, the picker's close box,
+`rfsuite.batteryPick.dismiss()`, arming and a reconnect all clear it. A pick clears it in two
+steps — the press records the request, and `pending` falls when the runtime has applied it a
+few passes later — so `batteryPickPending` is false as soon as a request is recorded.
 
 The menu opened over the picker with a page key lies above it; the picker is not raised over it.
 Closing the menu brings the prompt back.

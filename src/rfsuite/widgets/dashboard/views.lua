@@ -59,8 +59,7 @@ M.STACK_LIMIT = 4
 -- What an empty stack shows when there is no base layer.
 M.DEFAULT_VIEW = "menu"
 
--- The views the widget ships, in the order their `openWhen` is asked. Only the first one whose
--- condition holds is opened on a pass, so the battery prompt comes ahead of the quick menu.
+-- The views the widget ships, in the order their `openWhen` is asked, ahead of a theme's.
 local CORE_VIEWS = {
   { id = "battery_pick", module = "widgets/dashboard/battery_pick_menu.lua", openWhen = "batteryPickPending" },
   { id = "menu", module = "widgets/dashboard/fullscreen_menu.lua" },
@@ -81,7 +80,9 @@ local CORE_VIEWS = {
 -- one, so the first entry that needs one brings its resolver with it.
 --
 -- A condition that opens a view is cleared by whoever set it when the view is answered or
--- closed. A view whose condition is still true when it is closed opens again on the next pass.
+-- closed. A view opens when its condition rises, not while it holds (see `resolve`), so one that
+-- is closed while its condition is still true stays closed until the condition has fallen and
+-- risen again.
 local CONDITIONS = {}
 
 -- In-flight tuning, only for a model that has it switched on and only while the preview
@@ -263,6 +264,22 @@ local function pop(widget)
   stack.refused = nil
 end
 
+-- Bring `id` to the top. A view already on the stack is moved there, and the views that were
+-- above it stay open, under it; a view that is not on it is pushed, marked automatic. This is
+-- what the rise of a view's condition does -- where an explicit open returns to a view and closes
+-- what lies above it.
+local function raise(widget, id)
+  local stack = widget._viewStack
+  local at = indexOf(stack, id)
+  if at == nil then return push(widget, id, true) end
+  if at < #stack then
+    local entry = table.remove(stack, at)
+    stack[#stack + 1] = entry
+    stack.refused = nil
+  end
+  return true
+end
+
 --- This visit's session: the stack table, made when a visit has none yet.
 function M.session(widget)
   local stack = widget._viewStack
@@ -313,12 +330,20 @@ end
 
 --- The view fullscreen shows on this pass, and the render key for it.
 --
+-- Every view's `openWhen` is asked once per pass, in registry order -- the widget's views, then
+-- the theme's in the order it lists them -- and what each answered is kept on the session for
+-- the next pass (`held`). Then:
+--
 -- 1. A view its own condition opened is closed again once that condition has fallen. That is
 --    what keeps the battery prompt as it has always been: it shows while it is pending, and
 --    three places end the pending state without closing anything -- the arm edge in
 --    `updateDerivedFlightState`, a pick in `batteryPickApplyStep`, and the reconnect edge.
--- 2. The first view in registry order whose `openWhen` holds is opened, unless it is already on
---    the stack. No further view is considered on that pass.
+-- 2. A view whose condition has RISEN -- false on the last pass, true on this one -- is opened,
+--    or brought to the top where it is already open. Entering fullscreen with a condition
+--    already true is a rise: a visit starts with nothing held. A condition that merely holds
+--    forces nothing, so a view opened over it -- the menu over a switch's view -- stays usable,
+--    and a view closed while its condition holds stays closed. Where several rise on one pass
+--    each is brought up in turn, so the last of them in registry order is on top.
 -- 3. The top of the stack is the view. With the stack empty: the base layer, reported as nil,
 --    or with no base layer the default view.
 --
@@ -327,28 +352,40 @@ end
 -- phase module has it. A module is never loaded here; that is the job pass's work.
 function M.resolve(widget)
   local registry = M.registry(widget)
-
-  local stack = widget._viewStack
-  if stack ~= nil then
-    local changed = false
-    for i = #stack, 1, -1 do
-      if stack[i].auto then
-        local entry = M.find(widget, stack[i].id)
-        if not (entry and M.condition(entry.openWhen, widget)) then
-          table.remove(stack, i)
-          changed = true
-        end
-      end
-    end
-    if changed then stack.refused = nil end
+  local session = M.session(widget)
+  local held = session.held
+  if held == nil then
+    held = {}
+    session.held = held
   end
 
+  local risen = nil
   for i = 1, #registry do
     local entry = registry[i]
-    if entry.openWhen ~= nil and not entry.failed and M.condition(entry.openWhen, widget) then
-      if indexOf(widget._viewStack, entry.id) == nil then push(widget, entry.id, true) end
-      break
+    if entry.openWhen ~= nil and not entry.failed then
+      if M.condition(entry.openWhen, widget) then
+        if not held[entry.id] then
+          risen = risen or {}
+          risen[#risen + 1] = entry.id
+          held[entry.id] = true
+        end
+      else
+        held[entry.id] = nil
+      end
     end
+  end
+
+  local changed = false
+  for i = #session, 1, -1 do
+    if session[i].auto and not held[session[i].id] then
+      table.remove(session, i)
+      changed = true
+    end
+  end
+  if changed then session.refused = nil end
+
+  if risen ~= nil then
+    for i = 1, #risen do raise(widget, risen[i]) end
   end
 
   local id = M.top(widget)
@@ -426,7 +463,9 @@ end
 --   openView:<id>   open that view, or return to it where it is already on the stack
 --   closeView       close the view on top; what is under it shows again
 --   done            the interaction is finished: the stack is emptied, which leaves fullscreen
---                   where there is no base layer and shows the base layer where there is one
+--                   where there is no base layer and shows the base layer where there is one;
+--                   the session starts anew, carrying only what the theme's views' conditions
+--                   last answered
 --   exitFullscreen  empty the stack and leave fullscreen, base layer or not
 --   none            nothing at all; the press did whatever needed doing itself
 --
@@ -448,7 +487,23 @@ function M.navigate(widget, after)
     pop(widget)
     reset(widget)
   elseif verb == "done" then
-    widget._viewStack = nil
+    -- A new session, empty, which keeps only what the conditions of the THEME's views answered
+    -- on the last pass: the outcomes lapse, and a theme's view whose condition still holds is not
+    -- opened again over the surface the pilot has just returned to. The widget's own views are
+    -- not carried over, so the battery prompt, still waiting for an answer, comes back as a rise
+    -- -- as it always has when the menu over it was closed.
+    local old = widget._viewStack
+    local carried = nil
+    if old ~= nil and old.held ~= nil then
+      for heldId in pairs(old.held) do
+        local entry = M.find(widget, heldId)
+        if entry ~= nil and entry.theme then
+          carried = carried or {}
+          carried[heldId] = true
+        end
+      end
+    end
+    widget._viewStack = carried and { held = carried } or nil
     if widget._viewBase == nil then
       exitFullscreen(widget)
     else
