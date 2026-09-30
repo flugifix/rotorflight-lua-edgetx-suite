@@ -198,7 +198,10 @@ its view can be shown — every fullscreen pass for a fullscreen view, the zone'
 [zone view](#zone-views) — and under `pcall`: one that
 raises counts as false and says so in one log line per theme and view, not on every pass. It
 runs on every one of those passes, so it reads what the state already holds and computes as
-little as a box's value function does.
+little as a box's value function does. `bin/themes/validate.lua` calls it on its fixture state
+of every phase and is red where it raises or costs more than **35 instructions** a call — what
+asking the costliest of the widget's own conditions costs, counted the same way (see
+[its README](../../bin/themes/README.md#a-themes-views)).
 
 ## Zone views
 

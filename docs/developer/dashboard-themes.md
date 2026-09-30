@@ -826,6 +826,16 @@ each run with `ctx.run(entry, option)`, and `ctx.run(entry, entry.close)` is its
 theme never writes the pick or the prompt's state itself. RTN on it is the widget picker's own
 close. A theme that replaces the picker's look owes it a way out, as the widget's picker has.
 
+`bin/themes/validate.lua` checks the `views` of any theme, whether it takes fullscreen or not:
+every module is built — a fullscreen view with a recording `ctx` whose presses are fired, a zone
+view without one — and it is red on a zone view that binds a press, an `openWhen` that names a
+condition, a switch or a setting the widget or the theme does not have, and a condition function
+that raises or costs more than 35 instructions a call. A setting counts as the theme's where its
+settings page names it — the `configure` module or a theme file that module loads. A number where
+a switch name goes is a stored switch position, and a setting's `default` may be `0`, "no
+switch", for a view that opens on a switch only once the pilot has picked one. See its
+[README](../../bin/themes/README.md#a-themes-views).
+
 ## The battery prompt
 
 With *Ask which pack after connecting* on (the [Flight Log](../pages/tools/flight_log.md) page,

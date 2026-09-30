@@ -1,5 +1,6 @@
 -- Checks a dashboard theme that takes fullscreen (`fullscreen = "theme"` in its init.lua) for the
--- duties docs/developer/dashboard-themes.md gives it, offline, with desktop Lua 5.3.
+-- duties docs/developer/dashboard-themes.md gives it, and the views a theme registers, offline,
+-- with desktop Lua 5.3.
 --
 --   lua5.3 bin/themes/validate.lua <theme folder> [--size 800x480|480x272]
 --
@@ -18,12 +19,30 @@
 --
 -- A tree that binds no press at all is green: the widget draws its own menu control and X over
 -- it. So is a declarative theme, which cannot bind a press. A theme without the key is not
--- checked. Exit status 0 green, 1 red, 2 when the theme cannot be read.
+-- checked for these. Exit status 0 green, 1 red, 2 when the theme cannot be read.
+--
+-- The views a theme registers (`views` in init.lua) are checked whether it takes fullscreen or
+-- not. Each module is built -- a fullscreen view with the recording `ctx`, its presses fired and
+-- held to the rules above; a zone view without one -- and a view is red where
+--
+--   * an entry has no `id` or `module`, or a `where` that is not "fullscreen", "zone" or "both";
+--   * its module does not load or has no build(), or a build raises;
+--   * a zone view binds a press, or has no `openWhen` and so never shows;
+--   * `openWhen` names a condition the widget does not have, a switch that is none of the names
+--     a radio gives by default (SA to SR, SW1 to SW6, FL1 to FL4, L01 to L64), a physical switch
+--     without `pos`, switch 0, or a setting its settings page -- the `configure` module and the
+--     theme files it loads -- does not name, or reads a setting without a `default`. A number is
+--     a stored switch position, as the widget reads it, and a `default` of 0 is "no switch";
+--   * `openWhen` is a function that raises on the fixture state of a phase, or costs more than
+--     CONDITION_BUDGET instructions per call on any of them.
 --
 -- The firmware and the widget are stubbed here, in this file: a theme is only ever called with
 -- a zone, a state and a ctx, and a stub answers rather than computes. The state is a fixture of
 -- typical readings, so a theme that reads something else sees nil, as it may on a radio before
--- the first telemetry.
+-- the first telemetry. The quick menu's records a theme reaches through `ctx` are the widget's
+-- own (widgets/dashboard/fullscreen_menu.lua); `ctx.run` looks the entry and the option up again
+-- among them, as the widget does, refuses what the menu does not have, and records the action
+-- that would follow rather than doing the work.
 
 local USAGE = "usage: lua5.3 bin/themes/validate.lua <theme folder> [--size 800x480|480x272]"
 
@@ -179,14 +198,46 @@ local function actionProblem(after)
   return nil
 end
 
-local function newCtx(log)
+-- The quick menu's records, as the widget hands them out: the real fullscreen_menu.lua, asked
+-- for a widget that carries the fixture state. Nothing a record does is run here -- `ctx.run`
+-- records the action that would follow it -- so no message is ever queued.
+local Menu = _G.rfsuite.require("widgets/dashboard/fullscreen_menu.lua")
+if type(Menu) ~= "table" or type(Menu.resolve) ~= "function" then Menu = nil end
+
+local function newCtx(log, state)
+  local widget = { state = state, zone = { x = 0, y = 0, w = width, h = height }, preferences = { general = {} } }
   local ctx = { keys = {} }
   ctx.action = function(after) log.actions[#log.actions + 1] = after end
   ctx.condition = function() return false end
-  ctx.entries = function() return {} end
+  ctx.entries = function() return Menu and Menu.entries(widget) or {} end
   ctx.menu = function(children)
     log.menuBuilt = true
     return children
+  end
+  ctx.entry = function(id) return Menu and Menu.entry(widget, id) or nil end
+  ctx.list = function(name) return Menu and Menu.list(widget, name) or {} end
+  -- As the widget does: what a theme hands in is looked up again among the menu's own records by
+  -- id, and only those are asked anything.
+  ctx.visible = function(entry)
+    local core = Menu and Menu.resolve(widget, entry) or nil
+    return core ~= nil and Menu.visible(widget, core)
+  end
+  ctx.run = function(entry, option, after)
+    local core, coreOption = nil, nil
+    if Menu ~= nil then core, coreOption = Menu.resolve(widget, entry, option) end
+    if core == nil then
+      log.runs[#log.runs + 1] = "ctx.run of an entry or option the menu does not have ("
+        .. tostring(type(entry) == "table" and entry.id) .. ")"
+      return
+    end
+    if after == nil then after = (coreOption or core).after end
+    log.actions[#log.actions + 1] = after
+  end
+  ctx.status = function() return nil end
+  ctx.info = function(entry)
+    local core = Menu and Menu.resolve(widget, entry) or nil
+    if core ~= nil and type(core.info) == "function" then return core.info() end
+    return nil
   end
   return ctx
 end
@@ -226,6 +277,58 @@ local findings, notes = {}, {}
 local function red(msg) findings[#findings + 1] = msg end
 local function note(msg) notes[#notes + 1] = msg end
 
+-- Fire every press of a built tree and check what each one asks for. Returns the number of
+-- presses, whether one opened the quick menu and whether one left fullscreen.
+local function checkPresses(label, tree, log)
+  local flat = flatten(tree, 0, 0, {})
+  local presses, opensMenu, leaves = 0, log.menuBuilt, false
+  for i, item in ipairs(flat) do
+    if item.node.press ~= nil then
+      presses = presses + 1
+      if type(item.node.press) ~= "function" then
+        red(label .. ": the press of " .. where(item) .. " is not a function")
+      else
+        local before, exitsBefore, runsBefore = #log.actions, exits, #log.runs
+        local okPress, err = pcall(item.node.press)
+        if not okPress then red(label .. ": the press of " .. where(item) .. " raised: " .. tostring(err)) end
+        if exits > exitsBefore then
+          leaves = true
+          note(label .. ": the press of " .. where(item) .. " calls lcd.exitFullScreen() itself; "
+            .. "ctx.action(\"exitFullscreen\") is the documented way")
+        end
+        for k = before + 1, #log.actions do
+          local after = log.actions[k]
+          local problem = actionProblem(after)
+          if problem then red(label .. ": the press of " .. where(item) .. ": " .. problem) end
+          if after == "openView:menu" then opensMenu = true end
+          if after == "exitFullscreen" then leaves = true end
+        end
+        for k = runsBefore + 1, #log.runs do
+          red(label .. ": the press of " .. where(item) .. ": " .. log.runs[k])
+        end
+      end
+      for j = i + 1, #flat do
+        if flat[j].node.type == "rectangle" and overlaps(flat[j], item) then
+          red(label .. ": " .. where(flat[j]) .. " is drawn over the press of " .. where(item)
+            .. "; draw it before the pressable node, or as a line or a label")
+        end
+      end
+    end
+  end
+  return presses, opensMenu, leaves
+end
+
+local function finish()
+  for _, n in ipairs(notes) do print("  " .. n) end
+  for _, f in ipairs(findings) do print("RED: " .. f) end
+  if #findings > 0 then
+    print(string.format("RED (%d finding%s)", #findings, #findings == 1 and "" or "s"))
+    os.exit(1)
+  end
+  print("GREEN")
+  os.exit(0)
+end
+
 local initChunk = loadfile(folder .. "/init.lua", "t")
 if not initChunk then
   io.stderr:write("cannot read " .. folder .. "/init.lua\n")
@@ -239,10 +342,249 @@ end
 
 print(string.format("theme %s (%s), fullscreen %dx%d", folder, tostring(init.name), width, height))
 
+-- ---------------------------------------------------------------------------
+-- The theme's views (`views` in init.lua), checked whether or not the theme takes fullscreen
+-- ---------------------------------------------------------------------------
+
+-- The condition names widgets/dashboard/views.lua resolves, read off its source so that this
+-- list cannot drift from it.
+local CONDITION_NAMES = {}
+do
+  local f = io.open(ROOT .. "/src/rfsuite/widgets/dashboard/views.lua", "r")
+  if f then
+    for name in string.gmatch(f:read("a"), "function CONDITIONS%.([%w_]+)") do CONDITION_NAMES[name] = true end
+    f:close()
+  end
+end
+
+-- The switches a radio knows by the names it gives them by default: SA to SR and SW1 to SW6 (the
+-- boards' switch definitions), FL1 to FL4 (the flex switches) and the logical switches L01 to
+-- L64. A switch the pilot has renamed on the radio is found by that name there, but not here.
+local POSITIONS = { up = true, mid = true, down = true }
+-- A number, or a string that reads as one, is what the widget reads as a stored switch POSITION
+-- (views.lua, switchIndex): the shape the radio's switch picker hands a setting, taken as it is
+-- whatever `pos` says. `0` is the picker's "nothing chosen": no switch, so the view does not open
+-- on one. As a setting's `default` that is a legitimate start; written as the switch itself it
+-- only says the view never opens that way.
+local function switchProblem(name, pos, isDefault)
+  local position = tonumber(name)
+  if position ~= nil then
+    if position == 0 and not isDefault then return "names switch 0, which is no switch: the view never opens on it" end
+    return nil
+  end
+  if type(name) ~= "string" or name == "" then return "names no switch" end
+  local upper = string.upper(name)
+  local logical = string.match(upper, "^L(%d+)$")
+  if logical ~= nil then
+    local n = tonumber(logical)
+    if n < 1 or n > 64 then return "names logical switch '" .. name .. "', which is not one of L01 to L64" end
+    return nil
+  end
+  if not (string.match(upper, "^S[A-R]$") or string.match(upper, "^SW[1-6]$") or string.match(upper, "^FL[1-4]$")) then
+    return "names switch '" .. name .. "', which is none of SA to SR, SW1 to SW6, FL1 to FL4 and L01 to L64"
+  end
+  if pos == nil then return "names switch '" .. name .. "' without a pos: \"up\", \"mid\" or \"down\"" end
+  if not POSITIONS[pos] then return "names pos '" .. tostring(pos) .. "', which is not \"up\", \"mid\" or \"down\"" end
+  return nil
+end
+
+-- A setting of the theme's own is one its settings page names: assigned as a key in a table or a
+-- field (`key =`, `values.key =`, never `==`) or as a quoted string, in the settings module
+-- (`configure` in init.lua) or in a file of the theme's folder that module names as a `.lua`
+-- path, and so on down. That is read off the source; a key the page builds from parts is not
+-- seen.
+--
+-- Not every file of the folder: init.lua names the key in the very `openWhen` being checked, and a
+-- view reading `themeConfig.key` names it as well, so a search of the whole folder would find
+-- every key it is asked about and prove nothing. What proves a setting is the page that stores it.
+local settingsSource = nil
+if type(init.configure) == "string" then
+  local parts, seen, queue = {}, { ["init.lua"] = true }, { init.configure }
+  while #queue > 0 do
+    local file = table.remove(queue, 1)
+    if not seen[file] then
+      seen[file] = true
+      local f = io.open(folder .. "/" .. file, "r")
+      if f then
+        local text = f:read("a")
+        f:close()
+        parts[#parts + 1] = text
+        for path in string.gmatch(text, "[\"']([^\"']-%.lua)[\"']") do
+          local name = string.match(path, "([^/\\]+)$")
+          if name and not seen[name] then queue[#queue + 1] = name end
+        end
+      end
+    end
+  end
+  if #parts > 0 then settingsSource = "\n" .. table.concat(parts, "\n") end
+end
+local function namedSetting(key)
+  if settingsSource == nil then return false end
+  local k = string.gsub(key, "%W", "%%%0")
+  return string.find(settingsSource, "[^%w_]" .. k .. "%s*=[^=]") ~= nil
+    or string.find(settingsSource, "[\"']" .. k .. "[\"']") ~= nil
+end
+
+-- What a view condition may cost, in instructions per call, counted the way
+-- bin/accounting/measure.lua counts (debug.sethook, one per VM instruction, the counter's own
+-- empty call taken back out) on the fixture state of every phase. It is what asking the costliest
+-- of the widget's own conditions costs, counted the same way on the same states:
+-- `views.condition("batteryPickHasPacks", widget)` is 35 (`batteryPickPending`, the one the
+-- widget asks on every fullscreen pass, 25; `previewInflightTuning` 28). So a theme's view asks no
+-- more of a pass than the widget's own conditions do.
+local CONDITION_BUDGET = 35
+
+local function countCall(fn, ...)
+  local n = 0
+  collectgarbage("collect")
+  collectgarbage("stop")
+  debug.sethook(function() n = n + 1 end, "", 1)
+  local ok, err = pcall(fn, ...)
+  debug.sethook()
+  collectgarbage("restart")
+  return n, ok, err
+end
+local EMPTY_CALL = countCall(function() end)
+
+local VIEW_PHASES = { "preflight", "armed", "inflight", "postflight", "offline" }
+
+local function checkOpenWhen(label, spec)
+  local kind = type(spec)
+  if kind == "string" then
+    if not CONDITION_NAMES[spec] then red(label .. ": openWhen '" .. spec .. "' is not a condition the widget has") end
+  elseif kind == "table" then
+    local switch = spec.switch
+    if type(switch) == "table" then
+      if type(switch.pref) ~= "string" or switch.pref == "" then
+        red(label .. ": openWhen names no setting (switch.pref)")
+      elseif not namedSetting(switch.pref) then
+        red(label .. ": openWhen reads the setting '" .. switch.pref .. "', which "
+          .. (settingsSource and ("the theme's settings page (" .. init.configure .. " and the theme files it loads) does not name")
+            or "no settings module of the theme names (no configure in init.lua)"))
+      end
+      if switch.default == nil then
+        red(label .. ": openWhen reads the setting '" .. tostring(switch.pref) .. "' and declares no default switch")
+      else
+        local problem = switchProblem(switch.default, spec.pos, true)
+        if problem then red(label .. ": openWhen's default " .. problem) end
+      end
+    else
+      local problem = switchProblem(switch, spec.pos)
+      if problem then red(label .. ": openWhen " .. problem) end
+    end
+  elseif kind == "function" then
+    local worst = 0
+    for _, phase in ipairs(VIEW_PHASES) do
+      local n, ok, err = countCall(spec, makeState(phase))
+      if not ok then
+        red(label .. ": openWhen raised on the " .. phase .. " state: " .. tostring(err))
+        return
+      end
+      n = n - EMPTY_CALL
+      if n > worst then worst = n end
+    end
+    if worst > CONDITION_BUDGET then
+      red(string.format("%s: openWhen costs %d instructions per call, above the %d a view condition may cost",
+        label, worst, CONDITION_BUDGET))
+    else
+      note(string.format("%s: openWhen costs %d instructions per call (at most %d)", label, worst, CONDITION_BUDGET))
+    end
+  elseif spec ~= nil then
+    red(label .. ": openWhen is a " .. kind .. ", not a condition name, a switch or a function")
+  end
+end
+
+local PLACES = { fullscreen = { fullscreen = true }, zone = { zone = true }, both = { fullscreen = true, zone = true } }
+local WIDGET_VIEWS = { menu = true, battery_pick = true }
+
+local themeViews = {}
+if init.views ~= nil then
+  if type(init.views) ~= "table" then
+    red("init.lua: views is a " .. type(init.views) .. ", not a list")
+  else
+    local seen = {}
+    for i, view in ipairs(init.views) do
+      local label = "views[" .. i .. "]"
+      if type(view) ~= "table" then
+        red(label .. " is not a table")
+      elseif type(view.id) ~= "string" or view.id == "" then
+        red(label .. ": no id")
+      elseif type(view.module) ~= "string" or view.module == "" then
+        red(label .. " '" .. view.id .. "': no module")
+      elseif PLACES[view.where or "fullscreen"] == nil then
+        red(label .. " '" .. view.id .. "': where = " .. tostring(view.where) .. " is not \"fullscreen\", \"zone\" or \"both\"")
+      elseif seen[view.id] then
+        note(label .. " '" .. view.id .. "': an id listed before; the first entry is the one the widget takes")
+      else
+        seen[view.id] = true
+        themeViews[#themeViews + 1] = view
+        -- A press may open the theme's own fullscreen views as it opens the widget's.
+        if PLACES[view.where or "fullscreen"].fullscreen then VIEWS[view.id] = true end
+      end
+    end
+  end
+end
+
+for _, view in ipairs(themeViews) do
+  local places = PLACES[view.where or "fullscreen"]
+  local label = "view '" .. view.id .. "' (" .. view.module .. ")"
+  local chunk = loadfile(folder .. "/" .. view.module, "t")
+  local okMod, module = false, nil
+  if chunk then okMod, module = pcall(chunk) end
+  if not okMod or type(module) ~= "table" or type(module.build) ~= "function" then
+    red(label .. ": the module does not load, or has no build() (" .. tostring(module) .. ")")
+  else
+    if WIDGET_VIEWS[view.id] and places.fullscreen then
+      note(label .. ": draws the widget's own '" .. view.id
+        .. "'; when it opens, RTN and what its presses are followed by stay the widget's")
+      if view.openWhen ~= nil then note(label .. ": openWhen is not read for the look of a widget view") end
+    else
+      checkOpenWhen(label, view.openWhen)
+      if view.openWhen == nil and places.zone then
+        red(label .. ": a zone view without openWhen is never shown")
+      end
+    end
+    if module.back ~= nil and type(module.back) ~= "function" then
+      red(label .. ": back is a " .. type(module.back) .. ", not a function")
+    end
+    if places.fullscreen then
+      local log = { actions = {}, menuBuilt = false, runs = {} }
+      local state = makeState("preflight")
+      if view.id == "battery_pick" then
+        state.batteryPick = { loaded = true, pending = true, dismissed = false,
+          candidates = { { id = "pack1", name = "Pack 1", cap = 2200, targetProfile = 0 } } }
+      end
+      local ctx = newCtx(log, state)
+      local children = {}
+      local okBuild, err = pcall(module.build, children, { x = 0, y = 0, w = width, h = height }, state, ctx)
+      if not okBuild then
+        red(label .. ": build() raised: " .. tostring(err))
+      else
+        local presses = checkPresses(label, children, log)
+        if presses == 0 and not WIDGET_VIEWS[view.id] then
+          note(label .. ": binds no press; RTN " .. (type(module.back) == "function" and "runs its back()" or "closes it"))
+        end
+      end
+    end
+    if places.zone then
+      local children = {}
+      local okBuild, err = pcall(module.build, children, { x = 0, y = 0, w = width, h = height }, makeState("inflight"))
+      if not okBuild then
+        red(label .. ": the zone build (no ctx) raised: " .. tostring(err))
+      else
+        for _, item in ipairs(flatten(children, 0, 0, {})) do
+          if item.node.press ~= nil then
+            red(label .. ": a zone view binds no press, and " .. where(item) .. " has one")
+          end
+        end
+      end
+    end
+  end
+end
+
 if init.fullscreen ~= "theme" then
-  print("does not take fullscreen (no fullscreen = \"theme\" in init.lua): nothing to check")
-  print("GREEN")
-  os.exit(0)
+  print("does not take fullscreen (no fullscreen = \"theme\" in init.lua): its fullscreen duties are not checked")
+  finish()
 end
 
 local relyOnLongRtn = init.fullscreenExit == "longRtn"
@@ -281,47 +623,17 @@ for _, file in ipairs(order) do
       red(label .. ": neither build() nor layout/boxes")
     end
   else
-    local log = { actions = {}, menuBuilt = false }
-    local ctx = newCtx(log)
+    local log = { actions = {}, menuBuilt = false, runs = {} }
+    local state = makeState(modules[file].phases[1])
+    local ctx = newCtx(log, state)
     local zone = { x = 0, y = 0, w = width, h = height }
-    local okBuild, tree = pcall(theme.build, zone, makeState(modules[file].phases[1]), ctx)
+    local okBuild, tree = pcall(theme.build, zone, state, ctx)
     if not okBuild then
       red(label .. ": build() raised: " .. tostring(tree))
     elseif type(tree) ~= "table" then
       red(label .. ": build() returned " .. type(tree) .. ", not a node list")
     else
-      local flat = flatten(tree, 0, 0, {})
-      local presses, opensMenu, leaves = 0, log.menuBuilt, false
-      for i, item in ipairs(flat) do
-        if item.node.press ~= nil then
-          presses = presses + 1
-          if type(item.node.press) ~= "function" then
-            red(label .. ": the press of " .. where(item) .. " is not a function")
-          else
-            local before, exitsBefore = #log.actions, exits
-            local okPress, err = pcall(item.node.press)
-            if not okPress then red(label .. ": the press of " .. where(item) .. " raised: " .. tostring(err)) end
-            if exits > exitsBefore then
-              leaves = true
-              note(label .. ": the press of " .. where(item) .. " calls lcd.exitFullScreen() itself; "
-                .. "ctx.action(\"exitFullscreen\") is the documented way")
-            end
-            for k = before + 1, #log.actions do
-              local after = log.actions[k]
-              local problem = actionProblem(after)
-              if problem then red(label .. ": the press of " .. where(item) .. ": " .. problem) end
-              if after == "openView:menu" then opensMenu = true end
-              if after == "exitFullscreen" then leaves = true end
-            end
-          end
-          for j = i + 1, #flat do
-            if flat[j].node.type == "rectangle" and overlaps(flat[j], item) then
-              red(label .. ": " .. where(flat[j]) .. " is drawn over the press of " .. where(item)
-                .. "; draw it before the pressable node, or as a line or a label")
-            end
-          end
-        end
-      end
+      local presses, opensMenu, leaves = checkPresses(label, tree, log)
       for name, after in pairs(ctx.keys) do
         if name ~= "exit" and name ~= "pageDown" and name ~= "pageUp" then
           red(label .. ": ctx.keys." .. tostring(name) .. " is not a key the widget answers")
@@ -353,11 +665,4 @@ for _, file in ipairs(order) do
   end
 end
 
-for _, n in ipairs(notes) do print("  " .. n) end
-for _, f in ipairs(findings) do print("RED: " .. f) end
-if #findings > 0 then
-  print(string.format("RED (%d finding%s)", #findings, #findings == 1 and "" or "s"))
-  os.exit(1)
-end
-print("GREEN")
-os.exit(0)
+finish()
