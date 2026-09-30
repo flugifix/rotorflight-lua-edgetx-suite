@@ -681,7 +681,11 @@ L.SOURCES = {
     make = decimalGetter("bec_voltage", 2) },
   { id = "watts", label = "@i18n(app.pages.logs.tpl_power)@", unit = "W", sample = "8888", make = intGetter("watts") },
   { id = "throttle", label = "@i18n(app.pages.logs.throttle_title)@", unit = "%", sample = "888", make = intGetter("throttlePercent") },
-  { id = "fuel", label = "@i18n(app.pages.settings_audio_events.section_fuel)@", unit = "%", sample = "888", make = intGetter("fuel") },
+  -- The fuel row reads what the gauge reads: nothing until the host has seen a fuel reading.
+  { id = "fuel", label = "@i18n(app.pages.settings_audio_events.section_fuel)@", unit = "%", sample = "888",
+    make = function(state)
+      return Common.getter(function() return Common.fuel(state) end, Common.integer)
+    end },
   { id = "consumed", label = "@i18n(widgets.dashboard.urban_used)@", unit = "mAh", sample = "8888", make = intGetter("consumedMah") },
   { id = "altitude", label = "@i18n(widgets.dashboard.urban_altitude)@", unit = "m", sample = "888.8",
     make = decimalGetter("altitude", 1) },

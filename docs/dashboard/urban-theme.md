@@ -30,7 +30,8 @@ theme's, so it speaks the language of the package that was installed.
 - **Left panel** — the model picture, the flight count and total flight time, the governor state
   and the throttle, a status line, and the PID, rate and battery profile numbers.
 - **Middle** — a vertical battery gauge with the cell count, the fuel percentage and the capacity
-  used.
+  used. Until the model has reported a fuel reading the gauge is empty and reads `--%` rather
+  than an empty pack.
 - **Right panel** — five value rows, each chosen on the *Value Rows* page.
 - **Bottom bar** — the model name, the arm state, the transmitter power and the skipped-frame
   count. While the flight controller names reasons that block arming, the whole bar shows them

@@ -823,6 +823,16 @@ function M.packColor(state, base)
   end
 end
 
+-- The fuel reading, or nil before the host has seen one. The host seeds `state.fuel` with 0 and
+-- sets `fuelTelemetrySeen` only once a fuel source has produced a number (runtime.lua,
+-- readTelemetry), and clears both again on a disconnect. Read off the value alone, a model that
+-- has not reported yet would draw an empty pack in the critical colour. The suite's fuel
+-- announcements wait for the same flag (lib/audio.lua).
+function M.fuel(state)
+  if state.fuelTelemetrySeen ~= true then return nil end
+  return num(state.fuel)
+end
+
 -- The fuel reading, decoded once per value change and shared by every node that follows it:
 -- the ten gauge rows all ask this one closure, so the three-step colour is computed once per
 -- change rather than once per row per frame, and no two rows can disagree about it.
@@ -834,7 +844,7 @@ function M.fuelLevel(state)
     --
     -- Written out rather than as `cond and nil or value`: that idiom cannot yield nil in Lua --
     -- `true and nil` is false, so the `or` arm runs and the reading comes back anyway.
-    local p = num(state.fuel)
+    local p = M.fuel(state)
     if state.mainPowerLost == true then p = nil end
     if primed and p == last then return p, lastColor end
     last = p
@@ -1194,7 +1204,7 @@ function M.fuelGauge(nodes, state, x, y, w, h)
     -- colour beside them, and it costs one comparison per frame.
     M.getter(function()
       if state.mainPowerLost == true then return false end
-      return num(state.fuel)
+      return M.fuel(state)
     end, function(p)
       if p == nil or p == false then return "--%" end
       return string.format("%d%%", math.floor(p + 0.5))
