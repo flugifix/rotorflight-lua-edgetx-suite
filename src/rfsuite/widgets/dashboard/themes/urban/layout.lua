@@ -132,20 +132,7 @@ function L.settingsLabels()
   }
 end
 
--- The language, applied for a caller outside a build: the settings page, which runs in the
--- settings tool's Lua state and builds its option lists at load. Answers the language applied.
-function L.applyLanguage()
-  return Common.applyLanguage(Common.resolveLanguage())
-end
 L.T = T
-
--- A value row's name in the active language: the label table's `src_<id>` where it has one, the
--- catalogue's English label otherwise. The page's option list and the drawn row read this one
--- function, so the two cannot name a row differently.
-function L.sourceLabel(def)
-  if def == nil then return "" end
-  return T["src_" .. def.id] or def.label
-end
 
 local SETTINGS_BY_KEY = {}
 for i = 1, #L.SETTINGS do
@@ -637,7 +624,9 @@ local function derivedGetter(source, format)
 end
 
 -- Every source reads a state field the runtime's telemetry pass fills; nothing here probes.
--- `list` is the configure page's order, `id` the cfg value it stores. This list is the one
+-- `list` is the configure page's order, `id` the cfg value it stores, `label` the row's name as a
+-- translation marker -- the configure page lists it as the option and the panel draws it, so the
+-- two cannot name a row differently. This list is the one
 -- extension point a new value needs: `make` returns the row's reactive getter over `state`,
 -- `color` (optional) its reactive colour, `sample` the widest string the font is picked against.
 --
@@ -648,7 +637,7 @@ end
 -- chose. None of the five defaults carries a `source`; the readings the theme declares whatever
 -- the slots say are listed in L.sources, with the reason for each.
 L.SOURCES = {
-  { id = "cell_voltage", label = "Cell Voltage", unit = "V", sample = "4.20",
+  { id = "cell_voltage", label = "@i18n(widgets.dashboard.urban_cell_voltage)@", unit = "V", sample = "4.20",
     make = function(state)
       return Common.getter(function()
         local v = num(state.voltage)
@@ -673,28 +662,30 @@ L.SOURCES = {
         return C.text
       end
     end },
-  { id = "voltage", label = "Voltage", unit = "V", sample = "99.9", make = decimalGetter("voltage", 1),
+  { id = "voltage", label = "@i18n(app.pages.logs.voltage_title)@", unit = "V", sample = "99.9", make = decimalGetter("voltage", 1),
     -- The pack voltage turns with the gauge and the status line when the main pack is gone.
     -- This row has no minimum of its own -- the cell figure is the one the theme's configured
     -- bounds apply to -- so this is its only colour.
     color = function(state) return Common.packColor(state, C.text) end },
-  { id = "rpm", label = "Headspeed", unit = "rpm", sample = "9999", make = intGetter("rpm") },
-  { id = "current", label = "Current", unit = "A", sample = "999.9", make = decimalGetter("current", 1) },
+  { id = "rpm", label = "@i18n(app.pages.logs.rpm_title)@", unit = "rpm", sample = "9999", make = intGetter("rpm") },
+  { id = "current", label = "@i18n(app.pages.logs.current_title)@", unit = "A", sample = "999.9", make = decimalGetter("current", 1) },
   -- The two temperature rows are the only ones with a ladder a pilot sets: the colour comes from
   -- the `temp_colors` row of the settings page, which answers nil while it is off -- so the row
   -- then carries no colour closure at all and the setting costs nothing per frame. common.lua
   -- holds the ladders and the reasoning for their being one row rather than four.
-  { id = "esc_temp", label = "ESC Temp", unit = "C", sample = "9999", make = intGetter("escTemp"),
+  { id = "esc_temp", label = "@i18n(app.pages.logs.temp_title)@", unit = "C", sample = "9999", make = intGetter("escTemp"),
     color = function(state) return Common.tempColor(setting(state, "temp_colors"), state, "esc", "escTemp") end },
-  { id = "mcu_temp", label = "MCU Temp", unit = "C", sample = "9999", make = intGetter("mcuTemp"),
+  { id = "mcu_temp", label = "@i18n(widgets.dashboard.urban_mcu_temp)@", unit = "C", sample = "9999", make = intGetter("mcuTemp"),
     color = function(state) return Common.tempColor(setting(state, "temp_colors"), state, "mcu", "mcuTemp") end },
-  { id = "bec_voltage", label = "BEC Voltage", unit = "V", sample = "99.99", make = decimalGetter("bec_voltage", 2) },
-  { id = "watts", label = "Power", unit = "W", sample = "8888", make = intGetter("watts") },
-  { id = "throttle", label = "Throttle", unit = "%", sample = "888", make = intGetter("throttlePercent") },
-  { id = "fuel", label = "Fuel", unit = "%", sample = "888", make = intGetter("fuel") },
-  { id = "consumed", label = "Used", unit = "mAh", sample = "8888", make = intGetter("consumedMah") },
-  { id = "altitude", label = "Altitude", unit = "m", sample = "888.8", make = decimalGetter("altitude", 1) },
-  { id = "link", label = "Link", unit = "%", sample = "888", make = intGetter("lq") },
+  { id = "bec_voltage", label = "@i18n(widgets.dashboard.urban_bec_voltage)@", unit = "V", sample = "99.99",
+    make = decimalGetter("bec_voltage", 2) },
+  { id = "watts", label = "@i18n(app.pages.logs.tpl_power)@", unit = "W", sample = "8888", make = intGetter("watts") },
+  { id = "throttle", label = "@i18n(app.pages.logs.throttle_title)@", unit = "%", sample = "888", make = intGetter("throttlePercent") },
+  { id = "fuel", label = "@i18n(app.pages.settings_audio_events.section_fuel)@", unit = "%", sample = "888", make = intGetter("fuel") },
+  { id = "consumed", label = "@i18n(widgets.dashboard.urban_used)@", unit = "mAh", sample = "8888", make = intGetter("consumedMah") },
+  { id = "altitude", label = "@i18n(widgets.dashboard.urban_altitude)@", unit = "m", sample = "888.8",
+    make = decimalGetter("altitude", 1) },
+  { id = "link", label = "@i18n(app.pages.logs.tpl_link)@", unit = "%", sample = "888", make = intGetter("lq") },
 
   -- The readings below are the host's DERIVED ones. Each names the source it needs, and
   -- L.sources declares exactly those of them a pilot has put in a row.
@@ -704,7 +695,7 @@ L.SOURCES = {
   -- it to nil and the row reads "-", which is the state every model is in until the limit has
   -- been typed in or read off the controller -- which is why this is an option and not a
   -- default. The interesting part is above 100, so the row is not clamped to it.
-  { id = "esc_load", label = "ESC Load", unit = "%", sample = "888", source = "esc_load",
+  { id = "esc_load", label = "@i18n(widgets.dashboard.urban_esc_load)@", unit = "%", sample = "888", source = "esc_load",
     make = derivedGetter("esc_load", Common.integer) },
 
   -- The speed controller's health in words. Two properties decide how it is drawn: the reading
@@ -731,7 +722,7 @@ L.SOURCES = {
   -- truncation. Twelve of the widest capital is the bound the cut actually guarantees. It costs
   -- this row a font class -- the sample is wider than any real status of that length -- and a
   -- row of words reads perfectly well one class down, where a clipped one does not read at all.
-  { id = "esc_status", label = "ESC Status", unit = "", sample = "WWWWWWWWWWW.",
+  { id = "esc_status", label = "@i18n(widgets.dashboard.urban_esc_status)@", unit = "", sample = "WWWWWWWWWWW.",
     source = "esc_status",
     make = derivedGetter("esc_status", function(v)
       if type(v) ~= "string" or v == "" then return "-" end
@@ -754,7 +745,7 @@ L.SOURCES = {
   -- module's own enumeration and the frame does not say whose: on a link that is not
   -- ExpressLRS, or on a receiver older than the 4.x numbering, the row names a rate that is not
   -- being run. That is why it is an option a pilot turns on rather than a default.
-  { id = "link_rate", label = "Air Rate", unit = "", sample = "100Hz Full",
+  { id = "link_rate", label = "@i18n(widgets.dashboard.urban_air_rate)@", unit = "", sample = "100Hz Full",
     source = "link_packet_rate",
     make = derivedGetter("link_packet_rate", function(v)
       if type(v) ~= "string" or v == "" then return "-" end
@@ -764,11 +755,11 @@ L.SOURCES = {
   -- The receiver sensitivity that rate is specified down to, in dBm and negative. It is the
   -- floor as ExpressLRS states it. The row shows the floor itself; the RSSI bars in the top bar
   -- draw the headroom above it.
-  { id = "link_floor", label = "Rate Floor", unit = "dBm", sample = "-888",
+  { id = "link_floor", label = "@i18n(widgets.dashboard.urban_rate_floor)@", unit = "dBm", sample = "-888",
     source = "link_floor",
     make = derivedGetter("link_floor", Common.integer) },
 
-  { id = "none", label = "(off)", unit = "", sample = "8888",
+  { id = "none", label = "@i18n(widgets.dashboard.urban_off)@", unit = "", sample = "8888",
     make = function() return function() return "" end end },
 }
 
@@ -857,7 +848,7 @@ function L.slotRows(state)
     local id = cfg["slot" .. i]
     local def = SOURCES_BY_ID[id] or SOURCES_BY_ID[L.DEFAULT_SLOTS[i]]
     rows[i] = {
-      label = (def.id == "none") and "" or L.sourceLabel(def),
+      label = (def.id == "none") and "" or def.label,
       unit = def.unit,
       sample = def.sample,
       value = def.make(state),
@@ -989,7 +980,6 @@ function L.buildFlight(zone, state, ctx)
   -- a closure alike, is then the one the pilot chose. It is a build-time reading and needs no
   -- term in the render key -- the host reloads the theme when its preferences change.
   Common.applyScheme((state.themeConfig or {}).scheme)
-  Common.applyLanguage(Common.resolveLanguage())
   Common.beginBuild(zone)
 
   local barH = math.max(18, math.floor(h * 0.075))
@@ -1208,7 +1198,6 @@ function L.buildStats(zone, state, ctx)
   local x0, y0, w, h = zone.x or 0, zone.y or 0, zone.w or 0, zone.h or 0
   if w <= 0 or h <= 0 then return nodes end
   Common.applyScheme((state.themeConfig or {}).scheme)
-  Common.applyLanguage(Common.resolveLanguage())
   Common.beginBuild(zone)
 
   -- The bars as the flight view has them, so the two screens share their top and their foot

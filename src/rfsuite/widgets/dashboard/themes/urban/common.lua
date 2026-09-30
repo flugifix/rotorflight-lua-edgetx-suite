@@ -38,184 +38,123 @@ local M = {}
 -- labels
 -- ---------------------------------------------------------------------------
 
--- Every fixed string the panels draw, in one table: a language overlay (below) rewrites the
--- fields of this table and touches no panel. The source catalogue in layout.lua keeps its own
--- labels because the configure page lists them as options, and those two must stay one list.
+-- Every fixed string the panels draw, in one table, so a panel names a string and never spells
+-- it. The words are translation markers in the suite's own translation files, which the
+-- packager resolves into each locale's build; the firmware's identifiers, the units and the
+-- sensor names beside them are not words and stand as they are. The source catalogue in
+-- layout.lua keeps its own labels because the configure page lists them as options, and those
+-- two must stay one list.
+--
+-- Where the suite already names the same thing in the same case, its key is used rather than a
+-- second one: the flight-log viewer's column names, the flight statistics' total, the audio
+-- events' governor states, the status page's arming-disable reasons.
 M.T = {
-  flights = "Flights",
-  total_time = "Total Time",
-  governor = "Governor",
-  throttle = "Throttle",
-  profile = "Profile",
-  rate = "Rate",
-  battery_profile = "B-Profile",
+  flights = "@i18n(widgets.dashboard.urban_flights)@",
+  total_time = "@i18n(widgets.dashboard.urban_total_time)@",
+  governor = "@i18n(app.pages.logs.tpl_governor)@",
+  throttle = "@i18n(app.pages.logs.throttle_title)@",
+  profile = "@i18n(widgets.dashboard.urban_profile)@",
+  rate = "@i18n(widgets.dashboard.urban_rate)@",
+  battery_profile = "@i18n(widgets.dashboard.urban_battery_profile)@",
   -- The shorter word where the full one does not fit the narrow third column.
-  battery_profile_short = "B-Prof",
+  battery_profile_short = "@i18n(widgets.dashboard.urban_battery_profile_short)@",
   -- The status line's three placeholders: no flight controller answering, armed with nothing
   -- to report, disarmed with nothing blocking.
-  no_telemetry = "No telemetry",
-  armed_ok = "Armed - OK",
-  ready = "Ready",
+  no_telemetry = "@i18n(widgets.dashboard.urban_no_telemetry)@",
+  armed_ok = "@i18n(widgets.dashboard.urban_armed_ok)@",
+  ready = "@i18n(widgets.dashboard.urban_ready)@",
   -- The bottom bar's arm state. Without a flight controller the craft's state is not known, so
   -- the bar says so instead of claiming "Disarmed".
-  armed = "Armed",
-  disarmed = "Disarmed",
-  no_fc = "No FC connected",
-  model_prefix = "Model: ",
+  armed = "@i18n(widgets.dashboard.urban_armed)@",
+  disarmed = "@i18n(widgets.dashboard.urban_disarmed)@",
+  no_fc = "@i18n(widgets.dashboard.urban_no_fc)@",
+  model_prefix = "@i18n(app.pages.tools_flight_log.field_model)@: ",
   tpwr = "TPWR",
   skp = "Skp",
-  arming_disabled = "Arming Disabled: ",
+  arming_disabled = "@i18n(widgets.dashboard.urban_arming_disabled)@: ",
   -- The statistics view's status bar: the flight's extremes of the link, each marked with the
   -- direction of the extreme, `-` the least and `+` the most.
   tpwr_stat = "TPWR",
   rqly_min = "RQly-",
   mcu_max = "Tmcu+",
   -- The throttle cell off the ground: disarmed it is safe, and without a link nothing is known.
-  throttle_safe = "Safe",
+  throttle_safe = "@i18n(widgets.dashboard.urban_throttle_safe)@",
   throttle_unknown = "**",
   model_fallback = "Rotorflight",
   mah = "mAh",
   -- The statistics view: its table rows, the three column heads, the link's state over the
   -- label column, and the totals and the line beneath the table.
-  flight_time = "Flight Time",
-  total_flight_time = "Total Flight Time",
-  mah_used = "mAh Used",
-  cell_voltage = "Cell Voltage",
-  current = "Current",
-  esc_temp = "ESC Temp",
-  bec_voltage = "BEC Voltage",
-  latest = "Latest",
-  min = "Min",
-  max = "Max",
-  state_armed = "Armed",
-  state_disarmed = "Disarmed",
-  state_offline = "Disconnected",
+  flight_time = "@i18n(app.pages.logs.flight_duration)@",
+  total_flight_time = "@i18n(app.pages.setup_stats.totalflighttime)@",
+  mah_used = "@i18n(widgets.dashboard.urban_mah_used)@",
+  cell_voltage = "@i18n(widgets.dashboard.urban_cell_voltage)@",
+  current = "@i18n(app.pages.logs.current_title)@",
+  esc_temp = "@i18n(app.pages.logs.temp_title)@",
+  bec_voltage = "@i18n(widgets.dashboard.urban_bec_voltage)@",
+  latest = "@i18n(widgets.dashboard.urban_latest)@",
+  min = "@i18n(app.pages.logs.min)@",
+  max = "@i18n(app.pages.logs.max)@",
+  state_armed = "@i18n(widgets.dashboard.urban_armed)@",
+  state_disarmed = "@i18n(widgets.dashboard.urban_disarmed)@",
+  state_offline = "@i18n(widgets.dashboard.urban_disconnected)@",
   -- The two governor MODES the board runs no state machine in.
-  gov_off = "Gov. Off",
-  gov_limit = "Gov. Limit",
+  gov_off = "@i18n(widgets.governor.MODE_OFF)@",
+  gov_limit = "@i18n(widgets.governor.MODE_LIMIT)@",
   -- The main pack gone while the board still answers on its BEC.
-  main_power_lost = "MAIN POWER LOST",
-  -- The post-flight screen once the flight controller has stopped answering: nothing on it can
-  -- change any more, which is the one thing it can say that the still-connected screen cannot.
-  offline = "OFFLINE",
+  main_power_lost = "@i18n(app.pages.settings_audio_events.main_power_lost):upper()@",
   -- The voltage sag episodes of the last flight, and the headspeed band per PID profile.
-  sags = "V sags",
-  headspeed_profile = "Headspeed P",
+  sags = "@i18n(widgets.dashboard.urban_sags)@",
+  headspeed_profile = "@i18n(widgets.dashboard.urban_headspeed_profile)@",
   -- The governor states by the flight controller's own index, and the name for a state this
   -- table does not know. Read by M.governorText.
-  gov_state_0 = "Throttle off", gov_state_1 = "Throttle Idle", gov_state_2 = "Spooling up",
-  gov_state_3 = "Recovery", gov_state_4 = "Gov. Active", gov_state_5 = "Throttle Hold",
-  gov_state_6 = "Gov. Fallback", gov_state_7 = "Autorotation", gov_state_8 = "Bailing Out",
-  gov_state_9 = "Gov. Bypass",
-  gov_unknown = "Gov. Disabled",
+  gov_state_0 = "@i18n(app.pages.settings_audio_events.governor_state_thr_off)@",
+  gov_state_1 = "@i18n(app.pages.settings_audio_events.governor_state_idle)@",
+  gov_state_2 = "@i18n(app.pages.settings_audio_events.governor_state_spoolup)@",
+  gov_state_3 = "@i18n(app.pages.settings_audio_events.governor_state_recovery)@",
+  gov_state_4 = "@i18n(app.pages.settings_audio_events.governor_state_active)@",
+  gov_state_5 = "@i18n(widgets.dashboard.urban_gov_throttle_hold)@",
+  gov_state_6 = "@i18n(widgets.dashboard.urban_gov_fallback)@",
+  gov_state_7 = "@i18n(app.pages.settings_audio_events.governor_state_autorot)@",
+  gov_state_8 = "@i18n(app.pages.settings_audio_events.governor_state_bailout)@",
+  gov_state_9 = "@i18n(app.pages.settings_audio_events.governor_state_bypass)@",
+  gov_unknown = "@i18n(widgets.dashboard.urban_gov_unknown)@",
   -- The readable names of the arming-disable bits, for the bottom bar's override. The compact
   -- descriptors of the status line (NOGYRO, BOOTGRACE, ...) are the firmware's identifiers and
   -- are not translated.
-  arm_flag_0 = "No Gyro", arm_flag_1 = "Fail Safe", arm_flag_2 = "RX Fail Safe",
-  arm_flag_3 = "Bad RX Recovery", arm_flag_4 = "Box Fail Safe", arm_flag_5 = "Governor",
-  arm_flag_6 = "RPM Signal", arm_flag_7 = "Throttle", arm_flag_8 = "Angle",
-  arm_flag_9 = "Boot Grace Time", arm_flag_10 = "No Pre Arm", arm_flag_11 = "Load",
-  arm_flag_12 = "CALIB", arm_flag_13 = "CLI", arm_flag_14 = "CMS Menu", arm_flag_15 = "BST",
-  arm_flag_16 = "MSP", arm_flag_17 = "Paralyze", arm_flag_18 = "GPS", arm_flag_19 = "Resc",
-  arm_flag_20 = "RPM Filter", arm_flag_21 = "Reboot Required", arm_flag_22 = "DSHOT Bitbang",
-  arm_flag_23 = "Acc Calibration", arm_flag_24 = "Motor Protocol", arm_flag_25 = "Arm Switch",
+  arm_flag_0 = "@i18n(app.modules.fblstatus.arming_disable_flag_0)@",
+  arm_flag_1 = "@i18n(app.modules.fblstatus.arming_disable_flag_1)@",
+  arm_flag_2 = "@i18n(app.modules.fblstatus.arming_disable_flag_2)@",
+  arm_flag_3 = "@i18n(app.modules.fblstatus.arming_disable_flag_3)@",
+  arm_flag_4 = "@i18n(app.modules.fblstatus.arming_disable_flag_4)@",
+  arm_flag_5 = "@i18n(app.modules.fblstatus.arming_disable_flag_5)@",
+  arm_flag_6 = "@i18n(app.modules.fblstatus.arming_disable_flag_6)@",
+  arm_flag_7 = "@i18n(app.modules.fblstatus.arming_disable_flag_7)@",
+  arm_flag_8 = "@i18n(app.modules.fblstatus.arming_disable_flag_8)@",
+  arm_flag_9 = "@i18n(app.modules.fblstatus.arming_disable_flag_9)@",
+  arm_flag_10 = "@i18n(app.modules.fblstatus.arming_disable_flag_10)@",
+  arm_flag_11 = "@i18n(app.modules.fblstatus.arming_disable_flag_11)@",
+  arm_flag_12 = "@i18n(app.modules.fblstatus.arming_disable_flag_12)@",
+  arm_flag_13 = "@i18n(app.modules.fblstatus.arming_disable_flag_13)@",
+  arm_flag_14 = "@i18n(app.modules.fblstatus.arming_disable_flag_14)@",
+  arm_flag_15 = "@i18n(app.modules.fblstatus.arming_disable_flag_15)@",
+  arm_flag_16 = "@i18n(app.modules.fblstatus.arming_disable_flag_16)@",
+  arm_flag_17 = "@i18n(app.modules.fblstatus.arming_disable_flag_17)@",
+  arm_flag_18 = "@i18n(app.modules.fblstatus.arming_disable_flag_18)@",
+  arm_flag_19 = "@i18n(app.modules.fblstatus.arming_disable_flag_19)@",
+  arm_flag_20 = "@i18n(app.modules.fblstatus.arming_disable_flag_20)@",
+  arm_flag_21 = "@i18n(app.modules.fblstatus.arming_disable_flag_21)@",
+  arm_flag_22 = "@i18n(app.modules.fblstatus.arming_disable_flag_22)@",
+  arm_flag_23 = "@i18n(app.modules.fblstatus.arming_disable_flag_23)@",
+  arm_flag_24 = "@i18n(app.modules.fblstatus.arming_disable_flag_24)@",
+  arm_flag_25 = "@i18n(app.modules.fblstatus.arming_disable_flag_25)@",
 }
-
--- ---------------------------------------------------------------------------
--- language
--- ---------------------------------------------------------------------------
-
--- The theme's own translation table, kept inside its folder: English is the table above, and a
--- language is an OVERLAY of the keys it translates, keyed by its two-letter code, so a key it
--- leaves out stays English rather than empty. English is the only language shipped; an overlay
--- added here is applied by M.applyLanguage without anything else changing.
---
--- An overlay is a FUNCTION for the reason a colour scheme is one: a Lua state draws one language,
--- and the other's strings would otherwise be built on every theme load for nothing. Besides the
--- keys of M.T, an overlay may carry the value rows' names (`src_<id>`, layout.lua L.SOURCES) and
--- the settings pages' wording (`set_*`, layout.lua L.settingsLabels; `cfg_*`, configure.lua).
-local LANGUAGES = {}
-
--- The English originals of every key an overlay may replace, so switching back restores them
--- rather than keeping the last language's words. Taken LAZILY, on the first switch away from
--- English -- M.T is still English then -- because this module loads in the pass that reloads the
--- theme, and a Lua state that only ever draws English should not pay for a copy it never reads.
-local ENGLISH = nil
-
-local appliedLanguage = "en"
-
--- Rewrites the FIELDS of M.T, which is one table for the theme's whole life -- layout.lua holds
--- it as `T` from its load -- so every label, every closure and every settings row reads the
--- chosen language after the call. Called at the top of a build, beside M.applyScheme. A
--- language with no overlay is English.
-function M.applyLanguage(lang)
-  if LANGUAGES[lang] == nil then lang = "en" end
-  if lang == appliedLanguage then return lang end
-  local t = M.T
-  if ENGLISH == nil then
-    ENGLISH = {}
-    for k, v in pairs(t) do ENGLISH[k] = v end
-  end
-  for k in pairs(t) do t[k] = ENGLISH[k] end
-  for k, v in pairs(ENGLISH) do t[k] = v end
-  if lang ~= "en" then
-    for k, v in pairs(LANGUAGES[lang]()) do t[k] = v end
-  end
-  appliedLanguage = lang
-  return lang
-end
-
--- The token the suite's packager replaces with the package's language in every file under
--- SCRIPTS/TOOLS (its .vscode/scripts/resolve_i18n_tags.py), this theme's folder included. It is
--- compared against a string that is ASSEMBLED, so the replacement cannot touch the comparison: a
--- packaged install reads "de" / "en" here, a theme copied onto a card by hand reads the token.
-local BAKED_LANGUAGE = "@i18n_language@"
-local IS_BAKED = (BAKED_LANGUAGE ~= "@i18n_" .. "language@")
-
-local function norm(lang)
-  if type(lang) ~= "string" then return nil end
-  lang = string.lower(string.sub(lang, 1, 2))
-  if lang == "" then return nil end
-  return lang
-end
-
--- The language this build draws in, in the suite's own order, so the dashboard speaks what the
--- tool speaks:
---
---   1. the suite's answer, where its locale module is already loaded in this Lua state (it
---      registers itself as a global; this theme reads that global and loads NOTHING): the
---      pilot's language setting in the tool, then the package's language, then the radio's;
---   2. the package's language, baked into this file by the packager;
---   3. the radio's own language (getGeneralSettings, two capitals such as "EN");
---   4. English.
---
--- A build-time read and no render-key term: a language change is a settings change or a radio
--- setting, and both reach the theme through a reload.
-function M.resolveLanguage()
-  local mod = type(_G) == "table" and _G.__rfsuite_system_locale_module or nil
-  if type(mod) == "table" and type(mod.resolveSystemLanguage) == "function" then
-    local ok, lang = pcall(mod.resolveSystemLanguage, "en")
-    lang = ok and norm(lang) or nil
-    if lang then return lang end
-  end
-  if IS_BAKED then
-    local lang = norm(BAKED_LANGUAGE)
-    if lang then return lang end
-  end
-  if type(getGeneralSettings) == "function" then
-    local ok, g = pcall(getGeneralSettings)
-    local lang = (ok and type(g) == "table") and norm(g.language) or nil
-    if lang then return lang end
-  end
-  return "en"
-end
 
 -- The governor states' keys, built once: M.governorText and M.governorSample read them every
 -- build or every change, and neither should concatenate a key to do it.
 local GOV_STATE_KEYS = {}
 for i = 0, 9 do GOV_STATE_KEYS[i] = "gov_state_" .. i end
 
--- The widest governor name of the language on screen, which the governor cell is sized against
+-- The widest governor name of the package's language, which the governor cell is sized against
 -- so no state of THAT language is clipped. Measured by byte length, which over-counts a
 -- multi-byte character and errs towards the smaller face, never the clipped one.
 function M.governorSample()
@@ -494,7 +433,7 @@ function M.selectFont(availH, availW, sample, maxFont)
 end
 
 -- M.fit for a string that is a constant of the code rather than data -- a value row's name in
--- the active language, a bounded set -- so its answer can be kept with the zone's other
+-- the package's language, a bounded set -- so its answer can be kept with the zone's other
 -- measurements, and a rebuild in the same zone measures nothing. A name that fits costs one cached
 -- width lookup.
 function M.fitLabel(font, text, maxW)
@@ -632,10 +571,10 @@ function M.integer(value)
   return string.format("%d", math.floor(v + 0.5))
 end
 
--- The governor states are `M.T.gov_state_<n>` (see the label table and M.applyLanguage): the
+-- The governor states are `M.T.gov_state_<n>` (see the label table): the
 -- indices are the flight controller's own (rotorflight-firmware src/main/flight/governor.h,
--- GOV_STATE_THROTTLE_OFF .. GOV_STATE_BYPASS). The keys are GOV_STATE_KEYS, built once in the
--- language section, so the format path concatenates nothing.
+-- GOV_STATE_THROTTLE_OFF .. GOV_STATE_BYPASS). The keys are GOV_STATE_KEYS, built once beside
+-- the label table, so the format path concatenates nothing.
 
 -- The flight controller runs a governor STATE machine in the DIRECT, ELECTRIC and NITRO modes
 -- only. In OFF and LIMIT it never enters one, and the state sensor stands at its initial value
@@ -937,7 +876,7 @@ local ARM_DISABLE_DESCS = {
   [25] = "ARMSWITCH"
 }
 
--- The readable names are `M.T.arm_flag_<n>`, so they follow the language; the keys are built
+-- The readable names are `M.T.arm_flag_<n>`, so they follow the package's language; the keys are built
 -- once here so the decode below concatenates nothing.
 local ARM_FLAG_KEYS = {}
 for i = 0, 25 do ARM_FLAG_KEYS[i] = "arm_flag_" .. i end
