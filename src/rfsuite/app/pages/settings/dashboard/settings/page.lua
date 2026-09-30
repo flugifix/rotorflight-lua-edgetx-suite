@@ -261,8 +261,8 @@ end
 function M.onSave(ctx)
   ensureDeps()
   local module = loadThemeModule(ctx)
-  -- Without the model's store the library would write the values into the radio's standard
-  -- instead, so a model page that has lost its flight controller saves nothing.
+  -- Without the model's store the library saves nothing in the model scope, so a model page
+  -- that has lost its flight controller says so rather than reporting a save that did not happen.
   if ui.activeScope == "model" and not modelStoreReady() then
     if type(ctx.reportSave) == "function" then
       ctx.reportSave({

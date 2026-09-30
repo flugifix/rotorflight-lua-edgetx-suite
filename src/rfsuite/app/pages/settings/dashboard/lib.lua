@@ -586,11 +586,14 @@ end
 -- file alone. The model scope writes only what deviates: a value equal to the standard one --
 -- the radio's value where it has one, the theme's default otherwise -- is removed from the model
 -- rather than stored, so the model's file lists exactly its overrides and a later change of the
--- standard still reaches every value the model never changed.
+-- standard still reaches every value the model never changed. Without the model's store the
+-- model scope saves nothing: writing its values into the radio's file instead would change the
+-- standard for every model.
 function M.setThemeConfig(prefs, path, values, modelPrefs)
   if type(values) ~= "table" then return end
 
-  if M.getEditScope() == "model" and type(modelPrefs) == "table" then
+  if M.getEditScope() == "model" then
+    if type(modelPrefs) ~= "table" then return end
     local global = (type(prefs) == "table" and type(prefs.dashboard) == "table") and prefs.dashboard or {}
     local defaults = themeDefaults[path] or {}
     modelPrefs.dashboard = modelPrefs.dashboard or {}

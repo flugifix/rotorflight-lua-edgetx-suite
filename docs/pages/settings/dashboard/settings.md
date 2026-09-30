@@ -51,6 +51,12 @@ page fits the screen. Themes that do not split show their settings directly.
 - A card from an earlier version may hold per-model theme settings saved while a flight
   controller was connected. Such a model keeps using them, and they are listed under *Per-Model
   Settings*, until the switches on *Design* are saved off.
+- A card from an earlier version may also hold, in the radio's own settings, a copy of a value
+  that was saved for a model. Earlier versions removed that copy whenever the theme was saved for
+  a model; this one does not, because such a copy cannot be told apart from a standard value set
+  on purpose. It stays the standard for every model without values of its own until it is changed
+  on the theme's tile. For the battery voltage bounds that means those models do not scale the
+  bounds to the cell count they measure.
 - A theme split into pages saves the page that is open. Leaving a page for another one of the
   same theme discards what has not been saved, so save before stepping across.
 - Saving reloads the dashboard, so a change is visible on the widget as soon as the tool is
