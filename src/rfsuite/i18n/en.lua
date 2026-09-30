@@ -2368,7 +2368,30 @@ return {
         -- also the section headers of its configure page.
         urban_page_look = "Look",
         urban_page_rows = "Value Rows",
-        urban_page_topbar = "Top Bar"
+        urban_page_topbar = "Top Bar",
+        -- The rows of the Urban theme's settings pages and their values.
+        urban_scheme = "Colour scheme",
+        urban_scheme_light = "Light",
+        urban_scheme_dark = "Dark",
+        urban_arm_colors = "Arm state colours",
+        urban_arm_signal = "Green and red",
+        urban_arm_amber = "Amber and grey",
+        urban_row = "Row",
+        urban_clock = "Clock",
+        urban_clock_date_time = "Date and time",
+        urban_clock_time = "Time only",
+        urban_lq_bar = "RQ bar",
+        urban_tq_bar = "TQ bar",
+        urban_rssi_bars = "RSSI bars",
+        urban_tx_battery = "Transmitter battery",
+        urban_status_bar = "Status bar",
+        urban_bar_colors = "Colour the bars",
+        urban_bar_colors_warn = "Only on warning",
+        urban_lq_warn = "Link good above",
+        urban_rssi_warn = "Signal good above",
+        urban_units = "Units beside the values",
+        urban_temp_colors = "Temperature colours",
+        urban_temp_colors_early = "Early"
       },
       tools_flight_log = {
         title = "Flight Log",

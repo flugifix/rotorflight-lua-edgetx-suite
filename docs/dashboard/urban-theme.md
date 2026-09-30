@@ -16,7 +16,8 @@ are listed at the end of this page.
 *System* → *Settings* → *Dashboard* → *Design*: choose *Urban* for a flight phase, or for all
 three. Its settings are under *System* → *Settings* → *Dashboard* → *Settings* → *Urban*, split
 into three pages: *Look*, *Value Rows* and *Top Bar*. The settings are stored per model where the
-flight controller's id is known.
+flight controller's id is known. Its words come from the suite's translations, like every other
+theme's, so it speaks the language of the package that was installed.
 
 ## What it shows
 
@@ -85,8 +86,6 @@ declares nothing and reads the flight record. A reading the model does not carry
 
 ## What it does not do yet
 
-- **English only.** The theme's labels come from a table of its own with only an English entry;
-  it does not use the suite's translations.
 - **Not priced by `bin/accounting/measure.lua`.** The instrument cannot settle a dashboard that
   draws a free-form theme, so the theme carries no budget row.
 - **No colour for a pack that was not full when it was plugged in.** The gauge is green above

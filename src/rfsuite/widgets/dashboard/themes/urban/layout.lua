@@ -100,39 +100,39 @@ L.SETTINGS = {
 --
 -- A value with no label here would reach the page as its raw stored string.
 --
--- The wording follows the theme's language (common.lua, M.applyLanguage): every string is the
--- label table's `set_*` entry where the active language has one, and the English literal beside
--- it otherwise. The caller applies the language first (L.applyLanguage).
+-- Every word is a translation marker in the settings page's block of the suite's translation
+-- files, resolved by the packager into each locale's build. On, Off, Always and Standard are the
+-- suite's own words for them, read from the pages that already carry them.
 function L.settingsLabels()
-  local function tr(key, en) return T[key] or en end
-  local function onOff() return { on = tr("set_on", "On"), off = tr("set_off", "Off") } end
+  local function onOff()
+    return { on = "@i18n(app.pages.flight_tuning_advanced_pid_controller.tbl_on)@",
+             off = "@i18n(app.pages.flight_tuning_advanced_pid_controller.tbl_off)@" }
+  end
   return {
-    clock = { label = tr("set_clock", "Clock"),
-              values = { date_time = tr("set_clock_date_time", "Date and time"),
-                         time = tr("set_clock_time", "Time only") } },
-    lq_bar = { label = tr("set_lq_bar", "RQ bar"), values = onOff() },
-    tq_bar = { label = tr("set_tq_bar", "TQ bar"), values = onOff() },
-    rssi_bars = { label = tr("set_rssi_bars", "RSSI bars"), values = onOff() },
-    tx_battery = { label = tr("set_tx_battery", "Transmitter battery"), values = onOff() },
-    tpwr = { label = tr("set_tpwr", "Status bar: TPWR"), values = onOff() },
-    bar_colors = { label = tr("set_bar_colors", "Colour the bars"),
-                   values = { always = tr("set_bar_colors_always", "Always"),
-                              warn = tr("set_bar_colors_warn", "Only on warning") } },
-    lq_warn = { label = tr("set_lq_warn", "Link good above"),
+    clock = { label = "@i18n(app.pages.settings_dashboard_settings.urban_clock)@",
+              values = { date_time = "@i18n(app.pages.settings_dashboard_settings.urban_clock_date_time)@",
+                         time = "@i18n(app.pages.settings_dashboard_settings.urban_clock_time)@" } },
+    lq_bar = { label = "@i18n(app.pages.settings_dashboard_settings.urban_lq_bar)@", values = onOff() },
+    tq_bar = { label = "@i18n(app.pages.settings_dashboard_settings.urban_tq_bar)@", values = onOff() },
+    rssi_bars = { label = "@i18n(app.pages.settings_dashboard_settings.urban_rssi_bars)@", values = onOff() },
+    tx_battery = { label = "@i18n(app.pages.settings_dashboard_settings.urban_tx_battery)@", values = onOff() },
+    tpwr = { label = "@i18n(app.pages.settings_dashboard_settings.urban_status_bar)@: TPWR", values = onOff() },
+    bar_colors = { label = "@i18n(app.pages.settings_dashboard_settings.urban_bar_colors)@",
+                   values = { always = "@i18n(app.pages.setup_adjustments.channel_always)@",
+                              warn = "@i18n(app.pages.settings_dashboard_settings.urban_bar_colors_warn)@" } },
+    lq_warn = { label = "@i18n(app.pages.settings_dashboard_settings.urban_lq_warn)@",
                 values = { ["90"] = "90 %", ["80"] = "80 %", ["70"] = "70 %",
                            ["60"] = "60 %", ["50"] = "50 %" } },
-    rssi_warn = { label = tr("set_rssi_warn", "Signal good above"),
+    rssi_warn = { label = "@i18n(app.pages.settings_dashboard_settings.urban_rssi_warn)@",
                   values = { ["25"] = "25 %", ["20"] = "20 %", ["15"] = "15 %",
                              ["10"] = "10 %" } },
-    units = { label = tr("set_units", "Units beside the values"), values = onOff() },
-    temp_colors = { label = tr("set_temp_colors", "Temperature colours"),
-                    values = { off = tr("set_temp_colors_off", "Off"),
-                               standard = tr("set_temp_colors_standard", "Standard"),
-                               early = tr("set_temp_colors_early", "Early") } },
+    units = { label = "@i18n(app.pages.settings_dashboard_settings.urban_units)@", values = onOff() },
+    temp_colors = { label = "@i18n(app.pages.settings_dashboard_settings.urban_temp_colors)@",
+                    values = { off = "@i18n(app.pages.flight_tuning_advanced_pid_controller.tbl_off)@",
+                               standard = "@i18n(app.pages.setup_controls_inflight.set_mode_standard)@",
+                               early = "@i18n(app.pages.settings_dashboard_settings.urban_temp_colors_early)@" } },
   }
 end
-
-L.T = T
 
 local SETTINGS_BY_KEY = {}
 for i = 1, #L.SETTINGS do

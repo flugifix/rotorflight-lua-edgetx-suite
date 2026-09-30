@@ -14,13 +14,6 @@ local Controls = loadModule("ui/controls.lua")
 local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
 local Layout = loadModule("widgets/dashboard/themes/urban/layout.lua")
 
--- The page speaks the theme's language (common.lua, M.resolveLanguage), applied before any list
--- below is built, since they are all built at load. A layout module without the call is an
--- older one and stays English.
-if type(Layout.applyLanguage) == "function" then Layout.applyLanguage() end
-local T = Layout.T or {}
-local function tr(key, en) return T[key] or en end
-
 -- The settings page loads this file for the theme it is configuring and hands that theme to
 -- the factory at the foot of this file, so a copy of this theme under rfsuite.user/dashboard
 -- stores its values under its own key prefix instead of this one's. The literal is the
@@ -31,8 +24,8 @@ local SLOT_COUNT = 5
 
 -- The arm-state colour choice. common.lua resolves the value; the default is green and red.
 local ARM_COLORS = {
-  { label = tr("cfg_arm_signal", "Green and red"), value = "signal" },
-  { label = tr("cfg_arm_amber", "Amber and grey"), value = "amber" },
+  { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_signal)@", value = "signal" },
+  { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_amber)@", value = "amber" },
 }
 local ARM_COLORS_VALID = { amber = true, signal = true }
 local ARM_COLORS_DEFAULT = "signal"
@@ -43,10 +36,7 @@ local ARM_COLORS_DEFAULT = "signal"
 local SCHEMES = {}
 local SCHEMES_VALID = {}
 for i = 1, #Layout.SCHEMES do
-  -- The theme's label table is read directly here: the key is the scheme's id, so it is
-  -- assembled, and it is a key of that table rather than one the packager resolves.
-  SCHEMES[i] = { label = T["cfg_scheme_" .. Layout.SCHEMES[i].id] or Layout.SCHEMES[i].label,
-                 value = Layout.SCHEMES[i].id }
+  SCHEMES[i] = { label = Layout.SCHEMES[i].label, value = Layout.SCHEMES[i].id }
   SCHEMES_VALID[Layout.SCHEMES[i].id] = true
 end
 local SCHEME_DEFAULT = Layout.DEFAULT_SCHEME
@@ -96,8 +86,7 @@ local OPTIONS = {}
 for i = 1, #Layout.SOURCES do
   local src = Layout.SOURCES[i]
   VALID_IDS[src.id] = true
-  OPTIONS[i] = { label = (type(Layout.sourceLabel) == "function") and Layout.sourceLabel(src) or src.label,
-                 value = src.id }
+  OPTIONS[i] = { label = src.label, value = src.id }
 end
 
 local ui = {
@@ -247,11 +236,12 @@ function M.build(ctx)
   local cursorY = y
 
   if only == nil or only == "look" then
-    Controls.appendSectionHeader(children, x, cursorY, w, tr("cfg_look", "Look"), true, function() end)
+    Controls.appendSectionHeader(children, x, cursorY, w,
+      "@i18n(app.pages.settings_dashboard_settings.urban_page_look)@", true, function() end)
     cursorY = cursorY + Controls.SECTION_H
 
     cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-      tr("cfg_scheme", "Colour scheme"), SCHEMES, ui.config.scheme,
+      "@i18n(app.pages.settings_dashboard_settings.urban_scheme)@", SCHEMES, ui.config.scheme,
       function(value)
         if SCHEMES_VALID[value] then
           ui.config.scheme = value
@@ -259,7 +249,7 @@ function M.build(ctx)
       end)
 
     cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-      tr("cfg_arm_colors", "Arm state colours"), ARM_COLORS, ui.config.arm_colors,
+      "@i18n(app.pages.settings_dashboard_settings.urban_arm_colors)@", ARM_COLORS, ui.config.arm_colors,
       function(value)
         if ARM_COLORS_VALID[value] then
           ui.config.arm_colors = value
@@ -268,13 +258,14 @@ function M.build(ctx)
   end
 
   if only == nil or only == "rows" then
-    Controls.appendSectionHeader(children, x, cursorY, w, tr("cfg_rows", "Value Rows"), true, function() end)
+    Controls.appendSectionHeader(children, x, cursorY, w,
+      "@i18n(app.pages.settings_dashboard_settings.urban_page_rows)@", true, function() end)
     cursorY = cursorY + Controls.SECTION_H
 
     for i = 1, SLOT_COUNT do
       local key = "slot" .. i
       cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-        tr("cfg_row", "Row ") .. i, OPTIONS, ui.config[key],
+        "@i18n(app.pages.settings_dashboard_settings.urban_row)@ " .. i, OPTIONS, ui.config[key],
         function(value)
           if type(value) == "string" and VALID_IDS[value] then
             ui.config[key] = value
@@ -286,7 +277,8 @@ function M.build(ctx)
   end
 
   if only == nil or only == "topbar" then
-    Controls.appendSectionHeader(children, x, cursorY, w, tr("cfg_topbar", "Top Bar"), true, function() end)
+    Controls.appendSectionHeader(children, x, cursorY, w,
+      "@i18n(app.pages.settings_dashboard_settings.urban_page_topbar)@", true, function() end)
     cursorY = cursorY + Controls.SECTION_H
     cursorY = appendSettings(children, x, cursorY, w, "topbar")
   end

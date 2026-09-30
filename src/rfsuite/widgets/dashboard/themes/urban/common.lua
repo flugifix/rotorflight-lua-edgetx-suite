@@ -274,8 +274,8 @@ local SCHEMES = {
 -- the page because the palettes are here: the page cannot offer a scheme this table has no
 -- colours for, and applyScheme is never handed one the page never showed.
 M.SCHEMES = {
-  { id = "light", label = "Light" },
-  { id = "dark", label = "Dark" },
+  { id = "light", label = "@i18n(app.pages.settings_dashboard_settings.urban_scheme_light)@" },
+  { id = "dark", label = "@i18n(app.pages.settings_dashboard_settings.urban_scheme_dark)@" },
 }
 M.DEFAULT_SCHEME = "light"
 
