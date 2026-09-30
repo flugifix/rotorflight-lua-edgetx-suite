@@ -517,6 +517,18 @@ local function unitCelsius()
   return 0
 end
 
+-- A temperature as it is spoken: in Fahrenheit where Settings > Localization says so, the unit
+-- the dashboard shows it in. The reading comes in Celsius, as the flight controller reports it,
+-- and the thresholds are stored and compared in Celsius as well; only the spoken number is
+-- converted. Without the firmware's Fahrenheit unit it stays Celsius, so number and unit agree.
+local function spokenTemperature(self, celsius)
+  local localizations = self and self.preferences and self.preferences.localizations
+  if tonumber(localizations and localizations.temperature_unit) == 1 and type(UNIT_FAHRENHEIT) == "number" then
+    return math.floor(celsius * 9 / 5 + 32 + 0.5), UNIT_FAHRENHEIT
+  end
+  return math.floor(celsius + 0.5), unitCelsius()
+end
+
 local function unitVolts()
   if type(UNIT_VOLTS) == "number" then return UNIT_VOLTS end
   return 0
@@ -1561,7 +1573,8 @@ function Audio.process(self, opts)
       if alertMaySpeak(audioState, events, "mcu_temperature", now) then
         if tryPlayEventFile(audioState, now, "stat/alerts/mcu.wav", opts) then
           if type(playNumber) == "function" then
-            local ok, err = pcall(playNumber, math.floor(mcuTemp + 0.5), unitCelsius(), audio_volume)
+            local spoken, unit = spokenTemperature(self, mcuTemp)
+            local ok, err = pcall(playNumber, spoken, unit, audio_volume)
             if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
           end
           alertSpoken(audioState, events, "mcu_temperature", now)

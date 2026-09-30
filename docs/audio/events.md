@@ -92,6 +92,11 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 | Repeat | `esc_repeat` | Until cleared | Radio | How often either temperature alert speaks while the reading stays at or above its threshold -- see *Repeat and Haptic* below. |
 | Haptic | `esc_haptic` | On | Radio | Transmitter vibration alongside the ESC and MCU temperature alerts. |
 
+Both thresholds are stored and compared in °C, the unit the flight controller reports. On a radio
+set to Fahrenheit under [Localization](../pages/settings/localization.md) the page shows them in
+°F -- each step is still one degree Celsius, so they move in steps of about 2 °F -- and the MCU
+alert speaks the temperature in °F.
+
 ### 8. Link Quality
 
 | Setting | Switch / Key | Default | Scope | Description |
