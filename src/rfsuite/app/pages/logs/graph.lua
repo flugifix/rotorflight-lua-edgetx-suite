@@ -234,11 +234,13 @@ end
 -- The flight summary is accumulated by the SAME pass that builds the index, because both
 -- want every line of the file and reading it twice is the whole cost of opening a log.
 --
--- The column aliases, the value guards and the ARM-gated RPM branch below are the summary's
--- own rules and are kept exactly as they were, down to the last-match-wins resolution and
--- the fixed-index fallbacks -- so that moving the work does not also change what it reports.
--- Both of those are defects and neither is repaired here; repairing them changes values and
--- belongs in its own change, where the difference can be shown.
+-- A statistic is read only from a column whose header names it. A column the header does not
+-- name is not guessed from its position: a log from a model without Rotorflight telemetry has
+-- link statistics in the first columns, and a guess reported the link quality as throttle. Such
+-- a statistic is left out of the summary, which the page shows as unknown.
+--
+-- The column aliases, the value guards and the ARM-gated RPM branch below are otherwise the
+-- summary's own rules, down to the last-match-wins resolution.
 
 local STAT_KEYS = { "date", "time", "vbat", "curr", "capa", "hspd", "esct", "thr", "arm" }
 
@@ -287,13 +289,6 @@ local function prepareStats()
       if k then col[k] = c end              -- last match wins, as the summary has always done
     end
   end
-
-  -- The summary's own fallbacks: a missing column is taken to be one of the first five.
-  if not col.vbat then col.vbat = 1 end
-  if not col.curr then col.curr = 2 end
-  if not col.hspd then col.hspd = 3 end
-  if not col.esct then col.esct = 4 end
-  if not col.thr then col.thr = 5 end
 
   S.statCol = col
 
@@ -448,11 +443,16 @@ local function statsLine(line)
     if r and r > 0 then
       local cVal = f.curr and tonumber(f.curr) or 0
       local thrVal = f.thr and tonumber(f.thr) or 0
-      local armVal = f.arm and tonumber(f.arm) or 1
 
       -- ARM is a bit field: bit 0 is ARMED, bit 1 only records that the model was armed at
       -- some point, so it stays set after a disarm. lib/audio.lua tests the same bit.
-      local isArmed = (math.floor(armVal) % 2) == 1
+      -- A log without an ARM column gives the gate nothing to test, so the RPM figures then
+      -- rest on throttle and current alone.
+      local isArmed = true
+      if S.statCol.arm then
+        local armVal = f.arm and tonumber(f.arm) or 1
+        isArmed = (math.floor(armVal) % 2) == 1
+      end
       local isPowered = isArmed and ((thrVal >= 25) or (cVal >= 1.5))
       if isPowered then
         if r > st.rMax then st.rMax = r end
@@ -821,7 +821,8 @@ function G.isOpen() return S.path ~= nil end
 function G.isBusy() return S.phase ~= nil end
 function G.isTelemetry() return S.isTelemetry end
 
---- The flight summary, once the index pass has run, or nil if this log has no data rows.
+--- The flight summary, once the index pass has run, or nil if this log has no data rows. A
+--- field is nil where the log carries no column for it.
 --
 -- The derived fields are computed here rather than per line: a duration that cannot be read
 -- off the timestamps falls back to the sample count at the logger's nominal 10 Hz, and the
@@ -847,7 +848,7 @@ function G.getSummary()
   local consumedMah = st.lastCapa
     or ((st.cSum / (st.cSamples > 0 and st.cSamples or 1)) * (durationSec / 3600) * 1000)
 
-  return {
+  local out = {
     sampleCount = st.totalSamples,
     durationStr = durationStr,
     vStart = st.vStart or 0,
@@ -864,6 +865,18 @@ function G.getSummary()
     tMax = st.tMax or (st.tStart or 0),
     thrMax = st.thrMax
   }
+
+  -- A statistic whose column the header does not name is unknown, and is returned as nil
+  -- rather than as the zero it was accumulated from. A named column that never produced a
+  -- valid sample still reads 0, as it always has.
+  local col = S.statCol or {}
+  if not col.vbat then out.vStart, out.vMin, out.vMax, out.vEnd, out.vSag = nil, nil, nil, nil, nil end
+  if not col.curr then out.cPeak, out.cAvg = nil, nil end
+  if not col.curr and not col.capa then out.mah = nil end
+  if not col.hspd then out.rMax, out.rMin = nil, nil end
+  if not col.esct then out.tStart, out.tMax = nil, nil end
+  if not col.thr then out.thrMax = nil end
+  return out
 end
 function G.getError() return S.err end
 function G.getPhase() return S.phase end
