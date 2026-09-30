@@ -97,10 +97,10 @@ local ui = {
 local function loadConfig(prefs)
   if ui.loaded then return end
 
-  local modelPrefs = nil
-  if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" then
-    modelPrefs = _G.rfsuite.session.modelPreferences
-  end
+  local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
+  -- The per-model store is only addressable once the flight controller's id is known, so
+  -- the read is conditioned on it exactly as the save is.
+  local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
   local cfg = DashboardLib.getThemeConfig(prefs, THEME_PATH, THEME_DEFAULTS, modelPrefs)
   for i = 1, SLOT_COUNT do
@@ -138,7 +138,9 @@ end
 
 local function saveConfig(prefs)
   local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
-  local modelPrefs = session and session.modelPreferences
+  -- The per-model store can only be written once the flight controller's id is known, so
+  -- a theme configured without one is stored globally instead.
+  local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
   local values = {}
   for i = 1, SLOT_COUNT do
@@ -153,15 +155,20 @@ local function saveConfig(prefs)
   end
   DashboardLib.setThemeConfig(prefs, THEME_PATH, values, modelPrefs)
 
+  -- setThemeConfig has just taken these keys out of the global preferences, so where there is a
+  -- per-model store its write is the only one carrying the values, and its answer is what the
+  -- save reports. Without a store the global save carries them, and there is nothing to fail here.
   if session and session.mcu_id and modelPrefs then
     local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
     if type(loadMod) == "function" then
       local ok, MP = pcall(loadMod)
       if ok and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
-        MP.saveByMcuId(session.mcu_id, modelPrefs)
+        return MP.saveByMcuId(session.mcu_id, modelPrefs)
       end
     end
+    return false, "model_preferences"
   end
+  return true
 end
 
 local M = {}
@@ -177,8 +184,12 @@ function M.onReload(ctx)
 end
 
 function M.onSave(ctx)
-  saveConfig(ctx.preferences)
+  local modelOk, modelErr = saveConfig(ctx.preferences)
   local ok, err = ctx.savePreferences()
+  -- Saved only when both stores were written: the values themselves are in the per-model one.
+  if ok and not modelOk then
+    ok, err = false, modelErr
+  end
   if ok then
     if ctx and type(ctx.reportSave) == "function" then
       local i18n = ctx.i18n
