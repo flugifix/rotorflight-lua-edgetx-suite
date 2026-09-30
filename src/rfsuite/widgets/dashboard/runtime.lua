@@ -799,6 +799,87 @@ local function viewJobStep(self)
   return true
 end
 
+-- Whether a node list binds a press anywhere, nested children included.
+local function bindsPress(nodes)
+  for i = 1, #nodes do
+    local node = nodes[i]
+    if type(node) == "table" then
+      if node.press ~= nil then return true end
+      if type(node.children) == "table" and bindsPress(node.children) then return true end
+    end
+  end
+  return false
+end
+
+-- The widget's own menu control and way out, for a fullscreen theme that binds none of its own.
+local function appendFullscreenControls(self, nodes)
+  local Controls = requireModule("widgets/dashboard/fullscreen_controls.lua")
+  if type(Controls) == "table" and type(Controls.append) == "function" then
+    Controls.append(nodes, self)
+  end
+end
+
+--- Build the theme that has taken fullscreen, at the fullscreen zone: the base layer under the
+--- fullscreen views (widgets/dashboard/views.lua).
+---
+--- The chunking and the swap are sceneJobStep's, reached through it unchanged; this step adds what
+--- only the fullscreen build has, so the dashboard's own scene build carries no test for it. A
+--- free-form theme gets the views' `ctx` as the third argument of `build(zone, state, ctx)`,
+--- through which it binds its own controls. A tree that binds no press anywhere -- always the
+--- case for a declarative theme, whose boxes cannot take a tap -- gets the widget's two controls
+--- appended after the theme's nodes, so no fullscreen is without the menu and a way out.
+local function fsThemeJobStep(self)
+  local job = self._job
+  if job.swap then
+    appendFullscreenControls(self, job.build.nodes)
+    return sceneJobStep(self)
+  end
+  if job.build then return sceneJobStep(self) end
+
+  if not self.theme then return true end
+
+  if type(self.theme.build) == "function" then
+    local ctx = self._viewCtx
+    if ctx == nil then
+      local Views = viewsModule()
+      ctx = Views and Views.bind(self) or nil
+      self._viewCtx = ctx
+    end
+    local children = self.theme.build(self.zone, self.state, ctx)
+    if type(children) ~= "table" then return true end
+    if not bindsPress(children) then
+      -- Onto a copy: the table is the theme's, and a theme that hands back one it keeps would
+      -- otherwise carry the controls from then on -- into its zone tree as well.
+      local nodes = {}
+      for i = 1, #children do nodes[i] = children[i] end
+      children = nodes
+      appendFullscreenControls(self, children)
+    end
+    lvgl.clear()
+    lvgl.build(children)
+    self.built = true
+    self._lastChildCount = #children
+    logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #children)
+    return true
+  end
+
+  local theme = self.theme
+  if self.dashboardEngine
+    and (type(theme.layout) == "table" or type(theme.boxes) == "table" or type(theme.boxes) == "function") then
+    job.build = self.dashboardEngine.beginBuild(self.zone, self.state, theme)
+    return false
+  end
+
+  local empty = {}
+  appendFullscreenControls(self, empty)
+  lvgl.clear()
+  lvgl.build(empty)
+  self.built = true
+  self._lastChildCount = #empty
+  logGv("LVGL BUILD SUCCESS: themePath=%s, #children=%d", tostring(self.themePath), #empty)
+  return true
+end
+
 -- ---------------------------------------------------------------------------
 -- The battery prompt
 -- ---------------------------------------------------------------------------
@@ -867,6 +948,17 @@ local function batteryPickLoadStep(self)
   -- The registry is read whole off the card; GEMINI.md asks for an explicit collect after that.
   collectgarbage("collect")
   return true
+end
+
+--- An `rfsuite.batteryPick.open()` that is still waiting, taken by a fullscreen pass: the picker
+--- is opened explicitly, as the call itself does in fullscreen. Dropped instead where the model is
+--- armed or has disarmed since the call, because a pack chosen then would not be the one the call
+--- was about. Taken once either way.
+local function takeBatteryPickOpen(self, Views, pick)
+  local request = pick.openRequest
+  pick.openRequest = nil
+  if self.state.armed == true or request.disarmAt ~= self.state.lastDisarmAt then return end
+  if Views.top(self) ~= "battery_pick" then Views.navigate(self, "openView:battery_pick") end
 end
 
 --- Perform a pick: record it, and write the pack's battery profile when that is switched on.
@@ -1836,6 +1928,107 @@ local function loadThemeModuleForState(themePath, flightMode)
   return nil, stateKey, initTable
 end
 
+-- ---------------------------------------------------------------------------
+-- Theme mode: a theme that draws its own fullscreen
+-- ---------------------------------------------------------------------------
+--
+-- A theme opts in with `fullscreen = "theme"` in its init.lua. Fullscreen then builds that theme
+-- at the fullscreen size as the base layer under the fullscreen views (widgets/dashboard/views.lua),
+-- instead of opening on the quick menu, and the widget answers the page keys and RTN. A theme
+-- that says nothing is fullscreen exactly as before: the menu, and no key.
+--
+-- Everything here runs on a fullscreen pass or on a pass of a widget whose theme opted in, never
+-- on the zone pass of a theme that did not. The mode is therefore not taken where the theme is
+-- loaded -- a theme load is also what the arm and disarm edges pay for -- but on the first
+-- fullscreen pass after the theme on screen has changed, keyed on the theme module itself.
+
+-- Holds the theme module the mode was last taken for, without keeping a module that has since
+-- been replaced alive until the next fullscreen pass.
+local WEAK_VALUES = { __mode = "v" }
+
+--- Take the fullscreen mode for the theme now loaded, and reset what belongs to the previous one.
+--
+-- init.lua is read again for its `fullscreen` key rather than kept from the load, once per theme
+-- change and only on a fullscreen pass. The `ctx` handed to the previous theme is dropped with it,
+-- since the keys a theme bound belong to that theme.
+local function takeFullscreenMode(self)
+  local holder = self._fullscreenModeOf
+  if holder == nil then
+    holder = setmetatable({}, WEAK_VALUES)
+    self._fullscreenModeOf = holder
+  end
+  holder[1] = self.theme
+  local initTable = loadThemeInit(self.themePath)
+  local themeMode = type(initTable) == "table" and initTable.fullscreen == "theme"
+  self._viewBase = themeMode and "theme" or nil
+  self._viewCtx = nil
+  self._cachedFullscreenKey = nil
+end
+
+--- The render key of the theme as the base layer, under the same 2 Hz throttle as the zone key.
+---
+--- It is computed at once, not at the next tick of the throttle, on the pass the base layer comes
+--- back on screen -- entering fullscreen, or the last view closing over it. The key carries the
+--- zone size, so the key the last tick left was computed for the other surface, and waiting for
+--- the throttle would build the theme and then build it a second time within half a second. The
+--- cached key is dropped whenever something else is on screen, which is what marks the return.
+local function fullscreenThemeKey(self)
+  local key = self._cachedFullscreenKey
+  local now = nowSeconds()
+  if key == nil or (now - (self._lastUIRefresh or 0)) >= 0.5 then
+    self._lastUIRefresh = now
+    local themeKey = nil
+    local theme = self.theme
+    if type(theme.renderKey) == "function" then
+      themeKey = theme.renderKey(self.zone, self.state)
+    elseif self.dashboardEngine
+      and (type(theme.layout) == "table" or type(theme.boxes) == "table" or type(theme.boxes) == "function") then
+      themeKey = self.dashboardEngine.renderKey(self.state, self.boxSources)
+    end
+    -- Its own prefix, so the fullscreen tree and the zone tree can never share a key across the
+    -- transition: they are two trees at two sizes.
+    key = "fs_theme|" .. tostring(themeKey)
+    self._cachedFullscreenKey = key
+  end
+  return key
+end
+
+--- `widget.refresh` while a theme-mode fullscreen is up: the keys, then the pass itself.
+---
+--- EdgeTX hands a widget one event per call, and a pass that runs a job returns before the state
+--- half, so a key read there would be lost whenever it arrived during a build. This reads it
+--- ahead of that split instead, and the widget's own refresh is left as it is. It is put in place
+--- by the fullscreen pass of a theme-mode widget, and it puts the widget's own refresh back on the
+--- first pass without an event -- fullscreen has been left -- or once the theme no longer asks for
+--- fullscreen, so no zone pass and no widget without a base layer ever runs it.
+local function themeModeRefresh(self, event, touchState)
+  local ownRefresh = self._ownRefresh
+  if event == nil or self._viewBase == nil then
+    self.refresh = ownRefresh
+    self._cachedFullscreenKey = nil
+  elseif event ~= 0 and self.theme ~= nil and inflightMode(self, true) == nil
+    and (self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline") then
+    -- Not while the tuning surface is up, before a theme is loaded, or on the connect splash:
+    -- none of them is a view or the base layer.
+    local Views = viewsModule()
+    if Views then Views.key(self, event) end
+  end
+  return ownRefresh(self, event, touchState)
+end
+
+--- The fullscreen pass of a theme-mode widget: put the key route in place, and resolve the
+--- surface. Returns the view id and the render key, as views.resolve() does, with the base layer's
+--- key where no view is on top.
+local function resolveThemeMode(self, viewId, viewKey)
+  if self.refresh ~= themeModeRefresh then
+    self._ownRefresh = self.refresh
+    self.refresh = themeModeRefresh
+  end
+  if viewId == nil then return nil, fullscreenThemeKey(self) end
+  self._cachedFullscreenKey = nil
+  return viewId, viewKey
+end
+
 -- A stored path is a selection only if it names a theme: an empty select is written as the
 -- string "nil", and an absent one is empty or missing altogether.
 local function selectedThemePath(value)
@@ -2287,8 +2480,9 @@ function Runtime.new(zone, options)
     -- the dispatcher in widget.refresh.
     _job = nil,
     -- The fullscreen views, see widgets/dashboard/views.lua: the stack of open views, nil when
-    -- none is open; the base layer under it, which nothing sets yet; and the view the last
-    -- interactive pass resolved, which the job it enqueues is named after.
+    -- none is open; the base layer under it, `"theme"` for a theme that draws its own fullscreen
+    -- (taken on the fullscreen pass, see takeFullscreenMode); and the view the last interactive
+    -- pass resolved, which the job it enqueues is named after.
     _viewStack = nil,
     _viewBase = nil,
     _viewId = nil,
@@ -3048,7 +3242,8 @@ function Runtime.new(zone, options)
       -- discipline `Sink.step` documents: it throttles a caller repeating the same KIND, so a key
       -- that varied with the work -- or was left to default to a label carrying a counter -- would
       -- look like news on every call and the file would be rewritten as fast as the widget
-      -- renders. The label is a bounded set of five strings, not a formatted one, so nothing is
+      -- renders. The label is a bounded set of strings -- one per job kind, the fullscreen views'
+      -- ids and the fullscreen theme's `fs_theme` among them -- not a formatted one, so nothing is
       -- built on the pass either.
       local step = _G.rfsuite and _G.rfsuite.logStep
       if step then step("widget job: " .. tostring(self._job.kind), false, "wgt job") end
@@ -3196,7 +3391,16 @@ function Runtime.new(zone, options)
       -- a views module that could not be loaded shows no view and builds nothing.
       local Views = viewsModule()
       local viewId, viewKey = nil, nil
-      if Views then viewId, viewKey = Views.resolve(self) end
+      if Views then
+        -- A theme that draws its own fullscreen is the base layer under the views; see
+        -- takeFullscreenMode. Its mode is taken once per theme, here rather than at the load.
+        local modeOf = self._fullscreenModeOf
+        if modeOf == nil or modeOf[1] ~= self.theme then takeFullscreenMode(self) end
+        local pick = self.state.batteryPick
+        if pick.openRequest ~= nil then takeBatteryPickOpen(self, Views, pick) end
+        viewId, viewKey = Views.resolve(self)
+        if self._viewBase ~= nil then viewId, viewKey = resolveThemeMode(self, viewId, viewKey) end
+      end
       self._viewId = viewId
       nextRenderKey = viewKey
     else
@@ -3235,6 +3439,10 @@ function Runtime.new(zone, options)
         -- as it always has, and the menu keeps its pass class in bin/accounting/measure.lua.
         if self._viewId ~= nil then
           self._job = { kind = self._viewId, step = viewJobStep }
+        elseif self._viewBase ~= nil and nextRenderKey ~= nil then
+          -- The base layer: the theme at the fullscreen size. Only where the views module was
+          -- there to say that no view is on top, which is what a key of its own means.
+          self._job = { kind = "fs_theme", step = fsThemeJobStep, fullscreen = true }
         end
       else
         self._job = { kind = "scene", step = sceneJobStep }
@@ -3301,6 +3509,12 @@ function Runtime.new(zone, options)
       open = function()
         local Views = viewsModule()
         if Views then Views.navigate(widget, "openView:battery_pick") end
+        -- and kept as a request of its own for the next fullscreen pass, because the stack the
+        -- line above writes to is fullscreen state: the next pass without an event drops it, and
+        -- a call made while the widget is in its zone -- the only place a theme runs -- would
+        -- never reach the screen. The request is stamped with the last disarm, so it lapses once
+        -- the model has flown since; it lapses while armed, and with the table on a reconnect.
+        widget.state.batteryPick.openRequest = { disarmAt = widget.state.lastDisarmAt }
         widget.built = false
         widget.renderKey = nil
       end

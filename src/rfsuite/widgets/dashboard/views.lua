@@ -6,10 +6,11 @@
 -- widget, `widget._viewStack`, lying above a base layer:
 --
 --   * the top of the stack is what fullscreen shows;
---   * with the stack empty the base layer shows. `widget._viewBase` is the hook for it, and it
---     is nil: nothing in the runtime sets it yet. It is where a later theme mode that draws its
---     own fullscreen puts itself. With no base layer and an empty stack the default view -- the
---     quick menu -- is shown, which is what fullscreen has always shown on entry.
+--   * with the stack empty the base layer shows. `widget._viewBase` names it: `"theme"` while the
+--     active theme has asked for fullscreen (`fullscreen = "theme"` in its init.lua), which the
+--     runtime then builds at the fullscreen size, and nil otherwise. With no base layer and an
+--     empty stack the default view -- the quick menu -- is shown, which is what fullscreen has
+--     always shown on entry.
 --
 -- The stack is one field, so that the pass which arrives without an event -- fullscreen has
 -- been left, possibly by a long press on RTN that Lua never saw -- drops all of it in one
@@ -107,9 +108,15 @@ end
 
 -- The battery prompt is waiting for an answer. Raised by the runtime's registry load once per
 -- connection; cleared by a pick, by closing the picker, by arming and by a reconnect.
+--
+-- A pick is answered in two steps: the press records `_batteryPickRequest`, and `pending` falls
+-- only when the runtime's apply step has run in a free job slot, some passes later. In between
+-- the prompt counts as answered, or a surface that stays up after the press -- the theme under
+-- the picker -- would see the picker open again at once. The test is against nil because
+-- `false` is a request too: it is the "no battery" answer.
 function CONDITIONS.batteryPickPending(widget)
   local pick = widget.state and widget.state.batteryPick or nil
-  return type(pick) == "table" and pick.pending == true
+  return type(pick) == "table" and pick.pending == true and widget._batteryPickRequest == nil
 end
 
 --- Whether the named condition holds for this widget. Unknown names, nil included, are false.
@@ -287,9 +294,19 @@ function M.parseAction(after)
 end
 
 -- Whatever is built is dropped, so the next interactive pass builds the view now on top.
+--
+-- Over a base layer a build can still be under way for the surface that was on top until now:
+-- the theme is built over several passes, and a key can arrive while a view's build is queued.
+-- Left running it would put that surface up once more before the next pass notices the change,
+-- so a queued fullscreen build is dropped with the rest. Without a base layer every action but
+-- `openView` leaves fullscreen, and the job slot is left exactly as it was.
 local function reset(widget)
   widget.built = false
   widget.renderKey = nil
+  if widget._viewBase ~= nil then
+    local job = widget._job
+    if job ~= nil and (job.fullscreen or M.find(widget, job.kind) ~= nil) then widget._job = nil end
+  end
 end
 
 local function exitFullscreen(widget)
@@ -337,11 +354,104 @@ function M.navigate(widget, after)
   end
 end
 
---- The actions, bound to one widget, for code that holds no widget of its own to pass:
---- `ctx.action(after)` performs `after` exactly as `navigate(widget, after)` does.
+-- ---------------------------------------------------------------------------
+-- Keys
+-- ---------------------------------------------------------------------------
+
+-- The firmware's names for the three keys, read when a key arrives rather than when this file
+-- loads, and compared only where the radio defines them. The values differ between targets
+-- (radio/util/hw_defs/lua_keys.jinja maps each onto the release edge of whatever key the radio
+-- has), so no number is written down here. Only the release edges are answered: the press edge
+-- of RTN is also what a long press delivers before the firmware leaves fullscreen on its own.
+local function keyName(event)
+  local nextPage, prevPage, exit = _G.EVT_VIRTUAL_NEXT_PAGE, _G.EVT_VIRTUAL_PREV_PAGE, _G.EVT_VIRTUAL_EXIT
+  if nextPage ~= nil and event == nextPage then return "pageDown" end
+  if prevPage ~= nil and event == prevPage then return "pageUp" end
+  if exit ~= nil and event == exit then return "exit" end
+  return nil
+end
+
+--- Answer a key, for a widget whose fullscreen has a base layer. Returns true when the key was
+--- one of the three.
+--
+--   PAGE down / up  with the quick menu on top: close it. With any other view on top: open the
+--                   menu over it. With the base layer showing: the base layer's own binding
+--                   for that key (`keys.pageDown` / `keys.pageUp` on its ctx), else the menu.
+--   RTN             with a view on top: that view's `back(widget)` where its module has one,
+--                   else `closeView`. With the base layer showing: its `keys.exit`, else
+--                   nothing -- a long press on RTN still leaves fullscreen, in the firmware.
+--
+-- Both page keys do the same, because some radios have only one of them. The runtime calls this
+-- only for a widget with a base layer, and not while the in-flight tuning surface, the connect
+-- splash or no theme at all is on screen; without a base layer the widget answers no key.
+function M.key(widget, event)
+  local name = keyName(event)
+  if name == nil then return false end
+  local top = M.top(widget)
+  local after
+  if top == nil then
+    local ctx = widget._viewCtx
+    local keys = ctx and ctx.keys
+    after = type(keys) == "table" and keys[name] or nil
+    if after == nil and name ~= "exit" then after = "openView:" .. M.DEFAULT_VIEW end
+  elseif name == "exit" then
+    local entry = M.find(widget, top)
+    local view = entry and entry.loaded
+    if view == nil and entry ~= nil then
+      view = requireModule(entry.module)
+      if type(view) == "table" then entry.loaded = view end
+    end
+    if type(view) == "table" and type(view.back) == "function" then
+      view.back(widget)
+      return true
+    end
+    after = "closeView"
+  elseif top == M.DEFAULT_VIEW then
+    after = "closeView"
+  else
+    after = "openView:" .. M.DEFAULT_VIEW
+  end
+  M.navigate(widget, after)
+  return true
+end
+
+-- ---------------------------------------------------------------------------
+-- The context a theme is handed
+-- ---------------------------------------------------------------------------
+
+--- The actions and building blocks, bound to one widget, for code that holds no widget of its
+--- own to pass -- above all a theme that draws its own fullscreen, which receives this as the
+--- third argument of its `build(zone, state, ctx)`.
+--
+--   ctx.action(after)          performs `after` exactly as `navigate(widget, after)` does
+--   ctx.keys                   a table the theme fills: `exit`, `pageDown`, `pageUp`, each an
+--                              action; read by `key()` while the base layer shows
+--   ctx.condition(name)        `condition(name, widget)`
+--   ctx.entries()              the quick menu's entries, `fullscreen_menu.entries(widget)`
+--   ctx.menu(children, list)   the quick menu's builder, appending to `children`; `list`
+--                              defaults to the menu's own entries
+--
+-- The menu module is loaded on the first call that needs it, not here.
 function M.bind(widget)
+  local menu = nil
+  local function menuModule()
+    if menu == nil then menu = requireModule("widgets/dashboard/fullscreen_menu.lua") end
+    return menu
+  end
   return {
     action = function(after) M.navigate(widget, after) end,
+    keys = {},
+    condition = function(name) return M.condition(name, widget) end,
+    entries = function()
+      local m = menuModule()
+      if type(m) == "table" and type(m.entries) == "function" then return m.entries(widget) end
+      return {}
+    end,
+    menu = function(children, entries)
+      local m = menuModule()
+      if type(m) == "table" and type(m.build) == "function" then m.build(children, widget, entries) end
+      return children
+    end,
   }
 end
 

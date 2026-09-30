@@ -14,6 +14,11 @@ Put the *RFSuite* widget full screen the way EdgeTX puts any widget full screen 
 own context menu on the screen it sits on, then *Full screen*. The quick menu is what full
 screen shows; there is no other way in and no way for the widget to open it by itself.
 
+A dashboard theme can take full screen for itself instead (a theme author's choice, see
+[dashboard themes](../developer/dashboard-themes.md#a-theme-that-takes-fullscreen)). Full screen
+then shows the theme, and the quick menu opens over it from the theme's menu control or with
+the page keys.
+
 One exception is the [in-flight tuning overlay](inflight-tuning.md): while the interlock
 switch has brought it up, it takes full screen instead and the quick menu is not drawn.
 
@@ -29,7 +34,7 @@ EdgeTX gives every script, so it looks the same whichever dashboard theme is sel
 
 | Entry | What it does |
 | --- | --- |
-| **ERASE BLACKBOX** | Erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now. Closes the menu and leaves full screen. |
+| **ERASE BLACKBOX** | Erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now. Closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). |
 | **IN-FLIGHT TUNING** | Opens the in-flight tuning surface at full size. It stays full screen rather than closing. Only listed while the feature is switched on — see below. |
 | **BATTERY** | Brings the battery prompt back, with this model's packs. It stays full screen, the picker taking the menu's place. Only listed while the battery registry has a pack for this model and the model is disarmed. |
 | **BATTERY PROFILE** | A grid of the model's battery profiles; pressing one makes it the profile in force. |
@@ -51,7 +56,8 @@ sending it keeps the last profile that was read, and profile 1 until one has bee
 
 Pressing a capacity sets that battery profile on the flight controller and writes the setting
 to the board's own storage, which is what makes the board apply the change and tell the rest of
-the radio about it. The menu then closes and leaves full screen.
+the radio about it. The menu then closes and leaves full screen, or, over a theme that takes
+full screen, shows the theme again.
 
 The grid is two buttons wide, one wide on a narrow widget zone, and three wide on a screen at
 least 400 pixels across when there are more than four profiles, so all six still fit below the
@@ -61,8 +67,15 @@ fit is not drawn.
 ## Closing it
 
 The **X** in the header closes the menu and leaves full screen. So does every entry except
-in-flight tuning and BATTERY, which swap one full-screen surface for another. EdgeTX's own way
-out of full screen — a long press on the return key — works as it does anywhere else.
+in-flight tuning and BATTERY, which swap one full-screen surface for another. The battery
+picker's packs, *NO BATTERY* and its own X leave full screen as well, and the next entry into
+full screen shows the quick menu, with BATTERY to bring the picker back. EdgeTX's own way out of
+full screen — a long press on the return key — works as it does anywhere else.
+
+Over a theme that takes full screen, the same X, entries and picker answers close what is open
+and show the theme again instead; the theme's own close control, or a long press on the return
+key, leaves full screen. On a radio with page keys, PAGE opens and closes the menu there, and a
+short press on the return key closes the menu or the picker.
 
 ## For contributors
 

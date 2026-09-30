@@ -28,7 +28,8 @@ end
 local Views = requireModule("widgets/dashboard/views.lua")
 
 -- What follows each press. A pick and the close box both finish the interaction: the prompt has
--- been answered or closed, so fullscreen is left, as it always has been.
+-- been answered or closed. Without a base layer that leaves fullscreen, as it always has; over a
+-- theme that draws its own fullscreen it puts the theme back.
 local AFTER_PICK = "done"
 local AFTER_CLOSE = "done"
 
@@ -56,6 +57,14 @@ local function dismiss(widget)
     pick.dismissed = true
     pick.pending = false
   end
+end
+
+--- What RTN does while the picker is on top: exactly what its close box does. A plain
+--- `closeView` would leave `pending` standing, and the picker's own condition would open it
+--- again on the next pass.
+function M.back(widget)
+  dismiss(widget)
+  navigate(widget, AFTER_CLOSE)
 end
 
 function M.build(children, widget)

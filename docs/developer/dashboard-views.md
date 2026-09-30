@@ -11,11 +11,11 @@ that screen is pressed. Both are decided in one module,
 `src/rfsuite/widgets/dashboard/views.lua`: a list of views, a small stack of the ones that are
 open, and one function that performs whatever follows a press.
 
-**A pilot sees no change from this.** Full screen shows the battery prompt while it is waiting
-for an answer and the [quick menu](../dashboard/quick-menu.md) otherwise, every button does and
-leaves exactly what it did before, and the menu and the picker draw the same screens node for
-node. What changed is where those decisions are made: one exit instead of five, one build step
-instead of two identical ones, and one stack instead of two flags.
+With a theme that says nothing about fullscreen, full screen shows the battery prompt while it
+is waiting for an answer and the [quick menu](../dashboard/quick-menu.md) otherwise, and every
+button leaves full screen where it always has. A theme can instead take full screen itself
+([dashboard themes](dashboard-themes.md#a-theme-that-takes-fullscreen)); it is then the base
+layer described below, and the menu and the picker open over it.
 
 ## Where to find it
 
@@ -25,6 +25,7 @@ instead of two identical ones, and one stack instead of two flags.
 | `widgets/dashboard/runtime.lua` | The fullscreen branch of `widget.refresh`, which asks `views.resolve()` which view to show, and `viewJobStep`, which builds it. |
 | `widgets/dashboard/fullscreen_menu.lua` | The quick menu view. |
 | `widgets/dashboard/battery_pick_menu.lua` | The battery picker view. |
+| `widgets/dashboard/fullscreen_controls.lua` | The menu glyph and the X the widget draws over a fullscreen theme that binds no control of its own. |
 
 `views.lua` is loaded on the first fullscreen pass and never on a zone pass, so a dashboard
 that is never put full screen does not pay for it. The one exception is a call to
@@ -39,7 +40,7 @@ A view is a registry entry and a module:
 | Key | What it says |
 | --- | --- |
 | `id` | The view's name. It is the render key, and the job that builds the view is named after it: the widget's job log line reads `menu` and `battery_pick`, and the quick menu's job keeps its `menu` pass class in `bin/accounting/measure.lua`. |
-| `module` | The file that draws it. The module has `build(children, widget)`, which appends the whole fullscreen tree, and may have `renderKey(widget)`; its result is appended to the id (`menu|<key>`), and the view is rebuilt whenever it changes. |
+| `module` | The file that draws it. The module has `build(children, widget)`, which appends the whole fullscreen tree, and may have `renderKey(widget)`; its result is appended to the id (`menu|<key>`), and the view is rebuilt whenever it changes. It may also have `back(widget)`, what a short press on RTN does while the view is on top (see [Keys](#keys)). |
 | `openWhen` | Optional. The name of a condition that opens the view on its own — see below. |
 
 The shipped registry, in this order:
@@ -69,11 +70,16 @@ entry is `{ id = <id>, auto = true | nil }`.
   on RTN that Lua never sees — drops the whole stack in one assignment. So does a reconnect.
 
 The stack lies above a **base layer**, `widget._viewBase`. When the stack is empty the base
-layer is what full screen shows. Nothing in the widget sets it yet: it is the hook a later
-theme mode that draws its own full screen will use, and that mode also brings what draws it:
-`views.resolve()` reports the base layer as `nil`, and the runtime builds nothing for it yet.
-**With no base layer, an empty stack shows the quick menu**, which is what full screen has
-always shown on entry.
+layer is what full screen shows. It is `"theme"` while the theme on screen has `fullscreen =
+"theme"` in its `init.lua`, and `nil` otherwise. The runtime reads that key on the first
+fullscreen pass after the theme has changed rather than when the theme loads, so a theme load
+costs what it did. With a base layer and an empty stack, `views.resolve()` reports no view, and
+the runtime builds the theme at the fullscreen size in a job of its own, `fs_theme`, keyed
+`fs_theme|<the theme's render key>`. **With no base layer, an empty stack shows the quick
+menu**, which is what full screen has always shown on entry.
+
+Over a base layer, an action that changes the stack also drops a fullscreen build still queued
+for the surface that was on top, so the old surface is not put up once more before the new one.
 
 ## Views that open themselves
 
@@ -99,7 +105,13 @@ Such a view stays open when its condition falls, until it is closed.
 **The rule for a condition that opens a view: whoever sets it clears it when the view is
 answered or closed.** A view whose condition still holds when it is closed opens again on the
 very next pass. The battery prompt follows it: its registry load raises `pending`, and a pick,
-the picker's close box, `rfsuite.batteryPick.dismiss()`, arming and a reconnect all clear it.
+the picker's close box, `rfsuite.batteryPick.dismiss()`, arming and a reconnect all clear it. A
+pick clears it in two steps — the press records the request, and `pending` falls when the
+runtime has applied it a few passes later — so `batteryPickPending` is false as soon as a
+request is recorded; over a base layer the picker would otherwise open again at once.
+
+The menu opened over the picker with a page key lies above it; the picker is not raised over it.
+Closing the menu brings the prompt back.
 
 ## Conditions
 
@@ -111,7 +123,7 @@ view, which is what an unresolvable condition does in `app/menu_registry.lua` as
 | --- | --- |
 | `previewInflightTuning` | the in-flight tuning preview switch is on and the widget carries the overlay's state for this model |
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
-| `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) |
+| `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
 
 ## What follows a press
 
@@ -123,7 +135,7 @@ string:
 | --- | --- |
 | `openView:<id>` | Open that view, or return to it where it is already on the stack. |
 | `closeView` | Close the view on top; what is under it shows again. |
-| `done` | The interaction is finished: the stack is emptied. With no base layer that leaves full screen; with one, the base layer shows again. |
+| `done` | The interaction is finished: the stack is emptied. With no base layer that leaves full screen; with one, the base layer — the theme — shows again. |
 | `exitFullscreen` | Empty the stack and leave full screen, base layer or not. |
 | `none` | Nothing. The press did whatever needed doing itself. |
 
@@ -142,9 +154,37 @@ built, so the next pass builds the view now on top. The shipped buttons:
 | Quick menu | the header's X | `done` |
 | Picker | each pack, and NO BATTERY | `done` |
 | Picker | the header's X | `done` |
+| Over a fullscreen theme that binds no control | the menu glyph | `openView:menu` |
+| Over a fullscreen theme that binds no control | the X | `exitFullscreen` |
 
-`views.bind(widget)` returns the actions bound to one widget, for code that has no widget of
-its own to pass: `ctx.action(after)` performs `after` exactly as `navigate(widget, after)` does.
+So the picker's answers and its X leave full screen where there is no base layer, as they always
+have, and the quick menu, with its BATTERY button, is what the next entry into full screen shows.
+Over a fullscreen theme the same `done` puts the theme back instead.
+
+`views.bind(widget)` returns the actions and building blocks bound to one widget, for code that
+has no widget of its own to pass. It is the `ctx` a fullscreen theme's build receives:
+`ctx.action(after)` performs `after` exactly as `navigate(widget, after)` does, and `ctx.keys`,
+`ctx.condition`, `ctx.entries` and `ctx.menu` are described in
+[dashboard themes](dashboard-themes.md#ctx).
+
+## Keys
+
+Only a widget with a base layer answers keys; without one the widget answers none, as before.
+`views.key(widget, event)` is called for every event of a fullscreen pass that is not idle,
+ahead of the job the pass may run, so a key is not lost to a build. It acts on the release edge
+of three keys, read from the firmware's `EVT_VIRTUAL_NEXT_PAGE`, `EVT_VIRTUAL_PREV_PAGE` and
+`EVT_VIRTUAL_EXIT` where the radio defines them, and on nothing else:
+
+| Key | A view on top | The base layer showing |
+| --- | --- | --- |
+| PAGE down / up | the menu on top: `closeView`; any other view: `openView:menu` | the theme's `ctx.keys.pageDown` / `pageUp`, else `openView:menu` |
+| RTN | the view module's `back(widget)` if it has one, else `closeView` | the theme's `ctx.keys.exit`, else nothing |
+
+The picker's `back` is its close box — the prompt is dismissed and `done` follows — because a
+plain `closeView` would leave `pending` standing and the picker would open again on the next
+pass. A long press on RTN leaves full screen in the firmware; Lua sees only its press edge,
+which is not answered. Keys are not answered while the in-flight tuning surface, the connect
+splash or no theme is on screen.
 
 ## `rfsuite.batteryPick`
 
@@ -153,7 +193,7 @@ The handle the widget publishes for a theme or another widget
 
 | Call | What it does here |
 | --- | --- |
-| `open()` | `openView:battery_pick`. |
+| `open()` | `openView:battery_pick`, and a request of its own on `state.batteryPick`, stamped with the last disarm. The stack is fullscreen state and is dropped by the next pass without an event, so a call made in the zone would otherwise never reach the screen; the next fullscreen pass takes the request as an explicit `openView:battery_pick`. It lapses where the model is armed or has disarmed since the call, and a reconnect drops it with the table. |
 | `dismiss()` | Ends the prompt for this connection (`dismissed`, and `pending` cleared), then `closeView` if the picker is the view on top. |
 | `select(id)` | Records the pick, as before; it opens and closes nothing. |
 
