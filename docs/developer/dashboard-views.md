@@ -170,6 +170,34 @@ view, which is what an unresolvable condition does in `app/menu_registry.lua` as
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
 | `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
 
+### What else a theme's view may open on
+
+A view a theme registers may give `openWhen` in four forms (`views.opens()`):
+
+| Form | True while |
+| --- | --- |
+| `"name"` | the named condition above holds |
+| `{ switch = "SA", pos = "up" }` | the switch is in that position: `"up"`, `"mid"` or `"down"` |
+| `{ switch = "L01" }` | the logical switch is on |
+| `{ switch = { pref = "<key>", default = "SA" }, pos = "down" }` | the switch the theme's own settings name under `<key>` (`state.themeConfig`) is in that position; `default` where the settings name none |
+| `function(state) ... end` | the theme's function returns anything but `nil` or `false` |
+
+**A switch is named the way the radio's menus name it**, and the firmware looks the position up
+by that name (`getSwitchIndex`): the switch followed by an arrow for up and down or a dash for
+the middle, which the widget appends for `pos`, and a logical switch as `L` and two digits
+(`L1` is read as `L01`). A setting that holds a **number** rather than a name is a switch
+position as the radio's own switch picker stores it — the in-flight tuning interlock is kept that
+way — and is read as it is, whatever `pos` says; `0` is no switch, the picker's "nothing chosen
+yet", and the view then does not open on one. The position is looked up once, when the theme
+is loaded and again when its settings are saved, and a pass reads one value (`getSwitchValue`).
+A name the radio does not know never opens the view.
+
+**A condition function** is called with the widget state and nothing else, on the passes where
+its view can be shown — every fullscreen pass for a fullscreen view — and under `pcall`: one that
+raises counts as false and says so in one log line per theme and view, not on every pass. It
+runs on every one of those passes, so it reads what the state already holds and computes as
+little as a box's value function does.
+
 ## What follows a press
 
 A press does its work and nothing else. What happens next is data: an `after` action on the

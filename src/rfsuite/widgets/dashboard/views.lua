@@ -133,6 +133,108 @@ function M.condition(name, widget)
 end
 
 -- ---------------------------------------------------------------------------
+-- What opens a view
+-- ---------------------------------------------------------------------------
+
+-- A view's `openWhen` is one of:
+--
+--   "name"                                  a condition from the list above
+--   { switch = "SA", pos = "up" }           a switch position: "up", "mid" or "down"
+--   { switch = "L01" }                      a logical switch, true while it is on
+--   { switch = { pref = "key", default = "SA" }, pos = "down" }
+--                                           the switch the theme's own settings name under
+--                                           `key` (state.themeConfig), `default` where they
+--                                           name none
+--   function(state) ... end                 a theme's own test of the widget state
+--
+-- A switch is named as the radio's menus name it, and the firmware looks the position up by that
+-- name (getSwitchIndex, radio/src/strhelpers.cpp): the switch, then an arrow for up and down or
+-- a dash for the middle (getSwitchPositionName, CHAR_UP / CHAR_DOWN in
+-- radio/src/translations/untranslated.h), and a logical switch as L and two digits. A setting
+-- that holds a number rather than a name is a stored switch POSITION -- what the radio's own
+-- switch picker hands over, and what the in-flight tuning interlock stores -- and is read as it is.
+local POSITION_SUFFIX = { up = "\194\130", mid = "-", down = "\194\131" }
+
+-- A firmware function, or nil where this radio does not have it.
+local function callGlobal(name, ...)
+  local fn = _G[name]
+  if type(fn) ~= "function" then return nil end
+  return fn(...)
+end
+
+-- The switch position an `openWhen` names, as the index getSwitchValue takes; nil where it names
+-- none this radio has.
+--
+-- Looked up once and kept on the registry entry, against the theme settings it was looked up
+-- in: a theme load makes the registry anew, and saving the theme's settings replaces
+-- `state.themeConfig`, so either one looks it up again, and every other pass reads one value.
+local function switchIndex(entry, widget)
+  local config = widget.state and widget.state.themeConfig or nil
+  if entry.switchResolved and entry.switchFor == config then return entry.switchIndex end
+  entry.switchResolved = true
+  entry.switchFor = config
+
+  local spec = entry.openWhen
+  local name = spec.switch
+  if type(name) == "table" then
+    local setting = (type(config) == "table" and name.pref ~= nil) and config[name.pref] or nil
+    if setting == nil or setting == "" then setting = name.default end
+    name = setting
+  end
+
+  local index = nil
+  local position = tonumber(name)
+  if position ~= nil then
+    if position ~= 0 then index = position end
+  elseif type(name) == "string" and name ~= "" then
+    local logical = string.match(name, "^[Ll](%d+)$")
+    local lookup = nil
+    if logical ~= nil then
+      lookup = string.format("L%02d", tonumber(logical))
+    elseif spec.pos == nil then
+      lookup = name
+    elseif POSITION_SUFFIX[spec.pos] ~= nil then
+      lookup = name .. POSITION_SUFFIX[spec.pos]
+    end
+    if lookup ~= nil then index = callGlobal("getSwitchIndex", lookup) end
+  end
+  entry.switchIndex = index
+  return index
+end
+
+--- Whether the view's `openWhen` holds on this pass.
+--
+-- A theme's function is called with the widget state and nothing else, under pcall: one that
+-- raises answers false, and says so in one log line per theme and view for the life of the
+-- widget, rather than on every pass it keeps raising.
+function M.opens(entry, widget)
+  local spec = entry.openWhen
+  local kind = type(spec)
+  if kind == "string" then return M.condition(spec, widget) end
+  if kind == "table" then
+    local index = switchIndex(entry, widget)
+    if index == nil then return false end
+    return callGlobal("getSwitchValue", index) == true
+  end
+  if kind == "function" then
+    local ok, result = pcall(spec, widget.state)
+    if ok then return result ~= nil and result ~= false end
+    local faults = widget._viewFaults
+    if faults == nil then
+      faults = {}
+      widget._viewFaults = faults
+    end
+    local key = tostring(widget.themePath) .. "|" .. tostring(entry.id)
+    if not faults[key] then
+      faults[key] = true
+      viewLog("view '" .. tostring(entry.id) .. "': its openWhen raised and counts as false: " .. tostring(result))
+    end
+    return false
+  end
+  return false
+end
+
+-- ---------------------------------------------------------------------------
 -- The registry
 -- ---------------------------------------------------------------------------
 
@@ -363,7 +465,7 @@ function M.resolve(widget)
   for i = 1, #registry do
     local entry = registry[i]
     if entry.openWhen ~= nil and not entry.failed then
-      if M.condition(entry.openWhen, widget) then
+      if M.opens(entry, widget) then
         if not held[entry.id] then
           risen = risen or {}
           risen[#risen + 1] = entry.id
