@@ -94,16 +94,27 @@ end
 local fieldInfoCache = {}
 local valueMisses = {}
 
--- `now` is the caller's clock reading. Sensors.getValue reads the clock once and hands it to every
--- candidate it tries, instead of each candidate reading it again: a search after Sensors.reset()
--- tries every name on a source's list, and the clock is only compared here against a 1 s miss
--- window.
+-- The clock is only needed here while a miss is on record: it is compared against that record's
+-- 1 s window, and it stamps a new miss. A name that answers, which is the steady case for every
+-- adopted source, is read without it, and its record is cleared once it answers again.
+--
+-- `now` is the caller's clock reading, or nil where the caller has not needed one yet. A search
+-- after Sensors.reset() tries every name on a source's list, so Sensors.getValue reads the clock
+-- once for the search and hands it to every candidate. A miss of the name returns the reading it
+-- used as a second value, so a caller that goes on to search does not read the clock a second
+-- time. That reading is taken when the miss is found rather than when the call began, which
+-- differs only where the 10 ms clock ticks inside the call; the waits measured from it (this
+-- window, and the search gate in Sensors.getValue) can then end one call earlier or later.
 local function readTelemetryValue(name, now)
   if type(name) ~= "string" then return nil end
   local getV = _G.getValue
   if type(getV) ~= "function" then return nil end
 
-  if now - (valueMisses[name] or 0) < 1.0 then return nil end
+  local missedAt = valueMisses[name]
+  if missedAt then
+    now = now or nowSeconds()
+    if now - missedAt < 1.0 then return nil, now end
+  end
 
   local getFInfo = _G.getFieldInfo
   if type(getFInfo) == "function" then
@@ -113,19 +124,22 @@ local function readTelemetryValue(name, now)
       if type(info) == "table" and info.id ~= nil then
         fieldInfoCache[name] = info
       else
+        now = now or nowSeconds()
         valueMisses[name] = now
-        return nil
+        return nil, now
       end
     end
   end
 
   local ok, value = pcall(getV, name)
   if ok and type(value) == "number" then
+    if missedAt then valueMisses[name] = nil end
     return value
   end
 
+  now = now or nowSeconds()
   valueMisses[name] = now
-  return nil
+  return nil, now
 end
 
 -- getValue() answers 0 for a sensor the model still carries but the radio does not send, and 0
@@ -562,14 +576,17 @@ function Sensors.getValue(source)
     return nil
   end
 
-  -- One clock reading for the whole call, handed to every candidate below.
-  local now = nowSeconds()
+  -- At most one clock reading for the whole call, taken where it is first needed and handed to
+  -- every candidate after that. A source adopted on its primary name that answers needs none
+  -- while no miss is on record for that name.
+  local now
 
   local activePath = Sensors.active_paths and Sensors.active_paths[source]
   if activePath then
     local paths = Sensors.search_paths[source]
     local primaryPath = paths and paths[1]
     if primaryPath and activePath ~= primaryPath then
+      now = nowSeconds()
       Sensors.probe_times = Sensors.probe_times or {}
       local lastProbe = Sensors.probe_times[source] or 0
       if now - lastProbe >= 3.0 then
@@ -584,11 +601,14 @@ function Sensors.getValue(source)
       end
     end
 
-    local val = readTelemetryValue(activePath, now)
+    local val, readAt = readTelemetryValue(activePath, now)
     if type(val) == "number" then
       if debugWanted() then debugLog("telemetry-hit-cached:" .. source, "hit " .. activePath .. " = " .. tostring(val)) end
       return val
     end
+    now = now or readAt or nowSeconds()
+  else
+    now = nowSeconds()
   end
 
   Sensors.search_misses = Sensors.search_misses or {}
