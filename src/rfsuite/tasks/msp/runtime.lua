@@ -912,15 +912,23 @@ end
 --
 -- This is the queue half of tick() and nothing else -- no link detection, no arm handling, no
 -- version re-negotiation and no enqueueing of its own -- so running it a second time in a pass
--- cannot move any state that tick() owns. It refuses on exactly the conditions under which
--- tick() would not have reached processQueue either, and it never initialises the runtime: a
--- host that has not ticked yet has nothing queued to pump.
+-- cannot move any state that tick() owns. It refuses where tick() would not have reached
+-- processQueue either, and while armed, where tick() reaches it only with a queue it has just
+-- cleared. It never initialises the runtime: a host that has not ticked yet has nothing queued
+-- to pump.
+--
+-- A queue it finds idle -- the common case once the connect chain is done -- ends the turn
+-- without a publish. processQueue would do nothing, and publish() would copy the values the last
+-- publish copied: while the link is up, everything in this file that changes them publishes
+-- itself, writes the session itself, or runs before tick()'s own publish. That is not a
+-- refusal -- the turn was there, nothing was on it -- so it returns true.
 function Runtime.pump()
   if not state.initialized or not state.available then return false end
   if not state.queue or type(state.queue.processQueue) ~= "function" then return false end
   if state.lastConnected ~= true then return false end
   if state.lastArmed == true then return false end
   if state.unsupportedApi then return false end
+  if type(state.queue.isProcessed) == "function" and state.queue:isProcessed() then return true end
 
   state.queue:processQueue(nowSeconds())
   publish()
