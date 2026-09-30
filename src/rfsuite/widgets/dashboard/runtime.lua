@@ -2645,6 +2645,10 @@ function Runtime.new(zone, options)
       self.built = false
       self.renderKey = nil
       self._cachedRenderKey = nil
+      -- refresh() computes the render key under a 2 Hz throttle and hands on the cached key while
+      -- it is closed, which is nil now; a scene queued under that would be built again once the
+      -- throttle computed the real key. Opening it keys the scene on the new bounds in this pass.
+      self._lastUIRefresh = 0
     end
   end
 

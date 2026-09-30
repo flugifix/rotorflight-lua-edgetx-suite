@@ -595,6 +595,12 @@ write did not silently loses the setting.
 The widget hands the resolved configuration to the theme as `state.themeConfig`, which is where
 a box's `min`, `max` or threshold limit reads it from.
 
+Where the configuration sets no voltage bounds of its own, the widget fills in `v_min` and `v_max`
+from the pack's cell count and the flight controller's minimum and maximum cell voltage, and fills
+them in again whenever the bounds it holds are still the unset defaults or no longer fit the cell
+count. A move of those bounds rebuilds the scene, and the render key is computed again in the pass
+that moves them, so the scene is queued under the key for the new bounds.
+
 ## Splitting the settings into pages
 
 A theme with more settings than one screen carries may declare `pages` in its `init.lua`. Its
