@@ -138,8 +138,9 @@ end
 
 local function saveConfig(prefs)
   local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
-  -- The per-model store can only be written once the flight controller's id is known, so
-  -- a theme configured without one is stored globally instead.
+  -- Where the values land is the settings page's scope, not this module's: the library
+  -- writes the radio's standard values, or this model's own ones, which need the flight
+  -- controller's id -- without it the model scope saves nothing.
   local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
   local values = {}
@@ -155,18 +156,23 @@ local function saveConfig(prefs)
   end
   DashboardLib.setThemeConfig(prefs, THEME_PATH, values, modelPrefs)
 
-  -- setThemeConfig has just taken these keys out of the global preferences, so where there is a
-  -- per-model store its write is the only one carrying the values, and its answer is what the
-  -- save reports. Without a store the global save carries them, and there is nothing to fail here.
+  -- The model's file is written whenever a flight controller is connected, as every theme's
+  -- module does, but it carries this save's values only in the model scope: there its answer is
+  -- what the save reports. In the standard scope the values went into the radio's preferences,
+  -- which the page's own save writes, and this save changed nothing in the model's file -- a
+  -- failure to rewrite it is not a failure of this save.
+  local modelScope = type(DashboardLib.getEditScope) == "function" and DashboardLib.getEditScope() == "model"
   if session and session.mcu_id and modelPrefs then
     local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
     if type(loadMod) == "function" then
       local ok, MP = pcall(loadMod)
       if ok and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
-        return MP.saveByMcuId(session.mcu_id, modelPrefs)
+        local saved, err = MP.saveByMcuId(session.mcu_id, modelPrefs)
+        if modelScope then return saved, err end
+        return true
       end
     end
-    return false, "model_preferences"
+    if modelScope then return false, "model_preferences" end
   end
   return true
 end
@@ -186,7 +192,7 @@ end
 function M.onSave(ctx)
   local modelOk, modelErr = saveConfig(ctx.preferences)
   local ok, err = ctx.savePreferences()
-  -- Saved only when both stores were written: the values themselves are in the per-model one.
+  -- Saved only when every store that carries this save's values was written.
   if ok and not modelOk then
     ok, err = false, modelErr
   end

@@ -15,8 +15,9 @@ are listed at the end of this page.
 
 *System* → *Settings* → *Dashboard* → *Design*: choose *Urban* for a flight phase, or for all
 three. Its settings are under *System* → *Settings* → *Dashboard* → *Settings* → *Urban*, split
-into three pages: *Look*, *Value Rows* and *Top Bar*. The settings are stored per model where the
-flight controller's id is known. Its words come from the suite's translations, like every other
+into three pages: *Look*, *Value Rows* and *Top Bar*. They are stored for the radio, and a model
+can carry its own under [*Per-Model Settings*](../pages/settings/dashboard/overrides.md) where
+per-model settings are switched on. Its words come from the suite's translations, like every other
 theme's, so it speaks the language of the package that was installed.
 
 ## What it shows
