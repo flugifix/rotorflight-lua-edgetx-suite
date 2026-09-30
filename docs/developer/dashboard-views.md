@@ -24,7 +24,7 @@ layer described below, and the menu and the picker open over it.
 | `widgets/dashboard/views.lua` | The view registry, the stack, the conditions, the actions and `navigate()`. |
 | `widgets/dashboard/runtime.lua` | The fullscreen branch of `widget.refresh`, which asks `views.resolve()` which view to show, and `viewJobStep`, which builds it. |
 | `widgets/dashboard/fullscreen_menu.lua` | The quick menu view. |
-| `widgets/dashboard/battery_pick_menu.lua` | The battery picker view. |
+| `widgets/dashboard/battery_pick_menu.lua` | The battery picker view. It draws the quick menu's `battery_pick` record, whose options and close are what its presses run. |
 | `widgets/dashboard/fullscreen_controls.lua` | The menu glyph and the X the widget draws over a fullscreen theme that binds no control of its own. |
 
 `views.lua` is loaded on the first fullscreen pass and never on a zone pass, so a dashboard

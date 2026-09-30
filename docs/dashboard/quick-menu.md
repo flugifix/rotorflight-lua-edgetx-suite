@@ -92,10 +92,26 @@ menus:
 | `id` | The entry's name, for anything that has to refer to it. |
 | `title` | The text on the row, already translated. |
 | `kind` | `action` for a single button, `choice` for a title over a grid of options. |
+| `view` | For a `choice` whose options are drawn by a view of their own: that view's id. The menu then draws the row as the single button that opens it (its `after`), and the view draws the options. |
 | `visibleWhen` | The name of a condition that decides whether the row exists at all. Omitted, the row is always there. |
 | `press` | The work an `action` does when it is pressed, and nothing else. Optional: a row whose whole effect is its `after` has none. |
 | `after` | What follows the press, as data: `done`, `openView:<id>`, `closeView`, `exitFullscreen` or `none`. Missing means `none`. The actions are described in [dashboard views](../developer/dashboard-views.md). |
-| `options` | For a `choice`: a list, or a function of the widget returning one, of `{ label, current, press, after }`. The battery-profile grid is this and nothing else. |
+| `options` | For a `choice`: a list, or a function returning one, of `{ label, current, press, after }`. The battery-profile grid is one, and the battery picker's packs are the other. |
+| `close` | Optional, `{ press, after }`: what closing the surface that draws the options does. |
+
+`M.entry(widget, id)` returns one entry of the list, and `M.run(widget, entry, option)` runs
+it: the work — the option's `press` when an option is given, else the entry's — and then its
+`after`.
+
+**BATTERY is the battery prompt's record.** `battery_pick` is a `choice` with `view =
+"battery_pick"`: in the menu it is the BATTERY button, and the battery picker
+(`widgets/dashboard/battery_pick_menu.lua`) is the view that draws its options. They are one per
+pack this model has — `label` the pack's name, `detail` the capacity and profile line under it,
+`pack` the registry entry, `current` for the pack picked this connection — and a last one marked
+`none`, *NO BATTERY*. Each records the pick and is followed by `done`. Its `close` ends the
+prompt for this connection, which is what the picker's X and a short press on RTN do. What a
+pick does is therefore written in one place, the record; the picker is only its drawing.
+`options()` needs no argument: the widget is the one the list was made for.
 
 Two things are worth knowing before adding an entry:
 

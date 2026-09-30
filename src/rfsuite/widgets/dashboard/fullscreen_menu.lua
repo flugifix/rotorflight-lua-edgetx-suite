@@ -40,25 +40,101 @@ local function pressFor(widget, work, after)
   end
 end
 
---- What the menu offers, as a list rather than as drawing code.
---
--- One entry per row, in the order they are drawn, carrying the manifest's own vocabulary:
--- `id`, `title`, `kind`, `visibleWhen` and `press`. `kind` is what the builder makes of the
--- row -- `action` is a single button, `choice` is a title over a grid of options -- so the
--- battery-profile grid is a row of this list rather than a special case inside the builder.
---
--- `press` does the row's work and nothing else. What follows it -- leaving fullscreen, opening
--- another view, or nothing -- is the row's `after`, an action views.lua performs; an option of a
--- `choice` carries its own.
---
--- The title is resolved here, and it is resolved from a complete literal key: the translation
--- precompiler rewrites what it can read, and a key assembled from parts ships the English
--- fallback in every language with nothing saying so.
-function M.entries(widget)
-  local t = translator(widget)
-  local list = {}
+-- ---------------------------------------------------------------------------
+-- The battery prompt's work
+-- ---------------------------------------------------------------------------
 
-  list[#list+1] = {
+-- A pick records a REQUEST on the widget and nothing else. The pick, the card write and the
+-- flight controller write all happen in the runtime's job pass: an LVGL press callback runs
+-- inside the firmware's event dispatch, where a card write or a queue turn is the one thing a
+-- widget must not do.
+local function requestPick(widget, id)
+  -- `false` rather than nil for "no battery": nil is what the runtime reads as "no request at
+  -- all", so the answer that clears the pack would never reach the job. Written out rather than
+  -- as `(id == nil) and false or id`, which cannot produce `false` at all -- the `or` arm takes
+  -- over the moment the `and` arm is false, and hands back the nil it was meant to replace.
+  if id == nil then
+    widget._batteryPickRequest = false
+  else
+    widget._batteryPickRequest = id
+  end
+end
+
+-- Closing without a pick ends the prompt for this connection. `pending` is the condition that
+-- opens the picker on its own, so it is cleared here, or the picker would open again at once.
+local function dismissBatteryPick(widget)
+  local pick = widget.state and widget.state.batteryPick or nil
+  if type(pick) == "table" then
+    pick.dismissed = true
+    pick.pending = false
+  end
+end
+
+-- The prompt's options: one per pack this model has, in registry order, and NO BATTERY last.
+--
+-- Every string an option carries is built here, once per call, so what draws them builds none.
+-- `label` is the pack's name and `detail` the line under it; `pack` is the registry entry
+-- itself, for a surface that wants to lay the same facts out differently. NO BATTERY is marked
+-- `none`, because the picker reserves the foot row for it before the packs are laid out.
+local function batteryPickOptions(widget, t)
+  local pick = widget.state and widget.state.batteryPick or nil
+  local candidates = (type(pick) == "table" and type(pick.candidates) == "table") and pick.candidates or {}
+  local selectedId = type(pick) == "table" and pick.selectedId or nil
+
+  local profileFmt = t("widgets.dashboard.battery_pick_profile", "Profile %d")
+  local noProfile = t("widgets.dashboard.battery_pick_profile_none", "no profile")
+
+  local options = {}
+  for i = 1, #candidates do
+    local pack = candidates[i]
+
+    local nameText = pack.name
+    if type(nameText) ~= "string" or nameText == "" then nameText = tostring(pack.id) end
+    local capText = ""
+    if type(pack.cap) == "number" and pack.cap > 0 then
+      capText = string.format("%d mAh", math.floor(pack.cap))
+    end
+    local profileText = noProfile
+    if type(pack.targetProfile) == "number" then
+      profileText = string.format(profileFmt, pack.targetProfile + 1)
+    end
+    local detail = capText
+    if detail ~= "" then
+      detail = detail .. "  -  " .. profileText
+    else
+      detail = profileText
+    end
+
+    local id = pack.id
+    options[i] = {
+      label = nameText,
+      detail = detail,
+      current = (selectedId ~= nil and id == selectedId),
+      pack = pack,
+      press = function() requestPick(widget, id) end,
+      after = "done"
+    }
+  end
+
+  -- "No battery": the honest answer for a flight nobody wants in the log against a pack, and
+  -- the one that clears a choice carried over from the previous connection.
+  options[#options + 1] = {
+    label = t("widgets.dashboard.battery_pick_none", "NO BATTERY"),
+    none = true,
+    press = function() requestPick(widget, nil) end,
+    after = "done"
+  }
+  return options
+end
+
+-- The entries, one builder each, in the order the quick menu draws them. A caller that wants one
+-- entry -- the battery picker wants its own record, and a theme one entry by its id -- builds that
+-- one and not all of them, their translations and closures included.
+local BUILD = {}
+local ORDER = { "erase_blackbox", "inflight_tuning", "battery_pick", "battery_profile" }
+
+function BUILD.erase_blackbox(widget, t)
+  return {
     id = "erase_blackbox",
     kind = "action",
     title = t("widgets.dashboard.erase_blackbox", "ERASE BLACKBOX"),
@@ -96,10 +172,12 @@ function M.entries(widget)
     end,
     after = "done"
   }
+end
 
-  -- The tuning surface is not a view on the stack: it takes fullscreen ahead of every view while
-  -- its own flag is up, so the press raises the flag and nothing follows it.
-  list[#list+1] = {
+-- The tuning surface is not a view on the stack: it takes fullscreen ahead of every view while
+-- its own flag is up, so the press raises the flag and nothing follows it.
+function BUILD.inflight_tuning(widget, t)
+  return {
     id = "inflight_tuning",
     kind = "action",
     title = t("widgets.dashboard.inflight_open", "IN-FLIGHT TUNING"),
@@ -111,18 +189,37 @@ function M.entries(widget)
     end,
     after = "none"
   }
+end
 
-  -- The prompt comes up on its own once per connection; this is the way back to it after it
-  -- has been answered or closed. It stays full screen, the picker taking the menu's place.
-  list[#list+1] = {
+-- The battery prompt, as one record. Its options are the picks -- one per pack, then NO
+-- BATTERY -- and `close` ends the prompt for this connection without a pick; the picker view
+-- (battery_pick_menu.lua) draws this record, so what a pick does is written down once, here.
+--
+-- In this menu the record is the BATTERY row: a `choice` that names a `view` is drawn as the
+-- single button that opens that view, which is its own `after`. The prompt comes up on its own
+-- once per connection; this is the way back to it after it has been answered or closed. It
+-- stays full screen, the picker taking the menu's place.
+--
+-- `options` needs no argument: the widget is the one this list was made for, so a caller that
+-- holds only the record can still ask for the options as they stand now.
+function BUILD.battery_pick(widget, t)
+  return {
     id = "battery_pick",
-    kind = "action",
+    kind = "choice",
+    view = "battery_pick",
     title = t("widgets.dashboard.battery_pick_open", "BATTERY"),
     visibleWhen = "batteryPickHasPacks",
-    after = "openView:battery_pick"
+    after = "openView:battery_pick",
+    options = function() return batteryPickOptions(widget, t) end,
+    close = {
+      press = function() dismissBatteryPick(widget) end,
+      after = "done"
+    }
   }
+end
 
-  list[#list+1] = {
+function BUILD.battery_profile(widget, t)
+  return {
     id = "battery_profile",
     kind = "choice",
     title = t("widgets.dashboard.battery_profile", "BATTERY PROFILE"),
@@ -182,8 +279,45 @@ function M.entries(widget)
       return options
     end
   }
+end
 
+--- What the menu offers, as a list rather than as drawing code.
+--
+-- One entry per row, in the order they are drawn, carrying the manifest's own vocabulary:
+-- `id`, `title`, `kind`, `visibleWhen` and `press`. `kind` is what the builder makes of the
+-- row -- `action` is a single button, `choice` is a title over a grid of options -- so the
+-- battery-profile grid is a row of this list rather than a special case inside the builder. A
+-- `choice` whose options belong to a view of their own names it in `view`, and the menu draws it
+-- as the single button that opens that view.
+--
+-- `press` does the row's work and nothing else. What follows it -- leaving fullscreen, opening
+-- another view, or nothing -- is the row's `after`, an action views.lua performs; an option of a
+-- `choice` carries its own.
+--
+-- The title is resolved here, and it is resolved from a complete literal key: the translation
+-- precompiler rewrites what it can read, and a key assembled from parts ships the English
+-- fallback in every language with nothing saying so.
+function M.entries(widget)
+  local t = translator(widget)
+  local list = {}
+  for i = 1, #ORDER do list[i] = BUILD[ORDER[i]](widget, t) end
   return list
+end
+
+--- The entry `id` of this widget's list, or nil. Only that entry is built.
+function M.entry(widget, id)
+  local build = BUILD[id]
+  if build == nil then return nil end
+  return build(widget, translator(widget))
+end
+
+--- Run an entry, or one of its options: the work, then the action that follows it.
+--
+-- The work is the option's when an option is given and the entry's otherwise; so is the action.
+function M.run(widget, entry, option)
+  local source = option or entry
+  if type(source.press) == "function" then source.press() end
+  if Views and type(Views.navigate) == "function" then Views.navigate(widget, source.after) end
 end
 
 --- Draw the menu.
@@ -279,7 +413,7 @@ function M.build(children, widget, entries)
 
   for _, entry in ipairs(entries) do
     if isEntryVisible(entry, widget) then
-      if entry.kind == "choice" then
+      if entry.kind == "choice" and entry.view == nil then
         -- 4b. A title over a grid of options.
         contentY = contentY + titleGap - gapY
 
@@ -330,7 +464,7 @@ function M.build(children, widget, entries)
         -- The next row starts below the whole grid, the way an action row leaves room for itself.
         contentY = listY + math.ceil(#options / cols) * (btnH + gapY)
       else
-        -- 4a. A single button.
+        -- 4a. A single button: an action, or the way into the view a choice is drawn in.
         children[#children+1] = {
           type = "button", x=dX + paddingX, y=contentY, w=entryW, h=btnH, color=btn_color,
           press = pressFor(widget, entry.press, entry.after)

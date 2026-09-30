@@ -5,13 +5,13 @@
 -- is drawn here is deliberately the same layout profile as fullscreen_menu.lua, so that a radio
 -- at either resolution gets rows of the size it already gets from the quick menu.
 --
--- A press records a REQUEST on the widget and nothing else. The pick, the card write and the
--- flight controller write all happen in the runtime's job pass: an LVGL press callback runs
--- inside the firmware's event dispatch, where a card write or a queue turn is the one thing a
--- widget must not do. What follows the press is an action views.lua performs.
+-- What the picker offers and what each press does is not decided here. It is the quick menu's
+-- `battery_pick` record (fullscreen_menu.lua): its options are the picks, one per pack and then
+-- NO BATTERY, and its `close` ends the prompt. This file draws that record, and a press runs the
+-- option through the menu's `run`, which does the work and then the action that follows it.
 --
--- Every string the tree carries is built here, once, while the menu is built. Nothing below is
--- a closure, so nothing below runs in the reactive sweep.
+-- Every string the tree carries is built while the menu is built -- the record's options carry
+-- theirs already. Nothing below is a closure, so nothing below runs in the reactive sweep.
 
 local M = {}
 
@@ -25,46 +25,24 @@ local requireModule = (_G.rfsuite and _G.rfsuite.require) or function(path)
   return nil
 end
 
-local Views = requireModule("widgets/dashboard/views.lua")
+local Menu = requireModule("widgets/dashboard/fullscreen_menu.lua")
 
--- What follows each press. A pick and the close box both finish the interaction: the prompt has
--- been answered or closed. Without a base layer that leaves fullscreen, as it always has; over a
--- theme that draws its own fullscreen it puts the theme back.
-local AFTER_PICK = "done"
-local AFTER_CLOSE = "done"
-
-local function navigate(widget, after)
-  if Views and type(Views.navigate) == "function" then Views.navigate(widget, after) end
+-- The record this view draws, or nil where the menu module could not be loaded.
+local function record(widget)
+  if Menu and type(Menu.entry) == "function" then return Menu.entry(widget, "battery_pick") end
+  return nil
 end
 
-local function requestPick(widget, id)
-  -- `false` rather than nil for "no battery": nil is what the runtime reads as "no request at
-  -- all", so the answer that clears the pack would never reach the job. Written out rather than
-  -- as `(id == nil) and false or id`, which cannot produce `false` at all -- the `or` arm takes
-  -- over the moment the `and` arm is false, and hands back the nil it was meant to replace.
-  if id == nil then
-    widget._batteryPickRequest = false
-  else
-    widget._batteryPickRequest = id
-  end
-end
-
--- Closing without a pick ends the prompt for this connection. `pending` is the condition that
--- opens the picker on its own, so it is cleared here, or the picker would open again at once.
-local function dismiss(widget)
-  local pick = widget.state and widget.state.batteryPick or nil
-  if type(pick) == "table" then
-    pick.dismissed = true
-    pick.pending = false
-  end
+local function run(widget, entry, option)
+  if entry ~= nil then Menu.run(widget, entry, option) end
 end
 
 --- What RTN does while the picker is on top: exactly what its close box does. A plain
 --- `closeView` would leave `pending` standing, and the picker's own condition would open it
 --- again on the next pass.
 function M.back(widget)
-  dismiss(widget)
-  navigate(widget, AFTER_CLOSE)
+  local entry = record(widget)
+  if entry ~= nil then run(widget, entry, entry.close) end
 end
 
 function M.build(children, widget)
@@ -129,27 +107,29 @@ function M.build(children, widget)
     text=t("widgets.dashboard.battery_pick_title", "WHICH BATTERY?"), color=WHITE, align=LEFT, font=titleFont
   }
 
+  local entry = record(widget)
+
   local cx = dX + dW - closeSize - (isLarge and 8 or 1)
   local cy = dY + math.floor((headerH - closeSize)/2)
   children[#children+1] = {
     type = "button", x=cx, y=cy, w=closeSize, h=closeSize, color=COLOR_THEME_SECONDARY1 or RED,
-    press = function() dismiss(widget); navigate(widget, AFTER_CLOSE) end
+    press = function() if entry ~= nil then run(widget, entry, entry.close) end end
   }
   children[#children+1] = {
     type = "label", x=cx, y=cy + math.floor((closeSize - fontH)/2) + closeTextOffY, w=closeSize,
     text="X", color=WHITE, align=CENTER, font=titleFont
   }
 
-  local pick = widget.state and widget.state.batteryPick or nil
-  local candidates = (type(pick) == "table" and type(pick.candidates) == "table") and pick.candidates or {}
-  local selectedId = type(pick) == "table" and pick.selectedId or nil
-
-  local profileFmt = t("widgets.dashboard.battery_pick_profile", "Profile %d")
-  local noProfile = t("widgets.dashboard.battery_pick_profile_none", "no profile")
+  -- The packs, and NO BATTERY apart from them: it is laid out on a row of its own below.
+  local packs, none = {}, nil
+  local options = entry and entry.options() or {}
+  for i = 1, #options do
+    if options[i].none then none = options[i] else packs[#packs+1] = options[i] end
+  end
 
   -- Two columns from four packs up, so a pilot with a handful of them still sees the whole
   -- registry without scrolling. One column below that keeps the names readable.
-  local cols = (#candidates >= 4 and dW >= 400) and 2 or 1
+  local cols = (#packs >= 4 and dW >= 400) and 2 or 1
   local btnW = math.floor((dW - paddingX*(cols+1)) / cols)
   local listY = dY + headerH + contentGap
   local bottom = dY + dH - paddingX
@@ -161,61 +141,43 @@ function M.build(children, widget)
   local noneY = bottom - btnH
   local gridBottom = noneY - gapY
 
-  for i = 1, #candidates do
-    local entry = candidates[i]
+  for i = 1, #packs do
+    local option = packs[i]
     local row = math.floor((i-1)/cols)
     local col = (i-1)%cols
     local bx = dX + paddingX + col*(btnW+paddingX)
     local by = listY + row*(btnH+gapY)
     if by + btnH > gridBottom then break end
 
-    local isCurrent = (selectedId ~= nil and entry.id == selectedId)
+    local isCurrent = option.current == true
     local bColor = isCurrent and accent_color or btn_color
     local tColor = isCurrent and BLACK or WHITE
 
-    local nameText = entry.name
-    if type(nameText) ~= "string" or nameText == "" then nameText = tostring(entry.id) end
-    local capText = ""
-    if type(entry.cap) == "number" and entry.cap > 0 then
-      capText = string.format("%d mAh", math.floor(entry.cap))
-    end
-    local profileText = noProfile
-    if type(entry.targetProfile) == "number" then
-      profileText = string.format(profileFmt, entry.targetProfile + 1)
-    end
-    local subText = capText
-    if subText ~= "" then
-      subText = subText .. "  -  " .. profileText
-    else
-      subText = profileText
-    end
-
-    local id = entry.id
     children[#children+1] = {
       type = "button", x=bx, y=by, w=btnW, h=btnH, color=bColor,
-      press = function() requestPick(widget, id); navigate(widget, AFTER_PICK) end
+      press = function() run(widget, entry, option) end
     }
     children[#children+1] = {
       type = "label", x=bx, y=by + (isLarge and 8 or 3), w=btnW,
-      text=nameText, color=tColor, align=CENTER, font=rowFont
+      text=option.label, color=tColor, align=CENTER, font=rowFont
     }
     children[#children+1] = {
       type = "label", x=bx, y=by + btnH - smallH - (isLarge and 8 or 3), w=btnW,
-      text=subText, color=tColor, align=CENTER, font=SMLSIZE
+      text=option.detail, color=tColor, align=CENTER, font=SMLSIZE
     }
   end
 
-  -- "No battery": the honest answer for a flight nobody wants in the log against a pack, and
-  -- the one that clears a choice carried over from the previous connection.
-  local noneW = math.floor(dW - paddingX * 2)
-  children[#children+1] = {
-    type = "button", x=dX + paddingX, y=noneY, w=noneW, h=btnH, color=btn_color,
-    press = function() requestPick(widget, nil); navigate(widget, AFTER_PICK) end
-  }
-  children[#children+1] = {
-    type = "label", x=dX + paddingX, y=noneY + math.floor((btnH - fontH)/2), w=noneW,
-    text=t("widgets.dashboard.battery_pick_none", "NO BATTERY"), color=WHITE, align=CENTER, font=titleFont
-  }
+  if none ~= nil then
+    local noneW = math.floor(dW - paddingX * 2)
+    children[#children+1] = {
+      type = "button", x=dX + paddingX, y=noneY, w=noneW, h=btnH, color=btn_color,
+      press = function() run(widget, entry, none) end
+    }
+    children[#children+1] = {
+      type = "label", x=dX + paddingX, y=noneY + math.floor((btnH - fontH)/2), w=noneW,
+      text=none.label, color=WHITE, align=CENTER, font=titleFont
+    }
+  end
 end
 
 return M
