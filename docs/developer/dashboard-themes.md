@@ -59,6 +59,7 @@ the widget to find the module for the phase it is in.
 | `standalone` | boolean | `true` keeps the theme off the *Dashboard* → *Settings* page even if it declares `configure`. |
 | `fullscreen` | string | Optional. `"theme"` makes fullscreen show this theme at the fullscreen size instead of the quick menu. See [A theme that takes fullscreen](#a-theme-that-takes-fullscreen). Omit it and fullscreen is what it has always been. |
 | `fullscreenExit` | string | Optional, read only by `bin/themes/validate.lua`. `"longRtn"` declares that the theme binds no control that leaves fullscreen and relies on a long press on RTN. |
+| `views` | table | Optional, for a free-form theme. Views of the theme's own, and looks for the widget's: see [Views of a theme's own](#views-of-a-themes-own). |
 
 Beside it, `icon.png` is the tile the theme selector draws. The path is built from the folder
 name and is not checked before use, so a theme without one shows an empty tile rather than an
@@ -780,13 +781,60 @@ the theme back. The battery picker's packs, NO BATTERY and its X do the same. On
 that says `exitFullscreen` — the widget's own X on the theme, or one of the theme's — a short
 press on RTN where the theme bound `ctx.keys.exit` to it, and a long press on RTN leave fullscreen.
 
+## Views of a theme's own
+
+A free-form theme may list views in its `init.lua`. Each is a module in the theme's folder that
+draws a whole fullscreen surface, opened over whatever fullscreen shows — the theme, where it
+takes fullscreen, or the quick menu — the way the menu and the battery picker are
+([dashboard views](dashboard-views.md)):
+
+```lua
+views = {
+  { id = "link",         module = "link.lua" },            -- a view of the theme's own
+  { id = "menu",         module = "menu.lua" },            -- the quick menu, drawn by the theme
+  { id = "battery_pick", module = "picker.lua" },          -- the battery picker, drawn by the theme
+},
+```
+
+| Key | What it says |
+| --- | --- |
+| `id` | The view's name. An id the widget already has — `menu`, `battery_pick` — replaces that view's **look** and nothing else; any other id is a view of the theme's own. A repeated id counts once. |
+| `module` | The file that draws it, relative to the theme folder. |
+| `openWhen` | Optional. What opens the view on its own; see [dashboard views](dashboard-views.md#views-that-open-themselves). Ignored where the id replaces a look. |
+| `where` | Optional. `"fullscreen"` (the default). |
+
+The list is read on the first fullscreen pass after the theme on screen has changed, with the
+`fullscreen` key and for the same reason, and only where the phase module on screen is
+free-form: a declarative phase draws no view. The module is loaded the first time its view is
+built, through the loader that loads the rest of the theme — from the theme's own folder, a
+user theme from source — so registering a view costs nothing until it is opened, and a module
+that fails to load, or whose `build` raises, is not asked for again (a replaced look falls back
+to the widget's own; a view of the theme's own is closed and refused), with one log line. A view of the previous theme's that is still open
+when the theme changes is closed.
+
+A theme's view module has `build(children, zone, state, ctx)` — it appends the whole tree to
+`children`, at the fullscreen zone, and gets the same `ctx` as the theme's fullscreen build — and
+optionally `renderKey(zone, state)`, appended to the view's key so that the view is rebuilt when
+it changes. A view of the theme's own may have `back(ctx)`, what a short press on RTN does while
+it is on top; without one RTN closes it (`closeView`). A view opens with `ctx.action("openView:<id>")`.
+
+**A replaced look is the look only.** What the menu or the picker offers, when it opens, what RTN
+does on it and what follows each press stay the widget's: draw the records through `ctx` and run
+them with `ctx.run` ([the theme draws, the widget acts](#the-theme-draws-the-widget-acts)). For the
+picker that is `ctx.entry("battery_pick")`: `entry.options()` are the packs and *NO BATTERY*,
+each run with `ctx.run(entry, option)`, and `ctx.run(entry, entry.close)` is its close — the
+theme never writes the pick or the prompt's state itself. RTN on it is the widget picker's own
+close. A theme that replaces the picker's look owes it a way out, as the widget's picker has.
+
 ## The battery prompt
 
 With *Ask which pack after connecting* on (the [Flight Log](../pages/tools/flight_log.md) page,
 *Settings*), the widget offers the pilot's battery registry once per connection — in fullscreen,
 because a widget zone receives no touch and Lua can leave fullscreen but not enter it. The
-picker is drawn by the widget for every theme, so its way out is always there; a theme may read
-what the prompt knows, and anything on the radio may drive it.
+picker is the widget's for every theme that does not register a look for it, so its way out is
+always there; a free-form theme may draw it instead ([views of a theme's
+own](#views-of-a-themes-own)), and what a pick does stays the widget's either way. A theme may
+read what the prompt knows, and anything on the radio may drive it.
 
 ### `state.batteryPick`
 

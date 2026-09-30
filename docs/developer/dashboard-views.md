@@ -52,7 +52,30 @@ The shipped registry, in this order:
 
 Each widget gets its own copy of the list, entries included. A view's module is loaded by the
 job that first builds it and kept on that widget's entry; the state pass reads a view's own
-`renderKey` only from a module that is already loaded, and never loads one.
+`renderKey` only from a module that is already loaded, and never loads one. So the job that
+loads and builds a view also records the key with the module's own part (`views.viewKey`), which
+is the key the next state pass computes: a view is built once when it first opens, not a second
+time because its key grew by the module's part.
+
+### A theme's views
+
+A free-form theme adds to this list with `views` in its `init.lua`
+([dashboard themes](dashboard-themes.md#views-of-a-themes-own)). On the first fullscreen pass
+after the theme on screen has changed, `views.register()` makes the registry anew:
+
+- the core views, as above;
+- an id the widget already has keeps its entry — its `module`, `openWhen`, and the `back` RTN
+  runs — and gets the theme's module as its **look**: the job builds that instead;
+- any other id is appended, in the theme's order.
+
+A theme's module is read through the theme loader when the view is first built, and built as
+`build(children, zone, state, ctx)`; its key is `renderKey(zone, state)`. RTN on a view of the
+theme's own is its `back(ctx)`, else `closeView`. A view that was on the stack and is not in the
+new registry is taken off it, so no job is queued for a view no step can build. A theme module
+that does not load, or whose `build` raises, is not asked for again, with one log line: a
+replaced look falls back to the core module at once, and a view of the theme's own is closed and
+from then on refused like an unknown id. A build that raised is not queued again on the next
+pass.
 
 ## The stack and the base layer
 

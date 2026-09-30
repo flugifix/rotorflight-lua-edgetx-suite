@@ -682,6 +682,14 @@ end
 -- a bounded chunk per pass, then the swap. The STATE pass enqueues, the JOB pass
 -- executes -- see the dispatcher in widget.refresh.
 
+-- Whether an error is the firmware's instruction limit. The entry point owns the response to it
+-- (see the dispatcher in widget.refresh), so a step that catches an error of its own hands this
+-- one on rather than treating it as a failure of what it was running.
+local function isCpuLimitError(err)
+  return (LogSink and type(LogSink.isCpuLimitError) == "function" and LogSink.isCpuLimitError(err))
+    or (type(err) == "string" and string.find(err, "CPU limit", 1, true) ~= nil)
+end
+
 local function splashJobStep(self)
   local statusLine = self.statusLine or "Please wait..."
   local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
@@ -773,29 +781,61 @@ local function viewsModule()
   return loadInflightModule(ViewsCache, "widgets/dashboard/views.lua")
 end
 
---- Draw the fullscreen view the job is named after: the quick menu, or the battery picker.
+-- The `ctx` a theme's fullscreen builds receive: one per widget, made on the first build that
+-- needs it and dropped when the theme on screen changes (takeFullscreenMode).
+local function viewCtx(self)
+  local ctx = self._viewCtx
+  if ctx == nil then
+    local Views = viewsModule()
+    ctx = Views and Views.bind(self) or nil
+    self._viewCtx = ctx
+  end
+  return ctx
+end
+
+--- Draw the fullscreen view the job is named after: the quick menu, the battery picker, or a
+--- view the theme registered.
 ---
 --- The view's module is loaded here, on the job pass, and kept on this widget's registry entry,
---- which is where the state pass reads a view's own render key from. The picker is the widget's
---- own surface for every theme, so its way out is always drawn; a theme reads
---- `state.batteryPick` and may drive the prompt through rfsuite.batteryPick, but draws no part
---- of it.
+--- which is where the state pass reads a view's own render key from. A theme's module -- a view
+--- of its own, or the look of the menu or the picker -- is built like the rest of the theme,
+--- `build(children, zone, state, ctx)`. What the picker offers and what its presses do stay the
+--- widget's either way: the theme draws the `battery_pick` record through `ctx`, and RTN is the
+--- core picker's `back`. The widget's own picker, drawn where a theme does not replace it, keeps
+--- its close box.
 local function viewJobStep(self)
   local Views = viewsModule()
   local entry = Views and Views.find(self, self._job.kind) or nil
   if entry == nil then return true end
-  local view = entry.loaded
-  if view == nil then
-    view = requireModule(entry.module)
-    if not (type(view) == "table" and type(view.build) == "function") then return true end
-    entry.loaded = view
-  end
+  local view = Views.load(self, entry)
+  if view == nil then return true end
   local children = {}
-  view.build(children, self)
+  if entry.load ~= nil then
+    -- A theme's build that raises is given up on as a module that does not load is, rather than
+    -- raising out of the step: the dispatcher would clear the job and the next pass queue the
+    -- same failing build again. A replaced look is built from the core module at once; a view of
+    -- the theme's own has been closed, and the next pass builds what lies under it.
+    local ok, err = pcall(view.build, children, self.zone, self.state, viewCtx(self))
+    if not ok then
+      if isCpuLimitError(err) then error(err, 0) end
+      Views.fail(self, entry, "did not build: " .. tostring(err))
+      if entry.theme then return true end
+      view = Views.load(self, entry)
+      if view == nil then return true end
+      children = {}
+      view.build(children, self)
+    end
+  else
+    view.build(children, self)
+  end
   lvgl.clear()
   lvgl.build(children)
   self.built = true
   self._lastChildCount = #children
+  -- The state pass keyed this build before the module was loaded, so without the module's own
+  -- key; the next one will include it. Record that key now, or the view is built twice on its
+  -- first opening.
+  self.renderKey = Views.viewKey(self, entry, entry.id)
   return true
 end
 
@@ -839,13 +879,7 @@ local function fsThemeJobStep(self)
   if not self.theme then return true end
 
   if type(self.theme.build) == "function" then
-    local ctx = self._viewCtx
-    if ctx == nil then
-      local Views = viewsModule()
-      ctx = Views and Views.bind(self) or nil
-      self._viewCtx = ctx
-    end
-    local children = self.theme.build(self.zone, self.state, ctx)
+    local children = self.theme.build(self.zone, self.state, viewCtx(self))
     if type(children) ~= "table" then return true end
     if not bindsPress(children) then
       -- Onto a copy: the table is the theme's, and a theme that hands back one it keeps would
@@ -1946,11 +1980,56 @@ end
 -- been replaced alive until the next fullscreen pass.
 local WEAK_VALUES = { __mode = "v" }
 
+-- Where a theme's view may be shown, by the value of its `where`; a view that says nothing is a
+-- fullscreen view.
+local VIEW_PLACES = {
+  fullscreen = { fullscreen = true },
+  zone = { zone = true },
+  both = { fullscreen = true, zone = true },
+}
+
+--- The views a free-form theme registers in its init.lua (`views`) for one place, "fullscreen"
+--- or "zone", in the theme's order: `{ id, openWhen, load }`.
+---
+--- `load()` reads the view's module through the theme loader -- the theme's own folder, in the
+--- theme's load mode -- and not through the suite's module loader, which resolves a path under the
+--- suite's own folder, where a user theme's file is not. Nothing is read here. An entry without a
+--- string `id` and `module`, or with a `where` that is none of the three, is left out.
+local function themeViewList(initTable, base, folder, place)
+  local declared = type(initTable) == "table" and initTable.views or nil
+  if type(declared) ~= "table" then return nil end
+  local list = {}
+  for i = 1, #declared do
+    local view = declared[i]
+    local places = type(view) == "table" and VIEW_PLACES[view.where or "fullscreen"] or nil
+    if places and places[place] and type(view.id) == "string" and view.id ~= ""
+      and type(view.module) == "string" and view.module ~= "" then
+      local path = base .. folder .. "/" .. view.module
+      list[#list + 1] = {
+        id = view.id,
+        openWhen = view.openWhen,
+        load = function()
+          local chunk = loadScript(path, themeLoadMode(base))
+          if not chunk then return nil end
+          local ok, module = pcall(chunk)
+          if ok and type(module) == "table" then return module end
+          return nil
+        end,
+      }
+    end
+  end
+  return list
+end
+
 --- Take the fullscreen mode for the theme now loaded, and reset what belongs to the previous one.
 --
 -- init.lua is read again for its `fullscreen` key rather than kept from the load, once per theme
 -- change and only on a fullscreen pass. The `ctx` handed to the previous theme is dropped with it,
 -- since the keys a theme bound belong to that theme.
+--
+-- The same read takes the theme's `views`: the fullscreen view registry is made anew from the
+-- core views and those of a free-form theme -- only a module that builds its own tree can draw a
+-- view -- and a view of the previous theme's that is still on the stack is taken off it.
 local function takeFullscreenMode(self)
   local holder = self._fullscreenModeOf
   if holder == nil then
@@ -1958,16 +2037,23 @@ local function takeFullscreenMode(self)
     self._fullscreenModeOf = holder
   end
   holder[1] = self.theme
-  local initTable = loadThemeInit(self.themePath)
+  local initTable, base, folder = loadThemeInit(self.themePath)
   local themeMode = type(initTable) == "table" and initTable.fullscreen == "theme"
   self._viewBase = themeMode and "theme" or nil
   self._viewCtx = nil
   self._cachedFullscreenKey = nil
+  local Views = viewsModule()
+  if Views then
+    local themeViews = nil
+    if type(self.theme.build) == "function" then
+      themeViews = themeViewList(initTable, base, folder, "fullscreen")
+    end
+    Views.register(self, themeViews)
+  end
   -- What became of the work the previous theme ran was that theme's to draw. A phase change of
   -- the same theme keeps it.
   if holder.path ~= self.themePath then
     holder.path = self.themePath
-    local Views = viewsModule()
     if Views then Views.forgetOutcomes(self) end
   end
 end

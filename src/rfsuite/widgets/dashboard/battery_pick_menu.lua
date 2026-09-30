@@ -1,7 +1,8 @@
 -- The battery picker the dashboard shows in fullscreen when the flight log's prompt is on and
 -- the pilot has not answered it yet for this connection.
 --
--- It is the one picker surface, drawn for every theme, so its close box is always there. What
+-- It is the picker the widget draws for every theme that does not draw its own -- a free-form
+-- theme may replace this view's look, and nothing else -- so its close box is always there. What
 -- is drawn here is deliberately the same layout profile as fullscreen_menu.lua, so that a radio
 -- at either resolution gets rows of the size it already gets from the quick menu.
 --

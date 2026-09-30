@@ -2,8 +2,10 @@
 -- press on one of them.
 --
 -- A view is a module with `build(children, widget)`, and optionally `renderKey(widget)`, that
--- draws the whole fullscreen tree. Which one is on screen is a bounded stack of view ids on the
--- widget, `widget._viewStack`, lying above a base layer:
+-- draws the whole fullscreen tree. A free-form theme may register views of its own and replace
+-- the look of the widget's (see `register` below); a theme's module has `build(children, zone,
+-- state, ctx)` instead, like the rest of a theme. Which one is on screen is a bounded stack of
+-- view ids on the widget, `widget._viewStack`, lying above a base layer:
 --
 --   * the top of the stack is what fullscreen shows;
 --   * with the stack empty the base layer shows. `widget._viewBase` names it: `"theme"` while the
@@ -160,6 +162,47 @@ function M.find(widget, id)
   return nil
 end
 
+--- Make this widget's registry anew: the core views, then the views the theme on screen
+--- registers.
+--
+-- `themeViews` is a list of `{ id, openWhen, load }`, in the theme's order; `load()` returns the
+-- theme's module, read through the theme loader, and is not called here -- a theme's view is
+-- loaded when it is first built, so a theme that registers ten views and opens one pays for one.
+--
+--   * An id the widget already has replaces that view's LOOK and nothing else. The core module
+--     stays the entry's `module`, and its `back`, its `openWhen` and what its presses are
+--     followed by are still the core's; the theme's module only draws it.
+--   * Any other id is a view of the theme's own, after the core views.
+--
+-- An entry that carries `load` is built `build(children, zone, state, ctx)` like the rest of a
+-- theme; a core view keeps `build(children, widget)`.
+--
+-- A view on the stack that the new registry no longer has is taken off it. Left there it would
+-- be a job no step can build, queued again on every pass.
+function M.register(widget, themeViews)
+  widget._viewRegistry = nil
+  local registry = M.registry(widget)
+  if type(themeViews) == "table" then
+    for i = 1, #themeViews do
+      local view = themeViews[i]
+      local entry = M.find(widget, view.id)
+      if entry == nil then
+        registry[#registry + 1] = { id = view.id, openWhen = view.openWhen, load = view.load, theme = true }
+      elseif entry.load == nil then
+        entry.load = view.load
+      end
+    end
+  end
+
+  local stack = widget._viewStack
+  if stack ~= nil then
+    for i = #stack, 1, -1 do
+      if M.find(widget, stack[i].id) == nil then table.remove(stack, i) end
+    end
+  end
+  return registry
+end
+
 -- ---------------------------------------------------------------------------
 -- The stack
 -- ---------------------------------------------------------------------------
@@ -230,6 +273,44 @@ function M.session(widget)
   return stack
 end
 
+--- Give up on the theme's module for `entry`: it did not load, or its build raised. It is not
+--- asked for again. A replaced look falls back to the core view, which is what the pilot then
+--- gets; a view of the theme's own is refused from then on, and closed where it is open. Either
+--- way with one log line, not one per pass.
+function M.fail(widget, entry, why)
+  viewLog("view '" .. tostring(entry.id) .. "' of the theme " .. why)
+  entry.load = nil
+  entry.loaded = nil
+  if entry.theme then
+    entry.failed = true
+    local stack = widget._viewStack
+    local at = indexOf(stack, entry.id)
+    if at ~= nil then table.remove(stack, at) end
+  end
+end
+
+--- Load the module that builds `entry`, once: the theme's where it has one for it, else the
+--- core's. Returns nil where nothing loads; a theme's module that does not load is given up on
+--- (`fail`).
+function M.load(widget, entry)
+  local view = entry.loaded
+  if view ~= nil then return view end
+  if entry.load ~= nil then
+    view = entry.load()
+    if type(view) ~= "table" or type(view.build) ~= "function" then
+      M.fail(widget, entry, "did not load")
+      if entry.theme then return nil end
+      view = nil
+    end
+  end
+  if view == nil then
+    view = requireModule(entry.module)
+    if type(view) ~= "table" or type(view.build) ~= "function" then return nil end
+  end
+  entry.loaded = view
+  return view
+end
+
 --- The view fullscreen shows on this pass, and the render key for it.
 --
 -- 1. A view its own condition opened is closed again once that condition has fallen. That is
@@ -242,7 +323,8 @@ end
 --    or with no base layer the default view.
 --
 -- The key is the view id, followed by the view's own `renderKey(widget)` where it has one and
--- its module is already loaded. A module is never loaded here; that is the job pass's work.
+-- its module is already loaded -- `renderKey(zone, state)` for a theme's module, as a theme's
+-- phase module has it. A module is never loaded here; that is the job pass's work.
 function M.resolve(widget)
   local registry = M.registry(widget)
 
@@ -263,7 +345,7 @@ function M.resolve(widget)
 
   for i = 1, #registry do
     local entry = registry[i]
-    if entry.openWhen ~= nil and M.condition(entry.openWhen, widget) then
+    if entry.openWhen ~= nil and not entry.failed and M.condition(entry.openWhen, widget) then
       if indexOf(widget._viewStack, entry.id) == nil then push(widget, entry.id, true) end
       break
     end
@@ -275,12 +357,25 @@ function M.resolve(widget)
     id = M.DEFAULT_VIEW
   end
 
-  local entry = M.find(widget, id)
+  return id, M.viewKey(widget, M.find(widget, id), id)
+end
+
+--- The render key of view `id`: the id, followed by its module's own `renderKey` where the
+--- module is loaded and has one -- `renderKey(widget)` for the widget's views,
+--- `renderKey(zone, state)` for a theme's.
+--
+-- `resolve` keys a view with it, and the job that first loads and builds a view records it, so
+-- the pass after that build computes the key the build was made for rather than a longer one,
+-- which would build the view a second time.
+function M.viewKey(widget, entry, id)
   local view = entry and entry.loaded or nil
   if view ~= nil and type(view.renderKey) == "function" then
-    return id, id .. "|" .. tostring(view.renderKey(widget))
+    if entry.load ~= nil then
+      return id .. "|" .. tostring(view.renderKey(widget.zone, widget.state))
+    end
+    return id .. "|" .. tostring(view.renderKey(widget))
   end
-  return id, id
+  return id
 end
 
 -- ---------------------------------------------------------------------------
@@ -335,14 +430,15 @@ end
 --   exitFullscreen  empty the stack and leave fullscreen, base layer or not
 --   none            nothing at all; the press did whatever needed doing itself
 --
--- An `openView` that is refused -- a view this widget does not have, or a full stack -- changes
--- nothing and forces no rebuild. A view that is not in the registry would otherwise be a job no
--- step can build, re-queued on every pass.
+-- An `openView` that is refused -- a view this widget does not have, a theme's view that did not
+-- load, or a full stack -- changes nothing and forces no rebuild. A view that is not in the
+-- registry would otherwise be a job no step can build, re-queued on every pass.
 function M.navigate(widget, after)
   local verb, id = M.parseAction(after)
   if verb == "none" then return end
   if verb == "openView" then
-    if M.find(widget, id) == nil then
+    local entry = M.find(widget, id)
+    if entry == nil or entry.failed then
       viewLog("view '" .. id .. "' not opened: this widget has no such view")
       return
     end
@@ -448,9 +544,10 @@ end
 --   PAGE down / up  with the quick menu on top: close it. With any other view on top: open the
 --                   menu over it. With the base layer showing: the base layer's own binding
 --                   for that key (`keys.pageDown` / `keys.pageUp` on its ctx), else the menu.
---   RTN             with a view on top: that view's `back(widget)` where its module has one,
---                   else `closeView`. With the base layer showing: its `keys.exit`, else
---                   nothing -- a long press on RTN still leaves fullscreen, in the firmware.
+--   RTN             with a view on top: that view's `back(widget)` where its module has one --
+--                   for a view of the theme's own, `back(ctx)` -- else `closeView`. With the
+--                   base layer showing: its `keys.exit`, else nothing -- a long press on RTN
+--                   still leaves fullscreen, in the firmware.
 --
 -- Both page keys do the same, because some radios have only one of them. The runtime calls this
 -- only for a widget with a base layer, and not while the in-flight tuning surface, the connect
@@ -467,14 +564,25 @@ function M.key(widget, event)
     if after == nil and name ~= "exit" then after = "openView:" .. M.DEFAULT_VIEW end
   elseif name == "exit" then
     local entry = M.find(widget, top)
-    local view = entry and entry.loaded
-    if view == nil and entry ~= nil then
-      view = requireModule(entry.module)
-      if type(view) == "table" then entry.loaded = view end
-    end
-    if type(view) == "table" and type(view.back) == "function" then
-      view.back(widget)
-      return true
+    if entry ~= nil and entry.module ~= nil then
+      -- A core view: its own `back(widget)`, whoever draws it. A theme that replaced the look
+      -- did not replace what RTN does.
+      local core = entry.core
+      if core == nil then
+        core = requireModule(entry.module)
+        if type(core) == "table" then entry.core = core end
+      end
+      if type(core) == "table" and type(core.back) == "function" then
+        core.back(widget)
+        return true
+      end
+    elseif entry ~= nil then
+      -- A view of the theme's own: its `back(ctx)` where it declares one.
+      local view = M.load(widget, entry)
+      if view ~= nil and type(view.back) == "function" then
+        view.back(widget._viewCtx or M.bind(widget))
+        return true
+      end
     end
     after = "closeView"
   elseif top == M.DEFAULT_VIEW then
