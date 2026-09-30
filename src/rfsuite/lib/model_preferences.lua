@@ -59,6 +59,9 @@ local MODEL_SCHEMA = {
       model_theme_inflight = "nil",
       model_theme_postflight = "nil",
     },
+    -- Whether this model uses its own theme and theme settings. Without a default, because an
+    -- absent switch is answered from what the file holds (app/pages/settings/dashboard/lib.lua).
+    optional = { "overrides" },
     -- A theme's own configuration belongs to the machine and is stored here, under keys built
     -- from the theme's path (app/pages/settings/dashboard/lib.lua).
     open = true,

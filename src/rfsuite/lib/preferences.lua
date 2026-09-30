@@ -204,6 +204,10 @@ local SCHEMA = {
       theme_postflight = "nil",
       theme_per_phase = false,
     },
+    -- Whether models may override the theme and its settings on this radio. Without a default,
+    -- because an absent switch allows what a card written before it already stores per model
+    -- (app/pages/settings/dashboard/lib.lua).
+    optional = { "model_overrides" },
     -- A theme's own configuration is stored here under keys built from the theme's path
     -- (app/pages/settings/dashboard/lib.lua), so the set of key names is not knowable from
     -- a schema and the section keeps whatever it is handed.

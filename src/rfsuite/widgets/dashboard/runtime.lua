@@ -2036,7 +2036,7 @@ local function selectedThemePath(value)
   return nil
 end
 
-local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
+local function resolveThemePathForState(dashboard, modelPrefs, flightMode, lib)
   -- `armed` and `offline` refine the ground and the post-flight screen rather than standing
   -- beside them, so they have no slot of their own: each resolves through the theme chosen for
   -- the phase it refines, and the Design page keeps the three selects it has. The answer below
@@ -2056,7 +2056,14 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode)
   end
 
   local modelDashboard = modelPrefs and modelPrefs.dashboard or {}
-  local modelOverride = modelDashboard.model_override == true
+  -- The radio's and the model's override switches, and what an absent one means, are decided
+  -- in one place (app/pages/settings/dashboard/lib.lua), which the theme settings read too.
+  local modelOverride
+  if lib and lib.modelOverridesActive then
+    modelOverride = lib.modelOverridesActive(dashboard, modelDashboard)
+  else
+    modelOverride = modelDashboard.model_override == true
+  end
 
   -- A theme declares preflight, inflight and postflight itself and switches between them, so
   -- the phase keys are overrides on top of the theme chosen for the context. They are read
@@ -2767,7 +2774,7 @@ function Runtime.new(zone, options)
     -- it. Cleared first, so a load that raises is retried by the same tests as it was before.
     self._themeReloadPending = nil
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, self.flightMode)
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, self.flightMode, self.dashboardLib)
     local nextConfig = {}
     if self.dashboardLib and self.dashboardLib.getThemeConfig then
       nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, {}, modelPrefs)
@@ -3084,7 +3091,7 @@ function Runtime.new(zone, options)
     end
 
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, nextMode)
+    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, nextMode, self.dashboardLib)
 
     -- A different table is not a different preference set. The connect chain
     -- (tasks/events/onconnect/tasks/uid.lua), the MSP publisher (tasks/msp/runtime.lua) and
