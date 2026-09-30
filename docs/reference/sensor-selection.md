@@ -55,13 +55,13 @@ Crossfire or ELRS link, whether or not a flight controller is answering:
 
 | Name | Unit | What it is |
 | --- | --- | --- |
-| `1RSS`, `2RSS` | dB | Signal strength at the receiver, per antenna. |
+| `1RSS`, `2RSS` | dBm | Signal strength at the receiver, per antenna. |
 | `RQly` | % | Link quality up to the aircraft -- the share of packets that arrived. |
 | `RSNR` | dB | Signal-to-noise ratio at the receiver. |
 | `ANT` | — | Which receiver antenna is active. |
 | `RFMD` | — | The RF mode, as the module's own number. |
 | `TPWR` | mW | Transmit power the module is using. |
-| `TRSS` | dB | Signal strength of the downlink, at the radio. |
+| `TRSS` | dBm | Signal strength of the downlink, at the radio. |
 | `TQly` | % | Link quality down from the aircraft. |
 | `TSNR` | dB | Signal-to-noise ratio at the radio. |
 | `RRSP`, `TRSP` | % | The two signal strengths again as percentages, where the module sends them. |
@@ -69,8 +69,9 @@ Crossfire or ELRS link, whether or not a flight controller is answering:
 | `TFPS` | Hz | Downlink frame rate, where the module sends it. |
 
 Which of them a model actually has is the module's decision and not the suite's; the last four
-come from extended frames that only some modules send. The flight controller's own custom
-sensors are a separate set and are described under
+come from extended frames that only some modules send. The units are those of EdgeTX 2.12.3 and
+later; 2.12.2 and earlier declared the three signal strengths in dB. The flight controller's own
+custom sensors are a separate set and are described under
 [telemetry sensors](telemetry-sensors.md).
 
 ## Why a sensor the radio has never sent is not a reading of zero
