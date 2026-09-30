@@ -31,6 +31,7 @@ To prevent spurious "Battery 0%" announcements at startup:
 - **Dynamic Deferral Window:** When the model connects, the announcement is deferred for a window derived from the model's SmartFuel stabilization delay (`stabilize_delay`, defaulting to at least 8.0 seconds).
 - **Carried-Over Reading Detection:** EdgeTX retains the last received sensor reading across disconnections. If a new connection reports a reading bit-identical to the previous session's disconnect value (`previousSessionFuel`), it is treated as a carried-over reading and held until the new pack's fresh reading arrives.
 - **Immediate vs. Timed Callout:** As soon as a positive, fresh reading arrives (`fuel > 0` and different from the previous pack), the percentage is spoken immediately. If the pack is genuinely empty (0%), the callout fires once the deferral ceiling expires.
+- **Missing Sound File:** A sound pack without the announcement's file (`evt/battery.wav` for an electric model, `stat/alerts/fuel.wav` for nitro) has nothing to play, so the announcement counts as made for that connection and one warning in the log says so. Nothing is spoken, and the announcement is not tried again on every audio pass.
 
 ### 2. Fuel
 

@@ -1839,8 +1839,15 @@ function Audio.process(self, opts)
         if isReady and now >= (audioState.nextAllowedAt or 0) then
           local isElectricModel = resolveSmartfuelModel(self)
           local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
-          if tryPlayEventFile(audioState, now, calloutSound, opts) then
-            if type(playNumber) == "function" then
+          -- A sound pack without the file counts as announced. resolveEventPath caches its misses
+          -- for the session, so no later pass has anything to play either; without the latch this
+          -- block would run again on every audio pass and log two warnings each time.
+          local hasSound = resolveEventPath(calloutSound) ~= nil
+          if not hasSound then
+            emitLog(opts, "no " .. calloutSound .. " in this sound pack; nothing is spoken", "warn")
+          end
+          if not hasSound or tryPlayEventFile(audioState, now, calloutSound, opts) then
+            if hasSound and type(playNumber) == "function" then
               -- playNumber takes an integer and raises on a number it cannot convert to one.
               -- The fuel percentage is no longer rounded on its way here, so without this the
               -- alert tone would play and the percentage behind it would go unspoken. Same
