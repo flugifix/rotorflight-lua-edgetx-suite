@@ -514,9 +514,22 @@ function Stubs.install(root)
   _G.playNumber = function() end
   _G.killEvents = function() end
 
+  -- lcd.sizeText(text, flags) lays the text out in the font the flags name and answers its
+  -- width and height. A theme that picks the largest font a label fits in calls it while it
+  -- builds, so without it that build raises -- and the widget's job step catches the raise,
+  -- clears the job and builds again on the next pass, which reads here as a dashboard that
+  -- never settles. The answer only has to be plausible and fixed: a per-font advance and line
+  -- height, keyed by the size bits of the flags, the standard font for anything else.
+  local FONT = { [0x800] = { 24, 40 }, [0x700] = { 19, 32 }, [0x400] = { 14, 24 }, [0x300] = { 11, 18 },
+                 [0] = { 8, 14 }, [0x100] = { 6, 10 }, [0x200] = { 5, 8 } }
+
   _G.lcd = {
     RGB = function(r, g, b)
       return ((r // 8) << 11) | ((g // 4) << 5) | (b // 8)
+    end,
+    sizeText = function(text, font)
+      local m = FONT[(font or 0) & 0xF00] or FONT[0]
+      return #tostring(text or "") * m[1], m[2]
     end,
   }
 
