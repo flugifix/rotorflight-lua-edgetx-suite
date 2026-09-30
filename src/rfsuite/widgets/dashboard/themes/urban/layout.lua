@@ -883,10 +883,25 @@ end
 -- bar gives way to "Arming Disabled: <reason>", one reason at a time, two seconds each, in the
 -- WARNING colour. The returned function is the visibility the bar's ordinary labels take in the
 -- meantime. getTime is the radio's tick counter, not one of the probes a closure may not make.
+--
+-- Common.label cuts nothing, and "Arming Disabled: " with the longest reason is wider than the
+-- bar in a longer language and on a small screen. The texts are a bounded set of constants -- the
+-- prefix and the twenty-six reason names of the package's language -- so each one is fitted to
+-- the bar HERE, at build time, through Common.fitLabel, whose answers are kept with the zone's
+-- other measurements. The closure below only looks the fitted text up and makes no firmware call.
 local function armingOverride(nodes, state, x, y, w, fontH, font)
   local list = Common.armDisableList(state)
+  local textW = w - 2 * CARD_PAD
+  local fitted = {}
+  local names = Common.armFlagNames()
+  for i = 1, #names do
+    local name = names[i]
+    if name ~= nil and fitted[name] == nil then
+      fitted[name] = Common.fitLabel(font, T.arming_disabled .. name, textW)
+    end
+  end
   local index, since, lastList, lastText, lastName = 1, nil, nil, "", nil
-  Common.label(nodes, x + CARD_PAD, y, w - 2 * CARD_PAD, fontH, function()
+  Common.label(nodes, x + CARD_PAD, y, textW, fontH, function()
     local l = list()
     if l == nil then
       since, lastList = nil, nil
@@ -901,7 +916,7 @@ local function armingOverride(nodes, state, x, y, w, fontH, font)
     local name = l[index]
     if name ~= lastName then
       lastName = name
-      lastText = T.arming_disabled .. tostring(name)
+      lastText = fitted[name] or (T.arming_disabled .. tostring(name))
     end
     return lastText
   end, font, C.warning, LEFT)

@@ -438,16 +438,23 @@ end
 -- width lookup.
 function M.fitLabel(font, text, maxW)
   if M.textWidth(font, text) <= maxW then return text end
+  -- Kept per text, per face and per width. The face is a key of its own: the size flags are
+  -- multiples of 256, so folding them into one number with the width lost them, and a cut made
+  -- for a small face was handed back for a larger one at the same width.
   local entry = fits[text]
   if entry == nil then
     entry = {}
     fits[text] = entry
   end
-  local key = maxW * 8 + (font % 8)
-  local cut = entry[key]
+  local byFont = entry[font]
+  if byFont == nil then
+    byFont = {}
+    entry[font] = byFont
+  end
+  local cut = byFont[maxW]
   if cut == nil then
     cut = M.fit(font, text, maxW)
-    entry[key] = cut
+    byFont[maxW] = cut
   end
   return cut
 end
@@ -880,6 +887,13 @@ local ARM_DISABLE_DESCS = {
 -- once here so the decode below concatenates nothing.
 local ARM_FLAG_KEYS = {}
 for i = 0, 25 do ARM_FLAG_KEYS[i] = "arm_flag_" .. i end
+
+-- The readable names in bit order, for a caller that prepares something per name at build time.
+function M.armFlagNames()
+  local out = {}
+  for b = 0, 25 do out[#out + 1] = M.T[ARM_FLAG_KEYS[b]] end
+  return out
+end
 
 local function flagBits(v)
   v = math.floor(v)
