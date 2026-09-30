@@ -566,6 +566,13 @@ local function enqueueUidRead(now)
     return true
   end
   if not ensureUidDep() then
+    -- The loader does not remember a module that failed to load, so every call here goes back to
+    -- the card for it, and rfsuite.require prints the failure again. The failure need not last --
+    -- in a widget, a module whose execution runs into the CPU limit can load on a later pass -- so
+    -- the read stays owed, but it waits out the same backoff as a read the board did not answer
+    -- instead of retrying on every tick.
+    state.consecutiveUidFailures = (state.consecutiveUidFailures or 0) + 1
+    state.requestBackoffUntil = now + math.min(30, 2 + state.consecutiveUidFailures * 2)
     state.uidReadSettled = true
     return false
   end
