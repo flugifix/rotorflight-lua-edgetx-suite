@@ -28,8 +28,9 @@ layer described below, and the menu and the picker open over it.
 | `widgets/dashboard/fullscreen_controls.lua` | The menu glyph and the X the widget draws over a fullscreen theme that binds no control of its own. |
 
 `views.lua` is loaded on the first fullscreen pass and never on a zone pass, so a dashboard
-that is never put full screen does not pay for it. The one exception is a call to
-`rfsuite.batteryPick`, which loads it wherever it is made. The in-flight tuning surface is not a view:
+that is never put full screen does not pay for it. The exceptions are a call to
+`rfsuite.batteryPick`, which loads it wherever it is made, and a free-form theme that registers
+[zone views](#zone-views), whose conditions it asks on the zone pass. The in-flight tuning surface is not a view:
 it takes full screen ahead of all of them while it is up, is decided before any of this runs,
 and keeps its own close box.
 
@@ -193,10 +194,40 @@ is loaded and again when its settings are saved, and a pass reads one value (`ge
 A name the radio does not know never opens the view.
 
 **A condition function** is called with the widget state and nothing else, on the passes where
-its view can be shown — every fullscreen pass for a fullscreen view — and under `pcall`: one that
+its view can be shown — every fullscreen pass for a fullscreen view, the zone's 2 Hz tick for a
+[zone view](#zone-views) — and under `pcall`: one that
 raises counts as false and says so in one log line per theme and view, not on every pass. It
 runs on every one of those passes, so it reads what the state already holds and computes as
 little as a box's value function does.
+
+## Zone views
+
+A view a free-form theme registers with `where = "zone"` — or `"both"`, which makes it a
+fullscreen view as well — takes the widget's zone instead of the theme's zone picture **while
+its `openWhen` holds**: a level, not an edge, the way the in-flight tuning surface takes the zone
+while its interlock is closed. Where several hold, the first in the theme's list shows. It is
+shown armed as well as disarmed.
+
+- **Display only.** A zone view is not on the stack, answers no key, and is built without a
+  `ctx` — `build(children, zone, state)` — so it binds no press; a widget zone receives no touch
+  in any case. Its module may have `renderKey(zone, state)`, asked with the conditions, and it
+  is rebuilt when that changes as well as whenever the theme's own zone key does.
+- **On the zone's 2 Hz tick, through the job slot.** The conditions are asked on the pass after
+  the zone's render-key throttle has ticked, and on no other: a zone view comes and goes within
+  about half a second. When the view to show has changed, that pass marks the scene for a
+  rebuild, and the scene job, in a pass of its own, builds the zone view or the theme. Nothing
+  is built inline.
+- **Paid for by the theme that has them.** The list is read by the scene build of a free-form
+  theme — in the branch a declarative theme's module never takes — once per theme path, and the
+  conditions are asked by a `refresh` wrapper that only a theme with zone views puts in place and
+  that takes itself out once that theme is gone. So a theme without zone views, and every
+  declarative theme, has the zone pass it had. The forms of `openWhen` and the rule for a
+  condition function are those [above](#what-else-a-themes-view-may-open-on); a zone view's
+  function runs on the tick of the zone pass. Counted offline with the accounting stubs, the
+  wrapper costs such a theme 18 instructions on a zone pass and about 95 to 100 on the pass that
+  asks, with one zone view.
+- **A zone view that fails is dropped.** One whose module does not load, or whose `build` raises,
+  is not shown again, with one log line, and the theme's own zone picture is built in its place.
 
 ## What follows a press
 

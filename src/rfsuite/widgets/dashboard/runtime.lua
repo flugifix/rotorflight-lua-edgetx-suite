@@ -705,6 +705,10 @@ local function splashJobStep(self)
   return true
 end
 
+-- The zone view a free-form theme's scene build draws instead of the theme, or nil; defined with
+-- the theme views further down.
+local zoneViewFor
+
 -- The scene job in three phases, carried as fields on the job table. The old LVGL tree
 -- stands until the swap, so a stepped rebuild shows the previous frame, never a blank one.
 local function sceneJobStep(self)
@@ -745,6 +749,29 @@ local function sceneJobStep(self)
   if not self.theme then return true end
 
   if type(self.theme.build) == "function" then
+    -- A zone view the theme registered takes the zone's place while its condition holds. It is
+    -- looked for here, in the branch only a free-form theme reaches, so a declarative theme's
+    -- build carries no test for it.
+    local zoneView = zoneViewFor(self)
+    if zoneView ~= nil then
+      -- A zone view whose build raises is given up on, with one log line, and the theme's own
+      -- zone picture is built instead, in this same step -- rather than the dispatcher clearing
+      -- the job and the next pass queuing the same failing build again.
+      local nodes = {}
+      local ok, err = pcall(zoneView.build, nodes, self.zone, self.state)
+      if ok then
+        lvgl.clear()
+        lvgl.build(nodes)
+        self.built = true
+        self._lastChildCount = #nodes
+        return true
+      end
+      if isCpuLimitError(err) then error(err, 0) end
+      local entry = self._zoneView
+      widgetLog(self, "zone view '" .. tostring(entry and entry.id) .. "' of the theme did not build: " .. tostring(err), "warn")
+      if entry ~= nil then entry.failed = true end
+      self._zoneView = nil
+    end
     -- A free-form theme builds in one step, exactly as before -- the engine cannot chunk
     -- what it does not render.
     local children = self.theme.build(self.zone, self.state)
@@ -2120,6 +2147,129 @@ local function resolveThemeMode(self, viewId, viewKey)
   if viewId == nil then return nil, fullscreenThemeKey(self) end
   self._cachedFullscreenKey = nil
   return viewId, viewKey
+end
+
+-- ---------------------------------------------------------------------------
+-- Zone views: a free-form theme's views that take the widget zone
+-- ---------------------------------------------------------------------------
+--
+-- A view a free-form theme registers with `where = "zone"` or `"both"` replaces the theme's zone
+-- picture while its `openWhen` holds -- a level, not an edge: it shows exactly as long as the
+-- condition does, armed or not. It is display only. It is not on the view stack, it answers no
+-- key, and it is built without a `ctx`, so it binds no press; a zone receives no touch anyway.
+--
+-- None of this is reached by a declarative theme. The list is read by the scene build, in the
+-- branch only a free-form theme's module takes, and the condition is asked by a `refresh`
+-- wrapper that only a theme with zone views puts in place -- the same way the theme mode's key
+-- route is installed -- so the zone pass of every other theme is the pass it was. The wrapper
+-- only decides; a change of view is built by the scene job in the job slot, never inline.
+
+-- The first of the theme's zone views, in its order, whose condition holds; nil for none.
+local function pickZoneView(self)
+  local list = self._zoneViews
+  local Views = viewsModule()
+  if list == nil or Views == nil then return nil end
+  for i = 1, #list do
+    local entry = list[i]
+    if not entry.failed and entry.openWhen ~= nil and Views.opens(entry, self) then return entry end
+  end
+  return nil
+end
+
+-- What the wrapper below does on a tick: take itself out once the theme that put it in place has
+-- gone, or else ask which zone view shows and mark the scene for a rebuild when that, or the
+-- view's own render key, has changed.
+local function zoneViewTick(self)
+  if self._zoneViews == nil or self._zoneViewsPath ~= self.themePath then
+    self.refresh = self._zoneOwnRefresh
+    self._zoneOwnRefresh = nil
+    self._zoneViews = nil
+    self._zoneViewsPath = nil
+    if self._zoneView ~= nil then
+      self._zoneView = nil
+      self.built = false
+    end
+    return
+  end
+  if self.theme == nil or type(self.theme.build) ~= "function" then return end
+  local view = pickZoneView(self)
+  if view ~= self._zoneView then
+    self._zoneView = view
+    self._zoneViewKey = nil
+    self.built = false
+  elseif view ~= nil and view.loaded ~= nil and type(view.loaded.renderKey) == "function" then
+    local key = view.loaded.renderKey(self.zone, self.state)
+    if key ~= self._zoneViewKey then
+      self._zoneViewKey = key
+      self.built = false
+    end
+  end
+end
+
+--- `widget.refresh` while the theme on screen has zone views.
+---
+--- The conditions are asked on the zone's own 2 Hz tick and on no other pass: the render key
+--- throttle of the pass before moved `_lastUIRefresh`, and this pass sees that it did. So a zone
+--- view comes and goes within half a second and a pass in between costs a comparison. The pass
+--- that follows a theme load is a tick as well, since the load resets the throttle.
+---
+--- A fullscreen pass goes straight through: the theme mode's own wrapper may sit on top of this
+--- one there, and puts this one back on the first pass without an event.
+local function zoneViewRefresh(self, event, touchState)
+  local ownRefresh = self._zoneOwnRefresh
+  if event == nil and self._lastUIRefresh ~= self._zoneViewTick then
+    self._zoneViewTick = self._lastUIRefresh
+    zoneViewTick(self)
+  end
+  return ownRefresh(self, event, touchState)
+end
+
+-- Put the wrapper in place, under the theme mode's where that one is on top.
+local function installZoneViewRefresh(self)
+  if self._zoneOwnRefresh ~= nil then return end
+  if self.refresh == themeModeRefresh then
+    self._zoneOwnRefresh = self._ownRefresh
+    self._ownRefresh = zoneViewRefresh
+  else
+    self._zoneOwnRefresh = self.refresh
+    self.refresh = zoneViewRefresh
+  end
+end
+
+--- The module of the zone view the scene build draws, or nil for the theme itself.
+---
+--- The theme's `views` are read once per theme path, here: the first scene build of a free-form
+--- theme after the path has changed. The view to show is decided then as well, so the first
+--- frame is the right one, and from then on by the wrapper. A zone view's module is loaded when
+--- it is first shown, through the theme loader; one that does not load is not asked for again.
+zoneViewFor = function(self)
+  if self._zoneViewsPath ~= self.themePath then
+    self._zoneViewsPath = self.themePath
+    local initTable, base, folder = loadThemeInit(self.themePath)
+    local list = themeViewList(initTable, base, folder, "zone")
+    if list ~= nil and #list == 0 then list = nil end
+    self._zoneViews = list
+    self._zoneView = nil
+    self._zoneViewKey = nil
+    if list == nil then return nil end
+    installZoneViewRefresh(self)
+    self._zoneView = pickZoneView(self)
+  end
+  local entry = self._zoneView
+  if entry == nil then return nil end
+  local view = entry.loaded
+  if view == nil then
+    view = entry.load()
+    if type(view) ~= "table" or type(view.build) ~= "function" then
+      widgetLog(self, "zone view '" .. tostring(entry.id) .. "' of the theme did not load", "warn")
+      entry.failed = true
+      self._zoneView = nil
+      return nil
+    end
+    entry.loaded = view
+  end
+  if type(view.renderKey) == "function" then self._zoneViewKey = view.renderKey(self.zone, self.state) end
+  return view
 end
 
 -- A stored path is a selection only if it names a theme: an empty select is written as the

@@ -801,7 +801,7 @@ views = {
 | `id` | The view's name. An id the widget already has — `menu`, `battery_pick` — replaces that view's **look** and nothing else; any other id is a view of the theme's own. A repeated id counts once. |
 | `module` | The file that draws it, relative to the theme folder. |
 | `openWhen` | Optional. What opens the view on its own: the name of a condition, a switch position (`{ switch = "SA", pos = "up" }`, `{ switch = "L01" }`), a switch the theme's own settings name (`{ switch = { pref = "<key>", default = "SA" }, pos = "down" }`), or a function of the state. See [what else a theme's view may open on](dashboard-views.md#what-else-a-themes-view-may-open-on); the view opens when it rises, [not while it holds](dashboard-views.md#views-that-open-themselves). Ignored where the id replaces a look. |
-| `where` | Optional. `"fullscreen"` (the default). |
+| `where` | Optional. `"fullscreen"` (the default), `"zone"` for a view that takes the widget zone instead ([zone views](dashboard-views.md#zone-views)), or `"both"`. |
 
 The list is read on the first fullscreen pass after the theme on screen has changed, with the
 `fullscreen` key and for the same reason, and only where the phase module on screen is

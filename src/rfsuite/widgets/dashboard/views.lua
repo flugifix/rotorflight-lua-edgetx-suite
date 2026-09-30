@@ -27,7 +27,8 @@
 -- surface is not a view here -- it takes fullscreen ahead of all of them -- and keeps its own
 -- close box.
 --
--- Loaded on the first fullscreen pass, never on a zone pass, and by the rfsuite.batteryPick
+-- Loaded on the first fullscreen pass, never on a zone pass -- except that of a free-form theme
+-- that registers zone views, whose conditions are asked here -- and by the rfsuite.batteryPick
 -- handle when something calls it. Nothing here is module state: the registry and the stack live
 -- on the widget, so a second copy of this module would change nothing.
 
