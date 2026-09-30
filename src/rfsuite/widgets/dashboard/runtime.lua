@@ -695,8 +695,8 @@ end
 -- arms the same job again -- so a cause that does not go away (a theme file that throws, a nil
 -- in a scene definition) would have the widget run the failing step every other pass for as
 -- long as it is up, writing a fault line each time. The count is per kind and consecutive: a
--- step of that kind that completes clears it, and a theme reload clears them all, since that is
--- what replaces the code that raised.
+-- step of that kind that draws its surface clears it, and a theme reload clears them all, since
+-- that is what replaces the code that raised.
 local JOB_FAULT_LIMIT = 3
 
 local function jobCapped(self, kind)
@@ -3625,6 +3625,10 @@ function Runtime.new(zone, options)
       -- set, reruns the same step, raises again, and the STATE branch — where
       -- performBackgroundWork / MspRuntime.tick live — is never reached again.
       local jobKind = self._job.kind
+      -- Only a job the state pass arms on `built` can loop, so only those are counted. A one-shot
+      -- job is armed by a request that it clears before it can raise, and each new request arms it
+      -- again: it is logged in full every time, as before.
+      local counted = self._job.oneShot ~= true
       local stepOk, stepDone = pcall(self._job.step, self)
       if not stepOk then
         self._job   = nil
@@ -3640,8 +3644,11 @@ function Runtime.new(zone, options)
         -- goes to the card as a fault -- the ones after it are the same fault, and a fault line is
         -- written to the card as it happens -- and the raise that reaches the limit says so, so
         -- the log ends with the reason the screen shows what it shows.
-        local faults = (self._jobFaults[jobKind] or 0) + 1
-        self._jobFaults[jobKind] = faults
+        local faults = 1
+        if counted then
+          faults = (self._jobFaults[jobKind] or 0) + 1
+          self._jobFaults[jobKind] = faults
+        end
         if faults == 1 and LogSink and type(LogSink.fault) == "function" then
           pcall(LogSink.fault, "dashboard.job." .. tostring(jobKind), stepDone)
         end
@@ -3651,8 +3658,10 @@ function Runtime.new(zone, options)
             .. " times in a row; not retried until the theme is reloaded", "error")
         end
       elseif stepDone then
-        -- step returned true: job is done.
-        self._jobFaults[jobKind] = nil
+        -- step returned true: job is done. A run of raises ends when the surface is drawn, not
+        -- when a step merely returns: several steps finish without building anything, and the
+        -- state pass then arms them again.
+        if self.built then self._jobFaults[jobKind] = nil end
         self._job = nil
       end
       -- The second of the two clock reads the gap line is built from; see traceInstructionUsage.
@@ -3838,14 +3847,13 @@ function Runtime.new(zone, options)
 
     -- The battery prompt's own work, last and only into a free slot: the registry read and the
     -- pick both touch the card, and neither is worth delaying a build for. The steady state
-    -- past the load is three table reads. Both jobs are counted by the dispatcher like any other
-    -- and need no gate: neither is armed on `built`, and each clears what arms it before it can
-    -- raise, so a raise does not bring it back.
+    -- past the load is three table reads. Both are one-shot jobs (see the dispatcher): neither is
+    -- armed on `built`, and each clears what arms it before it can raise.
     if self._job == nil then
       if self._batteryPickRequest ~= nil then
-        self._job = { kind = "battery_pick_apply", step = batteryPickApplyStep }
+        self._job = { kind = "battery_pick_apply", step = batteryPickApplyStep, oneShot = true }
       elseif self.state.batteryPick.loaded ~= true and self.state.tasksDone == true then
-        self._job = { kind = "battery_pick_load", step = batteryPickLoadStep }
+        self._job = { kind = "battery_pick_load", step = batteryPickLoadStep, oneShot = true }
       end
     end
 
