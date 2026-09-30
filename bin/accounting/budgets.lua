@@ -92,7 +92,7 @@ return {
     -- the next turn, rather than cut off at an instruction count. It is here as a
     -- regression detector, and as the price of decoding a whole backlog instead of
     -- its newest quarter.
-    ["pass.function"] = { target = 7300, measured = 5808 },
+    ["pass.function"] = { target = 7300, measured = 5867 },
     -- The in-flight tuning overlay, in three rows: the pass that drives it, the pass a reply of
     -- its ground half lands on, and the build of its screens.
     --
@@ -222,12 +222,12 @@ return {
     -- The custom-telemetry drain with a full frame backlog waiting: POP_CAP frames
     -- popped and accounted, DECODE_CAP of them walked through the per-sensor
     -- decoders. This is what the two counts in telemetry_bg/drain.lua buy.
-    ["unit.telemetry.drain"] = { target = 3300, measured = 2607 },
+    ["unit.telemetry.drain"] = { target = 3300, measured = 2730 },
     -- The same wakeup while the background function script is draining for the
     -- whole radio: the drain and the adjustment teller are skipped and SmartFuel
     -- is not, so what is left is what only this Lua state can compute. The gap to
     -- the row above is what a pass saves by handing over.
-    ["unit.telemetry.handoff"] = { target = 350, measured = 287 },
+    ["unit.telemetry.handoff"] = { target = 350, measured = 233 },
     ["unit.msp.pump"] = { target = 300, measured = 218 },
     -- The API-layer parse of the largest reply the suite scripts, in one piece. It
     -- lands in whatever pass completes the reassembly.
