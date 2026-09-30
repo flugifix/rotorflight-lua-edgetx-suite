@@ -383,15 +383,29 @@ end
 
 -- The longest prefix of `text` that still fits `maxW`, with two dots marking what was cut.
 -- Measured raw: the text may be data, so it must not enter the cache.
+--
+-- Found by halving rather than by shortening a byte at a time from the end. A prefix with its
+-- two dots never gets narrower as the prefix grows, so the longest one that fits takes about
+-- log2 of the length in measurements instead of one per byte cut away -- which is what a long
+-- text in a narrow box costs, the arming override's reasons in a longer language above all. Every
+-- candidate goes through M.cutUtf8, so a cut still never splits a multibyte character, and the
+-- answer is the one the walk from the end would have stopped at.
 function M.fit(font, text, maxW)
   text = tostring(text or "")
   if type(maxW) ~= "number" or maxW <= 0 then return text end
   if rawSize(text, font) <= maxW then return text end
-  for n = #text - 1, 1, -1 do
-    local cut = M.cutUtf8(text, n) .. ".."
-    if rawSize(cut, font) <= maxW then return cut end
+  -- The largest n in 1 .. #text - 1 whose cut fits; none leaves the two dots alone.
+  local lo, hi, best = 1, #text - 1, nil
+  while lo <= hi do
+    local mid = math.floor((lo + hi) / 2)
+    local cut = M.cutUtf8(text, mid) .. ".."
+    if rawSize(cut, font) <= maxW then
+      best, lo = cut, mid + 1
+    else
+      hi = mid - 1
+    end
   end
-  return ".."
+  return best or ".."
 end
 
 -- Largest font whose sample fits both the height and the width on offer. Two pixels of
