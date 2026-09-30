@@ -403,11 +403,118 @@ function M.getConfigurableThemes(themes)
   return configurable
 end
 
+-- Model overrides: whether a model's own theme and theme settings are used at all.
+--
+-- Two switches decide it. `model_overrides` in the radio's [dashboard] section allows or
+-- forbids per-model overrides on this radio; `overrides` in a model's own [dashboard] section
+-- turns them on for that model. Both are optional keys, and an absent one is not a "no": a card
+-- written before the switches existed stored per-model values without asking, so an absent
+-- radio switch allows, and an absent model switch is answered by what that model's file
+-- already holds -- a theme chosen with the old Model Override, or any theme setting. Once a
+-- switch has been saved it is the answer, and nothing is inferred any more.
+--
+-- Switching off never deletes: the model's values stay in its file and are ignored until the
+-- switch is turned on again.
+local function hasThemeSettings(modelDashboard)
+  for k in pairs(modelDashboard) do
+    if type(k) == "string" and string.sub(k, 1, 4) == "cfg_" then return true end
+  end
+  return false
+end
+
+function M.overridesAllowed(dashboard)
+  if type(dashboard) ~= "table" then return true end
+  return dashboard.model_overrides ~= false
+end
+
+function M.modelOverridesOn(modelDashboard)
+  if type(modelDashboard) ~= "table" then return false end
+  if modelDashboard.overrides ~= nil then return modelDashboard.overrides == true end
+  return modelDashboard.model_override == true or hasThemeSettings(modelDashboard)
+end
+
+function M.modelOverridesActive(dashboard, modelDashboard)
+  return M.overridesAllowed(dashboard) and M.modelOverridesOn(modelDashboard)
+end
+
+-- The themes a model draws, for the overview: one entry per theme, with the flight phases it is
+-- drawn in. The rule is the widget's (resolveThemePathForState in widgets/dashboard/runtime.lua,
+-- which keeps its own copy because it runs without this file when it cannot load it): with
+-- Per-Phase Themes on, a phase's own select wins over the theme above it; the model's selects
+-- count while its overrides are active, and fall back to the radio's.
+local PHASES = { "preflight", "inflight", "postflight" }
+
+local function selectedThemePath(value)
+  if type(value) == "string" and value ~= "" and value ~= "nil" then return value end
+  return nil
+end
+
+function M.resolveThemePath(dashboard, modelDashboard, phase)
+  if type(dashboard) ~= "table" then dashboard = {} end
+  if type(modelDashboard) ~= "table" then modelDashboard = {} end
+  local perPhase = dashboard.theme_per_phase == true and phase ~= "preflight"
+  if M.modelOverridesActive(dashboard, modelDashboard) then
+    local chosen = (perPhase and selectedThemePath(modelDashboard["model_theme_" .. phase]))
+      or selectedThemePath(modelDashboard.model_theme_preflight)
+    if chosen then return chosen end
+  end
+  return (perPhase and selectedThemePath(dashboard["theme_" .. phase]))
+    or selectedThemePath(dashboard.theme_preflight)
+    or "system/default"
+end
+
+function M.themesInUse(dashboard, modelDashboard)
+  local out, byPath = {}, {}
+  for i = 1, #PHASES do
+    local path = M.resolveThemePath(dashboard, modelDashboard, PHASES[i])
+    local entry = byPath[path]
+    if not entry then
+      entry = { path = path, phases = {} }
+      byPath[path] = entry
+      out[#out + 1] = entry
+    end
+    entry.phases[#entry.phases + 1] = PHASES[i]
+  end
+  return out
+end
+
+-- Which half of the configuration a theme's settings page is editing. The settings page sets
+-- it before it opens a theme's module and clears it when it closes, because the modules read
+-- and save through getThemeConfig/setThemeConfig and are not told the scope themselves -- a
+-- theme written before scopes existed therefore edits the right half unchanged.
+--
+--   "standard"  the radio's values, which every model without overrides uses
+--   "model"     the connected model's overrides on top of the standard values
+--   nil         not editing: the dashboard reading what applies (the two switches decide)
+--
+-- The scope lives on the session because a theme's module loads its own copy of this file.
+function M.setEditScope(scope)
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session
+  if type(session) == "table" then
+    session.dashboardConfigScope = scope
+  end
+end
+
+function M.getEditScope()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session
+  if type(session) == "table" then
+    return session.dashboardConfigScope
+  end
+  return nil
+end
+
+-- The defaults each theme reads its configuration with, remembered so a save in the model
+-- scope can tell a value that deviates from one that merely repeats the standard.
+local themeDefaults = {}
+
 function M.getThemeConfig(prefs, path, defaults, modelPrefs)
   local out = {}
   local source = defaults or {}
   for k, v in pairs(source) do
     out[k] = v
+  end
+  if type(path) == "string" and defaults ~= nil then
+    themeDefaults[path] = defaults
   end
 
   local dashboard = prefs and prefs.dashboard
@@ -434,8 +541,17 @@ function M.getThemeConfig(prefs, path, defaults, modelPrefs)
     end
   end
 
-  -- 2. Then, apply model-specific preferences (higher priority)
+  -- 2. Then, apply model-specific preferences (higher priority), when they apply at all
+  local scope = M.getEditScope()
+  local useModel = false
   if type(modelPrefs) == "table" then
+    if scope == "model" then
+      useModel = true
+    elseif scope == nil then
+      useModel = M.modelOverridesActive(dashboard, modelPrefs.dashboard)
+    end
+  end
+  if useModel then
     local modelDashboard = modelPrefs.dashboard
     if type(modelDashboard) == "table" then
       if prefixPattern then
@@ -458,45 +574,109 @@ function M.getThemeConfig(prefs, path, defaults, modelPrefs)
   return out
 end
 
--- A theme's configuration describes the aircraft rather than the radio: the battery bounds a
--- theme is configured with are the cell count of one model. So the per-model store is the
--- target whenever there is one, and the global file is the fallback for a radio that has none
--- -- not a second copy.
---
--- Writing both made every value the last configured model chose the default for every model
--- that has none of its own, and getThemeConfig reads the global half first, so the leak is
--- read straight back. It reaches further than the numbers: widgets/dashboard/runtime.lua
--- treats any v_min/v_max it finds as a deliberate choice (`_customVoltage`) and then skips
--- normalising the bounds to the cell count it measured, so one configured theme switched that
--- normalisation off for every other model as well.
---
--- Saving into the per-model store therefore also clears this theme's keys from the global
--- file, whatever they hold. A value there cannot be told apart from the copy the old
--- unconditional double write left behind, so keeping the ones that merely differ would carry
--- the leak on for every radio configured before this: the next model with no store of its own
--- would read that number and lose its cell-count normalisation exactly as before.
+local function sameValue(a, b)
+  if type(a) == "number" and type(b) == "number" then
+    return math.abs(a - b) < 1e-6
+  end
+  return a == b
+end
+
+-- Where a save lands is the scope the page is editing, never whether a flight controller
+-- happens to be connected. The standard scope writes the radio's file and leaves every model
+-- file alone. The model scope writes only what deviates: a value equal to the standard one --
+-- the radio's value where it has one, the theme's default otherwise -- is removed from the model
+-- rather than stored, so the model's file lists exactly its overrides and a later change of the
+-- standard still reaches every value the model never changed. Without the model's store the
+-- model scope saves nothing: writing its values into the radio's file instead would change the
+-- standard for every model.
 function M.setThemeConfig(prefs, path, values, modelPrefs)
   if type(values) ~= "table" then return end
 
-  local target = (type(modelPrefs) == "table") and modelPrefs or prefs
-  if type(target) ~= "table" then return end
+  if M.getEditScope() == "model" then
+    if type(modelPrefs) ~= "table" then return end
+    local global = (type(prefs) == "table" and type(prefs.dashboard) == "table") and prefs.dashboard or {}
+    local defaults = themeDefaults[path] or {}
+    modelPrefs.dashboard = modelPrefs.dashboard or {}
+    -- Editing the model's overrides is the decision to have them; a model that only inferred
+    -- the switch from its file would lose it with its last deviating value.
+    if modelPrefs.dashboard.overrides == nil then modelPrefs.dashboard.overrides = true end
+    for k, v in pairs(values) do
+      local key = themeConfigKey(path, k)
+      if key then
+        local standard = global[key]
+        if standard == nil then standard = defaults[k] end
+        if standard ~= nil and sameValue(v, standard) then
+          modelPrefs.dashboard[key] = nil
+        else
+          modelPrefs.dashboard[key] = v
+        end
+      end
+    end
+    return
+  end
 
-  target.dashboard = target.dashboard or {}
+  if type(prefs) ~= "table" then return end
+  prefs.dashboard = prefs.dashboard or {}
   for k, v in pairs(values) do
     local key = themeConfigKey(path, k)
     if key then
-      target.dashboard[key] = v
+      prefs.dashboard[key] = v
     end
   end
+end
 
-  if target ~= prefs and type(prefs) == "table" and type(prefs.dashboard) == "table" then
-    for k in pairs(values) do
-      local key = themeConfigKey(path, k)
-      if key then
-        prefs.dashboard[key] = nil
+-- The overrides a model's file holds, for the overview: one entry per theme setting, with the
+-- theme it belongs to (by path, where one of `themes` matches its key), the model's value and
+-- the radio's standard value (nil where the radio has none and the theme's default applies).
+function M.listModelOverrides(prefs, modelPrefs, themes)
+  local out = {}
+  local modelDashboard = type(modelPrefs) == "table" and modelPrefs.dashboard or nil
+  if type(modelDashboard) ~= "table" then return out end
+  local global = (type(prefs) == "table" and type(prefs.dashboard) == "table") and prefs.dashboard or {}
+
+  local prefixes = {}
+  if type(themes) == "table" then
+    for i = 1, #themes do
+      local prefix = sanitizeThemeKey(themes[i].path)
+      if prefix then
+        prefixes[#prefixes + 1] = { prefix = "cfg_" .. prefix .. "_", theme = themes[i] }
       end
     end
   end
+
+  for key, value in pairs(modelDashboard) do
+    if type(key) == "string" and string.sub(key, 1, 4) == "cfg_" then
+      local theme, setting = nil, string.sub(key, 5)
+      local best = 0
+      for i = 1, #prefixes do
+        local p = prefixes[i].prefix
+        if #p > best and string.sub(key, 1, #p) == p then
+          best = #p
+          theme = prefixes[i].theme
+          setting = string.sub(key, #p + 1)
+        end
+      end
+      out[#out + 1] = { key = key, theme = theme, setting = setting, value = value, standard = global[key] }
+    end
+  end
+
+  table.sort(out, function(a, b) return a.key < b.key end)
+  return out
+end
+
+-- Removes one override (`key`) or all of them (`key` nil) from a model's file; the caller saves.
+function M.clearModelOverride(modelPrefs, key)
+  local modelDashboard = type(modelPrefs) == "table" and modelPrefs.dashboard or nil
+  if type(modelDashboard) ~= "table" then return end
+  if key ~= nil then
+    modelDashboard[key] = nil
+    return
+  end
+  local keys = {}
+  for k in pairs(modelDashboard) do
+    if type(k) == "string" and string.sub(k, 1, 4) == "cfg_" then keys[#keys + 1] = k end
+  end
+  for i = 1, #keys do modelDashboard[keys[i]] = nil end
 end
 
 return M

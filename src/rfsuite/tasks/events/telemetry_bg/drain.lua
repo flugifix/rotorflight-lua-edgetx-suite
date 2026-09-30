@@ -249,9 +249,15 @@ end
 -- -- the radio's script state, where a permanent script runs -- and there dropping the older
 -- frames of a backlog buys nothing. A call billed against a hard per-call ceiling keeps the cap.
 function M.wakeup(now, decodeAll)
+    -- The decoder table gets a wakeup of its own, and this one returns without popping: loading
+    -- its top-level chunk costs more than a steady drain pass does, and loading it in the same
+    -- call as the first decode puts both into one widget pass -- the rule telemetry_bg/tasks.lua
+    -- follows for the modules above this one. Nothing is popped here, so the frames stay queued
+    -- for the next wakeup, and returning 0 keeps liveness honest: this pass took nothing off the
+    -- wire.
     if not RFSensors then
         RFSensors = loadModule("lib/rf2tlm_sensors.lua", nil, groupDue)
-        if not RFSensors then return 0 end
+        return 0
     end
 
     -- Pop up to POP_CAP, keep the newest DECODE_CAP in arrival order, decode only those --

@@ -14,6 +14,7 @@ local entries = {
   --settings_shortcuts_page = definePage("settings/shortcuts"),
   settings_dashboard_theme_page = definePage("settings/dashboard/theme"),
   settings_dashboard_settings_page = definePage("settings/dashboard/settings"),
+  settings_dashboard_overrides_page = definePage("settings/dashboard/overrides"),
   settings_dashboard_inflight_page = definePage("settings/dashboard/inflight"),
   --settings_activelook_page = definePage("settings/activelook"),
   settings_localization_page = definePage("settings/localization"),
@@ -153,7 +154,10 @@ end
 
 local function isDynamicDashboardSettingsPage(menuId)
   if type(menuId) ~= "string" then return false end
-  if string.match(menuId, "^settings_dashboard_settings_[0-9a-f]+_page$") ~= nil then
+  -- `settings_` ids edit the radio's standard values and `model_` ids the connected model's
+  -- overrides. Both open the same page, which reads the scope off the id.
+  if string.match(menuId, "^settings_dashboard_settings_[0-9a-f]+_page$") ~= nil
+    or string.match(menuId, "^settings_dashboard_model_[0-9a-f]+_page$") ~= nil then
     return true
   end
   -- A theme that splits its settings into pages puts the page id between the theme token and
@@ -161,6 +165,7 @@ local function isDynamicDashboardSettingsPage(menuId)
   -- the menu id that answers with a page module here is the one that renders as a page, so a
   -- grid answering would replace itself with the settings page of its first theme.
   return string.match(menuId, "^settings_dashboard_settings_[0-9a-f]+_[a-z0-9_]+_page$") ~= nil
+    or string.match(menuId, "^settings_dashboard_model_[0-9a-f]+_[a-z0-9_]+_page$") ~= nil
 end
 
 local function isCacheableMenuId(menuId)
