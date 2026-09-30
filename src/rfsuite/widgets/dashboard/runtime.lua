@@ -2850,9 +2850,32 @@ function Runtime.new(zone, options)
           end
         end
       end
+      -- A source a module reads without a box of its own naming it. Two shapes need this and
+      -- neither can go through collect(): a free-form theme declares no boxes at all, so its
+      -- closures see a snapshot holding only the fixed state fields; and a box that draws a
+      -- session minimum or maximum beside its live value reads three sources through one
+      -- `source` field. The list is the phase module's own, which is what makes it per phase --
+      -- this runs again on every phase change, and the module standing here is the one being
+      -- drawn, so a source declared for the ground is not read in the air.
+      local function collectDeclared(declared)
+        if type(declared) == "function" then
+          local ok, list = pcall(declared, nil, self.state)
+          declared = (ok and type(list) == "table") and list or nil
+        end
+        if type(declared) ~= "table" then return end
+        for i = 1, #declared do
+          local src = declared[i]
+          if type(src) == "string" and src ~= "" and not seen[src] then
+            seen[src] = true
+            sources[#sources + 1] = src
+          end
+        end
+      end
       collect(self.theme.boxes)
       -- Header boxes stand in the same tree and their closures read the same snapshot.
       collect(self.theme.header_boxes)
+      -- Declared before the pairs are completed below, so a declared half gets its other half.
+      collectDeclared(self.theme.sources)
       -- A status and the severity of it are one reading used together: the text goes in the box
       -- and the level colours it, and a colour closure can read only what the snapshot carries.
       -- So naming either half of a pair declares both. The second one costs a cache read on the

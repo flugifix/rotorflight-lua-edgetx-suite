@@ -327,7 +327,10 @@ Sensors.map = {
   -- Speeds / RPM
   Hspd = { label = "Headspeed", unit = "rpm", prec = 0, fallback = 0 },
   Tspd = { label = "Tailspeed", unit = "rpm", prec = 0, fallback = 0 },
-  RQly = { label = "Link Quality", unit = "dB", prec = 0, fallback = 0 },
+  -- Percent, not dB: the radio creates this sensor itself and declares it UNIT_PERCENT
+  -- (EdgeTX, radio/src/telemetry/crossfire.cpp, crossfireSensors, LINK_ID subId 2). TQly
+  -- below is the same quantity in the other direction.
+  RQly = { label = "Link Quality", unit = "%", prec = 0, fallback = 0 },
 
   -- Attitude
   Ptch = { label = "Pitch", unit = "°", prec = 1, fallback = 0 },
@@ -342,6 +345,40 @@ Sensors.map = {
   ["Thr%"] = { label = "Throttle %", unit = "%", prec = 0, fallback = 0 },
   Alt  = { label = "Altitude", unit = "m", prec = 1, fallback = 0 },
   ["Cel#"] = { label = "Cell Count", unit = "raw", prec = 0, fallback = 6 },
+
+  -- The link statistics, which are the RADIO's sensors rather than the flight controller's:
+  -- the CRSF driver creates them from the link frames, so they exist on every model flown on
+  -- a Crossfire or ELRS link. Several are named elsewhere in the tree -- RSS1_SOURCES in the
+  -- dashboard and in ui/home.lua, the log graph's link template, the announcement list -- but
+  -- as names only, and none of them had a row here saying what unit they are in.
+  -- lib/rf2tlm_sensors.lua is the table for the flight controller's custom telemetry and
+  -- covers none of these. Names and units are EdgeTX's own,
+  -- radio/src/telemetry/crossfire.cpp (crossfireSensors), with the spellings in
+  -- radio/src/translations/untranslated.h on 2.12 and radio/src/telemetry/sensor_names.h
+  -- on main; every one of them is whole numbers. The units are those of 2.12.3 and later,
+  -- which declare the three RSSI rows in dBm where 2.12.2 and earlier said dB. TPWR is
+  -- declared twice there, in mW from the link frame and in dBm from the extended one; the row
+  -- keeps mW, the unit of the frame every link sends.
+  --
+  -- They carry no label and no fallback, unlike the rows above, because nothing in the tree
+  -- reads either field off a row of this table (getMetadata's one caller reads prec). A label
+  -- matters most: lib/ has no route to the translations, so an English label here would ship
+  -- as English in every locale the moment something did read it. A theme naming one of these
+  -- as a source titles its own tile, in its own translated string.
+  ["1RSS"] = { unit = "dBm", prec = 0 },
+  ["2RSS"] = { unit = "dBm", prec = 0 },
+  RSNR = { unit = "dB", prec = 0 },
+  ANT  = { unit = "raw", prec = 0 },
+  RFMD = { unit = "raw", prec = 0 },
+  TPWR = { unit = "mW", prec = 0 },
+  TRSS = { unit = "dBm", prec = 0 },
+  TQly = { unit = "%", prec = 0 },
+  TSNR = { unit = "dB", prec = 0 },
+  -- The four the extended link frames add, which only some modules send.
+  RRSP = { unit = "%", prec = 0 },
+  RPWR = { unit = "dBm", prec = 0 },
+  TRSP = { unit = "%", prec = 0 },
+  TFPS = { unit = "Hz", prec = 0 },
 }
 
 -- Aliases: dashboard/internal names → 4-char sensor names
