@@ -2363,7 +2363,12 @@ return {
         saved_title = "Saved",
         saved_message = "Theme settings saved",
         save_error_title = "Error",
-        save_error_message = "Save failed"
+        save_error_message = "Save failed",
+        -- The Urban theme's settings pages: the tile titles its init.lua declares, which are
+        -- also the section headers of its configure page.
+        urban_page_look = "Look",
+        urban_page_rows = "Value Rows",
+        urban_page_topbar = "Top Bar"
       },
       tools_flight_log = {
         title = "Flight Log",

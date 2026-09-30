@@ -2363,7 +2363,10 @@ return {
         saved_title = "Gespeichert",
         saved_message = "Theme-Einstellungen gespeichert",
         save_error_title = "Fehler",
-        save_error_message = "Speichern fehlgeschlagen"
+        save_error_message = "Speichern fehlgeschlagen",
+        urban_page_look = "Aussehen",
+        urban_page_rows = "Wertezeilen",
+        urban_page_topbar = "Kopfleiste"
       },
       tools_flight_log = {
         title = "Flugbuch",
