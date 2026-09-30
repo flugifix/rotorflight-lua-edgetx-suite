@@ -1963,6 +1963,13 @@ local function takeFullscreenMode(self)
   self._viewBase = themeMode and "theme" or nil
   self._viewCtx = nil
   self._cachedFullscreenKey = nil
+  -- What became of the work the previous theme ran was that theme's to draw. A phase change of
+  -- the same theme keeps it.
+  if holder.path ~= self.themePath then
+    holder.path = self.themePath
+    local Views = viewsModule()
+    if Views then Views.forgetOutcomes(self) end
+  end
 end
 
 --- The render key of the theme as the base layer, under the same 2 Hz throttle as the zone key.

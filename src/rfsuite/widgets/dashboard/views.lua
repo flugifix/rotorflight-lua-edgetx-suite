@@ -14,7 +14,10 @@
 --
 -- The stack is one field, so that the pass which arrives without an event -- fullscreen has
 -- been left, possibly by a long press on RTN that Lua never saw -- drops all of it in one
--- assignment in widgets/dashboard/runtime.lua.
+-- assignment in widgets/dashboard/runtime.lua. The same table is the fullscreen session: what
+-- else belongs to one visit to fullscreen -- the outcome of the work a theme ran -- is kept on
+-- it, beside the views, and goes with it. Once a visit has one, it stays a table while the
+-- visit lasts, empty or not.
 --
 -- What follows a press is data rather than code. An entry, an option or a button carries an
 -- `after` action; its `press` does the work only, and `navigate()` below performs the follow-up.
@@ -208,13 +211,23 @@ local function push(widget, id, auto)
   return true
 end
 
--- Take the top entry off; an empty stack becomes nil, so there is one way of being empty.
+-- Take the top entry off. An empty stack stays a table: it is still the session of this visit
+-- to fullscreen, and what is kept on it is not dropped by closing the last view.
 local function pop(widget)
   local stack = widget._viewStack
   if stack == nil then return end
   stack[#stack] = nil
   stack.refused = nil
-  if #stack == 0 then widget._viewStack = nil end
+end
+
+--- This visit's session: the stack table, made when a visit has none yet.
+function M.session(widget)
+  local stack = widget._viewStack
+  if stack == nil then
+    stack = {}
+    widget._viewStack = stack
+  end
+  return stack
 end
 
 --- The view fullscreen shows on this pass, and the render key for it.
@@ -245,10 +258,7 @@ function M.resolve(widget)
         end
       end
     end
-    if changed then
-      stack.refused = nil
-      if #stack == 0 then widget._viewStack = nil end
-    end
+    if changed then stack.refused = nil end
   end
 
   for i = 1, #registry do
@@ -355,6 +365,67 @@ function M.navigate(widget, after)
 end
 
 -- ---------------------------------------------------------------------------
+-- Outcomes
+-- ---------------------------------------------------------------------------
+
+-- What became of the work a theme ran through `ctx.run`, per entry id: "busy" once the work has
+-- queued its messages to the flight controller, "ok" when the last of them has been answered,
+-- "failed" when any of them was given up -- out of retries, timed out, or dropped by a clear of
+-- the queue. Work that queues nothing has no outcome.
+--
+-- The outcome is kept on the session it was started in and lapses with it: `done`,
+-- `exitFullscreen`, the pass without an event and a reconnect all start a new one. A reply that
+-- arrives after that writes into the session it belonged to, which nothing reads any more, and
+-- forces no rebuild -- the widget may be back in its zone by then. Of two runs of one entry the
+-- later one is reported; a chain that has failed stays failed.
+
+--- A reporter for one run of entry `id`, bound to this visit's session.
+function M.reporter(widget, id)
+  local session = M.session(widget)
+  local runs = session.runs
+  if runs == nil then
+    runs = {}
+    session.runs = runs
+  end
+  local failed = false
+  local report
+  report = function(value)
+    if failed or session.runs ~= runs or runs[id] ~= report then return end
+    if value == "failed" then failed = true end
+    local status = session.status
+    if status == nil then
+      status = {}
+      session.status = status
+    end
+    if status[id] == value then return end
+    status[id] = value
+    -- A theme draws the outcome, so a new one is a new picture.
+    if widget._viewStack == session then
+      widget.built = false
+      widget.renderKey = nil
+    end
+  end
+  runs[id] = report
+  return report
+end
+
+--- The outcome of the last run of entry `id` in this visit: nil, "busy", "ok" or "failed".
+function M.status(widget, id)
+  local session = widget._viewStack
+  local status = session and session.status or nil
+  return status and status[id] or nil
+end
+
+--- Drop every outcome: the theme they were drawn by has gone.
+function M.forgetOutcomes(widget)
+  local session = widget._viewStack
+  if session ~= nil then
+    session.status = nil
+    session.runs = nil
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Keys
 -- ---------------------------------------------------------------------------
 
@@ -429,14 +500,31 @@ end
 --   ctx.condition(name)        `condition(name, widget)`
 --   ctx.entries()              the quick menu's entries, `fullscreen_menu.entries(widget)`
 --   ctx.menu(children, list)   the quick menu's builder, appending to `children`; `list`
---                              defaults to the menu's own entries
+--                              defaults to the menu's own entries, and one handed in chooses
+--                              and orders them by id -- it cannot bring a press of its own
+--
+-- and, for a theme that draws the entries itself -- the theme draws, the widget acts:
+--
+--   ctx.entry(id)              the entry `id` of the menu's records, or nil
+--   ctx.list(name)             the records of a named list (`fullscreen_menu.LISTS`), in its
+--                              order; an empty list for a name there is none of
+--   ctx.visible(entry)         whether the entry is offered now, as the quick menu asks it
+--   ctx.run(entry, option, after)
+--                              the entry's work, or the option's, and then what follows it --
+--                              the menu's own record and option of that id, whatever table the
+--                              theme hands in; `after` replaces the follow-up, nil keeps it
+--   ctx.status(id)             what became of the last `ctx.run` of that entry in this visit
+--                              to fullscreen: nil, "busy", "ok" or "failed"
+--   ctx.info(entry)            what the entry has to say about the state it acts on, read now
+--                              (the blackbox fill for ERASE BLACKBOX), or nil
 --
 -- The menu module is loaded on the first call that needs it, not here.
 function M.bind(widget)
   local menu = nil
   local function menuModule()
     if menu == nil then menu = requireModule("widgets/dashboard/fullscreen_menu.lua") end
-    return menu
+    if type(menu) == "table" then return menu end
+    return nil
   end
   return {
     action = function(after) M.navigate(widget, after) end,
@@ -444,13 +532,58 @@ function M.bind(widget)
     condition = function(name) return M.condition(name, widget) end,
     entries = function()
       local m = menuModule()
-      if type(m) == "table" and type(m.entries) == "function" then return m.entries(widget) end
+      if m and type(m.entries) == "function" then return m.entries(widget) end
       return {}
     end,
+    -- A list a theme hands in chooses and orders the menu's own entries and nothing more: each
+    -- item is replaced by the menu's record of that id, and an item whose id the menu does not
+    -- have is left out, so no press of the theme's is ever drawn as one of the menu's.
     menu = function(children, entries)
       local m = menuModule()
-      if type(m) == "table" and type(m.build) == "function" then m.build(children, widget, entries) end
+      if not (m and type(m.build) == "function") then return children end
+      if entries ~= nil then
+        entries = type(m.coreList) == "function" and m.coreList(widget, entries) or {}
+      end
+      m.build(children, widget, entries)
       return children
+    end,
+    entry = function(id)
+      local m = menuModule()
+      if m and type(m.entry) == "function" then return m.entry(widget, id) end
+      return nil
+    end,
+    list = function(name)
+      local m = menuModule()
+      if m and type(m.list) == "function" then return m.list(widget, name) end
+      return {}
+    end,
+    visible = function(entry)
+      local m = menuModule()
+      local core = (m and type(m.resolve) == "function") and m.resolve(widget, entry) or nil
+      if core == nil then return false end
+      return m.visible(widget, core)
+    end,
+    -- What is run is the menu's own record, and its own option, looked up again from what the
+    -- theme hands in: never a press out of the theme's table. An entry or an option the menu does
+    -- not have is refused, so a theme cannot put work of its own behind the widget's name for it.
+    -- Only `after`, the follow-up, is the theme's to choose.
+    run = function(entry, option, after)
+      local m = menuModule()
+      if not (m and type(m.resolve) == "function" and type(m.run) == "function") then return end
+      local core, coreOption = m.resolve(widget, entry, option)
+      if core == nil then
+        viewLog("entry '" .. tostring(type(entry) == "table" and entry.id or entry)
+          .. "' not run: the menu has no such entry or option")
+        return
+      end
+      m.run(widget, core, coreOption, after, M.reporter(widget, core.id))
+    end,
+    status = function(id) return M.status(widget, id) end,
+    info = function(entry)
+      local m = menuModule()
+      local core = (m and type(m.resolve) == "function") and m.resolve(widget, entry) or nil
+      if core ~= nil and type(core.info) == "function" then return core.info() end
+      return nil
     end,
   }
 end

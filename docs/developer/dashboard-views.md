@@ -57,7 +57,12 @@ job that first builds it and kept on that widget's entry; the state pass reads a
 ## The stack and the base layer
 
 Which view is on screen is a stack of view ids, held in one field, `widget._viewStack`. Each
-entry is `{ id = <id>, auto = true | nil }`.
+entry is `{ id = <id>, auto = true | nil }`. The same table is the **session** of one visit to
+full screen: what else belongs to the visit — the outcome of the work a theme ran through
+`ctx.run` ([dashboard themes](dashboard-themes.md#the-theme-draws-the-widget-acts)) — is kept
+on it beside the views and goes with it. Once a visit has one, it stays a table while the visit
+lasts, empty or not: closing the last view leaves an empty stack, not `nil`. `done` and
+`exitFullscreen` start a new session, and so do the two clears below.
 
 - The view on top of the stack is the one shown.
 - Opening a view that is already on the stack returns to it — everything above it is closed —
@@ -164,7 +169,8 @@ Over a fullscreen theme the same `done` puts the theme back instead.
 `views.bind(widget)` returns the actions and building blocks bound to one widget, for code that
 has no widget of its own to pass. It is the `ctx` a fullscreen theme's build receives:
 `ctx.action(after)` performs `after` exactly as `navigate(widget, after)` does, and `ctx.keys`,
-`ctx.condition`, `ctx.entries` and `ctx.menu` are described in
+`ctx.condition`, `ctx.entries`, `ctx.menu` and the entry calls — `ctx.entry`, `ctx.list`,
+`ctx.visible`, `ctx.run`, `ctx.status` and `ctx.info` — are described in
 [dashboard themes](dashboard-themes.md#ctx).
 
 ## Keys

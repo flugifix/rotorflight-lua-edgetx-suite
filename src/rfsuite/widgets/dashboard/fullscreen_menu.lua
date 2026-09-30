@@ -40,6 +40,46 @@ local function pressFor(widget, work, after)
   end
 end
 
+-- The menus the widget offers, each a list of entry ids in the order they are drawn. The quick
+-- menu is the one there is; a theme draws it, or takes entries out of it by id, and adds none.
+M.LISTS = {
+  quick = { "erase_blackbox", "inflight_tuning", "battery_pick", "battery_profile" },
+}
+
+-- ---------------------------------------------------------------------------
+-- Work that talks to the flight controller
+-- ---------------------------------------------------------------------------
+
+-- Queue a chain of messages, in order.
+--
+-- With a `report` -- only a theme's run hands one in; the menu's own presses never do, so what
+-- they queue is exactly what they always queued -- the chain also says how it went: "busy" once
+-- it is queued, "ok" when the LAST message has been answered, and "failed" when any message is
+-- given up, whether out of retries, timed out or dropped by a clear of the queue. A message's own
+-- reply and error handlers are kept and run first: they are wrapped, never replaced.
+local function queueChain(queue, chain, report)
+  local last = #chain
+  if report ~= nil then
+    for i = 1, last do
+      local msg = chain[i]
+      local ownError = msg.errorHandler
+      msg.errorHandler = function(m, reason)
+        if type(ownError) == "function" then ownError(m, reason) end
+        report("failed")
+      end
+      if i == last then
+        local ownReply = msg.processReply
+        msg.processReply = function(m, buf)
+          if type(ownReply) == "function" then ownReply(m, buf) end
+          report("ok")
+        end
+      end
+    end
+  end
+  for i = 1, last do queue:add(chain[i]) end
+  if report ~= nil and last > 0 then report("busy") end
+end
+
 -- ---------------------------------------------------------------------------
 -- The battery prompt's work
 -- ---------------------------------------------------------------------------
@@ -74,8 +114,9 @@ end
 --
 -- Every string an option carries is built here, once per call, so what draws them builds none.
 -- `label` is the pack's name and `detail` the line under it; `pack` is the registry entry
--- itself, for a surface that wants to lay the same facts out differently. NO BATTERY is marked
--- `none`, because the picker reserves the foot row for it before the packs are laid out.
+-- itself, for a surface that wants to lay the same facts out differently. A pack's option
+-- carries the pack's `id`, by which a run is matched to it. NO BATTERY is marked `none`, because
+-- the picker reserves the foot row for it before the packs are laid out.
 local function batteryPickOptions(widget, t)
   local pick = widget.state and widget.state.batteryPick or nil
   local candidates = (type(pick) == "table" and type(pick.candidates) == "table") and pick.candidates or {}
@@ -107,6 +148,7 @@ local function batteryPickOptions(widget, t)
 
     local id = pack.id
     options[i] = {
+      id = id,
       label = nameText,
       detail = detail,
       current = (selectedId ~= nil and id == selectedId),
@@ -131,14 +173,13 @@ end
 -- entry -- the battery picker wants its own record, and a theme one entry by its id -- builds that
 -- one and not all of them, their translations and closures included.
 local BUILD = {}
-local ORDER = { "erase_blackbox", "inflight_tuning", "battery_pick", "battery_profile" }
 
 function BUILD.erase_blackbox(widget, t)
   return {
     id = "erase_blackbox",
     kind = "action",
     title = t("widgets.dashboard.erase_blackbox", "ERASE BLACKBOX"),
-    press = function()
+    press = function(report)
          local mspModule = requireModule("tasks/msp/runtime.lua")
          if mspModule and mspModule.getState then
             local mState = mspModule.getState()
@@ -147,28 +188,38 @@ function BUILD.erase_blackbox(widget, t)
                local summaryApi = requireModule("tasks/msp/api/dataflash_summary.lua")
 
                if eraseApi and summaryApi then
-                 mState.queue:add({
-                    command = eraseApi.writeCommand,
-                    payload = eraseApi.buildWritePayload({}),
-                    simulatorResponse = {},
-                    isWrite = true,
-                    timeout = 10.0,
-                 })
-                 mState.queue:add({
-                    command = summaryApi.command,
-                    simulatorResponse = summaryApi.simulatorResponse,
-                    processReply = function(_, buf)
-                      local stats = summaryApi.parse(buf)
-                      if stats then
-                        if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
-                          _G.rfsuite.session.dataflash = stats
-                        end
-                      end
-                    end
-                 })
+                 queueChain(mState.queue, {
+                   {
+                     command = eraseApi.writeCommand,
+                     payload = eraseApi.buildWritePayload({}),
+                     simulatorResponse = {},
+                     isWrite = true,
+                     timeout = 10.0,
+                   },
+                   {
+                     command = summaryApi.command,
+                     simulatorResponse = summaryApi.simulatorResponse,
+                     processReply = function(_, buf)
+                       local stats = summaryApi.parse(buf)
+                       if stats then
+                         if type(_G) == "table" and _G.rfsuite and _G.rfsuite.session then
+                           _G.rfsuite.session.dataflash = stats
+                         end
+                       end
+                     end
+                   }
+                 }, report)
                end
             end
          end
+    end,
+    -- How full the blackbox is, as the flight controller last reported it: the summary read on
+    -- connecting, and again after every erase.
+    info = function()
+      local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+      local stats = session and session.dataflash or nil
+      if type(stats) ~= "table" then return nil end
+      return { used = stats.used, total = stats.total }
     end,
     after = "done"
   }
@@ -224,8 +275,10 @@ function BUILD.battery_profile(widget, t)
     kind = "choice",
     title = t("widgets.dashboard.battery_profile", "BATTERY PROFILE"),
     -- One option per capacity the flight controller carries, resolved when the row is drawn
-    -- rather than when the list is made, so an entry stays a description of what it offers.
+    -- rather than when the list is made, so an entry stays a description of what it offers. The
+    -- widget is the one this list was made for where the caller passes none.
     options = function(w)
+      w = w or widget
       local options = {}
       local state = w and w.state or {}
       local config = state.battery_config
@@ -234,23 +287,26 @@ function BUILD.battery_profile(widget, t)
           local cap = config["batteryCapacity_"..i] or 0
           if cap > 0 then
             options[#options+1] = {
+              -- The profile the pilot reads, 1 to 6, by which a run is matched to this option.
+              id = i + 1,
               label = tostring(cap).." mAh",
               -- Highlight active battery profile
               -- FIX: Telemetry sensor BatP is 1-based (1 to 6)
               current = (state.batteryProfile == (i + 1)),
-              press = function()
+              press = function(report)
                 local mspModule = requireModule("tasks/msp/runtime.lua")
                 if mspModule and mspModule.getState then
                   local mState = mspModule.getState()
                   if mState and mState.queue then
+                     local chain = {}
                      -- 1. Set Battery Profile
                      local api = requireModule("tasks/msp/api/battery_profile.lua")
                      if api and type(api.buildWritePayload) == "function" then
-                       mState.queue:add({
+                       chain[#chain+1] = {
                           command = api.writeCommand,
                           payload = api.buildWritePayload({ batteryProfile = i }),
                           simulatorResponse = {}
-                       })
+                       }
                        -- The battery prompt keeps the profile the board reported on connecting
                        -- and skips a pick that matches it. After this write that report is
                        -- stale, so it is dropped and the next pick writes.
@@ -260,13 +316,14 @@ function BUILD.battery_profile(widget, t)
                      -- 2. Save to EEPROM so the FC applies and broadcasts the change
                      local eepromApi = requireModule("tasks/msp/api/eeprom_write.lua")
                      if eepromApi and type(eepromApi.buildWritePayload) == "function" then
-                       mState.queue:add({
+                       chain[#chain+1] = {
                           command = eepromApi.writeCommand,
                           payload = eepromApi.buildWritePayload({}),
                           simulatorResponse = {},
                           isWrite = true,
-                       })
+                       }
                      end
+                     queueChain(mState.queue, chain, report)
                   end
                 end
               end,
@@ -300,7 +357,8 @@ end
 function M.entries(widget)
   local t = translator(widget)
   local list = {}
-  for i = 1, #ORDER do list[i] = BUILD[ORDER[i]](widget, t) end
+  local ids = M.LISTS.quick
+  for i = 1, #ids do list[i] = BUILD[ids[i]](widget, t) end
   return list
 end
 
@@ -311,13 +369,81 @@ function M.entry(widget, id)
   return build(widget, translator(widget))
 end
 
---- Run an entry, or one of its options: the work, then the action that follows it.
+--- The entries of the named list in `M.LISTS`, in its order; an empty list for an unknown name.
+function M.list(widget, name)
+  local ids = M.LISTS[name]
+  local out = {}
+  if type(ids) ~= "table" then return out end
+  local byId = {}
+  local all = M.entries(widget)
+  for i = 1, #all do byId[all[i].id] = all[i] end
+  for i = 1, #ids do
+    if byId[ids[i]] ~= nil then out[#out+1] = byId[ids[i]] end
+  end
+  return out
+end
+
+--- The menu's own record, and its own option, for what a caller hands in; nil for either where
+--- the menu has none.
 --
--- The work is the option's when an option is given and the entry's otherwise; so is the action.
-function M.run(widget, entry, option)
+-- A caller's tables are never run: they only name what is meant. The entry is found by its `id`;
+-- an option by its `id` among the record's options as they stand now -- a pack's id, a battery
+-- profile's number -- or, for NO BATTERY, by `none`, and the record's `close` by being the
+-- `close` of the table handed in. Matching by identity would not do: a record's options are made
+-- anew on every call, so the table a caller drew is never one of them by the time it is run.
+function M.resolve(widget, entry, option)
+  if type(entry) ~= "table" then return nil end
+  local core = M.entry(widget, entry.id)
+  if core == nil then return nil end
+  if option == nil then return core, nil end
+  if type(option) ~= "table" then return nil end
+  if core.close ~= nil and option == entry.close then return core, core.close end
+  local options = core.options
+  if type(options) == "function" then options = options(widget) end
+  if type(options) ~= "table" then return nil end
+  for i = 1, #options do
+    local candidate = options[i]
+    if option.none == true then
+      if candidate.none == true then return core, candidate end
+    elseif candidate.id ~= nil and candidate.id == option.id then
+      return core, candidate
+    end
+  end
+  return nil
+end
+
+--- The menu's own records for a list a caller hands in, in its order: each item replaced by the
+--- record of its `id`, and an item whose id the menu does not have left out.
+function M.coreList(widget, list)
+  local out = {}
+  if type(list) ~= "table" then return out end
+  local byId = {}
+  local all = M.entries(widget)
+  for i = 1, #all do byId[all[i].id] = all[i] end
+  for i = 1, #list do
+    local item = list[i]
+    local core = type(item) == "table" and byId[item.id] or nil
+    if core ~= nil then out[#out+1] = core end
+  end
+  return out
+end
+
+--- Whether the entry is offered now: the test the menu makes for each of its rows.
+function M.visible(widget, entry)
+  return isEntryVisible(entry, widget)
+end
+
+--- Run an entry, or one of its options: the work, then the action that follows it. This is the
+--- one place both happen, for the menu's own buttons, the picker's and a theme's alike.
+--
+-- The work is the option's when an option is given and the entry's otherwise; so is the action,
+-- unless `after` names another one. `report` is handed to the work, which tells it how the
+-- messages it queued fared (see queueChain); the menu's own buttons pass none.
+function M.run(widget, entry, option, after, report)
   local source = option or entry
-  if type(source.press) == "function" then source.press() end
-  if Views and type(Views.navigate) == "function" then Views.navigate(widget, source.after) end
+  if type(source.press) == "function" then source.press(report) end
+  if after == nil then after = source.after end
+  if Views and type(Views.navigate) == "function" then Views.navigate(widget, after) end
 end
 
 --- Draw the menu.
@@ -451,7 +577,7 @@ function M.build(children, widget, entries)
            -- Button (Interactive layer)
            children[#children+1] = {
              type = "button", x=bx, y=by, w=btnW, h=btnH, color=bColor,
-             press = pressFor(widget, option.press, option.after)
+             press = function() M.run(widget, entry, option) end
            }
 
            -- Label (visual only)
@@ -467,7 +593,7 @@ function M.build(children, widget, entries)
         -- 4a. A single button: an action, or the way into the view a choice is drawn in.
         children[#children+1] = {
           type = "button", x=dX + paddingX, y=contentY, w=entryW, h=btnH, color=btn_color,
-          press = pressFor(widget, entry.press, entry.after)
+          press = function() M.run(widget, entry) end
         }
         children[#children+1] = {
           type = "label", x=dX + paddingX, y=contentY + math.floor((btnH - fontH)/2) + btnTextOffY, w=entryW,

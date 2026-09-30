@@ -96,19 +96,32 @@ menus:
 | `visibleWhen` | The name of a condition that decides whether the row exists at all. Omitted, the row is always there. |
 | `press` | The work an `action` does when it is pressed, and nothing else. Optional: a row whose whole effect is its `after` has none. |
 | `after` | What follows the press, as data: `done`, `openView:<id>`, `closeView`, `exitFullscreen` or `none`. Missing means `none`. The actions are described in [dashboard views](../developer/dashboard-views.md). |
-| `options` | For a `choice`: a list, or a function returning one, of `{ label, current, press, after }`. The battery-profile grid is one, and the battery picker's packs are the other. |
+| `options` | For a `choice`: a list, or a function returning one, of `{ id, label, current, press, after }`. `id` is what a run is matched by: a battery profile's number, 1 to 6, and a pack's registry id. The battery-profile grid is one, and the battery picker's packs are the other. |
 | `close` | Optional, `{ press, after }`: what closing the surface that draws the options does. |
+| `info` | Optional, a function returning what the entry knows about the state it acts on, read when it is called. ERASE BLACKBOX has one: `{ used, total }` of the blackbox, from the summary the flight controller last sent. |
 
-`M.entry(widget, id)` returns one entry of the list, and `M.run(widget, entry, option)` runs
-it: the work — the option's `press` when an option is given, else the entry's — and then its
-`after`.
+`M.entry(widget, id)` returns one entry of the list, building that one only, and `M.run(widget, entry, option, after,
+report)` runs it: the work — the option's `press` when an option is given, else the entry's —
+and then its `after`, or the `after` given in its place. It is the one place both happen, for
+the menu's own buttons, the picker's and a theme's. `report` is handed to the work: an entry
+that sends messages to the flight controller queues them as one chain and reports on the chain
+through it (`"busy"`, then `"ok"` on the last message's reply or `"failed"` on any message's
+error). The menu's own buttons pass none, so what they queue is what they always queued.
+
+**Menus are lists of entry ids.** `M.LISTS` names them — `quick` is `erase_blackbox`,
+`inflight_tuning`, `battery_pick`, `battery_profile`, which is what the quick menu draws — and
+`M.list(widget, name)` returns the entries of one. `M.resolve(widget, entry, option)` finds
+the menu's own record and option for what a caller hands in, by `id`, and
+`M.coreList(widget, list)` the records for a list of them. A theme reaches the same records
+through its `ctx` and may draw them its own way, but it adds none and changes none: see
+[dashboard themes](../developer/dashboard-themes.md#the-theme-draws-the-widget-acts).
 
 **BATTERY is the battery prompt's record.** `battery_pick` is a `choice` with `view =
 "battery_pick"`: in the menu it is the BATTERY button, and the battery picker
 (`widgets/dashboard/battery_pick_menu.lua`) is the view that draws its options. They are one per
 pack this model has — `label` the pack's name, `detail` the capacity and profile line under it,
-`pack` the registry entry, `current` for the pack picked this connection — and a last one marked
-`none`, *NO BATTERY*. Each records the pick and is followed by `done`. Its `close` ends the
+`pack` the registry entry, `id` its registry id, `current` for the pack picked this connection
+— and a last one marked `none`, *NO BATTERY*. Each records the pick and is followed by `done`. Its `close` ends the
 prompt for this connection, which is what the picker's X and a short press on RTN do. What a
 pick does is therefore written in one place, the record; the picker is only its drawing.
 `options()` needs no argument: the widget is the one the list was made for.

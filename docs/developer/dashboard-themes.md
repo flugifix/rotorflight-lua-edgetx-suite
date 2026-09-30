@@ -686,7 +686,48 @@ screen changes:
 | `ctx.keys` | a table the theme fills with actions for the keys, `exit`, `pageDown` and `pageUp`; see below |
 | `ctx.condition(name)` | whether a named condition holds, from the list in [dashboard views](dashboard-views.md#conditions) |
 | `ctx.entries()` | the quick menu's entries, as `fullscreen_menu.lua` returns them |
-| `ctx.menu(children, entries)` | the quick menu's builder: appends the menu for `entries` (the menu's own when omitted) to `children` |
+| `ctx.menu(children, entries)` | the quick menu's builder: appends the menu for `entries` (the menu's own when omitted) to `children`; a list handed in chooses and orders the menu's own entries by `id`, and an item whose id the menu does not have is left out |
+| `ctx.entry(id)` | the quick menu's record `id` — `erase_blackbox`, `inflight_tuning`, `battery_pick`, `battery_profile` — or `nil` |
+| `ctx.list(name)` | the records of a named menu, in its order: `"quick"` is the quick menu's four; any other name gives an empty list |
+| `ctx.visible(entry)` | whether the entry is offered now — the test the quick menu makes before drawing the row |
+| `ctx.run(entry, option, after)` | the entry's work, or `option`'s when one is given, and then what follows it — the menu's own record and option of that id, whatever table is handed in; `after` replaces the entry's own follow-up, `nil` keeps it |
+| `ctx.status(id)` | what became of the last `ctx.run` of that entry in this visit to fullscreen: `nil`, `"busy"`, `"ok"` or `"failed"` |
+| `ctx.info(entry)` | what the entry knows about the state it acts on, read now: `{ used, total }` of the blackbox for `erase_blackbox`, `nil` for the others |
+
+### The theme draws, the widget acts
+
+A theme may draw the quick menu's entries itself — all of them in its own layout, or a few of
+them among its own controls — and the widget still does what they do. Take the records with
+`ctx.list("quick")` or `ctx.entry(id)`, draw a row for each one `ctx.visible` offers, and give
+its button a press that calls `ctx.run(entry)`, or `ctx.run(entry, option)` for one of the
+options of a `choice` (`entry.options()` lists them as they stand now; see
+[quick menu](../dashboard/quick-menu.md#for-contributors) for the fields). The work and the
+action that follows it are the widget's, in one place, so a theme's ERASE BLACKBOX sends what
+the quick menu's sends. A theme adds no entry of its own, and changes none: `ctx.run` looks
+the entry up again by its `id` among the menu's records and the option by its `id` among that
+record's options as they stand now (NO BATTERY by `none`, the picker's close by being the
+entry's `close`), and runs those — never a `press` out of the table it was handed. An entry or
+an option the menu does not have is refused. `ctx.visible` and `ctx.info` answer for the menu's
+record of that id as well, and a list handed to `ctx.menu` draws the menu's records of the ids
+it names, in its order, and nothing else.
+
+What a theme can show beside an entry is read on each build:
+
+- **State** — whether it is offered (`ctx.visible`), which profile is in force (the option's
+  `current`), how full the blackbox is (`ctx.info`).
+- **Outcome** — `ctx.status(id)`, for work that talks to the flight controller: `"busy"` once
+  its messages are queued, `"ok"` once the last of them has been answered, `"failed"` if any of
+  them was given up (out of retries, timed out, or dropped by a clear of the queue). A new
+  outcome rebuilds the screen. Work that sends nothing has none, and the quick menu's own
+  buttons never set one — the quick menu closes at once and shows none.
+
+The outcome belongs to the visit to fullscreen it was started in, and lapses with the stack:
+on `done`, on `exitFullscreen`, on leaving fullscreen and on a reconnect, and when another
+theme is selected. ERASE BLACKBOX and a battery profile are followed by `done`, so a theme that
+wants to show how they went runs them with an `after` of its own, `ctx.run(entry, nil,
+"none")`, and closes the surface itself. A message that is dropped without being answered or
+reported — the queue drops one that carries no simulator reply while it runs in the simulator —
+leaves the outcome at `"busy"`.
 
 A control is a node with a `press` that calls `ctx.action`, for example
 `{ type = "button", x = ..., y = ..., w = 44, h = 44, press = function() ctx.action("openView:menu") end }`.
