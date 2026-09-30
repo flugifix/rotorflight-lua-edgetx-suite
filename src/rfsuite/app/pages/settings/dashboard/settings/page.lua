@@ -303,7 +303,7 @@ function M.build(ctx)
   if ui.activeTheme ~= nil then
     local scopeText
     if ui.activeScope == "model" then
-      scopeText = t(ctx.i18n, "scope_model", "Overrides for this model")
+      scopeText = t(ctx.i18n, "scope_model", "Own settings for this model")
       local name = connectedModelName()
       if name then scopeText = scopeText .. ": " .. name end
     else

@@ -124,6 +124,6 @@ In governor modes OFF and LIMIT the flight controller keeps no governor state, s
 ## Notes
 
 - User themes in `/SCRIPTS/TOOLS/rfsuite.user/` are preserved across suite updates.
-- If a theme includes a `configure.lua` file, its configurable options (such as voltage ranges) are saved in the radio's preferences as the standard values, and a model with overrides switched on keeps the values it changes in its own file. See [Settings](../pages/settings/dashboard/settings.md).
+- If a theme includes a `configure.lua` file, its configurable options (such as voltage ranges) are saved in the radio's preferences as the standard values, and a model with per-model settings switched on keeps the values it changes in its own file. See [Settings](../pages/settings/dashboard/settings.md).
 
 *Documented against RFSuite 0.1.7.*

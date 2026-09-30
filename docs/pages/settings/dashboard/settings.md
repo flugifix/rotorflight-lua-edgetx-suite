@@ -15,9 +15,9 @@ installed see different pages.
 Which theme a model actually shows is chosen on [*Design*](theme.md), and a theme keeps its
 settings whether or not it is the one in use.
 
-The theme tiles edit the **standard values**, which every model without overrides uses; the first
-line of a theme's page reads *Standard values for all models*. A model with overrides changes
-some of them for itself, on the *Model Overrides* tile.
+The theme tiles edit the **standard values**, which every model without settings of its own uses; the first
+line of a theme's page reads *Standard values for all models*. A model with settings of its own changes
+some of them for itself, on the *Per-Model Settings* tile.
 
 ## Where to find it
 
@@ -31,7 +31,7 @@ nothing opens a page saying so.
 
 | Setting | What it does |
 | --- | --- |
-| Model Overrides | The first tile, only while a flight controller is connected and model overrides are on for its model (see [*Design*](theme.md)). Opens [the list of what that model changes](overrides.md), and from there the settings of each theme that model draws, for that model alone. |
+| Per-Model Settings | The first tile, only while a flight controller is connected and per-model settings are on for its model (see [*Design*](theme.md)). Opens [the list of what that model changes](overrides.md), and from there the settings of each theme that model draws, for that model alone. |
 | *(one tile per theme)* | Opens that theme's standard settings. What the page holds is the theme's own business; several of the shipped themes offer the battery voltage bounds their gauges are scaled to. |
 
 A theme may split its settings into pages. Its tile then opens a second grid, one tile per
@@ -45,12 +45,12 @@ page fits the screen. Themes that do not split show their settings directly.
   original's values, and configuring the copy does not change the original.
 - Where a value is stored follows the page, not the connection: a theme tile stores the radio's
   standard values whether or not a flight controller is connected, and a theme opened from
-  *Model Overrides* stores the model's values — only those that differ from the standard. A
-  model reads its own values only while model overrides are on for it; switching them off on
+  *Per-Model Settings* stores the model's values — only those that differ from the standard. A
+  model reads its own values only while per-model settings are on for it; switching them off on
   *Design* keeps the values and ignores them.
 - A card from an earlier version may hold per-model theme settings saved while a flight
-  controller was connected. Such a model keeps using them, and they are listed under *Model
-  Overrides*, until the switches on *Design* are saved off.
+  controller was connected. Such a model keeps using them, and they are listed under *Per-Model
+  Settings*, until the switches on *Design* are saved off.
 - A theme split into pages saves the page that is open. Leaving a page for another one of the
   same theme discards what has not been saved, so save before stepping across.
 - Saving reloads the dashboard, so a change is visible on the widget as soon as the tool is

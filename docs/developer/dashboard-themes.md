@@ -166,7 +166,7 @@ are three theme slots, not five: `armed` resolves through the preflight slot and
 through the postflight one, because each is a refinement of that screen rather than a screen
 beside it. With the switch off, one theme covers every phase and the phase keys keep their
 values for whoever turns it back on. With it on, the first of these that names a theme wins: the
-model's phase override, then the model's own theme — both only while model overrides are allowed
+model's phase override, then the model's own theme — both only while per-model settings are allowed
 on the radio and on for that model (`DashboardLib.modelOverridesActive`) — then the global phase override, then the global theme, then `system/default`. A
 model theme is a context of its own, so an unset phase override falls back to the model's theme
 rather than jumping to the global one.
@@ -530,14 +530,14 @@ different folder starts from the defaults rather than inheriting.
 Where the values go is decided by the page the module is opened from, not by the module. The
 settings page sets an edit scope in the library before it runs anything of the module
 (`DashboardLib.setEditScope`): the theme tiles edit `"standard"`, the radio's preferences, and
-*Model Overrides* edits `"model"`, the connected model's preferences on top of the standard ones.
+*Per-Model Settings* edits `"model"`, the connected model's preferences on top of the standard ones.
 In the model scope `setThemeConfig` stores only the values that differ from the standard — the
 radio's value, else the default the module passed to `getThemeConfig` — and removes the others
 from the model, so a module has to read through `getThemeConfig` before it saves. The module
 still hands both tables over and saves the model's with `model_preferences.saveByMcuId` when a
 flight controller is connected; which of the two actually changes is the library's decision.
 With no scope set, as in the widget, `getThemeConfig` returns what applies: the model's values
-only while model overrides are on for that model (`DashboardLib.modelOverridesActive`).
+only while per-model settings are on for that model (`DashboardLib.modelOverridesActive`).
 
 The widget hands the resolved configuration to the theme as `state.themeConfig`, which is where
 a box's `min`, `max` or threshold limit reads it from.

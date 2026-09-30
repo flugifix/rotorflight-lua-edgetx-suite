@@ -413,7 +413,7 @@ function M.build(ctx)
 
   cursorY = cursorY + 10
   Controls.appendSectionHeader(children, x, cursorY, w,
-    t(i18n, "section_model_overrides", "Model Overrides"), true, function() end)
+    t(i18n, "section_model_overrides", "Per-Model Settings"), true, function() end)
   cursorY = cursorY + Controls.SECTION_H
 
   cursorY = cursorY + appendNote(children, x, cursorY, w,
@@ -423,7 +423,7 @@ function M.build(ctx)
   -- The radio's switch. Off, every model draws the theme and the settings above, whatever its
   -- own file holds.
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-    t(i18n, "model_overrides", "Allow model overrides"),
+    t(i18n, "model_overrides", "Allow per-model settings"),
     ui.runtime.getBoolGetter("model_overrides"),
     ui.runtime.getBoolSetter("model_overrides")
   )
@@ -442,7 +442,7 @@ function M.build(ctx)
 
       -- The connected model's switch, and below it the model's theme for all three phases.
       cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-        t(i18n, "model_overrides_this", "Overrides for this model"),
+        t(i18n, "model_overrides_this", "Own settings for this model"),
         ui.runtime.getBoolGetter("overrides"),
         ui.runtime.getBoolSetter("overrides")
       )

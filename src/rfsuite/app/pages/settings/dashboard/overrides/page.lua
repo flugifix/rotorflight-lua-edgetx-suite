@@ -1,10 +1,10 @@
--- Settings > Dashboard > Settings > Model Overrides: what the connected model changes.
+-- Settings > Dashboard > Settings > Per-Model Settings: what the connected model changes.
 --
--- The page lists every theme setting the model's own file holds, beside the standard value it
--- replaces, and lets each one -- or all of them -- be removed again. A removed override is not
--- set to anything: the model then reads the standard value, so a later change of the standard
--- reaches it. Below the list, one row per theme the model draws opens that theme's settings in
--- the model's scope.
+-- First, one row per theme the model draws opens that theme's settings in the model's scope.
+-- Below them, the page lists every theme setting the model's own file holds, beside the standard
+-- value it replaces, and lets each one -- or all of them -- be removed again. A removed override
+-- is not set to anything: the model then reads the standard value, so a later change of the
+-- standard reaches it.
 --
 -- Those buttons open entries of this page's own menu list, which the dashboard settings builder
 -- fills with the model-scope theme entries. The menu registry opens an entry of the list that
@@ -281,8 +281,51 @@ function M.build(ctx)
   end
 
   local session = getSession()
+
+  -- The theme entries the builder registered for this page, each opening the theme's settings
+  -- in the model's scope.
+  local menu = ctx.menu
+  local menuId = menu and menu.getCurrentMenuId and menu.getCurrentMenuId() or nil
+  local def = menu and type(menu.menus) == "table" and menuId and menu.menus[menuId] or nil
+  local entries = type(def) == "table" and def.pages or nil
+  if type(entries) == "table" and #entries > 0 then
+    Controls.appendSectionHeader(children, x, cursorY, w,
+      t(i18n, "section_edit", "Edit for this model"), true, function() end)
+    cursorY = cursorY + Controls.SECTION_H
+
+    -- Only the themes this model draws are offered: a setting of any other theme would be stored
+    -- and never shown. One row per theme, named by the flight phases it is drawn in.
+    local prefs = getPreferences(ctx)
+    local inUse = DashboardLib.themesInUse(prefs and prefs.dashboard, session.modelPreferences.dashboard)
+    local rows = 0
+    for i = 1, #inUse do
+      local entry = nil
+      for j = 1, #entries do
+        if entries[j].themePath == inUse[i].path then entry = entries[j] end
+      end
+      if entry then
+        local entryId = entry.id
+        cursorY = cursorY + appendThemeRow(children, x, cursorY, w, btnH,
+          describePhases(i18n, inUse[i].phases), tostring(entry.title),
+          function()
+            if menu.openEntry(entryId) and type(ctx.requestRebuild) == "function" then
+              ctx.requestRebuild()
+            end
+          end)
+        rows = rows + 1
+      end
+    end
+
+    if rows == 0 then
+      cursorY = cursorY + appendNote(children, x, cursorY, w,
+        t(i18n, "no_theme_settings", "The themes this model uses have no settings."))
+    end
+    cursorY = cursorY + 6
+  end
+
   local list = DashboardLib.listModelOverrides(getPreferences(ctx), session.modelPreferences, ui.themes)
 
+  -- What the model changes, below the themes it is edited through.
   Controls.appendSectionHeader(children, x, cursorY, w,
     t(i18n, "section_different", "Different from standard"), true, function() end)
   cursorY = cursorY + Controls.SECTION_H
@@ -312,49 +355,6 @@ function M.build(ctx)
 
   if ui.notice then
     cursorY = cursorY + appendNote(children, x, cursorY, w, ui.notice)
-  end
-
-  -- The theme entries the builder registered for this page, each opening the theme's settings
-  -- in the model's scope.
-  local menu = ctx.menu
-  local menuId = menu and menu.getCurrentMenuId and menu.getCurrentMenuId() or nil
-  local def = menu and type(menu.menus) == "table" and menuId and menu.menus[menuId] or nil
-  local entries = type(def) == "table" and def.pages or nil
-  if type(entries) ~= "table" or #entries == 0 then
-    return
-  end
-
-  cursorY = cursorY + 6
-  Controls.appendSectionHeader(children, x, cursorY, w,
-    t(i18n, "section_edit", "Edit for this model"), true, function() end)
-  cursorY = cursorY + Controls.SECTION_H
-
-  -- Only the themes this model draws are offered: a setting of any other theme would be stored
-  -- and never shown. One row per theme, named by the flight phases it is drawn in.
-  local prefs = getPreferences(ctx)
-  local inUse = DashboardLib.themesInUse(prefs and prefs.dashboard, session.modelPreferences.dashboard)
-  local rows = 0
-  for i = 1, #inUse do
-    local entry = nil
-    for j = 1, #entries do
-      if entries[j].themePath == inUse[i].path then entry = entries[j] end
-    end
-    if entry then
-      local entryId = entry.id
-      cursorY = cursorY + appendThemeRow(children, x, cursorY, w, btnH,
-        describePhases(i18n, inUse[i].phases), tostring(entry.title),
-        function()
-          if menu.openEntry(entryId) and type(ctx.requestRebuild) == "function" then
-            ctx.requestRebuild()
-          end
-        end)
-      rows = rows + 1
-    end
-  end
-
-  if rows == 0 then
-    appendNote(children, x, cursorY, w,
-      t(i18n, "no_theme_settings", "The themes this model uses have no settings."))
   end
 end
 

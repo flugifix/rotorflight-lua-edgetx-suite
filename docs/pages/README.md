@@ -124,7 +124,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | General | `settings/general.md` | yes | always available | to write |
 | Dashboard → Design | [settings/dashboard/theme.md](settings/dashboard/theme.md) | yes | always available | written |
 | Dashboard → Settings (one page per configurable theme) | [settings/dashboard/settings.md](settings/dashboard/settings.md) | yes | always available | written |
-| Dashboard → Settings → Model Overrides (and each theme's settings for the model) | [settings/dashboard/overrides.md](settings/dashboard/overrides.md) | yes | shown only while a flight controller is connected and model overrides are on for its model | written |
+| Dashboard → Settings → Per-Model Settings (and each theme's settings for the model) | [settings/dashboard/overrides.md](settings/dashboard/overrides.md) | yes | shown only while a flight controller is connected and per-model settings are on for its model | written |
 | Dashboard → In-Flight Tuning | [settings/dashboard/inflight.md](settings/dashboard/inflight.md) | yes | preview switch *In-flight tuning* | written |
 | Localization | [settings/localization.md](settings/localization.md) | yes | always available | written |
 | Audio → Volume | [settings/audio/volume.md](settings/audio/volume.md) | yes | always available | written |

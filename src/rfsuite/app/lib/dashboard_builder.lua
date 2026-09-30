@@ -10,6 +10,7 @@ end
 local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
 local Log = loadModule("lib/log.lua")
 local FALLBACK_ICON = "@pages/settings/dashboard/settings/icon.png"
+local OVERRIDES_ICON = "@pages/settings/dashboard/overrides/icon.png"
 local DEBUG_PREFIX = "[dashboard.builder] "
 
 local function debugLog(message)
@@ -135,7 +136,7 @@ local function buildDashboardSettingsThemeMenus()
       id = "dashboard_overrides",
       title = OVERRIDES_TITLE,
       menuId = OVERRIDES_MENU_ID,
-      icon = FALLBACK_ICON,
+      icon = OVERRIDES_ICON,
       row = 1,
       col = 1,
       visibleWhen = modelOverridesVisible
