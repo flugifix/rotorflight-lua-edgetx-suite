@@ -3,7 +3,7 @@
 -- The page lists every theme setting the model's own file holds, beside the standard value it
 -- replaces, and lets each one -- or all of them -- be removed again. A removed override is not
 -- set to anything: the model then reads the standard value, so a later change of the standard
--- reaches it. Below the list, one button per configurable theme opens that theme's settings in
+-- reaches it. Below the list, one row per theme the model draws opens that theme's settings in
 -- the model's scope.
 --
 -- Those buttons open entries of this page's own menu list, which the dashboard settings builder
@@ -37,6 +37,7 @@ local t = nil
 
 local NOTE_LINE_H = 24
 local RESET_BTN_W = 96
+local THEME_BTN_W = 240
 
 local function ensureDeps()
   if not Common then
@@ -215,6 +216,41 @@ local function appendButton(children, x, y, w, h, text, press)
   }
 end
 
+-- Which flight phases a theme is drawn in, as the label of its row.
+local function describePhases(i18n, phases)
+  if #phases >= 3 then
+    return t(i18n, "phase_all", "All flight phases")
+  end
+  local names = {
+    preflight = t(i18n, "phase_preflight", "Preflight"),
+    inflight = t(i18n, "phase_inflight", "Inflight"),
+    postflight = t(i18n, "phase_postflight", "Postflight"),
+  }
+  local parts = {}
+  for i = 1, #phases do
+    parts[#parts + 1] = names[phases[i]] or tostring(phases[i])
+  end
+  return table.concat(parts, ", ")
+end
+
+-- A form row like the settings pages draw theirs: what it is about on the left, the button that
+-- opens it on the right, and a divider below. Returns the height it takes.
+local function appendThemeRow(children, x, y, w, btnH, labelText, buttonText, press)
+  local rowH = math.max(Controls.ROW_H or 0, btnH + 8)
+  local btnW = math.min(THEME_BTN_W, w)
+  local btnX = x + w - btnW - 10
+  children[#children + 1] = {
+    type = "label", x = x, y = Controls.labelY(y, rowH), w = btnX - x - 8,
+    text = labelText, color = COLOR_THEME_PRIMARY1, font = SMLSIZE
+  }
+  appendButton(children, btnX, Controls.controlY(y, rowH, btnH), btnW, btnH, buttonText, press)
+  children[#children + 1] = {
+    type = "rectangle", x = x, y = y + rowH, w = w, h = 1,
+    color = COLOR_THEME_SECONDARY2, filled = true
+  }
+  return rowH + 1
+end
+
 function M.getHeaderActions()
   -- A reset is saved when it is pressed, so the page has nothing for the header to save.
   return { save = false, reload = false, help = true }
@@ -293,16 +329,32 @@ function M.build(ctx)
     t(i18n, "section_edit", "Edit for this model"), true, function() end)
   cursorY = cursorY + Controls.SECTION_H
 
-  local themeW = math.min(300, w)
-  for i = 1, #entries do
-    local entryId = entries[i].id
-    appendButton(children, x + math.floor((w - themeW) / 2), cursorY, themeW, btnH, tostring(entries[i].title),
-      function()
-        if menu.openEntry(entryId) and type(ctx.requestRebuild) == "function" then
-          ctx.requestRebuild()
-        end
-      end)
-    cursorY = cursorY + btnH + 6
+  -- Only the themes this model draws are offered: a setting of any other theme would be stored
+  -- and never shown. One row per theme, named by the flight phases it is drawn in.
+  local prefs = getPreferences(ctx)
+  local inUse = DashboardLib.themesInUse(prefs and prefs.dashboard, session.modelPreferences.dashboard)
+  local rows = 0
+  for i = 1, #inUse do
+    local entry = nil
+    for j = 1, #entries do
+      if entries[j].themePath == inUse[i].path then entry = entries[j] end
+    end
+    if entry then
+      local entryId = entry.id
+      cursorY = cursorY + appendThemeRow(children, x, cursorY, w, btnH,
+        describePhases(i18n, inUse[i].phases), tostring(entry.title),
+        function()
+          if menu.openEntry(entryId) and type(ctx.requestRebuild) == "function" then
+            ctx.requestRebuild()
+          end
+        end)
+      rows = rows + 1
+    end
+  end
+
+  if rows == 0 then
+    appendNote(children, x, cursorY, w,
+      t(i18n, "no_theme_settings", "The themes this model uses have no settings."))
   end
 end
 

@@ -2390,7 +2390,12 @@ return {
         no_dialog = "Dieser Sender kann die Rückfrage nicht anzeigen.",
         save_error_message = "Speichern fehlgeschlagen",
         section_edit = "Für dieses Modell bearbeiten",
-        help_message = "Die Design-Einstellungen, die das verbundene Modell ändert, jeweils neben dem Standardwert, den sie ersetzen. 'Zurücksetzen' entfernt den eigenen Wert des Modells, sodass es wieder den Standard nutzt und späteren Änderungen daran folgt. 'Alle zurücksetzen' tut das nach einer Rückfrage für jede Einstellung. Ein Zurücksetzen wird sofort gespeichert. Die Schaltflächen darunter öffnen die Einstellungen eines Designs nur für dieses Modell: Ein dort gespeicherter Wert, der dem Standard entspricht, wird nicht als Override gespeichert. Modell-Overrides werden unter Dashboard > Design eingeschaltet."
+        phase_all = "Alle Flugphasen",
+        phase_preflight = "Vorflug",
+        phase_inflight = "Flug",
+        phase_postflight = "Nachflug",
+        no_theme_settings = "Die Designs dieses Modells haben keine Einstellungen.",
+        help_message = "Die Design-Einstellungen, die das verbundene Modell ändert, jeweils neben dem Standardwert, den sie ersetzen. 'Zurücksetzen' entfernt den eigenen Wert des Modells, sodass es wieder den Standard nutzt und späteren Änderungen daran folgt. 'Alle zurücksetzen' tut das nach einer Rückfrage für jede Einstellung. Ein Zurücksetzen wird sofort gespeichert. Darunter steht jedes Design, das dieses Modell zeigt, mit den Flugphasen, in denen es gezeigt wird; seine Schaltfläche öffnet die Einstellungen des Designs nur für dieses Modell: Ein dort gespeicherter Wert, der dem Standard entspricht, wird nicht als Override gespeichert. Modell-Overrides werden unter Dashboard > Design eingeschaltet."
       },
       tools_flight_log = {
         title = "Flugbuch",

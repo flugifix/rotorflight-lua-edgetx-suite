@@ -31,8 +31,8 @@ nothing opens a page saying so.
 
 | Setting | What it does |
 | --- | --- |
+| Model Overrides | The first tile, only while a flight controller is connected and model overrides are on for its model (see [*Design*](theme.md)). Opens [the list of what that model changes](overrides.md), and from there the settings of each theme that model draws, for that model alone. |
 | *(one tile per theme)* | Opens that theme's standard settings. What the page holds is the theme's own business; several of the shipped themes offer the battery voltage bounds their gauges are scaled to. |
-| Model Overrides | Only while a flight controller is connected and model overrides are on for its model (see [*Design*](theme.md)). Opens [the list of what that model changes](overrides.md), and from there each theme's settings for that model alone. |
 
 A theme may split its settings into pages. Its tile then opens a second grid, one tile per
 page, and each of those opens part of the theme's settings — the same settings, divided so a

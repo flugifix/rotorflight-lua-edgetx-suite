@@ -2390,7 +2390,12 @@ return {
         no_dialog = "This radio cannot show the confirmation.",
         save_error_message = "Save failed",
         section_edit = "Edit for this model",
-        help_message = "The theme settings the connected model changes, each beside the standard value it replaces. Reset removes the model's own value, so the model uses the standard again and follows later changes of it. Reset all does that for every setting after asking. A reset is saved at once. The buttons below open a theme's settings for this model only: a value saved there that equals the standard is not stored as an override. Model overrides are switched on under Dashboard > Design."
+        phase_all = "All flight phases",
+        phase_preflight = "Preflight",
+        phase_inflight = "Inflight",
+        phase_postflight = "Postflight",
+        no_theme_settings = "The themes this model uses have no settings.",
+        help_message = "The theme settings the connected model changes, each beside the standard value it replaces. Reset removes the model's own value, so the model uses the standard again and follows later changes of it. Reset all does that for every setting after asking. A reset is saved at once. Below them, each theme this model draws is listed with the flight phases it is drawn in, and its button opens the theme's settings for this model only: a value saved there that equals the standard is not stored as an override. Model overrides are switched on under Dashboard > Design."
       },
       tools_flight_log = {
         title = "Flight Log",

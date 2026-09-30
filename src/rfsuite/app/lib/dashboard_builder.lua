@@ -122,29 +122,30 @@ local function buildDashboardSettingsThemeMenus()
   local modelEntries = {}
   local menus = {}
 
-  for i = 1, #themes do
-    local t = themes[i]
-    entries[#entries + 1] = buildThemeEntry(t, i, menus, STANDARD_SCOPE)
-    modelEntries[#modelEntries + 1] = buildThemeEntry(t, i, menus, MODEL_SCOPE)
-  end
-
   -- The overview is a page, and its theme entries are what its buttons open: the menu registry
-  -- opens an entry of the current menu id's list, and that id is the page's own.
+  -- opens an entry of the current menu id's list, and that id is the page's own. Its tile comes
+  -- first, ahead of the themes: it is the one tile that is about the connected model, and the
+  -- grid lays out only the tiles it shows, so while it is hidden the themes start the grid.
   if #themes > 0 then
     menus[OVERRIDES_MENU_ID] = {
       title = OVERRIDES_TITLE,
       pages = modelEntries
     }
-    local index = #entries + 1
-    entries[index] = {
+    entries[1] = {
       id = "dashboard_overrides",
       title = OVERRIDES_TITLE,
       menuId = OVERRIDES_MENU_ID,
       icon = FALLBACK_ICON,
-      row = math.floor((index - 1) / 6) + 1,
-      col = ((index - 1) % 6) + 1,
+      row = 1,
+      col = 1,
       visibleWhen = modelOverridesVisible
     }
+  end
+
+  for i = 1, #themes do
+    local t = themes[i]
+    entries[#entries + 1] = buildThemeEntry(t, #entries + 1, menus, STANDARD_SCOPE)
+    modelEntries[#modelEntries + 1] = buildThemeEntry(t, i, menus, MODEL_SCOPE)
   end
 
   debugLog("buildDashboardSettingsThemeMenus entries=" .. tostring(#entries))

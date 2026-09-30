@@ -8,11 +8,11 @@ sidebar_position: 25
 
 The theme settings the connected model uses instead of the standard ones. The page lists every
 setting the model changes, next to the standard value it replaces, lets each of them be reset,
-and opens any theme's settings for this model alone.
+and opens the settings of each theme the model draws for this model alone.
 
 ## Where to find it
 
-*System* → *Settings* → *Dashboard* → *Settings* → *Model Overrides*, the last tile of that grid.
+*System* → *Settings* → *Dashboard* → *Settings* → *Model Overrides*, the first tile of that grid.
 
 The tile is there only while a flight controller is connected and model overrides are on for
 its model: *Allow model overrides* and *Overrides for this model* on
@@ -28,9 +28,13 @@ switch turned on under *Design* shows the tile the next time the grid is entered
 | *(one row per setting)* | The theme, the setting and the model's value, followed by the standard value it replaces — *standard* and the radio's value, or *theme default* where the radio has none. |
 | Reset | Removes this one value from the model. The model then uses the standard value, and follows it when the standard changes later. Saved at once. |
 | Reset all | Removes every theme setting of the model, after asking. Saved at once. |
-| *(one button per theme)* | Opens that theme's settings for this model. Its first line reads *Overrides for this model*. |
+| *(one row per theme the model draws)* | The flight phases the theme is drawn in — *All flight phases*, or the phases it covers when *Per-Phase Themes* gives a phase a theme of its own — and a button with the theme's name that opens its settings for this model. The settings page's first line reads *Overrides for this model*. |
 
 With no row to show, the page says the model uses the standard values.
+
+Only the themes this model draws are listed: its own theme for each phase, or the standard theme
+where it has none. A setting of any other theme would be stored and never shown. When none of
+them has settings, the page says so.
 
 ## Notes
 

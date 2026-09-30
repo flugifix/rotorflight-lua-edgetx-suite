@@ -437,6 +437,47 @@ function M.modelOverridesActive(dashboard, modelDashboard)
   return M.overridesAllowed(dashboard) and M.modelOverridesOn(modelDashboard)
 end
 
+-- The themes a model draws, for the overview: one entry per theme, with the flight phases it is
+-- drawn in. The rule is the widget's (resolveThemePathForState in widgets/dashboard/runtime.lua,
+-- which keeps its own copy because it runs without this file when it cannot load it): with
+-- Per-Phase Themes on, a phase's own select wins over the theme above it; the model's selects
+-- count while its overrides are active, and fall back to the radio's.
+local PHASES = { "preflight", "inflight", "postflight" }
+
+local function selectedThemePath(value)
+  if type(value) == "string" and value ~= "" and value ~= "nil" then return value end
+  return nil
+end
+
+function M.resolveThemePath(dashboard, modelDashboard, phase)
+  if type(dashboard) ~= "table" then dashboard = {} end
+  if type(modelDashboard) ~= "table" then modelDashboard = {} end
+  local perPhase = dashboard.theme_per_phase == true and phase ~= "preflight"
+  if M.modelOverridesActive(dashboard, modelDashboard) then
+    local chosen = (perPhase and selectedThemePath(modelDashboard["model_theme_" .. phase]))
+      or selectedThemePath(modelDashboard.model_theme_preflight)
+    if chosen then return chosen end
+  end
+  return (perPhase and selectedThemePath(dashboard["theme_" .. phase]))
+    or selectedThemePath(dashboard.theme_preflight)
+    or "system/default"
+end
+
+function M.themesInUse(dashboard, modelDashboard)
+  local out, byPath = {}, {}
+  for i = 1, #PHASES do
+    local path = M.resolveThemePath(dashboard, modelDashboard, PHASES[i])
+    local entry = byPath[path]
+    if not entry then
+      entry = { path = path, phases = {} }
+      byPath[path] = entry
+      out[#out + 1] = entry
+    end
+    entry.phases[#entry.phases + 1] = PHASES[i]
+  end
+  return out
+end
+
 -- Which half of the configuration a theme's settings page is editing. The settings page sets
 -- it before it opens a theme's module and clears it when it closes, because the modules read
 -- and save through getThemeConfig/setThemeConfig and are not told the scope themselves -- a
