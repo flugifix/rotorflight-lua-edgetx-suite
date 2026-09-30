@@ -302,20 +302,46 @@ local SETTLE_TAIL = 40
 -- clock rather than however many ticks that pass happened to ask for, so the same elapsed time is
 -- reached in about ten times the passes. The budgets are a guard against a loop that never
 -- finishes, so they are scaled with the clock rather than tuned to a run.
+--
+-- A free-form theme -- one whose module has a build function -- builds its whole tree in the
+-- prepare pass and never swaps (sceneJobStep in widgets/dashboard/runtime.lua), so for it the
+-- first scene is on screen after the prepare pass that left the job slot empty and the widget
+-- built. That test is only taken for a theme with a build function, so a chunked theme settles
+-- on its swap exactly as before.
+--
+-- The job step runs under the widget's pcall, which logs what it caught and rebuilds on the
+-- next pass. A build that raises on every pass therefore looks like one that never settles, so
+-- the widget's log ring is read after each pass -- outside the count -- and the error names it.
 local function settle(widget, sensorIds, maxPasses)
   local coldWorst = 0
   local startupWorst = {}
-  local swapAt = nil
+  local sceneAt = nil
+  local raised, lastRaise = 0, nil
   for i = 1, maxPasses do
     feedLink(sensorIds, i)
     local before = passClass(widget)
+    local theme = widget.theme
+    local freeForm = before == "prepare" and widget._job.kind == "scene"
+      and type(theme) == "table" and type(theme.build) == "function"
+    local logSeq = _G.rfsuite.log_history_seq or 0
     local n = count(widget.refresh, widget, nil, nil)
     if n > coldWorst then coldWorst = n end
     if n > (startupWorst[before] or 0) then startupWorst[before] = n end
-    if before == "swap" then swapAt = swapAt or i end
+    if before == "swap" then sceneAt = sceneAt or i end
+    if freeForm and widget._job == nil and widget.built then sceneAt = sceneAt or i end
+    local history = _G.rfsuite.log_history or {}
+    local added = (_G.rfsuite.log_history_seq or 0) - logSeq
+    for k = math.max(1, #history - added + 1), #history do
+      local msg = history[k].msg
+      if string.find(msg, "job step error (", 1, true) == 1 then raised, lastRaise = raised + 1, msg end
+    end
     -- The first scene on screen, plus a tail: the pass after a swap still carries the
     -- module loads the first build pulled in, and those belong to the cold start.
-    if swapAt and i >= swapAt + SETTLE_TAIL then return coldWorst, i, startupWorst end
+    if sceneAt and i >= sceneAt + SETTLE_TAIL then return coldWorst, i, startupWorst end
+  end
+  if raised > 0 then
+    error(string.format("accounting: the dashboard's job step raised on %d of %d passes, so no "
+      .. "scene settled; the last error: %s", raised, maxPasses, lastRaise))
   end
   error("accounting: the dashboard never settled in " .. maxPasses .. " passes")
 end

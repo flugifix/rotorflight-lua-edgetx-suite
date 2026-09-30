@@ -36,7 +36,11 @@ reported as a margin to widen rather than a pass to celebrate.
   the cold-start worst pass. The class of a pass is read from the job slot *before* the
   call, which is where the dispatcher decides it.
 - **Every shipped theme**: its worst pass plus one full sweep of the tree it leaves
-  standing. This is the row the safety argument rests on.
+  standing. This is the row the safety argument rests on. The settle before it counts its
+  tail from the swap of a chunked theme, and from the one prepare pass a free-form theme
+  builds its whole tree in, since that theme never swaps. A build that raises on every
+  pass fails the run with the error the widget caught, rather than as a dashboard that
+  never settled.
 - **Every shipped box type**: one render into the node table, and one sweep of the
   reactive references that render collected. Enumerated from the themes' own box
   declarations and from the object modules on disk -- a type with no row fails the check,
