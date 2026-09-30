@@ -834,14 +834,21 @@ local function announceArmEvent(self, opts)
     return
   end
 
-  audioState.lastValues.arming_flags = value
   if not audioState.initialized then
+    audioState.lastValues.arming_flags = value
     return
   end
 
+  -- Not while the previous file's cooldown runs: tryPlayEventFile would refuse the file, and a
+  -- value recorded here is never tried again. Left unrecorded, the next pass announces it.
+  local now = nowSeconds()
+  if now < (audioState.nextAllowedAt or 0) then
+    return
+  end
+
+  audioState.lastValues.arming_flags = value
   local file = ARM_FILE_MAP[value]
   if type(file) ~= "string" then return end
-  local now = nowSeconds()
   tryPlayEventFile(audioState, now, "evt/" .. file, opts)
 end
 
@@ -870,6 +877,11 @@ local function announceGovernorEvent(self, events, opts)
     return false
   end
   if now - (tonumber(audioState.governorPendingSince) or now) < GOVERNOR_HOLD_SECONDS then
+    return false
+  end
+  -- The same for a file still in its cooldown -- most often the arm announcement of this very
+  -- pass, since a spool-up follows the arm. The candidate stays pending for the next pass.
+  if now < (audioState.nextAllowedAt or 0) then
     return false
   end
 
