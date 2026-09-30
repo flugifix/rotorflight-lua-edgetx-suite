@@ -200,6 +200,17 @@ any of this: `armed` looks for the theme's `armed` module and then for its `pref
 `offline` for its `offline` module and then for its `postflight` one, so what reaches the
 loader is always one of the three phases every theme declares.
 
+A module that loads but raises while the widget builds its scene — a free-form `build` that
+throws is the plain case — has nothing to fall back to. The widget tries that build three
+times in a row, then stops trying and shows *Dashboard error* in its place; the error is in
+the log, and the first of the three goes to the card as a fault when *Log to card* is on. A
+theme reload starts over: choosing a theme, any change to the preferences, or the flight
+controller reconnecting. The theme at full screen ([`fullscreen = "theme"`](#a-theme-that-takes-fullscreen)),
+the fullscreen menu and the in-flight tuning surface are given up the same way, each on its own
+count, and at full screen *Dashboard error* carries the tool control, as the connect splash does
+there. The views a theme registers are not counted: one whose `build` raises is given up on its
+first raise, as [Views of a theme's own](#views-of-a-themes-own) describes.
+
 ### `layout`
 
 | Key | Default | What it does |

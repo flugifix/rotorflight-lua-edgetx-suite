@@ -2646,6 +2646,8 @@ return {
       waiting_for_battery_telemetry = "Warte auf Batterie-Telemetrie",
       connected_starting = "Verbunden, Dashboard wird gestartet...",
       connected_partial_telemetry = "Verbunden mit teilweiser Telemetrie",
+      build_failed = "Dashboard-Fehler",
+      build_failed_hint = "Diese Ansicht konnte nicht gezeichnet werden",
       loading_tasks = "Lade Daten...",
       select_battery = "AKKU AUSWÄHLEN",
       switch_to_fullscreen = "Bitte in den Vollbildmodus wechseln um den Akku auszuwählen",
