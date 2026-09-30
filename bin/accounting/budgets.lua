@@ -150,6 +150,15 @@ return {
     ["theme.@srb-rc"] = { target = 14000, measured = 12887 },
     ["theme.default"] = { target = 14000, measured = 11746 },
     ["theme.rfstatus"] = { target = 14000, measured = 10515 },
+    -- A free-form theme builds its whole tree in the one pass that prepares the scene, where a
+    -- theme of boxes spreads its build over passes of eight boxes each, so its worst pass is the
+    -- build and this row sits above the 14 000 the shipped themes share, which stays its
+    -- `proposed`. What the build leaves standing is cheap: the sweep is below that of four of the
+    -- seven themes above, and a render happens once per scene where a sweep happens on every
+    -- foreground pass. The target is the measurement with the margin `pass.job.build` carries
+    -- over its own (6200 over 5557, 11.6 %), rounded up to the next hundred. The tree holds 50
+    -- references, more than any theme above, and that is what would move this row first.
+    ["theme.urban"] = { target = 17400, measured = 15510, proposed = 14000 },
 
     ----------------------------------------------------------------------------
     -- Per box type: one render into the node table, and one sweep of the reactive
