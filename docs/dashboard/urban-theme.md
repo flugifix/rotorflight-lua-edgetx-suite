@@ -84,6 +84,12 @@ seen, the skipped-frame count (`*Skp`) and the speed controller's live status, a
 chosen value row needs (ESC load, ESC status, air rate, rate floor). The statistics screen
 declares nothing and reads the flight record. A reading the model does not carry shows `-`.
 
+The skipped-frame count is published by the suite itself under the name `*Skp`
+(`tasks/events/telemetry_bg/drain.lua`, `setTelemetryValue(0xEE02, …, "*Skp")`), and `*Skp` is
+the name the theme declares and reads. The `Skp` in `common.lua`'s label table is only the word
+drawn beside the number; a bare `Skp` is declared nowhere on purpose, because nothing creates a
+sensor of that name and a declared name that is absent is still searched for.
+
 ## What it does not do yet
 
 - **Not priced by `bin/accounting/measure.lua`.** The instrument cannot settle a dashboard that
