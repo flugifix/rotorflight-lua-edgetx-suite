@@ -72,8 +72,10 @@ Urban draws these pages, the quick menu and the battery picker in the look of th
 open over, in its colour scheme: a plain page, a title in the top bar's lettering with a thin line
 under it, buttons drawn as an outline with the choice in force in green, and a large **X** at the
 top right that closes the page. The battery picker shows the packs in two columns from two packs up, each
-with its name, capacity and battery profile, and *NO BATTERY* in a row of its own at the foot; up
-to six packs fit. RTN closes a page as well.
+with its name, capacity and battery profile, and *NO BATTERY* in a row of its own at the foot. Where
+there are more packs than three rows hold, the packs scroll -- swipe them, or turn the rotary
+encoder, which moves from pack to pack -- while *NO BATTERY* stays at the foot, so every pack can
+be picked. RTN closes a page as well.
 
 What the page keys, MDL, SYS and TELE do in full screen is chosen on the *Keys* page. Left at
 their defaults, the page keys open the quick menu and MDL, SYS and TELE do nothing; outside full
@@ -133,8 +135,6 @@ sensor of that name and a declared name that is absent is still searched for.
   flight controller runs.
 - **Only the menu button, the profile row and the link bars take a press.** The gauge, the value
   rows and the status line open nothing.
-- **The battery picker shows at most six packs** on 800x480, 480x320 and 480x272 screens; it is
-  cut rather than scrolled.
 - **A copy in the user folder draws with the shipped files**: its settings are its own, but its
   phase modules load `layout.lua` and `common.lua` from the shipped folder.
 - The *Transmitter power*, *TQ* and skipped-frame cells read `-` on a link that does not report

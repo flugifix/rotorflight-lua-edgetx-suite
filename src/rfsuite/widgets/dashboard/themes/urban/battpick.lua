@@ -91,6 +91,15 @@ end
 -- the pack's name one face above the flight view's and its capacity and profile in that face.
 -- NO BATTERY always gets a full-width row of its own at the foot, reserved before the pack grid
 -- is measured so it can never be the entry that falls off the bottom.
+--
+-- Where the packs need more rows than the room above NO BATTERY holds, the grid scrolls: the
+-- cells keep the size they have when the room is full, and every row stands in a `box` the size
+-- of that room, which the firmware scrolls in full screen -- by a swipe, and by the rotary
+-- encoder, whose focus moves from button to button and brings the focused one into view. Every
+-- pack can then be reached and picked; NO BATTERY and the header stay where they are. The box
+-- takes no option beyond its geometry: the firmware's defaults scroll it in both directions,
+-- which is vertical only here because the rows are never wider than the box, and show a scroll
+-- bar while there is more to see, for which the cells leave a strip at the right.
 function M.layout(children, dW, dH, spec)
   local g = K.geometry({ x = 0, y = 0, w = dW, h = dH })
   if g == nil then return children end
@@ -113,13 +122,12 @@ function M.layout(children, dW, dH, spec)
   local noneY = contentY + contentH - noneH
   local gridH = contentH - noneH - g.gap
 
-  -- How many pack rows the remaining height takes. Candidates past `rows * cols` are NOT
-  -- drawn -- the grid is cut, not scrolled, and the pilot reaches the rest through the
-  -- flight log page. Registry order decides who makes the cut: three rows, six packs, on the
-  -- 800x480, 480x320 and 480x272 screens.
+  -- How many pack rows the remaining height shows at once: three on the 800x480, 480x320 and
+  -- 480x272 screens, six packs.
   local rowsFit = 0
   if gridH >= minBtnH then rowsFit = math.floor((gridH + g.gap) / (minBtnH + g.gap)) end
-  local rows = math.min(math.ceil(#packs / cols), rowsFit)
+  local rowsNeeded = math.ceil(#packs / cols)
+  local rows = math.min(rowsNeeded, rowsFit)
 
   local btnH = minBtnH
   if rows > 0 then
@@ -128,13 +136,34 @@ function M.layout(children, dW, dH, spec)
     btnH = math.max(minBtnH, math.min(fair, 2 * minBtnH))
   end
 
-  for i = 1, rows * cols do
-    local pack = packs[i]
-    if type(pack) ~= "table" then break end
-    local row = math.floor((i - 1) / cols)
-    local col = (i - 1) % cols
-    K.button(children, g, f, g.pad + col * (btnW + g.gap), contentY + row * (btnH + g.gap), btnW, btnH,
-      pack.name, pack.sub, pack.selected, pack.press)
+  if rowsNeeded <= rowsFit then
+    for i = 1, #packs do
+      local pack = packs[i]
+      if type(pack) ~= "table" then break end
+      local row = math.floor((i - 1) / cols)
+      local col = (i - 1) % cols
+      K.button(children, g, f, g.pad + col * (btnW + g.gap), contentY + row * (btnH + g.gap), btnW, btnH,
+        pack.name, pack.sub, pack.selected, pack.press)
+    end
+  elseif gridH > 0 then
+    -- The scrolling grid. A box clips what it holds to its own area, and a 2 px line reaches one
+    -- pixel above and left of its coordinate, so the cells start one pixel in from the box's top
+    -- left corner and the box one pixel before the grid: the first row's outline is drawn whole.
+    -- The strip at the right is the scroll bar's.
+    local barW = 2 * g.gap
+    local cellW = math.floor((fullW - barW - (cols - 1) * g.gap) / cols)
+    local cells = {}
+    for i = 1, #packs do
+      local pack = packs[i]
+      if type(pack) ~= "table" then break end
+      local row = math.floor((i - 1) / cols)
+      local col = (i - 1) % cols
+      K.button(cells, g, f, 1 + col * (cellW + g.gap), 1 + row * (btnH + g.gap), cellW, btnH,
+        pack.name, pack.sub, pack.selected, pack.press)
+    end
+    children[#children + 1] = {
+      type = "box", x = g.pad - 1, y = contentY - 1, w = fullW + 1, h = gridH + 1, children = cells
+    }
   end
 
   local none = spec.none
