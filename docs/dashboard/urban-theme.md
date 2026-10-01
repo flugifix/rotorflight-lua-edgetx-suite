@@ -17,8 +17,9 @@ are listed at the end of this page.
 three. Its settings are under *System* → *Settings* → *Dashboard* → *Settings* → *Urban*, split
 into three pages: *Look*, *Value Rows* and *Top Bar*. They are stored for the radio, and a model
 can carry its own under [*Per-Model Settings*](../pages/settings/dashboard/overrides.md) where
-per-model settings are switched on. Its words come from the suite's translations, like every other
-theme's, so it speaks the language of the package that was installed.
+per-model settings are switched on. On both pages its tile carries an icon of its own, a small
+picture of its flight screen with the battery gauge in the middle. Its words come from the suite's
+translations, like every other theme's, so it speaks the language of the package that was installed.
 
 ## What it shows
 

@@ -500,6 +500,9 @@
   - A reply the parser rejects ends the read chain instead of reading on, so the rest of a chain is no longer read after its first record failed.
   - The live write that Trims (with the swash override on) and Swash Geometry (in setup mode) send while a value is changed sends the same whole records, and waits for the same read.
   - The values from the earlier visit are still shown while the page reads again; they no longer count as a read.
+- **The Urban theme's tile draws an icon of its own (`widgets/dashboard/themes/urban/icon.png`, `docs/dashboard/urban-theme.md`)**:
+  - Urban shipped with a byte-for-byte copy of the *Default* theme's icon, so on *Dashboard* → *Settings* and *Per-Model Settings* its tile could not be told from *Default*'s or *RF Status*'s by its picture. The new icon is a small picture of Urban's flight screen: the top and bottom bars, the left panel, the vertical battery gauge in the middle and the value rows on the right.
+  - It is a 40x40 8-bit grayscale PNG with no alpha, the size and encoding `.vscode/scripts/optimize_icons.py` keeps for a monochrome source, drawn in the stroke width and greys of Urban's own page icons under `themes/urban/icons/` so the theme tile and its page tiles read as one set.
 
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:
