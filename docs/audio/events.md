@@ -32,6 +32,8 @@ To prevent spurious "Battery 0%" announcements at startup:
 - **Carried-Over Reading Detection:** EdgeTX retains the last received sensor reading across disconnections. If a new connection reports a reading bit-identical to the previous session's disconnect value (`previousSessionFuel`), it is treated as a carried-over reading and held until the new pack's fresh reading arrives.
 - **Immediate vs. Timed Callout:** As soon as a positive, fresh reading arrives (`fuel > 0` and different from the previous pack), the percentage is spoken immediately. If the pack is genuinely empty (0%), the callout fires once the deferral ceiling expires.
 
+A sound pack without the announcement's file (`evt/battery.wav` for an electric model, `stat/alerts/fuel.wav` for nitro) has nothing to play. Once the choice between the two files can no longer change (the model type is set explicitly, the battery configuration has been read from the flight controller, or the pack carries neither file), the announcement counts as made for that connection: nothing is spoken and one warning in the log says which file is missing. Until then it is tried again on every pass, because a model whose type is not yet known may still turn out to need the file the pack does carry.
+
 ### 2. Fuel
 
 Configures recurring callouts and low-fuel alarms during flight based on the estimated remaining capacity or battery percentage.
