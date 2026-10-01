@@ -280,13 +280,19 @@ has no widget of its own to pass. It is the `ctx` a fullscreen theme's build rec
 Only a widget with a base layer answers keys; without one the widget answers none, as before.
 `views.key(widget, event)` is called for every event of a fullscreen pass that is not idle,
 ahead of the job the pass may run, so a key is not lost to a build. It acts on the release edge
-of three keys, read from the firmware's `EVT_VIRTUAL_NEXT_PAGE`, `EVT_VIRTUAL_PREV_PAGE` and
-`EVT_VIRTUAL_EXIT` where the radio defines them, and on nothing else:
+of six keys, read from the firmware's `EVT_VIRTUAL_NEXT_PAGE`, `EVT_VIRTUAL_PREV_PAGE`,
+`EVT_VIRTUAL_EXIT`, `EVT_MODEL_BREAK`, `EVT_SYS_BREAK` and `EVT_TELEM_BREAK` where the radio
+defines them, and on nothing else:
 
 | Key | A view on top | The base layer showing |
 | --- | --- | --- |
 | PAGE down / up | the menu on top: `closeView`; any other view: `openView:menu` | the theme's `ctx.keys.pageDown` / `pageUp`, else `openView:menu` |
 | RTN | the view module's `back(widget)` if it has one, else `closeView` | the theme's `ctx.keys.exit`, else nothing |
+| MDL, SYS, TELE | nothing | the theme's `ctx.keys.mdl` / `sys` / `tele`, else nothing |
+
+Outside fullscreen MDL, SYS and TELE open the radio's own menus. A widget in fullscreen gets them
+instead and the radio opens nothing, so they are free for a theme to bind; without a binding they
+do nothing, as before.
 
 The picker's `back` is its close box — the prompt is dismissed and `done` follows — because a
 plain `closeView` would leave `pending` standing and the picker would open again on the next

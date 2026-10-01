@@ -683,21 +683,31 @@ end
 -- Keys
 -- ---------------------------------------------------------------------------
 
--- The firmware's names for the three keys, read when a key arrives rather than when this file
--- loads, and compared only where the radio defines them. The values differ between targets
+-- The keys only a theme gives a meaning to. Outside fullscreen they are the firmware's shortcuts
+-- (NavWindow::onEvent in gui/colorlcd/libui/window.cpp); a fullscreen widget is no NavWindow, and
+-- LuaWidget::onEvent hands them to the script instead, so without a binding they do nothing.
+local THEME_KEYS = { mdl = true, sys = true, tele = true }
+
+-- The firmware's names for the keys, read when a key arrives rather than when this file loads,
+-- and compared only where the radio defines them. The values differ between targets
 -- (radio/util/hw_defs/lua_keys.jinja maps each onto the release edge of whatever key the radio
 -- has), so no number is written down here. Only the release edges are answered: the press edge
 -- of RTN is also what a long press delivers before the firmware leaves fullscreen on its own.
+-- MDL, SYS and TELE are asked after the three every radio's layout uses.
 local function keyName(event)
   local nextPage, prevPage, exit = _G.EVT_VIRTUAL_NEXT_PAGE, _G.EVT_VIRTUAL_PREV_PAGE, _G.EVT_VIRTUAL_EXIT
   if nextPage ~= nil and event == nextPage then return "pageDown" end
   if prevPage ~= nil and event == prevPage then return "pageUp" end
   if exit ~= nil and event == exit then return "exit" end
+  local mdl, sys, tele = _G.EVT_MODEL_BREAK, _G.EVT_SYS_BREAK, _G.EVT_TELEM_BREAK
+  if mdl ~= nil and event == mdl then return "mdl" end
+  if sys ~= nil and event == sys then return "sys" end
+  if tele ~= nil and event == tele then return "tele" end
   return nil
 end
 
 --- Answer a key, for a widget whose fullscreen has a base layer. Returns true when the key was
---- one of the three.
+--- one of the six and answered; MDL, SYS and TELE with a view on top return false.
 --
 --   PAGE down / up  with the quick menu on top: close it. With any other view on top: open the
 --                   menu over it. With the base layer showing: the base layer's own binding
@@ -706,6 +716,8 @@ end
 --                   for a view of the theme's own, `back(ctx)` -- else `closeView`. With the
 --                   base layer showing: its `keys.exit`, else nothing -- a long press on RTN
 --                   still leaves fullscreen, in the firmware.
+--   MDL, SYS, TELE  with the base layer showing: its `keys.mdl` / `keys.sys` / `keys.tele`,
+--                   else nothing. With a view on top: nothing.
 --
 -- Both page keys do the same, because some radios have only one of them. The runtime calls this
 -- only for a widget with a base layer, and not while the in-flight tuning surface, the connect
@@ -719,7 +731,11 @@ function M.key(widget, event)
     local ctx = widget._viewCtx
     local keys = ctx and ctx.keys
     after = type(keys) == "table" and keys[name] or nil
-    if after == nil and name ~= "exit" then after = "openView:" .. M.DEFAULT_VIEW end
+    if after == nil and (name == "pageDown" or name == "pageUp") then
+      after = "openView:" .. M.DEFAULT_VIEW
+    end
+  elseif THEME_KEYS[name] then
+    return false
   elseif name == "exit" then
     local entry = M.find(widget, top)
     if entry ~= nil and entry.module ~= nil then
@@ -761,8 +777,9 @@ end
 --- third argument of its `build(zone, state, ctx)`.
 --
 --   ctx.action(after)          performs `after` exactly as `navigate(widget, after)` does
---   ctx.keys                   a table the theme fills: `exit`, `pageDown`, `pageUp`, each an
---                              action; read by `key()` while the base layer shows
+--   ctx.keys                   a table the theme fills: `exit`, `pageDown`, `pageUp`, `mdl`,
+--                              `sys`, `tele`, each an action; read by `key()` while the base
+--                              layer shows
 --   ctx.condition(name)        `condition(name, widget)`
 --   ctx.entries()              the quick menu's entries, `fullscreen_menu.entries(widget)`
 --   ctx.menu(children, list)   the quick menu's builder, appending to `children`; `list`

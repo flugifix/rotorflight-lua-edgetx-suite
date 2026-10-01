@@ -30,6 +30,7 @@ A theme is **red** where:
 | nothing leaves fullscreen | a way out is a press with `exitFullscreen`, or `ctx.keys.exit = "exitFullscreen"` — a short press on RTN, which every radio has — or `fullscreenExit = "longRtn"` declared in `init.lua`: the author relies on a long press on RTN, which always leaves fullscreen |
 | a `rectangle` is drawn over a node that has a press | built in fullscreen, a rectangle takes the press and hands it to its parent, so it swallows every press that lands on it |
 | a press or a `ctx.keys` entry names an unknown action or view | the widget ignores it, so the control or the key does nothing |
+| a `ctx.keys` entry is not `exit`, `pageDown`, `pageUp`, `mdl`, `sys` or `tele` | the widget answers no other key, so the binding does nothing |
 | a build raises or does not return a node list | |
 
 A tree that binds no press at all is green, because the widget then draws its own menu control

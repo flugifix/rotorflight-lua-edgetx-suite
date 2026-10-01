@@ -15,6 +15,9 @@
 --     and hands it to its parent, so it swallows every press that lands on it;
 --   * a press or a `ctx.keys` entry names an action that is not one of `openView:<id>`,
 --     `closeView`, `done`, `exitFullscreen` and `none`, or a view the widget does not have;
+--   * a `ctx.keys` entry is not one of the keys the widget answers -- `exit`, `pageDown`,
+--     `pageUp`, `mdl`, `sys`, `tele`. Only `exit` counts as a way out: MDL, SYS and TELE are
+--     not on every radio;
 --   * a build raises, or returns something that is not a node list.
 --
 -- A tree that binds no press at all is green: the widget draws its own menu control and X over
@@ -187,6 +190,8 @@ end
 
 local VIEWS = { menu = true, battery_pick = true }
 local SIMPLE = { closeView = true, done = true, exitFullscreen = true, none = true }
+-- The keys `views.key` answers from `ctx.keys` (widgets/dashboard/views.lua).
+local KEY_NAMES = { exit = true, pageDown = true, pageUp = true, mdl = true, sys = true, tele = true }
 
 -- nil when the action is one the widget knows, else why not.
 local function actionProblem(after)
@@ -635,7 +640,7 @@ for _, file in ipairs(order) do
     else
       local presses, opensMenu, leaves = checkPresses(label, tree, log)
       for name, after in pairs(ctx.keys) do
-        if name ~= "exit" and name ~= "pageDown" and name ~= "pageUp" then
+        if not KEY_NAMES[name] then
           red(label .. ": ctx.keys." .. tostring(name) .. " is not a key the widget answers")
         end
         local problem = actionProblem(after)

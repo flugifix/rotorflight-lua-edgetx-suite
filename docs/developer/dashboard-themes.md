@@ -684,7 +684,7 @@ screen changes:
 | | |
 | --- | --- |
 | `ctx.action(after)` | performs an action: `openView:<id>`, `closeView`, `done`, `exitFullscreen` or `none` (see [what follows a press](dashboard-views.md#what-follows-a-press)) |
-| `ctx.keys` | a table the theme fills with actions for the keys, `exit`, `pageDown` and `pageUp`; see below |
+| `ctx.keys` | a table the theme fills with actions for the keys, `exit`, `pageDown`, `pageUp`, `mdl`, `sys` and `tele`; see below |
 | `ctx.condition(name)` | whether a named condition holds, from the list in [dashboard views](dashboard-views.md#conditions) |
 | `ctx.entries()` | the quick menu's entries, as `fullscreen_menu.lua` returns them |
 | `ctx.menu(children, entries)` | the quick menu's builder: appends the menu for `entries` (the menu's own when omitted) to `children`; a list handed in chooses and orders the menu's own entries by `id`, and an item whose id the menu does not have is left out |
@@ -763,16 +763,27 @@ out; a theme that relies on a long press on RTN instead declares it with
 
 ### Keys
 
-In this mode the widget answers three keys (a theme without the key answers none, as before):
+In this mode the widget answers six keys (a theme without the key answers none, as before):
 
 | Key | With a view on top | With the theme showing |
 | --- | --- | --- |
 | PAGE down, PAGE up | the quick menu on top: close it; any other view: open the menu over it | `ctx.keys.pageDown` / `ctx.keys.pageUp` if set, else open the menu |
 | RTN, short | the view's `back` — the picker: its close box; the menu: close it | `ctx.keys.exit` if set, else nothing |
 | RTN, long | leaves fullscreen, in the firmware | leaves fullscreen, in the firmware |
+| MDL, SYS, TELE, short | nothing | `ctx.keys.mdl` / `ctx.keys.sys` / `ctx.keys.tele` if set, else nothing |
 
 Both page keys do the same because some radios have only one. The keys are not answered while
 the in-flight tuning surface or the connect splash is up.
+
+MDL, SYS and TELE open the radio's own menus everywhere but in a widget's fullscreen, where the
+widget gets them and the radio opens nothing; unbound they do nothing there, as before. Not
+every radio has them, so a binding is a shortcut, never the only way to something: the menu
+access and the way out a theme owes are a press, the page keys or RTN.
+
+```lua
+ctx.keys.tele = "openView:link"    -- a view the theme registers
+ctx.keys.mdl = "openView:menu"
+```
 
 ### What the pilot sees
 
