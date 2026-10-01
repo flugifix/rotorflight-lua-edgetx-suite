@@ -93,6 +93,7 @@ local KEY_ACTION_LABELS = {
   menu = "@i18n(app.pages.settings_dashboard_settings.urban_key_menu)@",
   tools = "@i18n(app.pages.settings_dashboard_settings.urban_key_tools)@",
   link = "@i18n(app.pages.settings_dashboard_settings.urban_key_link)@",
+  suite_tool = "@i18n(app.pages.settings_dashboard_settings.urban_key_suite_tool)@",
   exit = "@i18n(app.pages.settings_dashboard_settings.urban_key_exit)@",
 }
 local KEY_OPTIONS = {}

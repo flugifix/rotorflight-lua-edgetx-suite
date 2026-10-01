@@ -24,7 +24,7 @@ theme's, so it speaks the language of the package that was installed.
 
 **On the ground and in flight** one screen, which does not change shape at spool-up:
 
-- **Top bar** — in full screen a menu button at the left, then the clock; up to four stacked
+- **Top bar** — in full screen two buttons at the left, the menu and the tool, then the clock; up to four stacked
   link bars in the middle (the receiver's link quality *RQ*, the transmitter's *TQ*, and the
   signal of each receiver antenna as headroom above the sensitivity floor of the air rate the
   link runs, the second antenna only once one has been seen); the radio's battery at the right.
@@ -54,10 +54,13 @@ stopped answering.
 
 With *Urban* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
-allows. Three places on the screen open a page over it:
+allows. Three places on the screen open a page over it, and a fourth opens the suite's tool:
 
 - **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do the
-  page keys, left at their defaults.
+  page keys and TELE, left at their defaults.
+- **The tool button** beside it opens the suite's tool inside the widget, as the quick menu's
+  *RFSUITE TOOL* does; so does SYS, left at its default. The tool opens only while the model is
+  disarmed: while it is armed the button is drawn grey and a press does nothing.
 - **The profile row** of the left panel (PID, rate and battery profile) opens *Profile & Tuning*:
   the in-flight tuning surface, or a note that it is not available now, and the model's battery
   profiles, the one in force in green. Pressing a profile makes it the one in force and the page
@@ -78,10 +81,12 @@ encoder, which moves from pack to pack -- while *NO BATTERY* stays at the foot, 
 be picked. RTN closes a page as well.
 
 What the page keys, MDL, SYS and TELE do in full screen is chosen on the *Keys* page. Left at
-their defaults, the page keys open the quick menu and MDL, SYS and TELE do nothing; outside full
-screen MDL, SYS and TELE open the radio's own menus as always. A key set to open a page closes
-that page again when pressed while it is showing. A radio without one of these keys simply never
-uses its setting.
+their defaults, the page keys and TELE open the quick menu, SYS opens the suite's tool and MDL does
+nothing; outside full screen MDL, SYS and TELE open the radio's own menus as always. A key set to
+open a page closes that page again when pressed while it is showing, so a second TELE closes the
+quick menu. A key set to the tool does nothing while the model is armed. MDL, SYS and TELE do
+nothing while another page is on top. A radio without one of these keys simply never uses its
+setting.
 
 ## Settings
 
@@ -100,8 +105,8 @@ uses its setting.
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
-| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Quick menu* (default), *Profile & Tuning*, *ELRS link page* or *Leave full screen*. |
-| Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys; *Nothing* (default). |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Quick menu* (default), *Profile & Tuning*, *ELRS link page*, *RFSuite tool* or *Leave full screen*. |
+| Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *RFSuite tool*, TELE *Quick menu*. |
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the
 model — the cell count times the flight controller's minimum cell voltage — and the gauge, the
@@ -133,7 +138,7 @@ sensor of that name and a declared name that is absent is still searched for.
   the flight record keeps no transmitter power.
 - **The arming-disable names cover bits 0 to 25**, named the same whatever MSP API version the
   flight controller runs.
-- **Only the menu button, the profile row and the link bars take a press.** The gauge, the value
+- **Only the menu and tool buttons, the profile row and the link bars take a press.** The gauge, the value
   rows and the status line open nothing.
 - **A copy in the user folder draws with the shipped files**: its settings are its own, but its
   phase modules load `layout.lua` and `common.lua` from the shipped folder.

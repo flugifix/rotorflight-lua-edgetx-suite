@@ -26,8 +26,8 @@ local init = {
   -- menu; one that does not know it ignores the key and full screen stays the quick menu.
   fullscreen = "theme",
   -- The way out of full screen is a long press on RTN, which the firmware always honours, so
-  -- this theme draws no close control. The one control it binds is the menu glyph in the top
-  -- bar (layout.lua, L.menuControl).
+  -- this theme draws no close control. The two controls it binds are the menu and the tool
+  -- glyphs in the top bar (layout.lua, L.menuControl, L.toolControl).
   fullscreenExit = "longRtn",
   -- The settings of this theme are three pages rather than one long form. A host that knows
   -- `pages` opens the theme's tile on a grid of these and hands the chosen one to the

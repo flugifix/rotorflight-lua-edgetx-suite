@@ -2407,6 +2407,7 @@ return {
         urban_key_menu = "Quick menu",
         urban_key_tools = "Profile & Tuning",
         urban_key_link = "ELRS link page",
+        urban_key_suite_tool = "RFSuite tool",
         urban_key_exit = "Leave full screen"
       },
       settings_dashboard_overrides = {

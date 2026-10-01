@@ -155,9 +155,9 @@ local CARD_PAD = 3
 -- ---------------------------------------------------------------------------
 
 -- On the full screen surface the host hands the build a `ctx` (and only there), and a theme that
--- binds a press of its own gets no host controls over it. This theme binds exactly one: a small
--- boxed menu glyph at the left end of the top bar, before the clock, that opens the quick menu.
--- There is no close control -- a long press on RTN leaves full screen in the firmware, and
+-- binds a press of its own gets no host controls over it. This theme binds two small boxed glyphs
+-- at the left end of the top bar, before the clock: this one opens the quick menu, the one beside
+-- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves full screen in the firmware, and
 -- init.lua declares that (`fullscreenExit`), which is what the host's theme check reads. The
 -- page keys open the menu by the host's default.
 --
@@ -212,6 +212,58 @@ local function hasViews(ctx)
 end
 L.hasViews = hasViews
 
+-- The second control of the top bar, beside the menu glyph and of its size and outline: it opens
+-- the suite's tool (`openTool`), on a host with theme views -- the host this theme's views run on,
+-- whose quick menu offers the tool as well. Returns the width it took, as L.menuControl does.
+--
+-- The host opens the tool only while the model is disarmed, and refuses the action while it is
+-- armed (widgets/dashboard/tool_host.lua, `request`), as its quick menu offers the tool only while
+-- disarmed. So the control says so: while armed, its outline and its glyph are drawn in the
+-- track colour, the colour of a row that is not available in this theme's views. The arm state
+-- is read per frame by one colour function every line of the control shares, rather than at
+-- build time: the render key does not carry it, so the flight view is not rebuilt on the arm
+-- edge (L.renderKey).
+--
+-- The glyph is four squares in a square, the picture of a set of tools; each square is a short
+-- line as thick as it is long.
+function L.toolControl(nodes, state, ctx, x, y, h)
+  if not hasViews(ctx) then return 0 end
+  local action = ctx.action
+  local ink = function()
+    if state.armed == true then return C.track end
+    return C.line
+  end
+  local boxH = math.max(8, h - 2)
+  local boxW = boxH
+  local bx, by = x, y + 1
+  nodes[#nodes + 1] = {
+    type = "button", x = bx, y = by, w = boxW, h = boxH, color = C.bg,
+    press = function() action("openTool") end
+  }
+  local x1, y1 = bx + boxW - 1, by + boxH - 1
+  local edges = {
+    { { bx, by }, { x1, by } }, { { bx, y1 }, { x1, y1 } },
+    { { bx, by }, { bx, y1 } }, { { x1, by }, { x1, y1 } },
+  }
+  for i = 1, 4 do
+    nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = edges[i],
+      color = ink, thickness = 2 }
+  end
+  local s = math.max(2, math.floor(boxH * 0.22))
+  local gap = math.max(2, math.floor(boxH * 0.12))
+  local ox = bx + math.floor((boxW - 2 * s - gap) / 2)
+  local oy = by + math.floor((boxH - 2 * s - gap) / 2)
+  for i = 0, 1 do
+    for j = 0, 1 do
+      local cx = ox + i * (s + gap)
+      local cy = oy + j * (s + gap) + math.floor(s / 2)
+      nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
+        pts = { { cx, cy }, { cx + s, cy } }, color = ink, thickness = s }
+    end
+  end
+  return boxW + 4
+end
+
 -- A press over an area that is drawn anyway: a button in the panel's own colour, appended BEFORE
 -- what is drawn over it, which then has to be labels and lines -- a rectangle over a press takes
 -- the press away from it. EdgeTX draws every button with a border of its own.
@@ -226,28 +278,31 @@ end
 -- What a key may do in full screen, as the pilot chooses it on the Keys settings page: a stored
 -- id and the host action it stands for. The settings page offers exactly these, so the two cannot
 -- drift apart. The battery picker is not among them: the host opens it while a pick is pending
--- and at no other time.
+-- and at no other time. `suite_tool` is the suite's tool, which the host opens only while the
+-- model is disarmed: armed, the key does nothing.
 L.KEY_ACTIONS = {
-  { id = "none",  action = "none" },
-  { id = "menu",  action = "openView:menu" },
-  { id = "tools", action = "openView:urban_menu" },
-  { id = "link",  action = "openView:urban_link" },
-  { id = "exit",  action = "exitFullscreen" },
+  { id = "none",       action = "none" },
+  { id = "menu",       action = "openView:menu" },
+  { id = "tools",      action = "openView:urban_menu" },
+  { id = "link",       action = "openView:urban_link" },
+  { id = "suite_tool", action = "openTool" },
+  { id = "exit",       action = "exitFullscreen" },
 }
 
--- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, and the default.
--- The defaults are what the host does with the key when the theme binds nothing -- the page keys
--- open the quick menu, MDL, SYS and TELE do nothing -- so a pilot who never opens the page gets
--- the full screen he always had.
+-- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, the theme's default
+-- and `host`, what the host does with the key when the theme binds nothing -- the page keys open
+-- the quick menu, MDL, SYS and TELE do nothing. The defaults are the host's answer for the page
+-- keys and MDL; SYS opens the suite's tool and TELE the quick menu, the two places a pilot on
+-- the full screen goes most.
 --
 -- Not rows of L.SETTINGS: those are what the drawing reads, and the page probe holds each of them
 -- to a change in the picture. A key binding draws nothing.
 L.KEYS = {
-  { key = "pageDown", pref = "key_page_down", default = "menu" },
-  { key = "pageUp",   pref = "key_page_up",   default = "menu" },
-  { key = "mdl",      pref = "key_mdl",       default = "none" },
-  { key = "sys",      pref = "key_sys",       default = "none" },
-  { key = "tele",     pref = "key_tele",      default = "none" },
+  { key = "pageDown", pref = "key_page_down", default = "menu",       host = "menu" },
+  { key = "pageUp",   pref = "key_page_up",   default = "menu",       host = "menu" },
+  { key = "mdl",      pref = "key_mdl",       default = "none",       host = "none" },
+  { key = "sys",      pref = "key_sys",       default = "suite_tool", host = "none" },
+  { key = "tele",     pref = "key_tele",      default = "menu",       host = "none" },
 }
 
 local KEY_ACTION_IDS = {}
@@ -258,19 +313,18 @@ for i = 1, #L.KEY_ACTIONS do
 end
 L.KEY_ACTION_IDS = KEY_ACTION_IDS
 
--- Fill `ctx.keys` from the pilot's choices, on a host with theme views. A key left at its default
--- is left unbound, so the host's own answer stands and a full screen nobody configured is the
--- tree it always was. Every key is written on every build, a default as nil: the host keeps one
--- `ctx` for the whole visit to full screen, so a binding cleared on the page has to be cleared
--- here as well. A build-time read like every other setting -- the host reloads the theme when its
--- preferences change.
+-- Fill `ctx.keys` from the pilot's choices, on a host with theme views. A key whose choice is what
+-- the host does with it anyway is left unbound, so the host's own answer stands. Every key is
+-- written on every build, an unbound one as nil: the host keeps one `ctx` for the whole visit to
+-- full screen, so a binding cleared on the page has to be cleared here as well. A build-time read
+-- like every other setting -- the host reloads the theme when its preferences change.
 function L.bindKeys(state, ctx)
   if not hasViews(ctx) or type(ctx.keys) ~= "table" then return end
   local keys = ctx.keys
   for i = 1, #L.KEYS do
     local entry = L.KEYS[i]
     local id = Common.option(state, entry.pref, KEY_ACTION_IDS, entry.default)
-    if id == entry.default then
+    if id == entry.host then
       keys[entry.key] = nil
     else
       keys[entry.key] = KEY_ACTION_BY_ID[id]
@@ -279,7 +333,7 @@ function L.bindKeys(state, ctx)
 end
 
 -- ---------------------------------------------------------------------------
--- top bar: menu glyph, clock, link bars, TX battery pill
+-- top bar: menu and tool glyphs, clock, link bars, TX battery pill
 -- ---------------------------------------------------------------------------
 
 -- The radio battery is read at BUILD time, never in a closure: getValue is a sensor probe
@@ -334,7 +388,7 @@ local function rssiPercent(dbm, floor)
 end
 L.rssiPercent = rssiPercent
 
--- The top bar, left to right: the menu glyph (full screen only), the clock, the link bars
+-- The top bar, left to right: the menu and tool glyphs (full screen only), the clock, the link bars
 -- centred on the bar's midline, the radio battery pill at the right end.
 --
 -- `showLink` false draws the clock and the pill and nothing between them, whatever the pilot
@@ -348,6 +402,7 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   local quietBars = setting(state, "bar_colors") == "warn"
 
   local clockX = x + 1 + L.menuControl(nodes, ctx, x + 1, y, h)
+  clockX = clockX + L.toolControl(nodes, state, ctx, clockX, y, h)
 
   -- The clock, in the mode the pilot chose, and its width measured against THAT mode's own
   -- sample -- common.lua keeps the format and the sample in one entry.
@@ -1140,7 +1195,7 @@ end
 -- uncapped floor gives the side panels a negative width.
 --
 -- Both bars are 7.5 % of the height (at least 18 px), their boxes two pixels shorter, and
--- nothing is reserved for controls: the one control this theme draws sits inside the top bar.
+-- nothing is reserved for controls: the two controls this theme draws sit inside the top bar.
 function L.buildFlight(zone, state, ctx)
   local nodes = {}
   local x0, y0, w, h = zone.x or 0, zone.y or 0, zone.w or 0, zone.h or 0
