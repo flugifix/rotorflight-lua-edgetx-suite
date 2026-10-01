@@ -850,7 +850,7 @@ return {
         help_message = "Ansage des PID-Profils und des Raten-Profils bei einem Wechsel, mit der Nummer des neuen Profils."
       },
       settings_audio_events_esc = {
-        help_message = "Ansage, wenn die ESC-Temperatur den Schwellwert erreicht. Der Schwellwert gehoert zum Modell: mit verbundenem Flugregler wird er beim Modell gespeichert, sonst gilt der radioweite Standard. Darunter hat die MCU-Temperatur des Flugreglers einen eigenen Schalter und einen eigenen Schwellwert. Dieser gilt radioweit, denn derselbe Regler ist in jedem Modell gleich spezifiziert. Beide Schwellwerte werden in der Temperatureinheit angezeigt, die unter Einstellungen > Lokalisierung gewaehlt ist. Ganz unten legt Wiederholung fest, wie oft eine der beiden Warnungen spricht, solange die Temperatur auf oder ueber ihrem Schwellwert bleibt, und Haptisch, ob der Sender dabei vibriert. Bis behoben ist eine Ansage alle 10 Sekunden, solange es zu heiss ist; eine Anzahl endet danach und beginnt von vorn, sobald die Temperatur wieder gefallen ist."
+        help_message = "ESC-Temperatur: Ansage, wenn die ESC-Temperatur den Schwellwert darunter erreicht.\nSchwellwert: In der Einheit aus Einstellungen > Lokalisierung. Mit verbundenem Flugregler beim Modell gespeichert (die Zeile zeigt dann [Modell]), sonst radioweit.\nMCU-Temperatur, Schwellwert: Dasselbe für die MCU des Flugreglers; dieser Schwellwert gilt immer radioweit.\nWiederholung, Haptisch: Wie oft eine der beiden Warnungen wiederholt wird, solange es zu heiß ist, und ob der Sender vibriert."
       },
       settings_audio_events_adjustment = {
         help_message = "Ansage eines Werts, der ueber eine Adjustment-Funktion geaendert wurde, so wie der Flugregler ihn meldet."

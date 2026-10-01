@@ -97,6 +97,11 @@ set to Fahrenheit under [Localization](../pages/settings/localization.md) the pa
 °F -- each step is still one degree Celsius, so they move in steps of about 2 °F -- and the MCU
 alert speaks the temperature in °F.
 
+The ESC threshold is stored with the model while a flight controller is connected -- the row then
+reads *Threshold [Model]* -- and is otherwise the radio-wide default that every model without a
+value of its own reads. The MCU threshold is always radio-wide, because the same flight controller
+is rated the same in every aircraft.
+
 ### 8. Link Quality
 
 | Setting | Switch / Key | Default | Scope | Description |
