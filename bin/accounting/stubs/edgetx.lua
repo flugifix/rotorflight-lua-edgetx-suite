@@ -192,9 +192,24 @@ end
 -- a per-world install would wrap the wrapper again on every scenario.
 local realOpen, realRemove, realRename = io.open, os.remove, os.rename
 
+-- The sound pack is outside the card above, and it was the one other absolute path a measured
+-- source opens: lib/audio.lua finds out whether a file is there by opening it under /SOUNDS/
+-- before it plays it. That open went to the host's root filesystem, so a machine with a pack
+-- at /SOUNDS measured the branch that finds the file and every other machine the one that
+-- does not, and the two reports differed in rows no change had touched. A /SOUNDS/ path is
+-- answered here as the host answers a file that is not there, so every host measures a radio
+-- without a sound pack -- the case a host with no /SOUNDS, the CI runner among them, measured
+-- already. Nothing measured writes there; a write is answered the same way.
+local SOUNDS_PREFIX = "/SOUNDS/"
+
 io.open = function(path, mode)
   local card = cardPath(path)
-  if not card then return realOpen(path, mode) end
+  if not card then
+    if type(path) == "string" and string.sub(path, 1, #SOUNDS_PREFIX) == SOUNDS_PREFIX then
+      return nil, path .. ": No such file or directory", 2
+    end
+    return realOpen(path, mode)
+  end
   -- io.open does not create a missing directory, and the firmware's card layout has the
   -- user directory below two that may not be there -- lib/preferences.lua:335 says as much.
   if mode and string.find(mode, "[wa+]") then ensureDir(card:match("^(.*)[/\\][^/\\]*$") or card) end

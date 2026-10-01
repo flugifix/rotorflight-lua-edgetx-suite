@@ -61,7 +61,7 @@ return {
     -- firmware's hard limit -- which is why the entry point's "CPU limit" back-off
     -- is still in place. The target holds it at today's cost; it is not a share of
     -- a budget anyone would call comfortable.
-    ["pass.startup.worst"] = { target = 18000, measured = 17598 },
+    ["pass.startup.worst"] = { target = 18000, measured = 12263 },
 
     -- The service widget's background pass: the same two runtimes, with no scene
     -- build and no sweep of a theme mixed into it.
@@ -134,7 +134,7 @@ return {
     -- steady pass was measured at 12 961 in the air and 13 080 on the ground; the target is set
     -- above the second of those and not the first.
     ["pass.tuning.state"] = { target = 14200, measured = 13080, proposed = 13000 },
-    ["pass.tuning.prime"] = { target = 16700, measured = 14855 },
+    ["pass.tuning.prime"] = { target = 16700, measured = 14339 },
     ["pass.job.tuning"] = { target = 15700, measured = 13155, proposed = 10600 },
 
     ----------------------------------------------------------------------------
@@ -231,12 +231,12 @@ return {
     -- The custom-telemetry drain with a full frame backlog waiting: POP_CAP frames
     -- popped and accounted, DECODE_CAP of them walked through the per-sensor
     -- decoders. This is what the two counts in telemetry_bg/drain.lua buy.
-    ["unit.telemetry.drain"] = { target = 3300, measured = 2730 },
+    ["unit.telemetry.drain"] = { target = 3300, measured = 2743 },
     -- The same wakeup while the background function script is draining for the
     -- whole radio: the drain and the adjustment teller are skipped and SmartFuel
     -- is not, so what is left is what only this Lua state can compute. The gap to
     -- the row above is what a pass saves by handing over.
-    ["unit.telemetry.handoff"] = { target = 350, measured = 233 },
+    ["unit.telemetry.handoff"] = { target = 350, measured = 246 },
     ["unit.msp.pump"] = { target = 300, measured = 218 },
     -- The API-layer parse of the largest reply the suite scripts, in one piece. It
     -- lands in whatever pass completes the reassembly.
