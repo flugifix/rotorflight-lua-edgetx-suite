@@ -707,7 +707,8 @@ local function keyName(event)
 end
 
 --- Answer a key, for a widget whose fullscreen has a base layer. Returns true when the key was
---- one of the six and answered; MDL, SYS and TELE with a view on top return false.
+--- one of the six and answered; MDL, SYS and TELE with a view on top return false, unless they
+--- are bound to that view.
 --
 --   PAGE down / up  with the quick menu on top: close it. With any other view on top: open the
 --                   menu over it. With the base layer showing: the base layer's own binding
@@ -719,6 +720,9 @@ end
 --   MDL, SYS, TELE  with the base layer showing: its `keys.mdl` / `keys.sys` / `keys.tele`,
 --                   else nothing. With a view on top: nothing.
 --
+-- A key the base layer binds to `openView:<id>`, RTN aside, closes that view again while it is
+-- on top, whatever the rules above say for that key: a bound key toggles its view.
+--
 -- Both page keys do the same, because some radios have only one of them. The runtime calls this
 -- only for a widget with a base layer, and not while the in-flight tuning surface, the connect
 -- splash or no theme at all is on screen; without a base layer the widget answers no key.
@@ -726,14 +730,18 @@ function M.key(widget, event)
   local name = keyName(event)
   if name == nil then return false end
   local top = M.top(widget)
+  local ctx = widget._viewCtx
+  local keys = ctx and ctx.keys
+  local bound = type(keys) == "table" and keys[name] or nil
   local after
   if top == nil then
-    local ctx = widget._viewCtx
-    local keys = ctx and ctx.keys
-    after = type(keys) == "table" and keys[name] or nil
+    after = bound
     if after == nil and (name == "pageDown" or name == "pageUp") then
       after = "openView:" .. M.DEFAULT_VIEW
     end
+  elseif name ~= "exit" and bound == "openView:" .. top then
+    -- The key bound to the view on top: close it, rather than open the menu over it.
+    after = "closeView"
   elseif THEME_KEYS[name] then
     return false
   elseif name == "exit" then

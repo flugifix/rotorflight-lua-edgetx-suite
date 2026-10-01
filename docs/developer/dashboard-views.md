@@ -290,6 +290,9 @@ defines them, and on nothing else:
 | RTN | the view module's `back(widget)` if it has one, else `closeView` | the theme's `ctx.keys.exit`, else nothing |
 | MDL, SYS, TELE | nothing | the theme's `ctx.keys.mdl` / `sys` / `tele`, else nothing |
 
+A key the theme binds to `openView:<id>`, RTN aside, is `closeView` while that view is on top,
+whatever the first column says for it: a bound key toggles its view.
+
 Outside fullscreen MDL, SYS and TELE open the radio's own menus. A widget in fullscreen gets them
 instead and the radio opens nothing, so they are free for a theme to bind; without a binding they
 do nothing, as before.

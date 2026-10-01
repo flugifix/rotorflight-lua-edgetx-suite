@@ -772,6 +772,9 @@ In this mode the widget answers six keys (a theme without the key answers none, 
 | RTN, long | leaves fullscreen, in the firmware | leaves fullscreen, in the firmware |
 | MDL, SYS, TELE, short | nothing | `ctx.keys.mdl` / `ctx.keys.sys` / `ctx.keys.tele` if set, else nothing |
 
+A key bound to `openView:<id>`, RTN aside, closes that view again while it is on top, rather
+than doing what the first column says: pressed twice, it opens the view and closes it.
+
 Both page keys do the same because some radios have only one. The keys are not answered while
 the in-flight tuning surface or the connect splash is up.
 
