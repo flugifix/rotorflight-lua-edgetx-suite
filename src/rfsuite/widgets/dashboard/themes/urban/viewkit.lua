@@ -5,7 +5,8 @@
 -- the host loads a view's module the first time the view is built, so this file loads in a
 -- fullscreen job pass and never in the pass that reloads the theme. Every view draws its header
 -- through K.header, the battery picker (battpick.lua) included, so the picker, the menus and the
--- link view read as one set.
+-- link view read as one set -- and as the flight view they open from: a white page, black text,
+-- 1 px lines, outlined controls, and colour only where it means something.
 --
 -- Nothing here decides what a press does. Every press a view binds is `ctx.action(...)` or
 -- `ctx.run(...)`: the host performs the work and what follows it.
@@ -198,15 +199,17 @@ function K.stretch(g, avail, fixed, naturals)
   return heights
 end
 
--- A button with a name and an optional line under it, the picker's entry button. `selected`
--- draws it in the ok colour. The labels lie over the button and are labels, never rectangles:
--- a rectangle drawn over a press takes the press away from it.
+-- A button with a name and an optional line under it. White with a 2 px outline in the line
+-- colour, as the flight view's own controls are drawn; `selected` fills it in the ok colour -- the
+-- one choice in force. The labels and the outline lie over the button and are labels and lines,
+-- never rectangles: a rectangle drawn over a press takes the press away from it.
 function K.button(nodes, g, f, x, y, w, h, name, sub, selected, press)
   local C = UD.C
   nodes[#nodes + 1] = {
     type = "button", x = x, y = y, w = w, h = h,
-    color = selected and C.ok or C.track, press = press
+    color = selected and C.ok or C.bg, press = press
   }
+  K.outline(nodes, x, y, w, h, selected and C.ok or C.line, 2)
   local ink = selected and C.ink or C.text
   local subInk = selected and C.ink or C.label
   local inner = w - 2 * g.textPad
@@ -219,10 +222,11 @@ function K.button(nodes, g, f, x, y, w, h, name, sub, selected, press)
   end
 end
 
--- A row that is not offered now: its name and why, in the label colour, and no press.
+-- A row that is not offered now: its name and why, in the label colour, a 2 px outline in the
+-- track colour, and no press.
 function K.unavailable(nodes, g, f, x, y, w, h, name)
   local C = UD.C
-  UD.rect(nodes, x, y, w, h, C.track, false, 0, 1)
+  UD.rect(nodes, x, y, w, h, C.track, false, 0, 2)
   local inner = w - 2 * g.textPad
   local top = y + math.max(0, math.floor((h - f.nameH - f.subH) / 2))
   UD.label(nodes, x + g.textPad, top, inner, f.nameH, UD.fit(f.name, name, inner), f.name, C.label, CENTER)
