@@ -1,9 +1,9 @@
 -- The battery picker this theme draws for itself.
 --
--- The host's dashboard runtime calls `theme.batteryPick(children, widget)` in fullscreen
--- while `state.batteryPick.pending` or `widget.batteryPickOpen` is set; preflight.lua and
--- inflight.lua both forward to M.build below. Without the hook the host draws its own
--- generic picker, so nothing here is load-bearing for the feature -- only for the look.
+-- M.layout draws it, and pickview.lua is what calls it on a host with theme views: the host's
+-- `battery_pick` record turned into a spec. M.build fills the same spec from a widget's
+-- `state.batteryPick` for a host that calls a theme's `batteryPick(children, widget)` hook; the
+-- phase modules of this theme export no such hook.
 --
 -- It is a one-shot build: every string is a constant computed in this function. Nothing of
 -- the picker runs in the firmware's reactive sweep, which is the cheapest way to satisfy
@@ -17,11 +17,6 @@
 -- fullscreen. In particular the `widget.built = false; widget.renderKey = nil` reset the
 -- stock fullscreen menu performs is deliberately NOT done here -- the contract says nothing
 -- else is written to the host, so the host keys its own rebuild off `pending`/`dismissed`.
---
--- Node order is part of the deal with tools/battpick_probe.lua: background, header strip,
--- title, close box, then one button-plus-two-labels group per candidate in registry order,
--- then the NO BATTERY button. The close box is therefore the FIRST button in the list and
--- the pack buttons follow in registry order.
 
 if type(_G) == "table" and type(_G.__rfsuiteThemeUrbanBattpickModule) == "table" then
   return _G.__rfsuiteThemeUrbanBattpickModule
@@ -42,7 +37,8 @@ local function requireModule(path)
 end
 
 local UD = requireModule("widgets/dashboard/themes/urban/common.lua")
-if not UD then return {} end
+local K = requireModule("widgets/dashboard/themes/urban/viewkit.lua")
+if not UD or not K or type(K.geometry) ~= "function" then return {} end
 
 local M = {}
 local C = UD.C
@@ -91,40 +87,20 @@ end
 -- from the widget for the host hook; pickview.lua fills it from the host's `battery_pick`
 -- record, so the two pickers are one drawing.
 function M.layout(children, dW, dH, spec)
+  local g = K.geometry({ x = 0, y = 0, w = dW, h = dH })
+  if g == nil then return children end
   local packs = spec.packs or {}
+
+  -- The header is the one every view of this theme draws (viewkit.lua, K.header), from the
+  -- screen's top left corner.
+  local headerBottom = K.header(children, g, spec.title, spec.closePress)
 
   -- Two layout profiles, as the stock fullscreen menu has: 800x480 and 480x272 are the two
   -- screens this is ever built on. Only the paddings are fixed here -- the text heights come
   -- from the theme's own font picker, so a firmware without XLSIZE still lands on a face
   -- that fits.
   local isLarge = dH > 350
-  local pad = isLarge and 12 or 5
-  local gap = isLarge and 8 or 4
-  local textPad = isLarge and 5 or 2
-  local headerH = isLarge and 48 or 24
-
-  UD.rect(children, 0, 0, dW, dH, C.bg, true)
-  UD.rect(children, 0, 0, dW, headerH, C.track, true)
-
-  local closeSize = math.max(14, headerH - 2 * (isLarge and 6 or 3))
-  local closeX = dW - pad - closeSize
-  local closeY = math.floor((headerH - closeSize) / 2)
-
-  local title = spec.title
-  local titleW = math.max(10, closeX - 2 * pad)
-  local titleFont = UD.selectFont(headerH - 2 * textPad, titleW, title)
-  local titleH = UD.measure(titleFont, title)
-  UD.label(children, pad, math.floor((headerH - titleH) / 2), titleW, titleH,
-    UD.fit(titleFont, title, titleW), titleFont, C.text, LEFT)
-
-  children[#children + 1] = {
-    type = "button", x = closeX, y = closeY, w = closeSize, h = closeSize,
-    color = C.crit, press = spec.closePress
-  }
-  local closeFont = UD.selectFont(closeSize - 2 * textPad, closeSize, "X")
-  local closeH = UD.measure(closeFont, "X")
-  UD.label(children, closeX, closeY + math.floor((closeSize - closeH) / 2), closeSize, closeH,
-    "X", closeFont, C.text, CENTER)
+  local pad, gap, textPad = g.pad, g.gap, g.textPad
 
   -- UltiDash's own rule for its picker: one column below four packs, two from four up.
   -- NO BATTERY always gets a full-width row of its own at the foot, reserved before the
@@ -134,7 +110,7 @@ function M.layout(children, dW, dH, spec)
   local fullW = dW - 2 * pad
   if btnW < 20 then return children end
 
-  local contentY = headerH + gap
+  local contentY = headerBottom
   local contentH = dH - contentY - pad
   if contentH < 20 then return children end
 
