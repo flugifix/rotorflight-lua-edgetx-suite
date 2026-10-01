@@ -152,6 +152,16 @@ function Render.render(nodes, rect, box, state, themeCommon, utils)
         if source == "voltage" then
           statValue = state and state.lastFlightEndingVoltage
         end
+      elseif stattype == "lastcell" then
+        -- The landing voltage per cell, divided by the count taken with it at the disarm and not
+        -- by the live one: a pack plugged in after the landing changes the live count.
+        if source == "voltage" then
+          local voltage = state and state.lastFlightEndingVoltage
+          local cells = state and state.lastFlightEndingCells
+          if type(voltage) == "number" and type(cells) == "number" and cells > 0 then
+            statValue = voltage / cells
+          end
+        end
       elseif stattype == "consumed" then
         if source == "current" then
           statValue = state and state.consumedMah

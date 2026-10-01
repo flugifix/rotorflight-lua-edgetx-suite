@@ -13,7 +13,7 @@ Theme.boxes = {
 
   { col = 3, row = 1, colspan = 1, rowspan = 1, type = "text", subtype = "stats", source = "current", stattype = "consumed", title = "@i18n(widgets.dashboard.consumed_mah):upper()@", titlepos = "top", unit = "mAh", transform = "floor", titlefont = SMLSIZE, font = DBLSIZE, textcolor = WHITE, titlecolor = WHITE, bgcolor = BLACK },
   { col = 3, row = 2, colspan = 1, rowspan = 1, type = "text", subtype = "stats", source = "voltage", stattype = "last", title = "@i18n(widgets.dashboard.ending_voltage):upper()@", titlepos = "top", unit = "V", decimals = 2, titlefont = SMLSIZE, font = DBLSIZE, textcolor = WHITE, titlecolor = WHITE, bgcolor = BLACK },
-  { col = 3, row = 3, colspan = 1, rowspan = 1, type = "text", subtype = "stats", source = "voltage", stattype = "cell", title = "@i18n(widgets.dashboard.volts_per_cell):upper()@", titlepos = "top", unit = "V", decimals = 2, titlefont = SMLSIZE, font = DBLSIZE, textcolor = WHITE, titlecolor = WHITE, bgcolor = BLACK }
+  { col = 3, row = 3, colspan = 1, rowspan = 1, type = "text", subtype = "stats", source = "voltage", stattype = "lastcell", title = "@i18n(widgets.dashboard.volts_per_cell):upper()@", titlepos = "top", unit = "V", decimals = 2, titlefont = SMLSIZE, font = DBLSIZE, textcolor = WHITE, titlecolor = WHITE, bgcolor = BLACK }
 }
 
 return Theme

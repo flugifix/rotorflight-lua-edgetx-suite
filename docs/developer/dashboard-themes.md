@@ -240,6 +240,25 @@ Every box takes its place from four fields — `col`, `row`, `colspan`, `rowspan
 An unknown `type` draws a container with `--` in it, which is the shape a typo takes on the
 radio.
 
+### `text` / `stats`, and which voltage values outlive the pack
+
+A post-flight page is read after the landing, often with the pack already unplugged. For the
+recorded extremes and for the pack voltage, what a `stats` box shows then depends on its
+`stattype`:
+
+| `stattype` | `source` | Shows | After the pack comes off |
+| --- | --- | --- | --- |
+| `max`, `min` | a recorded source, see [Flight statistics](../reference/flight-statistics.md) | The flight's extreme. | kept |
+| `last` | `voltage` | The landing voltage, taken at the disarm. | kept until the next arming |
+| `lastcell` | `voltage` | The landing voltage per cell, divided by the cell count taken with it at the disarm. | kept until the next arming |
+| `cell` | `voltage` | The live voltage per cell, divided by the live cell count, or by an estimate from the theme's voltage range while no count is known. | follows the pack |
+
+A `telemetry` box is live as well. A flight controller that stays powered without its main pack
+reports the pack at zero volts, so a live voltage box reads `--.-V` once the pack is unplugged and
+shows the next pack as soon as one is plugged in. Use `last` or `lastcell` for a voltage on a
+post-flight page. `lastcell` does not use the live count for the same reason: the next pack can
+have a different number of cells.
+
 ### `text` / `governor`, and the two modes that have no state
 
 The box reads the governor STATE sensor and shows its name. The flight controller runs a
