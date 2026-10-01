@@ -24,12 +24,13 @@ layer described below, and the menu and the picker open over it.
 | `widgets/dashboard/views.lua` | The view registry, the stack, the conditions, the actions and `navigate()`. |
 | `widgets/dashboard/runtime.lua` | The fullscreen branch of `widget.refresh`, which asks `views.resolve()` which view to show, and `viewJobStep`, which builds it. |
 | `widgets/dashboard/fullscreen_menu.lua` | The quick menu view. |
-| `widgets/dashboard/battery_pick_menu.lua` | The battery picker view. |
+| `widgets/dashboard/battery_pick_menu.lua` | The battery picker view. It draws the quick menu's `battery_pick` record, whose options and close are what its presses run. |
 | `widgets/dashboard/fullscreen_controls.lua` | The menu glyph and the X the widget draws over a fullscreen theme that binds no control of its own. |
 
 `views.lua` is loaded on the first fullscreen pass and never on a zone pass, so a dashboard
-that is never put full screen does not pay for it. The one exception is a call to
-`rfsuite.batteryPick`, which loads it wherever it is made. The in-flight tuning surface is not a view:
+that is never put full screen does not pay for it. The exceptions are a call to
+`rfsuite.batteryPick`, which loads it wherever it is made, and a free-form theme that registers
+[zone views](#zone-views), whose conditions it asks on the zone pass. The in-flight tuning surface is not a view:
 it takes full screen ahead of all of them while it is up, is decided before any of this runs,
 and keeps its own close box.
 
@@ -52,12 +53,42 @@ The shipped registry, in this order:
 
 Each widget gets its own copy of the list, entries included. A view's module is loaded by the
 job that first builds it and kept on that widget's entry; the state pass reads a view's own
-`renderKey` only from a module that is already loaded, and never loads one.
+`renderKey` only from a module that is already loaded, and never loads one. So the job that
+loads and builds a view also records the key with the module's own part (`views.viewKey`), which
+is the key the next state pass computes: a view is built once when it first opens, not a second
+time because its key grew by the module's part.
+
+### A theme's views
+
+A free-form theme adds to this list with `views` in its `init.lua`
+([dashboard themes](dashboard-themes.md#views-of-a-themes-own)). On the first fullscreen pass
+after the theme on screen has changed, `views.register()` makes the registry anew:
+
+- the core views, as above;
+- an id the widget already has keeps its entry — its `module`, `openWhen`, and the `back` RTN
+  runs — and gets the theme's module as its **look**: the job builds that instead;
+- any other id is appended, in the theme's order.
+
+A theme's module is read through the theme loader when the view is first built, and built as
+`build(children, zone, state, ctx)`; its key is `renderKey(zone, state)`. RTN on a view of the
+theme's own is its `back(ctx)`, else `closeView`. A view that was on the stack and is not in the
+new registry is taken off it, so no job is queued for a view no step can build. A theme module
+that does not load, or whose `build` raises, is not asked for again, with one log line: a
+replaced look falls back to the core module at once, and a view of the theme's own is closed and
+from then on refused like an unknown id. A build that raised is not queued again on the next
+pass.
 
 ## The stack and the base layer
 
 Which view is on screen is a stack of view ids, held in one field, `widget._viewStack`. Each
-entry is `{ id = <id>, auto = true | nil }`.
+entry is `{ id = <id>, auto = true | nil }`. The same table is the **session** of one visit to
+full screen: what else belongs to the visit — the outcome of the work a theme ran through
+`ctx.run` ([dashboard themes](dashboard-themes.md#the-theme-draws-the-widget-acts)), and what
+each view's `openWhen` answered on the last pass ([below](#views-that-open-themselves)) — is
+kept on it beside the views and goes with it. Once a visit has one, it stays a table while the
+visit lasts, empty or not: closing the last view leaves an empty stack, not `nil`. `done` and
+`exitFullscreen` start a new session — `done` carrying over only what the conditions last
+answered — and so do the two clears below.
 
 - The view on top of the stack is the one shown.
 - Opening a view that is already on the stack returns to it — everything above it is closed —
@@ -83,32 +114,47 @@ for the surface that was on top, so the old surface is not put up once more befo
 
 ## Views that open themselves
 
-A view with `openWhen` opens on its own while that condition holds. On every fullscreen pass,
-in this order:
+A view with `openWhen` opens on its own when that condition **rises**. On every fullscreen pass
+every view's `openWhen` is asked once, in registry order — the widget's views, then the
+theme's in the order it lists them — and the answer is kept on the session for the next pass.
+Then, in this order:
 
 1. A view that its own condition opened (`auto = true`) and whose condition no longer holds is
    closed again. That is what keeps the battery prompt the way it was: it shows while it is
    pending, and three places end the pending state without closing anything — arming
    (`updateDerivedFlightState`), a pick (`batteryPickApplyStep`) and a reconnect.
-2. The first view in registry order whose `openWhen` holds is the only one considered on that
-   pass: it is opened unless it is already on the stack. A view already on the stack is left
-   where it is and is not raised over what lies above it, and no view listed after it is
-   opened while its condition holds. So where several hold, the one listed first is the one
-   that opens, not necessarily the one on top; the picker is listed before the menu.
+2. A view whose condition has risen — false on the last pass, true on this one — is opened, or,
+   where it is already on the stack, **brought to the top**: it is moved there, and the views
+   that were above it stay open under it. Entering full screen with a condition already true is
+   a rise, because a visit starts with nothing remembered. A condition that merely holds forces
+   nothing. Where several rise on the same pass, each is brought up in turn, so the last of them
+   in registry order ends on top: a theme's view rising together with the battery prompt lies
+   above the picker, and the picker shows again when it is closed.
 3. The top of the stack is shown; with the stack empty, the base layer, or with none the quick
    menu.
 
 A view opened explicitly — by a button or by `rfsuite.batteryPick.open()` — carries no `auto`
 mark, and opening a view explicitly that its condition had already opened takes the mark off.
-Such a view stays open when its condition falls, until it is closed.
+Such a view stays open when its condition falls, until it is closed. An explicit open returns
+to a view already on the stack and closes what lies above it; a rise moves it and closes
+nothing.
 
-**The rule for a condition that opens a view: whoever sets it clears it when the view is
-answered or closed.** A view whose condition still holds when it is closed opens again on the
-very next pass. The battery prompt follows it: its registry load raises `pending`, and a pick,
-the picker's close box, `rfsuite.batteryPick.dismiss()`, arming and a reconnect all clear it. A
-pick clears it in two steps — the press records the request, and `pending` falls when the
-runtime has applied it a few passes later — so `batteryPickPending` is false as soon as a
-request is recorded; over a base layer the picker would otherwise open again at once.
+**What a condition that holds does not do.** A view opened over one that its condition holds
+open — the menu over a switch's view — stays on top and usable; the view under it is not raised
+while the condition merely holds. A view closed while its condition still holds stays closed,
+and so does a view of the theme's that the pilot has left with `done`: the new session `done`
+starts carries over what the theme's views' conditions last answered, so none of them counts as
+a rise until its condition has fallen and risen again. The widget's own views are not carried
+over: the battery prompt, still waiting for an answer, rises again after `done` and comes back
+— the menu's X pressed over the picker brings the prompt back, as closing the menu with a page
+key does. Leaving full screen and a reconnect forget it all, so the next visit starts over.
+
+**Whoever sets a condition that opens a view still clears it when the view is answered or
+closed**, because that is what closes a view its condition opened. The battery prompt follows
+it: its registry load raises `pending`, and a pick, the picker's close box,
+`rfsuite.batteryPick.dismiss()`, arming and a reconnect all clear it. A pick clears it in two
+steps — the press records the request, and `pending` falls when the runtime has applied it a
+few passes later — so `batteryPickPending` is false as soon as a request is recorded.
 
 The menu opened over the picker with a page key lies above it; the picker is not raised over it.
 Closing the menu brings the prompt back.
@@ -124,6 +170,67 @@ view, which is what an unresolvable condition does in `app/menu_registry.lua` as
 | `previewInflightTuning` | the in-flight tuning preview switch is on and the widget carries the overlay's state for this model |
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
 | `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
+
+### What else a theme's view may open on
+
+A view a theme registers may give `openWhen` in four forms (`views.opens()`):
+
+| Form | True while |
+| --- | --- |
+| `"name"` | the named condition above holds |
+| `{ switch = "SA", pos = "up" }` | the switch is in that position: `"up"`, `"mid"` or `"down"` |
+| `{ switch = "L01" }` | the logical switch is on |
+| `{ switch = { pref = "<key>", default = "SA" }, pos = "down" }` | the switch the theme's own settings name under `<key>` (`state.themeConfig`) is in that position; `default` where the settings name none |
+| `function(state) ... end` | the theme's function returns anything but `nil` or `false` |
+
+**A switch is named the way the radio's menus name it**, and the firmware looks the position up
+by that name (`getSwitchIndex`): the switch followed by an arrow for up and down or a dash for
+the middle, which the widget appends for `pos`, and a logical switch as `L` and two digits
+(`L1` is read as `L01`). A setting that holds a **number** rather than a name is a switch
+position as the radio's own switch picker stores it — the in-flight tuning interlock is kept that
+way — and is read as it is, whatever `pos` says; `0` is no switch, the picker's "nothing chosen
+yet", and the view then does not open on one. The position is looked up once, when the theme
+is loaded and again when its settings are saved, and a pass reads one value (`getSwitchValue`).
+A name the radio does not know never opens the view.
+
+**A condition function** is called with the widget state and nothing else, on the passes where
+its view can be shown — every fullscreen pass for a fullscreen view, the zone's 2 Hz tick for a
+[zone view](#zone-views) — and under `pcall`: one that
+raises counts as false and says so in one log line per theme and view, not on every pass. It
+runs on every one of those passes, so it reads what the state already holds and computes as
+little as a box's value function does. `bin/themes/validate.lua` calls it on its fixture state
+of every phase and is red where it raises or costs more than **35 instructions** a call — what
+asking the costliest of the widget's own conditions costs, counted the same way (see
+[its README](../../bin/themes/README.md#a-themes-views)).
+
+## Zone views
+
+A view a free-form theme registers with `where = "zone"` — or `"both"`, which makes it a
+fullscreen view as well — takes the widget's zone instead of the theme's zone picture **while
+its `openWhen` holds**: a level, not an edge, the way the in-flight tuning surface takes the zone
+while its interlock is closed. Where several hold, the first in the theme's list shows. It is
+shown armed as well as disarmed.
+
+- **Display only.** A zone view is not on the stack, answers no key, and is built without a
+  `ctx` — `build(children, zone, state)` — so it binds no press; a widget zone receives no touch
+  in any case. Its module may have `renderKey(zone, state)`, asked with the conditions, and it
+  is rebuilt when that changes as well as whenever the theme's own zone key does.
+- **On the zone's 2 Hz tick, through the job slot.** The conditions are asked on the pass after
+  the zone's render-key throttle has ticked, and on no other: a zone view comes and goes within
+  about half a second. When the view to show has changed, that pass marks the scene for a
+  rebuild, and the scene job, in a pass of its own, builds the zone view or the theme. Nothing
+  is built inline.
+- **Paid for by the theme that has them.** The list is read by the scene build of a free-form
+  theme — in the branch a declarative theme's module never takes — once per theme path, and the
+  conditions are asked by a `refresh` wrapper that only a theme with zone views puts in place and
+  that takes itself out once that theme is gone. So a theme without zone views, and every
+  declarative theme, has the zone pass it had. The forms of `openWhen` and the rule for a
+  condition function are those [above](#what-else-a-themes-view-may-open-on); a zone view's
+  function runs on the tick of the zone pass. Counted offline with the accounting stubs, the
+  wrapper costs such a theme 18 instructions on a zone pass and about 95 to 100 on the pass that
+  asks, with one zone view.
+- **A zone view that fails is dropped.** One whose module does not load, or whose `build` raises,
+  is not shown again, with one log line, and the theme's own zone picture is built in its place.
 
 ## What follows a press
 
@@ -164,7 +271,8 @@ Over a fullscreen theme the same `done` puts the theme back instead.
 `views.bind(widget)` returns the actions and building blocks bound to one widget, for code that
 has no widget of its own to pass. It is the `ctx` a fullscreen theme's build receives:
 `ctx.action(after)` performs `after` exactly as `navigate(widget, after)` does, and `ctx.keys`,
-`ctx.condition`, `ctx.entries` and `ctx.menu` are described in
+`ctx.condition`, `ctx.entries`, `ctx.menu` and the entry calls — `ctx.entry`, `ctx.list`,
+`ctx.visible`, `ctx.run`, `ctx.status` and `ctx.info` — are described in
 [dashboard themes](dashboard-themes.md#ctx).
 
 ## Keys
@@ -172,13 +280,22 @@ has no widget of its own to pass. It is the `ctx` a fullscreen theme's build rec
 Only a widget with a base layer answers keys; without one the widget answers none, as before.
 `views.key(widget, event)` is called for every event of a fullscreen pass that is not idle,
 ahead of the job the pass may run, so a key is not lost to a build. It acts on the release edge
-of three keys, read from the firmware's `EVT_VIRTUAL_NEXT_PAGE`, `EVT_VIRTUAL_PREV_PAGE` and
-`EVT_VIRTUAL_EXIT` where the radio defines them, and on nothing else:
+of six keys, read from the firmware's `EVT_VIRTUAL_NEXT_PAGE`, `EVT_VIRTUAL_PREV_PAGE`,
+`EVT_VIRTUAL_EXIT`, `EVT_MODEL_BREAK`, `EVT_SYS_BREAK` and `EVT_TELEM_BREAK` where the radio
+defines them, and on nothing else:
 
 | Key | A view on top | The base layer showing |
 | --- | --- | --- |
 | PAGE down / up | the menu on top: `closeView`; any other view: `openView:menu` | the theme's `ctx.keys.pageDown` / `pageUp`, else `openView:menu` |
 | RTN | the view module's `back(widget)` if it has one, else `closeView` | the theme's `ctx.keys.exit`, else nothing |
+| MDL, SYS, TELE | nothing | the theme's `ctx.keys.mdl` / `sys` / `tele`, else nothing |
+
+A key the theme binds to `openView:<id>`, RTN aside, is `closeView` while that view is on top,
+whatever the first column says for it: a bound key toggles its view.
+
+Outside fullscreen MDL, SYS and TELE open the radio's own menus. A widget in fullscreen gets them
+instead and the radio opens nothing, so they are free for a theme to bind; without a binding they
+do nothing, as before.
 
 The picker's `back` is its close box — the prompt is dismissed and `done` follows — because a
 plain `closeView` would leave `pending` standing and the picker would open again on the next

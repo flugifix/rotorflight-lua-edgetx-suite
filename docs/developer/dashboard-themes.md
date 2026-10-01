@@ -59,6 +59,7 @@ the widget to find the module for the phase it is in.
 | `standalone` | boolean | `true` keeps the theme off the *Dashboard* → *Settings* page even if it declares `configure`. |
 | `fullscreen` | string | Optional. `"theme"` makes fullscreen show this theme at the fullscreen size instead of the quick menu. See [A theme that takes fullscreen](#a-theme-that-takes-fullscreen). Omit it and fullscreen is what it has always been. |
 | `fullscreenExit` | string | Optional, read only by `bin/themes/validate.lua`. `"longRtn"` declares that the theme binds no control that leaves fullscreen and relies on a long press on RTN. |
+| `views` | table | Optional, for a free-form theme. Views of the theme's own, and looks for the widget's: see [Views of a theme's own](#views-of-a-themes-own). |
 
 Beside it, `icon.png` is the tile the theme selector draws. The path is built from the folder
 name and is not checked before use, so a theme without one shows an empty tile rather than an
@@ -702,10 +703,51 @@ screen changes:
 | | |
 | --- | --- |
 | `ctx.action(after)` | performs an action: `openView:<id>`, `closeView`, `done`, `exitFullscreen` or `none` (see [what follows a press](dashboard-views.md#what-follows-a-press)) |
-| `ctx.keys` | a table the theme fills with actions for the keys, `exit`, `pageDown` and `pageUp`; see below |
+| `ctx.keys` | a table the theme fills with actions for the keys, `exit`, `pageDown`, `pageUp`, `mdl`, `sys` and `tele`; see below |
 | `ctx.condition(name)` | whether a named condition holds, from the list in [dashboard views](dashboard-views.md#conditions) |
 | `ctx.entries()` | the quick menu's entries, as `fullscreen_menu.lua` returns them |
-| `ctx.menu(children, entries)` | the quick menu's builder: appends the menu for `entries` (the menu's own when omitted) to `children` |
+| `ctx.menu(children, entries)` | the quick menu's builder: appends the menu for `entries` (the menu's own when omitted) to `children`; a list handed in chooses and orders the menu's own entries by `id`, and an item whose id the menu does not have is left out |
+| `ctx.entry(id)` | the quick menu's record `id` — `erase_blackbox`, `inflight_tuning`, `battery_pick`, `battery_profile` — or `nil` |
+| `ctx.list(name)` | the records of a named menu, in its order: `"quick"` is the quick menu's four; any other name gives an empty list |
+| `ctx.visible(entry)` | whether the entry is offered now — the test the quick menu makes before drawing the row |
+| `ctx.run(entry, option, after)` | the entry's work, or `option`'s when one is given, and then what follows it — the menu's own record and option of that id, whatever table is handed in; `after` replaces the entry's own follow-up, `nil` keeps it |
+| `ctx.status(id)` | what became of the last `ctx.run` of that entry in this visit to fullscreen: `nil`, `"busy"`, `"ok"` or `"failed"` |
+| `ctx.info(entry)` | what the entry knows about the state it acts on, read now: `{ used, total }` of the blackbox for `erase_blackbox`, `nil` for the others |
+
+### The theme draws, the widget acts
+
+A theme may draw the quick menu's entries itself — all of them in its own layout, or a few of
+them among its own controls — and the widget still does what they do. Take the records with
+`ctx.list("quick")` or `ctx.entry(id)`, draw a row for each one `ctx.visible` offers, and give
+its button a press that calls `ctx.run(entry)`, or `ctx.run(entry, option)` for one of the
+options of a `choice` (`entry.options()` lists them as they stand now; see
+[quick menu](../dashboard/quick-menu.md#for-contributors) for the fields). The work and the
+action that follows it are the widget's, in one place, so a theme's ERASE BLACKBOX sends what
+the quick menu's sends. A theme adds no entry of its own, and changes none: `ctx.run` looks
+the entry up again by its `id` among the menu's records and the option by its `id` among that
+record's options as they stand now (NO BATTERY by `none`, the picker's close by being the
+entry's `close`), and runs those — never a `press` out of the table it was handed. An entry or
+an option the menu does not have is refused. `ctx.visible` and `ctx.info` answer for the menu's
+record of that id as well, and a list handed to `ctx.menu` draws the menu's records of the ids
+it names, in its order, and nothing else.
+
+What a theme can show beside an entry is read on each build:
+
+- **State** — whether it is offered (`ctx.visible`), which profile is in force (the option's
+  `current`), how full the blackbox is (`ctx.info`).
+- **Outcome** — `ctx.status(id)`, for work that talks to the flight controller: `"busy"` once
+  its messages are queued, `"ok"` once the last of them has been answered, `"failed"` if any of
+  them was given up (out of retries, timed out, or dropped by a clear of the queue). A new
+  outcome rebuilds the screen. Work that sends nothing has none, and the quick menu's own
+  buttons never set one — the quick menu closes at once and shows none.
+
+The outcome belongs to the visit to fullscreen it was started in, and lapses with the stack:
+on `done`, on `exitFullscreen`, on leaving fullscreen and on a reconnect, and when another
+theme is selected. ERASE BLACKBOX and a battery profile are followed by `done`, so a theme that
+wants to show how they went runs them with an `after` of its own, `ctx.run(entry, nil,
+"none")`, and closes the surface itself. A message that is dropped without being answered or
+reported — the queue drops one that carries no simulator reply while it runs in the simulator —
+leaves the outcome at `"busy"`.
 
 A control is a node with a `press` that calls `ctx.action`, for example
 `{ type = "button", x = ..., y = ..., w = 44, h = 44, press = function() ctx.action("openView:menu") end }`.
@@ -740,16 +782,30 @@ out; a theme that relies on a long press on RTN instead declares it with
 
 ### Keys
 
-In this mode the widget answers three keys (a theme without the key answers none, as before):
+In this mode the widget answers six keys (a theme without the key answers none, as before):
 
 | Key | With a view on top | With the theme showing |
 | --- | --- | --- |
 | PAGE down, PAGE up | the quick menu on top: close it; any other view: open the menu over it | `ctx.keys.pageDown` / `ctx.keys.pageUp` if set, else open the menu |
 | RTN, short | the view's `back` — the picker: its close box; the menu: close it | `ctx.keys.exit` if set, else nothing |
 | RTN, long | leaves fullscreen, in the firmware | leaves fullscreen, in the firmware |
+| MDL, SYS, TELE, short | nothing | `ctx.keys.mdl` / `ctx.keys.sys` / `ctx.keys.tele` if set, else nothing |
+
+A key bound to `openView:<id>`, RTN aside, closes that view again while it is on top, rather
+than doing what the first column says: pressed twice, it opens the view and closes it.
 
 Both page keys do the same because some radios have only one. The keys are not answered while
 the in-flight tuning surface or the connect splash is up.
+
+MDL, SYS and TELE open the radio's own menus everywhere but in a widget's fullscreen, where the
+widget gets them and the radio opens nothing; unbound they do nothing there, as before. Not
+every radio has them, so a binding is a shortcut, never the only way to something: the menu
+access and the way out a theme owes are a press, the page keys or RTN.
+
+```lua
+ctx.keys.tele = "openView:link"    -- a view the theme registers
+ctx.keys.mdl = "openView:menu"
+```
 
 ### What the pilot sees
 
@@ -758,13 +814,70 @@ the theme back. The battery picker's packs, NO BATTERY and its X do the same. On
 that says `exitFullscreen` — the widget's own X on the theme, or one of the theme's — a short
 press on RTN where the theme bound `ctx.keys.exit` to it, and a long press on RTN leave fullscreen.
 
+## Views of a theme's own
+
+A free-form theme may list views in its `init.lua`. Each is a module in the theme's folder that
+draws a whole fullscreen surface, opened over whatever fullscreen shows — the theme, where it
+takes fullscreen, or the quick menu — the way the menu and the battery picker are
+([dashboard views](dashboard-views.md)):
+
+```lua
+views = {
+  { id = "link",         module = "link.lua" },            -- a view of the theme's own
+  { id = "menu",         module = "menu.lua" },            -- the quick menu, drawn by the theme
+  { id = "battery_pick", module = "picker.lua" },          -- the battery picker, drawn by the theme
+},
+```
+
+| Key | What it says |
+| --- | --- |
+| `id` | The view's name. An id the widget already has — `menu`, `battery_pick` — replaces that view's **look** and nothing else; any other id is a view of the theme's own. A repeated id counts once. |
+| `module` | The file that draws it, relative to the theme folder. |
+| `openWhen` | Optional. What opens the view on its own: the name of a condition, a switch position (`{ switch = "SA", pos = "up" }`, `{ switch = "L01" }`), a switch the theme's own settings name (`{ switch = { pref = "<key>", default = "SA" }, pos = "down" }`), or a function of the state. See [what else a theme's view may open on](dashboard-views.md#what-else-a-themes-view-may-open-on); the view opens when it rises, [not while it holds](dashboard-views.md#views-that-open-themselves). Ignored where the id replaces a look. |
+| `where` | Optional. `"fullscreen"` (the default), `"zone"` for a view that takes the widget zone instead ([zone views](dashboard-views.md#zone-views)), or `"both"`. |
+
+The list is read on the first fullscreen pass after the theme on screen has changed, with the
+`fullscreen` key and for the same reason, and only where the phase module on screen is
+free-form: a declarative phase draws no view. The module is loaded the first time its view is
+built, through the loader that loads the rest of the theme — from the theme's own folder, a
+user theme from source — so registering a view costs nothing until it is opened, and a module
+that fails to load, or whose `build` raises, is not asked for again (a replaced look falls back
+to the widget's own; a view of the theme's own is closed and refused), with one log line. A view of the previous theme's that is still open
+when the theme changes is closed.
+
+A theme's view module has `build(children, zone, state, ctx)` — it appends the whole tree to
+`children`, at the fullscreen zone, and gets the same `ctx` as the theme's fullscreen build — and
+optionally `renderKey(zone, state)`, appended to the view's key so that the view is rebuilt when
+it changes. A view of the theme's own may have `back(ctx)`, what a short press on RTN does while
+it is on top; without one RTN closes it (`closeView`). A view opens with `ctx.action("openView:<id>")`.
+
+**A replaced look is the look only.** What the menu or the picker offers, when it opens, what RTN
+does on it and what follows each press stay the widget's: draw the records through `ctx` and run
+them with `ctx.run` ([the theme draws, the widget acts](#the-theme-draws-the-widget-acts)). For the
+picker that is `ctx.entry("battery_pick")`: `entry.options()` are the packs and *NO BATTERY*,
+each run with `ctx.run(entry, option)`, and `ctx.run(entry, entry.close)` is its close — the
+theme never writes the pick or the prompt's state itself. RTN on it is the widget picker's own
+close. A theme that replaces the picker's look owes it a way out, as the widget's picker has.
+
+`bin/themes/validate.lua` checks the `views` of any theme, whether it takes fullscreen or not:
+every module is built — a fullscreen view with a recording `ctx` whose presses are fired, a zone
+view without one — and it is red on a zone view that binds a press, an `openWhen` that names a
+condition, a switch or a setting the widget or the theme does not have, and a condition function
+that raises or costs more than 35 instructions a call. A setting counts as the theme's where its
+settings page names it — the `configure` module or a theme file that module loads. A number where
+a switch name goes is a stored switch position, and a setting's `default` may be `0`, "no
+switch", for a view that opens on a switch only once the pilot has picked one. See its
+[README](../../bin/themes/README.md#a-themes-views).
+
 ## The battery prompt
 
 With *Ask which pack after connecting* on (the [Flight Log](../pages/tools/flight_log.md) page,
 *Settings*), the widget offers the pilot's battery registry once per connection — in fullscreen,
 because a widget zone receives no touch and Lua can leave fullscreen but not enter it. The
-picker is drawn by the widget for every theme, so its way out is always there; a theme may read
-what the prompt knows, and anything on the radio may drive it.
+picker is the widget's for every theme that does not register a look for it, so its way out is
+always there; a free-form theme may draw it instead ([views of a theme's
+own](#views-of-a-themes-own)), and what a pick does stays the widget's either way. A theme may
+read what the prompt knows, and anything on the radio may drive it.
 
 ### `state.batteryPick`
 
