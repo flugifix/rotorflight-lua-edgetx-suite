@@ -141,6 +141,7 @@ end
 
 local function queueSwashRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
+  ui.runtime.readComplete = false
   if not MspRuntime or not MixerConfigApi or not MixerInputPitchApi or not MixerInputRollApi or not MixerInputCollectiveApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -166,6 +167,7 @@ local function queueSwashRead(isAutoReload)
     simulatorResponse = MixerConfigApi.simulatorResponse,
     processReply = function(self, buf)
       local parsed = MixerConfigApi.parse(buf)
+      if type(parsed) ~= "table" then return Common.failPageRead(ui) end
       if parsed then
         ui.apiData.MIXER_CONFIG = parsed
         ui.config.swash_type = parsed.swash_type or 0
@@ -184,6 +186,7 @@ local function queueSwashRead(isAutoReload)
         simulatorResponse = MixerInputPitchApi.simulatorResponse,
         processReply = function(self, buf)
           local parsed = MixerInputPitchApi.parse(buf)
+          if type(parsed) ~= "table" then return Common.failPageRead(ui) end
           if parsed then
             ui.apiData.GET_MIXER_INPUT_PITCH = parsed
             ui.config.ele_direction = rateToDir(parsed.rate_stabilized_pitch)
@@ -201,6 +204,7 @@ local function queueSwashRead(isAutoReload)
             simulatorResponse = MixerInputRollApi.simulatorResponse,
             processReply = function(self, buf)
               local parsed = MixerInputRollApi.parse(buf)
+              if type(parsed) ~= "table" then return Common.failPageRead(ui) end
               if parsed then
                 ui.apiData.GET_MIXER_INPUT_ROLL = parsed
                 ui.config.ail_direction = rateToDir(parsed.rate_stabilized_roll)
@@ -218,6 +222,7 @@ local function queueSwashRead(isAutoReload)
                 simulatorResponse = MixerInputCollectiveApi.simulatorResponse,
                 processReply = function(self, buf)
                   local parsed = MixerInputCollectiveApi.parse(buf)
+                  if type(parsed) ~= "table" then return Common.failPageRead(ui) end
                   if parsed then
                     ui.apiData.GET_MIXER_INPUT_COLLECTIVE = parsed
                     ui.config.col_direction = rateToDir(parsed.rate_stabilized_collective)
@@ -226,6 +231,7 @@ local function queueSwashRead(isAutoReload)
                   saveToSession()
 
                   ui.runtime.readPending = false
+                  ui.runtime.readComplete = true
                   ui.loading = false
                   ui.dirty = false
                   ui.progress = 100
@@ -279,7 +285,8 @@ local function queueSwashWrite()
     return false, "msp_runtime_unavailable"
   end
 
-  if type(ui.apiData.MIXER_CONFIG) ~= "table"
+  if not M.canSave()
+    or type(ui.apiData.MIXER_CONFIG) ~= "table"
     or type(ui.apiData.GET_MIXER_INPUT_PITCH) ~= "table"
     or type(ui.apiData.GET_MIXER_INPUT_ROLL) ~= "table"
     or type(ui.apiData.GET_MIXER_INPUT_COLLECTIVE) ~= "table" then
@@ -388,6 +395,14 @@ function M.getHeaderActions()
     reload = true,
     menu = true
   }
+end
+
+-- The page is kept between visits and loadFromSession() puts the last records read back into
+-- ui.apiData before this visit's read is even queued, so "the records are there" says nothing
+-- about this visit. ui.runtime is dropped by resetPageState() on close, which makes this flag
+-- the visit's own: set only when every read of the chain parsed, cleared when a read starts.
+function M.canSave()
+  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
 end
 
 function M.build(ctx)
