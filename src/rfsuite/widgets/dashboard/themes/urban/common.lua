@@ -159,8 +159,8 @@ M.T = {
   run_ok = "@i18n(widgets.dashboard.urban_done)@",
   run_failed = "@i18n(widgets.dashboard.urban_failed)@",
   link_floor = "@i18n(widgets.dashboard.urban_rate_floor)@",
-  -- The link view's title is the link protocol's name, and its rows are named as the radio names
-  -- those sensors, the same in every language -- as `tpwr` and `skp` above.
+  -- The link view's title is the link protocol's name, and its rows carry short sensor names, the
+  -- same in every language -- as `tpwr` and `skp` above.
   view_link = "ELRS",
   link_rq = "RQ", link_tq = "TQ", link_rss1 = "1RSS", link_rss2 = "2RSS",
 }

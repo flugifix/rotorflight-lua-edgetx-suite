@@ -489,9 +489,10 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   local outlined = barH >= 6
   local good = quietBars and C.neut or C.ok
 
-  -- In full screen, on a host with theme views, the cluster is the tap that opens the link view,
-  -- as the original's bars are. Everything over the press is then a line rather than a rectangle,
-  -- in the same places and colours; the widget zone draws the rectangles it always drew.
+  -- In full screen, on a host with theme views, the cluster is the tap that opens the link view:
+  -- the bars are what that page shows in detail. Everything over the press is then a line rather
+  -- than a rectangle, in the same places and colours; the widget zone draws the rectangles it
+  -- always drew.
   local asLines = hasViews(ctx)
   if asLines then
     local action = ctx.action
@@ -691,8 +692,8 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
   local gridH = Common.measure(gridFont, "9999")
   local gridPad = math.max(0, math.floor((hGrid - fontH - gridH) / 2))
   -- In full screen, on a host with theme views, the profile row is the tap that opens this
-  -- theme's own menu -- the battery profiles and the tuning surface -- as the original's B-Profile
-  -- cell opens its profile picker. Drawn before the row's labels, which lie over it.
+  -- theme's own menu -- the battery profiles and the tuning surface -- which changes what this row
+  -- shows. Drawn before the row's labels, which lie over it.
   if hasViews(ctx) then
     local action = ctx.action
     tapArea(nodes, x + pad, y + yGrid, innerW, hGrid, function() action("openView:urban_menu") end)

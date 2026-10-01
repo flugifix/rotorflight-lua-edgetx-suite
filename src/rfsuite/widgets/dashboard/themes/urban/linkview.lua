@@ -1,5 +1,5 @@
 -- The link detail view (init.lua registers it as `urban_link`, in full screen and in the widget
--- zone): the original's ELRS page, in the readings this theme already has.
+-- zone): the ELRS link in detail, in the readings this theme already has.
 --
 -- Opened in full screen by a tap on the top bar's link bars, and -- in full screen and in the
 -- zone alike -- by the switch the pilot names on the settings page (`link_switch`), held: it shows
@@ -11,7 +11,8 @@
 -- (TQ, the TQly reading), the signal of each receiver antenna in dBm with its bar as headroom over
 -- the air rate's floor, the second only where the host has seen one, the transmitter power and the
 -- skipped-packet count. The bars take the warning steps the top bar takes from the settings. The
--- original's TRSS and SNR rows are not here: this theme reads neither.
+-- transmitter's received signal (TRSS) and the signal-to-noise ratio are not shown: this theme
+-- reads neither.
 
 local function requireModule(path)
   if _G.rfsuite and type(_G.rfsuite.require) == "function" then

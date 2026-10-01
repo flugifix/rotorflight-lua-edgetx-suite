@@ -56,13 +56,13 @@ local init = {
   -- draws its own menu and picker. `menu` and `battery_pick` are the host's own two, drawn in this
   -- theme's look: what they offer and what their presses do stay the host's. `urban_menu` is this
   -- theme's own menu (the battery profiles and the tuning surface, opened by a tap on the flight
-  -- view's profile row), `urban_link` the original's ELRS page (opened by a tap on the link bars).
+  -- view's profile row), `urban_link` its ELRS link page (opened by a tap on the link bars).
   --
   -- The link view also opens on a switch, in full screen and in the widget zone alike, and shows
-  -- while the switch holds -- the original's "hold the position to show the page". The switch is
-  -- the pilot's, on the Top Bar settings page (`link_switch`, a switch position as the radio's own
-  -- picker stores it). Until the pilot names one, `default` stands: 0, no switch, the original's
-  -- own default -- the view then opens by its tap only.
+  -- while the switch holds the position: a glance at the link without a tap, in flight too. The
+  -- switch is the pilot's, on the Top Bar settings page (`link_switch`, a switch position as the
+  -- radio's own picker stores it). Until the pilot names one, `default` stands: 0, no switch --
+  -- the view then opens by its tap only.
   views = {
     { id = "menu",         module = "menuview.lua" },
     { id = "battery_pick", module = "pickview.lua" },

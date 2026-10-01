@@ -62,14 +62,11 @@ function K.stepFace(font, steps)
   return font
 end
 
--- The start of every view build: the scheme and the language the pilot chose, the metric cache
+-- The start of every view build: the scheme and the frames the pilot chose, the metric cache
 -- for this zone, and the geometry. Answers the geometry, or nil where the zone has no area.
 function K.begin(zone, state)
   UD.applyScheme(((state and state.themeConfig) or {}).scheme)
   UD.applyFrames(state and state.themeConfig)
-  -- A host whose Urban carries a language table of its own picks it here; the suite's
-  -- shipped Urban resolves its words through the translation markers and has none.
-  if type(UD.applyLanguage) == "function" then UD.applyLanguage(UD.resolveLanguage()) end
   UD.beginBuild(zone)
   return K.geometry(zone)
 end

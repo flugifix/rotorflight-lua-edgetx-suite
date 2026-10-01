@@ -76,8 +76,8 @@ end
 -- The switch that opens the link view (init.lua, `views`, the `urban_link` entry's openWhen reads
 -- it as `link_switch`). It is chosen in the radio's own switch picker, the one the host's in-flight
 -- tuning page uses for its interlock, and stored the way that picker hands it over: a switch
--- POSITION, a number, which the host reads as it is. 0 is no switch, the original's default, and
--- the default init.lua declares: until the pilot picks one, the view opens by its tap only.
+-- POSITION, a number, which the host reads as it is. 0 is no switch, the default init.lua
+-- declares: until the pilot picks one, the view opens by its tap only.
 --
 -- Not a row of Layout.SETTINGS: those are the settings the DRAWING reads, and the page probe holds
 -- each of them to a change in the picture. This one changes when a view opens and draws nothing.
