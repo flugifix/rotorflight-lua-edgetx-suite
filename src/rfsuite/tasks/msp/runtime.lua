@@ -918,7 +918,10 @@ end
 -- to pump.
 --
 -- A queue it finds idle -- the common case once the connect chain is done -- ends the turn
--- without a publish. processQueue would do nothing, and publish() would copy the values the last
+-- without a publish. processQueue would only run the queue's lazy simulator detection and then
+-- return at its own isProcessed() test, so the skip defers that detection to the first turn
+-- that finds work -- which changes nothing, because every host ticks this runtime before it
+-- pumps and tick() calls processQueue itself. And publish() would copy the values the last
 -- publish copied: while the link is up, everything in this file that changes them publishes
 -- itself, writes the session itself, or runs before tick()'s own publish. That is not a
 -- refusal -- the turn was there, nothing was on it -- so it returns true.
