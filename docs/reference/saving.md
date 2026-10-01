@@ -69,10 +69,19 @@ board does not make it read again, so values edited and not yet saved stay on th
 - Setup > Controls: Modes, Failsafe, Stats, both Beepers pages, and Blackbox Configuration
   and Logging.
 - Setup > Power: Battery and Sources.
+- Setup > Mixer: Swash, Swash Geometry, Tail and Trims.
 
 A chained load must finish successfully even if an earlier error allowed the page to continue
 reading other records. Previously read session values alone do not grant permission to save.
 The page's existing parameter help and save/reboot sequence are otherwise unchanged.
+
+The four Mixer pages show the values of their previous visit while they read again, and each
+writes whole records -- the mixer configuration, and on Swash, Swash Geometry and Tail the mixer
+inputs -- with the page's own fields laid over them. A save from a visit whose read did not
+succeed would send an earlier visit's records, including settings another Mixer page has changed
+since. The live write that Trims sends while the swash override is on, and Swash Geometry while
+setup mode is on, waits for the same read: until it has succeeded, a changed value is shown and
+not sent.
 
 ## ESC Configurator pages
 
