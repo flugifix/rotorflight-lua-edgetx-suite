@@ -33,19 +33,19 @@ return {
     -- The ceiling below is unchanged, and the STATE target is derived from it --
     -- 14 000 less the largest shipped theme's sweep -- rather than chosen.
     ----------------------------------------------------------------------------
-    ["pass.state"] = { target = 12200, measured = 10594, proposed = 8000 },
+    ["pass.state"] = { target = 12200, measured = 7733, proposed = 8000 },
     -- The same class of pass with the model ARMED and telemetry moving between passes.
     -- It shares pass.state's ceiling because it is the same class of pass; it has a row
     -- of its own because every other steady-state row here is measured disarmed against
     -- a frozen sensor set, and a flight is neither.
     ["pass.state.armed"] = { target = 12200, measured = 10506 },
-    ["pass.job.prepare"] = { target = 1250, measured = 1021 },
+    ["pass.job.prepare"] = { target = 1250, measured = 924 },
     -- Raised from 5700 when the object renderers began compiling a box's thresholds where the
     -- box is rendered instead of on the first value change in the sweep. The build is chunked at
     -- eight boxes per pass and the sweep that follows the swap is not, so this is the cheaper of
     -- the two passes to carry it. The margin is held at the ~10% the row already had.
-    ["pass.job.build"] = { target = 6200, measured = 5557, proposed = 5700 },
-    ["pass.swap"] = { target = 3400, measured = 2737, proposed = 6000 },
+    ["pass.job.build"] = { target = 6200, measured = 5538, proposed = 5700 },
+    ["pass.swap"] = { target = 3400, measured = 2759, proposed = 6000 },
 
     -- The splash pass is the one JOB pass that runs while the connect chain still has
     -- MSP traffic in flight, so its pump quantum does real poll work. Until the pump
@@ -54,14 +54,14 @@ return {
     -- first read, so the loop barely ran and the row was first calibrated on that
     -- under-measurement (1 826). Counts-only, the loop runs to its poll caps, which
     -- is what a pass on the radio could always cost.
-    ["pass.splash"] = { target = 7100, measured = 5678 },
+    ["pass.splash"] = { target = 7100, measured = 2439 },
 
     -- The cold start, before the link is up and the first scene is on screen. It is
     -- the pass that loads modules, and it is the closest any pass comes to the
     -- firmware's hard limit -- which is why the entry point's "CPU limit" back-off
     -- is still in place. The target holds it at today's cost; it is not a share of
     -- a budget anyone would call comfortable.
-    ["pass.startup.worst"] = { target = 18000, measured = 17598 },
+    ["pass.startup.worst"] = { target = 18000, measured = 12235 },
 
     -- The service widget's background pass: the same two runtimes, with no scene
     -- build and no sweep of a theme mixed into it.
@@ -83,7 +83,7 @@ return {
     -- billed to the suite -- and even that stops short of this row: removing the io.open wrapper
     -- puts all four rows that move back on master's figures, and this is not one of them. The
     -- dearest pass of this block is an early one-off rather than a look at the store.
-    ["pass.service"] = { target = 6000, measured = 5314, proposed = 2200 },
+    ["pass.service"] = { target = 6000, measured = 5136, proposed = 2200 },
 
     -- One run() of SCRIPTS/FUNCTIONS/rfsbg.lua with a full frame backlog waiting,
     -- every frame of it decoded. This row is NOT a share of the widget ceiling
@@ -133,8 +133,8 @@ return {
     -- second, which is the overlay's own answer to a setting that needed a radio restart. The
     -- steady pass was measured at 12 961 in the air and 13 080 on the ground; the target is set
     -- above the second of those and not the first.
-    ["pass.tuning.state"] = { target = 14200, measured = 13080, proposed = 13000 },
-    ["pass.tuning.prime"] = { target = 16700, measured = 14855 },
+    ["pass.tuning.state"] = { target = 14200, measured = 9701, proposed = 13000 },
+    ["pass.tuning.prime"] = { target = 16700, measured = 14348 },
     ["pass.job.tuning"] = { target = 15700, measured = 13155, proposed = 10600 },
 
     ----------------------------------------------------------------------------
@@ -143,13 +143,13 @@ return {
     -- 20 000 covers the C-side work, the difference between this interpreter and
     -- the firmware's, and the variance neither of them accounts for.
     ----------------------------------------------------------------------------
-    ["theme.@aerc"] = { target = 14000, measured = 11600 },
-    ["theme.@aerc-n"] = { target = 14000, measured = 10950 },
-    ["theme.@rt-rc"] = { target = 14000, measured = 11676 },
-    ["theme.@rt-rc-n"] = { target = 14000, measured = 11170 },
-    ["theme.@srb-rc"] = { target = 14000, measured = 12887 },
-    ["theme.default"] = { target = 14000, measured = 11746 },
-    ["theme.rfstatus"] = { target = 14000, measured = 10515 },
+    ["theme.@aerc"] = { target = 14000, measured = 12855 },
+    ["theme.@aerc-n"] = { target = 14000, measured = 12804 },
+    ["theme.@rt-rc"] = { target = 14000, measured = 12425 },
+    ["theme.@rt-rc-n"] = { target = 14000, measured = 12364 },
+    ["theme.@srb-rc"] = { target = 14000, measured = 12065 },
+    ["theme.default"] = { target = 14000, measured = 8885 },
+    ["theme.rfstatus"] = { target = 14000, measured = 9007 },
     -- A free-form theme builds its whole tree in the one pass that prepares the scene, where a
     -- theme of boxes spreads its build over passes of eight boxes each, so its worst pass is the
     -- build and this row sits above the 14 000 the shipped themes share, which stays its
@@ -158,7 +158,7 @@ return {
     -- foreground pass. The target is the measurement with the margin `pass.job.build` carries
     -- over its own (6200 over 5557, 11.6 %), rounded up to the next hundred. The tree holds 50
     -- references, more than any theme above, and that is what would move this row first.
-    ["theme.urban"] = { target = 17400, measured = 15510, proposed = 14000 },
+    ["theme.urban"] = { target = 17400, measured = 15331, proposed = 14000 },
 
     ----------------------------------------------------------------------------
     -- Per box type: one render into the node table, and one sweep of the reactive
@@ -237,7 +237,12 @@ return {
     -- is not, so what is left is what only this Lua state can compute. The gap to
     -- the row above is what a pass saves by handing over.
     ["unit.telemetry.handoff"] = { target = 350, measured = 233 },
-    ["unit.msp.pump"] = { target = 300, measured = 218 },
+    -- One Runtime.pump() after twenty ticks of a connected runtime. Its queue is idle by then,
+    -- so this prices the idle turn -- the refusals and the isProcessed() test that ends it --
+    -- and not a pump that finds work. That pump's processQueue and publish have no row of
+    -- their own; they are priced inside the pass rows whose pump finds the queue busy,
+    -- pass.splash and pass.tuning.prime among them.
+    ["unit.msp.pump"] = { target = 300, measured = 48 },
     -- The API-layer parse of the largest reply the suite scripts, in one piece. It
     -- lands in whatever pass completes the reassembly.
     ["unit.msp.parse.max"] = { target = 2750, measured = 2175 },
