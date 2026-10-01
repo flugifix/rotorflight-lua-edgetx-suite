@@ -46,7 +46,8 @@ reported as a margin to widen rather than a pass to celebrate.
   declarations and from the object modules on disk -- a type with no row fails the check,
   which is what makes a new box type ship its cost with the PR that adds it.
 - **Per unit**: the whole background wakeup, the custom-telemetry drain with a full frame
-  backlog, one MSP pump, and the API-layer parse of the largest scripted reply.
+  backlog, one MSP pump on an idle queue (the turn that finds nothing to do, not a pump with
+  work on it), and the API-layer parse of the largest scripted reply.
 
 ## The phase sweep
 
