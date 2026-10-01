@@ -69,8 +69,8 @@ allows. Three places on the screen open a page over it:
   full screen and in the widget's zone alike; in the zone it only shows.
 
 Urban draws these pages, the quick menu and the battery picker in the look of the screen they
-open over, in its colour scheme: a plain page, a title in the top bar's lettering with a thin line
-under it, buttons drawn as an outline with the choice in force in green, and a large **X** at the
+open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's
+lettering with a thin line under it, buttons drawn as an outline with the choice in force in green, and a large **X** at the
 top right that closes the page. The battery picker shows the packs in two columns from two packs up, each
 with its name, capacity and battery profile, and *NO BATTERY* in a row of its own at the foot. Where
 there are more packs than three rows hold, the packs scroll -- swipe them, or turn the rotary

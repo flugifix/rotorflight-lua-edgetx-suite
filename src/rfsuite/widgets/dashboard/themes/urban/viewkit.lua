@@ -77,8 +77,9 @@ end
 --
 -- The face is the flight view's own -- the one its top bar, its clock and its value-row names are
 -- drawn in (layout.lua, L.buildFlight: a bar of 7.5 % of the height, at least 18 px, its face
--- sized against "Total Time"). Taken by the same rule from the same height, a view's title and
--- row names are the size of the screen the view opens from, on every screen size.
+-- sized against "Total Time"). Taken by the same rule from the same height, a view's row names
+-- are the size of the screen the view opens from, on every screen size; the title is up to one
+-- face larger (K.header).
 --
 -- The close box is the one fixed size: 72 px on a screen taller than 350 px, 36 px below that.
 function K.geometry(zone)
@@ -153,15 +154,21 @@ function K.header(nodes, g, title, closePress, aside)
     right = closeX - g.pad
   end
 
+  -- The title on one line, in the largest face up to 1.4 times the flight view's that fits the
+  -- room beside the close box: a face above the top bar's where the header has the height, the
+  -- top bar's own where it has not (a header without a close box is exactly as tall as that).
   local titleW = math.max(10, right - (g.x + g.pad))
-  local titleY = g.y + math.floor((headerH - g.fontH) / 2)
-  local shown = UD.fit(g.font, title, titleW)
-  UD.label(nodes, g.x + g.pad, titleY, titleW, g.fontH, shown, g.font, C.text, LEFT)
+  local titleFont = UD.selectFont(math.min(headerH - 2 * g.textPad, math.floor(g.fontH * 1.4)), titleW, title)
+  local titleH = UD.measure(titleFont, title)
+  local titleY = g.y + math.floor((headerH - titleH) / 2)
+  local shown = UD.fit(titleFont, title, titleW)
+  UD.label(nodes, g.x + g.pad, titleY, titleW, titleH, shown, titleFont, C.text, LEFT)
   if aside ~= nil then
-    local used = UD.textWidth(g.font, shown) + 2 * g.pad
+    local used = UD.textWidth(titleFont, shown) + 2 * g.pad
     local asideW = titleW - used
     if asideW > 10 then
-      UD.label(nodes, g.x + g.pad + used, titleY, asideW, g.fontH, aside, g.font, C.label, LEFT)
+      UD.label(nodes, g.x + g.pad + used, g.y + math.floor((headerH - g.fontH) / 2), asideW, g.fontH,
+        aside, g.font, C.label, LEFT)
     end
   end
   return g.y + headerH + g.gap
