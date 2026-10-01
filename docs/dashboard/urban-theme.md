@@ -52,10 +52,28 @@ stopped answering.
 
 ## Full screen
 
-With *Urban* selected, full screen shows the theme itself rather than the quick menu. The menu
-button in the top bar and the page keys open the [quick menu](quick-menu.md) over it. The theme
+With *Urban* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
-allows.
+allows. Three places on the screen open a page over it:
+
+- **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do the
+  page keys, left at their defaults.
+- **The profile row** of the left panel (PID, rate and battery profile) opens *Profile & Tuning*:
+  the in-flight tuning surface, or a note that it is not available now, and the model's battery
+  profiles, the one in force in green. Pressing a profile makes it the one in force and the page
+  stays open, showing whether the change is being sent, was done or failed.
+- **The link bars** in the top bar open the *ELRS* link page: the link quality of receiver and
+  transmitter and the signal of each antenna as bars with their figures, the transmitter power,
+  the skipped frames, the air rate beside the title and the rate floor at the foot. The *Link view
+  switch* on the *Top Bar* page opens the same page while the switch is in the chosen position, in
+  full screen and in the widget's zone alike; in the zone it only shows.
+
+Urban draws these pages, the quick menu and the battery picker in the look of the screen they
+open over, in its colour scheme: a plain page, a title in the top bar's lettering with a thin line
+under it, buttons drawn as an outline with the choice in force in green, and a large **X** at the
+top right that closes the page. The battery picker shows the packs in two columns from two packs up, each
+with its name, capacity and battery profile, and *NO BATTERY* in a row of its own at the foot; up
+to six packs fit. RTN closes a page as well.
 
 What the page keys, MDL, SYS and TELE do in full screen is chosen on the *Keys* page. Left at
 their defaults, the page keys open the quick menu and MDL, SYS and TELE do nothing; outside full
@@ -79,6 +97,7 @@ uses its setting.
 | Top Bar | Colour the bars | *Always* (default) colours a good link green; *Only on warning* leaves it neutral until a bar drops to its warning step. |
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
+| Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
 | Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Quick menu* (default), *Profile & Tuning*, *ELRS link page* or *Leave full screen*. |
 | Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys; *Nothing* (default). |
 
@@ -112,8 +131,10 @@ sensor of that name and a declared name that is absent is still searched for.
   the flight record keeps no transmitter power.
 - **The arming-disable names cover bits 0 to 25**, named the same whatever MSP API version the
   flight controller runs.
-- **Only the menu button takes a press.** The gauge, the value rows, the link bars and the status
-  line open nothing.
+- **Only the menu button, the profile row and the link bars take a press.** The gauge, the value
+  rows and the status line open nothing.
+- **The battery picker shows at most six packs** on 800x480, 480x320 and 480x272 screens; it is
+  cut rather than scrolled.
 - **A copy in the user folder draws with the shipped files**: its settings are its own, but its
   phase modules load `layout.lua` and `common.lua` from the shipped folder.
 - The *Transmitter power*, *TQ* and skipped-frame cells read `-` on a link that does not report
