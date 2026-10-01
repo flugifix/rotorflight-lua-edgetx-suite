@@ -160,15 +160,15 @@ local SECTIONS = {
     titleFallback = "ESC Temperature",
     items = {
       { kind = "bool", key = "esc_temperature", labelKey = "esc_temperature", labelFallback = "ESC Temperature" },
-      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", suffix = "°",
-        enabledBy = "esc_temperature" },
+      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Threshold", suffix = "°C",
+        temperature = true, enabledBy = "esc_temperature" },
       { kind = "subheader", labelKey = "section_mcu", labelFallback = "MCU Temperature" },
       { kind = "bool", key = "mcu_temperature", labelKey = "mcu_temperature", labelFallback = "MCU Temperature" },
       -- The label of the ESC threshold, on purpose: the row says the same thing, and the
       -- subheader above it is what tells the two thresholds apart. modelScopeLabel keys on
       -- the row's own key, so this one carries no [Model] marker.
-      { kind = "number", key = "mcu_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", suffix = "°",
-        enabledBy = "mcu_temperature" },
+      { kind = "number", key = "mcu_threshold", labelKey = "esc_threshold", labelFallback = "Threshold", suffix = "°C",
+        temperature = true, enabledBy = "mcu_temperature" },
       { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
       { kind = "choice", key = "esc_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
       { kind = "bool", key = "esc_haptic", labelKey = "alert_haptic", labelFallback = "Haptic" },
@@ -278,6 +278,19 @@ end
 local function prefBool(value, default)
   if value == nil then return default end
   return value == true or value == "true" or value == 1 or value == "1"
+end
+
+-- The two temperature thresholds are stored in Celsius, the unit the flight controller reports
+-- and lib/audio.lua compares in. On a radio set to Fahrenheit under Settings > Localization they
+-- are shown in Fahrenheit, like every other temperature the suite shows. Only the text changes:
+-- the control still steps one degree Celsius and stores what it shows, so nothing is rounded twice.
+local function usesFahrenheit(prefs)
+  local localizations = prefs and prefs.localizations
+  return tonumber(localizations and localizations.temperature_unit) == 1
+end
+
+local function fahrenheitText(celsius)
+  return tostring(math.floor(celsius * 9 / 5 + 32 + 0.5)) .. "°F"
 end
 
 -- ─── Page factory ────────────────────────────────────────────────────────────
@@ -552,7 +565,7 @@ function M.new(sectionKey)
   -- resolves a translation whose key is a literal and a computed one would reach the radio raw.
   local function modelScopeLabel(i18n, key, plain)
     if key ~= "esc_threshold" or not modelStore() then return plain end
-    return t(i18n, "esc_threshold_model", "Threshold (°) [Model]")
+    return t(i18n, "esc_threshold_model", "Threshold [Model]")
   end
 
   -- ─── Module API ────────────────────────────────────────────────────────────
@@ -712,6 +725,8 @@ function M.new(sectionKey)
         local maxVal = (field and field.max) or 100
         local labelText = t(i18n, item.labelKey, item.labelFallback)
         labelText = modelScopeLabel(i18n, k, labelText)
+        local display = nil
+        if item.temperature and usesFahrenheit(ctx.preferences) then display = fahrenheitText end
         cursorY = cursorY + Controls.appendNumberField(
           children, x, cursorY, w,
           labelText,
@@ -720,6 +735,7 @@ function M.new(sectionKey)
             min = minVal,
             max = maxVal,
             suffix = item.suffix or "",
+            display = display,
             get = getNumberGetter(k, minVal, maxVal),
             set = getNumberSetter(k, item.enabledBy, minVal, maxVal)
           }
