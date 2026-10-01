@@ -70,6 +70,10 @@ L.DEFAULT_SCHEME = Common.DEFAULT_SCHEME
 local ON_OFF = { "on", "off" }
 
 L.SETTINGS = {
+  -- The firmware's own frame around every place on the full screen that takes a press -- the
+  -- menu and tool buttons, the profile row, the link bars, the buttons of the views. Off covers
+  -- it (Common.button); the outlines this theme draws itself stay.
+  { page = "look",   key = "tap_frames", values = ON_OFF,                      default = "on" },
   { page = "topbar", key = "clock",      values = { "date_time", "time" },     default = Common.CLOCK_MODE_DEFAULT },
   -- The link bars, one row each: the receiver's link quality, the transmitter's, and the signal
   -- strength as headroom above the air rate's sensitivity floor.
@@ -109,6 +113,7 @@ function L.settingsLabels()
              off = "@i18n(app.pages.flight_tuning_advanced_pid_controller.tbl_off)@" }
   end
   return {
+    tap_frames = { label = "@i18n(app.pages.settings_dashboard_settings.urban_tap_frames)@", values = onOff() },
     clock = { label = "@i18n(app.pages.settings_dashboard_settings.urban_clock)@",
               values = { date_time = "@i18n(app.pages.settings_dashboard_settings.urban_clock_date_time)@",
                          time = "@i18n(app.pages.settings_dashboard_settings.urban_clock_time)@" } },
@@ -176,10 +181,7 @@ function L.menuControl(nodes, ctx, x, y, h)
   local boxH = math.max(8, h - 2)
   local boxW = boxH
   local bx, by = x, y + 1
-  nodes[#nodes + 1] = {
-    type = "button", x = bx, y = by, w = boxW, h = boxH, color = C.bg,
-    press = function() action("openView:menu") end
-  }
+  Common.button(nodes, bx, by, boxW, boxH, C.bg, function() action("openView:menu") end)
   local x1, y1 = bx + boxW - 1, by + boxH - 1
   local edges = {
     { { bx, by }, { x1, by } }, { { bx, y1 }, { x1, y1 } },
@@ -236,10 +238,7 @@ function L.toolControl(nodes, state, ctx, x, y, h)
   local boxH = math.max(8, h - 2)
   local boxW = boxH
   local bx, by = x, y + 1
-  nodes[#nodes + 1] = {
-    type = "button", x = bx, y = by, w = boxW, h = boxH, color = C.bg,
-    press = function() action("openTool") end
-  }
+  Common.button(nodes, bx, by, boxW, boxH, C.bg, function() action("openTool") end)
   local x1, y1 = bx + boxW - 1, by + boxH - 1
   local edges = {
     { { bx, by }, { x1, by } }, { { bx, y1 }, { x1, y1 } },
@@ -266,9 +265,10 @@ end
 
 -- A press over an area that is drawn anyway: a button in the panel's own colour, appended BEFORE
 -- what is drawn over it, which then has to be labels and lines -- a rectangle over a press takes
--- the press away from it. EdgeTX draws every button with a border of its own.
+-- the press away from it. EdgeTX draws every button with a frame of its own, which the pilot can
+-- have covered (Common.button).
 local function tapArea(nodes, x, y, w, h, press)
-  nodes[#nodes + 1] = { type = "button", x = x, y = y, w = w, h = h, color = C.bg, press = press }
+  Common.button(nodes, x, y, w, h, C.bg, press)
 end
 
 -- ---------------------------------------------------------------------------
@@ -1204,6 +1204,7 @@ function L.buildFlight(zone, state, ctx)
   -- a closure alike, is then the one the pilot chose. It is a build-time reading and needs no
   -- term in the render key -- the host reloads the theme when its preferences change.
   Common.applyScheme((state.themeConfig or {}).scheme)
+  Common.applyFrames(state.themeConfig)
   Common.beginBuild(zone)
   L.bindKeys(state, ctx)
 
@@ -1423,6 +1424,7 @@ function L.buildStats(zone, state, ctx)
   local x0, y0, w, h = zone.x or 0, zone.y or 0, zone.w or 0, zone.h or 0
   if w <= 0 or h <= 0 then return nodes end
   Common.applyScheme((state.themeConfig or {}).scheme)
+  Common.applyFrames(state.themeConfig)
   Common.beginBuild(zone)
   L.bindKeys(state, ctx)
 

@@ -2404,6 +2404,7 @@ return {
         urban_key_tools = "Profil & Tuning",
         urban_key_link = "ELRS-Linkseite",
         urban_key_suite_tool = "RFSuite-Tool",
+        urban_tap_frames = "Rahmen um Tippflächen",
         urban_key_exit = "Vollbild verlassen"
       },
       settings_dashboard_overrides = {

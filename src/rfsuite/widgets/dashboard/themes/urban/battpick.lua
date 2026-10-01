@@ -195,6 +195,7 @@ function M.build(children, widget)
   -- applies the colour scheme itself rather than inheriting whichever one the last build of a
   -- view happened to leave in place.
   UD.applyScheme((type(state.themeConfig) == "table" and state.themeConfig.scheme) or nil)
+  UD.applyFrames(state.themeConfig)
   local pick = (type(state.batteryPick) == "table" and state.batteryPick) or {}
   local candidates = (type(pick.candidates) == "table" and pick.candidates) or {}
   local selectedId = pick.selectedId

@@ -66,6 +66,7 @@ end
 -- for this zone, and the geometry. Answers the geometry, or nil where the zone has no area.
 function K.begin(zone, state)
   UD.applyScheme(((state and state.themeConfig) or {}).scheme)
+  UD.applyFrames(state and state.themeConfig)
   -- A host whose Urban carries a language table of its own picks it here; the suite's
   -- shipped Urban resolves its words through the translation markers and has none.
   if type(UD.applyLanguage) == "function" then UD.applyLanguage(UD.resolveLanguage()) end
@@ -140,10 +141,7 @@ function K.header(nodes, g, title, closePress, aside)
     local size = g.closeSize
     local closeX = right - size
     local closeY = g.y + g.closeMargin
-    nodes[#nodes + 1] = {
-      type = "button", x = closeX, y = closeY, w = size, h = size,
-      color = C.bg, press = closePress
-    }
+    UD.button(nodes, closeX, closeY, size, size, C.bg, closePress)
     K.outline(nodes, closeX, closeY, size, size, C.line, 2)
     local inset = math.floor(size * 0.28)
     local th = math.max(2, math.floor(size * 0.09))
@@ -212,10 +210,7 @@ end
 -- never rectangles: a rectangle drawn over a press takes the press away from it.
 function K.button(nodes, g, f, x, y, w, h, name, sub, selected, press)
   local C = UD.C
-  nodes[#nodes + 1] = {
-    type = "button", x = x, y = y, w = w, h = h,
-    color = selected and C.ok or C.bg, press = press
-  }
+  UD.button(nodes, x, y, w, h, selected and C.ok or C.bg, press)
   K.outline(nodes, x, y, w, h, selected and C.ok or C.line, 2)
   local ink = selected and C.ink or C.text
   local subInk = selected and C.ink or C.label

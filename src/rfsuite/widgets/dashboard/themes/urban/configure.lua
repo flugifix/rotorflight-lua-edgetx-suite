@@ -370,6 +370,8 @@ function M.build(ctx)
           ui.config.arm_colors = value
         end
       end)
+
+    cursorY = appendSettings(children, x, cursorY, w, "look")
   end
 
   if only == nil or only == "rows" then
