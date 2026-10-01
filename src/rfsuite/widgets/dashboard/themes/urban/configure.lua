@@ -73,13 +73,57 @@ for i = 1, #SETTINGS do
   SETTINGS_ROW_LABEL[entry.key] = labels.label or entry.key
 end
 
-local THEME_DEFAULTS = { arm_colors = ARM_COLORS_DEFAULT, scheme = SCHEME_DEFAULT }
+-- The switch that opens the link view (init.lua, `views`, the `urban_link` entry's openWhen reads
+-- it as `link_switch`). It is chosen in the radio's own switch picker, the one the host's in-flight
+-- tuning page uses for its interlock, and stored the way that picker hands it over: a switch
+-- POSITION, a number, which the host reads as it is. 0 is no switch, the default init.lua
+-- declares: until the pilot picks one, the view opens by its tap only.
+--
+-- Not a row of Layout.SETTINGS: those are the settings the DRAWING reads, and the page probe holds
+-- each of them to a change in the picture. This one changes when a view opens and draws nothing.
+local LINK_SWITCH_DEFAULT = 0
+
+-- What the keys do in full screen (Layout.KEYS, Layout.KEY_ACTIONS): the keys, their defaults and
+-- the actions come from layout.lua, which binds them; the words are this page's. Like the link
+-- switch, not a row of Layout.SETTINGS -- a binding draws nothing.
+local KEYS = Layout.KEYS or {}
+local KEY_NAMES = { pageDown = "PAGE >", pageUp = "PAGE <", mdl = "MDL", sys = "SYS", tele = "TELE" }
+local KEY_ACTION_LABELS = {
+  none = "@i18n(app.pages.settings_dashboard_settings.urban_key_none)@",
+  menu = "@i18n(app.pages.settings_dashboard_settings.urban_key_menu)@",
+  tools = "@i18n(app.pages.settings_dashboard_settings.urban_key_tools)@",
+  link = "@i18n(app.pages.settings_dashboard_settings.urban_key_link)@",
+  suite_tool = "@i18n(app.pages.settings_dashboard_settings.urban_key_suite_tool)@",
+  exit = "@i18n(app.pages.settings_dashboard_settings.urban_key_exit)@",
+}
+local KEY_OPTIONS = {}
+local KEY_VALID = {}
+for i = 1, #(Layout.KEY_ACTIONS or {}) do
+  local id = Layout.KEY_ACTIONS[i].id
+  KEY_OPTIONS[i] = { label = KEY_ACTION_LABELS[id] or id, value = id }
+  KEY_VALID[id] = true
+end
+
+local THEME_DEFAULTS = {
+  arm_colors = ARM_COLORS_DEFAULT,
+  scheme = SCHEME_DEFAULT,
+  link_switch = LINK_SWITCH_DEFAULT,
+}
 for i = 1, SLOT_COUNT do
   THEME_DEFAULTS["slot" .. i] = Layout.DEFAULT_SLOTS[i]
 end
 for i = 1, #SETTINGS do
   THEME_DEFAULTS[SETTINGS[i].key] = SETTINGS[i].default
 end
+for i = 1, #KEYS do
+  THEME_DEFAULTS[KEYS[i].pref] = KEYS[i].default
+end
+
+-- The link switch picker's filters, as the firmware numbers them (radio/src/dataconstants.h,
+-- SwitchTypes): the physical switches, the logical ones, and the empty entry that clears the choice.
+local SW_SWITCH = 1
+local SW_LOGICAL_SWITCH = 1 << 2
+local SW_NONE = 1 << 20
 
 local VALID_IDS = {}
 local OPTIONS = {}
@@ -133,6 +177,17 @@ local function loadConfig(prefs)
     end
     ui.config[entry.key] = value
   end
+
+  -- A number, or a number as text where the preferences file hands it back that way; anything
+  -- else is no choice made: no switch.
+  ui.config.link_switch = tonumber(cfg.link_switch) or LINK_SWITCH_DEFAULT
+
+  for i = 1, #KEYS do
+    local entry = KEYS[i]
+    local value = cfg[entry.pref]
+    if type(value) ~= "string" or not KEY_VALID[value] then value = entry.default end
+    ui.config[entry.pref] = value
+  end
   ui.loaded = true
 end
 
@@ -153,6 +208,11 @@ local function saveConfig(prefs)
   for i = 1, #SETTINGS do
     local entry = SETTINGS[i]
     values[entry.key] = ui.config[entry.key] or entry.default
+  end
+  values.link_switch = tonumber(ui.config.link_switch) or LINK_SWITCH_DEFAULT
+  for i = 1, #KEYS do
+    local entry = KEYS[i]
+    values[entry.pref] = ui.config[entry.pref] or entry.default
   end
   DashboardLib.setThemeConfig(prefs, THEME_PATH, values, modelPrefs)
 
@@ -240,13 +300,51 @@ local function appendSettings(children, x, cursorY, w, page)
   return cursorY
 end
 
+-- The link view's switch: a label and the radio's own switch picker, laid out the way the host's
+-- in-flight tuning page lays out its interlock row. Answers the cursor the caller continues from.
+local function appendLinkSwitch(children, x, cursorY, w)
+  local rowH = Controls.ROW_H or 40
+  local pickerW = math.min(172, w)
+  local labelY = (type(Controls.labelY) == "function") and Controls.labelY(cursorY, rowH) or cursorY
+  local controlY = (type(Controls.controlY) == "function") and Controls.controlY(cursorY, rowH) or cursorY
+  children[#children + 1] = {
+    type = "label", x = x, y = labelY, w = w - pickerW - 18,
+    text = "@i18n(app.pages.settings_dashboard_settings.urban_link_switch)@", color = COLOR_THEME_PRIMARY1, font = SMLSIZE
+  }
+  children[#children + 1] = {
+    type = "switch", x = x + w - pickerW - 10, y = controlY, w = pickerW, h = rowH - 6,
+    filter = SW_SWITCH | SW_LOGICAL_SWITCH | SW_NONE,
+    get = function() return ui.config.link_switch or 0 end,
+    set = function(value) ui.config.link_switch = tonumber(value) or 0 end
+  }
+  return cursorY + rowH
+end
+
+-- One row per key, in the order Layout.KEYS declares them. Every key is shown on every radio: a
+-- radio without the key simply never sends it, and a model's settings stay the same across
+-- radios. Answers the cursor the caller continues from.
+local function appendKeys(children, x, cursorY, w)
+  for i = 1, #KEYS do
+    local pref = KEYS[i].pref
+    cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+      "@i18n(app.pages.settings_dashboard_settings.urban_key)@ " .. (KEY_NAMES[KEYS[i].key] or KEYS[i].key),
+      KEY_OPTIONS, ui.config[pref],
+      function(value)
+        if type(value) == "string" and KEY_VALID[value] then
+          ui.config[pref] = value
+        end
+      end)
+  end
+  return cursorY
+end
+
 function M.build(ctx)
   loadConfig(ctx.preferences)
 
   -- Every id init.lua declares has to stand here as well. One that does not falls through to
   -- `only == nil`, which renders the whole form on that one tile and says nothing about it.
   local pageId = ctx and ctx.page and ctx.page.id
-  local only = (pageId == "look" or pageId == "rows" or pageId == "topbar") and pageId or nil
+  local only = (pageId == "look" or pageId == "rows" or pageId == "topbar" or pageId == "keys") and pageId or nil
 
   local children = ctx.children
   local x, y, w = ctx.x, ctx.y, ctx.w
@@ -272,6 +370,8 @@ function M.build(ctx)
           ui.config.arm_colors = value
         end
       end)
+
+    cursorY = appendSettings(children, x, cursorY, w, "look")
   end
 
   if only == nil or only == "rows" then
@@ -298,6 +398,14 @@ function M.build(ctx)
       "@i18n(app.pages.settings_dashboard_settings.urban_page_topbar)@", true, function() end)
     cursorY = cursorY + Controls.SECTION_H
     cursorY = appendSettings(children, x, cursorY, w, "topbar")
+    cursorY = appendLinkSwitch(children, x, cursorY, w)
+  end
+
+  if only == nil or only == "keys" then
+    Controls.appendSectionHeader(children, x, cursorY, w,
+      "@i18n(app.pages.settings_dashboard_settings.urban_page_keys)@", true, function() end)
+    cursorY = cursorY + Controls.SECTION_H
+    cursorY = appendKeys(children, x, cursorY, w)
   end
 end
 

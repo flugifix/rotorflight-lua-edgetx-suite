@@ -2374,6 +2374,7 @@ return {
         urban_page_look = "Aussehen",
         urban_page_rows = "Wertezeilen",
         urban_page_topbar = "Kopfleiste",
+        urban_page_keys = "Tasten",
         urban_scheme = "Farbschema",
         urban_scheme_light = "Hell",
         urban_scheme_dark = "Dunkel",
@@ -2395,7 +2396,16 @@ return {
         urban_rssi_warn = "Signal gut ab",
         urban_units = "Einheiten neben den Werten",
         urban_temp_colors = "Temperaturfarben",
-        urban_temp_colors_early = "Früh"
+        urban_temp_colors_early = "Früh",
+        urban_link_switch = "Schalter Linkseite",
+        urban_key = "Taste",
+        urban_key_none = "Nichts",
+        urban_key_menu = "Schnellmenü",
+        urban_key_tools = "Profil & Tuning",
+        urban_key_link = "ELRS-Linkseite",
+        urban_key_suite_tool = "RFSuite-Tool",
+        urban_tap_frames = "Rahmen um Tippflächen",
+        urban_key_exit = "Vollbild verlassen"
       },
       settings_dashboard_overrides = {
         model_name = "Modell",
@@ -2865,7 +2875,15 @@ return {
       urban_headspeed_profile = "Drehzahl P",
       urban_gov_throttle_hold = "Gassperre",
       urban_gov_fallback = "Fallback",
-      urban_gov_unknown = "Gov. deaktiviert"
+      urban_gov_unknown = "Gov. deaktiviert",
+      urban_quick_settings = "Schnelleinstellungen",
+      urban_which_battery = "Welcher Akku?",
+      urban_profile_tuning = "Profil & Tuning",
+      urban_active = "Aktiv",
+      urban_not_available = "Nicht verfügbar",
+      urban_sending = "Wird gesendet...",
+      urban_done = "Fertig",
+      urban_failed = "Fehlgeschlagen"
     },
     escstatus = {
       ok = "OK",

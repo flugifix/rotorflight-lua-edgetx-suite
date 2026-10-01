@@ -15,7 +15,7 @@ are listed at the end of this page.
 
 *System* → *Settings* → *Dashboard* → *Design*: choose *Urban* for a flight phase, or for all
 three. Its settings are under *System* → *Settings* → *Dashboard* → *Settings* → *Urban*, split
-into three pages: *Look*, *Value Rows* and *Top Bar*. They are stored for the radio, and a model
+into four pages: *Look*, *Value Rows*, *Top Bar* and *Keys*. They are stored for the radio, and a model
 can carry its own under [*Per-Model Settings*](../pages/settings/dashboard/overrides.md) where
 per-model settings are switched on. Its words come from the suite's translations, like every other
 theme's, so it speaks the language of the package that was installed.
@@ -24,7 +24,7 @@ theme's, so it speaks the language of the package that was installed.
 
 **On the ground and in flight** one screen, which does not change shape at spool-up:
 
-- **Top bar** — in full screen a menu button at the left, then the clock; up to four stacked
+- **Top bar** — in full screen two buttons at the left, the menu and the tool, then the clock; up to four stacked
   link bars in the middle (the receiver's link quality *RQ*, the transmitter's *TQ*, and the
   signal of each receiver antenna as headroom above the sensitivity floor of the air rate the
   link runs, the second antenna only once one has been seen); the radio's battery at the right.
@@ -52,10 +52,41 @@ stopped answering.
 
 ## Full screen
 
-With *Urban* selected, full screen shows the theme itself rather than the quick menu. The menu
-button in the top bar and the page keys open the [quick menu](quick-menu.md) over it. The theme
+With *Urban* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
-allows.
+allows. Three places on the screen open a page over it, and a fourth opens the suite's tool:
+
+- **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do the
+  page keys and TELE, left at their defaults.
+- **The tool button** beside it opens the suite's tool inside the widget, as the quick menu's
+  *RFSUITE TOOL* does; so does SYS, left at its default. The tool opens only while the model is
+  disarmed: while it is armed the button is drawn grey and a press does nothing.
+- **The profile row** of the left panel (PID, rate and battery profile) opens *Profile & Tuning*:
+  the in-flight tuning surface, or a note that it is not available now, and the model's battery
+  profiles, the one in force in green. Pressing a profile makes it the one in force and the page
+  stays open, showing whether the change is being sent, was done or failed.
+- **The link bars** in the top bar open the *ELRS* link page: the link quality of receiver and
+  transmitter and the signal of each antenna as bars with their figures, the transmitter power,
+  the skipped frames, the air rate beside the title and the rate floor at the foot. The *Link view
+  switch* on the *Top Bar* page opens the same page while the switch is in the chosen position, in
+  full screen and in the widget's zone alike; in the zone it only shows.
+
+Urban draws these pages, the quick menu and the battery picker in the look of the screen they
+open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's
+lettering with a thin line under it, buttons drawn as an outline with the choice in force in green, and a large **X** at the
+top right that closes the page. The battery picker shows the packs in two columns from two packs up, each
+with its name, capacity and battery profile, and *NO BATTERY* in a row of its own at the foot. Where
+there are more packs than three rows hold, the packs scroll -- swipe them, or turn the rotary
+encoder, which moves from pack to pack -- while *NO BATTERY* stays at the foot, so every pack can
+be picked. RTN closes a page as well.
+
+What the page keys, MDL, SYS and TELE do in full screen is chosen on the *Keys* page. Left at
+their defaults, the page keys and TELE open the quick menu, SYS opens the suite's tool and MDL does
+nothing; outside full screen MDL, SYS and TELE open the radio's own menus as always. A key set to
+open a page closes that page again when pressed while it is showing, so a second TELE closes the
+quick menu. A key set to the tool does nothing while the model is armed. MDL, SYS and TELE do
+nothing while another page is on top. A radio without one of these keys simply never uses its
+setting.
 
 ## Settings
 
@@ -63,6 +94,7 @@ allows.
 | --- | --- | --- |
 | Look | Colour scheme | *Light* (default) or *Dark*. |
 | Look | Arm state colours | *Green and red* (default): armed green, disarmed red. *Amber and grey*: armed amber, disarmed in the label colour. |
+| Look | Frames on tap areas | *On* (default) shows the radio's own frame, light blue in its default theme, around every place on the full screen that takes a press. *Off* covers it; the outlines Urban draws itself stay, the choice in force stays green, and a place reached with the rotary encoder still shows the radio's focus frame. |
 | Value Rows | Row 1 … Row 5 | The value each row of the right panel shows: cell voltage, voltage, headspeed, current, ESC temperature, MCU temperature, BEC voltage, power, throttle, fuel, capacity used, altitude, link quality, ESC load, ESC status, air rate, rate floor, or nothing. Defaults: cell voltage, headspeed, current, ESC temperature, BEC voltage. |
 | Value Rows | Units beside the values | *Off* (default) gives the width to the figures. |
 | Value Rows | Temperature colours | Colours the ESC and MCU temperature rows. *Off* (default); *Standard*: ESC amber from 90 °C and red from 110 °C, MCU from 75 °C and 90 °C; *Early*: each 10 °C lower. |
@@ -73,10 +105,17 @@ allows.
 | Top Bar | Colour the bars | *Always* (default) colours a good link green; *Only on warning* leaves it neutral until a bar drops to its warning step. |
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
+| Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Quick menu* (default), *Profile & Tuning*, *ELRS link page*, *RFSuite tool* or *Leave full screen*. |
+| Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *RFSuite tool*, TELE *Quick menu*. |
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the
 model — the cell count times the flight controller's minimum cell voltage — and the gauge, the
 voltage rows and the status line turn red while the main pack is lost.
+
+The radio draws the frame around every button a script creates, and a script can neither switch
+it off nor change its colour, so *Off* covers it: the button gets square corners and lines in the
+colour of the area lie over the frame.
 
 ## What it reads
 
@@ -104,8 +143,8 @@ sensor of that name and a declared name that is absent is still searched for.
   the flight record keeps no transmitter power.
 - **The arming-disable names cover bits 0 to 25**, named the same whatever MSP API version the
   flight controller runs.
-- **Only the menu button takes a press.** The gauge, the value rows, the link bars and the status
-  line open nothing.
+- **Only the menu and tool buttons, the profile row and the link bars take a press.** The gauge, the value
+  rows and the status line open nothing.
 - **A copy in the user folder draws with the shipped files**: its settings are its own, but its
   phase modules load `layout.lua` and `common.lua` from the shipped folder.
 - The *Transmitter power*, *TQ* and skipped-frame cells read `-` on a link that does not report

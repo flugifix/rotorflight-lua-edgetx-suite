@@ -70,6 +70,10 @@ L.DEFAULT_SCHEME = Common.DEFAULT_SCHEME
 local ON_OFF = { "on", "off" }
 
 L.SETTINGS = {
+  -- The firmware's own frame around every place on the full screen that takes a press -- the
+  -- menu and tool buttons, the profile row, the link bars, the buttons of the views. Off covers
+  -- it (Common.button); the outlines this theme draws itself stay.
+  { page = "look",   key = "tap_frames", values = ON_OFF,                      default = "on" },
   { page = "topbar", key = "clock",      values = { "date_time", "time" },     default = Common.CLOCK_MODE_DEFAULT },
   -- The link bars, one row each: the receiver's link quality, the transmitter's, and the signal
   -- strength as headroom above the air rate's sensitivity floor.
@@ -109,6 +113,7 @@ function L.settingsLabels()
              off = "@i18n(app.pages.flight_tuning_advanced_pid_controller.tbl_off)@" }
   end
   return {
+    tap_frames = { label = "@i18n(app.pages.settings_dashboard_settings.urban_tap_frames)@", values = onOff() },
     clock = { label = "@i18n(app.pages.settings_dashboard_settings.urban_clock)@",
               values = { date_time = "@i18n(app.pages.settings_dashboard_settings.urban_clock_date_time)@",
                          time = "@i18n(app.pages.settings_dashboard_settings.urban_clock_time)@" } },
@@ -155,9 +160,9 @@ local CARD_PAD = 3
 -- ---------------------------------------------------------------------------
 
 -- On the full screen surface the host hands the build a `ctx` (and only there), and a theme that
--- binds a press of its own gets no host controls over it. This theme binds exactly one: a small
--- boxed menu glyph at the left end of the top bar, before the clock, that opens the quick menu.
--- There is no close control -- a long press on RTN leaves full screen in the firmware, and
+-- binds a press of its own gets no host controls over it. This theme binds two small boxed glyphs
+-- at the left end of the top bar, before the clock: this one opens the quick menu, the one beside
+-- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves full screen in the firmware, and
 -- init.lua declares that (`fullscreenExit`), which is what the host's theme check reads. The
 -- page keys open the menu by the host's default.
 --
@@ -176,10 +181,7 @@ function L.menuControl(nodes, ctx, x, y, h)
   local boxH = math.max(8, h - 2)
   local boxW = boxH
   local bx, by = x, y + 1
-  nodes[#nodes + 1] = {
-    type = "button", x = bx, y = by, w = boxW, h = boxH, color = C.bg,
-    press = function() action("openView:menu") end
-  }
+  Common.button(nodes, bx, by, boxW, boxH, C.bg, function() action("openView:menu") end)
   local x1, y1 = bx + boxW - 1, by + boxH - 1
   local edges = {
     { { bx, by }, { x1, by } }, { { bx, y1 }, { x1, y1 } },
@@ -204,8 +206,134 @@ function L.menuControl(nodes, ctx, x, y, h)
   return boxW + 4
 end
 
+-- Whether the full screen build's ctx comes from a host with theme views -- the one that runs
+-- this theme's own views (init.lua `views`) and hands out `ctx.entry`. Only then does the flight
+-- view bind the two taps that open them; a host without them gets exactly the tree it always got.
+local function hasViews(ctx)
+  return type(ctx) == "table" and type(ctx.action) == "function" and type(ctx.entry) == "function"
+end
+L.hasViews = hasViews
+
+-- The second control of the top bar, beside the menu glyph and of its size and outline: it opens
+-- the suite's tool (`openTool`), on a host with theme views -- the host this theme's views run on,
+-- whose quick menu offers the tool as well. Returns the width it took, as L.menuControl does.
+--
+-- The host opens the tool only while the model is disarmed, and refuses the action while it is
+-- armed (widgets/dashboard/tool_host.lua, `request`), as its quick menu offers the tool only while
+-- disarmed. So the control says so: while armed, its outline and its glyph are drawn in the
+-- track colour, the colour of a row that is not available in this theme's views. The arm state
+-- is read per frame by one colour function every line of the control shares, rather than at
+-- build time: the render key does not carry it, so the flight view is not rebuilt on the arm
+-- edge (L.renderKey).
+--
+-- The glyph is four squares in a square, the picture of a set of tools; each square is a short
+-- line as thick as it is long.
+function L.toolControl(nodes, state, ctx, x, y, h)
+  if not hasViews(ctx) then return 0 end
+  local action = ctx.action
+  local ink = function()
+    if state.armed == true then return C.track end
+    return C.line
+  end
+  local boxH = math.max(8, h - 2)
+  local boxW = boxH
+  local bx, by = x, y + 1
+  Common.button(nodes, bx, by, boxW, boxH, C.bg, function() action("openTool") end)
+  local x1, y1 = bx + boxW - 1, by + boxH - 1
+  local edges = {
+    { { bx, by }, { x1, by } }, { { bx, y1 }, { x1, y1 } },
+    { { bx, by }, { bx, y1 } }, { { x1, by }, { x1, y1 } },
+  }
+  for i = 1, 4 do
+    nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = edges[i],
+      color = ink, thickness = 2 }
+  end
+  local s = math.max(2, math.floor(boxH * 0.22))
+  local gap = math.max(2, math.floor(boxH * 0.12))
+  local ox = bx + math.floor((boxW - 2 * s - gap) / 2)
+  local oy = by + math.floor((boxH - 2 * s - gap) / 2)
+  for i = 0, 1 do
+    for j = 0, 1 do
+      local cx = ox + i * (s + gap)
+      local cy = oy + j * (s + gap) + math.floor(s / 2)
+      nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
+        pts = { { cx, cy }, { cx + s, cy } }, color = ink, thickness = s }
+    end
+  end
+  return boxW + 4
+end
+
+-- A press over an area that is drawn anyway: a button in the panel's own colour, appended BEFORE
+-- what is drawn over it, which then has to be labels and lines -- a rectangle over a press takes
+-- the press away from it. EdgeTX draws every button with a frame of its own, which the pilot can
+-- have covered (Common.button).
+local function tapArea(nodes, x, y, w, h, press)
+  Common.button(nodes, x, y, w, h, C.bg, press)
+end
+
 -- ---------------------------------------------------------------------------
--- top bar: menu glyph, clock, link bars, TX battery pill
+-- the full screen surface: the keys
+-- ---------------------------------------------------------------------------
+
+-- What a key may do in full screen, as the pilot chooses it on the Keys settings page: a stored
+-- id and the host action it stands for. The settings page offers exactly these, so the two cannot
+-- drift apart. The battery picker is not among them: the host opens it while a pick is pending
+-- and at no other time. `suite_tool` is the suite's tool, which the host opens only while the
+-- model is disarmed: armed, the key does nothing.
+L.KEY_ACTIONS = {
+  { id = "none",       action = "none" },
+  { id = "menu",       action = "openView:menu" },
+  { id = "tools",      action = "openView:urban_menu" },
+  { id = "link",       action = "openView:urban_link" },
+  { id = "suite_tool", action = "openTool" },
+  { id = "exit",       action = "exitFullscreen" },
+}
+
+-- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, the theme's default
+-- and `host`, what the host does with the key when the theme binds nothing -- the page keys open
+-- the quick menu, MDL, SYS and TELE do nothing. The defaults are the host's answer for the page
+-- keys and MDL; SYS opens the suite's tool and TELE the quick menu, the two places a pilot on
+-- the full screen goes most.
+--
+-- Not rows of L.SETTINGS: those are what the drawing reads, and the page probe holds each of them
+-- to a change in the picture. A key binding draws nothing.
+L.KEYS = {
+  { key = "pageDown", pref = "key_page_down", default = "menu",       host = "menu" },
+  { key = "pageUp",   pref = "key_page_up",   default = "menu",       host = "menu" },
+  { key = "mdl",      pref = "key_mdl",       default = "none",       host = "none" },
+  { key = "sys",      pref = "key_sys",       default = "suite_tool", host = "none" },
+  { key = "tele",     pref = "key_tele",      default = "menu",       host = "none" },
+}
+
+local KEY_ACTION_IDS = {}
+local KEY_ACTION_BY_ID = {}
+for i = 1, #L.KEY_ACTIONS do
+  KEY_ACTION_IDS[i] = L.KEY_ACTIONS[i].id
+  KEY_ACTION_BY_ID[L.KEY_ACTIONS[i].id] = L.KEY_ACTIONS[i].action
+end
+L.KEY_ACTION_IDS = KEY_ACTION_IDS
+
+-- Fill `ctx.keys` from the pilot's choices, on a host with theme views. A key whose choice is what
+-- the host does with it anyway is left unbound, so the host's own answer stands. Every key is
+-- written on every build, an unbound one as nil: the host keeps one `ctx` for the whole visit to
+-- full screen, so a binding cleared on the page has to be cleared here as well. A build-time read
+-- like every other setting -- the host reloads the theme when its preferences change.
+function L.bindKeys(state, ctx)
+  if not hasViews(ctx) or type(ctx.keys) ~= "table" then return end
+  local keys = ctx.keys
+  for i = 1, #L.KEYS do
+    local entry = L.KEYS[i]
+    local id = Common.option(state, entry.pref, KEY_ACTION_IDS, entry.default)
+    if id == entry.host then
+      keys[entry.key] = nil
+    else
+      keys[entry.key] = KEY_ACTION_BY_ID[id]
+    end
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- top bar: menu and tool glyphs, clock, link bars, TX battery pill
 -- ---------------------------------------------------------------------------
 
 -- The radio battery is read at BUILD time, never in a closure: getValue is a sensor probe
@@ -260,7 +388,7 @@ local function rssiPercent(dbm, floor)
 end
 L.rssiPercent = rssiPercent
 
--- The top bar, left to right: the menu glyph (full screen only), the clock, the link bars
+-- The top bar, left to right: the menu and tool glyphs (full screen only), the clock, the link bars
 -- centred on the bar's midline, the radio battery pill at the right end.
 --
 -- `showLink` false draws the clock and the pill and nothing between them, whatever the pilot
@@ -274,6 +402,7 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   local quietBars = setting(state, "bar_colors") == "warn"
 
   local clockX = x + 1 + L.menuControl(nodes, ctx, x + 1, y, h)
+  clockX = clockX + L.toolControl(nodes, state, ctx, clockX, y, h)
 
   -- The clock, in the mode the pilot chose, and its width measured against THAT mode's own
   -- sample -- common.lua keeps the format and the sample in one entry.
@@ -360,6 +489,16 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   local outlined = barH >= 6
   local good = quietBars and C.neut or C.ok
 
+  -- In full screen, on a host with theme views, the cluster is the tap that opens the link view:
+  -- the bars are what that page shows in detail. Everything over the press is then a line rather
+  -- than a rectangle, in the same places and colours; the widget zone draws the rectangles it
+  -- always drew.
+  local asLines = hasViews(ctx)
+  if asLines then
+    local action = ctx.action
+    tapArea(nodes, barX - 2, topY - 1, barW + 4, slotH * n + 1, function() action("openView:urban_link") end)
+  end
+
   for i = 1, n do
     local read, warn, crit = bars[i].read, bars[i].warn, bars[i].crit
     local by = topY + (i - 1) * slotH
@@ -370,7 +509,9 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
       if v <= warn then return C.warn end
       return good
     end
-    if outlined then
+    if asLines then
+      L.barLines(nodes, barX, by, barW, barH, outlined, warn, crit, read, color)
+    elseif outlined then
       local fh, fwMax = barH - 2, barW - 2
       Common.rect(nodes, barX, by, barW, barH, C.frame, false, 2, 1)
       nodes[#nodes + 1] = {
@@ -402,6 +543,49 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   end
 end
 
+-- One link bar drawn in lines, for the full screen tap cluster above: the same track, fill,
+-- notches and outline as the rectangles, at the same coordinates. A line's `y` is its middle
+-- and its `h` its thickness; the fill is an `hline` whose reactive `size` is its length.
+local function vline(nodes, x, y1, y2, color, thickness)
+  nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
+    pts = { { x, y1 }, { x, y2 } }, color = color, thickness = thickness }
+end
+
+function L.barLines(nodes, barX, by, barW, barH, outlined, warn, crit, read, color)
+  local x0, fw, fh = barX, barW, barH
+  if outlined then x0, fw, fh = barX + 1, barW - 2, barH - 2 end
+  if not outlined then
+    nodes[#nodes + 1] = { type = "hline", x = barX, y = by + math.floor(barH / 2), w = barW, h = barH,
+      color = C.track }
+  end
+  nodes[#nodes + 1] = {
+    type = "hline", x = x0, y = (outlined and by + 1 or by) + math.floor(fh / 2), w = 1, h = fh,
+    color = color,
+    size = function()
+      local v = read() or 0
+      if v < 0 then v = 0 elseif v > 100 then v = 100 end
+      return math.floor(fw * v / 100), fh
+    end
+  }
+  if outlined then
+    local nh = math.max(2, math.floor(barH * 0.45))
+    vline(nodes, barX + math.floor(barW * crit / 100) + 1, by + barH - nh, by + barH - 1, C.tick, 2)
+    vline(nodes, barX + math.floor(barW * warn / 100) + 1, by + barH - nh, by + barH - 1, C.tick, 2)
+    local x1, y1 = barX + barW - 1, by + barH - 1
+    local edges = {
+      { { barX, by }, { x1, by } }, { { barX, y1 }, { x1, y1 } },
+      { { barX, by }, { barX, y1 } }, { { x1, by }, { x1, y1 } },
+    }
+    for i = 1, 4 do
+      nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = edges[i],
+        color = C.frame, thickness = 1 }
+    end
+  else
+    vline(nodes, barX + math.floor(barW * crit / 100), by, by + barH - 1, C.tick, 1)
+    vline(nodes, barX + math.floor(barW * warn / 100), by, by + barH - 1, C.tick, 1)
+  end
+end
+
 -- Whether the host has seen a second receiver antenna: its `link_diversity` reading, which it
 -- latches for the link. A build-time reading, and a term of the render key, so the fourth bar
 -- appears with a rebuild once the host has seen the second antenna.
@@ -415,7 +599,7 @@ end
 -- left panel: model, totals, governor and throttle, status line, profiles
 -- ---------------------------------------------------------------------------
 
-function L.statusPanel(nodes, state, x, y, w, h, font, fontH)
+function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
   local pad = CARD_PAD
   local innerW = math.max(20, w - 2 * pad)
 
@@ -507,6 +691,13 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH)
   local gridFont = Common.selectFont(hGrid - fontH, thirdLastW, "9999")
   local gridH = Common.measure(gridFont, "9999")
   local gridPad = math.max(0, math.floor((hGrid - fontH - gridH) / 2))
+  -- In full screen, on a host with theme views, the profile row is the tap that opens this
+  -- theme's own menu -- the battery profiles and the tuning surface -- which changes what this row
+  -- shows. Drawn before the row's labels, which lie over it.
+  if hasViews(ctx) then
+    local action = ctx.action
+    tapArea(nodes, x + pad, y + yGrid, innerW, hGrid, function() action("openView:urban_menu") end)
+  end
   Common.stacked(nodes, x + pad, y + yGrid, thirdW, gridPad, T.profile,
     Common.getter(function() return num(state.profile) end, Common.integer), font, fontH, gridFont, gridH)
   Common.stacked(nodes, x + pad + thirdW, y + yGrid, thirdW, gridPad, T.rate,
@@ -1005,7 +1196,7 @@ end
 -- uncapped floor gives the side panels a negative width.
 --
 -- Both bars are 7.5 % of the height (at least 18 px), their boxes two pixels shorter, and
--- nothing is reserved for controls: the one control this theme draws sits inside the top bar.
+-- nothing is reserved for controls: the two controls this theme draws sit inside the top bar.
 function L.buildFlight(zone, state, ctx)
   local nodes = {}
   local x0, y0, w, h = zone.x or 0, zone.y or 0, zone.w or 0, zone.h or 0
@@ -1014,7 +1205,9 @@ function L.buildFlight(zone, state, ctx)
   -- a closure alike, is then the one the pilot chose. It is a build-time reading and needs no
   -- term in the render key -- the host reloads the theme when its preferences change.
   Common.applyScheme((state.themeConfig or {}).scheme)
+  Common.applyFrames(state.themeConfig)
   Common.beginBuild(zone)
+  L.bindKeys(state, ctx)
 
   local barH = math.max(18, math.floor(h * 0.075))
   local boxH = math.max(1, barH - 2)
@@ -1037,7 +1230,7 @@ function L.buildFlight(zone, state, ctx)
   L.topBar(nodes, state, x0, y0 + OUTER_PAD, w - 4, boxH, font, fontH, ctx)
 
   if leftW > 0 and contentH > 0 then
-    L.statusPanel(nodes, state, x0 + OUTER_PAD, yContent, leftW, contentH, font, fontH)
+    L.statusPanel(nodes, state, x0 + OUTER_PAD, yContent, leftW, contentH, font, fontH, ctx)
   end
   if contentH > 0 then
     Common.fuelGauge(nodes, state, fuelX, yContent, fuelW, contentH)
@@ -1232,7 +1425,9 @@ function L.buildStats(zone, state, ctx)
   local x0, y0, w, h = zone.x or 0, zone.y or 0, zone.w or 0, zone.h or 0
   if w <= 0 or h <= 0 then return nodes end
   Common.applyScheme((state.themeConfig or {}).scheme)
+  Common.applyFrames(state.themeConfig)
   Common.beginBuild(zone)
+  L.bindKeys(state, ctx)
 
   -- The bars as the flight view has them, so the two screens share their top and their foot
   -- (see L.buildFlight). The table and the line beneath it are set in the same face.

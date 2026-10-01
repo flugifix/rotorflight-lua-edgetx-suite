@@ -147,6 +147,22 @@ M.T = {
   arm_flag_23 = "@i18n(app.modules.fblstatus.arming_disable_flag_23)@",
   arm_flag_24 = "@i18n(app.modules.fblstatus.arming_disable_flag_24)@",
   arm_flag_25 = "@i18n(app.modules.fblstatus.arming_disable_flag_25)@",
+  -- The full screen views (menuview, pickview, toolsview, linkview): their titles, what the
+  -- theme's own menu says about the work it ran, and the link view's row names.
+  view_menu = "@i18n(widgets.dashboard.urban_quick_settings)@",
+  view_pick = "@i18n(widgets.dashboard.urban_which_battery)@",
+  view_tools = "@i18n(widgets.dashboard.urban_profile_tuning)@",
+  blackbox = "@i18n(app.modules.blackbox.name)@",
+  active = "@i18n(widgets.dashboard.urban_active)@",
+  unavailable = "@i18n(widgets.dashboard.urban_not_available)@",
+  run_busy = "@i18n(widgets.dashboard.urban_sending)@",
+  run_ok = "@i18n(widgets.dashboard.urban_done)@",
+  run_failed = "@i18n(widgets.dashboard.urban_failed)@",
+  link_floor = "@i18n(widgets.dashboard.urban_rate_floor)@",
+  -- The link view's title is the link protocol's name, and its rows carry short sensor names, the
+  -- same in every language -- as `tpwr` and `skp` above.
+  view_link = "ELRS",
+  link_rq = "RQ", link_tq = "TQ", link_rss1 = "1RSS", link_rss2 = "2RSS",
 }
 
 -- The governor states' keys, built once: M.governorText and M.governorSample read them every
@@ -512,6 +528,45 @@ end
 
 function M.hline(nodes, x, y, w, color)
   M.rect(nodes, x, y, w, 1, color or M.C.line, true)
+end
+
+-- Whether the firmware's own frame shows around this theme's buttons, as the pilot chose it on the
+-- Look page (`tap_frames`, layout.lua L.SETTINGS). Set at the start of every build, as the colour
+-- scheme is, because one module serves the flight view, the statistics view and every view.
+M.tapFrames = true
+
+function M.applyFrames(themeConfig)
+  M.tapFrames = not (type(themeConfig) == "table" and themeConfig.tap_frames == "off")
+end
+
+-- A press: a `button` the size of the area, filled in `fill`. Everything the caller draws over it
+-- has to be labels and lines -- on the full screen surface a rectangle takes a press and hands it
+-- to its parent.
+--
+-- EdgeTX draws every button with a frame of its own: a 2 px border in the radio theme's secondary
+-- colour, the light blue of the default theme, with rounded corners
+-- (radio/src/gui/colorlcd/libui/button.cpp, etx_btn_style; etx_lv_theme.cpp, etx_std_settings,
+-- PAD_BORDER). A Lua button takes no border parameter, its `color` is the fill alone, and no
+-- other Lua object takes a press (radio/src/lua/lua_lvgl_widget.cpp, LvglWidgetTextButtonBase).
+-- So the frame cannot be switched off from here, only covered: with `tapFrames` off the button
+-- gets square corners (`cornerRadius`, in every firmware with LVGL for Lua) and four lines in its
+-- fill colour lie exactly over the border. A 2 px line reaches one pixel above and left of its
+-- coordinate and stops a pixel short of its end point, which is what the coordinates below allow
+-- for. The focus outline the firmware draws OUTSIDE a focused button is not covered, so a button
+-- reached with the rotary encoder still shows that it is.
+function M.button(nodes, x, y, w, h, fill, press)
+  local node = { type = "button", x = x, y = y, w = w, h = h, color = fill, press = press }
+  nodes[#nodes + 1] = node
+  if M.tapFrames then return end
+  node.cornerRadius = 0
+  local x1, y1 = x + w - 1, y + h - 1
+  local edges = {
+    { { x, y + 1 }, { x + w, y + 1 } }, { { x, y1 }, { x + w, y1 } },
+    { { x + 1, y }, { x + 1, y + h } }, { { x1, y }, { x1, y + h } },
+  }
+  for i = 1, 4 do
+    nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = edges[i], color = fill, thickness = 2 }
+  end
 end
 
 -- A label above a value, both centred in their column -- the shape the flight totals and
