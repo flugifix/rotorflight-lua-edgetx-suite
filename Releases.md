@@ -494,6 +494,9 @@
   - #424 limits the first searches after `Sensors.reset()` to four per pass. The dashboard widget asks for `armflags` after five other sources, so after every reset it was held back for one read and the widget knew the arming state about half a second later than before. `armflags` is now exempt from that limit: it is the one source whose absence reads as "not armed", and its list is five names long.
   - A long press on RTN that leaves fullscreen on a pass that waits for a theme reload now drops the tuning surface and the battery picker on that pass rather than the next one.
   - `docs/reference/sensor-selection.md` described the widget and the configuration tool together; the tool forgets its sensor choice on every audio tick while its connection is not ready, and now has a bullet of its own.
+- **Five help texts are short again, one line per setting (`i18n/en.lua`, `i18n/de.lua`, `app/pages/settings/dashboard/theme/help.lua`, `app/pages/settings/dashboard/overrides/help.lua`, `app/pages/settings/dashboard/settings/help.lua`, `docs/audio/events.md`)**:
+  - The `?` sheets of *Audio > Events > Voltage* and *Link*, and of *Dashboard > Design*, *Per-Model Settings* and a theme's page under *Dashboard > Settings*, were single paragraphs of up to 1332 characters. At 480x320 the longest ran behind the Close button.
+  - Each now names the settings in the order the page shows them, one line each, starting with the label as it reads on screen. The longer explanations were already on the documentation pages (`docs/audio/events.md`, `docs/pages/settings/dashboard/`). `docs/audio/events.md` gains the one fact only the old help text had: a receiver that reports no link quality leaves the link alert silent.
 
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:

@@ -96,7 +96,7 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
-| Link alert | `lq_alert` | Off | Radio | Spoken warning when RC link quality drops below defined levels. |
+| Link alert | `lq_alert` | Off | Radio | Spoken warning when RC link quality drops below defined levels. A receiver that reports no link quality stays silent: the value that arrives in its place is a signal strength in dBm, not a percentage. |
 | Warning level | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical level | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
 | Telemetry lost | `telemetry_lost` | Off | Radio | Announces that the model was lost while it was armed, and announces it again when it answers. |
