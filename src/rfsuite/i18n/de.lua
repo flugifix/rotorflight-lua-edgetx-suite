@@ -2875,7 +2875,15 @@ return {
       urban_headspeed_profile = "Drehzahl P",
       urban_gov_throttle_hold = "Gassperre",
       urban_gov_fallback = "Fallback",
-      urban_gov_unknown = "Gov. deaktiviert"
+      urban_gov_unknown = "Gov. deaktiviert",
+      urban_quick_settings = "Schnelleinstellungen",
+      urban_which_battery = "Welcher Akku?",
+      urban_profile_tuning = "Profil & Tuning",
+      urban_active = "Aktiv",
+      urban_not_available = "Nicht verfügbar",
+      urban_sending = "Wird gesendet...",
+      urban_done = "Fertig",
+      urban_failed = "Fehlgeschlagen"
     },
     escstatus = {
       ok = "OK",

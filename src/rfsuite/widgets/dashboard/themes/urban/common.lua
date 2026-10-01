@@ -149,19 +149,20 @@ M.T = {
   arm_flag_25 = "@i18n(app.modules.fblstatus.arming_disable_flag_25)@",
   -- The full screen views (menuview, pickview, toolsview, linkview): their titles, what the
   -- theme's own menu says about the work it ran, and the link view's row names.
-  view_menu = "Quick Settings",
-  view_pick = "Which battery?",
-  view_tools = "Profile & Tuning",
+  view_menu = "@i18n(widgets.dashboard.urban_quick_settings)@",
+  view_pick = "@i18n(widgets.dashboard.urban_which_battery)@",
+  view_tools = "@i18n(widgets.dashboard.urban_profile_tuning)@",
+  blackbox = "@i18n(app.modules.blackbox.name)@",
+  active = "@i18n(widgets.dashboard.urban_active)@",
+  unavailable = "@i18n(widgets.dashboard.urban_not_available)@",
+  run_busy = "@i18n(widgets.dashboard.urban_sending)@",
+  run_ok = "@i18n(widgets.dashboard.urban_done)@",
+  run_failed = "@i18n(widgets.dashboard.urban_failed)@",
+  link_floor = "@i18n(widgets.dashboard.urban_rate_floor)@",
+  -- The link view's title is the link protocol's name, and its rows are named as the radio names
+  -- those sensors, the same in every language -- as `tpwr` and `skp` above.
   view_link = "ELRS",
-  blackbox = "Blackbox",
-  active = "Active",
-  unavailable = "Not available",
-  run_busy = "Sending...",
-  run_ok = "Done",
-  run_failed = "Failed",
   link_rq = "RQ", link_tq = "TQ", link_rss1 = "1RSS", link_rss2 = "2RSS",
-  link_floor = "Rate floor",
-  set_link_switch = "Link view switch",
 }
 
 -- The governor states' keys, built once: M.governorText and M.governorSample read them every

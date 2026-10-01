@@ -2881,7 +2881,17 @@ return {
       urban_headspeed_profile = "Headspeed P",
       urban_gov_throttle_hold = "Throttle Hold",
       urban_gov_fallback = "Fallback",
-      urban_gov_unknown = "Gov. Disabled"
+      urban_gov_unknown = "Gov. Disabled",
+      -- The titles of the Urban theme's full screen pages, and what its own menu says about a
+      -- change it sent.
+      urban_quick_settings = "Quick Settings",
+      urban_which_battery = "Which battery?",
+      urban_profile_tuning = "Profile & Tuning",
+      urban_active = "Active",
+      urban_not_available = "Not available",
+      urban_sending = "Sending...",
+      urban_done = "Done",
+      urban_failed = "Failed"
     },
     escstatus = {
       ok = "OK",
