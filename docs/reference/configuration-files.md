@@ -86,6 +86,25 @@ its built-in defaults for that file, writes the reason and the line number to th
 next save replaces the file with a correct one. The one thing to know is that the settings that
 were in it are then gone — so keep a copy before editing.
 
+### The developer section
+
+`preferences.lua` may carry a `developer` section that no page writes. Its values are put there
+by hand, and a save keeps whatever the section holds.
+
+```lua
+  developer = {
+    precompile = false,
+  },
+```
+
+- **`precompile`** — whether the configuration tool compiles the installed suite while its
+  start screen is shown. Absent or `true` is the normal behaviour: after an install or an update
+  the start screen reads *Preparing suite* until every file has its compiled copy beside it, so
+  no page pays for that later. `false` skips this: the start screen waits for the connection
+  only, and each file is compiled the first time a page needs it, which makes that first opening
+  slower. It is meant for automated test runs on a card that starts without compiled files every
+  time; on a radio there is no reason to set it.
+
 ## Coming from an earlier release
 
 Earlier releases kept the same settings in `preferences.ini` and `<mcu id>.ini`, and the model
