@@ -103,12 +103,17 @@ function M.build(children, zone, state, ctx)
   end), g.font, C.label, LEFT)
   UD.hline(children, x, footY - g.gap, w)
 
-  -- The rows, each a name, a bar where the reading has one, and the figure.
+  -- The rows, each a name, a bar where the reading has one, and the figure -- the flight view's
+  -- value rows in one line: the name in its face and the label colour, the figure as large as the
+  -- row takes, picked by the rule its value panel uses (layout.lua, L.valuePanel: the row height
+  -- less 2 px). The name column is as wide as the widest name drawn.
   local rowsH = footY - g.gap - top - g.gap
   local rowH = math.floor(rowsH / #rows)
-  local font = UD.selectFont(math.max(8, rowH - 4), nil, "1RSS")
-  local fontH = UD.measure(font, "1RSS")
-  local labelW = UD.textWidth(font, "1RSS") + g.pad
+  local font = UD.selectFont(math.max(8, rowH - 2), math.floor(w / 2), "-108dBm")
+  local fontH = UD.measure(font, "-108dBm")
+  local labelW = 0
+  for i = 1, #rows do labelW = math.max(labelW, UD.textWidth(g.font, rows[i].label)) end
+  labelW = labelW + g.pad
   local valueW = UD.textWidth(font, "-108dBm") + g.pad
   local barX = x + labelW
   local barW = math.max(20, w - labelW - valueW - g.pad)
@@ -117,7 +122,7 @@ function M.build(children, zone, state, ctx)
     local row = rows[i]
     local ry = top + (i - 1) * rowH
     local ty = ry + math.floor((rowH - fontH) / 2)
-    UD.label(children, x, ty, labelW, fontH, row.label, font, C.text, LEFT)
+    UD.label(children, x, ry + math.floor((rowH - g.fontH) / 2), labelW, g.fontH, row.label, g.font, C.label, LEFT)
     if row.bar ~= nil then
       local read, warn, crit = row.bar, row.warn, row.crit
       local by = ry + math.floor((rowH - barH) / 2)
