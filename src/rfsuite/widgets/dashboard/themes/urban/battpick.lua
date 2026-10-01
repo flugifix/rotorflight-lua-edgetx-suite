@@ -41,7 +41,6 @@ local K = requireModule("widgets/dashboard/themes/urban/viewkit.lua")
 if not UD or not K or type(K.geometry) ~= "function" then return {} end
 
 local M = {}
-local C = UD.C
 local num = UD.num
 
 local function exitFullScreen()
@@ -86,76 +85,47 @@ end
 -- `selected`, `press`) and NO BATTERY (`label`, `selected`, `press`). M.build below fills it
 -- from the widget for the host hook; pickview.lua fills it from the host's `battery_pick`
 -- record, so the two pickers are one drawing.
+--
+-- The header is the one every view of this theme draws (viewkit.lua, K.header), from the
+-- screen's top left corner. The packs stand in two columns from two packs up, each a cell with
+-- the pack's name one face above the flight view's and its capacity and profile in that face.
+-- NO BATTERY always gets a full-width row of its own at the foot, reserved before the pack grid
+-- is measured so it can never be the entry that falls off the bottom.
 function M.layout(children, dW, dH, spec)
   local g = K.geometry({ x = 0, y = 0, w = dW, h = dH })
   if g == nil then return children end
   local packs = spec.packs or {}
+  local contentY = K.header(children, g, spec.title, spec.closePress)
 
-  -- The header is the one every view of this theme draws (viewkit.lua, K.header), from the
-  -- screen's top left corner.
-  local headerBottom = K.header(children, g, spec.title, spec.closePress)
-
-  -- Two layout profiles, as the stock fullscreen menu has: 800x480 and 480x272 are the two
-  -- screens this is ever built on. Only the paddings are fixed here -- the text heights come
-  -- from the theme's own font picker, so a firmware without XLSIZE still lands on a face
-  -- that fits.
-  local isLarge = dH > 350
-  local pad, gap, textPad = g.pad, g.gap, g.textPad
-
-  -- UltiDash's own rule for its picker: one column below four packs, two from four up.
-  -- NO BATTERY always gets a full-width row of its own at the foot, reserved before the
-  -- pack grid is measured so it can never be the entry that falls off the bottom.
-  local cols = (#packs >= 4) and 2 or 1
-  local btnW = math.floor((dW - pad * (cols + 1)) / cols)
-  local fullW = dW - 2 * pad
+  local cols = (#packs >= 2) and 2 or 1
+  local fullW = dW - 2 * g.pad
+  local btnW = math.floor((fullW - (cols - 1) * g.gap) / cols)
   if btnW < 20 then return children end
-
-  local contentY = headerBottom
-  local contentH = dH - contentY - pad
+  local contentH = dH - contentY - g.pad
   if contentH < 20 then return children end
 
-  local nameFont = UD.selectFont(isLarge and 26 or 14, btnW - 2 * textPad, "MMMMMMMMMMMM")
-  local nameH = UD.measure(nameFont, "Ag")
-  local subFont = UD.selectFont(isLarge and 19 or 11, btnW - 2 * textPad, "8888 mAh  Profile 6")
-  local subH = UD.measure(subFont, "Ag")
-  local minBtnH = nameH + subH + 2 * textPad
+  local nameFont = K.stepFace(g.font, 1)
+  local f = { name = nameFont, nameH = UD.measure(nameFont, "Ag"), sub = g.font, subH = g.fontH }
+  -- A cell is never lower than the close box, so every target on the picker is at least its size.
+  local minBtnH = math.max(f.nameH + f.subH + 2 * g.textPad, g.closeSize)
 
   local noneH = math.min(minBtnH, contentH)
   local noneY = contentY + contentH - noneH
-  local gridH = contentH - noneH - gap
+  local gridH = contentH - noneH - g.gap
 
   -- How many pack rows the remaining height takes. Candidates past `rows * cols` are NOT
   -- drawn -- the grid is cut, not scrolled, and the pilot reaches the rest through the
-  -- flight log page. Registry order decides who makes the cut. How many that is depends on
-  -- the face the firmware's font picker lands on and has not been measured on a radio; on
-  -- the desktop probe's stub metrics it is six rows, so twelve packs in two columns.
+  -- flight log page. Registry order decides who makes the cut: three rows, six packs, on the
+  -- 800x480, 480x320 and 480x272 screens.
   local rowsFit = 0
-  if gridH >= minBtnH then rowsFit = math.floor((gridH + gap) / (minBtnH + gap)) end
+  if gridH >= minBtnH then rowsFit = math.floor((gridH + g.gap) / (minBtnH + g.gap)) end
   local rows = math.min(math.ceil(#packs / cols), rowsFit)
 
   local btnH = minBtnH
   if rows > 0 then
-    local fair = math.floor((gridH - (rows - 1) * gap) / rows)
-    -- Capped, or two packs on an 800x480 screen become slabs half the height of the picker.
-    btnH = math.max(minBtnH, math.min(fair, math.floor(minBtnH * 3 / 2)))
-  end
-
-  local function entryButton(x, y, w, h, name, sub, selected, press)
-    children[#children + 1] = {
-      type = "button", x = x, y = y, w = w, h = h,
-      color = selected and C.ok or C.track, press = press
-    }
-    local ink = selected and C.ink or C.text
-    local subInk = selected and C.ink or C.label
-    local inner = w - 2 * textPad
-    local blockH = nameH + ((sub ~= "") and subH or 0)
-    local top = y + math.max(0, math.floor((h - blockH) / 2))
-    UD.label(children, x + textPad, top, inner, nameH,
-      UD.fit(nameFont, name, inner), nameFont, ink, CENTER)
-    if sub ~= "" then
-      UD.label(children, x + textPad, top + nameH, inner, subH,
-        UD.fit(subFont, sub, inner), subFont, subInk, CENTER)
-    end
+    local fair = math.floor((gridH - (rows - 1) * g.gap) / rows)
+    -- Capped, or two packs become slabs as tall as the picker.
+    btnH = math.max(minBtnH, math.min(fair, 2 * minBtnH))
   end
 
   for i = 1, rows * cols do
@@ -163,13 +133,13 @@ function M.layout(children, dW, dH, spec)
     if type(pack) ~= "table" then break end
     local row = math.floor((i - 1) / cols)
     local col = (i - 1) % cols
-    entryButton(pad + col * (btnW + pad), contentY + row * (btnH + gap), btnW, btnH,
+    K.button(children, g, f, g.pad + col * (btnW + g.gap), contentY + row * (btnH + g.gap), btnW, btnH,
       pack.name, pack.sub, pack.selected, pack.press)
   end
 
   local none = spec.none
   if none ~= nil then
-    entryButton(pad, noneY, fullW, noneH, none.label, "", none.selected, none.press)
+    K.button(children, g, f, g.pad, noneY, fullW, noneH, none.label, nil, none.selected, none.press)
   end
 
   return children
