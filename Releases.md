@@ -494,6 +494,9 @@
   - #424 limits the first searches after `Sensors.reset()` to four per pass. The dashboard widget asks for `armflags` after five other sources, so after every reset it was held back for one read and the widget knew the arming state about half a second later than before. `armflags` is now exempt from that limit: it is the one source whose absence reads as "not armed", and its list is five names long.
   - A long press on RTN that leaves fullscreen on a pass that waits for a theme reload now drops the tuning surface and the battery picker on that pass rather than the next one.
   - `docs/reference/sensor-selection.md` described the widget and the configuration tool together; the tool forgets its sensor choice on every audio tick while its connection is not ready, and now has a bullet of its own.
+- **Setup > Telemetry opens again on a second visit (`app/pages/setup/telemetry/page.lua`) (fixes #405)**:
+  - Leaving the page clears its runtime, while the page module stays in the page cache. On the next visit `ensureDeps` recreated the runtime as an empty table rather than as the page's own, so `activeGetters` was missing and the build raised at `getActiveGetter`. The page showed the page-build error screen instead of the sensor list, with Save, Reload and the star disabled. That happened on every visit for as long as the module stayed cached.
+  - `ensureDeps` now creates the runtime through `ensureRuntime()`, the page's own constructor, so a second visit builds the same page as the first.
 
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:
