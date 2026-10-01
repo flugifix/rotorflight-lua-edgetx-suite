@@ -59,8 +59,9 @@ allows.
 
 What the page keys, MDL, SYS and TELE do in full screen is chosen on the *Keys* page. Left at
 their defaults, the page keys open the quick menu and MDL, SYS and TELE do nothing; outside full
-screen MDL, SYS and TELE open the radio's own menus as always. A radio without one of these keys
-simply never uses its setting.
+screen MDL, SYS and TELE open the radio's own menus as always. A key set to open a page closes
+that page again when pressed while it is showing. A radio without one of these keys simply never
+uses its setting.
 
 ## Settings
 
