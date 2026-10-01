@@ -160,7 +160,7 @@ local function triggerLiveWrite()
 
   if not queue:isProcessed() then return end
 
-  if not ui.apiData.MIXER_CONFIG then return end
+  if not M.canSave() or not ui.apiData.MIXER_CONFIG then return end
 
   ui.apiData.MIXER_CONFIG.swash_trim_0 = ui.config.swash_trim_0
   ui.apiData.MIXER_CONFIG.swash_trim_1 = ui.config.swash_trim_1
@@ -181,6 +181,7 @@ end
 
 local function queueTrimsRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
+  ui.runtime.readComplete = false
   if not MspRuntime or not MixerConfigApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -205,6 +206,7 @@ local function queueTrimsRead(isAutoReload)
     simulatorResponse = MixerConfigApi.simulatorResponse,
     processReply = function(self, buf)
       local parsed = MixerConfigApi.parse(buf)
+      if type(parsed) ~= "table" then return Common.failPageRead(ui) end
       if parsed then
         ui.apiData.MIXER_CONFIG = parsed
         ui.config.tail_rotor_mode = parsed.tail_rotor_mode
@@ -217,6 +219,7 @@ local function queueTrimsRead(isAutoReload)
       saveToSession()
 
       ui.runtime.readPending = false
+      ui.runtime.readComplete = true
       ui.loading = false
       ui.dirty = false
       ui.progress = 100
@@ -247,7 +250,7 @@ local function queueTrimsWrite()
     return false, "msp_queue_unavailable"
   end
 
-  if not ui.apiData.MIXER_CONFIG then
+  if not M.canSave() or not ui.apiData.MIXER_CONFIG then
     return false, "loaded_data_missing"
   end
 
@@ -328,6 +331,15 @@ function M.getHeaderActions()
     star = true,
     menu = true
   }
+end
+
+-- The page is kept between visits and loadFromSession() puts the last record read back into
+-- ui.apiData before this visit's read is even queued, so "a MIXER_CONFIG is there" says nothing
+-- about this visit. ui.runtime is dropped by resetPageState() on close, which makes this flag
+-- the visit's own: set only by a read that parsed, cleared when a read starts.
+-- The live write while the override is on is held back by it too: it sends the same whole record.
+function M.canSave()
+  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
 end
 
 function M.build(ctx)
