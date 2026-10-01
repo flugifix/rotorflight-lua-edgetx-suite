@@ -7,10 +7,11 @@ return function(ctx)
     or "Copy settings between profiles."
   local p2 = i18n and i18n.t and i18n.t("app.pages.tools_copy_profiles.help_p2")
     or "Select the type (PID or Rate) and the source/destination profiles."
-  local p3 = i18n and i18n.t and i18n.t("app.pages.tools_copy_profiles.help_p3")
-    or "SAVE asks which profile is about to be overwritten: the destination keeps none of "
-      .. "its own settings afterwards and there is no undo. Only the profiles the flight "
-      .. "controller reports are offered."
+  -- Joined in a local of its own, for the reason given in settings/general/help.lua.
+  local p3Fallback = "SAVE asks which profile is about to be overwritten: the destination keeps none of "
+    .. "its own settings afterwards and there is no undo. Only the profiles the flight "
+    .. "controller reports are offered."
+  local p3 = i18n and i18n.t and i18n.t("app.pages.tools_copy_profiles.help_p3") or p3Fallback
 
   return {
     title = title,
