@@ -517,6 +517,18 @@ local function unitCelsius()
   return 0
 end
 
+-- A temperature as it is spoken: in Fahrenheit where Settings > Localization says so, the unit
+-- the dashboard shows it in. The reading comes in Celsius, as the flight controller reports it,
+-- and the thresholds are stored and compared in Celsius as well; only the spoken number is
+-- converted. Without the firmware's Fahrenheit unit it stays Celsius, so number and unit agree.
+local function spokenTemperature(self, celsius)
+  local localizations = self and self.preferences and self.preferences.localizations
+  if tonumber(localizations and localizations.temperature_unit) == 1 and type(UNIT_FAHRENHEIT) == "number" then
+    return math.floor(celsius * 9 / 5 + 32 + 0.5), UNIT_FAHRENHEIT
+  end
+  return math.floor(celsius + 0.5), unitCelsius()
+end
+
 local function unitVolts()
   if type(UNIT_VOLTS) == "number" then return UNIT_VOLTS end
   return 0
@@ -727,6 +739,15 @@ local function resolveSmartfuelModel(self)
   return isElectric, modelType, cellCount, hasCapacity
 end
 
+-- Whether the battery configuration has been read from the flight controller. A read always
+-- carries batteryCellCount (0 on a board without a battery); the battery and sources pages may
+-- store an empty table before it arrives, which decides nothing.
+local function batteryConfigRead()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+  return type(batteryConfig) == "table" and batteryConfig.batteryCellCount ~= nil
+end
+
 local function getModelName()
   if type(model) ~= "table" or type(model.getInfo) ~= "function" then
     return nil
@@ -834,14 +855,21 @@ local function announceArmEvent(self, opts)
     return
   end
 
-  audioState.lastValues.arming_flags = value
   if not audioState.initialized then
+    audioState.lastValues.arming_flags = value
     return
   end
 
+  -- Not while the previous file's cooldown runs: tryPlayEventFile would refuse the file, and a
+  -- value recorded here is never tried again. Left unrecorded, the next pass announces it.
+  local now = nowSeconds()
+  if now < (audioState.nextAllowedAt or 0) then
+    return
+  end
+
+  audioState.lastValues.arming_flags = value
   local file = ARM_FILE_MAP[value]
   if type(file) ~= "string" then return end
-  local now = nowSeconds()
   tryPlayEventFile(audioState, now, "evt/" .. file, opts)
 end
 
@@ -870,6 +898,11 @@ local function announceGovernorEvent(self, events, opts)
     return false
   end
   if now - (tonumber(audioState.governorPendingSince) or now) < GOVERNOR_HOLD_SECONDS then
+    return false
+  end
+  -- The same for a file still in its cooldown -- most often the arm announcement of this very
+  -- pass, since a spool-up follows the arm. The candidate stays pending for the next pass.
+  if now < (audioState.nextAllowedAt or 0) then
     return false
   end
 
@@ -1549,7 +1582,8 @@ function Audio.process(self, opts)
       if alertMaySpeak(audioState, events, "mcu_temperature", now) then
         if tryPlayEventFile(audioState, now, "stat/alerts/mcu.wav", opts) then
           if type(playNumber) == "function" then
-            local ok, err = pcall(playNumber, math.floor(mcuTemp + 0.5), unitCelsius(), audio_volume)
+            local spoken, unit = spokenTemperature(self, mcuTemp)
+            local ok, err = pcall(playNumber, spoken, unit, audio_volume)
             if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
           end
           alertSpoken(audioState, events, "mcu_temperature", now)
@@ -1674,8 +1708,22 @@ function Audio.process(self, opts)
       end
 
       local targetSeconds = tonumber(batteryPrefs and batteryPrefs.flighttime) or 0
-      if targetSeconds > 0 then
-        local elapsed = tonumber(self.state and self.state.flightSeconds)
+      -- The dashboard hands over its flight record (tasks/events/telemetry/flight_record.lua),
+      -- and that record is the clock this callout reads. `armed` above can come from a telemetry
+      -- read that saw the ARM sensor before the record's own arm edge, and the record's copy in
+      -- `flightSeconds` is refreshed on telemetry reads only; in between, that copy still holds
+      -- the previous flight's duration. So with a record, nothing is judged (and nothing reset)
+      -- until it is open, and its seconds are read live.
+      local record = self.state and self.state.flight
+      if type(record) ~= "table" then record = nil end
+      local recordOpen = record == nil or record.armed == true
+      if targetSeconds > 0 and recordOpen then
+        local elapsed
+        if record then
+          elapsed = tonumber(record.seconds)
+        else
+          elapsed = tonumber(self.state and self.state.flightSeconds)
+        end
         if type(elapsed) ~= "number" then
           if type(audioState.flightTimerStartAt) ~= "number" then
             audioState.flightTimerStartAt = now
@@ -1698,7 +1746,7 @@ function Audio.process(self, opts)
         else
           audioState.flightTimerTriggered = false
         end
-      else
+      elseif targetSeconds <= 0 then
         audioState.flightTimerTriggered = false
       end
     else
@@ -1837,10 +1885,29 @@ function Audio.process(self, opts)
         end
 
         if isReady and now >= (audioState.nextAllowedAt or 0) then
-          local isElectricModel = resolveSmartfuelModel(self)
+          local isElectricModel, modelType = resolveSmartfuelModel(self)
           local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
-          if tryPlayEventFile(audioState, now, calloutSound, opts) then
-            if type(playNumber) == "function" then
+          -- A sound pack without the file counts as announced once the choice of file can no
+          -- longer change: the model type is set explicitly, the battery configuration has been
+          -- read, or the pack carries neither file. Until then a model of undecided type may still
+          -- turn out to need the other file, so it is tried again as before. Checked only when the
+          -- file is missing. resolveEventPath caches its misses for as long as this module is
+          -- loaded, so no later pass has anything to play either; without the latch this block
+          -- would run again on every audio pass and log two warnings each time. Nothing clears
+          -- resolvedEventPaths, not a reconnect and not a change of language or sound pack, so a
+          -- file added to the card later is not found until the script is loaded again. The latch
+          -- depends on that cache staying as it is.
+          local hasSound = resolveEventPath(calloutSound) ~= nil
+          local noSound = false
+          if not hasSound then
+            local otherSound = isElectricModel and "stat/alerts/fuel.wav" or "evt/battery.wav"
+            noSound = modelType ~= 0 or batteryConfigRead() or resolveEventPath(otherSound) == nil
+            if noSound then
+              emitLog(opts, "no " .. calloutSound .. " in this sound pack; nothing is spoken", "warn")
+            end
+          end
+          if noSound or tryPlayEventFile(audioState, now, calloutSound, opts) then
+            if hasSound and type(playNumber) == "function" then
               -- playNumber takes an integer and raises on a number it cannot convert to one.
               -- The fuel percentage is no longer rounded on its way here, so without this the
               -- alert tone would play and the percentage behind it would go unspoken. Same

@@ -15,7 +15,7 @@ Theme.boxes = {
 
   { col = 3, row = 1, colspan = 1, rowspan = 2, type = "text", subtype = "stats", stattype = "max", unit = "mAh", source = "smartconsumption", title = "@i18n(widgets.dashboard.consumed_mah)@", titlepos = "top", transform = "floor", titlecolor = COLOR_THEME_DISABLED, textcolor = "orange", bgcolor = BLACK },
   { col = 3, row = 3, colspan = 1, rowspan = 2, type = "text", subtype = "stats", stattype = "min", unit = "%", source = "smartfuel", title = "@i18n(widgets.dashboard.fuel_remaining)@", titlepos = "top", transform = "floor", titlecolor = COLOR_THEME_DISABLED, textcolor = "orange", bgcolor = BLACK },
-  { col = 3, row = 5, colspan = 1, rowspan = 2, type = "text", subtype = "telemetry", source = "voltage", title = "@i18n(widgets.dashboard.volts_per_cell)@", titlepos = "top", unit = "V", decimals = 2, titlecolor = COLOR_THEME_DISABLED, textcolor = "orange", bgcolor = BLACK },
+  { col = 3, row = 5, colspan = 1, rowspan = 2, type = "text", subtype = "stats", stattype = "last", source = "voltage", title = "@i18n(widgets.dashboard.volts_per_cell)@", titlepos = "top", unit = "V", decimals = 2, titlecolor = COLOR_THEME_DISABLED, textcolor = "orange", bgcolor = BLACK },
   { col = 3, row = 7, colspan = 1, rowspan = 2, type = "text", subtype = "stats", source = "min_link", title = "@i18n(widgets.dashboard.link_min)@", titlepos = "top", transform = "floor", titlecolor = COLOR_THEME_DISABLED, textcolor = "orange", bgcolor = BLACK }
 }
 

@@ -14,7 +14,7 @@ Theme.boxes = {
   { col = 5, row = 7, colspan = 2, rowspan = 3, type = "text", subtype = "stats", source = "min_voltage_cell", title = "@i18n(widgets.dashboard.min_volts_cell)@", titlepos = "bottom", title_offset_y = 3, title_offset_y_lowres = 6, bgcolor = BLACK, titlecolor = COLOR_THEME_DISABLED, textcolor = WHITE },
   { col = 1, row = 10, colspan = 2, rowspan = 3, type = "text", subtype = "stats", stattype = "max", source = "watts", unit = "W", transform = "floor", title = "@i18n(widgets.dashboard.watts_max)@", titlepos = "bottom", title_offset_y = 3, title_offset_y_lowres = 6, bgcolor = BLACK, titlecolor = COLOR_THEME_DISABLED, textcolor = WHITE },
   { col = 3, row = 10, colspan = 2, rowspan = 3, type = "text", subtype = "stats", source = "min_link", title = "@i18n(widgets.dashboard.lq)@", titlepos = "bottom", title_offset_y = 3, title_offset_y_lowres = 6, bgcolor = BLACK, titlecolor = COLOR_THEME_DISABLED, textcolor = WHITE },
-  { col = 5, row = 10, colspan = 2, rowspan = 3, type = "text", subtype = "telemetry", source = "voltage", unit = "V", decimals = 2, title = "@i18n(widgets.dashboard.volts_per_cell)@", titlepos = "bottom", title_offset_y = 3, title_offset_y_lowres = 6, bgcolor = BLACK, titlecolor = COLOR_THEME_DISABLED, textcolor = WHITE }
+  { col = 5, row = 10, colspan = 2, rowspan = 3, type = "text", subtype = "stats", stattype = "last", source = "voltage", unit = "V", decimals = 2, title = "@i18n(widgets.dashboard.volts_per_cell)@", titlepos = "bottom", title_offset_y = 3, title_offset_y_lowres = 6, bgcolor = BLACK, titlecolor = COLOR_THEME_DISABLED, textcolor = WHITE }
 }
 
 return Theme

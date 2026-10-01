@@ -1807,19 +1807,23 @@ end
 -- file for a user theme that still reaches for the old flat field names.
 
 --- What this widget still keeps for itself across an arm edge, and the reading of what it does
---- not. The statistics and the flight clock come from the record; the three fields below are the
+--- not. The statistics and the flight clock come from the record; the fields below are the
 --- dashboard's own, because they are about this widget's screen rather than about the flight:
 --- `hadArmedFlight` holds the postflight page up while the link is down, `lastFlightEndingVoltage`
 --- is the landing voltage a tile shows, and `lastDisarmAt` times the postflight switch.
+--- `lastFlightEndingCells` is taken with the landing voltage: a tile that shows that voltage per
+--- cell has to divide by the pack that landed, and the live count follows whatever pack is
+--- plugged in after it.
 ---
 --- This still uses the widget's own armed reading. That is deliberate: the record's arm edge is
---- the event runtime's, and these three follow the screen, not the record.
+--- the event runtime's, and these follow the screen, not the record.
 local function updateDerivedFlightState(state)
   local wasArmed = state.wasArmed == true
   local isArmed = state.armed == true
 
   if isArmed and not wasArmed then
     state.lastFlightEndingVoltage = nil
+    state.lastFlightEndingCells = nil
     state.hadArmedFlight = true
     -- An unanswered battery prompt ends with the arming: the pack is on the craft by then, and
     -- fullscreen during the flight and after it shows what it would show without the prompt.
@@ -1829,9 +1833,12 @@ local function updateDerivedFlightState(state)
   elseif wasArmed and not isArmed then
     state.lastDisarmAt = nowSeconds()
     state.hadArmedFlight = true
-    -- Capture the ending (landing) voltage as the last known live voltage
+    -- Capture the ending (landing) voltage as the last known live voltage, and the cell count
+    -- readTelemetry took in the same pass, before it reached the arm flags.
     if type(state.voltage) == "number" and state.voltage > 0 then
       state.lastFlightEndingVoltage = state.voltage
+      local cells = tonumber(state.batteryCellCount)
+      state.lastFlightEndingCells = (cells and cells > 0) and cells or nil
     end
   end
 
@@ -2814,6 +2821,7 @@ function Runtime.new(zone, options)
       -- theme asking the question before any telemetry has arrived is not being told yes.
       mainPowerLost = false,
       lastFlightEndingVoltage = nil,
+      lastFlightEndingCells = nil,
       lastDisarmAt = nil,
       themeConfig = { v_min = 18.0, v_max = 25.2 }
     },
