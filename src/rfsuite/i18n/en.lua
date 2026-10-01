@@ -2376,6 +2376,7 @@ return {
         urban_page_look = "Look",
         urban_page_rows = "Value Rows",
         urban_page_topbar = "Top Bar",
+        urban_page_keys = "Keys",
         -- The rows of the Urban theme's settings pages and their values.
         urban_scheme = "Colour scheme",
         urban_scheme_light = "Light",
@@ -2398,7 +2399,15 @@ return {
         urban_rssi_warn = "Signal good above",
         urban_units = "Units beside the values",
         urban_temp_colors = "Temperature colours",
-        urban_temp_colors_early = "Early"
+        urban_temp_colors_early = "Early",
+        urban_link_switch = "Link view switch",
+        -- The Keys page: what a key does in full screen.
+        urban_key = "Key",
+        urban_key_none = "Nothing",
+        urban_key_menu = "Quick menu",
+        urban_key_tools = "Profile & Tuning",
+        urban_key_link = "ELRS link page",
+        urban_key_exit = "Leave full screen"
       },
       settings_dashboard_overrides = {
         model_name = "Model",

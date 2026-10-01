@@ -50,6 +50,7 @@ local init = {
     { id = "look",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_look)@",   icon = "icons/look.png" },
     { id = "rows",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_rows)@",   icon = "icons/rows.png" },
     { id = "topbar", title = "@i18n(app.pages.settings_dashboard_settings.urban_page_topbar)@", icon = "icons/topbar.png" },
+    { id = "keys",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_keys)@",   icon = "icons/keys.png" },
   },
   -- The full screen views, on a host that has theme views; any other host ignores the key and
   -- draws its own menu and picker. `menu` and `battery_pick` are the host's own two, drawn in this

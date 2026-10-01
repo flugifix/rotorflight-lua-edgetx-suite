@@ -220,6 +220,65 @@ local function tapArea(nodes, x, y, w, h, press)
 end
 
 -- ---------------------------------------------------------------------------
+-- the full screen surface: the keys
+-- ---------------------------------------------------------------------------
+
+-- What a key may do in full screen, as the pilot chooses it on the Keys settings page: a stored
+-- id and the host action it stands for. The settings page offers exactly these, so the two cannot
+-- drift apart. The battery picker is not among them: the host opens it while a pick is pending
+-- and at no other time.
+L.KEY_ACTIONS = {
+  { id = "none",  action = "none" },
+  { id = "menu",  action = "openView:menu" },
+  { id = "tools", action = "openView:urban_menu" },
+  { id = "link",  action = "openView:urban_link" },
+  { id = "exit",  action = "exitFullscreen" },
+}
+
+-- The keys the pilot can bind: the host's name in `ctx.keys`, the stored key, and the default.
+-- The defaults are what the host does with the key when the theme binds nothing -- the page keys
+-- open the quick menu, MDL, SYS and TELE do nothing -- so a pilot who never opens the page gets
+-- the full screen he always had.
+--
+-- Not rows of L.SETTINGS: those are what the drawing reads, and the page probe holds each of them
+-- to a change in the picture. A key binding draws nothing.
+L.KEYS = {
+  { key = "pageDown", pref = "key_page_down", default = "menu" },
+  { key = "pageUp",   pref = "key_page_up",   default = "menu" },
+  { key = "mdl",      pref = "key_mdl",       default = "none" },
+  { key = "sys",      pref = "key_sys",       default = "none" },
+  { key = "tele",     pref = "key_tele",      default = "none" },
+}
+
+local KEY_ACTION_IDS = {}
+local KEY_ACTION_BY_ID = {}
+for i = 1, #L.KEY_ACTIONS do
+  KEY_ACTION_IDS[i] = L.KEY_ACTIONS[i].id
+  KEY_ACTION_BY_ID[L.KEY_ACTIONS[i].id] = L.KEY_ACTIONS[i].action
+end
+L.KEY_ACTION_IDS = KEY_ACTION_IDS
+
+-- Fill `ctx.keys` from the pilot's choices, on a host with theme views. A key left at its default
+-- is left unbound, so the host's own answer stands and a full screen nobody configured is the
+-- tree it always was. Every key is written on every build, a default as nil: the host keeps one
+-- `ctx` for the whole visit to full screen, so a binding cleared on the page has to be cleared
+-- here as well. A build-time read like every other setting -- the host reloads the theme when its
+-- preferences change.
+function L.bindKeys(state, ctx)
+  if not hasViews(ctx) or type(ctx.keys) ~= "table" then return end
+  local keys = ctx.keys
+  for i = 1, #L.KEYS do
+    local entry = L.KEYS[i]
+    local id = Common.option(state, entry.pref, KEY_ACTION_IDS, entry.default)
+    if id == entry.default then
+      keys[entry.key] = nil
+    else
+      keys[entry.key] = KEY_ACTION_BY_ID[id]
+    end
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- top bar: menu glyph, clock, link bars, TX battery pill
 -- ---------------------------------------------------------------------------
 
@@ -1091,6 +1150,7 @@ function L.buildFlight(zone, state, ctx)
   -- term in the render key -- the host reloads the theme when its preferences change.
   Common.applyScheme((state.themeConfig or {}).scheme)
   Common.beginBuild(zone)
+  L.bindKeys(state, ctx)
 
   local barH = math.max(18, math.floor(h * 0.075))
   local boxH = math.max(1, barH - 2)
@@ -1309,6 +1369,7 @@ function L.buildStats(zone, state, ctx)
   if w <= 0 or h <= 0 then return nodes end
   Common.applyScheme((state.themeConfig or {}).scheme)
   Common.beginBuild(zone)
+  L.bindKeys(state, ctx)
 
   -- The bars as the flight view has them, so the two screens share their top and their foot
   -- (see L.buildFlight). The table and the line beneath it are set in the same face.

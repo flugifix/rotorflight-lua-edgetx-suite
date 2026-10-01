@@ -2374,6 +2374,7 @@ return {
         urban_page_look = "Aussehen",
         urban_page_rows = "Wertezeilen",
         urban_page_topbar = "Kopfleiste",
+        urban_page_keys = "Tasten",
         urban_scheme = "Farbschema",
         urban_scheme_light = "Hell",
         urban_scheme_dark = "Dunkel",
@@ -2395,7 +2396,14 @@ return {
         urban_rssi_warn = "Signal gut ab",
         urban_units = "Einheiten neben den Werten",
         urban_temp_colors = "Temperaturfarben",
-        urban_temp_colors_early = "Früh"
+        urban_temp_colors_early = "Früh",
+        urban_link_switch = "Schalter Linkseite",
+        urban_key = "Taste",
+        urban_key_none = "Nichts",
+        urban_key_menu = "Schnellmenü",
+        urban_key_tools = "Profil & Tuning",
+        urban_key_link = "ELRS-Linkseite",
+        urban_key_exit = "Vollbild verlassen"
       },
       settings_dashboard_overrides = {
         model_name = "Modell",
