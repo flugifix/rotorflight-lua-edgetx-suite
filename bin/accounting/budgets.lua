@@ -61,7 +61,7 @@ return {
     -- firmware's hard limit -- which is why the entry point's "CPU limit" back-off
     -- is still in place. The target holds it at today's cost; it is not a share of
     -- a budget anyone would call comfortable.
-    ["pass.startup.worst"] = { target = 18000, measured = 12276 },
+    ["pass.startup.worst"] = { target = 18000, measured = 12088 },
 
     -- The service widget's background pass: the same two runtimes, with no scene
     -- build and no sweep of a theme mixed into it.
@@ -134,7 +134,7 @@ return {
     -- steady pass was measured at 12 961 in the air and 13 080 on the ground; the target is set
     -- above the second of those and not the first.
     ["pass.tuning.state"] = { target = 14200, measured = 9701, proposed = 13000 },
-    ["pass.tuning.prime"] = { target = 16700, measured = 14361 },
+    ["pass.tuning.prime"] = { target = 16700, measured = 14248 },
     ["pass.job.tuning"] = { target = 15700, measured = 13155, proposed = 10600 },
 
     ----------------------------------------------------------------------------
