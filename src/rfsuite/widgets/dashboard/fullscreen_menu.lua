@@ -439,6 +439,12 @@ end
 -- The work is the option's when an option is given and the entry's otherwise; so is the action,
 -- unless `after` names another one. `report` is handed to the work, which tells it how the
 -- messages it queued fared (see queueChain); the menu's own buttons pass none.
+--
+-- This runs whatever it is handed: the `press` of the table it is given, with no check of where
+-- that table came from. A caller resolves first and passes only the menu's own records -- the
+-- menu's buttons and the picker take theirs from M.entries / M.entry, and anything a theme hands
+-- in goes through M.resolve (as ctx.run in views.lua does). A caller that skips that step lets a
+-- theme put work of its own behind one of the menu's entries.
 function M.run(widget, entry, option, after, report)
   local source = option or entry
   if type(source.press) == "function" then source.press(report) end
