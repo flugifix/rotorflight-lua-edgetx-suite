@@ -573,6 +573,9 @@
 - **The Urban theme's tile draws an icon of its own (`widgets/dashboard/themes/urban/icon.png`, `docs/dashboard/urban-theme.md`)**:
   - Urban shipped with a byte-for-byte copy of the *Default* theme's icon, so on *Dashboard* → *Settings* and *Per-Model Settings* its tile could not be told from *Default*'s or *RF Status*'s by its picture. The new icon is a small picture of Urban's flight screen: the top and bottom bars, the left panel, the vertical battery gauge in the middle and the value rows on the right.
   - It is a 40x40 8-bit grayscale PNG with no alpha, the size and encoding `.vscode/scripts/optimize_icons.py` keeps for a monochrome source, drawn in the stroke width and greys of Urban's own page icons under `themes/urban/icons/` so the theme tile and its page tiles read as one set.
+- **The help sheet behind `?` keeps its title and no longer lets a long text run behind a button (`ui/help_view.lua`, `docs/pages/README.md`) (fixes #490)**:
+  - The sheet put its text into a `page` node with a height and drew its own header and a Close button around it. EdgeTX builds every `page` full screen with a header of its own, so the hand-drawn header was painted over (the sheet showed an empty title) and the Close button sat on top of the text; at 480x320 a long help text ran behind it.
+  - The sheet is now a page like the menu pages: the header carries the title of the page the help belongs to, the text is its only content and scrolls to the bottom edge, and the X in its header or EXIT closes it. The height estimate the old layout needed is gone with it.
 
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:
