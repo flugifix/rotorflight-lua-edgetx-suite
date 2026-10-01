@@ -160,14 +160,14 @@ local SECTIONS = {
     titleFallback = "ESC Temperature",
     items = {
       { kind = "bool", key = "esc_temperature", labelKey = "esc_temperature", labelFallback = "ESC Temperature" },
-      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", suffix = "°C",
+      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Threshold", suffix = "°C",
         temperature = true, enabledBy = "esc_temperature" },
       { kind = "subheader", labelKey = "section_mcu", labelFallback = "MCU Temperature" },
       { kind = "bool", key = "mcu_temperature", labelKey = "mcu_temperature", labelFallback = "MCU Temperature" },
       -- The label of the ESC threshold, on purpose: the row says the same thing, and the
       -- subheader above it is what tells the two thresholds apart. modelScopeLabel keys on
       -- the row's own key, so this one carries no [Model] marker.
-      { kind = "number", key = "mcu_threshold", labelKey = "esc_threshold", labelFallback = "Threshold (°)", suffix = "°C",
+      { kind = "number", key = "mcu_threshold", labelKey = "esc_threshold", labelFallback = "Threshold", suffix = "°C",
         temperature = true, enabledBy = "mcu_temperature" },
       { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
       { kind = "choice", key = "esc_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
@@ -565,7 +565,7 @@ function M.new(sectionKey)
   -- resolves a translation whose key is a literal and a computed one would reach the radio raw.
   local function modelScopeLabel(i18n, key, plain)
     if key ~= "esc_threshold" or not modelStore() then return plain end
-    return t(i18n, "esc_threshold_model", "Threshold (°) [Model]")
+    return t(i18n, "esc_threshold_model", "Threshold [Model]")
   end
 
   -- ─── Module API ────────────────────────────────────────────────────────────
