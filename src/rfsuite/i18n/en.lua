@@ -810,8 +810,8 @@ return {
         pid_profile = "PID Profile",
         rate_profile = "Rate Profile",
         esc_temperature = "ESC Temperature",
-        esc_threshold = "Threshold (°)",
-        esc_threshold_model = "Threshold (°) [Model]",
+        esc_threshold = "Threshold",
+        esc_threshold_model = "Threshold [Model]",
         mcu_temperature = "MCU Temperature",
         section_telemetry = "Telemetry",
         telemetry_lost = "Telemetry Lost",
@@ -850,7 +850,7 @@ return {
         help_message = "Announce the PID profile and the rate profile when they change, with the new profile's number."
       },
       settings_audio_events_esc = {
-        help_message = "Announce when the ESC temperature reaches the threshold. The threshold belongs to the model: with a flight controller connected it is stored with that model, otherwise it is the radio-wide default. Below it, the flight controller's own MCU temperature has its own switch and threshold. That one is radio-wide, because the same controller is rated the same in every aircraft. At the bottom, Repeat says how often either alert speaks while the temperature stays at or above its threshold, and Haptic whether the transmitter buzzes with it. Until cleared is one announcement every 10 seconds for as long as it is too hot; a count stops after that many and starts over once the temperature has come back down."
+        help_message = "ESC Temperature: speaks when the ESC temperature reaches the threshold below it.\nThreshold: in the unit set under Settings > Localization. Stored with the model while a flight controller is connected (the row then reads [Model]), otherwise radio-wide.\nMCU Temperature, Threshold: the same for the flight controller's own MCU; this threshold is always radio-wide.\nRepeat, Haptic: how often either alert repeats while it is too hot, and whether the transmitter vibrates."
       },
       settings_audio_events_adjustment = {
         help_message = "Announce a value changed through an adjustment function, as the flight controller reports it."
