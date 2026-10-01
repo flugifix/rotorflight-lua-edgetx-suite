@@ -2646,6 +2646,7 @@ return {
       battery_profile = "BATTERY PROFILE",
       battery_pick_title = "WHICH BATTERY?",
       battery_pick_open = "BATTERY",
+      tool_open = "RFSUITE TOOL",
       battery_pick_none = "NO BATTERY",
       battery_pick_profile = "Profile %d",
       battery_pick_profile_none = "no profile",

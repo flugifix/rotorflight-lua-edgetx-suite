@@ -126,6 +126,11 @@ function CONDITIONS.batteryPickPending(widget)
   return type(pick) == "table" and pick.pending == true and widget._batteryPickRequest == nil
 end
 
+-- The suite's tool, which is opened only while the model is disarmed (tool_host.lua says why).
+function CONDITIONS.modelDisarmed(widget)
+  return not (widget.state and widget.state.armed == true)
+end
+
 --- Whether the named condition holds for this widget. Unknown names, nil included, are false.
 function M.condition(name, widget)
   local condition = CONDITIONS[name]
@@ -522,8 +527,9 @@ end
 -- Actions
 -- ---------------------------------------------------------------------------
 
--- An action is a string: `openView:<id>`, `closeView`, `done`, `exitFullscreen` or `none`.
-local SIMPLE_ACTIONS = { closeView = true, done = true, exitFullscreen = true, none = true }
+-- An action is a string: `openView:<id>`, `closeView`, `done`, `exitFullscreen`, `openTool` or
+-- `none`.
+local SIMPLE_ACTIONS = { closeView = true, done = true, exitFullscreen = true, openTool = true, none = true }
 
 --- The one place an action is read: its verb, and the view id for `openView`.
 --
@@ -561,6 +567,28 @@ local function exitFullscreen(widget)
   end
 end
 
+-- A new session, empty, which keeps only what the conditions of the THEME's views answered on
+-- the last pass: the outcomes lapse, and a theme's view whose condition still holds is not opened
+-- again over the surface the pilot returns to. The widget's own views are not carried over, so
+-- the battery prompt, still waiting for an answer, comes back as a rise -- as it always has when
+-- the menu over it was closed. `done` starts one, and so does `openTool`, whose tool takes
+-- fullscreen while no pass asks a condition: what held when it opened is what the first pass
+-- after it closes compares against.
+local function newSession(widget)
+  local old = widget._viewStack
+  local carried = nil
+  if old ~= nil and old.held ~= nil then
+    for heldId in pairs(old.held) do
+      local entry = M.find(widget, heldId)
+      if entry ~= nil and entry.theme then
+        carried = carried or {}
+        carried[heldId] = true
+      end
+    end
+  end
+  widget._viewStack = carried and { held = carried } or nil
+end
+
 --- Perform the action that follows a press.
 --
 --   openView:<id>   open that view, or return to it where it is already on the stack
@@ -570,6 +598,10 @@ end
 --                   the session starts anew, carrying only what the theme's views' conditions
 --                   last answered
 --   exitFullscreen  empty the stack and leave fullscreen, base layer or not
+--   openTool        open the suite's tool inside the widget (widgets/dashboard/tool_host.lua);
+--                   it takes fullscreen until it is closed; the session starts anew as for
+--                   `done`, so what the tool hands back to is the base layer, or the default
+--                   view, and a theme's view whose condition still holds is not opened again
 --   none            nothing at all; the press did whatever needed doing itself
 --
 -- An `openView` that is refused -- a view this widget does not have, a theme's view that did not
@@ -590,23 +622,7 @@ function M.navigate(widget, after)
     pop(widget)
     reset(widget)
   elseif verb == "done" then
-    -- A new session, empty, which keeps only what the conditions of the THEME's views answered
-    -- on the last pass: the outcomes lapse, and a theme's view whose condition still holds is not
-    -- opened again over the surface the pilot has just returned to. The widget's own views are
-    -- not carried over, so the battery prompt, still waiting for an answer, comes back as a rise
-    -- -- as it always has when the menu over it was closed.
-    local old = widget._viewStack
-    local carried = nil
-    if old ~= nil and old.held ~= nil then
-      for heldId in pairs(old.held) do
-        local entry = M.find(widget, heldId)
-        if entry ~= nil and entry.theme then
-          carried = carried or {}
-          carried[heldId] = true
-        end
-      end
-    end
-    widget._viewStack = carried and { held = carried } or nil
+    newSession(widget)
     if widget._viewBase == nil then
       exitFullscreen(widget)
     else
@@ -615,6 +631,12 @@ function M.navigate(widget, after)
   elseif verb == "exitFullscreen" then
     widget._viewStack = nil
     exitFullscreen(widget)
+  elseif verb == "openTool" then
+    local ToolHost = requireModule("widgets/dashboard/tool_host.lua")
+    if type(ToolHost) == "table" and type(ToolHost.request) == "function" and ToolHost.request(widget) then
+      newSession(widget)
+      reset(widget)
+    end
   end
 end
 

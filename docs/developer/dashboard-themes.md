@@ -683,7 +683,7 @@ screen changes:
 
 | | |
 | --- | --- |
-| `ctx.action(after)` | performs an action: `openView:<id>`, `closeView`, `done`, `exitFullscreen` or `none` (see [what follows a press](dashboard-views.md#what-follows-a-press)) |
+| `ctx.action(after)` | performs an action: `openView:<id>`, `closeView`, `done`, `exitFullscreen`, `openTool` or `none` (see [what follows a press](dashboard-views.md#what-follows-a-press)) |
 | `ctx.keys` | a table the theme fills with actions for the keys, `exit`, `pageDown`, `pageUp`, `mdl`, `sys` and `tele`; see below |
 | `ctx.condition(name)` | whether a named condition holds, from the list in [dashboard views](dashboard-views.md#conditions) |
 | `ctx.entries()` | the quick menu's entries, as `fullscreen_menu.lua` returns them |

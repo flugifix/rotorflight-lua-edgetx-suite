@@ -695,6 +695,14 @@ local function splashJobStep(self)
   local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
   local title = (t and t("widgets.dashboard.connecting_fbl")) or "Connecting FBL..."
   local splash = buildConnectionSplash(self.zone, statusLine, title)
+  -- At full screen the splash carries the tool control, so the tool can be opened while the
+  -- dashboard is still waiting for the link. A zone takes no press, so it is not drawn there.
+  if self._job and self._job.fullscreenSplash then
+    local Controls = requireModule("widgets/dashboard/fullscreen_controls.lua")
+    if type(Controls) == "table" and type(Controls.appendTool) == "function" then
+      Controls.appendTool(splash, self)
+    end
+  end
   lvgl.clear()
   lvgl.build(splash)
   self.built = true
@@ -818,6 +826,13 @@ local function viewCtx(self)
     self._viewCtx = ctx
   end
   return ctx
+end
+
+-- The suite's tool, run inside this widget (widgets/dashboard/tool_host.lua). The press that
+-- opens it has already loaded the module through the module cache, so `self._toolHost` is never
+-- set without it; this is a cache read.
+local function toolHostModule()
+  return requireModule("widgets/dashboard/tool_host.lua")
 end
 
 --- Draw the fullscreen view the job is named after: the quick menu, the battery picker, or a
@@ -2126,10 +2141,10 @@ local function themeModeRefresh(self, event, touchState)
   if event == nil or self._viewBase == nil then
     self.refresh = ownRefresh
     self._cachedFullscreenKey = nil
-  elseif event ~= 0 and self.theme ~= nil and inflightMode(self, true) == nil
+  elseif event ~= 0 and self.theme ~= nil and inflightMode(self, true) == nil and self._toolHost == nil
     and (self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline") then
-    -- Not while the tuning surface is up, before a theme is loaded, or on the connect splash:
-    -- none of them is a view or the base layer.
+    -- Not while the tuning surface is up, the tool is open, before a theme is loaded, or on the
+    -- connect splash: none of them is a view or the base layer.
     local Views = viewsModule()
     if Views then Views.key(self, event) end
   end
@@ -3470,6 +3485,22 @@ function Runtime.new(zone, options)
     -- every other one, so this is where "on screen" is known. The overlay drives only from here.
     self._foreground = true
 
+    -- The suite's tool, opened from a fullscreen control, runs in place of the whole pass until
+    -- it is closed (widgets/dashboard/tool_host.lua). It drives the MSP runtime and the event
+    -- runner itself, so nothing below may run beside it; once it is closed the next pass finds
+    -- the scene dropped and builds it again.
+    if self._toolHost ~= nil then
+      self._passWork = "tool"
+      local ToolHost = toolHostModule()
+      if type(ToolHost) == "table" then
+        ToolHost.step(self, event, touchState)
+      else
+        self._toolHost = nil
+      end
+      self._passEndAt = nowSeconds()
+      return
+    end
+
     -- The tuning overlay's fast half, ahead of everything else this pass may or may not do: a
     -- JOB pass returns before the background half and a state pass reaches it only on the logic
     -- tick, and neither cadence is one a surface driving a flight controller can be read at.
@@ -3578,13 +3609,16 @@ function Runtime.new(zone, options)
     -- this splash must not cover: the summary is what the pilot walked back to the bench for.
     if not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline" then
       local statusLine = self.statusLine or "Please wait..."
+      -- Full screen and the zone are two splashes, because only the first carries the tool control.
+      local fullscreenSplash = event ~= nil
       local splashKey = "splash|" .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
+        .. (fullscreenSplash and "|fs" or "")
       if self.renderKey ~= splashKey then
         self.renderKey = splashKey
         self.built = false
       end
       if not self.built then
-        self._job = { kind = "splash", step = splashJobStep }
+        self._job = { kind = "splash", step = splashJobStep, fullscreenSplash = fullscreenSplash }
       end
       return
     end
@@ -3741,6 +3775,13 @@ function Runtime.new(zone, options)
     -- Off screen. The overlay's own tick refuses to drive from here and cleans up instead, which
     -- is what makes a widget scrolled away stop writing the two variables.
     self._foreground = false
+    -- An open tool cannot paint from here and its closing sequence needs the screen, so it is
+    -- dropped at once and the dashboard's own background work takes over again.
+    if self._toolHost ~= nil then
+      local ToolHost = toolHostModule()
+      if type(ToolHost) == "table" then ToolHost.abandon(self, "widget in the background") end
+      self._toolHost = nil
+    end
     performBackgroundWork(self, true)
     return 0
   end

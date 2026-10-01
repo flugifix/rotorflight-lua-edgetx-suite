@@ -2643,6 +2643,7 @@ return {
       battery_profile = "AKKUPROFIL",
       battery_pick_title = "WELCHER AKKU?",
       battery_pick_open = "AKKU",
+      tool_open = "RFSUITE-TOOL",
       battery_pick_none = "KEIN AKKU",
       battery_pick_profile = "Profil %d",
       battery_pick_profile_none = "kein Profil",
