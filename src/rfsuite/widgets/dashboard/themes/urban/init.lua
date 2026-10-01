@@ -51,6 +51,24 @@ local init = {
     { id = "rows",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_rows)@",   icon = "icons/rows.png" },
     { id = "topbar", title = "@i18n(app.pages.settings_dashboard_settings.urban_page_topbar)@", icon = "icons/topbar.png" },
   },
+  -- The full screen views, on a host that has theme views; any other host ignores the key and
+  -- draws its own menu and picker. `menu` and `battery_pick` are the host's own two, drawn in this
+  -- theme's look: what they offer and what their presses do stay the host's. `urban_menu` is this
+  -- theme's own menu (the battery profiles and the tuning surface, opened by a tap on the flight
+  -- view's profile row), `urban_link` the original's ELRS page (opened by a tap on the link bars).
+  --
+  -- The link view also opens on a switch, in full screen and in the widget zone alike, and shows
+  -- while the switch holds -- the original's "hold the position to show the page". The switch is
+  -- the pilot's, on the Top Bar settings page (`link_switch`, a switch position as the radio's own
+  -- picker stores it). Until the pilot names one, `default` stands: 0, no switch, the original's
+  -- own default -- the view then opens by its tap only.
+  views = {
+    { id = "menu",         module = "menuview.lua" },
+    { id = "battery_pick", module = "pickview.lua" },
+    { id = "urban_menu",   module = "toolsview.lua" },
+    { id = "urban_link",   module = "linkview.lua", where = "both",
+      openWhen = { switch = { pref = "link_switch", default = 0 } } },
+  },
 }
 
 return init

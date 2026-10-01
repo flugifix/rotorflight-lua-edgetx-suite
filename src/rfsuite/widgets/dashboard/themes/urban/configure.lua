@@ -73,13 +73,33 @@ for i = 1, #SETTINGS do
   SETTINGS_ROW_LABEL[entry.key] = labels.label or entry.key
 end
 
-local THEME_DEFAULTS = { arm_colors = ARM_COLORS_DEFAULT, scheme = SCHEME_DEFAULT }
+-- The switch that opens the link view (init.lua, `views`, the `urban_link` entry's openWhen reads
+-- it as `link_switch`). It is chosen in the radio's own switch picker, the one the host's in-flight
+-- tuning page uses for its interlock, and stored the way that picker hands it over: a switch
+-- POSITION, a number, which the host reads as it is. 0 is no switch, the original's default, and
+-- the default init.lua declares: until the pilot picks one, the view opens by its tap only.
+--
+-- Not a row of Layout.SETTINGS: those are the settings the DRAWING reads, and the page probe holds
+-- each of them to a change in the picture. This one changes when a view opens and draws nothing.
+local LINK_SWITCH_DEFAULT = 0
+
+local THEME_DEFAULTS = {
+  arm_colors = ARM_COLORS_DEFAULT,
+  scheme = SCHEME_DEFAULT,
+  link_switch = LINK_SWITCH_DEFAULT,
+}
 for i = 1, SLOT_COUNT do
   THEME_DEFAULTS["slot" .. i] = Layout.DEFAULT_SLOTS[i]
 end
 for i = 1, #SETTINGS do
   THEME_DEFAULTS[SETTINGS[i].key] = SETTINGS[i].default
 end
+
+-- The link switch picker's filters, as the firmware numbers them (radio/src/dataconstants.h,
+-- SwitchTypes): the physical switches, the logical ones, and the empty entry that clears the choice.
+local SW_SWITCH = 1
+local SW_LOGICAL_SWITCH = 1 << 2
+local SW_NONE = 1 << 20
 
 local VALID_IDS = {}
 local OPTIONS = {}
@@ -133,6 +153,10 @@ local function loadConfig(prefs)
     end
     ui.config[entry.key] = value
   end
+
+  -- A number, or a number as text where the preferences file hands it back that way; anything
+  -- else is no choice made: no switch.
+  ui.config.link_switch = tonumber(cfg.link_switch) or LINK_SWITCH_DEFAULT
   ui.loaded = true
 end
 
@@ -154,6 +178,7 @@ local function saveConfig(prefs)
     local entry = SETTINGS[i]
     values[entry.key] = ui.config[entry.key] or entry.default
   end
+  values.link_switch = tonumber(ui.config.link_switch) or LINK_SWITCH_DEFAULT
   DashboardLib.setThemeConfig(prefs, THEME_PATH, values, modelPrefs)
 
   -- The model's file is written whenever a flight controller is connected, as every theme's
@@ -240,6 +265,26 @@ local function appendSettings(children, x, cursorY, w, page)
   return cursorY
 end
 
+-- The link view's switch: a label and the radio's own switch picker, laid out the way the host's
+-- in-flight tuning page lays out its interlock row. Answers the cursor the caller continues from.
+local function appendLinkSwitch(children, x, cursorY, w)
+  local rowH = Controls.ROW_H or 40
+  local pickerW = math.min(172, w)
+  local labelY = (type(Controls.labelY) == "function") and Controls.labelY(cursorY, rowH) or cursorY
+  local controlY = (type(Controls.controlY) == "function") and Controls.controlY(cursorY, rowH) or cursorY
+  children[#children + 1] = {
+    type = "label", x = x, y = labelY, w = w - pickerW - 18,
+    text = tr("set_link_switch", "Link view switch"), color = COLOR_THEME_PRIMARY1, font = SMLSIZE
+  }
+  children[#children + 1] = {
+    type = "switch", x = x + w - pickerW - 10, y = controlY, w = pickerW, h = rowH - 6,
+    filter = SW_SWITCH | SW_LOGICAL_SWITCH | SW_NONE,
+    get = function() return ui.config.link_switch or 0 end,
+    set = function(value) ui.config.link_switch = tonumber(value) or 0 end
+  }
+  return cursorY + rowH
+end
+
 function M.build(ctx)
   loadConfig(ctx.preferences)
 
@@ -298,6 +343,7 @@ function M.build(ctx)
       "@i18n(app.pages.settings_dashboard_settings.urban_page_topbar)@", true, function() end)
     cursorY = cursorY + Controls.SECTION_H
     cursorY = appendSettings(children, x, cursorY, w, "topbar")
+    cursorY = appendLinkSwitch(children, x, cursorY, w)
   end
 end
 

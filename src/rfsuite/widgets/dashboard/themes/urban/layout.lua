@@ -204,6 +204,21 @@ function L.menuControl(nodes, ctx, x, y, h)
   return boxW + 4
 end
 
+-- Whether the full screen build's ctx comes from a host with theme views -- the one that runs
+-- this theme's own views (init.lua `views`) and hands out `ctx.entry`. Only then does the flight
+-- view bind the two taps that open them; a host without them gets exactly the tree it always got.
+local function hasViews(ctx)
+  return type(ctx) == "table" and type(ctx.action) == "function" and type(ctx.entry) == "function"
+end
+L.hasViews = hasViews
+
+-- A press over an area that is drawn anyway: a button in the panel's own colour, appended BEFORE
+-- what is drawn over it, which then has to be labels and lines -- a rectangle over a press takes
+-- the press away from it. EdgeTX draws every button with a border of its own.
+local function tapArea(nodes, x, y, w, h, press)
+  nodes[#nodes + 1] = { type = "button", x = x, y = y, w = w, h = h, color = C.bg, press = press }
+end
+
 -- ---------------------------------------------------------------------------
 -- top bar: menu glyph, clock, link bars, TX battery pill
 -- ---------------------------------------------------------------------------
@@ -360,6 +375,15 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   local outlined = barH >= 6
   local good = quietBars and C.neut or C.ok
 
+  -- In full screen, on a host with theme views, the cluster is the tap that opens the link view,
+  -- as the original's bars are. Everything over the press is then a line rather than a rectangle,
+  -- in the same places and colours; the widget zone draws the rectangles it always drew.
+  local asLines = hasViews(ctx)
+  if asLines then
+    local action = ctx.action
+    tapArea(nodes, barX - 2, topY - 1, barW + 4, slotH * n + 1, function() action("openView:urban_link") end)
+  end
+
   for i = 1, n do
     local read, warn, crit = bars[i].read, bars[i].warn, bars[i].crit
     local by = topY + (i - 1) * slotH
@@ -370,7 +394,9 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
       if v <= warn then return C.warn end
       return good
     end
-    if outlined then
+    if asLines then
+      L.barLines(nodes, barX, by, barW, barH, outlined, warn, crit, read, color)
+    elseif outlined then
       local fh, fwMax = barH - 2, barW - 2
       Common.rect(nodes, barX, by, barW, barH, C.frame, false, 2, 1)
       nodes[#nodes + 1] = {
@@ -402,6 +428,49 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   end
 end
 
+-- One link bar drawn in lines, for the full screen tap cluster above: the same track, fill,
+-- notches and outline as the rectangles, at the same coordinates. A line's `y` is its middle
+-- and its `h` its thickness; the fill is an `hline` whose reactive `size` is its length.
+local function vline(nodes, x, y1, y2, color, thickness)
+  nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
+    pts = { { x, y1 }, { x, y2 } }, color = color, thickness = thickness }
+end
+
+function L.barLines(nodes, barX, by, barW, barH, outlined, warn, crit, read, color)
+  local x0, fw, fh = barX, barW, barH
+  if outlined then x0, fw, fh = barX + 1, barW - 2, barH - 2 end
+  if not outlined then
+    nodes[#nodes + 1] = { type = "hline", x = barX, y = by + math.floor(barH / 2), w = barW, h = barH,
+      color = C.track }
+  end
+  nodes[#nodes + 1] = {
+    type = "hline", x = x0, y = (outlined and by + 1 or by) + math.floor(fh / 2), w = 1, h = fh,
+    color = color,
+    size = function()
+      local v = read() or 0
+      if v < 0 then v = 0 elseif v > 100 then v = 100 end
+      return math.floor(fw * v / 100), fh
+    end
+  }
+  if outlined then
+    local nh = math.max(2, math.floor(barH * 0.45))
+    vline(nodes, barX + math.floor(barW * crit / 100) + 1, by + barH - nh, by + barH - 1, C.tick, 2)
+    vline(nodes, barX + math.floor(barW * warn / 100) + 1, by + barH - nh, by + barH - 1, C.tick, 2)
+    local x1, y1 = barX + barW - 1, by + barH - 1
+    local edges = {
+      { { barX, by }, { x1, by } }, { { barX, y1 }, { x1, y1 } },
+      { { barX, by }, { barX, y1 } }, { { x1, by }, { x1, y1 } },
+    }
+    for i = 1, 4 do
+      nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = edges[i],
+        color = C.frame, thickness = 1 }
+    end
+  else
+    vline(nodes, barX + math.floor(barW * crit / 100), by, by + barH - 1, C.tick, 1)
+    vline(nodes, barX + math.floor(barW * warn / 100), by, by + barH - 1, C.tick, 1)
+  end
+end
+
 -- Whether the host has seen a second receiver antenna: its `link_diversity` reading, which it
 -- latches for the link. A build-time reading, and a term of the render key, so the fourth bar
 -- appears with a rebuild once the host has seen the second antenna.
@@ -415,7 +484,7 @@ end
 -- left panel: model, totals, governor and throttle, status line, profiles
 -- ---------------------------------------------------------------------------
 
-function L.statusPanel(nodes, state, x, y, w, h, font, fontH)
+function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
   local pad = CARD_PAD
   local innerW = math.max(20, w - 2 * pad)
 
@@ -507,6 +576,13 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH)
   local gridFont = Common.selectFont(hGrid - fontH, thirdLastW, "9999")
   local gridH = Common.measure(gridFont, "9999")
   local gridPad = math.max(0, math.floor((hGrid - fontH - gridH) / 2))
+  -- In full screen, on a host with theme views, the profile row is the tap that opens this
+  -- theme's own menu -- the battery profiles and the tuning surface -- as the original's B-Profile
+  -- cell opens its profile picker. Drawn before the row's labels, which lie over it.
+  if hasViews(ctx) then
+    local action = ctx.action
+    tapArea(nodes, x + pad, y + yGrid, innerW, hGrid, function() action("openView:urban_menu") end)
+  end
   Common.stacked(nodes, x + pad, y + yGrid, thirdW, gridPad, T.profile,
     Common.getter(function() return num(state.profile) end, Common.integer), font, fontH, gridFont, gridH)
   Common.stacked(nodes, x + pad + thirdW, y + yGrid, thirdW, gridPad, T.rate,
@@ -1037,7 +1113,7 @@ function L.buildFlight(zone, state, ctx)
   L.topBar(nodes, state, x0, y0 + OUTER_PAD, w - 4, boxH, font, fontH, ctx)
 
   if leftW > 0 and contentH > 0 then
-    L.statusPanel(nodes, state, x0 + OUTER_PAD, yContent, leftW, contentH, font, fontH)
+    L.statusPanel(nodes, state, x0 + OUTER_PAD, yContent, leftW, contentH, font, fontH, ctx)
   end
   if contentH > 0 then
     Common.fuelGauge(nodes, state, fuelX, yContent, fuelW, contentH)

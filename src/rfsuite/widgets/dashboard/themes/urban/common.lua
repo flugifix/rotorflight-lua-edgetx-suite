@@ -147,6 +147,21 @@ M.T = {
   arm_flag_23 = "@i18n(app.modules.fblstatus.arming_disable_flag_23)@",
   arm_flag_24 = "@i18n(app.modules.fblstatus.arming_disable_flag_24)@",
   arm_flag_25 = "@i18n(app.modules.fblstatus.arming_disable_flag_25)@",
+  -- The full screen views (menuview, pickview, toolsview, linkview): their titles, what the
+  -- theme's own menu says about the work it ran, and the link view's row names.
+  view_menu = "Quick Settings",
+  view_pick = "Which battery?",
+  view_tools = "Profile & Tuning",
+  view_link = "ELRS",
+  blackbox = "Blackbox",
+  active = "Active",
+  unavailable = "Not available",
+  run_busy = "Sending...",
+  run_ok = "Done",
+  run_failed = "Failed",
+  link_rq = "RQ", link_tq = "TQ", link_rss1 = "1RSS", link_rss2 = "2RSS",
+  link_floor = "Rate floor",
+  set_link_switch = "Link view switch",
 }
 
 -- The governor states' keys, built once: M.governorText and M.governorSample read them every
