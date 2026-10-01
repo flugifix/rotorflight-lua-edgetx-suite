@@ -37,17 +37,19 @@ local function blackboxLine(info)
   return string.format("%s %d%%", K.T.blackbox, math.floor(used * 100 / total + 0.5))
 end
 
--- A choice's options as a grid under its title; answers the y below it.
-local function optionGrid(nodes, g, f, x, y, w, bottom, ctx, entry, run)
+-- How many columns a choice's options take in `w`.
+local function gridCols(count, w)
+  if w < 200 then return 1 end
+  return (count > 4 and w >= 400) and 3 or 2
+end
+
+-- A choice's options as a grid under its title, the rows `btnH` tall; answers the y below it.
+local function optionGrid(nodes, g, f, x, y, w, bottom, item, btnH, run)
   local UD, C = K.UD, K.C
-  local titleFont = f.sub
-  UD.label(nodes, x, y, w, f.subH, UD.fit(titleFont, entry.title or "", w), titleFont, C.label, LEFT)
-  y = y + f.subH + g.gap
-  local options = type(entry.options) == "function" and entry.options() or {}
-  local cols = (#options > 4 and w >= 400) and 3 or 2
-  if w < 200 then cols = 1 end
+  local entry, options, cols = item.entry, item.options, item.cols
+  UD.label(nodes, x, y, w, f.nameH, UD.fit(f.name, entry.title or "", w), f.name, C.label, LEFT)
+  y = y + f.nameH + g.gap
   local btnW = math.floor((w - (cols - 1) * g.gap) / cols)
-  local btnH = f.nameH + 2 * g.textPad
   for i = 1, #options do
     local option = options[i]
     local by = y + math.floor((i - 1) / cols) * (btnH + g.gap)
@@ -71,21 +73,43 @@ function M.build(children, zone, state, ctx)
   local run, visible = ctx.run, ctx.visible
   local x, w = g.x + g.pad, g.w - 2 * g.pad
   local bottom = g.y + g.h - g.pad
-  local f = K.rowFonts(g, w)
+  local f = K.rowFonts(g)
+
+  -- What is drawn first, so the rows can share the room there is (K.stretch); then the drawing.
+  -- A grid's rows are rows of the stack as well, and its title is room the rows cannot have.
+  local items, naturals, fixed = {}, {}, 0
   local list = ctx.list("quick")
   for i = 1, #list do
     local entry = list[i]
     if visible(entry) then
+      local item = { entry = entry, first = #naturals + 1 }
       if entry.kind == "choice" and entry.view == nil then
-        contentY = optionGrid(children, g, f, x, contentY, w, bottom, ctx, entry, run)
+        item.options = type(entry.options) == "function" and entry.options() or {}
+        item.cols = gridCols(#item.options, w)
+        fixed = fixed + f.nameH + g.gap
+        for _ = 1, math.ceil(#item.options / item.cols) do naturals[#naturals + 1] = f.lineH end
       else
-        if contentY + f.rowH > bottom then break end
-        local sub = nil
-        if entry.id == "erase_blackbox" and type(ctx.info) == "function" then sub = blackboxLine(ctx.info(entry)) end
-        K.button(children, g, f, x, contentY, w, f.rowH, entry.title or "", sub, false,
-          function() run(entry) end)
-        contentY = contentY + f.rowH + g.gap
+        if entry.id == "erase_blackbox" and type(ctx.info) == "function" then item.sub = blackboxLine(ctx.info(entry)) end
+        naturals[#naturals + 1] = item.sub and f.rowH or f.lineH
       end
+      items[#items + 1] = item
+    end
+  end
+  fixed = fixed + math.max(0, #naturals - 1) * g.gap
+  local heights = K.stretch(g, bottom - contentY, fixed, naturals)
+
+  for i = 1, #items do
+    local item = items[i]
+    local entry = item.entry
+    local rowH = heights[item.first] or f.lineH
+    if item.options then
+      if contentY + f.nameH > bottom then break end
+      contentY = optionGrid(children, g, f, x, contentY, w, bottom, item, rowH, run)
+    else
+      if contentY + rowH > bottom then break end
+      K.button(children, g, f, x, contentY, w, rowH, entry.title or "", item.sub, false,
+        function() run(entry) end)
+      contentY = contentY + rowH + g.gap
     end
   end
   return children

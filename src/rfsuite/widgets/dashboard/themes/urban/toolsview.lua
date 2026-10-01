@@ -43,44 +43,58 @@ function M.build(children, zone, state, ctx)
 
   local x, w = g.x + g.pad, g.w - 2 * g.pad
   local bottom = g.y + g.h - g.pad
-  local f = K.rowFonts(g, w)
+  local f = K.rowFonts(g)
+
+  -- What is drawn first, so the rows can share the room there is (K.stretch): the tuning row, a
+  -- button or -- with the line saying why -- a note, then the profiles' title and their grid.
+  local tuning = ctx.entry("inflight_tuning")
+  local tuningOn = tuning ~= nil and ctx.visible(tuning)
+  local profile = ctx.entry("battery_profile")
+  if profile ~= nil and not ctx.visible(profile) then profile = nil end
+  local options = (profile ~= nil and type(profile.options) == "function") and profile.options() or {}
+  local cols = (#options > 4 and w >= 400) and 3 or 2
+  local naturals, fixed = {}, 0
+  if tuning ~= nil then naturals[1] = tuningOn and f.lineH or f.rowH end
+  if profile ~= nil then
+    fixed = fixed + f.nameH + g.gap
+    for _ = 1, math.ceil(#options / cols) do naturals[#naturals + 1] = f.lineH end
+  end
+  fixed = fixed + math.max(0, #naturals - 1) * g.gap
+  local heights = K.stretch(g, bottom - contentY, fixed, naturals)
 
   -- The tuning surface: a button where the host offers it, a note where it does not.
-  local tuning = ctx.entry("inflight_tuning")
   if tuning ~= nil then
-    if ctx.visible(tuning) then
-      K.button(children, g, f, x, contentY, w, f.rowH, tuning.title or "", nil, false,
+    local rowH = heights[1]
+    if tuningOn then
+      K.button(children, g, f, x, contentY, w, rowH, tuning.title or "", nil, false,
         function() ctx.run(tuning) end)
     else
-      K.unavailable(children, g, f, x, contentY, w, f.rowH, tuning.title or "")
+      K.unavailable(children, g, f, x, contentY, w, rowH, tuning.title or "")
     end
-    contentY = contentY + f.rowH + g.gap
+    contentY = contentY + rowH + g.gap
   end
 
   -- The battery profiles: the title with the profile in force and the outcome of the last write,
   -- then one button per profile the board carries.
-  local profile = ctx.entry("battery_profile")
-  if profile == nil or not ctx.visible(profile) then return children end
-  local options = type(profile.options) == "function" and profile.options() or {}
+  if profile == nil then return children end
   local active = nil
   for i = 1, #options do
     if options[i].current then active = options[i].id end
   end
-  local lineH = f.subH
+  local lineH = f.nameH
   local title = profile.title or ""
   if active ~= nil then title = title .. "  " .. T.active .. ": " .. tostring(active) end
   local word, color = K.outcome(ctx.status("battery_profile"))
   local wordW = 0
   if word ~= nil then
-    wordW = UD.textWidth(f.sub, word) + g.pad
-    UD.label(children, x + w - wordW, contentY, wordW, lineH, word, f.sub, color, RIGHT)
+    wordW = UD.textWidth(f.name, word) + g.pad
+    UD.label(children, x + w - wordW, contentY, wordW, lineH, word, f.name, color, RIGHT)
   end
-  UD.label(children, x, contentY, w - wordW, lineH, UD.fit(f.sub, title, w - wordW), f.sub, C.label, LEFT)
+  UD.label(children, x, contentY, w - wordW, lineH, UD.fit(f.name, title, w - wordW), f.name, C.label, LEFT)
   contentY = contentY + lineH + g.gap
 
-  local cols = (#options > 4 and w >= 400) and 3 or 2
   local btnW = math.floor((w - (cols - 1) * g.gap) / cols)
-  local btnH = f.nameH + 2 * g.textPad
+  local btnH = heights[#heights] or f.lineH
   for i = 1, #options do
     local option = options[i]
     local by = contentY + math.floor((i - 1) / cols) * (btnH + g.gap)

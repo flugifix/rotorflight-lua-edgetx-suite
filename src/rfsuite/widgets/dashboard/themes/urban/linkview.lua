@@ -93,15 +93,14 @@ function M.build(children, zone, state, ctx)
     return string.format("%d", math.floor(v))
   end) }
 
-  -- The foot line: the floor the signal bars measure their headroom against.
+  -- The foot line, in the flight view's face: the floor the signal bars measure their headroom
+  -- against.
   local x, w = g.x + g.pad, g.w - 2 * g.pad
-  local footFont = UD.selectFont(g.isLarge and 19 or 11, w, "Rate floor -108dBm")
-  local footH = UD.measure(footFont, "Ag")
-  local footY = g.y + g.h - g.pad - footH
-  UD.label(children, x, footY, w, footH, UD.getter(function() return derived(state, "link_floor") end, function(v)
+  local footY = g.y + g.h - g.pad - g.fontH
+  UD.label(children, x, footY, w, g.fontH, UD.getter(function() return derived(state, "link_floor") end, function(v)
     if v == nil then return T.link_floor .. ": -" end
     return string.format("%s: %ddBm", T.link_floor, math.floor(v))
-  end), footFont, C.label, LEFT)
+  end), g.font, C.label, LEFT)
   UD.hline(children, x, footY - g.gap, w)
 
   -- The rows, each a name, a bar where the reading has one, and the figure.

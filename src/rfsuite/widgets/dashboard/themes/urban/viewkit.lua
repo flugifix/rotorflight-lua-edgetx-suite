@@ -36,6 +36,31 @@ K.UD = UD
 K.C = UD.C
 K.T = UD.T
 
+-- The faces the firmware exports, largest first -- the order common.lua's font picker walks. A
+-- face one step up or down from another is its neighbour in this list, never a ratio of heights:
+-- the faces are not evenly spaced, and a ratio can land on another face for one pixel of
+-- difference between two firmware builds.
+local FACES = {}
+do
+  local order = { "XXLSIZE", "XLSIZE", "DBLSIZE", "MIDSIZE", "STDSIZE", "SMLSIZE", "TINSIZE" }
+  for i = 1, #order do
+    local value = _G[order[i]]
+    if order[i] == "STDSIZE" and type(value) ~= "number" then value = 0 end
+    if type(value) == "number" then FACES[#FACES + 1] = value end
+  end
+end
+
+-- The face `steps` places from `font` in FACES: positive is larger, negative smaller. A step past
+-- either end answers that end; a face that is not in the list answers itself.
+function K.stepFace(font, steps)
+  for i = 1, #FACES do
+    if FACES[i] == font then
+      return FACES[math.max(1, math.min(#FACES, i - steps))]
+    end
+  end
+  return font
+end
+
 -- The start of every view build: the scheme and the language the pilot chose, the metric cache
 -- for this zone, and the geometry. Answers the geometry, or nil where the zone has no area.
 function K.begin(zone, state)
@@ -47,13 +72,12 @@ function K.begin(zone, state)
   return K.geometry(zone)
 end
 
--- The geometry alone, without touching the scheme: the paddings, the close box and the face of
--- the title, and the layout profile the rows still take -- the picker's two, by the screen height.
+-- The geometry alone, without touching the scheme: the paddings, the close box and the face.
 --
 -- The face is the flight view's own -- the one its top bar, its clock and its value-row names are
 -- drawn in (layout.lua, L.buildFlight: a bar of 7.5 % of the height, at least 18 px, its face
--- sized against "Total Time"). Taken by the same rule from the same height, a view's title is
--- the size of the screen the view opens from, on every screen size.
+-- sized against "Total Time"). Taken by the same rule from the same height, a view's title and
+-- row names are the size of the screen the view opens from, on every screen size.
 --
 -- The close box is the one fixed size: 72 px on a screen taller than 350 px, 36 px below that.
 function K.geometry(zone)
@@ -65,7 +89,6 @@ function K.geometry(zone)
   local font = UD.selectFont(barH - 2, nil, "Total Time")
   return {
     x = math.floor(UD.num(zone.x) or 0), y = math.floor(UD.num(zone.y) or 0), w = w, h = h,
-    isLarge = isLarge,
     pad = isLarge and 12 or 5,
     gap = isLarge and 8 or 4,
     textPad = isLarge and 5 or 2,
@@ -143,15 +166,36 @@ function K.header(nodes, g, title, closePress, aside)
   return g.y + headerH + g.gap
 end
 
--- The two faces a row uses, picked once per build against the width a row has: the name and
--- the smaller line under it.
-function K.rowFonts(g, w)
-  local nameFont = UD.selectFont(g.isLarge and 26 or 14, w - 2 * g.textPad, "MMMMMMMMMMMM")
-  local nameH = UD.measure(nameFont, "Ag")
-  local subFont = UD.selectFont(g.isLarge and 19 or 11, w - 2 * g.textPad, "8888 mAh  Profile 6")
+-- The two faces a row uses: the name in the flight view's face, the line under it one face
+-- smaller. `rowH` is a row with both lines, `lineH` a row with the name alone -- each the height
+-- its text needs; how much taller a row is drawn is the view's call (K.stretch).
+function K.rowFonts(g)
+  local subFont = K.stepFace(g.font, -1)
   local subH = UD.measure(subFont, "Ag")
-  return { name = nameFont, nameH = nameH, sub = subFont, subH = subH,
-           rowH = nameH + subH + 2 * g.textPad }
+  return { name = g.font, nameH = g.fontH, sub = subFont, subH = subH,
+           rowH = g.fontH + subH + 2 * g.textPad, lineH = g.fontH + 2 * g.textPad }
+end
+
+-- The heights of a stack of rows that has to fit `avail` px: each row at least its own `natural`
+-- height, and every row grown alike toward the close box's size with the room that is left -- so
+-- a short list gets targets as large as the X, and a long one still shows every row. `fixed` is
+-- what the stack spends on anything but rows (titles, gaps). Answers one height per row.
+function K.stretch(g, avail, fixed, naturals)
+  local n = #naturals
+  local heights = {}
+  if n == 0 then return heights end
+  local room = avail - fixed
+  -- A row whose own height is above the even share keeps its own height, and the share is worked
+  -- out again over the others.
+  local share = math.floor(room / n)
+  local big, rest = 0, 0
+  for i = 1, n do
+    if naturals[i] > share then big = big + naturals[i] else rest = rest + 1 end
+  end
+  if rest > 0 then share = math.floor((room - big) / rest) end
+  share = math.min(share, g.closeSize)
+  for i = 1, n do heights[i] = math.max(naturals[i], share) end
+  return heights
 end
 
 -- A button with a name and an optional line under it, the picker's entry button. `selected`
