@@ -570,6 +570,9 @@
   - The *Voltage* tiles on the @AERC and @RT-RC post-flight pages read the live pack voltage, so they showed `--.-V` once the pack was unplugged from a flight controller that stays powered, and the next pack's voltage once one was plugged in. They now show the landing voltage (`stattype = "last"`), with the two decimals the tiles declare. While the pack stays plugged in they no longer follow its live voltage; they keep the value read at the disarm.
   - The per-cell tile on the @SRB-RC post-flight page divided the live voltage by the live cell count. A new `stattype = "lastcell"` shows the landing voltage per cell, divided by the cell count taken with it at the disarm, so a pack with a different cell count plugged in afterwards does not change it.
   - `docs/developer/dashboard-themes.md` says which voltage values a `stats` box keeps after the pack comes off.
+- **The Urban theme's tile draws an icon of its own (`widgets/dashboard/themes/urban/icon.png`, `docs/dashboard/urban-theme.md`)**:
+  - Urban shipped with a byte-for-byte copy of the *Default* theme's icon, so on *Dashboard* → *Settings* and *Per-Model Settings* its tile could not be told from *Default*'s or *RF Status*'s by its picture. The new icon is a small picture of Urban's flight screen: the top and bottom bars, the left panel, the vertical battery gauge in the middle and the value rows on the right.
+  - It is a 40x40 8-bit grayscale PNG with no alpha, the size and encoding `.vscode/scripts/optimize_icons.py` keeps for a monochrome source, drawn in the stroke width and greys of Urban's own page icons under `themes/urban/icons/` so the theme tile and its page tiles read as one set.
 
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:
