@@ -494,6 +494,9 @@
   - #424 limits the first searches after `Sensors.reset()` to four per pass. The dashboard widget asks for `armflags` after five other sources, so after every reset it was held back for one read and the widget knew the arming state about half a second later than before. `armflags` is now exempt from that limit: it is the one source whose absence reads as "not armed", and its list is five names long.
   - A long press on RTN that leaves fullscreen on a pass that waits for a theme reload now drops the tuning surface and the battery picker on that pass rather than the next one.
   - `docs/reference/sensor-selection.md` described the widget and the configuration tool together; the tool forgets its sensor choice on every audio tick while its connection is not ready, and now has a bullet of its own.
+- **Three help texts no longer repeat their last sentence on an installed package (`app/pages/settings/general/help.lua`, `app/pages/tools/copy_profiles/help.lua`, `app/pages/setup/power/preferences/help.lua`)**:
+  - Each wrote its English fallback as `i18n.t("key") or "first part" .. "rest"`. The precompiler replaces the call together with the first literal, so the package carried the translated text followed by the rest of the English fallback: `Settings > General` showed half a sentence twice in English and, in German, an English tail after the German text.
+  - The fallback is now joined in a local of its own and the call reads `i18n.t("key") or fallback`, the shape `docs/developer/i18n.md` describes for a long text.
 
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:
