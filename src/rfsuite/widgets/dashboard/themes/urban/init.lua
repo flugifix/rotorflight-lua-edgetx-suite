@@ -26,8 +26,8 @@ local init = {
   -- menu; one that does not know it ignores the key and full screen stays the quick menu.
   fullscreen = "theme",
   -- The way out of full screen is a long press on RTN, which the firmware always honours, so
-  -- this theme draws no close control. The one control it binds is the menu glyph in the top
-  -- bar (layout.lua, L.menuControl).
+  -- this theme draws no close control. The two controls it binds are the menu and the tool
+  -- glyphs in the top bar (layout.lua, L.menuControl, L.toolControl).
   fullscreenExit = "longRtn",
   -- The settings of this theme are three pages rather than one long form. A host that knows
   -- `pages` opens the theme's tile on a grid of these and hands the chosen one to the
@@ -50,6 +50,25 @@ local init = {
     { id = "look",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_look)@",   icon = "icons/look.png" },
     { id = "rows",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_rows)@",   icon = "icons/rows.png" },
     { id = "topbar", title = "@i18n(app.pages.settings_dashboard_settings.urban_page_topbar)@", icon = "icons/topbar.png" },
+    { id = "keys",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_keys)@",   icon = "icons/keys.png" },
+  },
+  -- The full screen views, on a host that has theme views; any other host ignores the key and
+  -- draws its own menu and picker. `menu` and `battery_pick` are the host's own two, drawn in this
+  -- theme's look: what they offer and what their presses do stay the host's. `urban_menu` is this
+  -- theme's own menu (the battery profiles and the tuning surface, opened by a tap on the flight
+  -- view's profile row), `urban_link` its ELRS link page (opened by a tap on the link bars).
+  --
+  -- The link view also opens on a switch, in full screen and in the widget zone alike, and shows
+  -- while the switch holds the position: a glance at the link without a tap, in flight too. The
+  -- switch is the pilot's, on the Top Bar settings page (`link_switch`, a switch position as the
+  -- radio's own picker stores it). Until the pilot names one, `default` stands: 0, no switch --
+  -- the view then opens by its tap only.
+  views = {
+    { id = "menu",         module = "menuview.lua" },
+    { id = "battery_pick", module = "pickview.lua" },
+    { id = "urban_menu",   module = "toolsview.lua" },
+    { id = "urban_link",   module = "linkview.lua", where = "both",
+      openWhen = { switch = { pref = "link_switch", default = 0 } } },
   },
 }
 

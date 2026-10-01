@@ -25,7 +25,8 @@ layer described below, and the menu and the picker open over it.
 | `widgets/dashboard/runtime.lua` | The fullscreen branch of `widget.refresh`, which asks `views.resolve()` which view to show, and `viewJobStep`, which builds it. |
 | `widgets/dashboard/fullscreen_menu.lua` | The quick menu view. |
 | `widgets/dashboard/battery_pick_menu.lua` | The battery picker view. It draws the quick menu's `battery_pick` record, whose options and close are what its presses run. |
-| `widgets/dashboard/fullscreen_controls.lua` | The menu glyph and the X the widget draws over a fullscreen theme that binds no control of its own. |
+| `widgets/dashboard/fullscreen_controls.lua` | The tool control, the menu glyph and the X the widget draws over a fullscreen theme that binds no control of its own, and the tool control alone on the connect splash at full screen. |
+| `widgets/dashboard/tool_host.lua` | The suite's tool, run inside the widget while it is open — see [The tool](#the-tool). |
 
 `views.lua` is loaded on the first fullscreen pass and never on a zone pass, so a dashboard
 that is never put full screen does not pay for it. The exceptions are a call to
@@ -169,6 +170,7 @@ view, which is what an unresolvable condition does in `app/menu_registry.lua` as
 | --- | --- |
 | `previewInflightTuning` | the in-flight tuning preview switch is on and the widget carries the overlay's state for this model |
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
+| `modelDisarmed` | the model is not armed (`state.armed`) |
 | `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
 
 ### What else a theme's view may open on
@@ -244,6 +246,7 @@ string:
 | `closeView` | Close the view on top; what is under it shows again. |
 | `done` | The interaction is finished: the stack is emptied. With no base layer that leaves full screen; with one, the base layer — the theme — shows again. |
 | `exitFullscreen` | Empty the stack and leave full screen, base layer or not. |
+| `openTool` | Open the suite's tool inside the widget, where the model is disarmed. The tool takes full screen until it is closed; see [The tool](#the-tool). The stack is emptied as for `done`, keeping what the theme's views' conditions last answered, so once the tool is closed the base layer shows, or with none the quick menu, and a theme's view whose condition still holds is not opened again. |
 | `none` | Nothing. The press did whatever needed doing itself. |
 
 A missing `after`, and anything that is not one of these, is `none`. `views.parseAction()` is
@@ -257,12 +260,14 @@ built, so the next pass builds the view now on top. The shipped buttons:
 | Quick menu | ERASE BLACKBOX | `done` |
 | Quick menu | IN-FLIGHT TUNING | `none` — its press raises the tuning surface's own flag |
 | Quick menu | BATTERY | `openView:battery_pick` |
+| Quick menu | RFSUITE TOOL | `openTool` |
 | Quick menu | each BATTERY PROFILE option | `done` |
 | Quick menu | the header's X | `done` |
 | Picker | each pack, and NO BATTERY | `done` |
 | Picker | the header's X | `done` |
 | Over a fullscreen theme that binds no control | the menu glyph | `openView:menu` |
 | Over a fullscreen theme that binds no control | the X | `exitFullscreen` |
+| Over a fullscreen theme that binds no control, and on the connect splash at full screen | the tool control | `openTool` |
 
 So the picker's answers and its X leave full screen where there is no base layer, as they always
 have, and the quick menu, with its BATTERY button, is what the next entry into full screen shows.
@@ -316,6 +321,35 @@ The handle the widget publishes for a theme or another widget
 
 The handle runs outside the widget's own error guard, so it reaches `views.lua` through a loader
 that returns nothing rather than raising when the file cannot be loaded.
+
+## The tool
+
+`openTool` hands full screen to the suite's tool until it is closed.
+`widgets/dashboard/tool_host.lua` loads `ui/home.lua` into the widget's Lua state — the file the
+tool script runs — and `widget.refresh` drives it in place of the whole pass, keys included, so
+neither a view, the base layer nor the dashboard's own work runs beside it:
+
+- **Opening** takes two passes after the press: one loads `ui/home.lua`, one calls
+  `init({ hosted = true })`. A hosted tool leaves alone what the widget's state already owns:
+  it does not compile the tree, announce, reset the event runner, shut the card log, clear the
+  chunk cache or drop `_G.rfsuite` on its way out.
+- **Running**, the tool's `run(event, touchState)` is called under the widget's event context, so
+  the MSP queue bounds its loops by count and the event runner stays on the task list the widget
+  has already worked through. A widget call is stopped at the instruction limit where a tool
+  script is yielded; a stop inside the tool is caught and the tool is run again on the next pass,
+  and twelve stops in a row give the tool up.
+- **Closing** is the tool's own sequence: the back key at the top of its menu, or
+  `requestClose()`, which the host calls on the first pass without an event (full screen has
+  been left) and when the model arms. When `run` returns 2 the host detaches the tool's MSP
+  client, puts back the MSP queue's default client and the `preferences` and `savePreferences` it
+  found on `_G.rfsuite`, drops the module cache entries under `app/` and `ui/`, and drops the
+  scene, so the next pass builds the base layer, or with none the quick menu. No condition is
+  asked while the tool is open, so that pass compares against what the conditions answered when
+  it was opened: a theme's view whose condition held then and still holds stays closed, and one
+  whose condition rises later opens as it would have. A widget sent to the background drops the
+  tool without the sequence, because it cannot paint it.
+
+A theme that binds its own controls reaches the tool with `ctx.action("openTool")`.
 
 ## Related
 

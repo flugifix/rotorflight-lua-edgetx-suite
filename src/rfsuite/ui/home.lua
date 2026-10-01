@@ -2820,8 +2820,17 @@ end
 
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
-function M.init()
+-- `opts.hosted` is for a host that runs this file inside its own Lua state rather than as the
+-- radio's tool script -- the dashboard widget does (widgets/dashboard/tool_host.lua). Everything
+-- under _G.rfsuite is then the host's as well: the module cache, the event runner, the card
+-- sink and the audio engine are the instances the host is already running. So a hosted tool
+-- leaves those alone where it would otherwise own them -- it does not compile the tree, does
+-- not announce, and on its way out does not reset the events, shut the sink, clear the chunk
+-- cache or drop the global table.
+function M.init(opts)
   ensureInitDeps()
+
+  state.hosted = type(opts) == "table" and opts.hosted == true
 
   ensurePreferencesSafe()
   state.shouldExit = false
@@ -2909,9 +2918,14 @@ function M.init()
   state.precompileDone = 0
   state.precompileTotal = 0
   ensureVersion()
-  ensurePrecompile()
-  if Precompile then
-    Precompile.start(Version and Version.VERSION or nil)
+  -- Hosted, the walk is not this file's to make: lib/precompile.lua compiles through the
+  -- uncached loader that only the tool script installs (src/main.lua), and the host's state
+  -- has none. Without Precompile the start screen counts the compile as finished.
+  if not state.hosted then
+    ensurePrecompile()
+    if Precompile then
+      Precompile.start(Version and Version.VERSION or nil)
+    end
   end
   logStep("init: first build", true)
   M.buildUI()
@@ -3167,7 +3181,8 @@ function M.run(event, touchState)
           pcall(MspRuntime.setDefaultClient, TOOL_MSP_CLIENT)
         end
         
-        if Events and type(Events.reset) == "function" then
+        -- Hosted, the event runner is the host's and stays running.
+        if not state.hosted and Events and type(Events.reset) == "function" then
           logToFile("Resetting events.")
           pcall(Events.reset)
         end
@@ -3189,8 +3204,10 @@ function M.run(event, touchState)
           state.mspAttached = false
         end
         
-        -- Clear chunk cache to allow all compiled functions to be garbage collected
-        if _G.rfsuite and _G.rfsuite.utils and type(_G.rfsuite.utils.clearChunkCache) == "function" then
+        -- Clear chunk cache to allow all compiled functions to be garbage collected. Hosted, the
+        -- module cache it also empties is the one the host is running on.
+        if not state.hosted and _G.rfsuite and _G.rfsuite.utils
+          and type(_G.rfsuite.utils.clearChunkCache) == "function" then
           logToFile("Clearing compiled chunk cache.")
           pcall(_G.rfsuite.utils.clearChunkCache)
         end
@@ -3217,9 +3234,11 @@ function M.run(event, touchState)
         Sensors = nil
         ArmedState = nil
 
-        -- Clear the global table so everything becomes unreachable
-        _G.rfsuite = nil
-        
+        -- Clear the global table so everything becomes unreachable -- unless it is the host's.
+        if not state.hosted then
+          _G.rfsuite = nil
+        end
+
         -- Clear local state fields to break references to heavy tables
         state.i18n = nil
         state.menu = nil
@@ -3457,9 +3476,12 @@ function M.run(event, touchState)
     updateConnectionStatus()
 
     -- Audio Feedback Polling (gedrosselt auf ca. 5Hz)
-    if Audio and type(Audio.process) == "function" and (now - state.lastAudioTick) >= 20 then
+    -- Hosted, the host announces: a second audio state here would call out what the host's
+    -- has already called out.
+    if not state.hosted and Audio and type(Audio.process) == "function"
+      and (now - state.lastAudioTick) >= 20 then
       state.lastAudioTick = now
-      
+
       local lqReading = Sensors and Sensors.getValue("link")
       local lq = lqReading or 0
       local vbatReading = Sensors and Sensors.getValue("voltage")
@@ -3714,8 +3736,9 @@ function M.run(event, touchState)
       MspRuntime.detach("tool")
       state.mspAttached = false
     end
-    -- An orderly exit is the one case where the tail is not lost, so take it.
-    local exitSink = sink()
+    -- An orderly exit is the one case where the tail is not lost, so take it. Hosted, the sink
+    -- goes on writing for the host.
+    local exitSink = (not state.hosted) and sink() or nil
     if exitSink and type(exitSink.shutdown) == "function" then
       pcall(exitSink.shutdown)
     end
@@ -3729,4 +3752,20 @@ end
 -- LVGL tree itself. A host that clears the tree without it leaves the page blank, because
 -- nothing in `run` notices that the objects it built are gone. The rebuild still happens at
 -- the same point in `run` as every other one, so it cannot land in the middle of a build.
-return { init = M.init, run = M.run, useLvgl = true, requestRebuild = scheduleBuildUI }
+--
+-- `requestClose` starts the same closing sequence the back key starts at the top of the menu,
+-- for a host that has to end the tool on a condition of its own: the page's releases and the
+-- queued writes still go out over the ticks that follow, and `run` returns 2 when it is done.
+local function requestClose()
+  if state.menu and not state.isClosing then
+    state.isClosing = true
+  end
+end
+
+return {
+  init = M.init,
+  run = M.run,
+  useLvgl = true,
+  requestRebuild = scheduleBuildUI,
+  requestClose = requestClose
+}

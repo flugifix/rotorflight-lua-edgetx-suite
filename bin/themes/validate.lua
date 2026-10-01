@@ -14,7 +14,8 @@
 --   * a `rectangle` lies over a node that has a press: built in fullscreen it takes the press
 --     and hands it to its parent, so it swallows every press that lands on it;
 --   * a press or a `ctx.keys` entry names an action that is not one of `openView:<id>`,
---     `closeView`, `done`, `exitFullscreen` and `none`, or a view the widget does not have;
+--     `closeView`, `done`, `exitFullscreen`, `openTool` and `none`, or a view the widget does not
+--     have;
 --   * a `ctx.keys` entry is not one of the keys the widget answers -- `exit`, `pageDown`,
 --     `pageUp`, `mdl`, `sys`, `tele`. Only `exit` counts as a way out: MDL, SYS and TELE are
 --     not on every radio;
@@ -189,7 +190,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local VIEWS = { menu = true, battery_pick = true }
-local SIMPLE = { closeView = true, done = true, exitFullscreen = true, none = true }
+local SIMPLE = { closeView = true, done = true, exitFullscreen = true, openTool = true, none = true }
 -- The keys `views.key` answers from `ctx.keys` (widgets/dashboard/views.lua).
 local KEY_NAMES = { exit = true, pageDown = true, pageUp = true, mdl = true, sys = true, tele = true }
 

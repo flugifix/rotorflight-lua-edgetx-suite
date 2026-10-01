@@ -43,7 +43,7 @@ end
 -- The menus the widget offers, each a list of entry ids in the order they are drawn. The quick
 -- menu is the one there is; a theme draws it, or takes entries out of it by id, and adds none.
 M.LISTS = {
-  quick = { "erase_blackbox", "inflight_tuning", "battery_pick", "battery_profile" },
+  quick = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool", "battery_profile" },
 }
 
 -- ---------------------------------------------------------------------------
@@ -266,6 +266,18 @@ function BUILD.battery_pick(widget, t)
       press = function() dismissBatteryPick(widget) end,
       after = "done"
     }
+  }
+end
+
+-- The suite's tool, run inside the widget until it is closed (widgets/dashboard/tool_host.lua).
+-- The whole effect is the action, so the row has no press of its own.
+function BUILD.tool(widget, t)
+  return {
+    id = "tool",
+    kind = "action",
+    title = t("widgets.dashboard.tool_open", "RFSUITE TOOL"),
+    visibleWhen = "modelDisarmed",
+    after = "openTool"
   }
 end
 

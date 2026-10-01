@@ -37,6 +37,7 @@ EdgeTX gives every script, so it looks the same whichever dashboard theme is sel
 | **ERASE BLACKBOX** | Erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now. Closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). |
 | **IN-FLIGHT TUNING** | Opens the in-flight tuning surface at full size. It stays full screen rather than closing. Only listed while the feature is switched on — see below. |
 | **BATTERY** | Brings the battery prompt back, with this model's packs. It stays full screen, the picker taking the menu's place. Only listed while the battery registry has a pack for this model and the model is disarmed. |
+| **RFSUITE TOOL** | Opens the suite's tool inside the widget — see [the tool from full screen](#the-tool-from-full-screen). Only listed while the model is disarmed. |
 | **BATTERY PROFILE** | A grid of the model's battery profiles; pressing one makes it the profile in force. |
 
 **IN-FLIGHT TUNING is a preview entry.** It appears only while *System* → *Settings* →
@@ -45,6 +46,35 @@ state for this model. With the preview switch off the entry is not listed at all
 offers no route into a feature the widget has stopped driving. What the surface itself does is
 in [in-flight tuning](inflight-tuning.md); the screen it opens sends nothing until the
 interlock switch is thrown.
+
+## The tool from full screen
+
+EdgeTX gives a widget no way to start a tool script, so the dashboard opens the tool itself: it
+runs the same tool inside the widget, at full screen, until it is closed, and then shows the
+theme again — or, over a theme that does not take full screen, this menu. A view of the theme's
+that was showing, or that the pilot had closed, does not come back on its own when the tool is
+closed. It is reached three ways, all of them only while the model is disarmed:
+
+- **RFSUITE TOOL** in the quick menu;
+- the tool control — three slider lines — beside the menu control, over a theme that takes full
+  screen and binds no control of its own;
+- the same control on the connect screen, when the widget is put full screen before the link is
+  up, so the tool is there for a model that does not connect.
+
+While it is open the tool works as it does when started from the radio's tool list, on the
+widget's own connection to the flight controller. The return key at the top of its menu closes
+it. Arming the model closes it as well, because while it is open the dashboard does not run and
+nothing is announced. So does leaving full screen with a long press on the return key. In both
+cases the tool's own closing sequence runs, so a page's changes that were already sent still
+reach the flight controller.
+
+Two things are different from the tool started from the tool list:
+
+- **A page that builds a lot can take a moment longer to appear.** A widget is stopped when one
+  call runs too long, where the tool started from the tool list is paused and resumed, so such a
+  page is finished over the next few frames.
+- **Some memory stays in use after it is closed.** The pages are released, but the parts of the
+  tool the dashboard shares stay loaded until the widget is.
 
 ## The battery profile grid
 
@@ -67,7 +97,7 @@ fit is not drawn.
 ## Closing it
 
 The **X** in the header closes the menu and leaves full screen. So does every entry except
-in-flight tuning and BATTERY, which swap one full-screen surface for another. The battery
+in-flight tuning, BATTERY and RFSUITE TOOL, which swap one full-screen surface for another. The battery
 picker's packs, *NO BATTERY* and its own X leave full screen as well, and the next entry into
 full screen shows the quick menu, with BATTERY to bring the picker back. EdgeTX's own way out of
 full screen — a long press on the return key — works as it does anywhere else.
@@ -95,7 +125,7 @@ menus:
 | `view` | For a `choice` whose options are drawn by a view of their own: that view's id. The menu then draws the row as the single button that opens it (its `after`), and the view draws the options. |
 | `visibleWhen` | The name of a condition that decides whether the row exists at all. Omitted, the row is always there. |
 | `press` | The work an `action` does when it is pressed, and nothing else. Optional: a row whose whole effect is its `after` has none. |
-| `after` | What follows the press, as data: `done`, `openView:<id>`, `closeView`, `exitFullscreen` or `none`. Missing means `none`. The actions are described in [dashboard views](../developer/dashboard-views.md). |
+| `after` | What follows the press, as data: `done`, `openView:<id>`, `closeView`, `exitFullscreen`, `openTool` or `none`. Missing means `none`. The actions are described in [dashboard views](../developer/dashboard-views.md). |
 | `options` | For a `choice`: a list, or a function returning one, of `{ id, label, current, press, after }`. `id` is what a run is matched by: a battery profile's number, 1 to 6, and a pack's registry id. The battery-profile grid is one, and the battery picker's packs are the other. |
 | `close` | Optional, `{ press, after }`: what closing the surface that draws the options does. |
 | `info` | Optional, a function returning what the entry knows about the state it acts on, read when it is called. ERASE BLACKBOX has one: `{ used, total }` of the blackbox, from the summary the flight controller last sent. |
