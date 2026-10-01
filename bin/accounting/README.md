@@ -95,6 +95,14 @@ checks nothing, and leaves `--check` byte-identical. The run takes under a minut
   is done; nothing on the host can reach the measurement and nothing the measurement writes
   survives it. A path outside the card is left alone, so `measure.lua`'s own repo-relative
   file access is untouched.
+- The sound pack is answered as absent. `lib/audio.lua` finds out whether an announcement
+  file is there by opening it under `/SOUNDS/`, the one other absolute path a measured source
+  opens, and that open used to reach the host's own `/SOUNDS` -- so a machine with a sound
+  pack there measured the branch that finds the file, every other machine the branch that
+  does not, and the two reports differed in rows no change had touched. Every `/SOUNDS/`
+  open is now answered the way the host answers a file that is not there, so every host
+  measures a radio without a pack: the case a host with no `/SOUNDS`, the CI runner among
+  them, measured already.
 - **The remap costs what a remap costs, and it is in the figures.** `io.open` is a Lua
   function now, so every open the measured sources make goes through a wrapper that is
   counted under the hook and billed to the suite. Four rows carry it -- `pass.startup.worst`
@@ -102,7 +110,9 @@ checks nothing, and leaves `--check` byte-identical. The run takes under a minut
   on Lua 5.3.6, all four inside their targets. Removing the `io.open` wrapper alone puts all
   four back on master's figures and the report becomes identical to master's line for line,
   which is how the cost was attributed to the wrapper rather than to a settings write: no
-  card path is written at all in a traced `--check` run. Read the rows as
+  card path is written at all in a traced `--check` run. The `/SOUNDS/` test is one more
+  comparison on every open outside the card, and the same four rows carry it:
+  `pass.startup.worst` +41, the other three +13 each. Read the rows as
   *suite + instrument*, and the way to take the instrument out is the third report in the
   pull request.
 - **One card per run, not one per machine.** The card is claimed with `mkdir` as the test,
