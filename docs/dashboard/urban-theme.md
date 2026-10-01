@@ -15,7 +15,7 @@ are listed at the end of this page.
 
 *System* → *Settings* → *Dashboard* → *Design*: choose *Urban* for a flight phase, or for all
 three. Its settings are under *System* → *Settings* → *Dashboard* → *Settings* → *Urban*, split
-into three pages: *Look*, *Value Rows* and *Top Bar*. They are stored for the radio, and a model
+into four pages: *Look*, *Value Rows*, *Top Bar* and *Keys*. They are stored for the radio, and a model
 can carry its own under [*Per-Model Settings*](../pages/settings/dashboard/overrides.md) where
 per-model settings are switched on. Its words come from the suite's translations, like every other
 theme's, so it speaks the language of the package that was installed.
@@ -57,6 +57,11 @@ button in the top bar and the page keys open the [quick menu](quick-menu.md) ove
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
 allows.
 
+What the page keys, MDL, SYS and TELE do in full screen is chosen on the *Keys* page. Left at
+their defaults, the page keys open the quick menu and MDL, SYS and TELE do nothing; outside full
+screen MDL, SYS and TELE open the radio's own menus as always. A radio without one of these keys
+simply never uses its setting.
+
 ## Settings
 
 | Page | Setting | What it does |
@@ -73,6 +78,8 @@ allows.
 | Top Bar | Colour the bars | *Always* (default) colours a good link green; *Only on warning* leaves it neutral until a bar drops to its warning step. |
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Quick menu* (default), *Profile & Tuning*, *ELRS link page* or *Leave full screen*. |
+| Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys; *Nothing* (default). |
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the
 model — the cell count times the flight controller's minimum cell voltage — and the gauge, the
