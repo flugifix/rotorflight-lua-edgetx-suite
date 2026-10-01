@@ -727,6 +727,15 @@ local function resolveSmartfuelModel(self)
   return isElectric, modelType, cellCount, hasCapacity
 end
 
+-- Whether the battery configuration has been read from the flight controller. A read always
+-- carries batteryCellCount (0 on a board without a battery); the battery and sources pages may
+-- store an empty table before it arrives, which decides nothing.
+local function batteryConfigRead()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
+  return type(batteryConfig) == "table" and batteryConfig.batteryCellCount ~= nil
+end
+
 local function getModelName()
   if type(model) ~= "table" or type(model.getInfo) ~= "function" then
     return nil
@@ -1837,19 +1846,28 @@ function Audio.process(self, opts)
         end
 
         if isReady and now >= (audioState.nextAllowedAt or 0) then
-          local isElectricModel = resolveSmartfuelModel(self)
+          local isElectricModel, modelType = resolveSmartfuelModel(self)
           local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
-          -- A sound pack without the file counts as announced. resolveEventPath caches its misses
-          -- for as long as this module is loaded, so no later pass has anything to play either;
-          -- without the latch this block would run again on every audio pass and log two warnings
-          -- each time. Nothing clears resolvedEventPaths, not a reconnect and not a change of
-          -- language or sound pack, so a file added to the card later is not found until the
-          -- script is loaded again. The latch depends on that cache staying as it is.
+          -- A sound pack without the file counts as announced once the choice of file can no
+          -- longer change: the model type is set explicitly, the battery configuration has been
+          -- read, or the pack carries neither file. Until then a model of undecided type may still
+          -- turn out to need the other file, so it is tried again as before. Checked only when the
+          -- file is missing. resolveEventPath caches its misses for as long as this module is
+          -- loaded, so no later pass has anything to play either; without the latch this block
+          -- would run again on every audio pass and log two warnings each time. Nothing clears
+          -- resolvedEventPaths, not a reconnect and not a change of language or sound pack, so a
+          -- file added to the card later is not found until the script is loaded again. The latch
+          -- depends on that cache staying as it is.
           local hasSound = resolveEventPath(calloutSound) ~= nil
+          local noSound = false
           if not hasSound then
-            emitLog(opts, "no " .. calloutSound .. " in this sound pack; nothing is spoken", "warn")
+            local otherSound = isElectricModel and "stat/alerts/fuel.wav" or "evt/battery.wav"
+            noSound = modelType ~= 0 or batteryConfigRead() or resolveEventPath(otherSound) == nil
+            if noSound then
+              emitLog(opts, "no " .. calloutSound .. " in this sound pack; nothing is spoken", "warn")
+            end
           end
-          if not hasSound or tryPlayEventFile(audioState, now, calloutSound, opts) then
+          if noSound or tryPlayEventFile(audioState, now, calloutSound, opts) then
             if hasSound and type(playNumber) == "function" then
               -- playNumber takes an integer and raises on a number it cannot convert to one.
               -- The fuel percentage is no longer rounded on its way here, so without this the
