@@ -1840,8 +1840,11 @@ function Audio.process(self, opts)
           local isElectricModel = resolveSmartfuelModel(self)
           local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
           -- A sound pack without the file counts as announced. resolveEventPath caches its misses
-          -- for the session, so no later pass has anything to play either; without the latch this
-          -- block would run again on every audio pass and log two warnings each time.
+          -- for as long as this module is loaded, so no later pass has anything to play either;
+          -- without the latch this block would run again on every audio pass and log two warnings
+          -- each time. Nothing clears resolvedEventPaths, not a reconnect and not a change of
+          -- language or sound pack, so a file added to the card later is not found until the
+          -- script is loaded again. The latch depends on that cache staying as it is.
           local hasSound = resolveEventPath(calloutSound) ~= nil
           if not hasSound then
             emitLog(opts, "no " .. calloutSound .. " in this sound pack; nothing is spoken", "warn")
