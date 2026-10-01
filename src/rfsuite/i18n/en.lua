@@ -2317,7 +2317,7 @@ return {
         value_theme_inflight = "DEFAULT",
         value_theme_postflight = "DEFAULT",
         value_model_override = "DISABLED",
-        help_message = "Theme: the dashboard theme of every model without settings of its own.\nAllow per-model settings: lets a model use its own theme and theme settings, stored for its flight controller.\nOwn settings for this model: turns them on for the connected model; its Theme picks the model's theme, Disabled keeps the one above.\nPer-Phase Themes: adds an inflight and a postflight override; 'Use theme above' keeps the theme above.\nSwitching off keeps the stored values.",
+        help_message = "Theme: the dashboard theme of every model without settings of its own.\nAllow per-model settings: lets a model use its own theme and theme settings, stored for its flight controller. Off ignores them without deleting them.\nOwn settings for this model: turns them on for the connected model; off keeps them. Its Theme picks the model's theme, Disabled keeps the one above.\nPer-Phase Themes: adds an inflight and a postflight override; 'Use theme above' keeps the theme above.",
         saved_title = "Saved",
         saved_message = "Theme settings saved",
         save_error_title = "Error",

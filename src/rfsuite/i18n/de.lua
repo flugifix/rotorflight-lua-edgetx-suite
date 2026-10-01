@@ -777,7 +777,7 @@ return {
         section_profiles = "PID/Raten-Profil",
         section_esc = "ESC-Temperatur",
         section_mcu = "MCU-Temperatur",
-        section_link = "Linkqualitaet",
+        section_link = "Linkqualität",
         section_adjustment = "Einstellungsansagen",
         section_fuel = "Kraftstoff",
         section_battery = "Akku",
@@ -815,7 +815,7 @@ return {
         mcu_temperature = "MCU-Temperatur",
         section_telemetry = "Telemetrie",
         telemetry_lost = "Telemetrie verloren",
-        lq_alert = "Linkqualitaet",
+        lq_alert = "Linkqualität",
         lq_warn = "Warnung (%)",
         lq_critical = "Kritisch (%)",
         adjustment_events = "Einstellungsansagen",
@@ -862,7 +862,7 @@ return {
         help_message = "Ansage der Akku-Kapazitaet bei einem Wechsel des Akkuprofils und des Kraftstoffstands einmal beim Verbinden des Modells."
       },
       settings_audio_events_link = {
-        help_message = "Linkqualitaet: Ansage der Linkqualität, wenn sie auf eine Stufe fällt; die Erholung bleibt still, ebenso ein Empfänger, der keine meldet.\nWarnung (%), Kritisch (%): Die beiden Stufen.\nTelemetrie verloren: Ansage, wenn das scharfe Modell nicht mehr antwortet, und erneut, wenn es wieder antwortet. Braucht zwei Sounddateien, die ein Paket noch nicht haben muss.\nWiederholung, Haptisch: Wie oft die Linkqualitäts-Warnung wiederholt wird und ob der Sender vibriert (nur kritische Stufe und Telemetrie verloren)."
+        help_message = "Linkqualität: Ansage der Linkqualität, wenn sie auf eine Stufe fällt; die Erholung bleibt still, ebenso ein Empfänger, der keine meldet.\nWarnung (%), Kritisch (%): Die beiden Stufen.\nTelemetrie verloren: Ansage, wenn das scharfe Modell nicht mehr antwortet, und erneut, wenn es wieder antwortet. Braucht zwei Sounddateien, die ein Paket noch nicht haben muss.\nWiederholung, Haptisch: Wie oft die Linkqualitäts-Warnung wiederholt wird und ob der Sender vibriert (nur kritische Stufe und Telemetrie verloren)."
       },
       settings_audio_events_other = {
         help_message = "Ansage des Modellnamens beim Verbinden. Die Ansage ist eine WAV-Datei mit dem Namen des Modells im Ordner SOUNDS."
@@ -2345,7 +2345,7 @@ return {
         value_theme_inflight = "STANDARD",
         value_theme_postflight = "STANDARD",
         value_model_override = "DEAKTIVIERT",
-        help_message = "Design: Das Dashboard-Design jedes Modells ohne eigene Einstellungen.\nModell-Einstellungen erlauben: Ein Modell darf ein eigenes Design und eigene Design-Einstellungen nutzen, gespeichert für seinen Flugregler.\nEigene Einstellungen für dieses Modell: Schaltet sie für das verbundene Modell ein; sein Design wählt das Design des Modells, 'Deaktiviert' behält das Design darüber.\nDesigns pro Flugphase: Fügt einen Override für Flug und Nachflug hinzu; 'Design von oben' behält das Design darüber.\nAusschalten behält die gespeicherten Werte.",
+        help_message = "Design: Das Dashboard-Design jedes Modells ohne eigene Einstellungen.\nModell-Einstellungen erlauben: Ein Modell darf ein eigenes Design und eigene Design-Einstellungen nutzen, gespeichert für seinen Flugcontroller. Aus ignoriert sie, ohne sie zu löschen.\nEigene Einstellungen für dieses Modell: Schaltet sie für das verbundene Modell ein; aus behält sie. Sein Design wählt das Design des Modells, 'Deaktiviert' behält das Design darüber.\nDesigns pro Flugphase: Fügt einen Override für Flug und Nachflug hinzu; 'Design von oben' behält das Design darüber.",
         saved_title = "Gespeichert",
         saved_message = "Theme-Einstellungen gespeichert",
         save_error_title = "Fehler",

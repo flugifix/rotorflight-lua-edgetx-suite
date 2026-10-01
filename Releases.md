@@ -497,6 +497,7 @@
 - **Five help texts are short again, one line per setting (`i18n/en.lua`, `i18n/de.lua`, `app/pages/settings/dashboard/theme/help.lua`, `app/pages/settings/dashboard/overrides/help.lua`, `app/pages/settings/dashboard/settings/help.lua`, `docs/audio/events.md`)**:
   - The `?` sheets of *Audio > Events > Voltage* and *Link*, and of *Dashboard > Design*, *Per-Model Settings* and a theme's page under *Dashboard > Settings*, were single paragraphs of up to 1332 characters. At 480x320 the longest ran behind the Close button.
   - Each now names the settings in the order the page shows them, one line each, starting with the label as it reads on screen. The longer explanations were already on the documentation pages (`docs/audio/events.md`, `docs/pages/settings/dashboard/`). `docs/audio/events.md` gains the one fact only the old help text had: a receiver that reports no link quality leaves the link alert silent.
+  - In German, the *Link* page's section header and its first row now spell *link quality* with an umlaut, as the help text and the rest of the German translation do.
 
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:
