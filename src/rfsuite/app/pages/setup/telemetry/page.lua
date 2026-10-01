@@ -229,7 +229,10 @@ local function ensureDeps()
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ui.runtimeBase then
     ui.runtimeBase = Common.createFormRuntime(ui)
-    if type(ui.runtime) ~= "table" then ui.runtime = {} end
+    -- onClose leaves ui.runtime nil while the module stays in the page cache, so a re-entry
+    -- arrives here without one. It has to be the page's own runtime: activeGetters exists only
+    -- there, not on the shared base.
+    ensureRuntime()
     setmetatable(ui.runtime, { __index = ui.runtimeBase })
   end
   if not t then t = Common and Common.pageT("setup_telemetry") or nil end

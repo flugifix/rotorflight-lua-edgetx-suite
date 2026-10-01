@@ -32,6 +32,8 @@ To prevent spurious "Battery 0%" announcements at startup:
 - **Carried-Over Reading Detection:** EdgeTX retains the last received sensor reading across disconnections. If a new connection reports a reading bit-identical to the previous session's disconnect value (`previousSessionFuel`), it is treated as a carried-over reading and held until the new pack's fresh reading arrives.
 - **Immediate vs. Timed Callout:** As soon as a positive, fresh reading arrives (`fuel > 0` and different from the previous pack), the percentage is spoken immediately. If the pack is genuinely empty (0%), the callout fires once the deferral ceiling expires.
 
+A sound pack without the announcement's file (`evt/battery.wav` for an electric model, `stat/alerts/fuel.wav` for nitro) has nothing to play. Once the choice between the two files can no longer change (the model type is set explicitly, the battery configuration has been read from the flight controller, or the pack carries neither file), the announcement counts as made for that connection: nothing is spoken and one warning in the log says which file is missing. Until then it is tried again on every pass, because a model whose type is not yet known may still turn out to need the file the pack does carry.
+
 ### 2. Fuel
 
 Configures recurring callouts and low-fuel alarms during flight based on the estimated remaining capacity or battery percentage.
@@ -92,11 +94,21 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 | Repeat | `esc_repeat` | Until cleared | Radio | How often either temperature alert speaks while the reading stays at or above its threshold -- see *Repeat and Haptic* below. |
 | Haptic | `esc_haptic` | On | Radio | Transmitter vibration alongside the ESC and MCU temperature alerts. |
 
+Both thresholds are stored and compared in °C, the unit the flight controller reports. On a radio
+set to Fahrenheit under [Localization](../pages/settings/localization.md) the page shows them in
+°F -- each step is still one degree Celsius, so they move in steps of about 2 °F -- and the MCU
+alert speaks the temperature in °F.
+
+The ESC threshold is stored with the model while a flight controller is connected -- the row then
+reads *Threshold [Model]* -- and is otherwise the radio-wide default that every model without a
+value of its own reads. The MCU threshold is always radio-wide, because the same flight controller
+is rated the same in every aircraft.
+
 ### 8. Link Quality
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
-| Link alert | `lq_alert` | Off | Radio | Spoken warning when RC link quality drops below defined levels. |
+| Link alert | `lq_alert` | Off | Radio | Spoken warning when RC link quality drops below defined levels. A receiver that reports no link quality stays silent: the value that arrives in its place is a signal strength in dBm, not a percentage. |
 | Warning level | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical level | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
 | Telemetry lost | `telemetry_lost` | Off | Radio | Announces that the model was lost while it was armed, and announces it again when it answers. |

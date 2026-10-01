@@ -810,8 +810,8 @@ return {
         pid_profile = "PID Profile",
         rate_profile = "Rate Profile",
         esc_temperature = "ESC Temperature",
-        esc_threshold = "Threshold (°)",
-        esc_threshold_model = "Threshold (°) [Model]",
+        esc_threshold = "Threshold",
+        esc_threshold_model = "Threshold [Model]",
         mcu_temperature = "MCU Temperature",
         section_telemetry = "Telemetry",
         telemetry_lost = "Telemetry Lost",
@@ -844,13 +844,13 @@ return {
         help_message = "Announce the governor's state. The main switch turns the announcements on; below it, choose which states are spoken. A state is announced once it has held for a moment, so the states a spool-up passes through are not read out one after another."
       },
       settings_audio_events_voltage = {
-        help_message = "Announce when the pack voltage falls to the warning level set in the battery configuration, with the voltage spoken. The reading has to stay below that level for the hold time before anything is said, so that a pack sagging under load is not announced as a pack that is down; the alert then repeats every 10 seconds until the voltage recovers, and a hold of 0 announces on the first reading below the level as it did before. Below it, the pack check speaks once when the model connects if the pack is not full, with the per-cell voltage read out. The margin is how far below the full-cell voltage of the battery configuration a pack may sit and still count as full, so that one left standing for a day does not trip it. The check is made once per connection and never again in flight. The last switch announces a main pack that has gone while the flight controller stays alive on a BEC or a backup battery, repeating every 10 seconds with the BEC voltage spoken, and once more when the pack comes back. At the bottom, Repeat says how often an alert on this page speaks while its condition lasts, and Haptic whether the transmitter buzzes with it. Both cover the voltage alert, the main power alert and the BEC or receiver alert set up under Setup, Power, Alerts; the pack check speaks once when the model connects and takes neither."
+        help_message = "Voltage: speaks when the pack falls below the warning level of the battery configuration.\nHold (s): how long the reading has to stay below first; 0 speaks at once.\nPack Not Full: speaks once on connect when the pack is not full.\nMargin (mV/cell): how far below full a pack still counts as full.\nMain Power Lost: the pack is gone while the flight controller runs on a BEC or backup battery.\nRepeat, Haptic: how often an alert repeats, and whether the transmitter vibrates."
       },
       settings_audio_events_profiles = {
         help_message = "Announce the PID profile and the rate profile when they change, with the new profile's number."
       },
       settings_audio_events_esc = {
-        help_message = "Announce when the ESC temperature reaches the threshold. The threshold belongs to the model: with a flight controller connected it is stored with that model, otherwise it is the radio-wide default. Below it, the flight controller's own MCU temperature has its own switch and threshold. That one is radio-wide, because the same controller is rated the same in every aircraft. At the bottom, Repeat says how often either alert speaks while the temperature stays at or above its threshold, and Haptic whether the transmitter buzzes with it. Until cleared is one announcement every 10 seconds for as long as it is too hot; a count stops after that many and starts over once the temperature has come back down."
+        help_message = "ESC Temperature: speaks when the ESC temperature reaches the threshold below it.\nThreshold: in the unit set under Settings > Localization. Stored with the model while a flight controller is connected (the row then reads [Model]), otherwise radio-wide.\nMCU Temperature, Threshold: the same for the flight controller's own MCU; this threshold is always radio-wide.\nRepeat, Haptic: how often either alert repeats while it is too hot, and whether the transmitter vibrates."
       },
       settings_audio_events_adjustment = {
         help_message = "Announce a value changed through an adjustment function, as the flight controller reports it."
@@ -862,7 +862,7 @@ return {
         help_message = "Announce the battery capacity when the battery profile changes, and the fuel level once when the model connects."
       },
       settings_audio_events_link = {
-        help_message = "Announce the link quality with the percentage spoken, at a warning level and again at a critical one. A level is announced when it is first reached and then every 10 seconds while it holds; recovering is silent. On a receiver that reports no link quality the alert stays quiet, because the value that arrives instead is a signal strength in dBm and not a percentage. Below it, the telemetry switch announces a model that was lost while it was armed, and announces it again when it answers. Only a flight controller that stops answering while the radio link is still up is announced: a lost link is what the radio itself announces, and hearing the same event twice is worse than hearing it once. It needs two files that your sound pack may not carry yet, and stays silent without them. At the bottom, Repeat says how often the link quality alert speaks while it stays at a level, and Haptic whether the transmitter buzzes with it. The buzz is for the critical level only, whatever the quality alert is set to; the lost telemetry announcement buzzes too but says itself once per loss, so Repeat does not reach it."
+        help_message = "Link Quality: speaks the link quality when it falls to a level; recovering is silent, and so is a receiver that reports none.\nWarning (%), Critical (%): the two levels.\nTelemetry Lost: speaks when the armed model stops answering, and again when it answers. Needs two sound files a pack may not carry yet.\nRepeat, Haptic: how often the link quality alert repeats, and whether the transmitter vibrates (critical level and Telemetry Lost only)."
       },
       settings_audio_events_other = {
         help_message = "Announce the model's name when it connects. The announcement is a WAV file named after the model in the SOUNDS folder."
@@ -2317,7 +2317,7 @@ return {
         value_theme_inflight = "DEFAULT",
         value_theme_postflight = "DEFAULT",
         value_model_override = "DISABLED",
-        help_message = "Theme is the dashboard theme of every model. A theme covers all three flight phases itself. Allow per-model settings lets a model use its own theme and its own theme settings; they are stored for the connected flight controller, so one has to be connected to set them. Own settings for this model turns them on for that model, and its Theme picks the model's own; Disabled keeps the theme above. Switching either off keeps the model's values and ignores them until it is on again. A card from an earlier version has not stored the switches yet: models keep what they already use, and Allow per-model settings is stored only once it is changed. Per-Phase Themes adds an inflight and a postflight override to each theme; left at 'Use theme above', the phase keeps the theme above it.",
+        help_message = "Theme: the dashboard theme of every model without settings of its own.\nAllow per-model settings: lets a model use its own theme and theme settings, stored for its flight controller. Off ignores them without deleting them.\nOwn settings for this model: turns them on for the connected model; off keeps them. Its Theme picks the model's theme, Disabled keeps the one above.\nPer-Phase Themes: adds an inflight and a postflight override; 'Use theme above' keeps the theme above.",
         saved_title = "Saved",
         saved_message = "Theme settings saved",
         save_error_title = "Error",
@@ -2364,7 +2364,7 @@ return {
         scope_standard = "Standard values for all models",
         scope_model = "Own settings for this model",
         model_store_missing = "Connect the flight controller to save this model's settings",
-        help_message = "Each tile opens a theme's own settings. They are the standard values, used by every model without settings of its own. Per-Model Settings is shown while a flight controller is connected and per-model settings are on for its model: it lists what that model changes and opens each theme's settings for that model alone, where only a value that differs from the standard is stored. The first line of a theme's page says which of the two it edits.",
+        help_message = "The settings of this theme. The first line says whose values they are.\nStandard values for all models: used by every model without settings of its own.\nOwn settings for this model: this model only; only a value that differs from the standard is stored.",
         value_theme_config = "OPEN",
         value_connection_guard = "ON",
         saved_title = "Saved",
@@ -2423,7 +2423,7 @@ return {
         phase_inflight = "Inflight",
         phase_postflight = "Postflight",
         no_theme_settings = "The themes this model uses have no settings.",
-        help_message = "Each theme this model draws is listed first, with the flight phases it is drawn in; its button opens the theme's settings for this model only, and a value saved there that equals the standard is not stored for the model. Below are the theme settings the connected model changes, each beside the standard value it replaces. Reset removes the model's own value, so the model uses the standard again and follows later changes of it. Reset all does that for every setting after asking. A reset is saved at once. Per-model settings are switched on under Dashboard > Design."
+        help_message = "The theme settings the connected model uses instead of the standard values.\nEdit for this model: each theme the model draws; its button opens that theme's settings for this model alone.\nDifferent from standard: each value the model changes, beside the standard value it replaces.\nReset: the model uses the standard value again. Saved at once.\nReset all: the same for every value, after asking."
       },
       tools_flight_log = {
         title = "Flight Log",
