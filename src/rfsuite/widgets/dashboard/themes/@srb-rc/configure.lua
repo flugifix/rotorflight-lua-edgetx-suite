@@ -66,15 +66,24 @@ local function saveConfig(prefs)
     esctemp_max = tonumber(ui.config.esctemp_max) or THEME_DEFAULTS.esctemp_max,
   }, modelPrefs)
 
+  -- The model's file is written whenever a flight controller is connected, but it carries
+  -- this save's values only in the model scope: there its answer is what the save reports.
+  -- In the standard scope the values went into the radio's preferences, which the page's own
+  -- save writes, so a failure to rewrite the model's file is not a failure of this save.
+  local modelScope = type(DashboardLib.getEditScope) == "function" and DashboardLib.getEditScope() == "model"
   if session and session.mcu_id and modelPrefs then
     local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
     if type(loadMod) == "function" then
       local ok, MP = pcall(loadMod)
       if ok and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
-        MP.saveByMcuId(session.mcu_id, modelPrefs)
+        local saved, err = MP.saveByMcuId(session.mcu_id, modelPrefs)
+        if modelScope then return saved, err end
+        return true
       end
     end
+    if modelScope then return false, "model_preferences" end
   end
+  return true
 end
 
 local function getBecWarn()
@@ -119,8 +128,12 @@ function M.onReload(ctx)
 end
 
 function M.onSave(ctx)
-  saveConfig(ctx.preferences)
+  local modelOk, modelErr = saveConfig(ctx.preferences)
   local ok, err = ctx.savePreferences()
+  -- Saved only when every store that carries this save's values was written.
+  if ok and not modelOk then
+    ok, err = false, modelErr
+  end
   if ok then
     ui.dirty = false
     if ctx and type(ctx.reportSave) == "function" then

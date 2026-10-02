@@ -619,6 +619,24 @@ flight controller is connected; which of the two actually changes is the library
 With no scope set, as in the widget, `getThemeConfig` returns what applies: the model's values
 only while per-model settings are on for that model (`DashboardLib.modelOverridesActive`).
 
+`onSave` reports the save itself, through `ctx.reportSave`, and it reports success only when the
+store that carries the values was written. Which store that is depends on the scope, so read it
+with `DashboardLib.getEditScope()` when the save is made:
+
+- `"model"` — the values are in the model's preferences, and `saveByMcuId` answers whether its
+  file was written (`ok, err`). That answer decides the save: a failure is reported as *Save
+  failed* with its reason, and so is a `model_preferences.lua` that will not load.
+- `"standard"` — the values are in the radio's preferences, which `ctx.savePreferences()`
+  writes, and its answer decides the save. The model's file is still rewritten while a flight
+  controller is connected, but it carries none of this save's values, so its answer is not
+  reported.
+
+The shipped themes do this in `saveConfig`, which returns `true` or `false, err` by that rule
+(`true` where no flight controller is connected), and in `onSave`, which reports a failure when
+either `saveConfig` or `ctx.savePreferences()` failed. The settings page refuses a model-scope
+save without the model's store before `onSave` runs, so a module is not asked to save the model
+scope with no flight controller connected.
+
 The widget hands the resolved configuration to the theme as `state.themeConfig`, which is where
 a box's `min`, `max` or threshold limit reads it from.
 
