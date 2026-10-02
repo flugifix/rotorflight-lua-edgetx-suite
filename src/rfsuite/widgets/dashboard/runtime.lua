@@ -1183,6 +1183,32 @@ local function failedJobStep(self)
   return true
 end
 
+--- What stands in when the failure surface or the connect splash has itself raised
+--- JOB_FAULT_LIMIT times in a row: the same title as one label on a plain background, drawn
+--- without the splash builder and without the tool control, so neither of the two can be what
+--- fails here. Without it the last surface would stay up with nothing saying the dashboard has
+--- stopped drawing. A held step control is let go before the tree is cleared, as in
+--- failedJobStep.
+local function failedLabelJobStep(self)
+  local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
+  local title = (t and t("widgets.dashboard.build_failed")) or "Dashboard error"
+  local w = (self.zone and self.zone.w) or LCD_W or 320
+  local h = (self.zone and self.zone.h) or LCD_H or 172
+  -- The connect splash's two colours, on a filled rectangle of its own: after lvgl.clear() the
+  -- zone is transparent, and a bare label would sit on whatever the radio's layout draws there.
+  local nodes = {
+    { type = "rectangle", x = 0, y = 0, w = w, h = h, color = COLOR_THEME_PRIMARY3, filled = true },
+    { type = "label", x = 0, y = math.floor(h * 0.4), w = w, text = title, align = CENTER,
+      color = COLOR_THEME_PRIMARY2, font = MIDSIZE },
+  }
+  releaseInflightHold(self)
+  lvgl.clear()
+  lvgl.build(nodes)
+  self.built = true
+  self._lastChildCount = #nodes
+  return true
+end
+
 --- What the preference files look like right now: size and mtime, as one string.
 --
 -- `fstat` is a global in this firmware and returns { size, attrib, time }. Comparing that
@@ -3687,10 +3713,14 @@ function Runtime.new(zone, options)
         self.renderKey = splashKey
         self.built = false
       end
-      -- A splash that keeps raising has nothing to fall back to -- the failure surface is drawn
-      -- by the same builder -- so it is simply not armed again.
-      if not self.built and not jobCapped(self, "splash") then
-        self._job = { kind = "splash", step = splashJobStep, fullscreenSplash = fullscreenSplash }
+      -- A splash that keeps raising falls back to the bare label, not to the failure surface,
+      -- which is drawn by the same builder.
+      if not self.built then
+        if not jobCapped(self, "splash") then
+          self._job = { kind = "splash", step = splashJobStep, fullscreenSplash = fullscreenSplash }
+        elseif not jobCapped(self, "failed_label") then
+          self._job = { kind = "failed_label", step = failedLabelJobStep }
+        end
       end
       return
     end
@@ -3804,7 +3834,9 @@ function Runtime.new(zone, options)
     -- The job that builds this surface, named before the key is compared: a kind that has raised
     -- JOB_FAULT_LIMIT times in a row is not armed again, and the failure surface takes its place
     -- under a key of its own -- so it is drawn once, and again only after the pilot has been on
-    -- another surface. The failure surface counts under its own kind and is given up the same way.
+    -- another surface. The failure surface counts under its own kind; once it is capped as well,
+    -- the bare label (failedLabelJobStep) takes its place under the same key, and once that is
+    -- capped nothing is armed -- at most three raises of each, then the chain ends.
     -- `jobFullscreen` is the base layer's mark, which views.lua reads to drop a queued fullscreen
     -- build on a key; the failure surface that stands in for that build carries it too.
     local jobKind, jobStep, jobFullscreen = nil, nil, nil
@@ -3828,6 +3860,7 @@ function Runtime.new(zone, options)
     if jobKind ~= nil and jobCapped(self, jobKind) then
       nextRenderKey = "failed|" .. jobKind
       jobKind, jobStep = "failed", failedJobStep
+      if jobCapped(self, jobKind) then jobKind, jobStep = "failed_label", failedLabelJobStep end
       if jobCapped(self, jobKind) then jobKind = nil end
     end
 

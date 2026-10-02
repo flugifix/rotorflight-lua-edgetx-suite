@@ -205,8 +205,12 @@ throws is the plain case — has nothing to fall back to. The widget tries that 
 times in a row, then stops trying and shows *Dashboard error* in its place; the error is in
 the log, and the first of the three goes to the card as a fault when *Log to card* is on. A
 theme reload starts over: choosing a theme, any change to the preferences, the flight
-controller reconnecting, or a flight phase that brings up another of the theme's modules. The
-theme at full screen ([`fullscreen = "theme"`](#a-theme-that-takes-fullscreen)), the fullscreen
+controller reconnecting, or a flight phase that brings up another of the theme's modules. Until
+then the error stays on screen, even if the cause has gone away by itself: a build that raises
+for as little as three tries in a row in flight can leave *Dashboard error* up for the rest of
+the flight. If *Dashboard error* cannot be drawn either, the widget falls back to the same title
+as a single label, drawn without the splash builder, and stops only if that raises three times
+too. The theme at full screen ([`fullscreen = "theme"`](#a-theme-that-takes-fullscreen)), the fullscreen
 menu and the in-flight tuning surface are given up the same way, each on its own count, and at
 full screen *Dashboard error* carries the tool control, as the connect splash does there. The
 views a theme registers are not counted: one whose `build` raises is given up on its first
