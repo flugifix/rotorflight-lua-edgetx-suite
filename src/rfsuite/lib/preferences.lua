@@ -216,7 +216,8 @@ local SCHEMA = {
     -- life of the card otherwise, since no schema names them to begin with.
     retired = { "theme_config_target", "connection_guard" },
   },
-  -- Written by nothing: the developer pages read it so that a value can be put there by hand.
+  -- Written by nothing: the developer pages and the tool's start (`precompile`, ui/home.lua) read
+  -- it so that a value can be put there by hand.
   -- Declared so that such a value is not thrown away by the next save.
   developer = { open = true },
 }
