@@ -65,8 +65,12 @@ local state = {
 
 -- The argument a runner's wakeup is called with. One table for every call rather than a
 -- constructor per call: onconnect is woken on every pass while the link is up, for as long as
--- the script runs. `context` is set immediately before each call; a runner and its tasks read
--- it during the call and keep neither the table nor anything they write into it.
+-- the script runs. `context` is set immediately before each call. Reusing it is safe only while
+-- no task keeps it or writes into it: runner.wakeup in common/runner.lua hands it to the task
+-- as `pcall(module.wakeup, args)`, and every task under tasks/events/ either ignores it or hands
+-- it to a task in common/ that ignores it. A task that stored it (`M.args = args`) would read what
+-- the latest call set, and a field a task wrote into it would reach every later call, so a task
+-- that needs `context` after its call copies the string.
 local wakeupArgs = { context = nil }
 
 -- One pass of an arm or disarm runner, and whether it still has work.

@@ -239,10 +239,12 @@ function M.remoteAlive(now)
 end
 
 -- The frames one pass keeps for decoding. One table for every pass rather than a new one per
--- wakeup, because the drain is woken on every pass whether or not a frame is waiting. It is
--- emptied once the frames are decoded, so no frame is held from one pass to the next, and
--- again before a pass fills it, so a pass that raised part-way through its decode cannot
--- hand its frames to the next one.
+-- wakeup, because the drain is woken on every pass whether or not a frame is waiting. Reusing it
+-- is safe because the list never leaves M.wakeup: decodeFrame(kept[i], now) is handed one frame,
+-- never the list, and the list is neither returned nor stored anywhere else. It is emptied once
+-- the frames are decoded, so no frame is held from one pass to the next, and again before a pass
+-- fills it, so a pass that raised part-way through its decode cannot hand its frames to the next
+-- one.
 local keptFrames = {}
 
 --- One drain pass: pop what is waiting, decode it, publish what changed.

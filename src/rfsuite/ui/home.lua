@@ -1362,9 +1362,10 @@ local function returnToRootOnDisconnect()
   end
 end
 
--- The ESC protocols the ESC tools menu has an entry for. Built once: the function below runs
--- on every pass of run(), on every page, and a constructor inside it would build a new table on
--- every pass whether or not a flight controller is connected.
+-- The ESC protocols the ESC tools menu has an entry for. Built once and kept for as long as
+-- this file is loaded: the function below runs on every pass of run(), on every page, and a
+-- constructor inside it would build a new table on every pass whether or not a flight controller
+-- is connected.
 local ESC_PROTOCOLS = {1, 3, 4, 6, 7, 9, 10, 12}
 
 local function updateRuntimeMenuConditions()
