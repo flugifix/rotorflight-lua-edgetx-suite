@@ -19,28 +19,28 @@ local t = nil
 
 M.eepromWrite = true
 
-local SENSOR_GROUP_ORDER = {
-  "battery", "voltage", "current", "temps", "esc1", "esc2",
-  "rpm", "barometer", "gyro", "gps", "status", "profiles", "control", "system", "debug"
+-- The page opens on this list of groups; a group's sensors are built only when the group is
+-- opened. Each title is a complete i18n marker because the packager resolves literal keys only.
+local SENSOR_GROUPS = {
+  { key = "battery", title = "@i18n(app.pages.setup_telemetry.group_battery)@" },
+  { key = "voltage", title = "@i18n(app.pages.setup_telemetry.group_voltage)@" },
+  { key = "current", title = "@i18n(app.pages.setup_telemetry.group_current)@" },
+  { key = "temps", title = "@i18n(app.pages.setup_telemetry.group_temps)@" },
+  { key = "esc1", title = "@i18n(app.pages.setup_telemetry.group_esc1)@" },
+  { key = "esc2", title = "@i18n(app.pages.setup_telemetry.group_esc2)@" },
+  { key = "rpm", title = "@i18n(app.pages.setup_telemetry.group_rpm)@" },
+  { key = "barometer", title = "@i18n(app.pages.setup_telemetry.group_barometer)@" },
+  { key = "gyro", title = "@i18n(app.pages.setup_telemetry.group_gyro)@" },
+  { key = "gps", title = "@i18n(app.pages.setup_telemetry.group_gps)@" },
+  { key = "status", title = "@i18n(app.pages.setup_telemetry.group_status)@" },
+  { key = "profiles", title = "@i18n(app.pages.setup_telemetry.group_profiles)@" },
+  { key = "control", title = "@i18n(app.pages.setup_telemetry.group_control)@" },
+  { key = "system", title = "@i18n(app.pages.setup_telemetry.group_system)@" },
+  { key = "debug", title = "@i18n(app.pages.setup_telemetry.group_debug)@" }
 }
 
-local SENSOR_GROUP_TITLES = {
-  battery = "Battery",
-  voltage = "Voltage",
-  current = "Current",
-  temps = "Temperatures",
-  esc1 = "ESC 1",
-  esc2 = "ESC 2",
-  rpm = "RPM",
-  barometer = "Barometer",
-  gyro = "Gyro",
-  gps = "GPS",
-  status = "Status",
-  profiles = "Profiles",
-  control = "Control",
-  system = "System",
-  debug = "Debug"
-}
+-- The flight controller's sensor list holds 40 entries (buffer positions 13..52).
+local MAX_SLOTS = 40
 
 local SENSOR_CATALOG = {
   { id = 1, name = "Heartbeat", group = "system" },
@@ -174,30 +174,22 @@ local function newRuntime()
     requestRebuild = nil,
     boolGetters = {},
     boolSetters = {},
-    activeGetters = {}
+    activeGetters = {},
+    groupOpeners = {}
   }
 end
 
 local ui = {
   loaded = false,
   dirty = false,
-  sections = {
-    battery = true,
-    voltage = true,
-    current = true,
-    temps = true,
-    esc1 = true,
-    esc2 = true,
-    rpm = true,
-    barometer = true,
-    gyro = true,
-    gps = true,
-    status = true,
-    profiles = true,
-    control = true,
-    system = true,
-    debug = true
-  },
+  -- nil shows the list of groups; a group key shows that group's sensors.
+  group = nil,
+  -- The live count is formatted when a sensor changes, never in the label's own getter,
+  -- which LVGL polls on every refresh.
+  countText = "",
+  countOver = false,
+  countFormat = "%d / %d",
+  countOverFormat = "%d / %d",
   config = {},
   telemetryBuffer = nil,
   crsfTelemetryMode = nil,
@@ -448,22 +440,69 @@ local function ensureLoaded()
   queueTelemetryRead()
 end
 
+-- Whether a catalog sensor is written on save. A native-locked sensor always is; a child
+-- whose parent is native-locked is displayed off and inactive, so it never is -- what is
+-- written matches what is shown.
+local function isSelected(id)
+  if isNativeLocked(id) then
+    return true
+  end
+  if ui.config[id] ~= true then
+    return false
+  end
+  local parentId = CONFLICTING_WITH[id]
+  return not (parentId and isNativeLocked(parentId))
+end
+
 local function collectSelectedSensors()
   local selected = {}
   for i = 1, #SENSOR_IDS do
     local id = SENSOR_IDS[i]
-    if isNativeLocked(id) then
+    if isSelected(id) then
       selected[#selected + 1] = id
-    elseif ui.config[id] == true then
-      -- A child whose parent is native-locked is displayed off and inactive;
-      -- skip it here so what-is-written matches what-is-shown.
-      local parentId = CONFLICTING_WITH[id]
-      if not (parentId and isNativeLocked(parentId)) then
-        selected[#selected + 1] = id
-      end
     end
   end
   return selected
+end
+
+-- Slots holding a sensor this page does not list (e.g. native CRSF telemetry ids 2, 72, 108,
+-- 109). Save keeps them where they are, so they take slots from the 40 as well.
+local function countUnmanagedSlots()
+  local count = 0
+  if type(ui.telemetryBuffer) == "table" then
+    for pos = 13, 52 do
+      local origId = tonumber(ui.telemetryBuffer[pos]) or 0
+      if origId ~= 0 and not SENSOR_BY_ID[origId] then
+        count = count + 1
+      end
+    end
+  end
+  return count
+end
+
+-- The number of slots a save would fill. The live count and the save check both use it, so
+-- the number on screen and the number that refuses a save cannot disagree.
+local function countSlotsInUse(selected)
+  return #(selected or collectSelectedSensors()) + countUnmanagedSlots()
+end
+
+local function refreshCount()
+  local used = countSlotsInUse()
+  ui.countOver = used > MAX_SLOTS
+  ui.countText = string.format(ui.countOver and ui.countOverFormat or ui.countFormat, used, MAX_SLOTS)
+end
+
+local function countSelectedInGroup(groupKey)
+  local items = SENSOR_BY_GROUP[groupKey]
+  local count = 0
+  if items then
+    for i = 1, #items do
+      if isSelected(items[i].id) then
+        count = count + 1
+      end
+    end
+  end
+  return count, items and #items or 0
 end
 
 local function buildWritePayload(selected)
@@ -565,6 +604,8 @@ local function getBoolSetter(sensorId)
     end
 
     markDirty()
+    -- No rebuild: the count label reads ui.countText through its getter.
+    refreshCount()
   end
   ui.runtime.boolSetters[sensorId] = setter
   return setter
@@ -586,6 +627,55 @@ local function getActiveGetter(sensorId)
   end
   ui.runtime.activeGetters[sensorId] = getter
   return getter
+end
+
+local function getGroupOpener(groupKey)
+  local opener = ui.runtime.groupOpeners[groupKey]
+  if opener then return opener end
+
+  opener = function()
+    ui.group = groupKey
+    if type(ui.runtime.requestRebuild) == "function" then
+      ui.runtime.requestRebuild()
+    end
+  end
+  ui.runtime.groupOpeners[groupKey] = opener
+  return opener
+end
+
+local function countTextGetter()
+  return ui.countText
+end
+
+local function countColorGetter()
+  if ui.countOver then
+    return COLOR_THEME_WARNING or COLOR_THEME_PRIMARY1
+  end
+  return COLOR_THEME_PRIMARY1
+end
+
+-- One line showing how many of the 40 slots a save would fill. Text and colour are getters,
+-- so a toggle updates it without rebuilding the page.
+local function appendCountLine(children, x, y, w)
+  children[#children + 1] = {
+    type = "label",
+    x = x,
+    y = y + 4,
+    w = w,
+    text = countTextGetter,
+    color = countColorGetter,
+    font = SMLSIZE
+  }
+  return (Controls and Controls.LABEL_H or 20) + 10
+end
+
+-- Back from a group returns to the list of groups; from the list it leaves the page.
+function M.onBack()
+  if ui.group ~= nil then
+    ui.group = nil
+    return true
+  end
+  return false
 end
 
 function M.getHeaderActions()
@@ -648,18 +738,8 @@ function M.onSave(ctx)
   ensureDeps()
   ensureLoaded()
 
-  local unmanagedCount = 0
-  if type(ui.telemetryBuffer) == "table" then
-    for pos = 13, 52 do
-      local origId = tonumber(ui.telemetryBuffer[pos]) or 0
-      if origId ~= 0 and not SENSOR_BY_ID[origId] then
-        unmanagedCount = unmanagedCount + 1
-      end
-    end
-  end
-
   local selected = collectSelectedSensors()
-  if #selected + unmanagedCount > 40 then
+  if countSlotsInUse(selected) > MAX_SLOTS then
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({
         title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
@@ -709,7 +789,44 @@ function M.build(ctx)
 
   local cursorY = y
 
-  if ui.crsfTelemetryMode ~= nil then
+  ui.countFormat = pageText(i18n, "count_format", "Sensors: %d / %d")
+  ui.countOverFormat = pageText(i18n, "count_over_format", "Sensors: %d / %d - more than 40 cannot be saved")
+  refreshCount()
+
+  local groupItems = ui.group and SENSOR_BY_GROUP[ui.group] or nil
+  if ui.group ~= nil and not groupItems then
+    ui.group = nil
+  end
+
+  if groupItems then
+    -- One group: its title, the live count, and only this group's sensors.
+    local groupTitle = ui.group
+    for g = 1, #SENSOR_GROUPS do
+      if SENSOR_GROUPS[g].key == ui.group then
+        groupTitle = SENSOR_GROUPS[g].title
+        break
+      end
+    end
+    Controls.appendStaticSectionHeader(children, x, cursorY, w, groupTitle)
+    cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+    cursorY = cursorY + appendCountLine(children, x, cursorY, w)
+
+    for i = 1, #groupItems do
+      local sensorId = groupItems[i].id
+      cursorY = cursorY + Controls.appendRadioSwitch(
+        children,
+        x,
+        cursorY,
+        w,
+        groupItems[i].name,
+        getBoolGetter(sensorId),
+        getBoolSetter(sensorId),
+        getActiveGetter(sensorId)
+      )
+    end
+  end
+
+  if not groupItems and ui.crsfTelemetryMode ~= nil then
     local modeTitle = ui.crsfTelemetryMode == 0
       and pageText(i18n, "mode_native", "CRSF Telemetry: Native")
       or pageText(i18n, "mode_custom", "CRSF Telemetry: Custom")
@@ -735,39 +852,30 @@ function M.build(ctx)
     end
   end
 
-  for g = 1, #SENSOR_GROUP_ORDER do
-    local groupKey = SENSOR_GROUP_ORDER[g]
-    local items = SENSOR_BY_GROUP[groupKey]
-    if items and #items > 0 then
-      Controls.appendSectionHeader(
-        children,
-        x,
-        cursorY,
-        w,
-        SENSOR_GROUP_TITLES[groupKey] or groupKey,
-        ui.sections[groupKey] == true,
-        ui.runtime.getSectionToggleHandler(groupKey)
-      )
-      cursorY = cursorY + Controls.SECTION_H
-
-      if ui.sections[groupKey] == true then
-        for i = 1, #items do
-          local sensorId = items[i].id
-          local label = items[i].name
-          cursorY = cursorY + Controls.appendRadioSwitch(
-            children,
-            x,
-            cursorY,
-            w,
-            label,
-            getBoolGetter(sensorId),
-            getBoolSetter(sensorId),
-            getActiveGetter(sensorId)
-          )
-        end
+  if not groupItems then
+    -- The list of groups: the live count, then one row per group with how many of its
+    -- sensors are on. The chevron opens the group.
+    cursorY = cursorY + appendCountLine(children, x, cursorY, w)
+    local countW = 70
+    local countX = x + w - 30 - 8 - countW
+    for g = 1, #SENSOR_GROUPS do
+      local group = SENSOR_GROUPS[g]
+      local on, total = countSelectedInGroup(group.key)
+      if total > 0 then
+        local groupCount = string.format("%d / %d", on, total)
+        Controls.appendSectionHeader(children, x, cursorY, w, group.title, false, getGroupOpener(group.key))
+        children[#children + 1] = {
+          type = "label",
+          x = countX,
+          y = cursorY + 6,
+          w = countW,
+          text = groupCount,
+          color = on > 0 and COLOR_THEME_PRIMARY1 or COLOR_THEME_DISABLED,
+          align = RIGHT,
+          font = SMLSIZE
+        }
+        cursorY = cursorY + Controls.SECTION_H
       end
-
-      cursorY = cursorY + 8
     end
   end
 
@@ -801,6 +909,11 @@ function M.onClose()
     ui.dirty = false
   end
   ui.runtimeBase = nil
+  -- The module stays cached after close, so a re-entry would otherwise open on the group
+  -- that was open when the page was left.
+  ui.group = nil
+  ui.countText = ""
+  ui.countOver = false
   ui.loading = false
   ui.progress = 0
   ui.crsfTelemetryMode = nil
