@@ -63,6 +63,12 @@ local state = {
   edgeRunner = nil,
 }
 
+-- The argument a runner's wakeup is called with. One table for every call rather than a
+-- constructor per call: onconnect is woken on every pass while the link is up, for as long as
+-- the script runs. `context` is set immediately before each call; a runner and its tasks read
+-- it during the call and keep neither the table nor anything they write into it.
+local wakeupArgs = { context = nil }
+
 -- One pass of an arm or disarm runner, and whether it still has work.
 --
 -- The runner completes AT MOST ONE task per wakeup by design: it takes the first eligible entry
@@ -77,7 +83,8 @@ local function driveEdgeRunner(category, context)
   if not runner then return false end
 
   if type(runner.wakeup) == "function" then
-    local ok, err = pcall(runner.wakeup, { context = context })
+    wakeupArgs.context = context
+    local ok, err = pcall(runner.wakeup, wakeupArgs)
     if not ok and Log and type(Log.emit) == "function" then
       pcall(Log.emit, "rfsuite.events", category .. ".wakeup error: " .. tostring(err), "error")
     end
@@ -322,7 +329,8 @@ function Events.wakeup(carry)
           wasActive = onconnect.active()
         end
         if type(onconnect.wakeup) == "function" then
-          local ok, err = pcall(onconnect.wakeup, { context = context })
+          wakeupArgs.context = context
+          local ok, err = pcall(onconnect.wakeup, wakeupArgs)
           if not ok and Log and type(Log.emit) == "function" then
             pcall(Log.emit, "rfsuite.events", "onconnect.wakeup error: " .. tostring(err), "error")
           end

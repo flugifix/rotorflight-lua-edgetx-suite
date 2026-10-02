@@ -238,6 +238,13 @@ function M.remoteAlive(now)
     return remoteMovedAt ~= nil and (now - remoteMovedAt) < M.REMOTE_STALE_SECONDS
 end
 
+-- The frames one pass keeps for decoding. One table for every pass rather than a new one per
+-- wakeup, because the drain is woken on every pass whether or not a frame is waiting. It is
+-- emptied once the frames are decoded, so no frame is held from one pass to the next, and
+-- again before a pass fills it, so a pass that raised part-way through its decode cannot
+-- hand its frames to the next one.
+local keptFrames = {}
+
 --- One drain pass: pop what is waiting, decode it, publish what changed.
 --
 -- Returns how many frames the pass took off the wire. A caller that publishes liveness needs
@@ -263,7 +270,8 @@ function M.wakeup(now, decodeAll)
     -- Pop up to POP_CAP, keep the newest DECODE_CAP in arrival order, decode only those --
     -- on a same-sensor conflict the newest value lands last. POP_CAP bounds the pass whether
     -- or not the decode is capped, so one call stays finite however far behind the queue is.
-    local kept = {}
+    local kept = keptFrames
+    for i = #kept, 1, -1 do kept[i] = nil end
     local popped = 0
     while popped < POP_CAP do
         local data = popAndAccount()
@@ -280,6 +288,7 @@ function M.wakeup(now, decodeAll)
     for i = 1, #kept do
         decodeFrame(kept[i], now)
     end
+    for i = #kept, 1, -1 do kept[i] = nil end
     -- Published unconditionally, and that is deliberate: the sibling project creates the
     -- same two sensors and treats a missing `*Cnt` as "the pilot deleted the telemetry
     -- sensors", so a radio carrying both suites needs them to keep meaning what they mean.
