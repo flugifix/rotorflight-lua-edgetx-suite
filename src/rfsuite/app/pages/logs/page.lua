@@ -349,6 +349,13 @@ local function extractFileInfo(filename, fullPath, parentFolder)
   -- a date and a time is therefore taken as one of its logs without being opened, which keeps
   -- the walk as cheap as it was; every other file is opened here anyway, and has to start with
   -- that header to be listed.
+  --
+  -- logs.cpp writes that name and that header only on a build with RTCLOCK. Without it the file
+  -- is named <model>.csv, the header starts with Time instead and each row carries a tick count
+  -- where the time goes, so the graph could not plot such a log either: it needs the Date and
+  -- Time columns and a clock time (graph.lua refuses it as not_telemetry). Accepting a Time
+  -- header here would list files the graph then refuses. EdgeTX defines RTCLOCK for every colour
+  -- radio it builds, and the suite runs on colour radios only.
   if not date or not time then
     local f = io.open(fullPath, "r")
     if f then
@@ -597,7 +604,8 @@ local function graphErrorText(i18n, err)
     open = pageText(i18n, "graph_err_open"),
     empty = pageText(i18n, "graph_err_empty"),
     not_telemetry = pageText(i18n, "graph_err_not_telemetry"),
-    no_data = pageText(i18n, "graph_err_no_data")
+    no_data = pageText(i18n, "graph_err_no_data"),
+    no_time = pageText(i18n, "graph_err_no_time")
   }
   return texts[err] or texts.open
 end
@@ -683,7 +691,8 @@ local function buildCurvePicker(children, x, y, w, i18n)
         press = function()
           state.slots = {}
           for j = 1, #tpl.cols do state.slots[j] = tpl.cols[j] end
-          if Graph.applyColumns(tpl.cols) then state.pickCurves = false else state.graphRefused = true end
+          state.graphRefused = not Graph.applyColumns(tpl.cols)
+          if not state.graphRefused then state.pickCurves = false end
           rebuild()
         end
       }
@@ -759,7 +768,8 @@ local function buildCurvePicker(children, x, y, w, i18n)
     active = function() return #chosen > 0 end,
     press = function()
       if #chosen == 0 then return end
-      if Graph.applyColumns(chosen) then state.pickCurves = false else state.graphRefused = true end
+      state.graphRefused = not Graph.applyColumns(chosen)
+      if not state.graphRefused then state.pickCurves = false end
       rebuild()
     end
   }
@@ -941,13 +951,20 @@ local function buildGraphView(children, x, y, w, availH, i18n)
 
   -- The engine walks a file to the end for the summary whether or not the plot can use it, so
   -- a file the plot cannot draw is only known once the walk is done: one without Date and Time
-  -- columns, or one with no row whose time could be read. Both used to reach the chooser, where
-  -- every choice was refused without a word.
+  -- columns, one without data rows, or one with rows of which none carries a time the plot can
+  -- read. The summary reads its times more leniently than the plot (parseTimeSec against
+  -- parseTimeCs), so the last case still has a summary, and is told apart from the second by it.
+  -- These files used to reach the chooser, where every choice was refused without a word. Once
+  -- they are caught here no choice is refused; a refusal would still say so, with no_data.
   local err = Graph.getError()
   if err == nil and not Graph.isBusy() then
     if not Graph.isTelemetry() then
       err = "not_telemetry"
-    elseif #Graph.getSessions() == 0 or state.graphRefused then
+    elseif Graph.getSummary() == nil then
+      err = "no_data"
+    elseif #Graph.getSessions() == 0 then
+      err = "no_time"
+    elseif state.graphRefused then
       err = "no_data"
     end
   end

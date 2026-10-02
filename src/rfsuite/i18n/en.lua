@@ -2560,6 +2560,7 @@ return {
         graph_err_empty = "The log file is empty.",
         graph_err_not_telemetry = "Not an EdgeTX telemetry log: no Date and Time columns.",
         graph_err_no_data = "The log file carries no data rows.",
+        graph_err_no_time = "No row carries a time the graph can read.",
         tpl_power = "Power",
         tpl_battery = "Battery",
         tpl_link = "Link",

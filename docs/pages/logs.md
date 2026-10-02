@@ -55,9 +55,12 @@ they then rest on throttle and current alone.
 page and a cursor readout work on the plotted flight; where the log holds more than one flight,
 the chooser also offers which one.
 
-The graph needs the `Date` and `Time` columns and at least one row whose time it can read. A file
-that lacks either says so instead of offering columns: *Not an EdgeTX telemetry log* or *The log
-file carries no data rows*.
+The graph needs the `Date` and `Time` columns and at least one row whose time it can read, written
+the way EdgeTX writes it (`HH:MM:SS.mmm`). A file that lacks either says so instead of offering
+columns: *Not an EdgeTX telemetry log* without the two columns, *No row carries a time the graph
+can read* where no row's time has that form. The summary also reads a time without the
+milliseconds, so such a file can have a summary and still no graph. A log without any data rows
+has no summary, and its *Graph* button is not offered.
 
 ## Related
 

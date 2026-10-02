@@ -2556,6 +2556,7 @@ return {
         graph_err_empty = "Die Logdatei ist leer.",
         graph_err_not_telemetry = "Kein EdgeTX-Telemetrielog: keine Spalten Date und Time.",
         graph_err_no_data = "Die Logdatei enthält keine Datenzeilen.",
+        graph_err_no_time = "Keine Zeile enthält eine Uhrzeit, die das Diagramm lesen kann.",
         tpl_power = "Leistung",
         tpl_battery = "Akku",
         tpl_link = "Funk",
