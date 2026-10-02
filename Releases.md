@@ -575,7 +575,7 @@
   - It is a 40x40 8-bit grayscale PNG with no alpha, the size and encoding `.vscode/scripts/optimize_icons.py` keeps for a monochrome source, drawn in the stroke width and greys of Urban's own page icons under `themes/urban/icons/` so the theme tile and its page tiles read as one set.
 - **The help sheet behind `?` keeps its title and no longer lets a long text run behind a button (`ui/help_view.lua`, `docs/pages/README.md`) (fixes #490)**:
   - The sheet put its text into a `page` node with a height and drew its own header and a Close button around it. EdgeTX builds every `page` full screen with a header of its own, so the hand-drawn header was painted over (the sheet showed an empty title) and the Close button sat on top of the text; at 480x320 a long help text ran behind it.
-  - The sheet is now a page like the menu pages: the header carries the title of the page the help belongs to, the text is its only content and scrolls to the bottom edge, and the X in its header or EXIT closes it. The height estimate the old layout needed is gone with it.
+  - The sheet is now a page like the menu pages: the header carries the title of the page the help belongs to, and the text runs down the page with nothing over it. EXIT closes the sheet, and so does the X in the header on a touch screen. A long text is read on with the rotary encoder, one line of the text per step in either direction, a thin marker above each line showing the place in the focus colour, or by dragging on a touch screen. The height estimate the old layout needed is gone with it.
 
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:

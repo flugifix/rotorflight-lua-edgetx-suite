@@ -15,8 +15,11 @@ appended: the page `setup/power/smartfuel/page.lua` is documented in
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
-The help text opens as a page of its own, titled with the page it belongs to. The X at the top right of
-its header, or EXIT, returns to that page.
+The help text opens as a page of its own, titled with the page it belongs to. EXIT returns to
+that page, and so does the X at the top right of the header on a touch screen. A text taller
+than the screen is read on by turning the rotary encoder, one line of the text per step in
+either direction (the line marker in the focus colour shows where), or by dragging on a touch
+screen.
 
 The *Conditions* column names what hides, greys out or locks a page; the sentences to use in
 a page file are in [_template.md](../_template.md), and the mechanics are explained in
