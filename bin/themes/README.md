@@ -95,3 +95,39 @@ is `bin/accounting/measure.lua`. The firmware and the widget are stubbed in the 
 state a build receives is a fixture of typical readings, so a theme that reads anything else sees
 `nil`, as it may on a radio before the first telemetry arrives. It is not part of the CI
 workflow.
+
+## What a save reports
+
+`verify_save_scope.lua` checks a theme's settings page for what it tells the pilot when it
+saves. It runs offline, with desktop Lua 5.3, from the repository root:
+
+```sh
+lua5.3 bin/themes/verify_save_scope.lua              # the checks
+lua5.3 bin/themes/verify_save_scope.lua --verbose    # and one line per case
+lua5.3 bin/themes/verify_save_scope.lua --self-test  # proves the checks can go red
+```
+
+A theme's values are saved into the store of the scope its settings page was opened in
+([dashboard themes](../../docs/developer/dashboard-themes.md), `configure.lua`): a theme tile
+edits the radio's standard values, *Per-Model Settings* the connected model's own. The save may
+say *Saved* only when that store was written, and a failure has to reach the pilot as a
+translated sentence.
+
+The `configure.lua` of every shipped theme with a settings page is loaded with the real
+`app/pages/settings/dashboard/lib.lua`, the scope is set as the settings page sets it, and the
+module is driven as the page drives it -- the factory, `onReload`, `build`, `onSave`. Stubbed are
+the controls, the model's store (its write succeeds, is refused, or its module does not load) and
+the radio's write (succeeds or is refused), with and without a flight controller. Every case
+runs in both scopes and with the real bundle of both shipped locales, and is red where the page
+is told anything but the expected title and message, where the model's or the radio's file is
+written a different number of times, where the values stand in the wrong store, where a message
+names a module file or shows an untranslated key, and where a bundle lacks a key the message
+needs: a key missing from a locale is answered with the key, not with the English text.
+
+`--self-test` breaks every theme's module twice, in memory -- the model scope answering *Saved*
+after its file was refused, and the module's name back as the reason -- and fails unless each
+breakage turns every theme red in the case it breaks, or if a module's source no longer has the
+line the breakage rewrites.
+
+Exit status: `0` green, `1` red, `2` when the tree cannot be read. It is not part of the CI
+workflow.

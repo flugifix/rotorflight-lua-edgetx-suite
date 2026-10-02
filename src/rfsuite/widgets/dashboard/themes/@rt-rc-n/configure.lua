@@ -50,7 +50,7 @@ local function loadConfig(prefs)
     ui.loaded = true
 end
 
-local function saveConfig(prefs)
+local function saveConfig(prefs, i18n)
     local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
     -- Where the values land is the settings page's scope, not this module's: the library
     -- writes the radio's standard values, or this model's own ones, which need the flight
@@ -77,7 +77,11 @@ local function saveConfig(prefs)
                 return true
             end
         end
-        if modelScope then return false, "model_preferences" end
+        -- The pilot reads this reason after "Save failed", so it is a sentence, not a file name.
+        if modelScope then
+          return false, i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.model_store_unavailable")
+            or "model settings store not available"
+        end
     end
     return true
 end
@@ -124,7 +128,7 @@ function M.onReload(ctx)
 end
 
 function M.onSave(ctx)
-    local modelOk, modelErr = saveConfig(ctx.preferences)
+    local modelOk, modelErr = saveConfig(ctx.preferences, ctx.i18n)
     local ok, err = ctx.savePreferences()
     -- Saved only when every store that carries this save's values was written.
     if ok and not modelOk then

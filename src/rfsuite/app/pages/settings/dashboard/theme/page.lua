@@ -231,7 +231,7 @@ local function appendPhaseOverrides(children, x, y, w, i18n, prefix, options, ac
   return used
 end
 
-local function saveToPreferences(prefs)
+local function saveToPreferences(prefs, i18n)
   if not prefs.dashboard then prefs.dashboard = {} end
   prefs.dashboard.theme_preflight = ui.config.theme_preflight
   prefs.dashboard.theme_inflight = ui.config.theme_inflight
@@ -270,7 +270,7 @@ local function saveToPreferences(prefs)
       mDashboard.model_theme_postflight = ui.config.model_theme_postflight
 
       -- Save model preferences using ModelPreferences module
-      modelOk, modelErr = false, "model_preferences"
+      modelOk, modelErr = false, t(i18n, "model_store_unavailable", "model settings store not available")
       local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
       if type(loadMod) == "function" then
         local loaded, MP = pcall(loadMod)
@@ -315,7 +315,7 @@ function M.onSave(ctx)
   ensureDeps()
   -- The page saves into two stores. Both have to be believed before the save
   -- is reported as done, and a failure in either one has to be shown.
-  local modelOk, modelErr = saveToPreferences(ctx.preferences)
+  local modelOk, modelErr = saveToPreferences(ctx.preferences, ctx.i18n)
   local ok, err = ctx.savePreferences()
   if not ok then
     reportSaveError(ctx, err)
