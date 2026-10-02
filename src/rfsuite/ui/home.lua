@@ -2920,8 +2920,14 @@ function M.init(opts)
   ensureVersion()
   -- Hosted, the walk is not this file's to make: lib/precompile.lua compiles through the
   -- uncached loader that only the tool script installs (src/main.lua), and the host's state
-  -- has none. Without Precompile the start screen counts the compile as finished.
-  if not state.hosted then
+  -- has none. `developer.precompile = false` skips it too: every file is then compiled by the
+  -- loader when a page first needs it, and the start screen waits for the connection alone --
+  -- meant for automated runs on a card that starts without bytecode each time. Like the rest of
+  -- the developer section it is written by hand; an absent key keeps the pass. Either way,
+  -- without Precompile the start screen counts the compile as finished.
+  local developer = prefs and prefs.developer
+  local skipPrecompile = state.hosted or (developer and developer.precompile == false)
+  if not skipPrecompile then
     ensurePrecompile()
     if Precompile then
       Precompile.start(Version and Version.VERSION or nil)
