@@ -821,6 +821,13 @@ function G.isOpen() return S.path ~= nil end
 function G.isBusy() return S.phase ~= nil end
 function G.isTelemetry() return S.isTelemetry end
 
+--- Whether getSummary() would return a summary, answered without building one. getSummary
+--- keys its nil on this, so the two cannot disagree.
+function G.hasSummary()
+  local st = S.stats
+  return st ~= nil and S.phase == nil and st.totalSamples > 0
+end
+
 --- The flight summary, once the index pass has run, or nil if this log has no data rows. A
 --- field is nil where the log carries no column for it.
 --
@@ -829,9 +836,8 @@ function G.isTelemetry() return S.isTelemetry end
 -- consumption falls back to the average current over the duration when the log carries no
 -- capacity column.
 function G.getSummary()
+  if not G.hasSummary() then return nil end
   local st = S.stats
-  if st == nil or S.phase ~= nil then return nil end
-  if st.totalSamples == 0 then return nil end
 
   local durationSec = 0
   if st.startTimeSec and st.endTimeSec and st.endTimeSec >= st.startTimeSec then

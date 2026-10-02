@@ -960,7 +960,7 @@ local function buildGraphView(children, x, y, w, availH, i18n)
   if err == nil and not Graph.isBusy() then
     if not Graph.isTelemetry() then
       err = "not_telemetry"
-    elseif Graph.getSummary() == nil then
+    elseif not Graph.hasSummary() then
       err = "no_data"
     elseif #Graph.getSessions() == 0 then
       err = "no_time"
