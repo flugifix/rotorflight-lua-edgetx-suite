@@ -26,6 +26,10 @@ local state = {
   selectedFilePath = nil,
   selectedModel = nil,
   logsList = {},
+  -- The window of the list on screen: the index of its first log, less one; see LIST_WINDOW. A
+  -- log's summary and plot are views on top of the list, so coming back from them finds the
+  -- list on the window it was left on.
+  listTop = 0,
   summary = nil,
   loading = false,
   -- `loading` says a log is being read; `reading` says the engine has been given it and is
@@ -683,6 +687,7 @@ end
 
 function M.onReload(ctx)
   state.scanned = false
+  state.listTop = 0
   state.scan = nil
   state.scanShown = nil
   closeGraph()
@@ -790,6 +795,65 @@ end
 
 local function rebuild()
   if state.requestRebuild then state.requestRebuild() end
+end
+
+-- The list is built a window of logs at a time, into the page body, which scrolls on its own:
+-- a touch drags it, and the rotary encoder moves the focus from one row's View button to the
+-- next, which scrolls the focused row into view. A page of this tool is handed no key or rotary
+-- event of its own -- ui/home.lua reads them for its back handling only -- so this focus
+-- movement is how the encoder reaches the list, and every row has a control that can hold it.
+--
+-- LIST_WINDOW bounds what a build creates and measures: four LVGL objects and a wrapped label
+-- per row, however many logs the card holds. Twenty-five rows are about a hundred objects, the
+-- list a card of twenty-five logs always built, and at 480x320, with rows of at least 44 px,
+-- some four screens to scroll or turn through. Previous above the window and Next below it
+-- build the neighbouring window, which starts again at its top.
+local LIST_WINDOW = 25
+
+local LIST_NAV_H = 44
+
+-- A row of the window's own: a button, where there is somewhere to go, and which logs the
+-- window holds out of how many.
+local function appendWindowNav(children, x, y, w, buttonText, onPress, buttonRight, rangeText)
+  local navW = math.min(120, math.floor(w * 0.28))
+  local labelX = x + 10
+  if onPress then
+    local btnX = buttonRight and (x + w - navW - 10) or (x + 10)
+    children[#children + 1] = {
+      type = "button",
+      x = btnX,
+      y = y + 7,
+      w = navW,
+      h = 30,
+      text = buttonText,
+      press = onPress
+    }
+    if not buttonRight then
+      labelX = x + navW + 20
+    end
+  end
+
+  children[#children + 1] = {
+    type = "label",
+    x = labelX,
+    y = y + 13,
+    w = w - navW - 30,
+    text = rangeText,
+    color = COLOR_THEME_PRIMARY1,
+    font = SMLSIZE
+  }
+
+  children[#children + 1] = {
+    type = "rectangle",
+    x = x,
+    y = y + LIST_NAV_H - 1,
+    w = w,
+    h = 1,
+    color = COLOR_THEME_SECONDARY2,
+    filled = true
+  }
+
+  return LIST_NAV_H
 end
 
 -- The column chooser: the presets this log can serve, the flight to look at when
@@ -1475,6 +1539,7 @@ function M.build(ctx)
       text = pageText(i18n, "refresh"),
       press = function()
         state.scanned = false
+        state.listTop = 0
         if state.requestRebuild then
           state.requestRebuild()
         end
@@ -1501,7 +1566,30 @@ function M.build(ctx)
   local labelW = math.max(40, btnX - labelX - 10)
   local _, labelLineH = textSize("Ag", SMLSIZE)
 
-  for i = 1, #state.logsList do
+  -- The window on screen. It is clamped because the list can be shorter after a refresh than
+  -- when the window was chosen.
+  local logCount = #state.logsList
+  local maxTop = math.floor((logCount - 1) / LIST_WINDOW) * LIST_WINDOW
+  local top = math.max(0, math.min(state.listTop or 0, maxTop))
+  state.listTop = top
+  local first = top + 1
+  local last = math.min(logCount, top + LIST_WINDOW)
+  local windowed = logCount > LIST_WINDOW
+  local rangeText = string.format(pageText(i18n, "list_range"), first, last, logCount)
+
+  if windowed then
+    local onPrev = nil
+    if top > 0 then
+      onPrev = function()
+        state.listTop = top - LIST_WINDOW
+        rebuild()
+      end
+    end
+    cursorY = cursorY + appendWindowNav(children, x, cursorY, w, pageText(i18n, "page_prev"),
+                                        onPrev, false, rangeText)
+  end
+
+  for i = first, last do
     local item = state.logsList[i]
     local itemY = cursorY
 
@@ -1565,6 +1653,17 @@ function M.build(ctx)
 
     cursorY = cursorY + rowH
   end
+
+  if windowed then
+    local onNext = nil
+    if last < logCount then
+      onNext = function()
+        state.listTop = top + LIST_WINDOW
+        rebuild()
+      end
+    end
+    appendWindowNav(children, x, cursorY, w, pageText(i18n, "page_next"), onNext, true, rangeText)
+  end
 end
 
 function M.onClose()
@@ -1579,6 +1678,7 @@ function M.onClose()
   state.loading = false
   state.reading = false
   state.logsList = {}
+  state.listTop = 0
   LoadingOverlay = nil
   collectgarbage("collect")
 end
