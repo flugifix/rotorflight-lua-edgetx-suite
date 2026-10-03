@@ -2551,6 +2551,7 @@ return {
         file_size = "Größe",
         no_logs_found = "Keine Telemetrie-Logs in /LOGS/ gefunden.",
         scanning_message = "Suche Telemetrie-Logs in /LOGS/...",
+        scan_counts = "Einträge gelesen: %d, Logs gefunden: %d",
         loading_title = "Laden",
         loading_message = "Lese Telemetrie-Log...\nBitte warten, dies kann je nach Dateigröße einige Sekunden dauern.",
         back_to_list = "Zurück zur Liste",

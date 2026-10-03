@@ -31,8 +31,11 @@ local state = {
   -- `loading` says a log is being read; `reading` says the engine has been given it and is
   -- walking it, which is what tells the wakeup to spend units rather than to start again.
   reading = false,
-  -- The directory walk is deferred rather than run inside M.build; see the wakeup below.
-  scanPending = false,
+  -- The directory walk in progress (see newScan), or nil. It is started by M.build and
+  -- advanced by M.wakeup, never run inside a build; `scanned` says it has finished.
+  scan = nil,
+  -- What the scan notice drew last, so a wakeup repaints it only when that changes.
+  scanShown = nil,
   scanned = false,
   requestRebuild = nil,
   -- The file list and the statistics of a selected log are told apart by
@@ -268,17 +271,21 @@ local function statText(fmt, ...)
   return string.format(fmt, ...)
 end
 
-local function safeCollectEntries(listBasePath)
-  local entries = {}
+-- A directory listing that can be read a few names at a time.
+--
+-- EdgeTX's dir() returns a C closure whose only upvalue is the open directory, and that
+-- userdata closes itself when it is collected (radio/src/lua/api_filesystem.cpp: dir_iter,
+-- dir_gc). So the iterator can be kept between two wakeups and read on where it stopped, and
+-- a listing that is dropped half-read closes its directory with the next collection. A
+-- listing without an `iter` is complete: the system.listFiles fallback answers in one table,
+-- and a directory that cannot be opened answers with no names at all.
+local function openListing(listBasePath)
+  local listing = { names = {} }
   if type(dir) == "function" then
     local iterator = dir(listBasePath)
     if type(iterator) == "function" then
-      for name in iterator do
-        if name and name ~= "." and name ~= ".." and name ~= "" then
-          entries[#entries + 1] = name
-        end
-      end
-      return entries
+      listing.iter = iterator
+      return listing
     end
   end
 
@@ -288,14 +295,29 @@ local function safeCollectEntries(listBasePath)
       for i = 1, #res do
         local name = res[i]
         if name and name ~= "." and name ~= ".." and name ~= "" then
-          entries[#entries + 1] = name
+          listing.names[#listing.names + 1] = name
         end
       end
-      return entries
     end
   end
 
-  return entries
+  return listing
+end
+
+-- Reads at most `budget` names into the listing and answers how many reads that took. The
+-- read that finds the end of the directory counts as one, and it is what drops the iterator.
+local function readListing(listing, budget)
+  local spent = 0
+  while listing.iter and spent < budget do
+    local name = listing.iter()
+    spent = spent + 1
+    if name == nil then
+      listing.iter = nil
+    elseif name ~= "." and name ~= ".." and name ~= "" then
+      listing.names[#listing.names + 1] = name
+    end
+  end
+  return spent
 end
 
 local function formatDateText(date, time, isNarrow)
@@ -394,55 +416,161 @@ local function extractFileInfo(filename, fullPath, parentFolder)
   }
 end
 
-local function scanLogFiles()
-  local found = {}
-  -- The search paths NEST, and each one is walked both at its top level and one directory down.
-  -- A file lying directly in /LOGS/rfsuite/telemetry is therefore reached twice: once as a
-  -- top-level .csv of the first path, and once as a .csv inside the `telemetry` subdirectory of
-  -- the second. Nothing downstream removes it -- `extractFileInfo` builds a fresh record each
-  -- time and the sort has no uniqueness step -- so that file appears twice in the list, as two
-  -- adjacent identical rows (the sort key is the same). A file inside a model folder, or one
-  -- directly in /LOGS, is reached once.
-  --
-  -- The full path is what identifies a log, so that is what is remembered.
-  local seen = {}
-  local searchPaths = {
-    "/LOGS/rfsuite/telemetry",
-    "/LOGS/rfsuite",
-    "/LOGS"
+-- The search paths NEST, and each one is walked both at its top level and one directory down.
+-- A file lying directly in /LOGS/rfsuite/telemetry is therefore reached twice: once as a
+-- top-level .csv of the first path, and once as a .csv inside the `telemetry` subdirectory of
+-- the second. Nothing downstream removes it -- `extractFileInfo` builds a fresh record each
+-- time and the sort has no uniqueness step -- so that file appears twice in the list, as two
+-- adjacent identical rows (the sort key is the same). A file inside a model folder, or one
+-- directly in /LOGS, is reached once.
+--
+-- The full path is what identifies a log, so that is what the scan remembers.
+local SEARCH_PATHS = {
+  "/LOGS/rfsuite/telemetry",
+  "/LOGS/rfsuite",
+  "/LOGS"
+}
+
+-- The scan is a small state machine that M.wakeup advances a few entries at a time: a name
+-- read from a directory, or a name already read being looked at -- for a .csv that is
+-- extractFileInfo, which opens the file only where its name carries no date and time.
+--
+-- Each search path is listed and then walked, in the order the paths are given, and a folder
+-- among its names is listed and walked when it is reached -- the order the walk always had, so
+-- the first path a file is reached by, which decides the folder its model may be named after,
+-- is the one it was reached by before. The sort is a phase of its own, so it never shares a
+-- wakeup with a last batch of entries.
+local SCAN_UNIT_ENTRIES = 10
+
+-- How long one wakeup may spend on the scan, in getTime() ticks of 10 ms. A colour radio runs
+-- a tool's run() as one plain call that nothing can interrupt, so until it returns the screen is
+-- not repainted and no key or touch is read. The host calls a page's wakeup about every 50 ms,
+-- so 40 ms of scanning per call keeps the radio answering while spending most of the time on the
+-- walk; with a budget of a fixed number of entries instead, the passes that only match names
+-- cost almost nothing and each still took a frame. getTime() moves in whole ticks, so a wakeup
+-- spends between 30 and 40 ms here plus the one unit that crosses the line, and always at least
+-- one unit.
+local SCAN_BUDGET_TICKS = 4
+
+local function newScan()
+  return {
+    phase = "list",
+    s = 1,
+    listing = nil,
+    names = nil,
+    i = 0,
+    sub = nil,
+    read = 0,
+    found = {},
+    seen = {}
   }
+end
 
-  local function collect(fileName, fullPath, parentFolder)
-    if seen[fullPath] then return end
-    seen[fullPath] = true
-    local info = extractFileInfo(fileName, fullPath, parentFolder)
-    if info then found[#found + 1] = info end
-  end
+local function scanCollect(scan, fileName, fullPath, parentFolder)
+  if scan.seen[fullPath] then return end
+  scan.seen[fullPath] = true
+  local info = extractFileInfo(fileName, fullPath, parentFolder)
+  if info then scan.found[#scan.found + 1] = info end
+end
 
-  for s = 1, #searchPaths do
-    local basePath = searchPaths[s]
-    local topEntries = safeCollectEntries(basePath)
-    for i = 1, #topEntries do
-      local entry = topEntries[i]
-      if string.match(entry, "%.csv$") then
-        collect(entry, basePath .. "/" .. entry, "")
-      elseif not string.match(entry, "%.%w+$") then
-        -- Subdirectory (e.g. Model name)
-        local modelDir = basePath .. "/" .. entry
-        local subEntries = safeCollectEntries(modelDir)
-        for j = 1, #subEntries do
-          local subFile = subEntries[j]
-          if string.match(subFile, "%.csv$") then
-            collect(subFile, modelDir .. "/" .. subFile, entry)
+-- Reads up to `budget` names of a listing and counts them as read. Answers the reads spent.
+local function scanRead(scan, listing, budget)
+  local before = #listing.names
+  local spent = readListing(listing, budget)
+  scan.read = scan.read + #listing.names - before
+  return spent
+end
+
+-- Advances the scan by at most `budget` entries and answers true once it is complete, with
+-- `scan.found` sorted newest first. Steps that only move from one directory to the next cost
+-- nothing and are taken in the same call; the sort is one call on its own.
+local function scanStep(scan, budget)
+  while budget > 0 do
+    if scan.phase == "list" then
+      if not scan.listing then
+        scan.listing = openListing(SEARCH_PATHS[scan.s])
+      end
+      budget = budget - scanRead(scan, scan.listing, budget)
+      if not scan.listing.iter then
+        scan.names = scan.listing.names
+        scan.listing = nil
+        scan.i = 0
+        scan.phase = "walk"
+      end
+    elseif scan.phase == "walk" then
+      local basePath = SEARCH_PATHS[scan.s]
+      local sub = scan.sub
+      if sub then
+        -- Inside a subdirectory (e.g. a model folder) of a search path: list it, then collect
+        -- its .csv files.
+        if sub.listing.iter then
+          budget = budget - scanRead(scan, sub.listing, budget)
+        else
+          local names = sub.listing.names
+          while budget > 0 and sub.j < #names do
+            sub.j = sub.j + 1
+            budget = budget - 1
+            local subFile = names[sub.j]
+            if string.match(subFile, "%.csv$") then
+              scanCollect(scan, subFile, sub.path .. "/" .. subFile, sub.parent)
+            end
+          end
+          if sub.j >= #names then
+            scan.sub = nil
           end
         end
+      elseif scan.i < #scan.names then
+        scan.i = scan.i + 1
+        budget = budget - 1
+        local entry = scan.names[scan.i]
+        if string.match(entry, "%.csv$") then
+          scanCollect(scan, entry, basePath .. "/" .. entry, "")
+        elseif not string.match(entry, "%.%w+$") then
+          -- Subdirectory (e.g. Model name)
+          local modelDir = basePath .. "/" .. entry
+          scan.sub = { listing = openListing(modelDir), path = modelDir, parent = entry, j = 0 }
+        end
+      else
+        scan.names = nil
+        scan.s = scan.s + 1
+        if scan.s > #SEARCH_PATHS then
+          -- The walk is over. The sort is left to the next call, so it never runs in the same
+          -- call as the walk's last entries.
+          scan.phase = "sort"
+          return false
+        end
+        scan.phase = "list"
       end
+    elseif scan.phase == "sort" then
+      table.sort(scan.found, function(a, b) return a.sortKey > b.sortKey end)
+      scan.phase = "done"
+      return true
+    else
+      return true
     end
   end
+  return false
+end
 
-  table.sort(found, function(a, b) return a.sortKey > b.sortKey end)
-  state.logsList = found
-  return found
+-- The scan for as long as one wakeup may spend on it; see SCAN_BUDGET_TICKS. Without a clock it
+-- takes one unit per call.
+local function scanForAWhile(scan)
+  local clock = type(getTime) == "function" and getTime or nil
+  local start = clock and clock() or 0
+  repeat
+    if scanStep(scan, SCAN_UNIT_ENTRIES) then return true end
+    -- The sort gets a wakeup of its own rather than what is left of this one.
+    if scan.phase == "sort" then return false end
+  until not clock or clock() - start >= SCAN_BUDGET_TICKS
+  return false
+end
+
+-- The scan to its end in one call. Only for a build that has no overlay to report it with.
+local function scanLogFiles()
+  local scan = newScan()
+  while not scanStep(scan, SCAN_UNIT_ENTRIES) do end
+  state.logsList = scan.found
+  return scan.found
 end
 
 
@@ -468,18 +596,31 @@ function M.wakeup(ctx)
     state.requestRebuild = ctx.requestRebuild
   end
 
-  -- The scan walks three directory trees and opens every candidate to read its header. Done
-  -- inside M.build, that happens with nothing on the screen: the host paints no frame in front
-  -- of a page, so the tool simply stands still until the walk is over. Deferring it by one
-  -- wakeup lets the build that asked for it draw the notice first -- the same shape this page
-  -- already uses for parsing a selected log.
-  if state.scanPending then
-    state.scanPending = false
-    scanLogFiles()
-    state.scanned = true
-    state.loading = false
-    if state.requestRebuild then
-      state.requestRebuild()
+  -- The scan walks three directory trees and opens every candidate whose name carries no date
+  -- and time. Done in one call -- in M.build or in one wakeup -- the tool stands still until the
+  -- walk is over, however many logs the card holds. So the build that asks for it draws the
+  -- notice and each wakeup spends SCAN_BUDGET_TICKS on it -- the same shape this page already
+  -- uses for reading a selected log -- and the notice is drawn again whenever what it counts
+  -- has moved.
+  if state.scan then
+    if scanForAWhile(state.scan) then
+      state.logsList = state.scan.found
+      state.scan = nil
+      state.scanShown = nil
+      state.scanned = true
+      state.loading = false
+      collectgarbage("collect")
+      if state.requestRebuild then
+        state.requestRebuild()
+      end
+    else
+      local shown = state.scan.read .. "/" .. #state.scan.found
+      if shown ~= state.scanShown then
+        state.scanShown = shown
+        if state.requestRebuild then
+          state.requestRebuild()
+        end
+      end
     end
   end
 
@@ -542,7 +683,8 @@ end
 
 function M.onReload(ctx)
   state.scanned = false
-  state.scanPending = false
+  state.scan = nil
+  state.scanShown = nil
   closeGraph()
   state.selectedFile = nil
   state.selectedFilePath = nil
@@ -1270,31 +1412,36 @@ function M.build(ctx)
   -- List Mode: show available telemetry logs
   if not state.scanned then
     -- `state.loading` belongs to the CSV parse and drives a branch above this one with its own
-    -- message, so the scan gets a flag of its own. The notice is drawn on every build until the
-    -- wakeup has run, not only on the one that asks for it.
-    if not state.scanPending then
-      state.scanPending = true
-      if state.requestRebuild then
-        state.requestRebuild()
-      end
-    end
-
+    -- message, so the scan has a state of its own. Starting it reads nothing; the wakeup does
+    -- the walk. The notice is drawn on every build until the walk has finished, with how many
+    -- directory entries have been read and how many logs found so far.
+    --
+    -- It carries no bar. How many entries the walk will read is not known before it has read
+    -- them -- EdgeTX's dir() answers one name at a time, and nothing says how many a directory
+    -- holds -- and the reading is most of the time the walk takes, so any fraction drawn here
+    -- would be one this page made up. The two counts are what is known, and they move on every
+    -- wakeup of the walk.
     if LoadingOverlay then
+      if not state.scan then
+        state.scan = newScan()
+        state.scanShown = nil
+      end
+      local countText = string.format(pageText(i18n, "scan_counts"), state.scan.read, #state.scan.found)
       LoadingOverlay.append(children, {
         x = x,
         y = y,
         w = w,
         h = h,
         title = pageText(i18n, "loading_title"),
-        message = pageText(i18n, "scanning_message"),
-        progress = 0.3
+        message = pageText(i18n, "scanning_message") .. "\n" .. countText,
+        bar = false
       })
       return
     end
 
     -- No overlay module: nothing can be said, so do what this page did before rather than
     -- leave the list empty.
-    state.scanPending = false
+    state.scan = nil
     scanLogFiles()
     state.scanned = true
   end
@@ -1422,7 +1569,8 @@ end
 
 function M.onClose()
   state.scanned = false
-  state.scanPending = false
+  state.scan = nil
+  state.scanShown = nil
   closeGraph()
   state.selectedFile = nil
   state.selectedFilePath = nil
