@@ -588,16 +588,56 @@ end
 
 M.num = num
 
+-- A reader of one numeric state field, nil for anything that is not a number: `num(state[key])`
+-- with the test written out, because a getter calls its reader on every frame.
+function M.field(state, key)
+  return function()
+    local v = state[key]
+    if type(v) ~= "number" then return nil end
+    return v
+  end
+end
+
+-- What a memo holds before its first reading: a table no reading can be equal to, so the first
+-- call always formats and every later one costs a single comparison -- where a separate `primed`
+-- flag would cost a second test on every frame.
+local UNSET = {}
+M.UNSET = UNSET
+
 -- One formatted string per value change: the sweep calls these every frame, so the format
 -- has to be gated on the reading actually having moved.
 function M.getter(read, format)
-  local last, cached, primed = nil, nil, false
+  local last, cached = UNSET, nil
   return function()
     local v = read()
-    if primed and v == last then return cached end
+    if v == last then return cached end
     last = v
     cached = format(v)
-    primed = true
+    return cached
+  end
+end
+
+-- A number printed at `places` decimals, "-" without one. Two memos: the reading itself, which a
+-- value that has not moved passes in one comparison, and the reading rounded to the printed
+-- precision, so a change too small to show hands back the string already standing instead of
+-- formatting the same text again.
+function M.scaledGetter(read, places)
+  local scale = 10 ^ places
+  local fmt = "%." .. tostring(places) .. "f"
+  local lastRaw, lastScaled, cached = UNSET, UNSET, nil
+  return function()
+    local v = read()
+    if v == lastRaw then return cached end
+    lastRaw = v
+    local s = nil
+    if v ~= nil then s = math.floor(v * scale + 0.5) end
+    if s == lastScaled then return cached end
+    lastScaled = s
+    if s == nil then
+      cached = "-"
+    else
+      cached = string.format(fmt, s / scale)
+    end
     return cached
   end
 end
@@ -892,18 +932,22 @@ end
 -- the ten gauge rows all ask this one closure, so the three-step colour is computed once per
 -- change rather than once per row per frame, and no two rows can disagree about it.
 function M.fuelLevel(state)
-  local last, lastColor, primed = nil, M.C.empty, false
+  local last, lastColor = UNSET, M.C.empty
   return function()
     -- With the main pack gone the fuel figure is not low, it is no longer being measured:
     -- the gauge empties rather than freezing on the last reading it took.
     --
     -- Written out rather than as `cond and nil or value`: that idiom cannot yield nil in Lua --
     -- `true and nil` is false, so the `or` arm runs and the reading comes back anyway.
-    local p = M.fuel(state)
-    if state.mainPowerLost == true then p = nil end
-    if primed and p == last then return p, lastColor end
+    --
+    -- M.fuel is written out here too: up to twelve gauge rows ask this closure every frame.
+    local p = nil
+    if state.fuelTelemetrySeen == true and state.mainPowerLost ~= true then
+      p = state.fuel
+      if type(p) ~= "number" then p = nil end
+    end
+    if p == last then return p, lastColor end
     last = p
-    primed = true
     -- Critical at nothing left, low within twenty points of it, full otherwise. A fourth colour
     -- for a pack that was not full when it was plugged in would need a verdict latched at the
     -- connect, and a theme has no pass of its own to latch it in.
@@ -984,7 +1028,7 @@ end
 -- descriptors in bit order, cut with "+" once they pass eighteen characters. One decode per
 -- value change.
 function M.armDisableText(state)
-  return M.getter(function() return num(state.armDisableFlags) end, function(v)
+  return M.getter(M.field(state, "armDisableFlags"), function(v)
     if v == nil or v == 0 then return "" end
     v = flagBits(v)
     local parts, len = {}, 0
@@ -1265,7 +1309,7 @@ function M.fuelGauge(nodes, state, x, y, w, h)
       return string.format("%d%%", math.floor(p + 0.5))
     end), valueFont, M.packColor(state, M.C.ink), CENTER)
   M.label(nodes, bodyX, mahY, bodyW, mahH,
-    M.getter(function() return num(state.consumedMah) end, function(v)
+    M.getter(M.field(state, "consumedMah"), function(v)
       if v == nil then return "-" end
       return string.format("%d", math.floor(v + 0.5))
     end), mahFont, M.C.ink, CENTER)
