@@ -175,7 +175,11 @@ function M.append(children, opts)
   local messageShift = math.max(0, messageLines * messageLineH - messageRoom)
   local boxH = baseBoxH + messageShift
   local boxX = x + math.floor((w - boxW) / 2)
-  local boxY = y + math.floor((h - boxH) / 2) - 64
+  -- Centred in the area it is given, the same way it is centred across. A fixed lift of 64 px
+  -- has no screen-size term: on 800x480 it put the box 64 px above the centre, and on 480x320
+  -- and 480x272 it pushed every box with a button up against the clamp below -- the box sat on
+  -- the top edge with the rest of the screen empty under it.
+  local boxY = y + math.floor((h - boxH) / 2)
   if boxY < y + 8 then
     boxY = y + 8
   end
