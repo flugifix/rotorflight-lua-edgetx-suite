@@ -999,18 +999,36 @@ end
 -- delete the object that reports its release; a trim has no object and a rebuild cannot lose it,
 -- and freezing the surface for as long as a thumb is on a trim would freeze it for the whole of
 -- the tuning.
+--
+-- A press and a release move no epoch. `valueEpoch` is in the widget's render key, so a bump
+-- here tore the tuning surface down and built it again on every trim press and every release,
+-- and nothing on that surface had changed: the snapshot carries no field derived from trimRow,
+-- trimUp or trimHold, and the screen reads none of them. Where a trim does change what the
+-- surface shows -- in `rows` mode, the trim of another row selects that row -- `self.row` moves,
+-- and the row is in the render key on its own. The board's answer to the step travels on
+-- `reportEpoch` (see fastTick), so the value still follows the step without a rebuild.
 function Drive:pollTrimStep(now)
   local row, up = self:pollTrims()
 
   if row ~= self.trimRow or up ~= self.trimUp then
     self.trimRow, self.trimUp = row, up
-    self.valueEpoch = self.valueEpoch + 1
     if row == nil then
       -- Let go. The magnitude does not fall away here: a pulse still running owns it until its
       -- own clock says otherwise, and that is the whole of what makes a short press step at all.
       self.trimHold = false
     else
       self.row = row
+      -- A fresh press while this trim's own pulse or the cool-down after it is still running.
+      -- It starts nothing now -- the board cannot tell two steps that close apart -- and a
+      -- short press that ends inside the gap starts nothing at all. Said on the screen, as the
+      -- touch control says it (Drive:press), rather than looking like a trim that is not wired
+      -- up. Said at the press and not on every pass it is held: the refusal is read through a
+      -- closure against the clock, and moving its deadline on every pass would republish the
+      -- snapshot on every pass. A trim held past the gap still gets its pulse below, and that
+      -- pulse clears the sentence.
+      if self.trimHold ~= true and (self.trimPulseUntil ~= nil or now < (self.trimCoolUntil or 0)) then
+        self:refuseStep("cooling", now)
+      end
       -- The same thumb moved to another row without coming up. The magnitude follows the new row
       -- rather than finishing the old one's pulse: the screen has already followed the pilot and
       -- the wire has to agree with the screen.

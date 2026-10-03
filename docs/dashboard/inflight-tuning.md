@@ -107,7 +107,12 @@ One parameter at a time, not a grid:
 - **The step controls** at the bottom. One tap is one pulse is one step. Held, the flight
   controller repeats at its own rate. There is never a value that follows the finger.
 - **The trims** do the same thing without looking down, in whichever of the two layouts the
-  radio is set to.
+  radio is set to. A trim press that steps the selected parameter comes and goes without
+  rebuilding the screen; a trim that selects another row or bank redraws it for the new
+  selection. A step press that comes before the flight controller
+  can count it as a step of its own -- during the previous press's pulse or the pause after it --
+  shows **too fast - one step at a time**, as a tap on a step control does. A trim held past that
+  pause still steps once the pause is over.
 
 A profile change while the surface is live is named on the screen, and every cached value
 belonging to that profile is marked unknown until the reads have been sent again.
