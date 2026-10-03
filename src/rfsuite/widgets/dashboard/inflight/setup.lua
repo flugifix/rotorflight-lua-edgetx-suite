@@ -131,9 +131,16 @@ M.PULSE_MS_MIN = 100
 -- The largest setting whose own overrun cannot reach the board's SECOND step. The second step
 -- lands 300 ms into a held plateau (TRIGGER_DELAY 100 ms, then REPEAT_DELAY 200 ms counted from
 -- the first), and the overlay clears the pulse on the first pass at or AFTER its deadline, so a
--- plateau stands for its setting plus up to one pass. 250 leaves that overrun the whole of the
--- remaining 50 ms; anything longer would let one late pass turn a press into two steps, which is
--- the failure a pilot cannot see happening. A stored value above this is clamped on load.
+-- plateau stands for its setting plus up to one pass. At EdgeTX's 50 ms widget pass, 250 leaves
+-- that overrun the whole of the remaining 50 ms; anything longer would let one late pass turn a
+-- press into two steps, which is the failure a pilot cannot see happening. A stored value above
+-- this is clamped on load.
+--
+-- What the cap bounds is what the SETTING adds, not what a slow pass does. A widget pass is not
+-- always 50 ms: with the tuning surface up a colour radio can run it at about 300 ms, and then
+-- the plateau is one whole pass whatever is set between 100 and 250 -- which is where the second
+-- step lands, so a pass longer than that can still turn one press into two. No value of this cap
+-- changes that; a press is bounded by its own pulse, never by how long a trim reads as held.
 M.PULSE_MS_MAX = 250
 
 -- What one press moves a parameter by on the board. Four rungs rather than a free number: the
