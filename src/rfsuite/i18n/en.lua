@@ -2651,6 +2651,8 @@ return {
       waiting_for_battery_telemetry = "Waiting for battery telemetry",
       connected_starting = "Connected, starting dashboard...",
       connected_partial_telemetry = "Connected with partial telemetry",
+      build_failed = "Dashboard error",
+      build_failed_hint = "This screen could not be drawn",
       loading_tasks = "Loading data...",
       select_battery = "SELECT BATTERY",
       switch_to_fullscreen = "Please switch to fullscreen mode to select the battery",
