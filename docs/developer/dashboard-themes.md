@@ -88,6 +88,12 @@ state, the throttle percentage, and — with the governor off — headspeed and 
 The arm flag is the spine. It comes from the `armflags` sensor, and the widget keeps the
 previous pass's value beside it, so an arm and a disarm are edges rather than states.
 
+A reading that says *disarmed* is not taken while the MSP runtime still reads the model as armed.
+The runtime reads the same sensor at the top of the same pass, ahead of the custom-telemetry
+drain, so a disagreement means the sensor changed between the two reads of one pass -- and a
+real disarm is taken by the first read after the runtime has seen it too. A reading that says
+*armed* is always taken. Both `armed` and the raw `armFlags` a theme can read follow this rule.
+
 | Phase | Reached when |
 | --- | --- |
 | `preflight` | Not armed and no inflight phase has been reached in this armed session. This is also the phase the widget starts in, and the phase a model returns to after an arm that never spooled up. |

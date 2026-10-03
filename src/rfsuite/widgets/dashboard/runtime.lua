@@ -2476,6 +2476,53 @@ local function setField(field, value)
   end
 end
 
+-- Whether this read's arm flags are left untaken, because the MSP runtime still reads the model
+-- as armed.
+--
+-- While the link is up the runtime reads the same ARM sensor on every logic tick and keeps the
+-- answer in `lastArmed`, and this widget ticks it at the top of the very pass that reads below --
+-- ahead of the event runtimes, whose custom-telemetry drain publishes that sensor. So when the
+-- runtime holds armed and this read finds bit 0 clear, the sensor changed between two reads of
+-- one pass: a frame the drain published in between, possibly one queued long before, or a sensor
+-- that read 0 for that moment. (While the link is down the runtime does not read at all and keeps
+-- its last answer; a disarmed reading taken then is a reading from a link that is not there.)
+-- Taking it would end the flight on this screen -- the phase drops to postflight and back, the
+-- disarm is announced, the landing voltage and `lastDisarmAt` are stamped -- for a model that is
+-- still flying. Left untaken, a real disarm is taken by the first read after the runtime's next
+-- tick, which has read it by then.
+--
+-- One direction only. A reading of ARMED is always taken: the runtime's `false` is also what it
+-- holds when no arm source answers at all -- a simulator with no flight controller behind it is
+-- one such case -- so it cannot overrule a reading that says the model is armed, and erring
+-- towards armed is the safe side of that question.
+--
+-- One log line per run of untaken reads, not one per read.
+local armFlagsRefusalLogged = false
+
+local function armFlagsRefused(value)
+  if type(value) ~= "number" then return false end
+  local armedBit
+  if bit32 then armedBit = bit32.btest(value, 1) else armedBit = value ~= 0 end
+  local runtimeState = (not armedBit) and MspRuntime and type(MspRuntime.getState) == "function"
+    and MspRuntime.getState() or nil
+  if type(runtimeState) ~= "table" or runtimeState.lastArmed ~= true then
+    armFlagsRefusalLogged = false
+    return false
+  end
+  if not armFlagsRefusalLogged then
+    armFlagsRefusalLogged = true
+    local rssi = nil
+    local rssiFn = _G.getRSSI
+    if type(rssiFn) == "function" then
+      local ok, reading = pcall(rssiFn)
+      if ok then rssi = reading end
+    end
+    widgetLog(nil, string.format("arm flags %s not taken: the MSP runtime still reads armed (RSSI %s)",
+      tostring(value), tostring(rssi)), "info")
+  end
+  return true
+end
+
 local function readTelemetry(state, audioState)
   if not (Sensors and type(Sensors.getValue) == "function") then return end
   telemetryTarget = state
@@ -2501,7 +2548,12 @@ local function readTelemetry(state, audioState)
   setField("profile", roundInt(getSensor("pid_profile") or state.profile, state.profile or 1))
   setField("rateProfile", roundInt(getSensor("rate_profile") or state.rateProfile, state.rateProfile or 1))
   setField("batteryProfile", roundInt(getSensor("battery_profile") or state.batteryProfile, state.batteryProfile or 1))
-  setField("armFlags", roundInt(getSensor("armflags") or state.armFlags, state.armFlags or 0))
+  -- Read once for both fields that carry it -- `armFlags` here, which the announcements speak, and
+  -- `armed` further down -- so a reading armFlagsRefused leaves untaken is untaken for both.
+  local armState = getSensor("armflags")
+  local armTaken = armState
+  if armFlagsRefused(armState) then armTaken = nil end
+  setField("armFlags", roundInt(armTaken or state.armFlags, state.armFlags or 0))
   local armDisableFlagsValue = getSensor("armdisableflags")
   if type(armDisableFlagsValue) == "number" then
     setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
@@ -2601,19 +2653,19 @@ local function readTelemetry(state, audioState)
     end
   end
 
-  local armState = getSensor("armflags")
   if type(armState) == "number" then
     -- STICKY, and cleared only on the reconnect edge below. `armed` starting false is
     -- indistinguishable from `armed` never having been read at all -- a model whose telemetry
     -- sensor 99 is not selected reads nil here for ever and looks disarmed the whole time -- and
     -- anything that refuses while armed has to be able to tell those two apart, because failing
-    -- open there means sending MSP to a flying helicopter.
+    -- open there means sending MSP to a flying helicopter. Set on a reading left untaken as well:
+    -- the sensor answered.
     state.armedSeen = true
   end
-  if type(armState) == "number" and bit32 then
-    setField("armed", bit32.btest(armState, 1))
-  elseif type(armState) == "number" then
-    setField("armed", armState ~= 0)
+  if type(armTaken) == "number" and bit32 then
+    setField("armed", bit32.btest(armTaken, 1))
+  elseif type(armTaken) == "number" then
+    setField("armed", armTaken ~= 0)
   end
 
   local rss1 = readFirstNumber(RSS1_SOURCES, state.rss1)
