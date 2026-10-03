@@ -24,6 +24,20 @@ The page searches `/LOGS/`, `/LOGS/rfsuite/` and `/LOGS/rfsuite/telemetry/`, eac
 level and one folder down, and lists every `.csv` file it finds there that is a telemetry log,
 newest first. *View* opens the summary of that log.
 
+While it searches, the page shows how many folder entries it has read and how many logs it has
+found so far. It shows no bar: how many entries a folder holds is not known before they have
+been read, and reading them is most of the search.
+
+The list shows 25 logs at a time. Scroll it by touch, or turn the rotary encoder to step from
+one log's *View* to the next. Where there are more logs, *Previous* above the list and *Next*
+below it show the 25 before or after, with which logs are shown out of how many beside them.
+Coming back from a log's summary finds the list on the same 25.
+
+The list is kept when you leave the page, so coming back shows it at once, on the 25 you left
+it on. *Reload* in the header searches the card again and starts at the newest log; a log written
+since the list was read appears only then. The tool holds on to only the last few pages you
+opened, so after several other pages, or after leaving the tool, the page searches again.
+
 A file whose name carries a date and a time, as EdgeTX names its logs
 (`<model>-YYYY-MM-DD-HHMMSS.csv`), is listed without being opened. Any other `.csv` file is
 opened, and is listed only if its first line begins with the `Date,Time` header EdgeTX writes;
