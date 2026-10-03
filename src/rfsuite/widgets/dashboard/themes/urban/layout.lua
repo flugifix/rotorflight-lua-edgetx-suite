@@ -388,6 +388,22 @@ local function rssiPercent(dbm, floor)
 end
 L.rssiPercent = rssiPercent
 
+-- A link bar's fill as a reactive `size`: `full` pixels at 100, clamped to 0..100, worked out
+-- once per change of the reading rather than on every frame.
+local function barLength(read, full, fh)
+  local lastV, lastW = Common.UNSET, 0
+  return function()
+    local v = read()
+    if v ~= lastV then
+      lastV = v
+      local p = v or 0
+      if p < 0 then p = 0 elseif p > 100 then p = 100 end
+      lastW = math.floor(full * p / 100)
+    end
+    return lastW, fh
+  end
+end
+
 -- The top bar, left to right: the menu and tool glyphs (full screen only), the clock, the link bars
 -- centred on the bar's midline, the radio battery pill at the right end.
 --
@@ -448,7 +464,7 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   local rsCrit = math.floor(rsWarn / 2 + 0.5)
   local bars = {}
   if setting(state, "lq_bar") == "on" then
-    bars[#bars + 1] = { read = function() return num(state.lq) end, warn = lqWarn, crit = lqCrit }
+    bars[#bars + 1] = { read = Common.field(state, "lq"), warn = lqWarn, crit = lqCrit }
   end
   if setting(state, "tq_bar") == "on" then
     bars[#bars + 1] = { read = function()
@@ -457,10 +473,18 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
     end, warn = lqWarn, crit = lqCrit }
   end
   if setting(state, "rssi_bars") == "on" then
+    -- Kept per pair of readings: the bar's colour and its length both ask, every frame, and the
+    -- percentage only moves when the reading or the floor does. rssiPercent tests both for a
+    -- number itself.
     local function rss(field)
+      local lastDbm, lastFloor, lastP = Common.UNSET, Common.UNSET, nil
       return function()
         local d = state.derived
-        return rssiPercent(num(state[field]), d and num(d.link_floor) or nil)
+        local dbm, floor = state[field], d and d.link_floor
+        if dbm == lastDbm and floor == lastFloor then return lastP end
+        lastDbm, lastFloor = dbm, floor
+        lastP = rssiPercent(dbm, floor)
+        return lastP
       end
     end
     bars[#bars + 1] = { read = rss("rss1"), warn = rsWarn, crit = rsCrit }
@@ -502,12 +526,17 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   for i = 1, n do
     local read, warn, crit = bars[i].read, bars[i].warn, bars[i].crit
     local by = topY + (i - 1) * slotH
+    -- Decided once per change of the reading, as the gauge's fill colour is (Common.fuelLevel).
+    local lastV, lastColor = Common.UNSET, nil
     local color = function()
       local v = read()
-      if v == nil then return C.track end
-      if v <= crit then return C.crit end
-      if v <= warn then return C.warn end
-      return good
+      if v == lastV then return lastColor end
+      lastV = v
+      if v == nil then lastColor = C.track
+      elseif v <= crit then lastColor = C.crit
+      elseif v <= warn then lastColor = C.warn
+      else lastColor = good end
+      return lastColor
     end
     if asLines then
       L.barLines(nodes, barX, by, barW, barH, outlined, warn, crit, read, color)
@@ -517,11 +546,7 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
       nodes[#nodes + 1] = {
         type = "rectangle", x = barX + 1, y = by + 1, w = 1, h = fh, filled = true, rounded = 1,
         color = color,
-        size = function()
-          local v = read() or 0
-          if v < 0 then v = 0 elseif v > 100 then v = 100 end
-          return math.floor(fwMax * v / 100), fh
-        end
+        size = barLength(read, fwMax, fh)
       }
       local nh = math.max(2, math.floor(barH * 0.45))
       Common.rect(nodes, barX + math.floor(barW * crit / 100), by + barH - nh, 2, nh, C.tick, true, 0)
@@ -561,11 +586,7 @@ function L.barLines(nodes, barX, by, barW, barH, outlined, warn, crit, read, col
   nodes[#nodes + 1] = {
     type = "hline", x = x0, y = (outlined and by + 1 or by) + math.floor(fh / 2), w = 1, h = fh,
     color = color,
-    size = function()
-      local v = read() or 0
-      if v < 0 then v = 0 elseif v > 100 then v = 100 end
-      return math.floor(fw * v / 100), fh
-    end
+    size = barLength(read, fw, fh)
   }
   if outlined then
     local nh = math.max(2, math.floor(barH * 0.45))
@@ -644,9 +665,9 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
   local metaH = Common.measure(metaFont, "999:59:59")
   local metaPad = math.max(0, math.floor((hMeta - fontH - metaH) / 2))
   Common.stacked(nodes, x + pad, y + yMeta, halfW, metaPad, T.flights,
-    Common.getter(function() return num(state.flights) end, Common.integer), font, fontH, metaFont, metaH)
+    Common.getter(Common.field(state, "flights"), Common.integer), font, fontH, metaFont, metaH)
   Common.stacked(nodes, x + pad + halfW, y + yMeta, innerW - halfW, metaPad, T.total_time,
-    Common.getter(function() return num(state.totalFlightSeconds) end, Common.longDuration), font, fontH, metaFont, metaH)
+    Common.getter(Common.field(state, "totalFlightSeconds"), Common.longDuration), font, fontH, metaFont, metaH)
 
   -- The governor is sized against the widest governor name and never above MIDSIZE, the
   -- throttle against "100%" on its own -- which is why "Safe" beside "Throttle off" is the
@@ -699,9 +720,9 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
     tapArea(nodes, x + pad, y + yGrid, innerW, hGrid, function() action("openView:urban_menu") end)
   end
   Common.stacked(nodes, x + pad, y + yGrid, thirdW, gridPad, T.profile,
-    Common.getter(function() return num(state.profile) end, Common.integer), font, fontH, gridFont, gridH)
+    Common.getter(Common.field(state, "profile"), Common.integer), font, fontH, gridFont, gridH)
   Common.stacked(nodes, x + pad + thirdW, y + yGrid, thirdW, gridPad, T.rate,
-    Common.getter(function() return num(state.rateProfile) end, Common.integer), font, fontH, gridFont, gridH)
+    Common.getter(Common.field(state, "rateProfile"), Common.integer), font, fontH, gridFont, gridH)
   -- The B-Profile cell: the word "B-Profile" over the board's battery profile number, and the
   -- shorter "B-Prof" where the word does not fit the narrow third column. While the host is
   -- still waiting for a battery pick on this connection the word is drawn in the warn colour, a
@@ -713,7 +734,7 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
   if Common.textWidth(font, bpLabel) > thirdLastW then bpLabel = T.battery_profile_short end
   local bpLabelColor = (bp and bp.pending == true) and C.warn or nil
   Common.stacked(nodes, x + pad + 2 * thirdW, y + yGrid, thirdLastW, gridPad, bpLabel,
-    Common.getter(function() return num(state.batteryProfile) end, Common.integer), font, fontH, gridFont, gridH,
+    Common.getter(Common.field(state, "batteryProfile"), Common.integer), font, fontH, gridFont, gridH,
     bpLabelColor)
 
   Common.hline(nodes, x + pad, y + yMeta - 1, innerW)
@@ -783,21 +804,13 @@ end
 
 local function intGetter(field)
   return function(state)
-    return Common.getter(function() return num(state[field]) end, Common.integer)
+    return Common.getter(Common.field(state, field), Common.integer)
   end
 end
 
 local function decimalGetter(field, places)
-  local scale = 10 ^ places
   return function(state)
-    return Common.getter(function()
-      local v = num(state[field])
-      if v == nil then return nil end
-      return math.floor(v * scale + 0.5)
-    end, function(v)
-      if v == nil then return "-" end
-      return string.format("%." .. places .. "f", v / scale)
-    end)
+    return Common.scaledGetter(Common.field(state, field), places)
   end
 end
 
@@ -830,14 +843,13 @@ end
 L.SOURCES = {
   { id = "cell_voltage", label = "@i18n(widgets.dashboard.urban_cell_voltage)@", unit = "V", sample = "4.20",
     make = function(state)
-      return Common.getter(function()
+      -- The cell count is a render key term, so it is a constant of this build.
+      local cells = Common.cells(state)
+      return Common.scaledGetter(function()
         local v = num(state.voltage)
         if v == nil or v <= 0 then return nil end
-        return math.floor((v / Common.cells(state)) * 100 + 0.5)
-      end, function(v)
-        if v == nil then return "-" end
-        return string.format("%.2f", v / 100)
-      end)
+        return v / cells
+      end, 2)
     end,
     -- The one coloured row: below the theme's own minimum the figure turns, the same
     -- bounds the gauge is scaled by.
@@ -1267,20 +1279,22 @@ local function lastStat(state, key, flatName)
   return v
 end
 
--- A reading held as an integer at `places` decimals, so the getter compares integers and the
--- format runs once per change, and printed back at the same precision.
-local function scaled(read, places)
-  local scale = 10 ^ places
-  local fmt = "%." .. tostring(places) .. "f"
-  return Common.getter(function()
-    local v = read()
-    if v == nil then return nil end
-    return math.floor(v * scale + 0.5)
-  end, function(v)
-    if v == nil then return "-" end
-    return string.format(fmt, v / scale)
-  end)
+-- One record key as a reader for the per-frame sweep: lastStat's lookup written out, with both
+-- names joined once here rather than on every call, and the number test folded in.
+local function statReader(state, key, flatName)
+  return function()
+    local flight = state.flight
+    local last = type(flight) == "table" and flight.last or nil
+    local v = nil
+    if type(last) == "table" then v = last[key] end
+    if v == nil then v = state[flatName] end
+    if type(v) ~= "number" then return nil end
+    return v
+  end
 end
+
+-- A reading printed at `places` decimals, formatted once per change at that precision.
+local scaled = Common.scaledGetter
 
 -- One row of the table from one record key: the live reading and the record's two extremes of
 -- it. The "Latest" column is the state field the flight view reads. Once the flight controller
@@ -1290,9 +1304,9 @@ end
 local function recordRow(state, label, sample, field, key, places)
   return {
     label = label, sample = sample,
-    latest = scaled(function() return num(state[field]) end, places),
-    min = scaled(function() return num(lastStat(state, "min" .. key, "lastFlightMin" .. key)) end, places),
-    max = scaled(function() return num(lastStat(state, "max" .. key, "lastFlightMax" .. key)) end, places),
+    latest = scaled(Common.field(state, field), places),
+    min = scaled(statReader(state, "min" .. key, "lastFlightMin" .. key), places),
+    max = scaled(statReader(state, "max" .. key, "lastFlightMax" .. key), places),
   }
 end
 
@@ -1342,8 +1356,8 @@ local function statsRows(state)
         if cur == nil or math.floor(cur) ~= p then return nil end
         return num(state.rpm)
       end, 0),
-      min = scaled(function() return num(lastStat(state, "min" .. key, "lastFlightMin" .. key)) end, 0),
-      max = scaled(function() return num(lastStat(state, "max" .. key, "lastFlightMax" .. key)) end, 0),
+      min = scaled(statReader(state, "min" .. key, "lastFlightMin" .. key), 0),
+      max = scaled(statReader(state, "max" .. key, "lastFlightMax" .. key), 0),
     }
   end
 
@@ -1499,12 +1513,12 @@ function L.buildStats(zone, state, ctx)
   Common.label(nodes, lx, rowMid - math.floor(textH / 2), totalLabelW, textH, totalLabel, textFont, C.label, LEFT)
   lx = lx + totalLabelW + itemGap
   Common.label(nodes, lx, rowMid - math.floor(metaH / 2), totalValueW, metaH,
-    Common.getter(function() return num(state.totalFlightSeconds) end, Common.longDuration), metaFont, C.text, LEFT)
+    Common.getter(Common.field(state, "totalFlightSeconds"), Common.longDuration), metaFont, C.text, LEFT)
   lx = lx + totalValueW + pairGap
   Common.label(nodes, lx, rowMid - math.floor(textH / 2), flightsLabelW, textH, flightsLabel, textFont, C.label, LEFT)
   lx = lx + flightsLabelW + itemGap
   Common.label(nodes, lx, rowMid - math.floor(metaH / 2), flightsValueW, metaH,
-    Common.getter(function() return num(state.flights) end, Common.integer), metaFont, C.text, LEFT)
+    Common.getter(Common.field(state, "flights"), Common.integer), metaFont, C.text, LEFT)
 
   -- The header row: the link's state over the label column, the three column names over theirs.
   local headerY = yHeader + math.floor((headerRowH - textH) / 2)
