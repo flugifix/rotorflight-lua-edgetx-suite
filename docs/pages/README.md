@@ -11,9 +11,15 @@ One file per page, at the path of the page under `src/rfsuite/app/pages/` with `
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
 
-**Status:** 94 reachable pages, 35 written. 78 of them carry an in-app help text behind the
+**Status:** 94 reachable pages, 36 written. 78 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
+
+The help text opens as a page of its own, titled with the page it belongs to. EXIT returns to
+that page, and so does the X at the top right of the header on a touch screen. A text taller
+than the screen is read on by turning the rotary encoder, one line of the text per step in
+either direction (the line marker in the focus colour shows where), or by dragging on a touch
+screen.
 
 The *Conditions* column names what hides, greys out or locks a page; the sentences to use in
 a page file are in [_template.md](../_template.md), and the mechanics are explained in
@@ -115,7 +121,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
-| Logs (the telemetry CSV browser) | `logs.md` | yes | always available | to write |
+| Logs (the telemetry CSV browser) | [logs.md](logs.md) | yes | always available | written |
 
 ## System → Settings
 

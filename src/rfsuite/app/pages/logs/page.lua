@@ -40,7 +40,10 @@ local state = {
   -- pickCurves puts it into its column chooser.
   view = nil,
   pickCurves = false,
-  slots = {}
+  slots = {},
+  -- Set when the engine refused the chosen columns, so the view says so instead of drawing
+  -- the chooser again.
+  graphRefused = false
 }
 
 local function ensureDeps()
@@ -256,6 +259,15 @@ local function pageText(i18n, key)
   return key
 end
 
+-- A summary figure, or "--" where the log carries no column for it: the summary returns nil
+-- for those, and a number there would be a guess.
+local function statText(fmt, ...)
+  for i = 1, select("#", ...) do
+    if select(i, ...) == nil then return "--" end
+  end
+  return string.format(fmt, ...)
+end
+
 local function safeCollectEntries(listBasePath)
   local entries = {}
   if type(dir) == "function" then
@@ -329,12 +341,29 @@ local function extractFileInfo(filename, fullPath, parentFolder)
     model = (parentFolder and parentFolder ~= "" and parentFolder ~= "telemetry" and parentFolder ~= "rfsuite" and parentFolder ~= "LOGS") and parentFolder or "Default"
   end
 
-  -- Fallback: peek first lines if date/time not in filename
+  -- Fallback: peek first lines if date/time not in filename.
+  --
+  -- This peek is also where a CSV that is not a telemetry log is told apart, and such a file is
+  -- not listed. EdgeTX's logger names a log <model>-<date>-<time>, or <model>-<date> with one
+  -- log per day, and starts it with a Date,Time header (radio/src/logs.cpp). A name that carries
+  -- a date and a time is therefore taken as one of its logs without being opened, which keeps
+  -- the walk as cheap as it was; every other file is opened here anyway, and has to start with
+  -- that header to be listed.
+  --
+  -- logs.cpp writes that name and that header only on a build with RTCLOCK. Without it the file
+  -- is named <model>.csv, the header starts with Time instead and each row carries a tick count
+  -- where the time goes, so the graph could not plot such a log either: it needs the Date and
+  -- Time columns and a clock time (graph.lua refuses it as not_telemetry). Accepting a Time
+  -- header here would list files the graph then refuses. EdgeTX defines RTCLOCK for every colour
+  -- radio it builds, and the suite runs on colour radios only.
   if not date or not time then
     local f = io.open(fullPath, "r")
     if f then
       local firstChunk = io.read(f, 512)
       io.close(f)
+      if not firstChunk or string.sub(firstChunk, 1, 10) ~= "Date,Time," then
+        return nil
+      end
       if firstChunk then
         local l1, l2 = string.match(firstChunk, "([^\r\n]+)[\r\n]+([^\r\n]+)")
         if l2 then
@@ -386,7 +415,8 @@ local function scanLogFiles()
   local function collect(fileName, fullPath, parentFolder)
     if seen[fullPath] then return end
     seen[fullPath] = true
-    found[#found + 1] = extractFileInfo(fileName, fullPath, parentFolder)
+    local info = extractFileInfo(fileName, fullPath, parentFolder)
+    if info then found[#found + 1] = info end
   end
 
   for s = 1, #searchPaths do
@@ -558,6 +588,7 @@ local function openGraph()
   state.view = "graph"
   state.pickCurves = false
   state.slots = {}
+  state.graphRefused = false
   -- The statistics view has just had this file walked, and the walk built the index the plot
   -- needs. Opening it again here is what the engine recognises and answers without reading.
   Graph.open(state.selectedFilePath, { stats = true })
@@ -573,7 +604,8 @@ local function graphErrorText(i18n, err)
     open = pageText(i18n, "graph_err_open"),
     empty = pageText(i18n, "graph_err_empty"),
     not_telemetry = pageText(i18n, "graph_err_not_telemetry"),
-    no_data = pageText(i18n, "graph_err_no_data")
+    no_data = pageText(i18n, "graph_err_no_data"),
+    no_time = pageText(i18n, "graph_err_no_time")
   }
   return texts[err] or texts.open
 end
@@ -659,8 +691,8 @@ local function buildCurvePicker(children, x, y, w, i18n)
         press = function()
           state.slots = {}
           for j = 1, #tpl.cols do state.slots[j] = tpl.cols[j] end
-          Graph.applyColumns(tpl.cols)
-          state.pickCurves = false
+          state.graphRefused = not Graph.applyColumns(tpl.cols)
+          if not state.graphRefused then state.pickCurves = false end
           rebuild()
         end
       }
@@ -736,8 +768,8 @@ local function buildCurvePicker(children, x, y, w, i18n)
     active = function() return #chosen > 0 end,
     press = function()
       if #chosen == 0 then return end
-      Graph.applyColumns(chosen)
-      state.pickCurves = false
+      state.graphRefused = not Graph.applyColumns(chosen)
+      if not state.graphRefused then state.pickCurves = false end
       rebuild()
     end
   }
@@ -917,7 +949,25 @@ local function buildGraphView(children, x, y, w, availH, i18n)
   -- windows and starts the current one again; the points it still holds are drawn meanwhile.
   Graph.setGeometry(chartRect(x, y, w, availH))
 
+  -- The engine walks a file to the end for the summary whether or not the plot can use it, so
+  -- a file the plot cannot draw is only known once the walk is done: one without Date and Time
+  -- columns, one without data rows, or one with rows of which none carries a time the plot can
+  -- read. The summary reads its times more leniently than the plot (parseTimeSec against
+  -- parseTimeCs), so the last case still has a summary, and is told apart from the second by it.
+  -- These files used to reach the chooser, where every choice was refused without a word. Once
+  -- they are caught here no choice is refused; a refusal would still say so, with no_data.
   local err = Graph.getError()
+  if err == nil and not Graph.isBusy() then
+    if not Graph.isTelemetry() then
+      err = "not_telemetry"
+    elseif not Graph.hasSummary() then
+      err = "no_data"
+    elseif #Graph.getSessions() == 0 then
+      err = "no_time"
+    elseif state.graphRefused then
+      err = "no_data"
+    end
+  end
   if err ~= nil then
     local headH = 0
     if Controls and type(Controls.appendStaticSectionHeader) == "function" then
@@ -1068,10 +1118,10 @@ function M.build(ctx)
       x = valColX,
       y = cursorY + 10,
       w = valColW,
-      text = string.format("%s: %.2fV   |   %s: %.2fV (-%.2fV)   |   %s: %.2fV",
-        pageText(i18n, "start"), summary.vStart,
-        pageText(i18n, "min"), summary.vMin, summary.vSag,
-        pageText(i18n, "end_val"), summary.vEnd),
+      text = string.format("%s: %s   |   %s: %s   |   %s: %s",
+        pageText(i18n, "start"), statText("%.2fV", summary.vStart),
+        pageText(i18n, "min"), statText("%.2fV (-%.2fV)", summary.vMin, summary.vSag),
+        pageText(i18n, "end_val"), statText("%.2fV", summary.vEnd)),
       color = COLOR_WHITE,
       font = SMLSIZE
     }
@@ -1101,10 +1151,10 @@ function M.build(ctx)
       x = valColX,
       y = cursorY + 10,
       w = valColW,
-      text = string.format("%s: %.1f A   |   %s: %.1f A   |   %s: ~%d mAh",
-        pageText(i18n, "peak"), summary.cPeak,
-        pageText(i18n, "avg"), summary.cAvg,
-        pageText(i18n, "consumption_title"), math.floor(summary.mah)),
+      text = string.format("%s: %s   |   %s: %s   |   %s: %s",
+        pageText(i18n, "peak"), statText("%.1f A", summary.cPeak),
+        pageText(i18n, "avg"), statText("%.1f A", summary.cAvg),
+        pageText(i18n, "consumption_title"), statText("~%d mAh", summary.mah and math.floor(summary.mah))),
       color = COLOR_WHITE,
       font = SMLSIZE
     }
@@ -1134,9 +1184,9 @@ function M.build(ctx)
       x = valColX,
       y = cursorY + 10,
       w = valColW,
-      text = string.format("%s: %d rpm   |   %s: %d rpm (%s)",
-        pageText(i18n, "max"), math.floor(summary.rMax),
-        pageText(i18n, "min"), math.floor(summary.rMin),
+      text = string.format("%s: %s   |   %s: %s (%s)",
+        pageText(i18n, "max"), statText("%d rpm", summary.rMax and math.floor(summary.rMax)),
+        pageText(i18n, "min"), statText("%d rpm", summary.rMin and math.floor(summary.rMin)),
         pageText(i18n, "in_flight")),
       color = COLOR_WHITE,
       font = SMLSIZE
@@ -1159,8 +1209,8 @@ function M.build(ctx)
     local tStartVal = summary.tStart
     local tempUnit = "°C"
     if useFahrenheit then
-      tMaxVal = (tMaxVal * 9 / 5) + 32
-      tStartVal = (tStartVal * 9 / 5) + 32
+      tMaxVal = tMaxVal and ((tMaxVal * 9 / 5) + 32)
+      tStartVal = tStartVal and ((tStartVal * 9 / 5) + 32)
       tempUnit = "°F"
     end
 
@@ -1178,10 +1228,11 @@ function M.build(ctx)
       x = valColX,
       y = cursorY + 10,
       w = valColW,
-      text = string.format("%s: %d %s   |   %s: %d %s   |   %s %s: %d %%",
-        pageText(i18n, "max"), math.floor(tMaxVal), tempUnit,
-        pageText(i18n, "start"), math.floor(tStartVal), tempUnit,
-        pageText(i18n, "max"), pageText(i18n, "throttle_title"), math.floor(summary.thrMax)),
+      text = string.format("%s: %s   |   %s: %s   |   %s %s: %s",
+        pageText(i18n, "max"), statText("%d %s", tMaxVal and math.floor(tMaxVal), tempUnit),
+        pageText(i18n, "start"), statText("%d %s", tStartVal and math.floor(tStartVal), tempUnit),
+        pageText(i18n, "max"), pageText(i18n, "throttle_title"),
+        statText("%d %%", summary.thrMax and math.floor(summary.thrMax))),
       color = COLOR_WHITE,
       font = SMLSIZE
     }
