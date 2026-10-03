@@ -50,7 +50,7 @@ local function loadConfig(prefs)
   ui.loaded = true
 end
 
-local function saveConfig(prefs, i18n)
+local function saveConfig(prefs)
   local session = type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session or nil
   -- Where the values land is the settings page's scope, not this module's: the library
   -- writes the radio's standard values, or this model's own ones, which need the flight
@@ -77,11 +77,8 @@ local function saveConfig(prefs, i18n)
         return true
       end
     end
-    -- The pilot reads this reason after "Save failed", so it is a sentence, not a file name.
-    if modelScope then
-      return false, i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.model_store_unavailable")
-        or "model settings store not available"
-    end
+    -- saveByMcuId's own word for a store that will not load; onSave turns it into a sentence.
+    if modelScope then return false, "unavailable" end
   end
   return true
 end
@@ -128,11 +125,15 @@ function M.onReload(ctx)
 end
 
 function M.onSave(ctx)
-  local modelOk, modelErr = saveConfig(ctx.preferences, ctx.i18n)
+  local modelOk, modelErr = saveConfig(ctx.preferences)
   local ok, err = ctx.savePreferences()
-  -- Saved only when every store that carries this save's values was written.
-  if ok and not modelOk then
-    ok, err = false, modelErr
+  -- Saved only when every store that carries this save's values was written. A store answers a
+  -- refused write with a token or with the card's own error text, which names the file's path;
+  -- the pilot reads the sentence the library maps either to.
+  if not ok then
+    err = DashboardLib.saveFailureReason(ctx.i18n, err)
+  elseif not modelOk then
+    ok, err = false, DashboardLib.saveFailureReason(ctx.i18n, modelErr, true)
   end
   if ok then
     ui.dirty = false
@@ -147,7 +148,7 @@ function M.onSave(ctx)
       local i18n = ctx.i18n
       local title = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_title") or "Error"
       local message = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_message") or "Save failed"
-      ctx.reportSave({ title = title, message = message .. ": " .. tostring(err or "io") })
+      ctx.reportSave({ title = title, message = message .. ": " .. err })
     end
   end
   return true

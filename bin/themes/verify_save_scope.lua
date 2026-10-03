@@ -10,27 +10,38 @@
 -- standard values, which ctx.savePreferences() writes, and Per-Model Settings edits the connected
 -- model's own values, which model_preferences.saveByMcuId writes. The save may report success only
 -- when the store that carries the values was written, and a failure has to reach the pilot as a
--- translated sentence, never as a module name or an untranslated key.
+-- translated sentence, never as a module name, an untranslated key, or what the store answered.
 --
 -- Each theme's configure.lua is loaded with the real app/pages/settings/dashboard/lib.lua, the
 -- edit scope is set as the settings page sets it (DashboardLib.setEditScope), and the module is
 -- driven the way the page drives it: the factory, onReload, build, onSave. What is stubbed is
 -- what the page and the card would answer: ui/controls.lua (every append* records and answers a
--- row height), lib/model_preferences.lua (its save succeeds, fails, or the module will not load)
--- and ctx.savePreferences (succeeds or fails). Every theme runs every case in both scopes and in
--- both locales the suite ships (en, de), and each case has one expected answer: whether
+-- row height), lib/model_preferences.lua (its save succeeds, the module will not load, or the
+-- save fails with one of the answers the real one gives) and ctx.savePreferences (succeeds, or
+-- fails with one of the answers the real one gives). Every theme runs every case in both scopes
+-- and in both locales the suite ships (en, de), and each case has one expected answer: whether
 -- the page is told the save succeeded, the exact title and message it is told, how often the
 -- model's file was written, and whether the values stand in the radio's preferences.
+--
+-- The failure answers are the real ones. lib/config_store.lua's Store:save answers "io",
+-- "write", "delete" or "rename", or the error text io.open gave, which on the radio is the file's
+-- path followed by "file error"; lib/model_preferences.lua's saveByMcuId passes that up and adds
+-- "unavailable" and "missing_mcu_id"; lib/preferences.lua's save adds "unavailable", and
+-- ui/preferences.lua, which ctx.savePreferences calls, adds a sentence of its own for a missing
+-- module and the text of a Lua error the save raised. A message that contains any of what the
+-- stores answered in a case, a path separator or "file error" is red whatever else it says.
 --
 -- ctx.i18n answers from the real bundle of the locale under test. A key that bundle does not
 -- carry is answered with the key itself -- not with the English text the suite would fall back
 -- to -- so a message missing from one locale is reported rather than shown in English.
 --
--- The self-test runs the same checks against two deliberately broken copies of every theme's
--- module, made in memory from its source, and fails unless each breakage turns every theme red
--- in the case it breaks:
+-- The self-test runs the same checks against deliberately broken copies of every theme's module,
+-- made in memory from its source, and fails unless each breakage turns every theme red in the
+-- case it breaks, for the reason it breaks:
 --   * the model scope answering true after its file was refused (the scope rule undone);
---   * the reason for a module that will not load being the module's file name again.
+--   * the model's store answering a file name, not its own word, when its module will not load;
+--   * the model's store's answer reaching the screen as it came;
+--   * the radio's store's answer reaching the screen as it came.
 -- A breakage whose anchor is not found in a theme's source is a self-test failure too, because a
 -- copy that was not actually broken would pass for a check that cannot see the defect.
 --
@@ -65,8 +76,15 @@ local LOCALES = { "en", "de" }
 local SCOPES = { "standard", "model" }
 
 local K = "app.pages.settings_dashboard_settings."
-local MP_ERR = "card refused the model's file"
-local GLOBAL_ERR = "card refused the radio's file"
+local MCU_ID = "0123456789ABCDEF01234567"
+
+-- What the stores answer besides their tokens (see the head of this file): io.open's error for
+-- the temporary file a store writes first, in the shape the radio gives it, the sentence
+-- ui/preferences.lua answers for a missing module, and the text of a Lua error.
+local CARD_ERR_MODEL = "SCRIPTS:/TOOLS/rfsuite.user/" .. MCU_ID .. ".lua.tmp: file error"
+local CARD_ERR_RADIO = "/SCRIPTS/TOOLS/rfsuite.user/preferences.lua.tmp: file error"
+local PREFS_MODULE_MISSING = "Preferences unavailable in this build"
+local LUA_ERR = "/SCRIPTS/TOOLS/rfsuite-core/lib/preferences.lua:375: attempt to call a nil value (method 'save')"
 
 local function readFile(path)
   local f = io.open(path, "rb")
@@ -92,12 +110,13 @@ local Controls = setmetatable({ SECTION_H = 30, ROW_H = 40 }, {
   end
 })
 
-local mpMode = "ok"     -- "ok" | "fail" | "absent"
+-- "ok", "absent" (the module will not load), or what a refused save answers.
+local mpMode = "ok"
 local mpCalls = 0
 local MP = {}
 function MP.saveByMcuId()
   mpCalls = mpCalls + 1
-  if mpMode == "fail" then return false, MP_ERR end
+  if mpMode ~= "ok" then return false, mpMode end
   return true
 end
 
@@ -155,46 +174,65 @@ end
 -- The cases
 -- ---------------------------------------------------------------------------
 
+-- `mp` and `global` are what the two stores answer: "ok", "absent" for the model's module, or
+-- what a refused write answers. `modelWhy` names the sentence the pilot reads where the model's
+-- answer decides the save.
 local CASES = {
-  { id = "connected, both writes ok",       connected = true,  mp = "ok",     global = "ok" },
-  { id = "connected, model write fails",    connected = true,  mp = "fail",   global = "ok" },
-  { id = "connected, model module absent",  connected = true,  mp = "absent", global = "ok" },
-  { id = "connected, radio write fails",    connected = true,  mp = "ok",     global = "fail" },
-  { id = "connected, both writes fail",     connected = true,  mp = "fail",   global = "fail" },
-  { id = "disconnected, radio write ok",    connected = false, mp = "ok",     global = "ok" },
-  { id = "disconnected, radio write fails", connected = false, mp = "ok",     global = "fail" },
+  { id = "connected, both writes ok",                 connected = true,  mp = "ok",     global = "ok" },
+  { id = "connected, model write: io",                connected = true,  mp = "io",     global = "ok",
+    modelWhy = "store_write_failed" },
+  { id = "connected, model write: write",             connected = true,  mp = "write",  global = "ok",
+    modelWhy = "store_write_failed" },
+  { id = "connected, model write: delete",            connected = true,  mp = "delete", global = "ok",
+    modelWhy = "store_write_failed" },
+  { id = "connected, model write: rename",            connected = true,  mp = "rename", global = "ok",
+    modelWhy = "store_write_failed" },
+  { id = "connected, model write: card's error text", connected = true,  mp = CARD_ERR_MODEL, global = "ok",
+    modelWhy = "store_write_failed" },
+  { id = "connected, model write: unavailable",       connected = true,  mp = "unavailable", global = "ok",
+    modelWhy = "model_store_unavailable" },
+  { id = "connected, model write: missing_mcu_id",    connected = true,  mp = "missing_mcu_id", global = "ok",
+    modelWhy = "model_store_missing" },
+  { id = "connected, model module absent",            connected = true,  mp = "absent", global = "ok",
+    modelWhy = "model_store_unavailable" },
+  { id = "connected, radio write: io",                connected = true,  mp = "ok",     global = "io" },
+  { id = "connected, radio write: write",             connected = true,  mp = "ok",     global = "write" },
+  { id = "connected, radio write: delete",            connected = true,  mp = "ok",     global = "delete" },
+  { id = "connected, radio write: rename",            connected = true,  mp = "ok",     global = "rename" },
+  { id = "connected, radio write: card's error text", connected = true,  mp = "ok",     global = CARD_ERR_RADIO },
+  { id = "connected, radio write: unavailable",       connected = true,  mp = "ok",     global = "unavailable" },
+  { id = "connected, radio write: module missing",    connected = true,  mp = "ok",     global = PREFS_MODULE_MISSING },
+  { id = "connected, radio write: Lua error",         connected = true,  mp = "ok",     global = LUA_ERR },
+  { id = "connected, both writes fail",               connected = true,  mp = "rename", global = "io",
+    modelWhy = "store_write_failed" },
+  { id = "disconnected, radio write ok",              connected = false, mp = "ok",     global = "ok" },
+  { id = "disconnected, radio write fails",           connected = false, mp = "ok",     global = CARD_ERR_RADIO },
 }
 
--- Per scope and case: ok, the reason after "Save failed: " (nil for a success, else a function of
--- the locale), how often the model's file is written, and whether the values stand in the radio's
--- preferences.
-local function reason(err) return function() return err end end
-local EXPECT = {
-  standard = {
-    -- The values are in the radio's file, so its write is the answer; the model's file is
-    -- rewritten beside it but carries none of them.
-    ["connected, both writes ok"]       = { ok = true,  mpCalls = 1, global = true },
-    ["connected, model write fails"]    = { ok = true,  mpCalls = 1, global = true },
-    ["connected, model module absent"]  = { ok = true,  mpCalls = 0, global = true },
-    ["connected, radio write fails"]    = { ok = false, why = reason(GLOBAL_ERR), mpCalls = 1, global = true },
-    ["connected, both writes fail"]     = { ok = false, why = reason(GLOBAL_ERR), mpCalls = 1, global = true },
-    ["disconnected, radio write ok"]    = { ok = true,  mpCalls = 0, global = true },
-    ["disconnected, radio write fails"] = { ok = false, why = reason(GLOBAL_ERR), mpCalls = 0, global = true },
-  },
-  model = {
-    -- The values are in the model's file, so its write is the answer, and none reach the radio's.
-    ["connected, both writes ok"]       = { ok = true,  mpCalls = 1, global = false },
-    ["connected, model write fails"]    = { ok = false, why = reason(MP_ERR), mpCalls = 1, global = false },
-    ["connected, model module absent"]  = { ok = false, why = function(lang) return text(lang, "model_store_unavailable") end,
-                                            mpCalls = 0, global = false },
-    ["connected, radio write fails"]    = { ok = false, why = reason(GLOBAL_ERR), mpCalls = 1, global = false },
-    ["connected, both writes fail"]     = { ok = false, why = reason(GLOBAL_ERR), mpCalls = 1, global = false },
-    -- The settings page refuses this save before onSave runs (settings/page.lua); the module,
-    -- asked anyway, has no model store to write and leaves the answer to the radio's file.
-    ["disconnected, radio write ok"]    = { ok = true,  mpCalls = 0, global = false },
-    ["disconnected, radio write fails"] = { ok = false, why = reason(GLOBAL_ERR), mpCalls = 0, global = false },
-  },
-}
+-- Per scope and case: ok, the bundle key of the reason after "Save failed: " (nil for a success),
+-- how often the model's file is written, and whether the values stand in the radio's preferences.
+local function expect(scope, case)
+  local e = {
+    mpCalls = (case.connected and case.mp ~= "absent") and 1 or 0,
+    -- The values are in the radio's file in the standard scope and in the model's file in the
+    -- model scope, where none reach the radio's.
+    global = scope == "standard",
+  }
+  if case.global ~= "ok" then
+    -- The radio's file is written in both scopes, and its refusal is reported in both.
+    e.ok, e.why = false, "store_write_failed"
+  elseif scope == "model" and case.connected and case.mp ~= "ok" then
+    -- The values are in the model's file, so its write is the answer. In the standard scope the
+    -- model's file is rewritten beside the radio's but carries none of them.
+    e.ok, e.why = false, case.modelWhy
+  else
+    -- Disconnected in the model scope: the settings page refuses this save before onSave runs
+    -- (settings/page.lua); the module, asked anyway, has no model store to write and leaves the
+    -- answer to the radio's file.
+    e.ok = true
+  end
+  return e
+end
 
 local function countCfg(t)
   local n = 0
@@ -223,7 +261,7 @@ local function runCase(chunk, theme, scope, case, lang)
   mpMode, mpCalls = case.mp, 0
   _G.rfsuite = { session = {} }
   if case.connected then
-    _G.rfsuite.session.mcu_id = "0123456789ABCDEF01234567"
+    _G.rfsuite.session.mcu_id = MCU_ID
     _G.rfsuite.session.modelPreferences = { dashboard = {} }
   end
 
@@ -236,7 +274,7 @@ local function runCase(chunk, theme, scope, case, lang)
     x = 0, y = 0, w = 800, h = 400, children = {},
     savePreferences = function()
       globalSaves = globalSaves + 1
-      if case.global == "fail" then return false, GLOBAL_ERR end
+      if case.global ~= "ok" then return false, case.global end
       return true
     end,
     reportSave = function(r) reports[#reports + 1] = r end,
@@ -254,7 +292,28 @@ local function runCase(chunk, theme, scope, case, lang)
   return reports, globalSaves, countCfg(prefs.dashboard)
 end
 
-local function check(reports, globalSaves, globalCfg, e, lang)
+local LEAK = "shows what the store answered"
+
+-- What of a store's own answer is on the screen: the answer itself (a token as a whole word, any
+-- longer text anywhere), a path separator, or the card's "file error". Nil when none of it is.
+local function leak(shown, case)
+  for _, answer in ipairs({ case.mp, case.global }) do
+    if answer ~= "ok" and answer ~= "absent" then
+      local hit
+      if string.match(answer, "^[%w_]+$") then
+        hit = string.find(shown, "%f[%w_]" .. answer .. "%f[^%w_]")
+      else
+        hit = string.find(shown, answer, 1, true)
+      end
+      if hit then return string.format("%s (%q)", LEAK, answer) end
+    end
+  end
+  if string.find(shown, "/", 1, true) or string.find(shown, "\\", 1, true) then return LEAK .. " (a path)" end
+  if string.find(shown, "file error", 1, true) then return LEAK .. " (\"file error\")" end
+  return nil
+end
+
+local function check(reports, globalSaves, globalCfg, e, case, lang)
   local bad = {}
   local r = reports[1] or {}
   if #reports ~= 1 then bad[#bad + 1] = "reported " .. #reports .. " times" end
@@ -265,13 +324,15 @@ local function check(reports, globalSaves, globalCfg, e, lang)
     title, message = text(lang, "saved_title"), text(lang, "saved_message")
   else
     title = text(lang, "save_error_title")
-    message = text(lang, "save_error_message") .. ": " .. e.why(lang)
+    message = text(lang, "save_error_message") .. ": " .. text(lang, e.why)
   end
   if r.title ~= title then bad[#bad + 1] = string.format("title %q, expected %q", tostring(r.title), title) end
   if r.message ~= message then bad[#bad + 1] = string.format("message %q, expected %q", tostring(r.message), message) end
   local shown = tostring(r.title) .. " " .. tostring(r.message)
   if string.find(shown, "model_preferences", 1, true) then bad[#bad + 1] = "names a module file" end
   if string.find(shown, "app.pages.", 1, true) then bad[#bad + 1] = "shows an untranslated key" end
+  local leaked = leak(shown, case)
+  if leaked then bad[#bad + 1] = leaked end
   if mpCalls ~= e.mpCalls then bad[#bad + 1] = "model's file written " .. mpCalls .. " times, expected " .. e.mpCalls end
   if (globalCfg > 0) ~= e.global then
     bad[#bad + 1] = e.global and "values missing from the radio's preferences" or "values written into the radio's preferences"
@@ -298,7 +359,7 @@ local function runMatrix(mutate, quiet)
               bad, shown = { "raised: " .. tostring(reports) }, ""
             else
               local _
-              bad, _, shown = check(reports, globalSaves, globalCfg, EXPECT[scope][case.id], lang)
+              bad, _, shown = check(reports, globalSaves, globalCfg, expect(scope, case), case, lang)
             end
             if #bad == 0 then
               passes = passes + 1
@@ -308,7 +369,7 @@ local function runMatrix(mutate, quiet)
                                           detail = table.concat(bad, "; ") }
             end
             if verbose and not quiet then
-              print(string.format("%s %-9s %-2s %-8s %-32s %q", #bad == 0 and "PASS" or "FAIL", theme, lang,
+              print(string.format("%s %-9s %-2s %-8s %-42s %q", #bad == 0 and "PASS" or "FAIL", theme, lang,
                 scope, case.id, tostring(shown)))
             end
           end
@@ -333,7 +394,7 @@ local function printFailures(failures, prefix)
 end
 
 -- ---------------------------------------------------------------------------
--- The self-test: two broken copies, each of which must turn every theme red where it breaks
+-- The self-test: broken copies, each of which must turn every theme red where it breaks
 -- ---------------------------------------------------------------------------
 
 if selfTest then
@@ -342,6 +403,8 @@ if selfTest then
     if n ~= 1 then return nil, "the " .. what .. " was found " .. n .. " times, expected once" end
     return changed
   end
+  -- `detail`, where given, is what the failure has to say: a breakage that turns the case red
+  -- only through the message comparison would not show that the guard it is about can fire.
   local breakages = {
     {
       name = "the model scope answers true after its file was refused",
@@ -349,16 +412,31 @@ if selfTest then
         return replaceOnce(source, "if modelScope then return saved, err end", "if false then return saved, err end",
           "model scope's answer")
       end,
-      case = "connected, model write fails", scope = "model",
+      case = "connected, model write: rename", scope = "model",
     },
     {
-      name = "the reason for a module that will not load is its file name",
+      name = "a model store that will not load answers a file name",
       mutate = function(source)
-        return replaceOnce(source,
-          'i18n and i18n%.t and i18n%.t%("app%.pages%.settings_dashboard_settings%.model_store_unavailable"%)%s*or%s*"[^"]*"',
-          '"model_preferences"', "translated reason")
+        return replaceOnce(source, 'if modelScope then return false, "unavailable" end',
+          'if modelScope then return false, "model_preferences" end', "module-absent answer")
       end,
       case = "connected, model module absent", scope = "model",
+    },
+    {
+      name = "the model's store's answer reaches the screen as it came",
+      mutate = function(source)
+        return replaceOnce(source, "DashboardLib%.saveFailureReason%(ctx%.i18n, modelErr, true%)", "modelErr",
+          "model answer's mapping")
+      end,
+      case = "connected, model write: card's error text", scope = "model", detail = LEAK,
+    },
+    {
+      name = "the radio's store's answer reaches the screen as it came",
+      mutate = function(source)
+        return replaceOnce(source, "err = DashboardLib%.saveFailureReason%(ctx%.i18n, err%)", "err = tostring(err)",
+          "radio answer's mapping")
+      end,
+      case = "connected, radio write: rename", scope = "standard", detail = LEAK,
     },
   }
   local allFired = true
@@ -369,7 +447,10 @@ if selfTest then
       local fired, notBroken = false, nil
       for _, f in ipairs(failures) do
         if f.theme == theme and f.case == nil then notBroken = f.detail end
-        if f.theme == theme and f.case == b.case and f.scope == b.scope then fired = true end
+        if f.theme == theme and f.case == b.case and f.scope == b.scope
+          and (b.detail == nil or string.find(f.detail, b.detail, 1, true)) then
+          fired = true
+        end
       end
       -- A copy that could not be broken proves nothing, whatever else it did.
       if notBroken then
@@ -378,20 +459,21 @@ if selfTest then
         missed[#missed + 1] = theme
       end
     end
+    local with = b.detail and (" with '" .. b.detail .. "'") or ""
     if failures[1] then printFailures({ failures[1] }, "(self-test) e.g. ") end
     if #missed > 0 then
       allFired = false
-      print(string.format("SELF-TEST: '%s' did not turn red: %s", b.name, table.concat(missed, ", ")))
+      print(string.format("SELF-TEST: '%s' did not turn red%s: %s", b.name, with, table.concat(missed, ", ")))
     else
-      print(string.format("(self-test) '%s': all %d themes red in '%s' (%d failures in all)",
-        b.name, #THEMES, b.case, #failures))
+      print(string.format("(self-test) '%s': all %d themes red in '%s'%s (%d failures in all)",
+        b.name, #THEMES, b.case, with, #failures))
     end
   end
   if not allFired then
     print("SELF-TEST FAILED: a broken copy passed for a working one")
     os.exit(1)
   end
-  print("SELF-TEST PASSED: both broken copies turn every theme red")
+  print(string.format("SELF-TEST PASSED: all %d broken copies turn every theme red", #breakages))
   os.exit(0)
 end
 

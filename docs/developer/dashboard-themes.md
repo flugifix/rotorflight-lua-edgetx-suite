@@ -625,10 +625,8 @@ with `DashboardLib.getEditScope()` when the save is made:
 
 - `"model"` — the values are in the model's preferences, and `saveByMcuId` answers whether its
   file was written (`ok, err`). That answer decides the save: a failure is reported as *Save
-  failed* with its reason, and so is a `lib/model_preferences.lua` that will not load. The pilot
-  reads that reason, so it is the translated
-  `app.pages.settings_dashboard_settings.model_store_unavailable` (*model settings store not
-  available*), never the module's name.
+  failed* with its reason, and so is a `lib/model_preferences.lua` that will not load, which
+  `saveConfig` answers as `"unavailable"`, the word `saveByMcuId` uses for a store it cannot load.
 - `"standard"` — the values are in the radio's preferences, which `ctx.savePreferences()`
   writes, and its answer decides the save. The model's file is still rewritten while a flight
   controller is connected, but it carries none of this save's values, so its answer is not
@@ -636,7 +634,18 @@ with `DashboardLib.getEditScope()` when the save is made:
 
 The shipped themes do this in `saveConfig`, which returns `true` or `false, err` by that rule
 (`true` where no flight controller is connected), and in `onSave`, which reports a failure when
-either `saveConfig` or `ctx.savePreferences()` failed. The settings page refuses a model-scope
+either `saveConfig` or `ctx.savePreferences()` failed.
+
+What a store answers is not for the screen. A refused write comes back as a token of
+`lib/config_store.lua` (`io`, `write`, `delete`, `rename`), or as the error text `io.open` gave,
+which is the file's path followed by `file error`; the model's store adds `unavailable` and
+`missing_mcu_id`. `onSave` therefore shows the sentence `DashboardLib.saveFailureReason(i18n, err,
+modelStore)` maps the answer to, with `modelStore` true for the answer of `saveByMcuId`:
+`unavailable` from the model's store reads as `model_store_unavailable` (*model settings store
+not available*), `missing_mcu_id` as `model_store_missing` (*Connect the flight controller to save
+this model's settings*), and every other answer of either store as `store_write_failed` (*the
+settings file could not be written to the SD card*), all under
+`app.pages.settings_dashboard_settings`. The *Theme* page reports its two stores the same way. The settings page refuses a model-scope
 save without the model's store before `onSave` runs, so a module is not asked to save the model
 scope with no flight controller connected.
 

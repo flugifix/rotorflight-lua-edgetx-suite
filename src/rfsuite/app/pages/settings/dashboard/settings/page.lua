@@ -283,7 +283,10 @@ function M.onSave(ctx)
       end
       local ok, err = ctx.savePreferences()
       if not ok and ctx and type(ctx.reportSave) == "function" then
-        ctx.reportSave({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
+        ctx.reportSave({
+          title = t(ctx.i18n, "save_error_title", "Error"),
+          message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. DashboardLib.saveFailureReason(ctx.i18n, err)
+        })
       end
       return true
     end

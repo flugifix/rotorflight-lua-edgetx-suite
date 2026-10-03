@@ -50,11 +50,12 @@ page fits the screen. Themes that do not split show their settings directly.
   *Design* keeps the values and ignores them.
 - A save says *Saved* only when its values reached the card. A theme opened from *Per-Model
   Settings* stores them in the model's own file, so the save reports that file: where the card
-  refuses it, the page shows *Save failed* with the reason, the values on the page have not been
-  stored for the model, and saving again once the card can be written stores them. A theme tile
-  stores the radio's values, so the save reports the radio's file; the model's file, rewritten
-  beside it while a flight controller is connected, holds none of those values and does not
-  decide the answer.
+  refuses it, the page shows *Save failed: the settings file could not be written to the SD card*,
+  the values on the page have not been stored for the model, and saving again once the card can be
+  written stores them. A theme tile stores the radio's values, so the save reports the radio's
+  file, and a card that refuses it shows the same sentence; the model's file, rewritten beside it
+  while a flight controller is connected, holds none of those values and does not decide the
+  answer.
 - A card from an earlier version may hold per-model theme settings saved while a flight
   controller was connected. Such a model keeps using them, and they are listed under *Per-Model
   Settings*, until the switches on *Design* are saved off.
