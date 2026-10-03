@@ -183,7 +183,6 @@ function M.newDrive(radio, settings)
   self.trimRow = nil
   self.trimUp = nil
   self.trimCode = nil
-  self.trimHold = false
   self.trimPulseUntil = nil
   self.trimCoolUntil = 0
   self.trims = nil
@@ -553,7 +552,6 @@ function Drive:cleanup(force, keepBank)
   self.trimRow = nil
   self.trimUp = nil
   self.trimCode = nil
-  self.trimHold = false
   self.trimPulseUntil = nil
   self.navDir = 0
   self.navNextAt = nil
@@ -988,68 +986,67 @@ end
 -- while, and very inaccurately".
 --
 -- So one press is one pulse, which is what the touch control has always done: the magnitude goes
--- on at the edge and stays on for at least `pulse_ms` however early the trim is let go, and a
--- trim genuinely held keeps it on past that for as long as it is held -- which is where the
--- board's own REPEAT_DELAY takes over and steps at its own rate. The cool-down after a pulse is
--- the same length, so two presses closer together than the board can tell apart are one step and
--- not an arbitrary number of them.
+-- on at the edge and stays on for `pulse_ms` -- until the first pass at or after it -- however
+-- early the trim is let go. The cool-down after a pulse is the same length, so two presses closer
+-- together than the board can tell apart are one step and not an arbitrary number of them.
 --
--- The pulse and the hold are the trim's OWN, deliberately not the touch control's. A held touch
--- button is published as `holding` and freezes the widget's render key, because a rebuild would
--- delete the object that reports its release; a trim has no object and a rebuild cannot lose it,
--- and freezing the surface for as long as a thumb is on a trim would freeze it for the whole of
--- the tuning.
+-- And one press is ONE pulse however long the trim is held: a held trim does not repeat, and a
+-- new step needs the trim to come up and go down again. A trim is read once per widget pass, and a
+-- pass only sees whether it is down at that instant -- so a release and the next press that both
+-- fall between two passes read as one continuous hold. With the magnitude kept on the wire for as
+-- long as the trim read as held, the board's own REPEAT_DELAY turned every 200 ms of that reading
+-- into a step: on a radio running the widget at a few passes a second, a quick series of taps
+-- stood on the wire for seconds and stepped many times more often than the trim was pressed.
+-- Ending the pulse on its own clock bounds what one press can do whatever the pass rate. Holding
+-- to repeat stays with the touch controls, whose release is reported by an event rather than
+-- sampled.
+--
+-- The pulse is the trim's OWN, deliberately not the touch control's. A held touch button is
+-- published as `holding` and freezes the widget's render key, because a rebuild would delete the
+-- object that reports its release; a trim has no object and a rebuild cannot lose it, and
+-- freezing the surface for as long as a thumb is on a trim would freeze it for the whole of the
+-- tuning.
+--
+-- A press and a release move no epoch. `valueEpoch` is in the widget's render key, so a bump
+-- here tore the tuning surface down and built it again on every trim press and every release,
+-- and nothing on that surface had changed: the snapshot carries no field derived from trimRow or
+-- trimUp, and the screen reads neither. Where a trim does change what the surface shows -- in
+-- `rows` mode, the trim of another row selects that row -- `self.row` moves, and the row is in the
+-- render key on its own. The board's answer to the step travels on `reportEpoch` (see fastTick),
+-- so the value still follows the step without a rebuild.
 function Drive:pollTrimStep(now)
   local row, up = self:pollTrims()
 
-  if row ~= self.trimRow or up ~= self.trimUp then
-    self.trimRow, self.trimUp = row, up
-    self.valueEpoch = self.valueEpoch + 1
-    if row == nil then
-      -- Let go. The magnitude does not fall away here: a pulse still running owns it until its
-      -- own clock says otherwise, and that is the whole of what makes a short press step at all.
-      self.trimHold = false
-    else
-      self.row = row
-      -- The same thumb moved to another row without coming up. The magnitude follows the new row
-      -- rather than finishing the old one's pulse: the screen has already followed the pilot and
-      -- the wire has to agree with the screen.
-      if self.trimHold == true then
-        local code = Functions.rowCode(row, up, self.rowValues, self.bank)
-        if code == nil then
-          -- The new row cannot be stepped, so the wire has nothing to say for it. The hold ends
-          -- and the pulse with it: as on a move to a usable row, the old row's value is not kept
-          -- on the wire once the screen has stopped naming it, or the board would step the row
-          -- the pilot just left. The cool-down still separates this from the next pulse.
-          self.trimHold = false
-          self.trimPulseUntil = nil
-          self.trimCoolUntil = now + self:pulseTicks()
-          self:refuseStep("range", now)
-          return
-        end
-        self.trimCode = code
-        self.stepRefusedUntil, self.stepRefusedReason = nil, nil
-      end
-    end
+  -- Everything happens at an edge. A trim that reads the same as on the last pass -- held, or let
+  -- go and pressed again between two passes -- has had its answer already.
+  if row == self.trimRow and up == self.trimUp then return end
+  self.trimRow, self.trimUp = row, up
+
+  -- Let go. The magnitude does not fall away here: a pulse still running owns it until its own
+  -- clock says otherwise, and that is the whole of what makes a short press step at all.
+  if row == nil then return end
+
+  self.row = row
+  -- A press while a trim pulse or the cool-down after it is still running -- this trim's again, or
+  -- in `rows` mode another row's trim reached without a pass seeing the first one come up. It
+  -- starts nothing, now or later: the board cannot tell two steps that close apart, and a press
+  -- held until the gap is over is still the same press. The running pulse finishes as it began,
+  -- for the press that started it. Said on the screen, as the touch control says it
+  -- (Drive:press), rather than looking like a trim that is not wired up; once, at the press, so
+  -- the refusal's deadline is not moved and the snapshot not republished on every held pass.
+  if self.trimPulseUntil ~= nil or now < (self.trimCoolUntil or 0) then
+    self:refuseStep("cooling", now)
+    return
   end
 
-  if row == nil then return end
-  -- Already holding the value, or a pulse of this trim's own still on the wire: nothing to start.
-  if self.trimHold == true or self.trimPulseUntil ~= nil then return end
-  -- The board needs its REPEAT_DELAY between two magnitudes before it counts them as two steps.
-  -- A trim still down when that gap has passed gets its pulse then; two TAPS inside the gap get
-  -- ONE pulse between them, which is the point of having it.
-  if now < (self.trimCoolUntil or 0) then return end
-
-  self.trimCode = Functions.rowCode(row, up, self.rowValues, self.bank)
-  if self.trimCode == nil then
-    self.trimCoolUntil = now + self:pulseTicks()
+  local code = Functions.rowCode(row, up, self.rowValues, self.bank)
+  if code == nil then
     self:refuseStep("range", now)
     return
   end
   self.stepRefusedUntil, self.stepRefusedReason = nil, nil
+  self.trimCode = code
   self.trimPulseUntil = now + self:pulseTicks()
-  self.trimHold = true
 end
 
 --- Which rows the pilot can actually reach, as a mask the zone screen hides rows by.
@@ -1171,8 +1168,6 @@ function Drive:fastTick(now)
     want = Functions.rowCode(self.holdRow, self.holdUp, self.rowValues, self.bank) or 0
   elseif self.trimPulseUntil ~= nil then
     want = self.trimCode or 0
-  elseif self.trimHold == true and self.trimRow ~= nil then
-    want = Functions.rowCode(self.trimRow, self.trimUp, self.rowValues, self.bank) or 0
   end
 
   if want ~= self.written then
