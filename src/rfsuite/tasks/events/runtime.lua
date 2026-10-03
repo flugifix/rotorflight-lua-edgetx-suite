@@ -63,6 +63,16 @@ local state = {
   edgeRunner = nil,
 }
 
+-- The argument a runner's wakeup is called with. One table for every call rather than a
+-- constructor per call: onconnect is woken on every pass while the link is up, for as long as
+-- the script runs. `context` is set immediately before each call. Reusing it is safe only while
+-- no task keeps it or writes into it: runner.wakeup in common/runner.lua hands it to the task
+-- as `pcall(module.wakeup, args)`, and every task under tasks/events/ either ignores it or hands
+-- it to a task in common/ that ignores it. A task that stored it (`M.args = args`) would read what
+-- the latest call set, and a field a task wrote into it would reach every later call, so a task
+-- that needs `context` after its call copies the string.
+local wakeupArgs = { context = nil }
+
 -- One pass of an arm or disarm runner, and whether it still has work.
 --
 -- The runner completes AT MOST ONE task per wakeup by design: it takes the first eligible entry
@@ -77,7 +87,8 @@ local function driveEdgeRunner(category, context)
   if not runner then return false end
 
   if type(runner.wakeup) == "function" then
-    local ok, err = pcall(runner.wakeup, { context = context })
+    wakeupArgs.context = context
+    local ok, err = pcall(runner.wakeup, wakeupArgs)
     if not ok and Log and type(Log.emit) == "function" then
       pcall(Log.emit, "rfsuite.events", category .. ".wakeup error: " .. tostring(err), "error")
     end
@@ -322,7 +333,8 @@ function Events.wakeup(carry)
           wasActive = onconnect.active()
         end
         if type(onconnect.wakeup) == "function" then
-          local ok, err = pcall(onconnect.wakeup, { context = context })
+          wakeupArgs.context = context
+          local ok, err = pcall(onconnect.wakeup, wakeupArgs)
           if not ok and Log and type(Log.emit) == "function" then
             pcall(Log.emit, "rfsuite.events", "onconnect.wakeup error: " .. tostring(err), "error")
           end

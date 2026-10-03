@@ -88,6 +88,12 @@ state, the throttle percentage, and — with the governor off — headspeed and 
 The arm flag is the spine. It comes from the `armflags` sensor, and the widget keeps the
 previous pass's value beside it, so an arm and a disarm are edges rather than states.
 
+A reading that says *disarmed* is not taken while the MSP runtime still reads the model as armed.
+The runtime reads the same sensor at the top of the same pass, ahead of the custom-telemetry
+drain, so a disagreement means the sensor changed between the two reads of one pass -- and a
+real disarm is taken by the first read after the runtime has seen it too. A reading that says
+*armed* is always taken. Both `armed` and the raw `armFlags` a theme can read follow this rule.
+
 | Phase | Reached when |
 | --- | --- |
 | `preflight` | Not armed and no inflight phase has been reached in this armed session. This is also the phase the widget starts in, and the phase a model returns to after an arm that never spooled up. |
@@ -199,6 +205,22 @@ a single-screen theme covers every phase with one file. The two optional phases 
 any of this: `armed` looks for the theme's `armed` module and then for its `preflight` one,
 `offline` for its `offline` module and then for its `postflight` one, so what reaches the
 loader is always one of the three phases every theme declares.
+
+A module that loads but raises while the widget builds its scene — a free-form `build` that
+throws is the plain case — has nothing to fall back to. The widget tries that build three
+times in a row, then stops trying and shows *Dashboard error* in its place; the error is in
+the log, and the first of the three goes to the card as a fault when *Log to card* is on. A
+theme reload starts over: choosing a theme, any change to the preferences, the flight
+controller reconnecting, or a flight phase that brings up another of the theme's modules. Until
+then the error stays on screen, even if the cause has gone away by itself: a build that raises
+for as little as three tries in a row in flight can leave *Dashboard error* up for the rest of
+the flight. If *Dashboard error* cannot be drawn either, the widget falls back to the same title
+as a single label, drawn without the splash builder, and stops only if that raises three times
+too. The theme at full screen ([`fullscreen = "theme"`](#a-theme-that-takes-fullscreen)), the fullscreen
+menu and the in-flight tuning surface are given up the same way, each on its own count, and at
+full screen *Dashboard error* carries the tool control, as the connect splash does there. The
+views a theme registers are not counted: one whose `build` raises is given up on its first
+raise, as [Views of a theme's own](#views-of-a-themes-own) describes.
 
 ### `layout`
 

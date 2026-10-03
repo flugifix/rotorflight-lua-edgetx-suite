@@ -33,9 +33,26 @@ local L = requireModule("widgets/dashboard/themes/urban/layout.lua") or {}
 
 local M = {}
 
-local function derived(state, name)
-  local d = state.derived
-  return d and K.UD.num(d[name]) or nil
+-- What a memo holds before its first reading: no reading equals it.
+local UNSET = {}
+
+-- Readers of one number, nil for anything else, with the test written out: the sweep calls them
+-- every frame.
+local function stateField(state, name)
+  return function()
+    local v = state[name]
+    if type(v) ~= "number" then return nil end
+    return v
+  end
+end
+
+local function derivedField(state, name)
+  return function()
+    local d = state.derived
+    local v = d and d[name]
+    if type(v) ~= "number" then return nil end
+    return v
+  end
 end
 
 function M.build(children, zone, state, ctx)
@@ -59,11 +76,22 @@ function M.build(children, zone, state, ctx)
   local lqCrit = math.max(0, lqWarn - 30)
   local rsWarn = tonumber(L.setting(state, "rssi_warn")) or 15
   local rsCrit = math.floor(rsWarn / 2 + 0.5)
+  -- Kept per pair of raw readings: the bar's colour and its length both ask every frame.
+  -- rssiPercent tests both for a number itself.
   local function rss(field)
-    return function() return L.rssiPercent(UD.num(state[field]), derived(state, "link_floor")) end
+    local lastDbm, lastFloor, lastP = UNSET, UNSET, nil
+    return function()
+      -- The host replaces the snapshot rather than filling it, so it is read per call.
+      local snap = state.derived
+      local dbm, floor = state[field], snap and snap.link_floor
+      if dbm == lastDbm and floor == lastFloor then return lastP end
+      lastDbm, lastFloor = dbm, floor
+      lastP = L.rssiPercent(dbm, floor)
+      return lastP
+    end
   end
   local function dbm(field)
-    return UD.getter(function() return UD.num(state[field]) end, function(v)
+    return UD.getter(stateField(state, field), function(v)
       if v == nil or v == 0 then return "-" end
       return string.format("%ddBm", math.floor(v))
     end)
@@ -76,20 +104,20 @@ function M.build(children, zone, state, ctx)
   end
 
   local rows = {
-    { label = T.link_rq, value = percent(function() return UD.num(state.lq) end),
-      bar = function() return UD.num(state.lq) end, warn = lqWarn, crit = lqCrit },
-    { label = T.link_tq, value = percent(function() return derived(state, "TQly") end),
-      bar = function() return derived(state, "TQly") end, warn = lqWarn, crit = lqCrit },
+    { label = T.link_rq, value = percent(stateField(state, "lq")),
+      bar = stateField(state, "lq"), warn = lqWarn, crit = lqCrit },
+    { label = T.link_tq, value = percent(derivedField(state, "TQly")),
+      bar = derivedField(state, "TQly"), warn = lqWarn, crit = lqCrit },
     { label = T.link_rss1, value = dbm("rss1"), bar = rss("rss1"), warn = rsWarn, crit = rsCrit },
   }
   if type(L.diversity) == "function" and L.diversity(state) then
     rows[#rows + 1] = { label = T.link_rss2, value = dbm("rss2"), bar = rss("rss2"), warn = rsWarn, crit = rsCrit }
   end
-  rows[#rows + 1] = { label = T.tpwr, value = UD.getter(function() return derived(state, "TPWR") end, function(v)
+  rows[#rows + 1] = { label = T.tpwr, value = UD.getter(derivedField(state, "TPWR"), function(v)
     if v == nil then return "-" end
     return string.format("%dmW", math.floor(v))
   end) }
-  rows[#rows + 1] = { label = T.skp, value = UD.getter(function() return derived(state, "*Skp") end, function(v)
+  rows[#rows + 1] = { label = T.skp, value = UD.getter(derivedField(state, "*Skp"), function(v)
     if v == nil then return "-" end
     return string.format("%d", math.floor(v))
   end) }
@@ -98,7 +126,7 @@ function M.build(children, zone, state, ctx)
   -- against.
   local x, w = g.x + g.pad, g.w - 2 * g.pad
   local footY = g.y + g.h - g.pad - g.fontH
-  UD.label(children, x, footY, w, g.fontH, UD.getter(function() return derived(state, "link_floor") end, function(v)
+  UD.label(children, x, footY, w, g.fontH, UD.getter(derivedField(state, "link_floor"), function(v)
     if v == nil then return T.link_floor .. ": -" end
     return string.format("%s: %ddBm", T.link_floor, math.floor(v))
   end), g.font, C.label, LEFT)
@@ -127,20 +155,30 @@ function M.build(children, zone, state, ctx)
     if row.bar ~= nil then
       local read, warn, crit = row.bar, row.warn, row.crit
       local by = ry + math.floor((rowH - barH) / 2)
+      local lastSV, lastW = UNSET, 0
+      local lastV, lastColor = UNSET, nil
       UD.rect(children, barX, by, barW, barH, C.track, true, 2)
       children[#children + 1] = {
         type = "rectangle", x = barX, y = by, w = 1, h = barH, filled = true, rounded = 2,
         color = function()
           local v = read()
-          if v == nil then return C.track end
-          if v <= crit then return C.crit end
-          if v <= warn then return C.warn end
-          return C.ok
+          if v == lastV then return lastColor end
+          lastV = v
+          if v == nil then lastColor = C.track
+          elseif v <= crit then lastColor = C.crit
+          elseif v <= warn then lastColor = C.warn
+          else lastColor = C.ok end
+          return lastColor
         end,
         size = function()
-          local v = read() or 0
-          if v < 0 then v = 0 elseif v > 100 then v = 100 end
-          return math.floor(barW * v / 100), barH
+          local v = read()
+          if v ~= lastSV then
+            lastSV = v
+            local p = v or 0
+            if p < 0 then p = 0 elseif p > 100 then p = 100 end
+            lastW = math.floor(barW * p / 100)
+          end
+          return lastW, barH
         end
       }
       UD.rect(children, barX + math.floor(barW * crit / 100), by, 2, barH, C.tick, true, 0)

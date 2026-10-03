@@ -690,6 +690,19 @@ local function isCpuLimitError(err)
     or (type(err) == "string" and string.find(err, "CPU limit", 1, true) ~= nil)
 end
 
+-- How many times in a row a job of one kind may raise before it is no longer armed. The
+-- dispatcher catches a raising step and clears the slot and `built`, and the next STATE pass
+-- arms the same job again -- so a cause that does not go away (a theme file that throws, a nil
+-- in a scene definition) would have the widget run the failing step every other pass for as
+-- long as it is up, writing a fault line each time. The count is per kind and consecutive: a
+-- step of that kind that draws its surface clears it, and a theme reload clears them all, since
+-- that is what replaces the code that raised.
+local JOB_FAULT_LIMIT = 3
+
+local function jobCapped(self, kind)
+  return (self._jobFaults[kind] or 0) >= JOB_FAULT_LIMIT
+end
+
 local function splashJobStep(self)
   local statusLine = self.statusLine or "Please wait..."
   local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
@@ -1142,6 +1155,57 @@ local function tuningFullscreenJobStep(self)
   lvgl.build(children)
   self.built = true
   self._lastChildCount = #children
+  return true
+end
+
+--- What stands in for a surface whose job has raised JOB_FAULT_LIMIT times in a row: the
+--- connection splash's layout, saying that the screen could not be drawn. Without it the pilot
+--- is left with whatever was on screen before -- usually a connection status that is no longer
+--- true. It can replace the tuning surface, so a held step control is let go first, as the
+--- tuning builds do. At full screen it carries the tool control, as the connect splash does
+--- there: the tool is where another theme can be chosen, which gives every job its tries back.
+local function failedJobStep(self)
+  local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
+  local title = (t and t("widgets.dashboard.build_failed")) or "Dashboard error"
+  local line = (t and t("widgets.dashboard.build_failed_hint")) or "This screen could not be drawn"
+  local splash = buildConnectionSplash(self.zone, line, title)
+  if self._job and self._job.fullscreenSplash then
+    local Controls = requireModule("widgets/dashboard/fullscreen_controls.lua")
+    if type(Controls) == "table" and type(Controls.appendTool) == "function" then
+      Controls.appendTool(splash, self)
+    end
+  end
+  releaseInflightHold(self)
+  lvgl.clear()
+  lvgl.build(splash)
+  self.built = true
+  self._lastChildCount = #splash
+  return true
+end
+
+--- What stands in when the failure surface or the connect splash has itself raised
+--- JOB_FAULT_LIMIT times in a row: the same title as one label on a plain background, drawn
+--- without the splash builder and without the tool control, so neither of the two can be what
+--- fails here. Without it the last surface would stay up with nothing saying the dashboard has
+--- stopped drawing. A held step control is let go before the tree is cleared, as in
+--- failedJobStep.
+local function failedLabelJobStep(self)
+  local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
+  local title = (t and t("widgets.dashboard.build_failed")) or "Dashboard error"
+  local w = (self.zone and self.zone.w) or LCD_W or 320
+  local h = (self.zone and self.zone.h) or LCD_H or 172
+  -- The connect splash's two colours, on a filled rectangle of its own: after lvgl.clear() the
+  -- zone is transparent, and a bare label would sit on whatever the radio's layout draws there.
+  local nodes = {
+    { type = "rectangle", x = 0, y = 0, w = w, h = h, color = COLOR_THEME_PRIMARY3, filled = true },
+    { type = "label", x = 0, y = math.floor(h * 0.4), w = w, text = title, align = CENTER,
+      color = COLOR_THEME_PRIMARY2, font = MIDSIZE },
+  }
+  releaseInflightHold(self)
+  lvgl.clear()
+  lvgl.build(nodes)
+  self.built = true
+  self._lastChildCount = #nodes
   return true
 end
 
@@ -2476,6 +2540,53 @@ local function setField(field, value)
   end
 end
 
+-- Whether this read's arm flags are left untaken, because the MSP runtime still reads the model
+-- as armed.
+--
+-- While the link is up the runtime reads the same ARM sensor on every logic tick and keeps the
+-- answer in `lastArmed`, and this widget ticks it at the top of the very pass that reads below --
+-- ahead of the event runtimes, whose custom-telemetry drain publishes that sensor. So when the
+-- runtime holds armed and this read finds bit 0 clear, the sensor changed between two reads of
+-- one pass: a frame the drain published in between, possibly one queued long before, or a sensor
+-- that read 0 for that moment. (While the link is down the runtime does not read at all and keeps
+-- its last answer; a disarmed reading taken then is a reading from a link that is not there.)
+-- Taking it would end the flight on this screen -- the phase drops to postflight and back, the
+-- disarm is announced, the landing voltage and `lastDisarmAt` are stamped -- for a model that is
+-- still flying. Left untaken, a real disarm is taken by the first read after the runtime's next
+-- tick, which has read it by then.
+--
+-- One direction only. A reading of ARMED is always taken: the runtime's `false` is also what it
+-- holds when no arm source answers at all -- a simulator with no flight controller behind it is
+-- one such case -- so it cannot overrule a reading that says the model is armed, and erring
+-- towards armed is the safe side of that question.
+--
+-- One log line per run of untaken reads, not one per read.
+local armFlagsRefusalLogged = false
+
+local function armFlagsRefused(value)
+  if type(value) ~= "number" then return false end
+  local armedBit
+  if bit32 then armedBit = bit32.btest(value, 1) else armedBit = value ~= 0 end
+  local runtimeState = (not armedBit) and MspRuntime and type(MspRuntime.getState) == "function"
+    and MspRuntime.getState() or nil
+  if type(runtimeState) ~= "table" or runtimeState.lastArmed ~= true then
+    armFlagsRefusalLogged = false
+    return false
+  end
+  if not armFlagsRefusalLogged then
+    armFlagsRefusalLogged = true
+    local rssi = nil
+    local rssiFn = _G.getRSSI
+    if type(rssiFn) == "function" then
+      local ok, reading = pcall(rssiFn)
+      if ok then rssi = reading end
+    end
+    widgetLog(nil, string.format("arm flags %s not taken: the MSP runtime still reads armed (RSSI %s)",
+      tostring(value), tostring(rssi)), "info")
+  end
+  return true
+end
+
 local function readTelemetry(state, audioState)
   if not (Sensors and type(Sensors.getValue) == "function") then return end
   telemetryTarget = state
@@ -2501,7 +2612,12 @@ local function readTelemetry(state, audioState)
   setField("profile", roundInt(getSensor("pid_profile") or state.profile, state.profile or 1))
   setField("rateProfile", roundInt(getSensor("rate_profile") or state.rateProfile, state.rateProfile or 1))
   setField("batteryProfile", roundInt(getSensor("battery_profile") or state.batteryProfile, state.batteryProfile or 1))
-  setField("armFlags", roundInt(getSensor("armflags") or state.armFlags, state.armFlags or 0))
+  -- Read once for both fields that carry it -- `armFlags` here, which the announcements speak, and
+  -- `armed` further down -- so a reading armFlagsRefused leaves untaken is untaken for both.
+  local armState = getSensor("armflags")
+  local armTaken = armState
+  if armFlagsRefused(armState) then armTaken = nil end
+  setField("armFlags", roundInt(armTaken or state.armFlags, state.armFlags or 0))
   local armDisableFlagsValue = getSensor("armdisableflags")
   if type(armDisableFlagsValue) == "number" then
     setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
@@ -2601,19 +2717,19 @@ local function readTelemetry(state, audioState)
     end
   end
 
-  local armState = getSensor("armflags")
   if type(armState) == "number" then
     -- STICKY, and cleared only on the reconnect edge below. `armed` starting false is
     -- indistinguishable from `armed` never having been read at all -- a model whose telemetry
     -- sensor 99 is not selected reads nil here for ever and looks disarmed the whole time -- and
     -- anything that refuses while armed has to be able to tell those two apart, because failing
-    -- open there means sending MSP to a flying helicopter.
+    -- open there means sending MSP to a flying helicopter. Set on a reading left untaken as well:
+    -- the sensor answered.
     state.armedSeen = true
   end
-  if type(armState) == "number" and bit32 then
-    setField("armed", bit32.btest(armState, 1))
-  elseif type(armState) == "number" then
-    setField("armed", armState ~= 0)
+  if type(armTaken) == "number" and bit32 then
+    setField("armed", bit32.btest(armTaken, 1))
+  elseif type(armTaken) == "number" then
+    setField("armed", armTaken ~= 0)
   end
 
   local rss1 = readFirstNumber(RSS1_SOURCES, state.rss1)
@@ -2751,6 +2867,8 @@ function Runtime.new(zone, options)
     -- The pending job, at most one: { kind, step } or nil. See the job steps above and
     -- the dispatcher in widget.refresh.
     _job = nil,
+    -- Consecutive raises per job kind; see JOB_FAULT_LIMIT.
+    _jobFaults = {},
     -- The fullscreen views, see widgets/dashboard/views.lua: the stack of open views, nil when
     -- none is open; the base layer under it, `"theme"` for a theme that draws its own fullscreen
     -- (taken on the fullscreen pass, see takeFullscreenMode); and the view the last interactive
@@ -3087,6 +3205,8 @@ function Runtime.new(zone, options)
     -- A pending job may belong to the theme just torn down; drop it. The next STATE
     -- pass re-detects and enqueues a build against the new theme, in a pass of its own.
     self._job = nil
+    -- And every job gets its tries back: what raised may have been the theme just replaced.
+    self._jobFaults = {}
 
     logGv("reloadActiveTheme: flightMode=%s, selectedTheme=%s, loadedTheme=%s, v_min=%.1f, v_max=%.1f, customV=%s",
       tostring(self.flightMode), tostring(selectedTheme), tostring(self.theme ~= nil),
@@ -3582,9 +3702,13 @@ function Runtime.new(zone, options)
       -- pins the widget in the JOB branch for ever: the next pass finds _job still
       -- set, reruns the same step, raises again, and the STATE branch — where
       -- performBackgroundWork / MspRuntime.tick live — is never reached again.
+      local jobKind = self._job.kind
+      -- Only a job the state pass arms on `built` can loop, so only those are counted. A one-shot
+      -- job is armed by a request that it clears before it can raise, and each new request arms it
+      -- again: it is logged in full every time, as before.
+      local counted = self._job.oneShot ~= true
       local stepOk, stepDone = pcall(self._job.step, self)
       if not stepOk then
-        local jobKind = self._job and self._job.kind or "unknown"
         self._job   = nil
         self.built  = false
         -- The entry point owns the CPU-limit response: the hold-off, and the release of the two
@@ -3594,12 +3718,28 @@ function Runtime.new(zone, options)
         if isCpuLimit then
           error(stepDone, 0)
         end
-        if LogSink and type(LogSink.fault) == "function" then
+        -- Any other raise counts against its kind; see JOB_FAULT_LIMIT. Only the first of a run
+        -- goes to the card as a fault -- the ones after it are the same fault, and a fault line is
+        -- written to the card as it happens -- and the raise that reaches the limit says so, so
+        -- the log ends with the reason the screen shows what it shows.
+        local faults = 1
+        if counted then
+          faults = (self._jobFaults[jobKind] or 0) + 1
+          self._jobFaults[jobKind] = faults
+        end
+        if faults == 1 and LogSink and type(LogSink.fault) == "function" then
           pcall(LogSink.fault, "dashboard.job." .. tostring(jobKind), stepDone)
         end
         widgetLog(self, "job step error (" .. tostring(jobKind) .. "): " .. tostring(stepDone), "error")
+        if faults == JOB_FAULT_LIMIT then
+          widgetLog(self, "job " .. tostring(jobKind) .. " raised " .. faults
+            .. " times in a row; not retried until the theme is reloaded", "error")
+        end
       elseif stepDone then
-        -- step returned true: job is done.
+        -- step returned true: job is done. A run of raises ends when the surface is drawn, not
+        -- when a step merely returns: several steps finish without building anything, and the
+        -- state pass then arms them again.
+        if self.built then self._jobFaults[jobKind] = nil end
         self._job = nil
       end
       -- The second of the two clock reads the gap line is built from; see traceInstructionUsage.
@@ -3625,8 +3765,14 @@ function Runtime.new(zone, options)
         self.renderKey = splashKey
         self.built = false
       end
+      -- A splash that keeps raising falls back to the bare label, not to the failure surface,
+      -- which is drawn by the same builder.
       if not self.built then
-        self._job = { kind = "splash", step = splashJobStep, fullscreenSplash = fullscreenSplash }
+        if not jobCapped(self, "splash") then
+          self._job = { kind = "splash", step = splashJobStep, fullscreenSplash = fullscreenSplash }
+        elseif not jobCapped(self, "failed_label") then
+          self._job = { kind = "failed_label", step = failedLabelJobStep }
+        end
       end
       return
     end
@@ -3737,6 +3883,39 @@ function Runtime.new(zone, options)
       nextRenderKey = self._cachedRenderKey
     end
 
+    -- The job that builds this surface, named before the key is compared: a kind that has raised
+    -- JOB_FAULT_LIMIT times in a row is not armed again, and the failure surface takes its place
+    -- under a key of its own -- so it is drawn once, and again only after the pilot has been on
+    -- another surface. The failure surface counts under its own kind; once it is capped as well,
+    -- the bare label (failedLabelJobStep) takes its place under the same key, and once that is
+    -- capped nothing is armed -- at most three raises of each, then the chain ends.
+    -- `jobFullscreen` is the base layer's mark, which views.lua reads to drop a queued fullscreen
+    -- build on a key; the failure surface that stands in for that build carries it too.
+    local jobKind, jobStep, jobFullscreen = nil, nil, nil
+    if tuningMode == "zone" then
+      jobKind, jobStep = "tuning", tuningJobStep
+    elseif tuningMode == "fs" then
+      jobKind, jobStep = "tuning_fs", tuningFullscreenJobStep
+    elseif isInteractive then
+      -- The job is named after the view, so the job log line reads "menu" and "battery_pick"
+      -- as it always has, and the menu keeps its pass class in bin/accounting/measure.lua.
+      if self._viewId ~= nil then
+        jobKind, jobStep = self._viewId, viewJobStep
+      elseif self._viewBase ~= nil and nextRenderKey ~= nil then
+        -- The base layer: the theme at the fullscreen size. Only where the views module was
+        -- there to say that no view is on top, which is what a key of its own means.
+        jobKind, jobStep, jobFullscreen = "fs_theme", fsThemeJobStep, true
+      end
+    else
+      jobKind, jobStep = "scene", sceneJobStep
+    end
+    if jobKind ~= nil and jobCapped(self, jobKind) then
+      nextRenderKey = "failed|" .. jobKind
+      jobKind, jobStep = "failed", failedJobStep
+      if jobCapped(self, jobKind) then jobKind, jobStep = "failed_label", failedLabelJobStep end
+      if jobCapped(self, jobKind) then jobKind = nil end
+    end
+
     if nextRenderKey ~= self.renderKey then
       self.renderKey = nextRenderKey
       self.built = false
@@ -3744,34 +3923,22 @@ function Runtime.new(zone, options)
       -- lands in the next one, which carries nothing else.
     end
 
-    if not self.built then
-      if tuningMode == "zone" then
-        self._job = { kind = "tuning", step = tuningJobStep }
-      elseif tuningMode == "fs" then
-        self._job = { kind = "tuning_fs", step = tuningFullscreenJobStep }
-      elseif isInteractive then
-        -- The job is named after the view, so the job log line reads "menu" and "battery_pick"
-        -- as it always has, and the menu keeps its pass class in bin/accounting/measure.lua.
-        if self._viewId ~= nil then
-          self._job = { kind = self._viewId, step = viewJobStep }
-        elseif self._viewBase ~= nil and nextRenderKey ~= nil then
-          -- The base layer: the theme at the fullscreen size. Only where the views module was
-          -- there to say that no view is on top, which is what a key of its own means.
-          self._job = { kind = "fs_theme", step = fsThemeJobStep, fullscreen = true }
-        end
-      else
-        self._job = { kind = "scene", step = sceneJobStep }
-      end
+    if not self.built and jobKind ~= nil then
+      -- The failure surface at full screen carries what the connect splash carries there, since
+      -- it is drawn by the same builder: see failedJobStep.
+      self._job = { kind = jobKind, step = jobStep, fullscreen = jobFullscreen,
+        fullscreenSplash = jobKind == "failed" and isInteractive or nil }
     end
 
     -- The battery prompt's own work, last and only into a free slot: the registry read and the
     -- pick both touch the card, and neither is worth delaying a build for. The steady state
-    -- past the load is three table reads.
+    -- past the load is three table reads. Both are one-shot jobs (see the dispatcher): neither is
+    -- armed on `built`, and each clears what arms it before it can raise.
     if self._job == nil then
       if self._batteryPickRequest ~= nil then
-        self._job = { kind = "battery_pick_apply", step = batteryPickApplyStep }
+        self._job = { kind = "battery_pick_apply", step = batteryPickApplyStep, oneShot = true }
       elseif self.state.batteryPick.loaded ~= true and self.state.tasksDone == true then
-        self._job = { kind = "battery_pick_load", step = batteryPickLoadStep }
+        self._job = { kind = "battery_pick_load", step = batteryPickLoadStep, oneShot = true }
       end
     end
 
