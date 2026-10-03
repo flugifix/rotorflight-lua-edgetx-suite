@@ -3639,27 +3639,11 @@ function M.run(event, touchState)
         Audio.process(audioContext, { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
       elseif wasTelemetryReady then
         -- The connection is gone, and it was there a moment ago -- the edge, not the state.
-        -- `rfReady` is an instantaneous reading rather than a latch, so
-        -- it says WHICH half went away, and the announcement is only made for the half the
-        -- radio's own telemetry alert cannot see: the link is still there and the flight
-        -- controller has stopped answering. The call is made before the reset below, which
-        -- clears the state it reads.
-        --
-        -- Once per loss is also what the announcement itself is written for. It latches on
-        -- `connectionLostPending` (lib/audio.lua:1197-1199), but `Audio.resetConnectionState`
-        -- drops that latch again once the recovery window has passed
-        -- (lib/audio.lua:1254-1261), so on every tick this branch used to run it was set and
-        -- then taken away again -- which is to say the sound came back once per
-        -- CONNECTION_RECOVERY_WINDOW for as long as the tool sat in this state.
-        if Audio and type(Audio.announceConnectionLost) == "function" then
-          local audioContext = state.audioContext
-          audioContext.audioState = state.audioState
-          audioContext.preferences = state.preferences
-          state.telemetryState.rfConnected = state.rfConnected
-          audioContext.state = state.telemetryState
-          Audio.announceConnectionLost(audioContext, rfReady,
-            { log = function(msg, level) if Log then pcall(Log.emit, "rfsuite.audio", msg, level, false) end end })
-        end
+        -- Nothing is announced here: the edge cannot tell which half went away. `rfReady` and
+        -- the link behind `connected` fall within a moment of each other on a lost RF link,
+        -- which is the radio's own announcement, and a flight controller that stops sending with
+        -- the link up keeps its last readings and never reaches this edge. `Audio.process` hears
+        -- that case from the telemetry frames, while the tool is still in the branch above.
         if Audio and type(Audio.resetConnectionState) == "function" then
           Audio.resetConnectionState(state.audioState)
         else
