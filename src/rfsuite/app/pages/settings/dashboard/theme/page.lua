@@ -270,7 +270,7 @@ local function saveToPreferences(prefs)
       mDashboard.model_theme_postflight = ui.config.model_theme_postflight
 
       -- Save model preferences using ModelPreferences module
-      modelOk, modelErr = false, "model_preferences"
+      modelOk, modelErr = false, "unavailable"
       local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
       if type(loadMod) == "function" then
         local loaded, MP = pcall(loadMod)
@@ -306,7 +306,7 @@ local function reportSaveError(ctx, err)
   if ctx and type(ctx.reportSave) == "function" then
     ctx.reportSave({
       title = t(ctx.i18n, "save_error_title", "Error"),
-      message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io")
+      message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. err
     })
   end
 end
@@ -314,13 +314,14 @@ end
 function M.onSave(ctx)
   ensureDeps()
   -- The page saves into two stores. Both have to be believed before the save
-  -- is reported as done, and a failure in either one has to be shown.
+  -- is reported as done, and a failure in either one has to be shown -- as the
+  -- sentence the library maps the store's answer to, never the token or path itself.
   local modelOk, modelErr = saveToPreferences(ctx.preferences)
   local ok, err = ctx.savePreferences()
   if not ok then
-    reportSaveError(ctx, err)
+    reportSaveError(ctx, DashboardLib.saveFailureReason(ctx.i18n, err))
   elseif not modelOk then
-    reportSaveError(ctx, modelErr)
+    reportSaveError(ctx, DashboardLib.saveFailureReason(ctx.i18n, modelErr, true))
   else
     -- Both stores, because this page reports a save as done only when both were believed.
     ui.dirty = false

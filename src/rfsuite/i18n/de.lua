@@ -2381,6 +2381,8 @@ return {
         scope_standard = "Standardwerte für alle Modelle",
         scope_model = "Eigene Einstellungen für dieses Modell",
         model_store_missing = "Zum Speichern der Einstellungen dieses Modells den Flugcontroller verbinden",
+        model_store_unavailable = "Speicher für Modelleinstellungen nicht verfügbar",
+        store_write_failed = "die Einstellungsdatei konnte nicht auf die SD-Karte geschrieben werden",
         help_message = "Die Einstellungen dieses Designs. Die erste Zeile sagt, wessen Werte es sind.\nStandardwerte für alle Modelle: Gilt für jedes Modell ohne eigene Einstellungen.\nEigene Einstellungen für dieses Modell: Nur dieses Modell; gespeichert wird nur, was vom Standard abweicht.",
         value_theme_config = "OEFFNEN",
         value_connection_guard = "EIN",

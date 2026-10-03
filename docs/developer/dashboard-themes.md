@@ -641,6 +641,40 @@ flight controller is connected; which of the two actually changes is the library
 With no scope set, as in the widget, `getThemeConfig` returns what applies: the model's values
 only while per-model settings are on for that model (`DashboardLib.modelOverridesActive`).
 
+`onSave` reports the save itself, through `ctx.reportSave`, and it reports success only when the
+store that carries the values was written. Which store that is depends on the scope, so read it
+with `DashboardLib.getEditScope()` when the save is made:
+
+- `"model"` — the values are in the model's preferences, and `saveByMcuId` answers whether its
+  file was written (`ok, err`). That answer decides the save: a failure is reported as *Save
+  failed* with its reason, and so is a `lib/model_preferences.lua` that will not load, which
+  `saveConfig` answers as `"unavailable"`, the word `saveByMcuId` uses for a store it cannot load.
+- `"standard"` — the values are in the radio's preferences, which `ctx.savePreferences()`
+  writes, and its answer decides the save. The model's file is still rewritten while a flight
+  controller is connected, but it carries none of this save's values, so its answer is not
+  reported.
+
+The shipped themes do this in `saveConfig`, which returns `true` or `false, err` by that rule
+(`true` where no flight controller is connected), and in `onSave`, which reports a failure when
+either `saveConfig` or `ctx.savePreferences()` failed.
+
+What a store answers is not for the screen. A refused write comes back as a token of
+`lib/config_store.lua` (`io`, `write`, `delete`, `rename`), or as the error text `io.open` gave,
+which is the file's path followed by `file error`; the model's store adds `unavailable` and
+`missing_mcu_id`. `onSave` therefore shows the sentence `DashboardLib.saveFailureReason(i18n, err,
+modelStore)` maps the answer to, with `modelStore` true for the answer of `saveByMcuId`:
+`unavailable` from the model's store reads as `model_store_unavailable` (*model settings store
+not available*), `missing_mcu_id` as `model_store_missing` (*Connect the flight controller to save
+this model's settings*), and every other answer of either store as `store_write_failed` (*the
+settings file could not be written to the SD card*), all under
+`app.pages.settings_dashboard_settings`. The *Theme* page reports its two stores the same way. The settings page refuses a model-scope
+save without the model's store before `onSave` runs, so a module is not asked to save the model
+scope with no flight controller connected.
+
+`bin/themes/verify_save_scope.lua` drives every shipped theme's module through this contract
+offline, in both scopes and both shipped locales; see
+[README](../../bin/themes/README.md#what-a-save-reports).
+
 The widget hands the resolved configuration to the theme as `state.themeConfig`, which is where
 a box's `min`, `max` or threshold limit reads it from.
 

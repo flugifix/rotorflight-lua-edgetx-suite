@@ -59,7 +59,8 @@ The model's own theme settings are edited under
 - *Own settings for this model* is also written under the key the former *Model Override* switch
   used, so an older version of the suite on the same card still shows the model's theme.
 - Saving writes the radio's file and, with a flight controller connected, the model's file. The
-  page reports *Saved* only when both were written.
+  page reports *Saved* only when both were written, and otherwise *Save failed* with the reason:
+  *the settings file could not be written to the SD card* where the card refused a file.
 
 ## Related
 

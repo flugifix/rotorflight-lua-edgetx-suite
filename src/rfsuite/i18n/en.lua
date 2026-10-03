@@ -2381,6 +2381,8 @@ return {
         scope_standard = "Standard values for all models",
         scope_model = "Own settings for this model",
         model_store_missing = "Connect the flight controller to save this model's settings",
+        model_store_unavailable = "model settings store not available",
+        store_write_failed = "the settings file could not be written to the SD card",
         help_message = "The settings of this theme. The first line says whose values they are.\nStandard values for all models: used by every model without settings of its own.\nOwn settings for this model: this model only; only a value that differs from the standard is stored.",
         value_theme_config = "OPEN",
         value_connection_guard = "ON",

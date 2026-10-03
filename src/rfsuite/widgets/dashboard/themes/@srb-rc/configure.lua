@@ -66,15 +66,25 @@ local function saveConfig(prefs)
     esctemp_max = tonumber(ui.config.esctemp_max) or THEME_DEFAULTS.esctemp_max,
   }, modelPrefs)
 
+  -- The model's file is written whenever a flight controller is connected, but it carries
+  -- this save's values only in the model scope: there its answer is what the save reports.
+  -- In the standard scope the values went into the radio's preferences, which the page's own
+  -- save writes, so a failure to rewrite the model's file is not a failure of this save.
+  local modelScope = type(DashboardLib.getEditScope) == "function" and DashboardLib.getEditScope() == "model"
   if session and session.mcu_id and modelPrefs then
     local loadMod = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
     if type(loadMod) == "function" then
       local ok, MP = pcall(loadMod)
       if ok and type(MP) == "table" and type(MP.saveByMcuId) == "function" then
-        MP.saveByMcuId(session.mcu_id, modelPrefs)
+        local saved, err = MP.saveByMcuId(session.mcu_id, modelPrefs)
+        if modelScope then return saved, err end
+        return true
       end
     end
+    -- saveByMcuId's own word for a store that will not load; onSave turns it into a sentence.
+    if modelScope then return false, "unavailable" end
   end
+  return true
 end
 
 local function getBecWarn()
@@ -119,8 +129,16 @@ function M.onReload(ctx)
 end
 
 function M.onSave(ctx)
-  saveConfig(ctx.preferences)
+  local modelOk, modelErr = saveConfig(ctx.preferences)
   local ok, err = ctx.savePreferences()
+  -- Saved only when every store that carries this save's values was written. A store answers a
+  -- refused write with a token or with the card's own error text, which names the file's path;
+  -- the pilot reads the sentence the library maps either to.
+  if not ok then
+    err = DashboardLib.saveFailureReason(ctx.i18n, err)
+  elseif not modelOk then
+    ok, err = false, DashboardLib.saveFailureReason(ctx.i18n, modelErr, true)
+  end
   if ok then
     ui.dirty = false
     if ctx and type(ctx.reportSave) == "function" then
@@ -134,7 +152,7 @@ function M.onSave(ctx)
       local i18n = ctx.i18n
       local title = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_title") or "Error"
       local message = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.save_error_message") or "Save failed"
-      ctx.reportSave({ title = title, message = message .. ": " .. tostring(err or "io") })
+      ctx.reportSave({ title = title, message = message .. ": " .. err })
     end
   end
   return true
