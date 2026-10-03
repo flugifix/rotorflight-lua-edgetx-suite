@@ -611,7 +611,7 @@
   - A CPU-limit kill inside a step is not counted: it is rethrown to the widget's entry point as before, which owns the back-off.
 
 - **The saving box and every other notice or loading box are drawn centred on the screen (`ui/loading_overlay.lua`)**:
-  - The box was placed 64 px above the centre of the area it was given, a fixed lift with no screen-size term, and then clamped to 8 px from the top. On 480x320 and 480x272 every box with a button -- the save progress with *Close*, the save outcome, the armed notice -- reached the clamp and sat on the top edge of the screen with the rest of it empty below; on 800x480 the boxes stood 64 px above the centre.
+  - The box was placed 64 px above the centre of the area it was given, a fixed lift with no screen-size term, and then clamped to 8 px from the top. On 480x320 and 480x272 every box with a button -- the save progress and the save outcome with *Continue*, the armed notice, the connection notice -- reached the clamp and sat on the top edge of the screen with the rest of it empty below; on 800x480 the boxes stood 64 px above the centre.
   - The box is now centred vertically in its area, as it already was horizontally. Its height, its contents and the cap that keeps a long message on screen are unchanged. On a page the area is the content below the header, so a page's loading box is centred there.
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:
