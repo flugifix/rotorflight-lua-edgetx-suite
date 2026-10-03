@@ -24,6 +24,12 @@
     "needs_translation": false
   },
   {
+    "file": "adj/auto.wav",
+    "english": "Auto",
+    "translation": "Auto",
+    "needs_translation": false
+  },
+  {
     "file": "adj/b.wav",
     "english": "B",
     "translation": null,
@@ -39,6 +45,12 @@
     "file": "adj/ccw.wav",
     "english": "CCW",
     "translation": "CCW",
+    "needs_translation": false
+  },
+  {
+    "file": "adj/ceiling.wav",
+    "english": "Ceiling",
+    "translation": "Obergrenze",
     "needs_translation": false
   },
   {
@@ -108,6 +120,12 @@
     "needs_translation": false
   },
   {
+    "file": "adj/expo.wav",
+    "english": "Expo",
+    "translation": "Expo",
+    "needs_translation": false
+  },
+  {
     "file": "adj/f.wav",
     "english": "F",
     "translation": "F",
@@ -144,6 +162,12 @@
     "needs_translation": false
   },
   {
+    "file": "adj/headspeed.wav",
+    "english": "Head Speed",
+    "translation": "Rotordrehzahl",
+    "needs_translation": false
+  },
+  {
     "file": "adj/horizon.wav",
     "english": "horizon",
     "translation": "Horizont",
@@ -162,6 +186,12 @@
     "needs_translation": false
   },
   {
+    "file": "adj/idle.wav",
+    "english": "Idle",
+    "translation": "Leerlauf",
+    "needs_translation": false
+  },
+  {
     "file": "adj/inertia.wav",
     "english": "Inertia",
     "translation": "Trägheit",
@@ -171,6 +201,18 @@
     "file": "adj/level.wav",
     "english": "Level",
     "translation": "Level",
+    "needs_translation": false
+  },
+  {
+    "file": "adj/max.wav",
+    "english": "Maximum",
+    "translation": "Maximum",
+    "needs_translation": false
+  },
+  {
+    "file": "adj/min.wav",
+    "english": "Minimum",
+    "translation": "Minimum",
     "needs_translation": false
   },
   {
@@ -204,6 +246,12 @@
     "needs_translation": false
   },
   {
+    "file": "adj/ratio.wav",
+    "english": "Ratio",
+    "translation": "Verhältnis",
+    "needs_translation": false
+  },
+  {
     "file": "adj/rc.wav",
     "english": "RC",
     "translation": "RC",
@@ -228,9 +276,21 @@
     "needs_translation": false
   },
   {
+    "file": "adj/throttle.wav",
+    "english": "Throttle",
+    "translation": "Gas",
+    "needs_translation": false
+  },
+  {
     "file": "adj/trim.wav",
     "english": "Trim",
     "translation": "Trimmen",
+    "needs_translation": false
+  },
+  {
+    "file": "adj/tta.wav",
+    "english": "T T A",
+    "translation": "T T A",
     "needs_translation": false
   },
   {

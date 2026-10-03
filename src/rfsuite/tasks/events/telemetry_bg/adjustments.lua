@@ -46,14 +46,12 @@ local SETTLE_SECONDS = 1.0
 --
 -- Each entry is the sequence of word files to play from `adj/`. Only words that exist in the
 -- tree are used: an adjustment whose name cannot be spoken with them has NO entry, and the
--- teller then announces its value alone rather than announcing something else. The words that
--- would complete the set are `expo` (11-13), `tta` (53), `ratio` (62), `ceiling` (72), and for
--- the governor and battery block `idle`, `auto`, `throttle`, `max`, `min`, `headspeed`,
--- `battery` and `profile` (76-80, 82).
+-- teller then announces its value alone rather than announcing something else.
 --
--- Ids 1-4 are the profile switches. They are deliberately absent: the suite already announces a
--- PID or rate profile change through its own `pid_profile` / `rate_profile` settings, and a
--- second voice for the same event is worse than none.
+-- Ids 1-4 are the profile switches and 82 is the battery profile. They are deliberately absent:
+-- the suite already announces a PID or rate profile change through its own `pid_profile` /
+-- `rate_profile` settings and a battery profile change through `battery_profile`, and a second
+-- voice for the same event is worse than none.
 local ADJUSTMENTS = {
   [5]  = { "pitch", "rate" },
   [6]  = { "roll", "rate" },
@@ -61,6 +59,9 @@ local ADJUSTMENTS = {
   [8]  = { "pitch", "rc", "rate" },
   [9]  = { "roll", "rc", "rate" },
   [10] = { "yaw", "rc", "rate" },
+  [11] = { "pitch", "rc", "expo" },
+  [12] = { "roll", "rc", "expo" },
+  [13] = { "yaw", "rc", "expo" },
 
   [14] = { "pitch", "p", "gain" },
   [15] = { "pitch", "i", "gain" },
@@ -107,6 +108,7 @@ local ADJUSTMENTS = {
   [50] = { "gov", "i", "gain" },
   [51] = { "gov", "d", "gain" },
   [52] = { "gov", "f", "gain" },
+  [53] = { "gov", "tta", "gain" },
   [54] = { "gov", "cyclic", "ff" },
   [55] = { "gov", "collective", "ff" },
 
@@ -117,6 +119,7 @@ local ADJUSTMENTS = {
   [60] = { "roll", "o", "gain" },
 
   [61] = { "crossc", "gain" },
+  [62] = { "crossc", "ratio" },
   [63] = { "crossc", "cutoff" },
 
   [64] = { "acc", "pitch", "trim" },
@@ -130,10 +133,16 @@ local ADJUSTMENTS = {
   [70] = { "yaw", "setpoint", "boost", "gain" },
   [71] = { "collective", "setpoint", "boost", "gain" },
 
+  [72] = { "yaw", "dyn", "ceiling", "gain" },
   [73] = { "yaw", "dyn", "deadband", "gain" },
   [74] = { "yaw", "dyn", "deadband", "filter" },
   [75] = { "yaw", "precomp", "cutoff" },
 
+  [76] = { "gov", "idle", "throttle" },
+  [77] = { "gov", "auto", "throttle" },
+  [78] = { "gov", "max", "throttle" },
+  [79] = { "gov", "min", "throttle" },
+  [80] = { "gov", "headspeed" },
   [81] = { "gov", "yaw", "ff" },
 }
 
