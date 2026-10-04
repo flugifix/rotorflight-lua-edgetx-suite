@@ -1704,6 +1704,12 @@ function Audio.process(self, opts)
     local armed = isArmedFromState(self.state)
     if audioState.flightArmed ~= armed then
       audioState.flightArmed = armed
+      -- A safeguard: re-evaluate the silence from the next pass, so that a quiet edge spent
+      -- while disarmed cannot leave an armed model unannounced. Today the arm state arrives
+      -- only with the flight controller's frames, and the first of them has already reset the
+      -- edge above, so this changes no sequence that can happen now; it matters only if the
+      -- arm state ever reaches this function by another route.
+      audioState.telemetryQuiet = false
       if armed then
         audioState.flightTimerTriggered = false
         audioState.flightTimerStartAt = nil
