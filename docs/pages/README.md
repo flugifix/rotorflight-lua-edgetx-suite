@@ -11,7 +11,7 @@ One file per page, at the path of the page under `src/rfsuite/app/pages/` with `
 appended: the page `setup/power/smartfuel/page.lua` is documented in
 `docs/pages/setup/power/smartfuel.md`. Menu entries that only open a submenu have no file.
 
-**Status:** 94 reachable pages, 36 written. 78 of them carry an in-app help text behind the
+**Status:** 94 reachable pages, 37 written. 78 of them carry an in-app help text behind the
 `?` in the header, which is the text to start a page file from; the others start from the
 page source.
 
@@ -60,7 +60,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Servos → PWM Output | `setup/servos/pwm.md` | no | read-only while armed | to write |
 | Servos → BUS Output | `setup/servos/bus.md` | no | read-only while armed | to write |
 | Controls → Modes | `setup/controls/modes.md` | yes | read-only while armed | to write |
-| Controls → Adjustments | `setup/controls/adjustments.md` | yes | read-only while armed | to write |
+| Controls → Adjustments | [setup/controls/adjustments.md](setup/controls/adjustments.md) | yes | read-only while armed | written |
 | Controls → Failsafe | `setup/controls/failsafe.md` | yes | read-only while armed | to write |
 | Controls → Beepers → Configuration | `setup/controls/beepers/configuration.md` | yes | read-only while armed | to write |
 | Controls → Beepers → ESC Beacon | `setup/controls/beepers/dshot.md` | yes | read-only while armed | to write |

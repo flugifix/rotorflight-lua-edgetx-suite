@@ -65,7 +65,11 @@ function M.append(children, opts)
 
   local title = tostring(opts.title or "Loading")
   local message = tostring(opts.message or "")
-  local progress = clamp01(opts.progress)
+  -- `progress` is a number, or a function returning one. A function is read by the firmware on
+  -- its own refresh pass, so a caller whose reads arrive one at a time can move the bar without
+  -- clearing and rebuilding the whole scene for every step.
+  local progressFn = type(opts.progress) == "function" and opts.progress or nil
+  local progress = progressFn and clamp01(progressFn()) or clamp01(opts.progress)
 
   local action = type(opts.action) == "table" and opts.action or nil
 
@@ -240,7 +244,23 @@ function M.append(children, opts)
       filled = true
     }
 
-    if fillW > 0 then
+    if progressFn then
+      -- Always present, because its width is the firmware's to update. A width of 0 draws
+      -- nothing, which is what the numeric path below gets by leaving the rectangle out.
+      local fillMaxW, fillH = barW - 4, barH - 4
+      children[#children + 1] = {
+        type = "rectangle",
+        x = barX + 2,
+        y = barY + 2,
+        w = math.max(1, fillW),
+        h = fillH,
+        color = COLOR_THEME_SECONDARY1,
+        filled = true,
+        size = function()
+          return math.floor(fillMaxW * clamp01(progressFn()) + 0.5), fillH
+        end
+      }
+    elseif fillW > 0 then
       children[#children + 1] = {
         type = "rectangle",
         x = barX + 2,

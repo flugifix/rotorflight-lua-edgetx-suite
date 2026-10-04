@@ -105,6 +105,12 @@ local function pageText(i18n, key, fallback)
   return fallback
 end
 
+-- The loading bar reads this on the firmware's own refresh pass, so each reply of the load
+-- moves it without a rebuild of the scene.
+local function loadingProgress()
+  return (tonumber(ui.progress) or 0) / 100
+end
+
 local function getRcConfig(session)
   if type(session) ~= "table" then return nil end
   if type(session.setup_servos_bus) ~= "table" then
@@ -447,9 +453,6 @@ local function queueServosRead(isAutoReload)
       end
 
       ui.progress = 25
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
 
       -- Step 2: Read STATUS
       queue:add({
@@ -462,9 +465,6 @@ local function queueServosRead(isAutoReload)
           end
 
           ui.progress = 50
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
 
           -- Step 3: Read SERIAL_CONFIG
           queue:add({
@@ -487,9 +487,6 @@ local function queueServosRead(isAutoReload)
               end
 
               ui.progress = 75
-              if type(ui.runtime.requestRebuild) == "function" then
-                ui.runtime.requestRebuild()
-              end
 
               -- Step 4: the selected servo's own record, where the firmware has that read
               if hasPagedServoReads() then
@@ -751,7 +748,7 @@ function M.build(ctx)
       x = x, y = y, w = w, h = h,
       title = "@i18n(app.loading)@",
       message = pageText(i18n, "loading", "Reading servos configuration..."),
-      progress = ui.progress / 100
+      progress = loadingProgress
     })
     return
   end

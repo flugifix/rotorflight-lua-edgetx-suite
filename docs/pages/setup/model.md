@@ -30,6 +30,15 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 
 - Saving writes the parameters and the model-name flag to the flight controller; the two
   radio-wide switches are saved on the radio.
+- The rename is temporary. The model's own name is put back when the craft disconnects, or at
+  the next start if the radio was switched off while connected. The dashboard widget (or the
+  service widget) does both, not the configuration tool: a link that drops and comes back while
+  the tool is open leaves the craft name in place, and one that is still down when the tool is
+  closed is put back by the widget then.
+- A model that carries neither the dashboard widget nor the service widget any more when the craft
+  disconnects keeps the craft name; the configuration tool does not put it back. The model's own
+  name stays recorded: once one of the two widgets is on the model again, it puts the name back the
+  first time it runs without a link.
 - The announcements at connect (the model name, the initial fuel) are switched under
   *System* → *Settings* → *Audio* → *Events*, not here.
 
