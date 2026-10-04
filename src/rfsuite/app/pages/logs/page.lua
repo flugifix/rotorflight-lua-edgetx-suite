@@ -1669,11 +1669,14 @@ function M.build(ctx)
 end
 
 -- The list of logs and the window of it on screen are kept when the page closes, so coming back
--- neither walks the card again nor builds more than one window of it. They are a few strings
--- per log; what is costly to hold is the LVGL tree, and the host drops that with the page. The
--- list is read again when the pilot asks for it with Reload, or when the host drops this module
--- from its page cache (app/pages/init.lua) and loads it afresh. A log written since the list
--- was read is not on it until then.
+-- neither walks the card again nor builds more than one window of it. Each log is one table of
+-- six short strings from extractFileInfo, about half a kilobyte of Lua memory on the 64-bit
+-- EdgeTX simulator (less on a radio's 32-bit build): 2.3 MB there for 5000 logs, which counts
+-- against the limit EdgeTX sets for all Lua scripts and widgets together (6 MB on colour
+-- radios). The LVGL tree is not kept; the host drops it with the page. The list is read again
+-- when the pilot asks for it with Reload, or when the host drops this module from its page
+-- cache (app/pages/init.lua) and loads it afresh. A log written since the list was read is not
+-- on it until then.
 --
 -- A walk still in progress is dropped rather than kept, and with it any directory it held open;
 -- the next visit starts it again.
