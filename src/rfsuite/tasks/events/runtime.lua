@@ -205,10 +205,29 @@ end
 -- therefore cannot be an event: it is a STATE, checked on a tick that has established there is no
 -- craft, which a cold start reaches on its first pass.
 --
--- The cost on that tick is one boolean. The store answers hasAny() from a flag after its first
+-- The cost on that tick is the context check below and one boolean. The store answers hasAny() from a flag after its first
 -- call, and everything past it -- reading the model, writing to it, touching the card -- happens
 -- only where a rename is actually outstanding.
+--
+-- Only in the context that renames. `model_name_sync` is a `widget` task
+-- (tasks/events/onconnect/manifest.lua), so the configuration tool never writes the craft name,
+-- and it must not take it off either. While a standalone tool is open EdgeTX runs no widget, so a
+-- link that drops and comes back in that time is seen by the tool alone: a restore from the tool
+-- puts the model's own name back and spends the record, the tool's reconnect cannot write the
+-- craft name again, and the widget, resuming with the link up, has seen no disconnect and does
+-- not either -- the model keeps its own name while the craft is connected. A link that is still
+-- down when the tool closes is seen by the widget on its next ticks, and a cold start reaches a
+-- widget tick like any other, so every case above still has a state that restores.
+--
+-- One case is left without one: a model that no longer carries the dashboard or the service widget
+-- when the link goes, or when the radio starts. Its record stays on the card and the model keeps
+-- the craft name until one of the two widgets is on it again, which puts the name back on its first
+-- tick without a link; a rename in between takes the recorded name, not the current one, as the
+-- original (tasks/events/onconnect/tasks/model_name_sync.lua).
 local function restorePendingModelName()
+  local context = Env and Env.get() or "tool"
+  if context ~= "widget" then return end
+
   local nameStore = modelNameStore()
   if not nameStore then return end
 

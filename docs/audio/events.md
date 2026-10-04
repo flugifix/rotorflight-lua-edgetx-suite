@@ -126,6 +126,9 @@ The loss is announced **once**. A model that stays silent keeps the announcement
 | --- | --- | --- | --- | --- |
 | Adjustment events | `adjustment_events` | Off | Radio | Audio feedback when adjusting tuning parameters via in-flight switches or rotary knobs. |
 
+#### What an Adjustment Announcement Says
+The new value, preceded by the name of the adjustment function whenever the pilot moves on to a different function than the last one adjusted. The name is built from the words in `adj/` (for example *Pitch RC Expo*, *Governor Idle Throttle*). Every adjustment function the firmware defines is named this way except the four profile switches (rate, PID, LED and OSD profile) and the battery profile, for which the adjustment announcement says only the value. A rate or PID profile change is announced under *Profiles* and a battery profile change under *Battery*, so naming them here as well would say the same event twice.
+
 ### 10. Other
 
 | Setting | Switch / Key | Default | Scope | Description |

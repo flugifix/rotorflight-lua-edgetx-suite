@@ -32,7 +32,7 @@ the flight controller over MSP.
 | Build Info | Read over MSP when the page opens. |
 | RF Mode | The `RFMD` telemetry sensor, where the RF module publishes one. |
 | RF Band | Derived from the same sensor. |
-| Packet Ratio | The flight controller's telemetry link ratio. |
+| Packet Ratio | The telemetry link ratio set on the flight controller, read over MSP when the page opens and again every 45 seconds while it stays open. It is a setting, not a measurement of the link. |
 | MSP Version | The API version the flight controller reports. |
 | MSP Transport | The transport MSP is running over, or `SIMULATOR`. |
 | Supported MSP API | What this version of the suite supports. |
