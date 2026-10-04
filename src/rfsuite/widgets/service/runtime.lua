@@ -293,8 +293,15 @@ local function tickRuntimes(self)
 
   if type(MspRuntime.tick) ~= "function" then return end
 
+  -- Created here when it is missing, as the dashboard does: the model-name restore in the event
+  -- runtime runs only in the widget context, and where the MSP runtime finds no transport it
+  -- never publishes, so nothing else in this Lua state creates the table to carry the context.
+  if type(_G) == "table" then
+    _G.rfsuite = _G.rfsuite or {}
+    _G.rfsuite.session = _G.rfsuite.session or {}
+    _G.rfsuite.session.event_context = "widget"
+  end
   local s = session()
-  if s then s.event_context = "widget" end
 
   MspRuntime.tick()
   if EventsRuntime and type(EventsRuntime.wakeup) == "function" then
