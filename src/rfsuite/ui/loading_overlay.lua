@@ -180,6 +180,10 @@ function M.append(children, opts)
   -- and 480x272 it pushed every box with a button up against the clamp below -- the box sat on
   -- the top edge with the rest of the screen empty under it.
   local boxY = y + math.floor((h - boxH) / 2)
+  -- Centred, the box can only reach this clamp where the area is shorter than `baseBoxH + 16`:
+  -- `roomForLines` above lets a message grow the box to `h - 16` at most, which centres at
+  -- `y + 8` or further down. Where the area is that short the box cannot fit at all, and the clamp
+  -- keeps its top -- the title -- inside the area and lets the bottom run past it instead.
   if boxY < y + 8 then
     boxY = y + 8
   end
