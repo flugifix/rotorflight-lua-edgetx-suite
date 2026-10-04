@@ -30,90 +30,96 @@ local RANGE_STEP = 5
 local RANGE_SNAP_DELTA_US = 50
 local AUTODETECT_DELTA_US = 120
 
+-- Every adjustment function, listed by id from 0 without gaps: the id is the index minus one,
+-- and the list is already in the order the Function choice shows it. The names are a
+-- labelKey/labelFallback pair, which the packager resolves into the locale being built, so
+-- the page reads them without a translation lookup at run time.
 local ADJUST_FUNCTIONS = {
-  {id = 0, key = "fn_none", default = "None", min = 0, max = 100},
-  {id = 1, key = "fn_rate_profile", default = "Rate Profile", min = 1, max = 6},
-  {id = 2, key = "fn_pid_profile", default = "PID Profile", min = 1, max = 6},
-  {id = 3, key = "fn_led_profile", default = "LED Profile", min = 1, max = 4},
-  {id = 4, key = "fn_osd_profile", default = "OSD Profile", min = 1, max = 3},
-  {id = 5, key = "fn_pitch_rate", default = "Pitch Rate", min = 0, max = 255},
-  {id = 6, key = "fn_roll_rate", default = "Roll Rate", min = 0, max = 255},
-  {id = 7, key = "fn_yaw_rate", default = "Yaw Rate", min = 0, max = 255},
-  {id = 8, key = "fn_pitch_rc_rate", default = "Pitch RC Rate", min = 0, max = 255},
-  {id = 9, key = "fn_roll_rc_rate", default = "Roll RC Rate", min = 0, max = 255},
-  {id = 10, key = "fn_yaw_rc_rate", default = "Yaw RC Rate", min = 0, max = 255},
-  {id = 11, key = "fn_pitch_rc_expo", default = "Pitch RC Expo", min = 0, max = 100},
-  {id = 12, key = "fn_roll_rc_expo", default = "Roll RC Expo", min = 0, max = 100},
-  {id = 13, key = "fn_yaw_rc_expo", default = "Yaw RC Expo", min = 0, max = 100},
-  {id = 14, key = "fn_pitch_p", default = "Pitch P", min = 0, max = 250},
-  {id = 15, key = "fn_pitch_i", default = "Pitch I", min = 0, max = 250},
-  {id = 16, key = "fn_pitch_d", default = "Pitch D", min = 0, max = 250},
-  {id = 17, key = "fn_pitch_f", default = "Pitch F", min = 0, max = 250},
-  {id = 18, key = "fn_roll_p", default = "Roll P", min = 0, max = 250},
-  {id = 19, key = "fn_roll_i", default = "Roll I", min = 0, max = 250},
-  {id = 20, key = "fn_roll_d", default = "Roll D", min = 0, max = 250},
-  {id = 21, key = "fn_roll_f", default = "Roll F", min = 0, max = 250},
-  {id = 22, key = "fn_yaw_p", default = "Yaw P", min = 0, max = 250},
-  {id = 23, key = "fn_yaw_i", default = "Yaw I", min = 0, max = 250},
-  {id = 24, key = "fn_yaw_d", default = "Yaw D", min = 0, max = 250},
-  {id = 25, key = "fn_yaw_f", default = "Yaw F", min = 0, max = 250},
-  {id = 26, key = "fn_yaw_cw_stop_gain", default = "Yaw CW Stop Gain", min = 25, max = 250},
-  {id = 27, key = "fn_yaw_ccw_stop_gain", default = "Yaw CCW Stop Gain", min = 25, max = 250},
-  {id = 28, key = "fn_yaw_cyclic_ff", default = "Yaw Cyclic FF", min = 0, max = 250},
-  {id = 29, key = "fn_yaw_collective_ff", default = "Yaw Collective FF", min = 0, max = 250},
-  {id = 30, key = "fn_yaw_collective_dyn", default = "Yaw Collective Dyn", min = -125, max = 125, maxApi = {12, 0, 7}},
-  {id = 31, key = "fn_yaw_collective_decay", default = "Yaw Collective Decay", min = 1, max = 250, maxApi = {12, 0, 7}},
-  {id = 32, key = "fn_pitch_collective_ff", default = "Pitch Collective FF", min = 0, max = 250},
-  {id = 33, key = "fn_pitch_gyro_cutoff", default = "Pitch Gyro Cutoff", min = 0, max = 250},
-  {id = 34, key = "fn_roll_gyro_cutoff", default = "Roll Gyro Cutoff", min = 0, max = 250},
-  {id = 35, key = "fn_yaw_gyro_cutoff", default = "Yaw Gyro Cutoff", min = 0, max = 250},
-  {id = 36, key = "fn_pitch_dterm_cutoff", default = "Pitch Dterm Cutoff", min = 0, max = 250},
-  {id = 37, key = "fn_roll_dterm_cutoff", default = "Roll Dterm Cutoff", min = 0, max = 250},
-  {id = 38, key = "fn_yaw_dterm_cutoff", default = "Yaw Dterm Cutoff", min = 0, max = 250},
-  {id = 39, key = "fn_rescue_climb_collective", default = "Rescue Climb Coll", min = 0, max = 1000},
-  {id = 40, key = "fn_rescue_hover_collective", default = "Rescue Hover Coll", min = 0, max = 1000},
-  {id = 41, key = "fn_rescue_hover_altitude", default = "Rescue Hover Alt", min = 0, max = 2500},
-  {id = 42, key = "fn_rescue_alt_p", default = "Rescue Alt P", min = 0, max = 250},
-  {id = 43, key = "fn_rescue_alt_i", default = "Rescue Alt I", min = 0, max = 250},
-  {id = 44, key = "fn_rescue_alt_d", default = "Rescue Alt D", min = 0, max = 250},
-  {id = 45, key = "fn_angle_level_gain", default = "Angle Level Gain", min = 0, max = 200},
-  {id = 46, key = "fn_horizon_level_gain", default = "Horizon Level Gain", min = 0, max = 200},
-  {id = 47, key = "fn_acro_trainer_gain", default = "Acro Trainer Gain", min = 25, max = 255},
-  {id = 48, key = "fn_governor_gain", default = "Governor Gain", min = 0, max = 250},
-  {id = 49, key = "fn_governor_p", default = "Governor P", min = 0, max = 250},
-  {id = 50, key = "fn_governor_i", default = "Governor I", min = 0, max = 250},
-  {id = 51, key = "fn_governor_d", default = "Governor D", min = 0, max = 250},
-  {id = 52, key = "fn_governor_f", default = "Governor F", min = 0, max = 250},
-  {id = 53, key = "fn_governor_tta", default = "Governor TTA", min = 0, max = 250},
-  {id = 54, key = "fn_governor_cyclic_ff", default = "Gov Cyclic FF", min = 0, max = 250},
-  {id = 55, key = "fn_governor_collective_ff", default = "Gov Collective FF", min = 0, max = 250},
-  {id = 56, key = "fn_pitch_b", default = "Pitch B", min = 0, max = 250},
-  {id = 57, key = "fn_roll_b", default = "Roll B", min = 0, max = 250},
-  {id = 58, key = "fn_yaw_b", default = "Yaw B", min = 0, max = 250},
-  {id = 59, key = "fn_pitch_o", default = "Pitch O", min = 0, max = 250},
-  {id = 60, key = "fn_roll_o", default = "Roll O", min = 0, max = 250},
-  {id = 61, key = "fn_cross_coupling_gain", default = "Cross Coupling Gain", min = 0, max = 250},
-  {id = 62, key = "fn_cross_coupling_ratio", default = "Cross Coupling Ratio", min = 0, max = 250},
-  {id = 63, key = "fn_cross_coupling_cutoff", default = "Cross Coupling Cutoff", min = 0, max = 250},
-  {id = 64, key = "fn_acc_trim_pitch", default = "Acc Trim Pitch", min = -300, max = 300},
-  {id = 65, key = "fn_acc_trim_roll", default = "Acc Trim Roll", min = -300, max = 300},
-  {id = 66, key = "fn_yaw_inertia_precomp_gain", default = "Yaw Inertia Precomp Gain", min = 0, max = 250, minApi = {12, 0, 8}},
-  {id = 67, key = "fn_yaw_inertia_precomp_cutoff", default = "Yaw Inertia Precomp Cutoff", min = 0, max = 250, minApi = {12, 0, 8}},
-  {id = 68, key = "fn_pitch_setpoint_boost_gain", default = "Pitch Setpoint Boost Gain", min = 0, max = 255, minApi = {12, 0, 8}},
-  {id = 69, key = "fn_roll_setpoint_boost_gain", default = "Roll Setpoint Boost Gain", min = 0, max = 255, minApi = {12, 0, 8}},
-  {id = 70, key = "fn_yaw_setpoint_boost_gain", default = "Yaw Setpoint Boost Gain", min = 0, max = 255, minApi = {12, 0, 8}},
-  {id = 71, key = "fn_col_setpoint_boost_gain", default = "Col Setpoint Boost Gain", min = 0, max = 255, minApi = {12, 0, 8}},
-  {id = 72, key = "fn_yaw_dyn_ceiling_gain", default = "Yaw Dyn Ceiling Gain", min = 0, max = 250, minApi = {12, 0, 8}},
-  {id = 73, key = "fn_yaw_dyn_deadband_gain", default = "Yaw Dyn Deadband Gain", min = 0, max = 250, minApi = {12, 0, 8}},
-  {id = 74, key = "fn_yaw_dyn_deadband_filter", default = "Yaw Dyn Deadband Filter", min = 0, max = 250, minApi = {12, 0, 8}},
-  {id = 75, key = "fn_yaw_precomp_cutoff", default = "Yaw Precomp Cutoff", min = 0, max = 250, minApi = {12, 0, 8}},
-  {id = 76, key = "fn_gov_idle_throttle", default = "Gov Idle Throttle", min = 0, max = 250, minApi = {12, 0, 9}},
-  {id = 77, key = "fn_gov_auto_throttle", default = "Gov Auto Throttle", min = 0, max = 250, minApi = {12, 0, 9}},
-  {id = 78, key = "fn_gov_max_throttle", default = "Gov Max Throttle", min = 0, max = 100, minApi = {12, 0, 9}},
-  {id = 79, key = "fn_gov_min_throttle", default = "Gov Min Throttle", min = 0, max = 100, minApi = {12, 0, 9}},
-  {id = 80, key = "fn_gov_headspeed", default = "Gov Headspeed", min = 0, max = 10000, minApi = {12, 0, 9}},
-  {id = 81, key = "fn_gov_yaw_ff", default = "Gov Yaw FF", min = 0, max = 250, minApi = {12, 0, 9}},
-  {id = 82, key = "fn_battery_profile", default = "Battery Profile", min = 1, max = 6}
+  {id = 0, labelKey = "fn_none", labelFallback = "None", min = 0, max = 100},
+  {id = 1, labelKey = "fn_rate_profile", labelFallback = "Rate Profile", min = 1, max = 6},
+  {id = 2, labelKey = "fn_pid_profile", labelFallback = "PID Profile", min = 1, max = 6},
+  {id = 3, labelKey = "fn_led_profile", labelFallback = "LED Profile", min = 1, max = 4},
+  {id = 4, labelKey = "fn_osd_profile", labelFallback = "OSD Profile", min = 1, max = 3},
+  {id = 5, labelKey = "fn_pitch_rate", labelFallback = "Pitch Rate", min = 0, max = 255},
+  {id = 6, labelKey = "fn_roll_rate", labelFallback = "Roll Rate", min = 0, max = 255},
+  {id = 7, labelKey = "fn_yaw_rate", labelFallback = "Yaw Rate", min = 0, max = 255},
+  {id = 8, labelKey = "fn_pitch_rc_rate", labelFallback = "Pitch RC Rate", min = 0, max = 255},
+  {id = 9, labelKey = "fn_roll_rc_rate", labelFallback = "Roll RC Rate", min = 0, max = 255},
+  {id = 10, labelKey = "fn_yaw_rc_rate", labelFallback = "Yaw RC Rate", min = 0, max = 255},
+  {id = 11, labelKey = "fn_pitch_rc_expo", labelFallback = "Pitch RC Expo", min = 0, max = 100},
+  {id = 12, labelKey = "fn_roll_rc_expo", labelFallback = "Roll RC Expo", min = 0, max = 100},
+  {id = 13, labelKey = "fn_yaw_rc_expo", labelFallback = "Yaw RC Expo", min = 0, max = 100},
+  {id = 14, labelKey = "fn_pitch_p", labelFallback = "Pitch P", min = 0, max = 250},
+  {id = 15, labelKey = "fn_pitch_i", labelFallback = "Pitch I", min = 0, max = 250},
+  {id = 16, labelKey = "fn_pitch_d", labelFallback = "Pitch D", min = 0, max = 250},
+  {id = 17, labelKey = "fn_pitch_f", labelFallback = "Pitch F", min = 0, max = 250},
+  {id = 18, labelKey = "fn_roll_p", labelFallback = "Roll P", min = 0, max = 250},
+  {id = 19, labelKey = "fn_roll_i", labelFallback = "Roll I", min = 0, max = 250},
+  {id = 20, labelKey = "fn_roll_d", labelFallback = "Roll D", min = 0, max = 250},
+  {id = 21, labelKey = "fn_roll_f", labelFallback = "Roll F", min = 0, max = 250},
+  {id = 22, labelKey = "fn_yaw_p", labelFallback = "Yaw P", min = 0, max = 250},
+  {id = 23, labelKey = "fn_yaw_i", labelFallback = "Yaw I", min = 0, max = 250},
+  {id = 24, labelKey = "fn_yaw_d", labelFallback = "Yaw D", min = 0, max = 250},
+  {id = 25, labelKey = "fn_yaw_f", labelFallback = "Yaw F", min = 0, max = 250},
+  {id = 26, labelKey = "fn_yaw_cw_stop_gain", labelFallback = "Yaw CW Stop Gain", min = 25, max = 250},
+  {id = 27, labelKey = "fn_yaw_ccw_stop_gain", labelFallback = "Yaw CCW Stop Gain", min = 25, max = 250},
+  {id = 28, labelKey = "fn_yaw_cyclic_ff", labelFallback = "Yaw Cyclic FF", min = 0, max = 250},
+  {id = 29, labelKey = "fn_yaw_collective_ff", labelFallback = "Yaw Collective FF", min = 0, max = 250},
+  {id = 30, labelKey = "fn_yaw_collective_dyn", labelFallback = "Yaw Collective Dyn", min = -125, max = 125, maxApi = {12, 0, 7}},
+  {id = 31, labelKey = "fn_yaw_collective_decay", labelFallback = "Yaw Collective Decay", min = 1, max = 250, maxApi = {12, 0, 7}},
+  {id = 32, labelKey = "fn_pitch_collective_ff", labelFallback = "Pitch Collective FF", min = 0, max = 250},
+  {id = 33, labelKey = "fn_pitch_gyro_cutoff", labelFallback = "Pitch Gyro Cutoff", min = 0, max = 250},
+  {id = 34, labelKey = "fn_roll_gyro_cutoff", labelFallback = "Roll Gyro Cutoff", min = 0, max = 250},
+  {id = 35, labelKey = "fn_yaw_gyro_cutoff", labelFallback = "Yaw Gyro Cutoff", min = 0, max = 250},
+  {id = 36, labelKey = "fn_pitch_dterm_cutoff", labelFallback = "Pitch Dterm Cutoff", min = 0, max = 250},
+  {id = 37, labelKey = "fn_roll_dterm_cutoff", labelFallback = "Roll Dterm Cutoff", min = 0, max = 250},
+  {id = 38, labelKey = "fn_yaw_dterm_cutoff", labelFallback = "Yaw Dterm Cutoff", min = 0, max = 250},
+  {id = 39, labelKey = "fn_rescue_climb_collective", labelFallback = "Rescue Climb Coll", min = 0, max = 1000},
+  {id = 40, labelKey = "fn_rescue_hover_collective", labelFallback = "Rescue Hover Coll", min = 0, max = 1000},
+  {id = 41, labelKey = "fn_rescue_hover_altitude", labelFallback = "Rescue Hover Alt", min = 0, max = 2500},
+  {id = 42, labelKey = "fn_rescue_alt_p", labelFallback = "Rescue Alt P", min = 0, max = 250},
+  {id = 43, labelKey = "fn_rescue_alt_i", labelFallback = "Rescue Alt I", min = 0, max = 250},
+  {id = 44, labelKey = "fn_rescue_alt_d", labelFallback = "Rescue Alt D", min = 0, max = 250},
+  {id = 45, labelKey = "fn_angle_level_gain", labelFallback = "Angle Level Gain", min = 0, max = 200},
+  {id = 46, labelKey = "fn_horizon_level_gain", labelFallback = "Horizon Level Gain", min = 0, max = 200},
+  {id = 47, labelKey = "fn_acro_trainer_gain", labelFallback = "Acro Trainer Gain", min = 25, max = 255},
+  {id = 48, labelKey = "fn_governor_gain", labelFallback = "Governor Gain", min = 0, max = 250},
+  {id = 49, labelKey = "fn_governor_p", labelFallback = "Governor P", min = 0, max = 250},
+  {id = 50, labelKey = "fn_governor_i", labelFallback = "Governor I", min = 0, max = 250},
+  {id = 51, labelKey = "fn_governor_d", labelFallback = "Governor D", min = 0, max = 250},
+  {id = 52, labelKey = "fn_governor_f", labelFallback = "Governor F", min = 0, max = 250},
+  {id = 53, labelKey = "fn_governor_tta", labelFallback = "Governor TTA", min = 0, max = 250},
+  {id = 54, labelKey = "fn_governor_cyclic_ff", labelFallback = "Gov Cyclic FF", min = 0, max = 250},
+  {id = 55, labelKey = "fn_governor_collective_ff", labelFallback = "Gov Collective FF", min = 0, max = 250},
+  {id = 56, labelKey = "fn_pitch_b", labelFallback = "Pitch B", min = 0, max = 250},
+  {id = 57, labelKey = "fn_roll_b", labelFallback = "Roll B", min = 0, max = 250},
+  {id = 58, labelKey = "fn_yaw_b", labelFallback = "Yaw B", min = 0, max = 250},
+  {id = 59, labelKey = "fn_pitch_o", labelFallback = "Pitch O", min = 0, max = 250},
+  {id = 60, labelKey = "fn_roll_o", labelFallback = "Roll O", min = 0, max = 250},
+  {id = 61, labelKey = "fn_cross_coupling_gain", labelFallback = "Cross Coupling Gain", min = 0, max = 250},
+  {id = 62, labelKey = "fn_cross_coupling_ratio", labelFallback = "Cross Coupling Ratio", min = 0, max = 250},
+  {id = 63, labelKey = "fn_cross_coupling_cutoff", labelFallback = "Cross Coupling Cutoff", min = 0, max = 250},
+  {id = 64, labelKey = "fn_acc_trim_pitch", labelFallback = "Acc Trim Pitch", min = -300, max = 300},
+  {id = 65, labelKey = "fn_acc_trim_roll", labelFallback = "Acc Trim Roll", min = -300, max = 300},
+  {id = 66, labelKey = "fn_yaw_inertia_precomp_gain", labelFallback = "Yaw Inertia Precomp Gain", min = 0, max = 250, minApi = {12, 0, 8}},
+  {id = 67, labelKey = "fn_yaw_inertia_precomp_cutoff", labelFallback = "Yaw Inertia Precomp Cutoff",
+    min = 0, max = 250, minApi = {12, 0, 8}},
+  {id = 68, labelKey = "fn_pitch_setpoint_boost_gain", labelFallback = "Pitch Setpoint Boost Gain",
+    min = 0, max = 255, minApi = {12, 0, 8}},
+  {id = 69, labelKey = "fn_roll_setpoint_boost_gain", labelFallback = "Roll Setpoint Boost Gain", min = 0, max = 255, minApi = {12, 0, 8}},
+  {id = 70, labelKey = "fn_yaw_setpoint_boost_gain", labelFallback = "Yaw Setpoint Boost Gain", min = 0, max = 255, minApi = {12, 0, 8}},
+  {id = 71, labelKey = "fn_col_setpoint_boost_gain", labelFallback = "Col Setpoint Boost Gain", min = 0, max = 255, minApi = {12, 0, 8}},
+  {id = 72, labelKey = "fn_yaw_dyn_ceiling_gain", labelFallback = "Yaw Dyn Ceiling Gain", min = 0, max = 250, minApi = {12, 0, 8}},
+  {id = 73, labelKey = "fn_yaw_dyn_deadband_gain", labelFallback = "Yaw Dyn Deadband Gain", min = 0, max = 250, minApi = {12, 0, 8}},
+  {id = 74, labelKey = "fn_yaw_dyn_deadband_filter", labelFallback = "Yaw Dyn Deadband Filter", min = 0, max = 250, minApi = {12, 0, 8}},
+  {id = 75, labelKey = "fn_yaw_precomp_cutoff", labelFallback = "Yaw Precomp Cutoff", min = 0, max = 250, minApi = {12, 0, 8}},
+  {id = 76, labelKey = "fn_gov_idle_throttle", labelFallback = "Gov Idle Throttle", min = 0, max = 250, minApi = {12, 0, 9}},
+  {id = 77, labelKey = "fn_gov_auto_throttle", labelFallback = "Gov Auto Throttle", min = 0, max = 250, minApi = {12, 0, 9}},
+  {id = 78, labelKey = "fn_gov_max_throttle", labelFallback = "Gov Max Throttle", min = 0, max = 100, minApi = {12, 0, 9}},
+  {id = 79, labelKey = "fn_gov_min_throttle", labelFallback = "Gov Min Throttle", min = 0, max = 100, minApi = {12, 0, 9}},
+  {id = 80, labelKey = "fn_gov_headspeed", labelFallback = "Gov Headspeed", min = 0, max = 10000, minApi = {12, 0, 9}},
+  {id = 81, labelKey = "fn_gov_yaw_ff", labelFallback = "Gov Yaw FF", min = 0, max = 250, minApi = {12, 0, 9}},
+  {id = 82, labelKey = "fn_battery_profile", labelFallback = "Battery Profile", min = 1, max = 6}
 }
 
 local ui = {
@@ -227,17 +233,15 @@ local function setUsRangeEnd(rangeTable, value)
 end
 
 local function getFunctionById(id)
-  for i = 1, #ADJUST_FUNCTIONS do
-    local item = ADJUST_FUNCTIONS[i]
-    if item.id == id then return item end
-  end
+  local item = ADJUST_FUNCTIONS[(id or 0) + 1]
+  if item and item.id == id then return item end
   return nil
 end
 
 local function getFunctionDisplayName(i18n, fnId)
   local fn = getFunctionById(math.floor(fnId or 0))
   if fn then
-    return pageText(i18n, fn.key, fn.default)
+    return fn.labelFallback
   end
   return pageText(i18n, "function_label", "Function") .. " " .. tostring(math.floor(fnId or 0))
 end
@@ -258,43 +262,52 @@ local function buildRangeSlotOptions(i18n)
   return options
 end
 
-local function apiVersionIsAtLeast(required)
+--- The session's API version, or nil while it is not known yet.
+---
+--- A version string is parsed here, once, so that a caller comparing it against many entries
+--- does not parse it again for each of them. A string that does not parse is handed on as it
+--- is and compares exactly as it did before.
+local function currentApiVersion()
   local session = getSession()
   local current = session and session.apiVersion
   if not current or current == "" or tostring(current) == "0" then
-    return false
+    return nil
   end
+  if type(current) ~= "table" and ApiVersion and ApiVersion.parse then
+    return ApiVersion.parse(current) or current
+  end
+  return current
+end
+
+local function apiVersionIsAtLeast(required, current)
+  if not current then return false end
   return ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(current, required)
 end
 
-local function apiVersionIsAtMost(required)
-  local session = getSession()
-  local current = session and session.apiVersion
-  if not current or current == "" or tostring(current) == "0" then
-    return false
-  end
+local function apiVersionIsAtMost(required, current)
+  if not current then return false end
   local reqPlusOne = {required[1], required[2], required[3] + 1}
   return not ApiVersion.isAtLeast(current, reqPlusOne)
 end
 
-local function functionVisible(def)
-  if def.minApi and not apiVersionIsAtLeast(def.minApi) then return false end
-  if def.maxApi and not apiVersionIsAtMost(def.maxApi) then return false end
+local function functionVisible(def, current)
+  if def.minApi and not apiVersionIsAtLeast(def.minApi, current) then return false end
+  if def.maxApi and not apiVersionIsAtMost(def.maxApi, current) then return false end
   return true
 end
 
-local function buildFunctionOptions(i18n)
+local function buildFunctionOptions()
+  local current = currentApiVersion()
   local entries = {}
   for i = 1, #ADJUST_FUNCTIONS do
     local def = ADJUST_FUNCTIONS[i]
-    if functionVisible(def) then
+    if functionVisible(def, current) then
       entries[#entries + 1] = {
         value = def.id,
-        label = pageText(i18n, def.key, def.default)
+        label = def.labelFallback
       }
     end
   end
-  table.sort(entries, function(a, b) return a.value < b.value end)
   return entries
 end
 
@@ -549,7 +562,7 @@ end
 local PAGED_READ_API = {12, 0, 9}
 
 local function hasPagedReads()
-  return apiVersionIsAtLeast(PAGED_READ_API)
+  return apiVersionIsAtLeast(PAGED_READ_API, currentApiVersion())
 end
 
 --- Reads one slot's record with MSP_GET_ADJUSTMENT_RANGE (156).
@@ -1738,7 +1751,7 @@ function M.build(ctx)
     end
 
     -- Function Dropdown
-    local funcOptions = buildFunctionOptions(i18n)
+    local funcOptions = buildFunctionOptions()
     cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
       pageText(i18n, "function", "Function"),
       funcOptions,
