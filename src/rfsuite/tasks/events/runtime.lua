@@ -218,6 +218,12 @@ end
 -- not either -- the model keeps its own name while the craft is connected. A link that is still
 -- down when the tool closes is seen by the widget on its next ticks, and a cold start reaches a
 -- widget tick like any other, so every case above still has a state that restores.
+--
+-- One case is left without one: a model that no longer carries the dashboard or the service widget
+-- when the link goes, or when the radio starts. Its record stays on the card and the model keeps
+-- the craft name until one of the two widgets is on it again, which puts the name back on its first
+-- tick without a link; a rename in between takes the recorded name, not the current one, as the
+-- original (tasks/events/onconnect/tasks/model_name_sync.lua).
 local function restorePendingModelName()
   local context = Env and Env.get() or "tool"
   if context ~= "widget" then return end
