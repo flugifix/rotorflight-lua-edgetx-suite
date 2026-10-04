@@ -308,8 +308,9 @@ local function openListing(listBasePath)
   return listing
 end
 
--- Reads at most `budget` names into the listing and answers how many reads that took. The
--- read that finds the end of the directory counts as one, and it is what drops the iterator.
+-- Reads at most `budget` entries into the listing and answers how many reads that took: the
+-- reads spent, `.` and `..` and the one that ends the directory among them. That last read is
+-- what drops the iterator.
 local function readListing(listing, budget)
   local spent = 0
   while listing.iter and spent < budget do
@@ -477,7 +478,8 @@ local function scanCollect(scan, fileName, fullPath, parentFolder)
   if info then scan.found[#scan.found + 1] = info end
 end
 
--- Reads up to `budget` names of a listing and counts them as read. Answers the reads spent.
+-- Reads up to `budget` names of a listing and counts them as read: the names added, `.` and
+-- `..` not counted, so `scan.read` is not the reads spent. Answers the reads spent.
 local function scanRead(scan, listing, budget)
   local before = #listing.names
   local spent = readListing(listing, budget)
