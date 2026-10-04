@@ -576,6 +576,18 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/telemetrylost.wav",
+    "english": "Telemetry Lost",
+    "translation": "Telemetry Lost",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/telemetryok.wav",
+    "english": "Telemetry Recovered",
+    "translation": "Telemetry Recovered",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/timer.wav",
     "english": "timer",
     "translation": "timer",

@@ -37,6 +37,25 @@ local VOL_GVAR_OFF = -1024
 -- new flight, and "telemetry recovered" belongs to the one that was interrupted.
 local CONNECTION_RECOVERY_WINDOW = 120
 
+-- How long the flight controller's telemetry frames may stay away, with the RF link up, before
+-- the model counts as lost. Rotorflight sends a sensor whose value has not changed every 3 s
+-- (the slow interval of its custom telemetry sensors), and one that is changing far more often,
+-- so twice the slowest default is a flight controller that has stopped sending rather than a
+-- frame that is late. Well inside the 20 s after which the radio itself reports each sensor as
+-- lost.
+local TELEMETRY_QUIET_SECONDS = 6
+
+-- The RF link as the radio sees it: the reading the MSP runtime's connection test takes
+-- (tasks/msp/runtime.lua, isConnected), asked at the moment it matters rather than through a
+-- state that is one tick behind it.
+local function rf_link_up()
+  local readRssi = _G.getRSSI
+  if type(readRssi) ~= "function" then return true end
+  local ok, rssi = pcall(readRssi)
+  if not ok or type(rssi) ~= "number" then return true end
+  return rssi > 0
+end
+
 local function is_rf_connected(self)
   if self and self.state and self.state.rfConnected ~= nil then
     return self.state.rfConnected == true
@@ -163,12 +182,12 @@ local LQ_HYSTERESIS = 5
 -- nothing a discharge can reach falls inside the window.
 local MAIN_POWER_LOST_VOLTS = 1.0
 
--- The four files this adds. Two of them the sound packs do not carry yet, and neither one is
--- borrowed from an existing alert: every shipped file names a different event, and announcing
--- a lost connection in the words of a low battery is worse than saying nothing. The pack files
--- that do exist are the fallback for the two power announcements, which have a near enough
--- neighbour; the two connection announcements have none and stay silent until a pack gains
--- them. Which pack answers is resolved once per session and cached.
+-- The four files this adds, each with a file of its own in both packs. None of them is borrowed
+-- from an existing alert: every shipped file names a different event, and announcing a lost
+-- connection in the words of a low battery is worse than saying nothing. In an older pack that
+-- lacks them, the two power announcements fall back to a near enough neighbour; the two
+-- connection announcements have none and stay silent there. Which pack answers is resolved
+-- once per session and cached.
 local CONNECTION_LOST_SOUND = "stat/alerts/telemetrylost.wav"
 local CONNECTION_OK_SOUND = "stat/alerts/telemetryok.wav"
 local MAIN_POWER_LOST_SOUNDS = { "stat/alerts/mainpower.wav", "stat/alerts/batteryempty.wav", "stat/alerts/lowvoltage.wav" }
@@ -1207,26 +1226,31 @@ local function linkIsQuality(self, audioState, lq, opts)
   return false
 end
 
---- The connection to the model was lost. Called from the branch each caller already runs when
---- its connection gate shuts, and before the state reset beside it.
+--- The flight controller has stopped sending. Called from `Audio.process` once its telemetry
+--- frames have stayed away for TELEMETRY_QUIET_SECONDS.
 ---
---- `rfLinkUp` says whether the radio still had the model's telemetry at that moment, and it is
---- what keeps this out of EdgeTX's way. The radio announces a lost RF LINK itself, so that half
---- is deliberately not ours; what is ours is the case the radio cannot see, where the link is
---- there and the flight controller has stopped answering. A pilot with the radio's own
---- announcement enabled therefore never hears the same event twice.
+--- `rfLinkUp` is the radio's link at that moment, and it is what keeps this out of EdgeTX's way.
+--- The radio announces a lost RF LINK itself, so that half is deliberately not ours; what is ours
+--- is the case the radio cannot see, where the link is there and the flight controller has
+--- stopped sending. A pilot with the radio's own announcement enabled therefore never hears the
+--- same event twice.
+---
+--- A caller's connection gate cannot decide it. The gate shuts when the link goes, through
+--- getRSSI() reaching zero, and the link sensors read on that pass can still show a live link
+--- for a moment longer -- which is how a plain link loss used to be announced here. And while the
+--- link stays up the gate stays open on the flight controller's last readings, so it never sees
+--- the case this is for.
 ---
 --- A drop while disarmed is a normal power-off and says nothing, so the last armed state the
---- pass saw is the gate. That state and the two flags set here outlive the reset the caller
---- does next: the reset runs at the moment of the loss, and the recovery has to survive it.
+--- pass saw is the gate. That state and the two flags set here outlive the reset a caller does
+--- when its gate shuts later on, because the recovery has to survive it.
 function Audio.announceConnectionLost(self, rfLinkUp, opts)
   if type(self) ~= "table" or type(self.audioState) ~= "table" then
     return
   end
 
   local audioState = self.audioState
-  -- Both callers reach their loss branch on more than one edge and then keep running it while
-  -- the connection is down, so everything below happens once per loss.
+  -- Asked on every pass while the frames stay away, so everything below happens once per loss.
   if audioState.connectionLostPending then
     return
   end
@@ -1318,11 +1342,13 @@ function Audio.resetConnectionState(audioState)
   audioState.mainPowerLostActive = false
   audioState.voltageLowSince = nil
   audioState.connectionSoundMissingLogged = nil
+  audioState.telemetryWatchFrom = nil
+  audioState.telemetryQuiet = nil
 
   -- `connectionLostPending`, `connectionLostAt` and `flightArmed` are deliberately NOT cleared
-  -- here. Every caller runs this function at the moment the connection goes down, which is
-  -- exactly when the loss announcement is decided and the recovery is armed; clearing them
-  -- would throw both away in the same pass that set them.
+  -- here. Every caller runs this function at the moment the connection goes down, and a flight
+  -- controller that fell silent before the link went is still owed its recovery when the link
+  -- comes back; clearing them would throw that away.
 
   if type(audioState.lastValues) == "table" then
     for k in pairs(audioState.lastValues) do
@@ -1433,10 +1459,34 @@ function Audio.process(self, opts)
     audioState.fuelSeenPositive = false
   end
 
-  -- Getting here at all is what a recovery is: both callers run this function only while their
-  -- connection gate is open. The window bounds it, so a model brought back to the bench long
-  -- after it went quiet does not open with an announcement about a flight that is over.
-  if audioState.connectionLostPending then
+  -- The flight controller's own telemetry, as the drain last saw it arrive
+  -- (tasks/events/telemetry_bg/tasks.lua). Both callers run this function only while their
+  -- connection gate is open, i.e. while the RF link is up, so frames that stay away here are a
+  -- flight controller that has stopped sending. The silence is counted from the later of the
+  -- last frame and the first pass of this connection, so a gate that has just opened is not
+  -- taken for a silence that began before it. A Lua state with no drain never stamps the time,
+  -- and then nothing is watched at all.
+  local rfSession = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local frameAt = rfSession and tonumber(rfSession.telemetryFrameAt) or nil
+  if audioState.telemetryWatchFrom == nil then
+    audioState.telemetryWatchFrom = now
+  end
+  local quiet = frameAt ~= nil
+    and (now - math.max(frameAt, audioState.telemetryWatchFrom)) >= TELEMETRY_QUIET_SECONDS
+  if quiet ~= (audioState.telemetryQuiet == true) then
+    audioState.telemetryQuiet = quiet
+    if quiet then
+      Audio.announceConnectionLost(self, rf_link_up(), opts)
+    end
+  end
+
+  -- A frame that arrived after the loss was announced is the recovery, and nothing else is: a
+  -- gate that re-opens after the link went as well can do so on the flight controller's last
+  -- readings while it is still silent. The window bounds it, so a model brought back to the
+  -- bench long after it went quiet does not open with an announcement about a flight that is
+  -- over.
+  if audioState.connectionLostPending and frameAt ~= nil
+      and frameAt > (tonumber(audioState.connectionLostAt) or 0) then
     local since = now - (tonumber(audioState.connectionLostAt) or 0)
     audioState.connectionLostPending = nil
     audioState.connectionLostAt = nil
@@ -1654,6 +1704,12 @@ function Audio.process(self, opts)
     local armed = isArmedFromState(self.state)
     if audioState.flightArmed ~= armed then
       audioState.flightArmed = armed
+      -- A safeguard: re-evaluate the silence from the next pass, so that a quiet edge spent
+      -- while disarmed cannot leave an armed model unannounced. Today the arm state arrives
+      -- only with the flight controller's frames, and the first of them has already reset the
+      -- edge above, so this changes no sequence that can happen now; it matters only if the
+      -- arm state ever reaches this function by another route.
+      audioState.telemetryQuiet = false
       if armed then
         audioState.flightTimerTriggered = false
         audioState.flightTimerStartAt = nil

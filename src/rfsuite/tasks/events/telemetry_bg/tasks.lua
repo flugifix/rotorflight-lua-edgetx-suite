@@ -58,8 +58,18 @@ function M.wakeup(carry)
     -- state, so the script has no way to compute it for this one.
     local remote = Drain and Drain.remoteAlive(now)
 
+    local popped = 0
     if Drain and not remote then
-        Drain.wakeup(now)
+        popped = Drain.wakeup(now) or 0
+    end
+
+    -- When the flight controller's own telemetry was last seen arriving: frames taken here, or
+    -- another state's drain moving, which it does only on frames it took. lib/audio.lua reads it
+    -- to hear a flight controller that has stopped sending while the RF link is still up --
+    -- the receiver's link statistics keep getRSSI() above zero then, so nothing else notices.
+    if remote or popped > 0 then
+        local session = _G.rfsuite and _G.rfsuite.session
+        if session then session.telemetryFrameAt = now end
     end
 
     -- Not on a pass the dashboard is spending on its telemetry read (`carry`, handed on by

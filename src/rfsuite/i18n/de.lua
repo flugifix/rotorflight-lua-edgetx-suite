@@ -862,7 +862,7 @@ return {
         help_message = "Ansage der Akku-Kapazitaet bei einem Wechsel des Akkuprofils und des Kraftstoffstands einmal beim Verbinden des Modells."
       },
       settings_audio_events_link = {
-        help_message = "Linkqualität: Ansage der Linkqualität, wenn sie auf eine Stufe fällt; die Erholung bleibt still, ebenso ein Empfänger, der keine meldet.\nWarnung (%), Kritisch (%): Die beiden Stufen.\nTelemetrie verloren: Ansage, wenn das scharfe Modell nicht mehr antwortet, und erneut, wenn es wieder antwortet. Braucht zwei Sounddateien, die ein Paket noch nicht haben muss.\nWiederholung, Haptisch: Wie oft die Linkqualitäts-Warnung wiederholt wird und ob der Sender vibriert (nur kritische Stufe und Telemetrie verloren)."
+        help_message = "Linkqualität: Ansage der Linkqualität, wenn sie auf eine Stufe fällt; die Erholung bleibt still, ebenso ein Empfänger, der keine meldet.\nWarnung (%), Kritisch (%): Die beiden Stufen.\nTelemetrie verloren: Ansage, wenn der Flugcontroller des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst.\nWiederholung, Haptisch: Wie oft die Linkqualitäts-Warnung wiederholt wird und ob der Sender vibriert (nur kritische Stufe und Telemetrie verloren)."
       },
       settings_audio_events_other = {
         help_message = "Ansage des Modellnamens beim Verbinden. Die Ansage ist eine WAV-Datei mit dem Namen des Modells im Ordner SOUNDS."

@@ -1783,14 +1783,9 @@ local function updateConnectionState(self)
       -- Open, and shut again: from here on there is something to steady and the hold is paid.
       if wasReady then self.everReady = true end
       widgetLog(self, "FBL not ready yet", "info")
-      -- Whether the radio still has the model's telemetry at this moment, taken from the three
-      -- instantaneous sensor tests rather than from the latches built out of them: it is what
-      -- tells a lost RF link, which the radio announces itself, from a flight controller that
-      -- has stopped answering with the link still up. Announced before the reset below, which
-      -- clears the state that decision is made on.
-      if self.audioState and DashboardAudio and type(DashboardAudio.announceConnectionLost) == "function" then
-        DashboardAudio.announceConnectionLost(self, (hasLq or hasRss1 or hasRss2) == true, self._audioOpts)
-      end
+      -- Nothing is announced here. The gate shuts on `connected`, i.e. on the RF link, and a lost
+      -- link is the radio's own announcement; a flight controller that stops sending with the
+      -- link up never shuts it, and lib/audio.lua hears that case from the telemetry frames.
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       elseif self.audioState then

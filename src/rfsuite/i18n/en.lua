@@ -862,7 +862,7 @@ return {
         help_message = "Announce the battery capacity when the battery profile changes, and the fuel level once when the model connects."
       },
       settings_audio_events_link = {
-        help_message = "Link Quality: speaks the link quality when it falls to a level; recovering is silent, and so is a receiver that reports none.\nWarning (%), Critical (%): the two levels.\nTelemetry Lost: speaks when the armed model stops answering, and again when it answers. Needs two sound files a pack may not carry yet.\nRepeat, Haptic: how often the link quality alert repeats, and whether the transmitter vibrates (critical level and Telemetry Lost only)."
+        help_message = "Link Quality: speaks the link quality when it falls to a level; recovering is silent, and so is a receiver that reports none.\nWarning (%), Critical (%): the two levels.\nTelemetry Lost: speaks when the armed model's flight controller stops sending with the link up, and again when it is back. A lost link is the radio's own call.\nRepeat, Haptic: how often the link quality alert repeats, and whether the transmitter vibrates (critical level and Telemetry Lost only)."
       },
       settings_audio_events_other = {
         help_message = "Announce the model's name when it connects. The announcement is a WAV file named after the model in the SOUNDS folder."
