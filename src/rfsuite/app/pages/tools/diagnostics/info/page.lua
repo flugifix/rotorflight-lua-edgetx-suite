@@ -90,7 +90,12 @@ local state = {
   loadingStartedAt = 0,
   loadingTimeoutSec = 12,
   refreshIntervalSec = 45,
-  packetRateRefreshSec = 1.2,
+  -- Packet Ratio is crsf_telemetry_link_ratio out of MSP_TELEMETRY_CONFIG: a stored setting,
+  -- which the firmware reads once when it sets up CRSF telemetry at boot, not a statistic of
+  -- the live link. Nothing in the suite can write it while this page is open, so the re-read
+  -- below only exists to pick up a change made by another client, such as a configurator on
+  -- USB, and it does that at the page's refresh interval rather than once a second.
+  packetRateRefreshSec = 45,
   lastFetchAt = 0,
   lastPacketRateFetchAt = 0,
   packetRateRequestPending = false,
@@ -486,6 +491,9 @@ local function startLiveLoad()
     errorHandler = function() onFailure("BUILD_INFO", BuildInfoApi.command) end
   })
 
+  -- The re-read counts its interval from this read. Left at 0, it would ask for the same
+  -- message again on the first wakeup after the load had finished.
+  state.lastPacketRateFetchAt = now
   queue:add({
     client = "info-page",
     command = TelemetryConfigApi.command,
@@ -525,7 +533,9 @@ local function pollPacketRateLive()
     state.packetRateRequestPending = false
     return
   end
-  if state.loading then
+  -- The page's own load reads the value first. Until it has started, the timestamp is still 0
+  -- and a re-read here would only send the message the load is about to send.
+  if state.loading or not state.started then
     return
   end
 
@@ -533,7 +543,7 @@ local function pollPacketRateLive()
   if state.packetRateRequestPending then
     return
   end
-  if (now - (state.lastPacketRateFetchAt or 0)) < (state.packetRateRefreshSec or 1.2) then
+  if (now - (state.lastPacketRateFetchAt or 0)) < (state.packetRateRefreshSec or 45) then
     return
   end
 
