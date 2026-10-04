@@ -3298,8 +3298,10 @@ function M.run(event, touchState)
       -- further down step aside to the next pass rather than land in the same call -- their
       -- timers are not advanced, so they run one pass late and nothing is dropped. Only once in
       -- a row: on a second build in succession they run, so a screen that rebuilds on every pass
-      -- still gets them on every other one.
-      deferBackground = not state.backgroundDeferred
+      -- still gets them on every other one. The start screen is left out: it rebuilds on every
+      -- step of the connection, and holding the MSP tick back there would slow the very chain it
+      -- is waiting for.
+      deferBackground = not state.backgroundDeferred and not state.initialLoad
     end
     state.backgroundDeferred = deferBackground
 
