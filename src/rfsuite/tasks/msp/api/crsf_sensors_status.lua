@@ -68,7 +68,9 @@ end
 -- Returns nil for a reply shorter than its own counts say it is, and for one whose walk does not
 -- end where the layout above says it must -- a wrong field width in this file shows up there
 -- rather than as a plausible wrong value. Bytes past the end are kept as a count and otherwise
--- ignored, so a field appended by a later firmware does not blank the page.
+-- ignored, so a field appended by a later firmware does not blank the page. A payload version
+-- other than 1 also returns nil: a firmware that reorders or re-widths the record would
+-- otherwise decode into plausible wrong numbers.
 function Api.parse(buf)
   if type(buf) ~= "table" then return nil end
   local length = #buf
@@ -78,6 +80,7 @@ function Api.parse(buf)
   local pos = 1
 
   out.version = readUnsigned(buf, pos, 1); pos = pos + 1
+  if out.version ~= 1 then return nil end
   out.enabled = readUnsigned(buf, pos, 1) ~= 0; pos = pos + 1
   out.rx_bytes = readUnsigned(buf, pos, 4); pos = pos + 4
   out.rx_sync = readUnsigned(buf, pos, 4); pos = pos + 4

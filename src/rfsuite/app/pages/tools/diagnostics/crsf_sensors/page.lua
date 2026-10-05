@@ -199,8 +199,13 @@ local function requestStatus(now)
     processReply = function(_, buf)
       if generation ~= state.generation then return end
       state.pending = false
-      if type(buf) ~= "table" or #buf < StatusApi.fixedLength then
-        applyAnswer("unsupported", nil)
+      -- The error reply of a firmware without the command is exactly one byte. Any other short
+      -- reply is a damaged one: it is reported, and the next poll asks again.
+      if type(buf) ~= "table" or #buf < 1 then
+        applyAnswer("no_reply", nil)
+        return
+      elseif #buf < StatusApi.fixedLength then
+        applyAnswer(#buf == 1 and "unsupported" or "bad_reply", nil)
         return
       end
       local parsed = StatusApi.parse(buf)
