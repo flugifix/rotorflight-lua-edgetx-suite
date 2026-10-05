@@ -14,7 +14,6 @@ local SavePipeline = nil
 local Common = nil
 local MspRuntime = nil
 local SerialConfigApi = nil
-local RxConfigApi = nil
 local BoardInfoApi = nil
 local PortLabels = nil
 local ApiVersion = nil
@@ -81,7 +80,6 @@ local ui = {
   dirty = false,
   portsOriginal = {},
   portsWorking = {},
-  rxSerialProvider = 0,
   boardDesign = nil,
   runtime = newRuntime(),
   loading = false,
@@ -99,7 +97,6 @@ local function ensureDeps()
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not SerialConfigApi then SerialConfigApi = loadModule("tasks/msp/api/serial_config.lua") end
-  if not RxConfigApi then RxConfigApi = loadModule("tasks/msp/api/rx_config.lua") end
   if not BoardInfoApi then BoardInfoApi = loadModule("tasks/msp/api/board_info.lua") end
   if not PortLabels then PortLabels = loadModule("lib/port_labels.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
@@ -353,7 +350,6 @@ local function loadFromSession()
     ui.portsOriginal = clonePorts(saved.ports)
     ui.portsWorking = clonePorts(saved.ports)
   end
-  ui.rxSerialProvider = tonumber(saved.rxSerialProvider) or 0
   ui.boardDesign = saved.boardDesign
 end
 
@@ -364,13 +360,12 @@ local function saveToSession()
     session.setup_ports = {}
   end
   session.setup_ports.ports = clonePorts(ui.portsWorking)
-  session.setup_ports.rxSerialProvider = ui.rxSerialProvider
   session.setup_ports.boardDesign = ui.boardDesign
 end
 
 local function queuePortsRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
-  if not MspRuntime or not SerialConfigApi or not RxConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not MspRuntime or not SerialConfigApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
 
@@ -397,13 +392,13 @@ local function queuePortsRead(isAutoReload)
     end
   end
 
-  -- The third and last read, queued once the two below have answered: MSP_BOARD_INFO, which is
+  -- The second and last read, queued once the one below has answered: MSP_BOARD_INFO, which is
   -- what tells this page which board it is talking to and so what that board calls its sockets.
   --
   -- A failure here ends the read the same way a success does. A board that does not answer the
   -- command, or answers with a design nothing is known about, leaves every row with its plain
   -- UART name -- which is what this page showed before it asked at all, and is not a reason to
-  -- withhold the port configuration the two reads before it already have.
+  -- withhold the port configuration the read before it already has.
   local function queueBoardInfoRead()
     if not BoardInfoApi then
       ui.progress = 100
@@ -461,35 +456,13 @@ local function queuePortsRead(isAutoReload)
         saveToSession()
       end
 
-      -- Step 2: Read RX_CONFIG
-      ui.progress = 33
+      ui.dirty = false
+      ui.progress = 50
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
 
-      queue:add({
-        command = RxConfigApi.command,
-        simulatorResponse = RxConfigApi.simulatorResponse,
-        processReply = function(self2, buf2)
-          local parsed2 = RxConfigApi.parse(buf2)
-          if parsed2 then
-            ui.rxSerialProvider = tonumber(parsed2.serialrx_provider) or 0
-            saveToSession()
-          end
-
-          ui.dirty = false
-          ui.progress = 66
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-
-          queueBoardInfoRead()
-        end,
-        errorHandler = function()
-          ui.progress = 66
-          queueBoardInfoRead()
-        end
-      })
+      queueBoardInfoRead()
     end,
     errorHandler = function()
       ui.runtime.readPending = false
@@ -844,7 +817,6 @@ function M.onClose()
   Common = nil
   MspRuntime = nil
   SerialConfigApi = nil
-  RxConfigApi = nil
   BoardInfoApi = nil
   PortLabels = nil
   ApiVersion = nil
