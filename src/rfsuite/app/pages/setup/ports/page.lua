@@ -21,6 +21,9 @@ local ApiVersion = nil
 local LoadingOverlay = nil
 local t = nil
 local portFunctions = nil
+local portFunctionsById = nil
+local availableFunctions = nil
+local availableFunctionsKey = nil
 
 local PORT_TYPE_DISABLED = 0
 local PORT_TYPE_MSP = 1
@@ -141,15 +144,16 @@ local function getPortFunctionsList(i18n)
     {id = 512, excl = 4668, name = pageText(i18n, "function_telem_mavlink", "Telemetry MAVLink"), type = PORT_TYPE_MAVLINK},
     {id = 16, excl = 4668, name = pageText(i18n, "function_telem_ltm", "Telemetry LTM"), type = PORT_TYPE_TELEM}
   }
+  portFunctionsById = {}
+  for i = 1, #portFunctions do
+    portFunctionsById[portFunctions[i].id] = portFunctions[i]
+  end
   return portFunctions
 end
 
 local function getPortFunctionById(i18n, functionMask)
-  local list = getPortFunctionsList(i18n)
-  for i = 1, #list do
-    if list[i].id == functionMask then return list[i] end
-  end
-  return nil
+  getPortFunctionsList(i18n)
+  return portFunctionsById[functionMask]
 end
 
 local function getPortType(i18n, functionMask)
@@ -178,6 +182,32 @@ local function functionAvailable(def)
     end
   end
   return true
+end
+
+local function apiVersionKey(raw)
+  if type(raw) == "table" then
+    return tostring(raw[1]) .. "." .. tostring(raw[2]) .. "." .. tostring(raw[3])
+  end
+  return tostring(raw)
+end
+
+-- The functions this flight controller's API version offers. Which of them are available
+-- depends on the version alone, so the list is filtered once and reused by every row, rather
+-- than every row asking the version about every function. It is filtered again if the version
+-- it was made for changes, because a page opened before the version is known offers everything.
+local function getAvailableFunctions(i18n)
+  local session = getSession()
+  local key = apiVersionKey(session and session.apiVersion)
+  if availableFunctions and availableFunctionsKey == key then return availableFunctions end
+  local list = getPortFunctionsList(i18n)
+  availableFunctions = {}
+  for i = 1, #list do
+    if functionAvailable(list[i]) then
+      availableFunctions[#availableFunctions + 1] = list[i]
+    end
+  end
+  availableFunctionsKey = key
+  return availableFunctions
 end
 
 local function getActiveBaudIndex(i18n, port)
@@ -230,29 +260,39 @@ local function buildBaudChoiceTable(i18n, port)
   return tableData
 end
 
-local function buildFunctionChoiceTable(i18n, portIndex)
+-- For each port, the functions the OTHER ports hold exclusively. Asked once per build: each
+-- port's exclusivity mask is looked up once, and a row combines the others' masks.
+local function getForbiddenMasks(i18n)
+  local excls = {}
+  local count = #ui.portsWorking
+  for i = 1, count do
+    excls[i] = getPortExcl(i18n, ui.portsWorking[i].function_mask)
+  end
+  local forbidden = {}
+  for i = 1, count do
+    local mask = 0
+    for j = 1, count do
+      if j ~= i then mask = mask | excls[j] end
+    end
+    forbidden[i] = mask
+  end
+  return forbidden
+end
+
+local function buildFunctionChoiceTable(i18n, portIndex, forbidden)
   local port = ui.portsWorking[portIndex]
   if not port then return {} end
 
-  local forbidden = 0
-  for i = 1, #ui.portsWorking do
-    if i ~= portIndex then
-      forbidden = forbidden | getPortExcl(i18n, ui.portsWorking[i].function_mask)
-    end
-  end
-
   local tableData = {}
   local seen = {}
-  local list = getPortFunctionsList(i18n)
+  local list = getAvailableFunctions(i18n)
 
   for i = 1, #list do
     local def = list[i]
-    if functionAvailable(def) then
-      local allowed = ((def.id & forbidden) == 0)
-      if allowed or def.id == port.function_mask then
-        tableData[#tableData + 1] = {def.name, def.id}
-        seen[def.id] = true
-      end
+    local allowed = ((def.id & forbidden) == 0)
+    if allowed or def.id == port.function_mask then
+      tableData[#tableData + 1] = {def.name, def.id}
+      seen[def.id] = true
     end
   end
 
@@ -530,7 +570,7 @@ local function ensureLoaded()
   queuePortsRead(false)
 end
 
-local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n)
+local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n, forbidden)
   local rowH = (Controls and Controls.ROW_H) or 64
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local comboY = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
@@ -556,7 +596,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
   }
 
   -- Build choice labels/values for function select
-  local functionChoices = buildFunctionChoiceTable(i18n, portIndex)
+  local functionChoices = buildFunctionChoiceTable(i18n, portIndex, forbidden)
   local functionFieldValues = {}
   local selectedFunctionIndex = 1
   for idx, opt in ipairs(functionChoices) do
@@ -741,6 +781,7 @@ function M.build(ctx)
     return
   end
 
+  local forbidden = getForbiddenMasks(i18n)
   for i = 1, #ui.portsWorking do
     local port = ui.portsWorking[i]
     local lineTitle = portLabel(port.identifier)
@@ -748,7 +789,7 @@ function M.build(ctx)
       lineTitle = lineTitle .. " " .. pageText(i18n, "rx_tag", "[RX]")
     end
 
-    cursorY = cursorY + appendPortRow(children, x, cursorY, w, lineTitle, port, i, i18n)
+    cursorY = cursorY + appendPortRow(children, x, cursorY, w, lineTitle, port, i, i18n, forbidden[i])
   end
 end
 
@@ -810,6 +851,9 @@ function M.onClose()
   LoadingOverlay = nil
   t = nil
   portFunctions = nil
+  portFunctionsById = nil
+  availableFunctions = nil
+  availableFunctionsKey = nil
 end
 
 return M
