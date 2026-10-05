@@ -480,7 +480,10 @@ end
 
 function M.onClose()
   Common.resetPageState(ui)
-  ui.themes = nil
+  -- The theme list is kept: listing it loads every theme's init.lua and looks for its icon, and
+  -- the library's own cache goes with the library below, so dropping it here made every visit
+  -- list the theme folders again. They are listed again once the registry drops this module,
+  -- or by M.onReload.
   Controls = nil
   Common = nil
   DashboardLib = nil
