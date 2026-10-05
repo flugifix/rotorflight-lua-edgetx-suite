@@ -534,7 +534,9 @@ local function queuePortsWrite()
         -- rather than kept from before the save: a port the firmware refused, or a configuration
         -- it reset at the EEPROM write, then shows as the board holds it. A page closed before
         -- the save finished reads the ports when it is opened again instead.
-        queuePortsRead(false)
+        -- Read as an automatic reload: the rows stay on screen and are replaced when the board
+        -- answers, instead of giving way to the loading screen once the save notice clears.
+        queuePortsRead(true)
       end
       if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
