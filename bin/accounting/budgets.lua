@@ -12,8 +12,8 @@
 -- where it differs from `target` the report says so on every run, so a re-apportioned
 -- budget can never pass for the original one.
 --
--- Adding a box type or a theme means adding its row here, measured rather than estimated:
--- `lua5.3 bin/accounting/measure.lua --emit` prints the table body of a run.
+-- Adding a box type, a theme or a tool page means adding its row here, measured rather than
+-- estimated: `lua5.3 bin/accounting/measure.lua --emit` prints the table body of a run.
 
 return {
   -- The cost of one call through the empty-closure loop the sweep is replayed in,
@@ -246,5 +246,112 @@ return {
     -- The API-layer parse of the largest reply the suite scripts, in one piece. It
     -- lands in whatever pass completes the reassembly.
     ["unit.msp.parse.max"] = { target = 2750, measured = 2175 },
+
+    ----------------------------------------------------------------------------
+    -- The tool's pages, as the dashboard hosts them: the instructions inside one page
+    -- module's build, the dearest build of one open. widgets/dashboard/tool_host.lua runs
+    -- ui/home.lua inside the widget call, so these builds are billed against the same
+    -- 20 000 as every row above; the tool script is not, and has no rows here.
+    --
+    -- Measured on src/, like every other row. On src/ a page resolves its strings at run
+    -- time through pageText(), and the packaged tool has them resolved at build time, so
+    -- these figures read higher than the radio pays: by 0 to 225 % (median 15 %) per page
+    -- on the English package built from the same tree. Read them as regression figures for
+    -- the source as written, not as the shipped cost.
+    --
+    -- The targets are what --emit suggests for a new row -- the measurement plus 20 %,
+    -- rounded up to 50 -- and never above the 20 000 a call is stopped at for a page that is
+    -- below it. Three pages are above it with their build alone, on src/ and on the package
+    -- both: a build that does not fit in one call does not finish hosted however often it
+    -- is tried. Those three carry their --emit figure as the target, so the check is green
+    -- today, and 20 000 in `proposed`, so every run prints that they sit above it. How the
+    -- 20 000 is to be shared between a page's build and the rest of the pass that builds it
+    -- is not decided by these rows.
+    --
+    -- A page that cannot be opened in the run's world -- no menu leads to it, its tile is
+    -- disabled, or it has no build of its own -- has no row, and the report names it.
+    ["page.developer_api_tester_page.build"] = { target = 2100, measured = 1669 },
+    ["page.developer_msp_experiments_page.build"] = { target = 5600, measured = 4448 },
+    ["page.developer_msp_speed_page.build"] = { target = 4150, measured = 3318 },
+    ["page.developer_settings_page.build"] = { target = 3250, measured = 2593 },
+    ["page.diagnostics_elrs_link_page.build"] = { target = 4400, measured = 3502 },
+    ["page.diagnostics_fblstatus_page.build"] = { target = 6300, measured = 5023 },
+    ["page.diagnostics_info_page.build"] = { target = 7250, measured = 5783 },
+    ["page.diagnostics_rfstatus_page.build"] = { target = 7750, measured = 6162 },
+    ["page.diagnostics_session_logs_page.build"] = { target = 3700, measured = 2942 },
+    ["page.diagnostics_smartfuel_page.build"] = { target = 9000, measured = 7194 },
+    ["page.diagnostics_validate_sensors_page.build"] = { target = 10650, measured = 8502 },
+    ["page.flight_tuning_advanced_autolevel_page.build"] = { target = 5150, measured = 4107 },
+    ["page.flight_tuning_advanced_filters_page.build"] = { target = 8550, measured = 6827 },
+    ["page.flight_tuning_advanced_main_rotor_page.build"] = { target = 5250, measured = 4169 },
+    ["page.flight_tuning_advanced_pid_bandwidth_page.build"] = { target = 5250, measured = 4169 },
+    ["page.flight_tuning_advanced_pid_controller_page.build"] = { target = 5400, measured = 4287 },
+    ["page.flight_tuning_advanced_rates_advanced_advanced_page.build"] = { target = 5150, measured = 4095 },
+    ["page.flight_tuning_advanced_rates_advanced_cyclic_behaviour_page.build"] = { target = 5050, measured = 4039 },
+    ["page.flight_tuning_advanced_rates_advanced_table_page.build"] = { target = 5000, measured = 3977 },
+    ["page.flight_tuning_advanced_rescue_page.build"] = { target = 5500, measured = 4390 },
+    ["page.flight_tuning_advanced_tail_rotor_page.build"] = { target = 5750, measured = 4600 },
+    ["page.flight_tuning_governor_page.build"] = { target = 8650, measured = 6907 },
+    ["page.flight_tuning_pids_page.build"] = { target = 6300, measured = 5013 },
+    ["page.flight_tuning_rates_page.build"] = { target = 5000, measured = 3998 },
+    ["page.logs_page.build"] = { target = 3600, measured = 2875 },
+    ["page.settings_audio_events_adjustment_page.build"] = { target = 2300, measured = 1805 },
+    ["page.settings_audio_events_arming_page.build"] = { target = 2300, measured = 1802 },
+    ["page.settings_audio_events_battery_page.build"] = { target = 2650, measured = 2103 },
+    ["page.settings_audio_events_esc_page.build"] = { target = 6000, measured = 4766 },
+    ["page.settings_audio_events_fuel_page.build"] = { target = 5550, measured = 4434 },
+    ["page.settings_audio_events_governor_page.build"] = { target = 6300, measured = 5010 },
+    ["page.settings_audio_events_link_page.build"] = { target = 5750, measured = 4573 },
+    ["page.settings_audio_events_other_page.build"] = { target = 2300, measured = 1805 },
+    ["page.settings_audio_events_profiles_page.build"] = { target = 2650, measured = 2103 },
+    ["page.settings_audio_events_voltage_page.build"] = { target = 6100, measured = 4877 },
+    ["page.settings_audio_volume_page.build"] = { target = 2100, measured = 1674 },
+    ["page.settings_dashboard_inflight_page.build"] = { target = 10200, measured = 8152 },
+    ["page.settings_dashboard_theme_page.build"] = { target = 13250, measured = 10585 },
+    ["page.settings_general_page.build"] = { target = 2200, measured = 1747 },
+    ["page.settings_localization_page.build"] = { target = 2350, measured = 1878 },
+    ["page.setup_accelerometer_page.build"] = { target = 4050, measured = 3240 },
+    ["page.setup_alignment_page.build"] = { target = 20000, measured = 16113 },
+    ["page.setup_configuration_page.build"] = { target = 4300, measured = 3427 },
+    ["page.setup_controls_adjustments_page.build"] = { target = 19250, measured = 15379 },
+    ["page.setup_controls_beepers_configuration_page.build"] = { target = 6450, measured = 5147 },
+    ["page.setup_controls_beepers_dshot_page.build"] = { target = 3450, measured = 2727 },
+    ["page.setup_controls_blackbox_configuration_page.build"] = { target = 5600, measured = 4476 },
+    ["page.setup_controls_blackbox_logging_page.build"] = { target = 7050, measured = 5620 },
+    ["page.setup_controls_blackbox_status_page.build"] = { target = 3800, measured = 3007 },
+    ["page.setup_controls_failsafe_page.build"] = { target = 6750, measured = 5396 },
+    ["page.setup_controls_inflight_page.build"] = { target = 9950, measured = 7930 },
+    ["page.setup_controls_modes_page.build"] = { target = 4650, measured = 3703 },
+    ["page.setup_controls_stats_page.build"] = { target = 3750, measured = 2964 },
+    ["page.setup_esc_motors_motor_override_page.build"] = { target = 3850, measured = 3047 },
+    ["page.setup_esc_motors_rpm_page.build"] = { target = 4400, measured = 3510 },
+    ["page.setup_esc_motors_telemetry_page.build"] = { target = 4000, measured = 3190 },
+    ["page.setup_esc_motors_throttle_page.build"] = { target = 4250, measured = 3379 },
+    ["page.setup_governor_curves_page.build"] = { target = 3850, measured = 3070 },
+    ["page.setup_governor_filters_page.build"] = { target = 3550, measured = 2833 },
+    ["page.setup_governor_general_page.build"] = { target = 4000, measured = 3177 },
+    ["page.setup_governor_time_page.build"] = { target = 3550, measured = 2833 },
+    ["page.setup_gps_page.build"] = { target = 3950, measured = 3158 },
+    ["page.setup_mixer_swash_page.build"] = { target = 4500, measured = 3565 },
+    ["page.setup_mixer_swashgeometry_page.build"] = { target = 4650, measured = 3688 },
+    ["page.setup_mixer_tail_page.build"] = { target = 4150, measured = 3315 },
+    ["page.setup_mixer_trims_page.build"] = { target = 3900, measured = 3083 },
+    ["page.setup_model_page.build"] = { target = 5350, measured = 4272 },
+    ["page.setup_ports_page.build"] = { target = 34300, measured = 27401, proposed = 20000 },
+    ["page.setup_power_alerts_page.build"] = { target = 4200, measured = 3346 },
+    ["page.setup_power_battery_page.build"] = { target = 14350, measured = 11456 },
+    ["page.setup_power_preferences_page.build"] = { target = 4800, measured = 3823 },
+    ["page.setup_power_smartfuel_page.build"] = { target = 5600, measured = 4466 },
+    ["page.setup_power_sources_page.build"] = { target = 4800, measured = 3839 },
+    ["page.setup_radio_config_page.build"] = { target = 3950, measured = 3139 },
+    ["page.setup_servos_bus_page.build"] = { target = 7800, measured = 6206 },
+    ["page.setup_servos_pwm_page.build"] = { target = 5950, measured = 4750 },
+    ["page.setup_telemetry_page.build"] = { target = 15550, measured = 12427 },
+    ["page.setup_wizard_board_page.build"] = { target = 17600, measured = 14070 },
+    ["page.setup_wizard_page.build"] = { target = 54800, measured = 43805, proposed = 20000 },
+    ["page.setup_wizard_radio_page.build"] = { target = 41200, measured = 32957, proposed = 20000 },
+    ["page.tools_copy_profiles_page.build"] = { target = 3300, measured = 2635 },
+    ["page.tools_flight_log_page.build"] = { target = 3250, measured = 2574 },
+    ["page.tools_select_profile_page.build"] = { target = 4200, measured = 3323 },
   },
 }
