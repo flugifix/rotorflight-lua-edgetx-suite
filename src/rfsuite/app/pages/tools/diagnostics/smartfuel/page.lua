@@ -198,7 +198,7 @@ local function requestData()
     return false 
   end
   
-  widgetLog("requestData: starting load", "info")
+  widgetLog("requestData: starting load")
   state.loading = true
   state.tasksTotal = 2
   state.tasksDone = 0
@@ -211,7 +211,7 @@ local function requestData()
     if state.tasksDone >= state.tasksTotal then
       state.loading = false
       state.progress = 1
-      widgetLog("requestData: finished", "info")
+      widgetLog("requestData: finished")
     end
     if type(state.requestRebuild) == "function" then
       state.requestRebuild()
