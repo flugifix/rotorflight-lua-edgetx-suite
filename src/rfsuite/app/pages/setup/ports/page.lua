@@ -528,6 +528,12 @@ local function queuePortsWrite()
     onDone = function(result)
       if result.status ~= "done" then
         ui.dirty = true
+      elseif ui.loaded and type(ui.runtime) == "table" then
+        -- The board has restarted and answers again, so what the rows show next is read from it
+        -- rather than kept from before the save: a port the firmware refused, or a configuration
+        -- it reset at the EEPROM write, then shows as the board holds it. A page closed before
+        -- the save finished reads the ports when it is opened again instead.
+        queuePortsRead(false)
       end
       if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
