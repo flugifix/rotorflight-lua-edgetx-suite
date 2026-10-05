@@ -21,6 +21,10 @@
 -- returns nil for it. The read is queued with completeOnErrorReplyAttempt = 1 so that the
 -- error reply reaches processReply at all; without it the queue retries and reports the
 -- refusal exactly like a lost link.
+--
+-- A reply whose payload version is not 1 is not read either, and parse returns nil for it too:
+-- a later firmware that reorders or re-widths the record would otherwise decode into plausible
+-- wrong numbers, and the advice would be built from them.
 
 local Api = {
   command = 0x5F10,      -- MSP2_GET_TUNE_ADVISOR
@@ -51,8 +55,8 @@ local function ratio(buf, i)
   return s16(buf, i) / 1000
 end
 
---- The decoded record, or nil when the reply is not one (the refusal of an older firmware).
---- axis is 1-based (1 roll, 2 pitch, 3 yaw).
+--- The decoded record, or nil when the reply is not one (the refusal of an older firmware, or
+--- a payload version this file does not know). axis is 1-based (1 roll, 2 pitch, 3 yaw).
 function Api.parse(buf)
   if type(buf) ~= "table" or #buf < REPLY_BYTES then return nil end
 
@@ -65,7 +69,7 @@ function Api.parse(buf)
     return out
   end
 
-  return {
+  local out = {
     version = u8(buf, 1),
     collecting = u8(buf, 2) ~= 0,
     seconds = u16(buf, 3),
@@ -96,6 +100,8 @@ function Api.parse(buf)
       meanIterm = ratio(buf, 66),
     }
   }
+  if out.version ~= 1 then return nil end
+  return out
 end
 
 -- Simulator fixture, one reply per axis (Actual rates, centre 360, max 720): cyclic turning
