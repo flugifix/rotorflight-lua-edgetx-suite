@@ -589,7 +589,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
     type  = "choice",
     x = xFunc, y = comboY,
     w = wFunc,
-    title = pageText(i18n, "title", "Ports"),
+    title = lineTitle,
     values = functionFieldValues,
     active = function() return not port.receiver_locked end,
     get = function()
@@ -650,7 +650,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
     type  = "choice",
     x = xBaud, y = comboY,
     w = wBaud,
-    title = pageText(i18n, "title", "Ports"),
+    title = lineTitle,
     values = baudFieldValues,
     active = function() return not port.receiver_locked end,
     get = function()
