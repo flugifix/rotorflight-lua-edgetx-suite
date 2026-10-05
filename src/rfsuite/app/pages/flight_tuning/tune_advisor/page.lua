@@ -171,24 +171,24 @@ end
 -- row and column it sends the pilot to, in every language those pages are translated into.
 local function loadTexts(i18n)
   local pidsAxis = {
-    Common.t(i18n, "flight_tuning_pids", "roll", "Roll"),
-    Common.t(i18n, "flight_tuning_pids", "pitch", "Pitch"),
-    Common.t(i18n, "flight_tuning_pids", "yaw", "Yaw")
+    "@i18n(app.pages.flight_tuning_pids.roll)@",
+    "@i18n(app.pages.flight_tuning_pids.pitch)@",
+    "@i18n(app.pages.flight_tuning_pids.yaw)@"
   }
   local ratesAxis = {
-    Common.t(i18n, "flight_tuning_rates", "roll", "Roll"),
-    Common.t(i18n, "flight_tuning_rates", "pitch", "Pitch"),
-    Common.t(i18n, "flight_tuning_rates", "yaw", "Yaw")
+    "@i18n(app.pages.flight_tuning_rates.roll)@",
+    "@i18n(app.pages.flight_tuning_rates.pitch)@",
+    "@i18n(app.pages.flight_tuning_rates.yaw)@"
   }
   local controllerAxis = {
-    Common.t(i18n, "flight_tuning_advanced_pid_controller", "roll", "Roll"),
-    Common.t(i18n, "flight_tuning_advanced_pid_controller", "pitch", "Pitch"),
-    Common.t(i18n, "flight_tuning_advanced_pid_controller", "yaw", "Yaw")
+    "@i18n(app.pages.flight_tuning_advanced_pid_controller.roll)@",
+    "@i18n(app.pages.flight_tuning_advanced_pid_controller.pitch)@",
+    "@i18n(app.pages.flight_tuning_advanced_pid_controller.yaw)@"
   }
-  local centerSens = Common.t(i18n, "flight_tuning_rates", "center_sensitivity", "Center Sens")
-  local maxRate = Common.t(i18n, "flight_tuning_rates", "max_rate", "Max Rate")
-  local rcRate = Common.t(i18n, "flight_tuning_rates", "rc_rate", "RC Rate")
-  local rate = Common.t(i18n, "flight_tuning_rates", "rate", "Rate")
+  local centerSens = "@i18n(app.pages.flight_tuning_rates.center_sensitivity)@"
+  local maxRate = "@i18n(app.pages.flight_tuning_rates.max_rate)@"
+  local rcRate = "@i18n(app.pages.flight_tuning_rates.rc_rate)@"
+  local rate = "@i18n(app.pages.flight_tuning_rates.rate)@"
 
   return {
     pageTitle = "@i18n(app.modules.tune_advisor.name)@",
@@ -228,13 +228,13 @@ local function loadTexts(i18n)
     whyUneven = pageText(i18n, "why_uneven", "The response varies too much to judge. Common in 3D."),
     whyFast = pageText(i18n, "why_fast", "The heli turns faster than the stick asks for."),
     whySlow = pageText(i18n, "why_slow", "The heli turns slower than the stick asks for."),
-    whyKeepFeel = pageText(i18n, "why_keep_feel", "Changing F and the rates together keeps the stick feel."),
-    whyNoF = pageText(i18n, "why_no_f", "This axis has no F, so its PID gains set the response."),
+    whyKeepFeel = pageText(i18n, "why_keep_feel", "Changing FF and the rates together keeps the stick feel."),
+    whyNoF = pageText(i18n, "why_no_f", "This axis has no FF, so its PID gains set the response."),
     whyFullFmt = pageText(i18n, "why_full_fmt", "Full stick asks %d deg/s but the heli tops out at %d."),
     whyCollHighFmt = pageText(i18n, "why_coll_high_fmt", "It turns %d%% faster at high collective than at low."),
     whyCollLowFmt = pageText(i18n, "why_coll_low_fmt", "It turns %d%% faster at low collective than at high."),
     whyRelax = pageText(i18n, "why_relax", "After a stop, the I-term pushes the heli back."),
-    whyFixFFmt = pageText(i18n, "why_fix_f_fmt", "Stops bounce back %d%%. Fix F first, then check again."),
+    whyFixFFmt = pageText(i18n, "why_fix_f_fmt", "Stops bounce back %d%%. Fix FF first, then check again."),
     whyBrakeFmt = pageText(i18n, "why_brake_fmt", "Stops bounce back %d%%. More P brakes them (or add B)."),
     whyOk = pageText(i18n, "why_ok", "The heli answers the stick as asked."),
 
@@ -246,9 +246,9 @@ local function loadTexts(i18n)
     pidsAxis = pidsAxis,
     ratesAxis = ratesAxis,
     controllerAxis = controllerAxis,
-    pidsP = Common.t(i18n, "flight_tuning_pids", "p", "P"),
-    pidsF = Common.t(i18n, "flight_tuning_pids", "f", "FF"),
-    cutoff = Common.t(i18n, "flight_tuning_advanced_pid_controller", "cutoff_point", "Cut-off point"),
+    pidsP = "@i18n(app.pages.flight_tuning_pids.p)@",
+    pidsF = "@i18n(app.pages.flight_tuning_pids.f)@",
+    cutoff = "@i18n(app.pages.flight_tuning_advanced_pid_controller.cutoff_point)@",
     rateColumns = {
       [RATE_TYPE_ACTUAL] = { rcRate = centerSens, srate = maxRate },
       [RATE_TYPE_QUICK] = { rcRate = rcRate, srate = maxRate },
