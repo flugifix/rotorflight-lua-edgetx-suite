@@ -13,9 +13,17 @@ local M = {}
 
 local DEBUG_PREFIX = "[dashboard.theme.page] "
 
-local function debugLog(message)
-  if Log and type(Log.emit) == "function" then
-    Log.emit("dashboard.theme.page", DEBUG_PREFIX .. tostring(message), "debug")
+-- Whether a debug line would be written, asked once where the page builds or reloads, so that a
+-- line is formatted only when the log level lets it out. The callers hand over the pieces.
+local debugOn = false
+
+local function refreshDebug()
+  debugOn = Log ~= nil and type(Log.wanted) == "function" and Log.wanted("debug") == true
+end
+
+local function debugLog(fmt, ...)
+  if debugOn and Log then
+    Log.emit("dashboard.theme.page", DEBUG_PREFIX .. string.format(fmt, ...), "debug")
   end
 end
 
@@ -63,7 +71,7 @@ end
 local function refreshThemes(forceRefresh)
   ensureDeps()
   ui.themes = DashboardLib.listThemes(forceRefresh == true)
-  debugLog("refreshThemes count=" .. tostring(ui.themes and #ui.themes or 0))
+  debugLog("refreshThemes count=%s", ui.themes and #ui.themes or 0)
 end
 
 -- Every selection except the general theme may legitimately be unset: a per-model theme that
@@ -292,6 +300,7 @@ end
 
 function M.onReload(ctx)
   ensureDeps()
+  refreshDebug()
   ui.loaded = false
   ui.dirty = false
   ui.themes = nil
@@ -356,6 +365,7 @@ end
 
 function M.build(ctx)
   ensureDeps()
+  refreshDebug()
   ensureLoaded(ctx.preferences)
   if not ui.themes then
     refreshThemes(false)
@@ -363,11 +373,11 @@ function M.build(ctx)
   ensureValidSelections()
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
 
-  debugLog("build theme count=" .. tostring(ui.themes and #ui.themes or 0) .. " preflight=" .. tostring(ui.config.theme_preflight) .. " inflight=" .. tostring(ui.config.theme_inflight) .. " postflight=" .. tostring(ui.config.theme_postflight))
+  debugLog("build theme count=%s preflight=%s inflight=%s postflight=%s", ui.themes and #ui.themes or 0, ui.config.theme_preflight, ui.config.theme_inflight, ui.config.theme_postflight)
   if type(ui.themes) == "table" then
     for i = 1, #ui.themes do
       local theme = ui.themes[i]
-      debugLog("option[" .. tostring(i) .. "] name=" .. tostring(theme.name) .. " path=" .. tostring(theme.path))
+      debugLog("option[%s] name=%s path=%s", i, theme.name, theme.path)
     end
   end
 
