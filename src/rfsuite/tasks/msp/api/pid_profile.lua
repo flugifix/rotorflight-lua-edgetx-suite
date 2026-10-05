@@ -63,15 +63,39 @@ local SIM_RESPONSE = {
     3,25,250,0,12,0,1,45,45,60,50,50,100,15,15,20,2,10,10,15,100,100,6,0,30,0,0,0,40,55,0,75,20,25,0,15,90,90,15,15,20,10,20
 }
 
--- The session's API version is the "<major>.<minor>" string the MSP runtime stores, e.g. "12.10".
+-- lib/api_version.lua decides the write gate, as it decides the page's row and its help line, so
+-- the three give one answer for every form of session.apiVersion it accepts. It is loaded on the
+-- first write rather than when this file loads, so opening a page that reads the profile does not
+-- pay for it; lib/require.lua hands back the copy the MSP runtime has normally loaded already.
+local ApiVersion = nil
+
+local function loadApiVersion()
+    if ApiVersion == nil then
+        local root = _G and _G.rfsuite
+        local req = root and root.require
+        local mod = nil
+        if type(req) == "function" then
+            mod = req("lib/api_version.lua")
+        else
+            local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/api_version.lua", (root and root.loadMode) or "bt")
+            if type(chunk) == "function" then
+                local ok, res = pcall(chunk)
+                if ok then mod = res end
+            end
+        end
+        ApiVersion = (type(mod) == "table" and type(mod.isAtLeast) == "function") and mod or false
+    end
+    return ApiVersion or nil
+end
+
+-- Without a version the session reports, the byte is not sent.
 local function sessionApiAtLeast12_10()
     local root = _G and _G.rfsuite
     local session = root and root.session
     local raw = type(session) == "table" and session.apiVersion or nil
-    local major, minor = string.match(tostring(raw or ""), "^(%d+)%.(%d+)$")
-    major, minor = tonumber(major), tonumber(minor)
-    if not major or not minor then return false end
-    return major > 12 or (major == 12 and minor >= 10)
+    if raw == nil then return false end
+    local V = loadApiVersion()
+    return V ~= nil and V.isAtLeast(raw, { 12, 0, 10 }) == true
 end
 
 local function expected_bytes(spec)
