@@ -29,7 +29,10 @@ local StatusApi = nil
 local t = nil
 
 -- The Configurator polls the same message every 500 ms. Half that rate keeps a counter visibly
--- moving and costs the link half as many request/reply exchanges.
+-- moving and costs the link half as many request/reply exchanges. The interval runs from one
+-- request to the next, not from the reply: a reply takes a few tenths of a second over a CRSF
+-- link, and counting from it would stretch every period by that much. One request is in flight
+-- at a time, so a slower round trip than the interval simply sets the pace.
 local POLL_INTERVAL_SEC = 1.0
 -- One attempt per poll: the next poll is the retry, so a lost reply costs one interval rather
 -- than the queue's whole retry ladder.
@@ -196,7 +199,6 @@ local function requestStatus(now)
     processReply = function(_, buf)
       if generation ~= state.generation then return end
       state.pending = false
-      state.lastPollAt = nowSeconds()
       if type(buf) ~= "table" or #buf < StatusApi.fixedLength then
         applyAnswer("unsupported", nil)
         return
@@ -211,7 +213,6 @@ local function requestStatus(now)
     errorHandler = function()
       if generation ~= state.generation then return end
       state.pending = false
-      state.lastPollAt = nowSeconds()
       applyAnswer("no_reply", nil)
     end,
   })
