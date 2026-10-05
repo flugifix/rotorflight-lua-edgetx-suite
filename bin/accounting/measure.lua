@@ -82,13 +82,13 @@ end
 -- The hook advances one counter for the whole run rather than one per call, so a section inside
 -- a measured call -- a tool page's build, below -- can be read off it as a difference, and a
 -- section outside one can install the same hook for itself and be read off it the same way.
-local billed = 0
-local function bill() billed = billed + 1 end
+local tally = 0
+local function bill() tally = tally + 1 end
 
 local function count(fn, ...)
   -- One pass of the host clock per measured call. The stub's clock does not run by itself.
   Stubs.tick()
-  local n = billed
+  local n = tally
   collectgarbage("collect")
   collectgarbage("stop")
   debug.sethook(bill, "", 1)
@@ -96,7 +96,7 @@ local function count(fn, ...)
   debug.sethook()
   collectgarbage("restart")
   if not ok then error(err, 0) end
-  return billed - n
+  return tally - n
 end
 
 --- What one call of an empty closure costs through the loop the sweep is replayed in.
@@ -668,7 +668,7 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   -- wrapper hooks the build alone, and both read the same instructions.
   local builds = { worst = 0, count = 0, declared = nil }
   local function measured(hooked, before, ...)
-    local spent = billed - before
+    local spent = tally - before
     if not hooked then debug.sethook() end
     builds.count = builds.count + 1
     if spent > builds.worst then builds.worst = spent end
@@ -687,7 +687,7 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
         module.build = function(...)
           local hooked = debug.gethook() ~= nil
           if not hooked then debug.sethook(bill, "", 1) end
-          return measured(hooked, billed, build(...))
+          return measured(hooked, tally, build(...))
         end
       end
       return module
@@ -725,12 +725,12 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   -- One pass of the widget with the tool open. The event is 0 and never nil: nil is the firmware
   -- saying fullscreen was left, and the host closes the tool on it.
   local frame = 0
-  local function pass(counted)
+  local function pass(counting)
     frame = frame + 1
     holdLinkBacklog()
     if fault ~= "held" then releaseReplies() end
     feedLink(World.sensorIds, 50000 + frame)
-    if counted then return count(widget.refresh, widget, 0, nil) end
+    if counting then return count(widget.refresh, widget, 0, nil) end
     Stubs.tick()
     widget.refresh(widget, 0, nil)
     return 0
