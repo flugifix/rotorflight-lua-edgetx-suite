@@ -64,7 +64,8 @@ local UART_NAMES = {
   [9] = "UART10",
   [20] = "USB VCP",
   [30] = "SOFTSERIAL1",
-  [31] = "SOFTSERIAL2"
+  [31] = "SOFTSERIAL2",
+  [40] = "LPUART1"
 }
 
 local function newRuntime()
