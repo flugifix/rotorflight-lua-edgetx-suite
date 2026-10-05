@@ -47,6 +47,7 @@ local function newRuntime()
 	return {
 		capacitySets = {},
 		profileSet = nil,
+		editProfileSet = nil,
 		maxCellSet = nil,
 		fullCellSet = nil,
 		warnCellSet = nil,
@@ -83,6 +84,10 @@ local ui = {
 		-- One list of six per CELL_FIELDS entry where the board keeps them per profile, else nil
 		-- and the five single values above apply to every profile.
 		profileCells = nil,
+		-- The profile the five rows show and edit where the board keeps them per profile. Its own
+		-- choice, so editing another profile never switches the board to it; nil until the page
+		-- has loaded, and then the active profile.
+		editBatteryProfile = nil,
 		consumption_warning_percentage = 35
 	},
 	runtime = newRuntime(),
@@ -253,7 +258,10 @@ local function loadFromSession()
 	ui.config.batteryCellCount = clampInt(batteryConfig and batteryConfig.batteryCellCount, CELL_COUNT_MIN, CELL_COUNT_MAX, 0)
 
 	-- Where the board keeps cell count and cell voltages per battery profile, the five fields show
-	-- and edit the profile selected above, the way the capacities are kept per profile.
+	-- and edit the profile chosen in Edit Battery, which opens on the active profile.
+	if ui.config.editBatteryProfile == nil then
+		ui.config.editBatteryProfile = ui.config.selectedBatteryProfile
+	end
 	if batteryConfig and batteryConfig.hasProfileCells == true then
 		local cells = {}
 		for f = 1, #CELL_FIELDS do
@@ -373,11 +381,25 @@ local function getProfileSetter()
 	return ui.runtime.profileSet
 end
 
--- The value a cell field shows: the selected profile's where the board keeps them per profile,
--- the single value otherwise.
+-- Choosing which profile to look at changes nothing on the board, so it does not mark the page
+-- dirty and is not saved.
+local function getEditProfileSetter()
+	if ui.runtime.editProfileSet then return ui.runtime.editProfileSet end
+	ui.runtime.editProfileSet = function(value)
+		ui.config.editBatteryProfile = clampInt(value, PROFILE_MIN, PROFILE_MAX, PROFILE_MIN)
+	end
+	return ui.runtime.editProfileSet
+end
+
+local function editSlot()
+	return clampInt(ui.config.editBatteryProfile or ui.config.selectedBatteryProfile, PROFILE_MIN, PROFILE_MAX, PROFILE_MIN) + 1
+end
+
+-- The value a cell field shows: the edited profile's where the board keeps them per profile, the
+-- single value otherwise.
 local function cellValue(field)
 	local cells = ui.config.profileCells
-	if cells then return cells[field][ui.config.selectedBatteryProfile + 1] end
+	if cells then return cells[field][editSlot()] end
 	return ui.config[field]
 end
 
@@ -410,7 +432,7 @@ end
 local function setCellValue(field, value)
 	local cells = ui.config.profileCells
 	if cells then
-		local slot = ui.config.selectedBatteryProfile + 1
+		local slot = editSlot()
 		if cells[field][slot] == value then return end
 		cells[field][slot] = value
 	else
@@ -528,6 +550,7 @@ function M.onReload()
 	ui.dirty = false
 	ui.reserveDirty = false
 	ui.profileDirty = false
+	ui.config.editBatteryProfile = nil
 	ensureLoaded()
 	return false
 end
@@ -753,6 +776,20 @@ function M.build(ctx)
 	Controls.appendStaticSectionHeader(children, x, cursorY, w, pageText(i18n, "section_battery", "Battery"))
 	cursorY = cursorY + Controls.STATIC_SECTION_H
 
+	-- Only where the board keeps the rows below per profile; elsewhere they apply to every profile
+	-- and there is nothing to choose.
+	if ui.config.profileCells then
+		cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+			pageText(i18n, "edit_battery", "Edit Battery"),
+			profileOptions,
+			editSlot() - 1,
+			getEditProfileSetter(), {
+				helpText = optionalPageHelpText(i18n, "help_edit_battery"),
+				helpTitle = pageText(i18n, "edit_battery", "Edit Battery"),
+				onHelp = getInlineHelpHandler()
+			})
+	end
+
 	cursorY = cursorY + Controls.appendNumberField(children, x, cursorY, w,
 		pageText(i18n, "max_cell_voltage", "Max cell voltage"), {
 			min = 250,
@@ -852,6 +889,7 @@ function M.onClose()
 	end
 	ui.reserveDirty = false
 	ui.profileDirty = false
+	ui.config.editBatteryProfile = nil
 	ui.loading = false
 	ui.progress = 0
 	Controls = nil

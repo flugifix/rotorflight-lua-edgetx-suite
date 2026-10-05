@@ -22,6 +22,7 @@ Read-only while the model is armed.
 | --- | --- |
 | Selected Battery | Which of the flight controller's six battery profiles is active. Switching it here switches it on the board. |
 | Battery 1 … Battery 6 | The capacity stored in each profile, 0 to 40000 mAh. All six are written on every save, so a capacity can be edited without selecting its profile. |
+| Edit Battery | Shown only on firmware that keeps the cell count and cell voltages per battery profile: which profile the five rows below show and edit. It opens on the active profile and is never sent to the flight controller, so editing another profile does not make it active. |
 | Max cell voltage | The top of a cell's voltage range. The flight controller uses it to work out the cell count when Cell count is 0, and to scale the charge level when no capacity is set. 2.50 to 5.00 V, default 4.20. |
 | Full cell voltage | The nominal voltage of a fully charged cell, which is what a full pack is measured against. 2.50 to 5.00 V, default 4.10. |
 | Warn cell voltage | The per-cell voltage at which the low-voltage alarm starts. 2.50 to 5.00 V, default 3.50. |
@@ -30,10 +31,10 @@ Read-only while the model is armed.
 | Consumption reserve | How much of the capacity is held back, so that the fuel reading reaches zero with that much of the pack left. 15 to 60 %, default 35. |
 
 On firmware that keeps the cell count and the four cell voltages per battery profile, those five
-rows show and edit the profile chosen in *Selected Battery*, and every profile is written on save;
-a profile that is not edited keeps exactly what the board holds. Choosing a profile there to edit its cells also makes it the active one when the page is
-saved; choose the active profile again before saving to keep it. On older firmware the five rows are
-one set of values for every profile.
+rows show and edit the profile chosen in *Edit Battery*, and every profile is written on save; a
+profile that is not edited keeps exactly what the board holds. *Selected Battery* alone decides which
+profile is active. On older firmware *Edit Battery* is not shown and the five rows are one set of
+values for every profile.
 
 ## Notes
 
