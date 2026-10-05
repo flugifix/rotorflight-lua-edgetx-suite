@@ -30,8 +30,8 @@ Read-only while the model is armed.
 | Consumption reserve | How much of the capacity is held back, so that the fuel reading reaches zero with that much of the pack left. 15 to 60 %, default 35. |
 
 On firmware that keeps the cell count and the four cell voltages per battery profile, those five
-rows show and edit the profile chosen in *Selected Battery*, and every profile's values are written
-on save. Choosing a profile there to edit its cells also makes it the active one when the page is
+rows show and edit the profile chosen in *Selected Battery*, and every profile is written on save;
+a profile that is not edited keeps exactly what the board holds. Choosing a profile there to edit its cells also makes it the active one when the page is
 saved; choose the active profile again before saving to keep it. On older firmware the five rows are
 one set of values for every profile.
 
