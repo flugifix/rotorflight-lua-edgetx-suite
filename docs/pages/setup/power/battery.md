@@ -22,12 +22,18 @@ Read-only while the model is armed.
 | --- | --- |
 | Selected Battery | Which of the flight controller's six battery profiles is active. Switching it here switches it on the board. |
 | Battery 1 … Battery 6 | The capacity stored in each profile, 0 to 40000 mAh. All six are written on every save, so a capacity can be edited without selecting its profile. |
-| Max cell voltage | The per-cell voltage above which the high-voltage alarm fires. 2.50 to 5.00 V, default 4.20. |
+| Max cell voltage | The top of a cell's voltage range. The flight controller uses it to work out the cell count when Cell count is 0, and to scale the charge level when no capacity is set. 2.50 to 5.00 V, default 4.20. |
 | Full cell voltage | The nominal voltage of a fully charged cell, which is what a full pack is measured against. 2.50 to 5.00 V, default 4.10. |
 | Warn cell voltage | The per-cell voltage at which the low-voltage alarm starts. 2.50 to 5.00 V, default 3.50. |
 | Min cell voltage | The minimum per-cell voltage, below which the low-voltage alarm is triggered. 2.50 to 5.00 V, default 3.30. |
 | Cell count | Cells in the pack, 0 to 24. 0 lets the flight controller work it out from the pack voltage. |
 | Consumption reserve | How much of the capacity is held back, so that the fuel reading reaches zero with that much of the pack left. 15 to 60 %, default 35. |
+
+On firmware that keeps the cell count and the four cell voltages per battery profile, those five
+rows show and edit the profile chosen in *Selected Battery*, and every profile's values are written
+on save. Choosing a profile there to edit its cells also makes it the active one when the page is
+saved; choose the active profile again before saving to keep it. On older firmware the five rows are
+one set of values for every profile.
 
 ## Notes
 
@@ -40,6 +46,14 @@ Read-only while the model is armed.
   profile on this page always sends it.
 - Saving writes the whole battery configuration to the flight controller and commits it to the
   board's own storage.
+- **Per profile, each cell voltage stays between its neighbours.** On firmware with per-profile
+  cells the flight controller keeps every profile ordered — Min below Max, and Min ≤ Warn ≤ Full ≤
+  Max — and changes a profile that is out of that order itself when it stores it. So a voltage
+  here stops at the next one: to raise all four, raise Max first; to lower them, lower Min first.
+- **Which profile's cells the alarms use.** The flight controller runs the cell count and the
+  cell voltages of its active profile. A profile change made while the model is armed is applied
+  when it is disarmed, and the suite's own voltage callouts and its own SmartFuel estimate
+  follow the `BatP` sensor, which reports the profile the board is running.
 - The Consumption reserve is also kept in this model's preferences on the radio, and is written
   to the flight controller only when it is edited here. What it is used for is on the
   [SmartFuel](smartfuel.md) page.

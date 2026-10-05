@@ -30,6 +30,17 @@ local CELL_COUNT_MAX = 24
 local RESERVE_MIN = 15
 local RESERVE_MAX = 60
 
+-- The settings firmware with per-profile battery cells keeps once per battery profile, with the
+-- range and default each is shown with.
+local CELL_FIELDS = { "batteryCellCount", "vbatmincellvoltage", "vbatmaxcellvoltage", "vbatfullcellvoltage", "vbatwarningcellvoltage" }
+local CELL_LIMITS = {
+	batteryCellCount = { CELL_COUNT_MIN, CELL_COUNT_MAX, 0 },
+	vbatmincellvoltage = { 250, 500, 330 },
+	vbatmaxcellvoltage = { 250, 500, 420 },
+	vbatfullcellvoltage = { 250, 500, 410 },
+	vbatwarningcellvoltage = { 250, 500, 350 }
+}
+
 local function newRuntime()
 	return {
 		capacitySets = {},
@@ -67,6 +78,9 @@ local ui = {
 		vbatwarningcellvoltage = 350,
 		vbatmincellvoltage = 330,
 		batteryCellCount = 0,
+		-- One list of six per CELL_FIELDS entry where the board keeps them per profile, else nil
+		-- and the five single values above apply to every profile.
+		profileCells = nil,
 		consumption_warning_percentage = 35
 	},
 	runtime = newRuntime(),
@@ -236,6 +250,24 @@ local function loadFromSession()
 	ui.config.vbatmincellvoltage = clampInt(batteryConfig and batteryConfig.vbatmincellvoltage, 250, 500, 330)
 	ui.config.batteryCellCount = clampInt(batteryConfig and batteryConfig.batteryCellCount, CELL_COUNT_MIN, CELL_COUNT_MAX, 0)
 
+	-- Where the board keeps cell count and cell voltages per battery profile, the five fields show
+	-- and edit the profile selected above, the way the capacities are kept per profile.
+	if batteryConfig and batteryConfig.hasProfileCells == true then
+		local cells = {}
+		for f = 1, #CELL_FIELDS do
+			local field = CELL_FIELDS[f]
+			local limits = CELL_LIMITS[field]
+			local values = {}
+			for i = 0, 5 do
+				values[i + 1] = clampInt(batteryConfig[field .. "_" .. tostring(i)], limits[1], limits[2], limits[3])
+			end
+			cells[field] = values
+		end
+		ui.config.profileCells = cells
+	else
+		ui.config.profileCells = nil
+	end
+
 	-- Resolve consumption reserve: SmartFuelReserve.pick prioritizes explicit per-model
 	-- preference when set by the pilot, then falls through to the FC's cbat_alert_percent.
 	-- Since defaultModelPreferences() no longer seeds 35, unedited models will pick the board value.
@@ -339,13 +371,56 @@ local function getProfileSetter()
 	return ui.runtime.profileSet
 end
 
+-- The value a cell field shows: the selected profile's where the board keeps them per profile,
+-- the single value otherwise.
+local function cellValue(field)
+	local cells = ui.config.profileCells
+	if cells then return cells[field][ui.config.selectedBatteryProfile + 1] end
+	return ui.config[field]
+end
+
+-- A board with per-profile cells keeps every profile ordered min < max and
+-- min <= warning <= full <= max, and a profile saved out of that order is changed by the board
+-- itself while it stores it. So each voltage is held between its neighbours of the same profile,
+-- and what is saved here is what the board keeps.
+local function boundCellVoltage(field, value)
+	if not ui.config.profileCells then return value end
+	local minV = cellValue("vbatmincellvoltage")
+	local warnV = cellValue("vbatwarningcellvoltage")
+	local fullV = cellValue("vbatfullcellvoltage")
+	local maxV = cellValue("vbatmaxcellvoltage")
+	local lo, hi = 250, 500
+	if field == "vbatmaxcellvoltage" then
+		lo = math.max(fullV, minV + 1)
+	elseif field == "vbatfullcellvoltage" then
+		lo, hi = warnV, maxV
+	elseif field == "vbatwarningcellvoltage" then
+		lo, hi = minV, fullV
+	elseif field == "vbatmincellvoltage" then
+		hi = math.min(warnV, maxV - 1)
+	end
+	if value < lo then value = lo end
+	if value > hi then value = hi end
+	return value
+end
+
+local function setCellValue(field, value)
+	local cells = ui.config.profileCells
+	if cells then
+		local slot = ui.config.selectedBatteryProfile + 1
+		if cells[field][slot] == value then return end
+		cells[field][slot] = value
+	else
+		if ui.config[field] == value then return end
+		ui.config[field] = value
+	end
+	markDirty()
+end
+
 local function getMaxCellSetter()
 	if ui.runtime.maxCellSet then return ui.runtime.maxCellSet end
 	ui.runtime.maxCellSet = function(value)
-		local nextValue = clampInt(value, 250, 500, 420)
-		if ui.config.vbatmaxcellvoltage == nextValue then return end
-		ui.config.vbatmaxcellvoltage = nextValue
-		markDirty()
+		setCellValue("vbatmaxcellvoltage", boundCellVoltage("vbatmaxcellvoltage", clampInt(value, 250, 500, 420)))
 	end
 	return ui.runtime.maxCellSet
 end
@@ -353,10 +428,7 @@ end
 local function getFullCellSetter()
 	if ui.runtime.fullCellSet then return ui.runtime.fullCellSet end
 	ui.runtime.fullCellSet = function(value)
-		local nextValue = clampInt(value, 250, 500, 410)
-		if ui.config.vbatfullcellvoltage == nextValue then return end
-		ui.config.vbatfullcellvoltage = nextValue
-		markDirty()
+		setCellValue("vbatfullcellvoltage", boundCellVoltage("vbatfullcellvoltage", clampInt(value, 250, 500, 410)))
 	end
 	return ui.runtime.fullCellSet
 end
@@ -364,10 +436,7 @@ end
 local function getWarnCellSetter()
 	if ui.runtime.warnCellSet then return ui.runtime.warnCellSet end
 	ui.runtime.warnCellSet = function(value)
-		local nextValue = clampInt(value, 250, 500, 350)
-		if ui.config.vbatwarningcellvoltage == nextValue then return end
-		ui.config.vbatwarningcellvoltage = nextValue
-		markDirty()
+		setCellValue("vbatwarningcellvoltage", boundCellVoltage("vbatwarningcellvoltage", clampInt(value, 250, 500, 350)))
 	end
 	return ui.runtime.warnCellSet
 end
@@ -375,10 +444,7 @@ end
 local function getMinCellSetter()
 	if ui.runtime.minCellSet then return ui.runtime.minCellSet end
 	ui.runtime.minCellSet = function(value)
-		local nextValue = clampInt(value, 250, 500, 330)
-		if ui.config.vbatmincellvoltage == nextValue then return end
-		ui.config.vbatmincellvoltage = nextValue
-		markDirty()
+		setCellValue("vbatmincellvoltage", boundCellVoltage("vbatmincellvoltage", clampInt(value, 250, 500, 330)))
 	end
 	return ui.runtime.minCellSet
 end
@@ -386,10 +452,7 @@ end
 local function getCellCountSetter()
 	if ui.runtime.cellCountSet then return ui.runtime.cellCountSet end
 	ui.runtime.cellCountSet = function(value)
-		local nextValue = clampInt(value, CELL_COUNT_MIN, CELL_COUNT_MAX, 0)
-		if ui.config.batteryCellCount == nextValue then return end
-		ui.config.batteryCellCount = nextValue
-		markDirty()
+		setCellValue("batteryCellCount", clampInt(value, CELL_COUNT_MIN, CELL_COUNT_MAX, 0))
 	end
 	return ui.runtime.cellCountSet
 end
@@ -418,7 +481,7 @@ local function buildBatteryPayload(batteryConfig)
 	for i = 0, 5 do
 		caps[i + 1] = tonumber(batteryConfig["batteryCapacity_" .. tostring(i)]) or 0
 	end
-	return BatteryConfigApi.buildWritePayload({
+	local data = {
 		batteryCapacity = tonumber(batteryConfig.batteryCapacity) or 0,
 		batteryCellCount = tonumber(batteryConfig.batteryCellCount) or 0,
 		voltageMeterSource = tonumber(batteryConfig.voltageMeterSource) or 0,
@@ -430,7 +493,19 @@ local function buildBatteryPayload(batteryConfig)
 		lvcPercentage = tonumber(batteryConfig.lvcPercentage) or 100,
 		consumptionWarningPercentage = tonumber(batteryConfig.consumptionWarningPercentage) or 35,
 		batteryCapacities = caps
-	})
+	}
+	-- The board stores the single fields into its active profile and then every profile from the
+	-- per-profile blocks, so the blocks are what decides each profile's values.
+	if batteryConfig.hasProfileCells == true then
+		data.hasProfileCells = true
+		for f = 1, #CELL_FIELDS do
+			for i = 0, 5 do
+				local key = CELL_FIELDS[f] .. "_" .. tostring(i)
+				data[key] = batteryConfig[key]
+			end
+		end
+	end
+	return BatteryConfigApi.buildWritePayload(data)
 end
 
 function M.getHeaderActions()
@@ -478,11 +553,21 @@ function M.onSave(ctx)
 	local profileKnown = ui.profileDirty or resolveProfile(session, batteryConfig) ~= nil
 	local activeCapacity = clampInt(ui.config.capacities[activeProfile + 1], CAPACITY_MIN, CAPACITY_MAX, 0)
 
-	batteryConfig.batteryCellCount = clampInt(ui.config.batteryCellCount, CELL_COUNT_MIN, CELL_COUNT_MAX, 0)
-	batteryConfig.vbatmaxcellvoltage = clampInt(ui.config.vbatmaxcellvoltage, 250, 500, 420)
-	batteryConfig.vbatfullcellvoltage = clampInt(ui.config.vbatfullcellvoltage, 250, 500, 410)
-	batteryConfig.vbatwarningcellvoltage = clampInt(ui.config.vbatwarningcellvoltage, 250, 500, 350)
-	batteryConfig.vbatmincellvoltage = clampInt(ui.config.vbatmincellvoltage, 250, 500, 330)
+	local profileCells = ui.config.profileCells
+	if profileCells then
+		for f = 1, #CELL_FIELDS do
+			local field = CELL_FIELDS[f]
+			for i = 0, 5 do
+				batteryConfig[field .. "_" .. tostring(i)] = profileCells[field][i + 1]
+			end
+		end
+	else
+		batteryConfig.batteryCellCount = clampInt(ui.config.batteryCellCount, CELL_COUNT_MIN, CELL_COUNT_MAX, 0)
+		batteryConfig.vbatmaxcellvoltage = clampInt(ui.config.vbatmaxcellvoltage, 250, 500, 420)
+		batteryConfig.vbatfullcellvoltage = clampInt(ui.config.vbatfullcellvoltage, 250, 500, 410)
+		batteryConfig.vbatwarningcellvoltage = clampInt(ui.config.vbatwarningcellvoltage, 250, 500, 350)
+		batteryConfig.vbatmincellvoltage = clampInt(ui.config.vbatmincellvoltage, 250, 500, 330)
+	end
 	-- Fix for issue #52: only overwrite consumptionWarningPercentage in batteryConfig
 	-- when the pilot explicitly edited the Consumption reserve spinner.
 	-- If unedited, preserve the existing FC value; if batteryConfig has no value yet,
@@ -505,6 +590,13 @@ function M.onSave(ctx)
 		batteryConfig.batteryProfile = activeProfile
 		batteryConfig.batteryCapacity = activeCapacity
 		session.activeBatteryType = activeProfile
+		-- The single fields describe the active profile, as the board reports them.
+		if profileCells then
+			for f = 1, #CELL_FIELDS do
+				local field = CELL_FIELDS[f]
+				batteryConfig[field] = profileCells[field][activeProfile + 1]
+			end
+		end
 	end
 	session.battery_config = batteryConfig
 	session.batteryConfig = batteryConfig
@@ -662,7 +754,7 @@ function M.build(ctx)
 		pageText(i18n, "max_cell_voltage", "Max cell voltage"), {
 			min = 250,
 			max = 500,
-			get = function() return ui.config.vbatmaxcellvoltage end,
+			get = function() return cellValue("vbatmaxcellvoltage") end,
 			set = getMaxCellSetter(),
 			helpText = optionalPageHelpText(i18n, "help_max_cell_voltage"),
 			helpTitle = pageText(i18n, "max_cell_voltage", "Max cell voltage"),
@@ -674,7 +766,7 @@ function M.build(ctx)
 		pageText(i18n, "full_cell_voltage", "Full cell voltage"), {
 			min = 250,
 			max = 500,
-			get = function() return ui.config.vbatfullcellvoltage end,
+			get = function() return cellValue("vbatfullcellvoltage") end,
 			set = getFullCellSetter(),
 			helpText = optionalPageHelpText(i18n, "help_full_cell_voltage"),
 			helpTitle = pageText(i18n, "full_cell_voltage", "Full cell voltage"),
@@ -686,7 +778,7 @@ function M.build(ctx)
 		pageText(i18n, "warn_cell_voltage", "Warn cell voltage"), {
 			min = 250,
 			max = 500,
-			get = function() return ui.config.vbatwarningcellvoltage end,
+			get = function() return cellValue("vbatwarningcellvoltage") end,
 			set = getWarnCellSetter(),
 			helpText = optionalPageHelpText(i18n, "help_warn_cell_voltage"),
 			helpTitle = pageText(i18n, "warn_cell_voltage", "Warn cell voltage"),
@@ -698,7 +790,7 @@ function M.build(ctx)
 		pageText(i18n, "min_cell_voltage", "Min cell voltage"), {
 			min = 250,
 			max = 500,
-			get = function() return ui.config.vbatmincellvoltage end,
+			get = function() return cellValue("vbatmincellvoltage") end,
 			set = getMinCellSetter(),
 			helpText = optionalPageHelpText(i18n, "help_min_cell_voltage"),
 			helpTitle = pageText(i18n, "min_cell_voltage", "Min cell voltage"),
@@ -710,7 +802,7 @@ function M.build(ctx)
 		pageText(i18n, "cell_count", "Cell count"), {
 			min = CELL_COUNT_MIN,
 			max = CELL_COUNT_MAX,
-			get = function() return ui.config.batteryCellCount end,
+			get = function() return cellValue("batteryCellCount") end,
 			set = getCellCountSetter(),
 			helpText = optionalPageHelpText(i18n, "help_cell_count"),
 			helpTitle = pageText(i18n, "cell_count", "Cell count"),
