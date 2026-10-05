@@ -92,6 +92,9 @@ function Api.parse(buf)
     end
   end
   -- Per-profile cells: batteryCellCount_0..5, then vbat<min|max|full|warning>cellvoltage_0..5.
+  -- The probe is ">=", so it cannot tell these five blocks from different fields a later firmware
+  -- might append here, and this message carries no version byte to ask instead: a later layout
+  -- needs an MSP2 command or an explicit discriminator.
   if out.batteryCapacity_5 ~= nil and #buf - idx + 1 >= PROFILE_CELL_BYTES then
     for i = 0, PROFILE_COUNT - 1 do
       out["batteryCellCount_" .. i] = buf[idx] or 0
