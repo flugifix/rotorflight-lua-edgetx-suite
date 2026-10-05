@@ -1804,7 +1804,11 @@ for _, row in ipairs(rows) do
     row.name, row.measured, target and tostring(target) or "MISSING", marginText,
     extra and ("   " .. extra) or ""))
   if target == nil then
-    failures[#failures + 1] = row.name .. " has no row in budgets.lua"
+    -- A tool page reaches this line the first time a menu leads to it in the run's world, which is
+    -- the pull request that adds it or the one that enables its tile here. The row it needs is a
+    -- measurement, and the run already has it.
+    local hint = string.find(row.name, "^page%.") and " -- a new tool page: --emit prints its row" or ""
+    failures[#failures + 1] = row.name .. " has no row in budgets.lua" .. hint
   elseif row.measured > target then
     failures[#failures + 1] = string.format("%s: %d instructions over a target of %d",
       row.name, row.measured, target)

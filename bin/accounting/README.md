@@ -72,9 +72,15 @@ How a page is opened:
 
 - **The inventory** is the tool's own page registry, `app/pages/init.lua`, read when the run
   starts. Every id in it gets a row or a note naming why it has none: no menu leads to it, its
-  tile is disabled in this world, or it has no `build` and the tool draws it as a menu. A page
-  that is added gets a row as soon as a menu leads to it, and its `budgets.lua` entry is due in
-  the same pull request, as for a box type.
+  tile is disabled in this world, or it has no `build` and the tool draws it as a menu.
+- **A page that is added** is measured as soon as a menu leads to it and its tile is enabled in
+  the run's world, and from then on it needs a row, as a new box type does. `--check` fails with
+  `page.<menuId>.build has no row in budgets.lua -- a new tool page: --emit prints its row`, and
+  the fix is the line `--emit` prints for it, pasted into the page rows of `budgets.lua` in the
+  same pull request. A page whose tile is disabled here -- one that needs a newer MSP API than the
+  stub flight controller reports, for example -- is named in a note and needs no row until it is
+  enabled; the pull request that enables it adds the row. A page that is removed leaves its row
+  behind, and `--check` fails on that too, until the row is deleted.
 - **The world** is the reference dashboard, settled as the other scenarios settle it, with the
   tool's firmware surface added (`Stubs.installTool`: the RSSI, the radio's general settings,
   the date, the free heap, the card's directories, the model's inputs, outputs and modules, the
