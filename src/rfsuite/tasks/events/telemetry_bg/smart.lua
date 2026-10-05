@@ -316,12 +316,15 @@ do
   end
 end
 
+-- Once per profile and per read: a fresh read is a new table, and the Battery page sets the single
+-- fields itself when it saves.
 local function applyProfileCells(config, profile)
-  if type(config) ~= "table" or config.hasProfileCells ~= true then return end
+  if type(config) ~= "table" or config.hasProfileCells ~= true or config.cellsProfile == profile then return end
   for field, keys in pairs(PROFILE_CELL_KEYS) do
     local value = config[keys[profile]]
     if value ~= nil then config[field] = value end
   end
+  config.cellsProfile = profile
 end
 
 local function getActivePackCapacity(session, batteryConfig)
@@ -334,13 +337,16 @@ local function getActivePackCapacity(session, batteryConfig)
 
   -- Only a live reading: the sensor reads 0 once the radio stops receiving it, and that names no
   -- profile.
-  raw = tonumber(raw)
-  if raw and raw >= 1 and raw <= 6 then
-    applyProfileCells(batteryConfig, profile)
-    -- The battery and sources pages keep a second name for the configuration, and a page that set
-    -- it before a later read can leave it naming an older table.
-    if session and session.batteryConfig ~= batteryConfig then
-      applyProfileCells(session.batteryConfig, profile)
+  if batteryConfig and batteryConfig.hasProfileCells == true then
+    raw = tonumber(raw)
+    if raw and raw >= 1 and raw <= 6 then
+      applyProfileCells(batteryConfig, profile)
+      -- The battery and sources pages keep a second name for the configuration, and a page that
+      -- set it before a later read can leave it naming an older table.
+      local other = session and session.batteryConfig
+      if other and other ~= batteryConfig then
+        applyProfileCells(other, profile)
+      end
     end
   end
 
