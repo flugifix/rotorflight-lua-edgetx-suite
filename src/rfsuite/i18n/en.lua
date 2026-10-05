@@ -1895,9 +1895,11 @@ return {
         rx_tag = "[RX]",
         save_error_prefix = "Save error:",
         help_title = "Ports Help",
-        help_p1 = "Configure the function and baud rate for each serial port on the flight controller.",
-        help_p2 = "Save writes changes to EEPROM and reboots the flight controller.",
-        help_p3 = "Where the board layout is known, a port is named as the board prints it, with its UART name in brackets."
+        help_p1 = "One row per serial port. Where the board layout is known, a port is named as the board prints it, with its UART name in brackets.",
+        help_p2 = "Function (first list): what the port is used for. A function another port already uses is not offered.",
+        help_p3 = "Baud rate (second list): only where the function has a choice; otherwise the fixed rate is shown as text.",
+        help_p4 = "[RX]: the receiver's port. It cannot be changed here.",
+        help_p5 = "Save: writes the ports you changed, restarts the flight controller and reads the ports back from it."
       },
       setup_alignment = {
         title = "Alignment",

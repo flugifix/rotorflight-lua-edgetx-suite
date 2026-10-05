@@ -1895,9 +1895,11 @@ return {
         rx_tag = "[RX]",
         save_error_prefix = "Speicherfehler:",
         help_title = "Ports-Hilfe",
-        help_p1 = "Konfigurieren Sie die Funktion und Baudrate fuer jeden seriellen Port auf dem Flugcontroller.",
-        help_p2 = "Speichern schreibt die Aenderungen in das EEPROM und startet den Flugcontroller neu.",
-        help_p3 = "Ist das Board-Layout bekannt, wird ein Port so benannt, wie er auf der Platine steht, mit dem UART-Namen in Klammern."
+        help_p1 = "Eine Zeile je seriellem Port. Ist das Board-Layout bekannt, heisst ein Port wie auf der Platine, mit dem UART-Namen in Klammern.",
+        help_p2 = "Funktion (erste Liste): wofuer der Port genutzt wird. Eine Funktion, die ein anderer Port schon nutzt, wird nicht angeboten.",
+        help_p3 = "Baudrate (zweite Liste): nur wo die Funktion eine Wahl hat; sonst steht die feste Rate als Text da.",
+        help_p4 = "[RX]: der Port des Empfaengers. Er laesst sich hier nicht aendern.",
+        help_p5 = "Speichern: schreibt die geaenderten Ports, startet den Flugcontroller neu und liest die Ports danach von ihm zurueck."
       },
       setup_alignment = {
         title = "Ausrichtung",

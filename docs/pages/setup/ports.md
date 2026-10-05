@@ -20,19 +20,22 @@ Read-only while the model is armed.
 The page has one row per serial port the flight controller reports, up to twelve. The USB port is
 not listed. Where the board layout is known, a row is named as the board prints it, with the UART
 name in brackets (`Port A [UART4]` on an F7A1 board); otherwise it carries the UART name alone.
+Each list a row opens is titled with that row's name.
 
 | Setting | What it does |
 | --- | --- |
 | Function | What the port is used for: *Disabled*, *MSP*, *GPS*, *RX Serial*, *ESC Sensor*, *Blackbox*, *SBus Out*, *FBus Out*, *S.PORT Master*, or one of the telemetry protocols (*FrSky*, *SmartPort*, *iBus*, *HoTT*, *MAVLink*, *LTM*). A function another port already uses is not offered, and only one port can carry telemetry. *SBus Out* needs MSP API 12.07, *FBus Out* and *S.PORT Master* need 12.09; on an older flight controller they are not offered. A function this page does not know is shown as *Custom* with its number. |
-| Baud rate | The speed of the port. Which rates are offered depends on the function: *MSP* offers fixed rates from 9600 to 1000000, *GPS* and *MAVLink* offer *AUTO* and rates up to 460800, *Blackbox* offers *AUTO* and rates up to 2470000, a disabled port shows *Disabled*, and every other function is fixed at *AUTO*. A rate already stored that is not in that list is still offered. When a new function does not allow the current rate, the rate moves to the first one it allows. |
+| Baud rate | The speed of the port, offered as a list only where the function has more than one: *MSP* offers fixed rates from 9600 to 1000000, *GPS* and *MAVLink* offer *AUTO* and rates up to 460800, *Blackbox* offers *AUTO* and rates up to 2470000. Every other function is fixed at *AUTO*, which is shown as text, and a disabled port shows no rate. A rate already stored that is not in that list is still offered. When a new function does not allow the current rate, the rate moves to the first one it allows. |
 
-The port that carries the receiver is marked *[RX]* and cannot be changed here: both of its
-controls are greyed out, and a save keeps that port as it was.
+The port that carries the receiver is marked *[RX]* and cannot be changed here: its function list
+is greyed out, and a save keeps that port as it was.
 
 ## Notes
 
-- **Save writes every port, stores the configuration and restarts the flight controller.** See
-  [Saving configuration](../../reference/saving.md).
+- **Save writes the ports you changed, stores the configuration and restarts the flight
+  controller.** Once the flight controller answers again, the page reads the ports from it, so the
+  rows show what the board holds -- including a configuration the flight controller rejected and
+  reset to its defaults when it stored it. See [Saving configuration](../../reference/saving.md).
 - *Reload* reads the ports from the flight controller again and discards unsaved changes.
 
 ## Related
