@@ -116,10 +116,12 @@ a page that reads from the flight controller, and fails unless the run stops.
 What the rows are measured on, and what that means:
 
 - **`src/`, like every other row.** On `src/` a page resolves its strings at run time through
-  `pageText()`; the packaged tool has them resolved by the packager. The page rows therefore
-  read higher than the radio pays -- by 0 to 225 % per page, median 15 %, against the English
-  package built from the same tree -- and are regression figures for the source as written. The
-  three pages over 20 000 are over it on both.
+  `pageText()`; the packaged tool has them resolved by the packager. A page row is therefore a
+  regression figure for the source as written, not what the page costs on a radio: it reads
+  higher than the packaged suite pays, by 0 to 225 % per page, median 15 %, against the English
+  package built from the same tree. *Adjustments* is 15 379 on `src/` and 6 971 packaged, and
+  *Ports* 27 401 against 20 507, so 27 401 is not what *Ports* costs on a radio. What a row is
+  for is to move when the source does. The three pages over 20 000 are over it on both.
 - **The stubs are billed**, as everywhere here: a page's build pays for the Lua of every stub it
   reaches -- `loadScript`, the card's `io.open`, `lcd.sizeText`. On the package that is a median
   of about 12 % of a build.
@@ -134,6 +136,25 @@ What the rows are measured on, and what that means:
 per page the build's range, the range of the open's worst pass with the phase of its maximum, and
 the largest total of an open. A report like `--phases`: it adds no row and checks nothing. It
 runs for minutes.
+
+What is gated, and what is not:
+
+- **The build is gated**, because it is the one figure that is a property of the page alone: it
+  runs inside one call, so it cannot be spread over passes, and over the twenty phases it is
+  identical on 82 of the 83 pages.
+- **The worst pass of an open is reported by `--pages` and not gated.** A pass that builds a
+  page hosted also carries the host's own step, the MSP tick and the events runner, and which of
+  those share the pass depends on the phase: across the twenty phases the worst pass of one open
+  moves by up to 1 412, median 1 399. A row taken at one phase would move with any change that
+  shifts the timeline, as `pass.state.armed` does (see below), and the phase-swept figure takes
+  minutes rather than seconds. And 19 of the 83 pages have a phase whose worst pass is over
+  20 000 on `src/` (14 of them at every phase; 12 pages on the package), so a gate on it would
+  start with 19 rows carrying `proposed = 20000`.
+- **So a page can be green here while the pass that builds it is stopped by the firmware and
+  retried by the host.** That is a known limit of these rows, not something they rule out.
+  Gating it would take a per-page row for the worst pass over all twenty phases, the phase sweep
+  in CI, a target for each of those 19 pages, and a decision on how much of the 20 000 a page's
+  build may take when the rest of the pass has to fit beside it.
 
 ## The phase sweep
 
