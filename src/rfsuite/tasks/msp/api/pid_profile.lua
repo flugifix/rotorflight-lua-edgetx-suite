@@ -67,6 +67,8 @@ local SIM_RESPONSE = {
 -- the three give one answer for every form of session.apiVersion it accepts. It is loaded on the
 -- first write rather than when this file loads, so opening a page that reads the profile does not
 -- pay for it; lib/require.lua hands back the copy the MSP runtime has normally loaded already.
+-- The modules under tasks/msp/api/ are leaf decoders that load nothing; this one is the exception
+-- on purpose, because its write gate needs the predicate the rest of the suite shares.
 local ApiVersion = nil
 
 local function loadApiVersion()
