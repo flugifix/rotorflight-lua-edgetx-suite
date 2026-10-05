@@ -275,7 +275,7 @@ function BUILD.tool(widget, t)
   return {
     id = "tool",
     kind = "action",
-    title = t("widgets.dashboard.tool_open", "RFSUITE TOOL"),
+    title = t("widgets.dashboard.tool_open", "MAIN MENU"),
     visibleWhen = "modelDisarmed",
     after = "openTool"
   }

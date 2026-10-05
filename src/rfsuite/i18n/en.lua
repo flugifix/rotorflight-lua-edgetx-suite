@@ -2426,7 +2426,7 @@ return {
         urban_key_menu = "Quick menu",
         urban_key_tools = "Profile & Tuning",
         urban_key_link = "ELRS link page",
-        urban_key_suite_tool = "RFSuite tool",
+        urban_key_suite_tool = "Main menu",
         urban_tap_frames = "Frames on tap areas",
         urban_key_exit = "Leave full screen"
       },
@@ -2683,7 +2683,7 @@ return {
       battery_profile = "BATTERY PROFILE",
       battery_pick_title = "WHICH BATTERY?",
       battery_pick_open = "BATTERY",
-      tool_open = "RFSUITE TOOL",
+      tool_open = "MAIN MENU",
       battery_pick_none = "NO BATTERY",
       battery_pick_profile = "Profile %d",
       battery_pick_profile_none = "no profile",

@@ -2422,7 +2422,7 @@ return {
         urban_key_menu = "Schnellmenü",
         urban_key_tools = "Profil & Tuning",
         urban_key_link = "ELRS-Linkseite",
-        urban_key_suite_tool = "RFSuite-Tool",
+        urban_key_suite_tool = "Hauptmenü",
         urban_tap_frames = "Rahmen um Tippflächen",
         urban_key_exit = "Vollbild verlassen"
       },
@@ -2679,7 +2679,7 @@ return {
       battery_profile = "AKKUPROFIL",
       battery_pick_title = "WELCHER AKKU?",
       battery_pick_open = "AKKU",
-      tool_open = "RFSUITE-TOOL",
+      tool_open = "HAUPTMENÜ",
       battery_pick_none = "KEIN AKKU",
       battery_pick_profile = "Profil %d",
       battery_pick_profile_none = "kein Profil",
