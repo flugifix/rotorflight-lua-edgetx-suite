@@ -22,10 +22,11 @@ return function(ctx)
   local parts = { help_p1 }
   local session = ctx.session or (_G.rfsuite and _G.rfsuite.session)
   local rawApiVersion = session and session.apiVersion
-
+  
   local ApiVersion = loadModule("lib/api_version.lua")
   local showRotation = not (rawApiVersion and rawApiVersion ~= "" and tostring(rawApiVersion) ~= "0" and ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(rawApiVersion, {12, 0, 9}))
-  local showStickGain = rawApiVersion and rawApiVersion ~= "" and tostring(rawApiVersion) ~= "0" and ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(rawApiVersion, {12, 0, 10})
+  local showStickGain = rawApiVersion and rawApiVersion ~= "" and tostring(rawApiVersion) ~= "0"
+    and ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(rawApiVersion, {12, 0, 10})
 
   if showStickGain then
     parts[#parts + 1] = help_stick_gain
