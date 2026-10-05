@@ -42,7 +42,7 @@ local state = {
   generation = 0,
   i18n = nil,
   requestRebuild = nil,
-  -- nil until the first answer, then "ok", "no_reply" or "bad_reply".
+  -- nil until the first answer, then "ok", "no_reply", "bad_reply" or "unsupported".
   status = nil,
   data = nil,
   -- The value column, formatted once per reply and read by the label closures.
@@ -187,10 +187,20 @@ local function requestStatus(now)
     simulatorResponse = StatusApi.simulatorResponse,
     maxRetries = 0,
     timeout = POLL_TIMEOUT_SEC,
+    -- A firmware without this command answers it with the MSP error flag and a one-byte error
+    -- code. That is an answer, not a lost reply, so it completes the request at once and reaches
+    -- processReply below instead of waiting out the timeout. The menu entry is gated on the API
+    -- version that introduced the command, but a build can report that version from before the
+    -- command was added.
+    completeOnErrorReplyAttempt = 1,
     processReply = function(_, buf)
       if generation ~= state.generation then return end
       state.pending = false
       state.lastPollAt = nowSeconds()
+      if type(buf) ~= "table" or #buf < StatusApi.fixedLength then
+        applyAnswer("unsupported", nil)
+        return
+      end
       local parsed = StatusApi.parse(buf)
       if parsed then
         applyAnswer("ok", parsed)
@@ -198,9 +208,6 @@ local function requestStatus(now)
         applyAnswer("bad_reply", nil)
       end
     end,
-    -- Also an error reply: a firmware without this command answers with the MSP error flag, and
-    -- the queue gives the message up through here. The page is gated on the API version that
-    -- introduced the command, so that is not expected -- but it must not leave the page waiting.
     errorHandler = function()
       if generation ~= state.generation then return end
       state.pending = false
@@ -276,6 +283,8 @@ function M.build(ctx)
       message = pageText(i18n, "no_reply", "No reply from the flight controller")
     elseif state.status == "bad_reply" then
       message = pageText(i18n, "bad_reply", "The reply could not be read")
+    elseif state.status == "unsupported" then
+      message = pageText(i18n, "unsupported", "This firmware does not support the CRSF Sensors diagnostic.")
     else
       message = pageText(i18n, "waiting", "Waiting for the flight controller")
     end
@@ -350,6 +359,9 @@ function M.wakeup()
   state.pollDeferred = false
 
   if state.pending then return end
+  -- The firmware does not change while it is connected, so a firmware without the command is
+  -- asked once per visit, and again only on Reload, which clears lastPollAt.
+  if state.status == "unsupported" and state.lastPollAt > 0 then return end
   local now = nowSeconds()
   if state.lastPollAt > 0 and (now - state.lastPollAt) < POLL_INTERVAL_SEC then return end
   requestStatus(now)

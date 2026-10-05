@@ -49,6 +49,9 @@ A group the accessory has not sent reads *No data*. A group it stops sending tur
 - **A dash or *Waiting for the flight controller* means nothing has been read yet.** *No reply
   from the flight controller* replaces the values as soon as a read goes unanswered, rather than
   leaving numbers on screen that are no longer being refreshed; the page keeps asking.
+- ***This firmware does not support the CRSF Sensors diagnostic.*** means the flight controller
+  answered that it does not know the message: a firmware that reports MSP API 12.10 but was built
+  before the CRSF sensor input was added. The page asks once per visit; Reload asks again.
 - **The function is assigned on the flight controller.** The Rotorflight Configurator's Ports tab
   sets the CRSF Sensors function on a serial port; the port is opened when the flight controller
   starts.

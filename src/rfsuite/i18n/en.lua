@@ -2028,6 +2028,7 @@ return {
         waiting = "Waiting for the flight controller",
         no_reply = "No reply from the flight controller",
         bad_reply = "The reply could not be read",
+        unsupported = "This firmware does not support the CRSF Sensors diagnostic.",
         help_message = "Counters and readings of a CRSF sensor accessory on the CRSF Sensors serial port, read about once a second.\nLink: Port enabled once a serial port has the CRSF Sensors function.\nRX bytes: rises while bytes arrive; standing still means nothing reaches the port.\nCRC fail: frames that arrived damaged; rising means a wiring or signal problem.\nGPS, Battery, Barometer, Cell Voltages, RPM: No data until that frame type arrives."
       },
       diagnostics_fblstatus = {

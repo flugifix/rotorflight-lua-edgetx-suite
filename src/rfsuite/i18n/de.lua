@@ -2028,6 +2028,7 @@ return {
         waiting = "Warte auf den Flight Controller",
         no_reply = "Keine Antwort vom Flight Controller",
         bad_reply = "Die Antwort konnte nicht gelesen werden",
+        unsupported = "Diese Firmware unterstützt die CRSF-Sensors-Diagnose nicht.",
         help_message = "Zähler und Werte eines CRSF-Sensors am seriellen Port mit der Funktion CRSF Sensors, etwa einmal pro Sekunde gelesen.\nVerbindung: Port aktiv, sobald ein serieller Port die Funktion CRSF Sensors hat.\nRX-Bytes: steigt, solange Bytes ankommen; bleibt der Wert stehen, erreicht nichts den Port.\nCRC-Fehler: beschädigt angekommene Frames; steigt der Wert, liegt ein Verdrahtungs- oder Signalproblem vor.\nGPS, Akku, Barometer, Zellspannungen, Drehzahl: Keine Daten, bis dieser Frame-Typ ankommt."
       },
       diagnostics_fblstatus = {
