@@ -116,7 +116,7 @@ local SIM_AXES = {
 local simulatorResponses = {}
 
 --- The simulator's reply for one axis (1-3), built once and kept.
-function Api.simulatorResponse(axis)
+function Api.simulatorResponseFor(axis)
   local cached = simulatorResponses[axis]
   if cached then return cached end
   local a = SIM_AXES[axis]
@@ -139,5 +139,8 @@ function Api.simulatorResponse(axis)
   simulatorResponses[axis] = buf
   return buf
 end
+
+-- The reply to a request for roll, as a plain byte table like every other api module's.
+Api.simulatorResponse = Api.simulatorResponseFor(1)
 
 return Api

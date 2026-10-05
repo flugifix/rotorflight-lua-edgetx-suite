@@ -459,7 +459,7 @@ poll = function()
     -- The flight controller's error reply is the only answer that says the firmware lacks the
     -- command, and only this field lets it reach processReply instead of being retried.
     completeOnErrorReplyAttempt = 1,
-    simulatorResponse = api.simulatorResponse(axis),
+    simulatorResponse = api.simulatorResponseFor(axis),
     processReply = function(_, buf)
       if generation ~= ui.generation then return end
       ui.pending = false
