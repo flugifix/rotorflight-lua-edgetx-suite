@@ -52,9 +52,10 @@ A group the accessory has not sent reads *No data*. A group it stops sending tur
 - ***This firmware does not support the CRSF Sensors diagnostic.*** means the flight controller
   answered that it does not know the message: a firmware that reports MSP API 12.10 but was built
   before the CRSF sensor input was added. The page asks once per visit; Reload asks again.
-- **The function is assigned on the flight controller.** The Rotorflight Configurator's Ports tab
-  sets the CRSF Sensors function on a serial port; the port is opened when the flight controller
-  starts.
+- **The function is assigned to a serial port of the flight controller.** Where this suite's
+  [Ports](../../setup/ports.md) page (*Configuration* → *Setup* → *Ports*) offers *CRSF Sensors* in
+  a port's function list -- it needs MSP API 12.10 -- set it there; otherwise the Rotorflight
+  Configurator's Ports tab sets it. The port is opened when the flight controller starts.
 - **What the readings are used for is set on the flight controller, not here.** The GPS values
   appear only on this page. With the voltage meter source set to CRSF, the battery voltage comes
   from the battery values, or from the total of the cell voltages when no battery values arrive
