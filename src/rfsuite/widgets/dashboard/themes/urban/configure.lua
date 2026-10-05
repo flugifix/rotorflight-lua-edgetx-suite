@@ -87,7 +87,9 @@ local LINK_SWITCH_DEFAULT = 0
 -- the actions come from layout.lua, which binds them; the words are this page's. Like the link
 -- switch, not a row of Layout.SETTINGS -- a binding draws nothing. Each label but Nothing says
 -- whose the action is, Suite or Theme, since the list mixes the dashboard's own actions with the
--- pages this theme adds; that word is part of the translated label.
+-- pages this theme adds; that word is part of the translated label. The labels are kept short
+-- enough for the choice control's standard font on a 480 px wide screen: a longer one is drawn in
+-- a smaller font, which makes the column uneven.
 local KEYS = Layout.KEYS or {}
 local KEY_NAMES = { pageDown = "PAGE >", pageUp = "PAGE <", mdl = "MDL", sys = "SYS", tele = "TELE" }
 local KEY_ACTION_LABELS = {

@@ -2425,11 +2425,11 @@ return {
         urban_key = "Key",
         urban_key_none = "Nothing",
         urban_key_menu = "Suite: Quick menu",
-        urban_key_tools = "Theme: Profile & Tuning",
-        urban_key_link = "Theme: ELRS link page",
+        urban_key_tools = "Theme: Tuning",
+        urban_key_link = "Theme: ELRS link",
         urban_key_suite_tool = "Suite: Main menu",
         urban_tap_frames = "Frames on tap areas",
-        urban_key_exit = "Suite: Leave full screen"
+        urban_key_exit = "Suite: Exit full screen"
       },
       settings_dashboard_overrides = {
         model_name = "Model",

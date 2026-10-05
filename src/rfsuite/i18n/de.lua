@@ -2420,11 +2420,11 @@ return {
         urban_key = "Taste",
         urban_key_none = "Nichts",
         urban_key_menu = "Suite: Schnellmenü",
-        urban_key_tools = "Theme: Profil & Tuning",
-        urban_key_link = "Theme: ELRS-Linkseite",
+        urban_key_tools = "Theme: Tuning",
+        urban_key_link = "Theme: ELRS-Link",
         urban_key_suite_tool = "Suite: Hauptmenü",
         urban_tap_frames = "Rahmen um Tippflächen",
-        urban_key_exit = "Suite: Vollbild verlassen"
+        urban_key_exit = "Suite: Vollbild aus"
       },
       settings_dashboard_overrides = {
         model_name = "Modell",
