@@ -1413,8 +1413,11 @@ local function updateRuntimeMenuConditions()
   -- the tool (tasks/events/onconnect/manifest.lua). When the dashboard hosts this file they run
   -- as the widget, and after a short link loss or a failed read the value stays empty as well, so
   -- the menu asks for it itself. A read that fails is asked again only after
-  -- ESC_PROTO_RETRY_TICKS; leaving the menu and coming back asks at once.
-  if currentMenuId == "esc_tools_menu" and state.fblConnected == true and session
+  -- ESC_PROTO_RETRY_TICKS; leaving the menu and coming back asks at once. It waits until
+  -- syncActivePageModule has taken the menu over, so the request is filed under the menu's own
+  -- MSP client rather than under the one the leaving menu's reads are dropped with.
+  if currentMenuId == "esc_tools_menu" and state.activePageMenuId == currentMenuId
+    and state.fblConnected == true and session
     and session.esc4WayDetectedProto == nil and not state.escProtoCheckPending
     and (state.escProtoRetryAt == nil or (getTime and getTime() or 0) >= state.escProtoRetryAt) then
     ensureMspRuntime()
