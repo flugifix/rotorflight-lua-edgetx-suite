@@ -477,6 +477,18 @@ local function queuePortsRead(isAutoReload)
   return true, nil
 end
 
+-- Has this port's record moved since it was read? The write replaces the whole record, so every
+-- field the record carries is compared, not only the function.
+local function portChanged(i)
+  local working, original = ui.portsWorking[i], ui.portsOriginal[i]
+  if not original or original.identifier ~= working.identifier then return true end
+  return working.function_mask ~= original.function_mask
+    or working.msp_baud_index ~= original.msp_baud_index
+    or working.gps_baud_index ~= original.gps_baud_index
+    or working.telem_baud_index ~= original.telem_baud_index
+    or working.blackbox_baud_index ~= original.blackbox_baud_index
+end
+
 local function queuePortsWrite()
   if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
   if not SavePipeline or not SerialConfigApi then
@@ -485,16 +497,20 @@ local function queuePortsWrite()
 
   applyReceiverGuardToWorkingCopy()
 
-  -- One write per port, as before. What was a recursive writeNext() queueing the next port from
-  -- the previous one's processReply is a list of steps here, so the same order costs no
-  -- recursion and the EEPROM commit is not buried three closures deep.
+  -- One write per port that changed, in the page's order. MSP_SET_SERIAL_CONFIG stores each
+  -- record into the port its identifier names and checks nothing until the EEPROM write, so
+  -- rewriting a port with the values it already holds changes nothing on the board: leaving it out
+  -- reaches the same configuration with fewer writes. A save with nothing changed still stores and
+  -- restarts, as it always has.
   local steps = {}
   for i = 1, #ui.portsWorking do
-    steps[#steps + 1] = {
-      label = "MSP_SET_CF_SERIAL_CONFIG",
-      command = SerialConfigApi.writeCommand,
-      payload = SerialConfigApi.buildWritePayload(ui.portsWorking[i])
-    }
+    if portChanged(i) then
+      steps[#steps + 1] = {
+        label = "MSP_SET_CF_SERIAL_CONFIG",
+        command = SerialConfigApi.writeCommand,
+        payload = SerialConfigApi.buildWritePayload(ui.portsWorking[i])
+      }
+    end
   end
 
   -- Behaviour change worth naming: a port write that failed used to run an errorHandler whose
