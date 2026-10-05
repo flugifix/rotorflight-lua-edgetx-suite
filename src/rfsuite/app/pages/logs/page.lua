@@ -1299,6 +1299,7 @@ function M.build(ctx)
       y = cursorY + 10,
       w = valColW,
       text = string.format("%s   (%d %s)", summary.durationStr, summary.sampleCount, pageText(i18n, "samples")),
+      -- The default label colour these values were always drawn in (COLOR_WHITE is undefined); white is unreadable on the light page.
       color = COLOR_THEME_SECONDARY1,
       font = SMLSIZE
     }
