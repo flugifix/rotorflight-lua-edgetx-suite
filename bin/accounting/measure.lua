@@ -968,6 +968,7 @@ if args["--pages"] then
         worstLo, worstHi, worstAt, totalHi))
     end
   end
+  Stubs.releaseCard()
   return
 end
 

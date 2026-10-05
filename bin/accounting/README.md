@@ -95,6 +95,11 @@ How a page is opened:
 - **The link** answers between passes and holds one pass's worth of telemetry from the host's
   request on, as in the in-flight tuning scenario. An open is over when the page has stayed
   quiet for ten passes: no build, nothing outstanding on the link, nothing to redraw.
+- **One world per page**, rebuilt as for every scenario here, and the pages opened in the
+  registry's sorted order. That is not quite the same as no inheritance: run in reverse order,
+  82 of the 83 rows read the same and one moves by 50 (`tools_select_profile`, which then follows
+  the service widget's world instead of another page's). The order is fixed, so two runs agree;
+  a page added ahead of others in that order can move a row behind it by about as much.
 - **The build** is counted on the hook's own counter: the page module is wrapped where the
   registry loads it, and the wrapper hooks the build alone, so the passes around it can run
   without the hook. The wrapper's call into the build and back is billed with it, a handful of
