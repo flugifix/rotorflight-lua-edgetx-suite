@@ -31,14 +31,16 @@ local RESERVE_MIN = 15
 local RESERVE_MAX = 60
 
 -- The settings firmware with per-profile battery cells keeps once per battery profile, with the
--- range and default each is shown with.
+-- range the board accepts and the default. Every profile is written back on save, so a profile the
+-- pilot does not touch keeps the board's own value even where it lies outside the 2.50 V the
+-- fields start at (the board takes cell voltages from 1.00 V).
 local CELL_FIELDS = { "batteryCellCount", "vbatmincellvoltage", "vbatmaxcellvoltage", "vbatfullcellvoltage", "vbatwarningcellvoltage" }
 local CELL_LIMITS = {
 	batteryCellCount = { CELL_COUNT_MIN, CELL_COUNT_MAX, 0 },
-	vbatmincellvoltage = { 250, 500, 330 },
-	vbatmaxcellvoltage = { 250, 500, 420 },
-	vbatfullcellvoltage = { 250, 500, 410 },
-	vbatwarningcellvoltage = { 250, 500, 350 }
+	vbatmincellvoltage = { 100, 500, 330 },
+	vbatmaxcellvoltage = { 100, 500, 420 },
+	vbatfullcellvoltage = { 100, 500, 410 },
+	vbatwarningcellvoltage = { 100, 500, 350 }
 }
 
 local function newRuntime()
@@ -399,6 +401,7 @@ local function boundCellVoltage(field, value)
 	elseif field == "vbatmincellvoltage" then
 		hi = math.min(warnV, maxV - 1)
 	end
+	if hi < lo then hi = lo end
 	if value < lo then value = lo end
 	if value > hi then value = hi end
 	return value
