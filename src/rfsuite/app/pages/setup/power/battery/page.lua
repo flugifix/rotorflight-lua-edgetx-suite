@@ -265,11 +265,17 @@ local function loadFromSession()
 	if batteryConfig and batteryConfig.hasProfileCells == true then
 		local cells = {}
 		for f = 1, #CELL_FIELDS do
+			-- Thirty values on the pass that builds the page, so the range check is inline: the
+			-- parsed reply holds integers or nothing.
 			local field = CELL_FIELDS[f]
 			local limits = CELL_LIMITS[field]
+			local lo, hi, default = limits[1], limits[2], limits[3]
+			local prefix = field .. "_"
 			local values = {}
 			for i = 0, 5 do
-				values[i + 1] = clampInt(batteryConfig[field .. "_" .. tostring(i)], limits[1], limits[2], limits[3])
+				local v = batteryConfig[prefix .. i] or default
+				if v < lo then v = lo elseif v > hi then v = hi end
+				values[i + 1] = v
 			end
 			cells[field] = values
 		end
@@ -391,8 +397,9 @@ local function getEditProfileSetter()
 	return ui.runtime.editProfileSet
 end
 
+-- Both are clamped where they are set, and the five rows ask on every refresh.
 local function editSlot()
-	return clampInt(ui.config.editBatteryProfile or ui.config.selectedBatteryProfile, PROFILE_MIN, PROFILE_MAX, PROFILE_MIN) + 1
+	return (ui.config.editBatteryProfile or ui.config.selectedBatteryProfile or PROFILE_MIN) + 1
 end
 
 -- The value a cell field shows: the edited profile's where the board keeps them per profile, the
