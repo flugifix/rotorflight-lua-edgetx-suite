@@ -50,9 +50,29 @@ local FIELD_SPEC = {
     {"yaw_inertia_precomp_cutoff", "U8"}
 }
 
+-- error_decay_gain_cyclic follows FIELD_SPEC as the last byte from MSP API 12.10 (firmware 4.7)
+-- on. The read takes it whenever the reply carries it, so a shorter reply still parses. The write
+-- sends it only to a flight controller that reports 12.10 or later: firmware 4.6 (API 12.9) leaves
+-- a trailing byte here unread and still acknowledges the write, so the value would be dropped
+-- without a word, while 4.7 reads the byte only when one is left, so a write without it keeps the
+-- stored value.
+local ERROR_DECAY_GAIN_CYCLIC = "error_decay_gain_cyclic"
+
+-- The simulator answers MSP_API_VERSION with 12.9, so its reply ends before the 12.10 field.
 local SIM_RESPONSE = {
     3,25,250,0,12,0,1,45,45,60,50,50,100,15,15,20,2,10,10,15,100,100,6,0,30,0,0,0,40,55,0,75,20,25,0,15,90,90,15,15,20,10,20
 }
+
+-- The session's API version is the "<major>.<minor>" string the MSP runtime stores, e.g. "12.10".
+local function sessionApiAtLeast12_10()
+    local root = _G and _G.rfsuite
+    local session = root and root.session
+    local raw = type(session) == "table" and session.apiVersion or nil
+    local major, minor = string.match(tostring(raw or ""), "^(%d+)%.(%d+)$")
+    major, minor = tonumber(major), tonumber(minor)
+    if not major or not minor then return false end
+    return major > 12 or (major == 12 and minor >= 10)
+end
 
 local function expected_bytes(spec)
     local n = 0
@@ -96,6 +116,9 @@ function Api.parse(buf)
         elseif typ == "U16" then out[name] = to_u16(buf[i], buf[i+1]); i = i + 2
         else out[name] = tonumber(buf[i]) or 0; i = i + 1 end
     end
+    if #buf > need then
+        out[ERROR_DECAY_GAIN_CYCLIC] = tonumber(buf[need + 1]) or 0
+    end
     return out
 end
 
@@ -108,6 +131,10 @@ function Api.buildWritePayload(data)
         if typ == "U8" or typ == "S8" then p[#p+1] = val & 0xFF
         elseif typ == "U16" then local lo, hi = from_u16(val); p[#p+1] = lo; p[#p+1] = hi
         else p[#p+1] = val & 0xFF end
+    end
+    local gain = data[ERROR_DECAY_GAIN_CYCLIC]
+    if type(gain) == "number" and sessionApiAtLeast12_10() then
+        p[#p+1] = math.floor(gain) & 0xFF
     end
     return p
 end
