@@ -233,6 +233,8 @@
   - The page lists the sensor groups -- Battery, Voltage, Current, ESC 1 and the rest -- each with how many of its sensors are on, and a group opens on its own sensors only; Back returns to the list. It used to build every sensor of every group at once, about ninety switches on one scrolling page.
   - A line on both levels reads *Sensors: n / 40*: the slots a save would fill, counting the sensors the page does not list but keeps in their slots. Above 40 it turns to the warning colour and says that more than 40 cannot be saved, as a sensor is switched on rather than only when Save is pressed. The line and the save check are the same count.
   - Saving is unchanged: one write of all 40 slots, whichever group is open, and switches changed in several groups are saved together. The group titles are translated; the sensor names are not changed.
+- **Urban's Keys page says whose each choice is (`widgets/dashboard/themes/urban/configure.lua`, `i18n/en.lua`, `i18n/de.lua`, `docs/dashboard/urban-theme.md`)**:
+  - The list a key is set from mixes what the dashboard does on every theme -- the quick menu, the main menu, leaving full screen -- with the two pages Urban draws itself, and nothing told them apart. Each choice but *Nothing* now opens with *Suite:* or *Theme:*. The stored choices are unchanged.
 
 ### Bug Fixes & Improvements
 - **`rfsuite.batteryPick.open()` called while the dashboard widget is in its zone now opens the picker on the next entry into fullscreen (`widgets/dashboard/runtime.lua`, `docs/developer/dashboard-themes.md`, `docs/developer/dashboard-views.md`) (fixes #453)**:

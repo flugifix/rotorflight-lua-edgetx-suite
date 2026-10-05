@@ -2420,15 +2420,16 @@ return {
         urban_temp_colors = "Temperature colours",
         urban_temp_colors_early = "Early",
         urban_link_switch = "Link view switch",
-        -- The Keys page: what a key does in full screen.
+        -- The Keys page: what a key does in full screen. Each choice but "Nothing" opens with whose it
+        -- is: "Suite:" for what the dashboard does on every theme, "Theme:" for a page Urban draws itself.
         urban_key = "Key",
         urban_key_none = "Nothing",
-        urban_key_menu = "Quick menu",
-        urban_key_tools = "Profile & Tuning",
-        urban_key_link = "ELRS link page",
-        urban_key_suite_tool = "Main menu",
+        urban_key_menu = "Suite: Quick menu",
+        urban_key_tools = "Theme: Profile & Tuning",
+        urban_key_link = "Theme: ELRS link page",
+        urban_key_suite_tool = "Suite: Main menu",
         urban_tap_frames = "Frames on tap areas",
-        urban_key_exit = "Leave full screen"
+        urban_key_exit = "Suite: Leave full screen"
       },
       settings_dashboard_overrides = {
         model_name = "Model",
