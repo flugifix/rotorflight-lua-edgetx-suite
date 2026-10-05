@@ -631,6 +631,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
 
   -- Build baud rate choices
   local baudChoices = buildBaudChoiceTable(i18n, port)
+  local ptype = getPortType(i18n, port.function_mask)
   local baudFieldValues = {}
   local selectedBaudIndex = 1
   local currentBaud = getActiveBaudIndex(i18n, port)
@@ -645,32 +646,51 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
     selectedBaudIndex = 1
   end
 
-  -- Baud rate choice dropdown select
-  children[#children + 1] = {
-    type  = "choice",
-    x = xBaud, y = comboY,
-    w = wBaud,
-    title = lineTitle,
-    values = baudFieldValues,
-    active = function() return not port.receiver_locked end,
-    get = function()
-      return selectedBaudIndex
-    end,
-    set = function(nextIndex)
-      if port.receiver_locked then return end
-      local idx = tonumber(nextIndex) or selectedBaudIndex
-      if idx < 1 then idx = 1 end
-      if idx > #baudChoices then idx = #baudChoices end
-      selectedBaudIndex = idx
+  -- A rate is only a control where the function offers more than one. A disabled port has no
+  -- rate at all, and a function fixed at one rate (AUTO for the receiver, the ESC sensor and most
+  -- telemetry) shows that rate as text: a list with a single entry is a control with nothing to
+  -- choose, and it was built for every such row on every build.
+  if ptype == PORT_TYPE_DISABLED then
+    baudChoices = nil
+  elseif #baudChoices <= 1 then
+    children[#children + 1] = {
+      type  = "label",
+      x = xBaud + 8, y = labelY,
+      w = wBaud - 8,
+      text  = baudFieldValues[1],
+      color = COLOR_THEME_PRIMARY1
+    }
+    baudChoices = nil
+  end
 
-      local opt = baudChoices[idx]
-      local value = opt and opt[2]
-      if value and value ~= getActiveBaudIndex(i18n, port) then
-        setActiveBaudIndex(i18n, port, value)
-        ui.dirty = true
+  -- Baud rate choice dropdown select
+  if baudChoices then
+    children[#children + 1] = {
+      type  = "choice",
+      x = xBaud, y = comboY,
+      w = wBaud,
+      title = lineTitle,
+      values = baudFieldValues,
+      active = function() return not port.receiver_locked end,
+      get = function()
+        return selectedBaudIndex
+      end,
+      set = function(nextIndex)
+        if port.receiver_locked then return end
+        local idx = tonumber(nextIndex) or selectedBaudIndex
+        if idx < 1 then idx = 1 end
+        if idx > #baudChoices then idx = #baudChoices end
+        selectedBaudIndex = idx
+
+        local opt = baudChoices[idx]
+        local value = opt and opt[2]
+        if value and value ~= getActiveBaudIndex(i18n, port) then
+          setActiveBaudIndex(i18n, port, value)
+          ui.dirty = true
+        end
       end
-    end
-  }
+    }
+  end
 
   -- Divider line
   children[#children + 1] = {
