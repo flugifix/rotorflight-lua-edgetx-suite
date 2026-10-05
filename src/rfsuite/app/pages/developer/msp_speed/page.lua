@@ -486,6 +486,11 @@ function M.build(ctx)
   local rowH = (Controls and Controls.ROW_H) or 64
   local buttonW = 130
   local comboW = 130
+  local rightPad = 10
+  local gap = 8
+  local buttonX = x + w - buttonW - rightPad
+  local comboX = buttonX - gap - comboW
+  local labelW = comboX - x - 8
   local ctrlY = (Controls and Controls.controlY and Controls.controlY(cursorY, rowH)) or (cursorY + math.floor((rowH - 32) / 2))
   local labelY = (Controls and Controls.labelY and Controls.labelY(cursorY, rowH)) or (cursorY + math.floor((rowH - 21) / 2))
 
