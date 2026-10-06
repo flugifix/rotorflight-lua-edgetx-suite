@@ -758,12 +758,12 @@ screen changes:
 
 | | |
 | --- | --- |
-| `ctx.action(after)` | performs an action: `openView:<id>`, `closeView`, `done`, `exitFullscreen`, `openTool` or `none` (see [what follows a press](dashboard-views.md#what-follows-a-press)) |
+| `ctx.action(after)` | performs an action: `openView:<id>`, `closeView`, `done`, `exitFullscreen`, `openTool`, `openTool:<menuId>` or `none` (see [what follows a press](dashboard-views.md#what-follows-a-press)) |
 | `ctx.keys` | a table the theme fills with actions for the keys, `exit`, `pageDown`, `pageUp`, `mdl`, `sys` and `tele`; see below |
 | `ctx.condition(name)` | whether a named condition holds, from the list in [dashboard views](dashboard-views.md#conditions) |
 | `ctx.entries()` | the quick menu's entries, as `fullscreen_menu.lua` returns them: the ones the pilot has put in it, in the pilot's order |
 | `ctx.menu(children, entries)` | the quick menu's builder: appends the menu for `entries` (the menu's own when omitted) to `children`; a list handed in chooses and orders the menu's own entries by `id`, and an item whose id the menu does not have is left out |
-| `ctx.entry(id)` | the quick menu's record `id` — `erase_blackbox`, `inflight_tuning`, `battery_pick`, `tool`, `battery_profile` — or `nil`; whether or not the pilot has put it in the quick menu |
+| `ctx.entry(id)` | the quick menu's record `id` — `erase_blackbox`, `inflight_tuning`, `battery_pick`, `tool`, `flight_log`, `battery_profile` — or `nil`; whether or not the pilot has put it in the quick menu |
 | `ctx.list(name)` | the records of a named menu, in its order: `"quick"` is the quick menu as the pilot has arranged it on *Settings* → *Dashboard* → *Quick Settings*; any other name gives an empty list |
 | `ctx.visible(entry)` | whether the entry is offered now — the test the quick menu makes before drawing the row |
 | `ctx.run(entry, option, after)` | the entry's work, or `option`'s when one is given, and then what follows it — the menu's own record and option of that id, whatever table is handed in; `after` replaces the entry's own follow-up, `nil` keeps it |

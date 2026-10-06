@@ -2532,6 +2532,7 @@ return {
         urban_key_tools = "Theme: Tuning",
         urban_key_link = "Theme: ELRS link",
         urban_key_suite_tool = "Suite: Main menu",
+        urban_key_flight_log = "Suite: Flight log",
         urban_tap_frames = "Frames on tap areas",
         urban_key_exit = "Suite: Exit full screen"
       },
@@ -2789,6 +2790,7 @@ return {
       battery_pick_title = "WHICH BATTERY?",
       battery_pick_open = "BATTERY",
       tool_open = "MAIN MENU",
+      flight_log_open = "FLIGHT LOG",
       battery_pick_none = "NO BATTERY",
       battery_pick_profile = "Profile %d",
       battery_pick_profile_none = "no profile",

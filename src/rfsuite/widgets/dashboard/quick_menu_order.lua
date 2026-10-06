@@ -24,7 +24,7 @@ M.KEY = "quick_menu"
 
 -- Every entry the pilot may put in the menu, in the order the settings page lists them. Each one
 -- is an entry fullscreen_menu.lua builds under the same id.
-M.OFFERED = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool", "battery_profile" }
+M.OFFERED = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool", "flight_log", "battery_profile" }
 
 -- What the menu shows until the pilot chooses: what it has always shown, in that order.
 M.DEFAULT = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool", "battery_profile" }
@@ -36,6 +36,7 @@ M.TITLES = {
   inflight_tuning = "@i18n(widgets.dashboard.inflight_open)@",
   battery_pick = "@i18n(widgets.dashboard.battery_pick_open)@",
   tool = "@i18n(widgets.dashboard.tool_open)@",
+  flight_log = "@i18n(widgets.dashboard.flight_log_open)@",
   battery_profile = "@i18n(widgets.dashboard.battery_profile)@",
 }
 

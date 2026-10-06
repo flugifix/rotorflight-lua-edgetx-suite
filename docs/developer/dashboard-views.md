@@ -171,6 +171,7 @@ view, which is what an unresolvable condition does in `app/menu_registry.lua` as
 | `previewInflightTuning` | the in-flight tuning preview switch is on and the widget carries the overlay's state for this model |
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
 | `modelDisarmed` | the model is not armed (`state.armed`) |
+| `flightLogOffered` | the *Flight Log* preview switch is on (`preferences.general.preview_flight_log`, the switch the tool's own menu asks) and the model is not armed |
 | `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
 
 ### What else a theme's view may open on
@@ -247,6 +248,7 @@ string:
 | `done` | The interaction is finished: the stack is emptied. With no base layer that leaves full screen; with one, the base layer — the theme — shows again. |
 | `exitFullscreen` | Empty the stack and leave full screen, base layer or not. |
 | `openTool` | Open the suite's tool inside the widget, where the model is disarmed. The tool takes full screen until it is closed; see [The tool](#the-tool). The stack is emptied as for `done`, keeping what the theme's views' conditions last answered, so once the tool is closed the base layer shows, or with none the quick menu, and a theme's view whose condition still holds is not opened again. |
+| `openTool:<menuId>` | The same, with the tool opened on that page instead of on its menu; the back key there closes the tool again, because the pilot came from the widget. Only for a page `views.lua` lists in `TOOL_LANDINGS` — `tools_flight_log_page`, while `flightLogOffered` holds — and nothing at all otherwise, so a key bound to it does nothing while the page is not offered. |
 | `none` | Nothing. The press did whatever needed doing itself. |
 
 A missing `after`, and anything that is not one of these, is `none`. `views.parseAction()` is
@@ -261,6 +263,7 @@ built, so the next pass builds the view now on top. The shipped buttons:
 | Quick menu | IN-FLIGHT TUNING | `none` — its press raises the tuning surface's own flag |
 | Quick menu | BATTERY | `openView:battery_pick` |
 | Quick menu | MAIN MENU | `openTool` |
+| Quick menu | FLIGHT LOG, where the pilot has put it in the menu | `openTool:tools_flight_log_page` |
 | Quick menu | each BATTERY PROFILE option | `done` |
 | Quick menu | the header's X | `done` |
 | Picker | each pack, and NO BATTERY | `done` |
@@ -330,7 +333,9 @@ tool script runs — and `widget.refresh` drives it in place of the whole pass, 
 neither a view, the base layer nor the dashboard's own work runs beside it:
 
 - **Opening** takes two passes after the press: one loads `ui/home.lua`, one calls
-  `init({ hosted = true })`. A hosted tool leaves alone what the widget's state already owns:
+  `init({ hosted = true })` — with `landing = <menuId>` for `openTool:<menuId>`, which opens that
+  page the way the pilot would reach it, through its root entry and its menu, under the menu's
+  own conditions; where a step fails the tool opens on its menu instead. A hosted tool leaves alone what the widget's state already owns:
   it does not compile the tree, announce, reset the event runner, shut the card log, clear the
   chunk cache or drop `_G.rfsuite` on its way out.
 - **Loading**, from the first of those passes until the tool closes, `loadScript` is the tool
@@ -344,7 +349,8 @@ neither a view, the base layer nor the dashboard's own work runs beside it:
   has already worked through. A widget call is stopped at the instruction limit where a tool
   script is yielded; a stop inside the tool is caught and the tool is run again on the next pass,
   and twelve stops in a row give the tool up.
-- **Closing** is the tool's own sequence: the back key at the top of its menu, or
+- **Closing** is the tool's own sequence: the back key at the top of its menu, or on the page
+  `openTool:<menuId>` opened it on while that page is still the one up, or
   `requestClose()`, which the host calls on the first pass without an event (full screen has
   been left) and when the model arms. When `run` returns 2 the host detaches the tool's MSP
   client, puts back the MSP queue's default client and the `preferences` and `savePreferences` it
@@ -357,7 +363,8 @@ neither a view, the base layer nor the dashboard's own work runs beside it:
   whose condition rises later opens as it would have. A widget sent to the background drops the
   tool without the sequence, because it cannot paint it.
 
-A theme that binds its own controls reaches the tool with `ctx.action("openTool")`.
+A theme that binds its own controls reaches the tool with `ctx.action("openTool")`, or with
+`ctx.action("openTool:tools_flight_log_page")` on its *Flight Log* page.
 
 ## Related
 

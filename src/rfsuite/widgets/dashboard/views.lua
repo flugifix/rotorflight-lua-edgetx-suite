@@ -131,6 +131,15 @@ function CONDITIONS.modelDisarmed(widget)
   return not (widget.state and widget.state.armed == true)
 end
 
+-- The tool opened on its Flight Log page: only while the page is in the tool at all -- the same
+-- preview switch the tool's own menu asks (`previewFlightLog` in app/manifest.lua) -- and, like
+-- the tool, only while the model is disarmed.
+function CONDITIONS.flightLogOffered(widget)
+  local previewOn = widget.preferences and widget.preferences.general
+    and widget.preferences.general.preview_flight_log == true
+  return previewOn == true and CONDITIONS.modelDisarmed(widget)
+end
+
 --- Whether the named condition holds for this widget. Unknown names, nil included, are false.
 function M.condition(name, widget)
   local condition = CONDITIONS[name]
@@ -527,11 +536,20 @@ end
 -- Actions
 -- ---------------------------------------------------------------------------
 
--- An action is a string: `openView:<id>`, `closeView`, `done`, `exitFullscreen`, `openTool` or
--- `none`.
+-- An action is a string: `openView:<id>`, `closeView`, `done`, `exitFullscreen`, `openTool`,
+-- `openTool:<menuId>` or `none`.
 local SIMPLE_ACTIONS = { closeView = true, done = true, exitFullscreen = true, openTool = true, none = true }
 
---- The one place an action is read: its verb, and the view id for `openView`.
+-- The pages `openTool:<menuId>` may open the tool on, each with the condition that has to hold for
+-- it: the page has to be in the tool's menu and reachable now. A target that is not here is
+-- refused, so a key bound to a page that is not offered does nothing rather than opening the tool
+-- somewhere else.
+local TOOL_LANDINGS = {
+  tools_flight_log_page = "flightLogOffered",
+}
+
+--- The one place an action is read: its verb, and the view id for `openView` or the page for
+--- `openTool:<menuId>`.
 --
 -- nil and anything unrecognised are `none`, so a missing `after` leaves the view where it is.
 -- A later form that is not a string is added here and nowhere else.
@@ -540,6 +558,8 @@ function M.parseAction(after)
   if SIMPLE_ACTIONS[after] then return after, nil end
   local id = string.match(after, "^openView:(.+)$")
   if id ~= nil then return "openView", id end
+  local page = string.match(after, "^openTool:(.+)$")
+  if page ~= nil then return "openTool", page end
   viewLog("unknown view action '" .. after .. "' ignored")
   return "none", nil
 end
@@ -602,6 +622,10 @@ end
 --                   it takes fullscreen until it is closed; the session starts anew as for
 --                   `done`, so what the tool hands back to is the base layer, or the default
 --                   view, and a theme's view whose condition still holds is not opened again
+--   openTool:<menuId>
+--                   the same, with the tool opened on that page rather than on its menu, and
+--                   closed again by the back key there; only for a page in TOOL_LANDINGS whose
+--                   condition holds, and nothing at all otherwise
 --   none            nothing at all; the press did whatever needed doing itself
 --
 -- An `openView` that is refused -- a view this widget does not have, a theme's view that did not
@@ -632,8 +656,12 @@ function M.navigate(widget, after)
     widget._viewStack = nil
     exitFullscreen(widget)
   elseif verb == "openTool" then
+    if id ~= nil and not M.condition(TOOL_LANDINGS[id], widget) then
+      viewLog("tool not opened on '" .. id .. "': that page is not offered now")
+      return
+    end
     local ToolHost = requireModule("widgets/dashboard/tool_host.lua")
-    if type(ToolHost) == "table" and type(ToolHost.request) == "function" and ToolHost.request(widget) then
+    if type(ToolHost) == "table" and type(ToolHost.request) == "function" and ToolHost.request(widget, id) then
       newSession(widget)
       reset(widget)
     end

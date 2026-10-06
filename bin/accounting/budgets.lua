@@ -307,7 +307,7 @@ return {
     ["page.settings_audio_events_voltage_page.build"] = { target = 6100, measured = 4877 },
     ["page.settings_audio_volume_page.build"] = { target = 2100, measured = 1674 },
     ["page.settings_dashboard_inflight_page.build"] = { target = 10200, measured = 8152 },
-    ["page.settings_dashboard_quick_menu_page.build"] = { target = 2500, measured = 1987 },
+    ["page.settings_dashboard_quick_menu_page.build"] = { target = 2500, measured = 2364 },
     ["page.settings_dashboard_theme_page.build"] = { target = 13250, measured = 10585 },
     ["page.settings_general_page.build"] = { target = 2200, measured = 1747 },
     ["page.settings_localization_page.build"] = { target = 2350, measured = 1878 },
