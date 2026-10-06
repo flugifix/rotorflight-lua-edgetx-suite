@@ -61,6 +61,10 @@ The model's own theme settings are edited under
 - Saving writes the radio's file and, with a flight controller connected, the model's file. The
   page reports *Saved* only when both were written, and otherwise *Save failed* with the reason:
   *the settings file could not be written to the SD card* where the card refused a file.
+- **The theme list is kept between visits.** The page lists the theme folders when it is first
+  opened and keeps that list while the tool runs, until the tool drops the page from its cache of
+  recently opened pages. The page has no *Reload*: a theme copied onto the card while the tool is
+  open is offered once the tool has been closed and opened again.
 
 ## Related
 

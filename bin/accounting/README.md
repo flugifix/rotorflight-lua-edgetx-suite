@@ -1,6 +1,6 @@
 # Offline instruction accounting
 
-Runs dashboard and service sources under `debug.sethook(counter, "", 1)` -- the same
+Runs dashboard, service and tool sources under `debug.sethook(counter, "", 1)` -- the same
 count-hook mechanism the firmware bills widget calls with -- against small deterministic
 EdgeTX stubs, and gates the numbers against the checked-in table in `budgets.lua`.
 
@@ -18,11 +18,14 @@ lua5.3 bin/accounting/measure.lua --check      # gate: non-zero exit on any brea
 lua5.3 bin/accounting/measure.lua --self-test  # proves the check can go red
 lua5.3 bin/accounting/measure.lua --emit       # print the budgets.lua table of this run
 lua5.3 bin/accounting/measure.lua --phases     # the arm and disarm edges at every phase
+lua5.3 bin/accounting/measure.lua --pages      # every tool page opened at every phase
 ```
 
 `--check` is what CI runs, after `--self-test`. The self-test poisons one target and
 removes another row's budget, and fails unless *both* turn the check red -- a gate that
-has never been seen red is a loop that never ran with a badge on it.
+has never been seen red is a loop that never ran with a badge on it. It does the same to
+the first two tool-page rows, which come after every other row and would otherwise never be
+the ones it picks, and it drives each of the page driver's controls red once (see below).
 
 EdgeTX 2.12 embeds Lua 5.3, so a distribution `lua5.3` counts the same mechanism. It is
 still a proxy for the embedded VM's exact per-line numbers -- which is one reason every
@@ -48,6 +51,110 @@ reported as a margin to widen rather than a pass to celebrate.
 - **Per unit**: the whole background wakeup, the custom-telemetry drain with a full frame
   backlog, one MSP pump on an idle queue (the turn that finds nothing to do, not a pump with
   work on it), and the API-layer parse of the largest scripted reply.
+- **Every tool page the dashboard can open**: the build of the page, hosted. See below.
+
+## The tool's pages
+
+The dashboard opens the tool inside its own widget: `widgets/dashboard/tool_host.lua` loads
+`ui/home.lua` into the widget's Lua state and drives it from `widget.refresh`, so every pass of
+an open tool is a widget call and is stopped at the same 20 000 as the rows above. The tool
+script is not -- a call there is yielded once it has held the interpreter for a task period --
+so the rows are measured hosted, and the tool script has none.
+
+A row `page.<menuId>.build` is the instructions inside the page module's `build`, the call that
+lays the page's whole screen out, taken as the dearest build of one open: most pages build more
+than once while they open. It is the part of opening a page that cannot be spread over
+passes -- it runs inside one call, and every attempt at it is the same deterministic code -- so a
+page whose build alone needs more than a call is allowed does not finish building hosted. It is
+also the figure the cadence grid does not move, which is why it is the one that is gated.
+
+How a page is opened:
+
+- **The inventory** is the tool's own page registry, `app/pages/init.lua`, read when the run
+  starts. Every id in it gets a row or a note naming why it has none: no menu leads to it, its
+  tile is disabled in this world, or it has no `build` and the tool draws it as a menu.
+- **A page that is added** is measured as soon as a menu leads to it and its tile is enabled in
+  the run's world, and from then on it needs a row, as a new box type does. `--check` fails with
+  `page.<menuId>.build has no row in budgets.lua -- a new tool page: --emit prints its row`, and
+  the fix is the line `--emit` prints for it, pasted into the page rows of `budgets.lua` in the
+  same pull request. A page whose tile is disabled here -- one that needs a newer MSP API than the
+  stub flight controller reports, for example -- is named in a note and needs no row until it is
+  enabled; the pull request that enables it adds the row. A page that is removed leaves its row
+  behind, and `--check` fails on that too, until the row is deleted.
+- **The world** is the reference dashboard, settled as the other scenarios settle it, with the
+  tool's firmware surface added (`Stubs.installTool`: the RSSI, the radio's general settings,
+  the date, the free heap, the card's directories, the model's inputs, outputs and modules, the
+  lvgl table's layout figures, the telemetry unit numbers). The dashboard reads several of the
+  same names, and the other rows were written on a world without them, so only the page worlds
+  get them; `install()` takes them away again.
+- **The presses** are the tool's own: the tool is opened through the host the way a press on
+  the dashboard opens it, and every step after that parks the target in the tool's
+  `pendingMenuOpen`, which is all a tile press does. The path is read off the manifest. The
+  switches for the developer pages and the preview features are on, because the pages behind
+  them ship.
+- **The link** answers between passes and holds one pass's worth of telemetry from the host's
+  request on, as in the in-flight tuning scenario. An open is over when the page has stayed
+  quiet for ten passes: no build, nothing outstanding on the link, nothing to redraw.
+- **One world per page**, rebuilt as for every scenario here, and the pages opened in the
+  registry's sorted order. That is not quite the same as no inheritance: run in reverse order,
+  82 of the 83 rows read the same and one moves by 50 (`tools_select_profile`, which then follows
+  the service widget's world instead of another page's). The order is fixed, so two runs agree;
+  a page added ahead of others in that order can move a row behind it by about as much.
+- **The build** is counted on the hook's own counter: the page module is wrapped where the
+  registry loads it, and the wrapper hooks the build alone, so the passes around it can run
+  without the hook. The wrapper's call into the build and back is billed with it, a handful of
+  instructions; every other load pays one table comparison.
+
+The driver's controls, each of which would otherwise end in a plausible number for the wrong
+screen: the dashboard must have connected the flight controller before the tool is opened (a
+world that never connected prices every page on the screen of a radio without one); after the
+open the tool must be on the page, its build must have run and not raised, and nothing the
+flight controller sent may still be held off the link (a page whose replies never reached it
+builds the screen it shows while it waits). The self-test breaks the run each of those ways on
+a page that reads from the flight controller, and fails unless the run stops.
+
+What the rows are measured on, and what that means:
+
+- **`src/`, like every other row.** On `src/` a page resolves its strings at run time through
+  `pageText()`; the packaged tool has them resolved by the packager. A page row is therefore a
+  regression figure for the source as written, not what the page costs on a radio: it reads
+  higher than the packaged suite pays, by 0 to 225 % per page, median 15 %, against the English
+  package built from the same tree. *Adjustments* is 15 379 on `src/` and 6 971 packaged, and
+  *Ports* 27 401 against 20 507, so 27 401 is not what *Ports* costs on a radio. What a row is
+  for is to move when the source does. The three pages over 20 000 are over it on both.
+- **The stubs are billed**, as everywhere here: a page's build pays for the Lua of every stub it
+  reaches -- `loadScript`, the card's `io.open`, `lcd.sizeText`. On the package that is a median
+  of about 12 % of a build.
+- **No sweep.** The lvgl stub collects every function field of a tree as a reactive reference.
+  That holds for a dashboard theme; a page's tree also carries its press and change handlers as
+  function fields, and replaying those would act on the page.
+- **Targets** are what `--emit` suggests for a new row, held at 20 000 for a page below it. A page
+  whose build alone is above 20 000 carries its `--emit` figure as the target and 20 000 in
+  `proposed`, so the check is green and every run says that the page sits above the limit.
+
+`--pages` opens every page twenty times with the press moved by one 100 ms pass each, and prints
+per page the build's range, the range of the open's worst pass with the phase of its maximum, and
+the largest total of an open. A report like `--phases`: it adds no row and checks nothing. It
+runs for minutes.
+
+What is gated, and what is not:
+
+- **The build is gated**, because it is the one figure that is a property of the page alone: it
+  runs inside one call, so it cannot be spread over passes, and over the twenty phases it is
+  identical on 82 of the 83 pages.
+- **The worst pass of an open is reported by `--pages` and not gated.** A pass that builds a
+  page hosted also carries the host's own step, the MSP tick and the events runner, and which of
+  those share the pass depends on the phase: across the twenty phases the worst pass of one open
+  moves by up to 1 412, median 1 399. A row taken at one phase would move with any change that
+  shifts the timeline, as `pass.state.armed` does (see below), and the phase-swept figure takes
+  minutes rather than seconds. And 19 of the 83 pages have a phase whose worst pass is over
+  20 000 on `src/` (14 of them at every phase; 12 pages on the package), so a gate on it would
+  start with 19 rows carrying `proposed = 20000`.
+- **So a page can be green here while the pass that builds it is stopped by the firmware and
+  retried by the host.** That is a known limit of these rows, not something they rule out.
+  Gating it would take a per-page row for the worst pass over all twenty phases, the phase sweep
+  in CI, a target for each of those 19 pages, and a decision on how much of the 20 000 a page's
+  build may take when the rest of the pass has to fit beside it.
 
 ## The phase sweep
 
