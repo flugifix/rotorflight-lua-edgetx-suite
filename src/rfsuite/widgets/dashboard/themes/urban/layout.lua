@@ -91,6 +91,12 @@ L.SETTINGS = {
   -- The signal bar's warning step, in percent of the headroom above the floor; the critical step
   -- is half of it -- 15 / 8 at the default. A stored value not in this list lands on the default.
   { page = "topbar", key = "rssi_warn",  values = { "25", "20", "15", "10" },  default = "15" },
+  -- The most the transmitter module sends with, in mW: the full scale of the link view's TPWR bar.
+  -- No link frame carries it -- dynamic power moves the reported power below it -- so it is the
+  -- pilot's to say. The values are ExpressLRS's power levels; the bar turns amber from 60 % of the
+  -- limit and red from 85 %, where dynamic power is close to having nothing left to add.
+  { page = "topbar", key = "tpwr_max",   values = { "25", "50", "100", "250", "500", "1000", "2000" },
+    default = "100" },
   { page = "rows",   key = "units",      values = ON_OFF,                      default = "off" },
   { page = "rows",   key = "temp_colors", values = { "off", "standard", "early" }, default = Common.TEMP_COLORS_DEFAULT },
 }
@@ -131,6 +137,9 @@ function L.settingsLabels()
     rssi_warn = { label = "@i18n(app.pages.settings_dashboard_settings.urban_rssi_warn)@",
                   values = { ["25"] = "25 %", ["20"] = "20 %", ["15"] = "15 %",
                              ["10"] = "10 %" } },
+    tpwr_max = { label = "@i18n(app.pages.settings_dashboard_settings.urban_tpwr_max)@",
+                 values = { ["25"] = "25 mW", ["50"] = "50 mW", ["100"] = "100 mW", ["250"] = "250 mW",
+                            ["500"] = "500 mW", ["1000"] = "1000 mW", ["2000"] = "2000 mW" } },
     units = { label = "@i18n(app.pages.settings_dashboard_settings.urban_units)@", values = onOff() },
     temp_colors = { label = "@i18n(app.pages.settings_dashboard_settings.urban_temp_colors)@",
                     values = { off = "@i18n(app.pages.flight_tuning_advanced_pid_controller.tbl_off)@",
