@@ -7,9 +7,9 @@
 -- answers, and run from this view's ERASE button. Nothing is queued, and full screen is not
 -- left, until then.
 --
--- It is deliberately the same two layout profiles fullscreen_menu.lua, battery_pick_menu.lua and
--- fullscreen_menu.lua use (large above 350 px, standard below), so a radio at either resolution
--- gets a box of the size it already gets from the menu.
+-- It is deliberately the same two layout profiles fullscreen_menu.lua and battery_pick_menu.lua
+-- use (large above 350 px, standard below), so a radio at either resolution gets a box of the
+-- size it already gets from the menu.
 --
 -- The strings all come from the entry's `confirm` table, resolved where the entry was built; the
 -- only literals here are the fallbacks for a table that is missing one, so a new confirmed
@@ -35,17 +35,21 @@ local function pending(widget)
   return nil
 end
 
--- Agreeing forgets the question FIRST. The work it runs may start a new session (`done`), which
--- takes the field with it, so a callback that read it afterwards would read a table the visit no
--- longer holds.
+-- Answering closes the question FIRST -- both answers do -- and agreeing then runs the work. The
+-- work performs the press and, after it, the `after` action; that action belongs to the surface
+-- the press was written for (the menu), not to the question that was on top of it. Closing first
+-- is what makes a theme's own `after`, handed in through ctx.run, act on the menu as well.
+-- Closing first also matters because the work may start a new session (`done`), which takes the
+-- field with it, so a callback that read it afterwards would read a table the visit no longer
+-- holds.
 local function agree(widget, work)
-  if Views and type(Views.clearConfirm) == "function" then Views.clearConfirm(widget) end
+  if Views and type(Views.closeConfirm) == "function" then Views.closeConfirm(widget) end
   if type(work) == "function" then work() end
 end
 
--- Declining forgets the question and closes this view, leaving the menu under it standing.
+-- Declining closes the question and forgets the press, leaving the menu under it standing.
 local function decline(widget)
-  if Views and type(Views.cancelConfirm) == "function" then Views.cancelConfirm(widget) end
+  if Views and type(Views.closeConfirm) == "function" then Views.closeConfirm(widget) end
 end
 
 --- What RTN does while the question is on top: the same as CANCEL.

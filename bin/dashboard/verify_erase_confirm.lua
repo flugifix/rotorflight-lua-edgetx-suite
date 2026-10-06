@@ -243,12 +243,63 @@ local function caseNoQuestionRefuses(menu)
   return nil
 end
 
+-- Agreeing closes the question before the work's own action runs, so a theme's `after` -- handed
+-- in through ctx.run -- acts on the surface the press was written for, the menu, and not on the
+-- question that was on top of it.
+local function caseAgreeClosesQuestionFirst(menu)
+  local expected = {
+    { after = nil,                     top = nil },            -- the row's own `done`
+    { after = "none",                  top = "menu" },
+    { after = "closeView",             top = nil },
+    { after = "openView:battery_pick", top = "battery_pick" },
+  }
+  for _, e in ipairs(expected) do
+    resetWorld()
+    local w = newWidget()
+    w._viewBase = {}
+    Views.navigate(w, "openView:menu")
+    Views.bind(w).run({ id = "erase_blackbox" }, nil, e.after)
+    local children = {}
+    Confirm.build(children, w)
+    local buttons = buttonsOf(children)
+    if #buttons ~= 2 then return "the question has " .. #buttons .. " buttons, expected 2" end
+    buttons[2].press()
+    local top = Views.top(w)
+    if top ~= e.top then
+      return "after=" .. tostring(e.after) .. ": the view on top is " .. tostring(top)
+        .. ", expected " .. tostring(e.top)
+    end
+  end
+  return nil
+end
+
+-- A `choice` entry's own `confirm` guards its options too: running an option raises the question
+-- and performs nothing until it is answered.
+local function caseChoiceConfirmGuardsOptions(menu)
+  resetWorld()
+  local w = newWidget()
+  local ran = 0
+  local entry = {
+    id = "choice_demo", kind = "choice", after = "none",
+    confirm = { title = "Q", message = "m", confirmLabel = "YES", cancelLabel = "NO" },
+  }
+  local option = { press = function() ran = ran + 1 end, after = "none" }
+  menu.run(w, entry, option)
+  if ran ~= 0 then return "a choice entry's confirm did not hold its option's press" end
+  if Views.top(w) ~= "confirm" then
+    return "the choice entry's confirm raised no question (top is " .. tostring(Views.top(w)) .. ")"
+  end
+  return nil
+end
+
 local CASES = {
   { id = "the row carries a question",              fn = caseRowCarriesQuestion },
   { id = "a tap is held until it is answered",       fn = casePressIsHeld },
   { id = "CANCEL runs nothing",                      fn = caseCancelRunsNothing },
   { id = "ERASE performs the press",                 fn = caseAgreePerforms },
   { id = "an unraisable question refuses the press", fn = caseNoQuestionRefuses },
+  { id = "agreeing closes the question first",       fn = caseAgreeClosesQuestionFirst },
+  { id = "a choice confirm guards its options",      fn = caseChoiceConfirmGuardsOptions },
 }
 
 local function runChecks(menu, quiet)

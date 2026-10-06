@@ -490,6 +490,9 @@ end
 -- pilot's answer. A question that cannot be raised leaves the press unperformed -- refusing
 -- loses nothing where a mis-tap would lose the logs.
 --
+-- A `choice` entry's own `confirm` guards every option it runs; an option that carries one is
+-- held by its own question, which is preferred where both carry one.
+--
 -- This runs whatever it is handed: the `press` of the table it is given, with no check of where
 -- that table came from. A caller resolves first and passes only the menu's own records -- the
 -- menu's buttons and the picker take theirs from M.entries / M.entry, and anything a theme hands
@@ -498,9 +501,10 @@ end
 function M.run(widget, entry, option, after, report)
   local source = option or entry
   if after == nil then after = source.after end
-  if type(source.confirm) == "table" then
+  local confirm = (option and option.confirm) or entry.confirm
+  if type(confirm) == "table" then
     if Views and type(Views.confirm) == "function" then
-      Views.confirm(widget, source.confirm, function() perform(widget, source, after, report) end)
+      Views.confirm(widget, confirm, function() perform(widget, source, after, report) end)
     end
     return
   end

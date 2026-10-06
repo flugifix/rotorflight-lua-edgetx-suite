@@ -685,17 +685,19 @@ function M.pendingConfirm(widget)
   return session and session.confirm or nil
 end
 
---- Forget the pending press without running it. The view on top is left where it is.
-function M.clearConfirm(widget)
+--- Answer the question and close it: forget the pending press and take the confirmation view off
+-- the stack, so the surface under it shows again. The `work` the question held is NOT run here --
+-- the caller runs it (agreeing) or does not (declining).
+--
+-- The view is removed only where it is on top; a question that is not the surface showing leaves
+-- the stack as it is.
+function M.closeConfirm(widget)
   local session = widget._viewStack
   if session ~= nil then session.confirm = nil end
-end
-
---- Decline: forget the pending press and close the question. The view under it shows again.
-function M.cancelConfirm(widget)
-  M.clearConfirm(widget)
-  pop(widget)
-  reset(widget)
+  if M.top(widget) == CONFIRM_VIEW then
+    pop(widget)
+    reset(widget)
+  end
 end
 
 -- ---------------------------------------------------------------------------

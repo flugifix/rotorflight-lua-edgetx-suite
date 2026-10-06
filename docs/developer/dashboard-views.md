@@ -242,12 +242,15 @@ shown armed as well as disarmed.
 ## Confirmations
 
 A press that must be agreed to first carries a `confirm` on its entry — or on one of its
-options. `fullscreen_menu.M.run` does not perform such a press: it hands it to
-`views.confirm(widget, spec, work)`, which raises the confirmation view and keeps `work` — the
-`press` and the `after` — on the visit's session until the pilot answers. `work` runs from the
-view's agreeing button; declining, and the view's `back` (a short press on RTN), call
-`views.cancelConfirm`, which forgets `work` and closes the view, so the surface under it shows
-again exactly as it was.
+options. A `choice` entry's own `confirm` guards every option it runs; an option that carries one
+is held by its own question, which is used where both carry one. `fullscreen_menu.M.run` does not
+perform such a press: it hands it to `views.confirm(widget, spec, work)`, which raises the
+confirmation view and keeps `work` — the `press` and the `after` — on the visit's session until
+the pilot answers. Both answers close the question first, through `views.closeConfirm`, which
+forgets `work` and takes the view off the stack, so the surface under it shows again exactly as it
+was; the agreeing button then runs `work`, so its `after` acts on the surface the press was written
+for rather than on the question. Declining, and the view's `back` (a short press on RTN), run
+nothing.
 
 The one entry that carries a `confirm` today is the quick menu's **ERASE BLACKBOX**
 (`fullscreen_menu.lua`, `BUILD.erase_blackbox`), which asks before it erases the flight
@@ -264,9 +267,9 @@ controller's blackbox. Its `spec` is a table of strings the entry resolved where
 `views.confirm` answers `false` — and `M.run` then performs nothing — where the widget has no
 confirmation view or the stack is full. A press that cannot ask its question is **not**
 performed: on an irreversible action, refusing loses nothing where performing it loses the
-logs. The confirmation view reads and clears the pending press through `views.pendingConfirm`,
-`views.clearConfirm` and `views.cancelConfirm`. The pending press goes when the visit does, so a
-full screen left with the question standing never performs it.
+logs. The confirmation view reads the pending press through `views.pendingConfirm` and answers it
+through `views.closeConfirm`. The pending press goes when the visit does, so a full screen left
+with the question standing never performs it.
 
 The confirmation is reached the same way by a theme that draws the entry itself: `ctx.run` goes
 through `M.run`, so a theme handing the menu its ERASE BLACKBOX record gets the question too,
