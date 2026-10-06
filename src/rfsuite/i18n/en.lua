@@ -2783,6 +2783,11 @@ return {
       battery_pick_profile = "Profile %d",
       battery_pick_profile_none = "no profile",
       erase_blackbox = "ERASE BLACKBOX",
+      erase_blackbox_confirm_title = "ERASE BLACKBOX",
+      erase_blackbox_confirm_message = "Erase the flight controller's blackbox? This cannot be undone.",
+      erase_blackbox_confirm_used = "%d%% used",
+      erase_blackbox_confirm_yes = "ERASE",
+      erase_blackbox_confirm_no = "CANCEL",
       erasing_blackbox = "Erasing Blackbox...",
       bec_voltage = "BEC VOLTAGE",
       esc_temp = "ESC TEMP",
@@ -3007,6 +3012,9 @@ return {
       -- change it sent.
       urban_quick_settings = "Quick Settings",
       urban_which_battery = "Which battery?",
+      -- A pack's line on that page: its cycle count, and the battery profile a pick selects.
+      urban_pick_cycles = "%d cycles",
+      urban_pick_profile = "P%d",
       urban_profile_tuning = "Profile & Tuning",
       urban_active = "Active",
       urban_not_available = "Not available",
