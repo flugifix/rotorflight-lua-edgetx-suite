@@ -38,9 +38,10 @@ EdgeTX gives every script, so it looks the same whichever dashboard theme is sel
 | **IN-FLIGHT TUNING** | Opens the in-flight tuning surface at full size. It stays full screen rather than closing. Only listed while the feature is switched on — see below. |
 | **BATTERY** | Brings the battery prompt back, with this model's packs. It stays full screen, the picker taking the menu's place. Only listed while the battery registry has a pack for this model and the model is disarmed. |
 | **MAIN MENU** | Opens the suite's tool, with its whole menu, inside the widget — see [the tool from full screen](#the-tool-from-full-screen). Only listed while the model is disarmed. |
+| **FLIGHT LOG** | Opens the suite's tool inside the widget on its [Flight Log](../pages/tools/flight_log.md) page; the back key there closes it again. Not in the menu as it comes — the pilot adds it on the *Quick Settings* page — and then only listed while the *Flight Log* preview is on and the model is disarmed. |
 | **BATTERY PROFILE** | A grid of the model's battery profiles; pressing one makes it the profile in force. |
 
-That is the menu as it comes. Which of these entries it shows, and in which order, is the
+That is the menu as it comes, *FLIGHT LOG* aside. Which of these entries it shows, and in which order, is the
 pilot's to choose on *System* → *Settings* → *Dashboard* →
 [*Quick Settings*](../pages/settings/dashboard/quick_menu.md). An entry chosen there still hides
 where the table says it is not listed.
@@ -74,7 +75,7 @@ theme again — or, over a theme that does not take full screen, this menu. A vi
 that was showing, or that the pilot had closed, does not come back on its own when the tool is
 closed. It is reached three ways, all of them only while the model is disarmed:
 
-- **MAIN MENU** in the quick menu;
+- **MAIN MENU** in the quick menu, and **FLIGHT LOG**, which opens it on its *Flight Log* page;
 - the tool control — three slider lines — beside the menu control, over a theme that takes full
   screen and binds no control of its own;
 - the same control on the connect screen, when the widget is put full screen before the link is
@@ -82,7 +83,7 @@ closed. It is reached three ways, all of them only while the model is disarmed:
 
 While it is open the tool works as it does when started from the radio's tool list, on the
 widget's own connection to the flight controller. The return key at the top of its menu closes
-it. Arming the model closes it as well, because while it is open the dashboard does not run and
+it, and so does the return key on the *Flight Log* page where *FLIGHT LOG* opened it there. Arming the model closes it as well, because while it is open the dashboard does not run and
 nothing is announced. So does leaving full screen with a long press on the return key. In both
 cases the tool's own closing sequence runs, so a page's changes that were already sent still
 reach the flight controller.
@@ -116,7 +117,7 @@ fit is not drawn.
 ## Closing it
 
 The **X** in the header closes the menu and leaves full screen. So does every entry except
-in-flight tuning, BATTERY and MAIN MENU, which swap one full-screen surface for another. The battery
+in-flight tuning, BATTERY, MAIN MENU and FLIGHT LOG, which swap one full-screen surface for another. The battery
 picker's packs, *NO BATTERY* and its own X leave full screen as well, and the next entry into
 full screen shows the quick menu, with BATTERY to bring the picker back. EdgeTX's own way out of
 full screen — a long press on the return key — works as it does anywhere else.

@@ -320,6 +320,19 @@ function BUILD.tool(widget, t)
   }
 end
 
+-- The suite's tool, opened on its Flight Log page rather than on its menu, and closed again by
+-- the back key there. Offered only while that page is in the tool -- its preview switch is on --
+-- and the model is disarmed; not in the default list, so it is in the menu only where the pilot puts it.
+function BUILD.flight_log(widget, t)
+  return {
+    id = "flight_log",
+    kind = "action",
+    title = t("widgets.dashboard.flight_log_open", "FLIGHT LOG"),
+    visibleWhen = "flightLogOffered",
+    after = "openTool:tools_flight_log_page"
+  }
+end
+
 function BUILD.battery_profile(widget, t)
   return {
     id = "battery_profile",

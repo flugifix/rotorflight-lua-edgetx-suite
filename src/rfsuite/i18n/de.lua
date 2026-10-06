@@ -2557,6 +2557,7 @@ return {
         urban_key_link = "Theme: ELRS-Link",
         urban_key_telemetry = "Theme: Telemetrie",
         urban_key_suite_tool = "Suite: Hauptmenü",
+        urban_key_flight_log = "Suite: Flugbuch",
         urban_tap_frames = "Rahmen um Tippflächen",
         urban_key_exit = "Suite: Vollbild aus",
         -- The Telemetry page: what each tile of the telemetry view shows.
@@ -2816,6 +2817,7 @@ return {
       battery_pick_title = "WELCHER AKKU?",
       battery_pick_open = "AKKU",
       tool_open = "HAUPTMENÜ",
+      flight_log_open = "FLUGBUCH",
       battery_pick_none = "KEIN AKKU",
       battery_pick_profile = "Profil %d",
       battery_pick_profile_none = "kein Profil",

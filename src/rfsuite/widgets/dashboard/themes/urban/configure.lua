@@ -104,6 +104,7 @@ local KEY_ACTION_LABELS = {
   link = "@i18n(app.pages.settings_dashboard_settings.urban_key_link)@",
   telemetry = "@i18n(app.pages.settings_dashboard_settings.urban_key_telemetry)@",
   suite_tool = "@i18n(app.pages.settings_dashboard_settings.urban_key_suite_tool)@",
+  flight_log = "@i18n(app.pages.settings_dashboard_settings.urban_key_flight_log)@",
   exit = "@i18n(app.pages.settings_dashboard_settings.urban_key_exit)@",
 }
 local KEY_OPTIONS = {}

@@ -843,6 +843,10 @@ local function syncActivePageModule()
 
   logf("debug", "page %s -> %s", tostring(state.activePageMenuId), tostring(currentMenuId))
   state.activePageMenuId = currentMenuId
+  -- The page the tool was opened on (see openLanding) is that only until another one is up.
+  if state.landingMenuId ~= nil and currentMenuId ~= state.landingMenuId then
+    state.landingMenuId = nil
+  end
   -- The latch belongs to the page that is leaving. Re-entering it is a fresh attempt.
   state.pageBuildFailed = nil
 
@@ -869,6 +873,14 @@ local function leaveCurrentPage(fromEvent)
   state.armedFeedbackUntil = nil
   state.armedFeedbackText = nil
   if not (state.menu and not state.menu.isRoot()) then
+    state.lastBackTick = now
+    state.isClosing = true
+    return
+  end
+
+  -- The page a host opened the tool on (openLanding): the pilot came from the host and not from
+  -- the menu above the page, so leaving the page closes the tool, as leaving the menu does.
+  if state.landingMenuId ~= nil and state.menu.getCurrentMenuId() == state.landingMenuId then
     state.lastBackTick = now
     state.isClosing = true
     return
@@ -2856,6 +2868,39 @@ end
 
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
+-- Open the page `menuId` the way the pilot would reach it: through the root entry that leads to
+-- it, and for a page one level down, through that entry's own menu. The page's conditions are
+-- the menu's -- a page the menu would not offer now is not opened -- and a step that fails puts
+-- the menu back at its root. Answers whether the page is open.
+local function openLanding(menuId)
+  local sections = manifest and manifest.sections or {}
+  local menus = manifest and manifest.menus or {}
+  for i = 1, #sections do
+    local section = sections[i]
+    local entries = section.pages or {}
+    for j = 1, #entries do
+      local entry = entries[j]
+      if entry.menuId == menuId then
+        return state.menu.openRootEntry(section.id, entry.id) == true
+      end
+      local sub = entry.menuId and menus[entry.menuId] or nil
+      local subEntries = type(sub) == "table" and sub.pages or {}
+      for k = 1, #subEntries do
+        if subEntries[k].menuId == menuId then
+          if state.menu.openRootEntry(section.id, entry.id) and state.menu.openEntry(subEntries[k].id) then
+            return true
+          end
+          while not state.menu.isRoot() do
+            if not state.menu.goBack() then break end
+          end
+          return false
+        end
+      end
+    end
+  end
+  return false
+end
+
 -- `opts.hosted` is for a host that runs this file inside its own Lua state rather than as the
 -- radio's tool script -- the dashboard widget does (widgets/dashboard/tool_host.lua). Everything
 -- under _G.rfsuite is then the host's as well: the module cache, the event runner, the card
@@ -2863,6 +2908,10 @@ end
 -- leaves those alone where it would otherwise own them -- it does not compile the tree, does
 -- not announce, and on its way out does not reset the events, shut the sink, clear the chunk
 -- cache or drop the global table.
+--
+-- `opts.landing`, for a hosted tool only, is the menuId of a page to open on instead of the menu
+-- (openLanding). The back key on that page then closes the tool rather than stepping up to the
+-- menu above it, because the pilot came from the host.
 function M.init(opts)
   ensureInitDeps()
 
@@ -2968,6 +3017,15 @@ function M.init(opts)
     ensurePrecompile()
     if Precompile then
       Precompile.start(Version and Version.VERSION or nil)
+    end
+  end
+  state.landingMenuId = nil
+  local landing = state.hosted and type(opts) == "table" and opts.landing or nil
+  if type(landing) == "string" then
+    if openLanding(landing) then
+      state.landingMenuId = landing
+    else
+      logf("info", "landing %s not offered, the tool opens on its menu", landing)
     end
   end
   logStep("init: first build", true)
