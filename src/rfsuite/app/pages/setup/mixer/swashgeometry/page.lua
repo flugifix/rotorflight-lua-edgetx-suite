@@ -573,7 +573,9 @@ function M.getHeaderActions()
   return {
     save = true,
     reload = true,
-    star = true,
+    -- Switching setup mode on waits for this visit's read, as Save does (M.canSave below):
+    -- until then the live write sends nothing. Switching it off is always offered.
+    star = ui.inOverride or M.canSave(),
     menu = true
   }
 end
@@ -834,6 +836,7 @@ end
 
 function M.onStar(ctx)
   if not ConfirmDialog then return false end
+  if not ui.inOverride and not M.canSave() then return false end
 
   local i18n = ctx and ctx.i18n
   local title

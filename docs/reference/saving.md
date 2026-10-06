@@ -81,7 +81,8 @@ inputs -- with the page's own fields laid over them. A save from a visit whose r
 succeed would send an earlier visit's records, including settings another Mixer page has changed
 since. The live write that Trims sends while the swash override is on, and Swash Geometry while
 setup mode is on, waits for the same read: until it has succeeded, a changed value is shown and
-not sent.
+not sent. Switching the override or setup mode on with the * button waits for it too -- the button
+is disabled until the read has succeeded -- while switching either off is available at any time.
 
 ## ESC Configurator pages
 
