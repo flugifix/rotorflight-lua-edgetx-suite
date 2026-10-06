@@ -843,6 +843,10 @@ local function syncActivePageModule()
 
   logf("debug", "page %s -> %s", tostring(state.activePageMenuId), tostring(currentMenuId))
   state.activePageMenuId = currentMenuId
+  -- The page the tool was opened on (see openLanding) is that only until another one is up.
+  if state.landingMenuId ~= nil and currentMenuId ~= state.landingMenuId then
+    state.landingMenuId = nil
+  end
   -- The latch belongs to the page that is leaving. Re-entering it is a fresh attempt.
   state.pageBuildFailed = nil
 
@@ -869,6 +873,14 @@ local function leaveCurrentPage(fromEvent)
   state.armedFeedbackUntil = nil
   state.armedFeedbackText = nil
   if not (state.menu and not state.menu.isRoot()) then
+    state.lastBackTick = now
+    state.isClosing = true
+    return
+  end
+
+  -- The page a host opened the tool on (openLanding): the pilot came from the host and not from
+  -- the menu above the page, so leaving the page closes the tool, as leaving the menu does.
+  if state.landingMenuId ~= nil and state.menu.getCurrentMenuId() == state.landingMenuId then
     state.lastBackTick = now
     state.isClosing = true
     return
@@ -1370,6 +1382,8 @@ end
 -- constructor inside it would build a new table on every pass whether or not a flight controller
 -- is connected.
 local ESC_PROTOCOLS = {1, 3, 4, 6, 7, 9, 10, 12}
+-- getTime() ticks (10 ms) before the ESC tools menu asks again for a protocol it failed to read.
+local ESC_PROTO_RETRY_TICKS = 500
 
 local function updateRuntimeMenuConditions()
   if not state.menu then return end
@@ -1404,34 +1418,60 @@ local function updateRuntimeMenuConditions()
   local currentMenuId = state.menu.getCurrentMenuId()
   if currentMenuId ~= "esc_tools_menu" then
     state.escProtoCheckPending = false
+    state.escProtoRetryAt = nil
   end
 
-  if currentMenuId == "esc_tools_menu" and session and session.esc4WayDetectedProto == nil and not state.escProtoCheckPending then
+  -- The onconnect task esc_sensor_config fills the protocol only where the event tasks run as
+  -- the tool (tasks/events/onconnect/manifest.lua). When the dashboard hosts this file they run
+  -- as the widget, and after a short link loss or a failed read the value stays empty as well, so
+  -- the menu asks for it itself. A read that fails is asked again only after
+  -- ESC_PROTO_RETRY_TICKS; leaving the menu and coming back asks at once. It waits until
+  -- syncActivePageModule has taken the menu over, so the request is filed under the menu's own
+  -- MSP client rather than under the one the leaving menu's reads are dropped with.
+  if currentMenuId == "esc_tools_menu" and state.activePageMenuId == currentMenuId
+    and state.fblConnected == true and session
+    and session.esc4WayDetectedProto == nil and not state.escProtoCheckPending
+    and (state.escProtoRetryAt == nil or (getTime and getTime() or 0) >= state.escProtoRetryAt) then
+    ensureMspRuntime()
     local SensorConfigApi = loadModule("tasks/msp/api/esc_sensor_config.lua")
-    local msp = root and root.tasks and root.tasks.msp
-    local queue = msp and msp.getState and msp.getState().queue
-    if queue and SensorConfigApi then
-      queue:add({
+    local function retryLater()
+      state.escProtoCheckPending = false
+      state.escProtoRetryAt = (getTime and getTime() or 0) + ESC_PROTO_RETRY_TICKS
+    end
+    local queued = false
+    if SensorConfigApi and MspRuntime and type(MspRuntime.enqueue) == "function" then
+      queued = MspRuntime.enqueue({
         command = SensorConfigApi.command,
         isWrite = false,
         simulatorResponse = { 1, 0, 200, 0, 0, 15, 0, 0, 0, 30, 0, 0, 0, 0 },
+        timeout = 5.0,
+        maxRetries = 2,
         processReply = function(self, buf)
-          state.escProtoCheckPending = false
           local parsed = SensorConfigApi.parse(buf)
           if parsed and parsed.protocol then
-            local proto = tonumber(parsed.protocol) or 0
-            session.esc4WayDetectedProto = proto
+            state.escProtoCheckPending = false
+            session.esc4WayDetectedProto = tonumber(parsed.protocol) or 0
+          else
+            retryLater()
           end
         end,
-        errorHandler = function()
-          state.escProtoCheckPending = false
+        errorHandler = function(_, reason)
+          -- "cleared" is the queue dropping the request unsent, so nothing failed: ask again
+          -- on the next pass that is still on the menu.
+          if reason == "cleared" then
+            state.escProtoCheckPending = false
+          else
+            retryLater()
+          end
         end
-      })
-      -- The three assignments above are all resets. Without this one the guard on the `if`
-      -- is never false, so the probe is queued again on every pass through this function.
+      }) == true
+    end
+    if queued then
+      -- The handlers above are what reset this. Without it the guard on the `if` is never
+      -- false, so the read is queued again on every pass through this function.
       state.escProtoCheckPending = true
     else
-      state.escProtoCheckPending = false
+      retryLater()
     end
   end
 
@@ -2828,6 +2868,39 @@ end
 
 -- ── Init / Run ────────────────────────────────────────────────────────────────
 
+-- Open the page `menuId` the way the pilot would reach it: through the root entry that leads to
+-- it, and for a page one level down, through that entry's own menu. The page's conditions are
+-- the menu's -- a page the menu would not offer now is not opened -- and a step that fails puts
+-- the menu back at its root. Answers whether the page is open.
+local function openLanding(menuId)
+  local sections = manifest and manifest.sections or {}
+  local menus = manifest and manifest.menus or {}
+  for i = 1, #sections do
+    local section = sections[i]
+    local entries = section.pages or {}
+    for j = 1, #entries do
+      local entry = entries[j]
+      if entry.menuId == menuId then
+        return state.menu.openRootEntry(section.id, entry.id) == true
+      end
+      local sub = entry.menuId and menus[entry.menuId] or nil
+      local subEntries = type(sub) == "table" and sub.pages or {}
+      for k = 1, #subEntries do
+        if subEntries[k].menuId == menuId then
+          if state.menu.openRootEntry(section.id, entry.id) and state.menu.openEntry(subEntries[k].id) then
+            return true
+          end
+          while not state.menu.isRoot() do
+            if not state.menu.goBack() then break end
+          end
+          return false
+        end
+      end
+    end
+  end
+  return false
+end
+
 -- `opts.hosted` is for a host that runs this file inside its own Lua state rather than as the
 -- radio's tool script -- the dashboard widget does (widgets/dashboard/tool_host.lua). Everything
 -- under _G.rfsuite is then the host's as well: the module cache, the event runner, the card
@@ -2835,6 +2908,10 @@ end
 -- leaves those alone where it would otherwise own them -- it does not compile the tree, does
 -- not announce, and on its way out does not reset the events, shut the sink, clear the chunk
 -- cache or drop the global table.
+--
+-- `opts.landing`, for a hosted tool only, is the menuId of a page to open on instead of the menu
+-- (openLanding). The back key on that page then closes the tool rather than stepping up to the
+-- menu above it, because the pilot came from the host.
 function M.init(opts)
   ensureInitDeps()
 
@@ -2940,6 +3017,15 @@ function M.init(opts)
     ensurePrecompile()
     if Precompile then
       Precompile.start(Version and Version.VERSION or nil)
+    end
+  end
+  state.landingMenuId = nil
+  local landing = state.hosted and type(opts) == "table" and opts.landing or nil
+  if type(landing) == "string" then
+    if openLanding(landing) then
+      state.landingMenuId = landing
+    else
+      logf("info", "landing %s not offered, the tool opens on its menu", landing)
     end
   end
   logStep("init: first build", true)

@@ -1,4 +1,5 @@
--- Settings page for this theme: which value the five rows of the right-hand panel show.
+-- Settings page for this theme: which value the five rows of the right-hand panel show, which
+-- the telemetry view's tiles show, and the rest of what the theme carries.
 --
 -- Follows the shipped default theme's configure module: load through
 -- DashboardLib.getThemeConfig, save through setThemeConfig plus the per-model store, and
@@ -21,6 +22,10 @@ local Layout = loadModule("widgets/dashboard/themes/urban/layout.lua")
 local THEME_PATH = "system/urban"
 
 local SLOT_COUNT = 5
+
+-- The telemetry view's tiles, on the Telemetry page: as many as layout.lua draws, from the same
+-- catalogue as the rows.
+local TILE_COUNT = Layout.TILE_COUNT or 12
 
 -- The arm-state colour choice. common.lua resolves the value; the default is green and red.
 local ARM_COLORS = {
@@ -97,8 +102,10 @@ local KEY_ACTION_LABELS = {
   menu = "@i18n(app.pages.settings_dashboard_settings.urban_key_menu)@",
   tools = "@i18n(app.pages.settings_dashboard_settings.urban_key_tools)@",
   link = "@i18n(app.pages.settings_dashboard_settings.urban_key_link)@",
+  telemetry = "@i18n(app.pages.settings_dashboard_settings.urban_key_telemetry)@",
   battery = "@i18n(app.pages.settings_dashboard_settings.urban_key_battery)@",
   suite_tool = "@i18n(app.pages.settings_dashboard_settings.urban_key_suite_tool)@",
+  flight_log = "@i18n(app.pages.settings_dashboard_settings.urban_key_flight_log)@",
   exit = "@i18n(app.pages.settings_dashboard_settings.urban_key_exit)@",
 }
 local KEY_OPTIONS = {}
@@ -116,6 +123,9 @@ local THEME_DEFAULTS = {
 }
 for i = 1, SLOT_COUNT do
   THEME_DEFAULTS["slot" .. i] = Layout.DEFAULT_SLOTS[i]
+end
+for i = 1, TILE_COUNT do
+  THEME_DEFAULTS["tile" .. i] = (Layout.DEFAULT_TILES or {})[i] or "none"
 end
 for i = 1, #SETTINGS do
   THEME_DEFAULTS[SETTINGS[i].key] = SETTINGS[i].default
@@ -154,6 +164,14 @@ local function loadConfig(prefs)
   local cfg = DashboardLib.getThemeConfig(prefs, THEME_PATH, THEME_DEFAULTS, modelPrefs)
   for i = 1, SLOT_COUNT do
     local key = "slot" .. i
+    local value = cfg[key]
+    if type(value) ~= "string" or not VALID_IDS[value] then
+      value = THEME_DEFAULTS[key]
+    end
+    ui.config[key] = value
+  end
+  for i = 1, TILE_COUNT do
+    local key = "tile" .. i
     local value = cfg[key]
     if type(value) ~= "string" or not VALID_IDS[value] then
       value = THEME_DEFAULTS[key]
@@ -206,6 +224,10 @@ local function saveConfig(prefs)
   local values = {}
   for i = 1, SLOT_COUNT do
     local key = "slot" .. i
+    values[key] = ui.config[key] or THEME_DEFAULTS[key]
+  end
+  for i = 1, TILE_COUNT do
+    local key = "tile" .. i
     values[key] = ui.config[key] or THEME_DEFAULTS[key]
   end
   values.arm_colors = ui.config.arm_colors or ARM_COLORS_DEFAULT
@@ -354,7 +376,8 @@ function M.build(ctx)
   -- Every id init.lua declares has to stand here as well. One that does not falls through to
   -- `only == nil`, which renders the whole form on that one tile and says nothing about it.
   local pageId = ctx and ctx.page and ctx.page.id
-  local only = (pageId == "look" or pageId == "rows" or pageId == "topbar" or pageId == "keys") and pageId or nil
+  local only = (pageId == "look" or pageId == "rows" or pageId == "topbar" or pageId == "keys"
+    or pageId == "telemetry") and pageId or nil
 
   local children = ctx.children
   local x, y, w = ctx.x, ctx.y, ctx.w
@@ -416,6 +439,23 @@ function M.build(ctx)
       "@i18n(app.pages.settings_dashboard_settings.urban_page_keys)@", true, function() end)
     cursorY = cursorY + Controls.SECTION_H
     cursorY = appendKeys(children, x, cursorY, w)
+  end
+
+  if only == nil or only == "telemetry" then
+    Controls.appendSectionHeader(children, x, cursorY, w,
+      "@i18n(app.pages.settings_dashboard_settings.urban_page_telemetry)@", true, function() end)
+    cursorY = cursorY + Controls.SECTION_H
+
+    for i = 1, TILE_COUNT do
+      local key = "tile" .. i
+      cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+        "@i18n(app.pages.settings_dashboard_settings.urban_tile)@ " .. i, OPTIONS, ui.config[key],
+        function(value)
+          if type(value) == "string" and VALID_IDS[value] then
+            ui.config[key] = value
+          end
+        end)
+    end
   end
 end
 

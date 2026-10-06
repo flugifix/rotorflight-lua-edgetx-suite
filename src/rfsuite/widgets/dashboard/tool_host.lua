@@ -197,13 +197,16 @@ end
 --- Ask for the tool to be opened. The work is done by the next pass of the widget, not by the
 --- press: a press arrives in the middle of a pass whose budget is already partly spent. Refused
 --- while the model is armed.
-function M.request(widget)
+--
+-- `landing`, where given, is the menuId of the page the tool opens on instead of its menu
+-- (`init({ hosted = true, landing = ... })` in ui/home.lua); the back key there closes the tool.
+function M.request(widget, landing)
   if widget._toolHost ~= nil then return false end
   if modelArmed() then
     hostLog("tool not opened: the model is armed", "warn")
     return false
   end
-  widget._toolHost = { phase = "load", cpuHits = 0 }
+  widget._toolHost = { phase = "load", cpuHits = 0, landing = landing }
   widget.built = false
   widget.renderKey = nil
   return true
@@ -261,7 +264,7 @@ local function loadStep(widget, host)
 end
 
 local function initStep(widget, host)
-  local ok, err = callInWidgetContext(host.home.init, { hosted = true })
+  local ok, err = callInWidgetContext(host.home.init, { hosted = true, landing = host.landing })
   if not ok then return stopped(widget, host, err, "init") end
   host.phase = "run"
   host.cpuHits = 0

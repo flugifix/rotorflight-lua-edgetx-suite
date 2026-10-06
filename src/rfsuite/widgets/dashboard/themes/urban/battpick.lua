@@ -80,6 +80,34 @@ local function pressDismiss(widget)
   end
 end
 
+-- A pack's line under its name: the capacity, the cycle count and the battery profile a pick
+-- selects, each where the registry or the board gives one. `targetProfile` is 0-based, as the
+-- host resolves it; a pack with no `cycles=` in the registry has not been counted yet, which is
+-- zero. Every number is floored, because a float into "%d" raises.
+function M.detail(cap, cycles, targetProfile)
+  local T = UD.T
+  local parts = {}
+  cap = num(cap)
+  if cap and cap > 0 then parts[#parts + 1] = string.format("%d mAh", math.floor(cap + 0.5)) end
+  parts[#parts + 1] = string.format(T.pick_cycles, math.floor(num(cycles) or 0))
+  targetProfile = num(targetProfile)
+  if targetProfile then parts[#parts + 1] = string.format(T.pick_profile, math.floor(targetProfile) + 1) end
+  return table.concat(parts, " - ")
+end
+
+-- NO BATTERY as one line in the flight view's face, in an outline: the answer in force is marked
+-- by the ok colour on the outline and the text rather than by a filled bar, so the foot row stays
+-- as quiet as its one line.
+local function noneRow(nodes, g, x, y, w, h, label, selected, press)
+  local C = UD.C
+  local ink = selected and C.ok or C.text
+  UD.button(nodes, x, y, w, h, C.bg, press)
+  K.outline(nodes, x, y, w, h, selected and C.ok or C.line, 2)
+  local inner = w - 2 * g.textPad
+  UD.label(nodes, x + g.textPad, y + math.max(0, math.floor((h - g.fontH) / 2)), inner, g.fontH,
+    UD.fit(g.font, label, inner), g.font, ink, CENTER)
+end
+
 -- The picker's picture, apart from what its presses do and where its strings come from: the
 -- `spec` names the title, the close box's press, the packs in registry order (`name`, `sub`,
 -- `selected`, `press`) and NO BATTERY (`label`, `selected`, `press`). M.build below fills it
@@ -88,9 +116,11 @@ end
 --
 -- The header is the one every view of this theme draws (viewkit.lua, K.header), from the
 -- screen's top left corner. The packs stand in two columns from two packs up, each a cell with
--- the pack's name one face above the flight view's and its capacity and profile in that face.
+-- the pack's name one face above the flight view's and its line (M.detail) in that face.
 -- NO BATTERY always gets a full-width row of its own at the foot, reserved before the pack grid
--- is measured so it can never be the entry that falls off the bottom.
+-- is measured so it can never be the entry that falls off the bottom. It holds one line, so it
+-- is only as tall as that line or the close box, whichever is taller, and the pack cells get
+-- the rest.
 --
 -- Where the packs need more rows than the room above NO BATTERY holds, the grid scrolls: the
 -- cells keep the size they have when the room is full, and every row stands in a `box` the size
@@ -118,7 +148,7 @@ function M.layout(children, dW, dH, spec)
   -- A cell is never lower than the close box, so every target on the picker is at least its size.
   local minBtnH = math.max(f.nameH + f.subH + 2 * g.textPad, g.closeSize)
 
-  local noneH = math.min(minBtnH, contentH)
+  local noneH = math.min(math.max(g.fontH + 2 * g.textPad, g.closeSize), contentH)
   local noneY = contentY + contentH - noneH
   local gridH = contentH - noneH - g.gap
 
@@ -168,7 +198,7 @@ function M.layout(children, dW, dH, spec)
 
   local none = spec.none
   if none ~= nil then
-    K.button(children, g, f, g.pad, noneY, fullW, noneH, none.label, nil, none.selected, none.press)
+    noneRow(children, g, g.pad, noneY, fullW, noneH, none.label, none.selected, none.press)
   end
 
   return children
@@ -201,30 +231,16 @@ function M.build(children, widget)
   local selectedId = pick.selectedId
   local noneSelected = (selectedId == nil or selectedId == "")
 
-  local profileNone = t("widgets.dashboard.battery_pick_profile_none", "no profile")
-  local profileFmt = t("widgets.dashboard.battery_pick_profile", "Profile %d")
-
   local packs = {}
   for i = 1, #candidates do
     local entry = candidates[i]
     if type(entry) ~= "table" then break end
 
-    -- targetProfile is 0-based and may be absent; the picker shows the human number.
-    -- math.floor keeps an integer out of "%d", which a float would make raise.
-    local target = num(entry.targetProfile)
-    local profileText = profileNone
-    if target then profileText = string.format(profileFmt, math.floor(target) + 1) end
-
-    local cap = num(entry.cap)
-    local sub = profileText
-    if cap and cap > 0 then
-      sub = string.format("%d mAh  %s", math.floor(cap + 0.5), profileText)
-    end
-
     -- The comparison is by string so a numeric registry id and a stored string id still
     -- match; the id itself goes back to the host untouched -- the host owns its type.
     packs[i] = {
-      name = tostring(entry.name or entry.id or "?"), sub = sub,
+      name = tostring(entry.name or entry.id or "?"),
+      sub = M.detail(entry.cap, entry.cycles, entry.targetProfile),
       selected = (not noneSelected) and (tostring(entry.id) == tostring(selectedId)),
       press = pressRequest(widget, entry.id),
     }

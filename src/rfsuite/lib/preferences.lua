@@ -207,7 +207,10 @@ local SCHEMA = {
     -- Whether models may override the theme and its settings on this radio. Without a default,
     -- because an absent switch allows what a card written before it already stores per model
     -- (app/pages/settings/dashboard/lib.lua).
-    optional = { "model_overrides" },
+    -- `quick_menu`: the entries of the widget's quick menu and their order, as the pilot set them
+    -- on Settings > Dashboard > Quick Settings. Absent means the menu's default; the empty string is
+    -- a menu the pilot has emptied (widgets/dashboard/quick_menu_order.lua).
+    optional = { "model_overrides", "quick_menu" },
     -- A theme's own configuration is stored here under keys built from the theme's path
     -- (app/pages/settings/dashboard/lib.lua), so the set of key names is not knowable from
     -- a schema and the section keeps whatever it is handed.

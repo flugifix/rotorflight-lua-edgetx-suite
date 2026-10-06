@@ -25,6 +25,7 @@ layer described below, and the menu and the picker open over it.
 | `widgets/dashboard/runtime.lua` | The fullscreen branch of `widget.refresh`, which asks `views.resolve()` which view to show, and `viewJobStep`, which builds it. |
 | `widgets/dashboard/fullscreen_menu.lua` | The quick menu view. |
 | `widgets/dashboard/battery_pick_menu.lua` | The battery picker view. It draws the quick menu's `battery_pick` record, whose options and close are what its presses run. |
+| `widgets/dashboard/confirm_menu.lua` | The confirmation view. It draws the question an entry's `confirm` raises (see [Confirmations](#confirmations)); its two buttons run or discard the press held behind the question. |
 | `widgets/dashboard/fullscreen_controls.lua` | The tool control, the menu glyph and the X the widget draws over a fullscreen theme that binds no control of its own, and the tool control alone on the connect splash at full screen. |
 | `widgets/dashboard/tool_host.lua` | The suite's tool, run inside the widget while it is open — see [The tool](#the-tool). |
 
@@ -50,7 +51,11 @@ The shipped registry, in this order:
 | id | module | openWhen |
 | --- | --- | --- |
 | `battery_pick` | `widgets/dashboard/battery_pick_menu.lua` | `batteryPickPending` |
+| `confirm` | `widgets/dashboard/confirm_menu.lua` | — |
 | `menu` | `widgets/dashboard/fullscreen_menu.lua` | — |
+
+`confirm` has no `openWhen`: it only ever opens from `views.confirm`, which an entry's own
+`confirm` reaches — see [Confirmations](#confirmations).
 
 Each widget gets its own copy of the list, entries included. A view's module is loaded by the
 job that first builds it and kept on that widget's entry; the state pass reads a view's own
@@ -71,8 +76,10 @@ after the theme on screen has changed, `views.register()` makes the registry ane
 - any other id is appended, in the theme's order.
 
 A theme's module is read through the theme loader when the view is first built, and built as
-`build(children, zone, state, ctx)`; its key is `renderKey(zone, state)`. RTN on a view of the
-theme's own is its `back(ctx)`, else `closeView`. A view that was on the stack and is not in the
+`build(children, zone, state, ctx)`; its key is `renderKey(zone, state)`. Where it has
+`sources(zone, state)`, the derived snapshot resolves that list after the theme's own sources while
+the view is on top, and stops when it is not (`viewSnapshotSources` in `runtime.lua`). RTN on a
+view of the theme's own is its `back(ctx)`, else `closeView`. A view that was on the stack and is not in the
 new registry is taken off it, so no job is queued for a view no step can build. A theme module
 that does not load, or whose `build` raises, is not asked for again, with one log line: a
 replaced look falls back to the core module at once, and a view of the theme's own is closed and
@@ -171,6 +178,7 @@ view, which is what an unresolvable condition does in `app/menu_registry.lua` as
 | `previewInflightTuning` | the in-flight tuning preview switch is on and the widget carries the overlay's state for this model |
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
 | `modelDisarmed` | the model is not armed (`state.armed`) |
+| `flightLogOffered` | the *Flight Log* preview switch is on (`preferences.general.preview_flight_log`, the switch the tool's own menu asks) and the model is not armed |
 | `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
 
 ### What else a theme's view may open on
@@ -234,6 +242,42 @@ shown armed as well as disarmed.
 - **A zone view that fails is dropped.** One whose module does not load, or whose `build` raises,
   is not shown again, with one log line, and the theme's own zone picture is built in its place.
 
+## Confirmations
+
+A press that must be agreed to first carries a `confirm` on its entry — or on one of its
+options. A `choice` entry's own `confirm` guards every option it runs; an option that carries one
+is held by its own question, which is used where both carry one. `fullscreen_menu.M.run` does not
+perform such a press: it hands it to `views.confirm(widget, spec, work)`, which raises the
+confirmation view and keeps `work` — the `press` and the `after` — on the visit's session until
+the pilot answers. Both answers close the question first, through `views.closeConfirm`, which
+forgets `work` and takes the view off the stack, so the surface under it shows again exactly as it
+was; the agreeing button then runs `work`, so its `after` acts on the surface the press was written
+for rather than on the question. Declining, and the view's `back` (a short press on RTN), run
+nothing.
+
+The one entry that carries a `confirm` today is the quick menu's **ERASE BLACKBOX**
+(`fullscreen_menu.lua`, `BUILD.erase_blackbox`), which asks before it erases the flight
+controller's blackbox. Its `spec` is a table of strings the entry resolved where it was built:
+
+| Key | What it is |
+| --- | --- |
+| `title` | The question's heading. |
+| `message` | The sentence that says what the press does. |
+| `detail` | Optional, a line under the message — for the erase, how full the storage is. |
+| `confirmLabel` | The label of the button that agrees (the action), drawn on the right in the warning colour. |
+| `cancelLabel` | The label of the button that declines, drawn on the left. |
+
+`views.confirm` answers `false` — and `M.run` then performs nothing — where the widget has no
+confirmation view or the stack is full. A press that cannot ask its question is **not**
+performed: on an irreversible action, refusing loses nothing where performing it loses the
+logs. The confirmation view reads the pending press through `views.pendingConfirm` and answers it
+through `views.closeConfirm`. The pending press goes when the visit does, so a full screen left
+with the question standing never performs it.
+
+The confirmation is reached the same way by a theme that draws the entry itself: `ctx.run` goes
+through `M.run`, so a theme handing the menu its ERASE BLACKBOX record gets the question too,
+and adds no work of its own.
+
 ## What follows a press
 
 A press does its work and nothing else. What happens next is data: an `after` action on the
@@ -247,6 +291,7 @@ string:
 | `done` | The interaction is finished: the stack is emptied. With no base layer that leaves full screen; with one, the base layer — the theme — shows again. |
 | `exitFullscreen` | Empty the stack and leave full screen, base layer or not. |
 | `openTool` | Open the suite's tool inside the widget, where the model is disarmed. The tool takes full screen until it is closed; see [The tool](#the-tool). The stack is emptied as for `done`, keeping what the theme's views' conditions last answered, so once the tool is closed the base layer shows, or with none the quick menu, and a theme's view whose condition still holds is not opened again. |
+| `openTool:<menuId>` | The same, with the tool opened on that page instead of on its menu; the back key there closes the tool again, because the pilot came from the widget. Only for a page `views.lua` lists in `TOOL_LANDINGS` — `tools_flight_log_page`, while `flightLogOffered` holds — and nothing at all otherwise, so a key bound to it does nothing while the page is not offered. |
 | `none` | Nothing. The press did whatever needed doing itself. |
 
 A missing `after`, and anything that is not one of these, is `none`. `views.parseAction()` is
@@ -257,10 +302,11 @@ built, so the next pass builds the view now on top. The shipped buttons:
 
 | Where | Button | after |
 | --- | --- | --- |
-| Quick menu | ERASE BLACKBOX | `done` |
+| Quick menu | ERASE BLACKBOX | `done` — behind a [`confirm`](#confirmations): the press is held, and this is what runs once it is agreed to |
 | Quick menu | IN-FLIGHT TUNING | `none` — its press raises the tuning surface's own flag |
 | Quick menu | BATTERY | `openView:battery_pick` |
 | Quick menu | MAIN MENU | `openTool` |
+| Quick menu | FLIGHT LOG, where the pilot has put it in the menu | `openTool:tools_flight_log_page` |
 | Quick menu | each BATTERY PROFILE option | `done` |
 | Quick menu | the header's X | `done` |
 | Picker | each pack, and NO BATTERY | `done` |
@@ -330,7 +376,9 @@ tool script runs — and `widget.refresh` drives it in place of the whole pass, 
 neither a view, the base layer nor the dashboard's own work runs beside it:
 
 - **Opening** takes two passes after the press: one loads `ui/home.lua`, one calls
-  `init({ hosted = true })`. A hosted tool leaves alone what the widget's state already owns:
+  `init({ hosted = true })` — with `landing = <menuId>` for `openTool:<menuId>`, which opens that
+  page the way the pilot would reach it, through its root entry and its menu, under the menu's
+  own conditions; where a step fails the tool opens on its menu instead. A hosted tool leaves alone what the widget's state already owns:
   it does not compile the tree, announce, reset the event runner, shut the card log, clear the
   chunk cache or drop `_G.rfsuite` on its way out.
 - **Loading**, from the first of those passes until the tool closes, `loadScript` is the tool
@@ -344,7 +392,8 @@ neither a view, the base layer nor the dashboard's own work runs beside it:
   has already worked through. A widget call is stopped at the instruction limit where a tool
   script is yielded; a stop inside the tool is caught and the tool is run again on the next pass,
   and twelve stops in a row give the tool up.
-- **Closing** is the tool's own sequence: the back key at the top of its menu, or
+- **Closing** is the tool's own sequence: the back key at the top of its menu, or on the page
+  `openTool:<menuId>` opened it on while that page is still the one up, or
   `requestClose()`, which the host calls on the first pass without an event (full screen has
   been left) and when the model arms. When `run` returns 2 the host detaches the tool's MSP
   client, puts back the MSP queue's default client and the `preferences` and `savePreferences` it
@@ -357,7 +406,8 @@ neither a view, the base layer nor the dashboard's own work runs beside it:
   whose condition rises later opens as it would have. A widget sent to the background drops the
   tool without the sequence, because it cannot paint it.
 
-A theme that binds its own controls reaches the tool with `ctx.action("openTool")`.
+A theme that binds its own controls reaches the tool with `ctx.action("openTool")`, or with
+`ctx.action("openTool:tools_flight_log_page")` on its *Flight Log* page.
 
 ## Related
 

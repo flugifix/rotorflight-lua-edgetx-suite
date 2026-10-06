@@ -18,6 +18,13 @@ Hidden until *System* → *Settings* → *General* → *Preview* → *Flight Log
 (`visibleWhen = "previewFlightLog"`). The tile is locked while the model is armed
 (`lockedWhileArmed = true`), so the page cannot be opened in flight.
 
+From the dashboard widget at full screen the page can be opened directly: put *FLIGHT LOG* into
+the [quick menu](../../dashboard/quick-menu.md) on *System* → *Settings* → *Dashboard* →
+[*Quick Settings*](../settings/dashboard/quick_menu.md), or, on the Urban theme, set a key to
+*Suite: Flight log*. Either opens the suite's tool inside the widget on this page, under the same two
+conditions, and the back key on the page closes the tool again rather than stepping up to
+*Tools*.
+
 ## Getting around the page
 
 Four tabs across the top — *Flights*, *Models*, *Batteries*, *Settings* — and the tab of the view

@@ -279,14 +279,18 @@ end
 -- id and the host action it stands for. The settings page offers exactly these, so the two cannot
 -- drift apart. The battery picker is not among them: the host opens it while a pick is pending
 -- and at no other time. `suite_tool` is the suite's tool, which the host opens only while the
--- model is disarmed: armed, the key does nothing.
+-- model is disarmed: armed, the key does nothing. `flight_log` is the same tool opened on its
+-- Flight Log page, which the host opens only while that page's preview switch is on as well:
+-- otherwise the key does nothing.
 L.KEY_ACTIONS = {
   { id = "none",       action = "none" },
   { id = "menu",       action = "openView:menu" },
   { id = "tools",      action = "openView:urban_menu" },
   { id = "link",       action = "openView:urban_link" },
+  { id = "telemetry",  action = "openView:urban_telemetry" },
   { id = "battery",    action = "openView:urban_battery" },
   { id = "suite_tool", action = "openTool" },
+  { id = "flight_log", action = "openTool:tools_flight_log_page" },
   { id = "exit",       action = "exitFullscreen" },
 }
 
@@ -750,11 +754,20 @@ end
 
 -- Each row picks its own value font against its own widest sample, so one wide row does
 -- not shrink the whole panel.
-function L.valuePanel(nodes, state, x, y, w, h, font, fontH, rows)
+--
+-- In full screen, on a host with theme views, the panel is the tap that opens the telemetry view
+-- (telemview.lua): the rows are what that page shows more of. Everything over the press is then
+-- a label or a line -- the separators become lines -- and the widget zone draws what it always did.
+function L.valuePanel(nodes, state, x, y, w, h, font, fontH, rows, ctx)
   local pad = math.max(2, CARD_PAD - 1)
   local rowGap = 1
   local count = #rows
   if count == 0 then return end
+  local asLines = hasViews(ctx)
+  if asLines then
+    local action = ctx.action
+    tapArea(nodes, x, y, w, h, function() action("openView:urban_telemetry") end)
+  end
   local rowH = math.floor((h - 2 * pad - (count - 1) * rowGap) / count)
   local usedH = rowH * count + (count - 1) * rowGap
   local startY = pad + math.floor((h - usedH) / 2)
@@ -794,7 +807,13 @@ function L.valuePanel(nodes, state, x, y, w, h, font, fontH, rows)
     Common.label(nodes, x + valueX, y + valueY, valueW - unitW, valueH, row.value, valueFont, row.color or C.text, RIGHT)
 
     if i < count then
-      Common.hline(nodes, x + pad, y + rowY + rowH, w - 2 * pad)
+      local lineY = y + rowY + rowH
+      if asLines then
+        nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
+          pts = { { x + pad, lineY }, { x + w - pad, lineY } }, color = C.line, thickness = 1 }
+      else
+        Common.hline(nodes, x + pad, lineY, w - 2 * pad)
+      end
     end
   end
 end
@@ -828,6 +847,24 @@ local function derivedGetter(source, format)
   end
 end
 
+-- A reading straight off one of the radio's telemetry sensors, by the name EdgeTX gives it. The
+-- host has no field for these: naming the sensor as a source makes it resolve the name with
+-- `getValue` on its own pass (objects/common.lua, Utils.mapTelemetrySource, which falls through to
+-- the sensor module's direct lookup), and the closure reads the snapshot. `places` is the number
+-- of decimals drawn. The telemetry view's range for such a reading is the radio's own least and
+-- most of the sensor since its last telemetry reset -- the `-` and `+` forms of the same name --
+-- because the flight record keeps none of them.
+local function rawSource(id, label, sensor, unit, sample, places)
+  local format
+  if places == 0 then
+    format = Common.integer
+  else
+    format = function(v) return Common.decimals(v, places) end
+  end
+  return { id = id, label = label, unit = unit, sample = sample, source = sensor, rawRange = true,
+    places = places, make = derivedGetter(sensor, format) }
+end
+
 -- Every source reads a state field the runtime's telemetry pass fills; nothing here probes.
 -- `list` is the configure page's order, `id` the cfg value it stores, `label` the row's name as a
 -- translation marker -- the configure page lists it as the option and the panel draws it, so the
@@ -841,8 +878,14 @@ end
 -- asked for it, so the slot half of the list is built from the five slots a pilot actually
 -- chose. None of the five defaults carries a `source`; the readings the theme declares whatever
 -- the slots say are listed in L.sources, with the reason for each.
+--
+-- `minKey` / `maxKey` (optional) name the flight record's extremes of the reading
+-- (tasks/events/telemetry/flight_record.lua, FLIGHT_STATS), which the telemetry view prints under
+-- the figure at `places` decimals. A side the record does not keep is absent and prints `-`; a
+-- reading with neither is not in the record at all and its tile has no range line.
 L.SOURCES = {
   { id = "cell_voltage", label = "@i18n(widgets.dashboard.urban_cell_voltage)@", unit = "V", sample = "4.20",
+    minKey = "minVoltage", maxKey = "maxVoltage", places = 2, perCell = true,
     make = function(state)
       -- The cell count is a render key term, so it is a constant of this build.
       local cells = Common.cells(state)
@@ -867,33 +910,43 @@ L.SOURCES = {
       end
     end },
   { id = "voltage", label = "@i18n(app.pages.logs.voltage_title)@", unit = "V", sample = "99.9", make = decimalGetter("voltage", 1),
+    minKey = "minVoltage", maxKey = "maxVoltage", places = 1,
     -- The pack voltage turns with the gauge and the status line when the main pack is gone.
     -- This row has no minimum of its own -- the cell figure is the one the theme's configured
     -- bounds apply to -- so this is its only colour.
     color = function(state) return Common.packColor(state, C.text) end },
-  { id = "rpm", label = "@i18n(app.pages.logs.rpm_title)@", unit = "rpm", sample = "9999", make = intGetter("rpm") },
-  { id = "current", label = "@i18n(app.pages.logs.current_title)@", unit = "A", sample = "999.9", make = decimalGetter("current", 1) },
+  { id = "rpm", label = "@i18n(app.pages.logs.rpm_title)@", unit = "rpm", sample = "9999", make = intGetter("rpm"),
+    minKey = "minRpm", maxKey = "maxRpm", places = 0 },
+  { id = "current", label = "@i18n(app.pages.logs.current_title)@", unit = "A", sample = "999.9", make = decimalGetter("current", 1),
+    minKey = "minCurrent", maxKey = "maxCurrent", places = 1 },
   -- The two temperature rows are the only ones with a ladder a pilot sets: the colour comes from
   -- the `temp_colors` row of the settings page, which answers nil while it is off -- so the row
   -- then carries no colour closure at all and the setting costs nothing per frame. common.lua
   -- holds the ladders and the reasoning for their being one row rather than four.
   { id = "esc_temp", label = "@i18n(app.pages.logs.temp_title)@", unit = "C", sample = "9999", make = intGetter("escTemp"),
+    minKey = "minEscTemp", maxKey = "maxEscTemp", places = 0,
     color = function(state) return Common.tempColor(setting(state, "temp_colors"), state, "esc", "escTemp") end },
   { id = "mcu_temp", label = "@i18n(widgets.dashboard.urban_mcu_temp)@", unit = "C", sample = "9999", make = intGetter("mcuTemp"),
+    maxKey = "maxMcuTemp", places = 0,
     color = function(state) return Common.tempColor(setting(state, "temp_colors"), state, "mcu", "mcuTemp") end },
   { id = "bec_voltage", label = "@i18n(widgets.dashboard.urban_bec_voltage)@", unit = "V", sample = "99.99",
-    make = decimalGetter("bec_voltage", 2) },
-  { id = "watts", label = "@i18n(app.pages.logs.tpl_power)@", unit = "W", sample = "8888", make = intGetter("watts") },
-  { id = "throttle", label = "@i18n(app.pages.logs.throttle_title)@", unit = "%", sample = "888", make = intGetter("throttlePercent") },
+    make = decimalGetter("bec_voltage", 2), minKey = "minBecVoltage", maxKey = "maxBecVoltage", places = 2 },
+  { id = "watts", label = "@i18n(app.pages.logs.tpl_power)@", unit = "W", sample = "8888", make = intGetter("watts"),
+    maxKey = "maxWatts", places = 0 },
+  { id = "throttle", label = "@i18n(app.pages.logs.throttle_title)@", unit = "%", sample = "888", make = intGetter("throttlePercent"),
+    maxKey = "maxThrottlePercent", places = 0 },
   -- The fuel row reads what the gauge reads: nothing until the host has seen a fuel reading.
   { id = "fuel", label = "@i18n(app.pages.settings_audio_events.section_fuel)@", unit = "%", sample = "888",
+    minKey = "minFuel", places = 0,
     make = function(state)
       return Common.getter(function() return Common.fuel(state) end, Common.integer)
     end },
-  { id = "consumed", label = "@i18n(widgets.dashboard.urban_used)@", unit = "mAh", sample = "8888", make = intGetter("consumedMah") },
+  { id = "consumed", label = "@i18n(widgets.dashboard.urban_used)@", unit = "mAh", sample = "8888", make = intGetter("consumedMah"),
+    maxKey = "maxConsumedMah", places = 0 },
   { id = "altitude", label = "@i18n(widgets.dashboard.urban_altitude)@", unit = "m", sample = "888.8",
-    make = decimalGetter("altitude", 1) },
-  { id = "link", label = "@i18n(app.pages.logs.tpl_link)@", unit = "%", sample = "888", make = intGetter("lq") },
+    make = decimalGetter("altitude", 1), maxKey = "maxAltitude", places = 1 },
+  { id = "link", label = "@i18n(app.pages.logs.tpl_link)@", unit = "%", sample = "888", make = intGetter("lq"),
+    minKey = "minLq", maxKey = "maxLq", places = 0 },
 
   -- The readings below are the host's DERIVED ones. Each names the source it needs, and
   -- L.sources declares exactly those of them a pilot has put in a row.
@@ -967,6 +1020,37 @@ L.SOURCES = {
     source = "link_floor",
     make = derivedGetter("link_floor", Common.integer) },
 
+  -- Readings the host has no field for, straight off the radio's telemetry sensors (rawSource
+  -- above). Each costs the host a sensor read per telemetry pass only while a row or a tile shows
+  -- it, and a tile showing it two more for its range. The names are the ones the suite's own
+  -- decoder creates (lib/rf2tlm_sensors.lua); TQly, TPWR and RSNR are the link's own.
+  rawSource("bec_temp", "@i18n(widgets.dashboard.urban_bec_temp)@", "Tbec", "C", "999", 0),
+  rawSource("tail_speed", "@i18n(widgets.dashboard.urban_tail_speed)@", "Tspd", "rpm", "9999", 0),
+  rawSource("vario", "@i18n(widgets.dashboard.urban_vario)@", "Var", "m/s", "-99.9", 1),
+  rawSource("tq", "@i18n(widgets.dashboard.urban_tq)@", "TQly", "%", "888", 0),
+  rawSource("tx_power", "@i18n(widgets.dashboard.urban_tx_power)@", "TPWR", "mW", "8888", 0),
+  rawSource("esc_bec_temp", "@i18n(widgets.dashboard.urban_esc_bec_temp)@", "BecT", "C", "999", 0),
+  rawSource("bec_current", "@i18n(widgets.dashboard.urban_bec_current)@", "Ibec", "A", "99.9", 1),
+  rawSource("esc_voltage", "@i18n(widgets.dashboard.urban_esc_voltage)@", "EscV", "V", "99.99", 2),
+  rawSource("esc_current", "@i18n(widgets.dashboard.urban_esc_current)@", "EscI", "A", "999.9", 1),
+  rawSource("esc_used", "@i18n(widgets.dashboard.urban_esc_used)@", "EscC", "mAh", "8888", 0),
+  rawSource("esc_rpm", "@i18n(widgets.dashboard.urban_esc_rpm)@", "EscR", "rpm", "99999", 0),
+  rawSource("esc_pwm", "@i18n(widgets.dashboard.urban_esc_pwm)@", "EscP", "%", "100.0", 1),
+  rawSource("esc_telem_load", "@i18n(widgets.dashboard.urban_esc_telem_load)@", "Esc%", "%", "100.0", 1),
+  rawSource("gps_sats", "@i18n(widgets.dashboard.urban_gps_sats)@", "Sats", "", "88", 0),
+  rawSource("gps_speed", "@i18n(widgets.dashboard.urban_gps_speed)@", "GSpd", "m/s", "99.9", 1),
+  rawSource("gps_alt", "@i18n(widgets.dashboard.urban_gps_alt)@", "GAlt", "m", "888.8", 1),
+  rawSource("gps_dist", "@i18n(widgets.dashboard.urban_gps_dist)@", "GDis", "m", "8888", 0),
+  rawSource("pitch", "@i18n(widgets.dashboard.urban_pitch)@", "Ptch", "deg", "-180", 0),
+  rawSource("roll", "@i18n(widgets.dashboard.urban_roll)@", "Roll", "deg", "-180", 0),
+  rawSource("yaw", "@i18n(widgets.dashboard.urban_yaw)@", "Yaw", "deg", "-180", 0),
+  rawSource("cpu_load", "@i18n(widgets.dashboard.urban_cpu_load)@", "CPU%", "%", "888", 0),
+  rawSource("sys_load", "@i18n(widgets.dashboard.urban_sys_load)@", "SYS%", "%", "888", 0),
+  rawSource("rt_load", "@i18n(widgets.dashboard.urban_rt_load)@", "RT%", "%", "888", 0),
+  rawSource("bus_voltage", "@i18n(widgets.dashboard.urban_bus_voltage)@", "Vbus", "V", "99.99", 2),
+  rawSource("mcu_voltage", "@i18n(widgets.dashboard.urban_mcu_voltage)@", "Vmcu", "V", "9.99", 2),
+  rawSource("rsnr", "@i18n(widgets.dashboard.urban_rsnr)@", "RSNR", "dB", "-88", 0),
+
   { id = "none", label = "@i18n(widgets.dashboard.urban_off)@", unit = "", sample = "8888",
     make = function() return function() return "" end end },
 }
@@ -976,6 +1060,18 @@ for i = 1, #L.SOURCES do SOURCES_BY_ID[L.SOURCES[i].id] = L.SOURCES[i] end
 
 -- The defaults: cell voltage, headspeed, current, ESC temperature, BEC.
 L.DEFAULT_SLOTS = { "cell_voltage", "rpm", "current", "esc_temp", "bec_voltage" }
+
+-- The telemetry view's tiles (telemview.lua), chosen on the Telemetry settings page from the same
+-- catalogue as the five rows. Up to twelve, three to a row; a tile set to `none` is left out and
+-- the others close up. Nine are on by default, the pack, the drive and the electronics, so a
+-- page nobody has configured is already worth opening.
+L.TILE_COUNT = 12
+L.DEFAULT_TILES = {
+  "voltage", "cell_voltage", "current",
+  "consumed", "fuel", "rpm",
+  "esc_temp", "mcu_temp", "bec_voltage",
+  "none", "none", "none",
+}
 
 -- What this theme asks the host to resolve for it.
 --
@@ -1047,6 +1143,121 @@ function L.sources(state)
     end
   end
   return list
+end
+
+-- What the telemetry view's tiles read beyond the fixed state fields: the `source` of each tile,
+-- and for a raw sensor the `-` and `+` forms of its name, the radio's own least and most of it,
+-- which only a tile draws. telemview.lua hands this to the host as the view's own `sources`, so
+-- they are read while the view is open and at no other time; the flight view's list above names
+-- only what the flight view draws. None of the default tiles carries a `source`.
+function L.tileSources(state)
+  local cfg = (state and state.themeConfig) or {}
+  local list, seen = {}, {}
+  local function add(name)
+    if not seen[name] then
+      seen[name] = true
+      list[#list + 1] = name
+    end
+  end
+  for i = 1, L.TILE_COUNT do
+    local def = SOURCES_BY_ID[cfg["tile" .. i]] or SOURCES_BY_ID[L.DEFAULT_TILES[i]]
+    local src = def and def.source
+    if src then
+      add(src)
+      if def.rawRange then
+        add(src .. "-")
+        add(src .. "+")
+      end
+    end
+  end
+  return list
+end
+
+-- One extreme of the flight record as a reader for the per-frame sweep: the flight in progress
+-- where it has taken a value for the key, the flight that ended otherwise -- the rule the host's
+-- own boxes read the record by (objects/common.lua, Utils.statFromRecord). `cells` divides a pack
+-- reading down to a cell.
+local function extremeReader(state, key, cells)
+  return function()
+    local flight = state.flight
+    if type(flight) ~= "table" then return nil end
+    local rec = flight.current
+    local v = type(rec) == "table" and rec[key] or nil
+    if v == nil then
+      rec = flight.last
+      v = type(rec) == "table" and rec[key] or nil
+    end
+    if type(v) ~= "number" then return nil end
+    if cells then return v / cells end
+    return v
+  end
+end
+
+-- "<least> .. <most>" of the flight record, a side the record does not keep as `-`, formatted once
+-- per change of either side.
+local function rangeGetter(state, def, cells)
+  local readMin = def.minKey and extremeReader(state, def.minKey, cells) or nil
+  local readMax = def.maxKey and extremeReader(state, def.maxKey, cells) or nil
+  local fmt = "%." .. tostring(def.places or 0) .. "f"
+  local lastMin, lastMax, text = Common.UNSET, Common.UNSET, nil
+  return function()
+    local lo = readMin and readMin() or nil
+    local hi = readMax and readMax() or nil
+    if lo == lastMin and hi == lastMax then return text end
+    lastMin, lastMax = lo, hi
+    text = (lo and string.format(fmt, lo) or "-") .. " .. " .. (hi and string.format(fmt, hi) or "-")
+    return text
+  end
+end
+
+-- "<least> .. <most>" of a raw sensor, from the radio's `-` and `+` forms of its name as the host
+-- resolved them into the snapshot (L.sources declares both for a tile).
+local function rawRangeGetter(state, def)
+  local lowName, highName = def.source .. "-", def.source .. "+"
+  local fmt = "%." .. tostring(def.places or 0) .. "f"
+  local lastMin, lastMax, text = Common.UNSET, Common.UNSET, nil
+  return function()
+    local d = state.derived
+    local lo = d and d[lowName]
+    local hi = d and d[highName]
+    if type(lo) ~= "number" then lo = nil end
+    if type(hi) ~= "number" then hi = nil end
+    if lo == lastMin and hi == lastMax then return text end
+    lastMin, lastMax = lo, hi
+    text = (lo and string.format(fmt, lo) or "-") .. " .. " .. (hi and string.format(fmt, hi) or "-")
+    return text
+  end
+end
+
+-- The telemetry view's tiles, in the order the settings page lists them, without the ones set to
+-- `none`. Each is a row of the five-row panel -- the same label, unit, figure and colour -- plus
+-- `range`, the record's extremes as one string, nil for a reading the record does not keep.
+function L.tileRows(state)
+  local cfg = state.themeConfig or {}
+  local tiles = {}
+  local cells = nil
+  for i = 1, L.TILE_COUNT do
+    local def = SOURCES_BY_ID[cfg["tile" .. i]] or SOURCES_BY_ID[L.DEFAULT_TILES[i]]
+    if def and def.id ~= "none" then
+      local range = nil
+      if def.rawRange then
+        range = rawRangeGetter(state, def)
+      elseif def.minKey or def.maxKey then
+        if def.perCell and cells == nil then cells = Common.cells(state) end
+        range = rangeGetter(state, def, def.perCell and cells or nil)
+      end
+      tiles[#tiles + 1] = {
+        label = def.label,
+        unit = def.unit,
+        sample = def.sample,
+        value = def.make(state),
+        color = def.color and def.color(state) or nil,
+        range = range,
+        rangeSample = def.perCell and "4.20 .. 4.20" or (def.sample .. " .. " .. def.sample),
+      }
+    end
+  end
+  return tiles
 end
 
 function L.slotRows(state)
@@ -1250,7 +1461,7 @@ function L.buildFlight(zone, state, ctx)
   end
   if rightW > 0 and contentH > 0 then
     L.valuePanel(nodes, state, rightX, yContent, rightW, contentH, font, fontH,
-      L.slotRows(state))
+      L.slotRows(state), ctx)
   end
 
   L.statusBar(nodes, state, x0, yStatus, w - 4, boxH, font, fontH)

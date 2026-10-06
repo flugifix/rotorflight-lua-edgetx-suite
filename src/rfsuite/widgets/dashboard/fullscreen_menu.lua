@@ -40,11 +40,27 @@ local function pressFor(widget, work, after)
   end
 end
 
+-- Which entries the quick menu shows and in which order is the pilot's to choose, on
+-- Settings > Dashboard > Quick Settings; the ids, the default and the stored form are in
+-- quick_menu_order.lua, which that page reads as well.
+local Order = requireModule("widgets/dashboard/quick_menu_order.lua")
+
 -- The menus the widget offers, each a list of entry ids in the order they are drawn. The quick
 -- menu is the one there is; a theme draws it, or takes entries out of it by id, and adds none.
+-- `quick` here is the menu's default; what is drawn is the pilot's list (`quickIds` below).
 M.LISTS = {
-  quick = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool", "battery_profile" },
+  quick = Order and Order.DEFAULT or {},
 }
+
+-- The quick menu's ids as the pilot has arranged them, read from the preferences of this pass,
+-- so a save on the settings page reaches the next build of the menu with the widget's reload of
+-- the preferences file.
+local function quickIds(widget)
+  if Order == nil then return M.LISTS.quick end
+  local prefs = widget.preferences
+  local dashboard = type(prefs) == "table" and prefs.dashboard or nil
+  return Order.ids(type(dashboard) == "table" and dashboard[Order.KEY] or nil)
+end
 
 -- ---------------------------------------------------------------------------
 -- Work that talks to the flight controller
@@ -169,16 +185,46 @@ local function batteryPickOptions(widget, t)
   return options
 end
 
--- The entries, one builder each, in the order the quick menu draws them. A caller that wants one
+-- The entries, one builder each, in the quick menu's default order. A caller that wants one
 -- entry -- the battery picker wants its own record, and a theme one entry by its id -- builds that
 -- one and not all of them, their translations and closures included.
 local BUILD = {}
 
+-- How full the blackbox is, as the flight controller last reported it: the summary read on
+-- connecting, and again after every erase. It is the row's `info`, and it is also what the
+-- erase's question is worded from: how much is about to be lost is the one thing a pilot cannot
+-- recover by looking afterwards.
+local function blackboxFill()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local stats = session and session.dataflash or nil
+  if type(stats) ~= "table" then return nil end
+  return { used = stats.used, total = stats.total }
+end
+
 function BUILD.erase_blackbox(widget, t)
+  -- The erase is irreversible and sits one tap from the quick menu, so the entry carries the
+  -- question and `M.run` holds the press behind it: nothing is queued, and full screen is not
+  -- left, until the pilot has agreed. `detail` is omitted where no summary has been read, so the
+  -- question is the same shape with or without a number in it.
+  local confirm = {
+    title = t("widgets.dashboard.erase_blackbox_confirm_title", "ERASE BLACKBOX"),
+    message = t("widgets.dashboard.erase_blackbox_confirm_message",
+      "Erase the flight controller's blackbox? This cannot be undone."),
+    confirmLabel = t("widgets.dashboard.erase_blackbox_confirm_yes", "ERASE"),
+    cancelLabel = t("widgets.dashboard.erase_blackbox_confirm_no", "CANCEL"),
+  }
+  local fill = blackboxFill()
+  if fill and type(fill.used) == "number" and type(fill.total) == "number" and fill.total > 0 then
+    confirm.detail = string.format(
+      t("widgets.dashboard.erase_blackbox_confirm_used", "%d%% used"),
+      math.floor(fill.used / fill.total * 100 + 0.5))
+  end
+
   return {
     id = "erase_blackbox",
     kind = "action",
     title = t("widgets.dashboard.erase_blackbox", "ERASE BLACKBOX"),
+    confirm = confirm,
     press = function(report)
          local mspModule = requireModule("tasks/msp/runtime.lua")
          if mspModule and mspModule.getState then
@@ -213,14 +259,7 @@ function BUILD.erase_blackbox(widget, t)
             end
          end
     end,
-    -- How full the blackbox is, as the flight controller last reported it: the summary read on
-    -- connecting, and again after every erase.
-    info = function()
-      local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
-      local stats = session and session.dataflash or nil
-      if type(stats) ~= "table" then return nil end
-      return { used = stats.used, total = stats.total }
-    end,
+    info = blackboxFill,
     after = "done"
   }
 end
@@ -278,6 +317,19 @@ function BUILD.tool(widget, t)
     title = t("widgets.dashboard.tool_open", "MAIN MENU"),
     visibleWhen = "modelDisarmed",
     after = "openTool"
+  }
+end
+
+-- The suite's tool, opened on its Flight Log page rather than on its menu, and closed again by
+-- the back key there. Offered only while that page is in the tool -- its preview switch is on --
+-- and the model is disarmed; not in the default list, so it is in the menu only where the pilot puts it.
+function BUILD.flight_log(widget, t)
+  return {
+    id = "flight_log",
+    kind = "action",
+    title = t("widgets.dashboard.flight_log_open", "FLIGHT LOG"),
+    visibleWhen = "flightLogOffered",
+    after = "openTool:tools_flight_log_page"
   }
 end
 
@@ -361,16 +413,25 @@ end
 --
 -- `press` does the row's work and nothing else. What follows it -- leaving fullscreen, opening
 -- another view, or nothing -- is the row's `after`, an action views.lua performs; an option of a
--- `choice` carries its own.
+-- `choice` carries its own. A row whose press must be agreed to first also carries a `confirm`,
+-- the question `M.run` raises before the work: ERASE BLACKBOX is the one, and it is what keeps a
+-- mis-tap on an irreversible action from meaning anything.
 --
 -- The title is resolved here, and it is resolved from a complete literal key: the translation
 -- precompiler rewrites what it can read, and a key assembled from parts ships the English
 -- fallback in every language with nothing saying so.
+--
+-- The rows are the pilot's: the entries the pilot has put in the quick menu, in that order
+-- (quickIds).
+-- Whether a row is drawn is still its `visibleWhen`, asked on top of that choice.
 function M.entries(widget)
   local t = translator(widget)
   local list = {}
-  local ids = M.LISTS.quick
-  for i = 1, #ids do list[i] = BUILD[ids[i]](widget, t) end
+  local ids = quickIds(widget)
+  for i = 1, #ids do
+    local build = BUILD[ids[i]]
+    if build ~= nil then list[#list + 1] = build(widget, t) end
+  end
   return list
 end
 
@@ -382,15 +443,16 @@ function M.entry(widget, id)
 end
 
 --- The entries of the named list in `M.LISTS`, in its order; an empty list for an unknown name.
+--- `quick` is the pilot's list, the one the quick menu draws.
 function M.list(widget, name)
+  if name == "quick" then return M.entries(widget) end
   local ids = M.LISTS[name]
   local out = {}
   if type(ids) ~= "table" then return out end
-  local byId = {}
-  local all = M.entries(widget)
-  for i = 1, #all do byId[all[i].id] = all[i] end
+  local t = translator(widget)
   for i = 1, #ids do
-    if byId[ids[i]] ~= nil then out[#out+1] = byId[ids[i]] end
+    local build = BUILD[ids[i]]
+    if build ~= nil then out[#out+1] = build(widget, t) end
   end
   return out
 end
@@ -426,16 +488,17 @@ end
 
 --- The menu's own records for a list a caller hands in, in its order: each item replaced by the
 --- record of its `id`, and an item whose id the menu does not have left out.
+--
+-- Every entry the menu can build counts, not only the ones the pilot has put in the quick menu:
+-- a theme that names an entry asks for that entry, as `M.entry` answers it.
 function M.coreList(widget, list)
   local out = {}
   if type(list) ~= "table" then return out end
-  local byId = {}
-  local all = M.entries(widget)
-  for i = 1, #all do byId[all[i].id] = all[i] end
+  local t = translator(widget)
   for i = 1, #list do
     local item = list[i]
-    local core = type(item) == "table" and byId[item.id] or nil
-    if core ~= nil then out[#out+1] = core end
+    local build = type(item) == "table" and BUILD[item.id] or nil
+    if build ~= nil then out[#out+1] = build(widget, t) end
   end
   return out
 end
@@ -445,12 +508,28 @@ function M.visible(widget, entry)
   return isEntryVisible(entry, widget)
 end
 
+-- The work a press does and the action that follows it, in that order. Split out of `run` so
+-- that a press which must be confirmed can be performed from the answer instead of here.
+local function perform(widget, source, after, report)
+  if type(source.press) == "function" then source.press(report) end
+  if after == nil then after = source.after end
+  if Views and type(Views.navigate) == "function" then Views.navigate(widget, after) end
+end
+
 --- Run an entry, or one of its options: the work, then the action that follows it. This is the
 --- one place both happen, for the menu's own buttons, the picker's and a theme's alike.
 --
 -- The work is the option's when an option is given and the entry's otherwise; so is the action,
 -- unless `after` names another one. `report` is handed to the work, which tells it how the
 -- messages it queued fared (see queueChain); the menu's own buttons pass none.
+--
+-- An entry that carries `confirm` is a press that must be agreed to first: its work is NOT
+-- performed here but handed to the confirmation view (views.confirm), which runs it from the
+-- pilot's answer. A question that cannot be raised leaves the press unperformed -- refusing
+-- loses nothing where a mis-tap would lose the logs.
+--
+-- A `choice` entry's own `confirm` guards every option it runs; an option that carries one is
+-- held by its own question, which is preferred where both carry one.
 --
 -- This runs whatever it is handed: the `press` of the table it is given, with no check of where
 -- that table came from. A caller resolves first and passes only the menu's own records -- the
@@ -459,9 +538,15 @@ end
 -- theme put work of its own behind one of the menu's entries.
 function M.run(widget, entry, option, after, report)
   local source = option or entry
-  if type(source.press) == "function" then source.press(report) end
   if after == nil then after = source.after end
-  if Views and type(Views.navigate) == "function" then Views.navigate(widget, after) end
+  local confirm = (option and option.confirm) or entry.confirm
+  if type(confirm) == "table" then
+    if Views and type(Views.confirm) == "function" then
+      Views.confirm(widget, confirm, function() perform(widget, source, after, report) end)
+    end
+    return
+  end
+  perform(widget, source, after, report)
 end
 
 --- Draw the menu.

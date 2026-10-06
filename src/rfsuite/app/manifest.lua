@@ -381,6 +381,8 @@ local manifest = {
       pages = {
         { id = "dashboard_theme", title = "@i18n(app.modules.dashboard_theme.name)@", menuId = "settings_dashboard_theme_page" },
         { id = "dashboard_settings", title = "@i18n(app.modules.dashboard_settings.name)@", menuId = "settings_dashboard_settings_menu", icon = "@pages/settings/dashboard/settings/icon.png" },
+        { id = "dashboard_quick_menu", title = "@i18n(app.modules.dashboard_quick_menu.name)@",
+          menuId = "settings_dashboard_quick_menu_page", icon = "@pages/settings/shortcuts/icon.png" },
         -- The other half of the same preview feature, and it carries the same condition:
         -- one preference key decides whether in-flight tuning is on the radio at all.
         { id = "dashboard_inflight", title = "@i18n(app.modules.dashboard_inflight.name)@",
@@ -403,6 +405,10 @@ local manifest = {
     },
     settings_dashboard_inflight_page = {
       title = "@i18n(app.modules.dashboard_inflight.name)@",
+      pages = {}
+    },
+    settings_dashboard_quick_menu_page = {
+      title = "@i18n(app.modules.dashboard_quick_menu.name)@",
       pages = {}
     },
     settings_dashboard_settings_page = {
@@ -455,8 +461,10 @@ local manifest = {
     },
     settings_audio_events_page = {
       title = "@i18n(app.modules.audio_events.name)@",
-      -- One page per category. The icons are the ones the matching setup pages already carry.
+      -- One page per category. The icons are the ones the matching setup pages already carry,
+      -- except On Connect, which matches no setup page and carries its own.
       pages = {
+        { id = "audio_events_connect", title = "@i18n(app.modules.audio_events_connect.name)@", menuId = "settings_audio_events_connect_page", icon = "@pages/settings/audio/events/connect/icon.png" },
         { id = "audio_events_arming", title = "@i18n(app.modules.audio_events_arming.name)@", menuId = "settings_audio_events_arming_page", icon = "@pages/setup/controls/modes/icon.png" },
         { id = "audio_events_governor", title = "@i18n(app.modules.audio_events_governor.name)@", menuId = "settings_audio_events_governor_page", icon = "@pages/setup/governor/icon.png" },
         { id = "audio_events_voltage", title = "@i18n(app.modules.audio_events_voltage.name)@", menuId = "settings_audio_events_voltage_page", icon = "@pages/setup/power/alerts/icon.png" },
@@ -464,10 +472,12 @@ local manifest = {
         { id = "audio_events_esc", title = "@i18n(app.modules.audio_events_esc.name)@", menuId = "settings_audio_events_esc_page", icon = "@pages/setup/esc_motors/telemetry/icon.png" },
         { id = "audio_events_adjustment", title = "@i18n(app.modules.audio_events_adjustment.name)@", menuId = "settings_audio_events_adjustment_page", icon = "@pages/setup/controls/adjustments/icon.png" },
         { id = "audio_events_fuel", title = "@i18n(app.modules.audio_events_fuel.name)@", menuId = "settings_audio_events_fuel_page", icon = "@pages/setup/power/smartfuel/icon.png" },
-        { id = "audio_events_battery", title = "@i18n(app.modules.audio_events_battery.name)@", menuId = "settings_audio_events_battery_page", icon = "@pages/setup/power/battery/icon.png" },
-        { id = "audio_events_link", title = "@i18n(app.modules.audio_events_link.name)@", menuId = "settings_audio_events_link_page", icon = "@pages/tools/diagnostics/elrs_link/icon.png" },
-        { id = "audio_events_other", title = "@i18n(app.modules.audio_events_other.name)@", menuId = "settings_audio_events_other_page", icon = "@pages/setup/model/icon.png" }
+        { id = "audio_events_link", title = "@i18n(app.modules.audio_events_link.name)@", menuId = "settings_audio_events_link_page", icon = "@pages/tools/diagnostics/elrs_link/icon.png" }
       }
+    },
+    settings_audio_events_connect_page = {
+      title = "@i18n(app.modules.audio_events_connect.name)@",
+      pages = {}
     },
     settings_audio_events_arming_page = {
       title = "@i18n(app.modules.audio_events_arming.name)@",
@@ -497,16 +507,8 @@ local manifest = {
       title = "@i18n(app.modules.audio_events_fuel.name)@",
       pages = {}
     },
-    settings_audio_events_battery_page = {
-      title = "@i18n(app.modules.audio_events_battery.name)@",
-      pages = {}
-    },
     settings_audio_events_link_page = {
       title = "@i18n(app.modules.audio_events_link.name)@",
-      pages = {}
-    },
-    settings_audio_events_other_page = {
-      title = "@i18n(app.modules.audio_events_other.name)@",
       pages = {}
     },
     settings_audio_volume_page = {

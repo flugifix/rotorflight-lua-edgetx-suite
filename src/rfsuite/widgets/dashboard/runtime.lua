@@ -894,6 +894,44 @@ local function viewJobStep(self)
   return true
 end
 
+-- What the derived snapshot resolves while a fullscreen view stands whose module names readings of
+-- its own: the theme's sources (`self.boxSources`, collected at the theme load) followed by the
+-- view's `sources(zone, state)`, without duplicates. Nil where no such view is on top, and the
+-- snapshot then resolves the theme's sources alone -- so a reading only a view shows is read only
+-- while that view is open.
+--
+-- The module is the one the job pass loaded for the view, never loaded here; a view that has not
+-- been built yet names nothing until it has. The list is made once per view module and per
+-- source list of the theme -- a theme reload replaces the latter -- so a standing view costs two
+-- comparisons a pass. A pair the host completes for the theme (PAIRED_SOURCES) is not completed
+-- for a view: it names both halves itself.
+local function viewSnapshotSources(self, Views, viewId)
+  if viewId == nil then return nil end
+  local entry = Views.find(self, viewId)
+  local view = entry and entry.loaded or nil
+  if view == nil or type(view.sources) ~= "function" then return nil end
+  local base = self.boxSources or {}
+  local memo = self._viewSourcesMemo
+  if memo ~= nil and memo.view == view and memo.base == base then return memo.list end
+  local list, seen = {}, {}
+  for i = 1, #base do
+    list[i] = base[i]
+    seen[base[i]] = true
+  end
+  local ok, declared = pcall(view.sources, self.zone, self.state)
+  if ok and type(declared) == "table" then
+    for i = 1, #declared do
+      local src = declared[i]
+      if type(src) == "string" and src ~= "" and not seen[src] then
+        seen[src] = true
+        list[#list + 1] = src
+      end
+    end
+  end
+  self._viewSourcesMemo = { view = view, base = base, list = list }
+  return list
+end
+
 -- Whether a node list binds a press anywhere, nested children included.
 local function bindsPress(nodes)
   for i = 1, #nodes do
@@ -3350,7 +3388,7 @@ function Runtime.new(zone, options)
         -- The snapshot the reactive closures read, rebuilt on the same cadence as the
         -- telemetry read that feeds it -- probing is legal here and nowhere in the sweep.
         if DerivedSnapshot and type(DerivedSnapshot.build) == "function" then
-          DerivedSnapshot.build(self.state, self.boxSources)
+          DerivedSnapshot.build(self.state, self._snapshotSources or self.boxSources)
         end
       end
     end
@@ -3797,6 +3835,9 @@ function Runtime.new(zone, options)
     if not self.theme then return end
 
     local tuningMode = inflightMode(self, isInteractive)
+    -- The readings of the fullscreen view on top, where it names any (viewSnapshotSources); every
+    -- other surface leaves this nil, so leaving fullscreen stops reading them.
+    local viewSources = nil
     -- See the gap line in traceInstructionUsage: a state pass is named by the surface it is for,
     -- so a hole measured while the tuning surface was up can be told from one on the dashboard.
     self._passWork = tuningMode or "state"
@@ -3856,6 +3897,7 @@ function Runtime.new(zone, options)
         if pick.openRequest ~= nil then takeBatteryPickOpen(self, Views, pick) end
         viewId, viewKey = Views.resolve(self)
         if self._viewBase ~= nil then viewId, viewKey = resolveThemeMode(self, viewId, viewKey) end
+        viewSources = viewSnapshotSources(self, Views, viewId)
       end
       self._viewId = viewId
       nextRenderKey = viewKey
@@ -3877,6 +3919,8 @@ function Runtime.new(zone, options)
       end
       nextRenderKey = self._cachedRenderKey
     end
+
+    self._snapshotSources = viewSources
 
     -- The job that builds this surface, named before the key is compared: a kind that has raised
     -- JOB_FAULT_LIMIT times in a row is not armed again, and the failure surface takes its place

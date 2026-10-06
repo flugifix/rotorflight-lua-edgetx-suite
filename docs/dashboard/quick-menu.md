@@ -34,11 +34,17 @@ EdgeTX gives every script, so it looks the same whichever dashboard theme is sel
 
 | Entry | What it does |
 | --- | --- |
-| **ERASE BLACKBOX** | Erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now. Closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). |
+| **ERASE BLACKBOX** | Asks first, because the erase cannot be undone — see [the erase confirmation](#the-erase-confirmation). Its **ERASE** answer erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now, closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). |
 | **IN-FLIGHT TUNING** | Opens the in-flight tuning surface at full size. It stays full screen rather than closing. Only listed while the feature is switched on — see below. |
 | **BATTERY** | Brings the battery prompt back, with this model's packs. It stays full screen, the picker taking the menu's place. Only listed while the battery registry has a pack for this model and the model is disarmed. |
 | **MAIN MENU** | Opens the suite's tool, with its whole menu, inside the widget — see [the tool from full screen](#the-tool-from-full-screen). Only listed while the model is disarmed. |
+| **FLIGHT LOG** | Opens the suite's tool inside the widget on its [Flight Log](../pages/tools/flight_log.md) page; the back key there closes it again. Not in the menu as it comes — the pilot adds it on the *Quick Settings* page — and then only listed while the *Flight Log* preview is on and the model is disarmed. |
 | **BATTERY PROFILE** | A grid of the model's battery profiles; pressing one makes it the profile in force. |
+
+That is the menu as it comes, *FLIGHT LOG* aside. Which of these entries it shows, and in which order, is the
+pilot's to choose on *System* → *Settings* → *Dashboard* →
+[*Quick Settings*](../pages/settings/dashboard/quick_menu.md). An entry chosen there still hides
+where the table says it is not listed.
 
 **IN-FLIGHT TUNING is a preview entry.** It appears only while *System* → *Settings* →
 *General* → *Preview* → *In-flight tuning* is on **and** the widget is carrying the overlay's
@@ -46,6 +52,20 @@ state for this model. With the preview switch off the entry is not listed at all
 offers no route into a feature the widget has stopped driving. What the surface itself does is
 in [in-flight tuning](inflight-tuning.md); the screen it opens sends nothing until the
 interlock switch is thrown.
+
+## The erase confirmation
+
+Erasing the blackbox is irreversible and sits one tap from the flight line, so the row asks
+before it acts. Tapping **ERASE BLACKBOX** opens a question over the menu: a title, a sentence
+naming what is about to go, and, where the flight controller has reported the storage summary
+(on connecting, and after every erase), a line saying how full it is as *% used*. **ERASE** is
+on the right, in the warning colour; **CANCEL** is on the left.
+
+Nothing is sent and full screen is not left until **ERASE** is pressed. **CANCEL** does nothing
+and shows the menu again; a short press on the return key does the same while a theme takes full
+screen, and on a radio whose return key leaves full screen the question is discarded with the
+visit. Either way the logs are left alone. A model that has not reported a summary yet is asked
+the same question without the *% used* line.
 
 ## The tool from full screen
 
@@ -55,7 +75,7 @@ theme again — or, over a theme that does not take full screen, this menu. A vi
 that was showing, or that the pilot had closed, does not come back on its own when the tool is
 closed. It is reached three ways, all of them only while the model is disarmed:
 
-- **MAIN MENU** in the quick menu;
+- **MAIN MENU** in the quick menu, and **FLIGHT LOG**, which opens it on its *Flight Log* page;
 - the tool control — three slider lines — beside the menu control, over a theme that takes full
   screen and binds no control of its own;
 - the same control on the connect screen, when the widget is put full screen before the link is
@@ -63,7 +83,7 @@ closed. It is reached three ways, all of them only while the model is disarmed:
 
 While it is open the tool works as it does when started from the radio's tool list, on the
 widget's own connection to the flight controller. The return key at the top of its menu closes
-it. Arming the model closes it as well, because while it is open the dashboard does not run and
+it, and so does the return key on the *Flight Log* page where *FLIGHT LOG* opened it there. Arming the model closes it as well, because while it is open the dashboard does not run and
 nothing is announced. So does leaving full screen with a long press on the return key. In both
 cases the tool's own closing sequence runs, so a page's changes that were already sent still
 reach the flight controller.
@@ -97,7 +117,7 @@ fit is not drawn.
 ## Closing it
 
 The **X** in the header closes the menu and leaves full screen. So does every entry except
-in-flight tuning, BATTERY and MAIN MENU, which swap one full-screen surface for another. The battery
+in-flight tuning, BATTERY, MAIN MENU and FLIGHT LOG, which swap one full-screen surface for another. The battery
 picker's packs, *NO BATTERY* and its own X leave full screen as well, and the next entry into
 full screen shows the quick menu, with BATTERY to bring the picker back. EdgeTX's own way out of
 full screen — a long press on the return key — works as it does anywhere else.
@@ -126,6 +146,7 @@ menus:
 | `visibleWhen` | The name of a condition that decides whether the row exists at all. Omitted, the row is always there. |
 | `press` | The work an `action` does when it is pressed, and nothing else. Optional: a row whose whole effect is its `after` has none. |
 | `after` | What follows the press, as data: `done`, `openView:<id>`, `closeView`, `exitFullscreen`, `openTool` or `none`. Missing means `none`. The actions are described in [dashboard views](../developer/dashboard-views.md). |
+| `confirm` | Optional, the question the row asks before its press is performed: a table of already-translated strings — `title`, `message`, the optional `detail`, and the labels `confirmLabel` and `cancelLabel`. Present, the press is held until the pilot answers — see [the erase confirmation](#the-erase-confirmation). |
 | `options` | For a `choice`: a list, or a function returning one, of `{ id, label, current, press, after }`. `id` is what a run is matched by: a battery profile's number, 1 to 6, and a pack's registry id. The battery-profile grid is one, and the battery picker's packs are the other. |
 | `close` | Optional, `{ press, after }`: what closing the surface that draws the options does. |
 | `info` | Optional, a function returning what the entry knows about the state it acts on, read when it is called. ERASE BLACKBOX has one: `{ used, total }` of the blackbox, from the summary the flight controller last sent. |
@@ -138,11 +159,21 @@ that sends messages to the flight controller queues them as one chain and report
 through it (`"busy"`, then `"ok"` on the last message's reply or `"failed"` on any message's
 error). The menu's own buttons pass none, so what they queue is what they always queued.
 
-**Menus are lists of entry ids.** `M.LISTS` names them — `quick` is `erase_blackbox`,
-`inflight_tuning`, `battery_pick`, `battery_profile`, which is what the quick menu draws — and
-`M.list(widget, name)` returns the entries of one. `M.resolve(widget, entry, option)` finds
+**Menus are lists of entry ids.** `M.LISTS` names them — `quick` is the quick menu's default,
+`erase_blackbox`, `inflight_tuning`, `battery_pick`, `tool`, `battery_profile` — and
+`M.list(widget, name)` returns the entries of one. For `quick` that is the pilot's list rather
+than the default: `M.entries(widget)` and `M.list(widget, "quick")` read the ids from the
+`dashboard.quick_menu` preference through `src/rfsuite/widgets/dashboard/quick_menu_order.lua`,
+which also holds the entries a pilot may choose (`OFFERED`), the default (`DEFAULT`) and their
+titles for the settings page, so the page and the menu cannot disagree. The preference is a
+string of ids separated by commas: absent, or not a string, is the default; the empty string is
+an emptied menu; an id the build does not offer is dropped, and an id named twice counts at its
+first place. A string that names nothing the build offers reads as the default. An entry added
+to the menu is added to `OFFERED` there, and to `DEFAULT` only where an unconfigured radio
+should show it. `M.resolve(widget, entry, option)` finds
 the menu's own record and option for what a caller hands in, by `id`, and
-`M.coreList(widget, list)` the records for a list of them. A theme reaches the same records
+`M.coreList(widget, list)` the records for a list of them — every entry the menu can build, not
+only the ones in the pilot's list, so a theme that names an entry gets it. A theme reaches the same records
 through its `ctx` and may draw them its own way, but it adds none and changes none: see
 [dashboard themes](../developer/dashboard-themes.md#the-theme-draws-the-widget-acts).
 
@@ -164,9 +195,10 @@ Two things are worth knowing before adding an entry:
 - **A `visibleWhen` name is resolved in `src/rfsuite/widgets/dashboard/views.lua`, and an
   unknown name hides its row** — the same way an unresolvable condition hides a tool menu entry
   in `src/rfsuite/app/menu_registry.lua`. It is the same list a fullscreen view's `openWhen`
-  is resolved against. `enabledWhen`, `lockedWhileArmed` and `confirm` belong
-  to the same vocabulary and no entry uses one yet, so the first entry that needs one brings
-  its resolver with it.
+  is resolved against. `enabledWhen` and `lockedWhileArmed` belong to the same vocabulary and no
+  entry uses one yet, so the first entry that needs one brings its resolver with it. `confirm`
+  is the first that did: an entry that carries one has its press held by `views.lua` until the
+  pilot has answered, and run from that answer.
 
 ## Related
 

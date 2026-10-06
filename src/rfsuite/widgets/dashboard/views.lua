@@ -60,9 +60,15 @@ M.STACK_LIMIT = 4
 -- What an empty stack shows when there is no base layer.
 M.DEFAULT_VIEW = "menu"
 
+-- The view that asks a press its question before the press is performed. It carries no
+-- `openWhen`: it only ever opens from `M.confirm`, which an entry's own `confirm` reaches
+-- (widgets/dashboard/fullscreen_menu.lua, `M.run`).
+local CONFIRM_VIEW = "confirm"
+
 -- The views the widget ships, in the order their `openWhen` is asked, ahead of a theme's.
 local CORE_VIEWS = {
   { id = "battery_pick", module = "widgets/dashboard/battery_pick_menu.lua", openWhen = "batteryPickPending" },
+  { id = CONFIRM_VIEW, module = "widgets/dashboard/confirm_menu.lua" },
   { id = "menu", module = "widgets/dashboard/fullscreen_menu.lua" },
 }
 
@@ -76,9 +82,11 @@ local CORE_VIEWS = {
 -- and never opens a view -- what an unresolvable condition does in `app/menu_registry.lua` as
 -- well.
 --
--- Only the vocabulary an entry or a view actually uses is resolved. `enabledWhen`,
--- `lockedWhileArmed` and `confirm` are part of the same manifest vocabulary and nothing sets
--- one, so the first entry that needs one brings its resolver with it.
+-- Only the vocabulary an entry or a view actually uses is resolved. `enabledWhen` and
+-- `lockedWhileArmed` are part of the same manifest vocabulary and nothing sets one, so the
+-- first entry that needs one brings its resolver with it. `confirm` is the first that did, and
+-- its resolver is not a condition but the confirmation below: an entry that carries one is
+-- held by `M.run` until the pilot has answered.
 --
 -- A condition that opens a view is cleared by whoever set it when the view is answered or
 -- closed. A view opens when its condition rises, not while it holds (see `resolve`), so one that
@@ -129,6 +137,15 @@ end
 -- The suite's tool, which is opened only while the model is disarmed (tool_host.lua says why).
 function CONDITIONS.modelDisarmed(widget)
   return not (widget.state and widget.state.armed == true)
+end
+
+-- The tool opened on its Flight Log page: only while the page is in the tool at all -- the same
+-- preview switch the tool's own menu asks (`previewFlightLog` in app/manifest.lua) -- and, like
+-- the tool, only while the model is disarmed.
+function CONDITIONS.flightLogOffered(widget)
+  local previewOn = widget.preferences and widget.preferences.general
+    and widget.preferences.general.preview_flight_log == true
+  return previewOn == true and CONDITIONS.modelDisarmed(widget)
 end
 
 --- Whether the named condition holds for this widget. Unknown names, nil included, are false.
@@ -527,11 +544,20 @@ end
 -- Actions
 -- ---------------------------------------------------------------------------
 
--- An action is a string: `openView:<id>`, `closeView`, `done`, `exitFullscreen`, `openTool` or
--- `none`.
+-- An action is a string: `openView:<id>`, `closeView`, `done`, `exitFullscreen`, `openTool`,
+-- `openTool:<menuId>` or `none`.
 local SIMPLE_ACTIONS = { closeView = true, done = true, exitFullscreen = true, openTool = true, none = true }
 
---- The one place an action is read: its verb, and the view id for `openView`.
+-- The pages `openTool:<menuId>` may open the tool on, each with the condition that has to hold for
+-- it: the page has to be in the tool's menu and reachable now. A target that is not here is
+-- refused, so a key bound to a page that is not offered does nothing rather than opening the tool
+-- somewhere else.
+local TOOL_LANDINGS = {
+  tools_flight_log_page = "flightLogOffered",
+}
+
+--- The one place an action is read: its verb, and the view id for `openView` or the page for
+--- `openTool:<menuId>`.
 --
 -- nil and anything unrecognised are `none`, so a missing `after` leaves the view where it is.
 -- A later form that is not a string is added here and nowhere else.
@@ -540,6 +566,8 @@ function M.parseAction(after)
   if SIMPLE_ACTIONS[after] then return after, nil end
   local id = string.match(after, "^openView:(.+)$")
   if id ~= nil then return "openView", id end
+  local page = string.match(after, "^openTool:(.+)$")
+  if page ~= nil then return "openTool", page end
   viewLog("unknown view action '" .. after .. "' ignored")
   return "none", nil
 end
@@ -602,6 +630,10 @@ end
 --                   it takes fullscreen until it is closed; the session starts anew as for
 --                   `done`, so what the tool hands back to is the base layer, or the default
 --                   view, and a theme's view whose condition still holds is not opened again
+--   openTool:<menuId>
+--                   the same, with the tool opened on that page rather than on its menu, and
+--                   closed again by the back key there; only for a page in TOOL_LANDINGS whose
+--                   condition holds, and nothing at all otherwise
 --   none            nothing at all; the press did whatever needed doing itself
 --
 -- An `openView` that is refused -- a view this widget does not have, a theme's view that did not
@@ -632,11 +664,67 @@ function M.navigate(widget, after)
     widget._viewStack = nil
     exitFullscreen(widget)
   elseif verb == "openTool" then
+    if id ~= nil and not M.condition(TOOL_LANDINGS[id], widget) then
+      viewLog("tool not opened on '" .. id .. "': that page is not offered now")
+      return
+    end
     local ToolHost = requireModule("widgets/dashboard/tool_host.lua")
-    if type(ToolHost) == "table" and type(ToolHost.request) == "function" and ToolHost.request(widget) then
+    if type(ToolHost) == "table" and type(ToolHost.request) == "function" and ToolHost.request(widget, id) then
       newSession(widget)
       reset(widget)
     end
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- Confirmations
+-- ---------------------------------------------------------------------------
+
+--- Hold a press behind the pilot's answer, and raise the question that asks for it.
+--
+-- `spec` is the entry's `confirm` table, its strings already resolved: `title`, `message`, and
+-- the optional `detail`, `confirmLabel` and `cancelLabel`. `work` is the press and the action
+-- that follows it, run only where the pilot agrees.
+--
+-- Returns true when the question is up. False where there is no confirmation view or no room
+-- left on the stack, and the caller must then NOT run `work`: a press that cannot ask its
+-- question does nothing rather than doing it unguarded. That is the whole point of a
+-- confirmation on an irreversible action -- refusing loses nothing, proceeding loses the logs.
+--
+-- The pending press lives on this visit's session, beside the views, and goes when the visit
+-- does: a full screen left with the question standing never performs it. A second press while a
+-- question is up replaces the first -- there is one question at a time.
+function M.confirm(widget, spec, work)
+  if type(spec) ~= "table" or type(work) ~= "function" then return false end
+  if M.find(widget, CONFIRM_VIEW) == nil then return false end
+  local session = M.session(widget)
+  session.confirm = { spec = spec, work = work }
+  if not push(widget, CONFIRM_VIEW, false) then
+    session.confirm = nil
+    return false
+  end
+  reset(widget)
+  return true
+end
+
+--- The press waiting for an answer, or nil: `{ spec, work }` on this visit's session.
+function M.pendingConfirm(widget)
+  local session = widget._viewStack
+  return session and session.confirm or nil
+end
+
+--- Answer the question and close it: forget the pending press and take the confirmation view off
+-- the stack, so the surface under it shows again. The `work` the question held is NOT run here --
+-- the caller runs it (agreeing) or does not (declining).
+--
+-- The view is removed only where it is on top; a question that is not the surface showing leaves
+-- the stack as it is.
+function M.closeConfirm(widget)
+  local session = widget._viewStack
+  if session ~= nil then session.confirm = nil end
+  if M.top(widget) == CONFIRM_VIEW then
+    pop(widget)
+    reset(widget)
   end
 end
 
@@ -811,16 +899,19 @@ end
 --                              `sys`, `tele`, each an action; read by `key()` while the base
 --                              layer shows
 --   ctx.condition(name)        `condition(name, widget)`
---   ctx.entries()              the quick menu's entries, `fullscreen_menu.entries(widget)`
+--   ctx.entries()              the quick menu's entries, `fullscreen_menu.entries(widget)`: the
+--                              ones the pilot has put in it, in the pilot's order
 --   ctx.menu(children, list)   the quick menu's builder, appending to `children`; `list`
 --                              defaults to the menu's own entries, and one handed in chooses
 --                              and orders them by id -- it cannot bring a press of its own
 --
 -- and, for a theme that draws the entries itself -- the theme draws, the widget acts:
 --
---   ctx.entry(id)              the entry `id` of the menu's records, or nil
+--   ctx.entry(id)              the entry `id` of the menu's records, or nil -- whether or not
+--                              the pilot has put it in the quick menu
 --   ctx.list(name)             the records of a named list (`fullscreen_menu.LISTS`), in its
---                              order; an empty list for a name there is none of
+--                              order -- for "quick" the pilot's list; an empty list for a name
+--                              there is none of
 --   ctx.visible(entry)         whether the entry is offered now, as the quick menu asks it
 --   ctx.run(entry, option, after)
 --                              the entry's work, or the option's, and then what follows it --

@@ -14,8 +14,8 @@
 --   * a `rectangle` lies over a node that has a press: built in fullscreen it takes the press
 --     and hands it to its parent, so it swallows every press that lands on it;
 --   * a press or a `ctx.keys` entry names an action that is not one of `openView:<id>`,
---     `closeView`, `done`, `exitFullscreen`, `openTool` and `none`, or a view the widget does not
---     have;
+--     `closeView`, `done`, `exitFullscreen`, `openTool`, `openTool:<menuId>` and `none`, or a view
+--     or a tool page the widget does not have;
 --   * a `ctx.keys` entry is not one of the keys the widget answers -- `exit`, `pageDown`,
 --     `pageUp`, `mdl`, `sys`, `tele`. Only `exit` counts as a way out: MDL, SYS and TELE are
 --     not on every radio;
@@ -191,6 +191,8 @@ end
 
 local VIEWS = { menu = true, battery_pick = true }
 local SIMPLE = { closeView = true, done = true, exitFullscreen = true, openTool = true, none = true }
+-- The tool pages `openTool:<menuId>` may open on (TOOL_LANDINGS in widgets/dashboard/views.lua).
+local TOOL_PAGES = { tools_flight_log_page = true }
 -- The keys `views.key` answers from `ctx.keys` (widgets/dashboard/views.lua).
 local KEY_NAMES = { exit = true, pageDown = true, pageUp = true, mdl = true, sys = true, tele = true }
 
@@ -198,6 +200,11 @@ local KEY_NAMES = { exit = true, pageDown = true, pageUp = true, mdl = true, sys
 local function actionProblem(after)
   if type(after) ~= "string" then return "an action that is not a string (" .. type(after) .. ")" end
   if SIMPLE[after] then return nil end
+  local page = string.match(after, "^openTool:(.+)$")
+  if page ~= nil then
+    if TOOL_PAGES[page] then return nil end
+    return "'" .. after .. "' names a tool page the widget does not open"
+  end
   local id = string.match(after, "^openView:(.+)$")
   if id == nil then return "unknown action '" .. after .. "'" end
   if not VIEWS[id] then return "'" .. after .. "' names a view the widget does not have" end
