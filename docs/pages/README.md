@@ -114,6 +114,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Diagnostics → ELRS Link | [tools/diagnostics/elrs_link.md](tools/diagnostics/elrs_link.md) | yes | read-only while armed | written |
 | Diagnostics → Validate Sensors | [tools/diagnostics/validate_sensors.md](tools/diagnostics/validate_sensors.md) | yes | needs the flight controller, read-only while armed | written |
 | Diagnostics → SmartFuel | `tools/diagnostics/smartfuel.md` | no | needs the flight controller, read-only while armed, needs MSP API 12.09 | to write |
+| Diagnostics → CRSF Sensors | [tools/diagnostics/crsf_sensors.md](tools/diagnostics/crsf_sensors.md) | yes | needs the flight controller, read-only while armed, needs MSP API 12.10 | written |
 | Diagnostics → Session Logs | [tools/diagnostics/session_logs.md](tools/diagnostics/session_logs.md) | yes | always available | written |
 | Diagnostics → Info | [tools/diagnostics/info.md](tools/diagnostics/info.md) | yes | read-only while armed | written |
 
