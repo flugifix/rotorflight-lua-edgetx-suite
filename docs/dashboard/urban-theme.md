@@ -81,7 +81,8 @@ allows. Four places on the screen open a page over it, and a fifth opens the sui
   voltages are the pack voltage divided by the cell count, as on the flight screen: no telemetry
   carries each cell's own voltage. The limits and the reserve are read from the flight controller
   on connecting, and read *-* until they have been. Like every other place that takes a press, the
-  gauge has the radio's frame around it while *Frames on tap areas* is on.
+  gauge has the radio's frame around it while *Frames on tap areas* is on. A key can open the page
+  as well: choose *Theme: Battery* for it on the *Keys* page.
 
 Urban draws these pages, the quick menu and the battery picker in the look of the screen they
 open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's
@@ -118,7 +119,7 @@ setting.
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
-| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Suite: Main menu* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Battery* (the *Battery* page), *Suite: Main menu* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. |
 | Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *Suite: Main menu*, TELE *Suite: Quick menu*. |
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the

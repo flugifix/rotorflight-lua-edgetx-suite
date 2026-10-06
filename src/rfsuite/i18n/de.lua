@@ -2516,6 +2516,7 @@ return {
         urban_key_menu = "Suite: Schnellmenü",
         urban_key_tools = "Theme: Abstimmung",
         urban_key_link = "Theme: ELRS-Link",
+        urban_key_battery = "Theme: Akku",
         urban_key_suite_tool = "Suite: Hauptmenü",
         urban_tap_frames = "Rahmen um Tippflächen",
         urban_key_exit = "Suite: Vollbild aus"

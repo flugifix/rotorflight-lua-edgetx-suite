@@ -285,6 +285,7 @@ L.KEY_ACTIONS = {
   { id = "menu",       action = "openView:menu" },
   { id = "tools",      action = "openView:urban_menu" },
   { id = "link",       action = "openView:urban_link" },
+  { id = "battery",    action = "openView:urban_battery" },
   { id = "suite_tool", action = "openTool" },
   { id = "exit",       action = "exitFullscreen" },
 }

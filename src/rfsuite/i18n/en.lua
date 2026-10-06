@@ -2521,6 +2521,7 @@ return {
         urban_key_menu = "Suite: Quick menu",
         urban_key_tools = "Theme: Tuning",
         urban_key_link = "Theme: ELRS link",
+        urban_key_battery = "Theme: Battery",
         urban_key_suite_tool = "Suite: Main menu",
         urban_tap_frames = "Frames on tap areas",
         urban_key_exit = "Suite: Exit full screen"
