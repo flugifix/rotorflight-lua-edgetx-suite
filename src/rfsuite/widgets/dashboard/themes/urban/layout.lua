@@ -1138,25 +1138,31 @@ function L.sources(state)
       list[#list + 1] = src
     end
   end
-  -- The telemetry view's tiles as well: a view declares nothing of its own, and the host resolves
-  -- only what the phase module standing under it declared. None of the default tiles carries a
-  -- `source`, so a pilot who leaves the page as it is adds nothing to this list.
+  return list
+end
+
+-- What the telemetry view's tiles read beyond the fixed state fields: the `source` of each tile,
+-- and for a raw sensor the `-` and `+` forms of its name, the radio's own least and most of it,
+-- which only a tile draws. telemview.lua hands this to the host as the view's own `sources`, so
+-- they are read while the view is open and at no other time; the flight view's list above names
+-- only what the flight view draws. None of the default tiles carries a `source`.
+function L.tileSources(state)
+  local cfg = (state and state.themeConfig) or {}
+  local list, seen = {}, {}
+  local function add(name)
+    if not seen[name] then
+      seen[name] = true
+      list[#list + 1] = name
+    end
+  end
   for i = 1, L.TILE_COUNT do
     local def = SOURCES_BY_ID[cfg["tile" .. i]] or SOURCES_BY_ID[L.DEFAULT_TILES[i]]
     local src = def and def.source
-    if src and not seen[src] then
-      seen[src] = true
-      list[#list + 1] = src
-    end
-    -- A raw sensor's range is the radio's own least and most of it, the `-` and `+` forms of the
-    -- name; only a tile draws a range, so a row showing the same sensor does not pay for them.
-    if src and def.rawRange then
-      for _, suffix in ipairs({ "-", "+" }) do
-        local ext = src .. suffix
-        if not seen[ext] then
-          seen[ext] = true
-          list[#list + 1] = ext
-        end
+    if src then
+      add(src)
+      if def.rawRange then
+        add(src .. "-")
+        add(src .. "+")
       end
     end
   end
