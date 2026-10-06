@@ -2998,6 +2998,8 @@ return {
       urban_gov_unknown = "Gov. deaktiviert",
       urban_quick_settings = "Schnelleinstellungen",
       urban_which_battery = "Welcher Akku?",
+      urban_pick_cycles = "%d Zyklen",
+      urban_pick_profile = "P%d",
       urban_profile_tuning = "Profil & Tuning",
       urban_active = "Aktiv",
       urban_not_available = "Nicht verfügbar",
