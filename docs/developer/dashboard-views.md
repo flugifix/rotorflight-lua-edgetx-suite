@@ -25,6 +25,7 @@ layer described below, and the menu and the picker open over it.
 | `widgets/dashboard/runtime.lua` | The fullscreen branch of `widget.refresh`, which asks `views.resolve()` which view to show, and `viewJobStep`, which builds it. |
 | `widgets/dashboard/fullscreen_menu.lua` | The quick menu view. |
 | `widgets/dashboard/battery_pick_menu.lua` | The battery picker view. It draws the quick menu's `battery_pick` record, whose options and close are what its presses run. |
+| `widgets/dashboard/confirm_menu.lua` | The confirmation view. It draws the question an entry's `confirm` raises (see [Confirmations](#confirmations)); its two buttons run or discard the press held behind the question. |
 | `widgets/dashboard/fullscreen_controls.lua` | The tool control, the menu glyph and the X the widget draws over a fullscreen theme that binds no control of its own, and the tool control alone on the connect splash at full screen. |
 | `widgets/dashboard/tool_host.lua` | The suite's tool, run inside the widget while it is open — see [The tool](#the-tool). |
 
@@ -50,7 +51,11 @@ The shipped registry, in this order:
 | id | module | openWhen |
 | --- | --- | --- |
 | `battery_pick` | `widgets/dashboard/battery_pick_menu.lua` | `batteryPickPending` |
+| `confirm` | `widgets/dashboard/confirm_menu.lua` | — |
 | `menu` | `widgets/dashboard/fullscreen_menu.lua` | — |
+
+`confirm` has no `openWhen`: it only ever opens from `views.confirm`, which an entry's own
+`confirm` reaches — see [Confirmations](#confirmations).
 
 Each widget gets its own copy of the list, entries included. A view's module is loaded by the
 job that first builds it and kept on that widget's entry; the state pass reads a view's own
@@ -236,6 +241,42 @@ shown armed as well as disarmed.
 - **A zone view that fails is dropped.** One whose module does not load, or whose `build` raises,
   is not shown again, with one log line, and the theme's own zone picture is built in its place.
 
+## Confirmations
+
+A press that must be agreed to first carries a `confirm` on its entry — or on one of its
+options. A `choice` entry's own `confirm` guards every option it runs; an option that carries one
+is held by its own question, which is used where both carry one. `fullscreen_menu.M.run` does not
+perform such a press: it hands it to `views.confirm(widget, spec, work)`, which raises the
+confirmation view and keeps `work` — the `press` and the `after` — on the visit's session until
+the pilot answers. Both answers close the question first, through `views.closeConfirm`, which
+forgets `work` and takes the view off the stack, so the surface under it shows again exactly as it
+was; the agreeing button then runs `work`, so its `after` acts on the surface the press was written
+for rather than on the question. Declining, and the view's `back` (a short press on RTN), run
+nothing.
+
+The one entry that carries a `confirm` today is the quick menu's **ERASE BLACKBOX**
+(`fullscreen_menu.lua`, `BUILD.erase_blackbox`), which asks before it erases the flight
+controller's blackbox. Its `spec` is a table of strings the entry resolved where it was built:
+
+| Key | What it is |
+| --- | --- |
+| `title` | The question's heading. |
+| `message` | The sentence that says what the press does. |
+| `detail` | Optional, a line under the message — for the erase, how full the storage is. |
+| `confirmLabel` | The label of the button that agrees (the action), drawn on the right in the warning colour. |
+| `cancelLabel` | The label of the button that declines, drawn on the left. |
+
+`views.confirm` answers `false` — and `M.run` then performs nothing — where the widget has no
+confirmation view or the stack is full. A press that cannot ask its question is **not**
+performed: on an irreversible action, refusing loses nothing where performing it loses the
+logs. The confirmation view reads the pending press through `views.pendingConfirm` and answers it
+through `views.closeConfirm`. The pending press goes when the visit does, so a full screen left
+with the question standing never performs it.
+
+The confirmation is reached the same way by a theme that draws the entry itself: `ctx.run` goes
+through `M.run`, so a theme handing the menu its ERASE BLACKBOX record gets the question too,
+and adds no work of its own.
+
 ## What follows a press
 
 A press does its work and nothing else. What happens next is data: an `after` action on the
@@ -259,7 +300,7 @@ built, so the next pass builds the view now on top. The shipped buttons:
 
 | Where | Button | after |
 | --- | --- | --- |
-| Quick menu | ERASE BLACKBOX | `done` |
+| Quick menu | ERASE BLACKBOX | `done` — behind a [`confirm`](#confirmations): the press is held, and this is what runs once it is agreed to |
 | Quick menu | IN-FLIGHT TUNING | `none` — its press raises the tuning surface's own flag |
 | Quick menu | BATTERY | `openView:battery_pick` |
 | Quick menu | MAIN MENU | `openTool` |

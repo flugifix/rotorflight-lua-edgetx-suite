@@ -149,3 +149,23 @@ jobs:
 
       - name: Prove the resolver can report a failure
         run: python .vscode/scripts/resolve_i18n_tags.py --self-test
+
+  erase-confirmation:
+    # The quick menu's ERASE BLACKBOX is irreversible and one tap from the flight line. The
+    # row carries a `confirm` and M.run holds its press behind it; this proves the whole path
+    # offline, and its self-test proves the checks go red for a row that erases without asking.
+    name: Erase confirmation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+
+      - name: Prove the checks can go red
+        run: lua5.3 bin/dashboard/verify_erase_confirm.lua --self-test
+
+      - name: Check the erase asks before it erases
+        run: lua5.3 bin/dashboard/verify_erase_confirm.lua
