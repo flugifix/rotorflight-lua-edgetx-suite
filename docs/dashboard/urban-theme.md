@@ -79,6 +79,18 @@ allows. Four places on the screen open a page over it, and a fifth opens the sui
   side only it shows `-` for the other -- the MCU temperature and the power have a most and no
   least, the fuel a least and no most -- and a reading the record does not keep (ESC load, ESC
   status, air rate, rate floor) has no line at all.
+- **The battery gauge** opens the *Battery* page. At the top, the cell voltage as a bar with the
+  figure beside it, on a scale marked at the flight controller's own minimum, warning and full
+  cell voltage, which are written out under it; the bar turns yellow at the warning voltage and red
+  at the minimum. Below it the pack as a battery laid on its side, filling towards the terminal in
+  the same steps and colours as the gauge on the flight screen, with the fuel figure in the middle,
+  the cell count at the left end and the used capacity at the right. At the foot, the pack voltage,
+  the lowest cell voltage of the flight and the reserve the fuel figure keeps back. The cell
+  voltages are the pack voltage divided by the cell count, as on the flight screen: no telemetry
+  carries each cell's own voltage. The limits and the reserve are read from the flight controller
+  on connecting, and read *-* until they have been. Like every other place that takes a press, the
+  gauge has the radio's frame around it while *Frames on tap areas* is on. A key can open the page
+  as well: choose *Theme: Battery* for it on the *Keys* page.
 
 Urban draws these pages, the quick menu and the battery picker in the look of the screen they
 open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's
@@ -117,7 +129,7 @@ setting.
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
-| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Suite: Main menu*, *Suite: Flight log* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. *Suite: Flight log* opens the suite's tool on its *Flight Log* page, as the quick menu's *FLIGHT LOG* does, and does nothing while that page's preview switch is off or the model is armed. |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Theme: Battery* (the *Battery* page), *Suite: Main menu*, *Suite: Flight log* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. *Suite: Flight log* opens the suite's tool on its *Flight Log* page, as the quick menu's *FLIGHT LOG* does, and does nothing while that page's preview switch is off or the model is armed. |
 | Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *Suite: Main menu*, TELE *Suite: Quick menu*. |
 | Telemetry | Tile 1 … Tile 12 | The reading each tile of the *Telemetry* page shows, from the same list as the value rows, or nothing; a tile set to nothing is left out and the others close up. Defaults: voltage, cell voltage, current, capacity used, fuel, headspeed, ESC temperature, MCU temperature, BEC voltage, and tiles 10 to 12 off. The *Units beside the values* and *Temperature colours* settings apply to the tiles as to the rows. |
 

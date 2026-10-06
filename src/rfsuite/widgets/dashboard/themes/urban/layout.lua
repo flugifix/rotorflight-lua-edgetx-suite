@@ -288,6 +288,7 @@ L.KEY_ACTIONS = {
   { id = "tools",      action = "openView:urban_menu" },
   { id = "link",       action = "openView:urban_link" },
   { id = "telemetry",  action = "openView:urban_telemetry" },
+  { id = "battery",    action = "openView:urban_battery" },
   { id = "suite_tool", action = "openTool" },
   { id = "flight_log", action = "openTool:tools_flight_log_page" },
   { id = "exit",       action = "exitFullscreen" },
@@ -1456,7 +1457,7 @@ function L.buildFlight(zone, state, ctx)
     L.statusPanel(nodes, state, x0 + OUTER_PAD, yContent, leftW, contentH, font, fontH, ctx)
   end
   if contentH > 0 then
-    Common.fuelGauge(nodes, state, fuelX, yContent, fuelW, contentH)
+    L.gauge(nodes, state, fuelX, yContent, fuelW, contentH, ctx)
   end
   if rightW > 0 and contentH > 0 then
     L.valuePanel(nodes, state, rightX, yContent, rightW, contentH, font, fontH,
@@ -1465,6 +1466,40 @@ function L.buildFlight(zone, state, ctx)
 
   L.statusBar(nodes, state, x0, yStatus, w - 4, boxH, font, fontH)
   return nodes
+end
+
+-- The battery gauge, and in full screen on a host with theme views the tap that opens the battery
+-- view. The gauge is built of rectangles, and a rectangle over a press takes it -- but a rectangle
+-- hands a press it takes on to the object it was built INTO (radio/src/gui/colorlcd/libui/
+-- window.cpp, Window::onClicked). So there the gauge is built as the children of the button that
+-- opens the view, and a tap anywhere on it reaches the button. The widget zone and a host without
+-- theme views draw the gauge as it always was.
+--
+-- A button's children are placed against its content area, which starts inside its padding:
+-- `pad_button`, PAD_MEDIUM left and right and PAD_TINY above and below, both scaled by the screen
+-- class (radio/src/gui/colorlcd/libui/etx_lv_theme.cpp and etx_lv_theme.h, LAYOUT_SCALE), plus
+-- the 2 px frame (PAD_BORDER). A Lua button takes no padding parameter, so the gauge is drawn
+-- that far up and to the left, and lands where the widget zone draws it.
+local function layoutScale(v)
+  if LCD_W == 800 then return math.floor((v * 11 + 4) / 8) end
+  if LCD_W == 320 then return math.floor((v * 8 + 5) / 10) end
+  return v
+end
+local BUTTON_BORDER = 2
+L.buttonInset = function() return layoutScale(6) + BUTTON_BORDER, layoutScale(2) + BUTTON_BORDER end
+
+function L.gauge(nodes, state, x, y, w, h, ctx)
+  if not hasViews(ctx) then
+    Common.fuelGauge(nodes, state, x, y, w, h)
+    return
+  end
+  local action = ctx.action
+  local at = #nodes + 1
+  Common.button(nodes, x, y, w, h, C.bg, function() action("openView:urban_battery") end)
+  local insetX, insetY = L.buttonInset()
+  local inner = {}
+  Common.fuelGauge(inner, state, -insetX, -insetY, w, h)
+  nodes[at].children = inner
 end
 
 -- ---------------------------------------------------------------------------

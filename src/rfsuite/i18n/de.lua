@@ -2556,6 +2556,7 @@ return {
         urban_key_tools = "Theme: Abstimmung",
         urban_key_link = "Theme: ELRS-Link",
         urban_key_telemetry = "Theme: Telemetrie",
+        urban_key_battery = "Theme: Akku",
         urban_key_suite_tool = "Suite: Hauptmenü",
         urban_key_flight_log = "Suite: Flugbuch",
         urban_tap_frames = "Rahmen um Tippflächen",
@@ -3083,7 +3084,14 @@ return {
       urban_rt_load = "RT-Last",
       urban_bus_voltage = "Bus-Spannung",
       urban_mcu_voltage = "MCU-Spannung",
-      urban_rsnr = "RSNR"
+      urban_rsnr = "RSNR",
+      urban_battery = "Akku",
+      urban_batt_crit = "krit",
+      urban_batt_low = "niedrig",
+      urban_batt_full = "voll",
+      urban_batt_pack = "Akku",
+      urban_cell_min = "Zelle min",
+      urban_reserve = "Reserve"
     },
     escstatus = {
       ok = "OK",

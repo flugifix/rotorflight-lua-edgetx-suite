@@ -820,7 +820,11 @@ A control is a node with a `press` that calls `ctx.action`, for example
 A press does its own work and then names what follows, the same way the quick menu's entries
 do. Draw a glyph or a label over a button as `label` or `line` nodes, not as a `rectangle`: a
 rectangle built in fullscreen takes the press and hands it to its parent, so it swallows every
-press that lands on it.
+press that lands on it. That same hand-over is what lets a picture made of rectangles take a press
+of its own: build it as the button's `children`, and a press on any of them reaches the button.
+The children are placed against the button's content area, inside the button's padding and its
+2 px frame, so they have to be drawn that far up and to the left to sit where the button starts --
+Urban's battery gauge does so (`themes/urban/layout.lua`, `L.gauge`).
 
 ### The controls, and what a theme owes
 

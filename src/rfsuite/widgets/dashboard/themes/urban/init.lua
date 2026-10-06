@@ -60,6 +60,7 @@ local init = {
   -- view's profile row), `urban_link` its ELRS link page (opened by a tap on the link bars),
   -- `urban_telemetry` its telemetry page (opened by a tap on the value rows; its tiles are chosen
   -- on the Telemetry settings page).
+  -- `urban_battery` its battery page (opened by a tap on the battery gauge).
   --
   -- The link view also opens on a switch, in full screen and in the widget zone alike, and shows
   -- while the switch holds the position: a glance at the link without a tap, in flight too. The
@@ -73,6 +74,7 @@ local init = {
     { id = "urban_link",   module = "linkview.lua", where = "both",
       openWhen = { switch = { pref = "link_switch", default = 0 } } },
     { id = "urban_telemetry", module = "telemview.lua" },
+    { id = "urban_battery", module = "battview.lua" },
   },
 }
 

@@ -260,18 +260,28 @@ end
 -- ---------------------------------------------------------------------------
 
 -- Pre-order, in drawing order, with absolute boxes: a child's coordinates are its parent's plus
--- its own.
-local function flatten(nodes, ox, oy, out)
+-- its own. Each item keeps its ancestors (`up`), so a check can tell a node drawn INSIDE another
+-- from one drawn over it.
+local function flatten(nodes, ox, oy, out, up)
   for i = 1, #nodes do
     local node = nodes[i]
     if type(node) == "table" then
       local x = ox + (tonumber(node.x) or 0)
       local y = oy + (tonumber(node.y) or 0)
-      out[#out + 1] = { node = node, x = x, y = y, w = tonumber(node.w) or 0, h = tonumber(node.h) or 0 }
-      if type(node.children) == "table" then flatten(node.children, x, y, out) end
+      out[#out + 1] = { node = node, x = x, y = y, w = tonumber(node.w) or 0, h = tonumber(node.h) or 0, up = up }
+      if type(node.children) == "table" then flatten(node.children, x, y, out, { node = node, up = up }) end
     end
   end
   return out
+end
+
+local function inside(item, node)
+  local a = item.up
+  while a ~= nil do
+    if a.node == node then return true end
+    a = a.up
+  end
+  return false
 end
 
 local function overlaps(a, b)
@@ -320,8 +330,11 @@ local function checkPresses(label, tree, log)
           red(label .. ": the press of " .. where(item) .. ": " .. log.runs[k])
         end
       end
+      -- A rectangle built as one of the press's own children is not over it: EdgeTX hands a
+      -- press a rectangle takes on to the object the rectangle was built into
+      -- (radio/src/gui/colorlcd/libui/window.cpp, Window::onClicked), so it reaches the button.
       for j = i + 1, #flat do
-        if flat[j].node.type == "rectangle" and overlaps(flat[j], item) then
+        if flat[j].node.type == "rectangle" and overlaps(flat[j], item) and not inside(flat[j], item.node) then
           red(label .. ": " .. where(flat[j]) .. " is drawn over the press of " .. where(item)
             .. "; draw it before the pressable node, or as a line or a label")
         end

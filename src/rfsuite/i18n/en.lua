@@ -2561,6 +2561,7 @@ return {
         urban_key_tools = "Theme: Tuning",
         urban_key_link = "Theme: ELRS link",
         urban_key_telemetry = "Theme: Telemetry",
+        urban_key_battery = "Theme: Battery",
         urban_key_suite_tool = "Suite: Main menu",
         urban_key_flight_log = "Suite: Flight log",
         urban_tap_frames = "Frames on tap areas",
@@ -3093,7 +3094,16 @@ return {
       urban_rt_load = "RT Load",
       urban_bus_voltage = "Bus Voltage",
       urban_mcu_voltage = "MCU Voltage",
-      urban_rsnr = "RSNR"
+      urban_rsnr = "RSNR",
+      -- The Urban theme's battery page: its title, the three cell limits written out under the
+      -- cell voltage bar, and the line at its foot.
+      urban_battery = "Battery",
+      urban_batt_crit = "crit",
+      urban_batt_low = "low",
+      urban_batt_full = "full",
+      urban_batt_pack = "Batt",
+      urban_cell_min = "Cell min",
+      urban_reserve = "Reserve"
     },
     escstatus = {
       ok = "OK",

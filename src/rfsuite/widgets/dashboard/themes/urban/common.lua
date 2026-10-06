@@ -168,6 +168,15 @@ M.T = {
   -- same in every language -- as `tpwr` and `skp` above.
   view_link = "ELRS",
   link_rq = "RQ", link_tq = "TQ", link_rss1 = "1RSS", link_rss2 = "2RSS",
+  -- The battery view (battview.lua): its title, the words of the cell limits under the bar, and
+  -- the three figures of its foot line.
+  view_battery = "@i18n(widgets.dashboard.urban_battery)@",
+  batt_crit = "@i18n(widgets.dashboard.urban_batt_crit)@",
+  batt_low = "@i18n(widgets.dashboard.urban_batt_low)@",
+  batt_full = "@i18n(widgets.dashboard.urban_batt_full)@",
+  batt_pack = "@i18n(widgets.dashboard.urban_batt_pack)@",
+  batt_cell_min = "@i18n(widgets.dashboard.urban_cell_min)@",
+  batt_reserve = "@i18n(widgets.dashboard.urban_reserve)@",
 }
 
 -- The governor states' keys, built once: M.governorText and M.governorSample read them every
