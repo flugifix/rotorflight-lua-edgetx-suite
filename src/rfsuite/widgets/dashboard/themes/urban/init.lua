@@ -56,7 +56,8 @@ local init = {
   -- draws its own menu and picker. `menu` and `battery_pick` are the host's own two, drawn in this
   -- theme's look: what they offer and what their presses do stay the host's. `urban_menu` is this
   -- theme's own menu (the battery profiles and the tuning surface, opened by a tap on the flight
-  -- view's profile row), `urban_link` its ELRS link page (opened by a tap on the link bars).
+  -- view's profile row), `urban_link` its ELRS link page (opened by a tap on the link bars),
+  -- `urban_battery` its battery page (opened by a tap on the battery gauge).
   --
   -- The link view also opens on a switch, in full screen and in the widget zone alike, and shows
   -- while the switch holds the position: a glance at the link without a tap, in flight too. The
@@ -69,6 +70,7 @@ local init = {
     { id = "urban_menu",   module = "toolsview.lua" },
     { id = "urban_link",   module = "linkview.lua", where = "both",
       openWhen = { switch = { pref = "link_switch", default = 0 } } },
+    { id = "urban_battery", module = "battview.lua" },
   },
 }
 

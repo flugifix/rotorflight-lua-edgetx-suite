@@ -3003,7 +3003,14 @@ return {
       urban_not_available = "Nicht verfügbar",
       urban_sending = "Wird gesendet...",
       urban_done = "Fertig",
-      urban_failed = "Fehlgeschlagen"
+      urban_failed = "Fehlgeschlagen",
+      urban_battery = "Akku",
+      urban_batt_crit = "krit",
+      urban_batt_low = "niedrig",
+      urban_batt_full = "voll",
+      urban_batt_pack = "Akku",
+      urban_cell_min = "Zelle min",
+      urban_reserve = "Reserve"
     },
     escstatus = {
       ok = "OK",

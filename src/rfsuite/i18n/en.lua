@@ -3012,7 +3012,16 @@ return {
       urban_not_available = "Not available",
       urban_sending = "Sending...",
       urban_done = "Done",
-      urban_failed = "Failed"
+      urban_failed = "Failed",
+      -- The Urban theme's battery page: its title, the three cell limits written out under the
+      -- cell voltage bar, and the line at its foot.
+      urban_battery = "Battery",
+      urban_batt_crit = "crit",
+      urban_batt_low = "low",
+      urban_batt_full = "full",
+      urban_batt_pack = "Batt",
+      urban_cell_min = "Cell min",
+      urban_reserve = "Reserve"
     },
     escstatus = {
       ok = "OK",
