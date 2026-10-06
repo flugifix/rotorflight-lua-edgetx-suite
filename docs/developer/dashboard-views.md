@@ -260,7 +260,7 @@ built, so the next pass builds the view now on top. The shipped buttons:
 | Quick menu | ERASE BLACKBOX | `done` |
 | Quick menu | IN-FLIGHT TUNING | `none` — its press raises the tuning surface's own flag |
 | Quick menu | BATTERY | `openView:battery_pick` |
-| Quick menu | RFSUITE TOOL | `openTool` |
+| Quick menu | MAIN MENU | `openTool` |
 | Quick menu | each BATTERY PROFILE option | `done` |
 | Quick menu | the header's X | `done` |
 | Picker | each pack, and NO BATTERY | `done` |

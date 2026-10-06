@@ -14,6 +14,7 @@ local Common = nil
 local MspRuntime = nil
 local BatteryConfigApi = nil
 local LoadingOverlay = nil
+local ApiVersion = nil
 local t = nil
 
 M.eepromWrite = true
@@ -66,6 +67,7 @@ local function ensureDeps()
 	if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
 	if not BatteryConfigApi then BatteryConfigApi = loadModule("tasks/msp/api/battery_config.lua") end
 	if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
+	if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
 	if not t then t = Common and Common.pageT("setup_power_sources") or nil end
 end
 
@@ -225,6 +227,15 @@ local function buildSourceOptions(i18n, selectedValue)
 		{ value = 2, label = pageText(i18n, "source_esc", "ESC") },
 		{ value = 3, label = pageText(i18n, "source_fbus", "FBUS") }
 	}
+
+	-- The CRSF meter source (an external CRSF sensor on a port set to CRSF Sensors) reached the
+	-- firmware while the API was already at 12.10. Without a known version it is not offered;
+	-- a value already stored still shows below as Unknown and is kept on save.
+	local session = getSession()
+	local rawApiVersion = session and session.apiVersion
+	if rawApiVersion and ApiVersion and ApiVersion.isAtLeast(rawApiVersion, {12, 0, 10}) then
+		options[#options + 1] = { value = 4, label = pageText(i18n, "source_crsf", "CRSF") }
+	end
 
 	local known = false
 	for i = 1, #options do
@@ -429,6 +440,7 @@ function M.onClose()
 	MspRuntime = nil
 	BatteryConfigApi = nil
 	LoadingOverlay = nil
+	ApiVersion = nil
 	t = nil
 end
 

@@ -14,13 +14,15 @@ local SavePipeline = nil
 local Common = nil
 local MspRuntime = nil
 local SerialConfigApi = nil
-local RxConfigApi = nil
 local BoardInfoApi = nil
 local PortLabels = nil
 local ApiVersion = nil
 local LoadingOverlay = nil
 local t = nil
 local portFunctions = nil
+local portFunctionsById = nil
+local availableFunctions = nil
+local availableFunctionsKey = nil
 
 local PORT_TYPE_DISABLED = 0
 local PORT_TYPE_MSP = 1
@@ -62,7 +64,8 @@ local UART_NAMES = {
   [9] = "UART10",
   [20] = "USB VCP",
   [30] = "SOFTSERIAL1",
-  [31] = "SOFTSERIAL2"
+  [31] = "SOFTSERIAL2",
+  [40] = "LPUART1"
 }
 
 local function newRuntime()
@@ -78,7 +81,6 @@ local ui = {
   dirty = false,
   portsOriginal = {},
   portsWorking = {},
-  rxSerialProvider = 0,
   boardDesign = nil,
   runtime = newRuntime(),
   loading = false,
@@ -96,7 +98,6 @@ local function ensureDeps()
   if not Controls then Controls = loadModule("ui/controls.lua") end
   if not MspRuntime then MspRuntime = loadModule("tasks/msp/runtime.lua") end
   if not SerialConfigApi then SerialConfigApi = loadModule("tasks/msp/api/serial_config.lua") end
-  if not RxConfigApi then RxConfigApi = loadModule("tasks/msp/api/rx_config.lua") end
   if not BoardInfoApi then BoardInfoApi = loadModule("tasks/msp/api/board_info.lua") end
   if not PortLabels then PortLabels = loadModule("lib/port_labels.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
@@ -134,6 +135,8 @@ local function getPortFunctionsList(i18n)
     {id = 262144, excl = 262144, name = pageText(i18n, "function_sbus_out", "SBus Out"), type = PORT_TYPE_AUTO, minApi = {12, 0, 7}},
     {id = 524288, excl = 524288, name = pageText(i18n, "function_fbus_out", "FBus Out"), type = PORT_TYPE_AUTO, minApi = {12, 0, 9}},
     {id = 1048576, excl = 1048576, name = pageText(i18n, "function_sport_input", "S.PORT Master"), type = PORT_TYPE_AUTO, minApi = {12, 0, 9}},
+    {id = 2097152, excl = 2097152, name = pageText(i18n, "function_srxl2_esc", "SRXL2 ESC"), type = PORT_TYPE_AUTO, minApi = {12, 0, 10}},
+    {id = 4194304, excl = 4194304, name = pageText(i18n, "function_crsf_sensors", "CRSF Sensors"), type = PORT_TYPE_AUTO, minApi = {12, 0, 10}},
     {id = 4, excl = 4668, name = pageText(i18n, "function_telem_frsky", "Telemetry FrSky"), type = PORT_TYPE_TELEM},
     {id = 32, excl = 4668, name = pageText(i18n, "function_telem_smartport", "Telemetry SmartPort"), type = PORT_TYPE_TELEM},
     {id = 4096, excl = 4668, name = pageText(i18n, "function_telem_ibus", "Telemetry iBus"), type = PORT_TYPE_TELEM},
@@ -141,15 +144,16 @@ local function getPortFunctionsList(i18n)
     {id = 512, excl = 4668, name = pageText(i18n, "function_telem_mavlink", "Telemetry MAVLink"), type = PORT_TYPE_MAVLINK},
     {id = 16, excl = 4668, name = pageText(i18n, "function_telem_ltm", "Telemetry LTM"), type = PORT_TYPE_TELEM}
   }
+  portFunctionsById = {}
+  for i = 1, #portFunctions do
+    portFunctionsById[portFunctions[i].id] = portFunctions[i]
+  end
   return portFunctions
 end
 
 local function getPortFunctionById(i18n, functionMask)
-  local list = getPortFunctionsList(i18n)
-  for i = 1, #list do
-    if list[i].id == functionMask then return list[i] end
-  end
-  return nil
+  getPortFunctionsList(i18n)
+  return portFunctionsById[functionMask]
 end
 
 local function getPortType(i18n, functionMask)
@@ -178,6 +182,32 @@ local function functionAvailable(def)
     end
   end
   return true
+end
+
+local function apiVersionKey(raw)
+  if type(raw) == "table" then
+    return tostring(raw[1]) .. "." .. tostring(raw[2]) .. "." .. tostring(raw[3])
+  end
+  return tostring(raw)
+end
+
+-- The functions this flight controller's API version offers. Which of them are available
+-- depends on the version alone, so the list is filtered once and reused by every row, rather
+-- than every row asking the version about every function. It is filtered again if the version
+-- it was made for changes, because a page opened before the version is known offers everything.
+local function getAvailableFunctions(i18n)
+  local session = getSession()
+  local key = apiVersionKey(session and session.apiVersion)
+  if availableFunctions and availableFunctionsKey == key then return availableFunctions end
+  local list = getPortFunctionsList(i18n)
+  availableFunctions = {}
+  for i = 1, #list do
+    if functionAvailable(list[i]) then
+      availableFunctions[#availableFunctions + 1] = list[i]
+    end
+  end
+  availableFunctionsKey = key
+  return availableFunctions
 end
 
 local function getActiveBaudIndex(i18n, port)
@@ -230,29 +260,39 @@ local function buildBaudChoiceTable(i18n, port)
   return tableData
 end
 
-local function buildFunctionChoiceTable(i18n, portIndex)
+-- For each port, the functions the OTHER ports hold exclusively. Asked once per build: each
+-- port's exclusivity mask is looked up once, and a row combines the others' masks.
+local function getForbiddenMasks(i18n)
+  local excls = {}
+  local count = #ui.portsWorking
+  for i = 1, count do
+    excls[i] = getPortExcl(i18n, ui.portsWorking[i].function_mask)
+  end
+  local forbidden = {}
+  for i = 1, count do
+    local mask = 0
+    for j = 1, count do
+      if j ~= i then mask = mask | excls[j] end
+    end
+    forbidden[i] = mask
+  end
+  return forbidden
+end
+
+local function buildFunctionChoiceTable(i18n, portIndex, forbidden)
   local port = ui.portsWorking[portIndex]
   if not port then return {} end
 
-  local forbidden = 0
-  for i = 1, #ui.portsWorking do
-    if i ~= portIndex then
-      forbidden = forbidden | getPortExcl(i18n, ui.portsWorking[i].function_mask)
-    end
-  end
-
   local tableData = {}
   local seen = {}
-  local list = getPortFunctionsList(i18n)
+  local list = getAvailableFunctions(i18n)
 
   for i = 1, #list do
     local def = list[i]
-    if functionAvailable(def) then
-      local allowed = ((def.id & forbidden) == 0)
-      if allowed or def.id == port.function_mask then
-        tableData[#tableData + 1] = {def.name, def.id}
-        seen[def.id] = true
-      end
+    local allowed = ((def.id & forbidden) == 0)
+    if allowed or def.id == port.function_mask then
+      tableData[#tableData + 1] = {def.name, def.id}
+      seen[def.id] = true
     end
   end
 
@@ -313,7 +353,6 @@ local function loadFromSession()
     ui.portsOriginal = clonePorts(saved.ports)
     ui.portsWorking = clonePorts(saved.ports)
   end
-  ui.rxSerialProvider = tonumber(saved.rxSerialProvider) or 0
   ui.boardDesign = saved.boardDesign
 end
 
@@ -324,13 +363,12 @@ local function saveToSession()
     session.setup_ports = {}
   end
   session.setup_ports.ports = clonePorts(ui.portsWorking)
-  session.setup_ports.rxSerialProvider = ui.rxSerialProvider
   session.setup_ports.boardDesign = ui.boardDesign
 end
 
 local function queuePortsRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
-  if not MspRuntime or not SerialConfigApi or not RxConfigApi or type(MspRuntime.getState) ~= "function" then
+  if not MspRuntime or not SerialConfigApi or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
 
@@ -357,13 +395,13 @@ local function queuePortsRead(isAutoReload)
     end
   end
 
-  -- The third and last read, queued once the two below have answered: MSP_BOARD_INFO, which is
+  -- The second and last read, queued once the one below has answered: MSP_BOARD_INFO, which is
   -- what tells this page which board it is talking to and so what that board calls its sockets.
   --
   -- A failure here ends the read the same way a success does. A board that does not answer the
   -- command, or answers with a design nothing is known about, leaves every row with its plain
   -- UART name -- which is what this page showed before it asked at all, and is not a reason to
-  -- withhold the port configuration the two reads before it already have.
+  -- withhold the port configuration the read before it already has.
   local function queueBoardInfoRead()
     if not BoardInfoApi then
       ui.progress = 100
@@ -421,35 +459,13 @@ local function queuePortsRead(isAutoReload)
         saveToSession()
       end
 
-      -- Step 2: Read RX_CONFIG
-      ui.progress = 33
+      ui.dirty = false
+      ui.progress = 50
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
 
-      queue:add({
-        command = RxConfigApi.command,
-        simulatorResponse = RxConfigApi.simulatorResponse,
-        processReply = function(self2, buf2)
-          local parsed2 = RxConfigApi.parse(buf2)
-          if parsed2 then
-            ui.rxSerialProvider = tonumber(parsed2.serialrx_provider) or 0
-            saveToSession()
-          end
-
-          ui.dirty = false
-          ui.progress = 66
-          if type(ui.runtime.requestRebuild) == "function" then
-            ui.runtime.requestRebuild()
-          end
-
-          queueBoardInfoRead()
-        end,
-        errorHandler = function()
-          ui.progress = 66
-          queueBoardInfoRead()
-        end
-      })
+      queueBoardInfoRead()
     end,
     errorHandler = function()
       ui.runtime.readPending = false
@@ -463,6 +479,18 @@ local function queuePortsRead(isAutoReload)
   return true, nil
 end
 
+-- Has this port's record moved since it was read? The write replaces the whole record, so every
+-- field the record carries is compared, not only the function.
+local function portChanged(i)
+  local working, original = ui.portsWorking[i], ui.portsOriginal[i]
+  if not original or original.identifier ~= working.identifier then return true end
+  return working.function_mask ~= original.function_mask
+    or working.msp_baud_index ~= original.msp_baud_index
+    or working.gps_baud_index ~= original.gps_baud_index
+    or working.telem_baud_index ~= original.telem_baud_index
+    or working.blackbox_baud_index ~= original.blackbox_baud_index
+end
+
 local function queuePortsWrite()
   if not SavePipeline then SavePipeline = loadModule("tasks/msp/save_pipeline.lua") end
   if not SavePipeline or not SerialConfigApi then
@@ -471,16 +499,20 @@ local function queuePortsWrite()
 
   applyReceiverGuardToWorkingCopy()
 
-  -- One write per port, as before. What was a recursive writeNext() queueing the next port from
-  -- the previous one's processReply is a list of steps here, so the same order costs no
-  -- recursion and the EEPROM commit is not buried three closures deep.
+  -- One write per port that changed, in the page's order. MSP_SET_SERIAL_CONFIG stores each
+  -- record into the port its identifier names and checks nothing until the EEPROM write, so
+  -- rewriting a port with the values it already holds changes nothing on the board: leaving it out
+  -- reaches the same configuration with fewer writes. A save with nothing changed still stores and
+  -- restarts, as it always has.
   local steps = {}
   for i = 1, #ui.portsWorking do
-    steps[#steps + 1] = {
-      label = "MSP_SET_CF_SERIAL_CONFIG",
-      command = SerialConfigApi.writeCommand,
-      payload = SerialConfigApi.buildWritePayload(ui.portsWorking[i])
-    }
+    if portChanged(i) then
+      steps[#steps + 1] = {
+        label = "MSP_SET_CF_SERIAL_CONFIG",
+        command = SerialConfigApi.writeCommand,
+        payload = SerialConfigApi.buildWritePayload(ui.portsWorking[i])
+      }
+    end
   end
 
   -- Behaviour change worth naming: a port write that failed used to run an errorHandler whose
@@ -498,6 +530,14 @@ local function queuePortsWrite()
     onDone = function(result)
       if result.status ~= "done" then
         ui.dirty = true
+      elseif ui.loaded and type(ui.runtime) == "table" then
+        -- The board has restarted and answers again, so what the rows show next is read from it
+        -- rather than kept from before the save: a port the firmware refused, or a configuration
+        -- it reset at the EEPROM write, then shows as the board holds it. A page closed before
+        -- the save finished reads the ports when it is opened again instead.
+        -- Read as an automatic reload: the rows stay on screen and are replaced when the board
+        -- answers, instead of giving way to the loading screen once the save notice clears.
+        queuePortsRead(true)
       end
       if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
@@ -530,7 +570,7 @@ local function ensureLoaded()
   queuePortsRead(false)
 end
 
-local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n)
+local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n, forbidden)
   local rowH = (Controls and Controls.ROW_H) or 64
   local labelY = (Controls and Controls.labelY and Controls.labelY(y, rowH)) or (y + math.floor((rowH - 21) / 2))
   local comboY = (Controls and Controls.controlY and Controls.controlY(y, rowH)) or (y + math.floor((rowH - 32) / 2))
@@ -556,7 +596,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
   }
 
   -- Build choice labels/values for function select
-  local functionChoices = buildFunctionChoiceTable(i18n, portIndex)
+  local functionChoices = buildFunctionChoiceTable(i18n, portIndex, forbidden)
   local functionFieldValues = {}
   local selectedFunctionIndex = 1
   for idx, opt in ipairs(functionChoices) do
@@ -575,7 +615,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
     type  = "choice",
     x = xFunc, y = comboY,
     w = wFunc,
-    title = pageText(i18n, "title", "Ports"),
+    title = lineTitle,
     values = functionFieldValues,
     active = function() return not port.receiver_locked end,
     get = function()
@@ -617,6 +657,7 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
 
   -- Build baud rate choices
   local baudChoices = buildBaudChoiceTable(i18n, port)
+  local ptype = getPortType(i18n, port.function_mask)
   local baudFieldValues = {}
   local selectedBaudIndex = 1
   local currentBaud = getActiveBaudIndex(i18n, port)
@@ -631,32 +672,51 @@ local function appendPortRow(children, x, y, w, lineTitle, port, portIndex, i18n
     selectedBaudIndex = 1
   end
 
-  -- Baud rate choice dropdown select
-  children[#children + 1] = {
-    type  = "choice",
-    x = xBaud, y = comboY,
-    w = wBaud,
-    title = pageText(i18n, "title", "Ports"),
-    values = baudFieldValues,
-    active = function() return not port.receiver_locked end,
-    get = function()
-      return selectedBaudIndex
-    end,
-    set = function(nextIndex)
-      if port.receiver_locked then return end
-      local idx = tonumber(nextIndex) or selectedBaudIndex
-      if idx < 1 then idx = 1 end
-      if idx > #baudChoices then idx = #baudChoices end
-      selectedBaudIndex = idx
+  -- A rate is only a control where the function offers more than one. A disabled port has no
+  -- rate at all, and a function fixed at one rate (AUTO for the receiver, the ESC sensor and most
+  -- telemetry) shows that rate as text: a list with a single entry is a control with nothing to
+  -- choose, and it was built for every such row on every build.
+  if ptype == PORT_TYPE_DISABLED then
+    baudChoices = nil
+  elseif #baudChoices <= 1 then
+    children[#children + 1] = {
+      type  = "label",
+      x = xBaud + 8, y = labelY,
+      w = wBaud - 8,
+      text  = baudFieldValues[1],
+      color = COLOR_THEME_PRIMARY1
+    }
+    baudChoices = nil
+  end
 
-      local opt = baudChoices[idx]
-      local value = opt and opt[2]
-      if value and value ~= getActiveBaudIndex(i18n, port) then
-        setActiveBaudIndex(i18n, port, value)
-        ui.dirty = true
+  -- Baud rate choice dropdown select
+  if baudChoices then
+    children[#children + 1] = {
+      type  = "choice",
+      x = xBaud, y = comboY,
+      w = wBaud,
+      title = lineTitle,
+      values = baudFieldValues,
+      active = function() return not port.receiver_locked end,
+      get = function()
+        return selectedBaudIndex
+      end,
+      set = function(nextIndex)
+        if port.receiver_locked then return end
+        local idx = tonumber(nextIndex) or selectedBaudIndex
+        if idx < 1 then idx = 1 end
+        if idx > #baudChoices then idx = #baudChoices end
+        selectedBaudIndex = idx
+
+        local opt = baudChoices[idx]
+        local value = opt and opt[2]
+        if value and value ~= getActiveBaudIndex(i18n, port) then
+          setActiveBaudIndex(i18n, port, value)
+          ui.dirty = true
+        end
       end
-    end
-  }
+    }
+  end
 
   -- Divider line
   children[#children + 1] = {
@@ -741,6 +801,7 @@ function M.build(ctx)
     return
   end
 
+  local forbidden = getForbiddenMasks(i18n)
   for i = 1, #ui.portsWorking do
     local port = ui.portsWorking[i]
     local lineTitle = portLabel(port.identifier)
@@ -748,7 +809,7 @@ function M.build(ctx)
       lineTitle = lineTitle .. " " .. pageText(i18n, "rx_tag", "[RX]")
     end
 
-    cursorY = cursorY + appendPortRow(children, x, cursorY, w, lineTitle, port, i, i18n)
+    cursorY = cursorY + appendPortRow(children, x, cursorY, w, lineTitle, port, i, i18n, forbidden[i])
   end
 end
 
@@ -803,13 +864,15 @@ function M.onClose()
   Common = nil
   MspRuntime = nil
   SerialConfigApi = nil
-  RxConfigApi = nil
   BoardInfoApi = nil
   PortLabels = nil
   ApiVersion = nil
   LoadingOverlay = nil
   t = nil
   portFunctions = nil
+  portFunctionsById = nil
+  availableFunctions = nil
+  availableFunctionsKey = nil
 end
 
 return M
