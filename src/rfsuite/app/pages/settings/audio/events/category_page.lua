@@ -41,10 +41,6 @@ local CONFIG_SCHEMA = {
   -- the behaviour this setting was added to, where the first sample under the line announces.
   { key = "voltage_hold",      type = "number", default = 2, min = 0, max = 10, section = "voltage" },
   { key = "main_power_lost",   type = "bool", default = false, section = "voltage" },
-  { key = "pack_not_full",     type = "bool", default = false, section = "voltage" },
-  -- Millivolts per cell, so the number reads the same whatever the pack is: 100 is a tenth of
-  -- a volt below the configured full-cell voltage.
-  { key = "pack_not_full_margin", type = "number", default = 100, min = 10, max = 500, section = "voltage" },
   -- Whether an alert repeats and whether it buzzes belong to a CATEGORY rather than to one
   -- alert: this page is where the pilot switches its alerts on, so it is where they say how
   -- those alerts behave. A repeat of 0 is "for as long as the condition holds", which is what
@@ -85,9 +81,16 @@ local CONFIG_SCHEMA = {
   -- starts at 0 like the others, which is the value that was not expressible before.
   { key = "fuel_repeat_below_zero", type = "number", default = 1, min = 0, max = 10, section = "fuel" },
   { key = "fuel_haptic_below_zero", type = "bool", default = false, section = "fuel" },
-  { key = "battery_profile",   type = "bool", default = true,  section = "battery" },
-  { key = "initial_fuel",      type = "bool", default = true,  section = "battery" },
-  { key = "model_announcement",type = "bool", default = false, section = "other" },
+  -- What is said once when a model connects has a page of its own, whatever quantity each
+  -- announcement reads. The keys are the ones these settings always had, so an existing
+  -- preferences file reads exactly as it did; only the page that draws and saves them changed.
+  { key = "model_announcement",type = "bool", default = false, section = "connect" },
+  { key = "pack_not_full",     type = "bool", default = false, section = "connect" },
+  -- Millivolts per cell, so the number reads the same whatever the pack is: 100 is a tenth of
+  -- a volt below the configured maximum cell voltage.
+  { key = "pack_not_full_margin", type = "number", default = 100, min = 10, max = 500, section = "connect" },
+  { key = "battery_profile",   type = "bool", default = true,  section = "connect" },
+  { key = "initial_fuel",      type = "bool", default = true,  section = "connect" },
 }
 
 -- One enable per governor state, under the `governor_state` master switch. They default to on,
@@ -135,9 +138,6 @@ local SECTIONS = {
       { key = "voltage_alert", labelKey = "voltage_alert", labelFallback = "Voltage" },
       { kind = "number", key = "voltage_hold", labelKey = "voltage_hold", labelFallback = "Hold (s)",
         suffix = " s", enabledBy = "voltage_alert" },
-      { kind = "bool", key = "pack_not_full", labelKey = "pack_not_full", labelFallback = "Pack Not Full" },
-      { kind = "number", key = "pack_not_full_margin", labelKey = "pack_not_full_margin", labelFallback = "Margin (mV/cell)",
-        suffix = " mV", enabledBy = "pack_not_full" },
       -- Its own subheader, because it is not a threshold on the pack voltage above but a
       -- different event that happens to be read off the same sensor.
       { kind = "subheader", labelKey = "section_main_power", labelFallback = "Main Power" },
@@ -197,11 +197,13 @@ local SECTIONS = {
       { key = "adjustment_events", labelKey = "adjustment_events", labelFallback = "Adjustment Announcements" },
     },
   },
+  -- Named after the feature that produces the value it reads, as Setup > Power > SmartFuel and
+  -- the configurator call it. `section_fuel` keeps its old text because a dashboard theme reads it.
   fuel = {
-    titleKey = "section_fuel",
-    titleFallback = "Fuel",
+    titleKey = "section_smartfuel",
+    titleFallback = "SmartFuel",
     items = {
-      { kind = "bool", key = "fuel_alerts", labelKey = "fuel_alerts", labelFallback = "Fuel" },
+      { kind = "bool", key = "fuel_alerts", labelKey = "fuel_alerts", labelFallback = "SmartFuel" },
       { kind = "choice", key = "fuel_callout_percent", labelKey = "fuel_callout_percent", labelFallback = "Callout %" },
       -- The same two rows the other categories carry, under the same subheader. The empty
       -- alert is the only one on this page that has a condition to hold, so the pair reads
@@ -212,19 +214,20 @@ local SECTIONS = {
       { kind = "bool", key = "fuel_haptic_below_zero", labelKey = "alert_haptic", labelFallback = "Haptic" },
     },
   },
-  battery = {
-    titleKey = "section_battery",
-    titleFallback = "Battery",
+  -- The rows in the order lib/audio.lua speaks them after a connect. The dashboard's audio pass
+  -- starts once the connect tasks have read the battery configuration, so its first pass plays
+  -- the model's name and judges the pack, which is not gated on `initialized`; the capacity is,
+  -- and follows a pass later; the SmartFuel level comes last, once its reading has settled.
+  connect = {
+    titleKey = "section_connect",
+    titleFallback = "On Connect",
     items = {
-      { key = "battery_profile", labelKey = "battery_profile", labelFallback = "Battery Capacity" },
-      { key = "initial_fuel", labelKey = "initial_fuel", labelFallback = "Initial Fuel Announcement" },
-    },
-  },
-  other = {
-    titleKey = "section_other",
-    titleFallback = "Other",
-    items = {
-      { key = "model_announcement", labelKey = "model_announcement", labelFallback = "Model Announcement" },
+      { kind = "bool", key = "model_announcement", labelKey = "model_announcement", labelFallback = "Model Name" },
+      { kind = "bool", key = "pack_not_full", labelKey = "pack_not_full", labelFallback = "Pack Not Full" },
+      { kind = "number", key = "pack_not_full_margin", labelKey = "pack_not_full_margin", labelFallback = "Margin (mV/cell)",
+        suffix = " mV", enabledBy = "pack_not_full" },
+      { kind = "bool", key = "battery_profile", labelKey = "battery_profile", labelFallback = "Battery Capacity" },
+      { kind = "bool", key = "initial_fuel", labelKey = "initial_fuel", labelFallback = "SmartFuel" },
     },
   },
 }
@@ -236,6 +239,87 @@ for i = 1, #GOVERNOR_STATES do
     key = state.key, labelKey = state.labelKey, labelFallback = state.labelFallback, requires = "governor_state"
   }
 end
+
+-- ─── Row help ────────────────────────────────────────────────────────────────
+-- The text behind each row's `?` button, one function per page, so a page resolves its own texts
+-- and no others. The keys are written out in t() calls because the packager translates a key only
+-- where it is a quoted literal; a key read from the row would reach the radio untranslated. The
+-- governor's per-state rows mean the same thing each, so they share one text.
+
+local ROW_HELP = {
+  connect = function(t, i18n)
+    return {
+      model_announcement = t(i18n, "help_model_announcement"),
+      battery_profile = t(i18n, "help_battery_profile"),
+      pack_not_full = t(i18n, "help_pack_not_full"),
+      pack_not_full_margin = t(i18n, "help_pack_not_full_margin"),
+      initial_fuel = t(i18n, "help_initial_fuel"),
+    }
+  end,
+  arming = function(t, i18n)
+    return {
+      arming_flags = t(i18n, "help_arming_flags"),
+    }
+  end,
+  governor = function(t, i18n)
+    local stateRow = t(i18n, "help_governor_state_row")
+    local texts = {
+      governor_state = t(i18n, "help_governor_state"),
+    }
+    for i = 1, #GOVERNOR_STATES do
+      texts[GOVERNOR_STATES[i].key] = stateRow
+    end
+    return texts
+  end,
+  voltage = function(t, i18n)
+    return {
+      voltage_alert = t(i18n, "help_voltage_alert"),
+      voltage_hold = t(i18n, "help_voltage_hold"),
+      main_power_lost = t(i18n, "help_main_power_lost"),
+      voltage_repeat = t(i18n, "help_voltage_repeat"),
+      voltage_haptic = t(i18n, "help_voltage_haptic"),
+    }
+  end,
+  profiles = function(t, i18n)
+    return {
+      pid_profile = t(i18n, "help_pid_profile"),
+      rate_profile = t(i18n, "help_rate_profile"),
+    }
+  end,
+  esc = function(t, i18n)
+    return {
+      esc_temperature = t(i18n, "help_esc_temperature"),
+      esc_threshold = t(i18n, "help_esc_threshold"),
+      mcu_temperature = t(i18n, "help_mcu_temperature"),
+      mcu_threshold = t(i18n, "help_mcu_threshold"),
+      esc_repeat = t(i18n, "help_esc_repeat"),
+      esc_haptic = t(i18n, "help_esc_haptic"),
+    }
+  end,
+  adjustment = function(t, i18n)
+    return {
+      adjustment_events = t(i18n, "help_adjustment_events"),
+    }
+  end,
+  fuel = function(t, i18n)
+    return {
+      fuel_alerts = t(i18n, "help_fuel_alerts"),
+      fuel_callout_percent = t(i18n, "help_fuel_callout_percent"),
+      fuel_repeat_below_zero = t(i18n, "help_fuel_repeat_below_zero"),
+      fuel_haptic_below_zero = t(i18n, "help_fuel_haptic_below_zero"),
+    }
+  end,
+  link = function(t, i18n)
+    return {
+      lq_alert = t(i18n, "help_lq_alert"),
+      lq_warn = t(i18n, "help_lq_warn"),
+      lq_critical = t(i18n, "help_lq_critical"),
+      telemetry_lost = t(i18n, "help_telemetry_lost"),
+      link_repeat = t(i18n, "help_link_repeat"),
+      link_haptic = t(i18n, "help_link_haptic"),
+    }
+  end,
+}
 
 local FUEL_CALLOUT_VALUES = { [0] = true, [5] = true, [10] = true, [20] = true, [25] = true, [50] = true }
 
@@ -568,6 +652,27 @@ function M.new(sectionKey)
     return t(i18n, "esc_threshold_model", "Threshold [Model]")
   end
 
+  -- A row's `?` opens the same sheet as the header's, through the host's openHelp, with the row's
+  -- label as its title. Cached on ui.runtime like the other closures, so onClose drops it.
+  local function getInlineHelpHandler()
+    if ui.runtime.inlineHelpHandler then return ui.runtime.inlineHelpHandler end
+    ui.runtime.inlineHelpHandler = function(helpText, helpTitle)
+      local openHelp = ui.runtime.openHelp
+      if type(openHelp) == "function" and type(helpText) == "string" and helpText ~= "" then
+        openHelp(helpText, helpTitle)
+      end
+    end
+    return ui.runtime.inlineHelpHandler
+  end
+
+  -- The options table every row control takes for its `?` button. Nil when the row has no text,
+  -- which leaves the control exactly as it is drawn without one.
+  local function helpOpts(texts, key, title)
+    local text = texts[key]
+    if type(text) ~= "string" or text == "" then return nil end
+    return { helpText = text, helpTitle = title, onHelp = getInlineHelpHandler() }
+  end
+
   -- ─── Module API ────────────────────────────────────────────────────────────
 
   function page.getHeaderActions()
@@ -691,7 +796,9 @@ function M.new(sectionKey)
     local x, w          = ctx.x, ctx.w
     local i18n           = ctx.i18n
     ui.runtime.setRequestRebuild(ctx.requestRebuild)
+    ui.runtime.openHelp = ctx.openHelp
     local cursorY        = ctx.y
+    local helpTexts      = ROW_HELP[sectionKey](t, i18n)
 
     Controls.appendStaticSectionHeader(children, x, cursorY, w, t(i18n, section.titleKey, section.titleFallback))
     cursorY = cursorY + Controls.STATIC_SECTION_H
@@ -717,7 +824,8 @@ function M.new(sectionKey)
           labelText,
           options,
           selected,
-          onSelect
+          onSelect,
+          helpOpts(helpTexts, k, labelText)
         )
       elseif item.kind == "number" then
         local field = SCHEMA_BY_KEY[k]
@@ -727,6 +835,7 @@ function M.new(sectionKey)
         labelText = modelScopeLabel(i18n, k, labelText)
         local display = nil
         if item.temperature and usesFahrenheit(ctx.preferences) then display = fahrenheitText end
+        local help = helpOpts(helpTexts, k, labelText) or {}
         cursorY = cursorY + Controls.appendNumberField(
           children, x, cursorY, w,
           labelText,
@@ -737,20 +846,27 @@ function M.new(sectionKey)
             suffix = item.suffix or "",
             display = display,
             get = getNumberGetter(k, minVal, maxVal),
-            set = getNumberSetter(k, item.enabledBy, minVal, maxVal)
+            set = getNumberSetter(k, item.enabledBy, minVal, maxVal),
+            helpText = help.helpText,
+            helpTitle = help.helpTitle,
+            onHelp = help.onHelp
           }
         )
       elseif item.kind == "bool" and k == "fuel_haptic_below_zero" then
+        local labelText = t(i18n, item.labelKey, item.labelFallback)
         cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-          t(i18n, item.labelKey, item.labelFallback),
+          labelText,
           getFuelHapticGetter(),
-          getFuelHapticSetter()
+          getFuelHapticSetter(),
+          helpOpts(helpTexts, k, labelText)
         )
       else
+        local labelText = t(i18n, item.labelKey, item.labelFallback)
         cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-          t(i18n, item.labelKey, item.labelFallback),
+          labelText,
           ui.runtime.getBoolGetter(k),
-          ui.runtime.getBoolSetter(k)
+          ui.runtime.getBoolSetter(k),
+          helpOpts(helpTexts, k, labelText)
         )
       end
     end
