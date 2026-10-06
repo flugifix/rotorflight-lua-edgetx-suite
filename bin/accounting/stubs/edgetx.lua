@@ -309,6 +309,9 @@ function Stubs.reset()
   clockTicks = 0
   clockTicks = 0
   Stubs.sensors = {}
+  -- What getInfo answers. The tool's connect chain writes the model's name back through setInfo,
+  -- so a world that does that must not hand the name it wrote to the next one.
+  Stubs.modelInfo = { name = "Bench", bitmap = "", filename = "bench.bin" }
   Stubs.telemetryFrames = {}
   Stubs.published = {}
   Stubs.prefsStat = nil
@@ -326,8 +329,19 @@ function Stubs.reset()
   Stubs.gvars = {}
 end
 
+-- The names installTool() below sets as globals. install() takes them away again, so a world is
+-- built without them unless the scenario that builds it asks for them.
+local TOOL_GLOBALS = {
+  "getRSSI", "getSourceValue", "getGeneralSettings", "getDateTime", "getRtcTime",
+  "getAvailableMemory", "dir", "mkdir", "GREY_DEFAULT", "EVT_EXIT_BREAK", "EVT_VIRTUAL_EXIT",
+  "UNIT_RAW", "UNIT_VOLTS", "UNIT_AMPS", "UNIT_METERS_PER_SECOND", "UNIT_METERS", "UNIT_CELSIUS",
+  "UNIT_PERCENT", "UNIT_MAH", "UNIT_RPMS", "UNIT_G", "UNIT_DEGREE",
+}
+
 function Stubs.install(root)
   repoRoot = root or "."
+
+  for _, name in ipairs(TOOL_GLOBALS) do _G[name] = nil end
 
   _G.LCD_W = 800
   _G.LCD_H = 480
@@ -644,6 +658,123 @@ function Stubs.install(root)
     error("accounting: lib/require.lua not found under " .. tostring(repoRoot))
   end
   requireChunk()
+end
+
+--- The part of the firmware surface only the suite's tool reaches.
+--
+-- The tool asks the radio things no dashboard row here does: the link's RSSI, the radio's general
+-- settings, the date, the free heap, the card's directories, the model's name, inputs, outputs and
+-- modules, and the layout figures the lvgl table carries. The suite asks for every one of them
+-- behind a type() test, and an absent name takes the branch of a radio that does not offer it --
+-- which is not the branch an EdgeTX 2.12 colour radio takes. A page priced without them is priced
+-- on a path no pilot runs, and nothing in the report would say so.
+--
+-- Installed by measure.lua for the tool's scenario only, after install() has built that world. The
+-- dashboard reads several of the same names -- getRSSI in four places -- and every other row was
+-- written on a world without them, so install() takes them away again for the next world.
+--
+-- Left out because the firmware does not offer them either: system.listFiles and system.getSource,
+-- which the suite asks for where another platform has them and replaces with dir() here; GREY_DARK;
+-- and every key name but the exit key's two events. EdgeTX 2.12 exports no KEY_* or EVT_KEY_*
+-- constants and no EVT_RTN_*, and the measured passes press no key, so a comparison against any of
+-- them is false either way.
+--
+-- The answers are a radio on the bench with its link up, an 800x480 screen, and a model with no
+-- inputs and every output at its defaults.
+function Stubs.installTool()
+  _G.getRSSI = function()
+    -- The reading, then the radio's low and critical warning levels.
+    return 99, 45, 42
+  end
+
+  -- The sensor's last value, or nothing for a sensor the radio does not have.
+  _G.getSourceValue = function(name)
+    return Stubs.sensors[name]
+  end
+
+  _G.getGeneralSettings = function()
+    return {
+      battWarn = 6.6, battMin = 6.0, battMax = 8.4, imperial = 0,
+      language = "EN", voice = "en", gtimer = 0
+    }
+  end
+
+  -- A fixed date: nothing measured may depend on when the run happens.
+  _G.getDateTime = function()
+    return { year = 2026, mon = 1, day = 1, hour = 12, min = 0, sec = 0 }
+  end
+  _G.getRtcTime = function()
+    return 1767268800
+  end
+
+  -- What the firmware reports free of the Lua heap. Only compared against a low-memory floor.
+  _G.getAvailableMemory = function()
+    return 4 * 1024 * 1024
+  end
+
+  -- The card's own directory calls, on the card this run is given. dir() answers an iterator over
+  -- the entries the way the firmware does; a path that is not on the card has nothing in it.
+  _G.dir = function(path)
+    local card = cardPath(path)
+    local names = card and listDir(card) or {}
+    local i = 0
+    return function()
+      i = i + 1
+      return names[i]
+    end
+  end
+  _G.mkdir = function(path)
+    local card = cardPath(path)
+    if card then ensureDir(card) end
+    return card ~= nil
+  end
+
+  -- A colour, whose value is irrelevant to the count; and the exit key's release, which the
+  -- firmware exports under both names (radio/util/hw_defs/lua_keys.jinja, radio/src/keys.h).
+  _G.GREY_DEFAULT = 0x7BEF
+  _G.EVT_EXIT_BREAK = 0x0201
+  _G.EVT_VIRTUAL_EXIT = 0x0201
+
+  -- radio/src/dataconstants.h, enum TelemetryUnit. The suite compares units with each other, so
+  -- the values have to be the firmware's and not merely distinct.
+  _G.UNIT_RAW = 0
+  _G.UNIT_VOLTS = 1
+  _G.UNIT_AMPS = 2
+  _G.UNIT_METERS_PER_SECOND = 5
+  _G.UNIT_METERS = 9
+  _G.UNIT_CELSIUS = 11
+  _G.UNIT_PERCENT = 13
+  _G.UNIT_MAH = 14
+  _G.UNIT_RPMS = 18
+  _G.UNIT_G = 19
+  _G.UNIT_DEGREE = 20
+
+  -- The lvgl table's layout figures for an 800-pixel-wide screen
+  -- (radio/src/gui/colorlcd/libui/etx_lv_theme.h, scaled by 11/8), and the switch source flags.
+  _G.lvgl.LCD_SCALE = 1.375
+  _G.lvgl.UI_ELEMENT_HEIGHT = 44
+  _G.lvgl.PAGE_BODY_HEIGHT = 418
+  _G.lvgl.SRC_SWITCH = 0x0600
+
+  -- The model's name is written back by the connect chain; a stub records it.
+  _G.model.setInfo = function(info)
+    for k, v in pairs(info or {}) do Stubs.modelInfo[k] = v end
+  end
+  _G.model.getInputsCount = function(_input)
+    return 0
+  end
+  _G.model.getInput = function(_input, _line)
+    return nil
+  end
+  _G.model.getOutput = function(_channel)
+    return { name = "", offset = 0, min = -1000, max = 1000, revert = 0, ppmCenter = 0, symetrical = 0 }
+  end
+  -- The internal module off, the external one a CRSF module (MODULE_TYPE_CROSSFIRE,
+  -- radio/src/pulses/modules_constants.h): the link the stubs above carry.
+  _G.model.getModule = function(index)
+    if index == 1 then return { Type = 5, protocol = 0, subType = 0, firstChannel = 0, channelsCount = 16 } end
+    return { Type = 0 }
+  end
 end
 
 --- The card's own self-test, called by measure.lua --self-test so CI runs it.

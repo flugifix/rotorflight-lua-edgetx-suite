@@ -78,18 +78,25 @@ end
 -- collection when the connect chain finishes, and a GC step would land in the count
 -- wherever the allocator happens to be. The firmware's own incremental collection is part
 -- of what the budget margin covers.
+--
+-- The hook advances one counter for the whole run rather than one per call, so a section inside
+-- a measured call -- a tool page's build, below -- can be read off it as a difference, and a
+-- section outside one can install the same hook for itself and be read off it the same way.
+local tally = 0
+local function bill() tally = tally + 1 end
+
 local function count(fn, ...)
   -- One pass of the host clock per measured call. The stub's clock does not run by itself.
   Stubs.tick()
-  local n = 0
+  local n = tally
   collectgarbage("collect")
   collectgarbage("stop")
-  debug.sethook(function() n = n + 1 end, "", 1)
+  debug.sethook(bill, "", 1)
   local ok, err = pcall(fn, ...)
   debug.sethook()
   collectgarbage("restart")
   if not ok then error(err, 0) end
-  return n
+  return tally - n
 end
 
 --- What one call of an empty closure costs through the loop the sweep is replayed in.
@@ -312,7 +319,11 @@ local SETTLE_TAIL = 40
 -- The job step runs under the widget's pcall, which logs what it caught and rebuilds on the
 -- next pass. A build that raises on every pass therefore looks like one that never settles, so
 -- the widget's log ring is read after each pass -- outside the count -- and the error names it.
-local function settle(widget, sensorIds, maxPasses)
+--
+-- `uncounted` drives the same passes without the hook, for a scenario that prices nothing in its
+-- settle: the hook and the collection before every counted pass are most of what a pass costs
+-- here in time, and the cold-start figures it would return are thrown away.
+local function settle(widget, sensorIds, maxPasses, uncounted)
   local coldWorst = 0
   local startupWorst = {}
   local sceneAt = nil
@@ -324,7 +335,13 @@ local function settle(widget, sensorIds, maxPasses)
     local freeForm = before == "prepare" and widget._job.kind == "scene"
       and type(theme) == "table" and type(theme.build) == "function"
     local logSeq = _G.rfsuite.log_history_seq or 0
-    local n = count(widget.refresh, widget, nil, nil)
+    local n = 0
+    if uncounted then
+      Stubs.tick()
+      widget.refresh(widget, nil, nil)
+    else
+      n = count(widget.refresh, widget, nil, nil)
+    end
     if n > coldWorst then coldWorst = n end
     if n > (startupWorst[before] or 0) then startupWorst[before] = n end
     if before == "swap" then sceneAt = sceneAt or i end
@@ -538,6 +555,299 @@ local function runTotal(passes)
 end
 
 -- ---------------------------------------------------------------------------
+-- The tool's pages, opened inside the dashboard the way a pilot opens them.
+--
+-- The dashboard does not start the tool script: widgets/dashboard/tool_host.lua loads ui/home.lua
+-- into the widget's own Lua state and drives it from widget.refresh for as long as it is open. So a
+-- page opened there is built inside a widget call, and a widget call is stopped at the instruction
+-- limit the rest of this file prices against. The tool script is not: a call there is yielded once
+-- it has held the interpreter for a task period, which is why the page rows are measured hosted.
+--
+-- What is gated is the page's BUILD -- the instructions inside its module's build, the one call
+-- that lays its whole screen out. It is the part of opening a page the host cannot spread over
+-- passes: it runs inside a single widget call, and every attempt at it is the same deterministic
+-- code, so a page whose build alone needs more than a call is allowed does not finish building
+-- hosted, whichever pass it is tried on. It is also the one figure here that does not move with
+-- the cadence grid the rest of the pass sits on; the --pages report prints it beside the worst
+-- pass, which does.
+-- ---------------------------------------------------------------------------
+
+local TOOL_PAGE_ROOT = "/SCRIPTS/TOOLS/rfsuite-core/app/pages/"
+
+-- The switches a pilot sets under the general settings to reach the developer pages and the
+-- preview features. The pages behind them ship, so they are priced like every other page.
+local TOOL_CONDITIONS = { "developerTools", "previewSetupWizard", "previewFlightLog", "previewInflightTuning" }
+
+-- How many passes an open may take, and how many in a row it has to stay quiet -- no build, nothing
+-- outstanding on the link, nothing waiting to be redrawn -- before the page counts as settled. Most
+-- pages build more than once while they open, so the open is not over when the first build is,
+-- and the row takes the dearest build of the open.
+local PAGE_PASSES = 400
+local PAGE_QUIET = 10
+
+--- An upvalue of `fn` by name, or an error that names it.
+local function upvalue(fn, name)
+  local i = 1
+  while true do
+    local found, value = debug.getupvalue(fn, i)
+    if found == nil then break end
+    if found == name then return value end
+    i = i + 1
+  end
+  error("accounting: `" .. name .. "` is no longer an upvalue of ui/home.lua's run, and the page "
+    .. "driver reads the tool's menu state through it")
+end
+
+--- The presses that lead from the tool's start menu to `menuId`, and the menu each of them opens,
+--- or nil where no menu leads there.
+--
+-- Read off the manifest the tool builds its menus from, breadth first, so a page reached from
+-- more than one menu is reached by the shortest way. The first press is a tile of the start menu,
+-- named by its section; every press after it is a tile of the menu the one before it opened.
+local function pathTo(manifest, menuId)
+  local queue, seen = {}, {}
+  for _, section in ipairs(manifest.sections or {}) do
+    for _, entry in ipairs(section.pages or {}) do
+      queue[#queue + 1] = { presses = { { section = section.id, card = entry.id } }, opens = { entry.menuId } }
+    end
+  end
+  local head = 1
+  while head <= #queue do
+    local node = queue[head]
+    head = head + 1
+    local opened = node.opens[#node.opens]
+    if opened == menuId then return node.presses, node.opens end
+    if opened ~= nil and not seen[opened] then
+      seen[opened] = true
+      local menu = manifest.menus and manifest.menus[opened]
+      for _, entry in ipairs(menu and menu.pages or {}) do
+        local presses, opens = { table.unpack(node.presses) }, { table.unpack(node.opens) }
+        presses[#presses + 1] = entry.id
+        opens[#opens + 1] = entry.menuId
+        queue[#queue + 1] = { presses = presses, opens = opens }
+      end
+    end
+  end
+  return nil
+end
+
+--- Open one of the tool's pages in a settled dashboard and price it.
+--
+-- The world is the reference dashboard, settled as every other scenario here settles it, with the
+-- tool's own firmware surface added (stubs/edgetx.lua, installTool). The tool is opened through
+-- the host exactly as a press on the dashboard opens it, and every press after that is a tile
+-- press: the target is parked in the tool's own `pendingMenuOpen`, which is all a press does
+-- (ui/home.lua, getCardPressHandler), and the next pass opens it. From the host's request on, the
+-- flight controller answers between passes and the link holds one pass's worth of telemetry, as
+-- in the in-flight tuning scenario.
+--
+-- `pad` passes are driven on the page's parent menu before the press, which moves the open across
+-- the cadence grid. `counted` counts every pass of the open rather than the build alone, for the
+-- worst pass and the total the --pages report prints. `fault` is the self-test's: it breaks the
+-- run in one of the ways the controls below exist to catch, and is nil everywhere else.
+--
+-- Answers { build, builds, worst, total, passes, served, empty } for a page that was priced, and
+-- { skipped = reason } for one that cannot be opened in this world. A page that should have opened
+-- and did not is an error, never a skip.
+local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
+  World.reset()
+  Stubs.installTool()
+  -- A link that never delivers what the flight controller answers, as a link left over from an
+  -- earlier world would: the connect chain asks and is never told.
+  if fault == "unanswered" then
+    local deliver = Stubs.pushFrame
+    Stubs.pushFrame = function(command, data)
+      if command ~= FRAME_MSP_REPLY then return deliver(command, data) end
+    end
+  end
+
+  -- The build, counted on the hook's own counter. The page module is wrapped where the registry
+  -- loads it, so its build is the module's own; the wrapper's call into it and back is billed with
+  -- it, a handful of instructions, and every other load pays one table comparison. Inside a pass
+  -- that is being counted the build is read off that pass's hook; in a pass that is not, the
+  -- wrapper hooks the build alone, and both read the same instructions.
+  local builds = { worst = 0, count = 0, declared = nil }
+  local function measured(hooked, before, ...)
+    local spent = tally - before
+    if not hooked then debug.sethook() end
+    builds.count = builds.count + 1
+    if spent > builds.worst then builds.worst = spent end
+    return ...
+  end
+  local stubLoad = _G.loadScript
+  local pageFile = TOOL_PAGE_ROOT .. pagePath
+  _G.loadScript = function(path, mode)
+    local chunk = stubLoad(path, mode)
+    if chunk == nil or path ~= pageFile then return chunk end
+    return function(...)
+      local module = chunk(...)
+      builds.declared = type(module) == "table" and type(module.build) == "function"
+      if builds.declared then
+        local build = module.build
+        module.build = function(...)
+          local hooked = debug.gethook() ~= nil
+          if not hooked then debug.sethook(bill, "", 1) end
+          return measured(hooked, tally, build(...))
+        end
+      end
+      return module
+    end
+  end
+
+  local Runtime = World.require("widgets/dashboard/runtime.lua")
+  local widget = Runtime.new(ZONE, {})
+  widget.preferences = widget.preferences or {}
+  widget.preferences.dashboard = { theme_preflight = theme }
+  settle(widget, World.sensorIds, 4000, true)
+  -- The dashboard's settle is what connects the link, and the tool shares that connection rather
+  -- than making its own. A world that settled without it would price every page on the screen of
+  -- a radio with no flight controller.
+  local session = _G.rfsuite.session
+  if session.isConnected ~= true or session.mcu_id == nil then
+    error("accounting: the dashboard settled without a connected flight controller (isConnected="
+      .. tostring(session.isConnected) .. ", mcu_id=" .. tostring(session.mcu_id) .. ")")
+  end
+
+  installDeferredLink()
+
+  local ToolHost = World.require("widgets/dashboard/tool_host.lua")
+  if not ToolHost.request(widget) then error("accounting: the dashboard refused to open the tool") end
+
+  local Msp = World.require("tasks/msp/runtime.lua")
+  local function linkIdle()
+    return Msp.getState().queue:isProcessed() and #heldReplies == 0
+  end
+  local function linkState()
+    return string.format("%d replies the flight controller sent are held off the link, the queue is %s",
+      #heldReplies, Msp.getState().queue:isProcessed() and "idle" or "busy")
+  end
+
+  -- One pass of the widget with the tool open. The event is 0 and never nil: nil is the firmware
+  -- saying fullscreen was left, and the host closes the tool on it.
+  local frame = 0
+  local function pass(counting)
+    frame = frame + 1
+    holdLinkBacklog()
+    if fault ~= "held" then releaseReplies() end
+    feedLink(World.sensorIds, 50000 + frame)
+    if counting then return count(widget.refresh, widget, 0, nil) end
+    Stubs.tick()
+    widget.refresh(widget, 0, nil)
+    return 0
+  end
+
+  -- The host loads ui/home.lua on one pass and initialises it on the next.
+  pass(false)
+  pass(false)
+  local host = widget._toolHost
+  local home = host and host.home
+  if type(home) ~= "table" or host.phase ~= "run" then
+    error("accounting: the tool host did not bring ui/home.lua up (phase " .. tostring(host and host.phase) .. ")")
+  end
+  local state = upvalue(home.run, "state")
+  for _, condition in ipairs(TOOL_CONDITIONS) do state.menu.setCondition(condition, true) end
+
+  local function settled(want)
+    local quiet = 0
+    for _ = 1, PAGE_PASSES do
+      pass(false)
+      local idle = linkIdle() and not state.pendingBuildUI and state.pendingMenuOpen == nil
+        and state.initialLoad == false
+      quiet = (idle and state.menu.getCurrentMenuId() == want) and quiet + 1 or 0
+      if quiet >= PAGE_QUIET then return true end
+    end
+    return false
+  end
+
+  if not settled(nil) then
+    error("accounting: the tool never left its start screen for its menu in " .. PAGE_PASSES .. " passes; "
+      .. linkState())
+  end
+  if state.fblConnected ~= true then
+    error("accounting: the tool came up without a connected flight controller")
+  end
+
+  local presses, opens = pathTo(state.manifest, menuId)
+  if presses == nil then
+    removeDeferredLink()
+    return { skipped = "no menu leads to it" }
+  end
+  for i = 1, #presses - 1 do
+    state.pendingMenuOpen = presses[i]
+    if not settled(opens[i]) then
+      error("accounting: the press towards " .. menuId .. " never reached " .. tostring(opens[i]) .. "; "
+        .. linkState())
+    end
+  end
+
+  local last = presses[#presses]
+  local enabled
+  if #presses == 1 then
+    enabled = state.menu.isRootEntryEnabled(last.section, last.card)
+  else
+    enabled = state.menu.isEntryEnabled(last)
+  end
+  if not enabled then
+    removeDeferredLink()
+    return { skipped = "its tile is disabled in this world" }
+  end
+
+  for _ = 1, pad or 0 do pass(false) end
+
+  -- The press, and the open it causes.
+  if fault ~= "stay" then state.pendingMenuOpen = last end
+  local served = FC.served
+  local unanswered = {}
+  for cmd, n in pairs(FC.unanswered) do unanswered[cmd] = n end
+  local worst, total, passes, quiet = 0, 0, 0, 0
+  for i = 1, PAGE_PASSES do
+    local before = builds.count
+    local n = pass(counted)
+    passes = i
+    total = total + n
+    if n > worst then worst = n end
+    local idle = linkIdle() and not state.pendingBuildUI and state.pendingMenuOpen == nil
+    quiet = (idle and builds.count == before) and quiet + 1 or 0
+    if quiet >= PAGE_QUIET and (builds.count > 0 or builds.declared == false) then break end
+  end
+  local here = state.menu.getCurrentMenuId()
+  local link = linkState()
+  served = FC.served - served
+  local empty = {}
+  for cmd, n in pairs(FC.unanswered) do
+    local asked = n - (unanswered[cmd] or 0)
+    if asked > 0 then empty[#empty + 1] = string.format("%d(x%d)", cmd, asked) end
+  end
+  table.sort(empty)
+  removeDeferredLink()
+
+  -- The controls. A page priced anywhere but on itself prices that other screen; a page whose
+  -- replies never reached it prices the screen it shows while it waits; and a build that raised
+  -- is priced up to the raise. Each would be a plausible number with nothing in the row to say so.
+  if here ~= menuId then
+    error("accounting: " .. menuId .. " did not open; the tool is on " .. tostring(here)
+      .. ", and a row measured there would price that screen")
+  end
+  if builds.declared == false then
+    return { skipped = "it has no build of its own; the tool draws it as a menu" }
+  end
+  if state.pageBuildFailed ~= nil then
+    error("accounting: the build of " .. menuId .. " raised; the tool shows its failure page")
+  end
+  if builds.count == 0 then
+    error("accounting: " .. menuId .. " opened without its build being counted")
+  end
+  if quiet < PAGE_QUIET then
+    error(string.format("accounting: %s never settled in %d passes; %s", menuId, PAGE_PASSES, link))
+  end
+
+  return {
+    build = builds.worst, builds = builds.count, worst = worst, total = total, passes = passes,
+    served = served, empty = empty,
+  }
+end
+
+-- ---------------------------------------------------------------------------
 -- Report and gate
 -- ---------------------------------------------------------------------------
 
@@ -582,6 +892,21 @@ if #themes == 0 then error("accounting: no shipped theme found under " .. THEMES
 -- type has a folder of its own.
 local objectFiles = listLuaFiles(OBJECTS_DIR)
 
+-- The tool's pages, by the id a menu opens them under, from the registry the tool loads them
+-- through (app/pages/init.lua). Read off that table rather than off the manifest, so a page that
+-- no menu leads to is still in the inventory and the report names it. An id the registry derives
+-- while the tool runs -- a theme's own settings pages -- is not in it.
+local ToolPages = World.require("app/pages/init.lua")
+if type(ToolPages) ~= "table" or type(ToolPages.pagePathByMenuId) ~= "table" then
+  error("accounting: app/pages/init.lua did not load as the tool's page registry")
+end
+local toolPages = {}
+for menuId in pairs(ToolPages.pagePathByMenuId) do toolPages[#toolPages + 1] = menuId end
+table.sort(toolPages)
+if #toolPages == 0 then error("accounting: the tool's page registry lists no page") end
+local toolPagePaths = {}
+for _, menuId in ipairs(toolPages) do toolPagePaths[menuId] = ToolPages.pagePathByMenuId[menuId] end
+
 -- The sensor id list the telemetry frames carry, from the repository's own decoder table.
 local RFSensors = World.require("lib/rf2tlm_sensors.lua")
 if type(RFSensors) ~= "table" then error("accounting: lib/rf2tlm_sensors.lua did not load") end
@@ -599,6 +924,54 @@ local control = sweepControl(2000)
 -- Pass classes, on the reference theme.
 ------------------------------------------------------------------------------
 local reference = "system/default"
+
+------------------------------------------------------------------------------
+-- --pages: every tool page opened at every phase of the cadence grid, and nothing else.
+--
+-- A report, not a gate: no row is added and nothing is checked. The gated rows below price a
+-- page's build, which the grid does not move; what the grid does move is everything else in the
+-- pass that builds and in the passes around it -- the host's step, the MSP tick, the events
+-- runner, a telemetry read -- so the worst pass of an open depends on which pass the press lands
+-- on. This opens every page twenty times, the press moved by one 100 ms pass each, and prints per
+-- page the build's range (a build that moves here depends on the phase, and its row is a reading
+-- of phase 0), the range of the open's worst pass with the phase its maximum was found at, and the
+-- largest total of an open. Hosted only, as the rows are. The run takes minutes rather than
+-- seconds.
+--
+-- There is no sweep column. The lvgl stub collects every function field of a tree as a reactive
+-- reference, which holds for a dashboard theme and not for a page: a page's tree carries its press
+-- and change handlers as function fields too, and replaying those would act on the page.
+------------------------------------------------------------------------------
+if args["--pages"] then
+  local PHASES = 20
+  print("offline instruction accounting -- tool pages, hosted, over the cadence grid")
+  print(string.format("  interpreter        %s, count hook at 1 instruction", _VERSION))
+  print(string.format("  phases             %d, the press moved by one 100 ms pass each", PHASES))
+  print("")
+  print(string.format("  %-58s %13s %13s %5s %8s", "page", "build", "worst pass", "phase", "total"))
+  for _, menuId in ipairs(toolPages) do
+    local first = openToolPage(reference, menuId, toolPagePaths[menuId], 0, true)
+    if first.skipped then
+      print(string.format("  %-58s not opened: %s", menuId, first.skipped))
+    else
+      local buildLo, buildHi = first.build, first.build
+      local worstLo, worstHi, worstAt, totalHi = first.worst, first.worst, 0, first.total
+      for k = 1, PHASES - 1 do
+        local page = openToolPage(reference, menuId, toolPagePaths[menuId], k, true)
+        if page.build < buildLo then buildLo = page.build end
+        if page.build > buildHi then buildHi = page.build end
+        if page.worst < worstLo then worstLo = page.worst end
+        if page.worst > worstHi then worstHi, worstAt = page.worst, k end
+        if page.total > totalHi then totalHi = page.total end
+      end
+      print(string.format("  %-58s %6d-%-6d %6d-%-6d %5d %8d", menuId, buildLo, buildHi,
+        worstLo, worstHi, worstAt, totalHi))
+    end
+  end
+  Stubs.releaseCard()
+  return
+end
+
 local base = runScenario(reference, 240)
 
 addRow("pass.state", base.worst.state or 0)
@@ -1307,6 +1680,35 @@ do
 end
 
 ------------------------------------------------------------------------------
+-- The tool's pages, hosted: the build of every page the dashboard can open. See openToolPage.
+--
+-- One phase, the press on the first pass after the parent menu has settled: the build does not
+-- move with the phase (--pages shows it per page), and the rest of the pass, which does, is not
+-- what these rows price. A page that cannot be opened in this world is named in a note and gets
+-- no row; one that should open and does not fails the run. A command a page asked for and the
+-- flight controller stub had no payload for is named in a note per page: the header's
+-- "answered empty" line reads the world that ran last, and it keeps reading the one it read before
+-- these worlds were added after it.
+------------------------------------------------------------------------------
+local pageReads = {}
+do
+  local unanswered = FC.unanswered
+  for _, menuId in ipairs(toolPages) do
+    local page = openToolPage(reference, menuId, toolPagePaths[menuId], 0, false)
+    if page.skipped then
+      note("page %s has no row: %s", menuId, page.skipped)
+    else
+      addRow("page." .. menuId .. ".build", page.build, page.builds .. (page.builds == 1 and " build" or " builds"))
+      if page.served > 0 then pageReads[#pageReads + 1] = menuId end
+      if #page.empty > 0 then
+        note("page %s: answered empty %s", menuId, table.concat(page.empty, " "))
+      end
+    end
+  end
+  FC.unanswered = unanswered
+end
+
+------------------------------------------------------------------------------
 -- Check and report.
 ------------------------------------------------------------------------------
 -- The card is emptied and then handed back here rather than at the end of the file: nothing
@@ -1373,11 +1775,21 @@ local poisoned = selfTest and rows[1] and rows[1].name or nil
 local hidden = selfTest and rows[2] and rows[2].name or nil
 if hidden then Budgets.rows[hidden] = nil end
 
+-- The same two for the tool's pages. Their rows are added last, so the two above never reach one,
+-- and a page row that cannot go red is a row nobody has seen gate anything.
+local pageRows = {}
+for _, row in ipairs(rows) do
+  if string.find(row.name, "^page%.") then pageRows[#pageRows + 1] = row.name end
+end
+local poisonedPage = selfTest and pageRows[1] or nil
+local hiddenPage = selfTest and pageRows[2] or nil
+if hiddenPage then Budgets.rows[hiddenPage] = nil end
+
 print(string.format("  %-32s %9s %9s %7s", "row", "measured", "target", "margin"))
 for _, row in ipairs(rows) do
   local budget = Budgets.rows[row.name]
   local target = budget and budget.target
-  if poisoned == row.name then target = 1 end
+  if poisoned == row.name or poisonedPage == row.name then target = 1 end
   local marginText = "-"
   if target and target > 0 then
     marginText = string.format("%.0f%%", 100 * (target - row.measured) / target)
@@ -1393,7 +1805,11 @@ for _, row in ipairs(rows) do
     row.name, row.measured, target and tostring(target) or "MISSING", marginText,
     extra and ("   " .. extra) or ""))
   if target == nil then
-    failures[#failures + 1] = row.name .. " has no row in budgets.lua"
+    -- A tool page reaches this line the first time a menu leads to it in the run's world, which is
+    -- the pull request that adds it or the one that enables its tile here. The row it needs is a
+    -- measurement, and the run already has it.
+    local hint = string.find(row.name, "^page%.") and " -- a new tool page: --emit prints its row" or ""
+    failures[#failures + 1] = row.name .. " has no row in budgets.lua" .. hint
   elseif row.measured > target then
     failures[#failures + 1] = string.format("%s: %d instructions over a target of %d",
       row.name, row.measured, target)
@@ -1446,27 +1862,60 @@ if selfTest then
     print("SELF-TEST FAILED: the card this run is given does not behave")
     os.exit(1)
   end
-  local sawPoisoned, sawHidden = false, false
-  for _, f in ipairs(failures) do
-    if poisoned and string.find(f, poisoned, 1, true)
-      and string.find(f, "over a target", 1, true) then
-      sawPoisoned = true
+  local function saw(name, kind)
+    if name == nil then return false end
+    for _, f in ipairs(failures) do
+      if string.find(f, name, 1, true) and string.find(f, kind, 1, true) then return true end
     end
-    if hidden and string.find(f, hidden, 1, true)
-      and string.find(f, "no row in budgets.lua", 1, true) then
-      sawHidden = true
-    end
+    return false
   end
   for _, f in ipairs(failures) do print("(self-test) " .. f) end
-  if not sawPoisoned then
+  if not saw(poisoned, "over a target") then
     print("SELF-TEST FAILED: a target poisoned to 1 did not turn the check red")
     os.exit(1)
   end
-  if not sawHidden then
+  if not saw(hidden, "no row in budgets.lua") then
     print("SELF-TEST FAILED: a row with its budget removed did not turn the check red")
     os.exit(1)
   end
-  print("SELF-TEST PASSED: the card behaves, and both a breached target and a missing budget row turn the check red")
+  if not saw(poisonedPage, "over a target") then
+    print("SELF-TEST FAILED: a tool page's target poisoned to 1 did not turn the check red")
+    os.exit(1)
+  end
+  if not saw(hiddenPage, "no row in budgets.lua") then
+    print("SELF-TEST FAILED: a tool page with its budget removed did not turn the check red")
+    os.exit(1)
+  end
+
+  -- The page driver's own controls, each driven red once on a page that reads from the flight
+  -- controller. Every one of these runs would otherwise end in a plausible number: a page whose
+  -- replies are held off the link builds the screen it shows while it waits; a world whose connect
+  -- chain was never answered prices every page on the screen of a radio with no flight controller;
+  -- and a press that never lands prices the menu the tool stayed on. The runs are pcall'ed here
+  -- and nowhere else, and the run is restored after each so the next starts on a clean link.
+  local readingPage = pageReads[1]
+  if readingPage == nil then
+    print("SELF-TEST FAILED: no tool page read from the flight controller, so the link controls cannot be driven")
+    os.exit(1)
+  end
+  local plainPush = Stubs.pushFrame
+  for _, case in ipairs({
+    { fault = "held", expect = "held off the link" },
+    { fault = "unanswered", expect = "without a connected flight controller" },
+    { fault = "stay", expect = "did not open" },
+  }) do
+    local ok, err = pcall(openToolPage, reference, readingPage, toolPagePaths[readingPage], 0, false, case.fault)
+    removeDeferredLink()
+    Stubs.pushFrame = plainPush
+    print(string.format("(self-test) page %s, %s: %s", readingPage, case.fault, ok and "priced" or tostring(err)))
+    if ok or not string.find(tostring(err), case.expect, 1, true) then
+      print("SELF-TEST FAILED: the page driver's '" .. case.fault .. "' control did not stop the run")
+      os.exit(1)
+    end
+  end
+  print("SELF-TEST PASSED: the card behaves, a breached target and a missing budget row turn the check red "
+    .. "for a pass row and for a tool page, and the page driver refuses a held link, an unanswered connect "
+    .. "and a press that never landed")
   os.exit(0)
 end
 
