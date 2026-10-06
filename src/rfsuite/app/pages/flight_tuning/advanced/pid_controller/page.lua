@@ -678,6 +678,7 @@ function M.build(ctx)
   local specLimitC = { scale=1, mult=1, min=0, max=25, suffix="°", decimals=0 }
   local specLimitE = { scale=1, mult=1, min=0, max=180, suffix="°", decimals=0 }
   local specCutoff = { scale=1, mult=1, min=1, max=100, suffix="Hz", decimals=0 }
+  local specGain   = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
 
   -- 1) Ground Error Decay (single right-aligned field)
   cursorY = cursorY + appendSingleFieldRow(children, x, cursorY, w,
@@ -691,6 +692,15 @@ function M.build(ctx)
     pageText(i18n, "time", "Time"), "error_decay_time_cyclic", specDecay,
     pageText(i18n, "limit", "Limit"), "error_decay_limit_cyclic", specLimitC
   )
+
+  -- 3) Error decay stick gain (single field, API 12.10 and later). It scales the cyclic decay
+  -- on the ground and in flight alike, so it has a row of its own rather than a third column.
+  if type(ui.config.error_decay_gain_cyclic) == "number" and isAtLeastVersion({12, 0, 10}) then
+    cursorY = cursorY + appendSingleFieldRow(children, x, cursorY, w,
+      pageText(i18n, "error_decay_stick_gain", "Error Decay Stick Gain"),
+      "", "error_decay_gain_cyclic", specGain
+    )
+  end
 
   -- 4) Error limit (triple field: Roll, Pitch, Yaw)
   cursorY = cursorY + appendTripleFieldRow(children, x, cursorY, w, i18n,

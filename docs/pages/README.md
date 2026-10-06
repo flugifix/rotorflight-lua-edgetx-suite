@@ -34,7 +34,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Tune Advisor | [flight_tuning/tune_advisor.md](flight_tuning/tune_advisor.md) | yes | read-only while armed, needs MSP API 12.10 | written |
 | Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
 | Advanced → Filters | `flight_tuning/advanced/filters.md` | yes | read-only while armed | to write |
-| Advanced → PID Controller | `flight_tuning/advanced/pid_controller.md` | yes | read-only while armed | to write |
+| Advanced → PID Controller | [flight_tuning/advanced/pid_controller.md](flight_tuning/advanced/pid_controller.md) | yes | read-only while armed | written |
 | Advanced → PID Bandwidth | `flight_tuning/advanced/pid_bandwidth.md` | yes | read-only while armed | to write |
 | Advanced → Autolevel | `flight_tuning/advanced/autolevel.md` | yes | read-only while armed | to write |
 | Advanced → Main Rotor | `flight_tuning/advanced/main_rotor.md` | yes | read-only while armed | to write |
@@ -115,6 +115,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Diagnostics → ELRS Link | [tools/diagnostics/elrs_link.md](tools/diagnostics/elrs_link.md) | yes | read-only while armed | written |
 | Diagnostics → Validate Sensors | [tools/diagnostics/validate_sensors.md](tools/diagnostics/validate_sensors.md) | yes | needs the flight controller, read-only while armed | written |
 | Diagnostics → SmartFuel | `tools/diagnostics/smartfuel.md` | no | needs the flight controller, read-only while armed, needs MSP API 12.09 | to write |
+| Diagnostics → CRSF Sensors | [tools/diagnostics/crsf_sensors.md](tools/diagnostics/crsf_sensors.md) | yes | needs the flight controller, read-only while armed, needs MSP API 12.10 | written |
 | Diagnostics → Session Logs | [tools/diagnostics/session_logs.md](tools/diagnostics/session_logs.md) | yes | always available | written |
 | Diagnostics → Info | [tools/diagnostics/info.md](tools/diagnostics/info.md) | yes | read-only while armed | written |
 
