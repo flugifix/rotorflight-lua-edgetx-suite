@@ -55,7 +55,7 @@ stopped answering.
 
 With *Urban* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
-allows. Four places on the screen open a page over it, and a fifth opens the suite's tool:
+allows. Six places on the screen open a page over it, and a seventh opens the suite's tool:
 
 - **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do the
   page keys and TELE, left at their defaults.
@@ -91,6 +91,17 @@ allows. Four places on the screen open a page over it, and a fifth opens the sui
   on connecting, and read *-* until they have been. Like every other place that takes a press, the
   gauge has the radio's frame around it while *Frames on tap areas* is on. A key can open the page
   as well: choose *Theme: Battery* for it on the *Keys* page.
+- **The governor row and the status line** of the left panel open *Status*: the arm state in
+  large letters with what stands in its way under it -- the reasons the flight controller names,
+  *Ready to arm* while there are none. The arm state takes the colours *Arm state colours* on the
+  *Look* page gives it on the flight screen. Beside it the governor, the throttle and the speed
+  controller's live verdict in its level's colour, and under both the *Event log*: what changed
+  on the craft, newest first, each with the radio's time -- arming and disarming, the flight
+  controller connecting and the connection ending, every change of the governor state and of the
+  speed controller's verdict, the last two after *Governor:* and *ESC:*. The log is the widget's
+  own and is kept while the widget runs, across connections; the page shows the newest entries
+  that fit and *No events yet* until the first. A key can open the page as well: choose
+  *Theme: Status* for it on the *Keys* page.
 
 Urban draws these pages, the quick menu and the battery picker in the look of the screen they
 open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's
@@ -129,7 +140,7 @@ setting.
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
-| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Theme: Battery* (the *Battery* page), *Suite: Main menu*, *Suite: Flight log* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. *Suite: Flight log* opens the suite's tool on its *Flight Log* page, as the quick menu's *FLIGHT LOG* does, and does nothing while that page's preview switch is off or the model is armed. |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Theme: Battery* (the *Battery* page), *Theme: Status* (the *Status* page), *Suite: Main menu*, *Suite: Flight log* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. *Suite: Flight log* opens the suite's tool on its *Flight Log* page, as the quick menu's *FLIGHT LOG* does, and does nothing while that page's preview switch is off or the model is armed. |
 | Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *Suite: Main menu*, TELE *Suite: Quick menu*. |
 | Telemetry | Tile 1 … Tile 12 | The reading each tile of the *Telemetry* page shows, from the same list as the value rows, or nothing; a tile set to nothing is left out and the others close up. Defaults: voltage, cell voltage, current, capacity used, fuel, headspeed, ESC temperature, MCU temperature, BEC voltage, and tiles 10 to 12 off. The *Units beside the values* and *Temperature colours* settings apply to the tiles as to the rows. |
 
