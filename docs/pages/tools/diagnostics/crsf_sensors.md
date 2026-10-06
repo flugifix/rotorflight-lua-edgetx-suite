@@ -51,7 +51,9 @@ A group the accessory has not sent reads *No data*. A group it stops sending tur
   leaving numbers on screen that are no longer being refreshed; the page keeps asking.
 - ***This firmware does not support the CRSF Sensors diagnostic.*** means the flight controller
   answered that it does not know the message: a firmware that reports MSP API 12.10 but was built
-  before the CRSF sensor input was added. The page asks once per visit; Reload asks again.
+  before the CRSF sensor input was added. It also appears when the flight controller sends the
+  record in a layout this suite does not know (a payload version other than 1), rather than
+  showing numbers decoded from the wrong layout. The page asks once per visit; Reload asks again.
 - **The function is assigned to a serial port of the flight controller.** Where this suite's
   [Ports](../../setup/ports.md) page (*Configuration* → *Setup* → *Ports*) offers *CRSF Sensors* in
   a port's function list -- it needs MSP API 12.10 -- set it there; otherwise the Rotorflight

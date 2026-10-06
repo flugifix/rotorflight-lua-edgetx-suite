@@ -207,6 +207,11 @@ local function requestStatus(now)
       elseif #buf < StatusApi.fixedLength then
         applyAnswer(#buf == 1 and "unsupported" or "bad_reply", nil)
         return
+      elseif buf[1] ~= StatusApi.payloadVersion then
+        -- A record in a layout this page does not know will not change on the next poll, so it is
+        -- answered like the refusal: said once, and not asked again until Reload.
+        applyAnswer("unsupported", nil)
+        return
       end
       local parsed = StatusApi.parse(buf)
       if parsed then

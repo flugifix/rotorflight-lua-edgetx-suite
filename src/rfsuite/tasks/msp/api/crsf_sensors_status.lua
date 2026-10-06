@@ -28,6 +28,9 @@ local Api = {
 -- The reply with no cell and no RPM value: 20 + 18 + 14 + 7 + 6 + 2.
 local FIXED_LENGTH = 67
 
+-- The layout above is payload version 1, the reply's first byte.
+local PAYLOAD_VERSION = 1
+
 -- Version 1, port enabled, every group present: six cells and one RPM value, 83 bytes.
 local SIM_RESPONSE = {
   1, 1,
@@ -42,6 +45,7 @@ local SIM_RESPONSE = {
 
 Api.simulatorResponse = SIM_RESPONSE
 Api.fixedLength = FIXED_LENGTH
+Api.payloadVersion = PAYLOAD_VERSION
 
 local function readUnsigned(buf, pos, width)
   local value = 0
@@ -80,7 +84,7 @@ function Api.parse(buf)
   local pos = 1
 
   out.version = readUnsigned(buf, pos, 1); pos = pos + 1
-  if out.version ~= 1 then return nil end
+  if out.version ~= PAYLOAD_VERSION then return nil end
   out.enabled = readUnsigned(buf, pos, 1) ~= 0; pos = pos + 1
   out.rx_bytes = readUnsigned(buf, pos, 4); pos = pos + 4
   out.rx_sync = readUnsigned(buf, pos, 4); pos = pos + 4
