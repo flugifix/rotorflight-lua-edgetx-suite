@@ -1880,6 +1880,7 @@ return {
         function_sbus_out = "SBus Out",
         function_fbus_out = "FBus Out",
         function_sport_input = "S.PORT Master",
+        function_srxl2_esc = "SRXL2 ESC",
         function_telem_frsky = "Telemetry FrSky",
         function_telem_smartport = "Telemetry SmartPort",
         function_telem_ibus = "Telemetry iBus",
