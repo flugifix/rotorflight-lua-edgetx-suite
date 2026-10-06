@@ -189,16 +189,15 @@ return {
         table = "Rate-Tabelle"
       },
       audio_events = { name = "Ereignisse" },
+      audio_events_connect = { name = "Beim Verbinden" },
       audio_events_arming = { name = "Arming" },
       audio_events_governor = { name = "Governor" },
       audio_events_voltage = { name = "Spannung" },
       audio_events_profiles = { name = "Profile" },
       audio_events_esc = { name = "ESC" },
       audio_events_adjustment = { name = "Einstellungen" },
-      audio_events_fuel = { name = "Kraftstoff" },
-      audio_events_battery = { name = "Akku" },
+      audio_events_fuel = { name = "SmartFuel" },
       audio_events_link = { name = "Link" },
-      audio_events_other = { name = "Sonstiges" },
       audio_volume = { name = "Lautstärke" },
       msp_speed = { name = "MSP-Geschwindigkeit" },
       api_tester = { name = "API Tester" },
@@ -829,8 +828,8 @@ return {
         section_link = "Linkqualität",
         section_adjustment = "Einstellungsansagen",
         section_fuel = "Kraftstoff",
-        section_battery = "Akku",
-        section_other = "Sonstiges",
+        section_smartfuel = "SmartFuel",
+        section_connect = "Beim Verbinden",
         section_alert_behaviour = "Verhalten der Warnungen",
         alert_repeat = "Wiederholung",
         alert_haptic = "Haptisch",
@@ -868,7 +867,7 @@ return {
         lq_warn = "Warnung (%)",
         lq_critical = "Kritisch (%)",
         adjustment_events = "Einstellungsansagen",
-        fuel_alerts = "Kraftstoff",
+        fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Ansage %",
         fuel_callout_only_10 = "Nur bei 10%",
         fuel_callout_default = "Nur bei 10%",
@@ -877,44 +876,73 @@ return {
         fuel_callout_20 = "Alle 20%",
         fuel_callout_25 = "Alle 25%",
         fuel_callout_50 = "Alle 50%",
-        battery_profile = "Akku-Kapazitaet",
-        initial_fuel = "Initiale Ansage Kraftstoff",
-        model_announcement = "Modellansage",
+        battery_profile = "Akkukapazität",
+        initial_fuel = "SmartFuel",
+        model_announcement = "Modellname",
+        help_model_announcement = "Spielt die nach dem Modell benannte Sounddatei SOUNDS/<Name>.wav einmal beim Verbinden. Fehlt die Datei auf der Karte, bleibt es still. Standard: aus.",
+        help_battery_profile = "Sagt die Kapazität des aktiven Akkuprofils in mAh beim Verbinden und bei jedem Profilwechsel; ohne eingestellte Kapazität die Profilnummer. Standard: an.",
+        help_pack_not_full = "Einmal beim Verbinden: warnt mit der Spannung pro Zelle, wenn sie unter Max Zellspannung (Setup > Power > Batterie) minus der Toleranz darunter liegt. Standard: aus.",
+        help_pack_not_full_margin = "Wie weit eine Zelle unter Max Zellspannung liegen darf und noch als voll gilt, in Millivolt pro Zelle (10 bis 500). Standard: 100 mV.",
+        help_initial_fuel = "Sagt den SmartFuel-Stand einmal nach dem Verbinden: beim ersten frischen Wert über 0, sonst nach ein paar Sekunden mit dem aktuellen Wert. Unabhängig vom Schalter der Seite SmartFuel. Standard: an.",
+        help_arming_flags = "Ansage beim Scharfschalten und beim Entschärfen des Modells. Standard: an.",
+        help_governor_state = "Sagt den Governor-Status bei einer Änderung, sobald der neue Zustand einen Moment anliegt. Darunter wählst du, welche Zustände gesprochen werden. Standard: an.",
+        help_governor_state_row = "Ob dieser Zustand gesagt wird, wenn der Governor ihn erreicht. Nur sichtbar, solange Governor-Status an ist. Standard: an.",
+        help_voltage_alert = "Sagt die Akkuspannung, wenn sie unter Warn Zellspannung (Setup > Power > Batterie) mal Zellenzahl fällt. Standard: an.",
+        help_voltage_hold = "So lange muss die Spannung unter dieser Schwelle bleiben, bevor sie gesagt wird; ein kurzer Einbruch unter Last bleibt still. 0 sagt sofort. Standard: 2 s.",
+        help_main_power_lost = "Ansage, wenn der Hauptakku weg ist und der Flugregler über BEC oder Stützakku weiterläuft, mit der BEC-Spannung, und erneut, wenn der Akku zurück ist. Standard: aus.",
+        help_voltage_repeat = "Wie oft eine Spannungswarnung spricht, solange ihr Zustand anhält, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal.\nGilt für Spannung, Hauptstrom verloren und den BEC/RX-Alarm aus Setup > Power > Alarme.",
+        help_voltage_haptic = "Ob der Sender bei Spannung, Hauptstrom verloren und dem BEC/RX-Alarm vibriert. Standard: an.",
+        help_pid_profile = "Sagt die Nummer des PID-Profils bei einem Wechsel. Standard: an.",
+        help_rate_profile = "Sagt die Nummer des Raten-Profils bei einem Wechsel. Standard: an.",
+        help_esc_temperature = "Warnt, wenn die ESC-Temperatur den Schwellwert darunter erreicht. Standard: aus.",
+        help_esc_threshold = "Die ESC-Temperatur, ab der gewarnt wird, in der Einheit aus Einstellungen > Lokalisierung. Mit verbundenem Modell bei diesem gespeichert (die Zeile zeigt [Modell]). Standard: 90 °C.",
+        help_mcu_temperature = "Warnt mit der Temperatur, wenn die MCU des Flugreglers den Schwellwert darunter erreicht. Standard: aus.",
+        help_mcu_threshold = "Die MCU-Temperatur, ab der gewarnt wird, in der Einheit aus Einstellungen > Lokalisierung. Gilt immer radioweit. Standard: 80 °C.",
+        help_esc_repeat = "Wie oft die ESC- oder MCU-Warnung spricht, solange die Temperatur am oder über dem Schwellwert bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal.",
+        help_esc_haptic = "Ob der Sender bei den ESC- und MCU-Temperaturwarnungen vibriert. Standard: an.",
+        help_adjustment_events = "Sagt den neuen Wert, wenn eine Adjustment-Funktion eine Einstellung ändert, sobald er eine Sekunde steht; mit dem Namen der Funktion, wenn es eine andere als zuletzt ist. Standard: aus.",
+        help_fuel_alerts = "Sagt den SmartFuel-Stand beim Unterschreiten der darunter gewählten Stufen und warnt bei 0 %. Standard: an.",
+        help_fuel_callout_percent = "Die Stufen, bei denen der fallende Stand gesagt wird, jede einmal. Nur bei 10% sagt nur die 10-%-Stufe. Standard: alle 10 %.",
+        help_fuel_repeat_below_zero = "Wie oft die Leer-Warnung spricht, solange der Stand bei 0 % bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Standard: einmal.",
+        help_fuel_haptic_below_zero = "Ob der Sender bei der Leer-Warnung vibriert. Standard: aus.",
+        help_lq_alert = "Sagt die Linkqualität in Prozent, wenn sie auf die Warn- oder kritische Stufe fällt. Die Erholung bleibt still, ebenso ein Empfänger ohne Linkqualität. Standard: aus.",
+        help_lq_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 70 %.",
+        help_lq_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 50 %.",
+        help_telemetry_lost = "Ansage, wenn der Flugregler des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst. Standard: aus.",
+        help_link_repeat = "Wie oft die Linkqualitäts-Warnung spricht, solange sie auf einer Stufe bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
+        help_link_haptic = "Ob der Sender bei der kritischen Linkqualität und bei Telemetrie verloren vibriert. Standard: an.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
         saved_title = "Gespeichert",
         saved_message = "Audio-Ereignisse gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen"
       },
+      settings_audio_events_connect = {
+        help_message = "Was beim Verbinden eines Modells einmal gesagt wird."
+      },
       settings_audio_events_arming = {
-        help_message = "Ansage, wenn das Modell scharf geschaltet oder entschaerft wird."
+        help_message = "Ansage beim Scharfschalten und Entschärfen."
       },
       settings_audio_events_governor = {
-        help_message = "Ansage des Governor-Status. Der Hauptschalter schaltet die Ansagen ein; darunter waehlst du, welche Zustaende gesprochen werden. Ein Zustand wird erst angesagt, wenn er einen Moment anliegt, damit die Zustaende eines Hochlaufs nicht nacheinander vorgelesen werden."
+        help_message = "Ansage des Governor-Status bei einer Änderung."
       },
       settings_audio_events_voltage = {
-        help_message = "Spannung: Ansage, wenn der Akku unter die Warnschwelle der Akkukonfiguration fällt.\nHaltezeit (s): So lange muss der Wert darunter bleiben; 0 meldet sofort.\nAkku nicht voll: Einmal beim Verbinden, wenn der Akku nicht voll ist.\nToleranz (mV/Zelle): So weit unter voll gilt ein Akku noch als voll.\nHauptstrom verloren: Der Akku ist weg, der Flugregler läuft über BEC oder Stützakku weiter.\nWiederholung, Haptisch: Wie oft eine Warnung wiederholt wird und ob der Sender vibriert."
+        help_message = "Warnungen zur Spannung des Flugakkus und zur Stromversorgung des Modells."
       },
       settings_audio_events_profiles = {
-        help_message = "Ansage des PID-Profils und des Raten-Profils bei einem Wechsel, mit der Nummer des neuen Profils."
+        help_message = "Ansage bei einem Wechsel des PID- oder Raten-Profils."
       },
       settings_audio_events_esc = {
-        help_message = "ESC-Temperatur: Ansage, wenn die ESC-Temperatur den Schwellwert darunter erreicht.\nSchwellwert: In der Einheit aus Einstellungen > Lokalisierung. Mit verbundenem Flugregler beim Modell gespeichert (die Zeile zeigt dann [Modell]), sonst radioweit.\nMCU-Temperatur, Schwellwert: Dasselbe für die MCU des Flugreglers; dieser Schwellwert gilt immer radioweit.\nWiederholung, Haptisch: Wie oft eine der beiden Warnungen wiederholt wird, solange es zu heiß ist, und ob der Sender vibriert."
+        help_message = "Temperaturwarnungen für den ESC und die MCU des Flugreglers."
       },
       settings_audio_events_adjustment = {
-        help_message = "Ansage eines Werts, der ueber eine Adjustment-Funktion geaendert wurde, so wie der Flugregler ihn meldet."
+        help_message = "Ansage von Werten, die über die Adjustment-Funktionen des Flugreglers geändert werden."
       },
       settings_audio_events_fuel = {
-        help_message = "Ansage des Restkraftstoffs beim Unterschreiten der gewaehlten Stufen. Ganz unten legt Wiederholung fest, wie oft die Leer-Warnung unter 0% spricht, und Haptisch, ob der Sender dabei vibriert. Die absteigenden Ansagen wiederholen sich nicht: jede Stufe wird einmal beim Unterschreiten gesagt."
-      },
-      settings_audio_events_battery = {
-        help_message = "Ansage der Akku-Kapazitaet bei einem Wechsel des Akkuprofils und des Kraftstoffstands einmal beim Verbinden des Modells."
+        help_message = "Ansagen des SmartFuel-Stands, solange das Modell verbunden ist.\nDen Wert berechnet der Flugregler, wenn SmartFuel dort an ist (Setup > Power > SmartFuel, ab MSP API 12.0.9).\nSonst berechnet ihn der Sender aus der lokalen Quelle in Setup > Power > Einstellungen."
       },
       settings_audio_events_link = {
-        help_message = "Linkqualität: Ansage der Linkqualität, wenn sie auf eine Stufe fällt; die Erholung bleibt still, ebenso ein Empfänger, der keine meldet.\nWarnung (%), Kritisch (%): Die beiden Stufen.\nTelemetrie verloren: Ansage, wenn der Flugcontroller des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst.\nWiederholung, Haptisch: Wie oft die Linkqualitäts-Warnung wiederholt wird und ob der Sender vibriert (nur kritische Stufe und Telemetrie verloren)."
-      },
-      settings_audio_events_other = {
-        help_message = "Ansage des Modellnamens beim Verbinden. Die Ansage ist eine WAV-Datei mit dem Namen des Modells im Ordner SOUNDS."
+        help_message = "Warnungen zur Funkverbindung und zur Telemetrie des Flugreglers."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",

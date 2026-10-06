@@ -260,6 +260,10 @@
 - **Urban's battery picker shows each pack's cycle count, and gives the packs the room NO BATTERY took (`widgets/dashboard/themes/urban/battpick.lua`, `pickview.lua`, `docs/dashboard/urban-theme.md`)**:
   - The line under a pack's name reads capacity, cycles and battery profile, e.g. *1100 mAh - 7 cycles - P2*; the profile is left out where no board profile matches the pack. The cycle count is the registry's, counted up by the pack's first flight.
   - *NO BATTERY* stays in its own row at the foot, but holds one line: it is as tall as the close box, drawn as an outline, and marked in the ok colour where it is the answer in force rather than filled. The height it no longer takes goes to the pack cells.
+- **Settings > Audio > Events: an *On Connect* page, *Fuel* becomes *SmartFuel*, and a `?` on every row (`app/pages/settings/audio/events/`, `ui/controls.lua`, `docs/audio/events.md`)**:
+  - A new *On Connect* page holds everything said once when a model connects: *Model Name*, *Pack Not Full* with its *Margin*, *Battery Capacity*, and *SmartFuel* (the level spoken once after connecting). The *Battery* and *Other* pages are gone, and *Pack Not Full* has left the *Voltage* page; the categories go from ten to nine. The settings keep their keys in the preferences file, so nothing a pilot has set changes.
+  - The *Fuel* page and its master switch are called *SmartFuel*, the name of the feature on *Setup > Power* that produces the value it announces.
+  - Every row on the nine pages has a `?` button with a short explanation of that row; the page help says what the page is for. `Controls.appendRadioSwitch` takes the same optional `helpText` / `helpTitle` / `onHelp` as the number and choice controls; a switch without them is drawn as before.
 
 ### Bug Fixes & Improvements
 - **ERASE BLACKBOX on the dashboard's quick menu asks before it erases (`widgets/dashboard/fullscreen_menu.lua`, `widgets/dashboard/views.lua`, `widgets/dashboard/confirm_menu.lua`, `i18n/en.lua`, `i18n/de.lua`, `docs/dashboard/quick-menu.md`, `docs/developer/dashboard-views.md`, `bin/dashboard/verify_erase_confirm.lua`) (fixes #108)**:
