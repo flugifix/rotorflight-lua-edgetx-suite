@@ -383,6 +383,8 @@ end
 --   labelText            – descriptive label on the left
 --   value                – boolean: true = ON
 --   onToggle             – press callback (no arguments)
+--   opts                 – optional table: active, rowH, and helpText / helpTitle / onHelp,
+--                          which add the same `?` button appendNumberField draws
 
 local TOGGLE_W       = 64
 
@@ -433,6 +435,16 @@ function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
 
   local barW   = TOGGLE_W
   local barX   = x + w - barW - 15
+  -- An optional `?` button, the one appendNumberField and appendComboSelect draw. It sits where
+  -- theirs does, so the buttons of a page that mixes all three controls form one column, and the
+  -- toggle moves left to make room. A caller that passes no help text gets the row it always had.
+  local helpText = opts.helpText
+  local helpTitle = opts.helpTitle
+  local hasHelp = type(helpText) == "string" and helpText ~= ""
+  local helpX = x + w - 10 - HELP_BTN_W
+  if hasHelp then
+    barX = helpX - HELP_BTN_GAP - barW
+  end
   local trackX = barX
   local rowH   = opts.rowH or Controls.ROW_H
   local trackY = Controls.controlY(y, rowH)
@@ -480,6 +492,24 @@ function Controls.appendRadioSwitch(children, x, y, w, labelText, value,
       end
     end
   }
+
+  if hasHelp then
+    children[#children + 1] = {
+      type = "button",
+      x = helpX,
+      y = y + math.floor((rowH - HELP_BTN_H) / 2),
+      w = HELP_BTN_W,
+      h = HELP_BTN_H,
+      text = "?",
+      press = function()
+        if type(opts.onHelp) == "function" then
+          opts.onHelp(helpText, helpTitle)
+        else
+          showHelpAlert(helpText, helpTitle)
+        end
+      end
+    }
+  end
 
   children[#children + 1] = {
     type   = "rectangle",
