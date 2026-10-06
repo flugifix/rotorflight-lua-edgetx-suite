@@ -55,7 +55,7 @@ stopped answering.
 
 With *Urban* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
-allows. Three places on the screen open a page over it, and a fourth opens the suite's tool:
+allows. Four places on the screen open a page over it, and a fifth opens the suite's tool:
 
 - **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do the
   page keys and TELE, left at their defaults.
@@ -71,6 +71,17 @@ allows. Three places on the screen open a page over it, and a fourth opens the s
   the skipped frames, the air rate beside the title and the rate floor at the foot. The *Link view
   switch* on the *Top Bar* page opens the same page while the switch is in the chosen position, in
   full screen and in the widget's zone alike; in the zone it only shows.
+- **The battery gauge** opens the *Battery* page. At the top, the cell voltage as a bar with the
+  figure beside it, on a scale marked at the flight controller's own minimum, warning and full
+  cell voltage, which are written out under it; the bar turns yellow at the warning voltage and red
+  at the minimum. Below it the pack as a battery laid on its side, filling towards the terminal in
+  the same steps and colours as the gauge on the flight screen, with the fuel figure in the middle,
+  the cell count at the left end and the used capacity at the right. At the foot, the pack voltage,
+  the lowest cell voltage of the flight and the reserve the fuel figure keeps back. The cell
+  voltages are the pack voltage divided by the cell count, as on the flight screen: no telemetry
+  carries each cell's own voltage. The limits and the reserve are read from the flight controller
+  on connecting, and read *-* until they have been. Like every other place that takes a press, the
+  gauge has the radio's frame around it while *Frames on tap areas* is on.
 
 Urban draws these pages, the quick menu and the battery picker in the look of the screen they
 open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's

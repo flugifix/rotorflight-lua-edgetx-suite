@@ -28,7 +28,7 @@ A theme is **red** where:
 | --- | --- |
 | no press opens the quick menu (`openView:menu`, or a menu built through `ctx.menu`) | the menu is where ERASE BLACKBOX, BATTERY and the battery profiles are, and a touch radio has no other way to it |
 | nothing leaves fullscreen | a way out is a press with `exitFullscreen`, or `ctx.keys.exit = "exitFullscreen"` — a short press on RTN, which every radio has — or `fullscreenExit = "longRtn"` declared in `init.lua`: the author relies on a long press on RTN, which always leaves fullscreen |
-| a `rectangle` is drawn over a node that has a press | built in fullscreen, a rectangle takes the press and hands it to its parent, so it swallows every press that lands on it |
+| a `rectangle` is drawn over a node that has a press | built in fullscreen, a rectangle takes the press and hands it to its parent, so it swallows every press that lands on it. A rectangle among the press node's own `children` is not over it: its parent IS the button, which the press then reaches |
 | a press or a `ctx.keys` entry names an unknown action or view | the widget ignores it, so the control or the key does nothing |
 | a `ctx.keys` entry is not `exit`, `pageDown`, `pageUp`, `mdl`, `sys` or `tele` | the widget answers no other key, so the binding does nothing |
 | a build raises or does not return a node list | |
