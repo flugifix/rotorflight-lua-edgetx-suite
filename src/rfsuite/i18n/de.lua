@@ -151,6 +151,7 @@ return {
       dashboard_settings = { name = "Einstellungen" },
       dashboard_overrides = { name = "Modell-Einstellungen" },
       dashboard_inflight = { name = "In-Flight-Tuning" },
+      dashboard_quick_menu = { name = "Schnelleinstellungen" },
       profile = { name = "Profil" },
       safety = { name = "Sicherheit" },
       startup = { name = "Start" },
@@ -2461,6 +2462,15 @@ return {
         help_pointer = "Schalter, Kanäle, Variablen und Trimmungen stehen unter Einstellungen > Dashboard > In-Flight-Tuning.",
         saved_title = "Gespeichert",
         saved_message = "In-Flight-Tuning-Einstellungen gespeichert",
+        save_error_title = "Fehler",
+        save_error_message = "Speichern fehlgeschlagen"
+      },
+      settings_dashboard_quick_menu = {
+        place = "Position %d",
+        none = "-",
+        help_message = "Welche Einträge das Menü Schnelleinstellungen des Dashboards zeigt, von oben.\nPosition 1, 2, ...: der Eintrag an dieser Stelle; der Strich lässt sie leer. Ein doppelt gewählter Eintrag zählt an seiner ersten Stelle.\nEin gewählter Eintrag bleibt verborgen, wo er nicht passt, wie im Menü. Mit der Standard-Reihenfolge gespeichert, folgt das Menü dem Standard.",
+        saved_title = "Gespeichert",
+        saved_message = "Schnelleinstellungen gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen"
       },

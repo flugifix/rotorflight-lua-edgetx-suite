@@ -381,6 +381,8 @@ local manifest = {
       pages = {
         { id = "dashboard_theme", title = "@i18n(app.modules.dashboard_theme.name)@", menuId = "settings_dashboard_theme_page" },
         { id = "dashboard_settings", title = "@i18n(app.modules.dashboard_settings.name)@", menuId = "settings_dashboard_settings_menu", icon = "@pages/settings/dashboard/settings/icon.png" },
+        { id = "dashboard_quick_menu", title = "@i18n(app.modules.dashboard_quick_menu.name)@",
+          menuId = "settings_dashboard_quick_menu_page", icon = "@pages/settings/shortcuts/icon.png" },
         -- The other half of the same preview feature, and it carries the same condition:
         -- one preference key decides whether in-flight tuning is on the radio at all.
         { id = "dashboard_inflight", title = "@i18n(app.modules.dashboard_inflight.name)@",
@@ -403,6 +405,10 @@ local manifest = {
     },
     settings_dashboard_inflight_page = {
       title = "@i18n(app.modules.dashboard_inflight.name)@",
+      pages = {}
+    },
+    settings_dashboard_quick_menu_page = {
+      title = "@i18n(app.modules.dashboard_quick_menu.name)@",
       pages = {}
     },
     settings_dashboard_settings_page = {

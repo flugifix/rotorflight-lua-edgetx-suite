@@ -40,11 +40,27 @@ local function pressFor(widget, work, after)
   end
 end
 
+-- Which entries the quick menu shows and in which order is the pilot's to choose, on
+-- Settings > Dashboard > Quick Settings; the ids, the default and the stored form are in
+-- quick_menu_order.lua, which that page reads as well.
+local Order = requireModule("widgets/dashboard/quick_menu_order.lua")
+
 -- The menus the widget offers, each a list of entry ids in the order they are drawn. The quick
 -- menu is the one there is; a theme draws it, or takes entries out of it by id, and adds none.
+-- `quick` here is the menu's default; what is drawn is the pilot's list (`quickIds` below).
 M.LISTS = {
-  quick = { "erase_blackbox", "inflight_tuning", "battery_pick", "tool", "battery_profile" },
+  quick = Order and Order.DEFAULT or {},
 }
+
+-- The quick menu's ids as the pilot has arranged them, read from the preferences of this pass,
+-- so a save on the settings page reaches the next build of the menu with the widget's reload of
+-- the preferences file.
+local function quickIds(widget)
+  if Order == nil then return M.LISTS.quick end
+  local prefs = widget.preferences
+  local dashboard = type(prefs) == "table" and prefs.dashboard or nil
+  return Order.ids(type(dashboard) == "table" and dashboard[Order.KEY] or nil)
+end
 
 -- ---------------------------------------------------------------------------
 -- Work that talks to the flight controller
@@ -169,7 +185,7 @@ local function batteryPickOptions(widget, t)
   return options
 end
 
--- The entries, one builder each, in the order the quick menu draws them. A caller that wants one
+-- The entries, one builder each, in the quick menu's default order. A caller that wants one
 -- entry -- the battery picker wants its own record, and a theme one entry by its id -- builds that
 -- one and not all of them, their translations and closures included.
 local BUILD = {}
@@ -391,11 +407,18 @@ end
 -- The title is resolved here, and it is resolved from a complete literal key: the translation
 -- precompiler rewrites what it can read, and a key assembled from parts ships the English
 -- fallback in every language with nothing saying so.
+--
+-- The rows are the pilot's: the entries the pilot has put in the quick menu, in that order
+-- (quickIds).
+-- Whether a row is drawn is still its `visibleWhen`, asked on top of that choice.
 function M.entries(widget)
   local t = translator(widget)
   local list = {}
-  local ids = M.LISTS.quick
-  for i = 1, #ids do list[i] = BUILD[ids[i]](widget, t) end
+  local ids = quickIds(widget)
+  for i = 1, #ids do
+    local build = BUILD[ids[i]]
+    if build ~= nil then list[#list + 1] = build(widget, t) end
+  end
   return list
 end
 
@@ -407,15 +430,16 @@ function M.entry(widget, id)
 end
 
 --- The entries of the named list in `M.LISTS`, in its order; an empty list for an unknown name.
+--- `quick` is the pilot's list, the one the quick menu draws.
 function M.list(widget, name)
+  if name == "quick" then return M.entries(widget) end
   local ids = M.LISTS[name]
   local out = {}
   if type(ids) ~= "table" then return out end
-  local byId = {}
-  local all = M.entries(widget)
-  for i = 1, #all do byId[all[i].id] = all[i] end
+  local t = translator(widget)
   for i = 1, #ids do
-    if byId[ids[i]] ~= nil then out[#out+1] = byId[ids[i]] end
+    local build = BUILD[ids[i]]
+    if build ~= nil then out[#out+1] = build(widget, t) end
   end
   return out
 end
@@ -451,16 +475,17 @@ end
 
 --- The menu's own records for a list a caller hands in, in its order: each item replaced by the
 --- record of its `id`, and an item whose id the menu does not have left out.
+--
+-- Every entry the menu can build counts, not only the ones the pilot has put in the quick menu:
+-- a theme that names an entry asks for that entry, as `M.entry` answers it.
 function M.coreList(widget, list)
   local out = {}
   if type(list) ~= "table" then return out end
-  local byId = {}
-  local all = M.entries(widget)
-  for i = 1, #all do byId[all[i].id] = all[i] end
+  local t = translator(widget)
   for i = 1, #list do
     local item = list[i]
-    local core = type(item) == "table" and byId[item.id] or nil
-    if core ~= nil then out[#out+1] = core end
+    local build = type(item) == "table" and BUILD[item.id] or nil
+    if build ~= nil then out[#out+1] = build(widget, t) end
   end
   return out
 end

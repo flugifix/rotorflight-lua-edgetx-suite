@@ -871,16 +871,19 @@ end
 --                              `sys`, `tele`, each an action; read by `key()` while the base
 --                              layer shows
 --   ctx.condition(name)        `condition(name, widget)`
---   ctx.entries()              the quick menu's entries, `fullscreen_menu.entries(widget)`
+--   ctx.entries()              the quick menu's entries, `fullscreen_menu.entries(widget)`: the
+--                              ones the pilot has put in it, in the pilot's order
 --   ctx.menu(children, list)   the quick menu's builder, appending to `children`; `list`
 --                              defaults to the menu's own entries, and one handed in chooses
 --                              and orders them by id -- it cannot bring a press of its own
 --
 -- and, for a theme that draws the entries itself -- the theme draws, the widget acts:
 --
---   ctx.entry(id)              the entry `id` of the menu's records, or nil
+--   ctx.entry(id)              the entry `id` of the menu's records, or nil -- whether or not
+--                              the pilot has put it in the quick menu
 --   ctx.list(name)             the records of a named list (`fullscreen_menu.LISTS`), in its
---                              order; an empty list for a name there is none of
+--                              order -- for "quick" the pilot's list; an empty list for a name
+--                              there is none of
 --   ctx.visible(entry)         whether the entry is offered now, as the quick menu asks it
 --   ctx.run(entry, option, after)
 --                              the entry's work, or the option's, and then what follows it --

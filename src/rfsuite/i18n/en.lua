@@ -151,6 +151,7 @@ return {
       dashboard_settings = { name = "Settings" },
       dashboard_overrides = { name = "Per-Model Settings" },
       dashboard_inflight = { name = "In-Flight Tuning" },
+      dashboard_quick_menu = { name = "Quick Settings" },
       profile = { name = "Profile" },
       safety = { name = "Safety" },
       startup = { name = "Startup" },
@@ -2433,6 +2434,15 @@ return {
         help_pointer = "The switch, the channels, the variables and the trims are in Settings > Dashboard > In-Flight Tuning.",
         saved_title = "Saved",
         saved_message = "In-flight tuning settings saved",
+        save_error_title = "Error",
+        save_error_message = "Save failed"
+      },
+      settings_dashboard_quick_menu = {
+        place = "Position %d",
+        none = "-",
+        help_message = "Which entries the dashboard's Quick Settings menu shows, from the top.\nPosition 1, 2, ...: the entry in that place; the dash leaves it empty. An entry chosen twice counts at its first place.\nA chosen entry still hides where it does not apply, as in the menu. Saved with the default order, the menu follows the default.",
+        saved_title = "Saved",
+        saved_message = "Quick Settings saved",
         save_error_title = "Error",
         save_error_message = "Save failed"
       },
