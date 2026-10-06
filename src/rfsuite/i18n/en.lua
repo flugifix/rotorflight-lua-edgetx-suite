@@ -2149,7 +2149,9 @@ return {
         rate_profile = "Rate Profile",
         help_title = "Select Profile",
         help_p1 = "Switch the active PID and Rate profiles of your flight controller.",
-        help_p2 = "The display updates automatically if profiles are changed via transmitter switches."
+        help_p2 = "The display updates automatically if profiles are changed via transmitter switches.",
+        msp_unavailable = "No connection to the flight controller.",
+        save_in_progress = "The previous profile change is still being sent."
       },
       diagnostics_session_logs = {
         no_logs = "No logs available",

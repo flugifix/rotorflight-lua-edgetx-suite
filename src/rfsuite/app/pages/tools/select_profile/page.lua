@@ -16,6 +16,8 @@ local Sensors = nil
 local Profile = nil
 local t = nil
 
+local DEFAULT_PROFILE_COUNT = 6
+
 local state = {
   loaded = false,
   isEditing = false,
@@ -71,6 +73,42 @@ end
 local function getSession()
   local root = _G and _G.rfsuite
   return root and root.session or nil
+end
+
+-- How many PID and rate profiles the board has depends on its flash size: 6 and 6, 3 and 6, or
+-- 2 and 3. MSP_STATUS reports both, and this page and tasks/events/common/status.lua put them in
+-- the session. Before that reply there is no field; a zero can only come from a short reply.
+-- Neither is a profile the pilot can pick, so both fall back to six.
+local function profileCount(field)
+  local session = getSession()
+  local count = session and tonumber(session[field]) or nil
+  if count and count >= 1 then return count end
+  return DEFAULT_PROFILE_COUNT
+end
+
+-- MSP_SELECT_SETTING does not refuse an index the board does not have: it switches to the first
+-- profile and answers as a success. So an index is never handed to a list or a write beyond the
+-- profiles the board reports.
+local function clampIndex(index, count)
+  local value = tonumber(index) or 0
+  if value < 0 then return 0 end
+  if value > count - 1 then return count - 1 end
+  return value
+end
+
+local function clampSelection()
+  state.uiPidProfileIndex = clampIndex(state.uiPidProfileIndex, profileCount("pid_profile_count"))
+  state.uiRateProfileIndex = clampIndex(state.uiRateProfileIndex, profileCount("control_rate_profile_count"))
+end
+
+local function reportRefusal(ctx, message)
+  local report = ctx and ctx.reportSave
+  if type(report) ~= "function" then return end
+  report({
+    ok = false,
+    title = pageText(ctx and ctx.i18n, "help_title", "Select Profile"),
+    message = message
+  })
 end
 
 local function syncFromSensors()
@@ -193,12 +231,24 @@ function M.onReload()
 end
 
 function M.onSave(ctx)
-  if state.isSaving then return false end
-  
+  ensureDeps()
+  local i18n = ctx and ctx.i18n or state.i18n
+
+  if state.isSaving then
+    reportRefusal(ctx, pageText(i18n, "save_in_progress",
+      "The previous profile change is still being sent."))
+    return false
+  end
+
   local msp = MspRuntime
   local mspState = msp and type(msp.getState) == "function" and msp.getState()
-  if not mspState or not mspState.queue then return false, "MSP link unavailable" end
+  if not mspState or not mspState.queue then
+    reportRefusal(ctx, pageText(i18n, "msp_unavailable",
+      "No connection to the flight controller."))
+    return false
+  end
 
+  clampSelection()
   state.isSaving = true
   
   logMsg("Saving changes: Rate=" .. tostring(state.uiRateProfileIndex + 1) .. ", PID=" .. tostring(state.uiPidProfileIndex + 1))
@@ -276,9 +326,14 @@ function M.build(ctx)
 
   local cursorY = y + 10
   
+  -- Both lists offer the profiles the board reports, counted separately for the two kinds.
+  local pidCount = profileCount("pid_profile_count")
+  local rateCount = profileCount("control_rate_profile_count")
+  clampSelection()
+
   -- PID Profile Selector
   local pidOptions = {}
-  for i = 1, 6 do pidOptions[i] = { value = i - 1, label = tostring(i) } end
+  for i = 1, pidCount do pidOptions[i] = { value = i - 1, label = tostring(i) } end
   
   cursorY = cursorY + Controls.appendComboSelect(
     children, x, cursorY, w,
@@ -295,7 +350,7 @@ function M.build(ctx)
   
   -- Rate Profile Selector
   local rateOptions = {}
-  for i = 1, 6 do rateOptions[i] = { value = i - 1, label = tostring(i) } end
+  for i = 1, rateCount do rateOptions[i] = { value = i - 1, label = tostring(i) } end
   
   cursorY = cursorY + Controls.appendComboSelect(
     children, x, cursorY, w,
