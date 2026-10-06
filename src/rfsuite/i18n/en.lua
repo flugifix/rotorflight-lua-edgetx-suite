@@ -3012,6 +3012,9 @@ return {
       -- change it sent.
       urban_quick_settings = "Quick Settings",
       urban_which_battery = "Which battery?",
+      -- A pack's line on that page: its cycle count, and the battery profile a pick selects.
+      urban_pick_cycles = "%d cycles",
+      urban_pick_profile = "P%d",
       urban_profile_tuning = "Profile & Tuning",
       urban_active = "Active",
       urban_not_available = "Not available",

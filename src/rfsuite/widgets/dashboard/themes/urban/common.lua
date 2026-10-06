@@ -151,6 +151,8 @@ M.T = {
   -- theme's own menu says about the work it ran, and the link view's row names.
   view_menu = "@i18n(widgets.dashboard.urban_quick_settings)@",
   view_pick = "@i18n(widgets.dashboard.urban_which_battery)@",
+  pick_cycles = "@i18n(widgets.dashboard.urban_pick_cycles)@",
+  pick_profile = "@i18n(widgets.dashboard.urban_pick_profile)@",
   view_tools = "@i18n(widgets.dashboard.urban_profile_tuning)@",
   blackbox = "@i18n(app.modules.blackbox.name)@",
   active = "@i18n(widgets.dashboard.urban_active)@",
