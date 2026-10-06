@@ -512,13 +512,14 @@ temperature limit is converted for a radio set to Fahrenheit — are described o
 
 ### Facts on `state` that are not a box source
 
-A free-form module is handed the widget state and may read more than the value list above. One
-of those is worth naming, because nothing else in the tree says it and a theme that works it out
-for itself will not agree with the announcement that speaks it:
+A free-form module is handed the widget state and may read more than the value list above. Two
+of those are worth naming, because nothing else in the tree says them -- and a theme that works
+the first out for itself will not agree with the announcement that speaks it:
 
 | Field | What it says |
 | --- | --- |
 | `state.mainPowerLost` | The main pack is gone while the flight controller is still answering — it reads as gone rather than merely low, it had read a real voltage earlier in this connection, and a BEC voltage is there beside it. It is the test `lib/audio.lua` makes for its *Main power lost* announcement, decided in one place (`Audio.mainPowerLost`) and published here; it does **not** depend on that announcement being switched on. A theme drawing it would show the voltage slot as running on the reserve and the fuel reading as unknown, because neither is being measured any more. It is refreshed on the telemetry cadence, so like every other reading it stands still on a post-flight screen whose link is gone. |
+| `state.eventLog` | What changed on the craft and when: the last thirty transitions, oldest first, each `{ kind, value, text, level, time }`. `kind` is `"armed"`, `"disarmed"`, `"connected"`, `"disconnected"`, `"governor"` or `"esc"`; `value` is the governor state index for `"governor"`; `text` is the speed controller's own verdict for `"esc"`, already in the package's language, and nil otherwise, so the theme names every other kind in its own words; `level` is 1 information, 2 warning, 3 error (the speed controller's levels, which `"esc"` carries and a disconnect takes as 2); `time` is the radio's clock as `HH:MM:SS`, empty on a radio without one. A connection's first governor state is its starting point and is not an entry; its speed controller's first verdict is. An `"esc"` entry exists only while the active theme declares `esc_status_live` — the history reads the verdict the snapshot already resolved and never the sensors. The table is never nil, is kept across connections, and changes only on a transition, so a closure reading the newest entries (`log[#log]`, `log[#log - 1]`, ...) reads a few fields per frame and allocates nothing. |
 
 **`source` is read as a literal, once, at theme load.** When a theme is loaded the widget walks
 its boxes and collects every `source` that is a string into the list the derived snapshot is
