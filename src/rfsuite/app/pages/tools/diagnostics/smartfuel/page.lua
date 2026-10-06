@@ -15,6 +15,7 @@ local Sensors = nil
 local SmartfuelApi = nil
 local SmartFuelReserve = nil
 local LoadingOverlay = nil
+local Log = nil
 local t = nil
 
 local state = {
@@ -92,6 +93,7 @@ local function ensureDeps()
   if not Sensors then Sensors = loadModule("lib/sensors.lua") end
   if not SmartfuelApi then SmartfuelApi = loadModule("tasks/msp/api/smartfuel_config.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
+  if not Log then Log = loadModule("lib/log.lua") end
   if not t then t = Common and Common.pageT("diagnostics_smartfuel") or nil end
   if not SmartFuelReserve then SmartFuelReserve = loadModule("lib/smartfuel_reserve.lua") end
 end
@@ -196,7 +198,7 @@ local function requestData()
     return false 
   end
   
-  widgetLog("requestData: starting load", "info")
+  widgetLog("requestData: starting load")
   state.loading = true
   state.tasksTotal = 2
   state.tasksDone = 0
@@ -209,7 +211,7 @@ local function requestData()
     if state.tasksDone >= state.tasksTotal then
       state.loading = false
       state.progress = 1
-      widgetLog("requestData: finished", "info")
+      widgetLog("requestData: finished")
     end
     if type(state.requestRebuild) == "function" then
       state.requestRebuild()
@@ -459,6 +461,7 @@ function M.closePage()
   MspRuntime = nil
   Sensors = nil
   SmartfuelApi = nil
+  Log = nil
   t = nil
 end
 

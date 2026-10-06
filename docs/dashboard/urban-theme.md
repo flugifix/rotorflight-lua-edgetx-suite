@@ -60,7 +60,7 @@ allows. Three places on the screen open a page over it, and a fourth opens the s
 - **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do the
   page keys and TELE, left at their defaults.
 - **The tool button** beside it opens the suite's tool inside the widget, as the quick menu's
-  *RFSUITE TOOL* does; so does SYS, left at its default. The tool opens only while the model is
+  *MAIN MENU* does; so does SYS, left at its default. The tool opens only while the model is
   disarmed: while it is armed the button is drawn grey and a press does nothing.
 - **The profile row** of the left panel (PID, rate and battery profile) opens *Profile & Tuning*:
   the in-flight tuning surface, or a note that it is not available now, and the model's battery
@@ -107,8 +107,8 @@ setting.
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
-| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Quick menu* (default), *Profile & Tuning*, *ELRS link page*, *RFSuite tool* or *Leave full screen*. |
-| Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *RFSuite tool*, TELE *Quick menu*. |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Suite: Main menu* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. |
+| Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *Suite: Main menu*, TELE *Suite: Quick menu*. |
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the
 model — the cell count times the flight controller's minimum cell voltage — and the gauge, the

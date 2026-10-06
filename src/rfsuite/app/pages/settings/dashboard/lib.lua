@@ -16,9 +16,17 @@ do
   end
 end
 
-local function debugLog(message)
-  if Log then
-    Log.emit("dashboard.lib", DEBUG_PREFIX .. tostring(message), "debug")
+-- Whether a debug line would be written, asked once where a public function starts, so that a
+-- line is formatted only when the log level lets it out. The callers hand over the pieces.
+local debugOn = false
+
+local function refreshDebug()
+  debugOn = Log ~= nil and Log.wanted("debug") == true
+end
+
+local function debugLog(fmt, ...)
+  if debugOn then
+    Log.emit("dashboard.lib", DEBUG_PREFIX .. string.format(fmt, ...), "debug")
   end
 end
 
@@ -103,12 +111,12 @@ local function themePages(declared, loadBasePath, folder)
       end
       pages[#pages + 1] = { id = id, title = title, iconPath = iconPath }
     else
-      debugLog("page entry dropped folder=" .. tostring(folder) .. " index=" .. tostring(i) .. " id=" .. tostring(id))
+      debugLog("page entry dropped folder=%s index=%s id=%s", folder, i, id)
     end
   end
 
   if #pages < MIN_THEME_PAGES then
-    debugLog("pages ignored folder=" .. tostring(folder) .. " valid=" .. tostring(#pages))
+    debugLog("pages ignored folder=%s valid=%s", folder, #pages)
     return nil
   end
 
@@ -143,17 +151,17 @@ end
 local function loadThemeIndex()
   local ok, chunk = pcall(loadScript, INDEX_PATH, "t")
   if not ok or type(chunk) ~= "function" then
-    debugLog("theme index missing path=" .. tostring(INDEX_PATH))
+    debugLog("theme index missing path=%s", INDEX_PATH)
     return nil
   end
 
   local loadedOk, index = pcall(chunk)
   if not loadedOk or type(index) ~= "table" then
-    debugLog("theme index invalid path=" .. tostring(INDEX_PATH))
+    debugLog("theme index invalid path=%s", INDEX_PATH)
     return nil
   end
 
-  debugLog("theme index loaded entries=" .. tostring(#index))
+  debugLog("theme index loaded entries=%s", #index)
   return index
 end
 
@@ -175,7 +183,7 @@ local function loadIndexedThemes(themes, nextId)
 
     if loadBasePath then
       nextId = appendTheme(themes, nextId, entry, loadBasePath)
-      debugLog("indexed theme name=" .. tostring(entry.name) .. " source=" .. tostring(entry.source) .. " folder=" .. tostring(entry.folder))
+      debugLog("indexed theme name=%s source=%s folder=%s", entry.name, entry.source, entry.folder)
     end
   end
 
@@ -186,7 +194,7 @@ local function collectDirectoryEntries(listBasePath)
   if type(dir) == "function" then
     local iterator = dir(listBasePath)
     if type(iterator) ~= "function" then
-      debugLog("dir unavailable for path=" .. tostring(listBasePath))
+      debugLog("dir unavailable for path=%s", listBasePath)
       return nil
     end
 
@@ -194,36 +202,36 @@ local function collectDirectoryEntries(listBasePath)
     for name in iterator do
       entries[#entries + 1] = name
     end
-    debugLog("dir entries=" .. tostring(#entries) .. " path=" .. tostring(listBasePath))
+    debugLog("dir entries=%s path=%s", #entries, listBasePath)
     return entries
   end
 
   if system and system.listFiles then
     local entries = system.listFiles(listBasePath)
-    debugLog("listFiles fallback type=" .. tostring(type(entries)) .. " path=" .. tostring(listBasePath))
+    debugLog("listFiles fallback type=%s path=%s", type(entries), listBasePath)
     return entries
   end
 
-  debugLog("no directory enumeration API available for path=" .. tostring(listBasePath))
+  debugLog("no directory enumeration API available for path=%s", listBasePath)
   return nil
 end
 
 local function scanThemes(listBasePath, loadBasePath, source, themes, nextId)
-  debugLog("scan start source=" .. tostring(source) .. " list=" .. tostring(listBasePath) .. " load=" .. tostring(loadBasePath))
+  debugLog("scan start source=%s list=%s load=%s", source, listBasePath, loadBasePath)
   local entries = collectDirectoryEntries(listBasePath)
   if type(entries) ~= "table" then
-    debugLog("directory enumeration returned " .. type(entries) .. " for source=" .. tostring(source))
+    debugLog("directory enumeration returned %s for source=%s", type(entries), source)
     return nextId
   end
 
-  debugLog("directory entries=" .. tostring(#entries) .. " for source=" .. tostring(source))
+  debugLog("directory entries=%s for source=%s", #entries, source)
 
   for i = 1, #entries do
     local rawEntry = entries[i]
     if type(rawEntry) == "string" and rawEntry ~= "" then
       local trimmed = string.gsub(rawEntry, "[/\\]+$", "")
       local folder = string.match(trimmed, "([^/\\]+)$") or trimmed
-      debugLog("entry raw=" .. tostring(rawEntry) .. " folder=" .. tostring(folder))
+      debugLog("entry raw=%s folder=%s", rawEntry, folder)
       if folder ~= "." and folder ~= ".." and folder ~= "" and not string.match(folder, "%.%a+$") then
         local initPath = loadBasePath .. folder .. "/init.lua"
         local ok, chunk = pcall(loadScript, initPath, "t")
@@ -247,13 +255,13 @@ local function scanThemes(listBasePath, loadBasePath, source, themes, nextId)
               pages = themePages(initTable.pages, loadBasePath, folder),
               standalone = initTable.standalone == true
             }
-            debugLog("accepted theme name=" .. tostring(initTable.name) .. " path=" .. tostring(source) .. "/" .. tostring(folder) .. " configure=" .. tostring(initTable.configure) .. " configurePath=" .. tostring(configurePath))
+            debugLog("accepted theme name=%s path=%s/%s configure=%s configurePath=%s", initTable.name, source, folder, initTable.configure, configurePath)
             nextId = nextId + 1
           else
-            debugLog("init invalid for folder=" .. tostring(folder) .. " initOk=" .. tostring(initOk) .. " type=" .. type(initTable))
+            debugLog("init invalid for folder=%s initOk=%s type=%s", folder, initOk, type(initTable))
           end
         else
-          debugLog("loadScript failed for initPath=" .. tostring(initPath))
+          debugLog("loadScript failed for initPath=%s", initPath)
         end
       end
     end
@@ -263,8 +271,9 @@ local function scanThemes(listBasePath, loadBasePath, source, themes, nextId)
 end
 
 function M.listThemes(forceRefresh)
+  refreshDebug()
   if forceRefresh ~= true and type(themesCache) == "table" then
-    debugLog("listThemes cache hit count=" .. tostring(#themesCache))
+    debugLog("listThemes cache hit count=%s", #themesCache)
     return themesCache
   end
 
@@ -308,15 +317,15 @@ function M.listThemes(forceRefresh)
         debugLog("fallback default accepted")
       end
     else
-      debugLog("fallback default init failed path=" .. tostring(initPath))
+      debugLog("fallback default init failed path=%s", initPath)
     end
   end
 
   for i = 1, #themes do
     local theme = themes[i]
-    debugLog("theme[" .. tostring(i) .. "] name=" .. tostring(theme.name) .. " path=" .. tostring(theme.path) .. " configurePath=" .. tostring(theme.configurePath))
+    debugLog("theme[%s] name=%s path=%s configurePath=%s", i, theme.name, theme.path, theme.configurePath)
   end
-  debugLog("listThemes end count=" .. tostring(#themes))
+  debugLog("listThemes end count=%s", #themes)
 
   themesCache = themes
 
@@ -324,6 +333,7 @@ function M.listThemes(forceRefresh)
 end
 
 function M.invalidateThemeCache()
+  refreshDebug()
   themesCache = nil
   debugLog("theme cache invalidated")
 end
@@ -388,18 +398,19 @@ function M.buildModelThemeOptions(themes, disabledLabel)
 end
 
 function M.getConfigurableThemes(themes)
+  refreshDebug()
   local configurable = {}
   if type(themes) ~= "table" then return configurable end
   for i = 1, #themes do
     local t = themes[i]
     if t.standalone ~= true and type(t.configurePath) == "string" and t.configurePath ~= "" then
       configurable[#configurable + 1] = t
-      debugLog("configurable theme=" .. tostring(t.name) .. " path=" .. tostring(t.path))
+      debugLog("configurable theme=%s path=%s", t.name, t.path)
     else
-      debugLog("skipped configurable theme=" .. tostring(t and t.name) .. " standalone=" .. tostring(t and t.standalone) .. " configurePath=" .. tostring(t and t.configurePath))
+      debugLog("skipped configurable theme=%s standalone=%s configurePath=%s", t and t.name, t and t.standalone, t and t.configurePath)
     end
   end
-  debugLog("getConfigurableThemes count=" .. tostring(#configurable))
+  debugLog("getConfigurableThemes count=%s", #configurable)
   return configurable
 end
 
