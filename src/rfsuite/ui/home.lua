@@ -570,6 +570,9 @@ state = {
   helpPageSubtitle = nil,
   pendingBuildUI = false,
   pendingGcAfterBuild = false,
+  -- Whether the previous pass held the periodic MSP and audio ticks back for a scene build, so
+  -- that two builds in a row cannot hold them back twice.
+  backgroundDeferred = false,
   pendingSaveAction = nil,
   saveOutcome = nil,
   saveOverlayVisible = false,
@@ -2899,6 +2902,7 @@ function M.init(opts)
   state.helpPageSubtitle = nil
   state.pendingBuildUI = false
   state.pendingGcAfterBuild = false
+  state.backgroundDeferred = false
   state.pendingSaveAction = nil
   state.saveOutcome = nil
   state.saveOverlayVisible = false
@@ -3053,6 +3057,7 @@ function M.run(event, touchState)
   if state.menu then
     local now = getTime and getTime() or 0
     local transitionedMenuThisTick = false
+    local deferBackground = false
 
     local armed = isModelArmed()
 
@@ -3289,7 +3294,16 @@ function M.run(event, touchState)
       if doGc and collectgarbage then
         collectgarbage("collect")
       end
+      -- A scene build is the most expensive thing a pass does. The periodic MSP and audio ticks
+      -- further down step aside to the next pass rather than land in the same call -- their
+      -- timers are not advanced, so they run one pass late and nothing is dropped. Only once in
+      -- a row: on a second build in succession they run, so a screen that rebuilds on every pass
+      -- still gets them on every other one. The start screen is left out: it rebuilds on every
+      -- step of the connection, and holding the MSP tick back there would slow the very chain it
+      -- is waiting for.
+      deferBackground = not state.backgroundDeferred and not state.initialLoad
     end
+    state.backgroundDeferred = deferBackground
 
     if state.pendingSaveAction and state.saveOverlayVisible and not state.isClosing then
       local action = state.pendingSaveAction
@@ -3434,7 +3448,7 @@ function M.run(event, touchState)
       end
     end
 
-    if (not transitionedMenuThisTick) and (not mspSpeedPageActive) and MspRuntime and type(MspRuntime.tick) == "function" then
+    if (not transitionedMenuThisTick) and (not deferBackground) and (not mspSpeedPageActive) and MspRuntime and type(MspRuntime.tick) == "function" then
       if now == 0 or (now - (state.mspLastTick or 0)) >= 5 then
         state.mspLastTick = now
         MspRuntime.tick()
@@ -3489,7 +3503,7 @@ function M.run(event, touchState)
     -- Audio Feedback Polling (gedrosselt auf ca. 5Hz)
     -- Hosted, the host announces: a second audio state here would call out what the host's
     -- has already called out.
-    if not state.hosted and Audio and type(Audio.process) == "function"
+    if not state.hosted and (not deferBackground) and Audio and type(Audio.process) == "function"
       and (now - state.lastAudioTick) >= 20 then
       state.lastAudioTick = now
 

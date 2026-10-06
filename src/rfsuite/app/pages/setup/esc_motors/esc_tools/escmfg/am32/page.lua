@@ -666,6 +666,7 @@ function M.build(ctx)
   if Controls and type(Controls.appendEscSubheader) == "function" then
     cursorY = cursorY + Controls.appendEscSubheader(children, x, cursorY, w, ui.escFirmware, ui.escVersion)
   end
+  local rowH
   local hasMultipleEscs = (ui.motorCount == nil) or (ui.motorCount >= 2)
   if hasMultipleEscs then
     local escOptions = {
@@ -674,7 +675,7 @@ function M.build(ctx)
     }
     local escTargetVal = ui.escTarget or 0
     local targetLabel = pageText(i18n, "esc_target", "ESC Target")
-    local rowH = Controls.appendComboSelect(children, x, cursorY, w, targetLabel, escOptions, escTargetVal, function(val)
+    rowH = Controls.appendComboSelect(children, x, cursorY, w, targetLabel, escOptions, escTargetVal, function(val)
       local targetVal = tonumber(val) or 0
       if ui.escTarget ~= targetVal then
         ui.escTarget = targetVal
