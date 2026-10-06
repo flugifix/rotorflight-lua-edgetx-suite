@@ -298,11 +298,56 @@ local function getSmartConfig(session)
   }
 end
 
+-- Firmware with per-profile battery cells (tasks/msp/api/battery_config.lua, `hasProfileCells`)
+-- reports the single cell count and cell voltage fields for the profile that was active when the
+-- configuration was read, and every reader in this Lua state -- the fallback below, the voltage
+-- callouts, the flight record, the dashboard -- reads those single fields. So once the
+-- battery_profile sensor names another profile they are set from that profile's own values, which
+-- is what the board reports for them from then on. The sensor carries the profile the board is
+-- running: a change made while armed is applied by the board at disarm, and the sensor follows it
+-- then. On firmware without the per-profile values nothing is changed.
+local PROFILE_CELL_KEYS = {}
+do
+  local fields = { "batteryCellCount", "vbatmincellvoltage", "vbatmaxcellvoltage", "vbatfullcellvoltage", "vbatwarningcellvoltage" }
+  for f = 1, #fields do
+    local keys = {}
+    for profile = 0, 5 do keys[profile] = fields[f] .. "_" .. profile end
+    PROFILE_CELL_KEYS[fields[f]] = keys
+  end
+end
+
+-- Once per profile and per read: a fresh read is a new table, and the Battery page sets the single
+-- fields itself when it saves.
+local function applyProfileCells(config, profile)
+  if type(config) ~= "table" or config.hasProfileCells ~= true or config.cellsProfile == profile then return end
+  for field, keys in pairs(PROFILE_CELL_KEYS) do
+    local value = config[keys[profile]]
+    if value ~= nil then config[field] = value end
+  end
+  config.cellsProfile = profile
+end
+
 local function getActivePackCapacity(session, batteryConfig)
   local packCapacity = tonumber(batteryConfig and batteryConfig.batteryCapacity) or 0
-  local profile = normalizeBatteryProfileIndex(getSensor("battery_profile"))
+  local raw = getSensor("battery_profile")
+  local profile = normalizeBatteryProfileIndex(raw)
   if session then
     session.activeBatteryType = profile
+  end
+
+  -- Only a live reading: the sensor reads 0 once the radio stops receiving it, and that names no
+  -- profile.
+  if batteryConfig and batteryConfig.hasProfileCells == true then
+    raw = tonumber(raw)
+    if raw and raw >= 1 and raw <= 6 then
+      applyProfileCells(batteryConfig, profile)
+      -- The battery and sources pages keep a second name for the configuration, and a page that
+      -- set it before a later read can leave it naming an older table.
+      local other = session and session.batteryConfig
+      if other and other ~= batteryConfig then
+        applyProfileCells(other, profile)
+      end
+    end
   end
 
   if profile ~= nil and batteryConfig then
