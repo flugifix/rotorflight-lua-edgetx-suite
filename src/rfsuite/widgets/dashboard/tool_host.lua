@@ -21,6 +21,15 @@
 --     dashboard's own modules are in the same cache, so the cache cannot be emptied; only the
 --     entries the dashboard never uses -- the pages and the tool's interface -- are dropped.
 --
+-- What the tool loads is loaded as the tool script loads it, because the tool script's loader is
+-- not the radio's: src/main.lua puts a wrapper over loadScript that reads the bytecode beside a
+-- file when it is current and keeps a shared module's chunk for as long as the tool runs. The
+-- pages load themselves and most of what they use with loadScript(path, "t") and rely on that
+-- wrapper; without it every page here, and every file it loads that way, would be compiled from
+-- source on every visit, and the bytecode the radio writes beside each file never read back. The
+-- same loader is therefore put in place while the tool is open and taken away when it closes
+-- (see installLoader below).
+--
 -- The tool is closed by its own closing sequence wherever that can still run: the back key at
 -- the top of its menu, the model arming, and fullscreen being left. Arming closes it because
 -- while it is open it runs in place of the dashboard's pass, and the dashboard's pass is what
@@ -83,6 +92,56 @@ local function callInWidgetContext(fn, ...)
   return ok, result
 end
 
+-- A page's own module file. The page registry holds the module for as long as it wants it, so
+-- its chunk is not kept: kept, the bytecode of every page opened would stay until the tool
+-- closes. The same rule as the tool script's loader (src/main.lua).
+local function isPageModule(path)
+  return string.sub(path, -9) == "/page.lua" and string.find(path, "/app/pages/", 1, true) ~= nil
+end
+
+-- The tool script's loader, for as long as the tool is open: the suite's load mode in place of
+-- the one a caller passed, and every chunk but a page's kept until the tool closes. The global
+-- table of this state is shared with every other widget on the radio, so only the suite's own
+-- files go through it; any other path reaches the radio's loader exactly as it was asked for.
+-- A copy left behind once the tool has closed -- held by a caller, or under a wrapper another
+-- widget put over it -- passes every call through.
+local function installLoader(host)
+  local original = _G.loadScript
+  local chunks = {}
+  local function load(path, mode)
+    if host.loader ~= load or type(path) ~= "string" or string.sub(path, 1, #BASE_PATH) ~= BASE_PATH then
+      return original(path, mode)
+    end
+    local chunk = chunks[path]
+    if chunk then return chunk end
+    local root = _G.rfsuite
+    local err
+    chunk, err = original(path, (root and root.loadMode) or mode)
+    if chunk and not isPageModule(path) then chunks[path] = chunk end
+    return chunk, err
+  end
+  host.loader = load
+  host.chunks = chunks
+  host.originalLoadScript = original
+  _G.loadScript = load
+end
+
+-- Puts back the function installLoader replaced, unless something has been put over it since;
+-- the copy then passes through. The kept chunks are let go either way.
+local function removeLoader(host)
+  local load = host.loader
+  if load == nil then return end
+  host.loader = nil
+  if _G.loadScript == load then
+    _G.loadScript = host.originalLoadScript
+  end
+  local chunks = host.chunks
+  host.chunks = nil
+  for path in pairs(chunks) do
+    chunks[path] = nil
+  end
+end
+
 local function dropToolModules()
   local modules = _G.rfsuite and _G.rfsuite.modules
   if type(modules) ~= "table" then return end
@@ -102,6 +161,8 @@ local function finish(widget, reason)
   local host = widget._toolHost
   widget._toolHost = nil
   if host == nil then return end
+
+  removeLoader(host)
 
   local MspRuntime = requireModule("tasks/msp/runtime.lua")
   if MspRuntime and type(MspRuntime.detach) == "function" then
@@ -180,6 +241,7 @@ local function loadStep(widget, host)
     host.defaultClient = type(queue) == "table" and queue.defaultClient or nil
     host.snapshot = true
   end
+  if host.loader == nil then installLoader(host) end
   local chunk, err = loadScript(HOME_PATH, root.loadMode or "bt")
   if not chunk then
     hostLog("tool not opened: " .. tostring(err), "error")

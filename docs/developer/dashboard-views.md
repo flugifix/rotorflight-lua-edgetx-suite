@@ -333,6 +333,12 @@ neither a view, the base layer nor the dashboard's own work runs beside it:
   `init({ hosted = true })`. A hosted tool leaves alone what the widget's state already owns:
   it does not compile the tree, announce, reset the event runner, shut the card log, clear the
   chunk cache or drop `_G.rfsuite` on its way out.
+- **Loading**, from the first of those passes until the tool closes, `loadScript` is the tool
+  script's loader (`src/main.lua`) for the suite's own files: the suite's load mode in place of
+  the one a caller passes, so a current `.luac` beside a file is read rather than its source, and
+  every chunk but a page's own module kept until the tool closes. The widget's global table is
+  shared with every other widget on the radio, so any other path reaches the radio's loader as it
+  was asked for.
 - **Running**, the tool's `run(event, touchState)` is called under the widget's event context, so
   the MSP queue bounds its loops by count and the event runner stays on the task list the widget
   has already worked through. A widget call is stopped at the instruction limit where a tool
@@ -342,7 +348,9 @@ neither a view, the base layer nor the dashboard's own work runs beside it:
   `requestClose()`, which the host calls on the first pass without an event (full screen has
   been left) and when the model arms. When `run` returns 2 the host detaches the tool's MSP
   client, puts back the MSP queue's default client and the `preferences` and `savePreferences` it
-  found on `_G.rfsuite`, drops the module cache entries under `app/` and `ui/`, and drops the
+  found on `_G.rfsuite`, puts back the `loadScript` it replaced -- unless something has been put
+  over it since, in which case its copy passes every call through -- and lets go of the kept
+  chunks, drops the module cache entries under `app/` and `ui/`, and drops the
   scene, so the next pass builds the base layer, or with none the quick menu. No condition is
   asked while the tool is open, so that pass compares against what the conditions answered when
   it was opened: a theme's view whose condition held then and still holds stays closed, and one
