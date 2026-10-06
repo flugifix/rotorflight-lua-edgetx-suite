@@ -946,10 +946,11 @@ return {
         source_adc = "ADC",
         source_esc = "ESC",
         source_fbus = "FBUS",
+        source_crsf = "CRSF",
         source_unknown = "Unknown",
         help_voltage_meter_source = "Select which source the flight controller uses to measure battery voltage.",
         help_current_meter_source = "Select which source the flight controller uses to measure battery current.",
-        help_message = "Select which sources the flight controller uses for battery voltage and current measurements.",
+        help_message = "Select which sources the flight controller uses for battery voltage and current measurements.\nVoltage Source: where the pack voltage is read from; CRSF needs a serial port set to CRSF Sensors on the Ports page.\nCurrent Source: where the pack current is read from; CRSF reads it from the same sensor.",
         loading_title = "Loading",
         loading_message = "Reading battery config",
         saved_title = "Saved",
@@ -1880,6 +1881,8 @@ return {
         function_sbus_out = "SBus Out",
         function_fbus_out = "FBus Out",
         function_sport_input = "S.PORT Master",
+        function_srxl2_esc = "SRXL2 ESC",
+        function_crsf_sensors = "CRSF Sensors",
         function_telem_frsky = "Telemetry FrSky",
         function_telem_smartport = "Telemetry SmartPort",
         function_telem_ibus = "Telemetry iBus",
@@ -1895,9 +1898,11 @@ return {
         rx_tag = "[RX]",
         save_error_prefix = "Save error:",
         help_title = "Ports Help",
-        help_p1 = "Configure the function and baud rate for each serial port on the flight controller.",
-        help_p2 = "Save writes changes to EEPROM and reboots the flight controller.",
-        help_p3 = "Where the board layout is known, a port is named as the board prints it, with its UART name in brackets."
+        help_p1 = "One row per serial port. Where the board layout is known, a port is named as the board prints it, with its UART name in brackets.",
+        help_p2 = "Function (first list): what the port is used for. A function another port already uses is not offered.",
+        help_p3 = "Baud rate (second list): only where the function has a choice; otherwise the fixed rate is shown as text.",
+        help_p4 = "[RX]: the receiver's port. It cannot be changed here.",
+        help_p5 = "Save: writes the ports you changed, restarts the flight controller and reads the ports back from it."
       },
       setup_alignment = {
         title = "Alignment",
@@ -2420,15 +2425,16 @@ return {
         urban_temp_colors = "Temperature colours",
         urban_temp_colors_early = "Early",
         urban_link_switch = "Link view switch",
-        -- The Keys page: what a key does in full screen.
+        -- The Keys page: what a key does in full screen. Each choice but "Nothing" opens with whose it
+        -- is: "Suite:" for what the dashboard does on every theme, "Theme:" for a page Urban draws itself.
         urban_key = "Key",
         urban_key_none = "Nothing",
-        urban_key_menu = "Quick menu",
-        urban_key_tools = "Profile & Tuning",
-        urban_key_link = "ELRS link page",
-        urban_key_suite_tool = "RFSuite tool",
+        urban_key_menu = "Suite: Quick menu",
+        urban_key_tools = "Theme: Tuning",
+        urban_key_link = "Theme: ELRS link",
+        urban_key_suite_tool = "Suite: Main menu",
         urban_tap_frames = "Frames on tap areas",
-        urban_key_exit = "Leave full screen"
+        urban_key_exit = "Suite: Exit full screen"
       },
       settings_dashboard_overrides = {
         model_name = "Model",
@@ -2683,7 +2689,7 @@ return {
       battery_profile = "BATTERY PROFILE",
       battery_pick_title = "WHICH BATTERY?",
       battery_pick_open = "BATTERY",
-      tool_open = "RFSUITE TOOL",
+      tool_open = "MAIN MENU",
       battery_pick_none = "NO BATTERY",
       battery_pick_profile = "Profile %d",
       battery_pick_profile_none = "no profile",
