@@ -48,9 +48,9 @@ both sides is shown as done rather than asked again.
   transfer that was already running is abandoned rather than finished.
 - **Both *use this* buttons on the Link step ask before they write.** One sets the transmitter
   module's packet rate and telemetry ratio to the flight controller's, the other writes the flight
-  controller's telemetry configuration to match the module and saves it. The question names the
-  direction and quotes both rows, in the same words *Tools > Diagnostics > ELRS Link* uses for the
-  same two writes, and where the arming state cannot be read it asks that as well. Declining it
+  controller's telemetry configuration to match the module and saves it. The question is the one
+  *Tools > Diagnostics > ELRS Link* asks before the same two writes, followed by both rows as the
+  step shows them, and where the arming state cannot be read it asks that as well. Declining it
   writes nothing and the Probe row says *Nothing was written*; a radio
   that cannot show the question writes nothing either. The two pickers write without a question:
   there the value is the one the pilot picked.

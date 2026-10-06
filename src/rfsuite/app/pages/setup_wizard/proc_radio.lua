@@ -2148,6 +2148,7 @@ procs[#procs + 1] = {
     local task = linkTask(w)
     if task and w.data.linkProbed ~= true then
       w.data.linkProbed = true
+      w.data.linkNotice = nil
       task.start(task.MODE_PROBE)
     end
   end,
