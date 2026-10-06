@@ -133,8 +133,8 @@ Besides the fields every theme gets, the flight screen declares the transmitter'
 and power (`TQly`, `TPWR`), the air rate's sensitivity floor, whether a second antenna has been
 seen, the skipped-frame count (`*Skp`) and the speed controller's live status, and whatever a
 chosen value row or *Telemetry* tile needs (ESC load, ESC status, air rate, rate floor). The
-*Telemetry* page declares nothing of its own: the flight screen's list carries its tiles, and the
-ranges under the tiles are read from the flight record.
+*Telemetry* page names what its tiles need itself, so the widget reads those only while the page
+is open; the ranges under the record's readings are read from the flight record.
 
 A row or a tile can also show a telemetry sensor the widget has no reading of its own for, by the
 name the suite's decoder gives it: BEC temperature (`Tbec`), tail speed (`Tspd`), vario (`Var`),
@@ -143,11 +143,11 @@ the transmitter's link quality (`TQly`) and power (`TPWR`), the ESC's own BEC te
 (`EscV`, `EscI`, `EscC`, `EscR`, `EscP`, `Esc%`), GPS satellites, speed, altitude and distance
 (`Sats`, `GSpd`, `GAlt`, `GDis`), pitch, roll and yaw (`Ptch`, `Roll`, `Yaw`), the flight
 controller's CPU, system and real-time load (`CPU%`, `SYS%`, `RT%`), bus and MCU voltage
-(`Vbus`, `Vmcu`) and the link's signal-to-noise ratio (`RSNR`). Such a sensor is declared only
-while a row or a tile shows it, and each one costs a sensor read per telemetry pass. On a
-*Telemetry* tile its range is the radio's own least and most of the sensor since the last
-telemetry reset -- the sensor's `-` and `+` forms, two reads more -- because the flight record
-keeps none of them. The statistics screen
+(`Vbus`, `Vmcu`) and the link's signal-to-noise ratio (`RSNR`). Such a sensor costs a sensor read
+per telemetry pass: in a row for as long as the flight screen shows, on a *Telemetry* tile only
+while the page is open. On a tile its range is the radio's own least and most of the sensor since
+the last telemetry reset -- the sensor's `-` and `+` forms, two reads more -- because the flight
+record keeps none of them. The statistics screen
 declares nothing and reads the flight record. A reading the model does not carry shows `-`.
 
 The skipped-frame count is published by the suite itself under the name `*Skp`

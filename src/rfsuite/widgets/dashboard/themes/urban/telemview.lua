@@ -129,6 +129,13 @@ function M.build(children, zone, state, ctx)
   return children
 end
 
+-- The readings the tiles need beyond the fixed state fields (layout.lua, L.tileSources). A host
+-- with view sources resolves them while this view is on top and at no other time.
+function M.sources(_, state)
+  if type(L.tileSources) ~= "function" then return {} end
+  return L.tileSources(state or {})
+end
+
 -- The cell count divides the cell tile's figure and its range, and it is fixed at build time, as
 -- it is in the flight view; a pack with another count rebuilds the view.
 function M.renderKey(_, state)
