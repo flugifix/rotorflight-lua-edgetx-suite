@@ -10,51 +10,55 @@ The suite provides spoken voice alerts and tone callouts for flight telemetry, b
 
 *System* → *Settings* → *Audio* → *Events*
 
-The ten category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature threshold) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
+The nine category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature threshold) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
 
 ---
 
 ## Categories & Settings
 
-### 1. Battery
+Every row on these pages has a `?` button beside its control, which opens a short explanation of that row. The `?` in the page header says what the page is for.
 
-Configures spoken callouts for battery capacity and initial pack charge when connecting to the model.
+### 1. On Connect
+
+What is said once when a model connects. On a quick connect the model's name and the pack check come on the first pass after the connection (the dashboard starts its announcements once the battery configuration has been read from the flight controller), the battery capacity one pass later, and the SmartFuel level last; on a slow connect the battery capacity can come before the pack check. The rows are listed in the quick-connect order.
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
-| Battery profile | `battery_profile` | On | Radio | Announces the active battery profile number or battery capacity in mAh (e.g. "Battery 5000 mAh") when the profile is selected or on connection. |
-| Initial fuel | `initial_fuel` | On | Radio | Announces the remaining battery percentage (e.g. "Battery 95%") once upon connecting. |
+| Model Name | `model_announcement` | Off | Radio | Plays the sound file named after the model, `/SOUNDS/<name>.wav` (a name with spaces is also looked up with underscores), once when the model connects. The name is the craft name read from the flight controller when it is already known, otherwise the radio's model name. Nothing is said when the card has no such file. |
+| Pack Not Full | `pack_not_full` | Off | Radio | Once when the model connects: a warning with the voltage per cell when the pack's voltage per cell is below the flight controller's *Max cell voltage* (*Setup* → *Power* → *Battery*) less the margin below. Judged once per connection and then latched. |
+| Margin (mV/cell) | `pack_not_full_margin` | 100 mV | Radio | How far below *Max cell voltage* a cell may be and still count as full (10 to 500 mV per cell). |
+| Battery Capacity | `battery_profile` | On | Radio | Speaks the capacity of the active battery profile in mAh (e.g. "Battery 5000 mAh") when the model connects and whenever the battery profile changes; the profile number when that profile has no capacity set. |
+| SmartFuel | `initial_fuel` | On | Radio | Speaks the remaining SmartFuel percentage (e.g. "Battery 95%") once after the model connects. Independent of the *SmartFuel* switch on the SmartFuel page, which governs the descending callouts and the empty alarm. |
 
-#### Initial Fuel Startup Gating & Telemetry Readiness
+#### When the SmartFuel Level Is Spoken
 To prevent spurious "Battery 0%" announcements at startup:
 - **Telemetry Guard (`fuelTelemetrySeen`):** The announcement is held until valid fuel telemetry has been delivered by the flight controller or SmartFuel.
 - **Dynamic Deferral Window:** When the model connects, the announcement is deferred for a window derived from the model's SmartFuel stabilization delay (`stabilize_delay`, defaulting to at least 8.0 seconds).
 - **Carried-Over Reading Detection:** EdgeTX retains the last received sensor reading across disconnections. If a new connection reports a reading bit-identical to the previous session's disconnect value (`previousSessionFuel`), it is treated as a carried-over reading and held until the new pack's fresh reading arrives.
-- **Immediate vs. Timed Callout:** As soon as a positive, fresh reading arrives (`fuel > 0` and different from the previous pack), the percentage is spoken immediately. If the pack is genuinely empty (0%), the callout fires once the deferral ceiling expires.
+- **Immediate vs. Timed Callout:** As soon as a positive, fresh reading arrives (`fuel > 0` and different from the previous pack), the percentage is spoken immediately. If no positive reading has arrived by the end of the window, the reading at that moment is spoken, so a SmartFuel value that has not come up yet is announced as 0%.
 
 A sound pack without the announcement's file (`evt/battery.wav` for an electric model, `stat/alerts/fuel.wav` for nitro) has nothing to play. Once the choice between the two files can no longer change (the model type is set explicitly, the battery configuration has been read from the flight controller, or the pack carries neither file), the announcement counts as made for that connection: nothing is spoken and one warning in the log says which file is missing. Until then it is tried again on every pass, because a model whose type is not yet known may still turn out to need the file the pack does carry.
 
-### 2. Fuel
-
-Configures recurring callouts and low-fuel alarms during flight based on the estimated remaining capacity or battery percentage.
+### 2. Arming
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
-| Fuel alerts | `fuel_alerts` | On | Radio | Master switch for spoken remaining fuel percentage callouts and low-fuel alarms. |
-| Callout step | `fuel_callout_percent` | 10% | Radio | Interval step for descending percentage callouts (options: 5%, 10%, 15%, 20%, 25%). |
-| Repeat | `fuel_repeat_below_zero` | Once | Radio | How often the empty battery / fuel alarm speaks while fuel is at 0% -- *Until cleared*, or 1 to 10 announcements ten seconds apart. The descending percentage callouts are not repeated: each step is spoken once as it is passed. |
-| Haptic | `fuel_haptic_below_zero` | Off | Radio | Transmitter vibration alongside the empty alarm. |
+| Arming flags | `arming_flags` | On | Radio | Announces arming ("Armed") and disarming ("Disarmed"). |
 
-### 3. Voltage
+### 3. Governor
 
-Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
+| Setting | Switch / Key | Default | Scope | Description |
+| --- | --- | --- | --- | --- |
+| Governor state | `governor_state` | On | Radio | Spoken announcements when the governor transitions between operating states (Idle, Spool-up, Recovery, Active, Throttle off, Lost headspeed, Autorotation, Bailout, Bypass). A state is spoken once it has held for a moment. Individual states can be toggled independently. |
+
+### 4. Voltage
+
+Monitors the main pack voltage and the model's power supply.
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
 | Voltage alert | `voltage_alert` | On | Radio | Voice alert when cell or pack voltage drops below the warning threshold configured in the battery profile. The pack voltage the alert fired at is spoken with it. |
 | Hold | `voltage_hold` | 2 s | Radio | How long the reading has to stay below the warning threshold before the alert speaks (0 to 10 s). A hold of 0 announces on the first reading below the level, which is the behaviour before this setting existed. |
-| Pack not full | `pack_not_full` | Off | Radio | Spoken pre-flight warning on connection if the connected battery is not fully charged. |
-| Margin | `pack_not_full_margin` | 100 mV | Radio | Allowed voltage delta below full charge (10 to 500 mV per cell). Default is 100 mV/cell. |
 | Main power lost | `main_power_lost` | Off | Radio | Announces that the main pack has gone while the flight controller is still alive on a BEC or a backup battery, with the BEC voltage spoken. |
 | Repeat | `voltage_repeat` | Until cleared | Radio | How often an alert on this page speaks while its condition holds -- see *Repeat and Haptic* below. |
 | Haptic | `voltage_haptic` | On | Radio | Transmitter vibration alongside the voltage, main power and BEC / receiver alerts. |
@@ -64,26 +68,14 @@ Monitors main pack voltage, cell thresholds, and pre-flight pack charge level.
 - **Hold (`voltage_hold`):** a hard collective pull drags the reading under that line for a moment, and a pack that sags is not a pack that is down. The alert waits for the hold time, then repeats every 10 seconds while the voltage stays low, and arms again once the pack has recovered by half a volt.
 - **Main Power Lost (`main_power_lost`):** for a setup with a backup guard or a separate receiver battery. It needs the pack to have read a real voltage since the connection began, to read as gone rather than merely low, and a BEC voltage beside it -- without one there is nothing left to say anything is still powered. It repeats every 10 seconds while the pack stays away, and announces once more, with the pack voltage, when the pack comes back. Those three tests are also what the dashboard publishes as `state.mainPowerLost` for a theme to draw ([dashboard themes](../developer/dashboard-themes.md)) -- one definition, so a screen and the announcement cannot disagree. The switch on this page governs the announcement alone; a theme drawing the condition does so whether or not anything is spoken.
 
-### 4. Arming
-
-| Setting | Switch / Key | Default | Scope | Description |
-| --- | --- | --- | --- | --- |
-| Arming flags | `arming_flags` | On | Radio | Announces arming ("Armed"), disarming ("Disarmed"), and arm-disable reasons if arming is blocked. |
-
-### 5. Governor
-
-| Setting | Switch / Key | Default | Scope | Description |
-| --- | --- | --- | --- | --- |
-| Governor state | `governor_state` | On | Radio | Spoken announcements when the governor transitions between operating states (Idle, Spool-up, Recovery, Active, Throttle off, Lost headspeed, Autorotation, Bailout, Bypass). Individual sub-states can be toggled independently. |
-
-### 6. Profiles
+### 5. Profiles
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
 | PID profile | `pid_profile` | On | Radio | Announces the PID profile index when switched (e.g. "Profile 1"). |
 | Rate profile | `rate_profile` | On | Radio | Announces the rate profile index when switched (e.g. "Rate 1"). |
 
-### 7. ESC & MCU Temperature
+### 6. ESC & MCU Temperature
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
@@ -104,7 +96,27 @@ reads *Threshold [Model]* -- and is otherwise the radio-wide default that every 
 value of its own reads. The MCU threshold is always radio-wide, because the same flight controller
 is rated the same in every aircraft.
 
-### 8. Link Quality
+### 7. Adjustments
+
+| Setting | Switch / Key | Default | Scope | Description |
+| --- | --- | --- | --- | --- |
+| Adjustment events | `adjustment_events` | Off | Radio | Audio feedback when adjusting tuning parameters via in-flight switches or rotary knobs. |
+
+#### What an Adjustment Announcement Says
+The new value, preceded by the name of the adjustment function whenever the pilot moves on to a different function than the last one adjusted. The name is built from the words in `adj/` (for example *Pitch RC Expo*, *Governor Idle Throttle*). Every adjustment function the firmware defines is named this way except the four profile switches (rate, PID, LED and OSD profile) and the battery profile, for which the adjustment announcement says only the value. A rate or PID profile change is announced under *Profiles* and a battery profile change under *On Connect* (*Battery Capacity*), so naming them here as well would say the same event twice.
+
+### 8. SmartFuel
+
+Callouts of the SmartFuel level while the model is connected. The flight controller computes the value when SmartFuel is switched on there (*Setup* → *Power* → *SmartFuel*, MSP API 12.0.9 and later); otherwise the radio computes it from the local source chosen under *Setup* → *Power* → *Preferences*.
+
+| Setting | Switch / Key | Default | Scope | Description |
+| --- | --- | --- | --- | --- |
+| SmartFuel | `fuel_alerts` | On | Radio | Master switch for the descending percentage callouts and the empty alarm. |
+| Callout % | `fuel_callout_percent` | Every 10% | Radio | The steps at which the falling level is spoken, each once: *Only at 10%*, or every 5%, 10%, 20%, 25% or 50%. |
+| Repeat | `fuel_repeat_below_zero` | Once | Radio | How often the empty battery / fuel alarm speaks while fuel is at 0% -- *Until cleared*, or 1 to 10 announcements ten seconds apart. The descending percentage callouts are not repeated: each step is spoken once as it is passed. |
+| Haptic | `fuel_haptic_below_zero` | Off | Radio | Transmitter vibration alongside the empty alarm. |
+
+### 9. Link Quality
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
@@ -120,21 +132,6 @@ Only a flight controller that stops sending while the radio link is still up is 
 
 The loss is announced **once**. A model that stays silent keeps the announcement's recovery window open, and it is the return that speaks again -- not the silence, however long it lasts.
 
-### 9. Adjustments
-
-| Setting | Switch / Key | Default | Scope | Description |
-| --- | --- | --- | --- | --- |
-| Adjustment events | `adjustment_events` | Off | Radio | Audio feedback when adjusting tuning parameters via in-flight switches or rotary knobs. |
-
-#### What an Adjustment Announcement Says
-The new value, preceded by the name of the adjustment function whenever the pilot moves on to a different function than the last one adjusted. The name is built from the words in `adj/` (for example *Pitch RC Expo*, *Governor Idle Throttle*). Every adjustment function the firmware defines is named this way except the four profile switches (rate, PID, LED and OSD profile) and the battery profile, for which the adjustment announcement says only the value. A rate or PID profile change is announced under *Profiles* and a battery profile change under *Battery*, so naming them here as well would say the same event twice.
-
-### 10. Other
-
-| Setting | Switch / Key | Default | Scope | Description |
-| --- | --- | --- | --- | --- |
-| Model announcement | `model_announcement` | Off | Radio | Plays a model-specific sound file (`/SOUNDS/<lang>/modelname.wav`) upon selecting the model. |
-
 ---
 
 ## Repeat and Haptic
@@ -149,15 +146,15 @@ the page that switches an alert on is the page that says how it behaves.
 | Voltage | `voltage_repeat`, `voltage_haptic` | Low pack voltage, Main power lost, and the BEC / receiver alert set up under *Setup* → *Power* → *Alerts*. |
 | Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost. |
 | ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature, MCU temperature. |
-| Fuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
+| SmartFuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
 
 - **Repeat** is *Until cleared*, or a count from 1 to 10. Announcements are ten seconds apart
   either way; a count simply stops after that many and starts over once the condition has
   cleared. *Until cleared* is what every alert did before this setting existed, and is the
-  default everywhere except Fuel, which kept the single announcement it already had.
+  default everywhere except SmartFuel, which kept the single announcement it already had.
 - **Haptic** is the transmitter's vibration alongside the voice. It defaults to on for the
   three categories whose alerts already buzzed with no way of switching it off, and to off for
-  Fuel, which already had this setting and keeps its value.
+  SmartFuel, which already had this setting and keeps its value.
 - **Two alerts have their own rule inside the category, and a setting does not overrule it.**
   The link quality alert buzzes at its *critical* level only, never at the warning level. The
   lost telemetry announcement says itself once per loss, so it takes the haptic and ignores the

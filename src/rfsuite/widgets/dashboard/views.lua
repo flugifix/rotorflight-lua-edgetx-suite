@@ -60,9 +60,15 @@ M.STACK_LIMIT = 4
 -- What an empty stack shows when there is no base layer.
 M.DEFAULT_VIEW = "menu"
 
+-- The view that asks a press its question before the press is performed. It carries no
+-- `openWhen`: it only ever opens from `M.confirm`, which an entry's own `confirm` reaches
+-- (widgets/dashboard/fullscreen_menu.lua, `M.run`).
+local CONFIRM_VIEW = "confirm"
+
 -- The views the widget ships, in the order their `openWhen` is asked, ahead of a theme's.
 local CORE_VIEWS = {
   { id = "battery_pick", module = "widgets/dashboard/battery_pick_menu.lua", openWhen = "batteryPickPending" },
+  { id = CONFIRM_VIEW, module = "widgets/dashboard/confirm_menu.lua" },
   { id = "menu", module = "widgets/dashboard/fullscreen_menu.lua" },
 }
 
@@ -76,9 +82,11 @@ local CORE_VIEWS = {
 -- and never opens a view -- what an unresolvable condition does in `app/menu_registry.lua` as
 -- well.
 --
--- Only the vocabulary an entry or a view actually uses is resolved. `enabledWhen`,
--- `lockedWhileArmed` and `confirm` are part of the same manifest vocabulary and nothing sets
--- one, so the first entry that needs one brings its resolver with it.
+-- Only the vocabulary an entry or a view actually uses is resolved. `enabledWhen` and
+-- `lockedWhileArmed` are part of the same manifest vocabulary and nothing sets one, so the
+-- first entry that needs one brings its resolver with it. `confirm` is the first that did, and
+-- its resolver is not a condition but the confirmation below: an entry that carries one is
+-- held by `M.run` until the pilot has answered.
 --
 -- A condition that opens a view is cleared by whoever set it when the view is answered or
 -- closed. A view opens when its condition rises, not while it holds (see `resolve`), so one that
@@ -665,6 +673,58 @@ function M.navigate(widget, after)
       newSession(widget)
       reset(widget)
     end
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- Confirmations
+-- ---------------------------------------------------------------------------
+
+--- Hold a press behind the pilot's answer, and raise the question that asks for it.
+--
+-- `spec` is the entry's `confirm` table, its strings already resolved: `title`, `message`, and
+-- the optional `detail`, `confirmLabel` and `cancelLabel`. `work` is the press and the action
+-- that follows it, run only where the pilot agrees.
+--
+-- Returns true when the question is up. False where there is no confirmation view or no room
+-- left on the stack, and the caller must then NOT run `work`: a press that cannot ask its
+-- question does nothing rather than doing it unguarded. That is the whole point of a
+-- confirmation on an irreversible action -- refusing loses nothing, proceeding loses the logs.
+--
+-- The pending press lives on this visit's session, beside the views, and goes when the visit
+-- does: a full screen left with the question standing never performs it. A second press while a
+-- question is up replaces the first -- there is one question at a time.
+function M.confirm(widget, spec, work)
+  if type(spec) ~= "table" or type(work) ~= "function" then return false end
+  if M.find(widget, CONFIRM_VIEW) == nil then return false end
+  local session = M.session(widget)
+  session.confirm = { spec = spec, work = work }
+  if not push(widget, CONFIRM_VIEW, false) then
+    session.confirm = nil
+    return false
+  end
+  reset(widget)
+  return true
+end
+
+--- The press waiting for an answer, or nil: `{ spec, work }` on this visit's session.
+function M.pendingConfirm(widget)
+  local session = widget._viewStack
+  return session and session.confirm or nil
+end
+
+--- Answer the question and close it: forget the pending press and take the confirmation view off
+-- the stack, so the surface under it shows again. The `work` the question held is NOT run here --
+-- the caller runs it (agreeing) or does not (declining).
+--
+-- The view is removed only where it is on top; a question that is not the surface showing leaves
+-- the stack as it is.
+function M.closeConfirm(widget)
+  local session = widget._viewStack
+  if session ~= nil then session.confirm = nil end
+  if M.top(widget) == CONFIRM_VIEW then
+    pop(widget)
+    reset(widget)
   end
 end
 

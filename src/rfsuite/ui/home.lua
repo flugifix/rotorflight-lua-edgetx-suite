@@ -1382,6 +1382,8 @@ end
 -- constructor inside it would build a new table on every pass whether or not a flight controller
 -- is connected.
 local ESC_PROTOCOLS = {1, 3, 4, 6, 7, 9, 10, 12}
+-- getTime() ticks (10 ms) before the ESC tools menu asks again for a protocol it failed to read.
+local ESC_PROTO_RETRY_TICKS = 500
 
 local function updateRuntimeMenuConditions()
   if not state.menu then return end
@@ -1416,34 +1418,60 @@ local function updateRuntimeMenuConditions()
   local currentMenuId = state.menu.getCurrentMenuId()
   if currentMenuId ~= "esc_tools_menu" then
     state.escProtoCheckPending = false
+    state.escProtoRetryAt = nil
   end
 
-  if currentMenuId == "esc_tools_menu" and session and session.esc4WayDetectedProto == nil and not state.escProtoCheckPending then
+  -- The onconnect task esc_sensor_config fills the protocol only where the event tasks run as
+  -- the tool (tasks/events/onconnect/manifest.lua). When the dashboard hosts this file they run
+  -- as the widget, and after a short link loss or a failed read the value stays empty as well, so
+  -- the menu asks for it itself. A read that fails is asked again only after
+  -- ESC_PROTO_RETRY_TICKS; leaving the menu and coming back asks at once. It waits until
+  -- syncActivePageModule has taken the menu over, so the request is filed under the menu's own
+  -- MSP client rather than under the one the leaving menu's reads are dropped with.
+  if currentMenuId == "esc_tools_menu" and state.activePageMenuId == currentMenuId
+    and state.fblConnected == true and session
+    and session.esc4WayDetectedProto == nil and not state.escProtoCheckPending
+    and (state.escProtoRetryAt == nil or (getTime and getTime() or 0) >= state.escProtoRetryAt) then
+    ensureMspRuntime()
     local SensorConfigApi = loadModule("tasks/msp/api/esc_sensor_config.lua")
-    local msp = root and root.tasks and root.tasks.msp
-    local queue = msp and msp.getState and msp.getState().queue
-    if queue and SensorConfigApi then
-      queue:add({
+    local function retryLater()
+      state.escProtoCheckPending = false
+      state.escProtoRetryAt = (getTime and getTime() or 0) + ESC_PROTO_RETRY_TICKS
+    end
+    local queued = false
+    if SensorConfigApi and MspRuntime and type(MspRuntime.enqueue) == "function" then
+      queued = MspRuntime.enqueue({
         command = SensorConfigApi.command,
         isWrite = false,
         simulatorResponse = { 1, 0, 200, 0, 0, 15, 0, 0, 0, 30, 0, 0, 0, 0 },
+        timeout = 5.0,
+        maxRetries = 2,
         processReply = function(self, buf)
-          state.escProtoCheckPending = false
           local parsed = SensorConfigApi.parse(buf)
           if parsed and parsed.protocol then
-            local proto = tonumber(parsed.protocol) or 0
-            session.esc4WayDetectedProto = proto
+            state.escProtoCheckPending = false
+            session.esc4WayDetectedProto = tonumber(parsed.protocol) or 0
+          else
+            retryLater()
           end
         end,
-        errorHandler = function()
-          state.escProtoCheckPending = false
+        errorHandler = function(_, reason)
+          -- "cleared" is the queue dropping the request unsent, so nothing failed: ask again
+          -- on the next pass that is still on the menu.
+          if reason == "cleared" then
+            state.escProtoCheckPending = false
+          else
+            retryLater()
+          end
         end
-      })
-      -- The three assignments above are all resets. Without this one the guard on the `if`
-      -- is never false, so the probe is queued again on every pass through this function.
+      }) == true
+    end
+    if queued then
+      -- The handlers above are what reset this. Without it the guard on the `if` is never
+      -- false, so the read is queued again on every pass through this function.
       state.escProtoCheckPending = true
     else
-      state.escProtoCheckPending = false
+      retryLater()
     end
   end
 

@@ -190,11 +190,41 @@ end
 -- one and not all of them, their translations and closures included.
 local BUILD = {}
 
+-- How full the blackbox is, as the flight controller last reported it: the summary read on
+-- connecting, and again after every erase. It is the row's `info`, and it is also what the
+-- erase's question is worded from: how much is about to be lost is the one thing a pilot cannot
+-- recover by looking afterwards.
+local function blackboxFill()
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local stats = session and session.dataflash or nil
+  if type(stats) ~= "table" then return nil end
+  return { used = stats.used, total = stats.total }
+end
+
 function BUILD.erase_blackbox(widget, t)
+  -- The erase is irreversible and sits one tap from the quick menu, so the entry carries the
+  -- question and `M.run` holds the press behind it: nothing is queued, and full screen is not
+  -- left, until the pilot has agreed. `detail` is omitted where no summary has been read, so the
+  -- question is the same shape with or without a number in it.
+  local confirm = {
+    title = t("widgets.dashboard.erase_blackbox_confirm_title", "ERASE BLACKBOX"),
+    message = t("widgets.dashboard.erase_blackbox_confirm_message",
+      "Erase the flight controller's blackbox? This cannot be undone."),
+    confirmLabel = t("widgets.dashboard.erase_blackbox_confirm_yes", "ERASE"),
+    cancelLabel = t("widgets.dashboard.erase_blackbox_confirm_no", "CANCEL"),
+  }
+  local fill = blackboxFill()
+  if fill and type(fill.used) == "number" and type(fill.total) == "number" and fill.total > 0 then
+    confirm.detail = string.format(
+      t("widgets.dashboard.erase_blackbox_confirm_used", "%d%% used"),
+      math.floor(fill.used / fill.total * 100 + 0.5))
+  end
+
   return {
     id = "erase_blackbox",
     kind = "action",
     title = t("widgets.dashboard.erase_blackbox", "ERASE BLACKBOX"),
+    confirm = confirm,
     press = function(report)
          local mspModule = requireModule("tasks/msp/runtime.lua")
          if mspModule and mspModule.getState then
@@ -229,14 +259,7 @@ function BUILD.erase_blackbox(widget, t)
             end
          end
     end,
-    -- How full the blackbox is, as the flight controller last reported it: the summary read on
-    -- connecting, and again after every erase.
-    info = function()
-      local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
-      local stats = session and session.dataflash or nil
-      if type(stats) ~= "table" then return nil end
-      return { used = stats.used, total = stats.total }
-    end,
+    info = blackboxFill,
     after = "done"
   }
 end
@@ -390,7 +413,9 @@ end
 --
 -- `press` does the row's work and nothing else. What follows it -- leaving fullscreen, opening
 -- another view, or nothing -- is the row's `after`, an action views.lua performs; an option of a
--- `choice` carries its own.
+-- `choice` carries its own. A row whose press must be agreed to first also carries a `confirm`,
+-- the question `M.run` raises before the work: ERASE BLACKBOX is the one, and it is what keeps a
+-- mis-tap on an irreversible action from meaning anything.
 --
 -- The title is resolved here, and it is resolved from a complete literal key: the translation
 -- precompiler rewrites what it can read, and a key assembled from parts ships the English
@@ -483,12 +508,28 @@ function M.visible(widget, entry)
   return isEntryVisible(entry, widget)
 end
 
+-- The work a press does and the action that follows it, in that order. Split out of `run` so
+-- that a press which must be confirmed can be performed from the answer instead of here.
+local function perform(widget, source, after, report)
+  if type(source.press) == "function" then source.press(report) end
+  if after == nil then after = source.after end
+  if Views and type(Views.navigate) == "function" then Views.navigate(widget, after) end
+end
+
 --- Run an entry, or one of its options: the work, then the action that follows it. This is the
 --- one place both happen, for the menu's own buttons, the picker's and a theme's alike.
 --
 -- The work is the option's when an option is given and the entry's otherwise; so is the action,
 -- unless `after` names another one. `report` is handed to the work, which tells it how the
 -- messages it queued fared (see queueChain); the menu's own buttons pass none.
+--
+-- An entry that carries `confirm` is a press that must be agreed to first: its work is NOT
+-- performed here but handed to the confirmation view (views.confirm), which runs it from the
+-- pilot's answer. A question that cannot be raised leaves the press unperformed -- refusing
+-- loses nothing where a mis-tap would lose the logs.
+--
+-- A `choice` entry's own `confirm` guards every option it runs; an option that carries one is
+-- held by its own question, which is preferred where both carry one.
 --
 -- This runs whatever it is handed: the `press` of the table it is given, with no check of where
 -- that table came from. A caller resolves first and passes only the menu's own records -- the
@@ -497,9 +538,15 @@ end
 -- theme put work of its own behind one of the menu's entries.
 function M.run(widget, entry, option, after, report)
   local source = option or entry
-  if type(source.press) == "function" then source.press(report) end
   if after == nil then after = source.after end
-  if Views and type(Views.navigate) == "function" then Views.navigate(widget, after) end
+  local confirm = (option and option.confirm) or entry.confirm
+  if type(confirm) == "table" then
+    if Views and type(Views.confirm) == "function" then
+      Views.confirm(widget, confirm, function() perform(widget, source, after, report) end)
+    end
+    return
+  end
+  perform(widget, source, after, report)
 end
 
 --- Draw the menu.
