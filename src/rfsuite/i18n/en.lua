@@ -2490,6 +2490,7 @@ return {
         urban_page_rows = "Value Rows",
         urban_page_topbar = "Top Bar",
         urban_page_keys = "Keys",
+        urban_page_telemetry = "Telemetry",
         -- The rows of the Urban theme's settings pages and their values.
         urban_scheme = "Colour scheme",
         urban_scheme_light = "Light",
@@ -2521,9 +2522,12 @@ return {
         urban_key_menu = "Suite: Quick menu",
         urban_key_tools = "Theme: Tuning",
         urban_key_link = "Theme: ELRS link",
+        urban_key_telemetry = "Theme: Telemetry",
         urban_key_suite_tool = "Suite: Main menu",
         urban_tap_frames = "Frames on tap areas",
-        urban_key_exit = "Suite: Exit full screen"
+        urban_key_exit = "Suite: Exit full screen",
+        -- The Telemetry page: what each tile of the telemetry view shows.
+        urban_tile = "Tile"
       },
       settings_dashboard_overrides = {
         model_name = "Model",
@@ -3012,7 +3016,9 @@ return {
       urban_not_available = "Not available",
       urban_sending = "Sending...",
       urban_done = "Done",
-      urban_failed = "Failed"
+      urban_failed = "Failed",
+      urban_telemetry = "Telemetry",
+      urban_no_tiles = "No tiles chosen"
     },
     escstatus = {
       ok = "OK",

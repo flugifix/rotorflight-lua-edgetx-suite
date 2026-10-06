@@ -2488,6 +2488,7 @@ return {
         urban_page_rows = "Wertezeilen",
         urban_page_topbar = "Kopfleiste",
         urban_page_keys = "Tasten",
+        urban_page_telemetry = "Telemetrie",
         urban_scheme = "Farbschema",
         urban_scheme_light = "Hell",
         urban_scheme_dark = "Dunkel",
@@ -2516,9 +2517,12 @@ return {
         urban_key_menu = "Suite: Schnellmenü",
         urban_key_tools = "Theme: Abstimmung",
         urban_key_link = "Theme: ELRS-Link",
+        urban_key_telemetry = "Theme: Telemetrie",
         urban_key_suite_tool = "Suite: Hauptmenü",
         urban_tap_frames = "Rahmen um Tippflächen",
-        urban_key_exit = "Suite: Vollbild aus"
+        urban_key_exit = "Suite: Vollbild aus",
+        -- The Telemetry page: what each tile of the telemetry view shows.
+        urban_tile = "Kachel"
       },
       settings_dashboard_overrides = {
         model_name = "Modell",
@@ -3003,7 +3007,9 @@ return {
       urban_not_available = "Nicht verfügbar",
       urban_sending = "Wird gesendet...",
       urban_done = "Fertig",
-      urban_failed = "Fehlgeschlagen"
+      urban_failed = "Fehlgeschlagen",
+      urban_telemetry = "Telemetrie",
+      urban_no_tiles = "Keine Kacheln gewählt"
     },
     escstatus = {
       ok = "OK",
