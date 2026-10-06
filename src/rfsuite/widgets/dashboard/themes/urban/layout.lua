@@ -843,6 +843,24 @@ local function derivedGetter(source, format)
   end
 end
 
+-- A reading straight off one of the radio's telemetry sensors, by the name EdgeTX gives it. The
+-- host has no field for these: naming the sensor as a source makes it resolve the name with
+-- `getValue` on its own pass (objects/common.lua, Utils.mapTelemetrySource, which falls through to
+-- the sensor module's direct lookup), and the closure reads the snapshot. `places` is the number
+-- of decimals drawn. The telemetry view's range for such a reading is the radio's own least and
+-- most of the sensor since its last telemetry reset -- the `-` and `+` forms of the same name --
+-- because the flight record keeps none of them.
+local function rawSource(id, label, sensor, unit, sample, places)
+  local format
+  if places == 0 then
+    format = Common.integer
+  else
+    format = function(v) return Common.decimals(v, places) end
+  end
+  return { id = id, label = label, unit = unit, sample = sample, source = sensor, rawRange = true,
+    places = places, make = derivedGetter(sensor, format) }
+end
+
 -- Every source reads a state field the runtime's telemetry pass fills; nothing here probes.
 -- `list` is the configure page's order, `id` the cfg value it stores, `label` the row's name as a
 -- translation marker -- the configure page lists it as the option and the panel draws it, so the
@@ -998,6 +1016,37 @@ L.SOURCES = {
     source = "link_floor",
     make = derivedGetter("link_floor", Common.integer) },
 
+  -- Readings the host has no field for, straight off the radio's telemetry sensors (rawSource
+  -- above). Each costs the host a sensor read per telemetry pass only while a row or a tile shows
+  -- it, and a tile showing it two more for its range. The names are the ones the suite's own
+  -- decoder creates (lib/rf2tlm_sensors.lua); TQly, TPWR and RSNR are the link's own.
+  rawSource("bec_temp", "@i18n(widgets.dashboard.urban_bec_temp)@", "Tbec", "C", "999", 0),
+  rawSource("tail_speed", "@i18n(widgets.dashboard.urban_tail_speed)@", "Tspd", "rpm", "9999", 0),
+  rawSource("vario", "@i18n(widgets.dashboard.urban_vario)@", "Var", "m/s", "-99.9", 1),
+  rawSource("tq", "@i18n(widgets.dashboard.urban_tq)@", "TQly", "%", "888", 0),
+  rawSource("tx_power", "@i18n(widgets.dashboard.urban_tx_power)@", "TPWR", "mW", "8888", 0),
+  rawSource("esc_bec_temp", "@i18n(widgets.dashboard.urban_esc_bec_temp)@", "BecT", "C", "999", 0),
+  rawSource("bec_current", "@i18n(widgets.dashboard.urban_bec_current)@", "Ibec", "A", "99.9", 1),
+  rawSource("esc_voltage", "@i18n(widgets.dashboard.urban_esc_voltage)@", "EscV", "V", "99.99", 2),
+  rawSource("esc_current", "@i18n(widgets.dashboard.urban_esc_current)@", "EscI", "A", "999.9", 1),
+  rawSource("esc_used", "@i18n(widgets.dashboard.urban_esc_used)@", "EscC", "mAh", "8888", 0),
+  rawSource("esc_rpm", "@i18n(widgets.dashboard.urban_esc_rpm)@", "EscR", "rpm", "99999", 0),
+  rawSource("esc_pwm", "@i18n(widgets.dashboard.urban_esc_pwm)@", "EscP", "%", "100.0", 1),
+  rawSource("esc_telem_load", "@i18n(widgets.dashboard.urban_esc_telem_load)@", "Esc%", "%", "100.0", 1),
+  rawSource("gps_sats", "@i18n(widgets.dashboard.urban_gps_sats)@", "Sats", "", "88", 0),
+  rawSource("gps_speed", "@i18n(widgets.dashboard.urban_gps_speed)@", "GSpd", "m/s", "99.9", 1),
+  rawSource("gps_alt", "@i18n(widgets.dashboard.urban_gps_alt)@", "GAlt", "m", "888.8", 1),
+  rawSource("gps_dist", "@i18n(widgets.dashboard.urban_gps_dist)@", "GDis", "m", "8888", 0),
+  rawSource("pitch", "@i18n(widgets.dashboard.urban_pitch)@", "Ptch", "deg", "-180", 0),
+  rawSource("roll", "@i18n(widgets.dashboard.urban_roll)@", "Roll", "deg", "-180", 0),
+  rawSource("yaw", "@i18n(widgets.dashboard.urban_yaw)@", "Yaw", "deg", "-180", 0),
+  rawSource("cpu_load", "@i18n(widgets.dashboard.urban_cpu_load)@", "CPU%", "%", "888", 0),
+  rawSource("sys_load", "@i18n(widgets.dashboard.urban_sys_load)@", "SYS%", "%", "888", 0),
+  rawSource("rt_load", "@i18n(widgets.dashboard.urban_rt_load)@", "RT%", "%", "888", 0),
+  rawSource("bus_voltage", "@i18n(widgets.dashboard.urban_bus_voltage)@", "Vbus", "V", "99.99", 2),
+  rawSource("mcu_voltage", "@i18n(widgets.dashboard.urban_mcu_voltage)@", "Vmcu", "V", "9.99", 2),
+  rawSource("rsnr", "@i18n(widgets.dashboard.urban_rsnr)@", "RSNR", "dB", "-88", 0),
+
   { id = "none", label = "@i18n(widgets.dashboard.urban_off)@", unit = "", sample = "8888",
     make = function() return function() return "" end end },
 }
@@ -1099,6 +1148,17 @@ function L.sources(state)
       seen[src] = true
       list[#list + 1] = src
     end
+    -- A raw sensor's range is the radio's own least and most of it, the `-` and `+` forms of the
+    -- name; only a tile draws a range, so a row showing the same sensor does not pay for them.
+    if src and def.rawRange then
+      for _, suffix in ipairs({ "-", "+" }) do
+        local ext = src .. suffix
+        if not seen[ext] then
+          seen[ext] = true
+          list[#list + 1] = ext
+        end
+      end
+    end
   end
   return list
 end
@@ -1140,6 +1200,25 @@ local function rangeGetter(state, def, cells)
   end
 end
 
+-- "<least> .. <most>" of a raw sensor, from the radio's `-` and `+` forms of its name as the host
+-- resolved them into the snapshot (L.sources declares both for a tile).
+local function rawRangeGetter(state, def)
+  local lowName, highName = def.source .. "-", def.source .. "+"
+  local fmt = "%." .. tostring(def.places or 0) .. "f"
+  local lastMin, lastMax, text = Common.UNSET, Common.UNSET, nil
+  return function()
+    local d = state.derived
+    local lo = d and d[lowName]
+    local hi = d and d[highName]
+    if type(lo) ~= "number" then lo = nil end
+    if type(hi) ~= "number" then hi = nil end
+    if lo == lastMin and hi == lastMax then return text end
+    lastMin, lastMax = lo, hi
+    text = (lo and string.format(fmt, lo) or "-") .. " .. " .. (hi and string.format(fmt, hi) or "-")
+    return text
+  end
+end
+
 -- The telemetry view's tiles, in the order the settings page lists them, without the ones set to
 -- `none`. Each is a row of the five-row panel -- the same label, unit, figure and colour -- plus
 -- `range`, the record's extremes as one string, nil for a reading the record does not keep.
@@ -1151,7 +1230,9 @@ function L.tileRows(state)
     local def = SOURCES_BY_ID[cfg["tile" .. i]] or SOURCES_BY_ID[L.DEFAULT_TILES[i]]
     if def and def.id ~= "none" then
       local range = nil
-      if def.minKey or def.maxKey then
+      if def.rawRange then
+        range = rawRangeGetter(state, def)
+      elseif def.minKey or def.maxKey then
         if def.perCell and cells == nil then cells = Common.cells(state) end
         range = rangeGetter(state, def, def.perCell and cells or nil)
       end

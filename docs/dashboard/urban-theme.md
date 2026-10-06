@@ -106,7 +106,7 @@ setting.
 | Look | Colour scheme | *Light* (default) or *Dark*. |
 | Look | Arm state colours | *Green and red* (default): armed green, disarmed red. *Amber and grey*: armed amber, disarmed in the label colour. |
 | Look | Frames on tap areas | *On* (default) shows the radio's own frame, light blue in its default theme, around every place on the full screen that takes a press. *Off* covers it; the outlines Urban draws itself stay, the choice in force stays green, and a place reached with the rotary encoder still shows the radio's focus frame. |
-| Value Rows | Row 1 … Row 5 | The value each row of the right panel shows: cell voltage, voltage, headspeed, current, ESC temperature, MCU temperature, BEC voltage, power, throttle, fuel, capacity used, altitude, link quality, ESC load, ESC status, air rate, rate floor, or nothing. Defaults: cell voltage, headspeed, current, ESC temperature, BEC voltage. |
+| Value Rows | Row 1 … Row 5 | The value each row of the right panel shows: cell voltage, voltage, headspeed, current, ESC temperature, MCU temperature, BEC voltage, power, throttle, fuel, capacity used, altitude, link quality, ESC load, ESC status, air rate, rate floor, one of the telemetry sensors listed under [What it reads](#what-it-reads), or nothing. Defaults: cell voltage, headspeed, current, ESC temperature, BEC voltage. |
 | Value Rows | Units beside the values | *Off* (default) gives the width to the figures. |
 | Value Rows | Temperature colours | Colours the ESC and MCU temperature rows. *Off* (default); *Standard*: ESC amber from 90 °C and red from 110 °C, MCU from 75 °C and 90 °C; *Early*: each 10 °C lower. |
 | Top Bar | Clock | *Time only* (default) or *Date and time*. |
@@ -136,7 +136,20 @@ and power (`TQly`, `TPWR`), the air rate's sensitivity floor, whether a second a
 seen, the skipped-frame count (`*Skp`) and the speed controller's live status, and whatever a
 chosen value row or *Telemetry* tile needs (ESC load, ESC status, air rate, rate floor). The
 *Telemetry* page declares nothing of its own: the flight screen's list carries its tiles, and the
-ranges under the tiles are read from the flight record. The statistics screen
+ranges under the tiles are read from the flight record.
+
+A row or a tile can also show a telemetry sensor the widget has no reading of its own for, by the
+name the suite's decoder gives it: BEC temperature (`Tbec`), tail speed (`Tspd`), vario (`Var`),
+the transmitter's link quality (`TQly`) and power (`TPWR`), the ESC's own BEC temperature
+(`BecT`), BEC current (`Ibec`), the ESC's voltage, current, capacity, RPM, PWM and load
+(`EscV`, `EscI`, `EscC`, `EscR`, `EscP`, `Esc%`), GPS satellites, speed, altitude and distance
+(`Sats`, `GSpd`, `GAlt`, `GDis`), pitch, roll and yaw (`Ptch`, `Roll`, `Yaw`), the flight
+controller's CPU, system and real-time load (`CPU%`, `SYS%`, `RT%`), bus and MCU voltage
+(`Vbus`, `Vmcu`) and the link's signal-to-noise ratio (`RSNR`). Such a sensor is declared only
+while a row or a tile shows it, and each one costs a sensor read per telemetry pass. On a
+*Telemetry* tile its range is the radio's own least and most of the sensor since the last
+telemetry reset -- the sensor's `-` and `+` forms, two reads more -- because the flight record
+keeps none of them. The statistics screen
 declares nothing and reads the flight record. A reading the model does not carry shows `-`.
 
 The skipped-frame count is published by the suite itself under the name `*Skp`
@@ -159,9 +172,9 @@ sensor of that name and a declared name that is absent is still searched for.
   flight controller runs.
 - **Only the menu and tool buttons, the profile row, the link bars and the value rows take a press.**
   The gauge and the status line open nothing.
-- **The *Telemetry* page shows the flight record's extremes, not the radio's.** The radio keeps a
-  least and a most of every telemetry sensor since its last telemetry reset; the page shows the
-  flight's, which exist only for the readings the record keeps and only for the armed time.
+- **The *Telemetry* page shows the flight record's extremes for the readings the record keeps**,
+  covering the armed time only, and the radio's own since its last telemetry reset for a raw
+  sensor -- two different spans on one page.
 - **A copy in the user folder draws with the shipped files**: its settings are its own, but its
   phase modules load `layout.lua` and `common.lua` from the shipped folder.
 - The *Transmitter power*, *TQ* and skipped-frame cells read `-` on a link that does not report
