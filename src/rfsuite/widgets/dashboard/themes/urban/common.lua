@@ -152,6 +152,8 @@ M.T = {
   -- telemetry view says when every tile is switched off.
   view_menu = "@i18n(widgets.dashboard.urban_quick_settings)@",
   view_pick = "@i18n(widgets.dashboard.urban_which_battery)@",
+  pick_cycles = "@i18n(widgets.dashboard.urban_pick_cycles)@",
+  pick_profile = "@i18n(widgets.dashboard.urban_pick_profile)@",
   view_tools = "@i18n(widgets.dashboard.urban_profile_tuning)@",
   view_telemetry = "@i18n(widgets.dashboard.urban_telemetry)@",
   no_tiles = "@i18n(widgets.dashboard.urban_no_tiles)@",
