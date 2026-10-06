@@ -40,6 +40,11 @@ EdgeTX gives every script, so it looks the same whichever dashboard theme is sel
 | **MAIN MENU** | Opens the suite's tool, with its whole menu, inside the widget — see [the tool from full screen](#the-tool-from-full-screen). Only listed while the model is disarmed. |
 | **BATTERY PROFILE** | A grid of the model's battery profiles; pressing one makes it the profile in force. |
 
+That is the menu as it comes. Which of these entries it shows, and in which order, is the
+pilot's to choose on *System* → *Settings* → *Dashboard* →
+[*Quick Settings*](../pages/settings/dashboard/quick_menu.md). An entry chosen there still hides
+where the table says it is not listed.
+
 **IN-FLIGHT TUNING is a preview entry.** It appears only while *System* → *Settings* →
 *General* → *Preview* → *In-flight tuning* is on **and** the widget is carrying the overlay's
 state for this model. With the preview switch off the entry is not listed at all, so the menu
@@ -138,11 +143,21 @@ that sends messages to the flight controller queues them as one chain and report
 through it (`"busy"`, then `"ok"` on the last message's reply or `"failed"` on any message's
 error). The menu's own buttons pass none, so what they queue is what they always queued.
 
-**Menus are lists of entry ids.** `M.LISTS` names them — `quick` is `erase_blackbox`,
-`inflight_tuning`, `battery_pick`, `battery_profile`, which is what the quick menu draws — and
-`M.list(widget, name)` returns the entries of one. `M.resolve(widget, entry, option)` finds
+**Menus are lists of entry ids.** `M.LISTS` names them — `quick` is the quick menu's default,
+`erase_blackbox`, `inflight_tuning`, `battery_pick`, `tool`, `battery_profile` — and
+`M.list(widget, name)` returns the entries of one. For `quick` that is the pilot's list rather
+than the default: `M.entries(widget)` and `M.list(widget, "quick")` read the ids from the
+`dashboard.quick_menu` preference through `src/rfsuite/widgets/dashboard/quick_menu_order.lua`,
+which also holds the entries a pilot may choose (`OFFERED`), the default (`DEFAULT`) and their
+titles for the settings page, so the page and the menu cannot disagree. The preference is a
+string of ids separated by commas: absent, or not a string, is the default; the empty string is
+an emptied menu; an id the build does not offer is dropped, and an id named twice counts at its
+first place. A string that names nothing the build offers reads as the default. An entry added
+to the menu is added to `OFFERED` there, and to `DEFAULT` only where an unconfigured radio
+should show it. `M.resolve(widget, entry, option)` finds
 the menu's own record and option for what a caller hands in, by `id`, and
-`M.coreList(widget, list)` the records for a list of them. A theme reaches the same records
+`M.coreList(widget, list)` the records for a list of them — every entry the menu can build, not
+only the ones in the pilot's list, so a theme that names an entry gets it. A theme reaches the same records
 through its `ctx` and may draw them its own way, but it adds none and changes none: see
 [dashboard themes](../developer/dashboard-themes.md#the-theme-draws-the-widget-acts).
 
