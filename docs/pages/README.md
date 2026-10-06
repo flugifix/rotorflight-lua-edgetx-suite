@@ -33,7 +33,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Rates | [flight_tuning/rates.md](flight_tuning/rates.md) | yes | read-only while armed | written |
 | Governor | `flight_tuning/governor.md` | yes | read-only while armed, needs MSP API 12.09 | to write |
 | Advanced → Filters | `flight_tuning/advanced/filters.md` | yes | read-only while armed | to write |
-| Advanced → PID Controller | `flight_tuning/advanced/pid_controller.md` | yes | read-only while armed | to write |
+| Advanced → PID Controller | [flight_tuning/advanced/pid_controller.md](flight_tuning/advanced/pid_controller.md) | yes | read-only while armed | written |
 | Advanced → PID Bandwidth | `flight_tuning/advanced/pid_bandwidth.md` | yes | read-only while armed | to write |
 | Advanced → Autolevel | `flight_tuning/advanced/autolevel.md` | yes | read-only while armed | to write |
 | Advanced → Main Rotor | `flight_tuning/advanced/main_rotor.md` | yes | read-only while armed | to write |
