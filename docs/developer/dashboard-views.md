@@ -71,8 +71,10 @@ after the theme on screen has changed, `views.register()` makes the registry ane
 - any other id is appended, in the theme's order.
 
 A theme's module is read through the theme loader when the view is first built, and built as
-`build(children, zone, state, ctx)`; its key is `renderKey(zone, state)`. RTN on a view of the
-theme's own is its `back(ctx)`, else `closeView`. A view that was on the stack and is not in the
+`build(children, zone, state, ctx)`; its key is `renderKey(zone, state)`. Where it has
+`sources(zone, state)`, the derived snapshot resolves that list after the theme's own sources while
+the view is on top, and stops when it is not (`viewSnapshotSources` in `runtime.lua`). RTN on a
+view of the theme's own is its `back(ctx)`, else `closeView`. A view that was on the stack and is not in the
 new registry is taken off it, so no job is queued for a view no step can build. A theme module
 that does not load, or whose `build` raises, is not asked for again, with one log line: a
 replaced look falls back to the core module at once, and a view of the theme's own is closed and
