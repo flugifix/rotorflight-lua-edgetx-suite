@@ -15,7 +15,7 @@ are listed at the end of this page.
 
 *System* → *Settings* → *Dashboard* → *Design*: choose *Urban* for a flight phase, or for all
 three. Its settings are under *System* → *Settings* → *Dashboard* → *Settings* → *Urban*, split
-into four pages: *Look*, *Value Rows*, *Top Bar* and *Keys*. They are stored for the radio, and a model
+into five pages: *Look*, *Value Rows*, *Top Bar*, *Keys* and *Telemetry*. They are stored for the radio, and a model
 can carry its own under [*Per-Model Settings*](../pages/settings/dashboard/overrides.md) where
 per-model settings are switched on. On both pages its tile carries an icon of its own, a small
 picture of its flight screen with the battery gauge in the middle. Its words come from the suite's
@@ -55,7 +55,7 @@ stopped answering.
 
 With *Urban* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
-allows. Three places on the screen open a page over it, and a fourth opens the suite's tool:
+allows. Four places on the screen open a page over it, and a fifth opens the suite's tool:
 
 - **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do the
   page keys and TELE, left at their defaults.
@@ -71,6 +71,14 @@ allows. Three places on the screen open a page over it, and a fourth opens the s
   the skipped frames, the air rate beside the title and the rate floor at the foot. The *Link view
   switch* on the *Top Bar* page opens the same page while the switch is in the chosen position, in
   full screen and in the widget's zone alike; in the zone it only shows.
+- **The value rows** of the right panel open *Telemetry*: up to twelve readings as tiles, three to
+  a row, chosen on the *Telemetry* page. Each tile shows the reading's name and figure and, under
+  it, the least and the most the flight reached, `min .. max`. Those come from the flight record:
+  the flight in progress where it has a value, the last flight otherwise, so the line is empty
+  until the model has been armed once and covers the armed time only. Where the record keeps one
+  side only it shows `-` for the other -- the MCU temperature and the power have a most and no
+  least, the fuel a least and no most -- and a reading the record does not keep (ESC load, ESC
+  status, air rate, rate floor) has no line at all.
 
 Urban draws these pages, the quick menu and the battery picker in the look of the screen they
 open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's
@@ -109,8 +117,9 @@ setting.
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
-| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Suite: Main menu* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Suite: Main menu* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. |
 | Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *Suite: Main menu*, TELE *Suite: Quick menu*. |
+| Telemetry | Tile 1 … Tile 12 | The reading each tile of the *Telemetry* page shows, from the same list as the value rows, or nothing; a tile set to nothing is left out and the others close up. Defaults: voltage, cell voltage, current, capacity used, fuel, headspeed, ESC temperature, MCU temperature, BEC voltage, and tiles 10 to 12 off. The *Units beside the values* and *Temperature colours* settings apply to the tiles as to the rows. |
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the
 model — the cell count times the flight controller's minimum cell voltage — and the gauge, the
@@ -125,7 +134,9 @@ colour of the area lie over the frame.
 Besides the fields every theme gets, the flight screen declares the transmitter's link quality
 and power (`TQly`, `TPWR`), the air rate's sensitivity floor, whether a second antenna has been
 seen, the skipped-frame count (`*Skp`) and the speed controller's live status, and whatever a
-chosen value row needs (ESC load, ESC status, air rate, rate floor). The statistics screen
+chosen value row or *Telemetry* tile needs (ESC load, ESC status, air rate, rate floor). The
+*Telemetry* page declares nothing of its own: the flight screen's list carries its tiles, and the
+ranges under the tiles are read from the flight record. The statistics screen
 declares nothing and reads the flight record. A reading the model does not carry shows `-`.
 
 The skipped-frame count is published by the suite itself under the name `*Skp`
@@ -146,8 +157,11 @@ sensor of that name and a declared name that is absent is still searched for.
   the flight record keeps no transmitter power.
 - **The arming-disable names cover bits 0 to 25**, named the same whatever MSP API version the
   flight controller runs.
-- **Only the menu and tool buttons, the profile row and the link bars take a press.** The gauge, the value
-  rows and the status line open nothing.
+- **Only the menu and tool buttons, the profile row, the link bars and the value rows take a press.**
+  The gauge and the status line open nothing.
+- **The *Telemetry* page shows the flight record's extremes, not the radio's.** The radio keeps a
+  least and a most of every telemetry sensor since its last telemetry reset; the page shows the
+  flight's, which exist only for the readings the record keeps and only for the armed time.
 - **A copy in the user folder draws with the shipped files**: its settings are its own, but its
   phase modules load `layout.lua` and `common.lua` from the shipped folder.
 - The *Transmitter power*, *TQ* and skipped-frame cells read `-` on a link that does not report
