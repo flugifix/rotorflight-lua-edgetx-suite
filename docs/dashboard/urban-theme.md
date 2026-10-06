@@ -15,7 +15,7 @@ are listed at the end of this page.
 
 *System* → *Settings* → *Dashboard* → *Design*: choose *Urban* for a flight phase, or for all
 three. Its settings are under *System* → *Settings* → *Dashboard* → *Settings* → *Urban*, split
-into four pages: *Look*, *Value Rows*, *Top Bar* and *Keys*. They are stored for the radio, and a model
+into five pages: *Look*, *Value Rows*, *Top Bar*, *Keys* and *Telemetry*. They are stored for the radio, and a model
 can carry its own under [*Per-Model Settings*](../pages/settings/dashboard/overrides.md) where
 per-model settings are switched on. On both pages its tile carries an icon of its own, a small
 picture of its flight screen with the battery gauge in the middle. Its words come from the suite's
@@ -55,7 +55,7 @@ stopped answering.
 
 With *Urban* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen, which the radio always
-allows. Three places on the screen open a page over it, and a fourth opens the suite's tool:
+allows. Four places on the screen open a page over it, and a fifth opens the suite's tool:
 
 - **The menu button** at the left of the top bar opens the [quick menu](quick-menu.md); so do the
   page keys and TELE, left at their defaults.
@@ -71,12 +71,22 @@ allows. Three places on the screen open a page over it, and a fourth opens the s
   the skipped frames, the air rate beside the title and the rate floor at the foot. The *Link view
   switch* on the *Top Bar* page opens the same page while the switch is in the chosen position, in
   full screen and in the widget's zone alike; in the zone it only shows.
+- **The value rows** of the right panel open *Telemetry*: up to twelve readings as tiles, three to
+  a row, chosen on the *Telemetry* page. Each tile shows the reading's name and figure and, under
+  it, the least and the most the flight reached, `min .. max`. Those come from the flight record:
+  the flight in progress where it has a value, the last flight otherwise, so the line is empty
+  until the model has been armed once and covers the armed time only. Where the record keeps one
+  side only it shows `-` for the other -- the MCU temperature and the power have a most and no
+  least, the fuel a least and no most -- and a reading the record does not keep (ESC load, ESC
+  status, air rate, rate floor) has no line at all.
 
 Urban draws these pages, the quick menu and the battery picker in the look of the screen they
 open over, in its colour scheme: a plain page, a title up to a size larger than the top bar's
 lettering with a thin line under it, buttons drawn as an outline with the choice in force in green, and a large **X** at the
 top right that closes the page. The battery picker shows the packs in two columns from two packs up, each
-with its name, capacity and battery profile, and *NO BATTERY* in a row of its own at the foot. Where
+with its name and a line with its capacity, its cycle count and the battery profile a pick selects
+(*1100 mAh - 7 cycles - P2*; no profile where none of the board's matches the pack), and *NO BATTERY*
+as a one-line row of its own at the foot, outlined in green where no pack is picked. Where
 there are more packs than three rows hold, the packs scroll -- swipe them, or turn the rotary
 encoder, which moves from pack to pack -- while *NO BATTERY* stays at the foot, so every pack can
 be picked. RTN closes a page as well.
@@ -96,7 +106,7 @@ setting.
 | Look | Colour scheme | *Light* (default) or *Dark*. |
 | Look | Arm state colours | *Green and red* (default): armed green, disarmed red. *Amber and grey*: armed amber, disarmed in the label colour. |
 | Look | Frames on tap areas | *On* (default) shows the radio's own frame, light blue in its default theme, around every place on the full screen that takes a press. *Off* covers it; the outlines Urban draws itself stay, the choice in force stays green, and a place reached with the rotary encoder still shows the radio's focus frame. |
-| Value Rows | Row 1 … Row 5 | The value each row of the right panel shows: cell voltage, voltage, headspeed, current, ESC temperature, MCU temperature, BEC voltage, power, throttle, fuel, capacity used, altitude, link quality, ESC load, ESC status, air rate, rate floor, or nothing. Defaults: cell voltage, headspeed, current, ESC temperature, BEC voltage. |
+| Value Rows | Row 1 … Row 5 | The value each row of the right panel shows: cell voltage, voltage, headspeed, current, ESC temperature, MCU temperature, BEC voltage, power, throttle, fuel, capacity used, altitude, link quality, ESC load, ESC status, air rate, rate floor, one of the telemetry sensors listed under [What it reads](#what-it-reads), or nothing. Defaults: cell voltage, headspeed, current, ESC temperature, BEC voltage. |
 | Value Rows | Units beside the values | *Off* (default) gives the width to the figures. |
 | Value Rows | Temperature colours | Colours the ESC and MCU temperature rows. *Off* (default); *Standard*: ESC amber from 90 °C and red from 110 °C, MCU from 75 °C and 90 °C; *Early*: each 10 °C lower. |
 | Top Bar | Clock | *Time only* (default) or *Date and time*. |
@@ -107,8 +117,9 @@ setting.
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
-| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Suite: Main menu* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. |
+| Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Suite: Main menu* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. |
 | Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *Suite: Main menu*, TELE *Suite: Quick menu*. |
+| Telemetry | Tile 1 … Tile 12 | The reading each tile of the *Telemetry* page shows, from the same list as the value rows, or nothing; a tile set to nothing is left out and the others close up. Defaults: voltage, cell voltage, current, capacity used, fuel, headspeed, ESC temperature, MCU temperature, BEC voltage, and tiles 10 to 12 off. The *Units beside the values* and *Temperature colours* settings apply to the tiles as to the rows. |
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the
 model — the cell count times the flight controller's minimum cell voltage — and the gauge, the
@@ -123,7 +134,22 @@ colour of the area lie over the frame.
 Besides the fields every theme gets, the flight screen declares the transmitter's link quality
 and power (`TQly`, `TPWR`), the air rate's sensitivity floor, whether a second antenna has been
 seen, the skipped-frame count (`*Skp`) and the speed controller's live status, and whatever a
-chosen value row needs (ESC load, ESC status, air rate, rate floor). The statistics screen
+chosen value row or *Telemetry* tile needs (ESC load, ESC status, air rate, rate floor). The
+*Telemetry* page names what its tiles need itself, so the widget reads those only while the page
+is open; the ranges under the record's readings are read from the flight record.
+
+A row or a tile can also show a telemetry sensor the widget has no reading of its own for, by the
+name the suite's decoder gives it: BEC temperature (`Tbec`), tail speed (`Tspd`), vario (`Var`),
+the transmitter's link quality (`TQly`) and power (`TPWR`), the ESC's own BEC temperature
+(`BecT`), BEC current (`Ibec`), the ESC's voltage, current, capacity, RPM, PWM and load
+(`EscV`, `EscI`, `EscC`, `EscR`, `EscP`, `Esc%`), GPS satellites, speed, altitude and distance
+(`Sats`, `GSpd`, `GAlt`, `GDis`), pitch, roll and yaw (`Ptch`, `Roll`, `Yaw`), the flight
+controller's CPU, system and real-time load (`CPU%`, `SYS%`, `RT%`), bus and MCU voltage
+(`Vbus`, `Vmcu`) and the link's signal-to-noise ratio (`RSNR`). Such a sensor costs a sensor read
+per telemetry pass: in a row for as long as the flight screen shows, on a *Telemetry* tile only
+while the page is open. On a tile its range is the radio's own least and most of the sensor since
+the last telemetry reset -- the sensor's `-` and `+` forms, two reads more -- because the flight
+record keeps none of them. The statistics screen
 declares nothing and reads the flight record. A reading the model does not carry shows `-`.
 
 The skipped-frame count is published by the suite itself under the name `*Skp`
@@ -144,8 +170,11 @@ sensor of that name and a declared name that is absent is still searched for.
   the flight record keeps no transmitter power.
 - **The arming-disable names cover bits 0 to 25**, named the same whatever MSP API version the
   flight controller runs.
-- **Only the menu and tool buttons, the profile row and the link bars take a press.** The gauge, the value
-  rows and the status line open nothing.
+- **Only the menu and tool buttons, the profile row, the link bars and the value rows take a press.**
+  The gauge and the status line open nothing.
+- **The *Telemetry* page shows the flight record's extremes for the readings the record keeps**,
+  covering the armed time only, and the radio's own since its last telemetry reset for a raw
+  sensor -- two different spans on one page.
 - **A copy in the user folder draws with the shipped files**: its settings are its own, but its
   phase modules load `layout.lua` and `common.lua` from the shipped folder.
 - The *Transmitter power*, *TQ* and skipped-frame cells read `-` on a link that does not report

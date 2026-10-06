@@ -137,16 +137,15 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Dashboard → In-Flight Tuning | [settings/dashboard/inflight.md](settings/dashboard/inflight.md) | yes | preview switch *In-flight tuning* | written |
 | Localization | [settings/localization.md](settings/localization.md) | yes | always available | written |
 | Audio → Volume | [settings/audio/volume.md](settings/audio/volume.md) | yes | always available | written |
+| Audio → Events → On Connect | `settings/audio/events/connect.md` | yes | always available | to write |
 | Audio → Events → Arming | `settings/audio/events/arming.md` | yes | always available | to write |
 | Audio → Events → Governor | `settings/audio/events/governor.md` | yes | always available | to write |
 | Audio → Events → Voltage | `settings/audio/events/voltage.md` | yes | always available | to write |
 | Audio → Events → Profiles | `settings/audio/events/profiles.md` | yes | always available | to write |
 | Audio → Events → ESC | `settings/audio/events/esc.md` | yes | always available | to write |
 | Audio → Events → Adjustments | `settings/audio/events/adjustment.md` | yes | always available | to write |
-| Audio → Events → Fuel | `settings/audio/events/fuel.md` | yes | always available | to write |
-| Audio → Events → Battery | `settings/audio/events/battery.md` | yes | always available | to write |
+| Audio → Events → SmartFuel | `settings/audio/events/fuel.md` | yes | always available | to write |
 | Audio → Events → Link | `settings/audio/events/link.md` | yes | always available | to write |
-| Audio → Events → Other | `settings/audio/events/other.md` | yes | always available | to write |
 
 ## System → Developer
 

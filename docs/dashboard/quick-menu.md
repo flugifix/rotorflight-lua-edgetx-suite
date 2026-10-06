@@ -34,7 +34,7 @@ EdgeTX gives every script, so it looks the same whichever dashboard theme is sel
 
 | Entry | What it does |
 | --- | --- |
-| **ERASE BLACKBOX** | Erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now. Closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). |
+| **ERASE BLACKBOX** | Asks first, because the erase cannot be undone — see [the erase confirmation](#the-erase-confirmation). Its **ERASE** answer erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now, closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). |
 | **IN-FLIGHT TUNING** | Opens the in-flight tuning surface at full size. It stays full screen rather than closing. Only listed while the feature is switched on — see below. |
 | **BATTERY** | Brings the battery prompt back, with this model's packs. It stays full screen, the picker taking the menu's place. Only listed while the battery registry has a pack for this model and the model is disarmed. |
 | **MAIN MENU** | Opens the suite's tool, with its whole menu, inside the widget — see [the tool from full screen](#the-tool-from-full-screen). Only listed while the model is disarmed. |
@@ -51,6 +51,20 @@ state for this model. With the preview switch off the entry is not listed at all
 offers no route into a feature the widget has stopped driving. What the surface itself does is
 in [in-flight tuning](inflight-tuning.md); the screen it opens sends nothing until the
 interlock switch is thrown.
+
+## The erase confirmation
+
+Erasing the blackbox is irreversible and sits one tap from the flight line, so the row asks
+before it acts. Tapping **ERASE BLACKBOX** opens a question over the menu: a title, a sentence
+naming what is about to go, and, where the flight controller has reported the storage summary
+(on connecting, and after every erase), a line saying how full it is as *% used*. **ERASE** is
+on the right, in the warning colour; **CANCEL** is on the left.
+
+Nothing is sent and full screen is not left until **ERASE** is pressed. **CANCEL** does nothing
+and shows the menu again; a short press on the return key does the same while a theme takes full
+screen, and on a radio whose return key leaves full screen the question is discarded with the
+visit. Either way the logs are left alone. A model that has not reported a summary yet is asked
+the same question without the *% used* line.
 
 ## The tool from full screen
 
@@ -131,6 +145,7 @@ menus:
 | `visibleWhen` | The name of a condition that decides whether the row exists at all. Omitted, the row is always there. |
 | `press` | The work an `action` does when it is pressed, and nothing else. Optional: a row whose whole effect is its `after` has none. |
 | `after` | What follows the press, as data: `done`, `openView:<id>`, `closeView`, `exitFullscreen`, `openTool` or `none`. Missing means `none`. The actions are described in [dashboard views](../developer/dashboard-views.md). |
+| `confirm` | Optional, the question the row asks before its press is performed: a table of already-translated strings — `title`, `message`, the optional `detail`, and the labels `confirmLabel` and `cancelLabel`. Present, the press is held until the pilot answers — see [the erase confirmation](#the-erase-confirmation). |
 | `options` | For a `choice`: a list, or a function returning one, of `{ id, label, current, press, after }`. `id` is what a run is matched by: a battery profile's number, 1 to 6, and a pack's registry id. The battery-profile grid is one, and the battery picker's packs are the other. |
 | `close` | Optional, `{ press, after }`: what closing the surface that draws the options does. |
 | `info` | Optional, a function returning what the entry knows about the state it acts on, read when it is called. ERASE BLACKBOX has one: `{ used, total }` of the blackbox, from the summary the flight controller last sent. |
@@ -179,9 +194,10 @@ Two things are worth knowing before adding an entry:
 - **A `visibleWhen` name is resolved in `src/rfsuite/widgets/dashboard/views.lua`, and an
   unknown name hides its row** — the same way an unresolvable condition hides a tool menu entry
   in `src/rfsuite/app/menu_registry.lua`. It is the same list a fullscreen view's `openWhen`
-  is resolved against. `enabledWhen`, `lockedWhileArmed` and `confirm` belong
-  to the same vocabulary and no entry uses one yet, so the first entry that needs one brings
-  its resolver with it.
+  is resolved against. `enabledWhen` and `lockedWhileArmed` belong to the same vocabulary and no
+  entry uses one yet, so the first entry that needs one brings its resolver with it. `confirm`
+  is the first that did: an entry that carries one has its press held by `views.lua` until the
+  pilot has answered, and run from that answer.
 
 ## Related
 

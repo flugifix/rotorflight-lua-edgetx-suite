@@ -190,16 +190,15 @@ return {
         table = "Rate Table"
       },
       audio_events = { name = "Events" },
+      audio_events_connect = { name = "On Connect" },
       audio_events_arming = { name = "Arming" },
       audio_events_governor = { name = "Governor" },
       audio_events_voltage = { name = "Voltage" },
       audio_events_profiles = { name = "Profiles" },
       audio_events_esc = { name = "ESC" },
       audio_events_adjustment = { name = "Adjustments" },
-      audio_events_fuel = { name = "Fuel" },
-      audio_events_battery = { name = "Battery" },
+      audio_events_fuel = { name = "SmartFuel" },
       audio_events_link = { name = "Link" },
-      audio_events_other = { name = "Other" },
       audio_volume = { name = "Volume" },
       msp_speed = { name = "MSP Speed" },
       api_tester = { name = "API Tester" },
@@ -830,8 +829,8 @@ return {
         section_link = "Link Quality",
         section_adjustment = "Adjustment Announcements",
         section_fuel = "Fuel",
-        section_battery = "Battery",
-        section_other = "Other",
+        section_smartfuel = "SmartFuel",
+        section_connect = "On Connect",
         section_alert_behaviour = "Alert Behaviour",
         alert_repeat = "Repeat",
         alert_haptic = "Haptic",
@@ -869,7 +868,7 @@ return {
         lq_warn = "Warning (%)",
         lq_critical = "Critical (%)",
         adjustment_events = "Adjustment Announcements",
-        fuel_alerts = "Fuel",
+        fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Callout %",
         fuel_callout_only_10 = "Only at 10%",
         fuel_callout_default = "Only at 10%",
@@ -879,43 +878,72 @@ return {
         fuel_callout_25 = "Every 25%",
         fuel_callout_50 = "Every 50%",
         battery_profile = "Battery Capacity",
-        initial_fuel = "Initial Fuel Announcement",
-        model_announcement = "Model Announcement",
+        initial_fuel = "SmartFuel",
+        model_announcement = "Model Name",
+        help_model_announcement = "Plays the sound file named after the model, SOUNDS/<name>.wav, once when the model connects. Nothing is said if the card has no such file. Off by default.",
+        help_battery_profile = "Speaks the active battery profile's capacity in mAh when the model connects and whenever the profile changes; the profile number if no capacity is set. On by default.",
+        help_pack_not_full = "Once when the model connects: warns with the voltage per cell if it is below Max cell voltage (Setup > Power > Battery) less the margin below. Off by default.",
+        help_pack_not_full_margin = "How far below Max cell voltage a cell may be and still count as full, in millivolts per cell (10 to 500). Default 100 mV.",
+        help_initial_fuel = "Speaks the SmartFuel level once after connecting: on the first fresh reading above 0, else after a few seconds with the value then. Independent of the SmartFuel page's switch. On by default.",
+        help_arming_flags = "Speaks when the model is armed and when it is disarmed. On by default.",
+        help_governor_state = "Speaks the governor's state when it changes, once the new state has held for a moment. Choose below which states are spoken. On by default.",
+        help_governor_state_row = "Whether this state is spoken when the governor enters it. Shown only while Governor State is on. On by default.",
+        help_voltage_alert = "Speaks the pack voltage when it falls below Warn cell voltage (Setup > Power > Battery) times the cell count. On by default.",
+        help_voltage_hold = "How long the voltage has to stay below that line before it is spoken, so a short sag under load stays quiet. 0 speaks at once. Default 2 s.",
+        help_main_power_lost = "Speaks when the main pack is gone while the flight controller still runs on a BEC or backup battery, with the BEC voltage, and again when the pack is back. Off by default.",
+        help_voltage_repeat = "How often a voltage alert speaks while its condition lasts, 10 s apart: until cleared, or 1 to 10 times.\nApplies to Voltage, Main Power Lost and the BEC/RX alert of Setup > Power > Alerts.",
+        help_voltage_haptic = "Whether the transmitter vibrates with Voltage, Main Power Lost and the BEC/RX alert. On by default.",
+        help_pid_profile = "Speaks the PID profile's number when it changes. On by default.",
+        help_rate_profile = "Speaks the rate profile's number when it changes. On by default.",
+        help_esc_temperature = "Speaks a warning when the ESC temperature reaches the threshold below it. Off by default.",
+        help_esc_threshold = "The ESC temperature that sets off the warning, in the unit set in Settings > Localization. Kept with the model while one is connected (the row reads [Model]). Default 90 °C.",
+        help_mcu_temperature = "Speaks a warning with the temperature when the flight controller's MCU reaches the threshold below it. Off by default.",
+        help_mcu_threshold = "The MCU temperature that sets off the warning, in the unit set in Settings > Localization. Always radio-wide. Default 80 °C.",
+        help_esc_repeat = "How often the ESC or MCU warning speaks while the temperature stays at or above its threshold, 10 s apart: until cleared, or 1 to 10 times.",
+        help_esc_haptic = "Whether the transmitter vibrates with the ESC and MCU temperature warnings. On by default.",
+        help_adjustment_events = "Speaks the new value when an adjustment function changes a setting, once it has held for a second; with the function's name when it differs from the last one. Off by default.",
+        help_fuel_alerts = "Speaks the SmartFuel level as it falls past the steps chosen below, and warns when it reaches 0 %. On by default.",
+        help_fuel_callout_percent = "The steps at which the falling level is spoken, each once. Only at 10% speaks just the 10 % step. Default every 10 %.",
+        help_fuel_repeat_below_zero = "How often the empty warning speaks while the level stays at 0 %, 10 s apart: until cleared, or 1 to 10 times. Default once.",
+        help_fuel_haptic_below_zero = "Whether the transmitter vibrates with the empty warning. Off by default.",
+        help_lq_alert = "Speaks the link quality in percent when it falls to the warning or critical level. Recovering is silent, and so is a receiver that reports no link quality. Off by default.",
+        help_lq_warn = "The upper level in percent. Spoken without vibration. Default 70 %.",
+        help_lq_critical = "The lower level in percent. Vibrates too if Haptic is on. Default 50 %.",
+        help_telemetry_lost = "Speaks when the armed model's flight controller stops sending while the radio link is up, and again when it is back. A lost link is the radio's own announcement. Off by default.",
+        help_link_repeat = "How often the link quality alert speaks while it stays at a level, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
+        help_link_haptic = "Whether the transmitter vibrates with the critical link quality level and with Telemetry Lost. On by default.",
         help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
         saved_title = "Saved",
         saved_message = "Audio events saved",
         save_error_title = "Error",
         save_error_message = "Save failed"
       },
+      settings_audio_events_connect = {
+        help_message = "What is said once when a model connects."
+      },
       settings_audio_events_arming = {
-        help_message = "Announce when the model is armed and disarmed."
+        help_message = "Announces arming and disarming."
       },
       settings_audio_events_governor = {
-        help_message = "Announce the governor's state. The main switch turns the announcements on; below it, choose which states are spoken. A state is announced once it has held for a moment, so the states a spool-up passes through are not read out one after another."
+        help_message = "Announces the governor's state as it changes."
       },
       settings_audio_events_voltage = {
-        help_message = "Voltage: speaks when the pack falls below the warning level of the battery configuration.\nHold (s): how long the reading has to stay below first; 0 speaks at once.\nPack Not Full: speaks once on connect when the pack is not full.\nMargin (mV/cell): how far below full a pack still counts as full.\nMain Power Lost: the pack is gone while the flight controller runs on a BEC or backup battery.\nRepeat, Haptic: how often an alert repeats, and whether the transmitter vibrates."
+        help_message = "Alerts about the flight pack's voltage and the model's power supply."
       },
       settings_audio_events_profiles = {
-        help_message = "Announce the PID profile and the rate profile when they change, with the new profile's number."
+        help_message = "Announces a change of PID or rate profile."
       },
       settings_audio_events_esc = {
-        help_message = "ESC Temperature: speaks when the ESC temperature reaches the threshold below it.\nThreshold: in the unit set under Settings > Localization. Stored with the model while a flight controller is connected (the row then reads [Model]), otherwise radio-wide.\nMCU Temperature, Threshold: the same for the flight controller's own MCU; this threshold is always radio-wide.\nRepeat, Haptic: how often either alert repeats while it is too hot, and whether the transmitter vibrates."
+        help_message = "Temperature warnings for the ESC and the flight controller's MCU."
       },
       settings_audio_events_adjustment = {
-        help_message = "Announce a value changed through an adjustment function, as the flight controller reports it."
+        help_message = "Announces values changed with the flight controller's adjustment functions."
       },
       settings_audio_events_fuel = {
-        help_message = "Announce the remaining fuel as it falls past the chosen steps. At the bottom, Repeat says how often the empty warning below 0% speaks, and Haptic whether the transmitter buzzes with it. The descending callouts are not repeated: each step is spoken once as it is passed."
-      },
-      settings_audio_events_battery = {
-        help_message = "Announce the battery capacity when the battery profile changes, and the fuel level once when the model connects."
+        help_message = "Callouts of the SmartFuel level while the model is connected.\nThe flight controller computes the value when SmartFuel is on there (Setup > Power > SmartFuel, MSP API 12.0.9 or later).\nOtherwise the radio computes it from the local source set in Setup > Power > Preferences."
       },
       settings_audio_events_link = {
-        help_message = "Link Quality: speaks the link quality when it falls to a level; recovering is silent, and so is a receiver that reports none.\nWarning (%), Critical (%): the two levels.\nTelemetry Lost: speaks when the armed model's flight controller stops sending with the link up, and again when it is back. A lost link is the radio's own call.\nRepeat, Haptic: how often the link quality alert repeats, and whether the transmitter vibrates (critical level and Telemetry Lost only)."
-      },
-      settings_audio_events_other = {
-        help_message = "Announce the model's name when it connects. The announcement is a WAV file named after the model in the SOUNDS folder."
+        help_message = "Alerts about the radio link and the flight controller's telemetry."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Mode",
@@ -2500,6 +2528,7 @@ return {
         urban_page_rows = "Value Rows",
         urban_page_topbar = "Top Bar",
         urban_page_keys = "Keys",
+        urban_page_telemetry = "Telemetry",
         -- The rows of the Urban theme's settings pages and their values.
         urban_scheme = "Colour scheme",
         urban_scheme_light = "Light",
@@ -2531,9 +2560,12 @@ return {
         urban_key_menu = "Suite: Quick menu",
         urban_key_tools = "Theme: Tuning",
         urban_key_link = "Theme: ELRS link",
+        urban_key_telemetry = "Theme: Telemetry",
         urban_key_suite_tool = "Suite: Main menu",
         urban_tap_frames = "Frames on tap areas",
-        urban_key_exit = "Suite: Exit full screen"
+        urban_key_exit = "Suite: Exit full screen",
+        -- The Telemetry page: what each tile of the telemetry view shows.
+        urban_tile = "Tile"
       },
       settings_dashboard_overrides = {
         model_name = "Model",
@@ -2793,6 +2825,11 @@ return {
       battery_pick_profile = "Profile %d",
       battery_pick_profile_none = "no profile",
       erase_blackbox = "ERASE BLACKBOX",
+      erase_blackbox_confirm_title = "ERASE BLACKBOX",
+      erase_blackbox_confirm_message = "Erase the flight controller's blackbox? This cannot be undone.",
+      erase_blackbox_confirm_used = "%d%% used",
+      erase_blackbox_confirm_yes = "ERASE",
+      erase_blackbox_confirm_no = "CANCEL",
       erasing_blackbox = "Erasing Blackbox...",
       bec_voltage = "BEC VOLTAGE",
       esc_temp = "ESC TEMP",
@@ -3017,12 +3054,44 @@ return {
       -- change it sent.
       urban_quick_settings = "Quick Settings",
       urban_which_battery = "Which battery?",
+      -- A pack's line on that page: its cycle count, and the battery profile a pick selects.
+      urban_pick_cycles = "%d cycles",
+      urban_pick_profile = "P%d",
       urban_profile_tuning = "Profile & Tuning",
       urban_active = "Active",
       urban_not_available = "Not available",
       urban_sending = "Sending...",
       urban_done = "Done",
-      urban_failed = "Failed"
+      urban_failed = "Failed",
+      urban_telemetry = "Telemetry",
+      urban_no_tiles = "No tiles chosen",
+      -- Readings straight off the radio's telemetry sensors, offered by the Urban theme's rows and tiles.
+      urban_bec_temp = "BEC Temp",
+      urban_tail_speed = "Tail Speed",
+      urban_vario = "Vario",
+      urban_tq = "TQ",
+      urban_tx_power = "TX Power",
+      urban_esc_bec_temp = "BEC Temp (ESC)",
+      urban_bec_current = "BEC Current",
+      urban_esc_voltage = "ESC Voltage",
+      urban_esc_current = "ESC Current",
+      urban_esc_used = "ESC Used",
+      urban_esc_rpm = "ESC RPM",
+      urban_esc_pwm = "ESC PWM",
+      urban_esc_telem_load = "ESC Load (ESC)",
+      urban_gps_sats = "GPS Sats",
+      urban_gps_speed = "GPS Speed",
+      urban_gps_alt = "GPS Alt",
+      urban_gps_dist = "GPS Dist",
+      urban_pitch = "Pitch",
+      urban_roll = "Roll",
+      urban_yaw = "Yaw",
+      urban_cpu_load = "CPU Load",
+      urban_sys_load = "SYS Load",
+      urban_rt_load = "RT Load",
+      urban_bus_voltage = "Bus Voltage",
+      urban_mcu_voltage = "MCU Voltage",
+      urban_rsnr = "RSNR"
     },
     escstatus = {
       ok = "OK",
