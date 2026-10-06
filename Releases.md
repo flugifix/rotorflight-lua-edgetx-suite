@@ -235,6 +235,9 @@
   - Saving is unchanged: one write of all 40 slots, whichever group is open, and switches changed in several groups are saved together. The group titles are translated; the sensor names are not changed.
 - **Setup > Ports offers SRXL2 ESC on MSP API 12.10 (`app/pages/setup/ports/page.lua`, `docs/pages/setup/ports.md`)**:
   - A serial port can be set to *SRXL2 ESC*, the Spektrum SRXL2 link that drives the motor and returns the ESC telemetry over one wire. It is offered from MSP API 12.10 (Rotorflight 4.7) on, like the firmware's own list; on an older flight controller the list is unchanged, and a port already set to it is still shown as *Custom (2097152)* and kept on save.
+- **The CRSF sensor input of firmware 4.7 can be set up from the radio (`app/pages/setup/ports/page.lua`, `app/pages/setup/power/sources/`, `docs/pages/setup/ports.md`, `docs/pages/setup/power/sources.md`)**:
+  - *Setup > Ports* offers *CRSF Sensors* as a port function from MSP API 12.10. Before, a port the flight controller had set to it showed as *Custom (4194304)*.
+  - *Setup > Power > Sources* offers *CRSF* as the voltage and the current source from MSP API 12.10. Before, a source set to it showed as *Unknown (4)*. The help and the new documentation page say that the source needs a port set to *CRSF Sensors*.
 
 ### Bug Fixes & Improvements
 - **`rfsuite.batteryPick.open()` called while the dashboard widget is in its zone now opens the picker on the next entry into fullscreen (`widgets/dashboard/runtime.lua`, `docs/developer/dashboard-themes.md`, `docs/developer/dashboard-views.md`) (fixes #453)**:

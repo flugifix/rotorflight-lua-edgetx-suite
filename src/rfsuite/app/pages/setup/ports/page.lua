@@ -136,6 +136,7 @@ local function getPortFunctionsList(i18n)
     {id = 524288, excl = 524288, name = pageText(i18n, "function_fbus_out", "FBus Out"), type = PORT_TYPE_AUTO, minApi = {12, 0, 9}},
     {id = 1048576, excl = 1048576, name = pageText(i18n, "function_sport_input", "S.PORT Master"), type = PORT_TYPE_AUTO, minApi = {12, 0, 9}},
     {id = 2097152, excl = 2097152, name = pageText(i18n, "function_srxl2_esc", "SRXL2 ESC"), type = PORT_TYPE_AUTO, minApi = {12, 0, 10}},
+    {id = 4194304, excl = 4194304, name = pageText(i18n, "function_crsf_sensors", "CRSF Sensors"), type = PORT_TYPE_AUTO, minApi = {12, 0, 10}},
     {id = 4, excl = 4668, name = pageText(i18n, "function_telem_frsky", "Telemetry FrSky"), type = PORT_TYPE_TELEM},
     {id = 32, excl = 4668, name = pageText(i18n, "function_telem_smartport", "Telemetry SmartPort"), type = PORT_TYPE_TELEM},
     {id = 4096, excl = 4668, name = pageText(i18n, "function_telem_ibus", "Telemetry iBus"), type = PORT_TYPE_TELEM},
