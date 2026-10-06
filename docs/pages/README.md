@@ -151,7 +151,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
-| MSP Speed | `developer/msp_speed.md` | yes | hidden until *Developer Tools* is on, needs the flight controller, read-only while armed | to write |
+| MSP Speed | [developer/msp_speed.md](developer/msp_speed.md) | yes | hidden until *Developer Tools* is on, needs the flight controller, read-only while armed | written |
 | API Tester | `developer/api_tester.md` | yes | hidden until *Developer Tools* is on, needs the flight controller, read-only while armed | to write |
 | MSP Experiments | `developer/msp_experiments.md` | yes | hidden until *Developer Tools* is on, needs the flight controller, read-only while armed | to write |
 | Settings | `developer/developer_settings.md` | yes | hidden until *Developer Tools* is on | to write |

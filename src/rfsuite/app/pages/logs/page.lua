@@ -1299,7 +1299,8 @@ function M.build(ctx)
       y = cursorY + 10,
       w = valColW,
       text = string.format("%s   (%d %s)", summary.durationStr, summary.sampleCount, pageText(i18n, "samples")),
-      color = COLOR_WHITE,
+      -- The default label colour these values were always drawn in (COLOR_WHITE is undefined); white is unreadable on the light page.
+      color = COLOR_THEME_SECONDARY1,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
@@ -1332,7 +1333,7 @@ function M.build(ctx)
         pageText(i18n, "start"), statText("%.2fV", summary.vStart),
         pageText(i18n, "min"), statText("%.2fV (-%.2fV)", summary.vMin, summary.vSag),
         pageText(i18n, "end_val"), statText("%.2fV", summary.vEnd)),
-      color = COLOR_WHITE,
+      color = COLOR_THEME_SECONDARY1,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
@@ -1365,7 +1366,7 @@ function M.build(ctx)
         pageText(i18n, "peak"), statText("%.1f A", summary.cPeak),
         pageText(i18n, "avg"), statText("%.1f A", summary.cAvg),
         pageText(i18n, "consumption_title"), statText("~%d mAh", summary.mah and math.floor(summary.mah))),
-      color = COLOR_WHITE,
+      color = COLOR_THEME_SECONDARY1,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
@@ -1398,7 +1399,7 @@ function M.build(ctx)
         pageText(i18n, "max"), statText("%d rpm", summary.rMax and math.floor(summary.rMax)),
         pageText(i18n, "min"), statText("%d rpm", summary.rMin and math.floor(summary.rMin)),
         pageText(i18n, "in_flight")),
-      color = COLOR_WHITE,
+      color = COLOR_THEME_SECONDARY1,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
@@ -1443,7 +1444,7 @@ function M.build(ctx)
         pageText(i18n, "start"), statText("%d %s", tStartVal and math.floor(tStartVal), tempUnit),
         pageText(i18n, "max"), pageText(i18n, "throttle_title"),
         statText("%d %%", summary.thrMax and math.floor(summary.thrMax))),
-      color = COLOR_WHITE,
+      color = COLOR_THEME_SECONDARY1,
       font = SMLSIZE
     }
     cursorY = cursorY + rowH
