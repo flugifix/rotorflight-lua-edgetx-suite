@@ -45,8 +45,14 @@ function M.build(children, zone, state, ctx)
       none = { label = option.label, press = press }
     else
       if option.current then anyCurrent = true end
-      packs[#packs + 1] = { name = option.label, sub = option.detail or "", selected = option.current == true,
-                            press = press }
+      -- The line under the name is this theme's own, from the registry entry the option carries;
+      -- the host's `detail` stands where an option comes without one.
+      local pack = option.pack
+      local sub = option.detail or ""
+      if type(pack) == "table" and type(BattPick.detail) == "function" then
+        sub = BattPick.detail(pack.cap, pack.cycles, pack.targetProfile)
+      end
+      packs[#packs + 1] = { name = option.label, sub = sub, selected = option.current == true, press = press }
     end
   end
   -- NO BATTERY is the answer in force where no pack is, as the hook's picker marks it.
