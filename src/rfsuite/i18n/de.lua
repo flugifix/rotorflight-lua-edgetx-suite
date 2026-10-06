@@ -2149,7 +2149,10 @@ return {
         rate_profile = "Raten-Profil",
         help_title = "Profil auswählen",
         help_p1 = "Hier kannst du die aktiven PID- und Raten-Profile deines Flight Controllers umschalten.",
-        help_p2 = "Die Anzeige aktualisiert sich automatisch, wenn das Profil am Sender (z.B. per Schalter) gewechselt wird."
+        help_p2 = "Die Anzeige aktualisiert sich automatisch, wenn das Profil am Sender (z.B. per Schalter) gewechselt wird.",
+        msp_unavailable = "Keine Verbindung zum Flight Controller.",
+        save_in_progress = "Der vorige Profilwechsel wird noch gesendet.",
+        selection_out_of_range = "Der Flight Controller hat weniger Profile als angeboten. Auswahl prüfen und erneut speichern."
       },
       diagnostics_session_logs = {
         no_logs = "Keine Protokolle verfügbar",

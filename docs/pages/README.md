@@ -108,7 +108,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
 | Copy Profiles | [tools/copy_profiles.md](tools/copy_profiles.md) | yes | needs the flight controller, read-only while armed | written |
-| Select Profile | `tools/select_profile.md` | yes | needs the flight controller, read-only while armed | to write |
+| Select Profile | [tools/select_profile.md](tools/select_profile.md) | yes | needs the flight controller, read-only while armed | written |
 | Flight Log | [tools/flight_log.md](tools/flight_log.md) | yes | preview switch *Flight Log*, read-only while armed | written |
 | Diagnostics → FBL Status | `tools/diagnostics/fblstatus.md` | no | needs the flight controller, read-only while armed | to write |
 | Diagnostics → RF Status | `tools/diagnostics/rfstatus.md` | yes | needs the flight controller, read-only while armed | to write |
