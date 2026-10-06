@@ -20,6 +20,7 @@ local entries = {
   settings_localization_page = definePage("settings/localization"),
   settings_audio_page = definePage("settings/audio"),
   settings_audio_events_page = definePage("settings/audio/events"),
+  settings_audio_events_connect_page = definePage("settings/audio/events/connect"),
   settings_audio_events_arming_page = definePage("settings/audio/events/arming"),
   settings_audio_events_governor_page = definePage("settings/audio/events/governor"),
   settings_audio_events_voltage_page = definePage("settings/audio/events/voltage"),
@@ -27,9 +28,7 @@ local entries = {
   settings_audio_events_esc_page = definePage("settings/audio/events/esc"),
   settings_audio_events_adjustment_page = definePage("settings/audio/events/adjustment"),
   settings_audio_events_fuel_page = definePage("settings/audio/events/fuel"),
-  settings_audio_events_battery_page = definePage("settings/audio/events/battery"),
   settings_audio_events_link_page = definePage("settings/audio/events/link"),
-  settings_audio_events_other_page = definePage("settings/audio/events/other"),
   settings_audio_volume_page = definePage("settings/audio/volume"),
   setup_wizard_page = definePage("setup_wizard"),
   -- The same page, entered under three names. Which name it was opened under is what bounds the
