@@ -195,7 +195,12 @@ return {
     ["box.image/model"] = { target = 400, measured = 306 },
     ["sweep.image/model"] = { target = 50, measured = 0 },
     ["box.text/blackbox"] = { target = 740, measured = 577, proposed = 600 },
-    ["sweep.text/blackbox"] = { target = 500, measured = 352 },
+    -- Raised from 500 when `widgets.dashboard.bb_ready` went back to "READY". This row's fixture is
+    -- the first blackbox box a shipped theme declares (@aerc: autosize_chars 10, a font function)
+    -- drawn with the label every theme uses (themes/default/common.lua); the 11-character "MSP Wait..." took the autosize branch
+    -- of the box's font getter and skipped that font function, which "READY" -- like REC and
+    -- LOGGED -- calls. No `theme.*` row moves. The margin is held at ~10%.
+    ["sweep.text/blackbox"] = { target = 620, measured = 551, proposed = 500 },
     ["box.text/governor"] = { target = 720, measured = 556, proposed = 600 },
     ["sweep.text/governor"] = { target = 500, measured = 339 },
     ["box.text/stats"] = { target = 470, measured = 365, proposed = 300 },
