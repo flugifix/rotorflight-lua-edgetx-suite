@@ -699,6 +699,17 @@ end
 -- that is what replaces the code that raised.
 local JOB_FAULT_LIMIT = 3
 
+-- How long a held step control may keep back a rebuild of the surface it is on (the hold gate in
+-- the state pass), counted from the start of the hold. The rebuild waits because it would delete
+-- the button under the finger; but a release EdgeTX never reports would then keep it waiting for
+-- as long as the surface is up. Past this the rebuild runs, and lets go of the hold first, as
+-- every rebuild that is not held back does. The flight controller steps a held value every
+-- 200 ms after the first 100 ms (fc/rc_adjustments.c), so five seconds is 25 steps: at the
+-- largest step of every row but the head speed, 10, that is 250 units -- the whole range of most
+-- parameters, which run 0-250 or 0-255. A hold that long has crossed the range or lost its
+-- release. A hold with no rebuild waiting is not ended here.
+local HOLD_DEFER_SECONDS = 5
+
 local function jobCapped(self, kind)
   return (self._jobFaults[kind] or 0) >= JOB_FAULT_LIMIT
 end
@@ -3740,6 +3751,10 @@ function Runtime.new(zone, options)
       -- job is armed by a request that it clears before it can raise, and each new request arms it
       -- again: it is logged in full every time, as before.
       local counted = self._job.oneShot ~= true
+      -- Which surface the tree on screen is, for the hold gate in the state pass: forgotten before
+      -- any build step runs, since a step may clear the tree and then raise, and recorded only
+      -- once a build has completed. A one-shot job builds nothing and leaves the record alone.
+      if counted then self._treeKind, self._treeKey = nil, nil end
       local stepOk, stepDone = pcall(self._job.step, self)
       if not stepOk then
         self._job   = nil
@@ -3772,7 +3787,10 @@ function Runtime.new(zone, options)
         -- step returned true: job is done. A run of raises ends when the surface is drawn, not
         -- when a step merely returns: several steps finish without building anything, and the
         -- state pass then arms them again.
-        if self.built then self._jobFaults[jobKind] = nil end
+        if self.built then
+          self._jobFaults[jobKind] = nil
+          if counted then self._treeKind, self._treeKey = jobKind, self.renderKey end
+        end
         self._job = nil
       end
       -- The second of the two clock reads the gap line is built from; see traceInstructionUsage.
@@ -3842,6 +3860,7 @@ function Runtime.new(zone, options)
     -- so a hole measured while the tuning surface was up can be told from one on the dashboard.
     self._passWork = tuningMode or "state"
     local nextRenderKey = nil
+    local holding, heldFor = false, 0
     if tuningMode then
       -- The same 2 Hz throttle the scene key is under. The values and the armed row are reactive
       -- closures and follow the state per frame; everything the key covers is layout, and
@@ -3859,9 +3878,17 @@ function Runtime.new(zone, options)
       -- (widgets/dashboard/inflight/drive.lua, the AdjF block in fastTick). When the hold ends the
       -- next recompute happens as it always did.
       local snapshot = self.state.inflight
-      local holding = (type(snapshot) == "table") and snapshot.holding == true
+      holding = (type(snapshot) == "table") and snapshot.holding == true
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
       local now = nowSeconds()
+      -- When the hold began, for the cap on the hold gate below (HOLD_DEFER_SECONDS).
+      if not holding then
+        self._holdSince = nil
+      elseif self._holdSince == nil then
+        self._holdSince = now
+      else
+        heldFor = now - self._holdSince
+      end
       -- A tap on a bank chip or a row asks for the new selection to be on screen at once rather
       -- than up to half a second later; it sets this flag instead of dropping the key itself, so
       -- that it goes through the hold gate like everything else.
@@ -3960,6 +3987,20 @@ function Runtime.new(zone, options)
       self.built = false
       -- Fall through: detection and enqueue happen in this same pass, and the build
       -- lands in the next one, which carries nothing else.
+    end
+
+    -- The hold rule above keeps the tuning key still, but `built` and the render key are cleared
+    -- from elsewhere as well: a theme reload (the latch into flight loads the in-flight module, a
+    -- changed preference), the voltage bounds moving, new widget options. Each would rebuild the
+    -- tuning surface under the finger, and the rebuild lets go of the hold first (tuningJobStep),
+    -- so the held step ended with the finger still down. While a control is held and the tree on
+    -- screen is the one this pass would build -- same job, same key -- that rebuild waits: `built`
+    -- stays false and the first pass after the release builds it. A build of another surface --
+    -- the zone's, once fullscreen has been left -- is a different job and is not held back. A hold
+    -- older than HOLD_DEFER_SECONDS holds nothing back: the rebuild runs and lets go of it.
+    if holding and heldFor < HOLD_DEFER_SECONDS
+        and jobKind == self._treeKind and nextRenderKey == self._treeKey then
+      jobKind = nil
     end
 
     if not self.built and jobKind ~= nil then

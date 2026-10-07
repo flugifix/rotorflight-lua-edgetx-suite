@@ -105,7 +105,12 @@ One parameter at a time, not a grid:
 - **The row list** on the right is the six rows of the bank. A tap selects the row the step
   controls act on; the trims act on them directly.
 - **The step controls** at the bottom. One tap is one pulse is one step. Held, the flight
-  controller repeats at its own rate. There is never a value that follows the finger.
+  controller repeats at its own rate. There is never a value that follows the finger. A hold is
+  not cut short when the dashboard reloads its theme underneath the surface -- the change into
+  flight, a changed setting, a pack with a different cell count: the surface is drawn again once
+  the control has been let go. That wait lasts at most five seconds from the start of the hold
+  -- 25 steps: if a redraw is still waiting then, the surface is drawn and the hold ends, so a
+  release the radio never reports does not keep the redraw waiting.
 - **The trims** do the same thing without looking down, in whichever of the two layouts the
   radio is set to. A trim press that steps the selected parameter comes and goes without
   rebuilding the screen; a trim that selects another row or bank redraws it for the new
