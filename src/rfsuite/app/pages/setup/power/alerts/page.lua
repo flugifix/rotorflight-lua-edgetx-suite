@@ -75,6 +75,13 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
+-- The reason after a failed write of the model's file, in words (settings/common.lua). The page
+-- also runs without common.lua when that does not load, and the store's own answer stands in then.
+local function modelSaveReason(i18n, err)
+	if Common and Common.saveFailureReason then return Common.saveFailureReason(i18n, err, true) end
+	return tostring(err or "io")
+end
+
 local function getSession()
 	local root = _G and _G.rfsuite
 	return root and root.session or nil
@@ -141,7 +148,7 @@ end
 
 local function saveModelPreferences(session)
 	if not PowerModelPreferences or type(PowerModelPreferences.save) ~= "function" then
-		return false, "model_preferences_unavailable"
+		return false, "unavailable"
 	end
 	return PowerModelPreferences.save(session)
 end
@@ -258,8 +265,8 @@ function M.onSave(ctx)
 	if not okPrefs then
 		if ctx and type(ctx.reportSave) == "function" then
 			ctx.reportSave({
-				title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
-				message = pageText(ctx and ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(errPrefs or "io")
+				title = pageText(ctx.i18n, "save_error_title", "Error"),
+				message = pageText(ctx.i18n, "save_error_message", "Save failed") .. ": " .. modelSaveReason(ctx.i18n, errPrefs)
 			})
 		end
 		return false

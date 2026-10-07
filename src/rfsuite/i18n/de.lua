@@ -977,7 +977,10 @@ return {
         loading_title = "Laden",
         loading_message = "Lese SmartFuel-Konfiguration",
         saved_title = "Gespeichert",
-        saved_message = "SmartFuel Einstellungen gespeichert"
+        saved_message = "SmartFuel Einstellungen gespeichert",
+        warning_title = "Warnung",
+        model_prefs_failed_message = "SmartFuel-Werte an den FC gesendet; Modelleinstellungen nicht gespeichert",
+        pending_model_prefs_failed_message = "FC-Schreiben ausstehend; Modelleinstellungen nicht gespeichert"
       },
       flight_tuning_pids = {
         title = "PIDs",
@@ -1031,7 +1034,9 @@ return {
         saved_title = "Gespeichert",
         saved_message = "Batterieeinstellungen gespeichert",
         warning_title = "Warnung",
-        saved_local_only_message = "Lokal gespeichert; FC-Schreiben ausstehend"
+        saved_local_only_message = "Lokal gespeichert; FC-Schreiben ausstehend",
+        model_prefs_failed_message = "Akkuwerte an den FC gesendet; Modelleinstellungen nicht gespeichert",
+        pending_model_prefs_failed_message = "FC-Schreiben ausstehend; Modelleinstellungen nicht gespeichert"
       },
       setup_power_sources = {
         section_sources = "Quellen",

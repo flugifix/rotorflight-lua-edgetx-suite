@@ -77,7 +77,10 @@ ground, the link up and the values read — once per profile.
   writes it is *Set up the flight controller*, and it asks first.
 - Saving reports its outcome in the suite's own save overlay. These settings are stored with
   the model and keyed by the flight controller's MCU id, so a save made without one, or one the
-  card refused, is named rather than passed over.
+  card refused, is named rather than passed over: *Save failed* with *Connect the flight
+  controller to save this model's settings*, *the settings file could not be written to the SD
+  card*, or *model settings store not available* where the part of the suite that writes the
+  model's file could not be loaded.
 - The profile switch is the undo in the air: the backup profile holds what the flight started
   from, so switching to it is instant and speaks no MSP. A restore into a profile other than
   the one the backup was taken from is refused.

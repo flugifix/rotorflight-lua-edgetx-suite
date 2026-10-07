@@ -977,7 +977,10 @@ return {
         loading_title = "Loading",
         loading_message = "Reading SmartFuel config",
         saved_title = "Saved",
-        saved_message = "SmartFuel settings saved"
+        saved_message = "SmartFuel settings saved",
+        warning_title = "Warning",
+        model_prefs_failed_message = "SmartFuel values sent to FC; model settings not saved",
+        pending_model_prefs_failed_message = "FC write pending; model settings not saved"
       },
       flight_tuning_pids = {
         title = "PIDs",
@@ -1031,7 +1034,9 @@ return {
         saved_title = "Saved",
         saved_message = "Battery settings saved",
         warning_title = "Warning",
-        saved_local_only_message = "Saved locally; FC write pending"
+        saved_local_only_message = "Saved locally; FC write pending",
+        model_prefs_failed_message = "Battery values sent to FC; model settings not saved",
+        pending_model_prefs_failed_message = "FC write pending; model settings not saved"
       },
       setup_power_sources = {
         section_sources = "Sources",

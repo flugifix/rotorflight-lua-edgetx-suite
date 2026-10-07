@@ -87,9 +87,10 @@ the pilot's business.
 - On an ExpressLRS link use the *Wide* switch mode or a full-resolution packet rate. In
   *Hybrid* mode the value and bank channels carry 16 and 6 positions, so several rows and two
   banks miss the windows the flight controller decodes.
-- These settings are saved on the radio. The widget takes a change to them on its own clock,
-  and that clock is held while the model is armed — a change made in the air arrives after
-  landing.
+- These settings are saved on the radio. A save the card refuses shows *Save failed: the
+  settings file could not be written to the SD card*. The widget takes a change to them on its
+  own clock, and that clock is held while the model is armed — a change made in the air arrives
+  after landing.
 
 ## Related
 
