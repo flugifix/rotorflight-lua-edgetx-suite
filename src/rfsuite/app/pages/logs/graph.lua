@@ -943,12 +943,24 @@ end
 
 -- Which of the offered column sets this log can actually serve, with the columns
 -- each one resolves to. A set needs two matches to be worth offering.
+--
+-- A model can hold two sensors of the same name -- Curr and Capa from the native CRSF
+-- battery frame beside the same names from custom telemetry -- and EdgeTX then logs
+-- both, in the order of the model's sensor list, writing the one it is not receiving
+-- as 0. Where a label repeats, the set takes the last of its columns. For a value the
+-- flight summary shows, that is the column the summary reads (last match wins in
+-- prepareStats), so the plot and the summary beside it show the same sensor. A column
+-- of the same name and another unit is a different value -- Thr(%) is the throttle
+-- the flight controller reports, a plain Thr the stick -- and is not a repeat.
 function G.getTemplates()
   local out = {}
   local byName = {}
   for c = 3, #S.columns do
     local col = S.columns[c]
-    if col and col.name ~= "" and byName[col.name] == nil then byName[col.name] = c end
+    if col and col.name ~= "" then
+      local seen = byName[col.name]
+      if seen == nil or S.columns[seen].unit == col.unit then byName[col.name] = c end
+    end
   end
   for i = 1, #TEMPLATES do
     local tpl = TEMPLATES[i]
