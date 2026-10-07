@@ -129,17 +129,6 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
-local function pageHelpText(i18n, key, fallback)
-	return pageText(i18n, key, fallback)
-end
-
-local function optionalPageHelpText(i18n, key)
-	local value = pageHelpText(i18n, key, nil)
-	if type(value) ~= "string" or value == "" then return nil end
-	if string.sub(value, 1, 10) == "app.pages." then return nil end
-	return value
-end
-
 local function getInlineHelpHandler()
 	if ui.runtime.inlineHelpHandler then return ui.runtime.inlineHelpHandler end
 	ui.runtime.inlineHelpHandler = function(helpText, helpTitle)
@@ -759,7 +748,7 @@ function M.build(ctx)
 		profileOptions,
 		ui.config.selectedBatteryProfile,
 		getProfileSetter(), {
-			helpText = optionalPageHelpText(i18n, "help_selected_battery"),
+			helpText = pageText(i18n, "help_selected_battery"),
 			helpTitle = pageText(i18n, "selected", "Selected") .. " " .. pageText(i18n, "battery_slot", "Battery"),
 			onHelp = getInlineHelpHandler()
 		})
@@ -772,7 +761,7 @@ function M.build(ctx)
 				max = CAPACITY_MAX,
 				get = function() return ui.config.capacities[i] end,
 				set = getCapacitySetter(i),
-				helpText = optionalPageHelpText(i18n, "help_capacity"),
+				helpText = pageText(i18n, "help_capacity"),
 				helpTitle = label,
 				onHelp = getInlineHelpHandler(),
 				display = function(v) return tostring(v) .. " mAh" end
@@ -791,7 +780,7 @@ function M.build(ctx)
 			profileOptions,
 			editSlot() - 1,
 			getEditProfileSetter(), {
-				helpText = optionalPageHelpText(i18n, "help_edit_battery"),
+				helpText = pageText(i18n, "help_edit_battery"),
 				helpTitle = pageText(i18n, "edit_battery", "Edit Battery"),
 				onHelp = getInlineHelpHandler()
 			})
@@ -803,7 +792,7 @@ function M.build(ctx)
 			max = 500,
 			get = function() return cellValue("vbatmaxcellvoltage") end,
 			set = getMaxCellSetter(),
-			helpText = optionalPageHelpText(i18n, "help_max_cell_voltage"),
+			helpText = pageText(i18n, "help_max_cell_voltage"),
 			helpTitle = pageText(i18n, "max_cell_voltage", "Max cell voltage"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
@@ -815,7 +804,7 @@ function M.build(ctx)
 			max = 500,
 			get = function() return cellValue("vbatfullcellvoltage") end,
 			set = getFullCellSetter(),
-			helpText = optionalPageHelpText(i18n, "help_full_cell_voltage"),
+			helpText = pageText(i18n, "help_full_cell_voltage"),
 			helpTitle = pageText(i18n, "full_cell_voltage", "Full cell voltage"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
@@ -827,7 +816,7 @@ function M.build(ctx)
 			max = 500,
 			get = function() return cellValue("vbatwarningcellvoltage") end,
 			set = getWarnCellSetter(),
-			helpText = optionalPageHelpText(i18n, "help_warn_cell_voltage"),
+			helpText = pageText(i18n, "help_warn_cell_voltage"),
 			helpTitle = pageText(i18n, "warn_cell_voltage", "Warn cell voltage"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
@@ -839,7 +828,7 @@ function M.build(ctx)
 			max = 500,
 			get = function() return cellValue("vbatmincellvoltage") end,
 			set = getMinCellSetter(),
-			helpText = optionalPageHelpText(i18n, "help_min_cell_voltage"),
+			helpText = pageText(i18n, "help_min_cell_voltage"),
 			helpTitle = pageText(i18n, "min_cell_voltage", "Min cell voltage"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
@@ -851,7 +840,7 @@ function M.build(ctx)
 			max = CELL_COUNT_MAX,
 			get = function() return cellValue("batteryCellCount") end,
 			set = getCellCountSetter(),
-			helpText = optionalPageHelpText(i18n, "help_cell_count"),
+			helpText = pageText(i18n, "help_cell_count"),
 			helpTitle = pageText(i18n, "cell_count", "Cell count"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return tostring(v) end
@@ -863,7 +852,7 @@ function M.build(ctx)
 			max = RESERVE_MAX,
 			get = function() return ui.config.consumption_warning_percentage end,
 			set = getReserveSetter(),
-			helpText = optionalPageHelpText(i18n, "help_consumption_warning_percentage"),
+			helpText = pageText(i18n, "help_consumption_warning_percentage"),
 			helpTitle = pageText(i18n, "consumption_warning_percentage", "Consumption reserve"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return tostring(v) .. "%" end
