@@ -318,8 +318,7 @@ end
 local function rebuildRows(i18n)
   if not ElrsTask then return false end
   
-  local statusKey, statusDef = ElrsTask.getStatus()
-  local status = pageText(i18n, statusKey, statusDef)
+  local status = ElrsTask.getStatusText(i18n or state.i18n)
   local isRunning = ElrsTask.isRunning()
   -- A declined or unanswerable confirmation leaves the task untouched, so its own status still
   -- reads as the probe that ran before it. The notice is what tells the pilot nothing was
