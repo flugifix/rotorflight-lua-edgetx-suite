@@ -703,9 +703,10 @@ for the new bounds.
 The cell count is the one the flight controller reports in telemetry. Until that reads a count --
 it reads 0 for the moment after a pack is plugged in, until the board has detected the pack -- and
 on a model without that sensor, the widget takes the cell count configured on the flight controller
-(*Setup* → *Power* → *Battery*), and only where that is 0, which leaves the detection to the board,
-an estimate from the pack voltage. An estimate cannot tell every pack apart: 42 V is a full 10S
-pack and a 12S pack at 3.5 V per cell.
+(*Setup* → *Power* → *Battery*), which is the count the board itself uses for any pack plugged in.
+Only where that is 0, which leaves the detection to the board, or has not been read yet, does it
+estimate the count from the pack voltage. An estimate cannot tell every pack apart: 42 V is a full
+10S pack and a 12S pack at 3.5 V per cell.
 
 ## Splitting the settings into pages
 

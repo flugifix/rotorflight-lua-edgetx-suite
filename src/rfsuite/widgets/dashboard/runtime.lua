@@ -3222,8 +3222,11 @@ function Runtime.new(zone, options)
       -- gives 18.0/25.2 V, the pair isExactDefault reads as an unnormalized default, so without
       -- this every pass would copy the table only to write the same two numbers back. The raw
       -- values are compared, not curMin/curMax, so bounds held as strings still get converted.
+      -- The bounds in hand are then the ones derived for this count, and say so: a tag left at
+      -- another count would let them stand if the count ever moved back to it.
       local nextMin, nextMax = normalizedVoltageBounds(cells)
       if currentConfig.v_min == nextMin and currentConfig.v_max == nextMax then
+        if boundsCells ~= cells then currentConfig._boundsCells = cells end
         logVoltageThemeDecision(self, "normalize", cells, currentConfig.v_min, currentConfig.v_max, nextMin, nextMax)
         return
       end
