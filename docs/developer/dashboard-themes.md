@@ -207,9 +207,15 @@ any of this: `armed` looks for the theme's `armed` module and then for its `pref
 loader is always one of the three phases every theme declares.
 
 A module that loads but raises while the widget builds its scene — a free-form `build` that
-throws is the plain case — has nothing to fall back to. The widget tries that build three
+throws is the plain case — has nothing to fall back to. Two more cases count as a raise: a
+free-form `build` that returns anything but a node list (a missing `return` is enough), and a
+build the radio stops at its instruction limit. The widget tries that build three
 times in a row, then stops trying and shows *Dashboard error* in its place; the error is in
-the log, and the first of the three goes to the card as a fault when *Log to card* is on. A
+the log, and the first of the three goes to the card as a fault when *Log to card* is on (a
+stop at the instruction limit goes to the card every time, as the widget's own `widget.refresh`
+fault, and the widget waits 1.2 s before the next try). A
+build that is stopped at the limit only sometimes is drawn again as soon as one try completes,
+which starts the count over; one that is stopped three times in a row stays *Dashboard error*. A
 theme reload starts over: choosing a theme, any change to the preferences, the flight
 controller reconnecting, or a flight phase that brings up another of the theme's modules. Until
 then the error stays on screen, even if the cause has gone away by itself: a build that raises
@@ -219,8 +225,9 @@ as a single label, drawn without the splash builder, and stops only if that rais
 too. The theme at full screen ([`fullscreen = "theme"`](#a-theme-that-takes-fullscreen)), the fullscreen
 menu and the in-flight tuning surface are given up the same way, each on its own count, and at
 full screen *Dashboard error* carries the tool control, as the connect splash does there. The
-views a theme registers are not counted: one whose `build` raises is given up on its first
-raise, as [Views of a theme's own](#views-of-a-themes-own) describes.
+views a theme registers are not counted for a raise: one whose `build` raises is given up on its first
+raise, as [Views of a theme's own](#views-of-a-themes-own) describes. A view whose `build` the
+radio stops at its instruction limit is counted like the other surfaces, on a count of its own.
 
 ### `layout`
 
@@ -926,7 +933,9 @@ free-form: a declarative phase draws no view. The module is loaded the first tim
 built, through the loader that loads the rest of the theme — from the theme's own folder, a
 user theme from source — so registering a view costs nothing until it is opened, and a module
 that fails to load, or whose `build` raises, is not asked for again (a replaced look falls back
-to the widget's own; a view of the theme's own is closed and refused), with one log line. A view of the previous theme's that is still open
+to the widget's own; a view of the theme's own is closed and refused), with one log line. A
+`build` the radio stops at its instruction limit is not a raise here: it is tried again, and after
+three stops in a row the view shows *Dashboard error* until the theme is reloaded. A view of the previous theme's that is still open
 when the theme changes is closed.
 
 A theme's view module has `build(children, zone, state, ctx)` — it appends the whole tree to

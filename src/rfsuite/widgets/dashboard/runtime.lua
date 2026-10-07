@@ -741,6 +741,26 @@ end
 -- the theme views further down.
 local zoneViewFor
 
+-- A free-form theme's `build` must return a node list. One that returns anything else has drawn
+-- nothing and leaves `built` false, so the state pass would arm the same build again every other
+-- pass, with nothing logged. It raises instead, and is counted and given up like any other build
+-- that raises (see JOB_FAULT_LIMIT); the message names the theme.
+local function checkNodeList(self, children)
+  if type(children) ~= "table" then
+    error("theme build returned " .. type(children) .. ", not a node list: " .. tostring(self.themePath), 0)
+  end
+end
+
+-- The log lines of a job step that raised: the error itself, and on the raise that reaches
+-- JOB_FAULT_LIMIT the reason the screen now shows what it shows.
+local function logJobFault(self, jobKind, err, faults)
+  widgetLog(self, "job step error (" .. tostring(jobKind) .. "): " .. tostring(err), "error")
+  if faults == JOB_FAULT_LIMIT then
+    widgetLog(self, "job " .. tostring(jobKind) .. " raised " .. faults
+      .. " times in a row; not retried until the theme is reloaded", "error")
+  end
+end
+
 -- The scene job in three phases, carried as fields on the job table. The old LVGL tree
 -- stands until the swap, so a stepped rebuild shows the previous frame, never a blank one.
 local function sceneJobStep(self)
@@ -807,7 +827,7 @@ local function sceneJobStep(self)
     -- A free-form theme builds in one step, exactly as before -- the engine cannot chunk
     -- what it does not render.
     local children = self.theme.build(self.zone, self.state)
-    if type(children) ~= "table" then return true end
+    checkNodeList(self, children)
     lvgl.clear()
     lvgl.build(children)
     self.built = true
@@ -984,7 +1004,7 @@ local function fsThemeJobStep(self)
 
   if type(self.theme.build) == "function" then
     local children = self.theme.build(self.zone, self.state, viewCtx(self))
-    if type(children) ~= "table" then return true end
+    checkNodeList(self, children)
     if not bindsPress(children) then
       -- Onto a copy: the table is the theme's, and a theme that hands back one it keeps would
       -- otherwise carry the controls from then on -- into its zone tree as well.
@@ -3853,29 +3873,31 @@ function Runtime.new(zone, options)
       if not stepOk then
         self._job   = nil
         self.built  = false
-        -- The entry point owns the CPU-limit response: the hold-off, and the release of the two
-        -- variables the overlay may be holding. It cannot do either if the raise stops here.
         local isCpuLimit = (LogSink and type(LogSink.isCpuLimitError) == "function" and LogSink.isCpuLimitError(stepDone))
           or (type(stepDone) == "string" and string.find(stepDone, "CPU limit", 1, true) ~= nil)
-        if isCpuLimit then
-          error(stepDone, 0)
-        end
-        -- Any other raise counts against its kind; see JOB_FAULT_LIMIT. Only the first of a run
-        -- goes to the card as a fault -- the ones after it are the same fault, and a fault line is
-        -- written to the card as it happens -- and the raise that reaches the limit says so, so
-        -- the log ends with the reason the screen shows what it shows.
+        -- Every raise counts against its kind, a step stopped at the instruction limit included;
+        -- see JOB_FAULT_LIMIT. A build that always overruns is otherwise armed again after every
+        -- back-off for as long as the widget runs. Counting here is safe after such a stop: the
+        -- firmware raises the limit once per call and runs the rest of the call unmetered.
         local faults = 1
         if counted then
           faults = (self._jobFaults[jobKind] or 0) + 1
           self._jobFaults[jobKind] = faults
         end
-        if faults == 1 and LogSink and type(LogSink.fault) == "function" then
+        -- Only the first of a run goes to the card as a fault -- the ones after it are the same
+        -- fault, and a fault line is written to the card as it happens; a stop at the limit is
+        -- written there by the entry point -- and the raise that reaches the limit says so, so
+        -- the log ends with the reason the screen shows what it shows.
+        if faults == 1 and not isCpuLimit and LogSink and type(LogSink.fault) == "function" then
           pcall(LogSink.fault, "dashboard.job." .. tostring(jobKind), stepDone)
         end
-        widgetLog(self, "job step error (" .. tostring(jobKind) .. "): " .. tostring(stepDone), "error")
-        if faults == JOB_FAULT_LIMIT then
-          widgetLog(self, "job " .. tostring(jobKind) .. " raised " .. faults
-            .. " times in a row; not retried until the theme is reloaded", "error")
+        -- Under pcall: a log line that fails (out of memory) must not replace a CPU-limit stop on
+        -- its way to the entry point below.
+        pcall(logJobFault, self, jobKind, stepDone, faults)
+        -- The entry point owns the CPU-limit response: the hold-off, and the release of the two
+        -- variables the overlay may be holding. It cannot do either if the raise stops here.
+        if isCpuLimit then
+          error(stepDone, 0)
         end
       elseif stepDone then
         -- step returned true: job is done. A run of raises ends when the surface is drawn, not
