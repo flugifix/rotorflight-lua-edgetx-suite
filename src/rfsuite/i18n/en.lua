@@ -1943,7 +1943,7 @@ return {
         title_status = "Blackbox Status",
         help_status_title = "Blackbox Status Help",
         help_status_p1 = "Monitor storage media state and space usage.",
-        help_status_p2 = "Press * to erase onboard dataflash logs.",
+        help_status_p2 = "Press * to erase onboard dataflash logs. Asks first; lit only when the board has a dataflash.",
         loading_status = "Loading blackbox status...",
         erasing_dataflash = "Erasing dataflash...",
         erasing_busy = "Erasing / busy...",

@@ -1943,7 +1943,7 @@ return {
         title_status = "Blackbox-Status",
         help_status_title = "Blackbox-Status Hilfe",
         help_status_p1 = "Speichermedien-Status und Speicherplatz überwachen.",
-        help_status_p2 = "Drücke *, um die onboard Dataflash-Logs zu löschen.",
+        help_status_p2 = "Drücke *, um die onboard Dataflash-Logs zu löschen. Mit Rückfrage; nur aktiv, wenn ein Dataflash da ist.",
         loading_status = "Lade Blackbox-Status...",
         erasing_dataflash = "Datenspeicher wird gelöscht...",
         erasing_busy = "Löschen / beschäftigt...",
