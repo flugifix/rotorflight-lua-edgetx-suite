@@ -6,7 +6,7 @@ grand_parent: Settings
 
 # Volume
 
-The Volume page allows you to configure Adaptive Audio-Level and the Master-Volume bridge.
+The Volume page allows you to configure Adaptive Audio-Level and the Master-Volume bridge. A save the card refuses shows *Save failed: the settings file could not be written to the SD card*.
 
 ## WAV-Volume Level (Layer A)
 
