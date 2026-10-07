@@ -2803,20 +2803,30 @@ local function readTelemetry(state, audioState)
   if type(batteryCellCountValue) == "number" and batteryCellCountValue > 0 then
     setField("batteryCellCount", roundInt(batteryCellCountValue, state.batteryCellCount or 0))
   elseif type(voltageValue) == "number" and voltageValue > 0 then
-    -- Try to infer cell count from battery config's max cell voltage
     local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
     local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
-    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
-
-    local inferredCells = math.max(1, math.floor((voltageValue / maxCellVoltage) + 0.5))
-    local existingCells = tonumber(state.batteryCellCount)
-    if not existingCells or existingCells <= 0 then
-      setField("batteryCellCount", inferredCells)
+    -- A cell count configured on the flight controller is the count it latches when it detects
+    -- the pack (rotorflight-firmware `batteryUpdatePresence`), so it is taken as it is rather than
+    -- guessed from the voltage: while the cell count sensor still reads 0 after a pack is plugged
+    -- in, and on a model that carries no such sensor. lib/audio.lua and the flight record read the
+    -- same field first for the same question. A count of 0 is the board detecting it itself.
+    local configuredCells = tonumber(batteryConfig and batteryConfig.batteryCellCount)
+    if configuredCells and configuredCells > 0 then
+      setField("batteryCellCount", roundInt(configuredCells, state.batteryCellCount or 0))
     else
-      local perCell = voltageValue / existingCells
-      -- Reconnect-safe: replace stale cell count if implied per-cell voltage is implausible.
-      if perCell < 2.5 or perCell > 4.5 then
+      -- Otherwise infer it from the battery config's max cell voltage.
+      local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
+
+      local inferredCells = math.max(1, math.floor((voltageValue / maxCellVoltage) + 0.5))
+      local existingCells = tonumber(state.batteryCellCount)
+      if not existingCells or existingCells <= 0 then
         setField("batteryCellCount", inferredCells)
+      else
+        local perCell = voltageValue / existingCells
+        -- Reconnect-safe: replace stale cell count if implied per-cell voltage is implausible.
+        if perCell < 2.5 or perCell > 4.5 then
+          setField("batteryCellCount", inferredCells)
+        end
       end
     end
   end
@@ -3177,7 +3187,8 @@ function Runtime.new(zone, options)
 
     -- The steady-state pass allocates nothing. When the bounds in hand are already numeric,
     -- the four branches below that would end in a value-identical config -- custom bounds,
-    -- no cell count, plausible bounds kept, or a normalization that lands on the bounds
+    -- no cell count, plausible bounds kept for the count they were derived for, or a
+    -- normalization that lands on the bounds
     -- already held -- are decided here on the numbers alone, the existing table is kept, and
     -- only the (deduplicated, developer-gated) log line is still offered. Every path that can
     -- CHANGE a value falls through to the full copy below, so what the function computes is
@@ -3202,7 +3213,8 @@ function Runtime.new(zone, options)
         perCellMax < 3.0 or perCellMax > 5.2 or
         perCellMax <= perCellMin
       )
-      if (not isExactDefault) and (not looksInvalidForCells) then
+      local boundsCells = currentConfig._boundsCells
+      if (not isExactDefault) and (not looksInvalidForCells) and (boundsCells == nil or boundsCells == cells) then
         logVoltageThemeDecision(self, "keep", cells, currentConfig.v_min, currentConfig.v_max, curMin, curMax)
         return
       end
@@ -3210,8 +3222,11 @@ function Runtime.new(zone, options)
       -- gives 18.0/25.2 V, the pair isExactDefault reads as an unnormalized default, so without
       -- this every pass would copy the table only to write the same two numbers back. The raw
       -- values are compared, not curMin/curMax, so bounds held as strings still get converted.
+      -- The bounds in hand are then the ones derived for this count, and say so: a tag left at
+      -- another count would let them stand if the count ever moved back to it.
       local nextMin, nextMax = normalizedVoltageBounds(cells)
       if currentConfig.v_min == nextMin and currentConfig.v_max == nextMax then
+        if boundsCells ~= cells then currentConfig._boundsCells = cells end
         logVoltageThemeDecision(self, "normalize", cells, currentConfig.v_min, currentConfig.v_max, nextMin, nextMax)
         return
       end
@@ -3249,13 +3264,20 @@ function Runtime.new(zone, options)
       perCellMax < 3.0 or perCellMax > 5.2 or
       perCellMax <= perCellMin
     )
-    if (not isExactDefault) and (not looksInvalidForCells) then
+    -- Bounds this function derived carry the cell count they were derived for, and are derived
+    -- again when the count moves, however plausible they still look per cell: a count inferred
+    -- from a voltage that was still rising (11 for a 12S pack) gives bounds that pass the test
+    -- above for the real count too, and the real count arriving half a second later has to
+    -- replace them. Bounds with no count of their own are judged by that test alone, as before.
+    local boundsCells = currentConfig._boundsCells
+    if (not isExactDefault) and (not looksInvalidForCells) and (boundsCells == nil or boundsCells == cells) then
       applyThemeConfig(self, nextConfig)
       logVoltageThemeDecision(self, "keep", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
     nextConfig.v_min, nextConfig.v_max = normalizedVoltageBounds(cells)
+    nextConfig._boundsCells = cells
     applyThemeConfig(self, nextConfig)
     logVoltageThemeDecision(self, "normalize", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
   end
