@@ -699,6 +699,17 @@ end
 -- that is what replaces the code that raised.
 local JOB_FAULT_LIMIT = 3
 
+-- How long a held step control may keep back a rebuild of the surface it is on (the hold gate in
+-- the state pass), counted from the start of the hold. The rebuild waits because it would delete
+-- the button under the finger; but a release EdgeTX never reports would then keep it waiting for
+-- as long as the surface is up. Past this the rebuild runs, and lets go of the hold first, as
+-- every rebuild that is not held back does. The flight controller steps a held value every
+-- 200 ms after the first 100 ms (fc/rc_adjustments.c), so five seconds is 25 steps: at the
+-- largest step of every row but the head speed, 10, that is 250 units -- the whole range of most
+-- parameters, which run 0-250 or 0-255. A hold that long has crossed the range or lost its
+-- release. A hold with no rebuild waiting is not ended here.
+local HOLD_DEFER_SECONDS = 5
+
 local function jobCapped(self, kind)
   return (self._jobFaults[kind] or 0) >= JOB_FAULT_LIMIT
 end
@@ -729,6 +740,26 @@ end
 -- The zone view a free-form theme's scene build draws instead of the theme, or nil; defined with
 -- the theme views further down.
 local zoneViewFor
+
+-- A free-form theme's `build` must return a node list. One that returns anything else has drawn
+-- nothing and leaves `built` false, so the state pass would arm the same build again every other
+-- pass, with nothing logged. It raises instead, and is counted and given up like any other build
+-- that raises (see JOB_FAULT_LIMIT); the message names the theme.
+local function checkNodeList(self, children)
+  if type(children) ~= "table" then
+    error("theme build returned " .. type(children) .. ", not a node list: " .. tostring(self.themePath), 0)
+  end
+end
+
+-- The log lines of a job step that raised: the error itself, and on the raise that reaches
+-- JOB_FAULT_LIMIT the reason the screen now shows what it shows.
+local function logJobFault(self, jobKind, err, faults)
+  widgetLog(self, "job step error (" .. tostring(jobKind) .. "): " .. tostring(err), "error")
+  if faults == JOB_FAULT_LIMIT then
+    widgetLog(self, "job " .. tostring(jobKind) .. " raised " .. faults
+      .. " times in a row; not retried until the theme is reloaded", "error")
+  end
+end
 
 -- The scene job in three phases, carried as fields on the job table. The old LVGL tree
 -- stands until the swap, so a stepped rebuild shows the previous frame, never a blank one.
@@ -796,7 +827,7 @@ local function sceneJobStep(self)
     -- A free-form theme builds in one step, exactly as before -- the engine cannot chunk
     -- what it does not render.
     local children = self.theme.build(self.zone, self.state)
-    if type(children) ~= "table" then return true end
+    checkNodeList(self, children)
     lvgl.clear()
     lvgl.build(children)
     self.built = true
@@ -973,7 +1004,7 @@ local function fsThemeJobStep(self)
 
   if type(self.theme.build) == "function" then
     local children = self.theme.build(self.zone, self.state, viewCtx(self))
-    if type(children) ~= "table" then return true end
+    checkNodeList(self, children)
     if not bindsPress(children) then
       -- Onto a copy: the table is the theme's, and a theme that hands back one it keeps would
       -- otherwise carry the controls from then on -- into its zone tree as well.
@@ -1903,6 +1934,64 @@ end
 -- What is left here is the reading, below, plus the compatibility mapping at the end of this
 -- file for a user theme that still reaches for the old flat field names.
 
+-- The event history: what changed on the craft and when, newest last, for a theme that shows it
+-- (`state.eventLog`). Each entry is `{ kind, value, text, level, time }`:
+--
+--   kind    "armed", "disarmed", "connected", "disconnected", "governor" or "esc"
+--   value   the governor state index (rotorflight-firmware governor.h) for "governor", else nil
+--   text    the speed controller's own verdict for "esc", already in the package's language;
+--           nil for every other kind, which a theme names in its own words
+--   level   1 information, 2 warning, 3 error -- lib/esc_status.lua's levels, which "esc" carries
+--   time    the radio's clock as "HH:MM:SS", or "" on a radio that has none
+--
+-- Nothing here detects anything of its own. Each kind is noted where this file already acts on
+-- the transition: the arm edge in updateDerivedFlightState, the flight controller's connect and
+-- disconnect edges in the background work, and the governor and the speed controller after the
+-- telemetry read that brought them. So an entry costs a table and a clock read on the pass that
+-- has the transition, and a steady pass costs the two comparisons in noteReadingEvents.
+--
+-- The speed controller is the reading the theme already declared (`esc_status_live` in its
+-- sources, as the snapshot resolves it); a theme that does not declare it gets no "esc" entries,
+-- and nothing reads the two sensors for the history alone. The list is kept across connections:
+-- the disconnect is itself an entry, and the next connection's entries follow it.
+local EVENT_LOG_SIZE = 30
+
+local function eventClock()
+  if type(getDateTime) ~= "function" then return "" end
+  local ok, dt = pcall(getDateTime)
+  if not ok or type(dt) ~= "table" then return "" end
+  return string.format("%02d:%02d:%02d", dt.hour or 0, dt.min or 0, dt.sec or 0)
+end
+
+local function noteEvent(state, kind, level, value, text)
+  local log = state.eventLog
+  if type(log) ~= "table" then
+    log = {}
+    state.eventLog = log
+  end
+  log[#log + 1] = { kind = kind, value = value, text = text, level = level, time = eventClock() }
+  if #log > EVENT_LOG_SIZE then table.remove(log, 1) end
+end
+
+-- The two readings with no edge of their own elsewhere, on a pass that read them. A connection's
+-- first governor state is taken as the starting point and noted only once it moves; the speed
+-- controller's first verdict is noted, because it says which controller answered and how. A
+-- verdict the controller repeats is noted once, and a pass that resolved none (no link, nothing
+-- declared) leaves the last one standing.
+local function noteReadingEvents(state)
+  local governor = state.governor
+  if governor ~= state.eventGovernor then
+    if state.eventGovernor ~= nil then noteEvent(state, "governor", 1, governor) end
+    state.eventGovernor = governor
+  end
+  local derived = state.derived
+  local esc = derived and derived.esc_status_live
+  if type(esc) == "string" and esc ~= "" and esc ~= state.eventEsc then
+    state.eventEsc = esc
+    noteEvent(state, "esc", tonumber(derived.esc_status_live_level) or 1, nil, esc)
+  end
+end
+
 --- What this widget still keeps for itself across an arm edge, and the reading of what it does
 --- not. The statistics and the flight clock come from the record; the fields below are the
 --- dashboard's own, because they are about this widget's screen rather than about the flight:
@@ -1927,9 +2016,11 @@ local function updateDerivedFlightState(state)
     -- BATTERY in the quick menu still brings the picker back.
     local pick = state.batteryPick
     if pick then pick.pending = false end
+    noteEvent(state, "armed", 1)
   elseif wasArmed and not isArmed then
     state.lastDisarmAt = nowSeconds()
     state.hadArmedFlight = true
+    noteEvent(state, "disarmed", 1)
     -- Capture the ending (landing) voltage as the last known live voltage, and the cell count
     -- readTelemetry took in the same pass, before it reached the arm flags.
     if type(state.voltage) == "number" and state.voltage > 0 then
@@ -2732,20 +2823,30 @@ local function readTelemetry(state, audioState)
   if type(batteryCellCountValue) == "number" and batteryCellCountValue > 0 then
     setField("batteryCellCount", roundInt(batteryCellCountValue, state.batteryCellCount or 0))
   elseif type(voltageValue) == "number" and voltageValue > 0 then
-    -- Try to infer cell count from battery config's max cell voltage
     local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
     local batteryConfig = session and (session.batteryConfig or session.battery_config) or nil
-    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
-
-    local inferredCells = math.max(1, math.floor((voltageValue / maxCellVoltage) + 0.5))
-    local existingCells = tonumber(state.batteryCellCount)
-    if not existingCells or existingCells <= 0 then
-      setField("batteryCellCount", inferredCells)
+    -- A cell count configured on the flight controller is the count it latches when it detects
+    -- the pack (rotorflight-firmware `batteryUpdatePresence`), so it is taken as it is rather than
+    -- guessed from the voltage: while the cell count sensor still reads 0 after a pack is plugged
+    -- in, and on a model that carries no such sensor. lib/audio.lua and the flight record read the
+    -- same field first for the same question. A count of 0 is the board detecting it itself.
+    local configuredCells = tonumber(batteryConfig and batteryConfig.batteryCellCount)
+    if configuredCells and configuredCells > 0 then
+      setField("batteryCellCount", roundInt(configuredCells, state.batteryCellCount or 0))
     else
-      local perCell = voltageValue / existingCells
-      -- Reconnect-safe: replace stale cell count if implied per-cell voltage is implausible.
-      if perCell < 2.5 or perCell > 4.5 then
+      -- Otherwise infer it from the battery config's max cell voltage.
+      local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
+
+      local inferredCells = math.max(1, math.floor((voltageValue / maxCellVoltage) + 0.5))
+      local existingCells = tonumber(state.batteryCellCount)
+      if not existingCells or existingCells <= 0 then
         setField("batteryCellCount", inferredCells)
+      else
+        local perCell = voltageValue / existingCells
+        -- Reconnect-safe: replace stale cell count if implied per-cell voltage is implausible.
+        if perCell < 2.5 or perCell > 4.5 then
+          setField("batteryCellCount", inferredCells)
+        end
       end
     end
   end
@@ -2934,6 +3035,9 @@ function Runtime.new(zone, options)
       batteryProfile = 1,
       armFlags = 0,
       armDisableFlags = 0,
+      -- The event history (noteEvent above): a table from here on, never nil, empty until the first
+      -- transition.
+      eventLog = {},
       -- The flight log's battery prompt. A table from here on, never nil: see
       -- newBatteryPickState above.
       batteryPick = newBatteryPickState(),
@@ -3103,7 +3207,8 @@ function Runtime.new(zone, options)
 
     -- The steady-state pass allocates nothing. When the bounds in hand are already numeric,
     -- the four branches below that would end in a value-identical config -- custom bounds,
-    -- no cell count, plausible bounds kept, or a normalization that lands on the bounds
+    -- no cell count, plausible bounds kept for the count they were derived for, or a
+    -- normalization that lands on the bounds
     -- already held -- are decided here on the numbers alone, the existing table is kept, and
     -- only the (deduplicated, developer-gated) log line is still offered. Every path that can
     -- CHANGE a value falls through to the full copy below, so what the function computes is
@@ -3128,7 +3233,8 @@ function Runtime.new(zone, options)
         perCellMax < 3.0 or perCellMax > 5.2 or
         perCellMax <= perCellMin
       )
-      if (not isExactDefault) and (not looksInvalidForCells) then
+      local boundsCells = currentConfig._boundsCells
+      if (not isExactDefault) and (not looksInvalidForCells) and (boundsCells == nil or boundsCells == cells) then
         logVoltageThemeDecision(self, "keep", cells, currentConfig.v_min, currentConfig.v_max, curMin, curMax)
         return
       end
@@ -3136,8 +3242,11 @@ function Runtime.new(zone, options)
       -- gives 18.0/25.2 V, the pair isExactDefault reads as an unnormalized default, so without
       -- this every pass would copy the table only to write the same two numbers back. The raw
       -- values are compared, not curMin/curMax, so bounds held as strings still get converted.
+      -- The bounds in hand are then the ones derived for this count, and say so: a tag left at
+      -- another count would let them stand if the count ever moved back to it.
       local nextMin, nextMax = normalizedVoltageBounds(cells)
       if currentConfig.v_min == nextMin and currentConfig.v_max == nextMax then
+        if boundsCells ~= cells then currentConfig._boundsCells = cells end
         logVoltageThemeDecision(self, "normalize", cells, currentConfig.v_min, currentConfig.v_max, nextMin, nextMax)
         return
       end
@@ -3175,13 +3284,20 @@ function Runtime.new(zone, options)
       perCellMax < 3.0 or perCellMax > 5.2 or
       perCellMax <= perCellMin
     )
-    if (not isExactDefault) and (not looksInvalidForCells) then
+    -- Bounds this function derived carry the cell count they were derived for, and are derived
+    -- again when the count moves, however plausible they still look per cell: a count inferred
+    -- from a voltage that was still rising (11 for a 12S pack) gives bounds that pass the test
+    -- above for the real count too, and the real count arriving half a second later has to
+    -- replace them. Bounds with no count of their own are judged by that test alone, as before.
+    local boundsCells = currentConfig._boundsCells
+    if (not isExactDefault) and (not looksInvalidForCells) and (boundsCells == nil or boundsCells == cells) then
       applyThemeConfig(self, nextConfig)
       logVoltageThemeDecision(self, "keep", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
       return
     end
 
     nextConfig.v_min, nextConfig.v_max = normalizedVoltageBounds(cells)
+    nextConfig._boundsCells = cells
     applyThemeConfig(self, nextConfig)
     logVoltageThemeDecision(self, "normalize", cells, currentConfig.v_min, currentConfig.v_max, nextConfig.v_min, nextConfig.v_max)
   end
@@ -3390,6 +3506,9 @@ function Runtime.new(zone, options)
         if DerivedSnapshot and type(DerivedSnapshot.build) == "function" then
           DerivedSnapshot.build(self.state, self._snapshotSources or self.boxSources)
         end
+        -- Only once this connection's edge below has been taken, so its first entry is the
+        -- connection itself and not a reading taken on the pass that found it.
+        if self.lastFblConnected == true then noteReadingEvents(self.state) end
       end
     end
     
@@ -3427,6 +3546,7 @@ function Runtime.new(zone, options)
     updateVoltageThemeConfig(self)
     if isFblConnected and not wasFblConnected then
       -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
+      noteEvent(self.state, "connected", 1)
       self.state.hadArmedFlight = false
       self.state.hadInflightFlight = false
       self.state.prevArmed = false
@@ -3495,6 +3615,11 @@ function Runtime.new(zone, options)
       end
       widgetLog(self, "FBL reconnect edge: reset dashboard session state", "info")
     elseif not isFblConnected and wasFblConnected then
+      -- The event history's two memos go with the connection: the next one starts its governor
+      -- from its own first reading and notes its speed controller's first verdict again.
+      noteEvent(self.state, "disconnected", 2)
+      self.state.eventGovernor = nil
+      self.state.eventEsc = nil
       -- The session latches are cleared here rather than on the connect edge, and the difference
       -- is not stylistic. updateConnectionState() runs at the top of this pass, so a clear placed
       -- on the connect edge is first READ by the next pass -- the opening pass of a new session,
@@ -3740,39 +3865,48 @@ function Runtime.new(zone, options)
       -- job is armed by a request that it clears before it can raise, and each new request arms it
       -- again: it is logged in full every time, as before.
       local counted = self._job.oneShot ~= true
+      -- Which surface the tree on screen is, for the hold gate in the state pass: forgotten before
+      -- any build step runs, since a step may clear the tree and then raise, and recorded only
+      -- once a build has completed. A one-shot job builds nothing and leaves the record alone.
+      if counted then self._treeKind, self._treeKey = nil, nil end
       local stepOk, stepDone = pcall(self._job.step, self)
       if not stepOk then
         self._job   = nil
         self.built  = false
-        -- The entry point owns the CPU-limit response: the hold-off, and the release of the two
-        -- variables the overlay may be holding. It cannot do either if the raise stops here.
         local isCpuLimit = (LogSink and type(LogSink.isCpuLimitError) == "function" and LogSink.isCpuLimitError(stepDone))
           or (type(stepDone) == "string" and string.find(stepDone, "CPU limit", 1, true) ~= nil)
-        if isCpuLimit then
-          error(stepDone, 0)
-        end
-        -- Any other raise counts against its kind; see JOB_FAULT_LIMIT. Only the first of a run
-        -- goes to the card as a fault -- the ones after it are the same fault, and a fault line is
-        -- written to the card as it happens -- and the raise that reaches the limit says so, so
-        -- the log ends with the reason the screen shows what it shows.
+        -- Every raise counts against its kind, a step stopped at the instruction limit included;
+        -- see JOB_FAULT_LIMIT. A build that always overruns is otherwise armed again after every
+        -- back-off for as long as the widget runs. Counting here is safe after such a stop: the
+        -- firmware raises the limit once per call and runs the rest of the call unmetered.
         local faults = 1
         if counted then
           faults = (self._jobFaults[jobKind] or 0) + 1
           self._jobFaults[jobKind] = faults
         end
-        if faults == 1 and LogSink and type(LogSink.fault) == "function" then
+        -- Only the first of a run goes to the card as a fault -- the ones after it are the same
+        -- fault, and a fault line is written to the card as it happens; a stop at the limit is
+        -- written there by the entry point -- and the raise that reaches the limit says so, so
+        -- the log ends with the reason the screen shows what it shows.
+        if faults == 1 and not isCpuLimit and LogSink and type(LogSink.fault) == "function" then
           pcall(LogSink.fault, "dashboard.job." .. tostring(jobKind), stepDone)
         end
-        widgetLog(self, "job step error (" .. tostring(jobKind) .. "): " .. tostring(stepDone), "error")
-        if faults == JOB_FAULT_LIMIT then
-          widgetLog(self, "job " .. tostring(jobKind) .. " raised " .. faults
-            .. " times in a row; not retried until the theme is reloaded", "error")
+        -- Under pcall: a log line that fails (out of memory) must not replace a CPU-limit stop on
+        -- its way to the entry point below.
+        pcall(logJobFault, self, jobKind, stepDone, faults)
+        -- The entry point owns the CPU-limit response: the hold-off, and the release of the two
+        -- variables the overlay may be holding. It cannot do either if the raise stops here.
+        if isCpuLimit then
+          error(stepDone, 0)
         end
       elseif stepDone then
         -- step returned true: job is done. A run of raises ends when the surface is drawn, not
         -- when a step merely returns: several steps finish without building anything, and the
         -- state pass then arms them again.
-        if self.built then self._jobFaults[jobKind] = nil end
+        if self.built then
+          self._jobFaults[jobKind] = nil
+          if counted then self._treeKind, self._treeKey = jobKind, self.renderKey end
+        end
         self._job = nil
       end
       -- The second of the two clock reads the gap line is built from; see traceInstructionUsage.
@@ -3842,6 +3976,7 @@ function Runtime.new(zone, options)
     -- so a hole measured while the tuning surface was up can be told from one on the dashboard.
     self._passWork = tuningMode or "state"
     local nextRenderKey = nil
+    local holding, heldFor = false, 0
     if tuningMode then
       -- The same 2 Hz throttle the scene key is under. The values and the armed row are reactive
       -- closures and follow the state per frame; everything the key covers is layout, and
@@ -3859,9 +3994,17 @@ function Runtime.new(zone, options)
       -- (widgets/dashboard/inflight/drive.lua, the AdjF block in fastTick). When the hold ends the
       -- next recompute happens as it always did.
       local snapshot = self.state.inflight
-      local holding = (type(snapshot) == "table") and snapshot.holding == true
+      holding = (type(snapshot) == "table") and snapshot.holding == true
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
       local now = nowSeconds()
+      -- When the hold began, for the cap on the hold gate below (HOLD_DEFER_SECONDS).
+      if not holding then
+        self._holdSince = nil
+      elseif self._holdSince == nil then
+        self._holdSince = now
+      else
+        heldFor = now - self._holdSince
+      end
       -- A tap on a bank chip or a row asks for the new selection to be on screen at once rather
       -- than up to half a second later; it sets this flag instead of dropping the key itself, so
       -- that it goes through the hold gate like everything else.
@@ -3960,6 +4103,20 @@ function Runtime.new(zone, options)
       self.built = false
       -- Fall through: detection and enqueue happen in this same pass, and the build
       -- lands in the next one, which carries nothing else.
+    end
+
+    -- The hold rule above keeps the tuning key still, but `built` and the render key are cleared
+    -- from elsewhere as well: a theme reload (the latch into flight loads the in-flight module, a
+    -- changed preference), the voltage bounds moving, new widget options. Each would rebuild the
+    -- tuning surface under the finger, and the rebuild lets go of the hold first (tuningJobStep),
+    -- so the held step ended with the finger still down. While a control is held and the tree on
+    -- screen is the one this pass would build -- same job, same key -- that rebuild waits: `built`
+    -- stays false and the first pass after the release builds it. A build of another surface --
+    -- the zone's, once fullscreen has been left -- is a different job and is not held back. A hold
+    -- older than HOLD_DEFER_SECONDS holds nothing back: the rebuild runs and lets go of it.
+    if holding and heldFor < HOLD_DEFER_SECONDS
+        and jobKind == self._treeKind and nextRenderKey == self._treeKey then
+      jobKind = nil
     end
 
     if not self.built and jobKind ~= nil then

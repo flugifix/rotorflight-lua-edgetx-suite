@@ -343,7 +343,7 @@ function M.onSave(ctx)
     else
       ctx.reportSave({
         title = t(ctx.i18n, "save_error_title", "Error"),
-        message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io")
+        message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. Common.saveFailureReason(ctx.i18n, err)
       })
     end
   end

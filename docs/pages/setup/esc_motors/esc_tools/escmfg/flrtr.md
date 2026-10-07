@@ -72,6 +72,10 @@ chosen group is always shown.
 - An unsaved edit is marked below the list, and is lost if the page is left without saving.
 - If the ESC does not answer the write, the page says so and the edits stay marked as
   unsaved.
+- A reply that is not a Flyrotor parameter block -- shorter than the 56-byte block, or
+  carrying another ESC family's signature -- is refused. The values on screen stay as they were
+  (on a fresh visit, the page's own initial ones), Save is refused until a read succeeds, and the refusal is listed as a warning on the
+  *Session Logs* page.
 
 ## Related
 

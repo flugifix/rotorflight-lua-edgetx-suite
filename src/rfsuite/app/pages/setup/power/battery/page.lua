@@ -129,15 +129,11 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
-local function pageHelpText(i18n, key, fallback)
-	return pageText(i18n, key, fallback)
-end
-
-local function optionalPageHelpText(i18n, key)
-	local value = pageHelpText(i18n, key, nil)
-	if type(value) ~= "string" or value == "" then return nil end
-	if string.sub(value, 1, 10) == "app.pages." then return nil end
-	return value
+-- The reason after a failed write of the model's file, in words (settings/common.lua). The page
+-- also runs without common.lua when that does not load, and the store's own answer stands in then.
+local function modelSaveReason(i18n, err)
+	if Common and Common.saveFailureReason then return Common.saveFailureReason(i18n, err, true) end
+	return tostring(err or "io")
 end
 
 local function getInlineHelpHandler()
@@ -503,7 +499,7 @@ end
 
 local function saveModelPreferences(session)
 	if not PowerModelPreferences or type(PowerModelPreferences.save) ~= "function" then
-		return false, "model_preferences_unavailable"
+		return false, "unavailable"
 	end
 	return PowerModelPreferences.save(session)
 end
@@ -689,8 +685,9 @@ function M.onSave(ctx)
 			})
 		elseif okMsp and not okPrefs then
 			ctx.reportSave({
-				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
-				message = "Battery values sent to FC. Model prefs save failed: " .. tostring(errPrefs or "io")
+				title = pageText(ctx.i18n, "warning_title", "Warning"),
+				message = pageText(ctx.i18n, "model_prefs_failed_message", "Battery values sent to FC; model settings not saved")
+					.. ": " .. modelSaveReason(ctx.i18n, errPrefs)
 			})
 		elseif (not okMsp) and okPrefs then
 			ctx.reportSave({
@@ -699,8 +696,9 @@ function M.onSave(ctx)
 			})
 		else
 			ctx.reportSave({
-				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
-				message = "FC write pending and model prefs save failed: " .. tostring(errPrefs or "io")
+				title = pageText(ctx.i18n, "warning_title", "Warning"),
+				message = pageText(ctx.i18n, "pending_model_prefs_failed_message", "FC write pending; model settings not saved")
+					.. ": " .. modelSaveReason(ctx.i18n, errPrefs)
 			})
 		end
 	end
@@ -759,7 +757,7 @@ function M.build(ctx)
 		profileOptions,
 		ui.config.selectedBatteryProfile,
 		getProfileSetter(), {
-			helpText = optionalPageHelpText(i18n, "help_selected_battery"),
+			helpText = pageText(i18n, "help_selected_battery"),
 			helpTitle = pageText(i18n, "selected", "Selected") .. " " .. pageText(i18n, "battery_slot", "Battery"),
 			onHelp = getInlineHelpHandler()
 		})
@@ -772,7 +770,7 @@ function M.build(ctx)
 				max = CAPACITY_MAX,
 				get = function() return ui.config.capacities[i] end,
 				set = getCapacitySetter(i),
-				helpText = optionalPageHelpText(i18n, "help_capacity"),
+				helpText = pageText(i18n, "help_capacity"),
 				helpTitle = label,
 				onHelp = getInlineHelpHandler(),
 				display = function(v) return tostring(v) .. " mAh" end
@@ -791,7 +789,7 @@ function M.build(ctx)
 			profileOptions,
 			editSlot() - 1,
 			getEditProfileSetter(), {
-				helpText = optionalPageHelpText(i18n, "help_edit_battery"),
+				helpText = pageText(i18n, "help_edit_battery"),
 				helpTitle = pageText(i18n, "edit_battery", "Edit Battery"),
 				onHelp = getInlineHelpHandler()
 			})
@@ -803,7 +801,7 @@ function M.build(ctx)
 			max = 500,
 			get = function() return cellValue("vbatmaxcellvoltage") end,
 			set = getMaxCellSetter(),
-			helpText = optionalPageHelpText(i18n, "help_max_cell_voltage"),
+			helpText = pageText(i18n, "help_max_cell_voltage"),
 			helpTitle = pageText(i18n, "max_cell_voltage", "Max cell voltage"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
@@ -815,7 +813,7 @@ function M.build(ctx)
 			max = 500,
 			get = function() return cellValue("vbatfullcellvoltage") end,
 			set = getFullCellSetter(),
-			helpText = optionalPageHelpText(i18n, "help_full_cell_voltage"),
+			helpText = pageText(i18n, "help_full_cell_voltage"),
 			helpTitle = pageText(i18n, "full_cell_voltage", "Full cell voltage"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
@@ -827,7 +825,7 @@ function M.build(ctx)
 			max = 500,
 			get = function() return cellValue("vbatwarningcellvoltage") end,
 			set = getWarnCellSetter(),
-			helpText = optionalPageHelpText(i18n, "help_warn_cell_voltage"),
+			helpText = pageText(i18n, "help_warn_cell_voltage"),
 			helpTitle = pageText(i18n, "warn_cell_voltage", "Warn cell voltage"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
@@ -839,7 +837,7 @@ function M.build(ctx)
 			max = 500,
 			get = function() return cellValue("vbatmincellvoltage") end,
 			set = getMinCellSetter(),
-			helpText = optionalPageHelpText(i18n, "help_min_cell_voltage"),
+			helpText = pageText(i18n, "help_min_cell_voltage"),
 			helpTitle = pageText(i18n, "min_cell_voltage", "Min cell voltage"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return string.format("%.2f V", (tonumber(v) or 0) / 100) end
@@ -851,7 +849,7 @@ function M.build(ctx)
 			max = CELL_COUNT_MAX,
 			get = function() return cellValue("batteryCellCount") end,
 			set = getCellCountSetter(),
-			helpText = optionalPageHelpText(i18n, "help_cell_count"),
+			helpText = pageText(i18n, "help_cell_count"),
 			helpTitle = pageText(i18n, "cell_count", "Cell count"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return tostring(v) end
@@ -863,7 +861,7 @@ function M.build(ctx)
 			max = RESERVE_MAX,
 			get = function() return ui.config.consumption_warning_percentage end,
 			set = getReserveSetter(),
-			helpText = optionalPageHelpText(i18n, "help_consumption_warning_percentage"),
+			helpText = pageText(i18n, "help_consumption_warning_percentage"),
 			helpTitle = pageText(i18n, "consumption_warning_percentage", "Consumption reserve"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v) return tostring(v) .. "%" end
@@ -908,6 +906,11 @@ function M.onClose()
 	Sensors = nil
 	SmartFuelReserve = nil
 	t = nil
+end
+
+-- Asked before the page is left (ui/home.lua): true while an edit here is not saved.
+function M.hasUnsavedChanges()
+	return ui.dirty == true
 end
 
 return M

@@ -41,7 +41,7 @@ page back, and on the first page it leaves the assistant.
 | CH7 Profile | A whole three-position switch, one position per profile. Needs two adjustment slots on the flight controller. |
 | CH8 Rescue | The switch position that turns rescue on. Recommended rather than required. |
 | Write | The plan for every channel of the run on one screen, each row marked *ready* or *blocked*, and one press that writes the transmitter and the flight controller as one act. A blocked row is skipped and nothing about it reaches the board. The screen that follows compares what the board reports against the switch being held. |
-| Link | Packet rate and telemetry ratio, read from the transmitter module and from the flight controller and set on either side. |
+| Link | Packet rate and telemetry ratio, read from the transmitter module and from the flight controller and set on either side. Where the two differ, each row has a *use this* button, which asks before it writes. |
 | Name | The model name on the flight controller. |
 | Orientation | The board's mounting angles. It comes before the calibration because a calibration against an orientation that is not yet active calibrates the wrong thing. |
 | Accelerometer | Level calibration, with the flight controller's reported calibration state shown beside it. The machine has to be in its own frame and level; calibrating on a workbench calibrates the workbench. |
@@ -53,6 +53,14 @@ page back, and on the first page it leaves the assistant.
   locked while armed, but a step that was already open stays open across the arming edge. Both
   *use this* buttons and the two pickers are refused for as long as the model is armed, and a
   transfer that was already running is abandoned rather than finished.
+- **Both *use this* buttons on the Link step ask before they write.** One sets the transmitter
+  module's packet rate and telemetry ratio to the flight controller's, the other writes the flight
+  controller's telemetry configuration to match the module and saves it. The question is the one
+  *Tools > Diagnostics > ELRS Link* asks before the same two writes, followed by both rows as the
+  step shows them, and where the arming state cannot be read it asks that as well. Declining it
+  writes nothing and the Probe row says *Nothing was written*; a radio
+  that cannot show the question writes nothing either. The two pickers write without a question:
+  there the value is the one the pilot picked.
 - **The channels the assistant lays out are CH5 to CH8 and the four stick channels.** It replaces
   every mixer line and every input line on the channels it writes, which the channel screen says
   before it does so.
@@ -76,6 +84,24 @@ page back, and on the first page it leaves the assistant.
   each of the two functions it needs.
 - **The assistant never selects a model.** EdgeTX registers no model-selection function for Lua, so
   every write lands on the model that is open.
+- **Why the Link step exists.** The flight controller does not measure the link: it is told the
+  packet rate and telemetry ratio and paces every telemetry frame it sends from that pair. Told more
+  than the link carries, it schedules more than drains away -- a backlog, dropped frames, values
+  that are stale rather than missing. Told less, bandwidth stays unused. Both read as laggy
+  telemetry, and neither side reports an error. This holds in both CRSF telemetry modes, Native and
+  Custom.
+- **What the Link step shows and writes.** *Probe* is the state of the current or last read or
+  write, and *Read* reads the flight controller and the transmitter module again. The *Flight
+  controller* row shows the pair it is set to, followed by *native* where its CRSF telemetry runs in
+  Native mode; the *Transmitter module* row shows the pair the module runs. Where the two agree,
+  both rows say so. Where they differ, each row carries a *use this* button. On the flight
+  controller's row it sets the module's packet rate and telemetry ratio to the flight controller's,
+  each one only where the module offers that value. On the module's row it writes the module's pair
+  to the flight controller, switches its CRSF telemetry to Custom mode and saves it. *Packet rate*
+  and *Telemetry ratio* are shown where the module reports the setting and set the module directly;
+  they offer this suite's own list, reduced to what the module offers, or the module's whole list
+  where it offers none of them. After a write to the module, the module row shows the new values
+  once *Read* has read the module again.
 
 ## Related
 

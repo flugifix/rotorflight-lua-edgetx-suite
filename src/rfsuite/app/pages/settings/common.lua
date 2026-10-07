@@ -203,6 +203,26 @@ function M.failPageRead(ui)
   end
 end
 
+-- The reason a pilot reads after "Save failed" when a settings file could not be written. A store
+-- answers a refused write with a token -- config_store's "io", "write", "delete" or "rename" --
+-- or with the error text io.open gave, which carries the file's path, and the module around it
+-- can answer with a Lua error. None of that is for the screen: it all reads as one sentence.
+-- `modelStore` says the answer is about the model's own file (model_preferences.saveByMcuId),
+-- whose "unavailable" (the store module will not load) and "missing_mcu_id" (no board id to
+-- name the model's file by) have sentences of their own. The raw answer belongs in the log.
+function M.saveFailureReason(i18n, err, modelStore)
+  if modelStore and err == "unavailable" then
+    return i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.model_store_unavailable")
+      or "model settings store not available"
+  end
+  if modelStore and err == "missing_mcu_id" then
+    return i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.model_store_missing")
+      or "Connect the flight controller to save this model's settings"
+  end
+  return i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.store_write_failed")
+    or "the settings file could not be written to the SD card"
+end
+
 -- Shared teardown helper for page modules.
 -- Keeps close/reset behavior consistent across pages.
 function M.resetPageState(ui, opts)
