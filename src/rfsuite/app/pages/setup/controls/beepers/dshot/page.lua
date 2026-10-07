@@ -17,9 +17,11 @@ local LoadingOverlay = nil
 local ConfirmDialog = nil
 local t = nil
 
+-- Each label is a key and fallback pair in the form the packager translates in place, so an
+-- installed suite shows it in the pilot's language.
 local DSHOT_FIELDS = {
-  { bit = 1, key = "field_rx_lost", default = "RX lost" },
-  { bit = 9, key = "field_rx_set", default = "RX set" }
+  { bit = 1, labelKey = "field_rx_lost", labelFallback = "RX lost" },
+  { bit = 9, labelKey = "field_rx_set", labelFallback = "RX set" }
 }
 
 local ui = {
@@ -353,7 +355,7 @@ function M.build(ctx)
   -- Condition switches
   for i = 1, #DSHOT_FIELDS do
     local def = DSHOT_FIELDS[i]
-    local label = pageText(i18n, def.key, def.default)
+    local label = pageText(i18n, def.labelKey, def.labelFallback)
     
     cursorY = cursorY + Controls.appendRadioSwitch(
       children,
