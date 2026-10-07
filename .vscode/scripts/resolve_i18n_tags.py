@@ -559,7 +559,7 @@ def self_test():
     )
 
     # (label, marker key, file made read-only, expected status, file must have
-    # changed, expected write failures reported)
+    # changed, expected write failures reported, expected keys in no bundle)
     #
     # The write-failure column is the point of the third one. An unresolved key
     # used to be reported as a failed write as well, because the untouched marker
@@ -668,7 +668,7 @@ def self_test():
     if ok:
         print("[self-test] all cases behaved as specified")
         return 0
-    print("[self-test] FAILED: the exit status does not tell the truth")
+    print("[self-test] FAILED: the exit status or the report does not tell the truth")
     return 1
 
 
@@ -676,7 +676,8 @@ def main():
     ap = argparse.ArgumentParser(description="Resolve @i18n(...)@ tags in a codebase")
     ap.add_argument('--list-transforms', action='store_true', help='List available transforms and exit')
     ap.add_argument('--self-test', action='store_true',
-                    help='Prove the exit status reports unresolved keys and failed writes')
+                    help='Prove the exit status reports unresolved keys and failed writes, and that '
+                         'a key answered only by its inline fallback is reported')
     ap.add_argument('--json', required=False, help='Path to en.json')
     ap.add_argument('--root', required=False, help='Root of codebase to scan')
     ap.add_argument('--dry-run', action='store_true', help='Do not write changes')
