@@ -91,6 +91,12 @@ L.SETTINGS = {
   -- The signal bar's warning step, in percent of the headroom above the floor; the critical step
   -- is half of it -- 15 / 8 at the default. A stored value not in this list lands on the default.
   { page = "topbar", key = "rssi_warn",  values = { "25", "20", "15", "10" },  default = "15" },
+  -- The most the transmitter module sends with, in mW: the full scale of the link view's TPWR bar.
+  -- No link frame carries it -- dynamic power moves the reported power below it -- so it is the
+  -- pilot's to say. The values are ExpressLRS's power levels; the bar turns amber from 60 % of the
+  -- limit and red from 85 %, where dynamic power is close to having nothing left to add.
+  { page = "topbar", key = "tpwr_max",   values = { "25", "50", "100", "250", "500", "1000", "2000" },
+    default = "100" },
   { page = "rows",   key = "units",      values = ON_OFF,                      default = "off" },
   { page = "rows",   key = "temp_colors", values = { "off", "standard", "early" }, default = Common.TEMP_COLORS_DEFAULT },
 }
@@ -131,6 +137,9 @@ function L.settingsLabels()
     rssi_warn = { label = "@i18n(app.pages.settings_dashboard_settings.urban_rssi_warn)@",
                   values = { ["25"] = "25 %", ["20"] = "20 %", ["15"] = "15 %",
                              ["10"] = "10 %" } },
+    tpwr_max = { label = "@i18n(app.pages.settings_dashboard_settings.urban_tpwr_max)@",
+                 values = { ["25"] = "25 mW", ["50"] = "50 mW", ["100"] = "100 mW", ["250"] = "250 mW",
+                            ["500"] = "500 mW", ["1000"] = "1000 mW", ["2000"] = "2000 mW" } },
     units = { label = "@i18n(app.pages.settings_dashboard_settings.urban_units)@", values = onOff() },
     temp_colors = { label = "@i18n(app.pages.settings_dashboard_settings.urban_temp_colors)@",
                     values = { off = "@i18n(app.pages.flight_tuning_advanced_pid_controller.tbl_off)@",
@@ -289,6 +298,7 @@ L.KEY_ACTIONS = {
   { id = "link",       action = "openView:urban_link" },
   { id = "telemetry",  action = "openView:urban_telemetry" },
   { id = "battery",    action = "openView:urban_battery" },
+  { id = "status",     action = "openView:urban_status" },
   { id = "suite_tool", action = "openTool" },
   { id = "flight_log", action = "openTool:tools_flight_log_page" },
   { id = "exit",       action = "exitFullscreen" },
@@ -683,6 +693,15 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
   local thrFont = Common.selectFont(hGov - fontH, thrW, "100%")
   local thrH = Common.measure(thrFont, "100%")
   local govPad = math.max(0, math.floor((hGov - fontH - math.max(govH, thrH)) / 2))
+  -- In full screen, on a host with theme views, the governor row and the status line under it are
+  -- the tap that opens the status view (statusview.lua), which says more about both. Drawn before
+  -- their labels, which lie over it; the separator between the two is then a line, which takes no
+  -- press, and the area stops a pixel short of the separator under it.
+  local statusTap = hasViews(ctx)
+  if statusTap then
+    local action = ctx.action
+    tapArea(nodes, x + pad, y + yGov, innerW, hGov + hStat - 1, function() action("openView:urban_status") end)
+  end
   Common.stacked(nodes, x + pad, y + yGov, govW, govPad, T.governor,
     Common.governorText(state), font, fontH, govFont, govH)
   Common.stacked(nodes, x + pad + govW, y + yGov, thrW, govPad, T.throttle,
@@ -744,7 +763,12 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
 
   Common.hline(nodes, x + pad, y + yMeta - 1, innerW)
   Common.hline(nodes, x + pad, y + yGov - 1, innerW)
-  Common.hline(nodes, x + pad, y + yStat - 1, innerW)
+  if statusTap then
+    nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
+      pts = { { x + pad, y + yStat - 1 }, { x + pad + innerW, y + yStat - 1 } }, color = C.line, thickness = 1 }
+  else
+    Common.hline(nodes, x + pad, y + yStat - 1, innerW)
+  end
   Common.hline(nodes, x + pad, y + yGrid - 1, innerW)
 end
 

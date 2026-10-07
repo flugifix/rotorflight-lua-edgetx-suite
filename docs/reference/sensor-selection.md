@@ -106,6 +106,40 @@ behaviour, not something the suite can see behind.
   overwritten by a reading that arrived, so a value with no sensor behind it shows `0` there
   before and after. Making those tiles show `--` is a separate gate and this is not it.
 
+## When two sensors have the same name
+
+A sensor name is not unique on the radio. The case that happens: the native CRSF battery frame
+creates `RxBt`, `Curr`, `Capa` and `Bat%`, and a model whose sensors were discovered while the
+flight controller was still on its default native telemetry keeps those four after it is switched
+to custom telemetry -- above the flight controller's own `Curr`, `Capa` and `Bat%` in *Model* ->
+*Telemetry*. Asked for a name, the radio answers with the **first** sensor of that name, so fuel,
+current and consumption would come from the native rows, which no longer receive anything: no
+value at all, or the last one they received, frozen.
+
+So where a name is carried by more than one sensor, the suite reads the one the radio is receiving:
+the first of them, in the order of *Model* -> *Telemetry*, that the radio counts as current; if
+none is, the first that has received anything since the model was loaded. The radio counts a
+sensor as current until about 20 seconds after its last value, and none once the link has stopped.
+The choice is made on every read, so it follows the radio: when the native rows stop being current,
+the values move to the flight controller's rows by themselves.
+
+- **The first sensor wins while both are current**, so a model on native telemetry reads the native
+  rows, as it always did -- and for up to 20 seconds after the native rows last received something.
+- **Only a model that carries `RxBt` is looked at.** `RxBt` is the radio's own receiver battery
+  sensor, which the native telemetry creates and the suite never does. On such a model the suite
+  lists the model's sensors about two seconds after each connection, and again when a search meets
+  a sensor that has never received anything while one has been added since; a model without
+  `RxBt` reads every name as before.
+- **A sensor added after that list is noticed by a search.** On a model that meets custom
+  telemetry for the first time while the native rows still hold a value -- the telemetry mode
+  changed with the radio left on -- the values stay on the native rows until the next connection.
+- The **session minimum and maximum** (`Curr+`, `Bat%-`) follow the same sensor.
+
+Deleting the native rows in *Model* -> *Telemetry* removes the question altogether.
+
+The [validate sensors](../pages/tools/diagnostics/validate_sensors.md) page is not part of this: it
+asks the radio for each name itself and grades the first sensor of that name.
+
 ## When the choice is made again
 
 The sensor chosen for a value is forgotten in three places, and it is worth knowing which,

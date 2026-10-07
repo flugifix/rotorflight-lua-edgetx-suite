@@ -92,9 +92,11 @@ end
 Prefer that shape to assuming a file exists. A pack the pilot installed months ago will not have
 the file your announcement was written against.
 
-To speak a number after the file, use the radio's own teller — `playNumber(value, unit, attribute)`
+To speak a number after the file, use the radio's own teller — `playNumber(value, unit, attribute, volume)`
 — rather than a spoken-number WAV. It follows the language set on the radio, which the pack does
-not.
+not. Inside `lib/audio.lua` pass `audio_volume` as the fourth argument, and from outside it call
+`Audio.playNumber(value, unit)`, so the number is spoken at the WAV volume level the file before it
+plays at.
 
 **The file itself is generated, not recorded.** Add one entry to `bin/sound-generator/json/en.json`,
 run `update-missing-translations.py`, fill in the other languages, and build. See

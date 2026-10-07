@@ -191,16 +191,18 @@ local function ensureAudio()
 end
 
 local function announce()
+  local audio = ensureAudio()
   local words = state.functionChanged and ADJUSTMENTS[state.functionId] or nil
-  if words then
-    local audio = ensureAudio()
-    if audio then
-      for i = 1, #words do
-        audio.playEventFile("adj/" .. words[i] .. ".wav")
-      end
+  if words and audio then
+    for i = 1, #words do
+      audio.playEventFile("adj/" .. words[i] .. ".wav")
     end
   end
-  if type(playNumber) == "function" then
+  -- Through the audio module when it is reachable, so the value is spoken at the same level as
+  -- the words before it.
+  if audio and type(audio.playNumber) == "function" then
+    audio.playNumber(state.value or 0, 0)
+  elseif type(playNumber) == "function" then
     pcall(playNumber, state.value or 0, 0, 0)
   end
 end

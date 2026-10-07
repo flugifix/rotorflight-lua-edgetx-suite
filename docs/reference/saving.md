@@ -41,6 +41,49 @@ nothing anywhere holds what was there before. Answering *No* writes nothing.
 The re-checks described above are unaffected either way: the page, its read state and the arming
 state are all checked again after the answer and immediately before anything is written.
 
+## Leaving a page with unsaved changes
+
+A value changed on a page lives only on that page until it is saved; leaving the page discards it.
+On the pages listed below, Back on a page with a change that is not saved does not leave at once.
+It asks first, in a box titled **Unsaved changes**, with three answers:
+
+- **Stay** closes the box and keeps the page with its changes. Back while the box is up does the
+  same, so pressing Back twice never discards anything. Stay is the button that has the focus when
+  the box opens.
+- **Save** saves the page exactly as the header's Save does -- the same checks, the same notice --
+  and the page stays open; Back then leaves it without asking. The box counts as the confirmation,
+  so *Confirm on Save* does not ask a second time. A save that has to be confirmed anyway -- an
+  arming state that cannot be read, Copy Profiles -- still asks.
+- **Discard** leaves the page. Nothing is written; the next visit reads the flight controller
+  again.
+
+The question is put only where the header offers Save, never while the model is armed, and not
+while a save of the page is still on its way: then Back leaves the page as before. It is not put
+when the page goes without a Back on it -- the link to the flight controller is lost, or the tool
+opened from the dashboard closes because full screen was left or the model armed; the changes are
+discarded then as before. Trims, Swash Geometry and both Servos pages are not on the list: with
+their override on they send a change to the flight controller while it is being edited, before
+Save, and what leaving them should do with such a change is a question of its own.
+
+The page decides what counts as a change through `hasUnsavedChanges()`, an optional hook the
+tool asks before it leaves; on the pages below it is the same state that draws their *Unsaved
+changes* line. A page without the hook is left as before.
+
+Pages that ask:
+
+- Flight Tuning: PIDs, Rates and Governor.
+- Flight Tuning > Advanced: Autolevel, Filters, Main Rotor, PID Bandwidth, PID Controller,
+  Rescue, Tail Rotor, and all three Rates Advanced pages.
+- Setup: Configuration, Radio Config, Accelerometer, Alignment, GPS, Ports, Model and Telemetry.
+- Setup > Mixer: Swash and Tail.
+- Setup > Power: Battery, Sources, SmartFuel, Alerts and Preferences.
+- Setup > Governor: General, Time, Filters and Curves.
+- Setup > ESC/Motors: RPM, Telemetry, Throttle, and the ten ESC Configurator pages.
+- Setup > Controls: Modes, Adjustments, In-Flight Tuning, Failsafe, Stats, both Beepers pages, and
+  Blackbox Configuration and Logging.
+- System > Settings: General and Localization; Audio: Volume and all nine Audio Events pages;
+  Dashboard: Design and Quick Settings.
+
 ## A save that restarts the flight controller
 
 A save on Configuration, Alignment, GPS, Ports, Radio Config, and ESC/Motors RPM, Telemetry and
@@ -70,6 +113,7 @@ board does not make it read again, so values edited and not yet saved stay on th
   and Logging.
 - Setup > Power: Battery and Sources.
 - Setup > Mixer: Swash, Swash Geometry, Tail and Trims.
+- Setup > Servos: PWM Output and BUS Output.
 
 A chained load must finish successfully even if an earlier error allowed the page to continue
 reading other records. Previously read session values alone do not grant permission to save.
@@ -81,7 +125,19 @@ inputs -- with the page's own fields laid over them. A save from a visit whose r
 succeed would send an earlier visit's records, including settings another Mixer page has changed
 since. The live write that Trims sends while the swash override is on, and Swash Geometry while
 setup mode is on, waits for the same read: until it has succeeded, a changed value is shown and
-not sent.
+not sent. Switching the override or setup mode on with the * button waits for it too -- the button
+is disabled until the read has succeeded -- while switching either off is available at any time.
+
+The two Servos pages write one servo's whole record -- the one selected -- from what the page
+holds, and keep the records of their previous visit while they read again. Save waits for this
+visit's read and, after another servo has been picked, for that servo's own read; a servo whose
+record this visit has not read shows no fields. Switching the servo override on with the * button
+waits for the same read, while switching it off is available at any time. On flight controllers before API 12.09,
+which read every servo in one reply, a reply shorter than the servo count it announces is refused
+instead of being read as zeros. When PWM Output puts a servo back -- on Reload, or when the page
+is left with a change that was not saved -- it sends the value of this visit's read, or of the last
+save that completed, not the value of the first visit. Reload on PWM Output then reads the flight
+controller again, as it does on BUS Output.
 
 ## ESC Configurator pages
 
