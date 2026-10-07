@@ -911,6 +911,11 @@ function M.new(sectionKey)
     t = nil
   end
 
+  -- Asked before the page is left (ui/home.lua): true while an edit here is not saved.
+  function page.hasUnsavedChanges()
+    return ui.dirty == true
+  end
+
   return page
 end
 

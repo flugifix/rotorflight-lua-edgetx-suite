@@ -59,7 +59,12 @@ return {
       eeprom_pending = "Saved, but the EEPROM write is pending:",
       read_required = "Read the complete configuration before saving. Wait for loading to finish, or use Reload to try again.",
       page_changed = "The page changed. Return to the page and save again.",
-      confirm_required = "This save has to be confirmed, and the confirmation could not be shown. Nothing was written."
+      confirm_required = "This save has to be confirmed, and the confirmation could not be shown. Nothing was written.",
+      leave_title = "Unsaved changes",
+      leave_message = "This page has changes that are not saved. Leaving discards them.",
+      leave_stay = "Stay",
+      leave_save = "Save",
+      leave_discard = "Discard"
     },
     closing_rfsuite = "Closing RFSuite...",
     model_armed_title = "Model Armed",
