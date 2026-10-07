@@ -328,7 +328,9 @@ function M.getHeaderActions()
   return {
     save = true,
     reload = true,
-    star = true,
+    -- Switching the override on waits for this visit's read, as Save does (M.canSave below):
+    -- until then the live write sends nothing. Switching it off is always offered.
+    star = ui.inOverride or M.canSave(),
     menu = true
   }
 end
@@ -478,7 +480,7 @@ function M.onSave(ctx)
     ctx.reportSave({
       ok = true,
       title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-      message = pageText(ctx and ctx.i18n, "saved_message", "Servo trims saved")
+      message = pageText(ctx and ctx.i18n, "saved_message_trims", "Servo trims saved")
     })
   end
   return true
@@ -496,6 +498,7 @@ end
 
 function M.onStar(ctx)
   if not ConfirmDialog then return false end
+  if not ui.inOverride and not M.canSave() then return false end
 
   local i18n = ctx and ctx.i18n
   local title
@@ -514,6 +517,8 @@ function M.onStar(ctx)
     message = message,
     onConfirm = function()
       if not ui.inOverride then
+        -- Checked again: Yes comes later than the press, and the page may have closed since.
+        if not M.canSave() then return end
         setOverride(true)
         ui.inOverride = true
       else

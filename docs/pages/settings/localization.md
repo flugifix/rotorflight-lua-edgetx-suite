@@ -25,6 +25,8 @@ Always available.
 
 ## Notes
 
+- A save the card refuses shows *Save failed: the settings file could not be written to the SD
+  card*, and nothing on the page has been stored.
 - Only an explicit choice is written. *Automatic* is the **absence** of the `language` key in
   `preferences.lua`, which is what the resolution reads; choosing *Automatic* again removes the
   line and hands the decision back to the card or the radio. It is the only way back from this

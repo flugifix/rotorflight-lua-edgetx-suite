@@ -14,7 +14,7 @@ part of the backlog is dropped.
 The suite can move that work into a small script the radio runs outside the widgets:
 `SCRIPTS/FUNCTIONS/rfsbg.lua`. A call there is paused and continued on the next turn instead of
 being cut off, so it decodes every frame it takes. The same script also makes the adjustment
-announcements.
+announcements, at the level set under *Settings* → *Audio* → *Volume*.
 
 ## Where to find it
 

@@ -173,11 +173,18 @@ Closing the menu brings the prompt back.
 `views.lua`. A name that is not in the list is false: it hides the entry and never opens the
 view, which is what an unresolvable condition does in `app/menu_registry.lua` as well.
 
+An entry's `visibleWhen` is asked again when it is run: `fullscreen_menu.M.run` refuses an entry
+whose condition does not hold now, and so does the answer to its question. A surface is built
+again only when its key changes, so a menu built before the condition changed — open when the
+model armed — still draws the row; the refused press does nothing, follows with no action, and
+has the surface built again without it. The options and the `close` of an entry that names a
+`view` are pressed in that view and are not asked: the battery picker keeps its own rules.
+
 | Condition | True while |
 | --- | --- |
 | `previewInflightTuning` | the in-flight tuning preview switch is on and the widget carries the overlay's state for this model |
 | `batteryPickHasPacks` | the model is disarmed and the battery registry has a pack for it |
-| `modelDisarmed` | the model is not armed (`state.armed`) |
+| `modelDisarmed` | the model is not armed (`state.armed`); MAIN MENU, ERASE BLACKBOX and BATTERY PROFILE ask it |
 | `flightLogOffered` | the *Flight Log* preview switch is on (`preferences.general.preview_flight_log`, the switch the tool's own menu asks) and the model is not armed |
 | `batteryPickPending` | the battery prompt is waiting for an answer (`state.batteryPick.pending`) and no pick has been recorded yet |
 

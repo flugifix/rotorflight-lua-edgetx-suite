@@ -94,6 +94,128 @@ end
 local fieldInfoCache = {}
 local valueMisses = {}
 
+-- A label is not unique in a model's sensor table, and EdgeTX answers a label with the FIRST slot
+-- that carries it (luaFindFieldByName, radio/src/lua/api_general.cpp). The case that happens: the
+-- native CRSF battery frame creates RxBt, Curr, Capa and Bat%, and a model whose sensors were
+-- discovered while the flight controller was still on native telemetry keeps those four after it
+-- is switched to custom telemetry -- ahead of the Rotorflight rows of the same names. Read by
+-- label, Curr, Capa and Bat% are then the native rows: nothing at all if they were never received
+-- in this session, their last value, frozen, if they were.
+--
+-- So a label the model carries in more than one slot is read from the slot the radio is receiving:
+-- the first, in slot order, that getSourceValue() reports with a value and as current; failing
+-- that, the first with any value; failing that, the label as before. The slot is named "telemN",
+-- which EdgeTX resolves to slot N like a label, with "+" and "-" for the extremes
+-- (luaMultipleFields, same file). The choice is made on every read, so it follows the radio: a
+-- native row still counted as current -- the radio keeps that up to 20 s after its last value --
+-- gives way to the other once it is no longer, without waiting for a reset.
+--
+-- Finding the slots means walking the sensor table with model.getSensor(), one table per slot. It
+-- is done only on a model that carries RxBt: the radio's own receiver-battery sensor, which the
+-- native frames create alongside the other three and the suite never does, so a model without it
+-- cannot have the native rows and pays one getFieldInfo() per reset. On a model with it the walk
+-- runs SLOT_WALK_DELAY_SECONDS after the first read following a reset, which is the connect pass,
+-- and again where a sensor has appeared since (see rewalkIfTableGrew). Until the first walk every
+-- label is read as before.
+local NATIVE_MARKER = "RxBt"
+local SLOT_WALK_DELAY_SECONDS = 2.0
+-- nil: not looked at since the reset; false: no duplicate labels possible on this model; a table:
+-- name -> { "telemN", ... } in slot order, for every label in two or more slots and its "+"/"-".
+local duplicateNames = nil
+local firstEmptySlot = nil   -- where EdgeTX puts the next new sensor, as of the walk
+local slotWalkAt = nil
+
+local function walkSlots()
+  local getSensor = type(model) == "table" and model.getSensor or nil
+  if type(getSensor) ~= "function" then
+    duplicateNames, firstEmptySlot = false, nil
+    return
+  end
+  local names, slotsOf = {}, {}
+  firstEmptySlot = nil
+  local i = 0
+  local sensor = getSensor(i)
+  while sensor ~= nil do
+    local label = sensor.name
+    if label == nil or label == "" then
+      if firstEmptySlot == nil then firstEmptySlot = i end
+    else
+      local slots = slotsOf[label]
+      if slots == nil then
+        slotsOf[label] = { i }
+      else
+        slots[#slots + 1] = i
+        if #slots == 2 then names[label] = true end
+      end
+    end
+    i = i + 1
+    sensor = getSensor(i)
+  end
+  local labels = {}
+  for label in pairs(names) do labels[#labels + 1] = label end
+  for _, label in ipairs(labels) do
+    local slots = slotsOf[label]
+    local plain, high, low = {}, {}, {}
+    for k = 1, #slots do
+      local slotName = "telem" .. (slots[k] + 1)
+      plain[k], high[k], low[k] = slotName, slotName .. "+", slotName .. "-"
+    end
+    names[label], names[label .. "+"], names[label .. "-"] = plain, high, low
+    if debugWanted() then debugLog("dup:" .. label, label .. " is carried by " .. table.concat(plain, ", ")) end
+  end
+  duplicateNames = names
+end
+
+local function findDuplicates()
+  if slotWalkAt == nil then
+    local getFInfo = _G.getFieldInfo
+    local marker = type(getFInfo) == "function" and getFInfo(NATIVE_MARKER) or nil
+    if type(marker) ~= "table" then
+      duplicateNames = false
+      return
+    end
+    slotWalkAt = nowSeconds() + SLOT_WALK_DELAY_SECONDS
+    return
+  end
+  if nowSeconds() >= slotWalkAt then walkSlots() end
+end
+
+-- The name `name` is read under: itself, or the slot of that label the radio is receiving.
+local function slotName(name)
+  local duplicates = duplicateNames
+  if duplicates then
+    local slots = duplicates[name]
+    if slots == nil then return name end
+    local getSrcV = _G.getSourceValue
+    if type(getSrcV) ~= "function" then return name end
+    local held = nil
+    for i = 1, #slots do
+      local ok, value, current = pcall(getSrcV, slots[i])
+      if ok and value ~= nil then
+        if current ~= false then return slots[i] end
+        held = held or slots[i]
+      end
+    end
+    return held or name
+  end
+  if duplicates == nil then findDuplicates() end
+  return name
+end
+
+-- A sensor created after the walk is not in it. EdgeTX puts a new sensor into the lowest empty slot
+-- (availableTelemetryIndex, radio/src/telemetry/telemetry_sensors.cpp), so that slot no longer
+-- being empty is how one is noticed without walking the table on every read -- the suite's own
+-- decoder creates the Rotorflight rows on the first frame that carries them, which on a model
+-- meeting custom telemetry for the first time comes after the walk. Asked only on a model that was
+-- walked, and only where a row that was never received has just been refused, which is during a
+-- search or the re-try of a first name, never on the read of an adopted source.
+local function rewalkIfTableGrew()
+  if not duplicateNames or firstEmptySlot == nil then return end
+  local sensor = model.getSensor(firstEmptySlot)
+  if type(sensor) ~= "table" or sensor.name == nil or sensor.name == "" then return end
+  walkSlots()
+end
+
 -- The clock is only needed here while a miss is on record: it is compared against that record's
 -- 1 s window, and it stamps a new miss. A name that answers, which is the steady case for every
 -- adopted source, is read without it, and its record is cleared once it answers again.
@@ -131,7 +253,10 @@ local function readTelemetryValue(name, now)
     end
   end
 
-  local ok, value = pcall(getV, name)
+  -- `false` is the steady state of a model that cannot carry duplicate labels; it skips the call.
+  local readName = name
+  if duplicateNames ~= false then readName = slotName(name) end
+  local ok, value = pcall(getV, readName)
   if ok and type(value) == "number" then
     if missedAt then valueMisses[name] = nil end
     return value
@@ -178,11 +303,19 @@ end
 --
 -- A getSourceValue() that returns only the value leaves the second result nil, which is taken as
 -- current, so the test then falls back to "has it arrived since the model was loaded".
+--
+-- It asks the slot the name is read from (slotName above): for a label the model carries twice,
+-- that is the row the radio is receiving, so a silent row of the same label does not decide it. A
+-- row never received there has the slot table looked at again, in case the row the radio receives
+-- was created after the walk.
 local function telemetryValueIsLive(name)
   local getSrcV = _G.getSourceValue
   if type(getSrcV) ~= "function" then return true end
-  local ok, value, current = pcall(getSrcV, name)
+  local readName = name
+  if duplicateNames ~= false then readName = slotName(name) end
+  local ok, value, current = pcall(getSrcV, readName)
   if not ok then return true end
+  if value == nil and duplicateNames then rewalkIfTableGrew() end
   if value == nil then return false end
   if current ~= false then return true end
   local last = string.sub(name, -1)
@@ -790,6 +923,9 @@ function Sensors.reset()
       valueMisses[k] = nil
     end
   end
+  duplicateNames = nil
+  firstEmptySlot = nil
+  slotWalkAt = nil
 end
 
 -- Get all 4-char sensor names (for tool enumeration)
