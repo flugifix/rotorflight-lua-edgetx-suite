@@ -102,6 +102,13 @@ local function pageText(i18n, key, fallback)
   return fallback
 end
 
+local function logMsg(msg, level)
+  local Log = loadModule("lib/log.lua")
+  if Log and type(Log.emit) == "function" then
+    Log.emit("rfsuite.flrtr", msg, level or "debug")
+  end
+end
+
 local function queueFlyrotorReadActual(queue)
   queue:add({
     command = EscParametersFlyrotorApi.command,
