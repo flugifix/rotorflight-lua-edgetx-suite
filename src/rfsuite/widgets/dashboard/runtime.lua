@@ -705,8 +705,9 @@ local JOB_FAULT_LIMIT = 3
 -- as long as the surface is up. Past this the rebuild runs, and lets go of the hold first, as
 -- every rebuild that is not held back does. The flight controller steps a held value every
 -- 200 ms after the first 100 ms (fc/rc_adjustments.c), so five seconds is 25 steps: at the
--- largest step a row can be given, 10, that is 250 units -- the whole range of most parameters,
--- which run 0-250 or 0-255. A hold that long has crossed the range or lost its release.
+-- largest step of every row but the head speed, 10, that is 250 units -- the whole range of most
+-- parameters, which run 0-250 or 0-255. A hold that long has crossed the range or lost its
+-- release. A hold with no rebuild waiting is not ended here.
 local HOLD_DEFER_SECONDS = 5
 
 local function jobCapped(self, kind)
