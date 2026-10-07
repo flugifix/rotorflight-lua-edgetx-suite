@@ -39,6 +39,8 @@ Empty places are skipped, so the menu has no gaps: a dash in *Position 1* and *B
   out here hides it always.
 - **A dash in every place empties the menu.** The header and its close box stay, so full screen
   can still be left.
+- **A save the card refuses** shows *Save failed: the settings file could not be written to the
+  SD card*, and the order is not stored.
 - **Saved with the default order, the page stores nothing**, and the menu then follows whatever
   default a later release brings. Any other order is stored as it stands.
 - **A dashboard theme that draws the quick menu itself** follows this list — Urban does. A theme

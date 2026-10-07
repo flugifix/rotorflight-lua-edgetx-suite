@@ -129,6 +129,13 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
+-- The reason after a failed write of the model's file, in words (settings/common.lua). The page
+-- also runs without common.lua when that does not load, and the store's own answer stands in then.
+local function modelSaveReason(i18n, err)
+	if Common and Common.saveFailureReason then return Common.saveFailureReason(i18n, err, true) end
+	return tostring(err or "io")
+end
+
 local function getInlineHelpHandler()
 	if ui.runtime.inlineHelpHandler then return ui.runtime.inlineHelpHandler end
 	ui.runtime.inlineHelpHandler = function(helpText, helpTitle)
@@ -492,7 +499,7 @@ end
 
 local function saveModelPreferences(session)
 	if not PowerModelPreferences or type(PowerModelPreferences.save) ~= "function" then
-		return false, "model_preferences_unavailable"
+		return false, "unavailable"
 	end
 	return PowerModelPreferences.save(session)
 end
@@ -678,8 +685,9 @@ function M.onSave(ctx)
 			})
 		elseif okMsp and not okPrefs then
 			ctx.reportSave({
-				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
-				message = "Battery values sent to FC. Model prefs save failed: " .. tostring(errPrefs or "io")
+				title = pageText(ctx.i18n, "warning_title", "Warning"),
+				message = pageText(ctx.i18n, "model_prefs_failed_message", "Battery values sent to FC; model settings not saved")
+					.. ": " .. modelSaveReason(ctx.i18n, errPrefs)
 			})
 		elseif (not okMsp) and okPrefs then
 			ctx.reportSave({
@@ -688,8 +696,9 @@ function M.onSave(ctx)
 			})
 		else
 			ctx.reportSave({
-				title = pageText(ctx and ctx.i18n, "warning_title", "Warning"),
-				message = "FC write pending and model prefs save failed: " .. tostring(errPrefs or "io")
+				title = pageText(ctx.i18n, "warning_title", "Warning"),
+				message = pageText(ctx.i18n, "pending_model_prefs_failed_message", "FC write pending; model settings not saved")
+					.. ": " .. modelSaveReason(ctx.i18n, errPrefs)
 			})
 		end
 	end

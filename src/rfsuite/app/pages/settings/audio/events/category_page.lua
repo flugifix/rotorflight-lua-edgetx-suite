@@ -350,11 +350,12 @@ end
 local function saveModelStore()
   local session = modelStore()
   if not session then return true end
+  -- A module that will not load answers as saveByMcuId does when it has no store: "unavailable".
   local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/model_preferences.lua", "t")
-  if type(chunk) ~= "function" then return false, "model_preferences" end
+  if type(chunk) ~= "function" then return false, "unavailable" end
   local loaded, MP = pcall(chunk)
   if not (loaded and type(MP) == "table" and type(MP.saveByMcuId) == "function") then
-    return false, "model_preferences"
+    return false, "unavailable"
   end
   return MP.saveByMcuId(session.mcu_id, session.modelPreferences)
 end
@@ -791,8 +792,9 @@ function M.new(sectionKey)
     end
 
     -- Both stores, because a save is only done when both were believed.
+    local errModel = false
     if ok and not modelOk then
-      ok, err = false, modelErr
+      ok, err, errModel = false, modelErr, true
     end
 
     if ok then
@@ -806,7 +808,7 @@ function M.new(sectionKey)
         pcall(Log.emit, "rfsuite", "onSave: savePreferences failed: " .. tostring(err or "?"), "error")
       end
       if ctx and type(ctx.reportSave) == "function" then
-        ctx.reportSave({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(err or "io") })
+        ctx.reportSave({ title = t(ctx.i18n, "save_error_title", "Error"), message = t(ctx.i18n, "save_error_message", "Save failed") .. ": " .. Common.saveFailureReason(ctx.i18n, err, errModel) })
       end
       return false
     end

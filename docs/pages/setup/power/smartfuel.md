@@ -31,7 +31,9 @@ The three tuning values are greyed out unless the source is *VOLTAGE* or *COMBIN
 ## Notes
 
 - Saving writes the settings to the flight controller and keeps a copy in this model's
-  preferences on the radio.
+  preferences on the radio. Where that copy cannot be written, the notice says the model's
+  settings were not saved and why — for example *the settings file could not be written to the
+  SD card*.
 - The page also carries a *Local Source* selector (*CURRENT*, *VOLTAGE*, *COMBINED*) for a
   flight controller whose firmware has no SmartFuel. Such a flight controller does not show
   the tile at all, by the API-version rule above, so the selector is normally not seen.
