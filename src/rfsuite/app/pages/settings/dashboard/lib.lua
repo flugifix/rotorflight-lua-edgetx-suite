@@ -515,23 +515,24 @@ function M.getEditScope()
 end
 
 -- The reason a pilot reads after "Save failed" on a theme's settings page and on the Theme page.
--- A store answers a refused write with a token -- config_store's "io", "write", "delete" or
--- "rename" -- or with the error text io.open gave, which carries the file's path, and the module
--- around it can answer with a Lua error. None of that is for the screen: it all reads as one
--- sentence. `modelStore` says the answer is model_preferences.saveByMcuId's, whose
--- "unavailable" (the store module will not load) and "missing_mcu_id" (no board id to name the
--- model's file by) have sentences of their own.
+-- The sentences are settings/common.lua's (Common.saveFailureReason), which every other page that
+-- writes a settings file reports through as well. That module is read only once a save has
+-- failed, so the dashboard widget, which loads this file too, never pays for it. A save that has
+-- already failed must not raise on top of it: where common.lua does not load, the store's own
+-- answer stands in.
+local SettingsCommon = nil
+
 function M.saveFailureReason(i18n, err, modelStore)
-  if modelStore and err == "unavailable" then
-    return i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.model_store_unavailable")
-      or "model settings store not available"
+  if not SettingsCommon then
+    local okLoad, chunk = pcall(loadScript, "/SCRIPTS/TOOLS/rfsuite-core/app/pages/settings/common.lua", "t")
+    local okRun, mod = false, nil
+    if okLoad and type(chunk) == "function" then okRun, mod = pcall(chunk) end
+    if not (okRun and type(mod) == "table" and type(mod.saveFailureReason) == "function") then
+      return tostring(err or "io")
+    end
+    SettingsCommon = mod
   end
-  if modelStore and err == "missing_mcu_id" then
-    return i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.model_store_missing")
-      or "Connect the flight controller to save this model's settings"
-  end
-  return i18n and i18n.t and i18n.t("app.pages.settings_dashboard_settings.store_write_failed")
-    or "the settings file could not be written to the SD card"
+  return SettingsCommon.saveFailureReason(i18n, err, modelStore)
 end
 
 -- The defaults each theme reads its configuration with, remembered so a save in the model

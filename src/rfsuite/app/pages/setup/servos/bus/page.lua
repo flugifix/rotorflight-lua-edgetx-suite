@@ -404,6 +404,7 @@ end
 
 --- What the whole-table read used to do at the end of a load, for one servo instead of all.
 local function finishServoLoad(ok)
+  ui.runtime.readComplete = ok == true
   ui.runtime.readPending = false
   ui.loading = false
   ui.dirty = false
@@ -416,6 +417,11 @@ local function finishServoLoad(ok)
 end
 
 local function queueServosRead(isAutoReload)
+  -- Only what this read brings counts as read, and that holds from here on even when no read
+  -- can be queued: the records an earlier visit left in the session copy are still shown while
+  -- it runs, but they are neither drawn as editable nor saved.
+  ui.runtime.readComplete = false
+  ui.servoLoaded = {}
   if ui.runtime.readPending then return false, "read_pending" end
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
@@ -436,6 +442,10 @@ local function queueServosRead(isAutoReload)
     end
   end
 
+  -- A reply the parser rejects does not stop the chain, but it leaves the read incomplete. The
+  -- servo count and the bus ports decide which servo the configuration write addresses.
+  local chainOk = true
+
   local MixerConfigApi = loadModule("tasks/msp/api/mixer_config.lua")
   local StatusApi = loadModule("tasks/msp/api/status.lua")
   local SerialConfigApi = loadModule("tasks/msp/api/serial_config.lua")
@@ -450,6 +460,8 @@ local function queueServosRead(isAutoReload)
       if parsed then
         ui.mixerConfig.swash_type = parsed.swash_type or 0
         ui.mixerConfig.tail_rotor_mode = parsed.tail_rotor_mode or 0
+      else
+        chainOk = false
       end
 
       ui.progress = 25
@@ -462,6 +474,8 @@ local function queueServosRead(isAutoReload)
           local parsed = StatusApi.parse(buf)
           if parsed then
             ui.servoCount = parsed.servo_count or 0
+          else
+            chainOk = false
           end
 
           ui.progress = 50
@@ -484,14 +498,17 @@ local function queueServosRead(isAutoReload)
                   end
                 end
                 ui.servoBusEnabled = found
+              else
+                chainOk = false
               end
 
               ui.progress = 75
 
               -- Step 4: the selected servo's own record, where the firmware has that read
               if hasPagedServoReads() then
-                ui.servoLoaded = {}
-                if not queueServoRead(ui.selectedServoIndex, finishServoLoad) then
+                if not queueServoRead(ui.selectedServoIndex, function(ok)
+                  finishServoLoad(ok and chainOk)
+                end) then
                   finishServoLoad(false)
                 end
                 return
@@ -538,10 +555,13 @@ local function queueServosRead(isAutoReload)
                         ui.servoLoaded[i - pwm] = true
                       end
                     end
+                  else
+                    chainOk = false
                   end
 
                   saveToSession()
 
+                  ui.runtime.readComplete = chainOk
                   ui.runtime.readPending = false
                   ui.loading = false
                   ui.dirty = false
@@ -591,6 +611,7 @@ local function queueServosRead(isAutoReload)
 end
 
 local function queueServoWrite(servoIdx)
+  if not M.canSave() then return false, "read_required" end
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -712,7 +733,7 @@ function M.wakeup(ctx)
     queueServosRead(false)
   end
 
-  if ui.inOverride and ui.dirty then
+  if ui.inOverride and ui.dirty and M.canSave() then
     local now = nowSeconds()
     if (now - lastChangeTime) >= liveUpdateInterval then
       lastChangeTime = now
@@ -725,9 +746,22 @@ function M.getHeaderActions()
   return {
     save = true,
     reload = true,
-    star = true,
+    -- Switching the override on waits for this visit's read, as Save does (M.canSave below).
+    -- Switching it off is always offered.
+    star = ui.inOverride or M.canSave(),
     menu = true
   }
+end
+
+-- The page is kept between visits and loadFromSession() puts the last servo records back into
+-- ui.config.servos before this visit's read is even queued, so "a record is there" says nothing
+-- about this visit. readComplete is set only when every reply of this visit's read parsed, and
+-- ui.runtime is dropped by resetPageState() on close. servoLoaded is emptied when a read starts,
+-- so it says that the selected servo's record came from this visit: picking another servo reads
+-- that one outside the chain, and Save writes the selected servo's record.
+function M.canSave()
+  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+    and type(ui.servoLoaded) == "table" and ui.servoLoaded[ui.selectedServoIndex] == true
 end
 
 function M.build(ctx)
@@ -1021,6 +1055,7 @@ end
 
 function M.onStar(ctx)
   if not ConfirmDialog then return false end
+  if not ui.inOverride and not M.canSave() then return false end
 
   local i18n = ctx and ctx.i18n
   local title
@@ -1039,6 +1074,8 @@ function M.onStar(ctx)
     message = message,
     onConfirm = function()
       if not ui.inOverride then
+        -- Checked again: Yes comes later than the press, and the page may have closed since.
+        if not M.canSave() then return end
         setOverride(true)
         ui.inOverride = true
       else

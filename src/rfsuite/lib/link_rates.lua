@@ -71,12 +71,21 @@ local LinkRates = {}
 -- rf_Mode -> { rate = the air rate as ExpressLRS spells it,
 --              floor = expected minimum RF sensitivity in dBm, absent where no radio target
 --                      configures the rate, or where the targets that do disagree,
---              noSnr = true where the modulation reports no usable signal-to-noise ratio }
+--              noSnr = true where the modulation reports no usable signal-to-noise ratio,
+--              modulation = "FLRC" or "FSK" where the rate is not LoRa, absent where it is }
 --
 -- `noSnr` is ExpressLRS's own distinction rather than a judgement: the FLRC and GFSK rates are
 -- exactly the ones whose `DynpowerSnrThreshUp` is `DYNPOWER_SNR_THRESH_NONE`, the marker its
 -- dynamic-power control uses for "this rate's SNR cannot be compared" (4.1.0 common.h:131,
 -- 3.6.4 :130, and the rows in common.cpp). The `RSNR` and `TSNR` sensors read 0 on them.
+--
+-- `modulation` is the radio type the rate runs on, from the second column of the
+-- `ExpressLRS_AirRateConfig` tables beside the floors: `RADIO_TYPE_SX128x_FLRC` /
+-- `RadioBandMod::Combined::FLRC_2G4` for the FLRC rates, the DVDA 250 Hz and 500 Hz ones among
+-- them, and `RADIO_TYPE_LR1121_GFSK_*` / `GFSK_*` for the FSK ones (3.6.4 common.cpp:46-47 and
+-- :74-77, 4.1.0 :32, :41-43 and :82-85). Every other configured rate is LoRa, `RATE_DVDA_50HZ`
+-- included, and carries no field. Each rate NAME has one modulation in both generations, which is
+-- what lets LinkRates.modulationOf answer from the name alone.
 --
 -- A rate the enumeration declares and no radio target configures still has a name, because the
 -- enumeration constant says what it is; it is named and its floor is left out rather than
@@ -96,7 +105,7 @@ LinkRates.byMode4 = {
   [8]   = { rate = "333Hz Full" },
   [9]   = { rate = "500Hz" },
   [10]  = { rate = "D50Hz",      floor = -112 },
-  [11]  = { rate = "K1000 Full", floor = -101, noSnr = true },
+  [11]  = { rate = "K1000 Full", floor = -101, noSnr = true, modulation = "FSK" },
 
   -- 2.4 GHz (RATE_LORA_2G4_* / RATE_FLRC_2G4_* / RATE_FSK_2G4_*, enum values 20..36)
   [20]  = { rate = "25Hz" },
@@ -109,13 +118,13 @@ LinkRates.byMode4 = {
   [27]  = { rate = "250Hz",      floor = -108 },
   [28]  = { rate = "333Hz Full", floor = -105 },
   [29]  = { rate = "500Hz",      floor = -105 },
-  [30]  = { rate = "D250",       floor = -104, noSnr = true },
-  [31]  = { rate = "D500",       floor = -104, noSnr = true },
-  [32]  = { rate = "F500",       floor = -104, noSnr = true },
-  [33]  = { rate = "F1000",      floor = -104, noSnr = true },
-  [34]  = { rate = "DK250",      floor = -103, noSnr = true },
-  [35]  = { rate = "DK500",      floor = -103, noSnr = true },
-  [36]  = { rate = "K1000",      floor = -103, noSnr = true },
+  [30]  = { rate = "D250",       floor = -104, noSnr = true, modulation = "FLRC" },
+  [31]  = { rate = "D500",       floor = -104, noSnr = true, modulation = "FLRC" },
+  [32]  = { rate = "F500",       floor = -104, noSnr = true, modulation = "FLRC" },
+  [33]  = { rate = "F1000",      floor = -104, noSnr = true, modulation = "FLRC" },
+  [34]  = { rate = "DK250",      floor = -103, noSnr = true, modulation = "FSK" },
+  [35]  = { rate = "DK500",      floor = -103, noSnr = true, modulation = "FSK" },
+  [36]  = { rate = "K1000",      floor = -103, noSnr = true, modulation = "FSK" },
 
   -- Both bands at once (RATE_LORA_DUAL_*, enum values 100..101)
   [100] = { rate = "100Hz Full", floor = -112 },
@@ -136,16 +145,16 @@ LinkRates.byMode3 = {
   [7]   = { rate = "250Hz" },                                   -- RATE_LORA_250HZ: -111 / -108
   [8]   = { rate = "333Hz Full", floor = -105 },                -- RATE_LORA_333HZ_8CH
   [9]   = { rate = "500Hz",      floor = -105 },                -- RATE_LORA_500HZ
-  [10]  = { rate = "D250",       floor = -104, noSnr = true },  -- RATE_DVDA_250HZ
-  [11]  = { rate = "D500",       floor = -104, noSnr = true },  -- RATE_DVDA_500HZ
-  [12]  = { rate = "F500",       floor = -104, noSnr = true },  -- RATE_FLRC_500HZ
-  [13]  = { rate = "F1000",      floor = -104, noSnr = true },  -- RATE_FLRC_1000HZ
+  [10]  = { rate = "D250",       floor = -104, noSnr = true, modulation = "FLRC" },  -- RATE_DVDA_250HZ
+  [11]  = { rate = "D500",       floor = -104, noSnr = true, modulation = "FLRC" },  -- RATE_DVDA_500HZ
+  [12]  = { rate = "F500",       floor = -104, noSnr = true, modulation = "FLRC" },  -- RATE_FLRC_500HZ
+  [13]  = { rate = "F1000",      floor = -104, noSnr = true, modulation = "FLRC" },  -- RATE_FLRC_1000HZ
   [14]  = { rate = "D50Hz",      floor = -112 },                -- RATE_DVDA_50HZ
   [15]  = { rate = "200Hz Full", floor = -111 },                -- RATE_LORA_200HZ_8CH
-  [16]  = { rate = "DK500",      floor = -103, noSnr = true },  -- RATE_FSK_2G4_DVDA_500HZ
-  [17]  = { rate = "K1000" },                                   -- RATE_FSK_2G4_1000HZ
-  [18]  = { rate = "K1000" },                                   -- RATE_FSK_900_1000HZ
-  [19]  = { rate = "K1000 Full", floor = -101, noSnr = true },  -- RATE_FSK_900_1000HZ_8CH
+  [16]  = { rate = "DK500",      floor = -103, noSnr = true, modulation = "FSK" },  -- RATE_FSK_2G4_DVDA_500HZ
+  [17]  = { rate = "K1000", modulation = "FSK" },                -- RATE_FSK_2G4_1000HZ
+  [18]  = { rate = "K1000", modulation = "FSK" },                -- RATE_FSK_900_1000HZ
+  [19]  = { rate = "K1000 Full", floor = -101, noSnr = true, modulation = "FSK" },  -- RATE_FSK_900_1000HZ_8CH
 }
 
 LinkRates.byGeneration = { [3] = LinkRates.byMode3, [4] = LinkRates.byMode4 }
@@ -164,6 +173,20 @@ function LinkRates.forMode(mode, generation)
   -- not an air rate and rounding it would name one.
   if mode % 1 ~= 0 then return nil end
   return rows[mode]
+end
+
+--- The modulation of the air rate ExpressLRS names `rate` -- "LoRa", "FLRC" or "FSK" -- or nil
+--- where no row of either generation carries that name. Read off the rows rather than the name's
+--- spelling, so a rate added to a table answers without a second list to keep in step. A scan of
+--- both tables, for a caller that keeps the answer until the rate changes.
+function LinkRates.modulationOf(rate)
+  if type(rate) ~= "string" then return nil end
+  for _, rows in pairs(LinkRates.byGeneration) do
+    for _, row in pairs(rows) do
+      if row.rate == rate then return row.modulation or "LoRa" end
+    end
+  end
+  return nil
 end
 
 -- The device ping and its answer. The ping is addressed to the transmitter module (0xEE) from

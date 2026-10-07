@@ -49,7 +49,9 @@ supplied a figure — a dashboard tile whose source is `esc_load` shows `--` rat
 ## Notes
 
 - **The settings are stored per flight controller**, in this machine's own file on the card, not
-  per radio and not per model. Plugging a different board in brings its own values up.
+  per radio and not per model. Plugging a different board in brings its own values up. A save
+  that file does not take shows *Save failed* with the reason, for example *the settings file
+  could not be written to the SD card*.
 - ***Publish SmFt / SmCp* only matters for things outside the suite.** The dashboard, the
   per-flight statistics and the spoken announcements read the value directly from the script that
   computes it and are unaffected by this setting either way. Logical switches, special functions,

@@ -133,6 +133,13 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
+-- The reason after a failed write of the model's file, in words (settings/common.lua). The page
+-- also runs without common.lua when that does not load, and the store's own answer stands in then.
+local function modelSaveReason(i18n, err)
+	if Common and Common.saveFailureReason then return Common.saveFailureReason(i18n, err, true) end
+	return tostring(err or "io")
+end
+
 local function markDirty()
 	ui.dirty = true
 end
@@ -289,7 +296,7 @@ end
 
 local function saveModelPreferences(session)
 	if not PowerModelPreferences or type(PowerModelPreferences.save) ~= "function" then
-		return false, "model_preferences_unavailable"
+		return false, "unavailable"
 	end
 	return PowerModelPreferences.save(session)
 end
@@ -410,11 +417,19 @@ function M.onSave(ctx)
 			local savedMessage = pageText(ctx and ctx.i18n, "saved_message", "SmartFuel settings saved")
 			ctx.reportSave({ ok = true, title = savedTitle, message = savedMessage })
 		elseif okMsp and not okPrefs then
-			ctx.reportSave({ title = "Warning", message = "SmartFuel values sent to FC. Model prefs save failed: " .. tostring(errPrefs or "io") })
+			ctx.reportSave({
+				title = pageText(ctx.i18n, "warning_title", "Warning"),
+				message = pageText(ctx.i18n, "model_prefs_failed_message", "SmartFuel values sent to FC; model settings not saved")
+					.. ": " .. modelSaveReason(ctx.i18n, errPrefs)
+			})
 		elseif (not okMsp) and okPrefs then
 			ctx.reportSave({ title = "Warning", message = "Saved local SmartFuel values. FC write pending: " .. tostring(errMsp or "msp") })
 		else
-			ctx.reportSave({ title = "Warning", message = "FC write pending and model prefs save failed: " .. tostring(errPrefs or "io") })
+			ctx.reportSave({
+				title = pageText(ctx.i18n, "warning_title", "Warning"),
+				message = pageText(ctx.i18n, "pending_model_prefs_failed_message", "FC write pending; model settings not saved")
+					.. ": " .. modelSaveReason(ctx.i18n, errPrefs)
+			})
 		end
 	end
 
@@ -586,7 +601,7 @@ function M.build(ctx)
 			get = function() return ui.config.charge_drop_rate end,
 			set = getChargeSetter(),
 			enabled = isTuningEnabled,
-			helpText = pageText(i18n, "help_charge_drop_rate", "Maximum rate the reported SmartFuel value may recover in voltage mode after load is reduced."),
+			helpText = pageText(i18n, "help_charge_drop_rate", "Limits how quickly the reported SmartFuel value may drop in voltage mode once the model has been armed."),
 			helpTitle = pageText(i18n, "charge_drop_rate", "Charge drop rate"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v)
@@ -642,6 +657,11 @@ function M.onClose()
 	Log = nil
 	LoadingOverlay = nil
 	t = nil
+end
+
+-- Asked before the page is left (ui/home.lua): true while an edit here is not saved.
+function M.hasUnsavedChanges()
+	return ui.dirty == true
 end
 
 return M

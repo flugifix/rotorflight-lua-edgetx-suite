@@ -451,7 +451,7 @@ function M.build(ctx)
   end
 
   if ui.loading or ui.saving then
-    local titleText = ui.loading and pageText(i18n, "loading", "Loading") or pageText(i18n, "saving", "Saving")
+    local titleText = ui.loading and pageText(i18n, "loading_title", "Loading") or pageText(i18n, "saving_title", "Saving")
     local msgText = ui.loading and pageText(i18n, "loading_data", "Loading ESC parameters...") or pageText(i18n, "saving_data", "Saving ESC parameters...")
     if LoadingOverlay and type(LoadingOverlay.append) == "function" then
       LoadingOverlay.append(children, {
@@ -778,6 +778,11 @@ function M.onClose()
   Hw5Profile = nil
   Hw5Init = nil
   t = nil
+end
+
+-- Asked before the page is left (ui/home.lua): true while an edit here is not saved.
+function M.hasUnsavedChanges()
+  return ui.dirty == true
 end
 
 return M
