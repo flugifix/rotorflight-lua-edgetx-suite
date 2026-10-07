@@ -282,6 +282,10 @@ shows the next pack as soon as one is plugged in. Use `last` or `lastcell` for a
 post-flight page. `lastcell` does not use the live count for the same reason: the next pack can
 have a different number of cells.
 
+The `stats` source `min_voltage_cell` (no `stattype`) shows the flight's minimum pack voltage per
+cell. After a landing it divides by the same count `lastcell` uses, the one taken at the disarm;
+during a flight, and where the pack read 0 V at the disarm, it divides by the live count.
+
 ### `text` / `governor`, and the two modes that have no state
 
 The box reads the governor STATE sensor and shows its name. The flight controller runs a
