@@ -21,6 +21,12 @@ The three entries are not shortcuts into one walk: each opens the same assistant
 section, with the same steps and the same completion criteria. A step that is already done on
 both sides is shown as done rather than asked again.
 
+Each entry opens on an overview: one row per step with its state and an *Open* button, and
+*Continue*, which opens the first step that is still open. Where the list does not fit the screen
+it is cut into pages and the heading shows which one is on screen (*1/2*); the button beside *Close*
+then reads *Next* and turns to the next page, and reads *Continue* on the last one. Back turns a
+page back, and on the first page it leaves the assistant.
+
 ## Steps
 
 | Step | What it does |
