@@ -138,10 +138,12 @@ because they are not the same event:
   and the arming state is not held back -- so after a reconnect the dashboard's values appear
   over about two seconds rather than all on the first read, and somewhat later where other
   readers in the same pass start searches of their own. The same applies when the widget starts.
-- **The configuration tool** forgets the choice on every audio tick (five times a second) for as
-  long as it does not consider the connection ready -- no link quality, no battery reading, or
-  no flight controller answering -- and so matches again from the top each time. Once it is
-  ready, the choice stays until that test fails again.
+- **The configuration tool** forgets the choice once, on the audio tick where it stops
+  considering the connection ready -- no link quality, no battery reading, or no flight
+  controller answering. While it waits it keeps reading link quality, voltage and fuel on every
+  audio tick (five times a second); a sensor the model carries is searched for on the
+  two-second retry described above, so it is found again within about two seconds of the link
+  coming back. Once it is ready, the choice stays until that test fails again.
 - **The radio's own telemetry reset** -- which happens when a model is loaded, when the radio is
   switched on, and on *Reset Telemetry* -- puts the sensor rows themselves back to "never
   received".
