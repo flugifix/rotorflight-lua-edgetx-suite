@@ -818,7 +818,7 @@ function M.onSave(ctx)
     ctx.reportSave({
       ok = true,
       title = pageText(ctx and ctx.i18n, "saved_title", "Saved"),
-      message = pageText(ctx and ctx.i18n, "saved_message", "Swashplate geometry settings saved")
+      message = pageText(ctx and ctx.i18n, "saved_message_geometry", "Swashplate geometry settings saved")
     })
   end
   return true

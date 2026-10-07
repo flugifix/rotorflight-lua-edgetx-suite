@@ -272,7 +272,7 @@ local function getLiveProfile()
 end
 
 local function getBaseTitle()
-  return pageText(nil, "table", "Rate Table")
+  return pageText(nil, "rate_table", "Rate Table")
 end
 
 local function buildSessionSignature()
