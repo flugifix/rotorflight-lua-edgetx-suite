@@ -766,7 +766,7 @@
   - The 19 row help texts of *Battery*, *Alerts*, *Preferences* and *Sources* are asked for through `pageText(i18n, "help_...")` instead of a page-local `optionalPageHelpText`, whose call sites the precompiler never rewrote. On a packaged card the rows had no help text in any language; now they carry the locale's text. Without an inline fallback a help key missing from both bundles stops the package build instead of shipping an empty help sheet.
 - **The setup assistant's Link help describes the step as it is (`i18n/en.lua`, `i18n/de.lua`, `docs/pages/setup_wizard.md`)**:
   - The `?` sheet of the *Link* step ended with *"Set module writes the transmitter, set board writes the flight controller"*, two buttons the step no longer has; each row now carries a *use this* button. It also said the picker lists come from the module, where they are the suite's own list reduced to what the module offers.
-  - The sheet now has one line per row of the step, in screen order, each starting with the row's label. Why the pair matters, and what the step shows and writes, are on the documentation page.
+  - The sheet now has one intro line and then one line per row of the step, in screen order, each starting with the row's label. It also says that the module row's *use this* switches the flight controller's CRSF telemetry to Custom mode. Why the pair matters, and what the step shows and writes, are on the documentation page.
   - Five strings no code reads any more are removed from both locales: `link_match`, `link_agree`, `link_differ`, `link_set_module`, `link_set_board`.
 ### Performance, Memory & Build System
 - **A check for a dashboard theme that takes fullscreen (`bin/themes/validate.lua`, `bin/themes/README.md`, `docs/developer/dashboard-themes.md`)**:

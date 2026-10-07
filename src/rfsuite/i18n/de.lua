@@ -1597,7 +1597,7 @@ return {
         marker_off = "aus",
         marker_on = "an",
         verify_intro = "Werte vom Flugregler. Beweg die Schalter - jede Zeile muss dem folgen, was du festgelegt hast.",
-        help_link = "Der Flugregler taktet seine Telemetrie nach der bei ihm eingestellten Paketrate und Telemetrierate; weicht das Modul ab, bieten beide Zeilen 'nutze das' an.\nAbfrage: was das letzte Lesen oder Schreiben ergab; 'Lesen' fragt beide Seiten neu ab.\nFlugregler: die bei ihm eingestellten Werte; 'nutze das' stellt das Modul darauf ein.\nSendermodul: die Werte, mit denen das Modul läuft; 'nutze das' schreibt sie in den Flugregler und speichert sie dort.\nPaketrate: stellt die Paketrate des Moduls ein.\nTelemetrierate: stellt die Telemetrierate des Moduls ein.",
+        help_link = "Der Flugregler taktet seine Telemetrie nach seiner Paketrate und Telemetrierate; weicht das Modul ab, bieten beide Zeilen 'nutze das' an.\nAbfrage: Stand des laufenden oder letzten Lesens oder Schreibens; 'Lesen' fragt beide Seiten neu ab.\nFlugregler: seine Werte; 'nutze das' stellt das Modul darauf ein, soweit es sie anbietet.\nSendermodul: die Werte des Moduls; 'nutze das' schreibt sie im Custom-Modus in den Flugregler und speichert sie.\nPaketrate: stellt die Paketrate des Moduls ein.\nTelemetrierate: stellt die Telemetrierate des Moduls ein.",
         verify_aux = "-> AUX%d",
         link_pick_rate = "Paketrate",
         link_pick_ratio = "Telemetrierate"

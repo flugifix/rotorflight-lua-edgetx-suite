@@ -81,16 +81,20 @@ both sides is shown as done rather than asked again.
   packet rate and telemetry ratio and paces every telemetry frame it sends from that pair. Told more
   than the link carries, it schedules more than drains away -- a backlog, dropped frames, values
   that are stale rather than missing. Told less, bandwidth stays unused. Both read as laggy
-  telemetry, and neither side reports an error.
-- **What the Link step shows and writes.** *Probe* is the state of the last read or write, and
-  *Read* reads the flight controller and the transmitter module again. The *Flight controller* row
-  shows the pair it is set to, followed by *native* where its CRSF telemetry runs in Native mode;
-  the *Transmitter module* row shows the pair the module runs. Where the two agree, both rows say
-  so. Where they differ, each row carries a *use this* button: on the flight controller's row it
-  sets the module to the flight controller's pair, on the module's row it writes the module's pair
-  to the flight controller and saves it. *Packet rate* and *Telemetry ratio* set the module
-  directly; they offer this suite's own list, reduced to what the module reports it can do, or the
-  module's whole list where it offers none of them.
+  telemetry, and neither side reports an error. This holds in both CRSF telemetry modes, Native and
+  Custom.
+- **What the Link step shows and writes.** *Probe* is the state of the current or last read or
+  write, and *Read* reads the flight controller and the transmitter module again. The *Flight
+  controller* row shows the pair it is set to, followed by *native* where its CRSF telemetry runs in
+  Native mode; the *Transmitter module* row shows the pair the module runs. Where the two agree,
+  both rows say so. Where they differ, each row carries a *use this* button. On the flight
+  controller's row it sets the module's packet rate and telemetry ratio to the flight controller's,
+  each one only where the module offers that value. On the module's row it writes the module's pair
+  to the flight controller, switches its CRSF telemetry to Custom mode and saves it. *Packet rate*
+  and *Telemetry ratio* are shown where the module reports the setting and set the module directly;
+  they offer this suite's own list, reduced to what the module offers, or the module's whole list
+  where it offers none of them. After a write to the module, the module row shows the new values
+  once *Read* has read the module again.
 
 ## Related
 

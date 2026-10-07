@@ -1597,7 +1597,7 @@ return {
         marker_off = "off",
         marker_on = "on",
         verify_intro = "Values from the flight controller. Move the switches: every row has to follow what you settled.",
-        help_link = "The flight controller paces its telemetry from the packet rate and telemetry ratio it is set to; where the module differs, both rows offer 'use this'.\nProbe: what the last read or write did; 'Read' reads both sides again.\nFlight controller: the rate and ratio it is set to; 'use this' sets the module to match.\nTransmitter module: the rate and ratio the module runs; 'use this' writes them to the flight controller and saves them.\nPacket rate: sets the module's packet rate.\nTelemetry ratio: sets the module's telemetry ratio.",
+        help_link = "The flight controller paces its telemetry from its packet rate and telemetry ratio; where the module differs, both rows offer 'use this'.\nProbe: the state of the current or last read or write; 'Read' reads both sides again.\nFlight controller: its rate and ratio; 'use this' sets the module to them, as far as the module offers them.\nTransmitter module: the module's rate and ratio; 'use this' writes them to the flight controller in Custom mode and saves.\nPacket rate: sets the module's packet rate.\nTelemetry ratio: sets the module's telemetry ratio.",
         verify_aux = "-> AUX%d",
         link_pick_rate = "Packet rate",
         link_pick_ratio = "Telemetry ratio"
