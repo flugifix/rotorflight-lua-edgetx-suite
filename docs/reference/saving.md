@@ -113,6 +113,7 @@ board does not make it read again, so values edited and not yet saved stay on th
   and Logging.
 - Setup > Power: Battery and Sources.
 - Setup > Mixer: Swash, Swash Geometry, Tail and Trims.
+- Setup > Servos: PWM Output and BUS Output.
 
 A chained load must finish successfully even if an earlier error allowed the page to continue
 reading other records. Previously read session values alone do not grant permission to save.
@@ -126,6 +127,16 @@ since. The live write that Trims sends while the swash override is on, and Swash
 setup mode is on, waits for the same read: until it has succeeded, a changed value is shown and
 not sent. Switching the override or setup mode on with the * button waits for it too -- the button
 is disabled until the read has succeeded -- while switching either off is available at any time.
+
+The two Servos pages write one servo's whole record -- the one selected -- from what the page
+holds, and keep the records of their previous visit while they read again. Save waits for this
+visit's read and, after another servo has been picked, for that servo's own read; until then the
+servo's fields are not shown. Switching the servo override on with the * button waits for the same
+read, while switching it off is available at any time. On flight controllers before API 12.09,
+which read every servo in one reply, a reply shorter than the servo count it announces is refused
+instead of being read as zeros. When PWM Output puts a servo back -- on Reload, or when the page
+is left with a change that was not saved -- it sends the value of this visit's read, or of the last
+save that completed, not the value of the first visit.
 
 ## ESC Configurator pages
 
