@@ -27,6 +27,9 @@ local ARM_FILE_MAP = {
   [3] = "armed.wav"
 }
 
+-- The level set under Settings > Audio > Volume (1..5), or nil for the radio's own Wav volume.
+-- EdgeTX takes it as the second argument of playFile and as the FOURTH of playNumber, after the
+-- attributes (radio/src/lua/api_general.cpp); in third place it would be read as attributes.
 local audio_volume = nil
 local master_gvar_idx = nil
 local master_gvar_last = nil
@@ -198,10 +201,13 @@ local MAIN_POWER_OK_SOUNDS = { "stat/alerts/mainpowerok.wav", "evt/battery.wav" 
 -- them; one constant is what lets the repeat count below mean the same thing everywhere.
 local ALERT_REPEAT_SECONDS = 10
 
--- How long the transmitter buzzes for an alert that asks for it, and how often. The same
--- three numbers stood at seven call sites, none of which the pilot could turn off.
-local ALERT_HAPTIC_STRENGTH = 15
-local ALERT_HAPTIC_DURATION = 10
+-- How long the transmitter buzzes for an alert that asks for it, and the pause after it. EdgeTX
+-- takes playHaptic(duration, pause [, flags]) (radio/src/lua/api_general.cpp): there is no
+-- strength argument, and hapticQueue::play (radio/src/haptic.cpp) reads the low four bits of
+-- flags as a repeat count, so the alert passes no flags and buzzes once. The duration is scaled
+-- by the radio's own haptic length setting (getHapticLength, radio/src/haptic.h); 15 and 3 are
+-- the values EdgeTX's own alarm vibration uses.
+local ALERT_HAPTIC_DURATION = 15
 local ALERT_HAPTIC_PAUSE = 3
 
 -- Whether an alert repeats, and whether it buzzes, are properties of an alert CATEGORY rather
@@ -341,7 +347,7 @@ local function alertSpoken(audioState, events, alertKey, now, haptic)
   local counts = alertRepeatCounts(audioState)
   counts[alertKey] = (counts[alertKey] or 0) + 1
   if haptic ~= false and alertHapticWanted(events, alertKey) and type(playHaptic) == "function" then
-    pcall(playHaptic, ALERT_HAPTIC_STRENGTH, ALERT_HAPTIC_DURATION, ALERT_HAPTIC_PAUSE)
+    pcall(playHaptic, ALERT_HAPTIC_DURATION, ALERT_HAPTIC_PAUSE)
   end
 end
 
@@ -855,7 +861,7 @@ local function announceProfileEvent(self, eventKey, value, soundFile, opts)
     tryPlayEventFile(audioState, now, soundFile, opts)
     if type(playNumber) == "function" then
       emitLog(opts, "playNumber -> " .. tostring(rounded), "info")
-      local ok, err = pcall(playNumber, rounded, 0, audio_volume)
+      local ok, err = pcall(playNumber, rounded, 0, 0, audio_volume)
       if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
     end
     audioState.lastValues[eventKey] = rounded
@@ -1005,14 +1011,14 @@ local function announceBatteryCapacityEvent(self, opts)
     tryPlayEventFile(audioState, now, "evt/battery.wav", opts)
     if type(playNumber) == "function" then
       emitLog(opts, "playNumber -> " .. tostring(capacity) .. " mAh", "info")
-      local ok, err = pcall(playNumber, capacity, unitMah(), audio_volume)
+      local ok, err = pcall(playNumber, capacity, unitMah(), 0, audio_volume)
       if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
     end
   else
     emitLog(opts, "battery profile change value=" .. tostring(profile) .. " file=evt/battery.wav", "info")
     tryPlayEventFile(audioState, now, "evt/battery.wav", opts)
     if type(playNumber) == "function" then
-      local ok, err = pcall(playNumber, configIndex, 0, audio_volume)
+      local ok, err = pcall(playNumber, configIndex, 0, 0, audio_volume)
       if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
     end
   end
@@ -1633,7 +1639,7 @@ function Audio.process(self, opts)
         if tryPlayEventFile(audioState, now, "stat/alerts/mcu.wav", opts) then
           if type(playNumber) == "function" then
             local spoken, unit = spokenTemperature(self, mcuTemp)
-            local ok, err = pcall(playNumber, spoken, unit, audio_volume)
+            local ok, err = pcall(playNumber, spoken, unit, 0, audio_volume)
             if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
           end
           alertSpoken(audioState, events, "mcu_temperature", now)
@@ -1686,7 +1692,7 @@ function Audio.process(self, opts)
         if alertMaySpeak(audioState, events, "lq", now) then
           if tryPlayEventFile(audioState, now, "stat/alerts/lq.wav", opts) then
             if type(playNumber) == "function" then
-              local ok, err = pcall(playNumber, math.floor(lq + 0.5), unitPercent(), audio_volume)
+              local ok, err = pcall(playNumber, math.floor(lq + 0.5), unitPercent(), 0, audio_volume)
               if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
             end
             -- The warning level does not buzz even when the category is set to, which is the
@@ -1883,7 +1889,7 @@ function Audio.process(self, opts)
               if tryPlayEventFile(audioState, now, calloutSound, opts) then
                 if type(playNumber) == "function" then
                   emitLog(opts, "fuel callout playNumber -> " .. tostring(lowestCrossed), "info")
-                  local ok, err = pcall(playNumber, lowestCrossed, unitPercent(), audio_volume)
+                  local ok, err = pcall(playNumber, lowestCrossed, unitPercent(), 0, audio_volume)
                   if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
                 end
               end
@@ -1968,7 +1974,7 @@ function Audio.process(self, opts)
               -- The fuel percentage is no longer rounded on its way here, so without this the
               -- alert tone would play and the percentage behind it would go unspoken. Same
               -- rounding as the MCU temperature and the link quality above.
-              local ok, err = pcall(playNumber, math.floor(fuel + 0.5), unitPercent(), audio_volume)
+              local ok, err = pcall(playNumber, math.floor(fuel + 0.5), unitPercent(), 0, audio_volume)
               if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
             end
             audioState.initialFuelAnnounced = true
