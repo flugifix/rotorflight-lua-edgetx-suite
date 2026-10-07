@@ -78,11 +78,11 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
-local function optionalPageHelpText(i18n, key)
-	local value = pageText(i18n, key, nil)
-	if type(value) ~= "string" or value == "" then return nil end
-	if string.sub(value, 1, 10) == "app.pages." then return nil end
-	return value
+-- The reason after a failed write of the model's file, in words (settings/common.lua). The page
+-- also runs without common.lua when that does not load, and the store's own answer stands in then.
+local function modelSaveReason(i18n, err)
+	if Common and Common.saveFailureReason then return Common.saveFailureReason(i18n, err, true) end
+	return tostring(err or "io")
 end
 
 local function getSession()
@@ -149,7 +149,7 @@ end
 
 local function saveModelPreferences(session)
 	if not PowerModelPreferences or type(PowerModelPreferences.save) ~= "function" then
-		return false, "model_preferences_unavailable"
+		return false, "unavailable"
 	end
 	return PowerModelPreferences.save(session)
 end
@@ -252,8 +252,8 @@ function M.onSave(ctx)
 	if not okPrefs then
 		if ctx and type(ctx.reportSave) == "function" then
 			ctx.reportSave({
-				title = pageText(ctx and ctx.i18n, "save_error_title", "Error"),
-				message = pageText(ctx and ctx.i18n, "save_error_message", "Save failed") .. ": " .. tostring(errPrefs or "io")
+				title = pageText(ctx.i18n, "save_error_title", "Error"),
+				message = pageText(ctx.i18n, "save_error_message", "Save failed") .. ": " .. modelSaveReason(ctx.i18n, errPrefs)
 			})
 		end
 		return false
@@ -313,7 +313,7 @@ function M.build(ctx)
 		ui.config.smartfuel_model_type,
 		getModelTypeSetter(),
 		{
-			helpText = optionalPageHelpText(i18n, "help_model_type"),
+			helpText = pageText(i18n, "help_model_type"),
 			helpTitle = pageText(i18n, "model_type", "Model Type"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -326,7 +326,7 @@ function M.build(ctx)
 		ui.config.smartfuel_source,
 		getLocalSourceSetter(),
 		{
-			helpText = optionalPageHelpText(i18n, "help_calcfuel_local"),
+			helpText = pageText(i18n, "help_calcfuel_local"),
 			helpTitle = pageText(i18n, "calcfuel_local", "Local SmartFuel Source"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -338,7 +338,7 @@ function M.build(ctx)
 		ui.config.smartfuel_publish,
 		getPublishSetter(),
 		{
-			helpText = optionalPageHelpText(i18n, "help_publish_sensors"),
+			helpText = pageText(i18n, "help_publish_sensors"),
 			helpTitle = pageText(i18n, "publish_sensors", "Publish SmFt / SmCp"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -361,7 +361,7 @@ function M.build(ctx)
 			end,
 			get = function() return ui.config.esc_current_limit end,
 			set = getEscCurrentLimitSetter(),
-			helpText = optionalPageHelpText(i18n, "help_esc_current_limit"),
+			helpText = pageText(i18n, "help_esc_current_limit"),
 			helpTitle = pageText(i18n, "esc_current_limit", "ESC Current Limit"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -379,6 +379,11 @@ function M.onClose()
 	Common = nil
 	PowerModelPreferences = nil
 	t = nil
+end
+
+-- Asked before the page is left (ui/home.lua): true while an edit here is not saved.
+function M.hasUnsavedChanges()
+	return ui.dirty == true
 end
 
 return M

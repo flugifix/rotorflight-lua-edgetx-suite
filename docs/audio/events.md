@@ -12,6 +12,8 @@ The suite provides spoken voice alerts and tone callouts for flight telemetry, b
 
 The nine category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature threshold) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
 
+A save that cannot be stored reports *Save failed* with the reason: *the settings file could not be written to the SD card* where the card refused a file, and *model settings store not available* where the part of the suite that writes the model's own file could not be loaded.
+
 ---
 
 ## Categories & Settings
@@ -96,6 +98,10 @@ reads *Threshold [Model]* -- and is otherwise the radio-wide default that every 
 value of its own reads. The MCU threshold is always radio-wide, because the same flight controller
 is rated the same in every aircraft.
 
+When the model's file cannot be written, *Save* reports the failure and the model goes on with the
+threshold it had before. The page still shows the number that was entered, so saving again writes
+it once the file can be written.
+
 ### 7. Adjustments
 
 | Setting | Switch / Key | Default | Scope | Description |
@@ -152,7 +158,8 @@ the page that switches an alert on is the page that says how it behaves.
   either way; a count simply stops after that many and starts over once the condition has
   cleared. *Until cleared* is what every alert did before this setting existed, and is the
   default everywhere except SmartFuel, which kept the single announcement it already had.
-- **Haptic** is the transmitter's vibration alongside the voice. It defaults to on for the
+- **Haptic** is the transmitter's vibration alongside the voice: one short pulse per
+  announcement. It defaults to on for the
   three categories whose alerts already buzzed with no way of switching it off, and to off for
   SmartFuel, which already had this setting and keeps its value.
 - **Two alerts have their own rule inside the category, and a setting does not overrule it.**

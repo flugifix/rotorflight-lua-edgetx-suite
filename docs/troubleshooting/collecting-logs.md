@@ -102,4 +102,6 @@ suite version, so that does not have to be written out separately.
   middle. Even at *TRACE* that takes a long session: the connect sequence writes a few hundred
   lines, and after it a file grows by two lines or more for each request a page sends to the
   flight controller, and by a line or two every five seconds while the dashboard shows a
-  disarmed model.
+  disarmed model. Nothing is added to it after that, a fault included: a fault after the cap
+  goes only to the `*_step.txt` file, where it stays until the next step replaces it. Turning
+  *Log Session To Card* off and on again starts a new file.

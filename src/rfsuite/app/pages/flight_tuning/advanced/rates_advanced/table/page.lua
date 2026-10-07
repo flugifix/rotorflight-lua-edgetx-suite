@@ -272,7 +272,7 @@ local function getLiveProfile()
 end
 
 local function getBaseTitle()
-  return pageText(nil, "table", "Rate Table")
+  return pageText(nil, "rate_table", "Rate Table")
 end
 
 local function buildSessionSignature()
@@ -421,4 +421,10 @@ function M.onClose()
 end
 
 M.ui = ui
+
+-- Asked before the page is left (ui/home.lua): true while an edit here is not saved.
+function M.hasUnsavedChanges()
+  return ui.dirty == true
+end
+
 return M

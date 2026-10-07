@@ -46,7 +46,10 @@ values for every profile.
   leaves the board's profile alone rather than switching it to the one on screen. Selecting a
   profile on this page always sends it.
 - Saving writes the whole battery configuration to the flight controller and commits it to the
-  board's own storage.
+  board's own storage. The page also keeps this model's copy of its settings on the radio; where
+  that copy cannot be written, the notice says the values went to the flight controller, that the
+  model's settings were not saved, and why — for example *the settings file could not be written
+  to the SD card*.
 - **Per profile, each cell voltage stays between its neighbours.** On firmware with per-profile
   cells the flight controller keeps every profile ordered — Min below Max, and Min ≤ Warn ≤ Full ≤
   Max — and changes a profile that is out of that order itself when it stores it. So a voltage
