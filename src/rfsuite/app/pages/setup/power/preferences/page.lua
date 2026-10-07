@@ -78,13 +78,6 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
-local function optionalPageHelpText(i18n, key)
-	local value = pageText(i18n, key, nil)
-	if type(value) ~= "string" or value == "" then return nil end
-	if string.sub(value, 1, 10) == "app.pages." then return nil end
-	return value
-end
-
 local function getSession()
 	local root = _G and _G.rfsuite
 	return root and root.session or nil
@@ -313,7 +306,7 @@ function M.build(ctx)
 		ui.config.smartfuel_model_type,
 		getModelTypeSetter(),
 		{
-			helpText = optionalPageHelpText(i18n, "help_model_type"),
+			helpText = pageText(i18n, "help_model_type"),
 			helpTitle = pageText(i18n, "model_type", "Model Type"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -326,7 +319,7 @@ function M.build(ctx)
 		ui.config.smartfuel_source,
 		getLocalSourceSetter(),
 		{
-			helpText = optionalPageHelpText(i18n, "help_calcfuel_local"),
+			helpText = pageText(i18n, "help_calcfuel_local"),
 			helpTitle = pageText(i18n, "calcfuel_local", "Local SmartFuel Source"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -338,7 +331,7 @@ function M.build(ctx)
 		ui.config.smartfuel_publish,
 		getPublishSetter(),
 		{
-			helpText = optionalPageHelpText(i18n, "help_publish_sensors"),
+			helpText = pageText(i18n, "help_publish_sensors"),
 			helpTitle = pageText(i18n, "publish_sensors", "Publish SmFt / SmCp"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -361,7 +354,7 @@ function M.build(ctx)
 			end,
 			get = function() return ui.config.esc_current_limit end,
 			set = getEscCurrentLimitSetter(),
-			helpText = optionalPageHelpText(i18n, "help_esc_current_limit"),
+			helpText = pageText(i18n, "help_esc_current_limit"),
 			helpTitle = pageText(i18n, "esc_current_limit", "ESC Current Limit"),
 			onHelp = getInlineHelpHandler()
 		}

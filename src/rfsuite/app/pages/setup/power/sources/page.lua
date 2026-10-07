@@ -76,13 +76,6 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
-local function optionalPageHelpText(i18n, key)
-	local value = pageText(i18n, key, nil)
-	if type(value) ~= "string" or value == "" then return nil end
-	if string.sub(value, 1, 10) == "app.pages." then return nil end
-	return value
-end
-
 local function getSession()
 	local root = _G and _G.rfsuite
 	return root and root.session or nil
@@ -394,7 +387,7 @@ function M.build(ctx)
 		ui.config.voltageMeterSource,
 		getVoltageSourceSetter(),
 		{
-			helpText = optionalPageHelpText(i18n, "help_voltage_meter_source"),
+			helpText = pageText(i18n, "help_voltage_meter_source"),
 			helpTitle = pageText(i18n, "voltage_meter_source", "Voltage Source"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -407,7 +400,7 @@ function M.build(ctx)
 		ui.config.currentMeterSource,
 		getCurrentSourceSetter(),
 		{
-			helpText = optionalPageHelpText(i18n, "help_current_meter_source"),
+			helpText = pageText(i18n, "help_current_meter_source"),
 			helpTitle = pageText(i18n, "current_meter_source", "Current Source"),
 			onHelp = getInlineHelpHandler()
 		}

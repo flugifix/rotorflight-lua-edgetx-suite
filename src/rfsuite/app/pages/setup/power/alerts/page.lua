@@ -75,13 +75,6 @@ local function pageText(i18n, key, fallback)
 	return fallback
 end
 
-local function optionalPageHelpText(i18n, key)
-	local value = pageText(i18n, key, nil)
-	if type(value) ~= "string" or value == "" then return nil end
-	if string.sub(value, 1, 10) == "app.pages." then return nil end
-	return value
-end
-
 local function getSession()
 	local root = _G and _G.rfsuite
 	return root and root.session or nil
@@ -327,7 +320,7 @@ function M.build(ctx)
 			get = function() return ui.config.flighttime end,
 			set = getFlightTimeSetter(),
 			display = formatSeconds,
-			helpText = optionalPageHelpText(i18n, "help_timer"),
+			helpText = pageText(i18n, "help_timer"),
 			helpTitle = pageText(i18n, "timer", "Timer"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -340,7 +333,7 @@ function M.build(ctx)
 		ui.config.alert_type,
 		getAlertTypeSetter(),
 		{
-			helpText = optionalPageHelpText(i18n, "help_alert_type"),
+			helpText = pageText(i18n, "help_alert_type"),
 			helpTitle = pageText(i18n, "alert_type", "Alert Type"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -355,7 +348,7 @@ function M.build(ctx)
 			get = function() return ui.config.becalertvalue end,
 			set = getBecAlertSetter(),
 			display = formatDeciVolts,
-			helpText = optionalPageHelpText(i18n, "help_bec_voltage_alert"),
+			helpText = pageText(i18n, "help_bec_voltage_alert"),
 			helpTitle = pageText(i18n, "bec_voltage_alert", "BEC Voltage Alert"),
 			onHelp = getInlineHelpHandler()
 		}
@@ -370,7 +363,7 @@ function M.build(ctx)
 			get = function() return ui.config.rxalertvalue end,
 			set = getRxAlertSetter(),
 			display = formatDeciVolts,
-			helpText = optionalPageHelpText(i18n, "help_rx_voltage_alert"),
+			helpText = pageText(i18n, "help_rx_voltage_alert"),
 			helpTitle = pageText(i18n, "rx_voltage_alert", "RX Voltage Alert"),
 			onHelp = getInlineHelpHandler()
 		}
