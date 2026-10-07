@@ -2835,7 +2835,7 @@ return {
       min_link = "MIN LINK",
       link_min = "MIN LINK",
       link_max = "MAX LINK",
-      bb_ready = "MSP Wait...",
+      bb_ready = "READY",
       bb_rec = "REC",
       bb_logged = "LOGGED",
       status_armed = "ARMED",

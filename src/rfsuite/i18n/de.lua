@@ -2830,7 +2830,7 @@ return {
       min_link = "MIN LINK",
       link_min = "MIN LINK",
       link_max = "MAX LINK",
-      bb_ready = "MSP warten",
+      bb_ready = "BEREIT",
       bb_rec = "AUFN",
       bb_logged = "GEL",
       status_armed = "ARMED",

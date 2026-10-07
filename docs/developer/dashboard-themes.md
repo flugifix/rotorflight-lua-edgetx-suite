@@ -259,7 +259,7 @@ Every box takes its place from four fields — `col`, `row`, `colspan`, `rowspan
 | --- | --- | --- |
 | `text` | `telemetry` (default) | A telemetry value, formatted. |
 | `text` | `governor` | The governor state as a label — or, in the two modes that have no state, the mode. See below. |
-| `text` | `blackbox` | Blackbox usage. |
+| `text` | `blackbox` | Blackbox state, the same wording in every theme: `objects/text.lua` hands every text box `themes/default/common.lua`, whose `blackboxLabel(state)` gives REC while armed, the used and total size while the flight controller reports a dataflash, LOGGED after an armed flight, and READY otherwise -- also on a board without a dataflash. |
 | `text` | `stats` | One flight statistic, chosen with `stattype`. |
 | `text` | `text` | Nothing — a decorative container. |
 | `gauge` | `arc`, `bar` | The value between `min` and `max`; `arc` is the default. |
