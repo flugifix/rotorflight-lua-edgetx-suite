@@ -417,6 +417,11 @@ local function finishServoLoad(ok)
 end
 
 local function queueServosRead(isAutoReload)
+  -- Only what this read brings counts as read, and that holds from here on even when no read
+  -- can be queued: the records an earlier visit left in the session copy are still shown while
+  -- it runs, but they are neither drawn as editable nor saved.
+  ui.runtime.readComplete = false
+  ui.servoLoaded = {}
   if ui.runtime.readPending then return false, "read_pending" end
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
@@ -437,10 +442,6 @@ local function queueServosRead(isAutoReload)
     end
   end
 
-  -- Only what this read brings counts as read: the records an earlier visit left in the session
-  -- copy are still shown while it runs, but they are neither drawn as editable nor saved.
-  ui.runtime.readComplete = false
-  ui.servoLoaded = {}
   -- A reply the parser rejects does not stop the chain, but it leaves the read incomplete. The
   -- servo count and the bus ports decide which servo the configuration write addresses.
   local chainOk = true

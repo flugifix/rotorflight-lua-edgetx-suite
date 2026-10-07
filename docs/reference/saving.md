@@ -130,13 +130,14 @@ is disabled until the read has succeeded -- while switching either off is availa
 
 The two Servos pages write one servo's whole record -- the one selected -- from what the page
 holds, and keep the records of their previous visit while they read again. Save waits for this
-visit's read and, after another servo has been picked, for that servo's own read; until then the
-servo's fields are not shown. Switching the servo override on with the * button waits for the same
-read, while switching it off is available at any time. On flight controllers before API 12.09,
+visit's read and, after another servo has been picked, for that servo's own read; a servo whose
+record this visit has not read shows no fields. Switching the servo override on with the * button
+waits for the same read, while switching it off is available at any time. On flight controllers before API 12.09,
 which read every servo in one reply, a reply shorter than the servo count it announces is refused
 instead of being read as zeros. When PWM Output puts a servo back -- on Reload, or when the page
 is left with a change that was not saved -- it sends the value of this visit's read, or of the last
-save that completed, not the value of the first visit.
+save that completed, not the value of the first visit. Reload on PWM Output then reads the flight
+controller again, as it does on BUS Output.
 
 ## ESC Configurator pages
 

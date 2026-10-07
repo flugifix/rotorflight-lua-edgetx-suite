@@ -142,25 +142,6 @@ local function backupOriginalServo(i)
   }
 end
 
-local function backupOriginalServos()
-  if ui.originalServos then return end
-  ui.originalServos = {}
-  for i, s in pairs(ui.config.servos) do
-    ui.originalServos[i] = {
-      mid = s.mid,
-      min = s.min,
-      max = s.max,
-      scaleNeg = s.scaleNeg,
-      scalePos = s.scalePos,
-      rate = s.rate,
-      speed = s.speed,
-      flags = s.flags,
-      reverse = s.reverse,
-      geometry = s.geometry
-    }
-  end
-end
-
 --- After a completed save the board holds the saved values, so a later cancel puts those back.
 local function renewOriginalServo(i)
   if ui.originalServos then ui.originalServos[i] = nil end
@@ -468,6 +449,12 @@ local function finishServoLoad(ok)
 end
 
 local function queueServosRead(isAutoReload)
+  -- Only what this read brings counts as read, and that holds from here on even when no read
+  -- can be queued: the records an earlier visit left in the session copy are still shown while
+  -- it runs, but they are neither drawn as editable nor saved, nor what a cancel puts back.
+  ui.runtime.readComplete = false
+  ui.servoLoaded = {}
+  ui.originalServos = nil
   if ui.runtime.readPending then return false, "read_pending" end
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
@@ -488,12 +475,6 @@ local function queueServosRead(isAutoReload)
     end
   end
 
-  -- Only what this read brings counts as read: the records an earlier visit left in the session
-  -- copy are still shown while it runs, but they are neither drawn as editable nor saved, and
-  -- they are not what a cancel puts back.
-  ui.runtime.readComplete = false
-  ui.servoLoaded = {}
-  ui.originalServos = nil
   -- A reply the parser rejects does not stop the chain, but it leaves the read incomplete.
   local chainOk = true
 
@@ -599,8 +580,8 @@ local function queueServosRead(isAutoReload)
 
                       ui.config.servos[i] = s
                       ui.servoLoaded[i] = true
+                      backupOriginalServo(i)
                     end
-                    backupOriginalServos()
                   else
                     chainOk = false
                   end
@@ -1125,6 +1106,9 @@ function M.onReload(ctx)
   end
   rollbackChanges()
   ui.dirty = false
+  -- Read the board again, after the rollback's writes: Save waits for a read of this visit, and
+  -- a read that did not succeed is retried from here.
+  queueServosRead(false)
   if type(ui.runtime.requestRebuild) == "function" then
     ui.runtime.requestRebuild()
   end
