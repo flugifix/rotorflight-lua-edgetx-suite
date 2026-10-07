@@ -34,7 +34,7 @@ both sides is shown as done rather than asked again.
 | CH7 Profile | A whole three-position switch, one position per profile. Needs two adjustment slots on the flight controller. |
 | CH8 Rescue | The switch position that turns rescue on. Recommended rather than required. |
 | Write | The plan for every channel of the run on one screen, each row marked *ready* or *blocked*, and one press that writes the transmitter and the flight controller as one act. A blocked row is skipped and nothing about it reaches the board. The screen that follows compares what the board reports against the switch being held. |
-| Link | Packet rate and telemetry ratio, read from the transmitter module and from the flight controller and set on either side. |
+| Link | Packet rate and telemetry ratio, read from the transmitter module and from the flight controller and set on either side. Where the two differ, each row has a *use this* button, which asks before it writes. |
 | Name | The model name on the flight controller. |
 | Orientation | The board's mounting angles. It comes before the calibration because a calibration against an orientation that is not yet active calibrates the wrong thing. |
 | Accelerometer | Level calibration, with the flight controller's reported calibration state shown beside it. The machine has to be in its own frame and level; calibrating on a workbench calibrates the workbench. |
@@ -46,6 +46,14 @@ both sides is shown as done rather than asked again.
   locked while armed, but a step that was already open stays open across the arming edge. Both
   *use this* buttons and the two pickers are refused for as long as the model is armed, and a
   transfer that was already running is abandoned rather than finished.
+- **Both *use this* buttons on the Link step ask before they write.** One sets the transmitter
+  module's packet rate and telemetry ratio to the flight controller's, the other writes the flight
+  controller's telemetry configuration to match the module and saves it. The question is the one
+  *Tools > Diagnostics > ELRS Link* asks before the same two writes, followed by both rows as the
+  step shows them, and where the arming state cannot be read it asks that as well. Declining it
+  writes nothing and the Probe row says *Nothing was written*; a radio
+  that cannot show the question writes nothing either. The two pickers write without a question:
+  there the value is the one the pilot picked.
 - **The channels the assistant lays out are CH5 to CH8 and the four stick channels.** It replaces
   every mixer line and every input line on the channels it writes, which the channel screen says
   before it does so.

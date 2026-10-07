@@ -1940,6 +1940,78 @@ local function modulePair()
          link.packetRateLabel, link.telemetryRatioLabel
 end
 
+-- Neither *use this* writes on the press alone.
+--
+-- One changes the transmitter module's packet rate and telemetry ratio on a live link, the other
+-- writes the flight controller's telemetry configuration and commits it to EEPROM. So each puts a
+-- question up first: the same question, in the same words, that Tools > Diagnostics > ELRS Link
+-- asks before the same two writes, quoting both rows as this screen shows them. A declined
+-- question writes nothing and says so in the Probe row; a radio that cannot put the question up
+-- writes nothing either, rather than taking the missing answer for a yes.
+--
+-- The two pickers are not behind it. There the value is the pilot's own pick, so the pick is the
+-- answer.
+local ConfirmDialog = nil
+local Armed = nil
+
+local function askThenSync(w, i18n, mode, boardText, moduleText)
+  local task = linkTask(w)
+  -- Without the shared text helper there is no question to put up, and no answer to act on.
+  if task == nil or Common == nil then return end
+
+  if ConfirmDialog == nil then ConfirmDialog = loadModule("ui/confirm_dialog.lua") or false end
+  if Armed == nil then
+    if _G.rfsuite and _G.rfsuite.require then
+      Armed = _G.rfsuite.require("lib/armed.lua") or false
+    else
+      Armed = loadModule("lib/armed.lua") or false
+    end
+  end
+
+  local lines = {}
+  if mode == task.MODE_ROTORFLIGHT_TO_ELRS then
+    lines[#lines + 1] = Common.t(i18n, "diagnostics_elrs_link", "confirm_rf_to_elrs",
+      "Set the ELRS module's packet rate and telemetry ratio to match Rotorflight?")
+  else
+    lines[#lines + 1] = Common.t(i18n, "diagnostics_elrs_link", "confirm_elrs_to_rf",
+      "Set Rotorflight's telemetry configuration to match the ELRS module, and save it?")
+  end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = t(i18n, "link_board", "Flight controller") .. ": " .. tostring(boardText)
+  lines[#lines + 1] = t(i18n, "link_module", "Transmitter module") .. ": " .. tostring(moduleText)
+  -- "Cannot tell" is not "disarmed". The task refuses a write while the board reports the craft
+  -- armed; where the board does not report it at all, only the pilot can settle it, and the
+  -- question says so in the words the header's own Save uses.
+  if type(Armed) == "table" and type(Armed.isUncertain) == "function" and Armed.isUncertain() then
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = i18n and i18n.t and i18n.t("app.dialogs.confirm_save_arm_unknown")
+      or "Cannot read the arming state. Is the model disarmed?"
+  end
+
+  local shown = false
+  if ConfirmDialog and type(ConfirmDialog.show) == "function" then
+    shown = ConfirmDialog.show({
+      title = Common.t(i18n, "diagnostics_elrs_link", "confirm_title", "Confirm"),
+      message = table.concat(lines, "\n"),
+      onConfirm = function()
+        w.data.linkNotice = nil
+        task.start(mode)
+        w.rebuild()
+      end,
+      onCancel = function()
+        w.data.linkNotice = Common.t(i18n, "diagnostics_elrs_link", "confirm_cancelled", "Nothing was written")
+        w.rebuild()
+      end
+    })
+  end
+
+  if not shown then
+    w.data.linkNotice = Common.t(i18n, "diagnostics_elrs_link", "confirm_no_dialog",
+      "This radio cannot show the confirmation.")
+    w.rebuild()
+  end
+end
+
 -- One picker over a field the module itself described. Returns the height it took, or 0 where the
 -- walk has not produced that field -- a module that does not offer it gets no row rather than an
 -- empty one.
@@ -2046,6 +2118,7 @@ local function linkChoice(w, children, area, y, kind, label, task)
       local index = indices[position]
       local current = (kind == "rate") and task.getRateField() or task.getRatioField()
       if index == nil or current == nil or tonumber(current.selectedIndex) == index then return end
+      w.data.linkNotice = nil
       task.selectOption(kind, index)
       w.rebuild()
     end
@@ -2075,6 +2148,7 @@ procs[#procs + 1] = {
     local task = linkTask(w)
     if task and w.data.linkProbed ~= true then
       w.data.linkProbed = true
+      w.data.linkNotice = nil
       task.start(task.MODE_PROBE)
     end
   end,
@@ -2122,13 +2196,19 @@ procs[#procs + 1] = {
         -- states: every explanatory line taken out of a body is a control row gained, and this
         -- screen carries five of them plus two pickers.
 
+        -- A declined or unanswerable question leaves the task untouched, so its own status still
+        -- reads as whatever ran before it. The notice is what tells the pilot nothing was written,
+        -- and it stands only while nothing runs: every start below clears it.
         local statusKey, statusDefault = task.getStatus()
+        local statusText = tLink(i18n, statusKey, statusDefault)
+        if w.data.linkNotice ~= nil and not task.isRunning() then statusText = w.data.linkNotice end
         y = y + w.findingRow(children, area.x, y, area.w,
-          t(i18n, "link_status", "Probe"), tLink(i18n, statusKey, statusDefault),
+          t(i18n, "link_status", "Probe"), statusText,
           {
             { text = t(i18n, "link_probe", "Read"),
               active = function() return not task.isRunning() end,
               press = function()
+                w.data.linkNotice = nil
                 w.data.linkConfigAsked = nil
                 readTelemetryConfig(w)
                 task.start(task.MODE_PROBE)
@@ -2171,16 +2251,14 @@ procs[#procs + 1] = {
             { { text = useThis,
                 active = function() return not task.isRunning() end,
                 press = function()
-                  task.start(task.MODE_ROTORFLIGHT_TO_ELRS)
-                  w.rebuild()
+                  askThenSync(w, i18n, task.MODE_ROTORFLIGHT_TO_ELRS, boardText, moduleText)
                 end } })
           y = y + w.findingRow(children, area.x, y, area.w,
             t(i18n, "link_module", "Transmitter module"), moduleText,
             { { text = useThis,
                 active = function() return not task.isRunning() end,
                 press = function()
-                  task.start(task.MODE_ELRS_TO_ROTORFLIGHT)
-                  w.rebuild()
+                  askThenSync(w, i18n, task.MODE_ELRS_TO_ROTORFLIGHT, boardText, moduleText)
                 end } })
         else
           y = y + w.row(children, area.x, y, area.w,
