@@ -1029,8 +1029,12 @@ local function onBack(source, ev)
     -- where the header offers Save, since that is the other answer. Not while the model is
     -- armed: a save to the flight controller is refused then, and a question standing between
     -- the pilot and the way out is the one thing that must not be.
+    -- Nor while a save of this page is still on its way: its notice is what is on screen, and
+    -- the page's flag only clears once the write has answered. Back then behaves as before.
+    local saving = state.pendingSaveAction ~= nil
+      or (SavePipeline and type(SavePipeline.isActive) == "function" and SavePipeline.isActive())
     if pageModule and type(pageModule.hasUnsavedChanges) == "function" and state.headerSaveOffered
-      and not isModelArmed() then
+      and not saving and not isModelArmed() then
       local ok, unsaved = pcall(pageModule.hasUnsavedChanges)
       if not ok then
         reportHookCrash("activePage.hasUnsavedChanges", currentMenuId, unsaved)
@@ -2881,6 +2885,7 @@ function M.buildUI()
         -- of them would act on a page that does not exist. They come off. Help stays: it is
         -- answered for this menu id by the help registry, which never needed the build to run.
         actions.save = false
+        state.headerSaveOffered = false
         actions.reload = false
         actions.star = false
         -- Everything the page appended before it raised belongs to a screen that will never be
@@ -3086,6 +3091,7 @@ function M.init(opts)
   state.saveOverlayVisible = false
   state.armedNoticeVisible = false
   state.leavePromptVisible = false
+  state.headerSaveOffered = false
   state.armedFeedbackUntil = nil
   state.armedFeedbackText = nil
   state.connStatusNoticeVisible = false

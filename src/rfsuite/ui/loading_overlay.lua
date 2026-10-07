@@ -74,7 +74,7 @@ function M.append(children, opts)
   local action = type(opts.action) == "table" and opts.action or nil
   -- A question with more than one answer passes them all as `actions`, in the order they are
   -- drawn and focused. `action` stays the one-button form every other caller uses.
-  local actions = type(opts.actions) == "table" and opts.actions or nil
+  local actions = type(opts.actions) == "table" and #opts.actions > 0 and opts.actions or nil
   local actionCount = actions and #actions or (action and 1 or 0)
 
   -- A box that reports no progress. A notice waiting to be acknowledged has none to

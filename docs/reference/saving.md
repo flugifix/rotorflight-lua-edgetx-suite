@@ -57,11 +57,13 @@ It asks first, in a box titled **Unsaved changes**, with three answers:
 - **Discard** leaves the page. Nothing is written; the next visit reads the flight controller
   again.
 
-The question is put only where the header offers Save, and never while the model is armed: then
-Back leaves the page as before. It is not put when the page is left in a way the pilot did not
-choose -- the link to the flight controller is lost, or the tool opened from the dashboard closes
-because full screen was left or the model armed. A page that applies a change live
-while it is edited, without Save, is not on the list.
+The question is put only where the header offers Save, never while the model is armed, and not
+while a save of the page is still on its way: then Back leaves the page as before. It is not put
+when the page goes without a Back on it -- the link to the flight controller is lost, or the tool
+opened from the dashboard closes because full screen was left or the model armed; the changes are
+discarded then as before. Trims, Swash Geometry and both Servos pages are not on the list: with
+their override on they send a change to the flight controller while it is being edited, before
+Save, and what leaving them should do with such a change is a question of its own.
 
 The page decides what counts as a change through `hasUnsavedChanges()`, an optional hook the
 tool asks before it leaves; on the pages below it is the same state that draws their *Unsaved
