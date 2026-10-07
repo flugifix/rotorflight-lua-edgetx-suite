@@ -20,9 +20,12 @@ appear, and then *System* → *Developer* → *Settings*:
 | **Debug Level** | *INFO* for a first report. *DEBUG* for a problem that needs the steps in between, and it is also the level from which the background decoder keeps a record of its own. *TRACE* only when asked — it prints the decoded telemetry payloads and fills a file in seconds. |
 | **Log Session To Card** | On. Nothing is written to the card while this is off, whatever the debug level says. |
 
-**Both are needed, and neither alone does anything.** *Log Session To Card* decides whether the
-card is written at all; the debug level decides what is worth writing. A report asked for with
-one of them set comes back empty.
+**Log Session To Card is the switch that decides whether anything is written.** With it on and
+the debug level left at *OFF*, the configuration tool and the widgets already write their `tool_*`
+and `widget_*` files: errors, warnings and most info lines, the connect sequence among them, are
+kept whatever the level says. **The debug level decides how much more goes in.** The background
+decoder's `function_*` files are the exception that needs both, because the decoder only starts
+writing at *DEBUG* or higher.
 
 Switch both back off once the report is sent. The card write is small but it is permanent, and
 *TRACE* left on costs a measurable part of every pass.
@@ -68,7 +71,8 @@ dashboard widget silent 3.0 s, last pass 56 %
 The percentage is what the dashboard's last cycle cost, out of what it is allowed. Near or above
 100 is the reading that explains a dashboard that stopped drawing.
 
-Both need the background decoder on the model and the debug level at *DEBUG* or above.
+`widget_step.txt` needs nothing but *Log Session To Card*. `function_step.txt` also needs the
+background decoder on the model and the debug level at *DEBUG* or above.
 
 ## What to attach
 

@@ -57,8 +57,9 @@ and nothing needs to be configured.
   happened to it; this script runs outside the widgets and can. With the debug level at *DEBUG* or
   above its log then carries a line naming how long the dashboard has been silent and what its
   last cycle cost. A model without this script has nothing that can report that.
-- **It writes a log of its own** when *Log Session To Card* is on, under the `function_` prefix,
-  beside the tool's and the widgets'. Because this script is paused and resumed rather than cut
+- **It writes a log of its own** when *Log Session To Card* is on and the debug level is *DEBUG*
+  or above, under the `function_` prefix, beside the tool's and the widgets'. Unlike theirs, it
+  needs both switches: *Log Session To Card* alone writes no `function_` file. Because this script is paused and resumed rather than cut
   off, it keeps writing where a widget that overran its instruction budget cannot, and its
   one-line step file says when it last ran. See
   [collecting logs](../troubleshooting/collecting-logs.md).

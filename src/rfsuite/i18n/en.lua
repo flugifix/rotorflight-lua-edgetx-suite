@@ -2306,7 +2306,7 @@ return {
         show_header_memory = "Show Header Memory",
         enable_serial_debug = "Enable Serial Debug",
         log_to_card = "Log Session To Card",
-        help_message = "Configure logging and debugging options for development diagnostics.",
+        help_message = "Debug Level: how much is logged. Errors, warnings and most info lines are logged even at OFF; DEBUG and TRACE add more.\nContinuous Memory Log: the tool logs its Lua memory once a second.\nShow Header Memory: shows the tool's Lua memory in the page header.\nEnable Serial Debug: also sends the lines the debug level lets through to the radio's serial port; at OFF that is none.\nLog Session To Card: writes the log to the SD card. On its own it already writes errors, warnings and info; the background decoder writes only from DEBUG up.",
         saved_title = "Saved",
         saved_message = "Developer settings saved",
         save_error_title = "Error",
