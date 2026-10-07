@@ -66,11 +66,21 @@ allows. Six places on the screen open a page over it, and a seventh opens the su
   the in-flight tuning surface, or a note that it is not available now, and the model's battery
   profiles, the one in force in green. Pressing a profile makes it the one in force and the page
   stays open, showing whether the change is being sent, was done or failed.
-- **The link bars** in the top bar open the *ELRS* link page: the link quality of receiver and
-  transmitter and the signal of each antenna as bars with their figures, the transmitter power,
-  the skipped frames, the air rate beside the title and the rate floor at the foot. The *Link view
-  switch* on the *Top Bar* page opens the same page while the switch is in the chosen position, in
-  full screen and in the widget's zone alike; in the zone it only shows.
+- **The link bars** in the top bar open the *ELRS* link page: beside the title the air rate and
+  its modulation (*500Hz (LORA)*), then one row per reading, each a bar with its figure -- the link
+  quality of receiver and transmitter (*RQ*, *TQ*), the signal at each receiver antenna (*1RSS*,
+  *2RSS*, the second once one has been seen) and at the transmitter (*TRSS*), the signal-to-noise
+  ratio at the receiver and at the transmitter (*SNR*, `9 / 8dB`) and the transmitter power
+  (*TPWR*) -- and at the foot the least link quality of the flight (*RQ min*). The signal bars show
+  the headroom over the air rate's sensitivity floor, the SNR bar runs from -10 dB to +10 dB, and
+  the bars take the warning steps the *Top Bar* page sets for the link bars; the SNR bar turns
+  amber at 4 dB and red at 0 dB. The *TPWR* bar is the power as a share of the *TX power limit*
+  set on the *Top Bar* page and warns the other way round, amber from 60 % of the limit and red
+  from 85 %: dynamic power raises the power as the link weakens. On an FLRC or FSK rate, which reports no signal-to-noise ratio,
+  *SNR* reads `-`. *RQ min* is the flight record's: the flight in progress, the last flight
+  otherwise, `-` until the model has been armed once. The *Link view switch* on the *Top Bar*
+  page opens the same page while the switch is in the chosen position, in full screen and in the
+  widget's zone alike; in the zone it only shows.
 - **The value rows** of the right panel open *Telemetry*: up to twelve readings as tiles, three to
   a row, chosen on the *Telemetry* page. Each tile shows the reading's name and figure and, under
   it, the least and the most the flight reached, `min .. max`. Those come from the flight record:
@@ -139,6 +149,7 @@ setting.
 | Top Bar | Colour the bars | *Always* (default) colours a good link green; *Only on warning* leaves it neutral until a bar drops to its warning step. |
 | Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
 | Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
+| Top Bar | TX power limit | The most the transmitter module sends with, 25 mW to 2000 mW, default 100 mW: the full scale of the *TPWR* bar on the *ELRS* page. Set it to the module's own maximum, or to the limit set in the module. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
 | Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Theme: Battery* (the *Battery* page), *Theme: Status* (the *Status* page), *Suite: Main menu*, *Suite: Flight log* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. *Suite: Flight log* opens the suite's tool on its *Flight Log* page, as the quick menu's *FLIGHT LOG* does, and does nothing while that page's preview switch is off or the model is armed. |
 | Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *Suite: Main menu*, TELE *Suite: Quick menu*. |
@@ -159,7 +170,10 @@ and power (`TQly`, `TPWR`), the air rate's sensitivity floor, whether a second a
 seen, the skipped-frame count (`*Skp`) and the speed controller's live status, and whatever a
 chosen value row or *Telemetry* tile needs (ESC load, ESC status, air rate, rate floor). The
 *Telemetry* page names what its tiles need itself, so the widget reads those only while the page
-is open; the ranges under the record's readings are read from the flight record.
+is open; the ranges under the record's readings are read from the flight record. The *ELRS* link
+page does the same for what only it draws -- the air rate, the transmitter's signal (`TRSS`) and
+both signal-to-noise ratios (`RSNR`, `TSNR`) -- so those are read while the page is open in full
+screen and at no other time.
 
 A row or a tile can also show a telemetry sensor the widget has no reading of its own for, by the
 name the suite's decoder gives it: BEC temperature (`Tbec`), tail speed (`Tspd`), vario (`Var`),
@@ -202,6 +216,8 @@ sensor of that name and a declared name that is absent is still searched for.
   phase modules load `layout.lua` and `common.lua` from the shipped folder.
 - The *Transmitter power*, *TQ* and skipped-frame cells read `-` on a link that does not report
   those sensors.
+- **In the widget's zone the *ELRS* page shows `-` for the air rate, *TRSS* and *SNR***: the widget
+  reads a page's own readings only while that page is open in full screen.
 
 ## Related
 

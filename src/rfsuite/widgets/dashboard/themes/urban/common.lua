@@ -175,9 +175,9 @@ M.T = {
   run_busy = "@i18n(widgets.dashboard.urban_sending)@",
   run_ok = "@i18n(widgets.dashboard.urban_done)@",
   run_failed = "@i18n(widgets.dashboard.urban_failed)@",
-  link_floor = "@i18n(widgets.dashboard.urban_rate_floor)@",
   -- The link view's title is the link protocol's name, and its rows carry short sensor names, the
-  -- same in every language -- as `tpwr` and `skp` above.
+  -- same in every language -- as `tpwr` and `skp` above. Its foot line names the flight's least
+  -- link quality.
   view_link = "ELRS",
   link_rq = "RQ", link_tq = "TQ", link_rss1 = "1RSS", link_rss2 = "2RSS",
   -- The battery view (battview.lua): its title, the words of the cell limits under the bar, and
@@ -189,6 +189,8 @@ M.T = {
   batt_pack = "@i18n(widgets.dashboard.urban_batt_pack)@",
   batt_cell_min = "@i18n(widgets.dashboard.urban_cell_min)@",
   batt_reserve = "@i18n(widgets.dashboard.urban_reserve)@",
+  link_trss = "TRSS", link_snr = "SNR",
+  link_rq_min = "@i18n(widgets.dashboard.urban_rq_min)@",
 }
 
 -- The governor states' keys, built once: M.governorText and M.governorSample read them every
