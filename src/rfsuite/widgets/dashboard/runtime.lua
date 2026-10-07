@@ -751,6 +751,16 @@ local function checkNodeList(self, children)
   end
 end
 
+-- The log lines of a job step that raised: the error itself, and on the raise that reaches
+-- JOB_FAULT_LIMIT the reason the screen now shows what it shows.
+local function logJobFault(self, jobKind, err, faults)
+  widgetLog(self, "job step error (" .. tostring(jobKind) .. "): " .. tostring(err), "error")
+  if faults == JOB_FAULT_LIMIT then
+    widgetLog(self, "job " .. tostring(jobKind) .. " raised " .. faults
+      .. " times in a row; not retried until the theme is reloaded", "error")
+  end
+end
+
 -- The scene job in three phases, carried as fields on the job table. The old LVGL tree
 -- stands until the swap, so a stepped rebuild shows the previous frame, never a blank one.
 local function sceneJobStep(self)
@@ -3881,11 +3891,9 @@ function Runtime.new(zone, options)
         if faults == 1 and not isCpuLimit and LogSink and type(LogSink.fault) == "function" then
           pcall(LogSink.fault, "dashboard.job." .. tostring(jobKind), stepDone)
         end
-        widgetLog(self, "job step error (" .. tostring(jobKind) .. "): " .. tostring(stepDone), "error")
-        if faults == JOB_FAULT_LIMIT then
-          widgetLog(self, "job " .. tostring(jobKind) .. " raised " .. faults
-            .. " times in a row; not retried until the theme is reloaded", "error")
-        end
+        -- Under pcall: a log line that fails (out of memory) must not replace a CPU-limit stop on
+        -- its way to the entry point below.
+        pcall(logJobFault, self, jobKind, stepDone, faults)
         -- The entry point owns the CPU-limit response: the hold-off, and the release of the two
         -- variables the overlay may be holding. It cannot do either if the raise stops here.
         if isCpuLimit then

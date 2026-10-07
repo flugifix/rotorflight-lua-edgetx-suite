@@ -225,8 +225,9 @@ as a single label, drawn without the splash builder, and stops only if that rais
 too. The theme at full screen ([`fullscreen = "theme"`](#a-theme-that-takes-fullscreen)), the fullscreen
 menu and the in-flight tuning surface are given up the same way, each on its own count, and at
 full screen *Dashboard error* carries the tool control, as the connect splash does there. The
-views a theme registers are not counted: one whose `build` raises is given up on its first
-raise, as [Views of a theme's own](#views-of-a-themes-own) describes.
+views a theme registers are not counted for a raise: one whose `build` raises is given up on its first
+raise, as [Views of a theme's own](#views-of-a-themes-own) describes. A view whose `build` the
+radio stops at its instruction limit is counted like the other surfaces, on a count of its own.
 
 ### `layout`
 
@@ -932,7 +933,9 @@ free-form: a declarative phase draws no view. The module is loaded the first tim
 built, through the loader that loads the rest of the theme — from the theme's own folder, a
 user theme from source — so registering a view costs nothing until it is opened, and a module
 that fails to load, or whose `build` raises, is not asked for again (a replaced look falls back
-to the widget's own; a view of the theme's own is closed and refused), with one log line. A view of the previous theme's that is still open
+to the widget's own; a view of the theme's own is closed and refused), with one log line. A
+`build` the radio stops at its instruction limit is not a raise here: it is tried again, and after
+three stops in a row the view shows *Dashboard error* until the theme is reloaded. A view of the previous theme's that is still open
 when the theme changes is closed.
 
 A theme's view module has `build(children, zone, state, ctx)` — it appends the whole tree to
