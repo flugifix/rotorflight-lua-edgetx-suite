@@ -95,4 +95,6 @@ suite version, so that does not have to be written out separately.
 - **Opening the configuration tool pauses the background decoder** for as long as the tool is
   open, so a gap in `function_*` over that stretch is expected.
 - **A session file stops at 5000 lines** and says so on its last line, rather than dropping its
-  middle. At *TRACE* that is reached in well under a minute.
+  middle. At *TRACE* that is reached in well under a minute. Nothing is added to it after that,
+  a fault included: a fault after the cap is named only in the `*_step.txt` file. Turning *Log
+  Session To Card* off and on again starts a new file.
