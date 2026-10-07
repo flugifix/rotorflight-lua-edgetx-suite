@@ -356,6 +356,9 @@ end
 
 function M.getHeaderActions()
   return {
+    -- Declared rather than left to the header's help registry: that registry is created by the
+    -- first `?` press of a session, so before it a page that only ships a help.lua shows `?` greyed.
+    help = true,
     save = true,
     reload = true,
     menu = true
@@ -385,6 +388,13 @@ function M.onReload(ctx)
   ui.dirty = false
   queueFlyrotorRead(false)
   return true
+end
+
+-- The sheet names the rows of the section on screen, so it is told which section that is.
+function M.onHelp(ctx)
+  local help = loadModule("app/pages/setup/esc_motors/esc_tools/escmfg/flrtr/help.lua")
+  if type(help) ~= "function" then return nil end
+  return help({ i18n = ctx and ctx.i18n, section = ui.currentSection })
 end
 
 function M.build(ctx)
