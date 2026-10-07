@@ -96,8 +96,8 @@ local function wav_level(prefs, connected)
 end
 
 -- Set by the first refresh_volume_state in this Lua state. The dashboard and the tool reach it on
--- every audio pass; the background function script (src/functions/rfsbg.lua) loads this module
--- only for the adjustment teller and never does.
+-- their audio passes; the background function script (src/functions/rfsbg.lua) and the service
+-- widget run the adjustment teller without them and never do.
 local volume_driven = false
 
 local function refresh_volume_state(self, isCritical)
