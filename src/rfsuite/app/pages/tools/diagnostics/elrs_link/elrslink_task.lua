@@ -87,8 +87,37 @@ local pendingWrites = {}
 local pendingWriteCount = 0
 local pendingWriteIndex = 1
 local manualSyncMode = SYNC_MODE_OFF
-local statusText = "Idle"
 local statusI18nKey = "status_idle"
+local statusDetail = nil
+
+-- Every status this task reports, as a key and fallback pair in the form the packager
+-- translates in place: an installed suite carries no translation bundle, so the fallback it
+-- ships has to be the pilot's language already. The texts belong to the ELRS Link page.
+local STATUS_TEXT = {
+    status_writing_elrs = { labelKey = "status_writing_elrs", labelFallback = "Writing ELRS..." },
+    status_elrs_probe_complete = { labelKey = "status_elrs_probe_complete", labelFallback = "Probe complete" },
+    status_rotorflight_write_failed = { labelKey = "status_rotorflight_write_failed", labelFallback = "Write failed" },
+    status_rf_matches_elrs = { labelKey = "status_rf_matches_elrs", labelFallback = "RF matches ELRS" },
+    status_writing_rotorflight = { labelKey = "status_writing_rotorflight", labelFallback = "Writing RF..." },
+    status_saving_rotorflight = { labelKey = "status_saving_rotorflight", labelFallback = "Saving RF..." },
+    status_rotorflight_updated = { labelKey = "status_rotorflight_updated", labelFallback = "RF updated" },
+    status_rotorflight_save_failed = { labelKey = "status_rotorflight_save_failed", labelFallback = "Save failed" },
+    status_probe_complete = { labelKey = "status_probe_complete", labelFallback = "Probe complete" },
+    status_idle = { labelKey = "status_idle", labelFallback = "Idle" },
+    status_reading_module = { labelKey = "status_reading_module", labelFallback = "Reading module..." },
+    status_unavailable_armed = { labelKey = "status_unavailable_armed", labelFallback = "Unavailable while armed" },
+    status_requires_active_link = { labelKey = "status_requires_active_link", labelFallback = "Requires active link" },
+    status_waiting_rotorflight_config = { labelKey = "status_waiting_rotorflight_config", labelFallback = "Waiting for RF config" },
+    status_rotorflight_config_not_ready = { labelKey = "status_rotorflight_config_not_ready", labelFallback = "RF config not ready" },
+    status_pinging_module = { labelKey = "status_pinging_module", labelFallback = "Pinging module..." },
+    status_no_module = { labelKey = "status_no_module", labelFallback = "No module found" },
+    status_read_timeout = { labelKey = "status_read_timeout", labelFallback = "Read timeout" },
+    status_elrs_updated = { labelKey = "status_elrs_updated", labelFallback = "ELRS updated" },
+    status_writing_prefix = { labelKey = "status_writing_prefix", labelFallback = "Writing " }
+}
+
+local Common = nil
+local statusT = nil
 
 local function getSession()
     return _G.rfsuite and _G.rfsuite.session
@@ -109,9 +138,11 @@ local function logMsg(msg, level)
     end
 end
 
-local function setStatus(key, text)
+-- `detail` is appended to the translated text as it is, for a status that names what it is
+-- working on.
+local function setStatus(key, detail)
     statusI18nKey = key
-    statusText = text or "Idle"
+    statusDetail = detail
 end
 
 local function clearFieldData()
@@ -398,11 +429,11 @@ local function syncRotorflightToElrs(fcConfig)
     end
 
     if pendingWriteCount > 0 then
-        setStatus("status_writing_elrs", "Writing ELRS...")
+        setStatus("status_writing_elrs")
         state = "write"
         nextActionAt = 0
     else
-        setStatus("status_elrs_probe_complete", "Probe complete")
+        setStatus("status_elrs_probe_complete")
         completeTask()
     end
 end
@@ -411,13 +442,13 @@ local function syncElrsToRotorflight(fcConfig, moduleRate, moduleRatioLabel, rat
     local session = getSession()
     if not effectiveRatio or not moduleRate or not session or not session.telemetryConfigBuffer then
         logMsg("syncElrsToRotorflight: missing parameters - rate=" .. tostring(moduleRate) .. " ratio=" .. tostring(effectiveRatio), "warn")
-        setStatus("status_rotorflight_write_failed", "Write failed")
+        setStatus("status_rotorflight_write_failed")
         completeTask()
         return
     end
 
     if fcConfig and fcConfig.linkRate == moduleRate and fcConfig.linkRatio == effectiveRatio and fcConfig.mode == 1 then
-        setStatus("status_rf_matches_elrs", "RF matches ELRS")
+        setStatus("status_rf_matches_elrs")
         completeTask()
         return
     end
@@ -433,12 +464,12 @@ local function syncElrsToRotorflight(fcConfig, moduleRate, moduleRatioLabel, rat
     writeBuffer[12] = math_floor(effectiveRatio / 256)
 
     logMsg("syncElrsToRotorflight: writing to RF mode=1 rate=" .. tostring(moduleRate) .. " ratio=" .. tostring(effectiveRatio))
-    setStatus("status_writing_rotorflight", "Writing RF...")
+    setStatus("status_writing_rotorflight")
     
     local msp = loadModule("tasks/msp/runtime.lua")
     local mspState = msp and type(msp.getState) == "function" and msp.getState()
     if not mspState or not mspState.queue then
-        setStatus("status_rotorflight_write_failed", "Write failed")
+        setStatus("status_rotorflight_write_failed")
         completeTask()
         return
     end
@@ -449,7 +480,7 @@ local function syncElrsToRotorflight(fcConfig, moduleRate, moduleRatioLabel, rat
         payload = writeBuffer,
         isWrite = true,
         processReply = function()
-            setStatus("status_saving_rotorflight", "Saving RF...")
+            setStatus("status_saving_rotorflight")
             local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
             mspState.queue:add({
                 command = eepromApi.writeCommand,
@@ -464,19 +495,19 @@ local function syncElrsToRotorflight(fcConfig, moduleRate, moduleRatioLabel, rat
                         session.telemetryConfigBuffer = writeBuffer
                     end
                     logMsg("syncElrsToRotorflight: successfully saved to RF")
-                    setStatus("status_rotorflight_updated", "RF updated")
+                    setStatus("status_rotorflight_updated")
                     completeTask()
                 end,
                 errorHandler = function()
                     logMsg("syncElrsToRotorflight: eeprom save failed", "warn")
-                    setStatus("status_rotorflight_save_failed", "Save failed")
+                    setStatus("status_rotorflight_save_failed")
                     completeTask()
                 end
             })
         end,
         errorHandler = function()
             logMsg("syncElrsToRotorflight: MSP write failed", "warn")
-            setStatus("status_rotorflight_write_failed", "Write failed")
+            setStatus("status_rotorflight_write_failed")
             completeTask()
         end
     })
@@ -504,7 +535,7 @@ local function finalize()
     end
 
     if manualSyncMode == SYNC_MODE_OFF then
-        setStatus("status_probe_complete", "Probe complete")
+        setStatus("status_probe_complete")
         completeTask()
     elseif manualSyncMode == SYNC_MODE_ELRS_TO_ROTORFLIGHT then
         syncElrsToRotorflight(fcConfig, moduleRate, moduleRatioLabel, ratioKind, effectiveRatio)
@@ -530,7 +561,7 @@ function M.reset()
     moduleRatioLabel = nil
     clearFieldData()
     clearPendingWrites()
-    setStatus("status_idle", "Idle")
+    setStatus("status_idle")
 end
 
 local function handleDeviceInfo(data)
@@ -574,7 +605,7 @@ local function handleDeviceInfo(data)
     clearFieldData()
     state = "read"
     nextActionAt = 0
-    setStatus("status_reading_module", "Reading module...")
+    setStatus("status_reading_module")
     if fieldCount <= 0 then finalize() end
 end
 
@@ -667,7 +698,7 @@ function M.wakeup()
     -- mode covers a sync from the moment it is started, before the walk has reached its writes.
     if (state == "write" or manualSyncMode ~= SYNC_MODE_OFF) and armedRefusesTheWrite() then
         logMsg("sync abandoned: the model is armed", "warn")
-        setStatus("status_unavailable_armed", "Unavailable while armed")
+        setStatus("status_unavailable_armed")
         clearPendingWrites()
         completeTask()
         return
@@ -675,7 +706,7 @@ function M.wakeup()
 
     if not session or session.isConnected ~= true or session.telemetryType ~= "crsf" then
         if not isSimulation() then
-            setStatus("status_requires_active_link", "Requires active link")
+            setStatus("status_requires_active_link")
             taskComplete = true
             return
         end
@@ -684,10 +715,10 @@ function M.wakeup()
     if not session.crsfTelemetryConfig then
         if configWaitStartedAt == 0 then
             configWaitStartedAt = now
-            setStatus("status_waiting_rotorflight_config", "Waiting for RF config")
+            setStatus("status_waiting_rotorflight_config")
         elseif (now - configWaitStartedAt) >= DISCOVERY_TIMEOUT_SECONDS then
             logMsg("Skipping ELRS link probe: CRSF telemetry config not ready", "warn")
-            setStatus("status_rotorflight_config_not_ready", "RF config not ready")
+            setStatus("status_rotorflight_config_not_ready")
             taskComplete = true
         end
         return
@@ -699,7 +730,7 @@ function M.wakeup()
         state = "ping"
         nextActionAt = 0
         logMsg("Starting ELRS link probe (pinging 0x00 from 0xEA)")
-        setStatus("status_pinging_module", "Pinging module...")
+        setStatus("status_pinging_module")
     end
 
     if not CrsfManager then
@@ -758,14 +789,14 @@ function M.wakeup()
 
     if state == "ping" and (now - probeStartedAt) >= DISCOVERY_TIMEOUT_SECONDS then
         logMsg("ELRS probe failed: discovery timeout (no device info response)", "warn")
-        setStatus("status_no_module", "No module found")
+        setStatus("status_no_module")
         taskComplete = true
         return
     end
 
     if state == "read" and (now - probeStartedAt) >= READ_TIMEOUT_MAX_SECONDS then
         logMsg("ELRS probe failed: read timeout", "warn")
-        setStatus("status_read_timeout", "Read timeout")
+        setStatus("status_read_timeout")
         finalize()
         return
     end
@@ -793,10 +824,10 @@ function M.wakeup()
             logMsg("writing field " .. tostring(action.fieldId) .. " to " .. string.format("0x%02X", deviceId))
             crossfireTelemetryPush(CRSF_FRAMETYPE_PARAMETER_WRITE, {deviceId, CRSF_ADDRESS_ELRS_LUA, action.fieldId, action.value})
         end
-        setStatus("status_writing_prefix", "Writing " .. tostring(action.fieldName))
+        setStatus("status_writing_prefix", tostring(action.fieldName))
         pendingWriteIndex = pendingWriteIndex + 1
         if pendingWriteIndex > pendingWriteCount then
-            setStatus("status_elrs_updated", "ELRS updated")
+            setStatus("status_elrs_updated")
             completeTask()
         else
             nextActionAt = now + WRITE_DELAY_SECONDS
@@ -840,11 +871,33 @@ function M.selectOption(kind, index)
     taskComplete = false
     state = "write"
     nextActionAt = 0
-    setStatus("status_writing_elrs", "Writing ELRS...")
+    setStatus("status_writing_elrs")
     return true
 end
 
-function M.getStatus() return statusI18nKey, statusText end
+local function statusFallback()
+    local entry = STATUS_TEXT[statusI18nKey]
+    return entry and entry.labelFallback or tostring(statusI18nKey)
+end
+
+function M.getStatus()
+    return statusI18nKey, statusFallback() .. (statusDetail or "")
+end
+
+-- The status in the language of `i18n`, for a page to show.
+function M.getStatusText(i18n)
+    if not statusT then
+        Common = Common or loadModule("app/pages/settings/common.lua")
+        statusT = Common and Common.pageT("diagnostics_elrs_link") or nil
+    end
+    local entry = STATUS_TEXT[statusI18nKey]
+    local text = statusFallback()
+    if entry and statusT then
+        text = statusT(i18n, entry.labelKey, entry.labelFallback)
+    end
+    return text .. (statusDetail or "")
+end
+
 function M.isRunning() return not taskComplete end
 function M.getMode() return manualSyncMode end
 
