@@ -2373,7 +2373,7 @@ return {
         show_header_memory = "Speicheranzeige in Kopfzeile",
         enable_serial_debug = "Serielles Debug aktivieren",
         log_to_card = "Sitzungslog auf Karte",
-        help_message = "Konfiguriere Logging- und Debug-Optionen fuer die Entwicklungsdiagnose.",
+        help_message = "Debug-Level: wie viel protokolliert wird. Fehler, Warnungen und die meisten Info-Zeilen stehen auch bei OFF im Log; DEBUG und TRACE fügen mehr hinzu.\nKontinuierliches Speicher-Log: das Tool protokolliert jede Sekunde seinen Lua-Speicher.\nSpeicheranzeige in Kopfzeile: zeigt den Lua-Speicher des Tools in der Kopfzeile.\nSerielles Debug aktivieren: schickt die Zeilen, die das Debug-Level durchlässt, auch an die serielle Schnittstelle; bei OFF keine.\nSitzungslog auf Karte: schreibt das Log auf die SD-Karte, allein schon mit Fehlern, Warnungen und Info; der Hintergrund-Decoder erst ab DEBUG.",
         saved_title = "Gespeichert",
         saved_message = "Entwickler-Einstellungen gespeichert",
         save_error_title = "Fehler",
