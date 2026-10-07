@@ -8,7 +8,7 @@ perfectly on the radio -- in English, in every locale. The same is true of a tra
 call whose key is assembled at runtime: the precompiler cannot follow it, so it rewrites
 nothing and the English fallback ships everywhere.
 
-Two classes, and they are treated differently on purpose.
+Three classes, and they are treated differently on purpose.
 
   assembled key   A call to `t`, `tr` or `i18n.t` whose key is built rather than written:
                   `t("app.onconnect." .. name)`, `tr(prefix .. key)`,
@@ -20,7 +20,17 @@ Two classes, and they are treated differently on purpose.
                   or one of the other text fields of a table, or the label argument of a
                   `Controls.append*` helper -- that never reaches the translator.
 
-Both are REPORTED rather than refused, and each is held at a baseline below: the check
+  not rewritten   A call with a complete literal key that the precompiler leaves as a
+                  call: `pageText`, `t`, or a page-local wrapper declared as
+                  `function name(i18n, key, ...)`, still standing after
+                  `.vscode/scripts/precompile_i18n.py` has run over a copy of the tree. The
+                  key is right and the translation may exist, but on a packaged card there
+                  is no bundle to look it up in, so the pilot reads the English fallback --
+                  or nothing, where the call passes none. This class is measured by running
+                  the precompiler itself, so it cannot drift from what the precompiler
+                  actually rewrites.
+
+All three are REPORTED rather than refused, and each is held at a baseline below: the check
 fails when a number grows, not because it is not zero. A check that started red on the
 tree it was written for would only teach everybody to ignore it.
 
@@ -46,9 +56,12 @@ a decision that a string is a name; a word that merely appears often is not one.
 
 import argparse
 import collections
+import importlib.util
 import os
 import re
 import sys
+import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -72,6 +85,23 @@ ALLOWLIST_PATH = os.path.join("bin", "i18n", "allowed_untranslated.txt")
 #: keep true.
 BASELINE_UNTRANSLATED = 532
 BASELINE_ASSEMBLED = 1
+
+#: Measured on 0.1.7 when the class was added: the page titles that pass a variable
+#: fallback, `pageText(i18n, "title", displayTitle)`, which the precompiler's pattern does
+#: not read as a fallback and therefore leaves alone.
+BASELINE_NOT_REWRITTEN = 16
+
+PRECOMPILER_PATH = os.path.join(".vscode", "scripts", "precompile_i18n.py")
+
+#: The two call names the precompiler's page-local pattern rewrites. A call to either that
+#: survives it lost its marker.
+REWRITTEN_NAMES = ("pageText", "t")
+
+#: A page-local wrapper takes the same `(i18n, key, ...)` arguments, so a literal key at its
+#: call site reads like a translated string -- and the precompiler, which knows names rather
+#: than signatures, leaves it as a call. Read from the tree, so a new wrapper is seen.
+WRAPPER_DEF_RE = re.compile(
+    r"\bfunction\s+(?:[A-Za-z_]\w*[.:])?([A-Za-z_]\w*)\s*\(\s*i18n\s*,\s*key\b")
 
 #: The table fields that carry text a pilot reads. `label` and `title` are most of it;
 #: `message` is a dialog body; the rest are rarer and cost nothing to look at.
@@ -101,7 +131,8 @@ KEY_CALLS = (
 #: A first argument that is a bare name is a wrapper's own parameter -- `local function
 #: tr(key, fallback)`, `if t then return t(obj, key, fallback) end`, `i18n.t(fullKey)`.
 #: The precompiler rewrites such a wrapper's CALL SITES, so its body never runs in a
-#: packaged build and the parameter is not a lost key. Every non-literal key in these
+#: packaged build and the parameter is not a lost key -- where it does not, the call site
+#: is counted under "not rewritten" below. Every non-literal key in these
 #: shapes in the tree today is of that form, which is why the rule refuses only a key
 #: that is assembled.
 BARE_NAME_RE = re.compile(r"^[A-Za-z_]\w*$")
@@ -235,8 +266,9 @@ def read_allowlist(root):
     return allowed
 
 
-def scan_tree(root, allowed):
-    untranslated, assembled, files = [], [], 0
+def read_sources(root):
+    """Every source file the check reads, as {relative path: text}."""
+    sources = {}
     for base, _dirs, names in os.walk(os.path.join(root, SOURCE_ROOT)):
         for name in sorted(names):
             if not name.endswith(".lua"):
@@ -246,15 +278,72 @@ def scan_tree(root, allowed):
             if rel.startswith(EXEMPT_PREFIXES):
                 continue
             with open(full, encoding="utf-8", errors="replace") as handle:
-                text = handle.read()
-            files += 1
-            one, two = scan_text(rel, text, allowed)
-            untranslated += one
-            assembled += two
-    return untranslated, assembled, files
+                sources[rel] = handle.read()
+    return sources
 
 
-def format_report(untranslated, assembled, files, allowed, limit=25):
+def scan_tree(sources, allowed):
+    untranslated, assembled = [], []
+    for rel, text in sources.items():
+        one, two = scan_text(rel, text, allowed)
+        untranslated += one
+        assembled += two
+    return untranslated, assembled, len(sources)
+
+
+def load_precompiler(root):
+    """The tree's own precompiler as a module, or None where the tree has none."""
+    path = os.path.join(root, PRECOMPILER_PATH)
+    if not os.path.isfile(path):
+        return None
+    spec = importlib.util.spec_from_file_location("precompile_i18n", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def literal_key_calls(names):
+    """A call to one of `names` whose SECOND argument is a complete quoted literal.
+
+    The literal has to be followed by `,` or `)`: `t(i18n, "level_" .. name)` is an
+    assembled key, not a literal one, and is no business of this class.
+    """
+    return re.compile(
+        r"(?<![\w.:])(" + "|".join(sorted(re.escape(n) for n in names)) + r")"
+        r"""\s*\(\s*[^,()"']*?\s*,\s*(["'])[^"'\n]*\2\s*[,)]""")
+
+
+def scan_not_rewritten(precompiler, sources):
+    """The literal-key calls that `precompiler` leaves standing in `sources`.
+
+    `sources` maps a relative path to a file's text. Every file is precompiled in a
+    private copy -- the precompiler rewrites in place -- and the wrapper names are read
+    from the originals. Each hit is (path, line number, source line).
+    """
+    names = set(REWRITTEN_NAMES)
+    for text in sources.values():
+        names.update(WRAPPER_DEF_RE.findall(text))
+    pattern = literal_key_calls(names)
+
+    hits = []
+    with tempfile.TemporaryDirectory() as staging:
+        for rel, text in sources.items():
+            path = os.path.join(staging, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+            # process_file takes a Path: it reads `.name` for its per-file rules.
+            precompiler.process_file(Path(path))
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                after = handle.read()
+            lines = after.split("\n")
+            for match in pattern.finditer(after):
+                number = after.count("\n", 0, match.start()) + 1
+                hits.append((rel, number, lines[number - 1].strip()))
+    return hits
+
+
+def format_report(untranslated, assembled, files, allowed, limit=25, not_rewritten=()):
     lines = []
     lines.append("%d source file(s) read, %d allow-list entry/entries applied"
                  % (files, len(allowed)))
@@ -280,6 +369,13 @@ def format_report(untranslated, assembled, files, allowed, limit=25):
             first = where[0] + (" and %d more file(s)" % (len(where) - 1)
                                 if len(where) > 1 else "")
             lines.append("  %5d  %-34s %s" % (count, '"%s"' % literal[:32], first))
+    lines.append("")
+
+    lines.append("Literal-key calls the precompiler leaves as calls: %d (baseline %d)"
+                 % (len(not_rewritten), BASELINE_NOT_REWRITTEN))
+    for path, number, source in not_rewritten:
+        lines.append("  %s:%d" % (path, number))
+        lines.append("      %s" % source[:110])
     return "\n".join(lines)
 
 
@@ -336,9 +432,39 @@ SELF_TEST = (
 )
 
 
+#: The control for "not rewritten". It runs through the precompiler, so it is a page with a
+#: prefix, and the wrapper is declared in it the way the tree declares one. Lines `c` and
+#: `d` are what the class exists for; the other three must stay silent.
+NOT_REWRITTEN_FIXTURE = """\
+local t = Common.pageT("fixture_page")
+local function pageText(i18n, key, fallback) return t(i18n, key, fallback) end
+local function helpText(i18n, key) return pageText(i18n, key, nil) end
+local a = pageText(i18n, "plain_key", "Plain")
+local b = pageText(ctx and ctx.i18n, "guarded_key", "Guarded")
+local c = helpText(i18n, "help_key")
+local d = pageText(i18n, "title", displayTitle)
+local e = t(i18n, "level_" .. name, "Level")
+"""
+NOT_REWRITTEN_EXPECTED = ["local c", "local d"]
+
+
+def self_test_not_rewritten():
+    """1 where the class misses a call it exists for, or reports one it must not."""
+    precompiler = load_precompiler(ROOT)
+    if precompiler is None:
+        print("  FAIL  no precompiler at %s -- the class cannot be measured" % PRECOMPILER_PATH)
+        return 1
+    hits = scan_not_rewritten(precompiler, {"fixture/page.lua": NOT_REWRITTEN_FIXTURE})
+    found = [source.split("=")[0].strip() for _p, _n, source in hits]
+    ok = found == NOT_REWRITTEN_EXPECTED
+    print("  %s  expects %s left as calls by the precompiler, got %s"
+          % ("ok  " if ok else "FAIL", NOT_REWRITTEN_EXPECTED, found))
+    return 0 if ok else 1
+
+
 def self_test():
     allowed = read_allowlist(ROOT) or {"BLHeli_S"}
-    failures = 0
+    failures = self_test_not_rewritten()
     for source, want_untranslated, want_assembled, what in SELF_TEST:
         untranslated, assembled = scan_text("self-test.lua", source, allowed)
         ok = (len(untranslated) == want_untranslated
@@ -350,14 +476,14 @@ def self_test():
         if not ok:
             print("        got %d untranslated, %d assembled"
                   % (len(untranslated), len(assembled)))
-    reported = sum(case[1] + case[2] for case in SELF_TEST)
+    reported = sum(case[1] + case[2] for case in SELF_TEST) + len(NOT_REWRITTEN_EXPECTED)
     quiet = sum(1 for case in SELF_TEST if case[1] == 0 and case[2] == 0)
     if failures:
         print("\n%d self-test case(s) failed -- this check proves nothing." % failures)
         return 1
-    print("\n%d case(s): %d hit(s) found across %d of them, and %d cases that must stay\n"
-          "silent did. The check can find something and can keep quiet."
-          % (len(SELF_TEST), reported, len(SELF_TEST) - quiet, quiet))
+    print("\n%d case(s) and one precompiled page: %d hit(s) found, and %d cases that must\n"
+          "stay silent did. The check can find something and can keep quiet."
+          % (len(SELF_TEST), reported, quiet))
     return 0
 
 
@@ -385,12 +511,19 @@ def main():
         return self_test()
 
     allowed = read_allowlist(args.root)
-    untranslated, assembled, files = scan_tree(args.root, allowed)
+    sources = read_sources(args.root)
+    untranslated, assembled, files = scan_tree(sources, allowed)
     if not files:
         print("no source file found under %s -- wrong --root?" % SOURCE_ROOT)
         return 2
+    precompiler = load_precompiler(args.root)
+    if precompiler is None:
+        print("no precompiler at %s -- wrong --root?" % PRECOMPILER_PATH)
+        return 2
+    not_rewritten = scan_not_rewritten(precompiler, sources)
 
-    report = format_report(untranslated, assembled, files, allowed, args.limit)
+    report = format_report(untranslated, assembled, files, allowed, args.limit,
+                           not_rewritten)
     print(report)
     write_step_summary(report)
     print("")
@@ -415,6 +548,13 @@ def main():
             "  a word, add it to %s."
             % (len(untranslated), BASELINE_UNTRANSLATED,
                len(untranslated) - BASELINE_UNTRANSLATED, ALLOWLIST_PATH))
+    if len(not_rewritten) > BASELINE_NOT_REWRITTEN:
+        problems.append(
+            "%d literal-key call(s) the precompiler leaves as calls, against a baseline of\n"
+            "  %d. A packaged card has no bundle to look the key up in, so the pilot reads\n"
+            "  the English fallback, or nothing. Call pageText(i18n, \"key\", \"Fallback\")\n"
+            "  itself rather than a wrapper of it, with a literal fallback."
+            % (len(not_rewritten), BASELINE_NOT_REWRITTEN))
     if problems:
         print("FAILED")
         for problem in problems:
@@ -422,15 +562,16 @@ def main():
         return 1
 
     won = ((BASELINE_UNTRANSLATED - len(untranslated))
-           + (BASELINE_ASSEMBLED - len(assembled)))
+           + (BASELINE_ASSEMBLED - len(assembled))
+           + (BASELINE_NOT_REWRITTEN - len(not_rewritten)))
     if won > 0:
-        print("OK -- %d fewer than the baselines (%d untranslated, %d assembled). Lower\n"
-              "  BASELINE_UNTRANSLATED to %d and BASELINE_ASSEMBLED to %d in this file, so\n"
-              "  the ground that was won is held."
-              % (won, len(untranslated), len(assembled),
-                 len(untranslated), len(assembled)))
+        print("OK -- %d fewer than the baselines (%d untranslated, %d assembled, %d not\n"
+              "  rewritten). Lower BASELINE_UNTRANSLATED to %d, BASELINE_ASSEMBLED to %d and\n"
+              "  BASELINE_NOT_REWRITTEN to %d in this file, so the ground that was won is held."
+              % (won, len(untranslated), len(assembled), len(not_rewritten),
+                 len(untranslated), len(assembled), len(not_rewritten)))
     else:
-        print("OK -- neither count has grown past its baseline.")
+        print("OK -- no count has grown past its baseline.")
     return 0
 
 
