@@ -64,7 +64,10 @@ def process_file(file_path):
         pattern = r'(?<![\w.])(?:pageText|t)\s*\(\s*(?:(?:[a-zA-Z0-9_.]+\s+and\s+)?(?:[a-zA-Z0-9_.]+\.)?i18n|nil)\s*,\s*["\']([^"\']+)["\'](?:\s*,\s*(["\'])(.*?)\2)?\s*\)'
         def sub_pagetext(m):
             key = m.group(1)
-            if m.group(3) is not None:
+            # A fallback that is itself a marker is not carried inside this one: the resolver
+            # makes a single pass, so it would reach the radio as marker text. Without it a key
+            # that no bundle has stops the build, as the bare marker did.
+            if m.group(3) is not None and not m.group(3).startswith("@i18n("):
                 fallback = encode_fallback(m.group(3))
                 return f'"@i18n({full_prefix}.{key}|{fallback})@"'
             return f'"@i18n({full_prefix}.{key})@"'

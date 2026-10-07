@@ -14,7 +14,8 @@ the page's own key block, and a cross-page Common.t call must resolve against th
 block it names -- without the generic pattern matching the "t(" inside "Common.t("
 first, which used to leave a name followed by a string literal behind. A page-local
 call whose i18n argument is guarded -- pageText(ctx and ctx.i18n, ...) -- must resolve
-like the plain one; it used to be left as written and ship its English fallback.
+like the plain one; it used to be left as written and ship its English fallback. A
+fallback that is itself a marker must not be carried inside the new one.
 """
 
 import argparse
@@ -35,6 +36,7 @@ local b = Common.t(i18n, "setup_ports", "function_esc_sensor")
 local c = pageText(i18n, "own_key", "Own Fallback")
 local d = t(i18n, "plain_key", "Plain Fallback")
 local e = pageText(ctx and ctx.i18n, "guarded_key", "Guarded Fallback")
+local g = pageText(ctx and ctx.i18n, "nested_key", "@i18n(app.pages.setup_wizard.nested_key)@")
 """
 
 EXPECTED = """\
@@ -46,6 +48,7 @@ local b = "@i18n(app.pages.setup_ports.function_esc_sensor)@"
 local c = "@i18n(app.pages.setup_wizard.own_key|Own Fallback)@"
 local d = "@i18n(app.pages.setup_wizard.plain_key|Plain Fallback)@"
 local e = "@i18n(app.pages.setup_wizard.guarded_key|Guarded Fallback)@"
+local g = "@i18n(app.pages.setup_wizard.nested_key)@"
 """
 
 # What the precompiler emitted for the same fixture while the generic pageText/t
@@ -63,6 +66,7 @@ local b = Common."@i18n(app.pages.setup_wizard.setup_ports|function_esc_sensor)@
 local c = "@i18n(app.pages.setup_wizard.own_key|Own Fallback)@"
 local d = "@i18n(app.pages.setup_wizard.plain_key|Plain Fallback)@"
 local e = "@i18n(app.pages.setup_wizard.guarded_key|Guarded Fallback)@"
+local g = "@i18n(app.pages.setup_wizard.nested_key)@"
 """
 
 # What the precompiler emitted for the same fixture while its i18n argument could only
@@ -72,6 +76,13 @@ local e = "@i18n(app.pages.setup_wizard.guarded_key|Guarded Fallback)@"
 UNGUARDED = EXPECTED.replace(
     '"@i18n(app.pages.setup_wizard.guarded_key|Guarded Fallback)@"',
     'pageText(ctx and ctx.i18n, "guarded_key", "Guarded Fallback")')
+
+# A fallback that is itself a marker, carried inside the outer marker: the resolver
+# makes one pass, so a key missing from every bundle would put the inner marker on the
+# radio as text instead of stopping the build. The third red control.
+NESTED = EXPECTED.replace(
+    '"@i18n(app.pages.setup_wizard.nested_key)@"',
+    '"@i18n(app.pages.setup_wizard.nested_key|__AT__i18n__LPAREN__app.pages.setup_wizard.nested_key__RPAREN____AT__)@"')
 
 # A marker that has replaced the call part of a qualified name leaves the name and a
 # string literal side by side, which no Lua parser accepts.
@@ -126,8 +137,13 @@ def self_test():
         print("FAIL: the checks accept a page whose guarded call was not rewritten")
         return 1
 
-    print("self-test ok: %d and %d problem(s) reported for the two earlier outputs, "
-          "none for the expected one" % (len(problems), len(unguarded)))
+    nested = check(NESTED)
+    if NESTED == EXPECTED or not nested:
+        print("FAIL: the checks accept a page that nests a marker inside a marker")
+        return 1
+
+    print("self-test ok: %d, %d and %d problem(s) reported for the three earlier outputs, "
+          "none for the expected one" % (len(problems), len(unguarded), len(nested)))
     return 0
 
 
