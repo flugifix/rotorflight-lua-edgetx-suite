@@ -267,21 +267,60 @@ local function readTelemetryValue(name, now)
   return nil, now
 end
 
--- getValue() answers 0 for a sensor the model still carries but the radio does not send, and 0
--- is a number, so such a sensor would be taken for a reading. getSourceValue() returns nothing
--- for exactly that sensor and its last value otherwise, which tells a dead sensor apart from a
--- live one that happens to read zero. Only asked where a path is adopted, and only about a zero,
--- so neither a settled source nor a reading of its own costs anything. It asks the slot the name
--- is read from, so a Rotorflight row reading 0 behind a silent native row of the same label counts.
+-- Whether the radio is still receiving this sensor -- asked before a path is adopted, whatever
+-- the value. getValue() cannot answer it: it hands back the last value of a sensor that has
+-- stopped arriving, and 0 for one never received since the model was loaded or while the link
+-- is down, and either is a plausible reading. getSourceValue() returns three values: the value
+-- (nothing at all for a sensor never received since the model was loaded), then whether the
+-- sensor is still current, then whether it arrived within the last 320 ms. The second is the
+-- answer. The radio clears it per sensor once that sensor has been silent for 20 seconds -- the
+-- same timeout that raises "Sensor lost" -- and for every sensor once the radio stops counting
+-- the link as streaming, a second after its last frame. The next value that arrives sets it again.
+-- The first value alone only says that something arrived at some point, which stays true across a
+-- dropped link and a stopped sensor alike.
+--
+-- The 20 seconds are the radio's resolution and cannot be shortened from here: a sensor that
+-- stopped less than 20 seconds ago still reads as current. That includes a row a script has
+-- written without anything having arrived -- rf2tlm_sensors.lua's initializeSensors() writes 0
+-- into every row of the list it is handed, which this tree never does (the drain passes no list)
+-- but a background script of RFTool does on a model that carries it -- so such a row is taken for
+-- 20 seconds after it was written and refused after that. The suite's own decoder publishes an
+-- unchanged value again from the next frame that carries it once FORCE_REFRESH_INTERVAL has passed
+-- (tasks/events/telemetry_bg/drain.lua), so a value that simply holds still, in frames that keep
+-- arriving, never reads as stopped.
+--
+-- Only asked where a path is adopted or the first name is re-tried, never on the read of a path
+-- already adopted, so a settled source costs nothing. That also means a sensor which stops after
+-- it was adopted keeps answering its last value until the next Sensors.reset().
+--
+-- A name with a trailing "+" or "-" is the session maximum or minimum the radio keeps for that
+-- sensor. The radio reports the base sensor's state for it, but an extreme stays a valid figure
+-- after the sensor has stopped, so for those only "has it arrived" is asked.
+--
+-- The second result says that the radio HAS the row and it is not current -- it arrived once and
+-- has stopped, or the link is down -- as opposed to a row never received. The search uses it to
+-- keep such a source on the short retry: it is the case that comes back by itself.
+--
+-- A getSourceValue() that returns only the value leaves the second result nil, which is taken as
+-- current, so the test then falls back to "has it arrived since the model was loaded".
+--
+-- It asks the slot the name is read from (slotName above): for a label the model carries twice,
+-- that is the row the radio is receiving, so a silent row of the same label does not decide it. A
+-- row never received there has the slot table looked at again, in case the row the radio receives
+-- was created after the walk.
 local function telemetryValueIsLive(name)
   local getSrcV = _G.getSourceValue
   if type(getSrcV) ~= "function" then return true end
   local readName = name
   if duplicateNames ~= false then readName = slotName(name) end
-  local ok, sourceValue = pcall(getSrcV, readName)
+  local ok, value, current = pcall(getSrcV, readName)
   if not ok then return true end
-  if sourceValue == nil and duplicateNames then rewalkIfTableGrew() end
-  return sourceValue ~= nil
+  if value == nil and duplicateNames then rewalkIfTableGrew() end
+  if value == nil then return false end
+  if current ~= false then return true end
+  local last = string.sub(name, -1)
+  if last == "+" or last == "-" then return true end
+  return false, true
 end
 
 local SIM_SENSOR_PATHS = {
@@ -725,7 +764,7 @@ function Sensors.getValue(source)
       if now - lastProbe >= 3.0 then
         Sensors.probe_times[source] = now
         local primaryVal = readTelemetryValue(primaryPath, now)
-        if type(primaryVal) == "number" and (primaryVal ~= 0 or telemetryValueIsLive(primaryPath)) then
+        if type(primaryVal) == "number" and telemetryValueIsLive(primaryPath) then
           Sensors.active_paths = Sensors.active_paths or {}
           Sensors.active_paths[source] = primaryPath
           if debugWanted() then debugLog("telemetry-promote:" .. source, "promoted " .. primaryPath .. " = " .. tostring(primaryVal)) end
@@ -784,41 +823,62 @@ function Sensors.getValue(source)
   -- that every path which adopts a source and returns clears the back-off on its way out.
   searchWaits[source] = nil
 
+  -- Whether a candidate was refused only because the radio is not receiving it right now.
+  local stale = false
+  local live, old
+
   local paths = Sensors.search_paths[source]
   if paths then
     for i = 1, #paths do
       local val = readTelemetryValue(paths[i], now)
-      if type(val) == "number" and (val ~= 0 or telemetryValueIsLive(paths[i])) then
-        Sensors.active_paths = Sensors.active_paths or {}
-        Sensors.active_paths[source] = paths[i]
-        if debugWanted() then debugLog("telemetry-hit:" .. source, "hit " .. paths[i] .. " = " .. tostring(val)) end
-        return val
+      if type(val) == "number" then
+        live, old = telemetryValueIsLive(paths[i])
+        if live then
+          Sensors.active_paths = Sensors.active_paths or {}
+          Sensors.active_paths[source] = paths[i]
+          if debugWanted() then debugLog("telemetry-hit:" .. source, "hit " .. paths[i] .. " = " .. tostring(val)) end
+          return val
+        end
+        stale = stale or old == true
       end
     end
   end
 
   if resolved then
     -- The alias is the first search path for most sources, so without this test the loop above
-    -- rejects a dead sensor and this retries the same name and adopts it at 0 for the session.
+    -- rejects a dead sensor and this retries the same name and adopts it for the session.
     local value = readTelemetryValue(resolved, now)
-    if type(value) == "number" and (value ~= 0 or telemetryValueIsLive(resolved)) then
-      Sensors.active_paths = Sensors.active_paths or {}
-      Sensors.active_paths[source] = resolved
-      if debugWanted() then debugLog("telemetry-hit:" .. source, "telemetry hit " .. resolved .. " = " .. tostring(value)) end
-      return value
+    if type(value) == "number" then
+      live, old = telemetryValueIsLive(resolved)
+      if live then
+        Sensors.active_paths = Sensors.active_paths or {}
+        Sensors.active_paths[source] = resolved
+        if debugWanted() then debugLog("telemetry-hit:" .. source, "telemetry hit " .. resolved .. " = " .. tostring(value)) end
+        return value
+      end
+      stale = stale or old == true
     end
   end
 
   local direct = readTelemetryValue(source, now)
-  if type(direct) == "number" and (direct ~= 0 or telemetryValueIsLive(source)) then
-    Sensors.active_paths = Sensors.active_paths or {}
-    Sensors.active_paths[source] = source
-    if debugWanted() then debugLog("telemetry-direct-hit:" .. source, "telemetry direct hit " .. source .. " = " .. tostring(direct)) end
-    return direct
+  if type(direct) == "number" then
+    live, old = telemetryValueIsLive(source)
+    if live then
+      Sensors.active_paths = Sensors.active_paths or {}
+      Sensors.active_paths[source] = source
+      if debugWanted() then debugLog("telemetry-direct-hit:" .. source, "telemetry direct hit " .. source .. " = " .. tostring(direct)) end
+      return direct
+    end
+    stale = stale or old == true
   end
 
+  -- A source whose only rows are ones the radio is not receiving right now -- the link is down,
+  -- or the flight controller stopped sending -- stays on the first wait instead of doubling. It
+  -- is the case that comes back by itself, and the configuration tool forgets its choices only on
+  -- the edge where its connection stops being ready, so a doubled wait would hold the link
+  -- quality it waits for off for up to SEARCH_MISS_MAX_SECONDS after the link has returned.
   Sensors.search_misses[source] = now
-  if previousWait == nil then
+  if previousWait == nil or stale then
     searchWaits[source] = SEARCH_MISS_SECONDS
   else
     local wait = previousWait * 2

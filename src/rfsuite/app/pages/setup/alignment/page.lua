@@ -34,17 +34,20 @@ local BASE_VIEW_YAW_R = rad(90)
 local CAMERA_DIST = 7.0
 local CAMERA_NEAR_EPS = 0.25
 
+-- Each entry is a key and fallback pair in the form the packager translates in place, so an
+-- installed suite shows the choices in the pilot's language. The fallback is the English text
+-- rather than the key, because it is what is shown wherever the lookup finds nothing.
 local magAlignChoices = {
-  {"mag_default", 1},
-  {"mag_cw_0", 2},
-  {"mag_cw_90", 3},
-  {"mag_cw_180", 4},
-  {"mag_cw_270", 5},
-  {"mag_cw_0_flip", 6},
-  {"mag_cw_90_flip", 7},
-  {"mag_cw_180_flip", 8},
-  {"mag_cw_270_flip", 9},
-  {"mag_custom", 10}
+  { labelKey = "mag_default", labelFallback = "Default", value = 1 },
+  { labelKey = "mag_cw_0", labelFallback = "CW 0 deg", value = 2 },
+  { labelKey = "mag_cw_90", labelFallback = "CW 90 deg", value = 3 },
+  { labelKey = "mag_cw_180", labelFallback = "CW 180 deg", value = 4 },
+  { labelKey = "mag_cw_270", labelFallback = "CW 270 deg", value = 5 },
+  { labelKey = "mag_cw_0_flip", labelFallback = "CW 0 deg flip", value = 6 },
+  { labelKey = "mag_cw_90_flip", labelFallback = "CW 90 deg flip", value = 7 },
+  { labelKey = "mag_cw_180_flip", labelFallback = "CW 180 deg flip", value = 8 },
+  { labelKey = "mag_cw_270_flip", labelFallback = "CW 270 deg flip", value = 9 },
+  { labelKey = "mag_custom", labelFallback = "Custom", value = 10 }
 }
 
 local function newRuntime()
@@ -730,7 +733,7 @@ function M.build(ctx)
 
   local magAlignChoicesValues = {}
   for i, val in ipairs(magAlignChoices) do
-    magAlignChoicesValues[i] = pageText(i18n, val[1], val[1])
+    magAlignChoicesValues[i] = pageText(i18n, val.labelKey, val.labelFallback)
   end
 
   children[#children + 1] = {

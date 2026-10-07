@@ -62,6 +62,14 @@ most rows: its first columns are link statistics, and none of them is taken for 
 A log without an `ARM` column gives the headspeed rows nothing to tell armed from disarmed by, so
 they then rest on throttle and current alone.
 
+A model can hold two sensors of the same name -- `Curr` and `Capa` from the native CRSF battery
+frame beside the same names from the flight controller's custom telemetry, for example -- and
+its log then has two columns of that name. EdgeTX writes the one it is not receiving as 0. The
+summary reads the later of the two columns, and the graph's offered sets plot the same one; the
+column chooser lists both. Where the figures read 0 although the flight drew current, the sensor
+the radio receives is the earlier column: delete the sensors the model no longer receives on its
+telemetry page, and the next log has one column of each name.
+
 ## The graph
 
 *Graph* opens a plot of the log over time. Choose up to four columns, or one of the offered sets
