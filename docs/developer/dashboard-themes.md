@@ -207,9 +207,15 @@ any of this: `armed` looks for the theme's `armed` module and then for its `pref
 loader is always one of the three phases every theme declares.
 
 A module that loads but raises while the widget builds its scene — a free-form `build` that
-throws is the plain case — has nothing to fall back to. The widget tries that build three
+throws is the plain case — has nothing to fall back to. Two more cases count as a raise: a
+free-form `build` that returns anything but a node list (a missing `return` is enough), and a
+build the radio stops at its instruction limit. The widget tries that build three
 times in a row, then stops trying and shows *Dashboard error* in its place; the error is in
-the log, and the first of the three goes to the card as a fault when *Log to card* is on. A
+the log, and the first of the three goes to the card as a fault when *Log to card* is on (a
+stop at the instruction limit goes to the card every time, as the widget's own `widget.refresh`
+fault, and the widget waits 1.2 s before the next try). A
+build that is stopped at the limit only sometimes is drawn again as soon as one try completes,
+which starts the count over; one that is stopped three times in a row stays *Dashboard error*. A
 theme reload starts over: choosing a theme, any change to the preferences, the flight
 controller reconnecting, or a flight phase that brings up another of the theme's modules. Until
 then the error stays on screen, even if the cause has gone away by itself: a build that raises
