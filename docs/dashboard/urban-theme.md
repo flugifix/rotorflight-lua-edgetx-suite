@@ -63,7 +63,8 @@ allows. Six places on the screen open a page over it, and a seventh opens the su
   *MAIN MENU* does; so does SYS, left at its default. The tool opens only while the model is
   disarmed: while it is armed the button is drawn grey and a press does nothing.
 - **The profile row** of the left panel (PID, rate and battery profile) opens *Profile & Tuning*:
-  the in-flight tuning surface, or a note that it is not available now, and the model's battery
+  the in-flight tuning surface, or a note that it is not available now, and, only while the
+  model is disarmed, the model's battery
   profiles, the one in force in green. Pressing a profile makes it the one in force and the page
   stays open, showing whether the change is being sent, was done or failed.
 - **The link bars** in the top bar open the *ELRS* link page: beside the title the air rate and
