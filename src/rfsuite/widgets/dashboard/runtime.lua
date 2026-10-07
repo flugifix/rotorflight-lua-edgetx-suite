@@ -699,6 +699,16 @@ end
 -- that is what replaces the code that raised.
 local JOB_FAULT_LIMIT = 3
 
+-- How long a held step control may keep back a rebuild of the surface it is on (the hold gate in
+-- the state pass), counted from the start of the hold. The rebuild waits because it would delete
+-- the button under the finger; but a release EdgeTX never reports would then keep it waiting for
+-- as long as the surface is up. Past this the rebuild runs, and lets go of the hold first, as
+-- every rebuild that is not held back does. The flight controller steps a held value every
+-- 200 ms after the first 100 ms (fc/rc_adjustments.c), so five seconds is 25 steps: at the
+-- largest step a row can be given, 10, that is 250 units -- the whole range of most parameters,
+-- which run 0-250 or 0-255. A hold that long has crossed the range or lost its release.
+local HOLD_DEFER_SECONDS = 5
+
 local function jobCapped(self, kind)
   return (self._jobFaults[kind] or 0) >= JOB_FAULT_LIMIT
 end
@@ -3849,7 +3859,7 @@ function Runtime.new(zone, options)
     -- so a hole measured while the tuning surface was up can be told from one on the dashboard.
     self._passWork = tuningMode or "state"
     local nextRenderKey = nil
-    local holding = false
+    local holding, heldFor = false, 0
     if tuningMode then
       -- The same 2 Hz throttle the scene key is under. The values and the armed row are reactive
       -- closures and follow the state per frame; everything the key covers is layout, and
@@ -3870,6 +3880,14 @@ function Runtime.new(zone, options)
       holding = (type(snapshot) == "table") and snapshot.holding == true
       if not self._lastUIRefresh then self._lastUIRefresh = 0 end
       local now = nowSeconds()
+      -- When the hold began, for the cap on the hold gate below (HOLD_DEFER_SECONDS).
+      if not holding then
+        self._holdSince = nil
+      elseif self._holdSince == nil then
+        self._holdSince = now
+      else
+        heldFor = now - self._holdSince
+      end
       -- A tap on a bank chip or a row asks for the new selection to be on screen at once rather
       -- than up to half a second later; it sets this flag instead of dropping the key itself, so
       -- that it goes through the hold gate like everything else.
@@ -3977,8 +3995,10 @@ function Runtime.new(zone, options)
     -- so the held step ended with the finger still down. While a control is held and the tree on
     -- screen is the one this pass would build -- same job, same key -- that rebuild waits: `built`
     -- stays false and the first pass after the release builds it. A build of another surface --
-    -- the zone's, once fullscreen has been left -- is a different job and is not held back.
-    if holding and jobKind == self._treeKind and nextRenderKey == self._treeKey then
+    -- the zone's, once fullscreen has been left -- is a different job and is not held back. A hold
+    -- older than HOLD_DEFER_SECONDS holds nothing back: the rebuild runs and lets go of it.
+    if holding and heldFor < HOLD_DEFER_SECONDS
+        and jobKind == self._treeKind and nextRenderKey == self._treeKey then
       jobKind = nil
     end
 

@@ -108,7 +108,9 @@ One parameter at a time, not a grid:
   controller repeats at its own rate. There is never a value that follows the finger. A hold is
   not cut short when the dashboard reloads its theme underneath the surface -- the change into
   flight, a changed setting, a pack with a different cell count: the surface is drawn again once
-  the control has been let go.
+  the control has been let go. A hold longer than five seconds -- 25 steps -- holds nothing back:
+  the surface is drawn again then, which ends the hold, so a release the radio never reports
+  does not keep that redraw waiting.
 - **The trims** do the same thing without looking down, in whichever of the two layouts the
   radio is set to. A trim press that steps the selected parameter comes and goes without
   rebuilding the screen; a trim that selects another row or bank redraws it for the new
