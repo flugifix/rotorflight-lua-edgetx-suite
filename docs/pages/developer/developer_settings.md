@@ -22,7 +22,7 @@ Not listed at all until *Developer Tools* is switched on under *System* → *Set
 
 | Setting | What it does |
 | --- | --- |
-| Debug Level | How much is logged: *OFF*, *ERROR*, *WARN*, *INFO*, *DEBUG* or *TRACE*, default *OFF*. Errors, warnings and most info lines are logged at every level, *OFF* included: they go to the in-memory list under *Session Logs* and, with *Log Session To Card* on, to the card. The level decides what is added on top: *DEBUG* adds the steps in between, *TRACE* also the raw bytes of every request to and reply from the flight controller. A few info lines, and everything printed to the radio's debug output or sent to the serial port, appear only once the level is raised to them. |
+| Debug Level | How much is logged: *OFF*, *ERROR*, *WARN*, *INFO*, *DEBUG* or *TRACE*, default *OFF*. Errors, warnings and most info lines are logged at every level, *OFF* included: they go to the in-memory list under *Session Logs* and, with *Log Session To Card* on, to the card. The level decides what is added on top: *DEBUG* adds the steps in between, *TRACE* also the raw bytes of every request to and reply from the flight controller. A few info lines, and the log lines printed to the radio's debug output or sent to the serial port, appear only once the level is raised to them. |
 | Continuous Memory Log | The configuration tool logs its Lua memory once a second as an info line: what it holds, the peak, and what is left where the radio reports it. Off by default. |
 | Show Header Memory | Shows the configuration tool's Lua memory, `LUA: <n>KB`, in the page header. Off by default. |
 | Enable Serial Debug | Also sends every log line the debug level lets through to the radio's serial port. At *OFF* that is none. Off by default. |

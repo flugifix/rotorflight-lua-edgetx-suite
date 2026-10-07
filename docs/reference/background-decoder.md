@@ -59,7 +59,9 @@ and nothing needs to be configured.
   last cycle cost. A model without this script has nothing that can report that.
 - **It writes a log of its own** when *Log Session To Card* is on and the debug level is *DEBUG*
   or above, under the `function_` prefix, beside the tool's and the widgets'. Unlike theirs, it
-  needs both switches: *Log Session To Card* alone writes no `function_` file. Because this script is paused and resumed rather than cut
-  off, it keeps writing where a widget that overran its instruction budget cannot, and its
+  needs both switches to start: *Log Session To Card* alone writes no `function_` file. Once it
+  has started, lowering the level again does not stop it for the rest of that session, although
+  its step file is then no longer rewritten. Because this script is paused and resumed rather
+  than cut off, it keeps writing where a widget that overran its instruction budget cannot, and its
   one-line step file says when it last ran. See
   [collecting logs](../troubleshooting/collecting-logs.md).
