@@ -2565,6 +2565,7 @@ return {
         urban_key_link = "Theme: ELRS link",
         urban_key_telemetry = "Theme: Telemetry",
         urban_key_battery = "Theme: Battery",
+        urban_key_status = "Theme: Status",
         urban_key_suite_tool = "Suite: Main menu",
         urban_key_flight_log = "Suite: Flight log",
         urban_tap_frames = "Frames on tap areas",
@@ -3071,6 +3072,12 @@ return {
       urban_failed = "Failed",
       urban_telemetry = "Telemetry",
       urban_no_tiles = "No tiles chosen",
+      -- The Urban theme's status page: its title, the line under the arm state, and its event history.
+      urban_status = "Status",
+      urban_ready_to_arm = "Ready to arm",
+      urban_event_log = "Event log",
+      urban_connected = "Connected",
+      urban_no_events = "No events yet",
       -- Readings straight off the radio's telemetry sensors, offered by the Urban theme's rows and tiles.
       urban_bec_temp = "BEC Temp",
       urban_tail_speed = "Tail Speed",

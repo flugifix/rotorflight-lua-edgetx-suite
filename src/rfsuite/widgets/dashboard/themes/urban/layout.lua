@@ -289,6 +289,7 @@ L.KEY_ACTIONS = {
   { id = "link",       action = "openView:urban_link" },
   { id = "telemetry",  action = "openView:urban_telemetry" },
   { id = "battery",    action = "openView:urban_battery" },
+  { id = "status",     action = "openView:urban_status" },
   { id = "suite_tool", action = "openTool" },
   { id = "flight_log", action = "openTool:tools_flight_log_page" },
   { id = "exit",       action = "exitFullscreen" },
@@ -683,6 +684,15 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
   local thrFont = Common.selectFont(hGov - fontH, thrW, "100%")
   local thrH = Common.measure(thrFont, "100%")
   local govPad = math.max(0, math.floor((hGov - fontH - math.max(govH, thrH)) / 2))
+  -- In full screen, on a host with theme views, the governor row and the status line under it are
+  -- the tap that opens the status view (statusview.lua), which says more about both. Drawn before
+  -- their labels, which lie over it; the separator between the two is then a line, which takes no
+  -- press, and the area stops a pixel short of the separator under it.
+  local statusTap = hasViews(ctx)
+  if statusTap then
+    local action = ctx.action
+    tapArea(nodes, x + pad, y + yGov, innerW, hGov + hStat - 1, function() action("openView:urban_status") end)
+  end
   Common.stacked(nodes, x + pad, y + yGov, govW, govPad, T.governor,
     Common.governorText(state), font, fontH, govFont, govH)
   Common.stacked(nodes, x + pad + govW, y + yGov, thrW, govPad, T.throttle,
@@ -744,7 +754,12 @@ function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
 
   Common.hline(nodes, x + pad, y + yMeta - 1, innerW)
   Common.hline(nodes, x + pad, y + yGov - 1, innerW)
-  Common.hline(nodes, x + pad, y + yStat - 1, innerW)
+  if statusTap then
+    nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
+      pts = { { x + pad, y + yStat - 1 }, { x + pad + innerW, y + yStat - 1 } }, color = C.line, thickness = 1 }
+  else
+    Common.hline(nodes, x + pad, y + yStat - 1, innerW)
+  end
   Common.hline(nodes, x + pad, y + yGrid - 1, innerW)
 end
 

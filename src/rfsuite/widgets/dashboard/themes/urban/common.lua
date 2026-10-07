@@ -157,6 +157,18 @@ M.T = {
   view_tools = "@i18n(widgets.dashboard.urban_profile_tuning)@",
   view_telemetry = "@i18n(widgets.dashboard.urban_telemetry)@",
   no_tiles = "@i18n(widgets.dashboard.urban_no_tiles)@",
+  -- The status view (statusview.lua): its title, the arm word in capitals, what the line under it
+  -- says while nothing blocks arming, and its event history -- the caption, the words for a
+  -- connection made, and what the list says while it is empty. The speed controller's column
+  -- carries the short name every language uses, as `tpwr` and `skp` do.
+  view_status = "@i18n(widgets.dashboard.urban_status)@",
+  armed_caps = "@i18n(widgets.dashboard.urban_armed):upper()@",
+  disarmed_caps = "@i18n(widgets.dashboard.urban_disarmed):upper()@",
+  ready_to_arm = "@i18n(widgets.dashboard.urban_ready_to_arm)@",
+  event_log = "@i18n(widgets.dashboard.urban_event_log)@",
+  connected = "@i18n(widgets.dashboard.urban_connected)@",
+  no_events = "@i18n(widgets.dashboard.urban_no_events)@",
+  esc = "ESC",
   blackbox = "@i18n(app.modules.blackbox.name)@",
   active = "@i18n(widgets.dashboard.urban_active)@",
   unavailable = "@i18n(widgets.dashboard.urban_not_available)@",
