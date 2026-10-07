@@ -204,9 +204,9 @@ local ALERT_REPEAT_SECONDS = 10
 -- How long the transmitter buzzes for an alert that asks for it, and the pause after it. EdgeTX
 -- takes playHaptic(duration, pause [, flags]) (radio/src/lua/api_general.cpp): there is no
 -- strength argument, and hapticQueue::play (radio/src/haptic.cpp) reads the low four bits of
--- flags as a repeat count, so the alert passes no flags and buzzes once. The duration is scaled
--- by the radio's own haptic length setting (getHapticLength, radio/src/haptic.h); 15 and 3 are
--- the values EdgeTX's own alarm vibration uses.
+-- flags as a repeat count, so the alert passes no flags and buzzes once. The radio's own haptic
+-- length setting lengthens the duration (getHapticLength, radio/src/haptic.h); 15 and 3 are the
+-- values EdgeTX's own alarm vibration uses.
 local ALERT_HAPTIC_DURATION = 15
 local ALERT_HAPTIC_PAUSE = 3
 

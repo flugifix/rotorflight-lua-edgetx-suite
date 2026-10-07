@@ -157,7 +157,7 @@ the page that switches an alert on is the page that says how it behaves.
   cleared. *Until cleared* is what every alert did before this setting existed, and is the
   default everywhere except SmartFuel, which kept the single announcement it already had.
 - **Haptic** is the transmitter's vibration alongside the voice: one short pulse per
-  announcement, the same pulse EdgeTX uses for its own alarms. It defaults to on for the
+  announcement. It defaults to on for the
   three categories whose alerts already buzzed with no way of switching it off, and to off for
   SmartFuel, which already had this setting and keeps its value.
 - **Two alerts have their own rule inside the category, and a setting does not overrule it.**
