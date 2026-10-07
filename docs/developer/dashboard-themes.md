@@ -814,7 +814,9 @@ the quick menu's sends. A theme adds no entry of its own, and changes none: `ctx
 the entry up again by its `id` among the menu's records and the option by its `id` among that
 record's options as they stand now (NO BATTERY by `none`, the picker's close by being the
 entry's `close`), and runs those — never a `press` out of the table it was handed. An entry or
-an option the menu does not have is refused. `ctx.visible` and `ctx.info` answer for the menu's
+an option the menu does not have is refused, and so is an entry the menu does not offer now
+(`ctx.visible` would answer false for it) -- except the picks and the close of an entry that
+names a `view`, which the battery picker runs whatever the state. `ctx.visible` and `ctx.info` answer for the menu's
 record of that id as well, and a list handed to `ctx.menu` draws the menu's records of the ids
 it names, in its order, and nothing else.
 
