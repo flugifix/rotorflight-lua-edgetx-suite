@@ -22,7 +22,8 @@ Three classes, and they are treated differently on purpose.
 
   not rewritten   A call with a complete literal key that the precompiler leaves as a
                   call: `pageText`, `t`, or a page-local wrapper declared as
-                  `function name(i18n, key, ...)`, still standing after
+                  `function name(i18n, key, ...)` with the key second, or `t` and `tr`
+                  with the key first, still standing after
                   `.vscode/scripts/precompile_i18n.py` has run over a copy of the tree. The
                   key is right and the translation may exist, but on a packaged card there
                   is no bundle to look it up in, so the pilot reads the English fallback --
@@ -86,10 +87,11 @@ ALLOWLIST_PATH = os.path.join("bin", "i18n", "allowed_untranslated.txt")
 BASELINE_UNTRANSLATED = 532
 BASELINE_ASSEMBLED = 1
 
-#: Measured on 0.1.7 when the class was added: the page titles that pass a variable
+#: Measured on 0.1.7 when the class was added: 16 page titles that pass a variable
 #: fallback, `pageText(i18n, "title", displayTitle)`, which the precompiler's pattern does
-#: not read as a fallback and therefore leaves alone.
-BASELINE_NOT_REWRITTEN = 16
+#: not read as a fallback, and 34 `tr("key", "Fallback")` calls on the developer API tester
+#: page, whose keys carry no dot and so match no full-key form.
+BASELINE_NOT_REWRITTEN = 50
 
 PRECOMPILER_PATH = os.path.join(".vscode", "scripts", "precompile_i18n.py")
 
@@ -303,14 +305,18 @@ def load_precompiler(root):
 
 
 def literal_key_calls(names):
-    """A call to one of `names` whose SECOND argument is a complete quoted literal.
+    """The two places a literal key stands in a call the precompiler is meant to rewrite.
 
-    The literal has to be followed by `,` or `)`: `t(i18n, "level_" .. name)` is an
-    assembled key, not a literal one, and is no business of this class.
+    Second argument: `pageText`, `t` or a `(i18n, key, ...)` wrapper. First argument: `t`
+    and `tr`, the full-key forms. Either literal has to be followed by `,` or `)`:
+    `t(i18n, "level_" .. name)` is an assembled key, not a literal one, and is no business
+    of this class.
     """
-    return re.compile(
+    second = re.compile(
         r"(?<![\w.:])(" + "|".join(sorted(re.escape(n) for n in names)) + r")"
         r"""\s*\(\s*[^,()"']*?\s*,\s*(["'])[^"'\n]*\2\s*[,)]""")
+    first = re.compile(r"""(?<![\w.:])(t|tr)\s*\(\s*(["'])[^"'\n]*\2\s*[,)]""")
+    return second, first
 
 
 def scan_not_rewritten(precompiler, sources):
@@ -318,12 +324,13 @@ def scan_not_rewritten(precompiler, sources):
 
     `sources` maps a relative path to a file's text. Every file is precompiled in a
     private copy -- the precompiler rewrites in place -- and the wrapper names are read
-    from the originals. Each hit is (path, line number, source line).
+    from the originals. Comments are cut before matching, line by line, so a call quoted
+    in a comment is not counted. Each hit is (path, line number, source line).
     """
     names = set(REWRITTEN_NAMES)
     for text in sources.values():
         names.update(WRAPPER_DEF_RE.findall(text))
-    pattern = literal_key_calls(names)
+    patterns = literal_key_calls(names)
 
     hits = []
     with tempfile.TemporaryDirectory() as staging:
@@ -337,8 +344,10 @@ def scan_not_rewritten(precompiler, sources):
             with open(path, encoding="utf-8", errors="replace") as handle:
                 after = handle.read()
             lines = after.split("\n")
-            for match in pattern.finditer(after):
-                number = after.count("\n", 0, match.start()) + 1
+            code = "\n".join(strip_comment(line) for line in lines)
+            starts = sorted({match.start() for pattern in patterns for match in pattern.finditer(code)})
+            for start in starts:
+                number = code.count("\n", 0, start) + 1
                 hits.append((rel, number, lines[number - 1].strip()))
     return hits
 
@@ -433,19 +442,24 @@ SELF_TEST = (
 
 
 #: The control for "not rewritten". It runs through the precompiler, so it is a page with a
-#: prefix, and the wrapper is declared in it the way the tree declares one. Lines `c` and
-#: `d` are what the class exists for; the other three must stay silent.
+#: prefix, and the wrappers are declared in it the way the tree declares them. Lines `c`,
+#: `d` and `f` are what the class exists for; the other four, and the comment, must stay
+#: silent.
 NOT_REWRITTEN_FIXTURE = """\
 local t = Common.pageT("fixture_page")
 local function pageText(i18n, key, fallback) return t(i18n, key, fallback) end
 local function helpText(i18n, key) return pageText(i18n, key, nil) end
+local function tr(key, fallback) return t(i18n, key, fallback) end
 local a = pageText(i18n, "plain_key", "Plain")
 local b = pageText(ctx and ctx.i18n, "guarded_key", "Guarded")
 local c = helpText(i18n, "help_key")
 local d = pageText(i18n, "title", displayTitle)
 local e = t(i18n, "level_" .. name, "Level")
+local f = tr("dotless_key", "Dotless")
+local g = tr("app.full.key", "Full")
+-- helpText(i18n, "in_a_comment")
 """
-NOT_REWRITTEN_EXPECTED = ["local c", "local d"]
+NOT_REWRITTEN_EXPECTED = ["local c", "local d", "local f"]
 
 
 def self_test_not_rewritten():
