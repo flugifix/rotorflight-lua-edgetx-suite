@@ -86,7 +86,13 @@ local function is_telemetry_lost_active(self, now)
   return true
 end
 
+-- Set by the first refresh_volume_state in this Lua state. The dashboard and the tool reach it on
+-- their audio passes; the background function script (src/functions/rfsbg.lua) and the service
+-- widget run the adjustment teller without them and never do.
+local volume_driven = false
+
 local function refresh_volume_state(self, isCritical)
+  volume_driven = true
   local prefs = self and self.preferences and self.preferences.audio
   if not prefs and type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences then
     prefs = _G.rfsuite.preferences.audio
@@ -124,6 +130,23 @@ local function refresh_volume_state(self, isCritical)
     if pcall(model.setGlobalVariable, master_gvar_idx, 0, raw) then
       master_gvar_last = raw
     end
+  end
+end
+
+-- The level in a Lua state where nothing calls refresh_volume_state: layer A only, since the
+-- master-volume global variable belongs to the widget and the tool. Read on every call rather
+-- than kept, because the background function script replaces its preferences table whenever it
+-- reloads the file. `level_connected_only` asks the radio whether the RF link is up, because the
+-- background function script keeps no connection state of its own.
+local function resolve_undriven_level()
+  if volume_driven then return end
+  local root = _G.rfsuite
+  local prefs = root and root.preferences and root.preferences.audio
+  local v = prefs and tonumber(prefs.level) or 0
+  if v > 0 and not (prefs.level_connected_only and not rf_link_up()) then
+    audio_volume = v
+  else
+    audio_volume = nil
   end
 end
 
@@ -1304,6 +1327,7 @@ end
 -- Returns true when a file was found and handed to playFile.
 function Audio.playEventFile(relativePath, opts)
   if type(relativePath) ~= "string" or relativePath == "" then return false end
+  resolve_undriven_level()
   return playResolvedEventFile(relativePath, opts) == true
 end
 
@@ -1314,6 +1338,7 @@ end
 --- Returns true when the call was handed to playNumber without an error.
 function Audio.playNumber(value, unit)
   if type(playNumber) ~= "function" then return false end
+  resolve_undriven_level()
   return (pcall(playNumber, value, unit or 0, 0, audio_volume)) == true
 end
 
