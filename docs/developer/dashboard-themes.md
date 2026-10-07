@@ -691,9 +691,17 @@ a box's `min`, `max` or threshold limit reads it from.
 
 Where the configuration sets no voltage bounds of its own, the widget fills in `v_min` and `v_max`
 from the pack's cell count and the flight controller's minimum and maximum cell voltage, and fills
-them in again whenever the bounds it holds are still the unset defaults or no longer fit the cell
-count. A move of those bounds rebuilds the scene, and the render key is computed again in the pass
-that moves them, so the scene is queued under the key for the new bounds.
+them in again whenever the bounds it holds are still the unset defaults, no longer fit the cell
+count, or were filled in for a different cell count. A move of those bounds rebuilds the scene, and
+the render key is computed again in the pass that moves them, so the scene is queued under the key
+for the new bounds.
+
+The cell count is the one the flight controller reports in telemetry. Until that reads a count --
+it reads 0 for the moment after a pack is plugged in, until the board has detected the pack -- and
+on a model without that sensor, the widget takes the cell count configured on the flight controller
+(*Setup* → *Power* → *Battery*), and only where that is 0, which leaves the detection to the board,
+an estimate from the pack voltage. An estimate cannot tell every pack apart: 42 V is a full 10S
+pack and a 12S pack at 3.5 V per cell.
 
 ## Splitting the settings into pages
 
