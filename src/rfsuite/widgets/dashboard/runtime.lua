@@ -1914,6 +1914,64 @@ end
 -- What is left here is the reading, below, plus the compatibility mapping at the end of this
 -- file for a user theme that still reaches for the old flat field names.
 
+-- The event history: what changed on the craft and when, newest last, for a theme that shows it
+-- (`state.eventLog`). Each entry is `{ kind, value, text, level, time }`:
+--
+--   kind    "armed", "disarmed", "connected", "disconnected", "governor" or "esc"
+--   value   the governor state index (rotorflight-firmware governor.h) for "governor", else nil
+--   text    the speed controller's own verdict for "esc", already in the package's language;
+--           nil for every other kind, which a theme names in its own words
+--   level   1 information, 2 warning, 3 error -- lib/esc_status.lua's levels, which "esc" carries
+--   time    the radio's clock as "HH:MM:SS", or "" on a radio that has none
+--
+-- Nothing here detects anything of its own. Each kind is noted where this file already acts on
+-- the transition: the arm edge in updateDerivedFlightState, the flight controller's connect and
+-- disconnect edges in the background work, and the governor and the speed controller after the
+-- telemetry read that brought them. So an entry costs a table and a clock read on the pass that
+-- has the transition, and a steady pass costs the two comparisons in noteReadingEvents.
+--
+-- The speed controller is the reading the theme already declared (`esc_status_live` in its
+-- sources, as the snapshot resolves it); a theme that does not declare it gets no "esc" entries,
+-- and nothing reads the two sensors for the history alone. The list is kept across connections:
+-- the disconnect is itself an entry, and the next connection's entries follow it.
+local EVENT_LOG_SIZE = 30
+
+local function eventClock()
+  if type(getDateTime) ~= "function" then return "" end
+  local ok, dt = pcall(getDateTime)
+  if not ok or type(dt) ~= "table" then return "" end
+  return string.format("%02d:%02d:%02d", dt.hour or 0, dt.min or 0, dt.sec or 0)
+end
+
+local function noteEvent(state, kind, level, value, text)
+  local log = state.eventLog
+  if type(log) ~= "table" then
+    log = {}
+    state.eventLog = log
+  end
+  log[#log + 1] = { kind = kind, value = value, text = text, level = level, time = eventClock() }
+  if #log > EVENT_LOG_SIZE then table.remove(log, 1) end
+end
+
+-- The two readings with no edge of their own elsewhere, on a pass that read them. A connection's
+-- first governor state is taken as the starting point and noted only once it moves; the speed
+-- controller's first verdict is noted, because it says which controller answered and how. A
+-- verdict the controller repeats is noted once, and a pass that resolved none (no link, nothing
+-- declared) leaves the last one standing.
+local function noteReadingEvents(state)
+  local governor = state.governor
+  if governor ~= state.eventGovernor then
+    if state.eventGovernor ~= nil then noteEvent(state, "governor", 1, governor) end
+    state.eventGovernor = governor
+  end
+  local derived = state.derived
+  local esc = derived and derived.esc_status_live
+  if type(esc) == "string" and esc ~= "" and esc ~= state.eventEsc then
+    state.eventEsc = esc
+    noteEvent(state, "esc", tonumber(derived.esc_status_live_level) or 1, nil, esc)
+  end
+end
+
 --- What this widget still keeps for itself across an arm edge, and the reading of what it does
 --- not. The statistics and the flight clock come from the record; the fields below are the
 --- dashboard's own, because they are about this widget's screen rather than about the flight:
@@ -1938,9 +1996,11 @@ local function updateDerivedFlightState(state)
     -- BATTERY in the quick menu still brings the picker back.
     local pick = state.batteryPick
     if pick then pick.pending = false end
+    noteEvent(state, "armed", 1)
   elseif wasArmed and not isArmed then
     state.lastDisarmAt = nowSeconds()
     state.hadArmedFlight = true
+    noteEvent(state, "disarmed", 1)
     -- Capture the ending (landing) voltage as the last known live voltage, and the cell count
     -- readTelemetry took in the same pass, before it reached the arm flags.
     if type(state.voltage) == "number" and state.voltage > 0 then
@@ -2945,6 +3005,9 @@ function Runtime.new(zone, options)
       batteryProfile = 1,
       armFlags = 0,
       armDisableFlags = 0,
+      -- The event history (noteEvent above): a table from here on, never nil, empty until the first
+      -- transition.
+      eventLog = {},
       -- The flight log's battery prompt. A table from here on, never nil: see
       -- newBatteryPickState above.
       batteryPick = newBatteryPickState(),
@@ -3401,6 +3464,9 @@ function Runtime.new(zone, options)
         if DerivedSnapshot and type(DerivedSnapshot.build) == "function" then
           DerivedSnapshot.build(self.state, self._snapshotSources or self.boxSources)
         end
+        -- Only once this connection's edge below has been taken, so its first entry is the
+        -- connection itself and not a reading taken on the pass that found it.
+        if self.lastFblConnected == true then noteReadingEvents(self.state) end
       end
     end
     
@@ -3438,6 +3504,7 @@ function Runtime.new(zone, options)
     updateVoltageThemeConfig(self)
     if isFblConnected and not wasFblConnected then
       -- New FBL session detected: clear stale postflight state and rebuild theme/UI.
+      noteEvent(self.state, "connected", 1)
       self.state.hadArmedFlight = false
       self.state.hadInflightFlight = false
       self.state.prevArmed = false
@@ -3506,6 +3573,11 @@ function Runtime.new(zone, options)
       end
       widgetLog(self, "FBL reconnect edge: reset dashboard session state", "info")
     elseif not isFblConnected and wasFblConnected then
+      -- The event history's two memos go with the connection: the next one starts its governor
+      -- from its own first reading and notes its speed controller's first verdict again.
+      noteEvent(self.state, "disconnected", 2)
+      self.state.eventGovernor = nil
+      self.state.eventEsc = nil
       -- The session latches are cleared here rather than on the connect edge, and the difference
       -- is not stylistic. updateConnectionState() runs at the top of this pass, so a clear placed
       -- on the connect edge is first READ by the next pass -- the opening pass of a new session,
