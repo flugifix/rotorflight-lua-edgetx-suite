@@ -86,23 +86,29 @@ local function is_telemetry_lost_active(self, now)
   return true
 end
 
+-- Layer A: the Wav level the pilot set, or nil for the radio's own.
+local function wav_level(prefs, connected)
+  local v = prefs and tonumber(prefs.level) or 0
+  if v > 0 and (connected or not prefs.level_connected_only) then
+    return v
+  end
+  return nil
+end
+
+-- Set by the first refresh_volume_state in this Lua state. The dashboard and the tool reach it on
+-- every audio pass; the background function script (src/functions/rfsbg.lua) loads this module
+-- only for the adjustment teller and never does.
+local volume_driven = false
+
 local function refresh_volume_state(self, isCritical)
+  volume_driven = true
   local prefs = self and self.preferences and self.preferences.audio
   if not prefs and type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences then
     prefs = _G.rfsuite.preferences.audio
   end
   
   -- Layer A
-  local v = prefs and tonumber(prefs.level) or 0
-  if v ~= nil and v > 0 then
-    if prefs.level_connected_only and not is_rf_connected(self) then
-      audio_volume = nil
-    else
-      audio_volume = v
-    end
-  else
-    audio_volume = nil
-  end
+  audio_volume = wav_level(prefs, is_rf_connected(self))
 
   -- Layer B
   if type(model) ~= "table" or type(model.setGlobalVariable) ~= "function" then return end
@@ -125,6 +131,18 @@ local function refresh_volume_state(self, isCritical)
       master_gvar_last = raw
     end
   end
+end
+
+-- The level in a Lua state where nothing calls refresh_volume_state: layer A only, since the
+-- master-volume global variable belongs to the widget and the tool. Read on every call rather
+-- than kept, because the background function script replaces its preferences table whenever it
+-- reloads the file. That state has no connection flag, so `level_connected_only` asks the radio
+-- whether the RF link is up.
+local function resolve_undriven_level()
+  if volume_driven then return end
+  local root = _G.rfsuite
+  local prefs = root and root.preferences and root.preferences.audio
+  audio_volume = wav_level(prefs, rf_link_up())
 end
 
 -- Keyed on govState_e as the firmware numbers it (flight/governor.h, 0..9), which is what the
@@ -1304,6 +1322,7 @@ end
 -- Returns true when a file was found and handed to playFile.
 function Audio.playEventFile(relativePath, opts)
   if type(relativePath) ~= "string" or relativePath == "" then return false end
+  resolve_undriven_level()
   return playResolvedEventFile(relativePath, opts) == true
 end
 
@@ -1314,6 +1333,7 @@ end
 --- Returns true when the call was handed to playNumber without an error.
 function Audio.playNumber(value, unit)
   if type(playNumber) ~= "function" then return false end
+  resolve_undriven_level()
   return (pcall(playNumber, value, unit or 0, 0, audio_volume)) == true
 end
 
