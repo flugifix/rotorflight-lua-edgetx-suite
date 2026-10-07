@@ -8,7 +8,7 @@ sidebar_position: 40
 
 How the remaining fuel of the pack is estimated: from the current drawn, from the pack
 voltage, or from whichever of the two is more pessimistic, and how quickly a voltage-based
-estimate may fall and recover under load.
+estimate may fall under load.
 
 ## Where to find it
 
@@ -23,8 +23,8 @@ armed.
 | --- | --- |
 | Firmware Source | Which estimate the flight controller computes: *OFF (LOCAL)*, *VOLTAGE*, *CURRENT* or *COMBINED*. Combined takes the more pessimistic of voltage and current. |
 | Voltage drop rate | How fast the filtered voltage may fall in voltage mode, so that a brief sag under load does not pull the estimate down. 0 to 250 mV/s, default 10. |
-| Charge drop rate | How fast the reported fuel may recover in voltage mode once the load is reduced. 0.00 to 2.50 %/s in steps of 0.01, default 0.50. |
-| Sag gain | Strength of the load-sag compensation in voltage mode; higher compensates more aggressively. 0 to 100 %, default 40. |
+| Charge drop rate | How fast the reported fuel may drop in voltage mode once the model has been armed. 0.00 to 2.50 %/s in steps of 0.01, default 0.50. |
+| Sag gain | Strength of the load-sag compensation in voltage mode; higher compensates more aggressively. Raise it if the estimate reads too low under load in flight. 0 to 100 %, default 40. |
 
 The three tuning values are greyed out unless the source is *VOLTAGE* or *COMBINED*.
 

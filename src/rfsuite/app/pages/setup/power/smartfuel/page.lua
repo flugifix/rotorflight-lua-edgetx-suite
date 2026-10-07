@@ -586,7 +586,7 @@ function M.build(ctx)
 			get = function() return ui.config.charge_drop_rate end,
 			set = getChargeSetter(),
 			enabled = isTuningEnabled,
-			helpText = pageText(i18n, "help_charge_drop_rate", "Maximum rate the reported SmartFuel value may recover in voltage mode after load is reduced."),
+			helpText = pageText(i18n, "help_charge_drop_rate", "Limits how quickly the reported SmartFuel value may drop in voltage mode once the model has been armed."),
 			helpTitle = pageText(i18n, "charge_drop_rate", "Charge drop rate"),
 			onHelp = getInlineHelpHandler(),
 			display = function(v)

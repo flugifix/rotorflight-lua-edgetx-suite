@@ -10,7 +10,7 @@
 
 local M = {}
 
--- Their packager rewrites every literal t("widgets.dashboard.<key>", "FALLBACK") call site into
+-- Their packager rewrites every t(<key>, <fallback>) call site with a literal widgets.dashboard key into
 -- the locale being built (bin/package/build_package.py, .vscode/scripts/precompile_i18n.py). In a
 -- tree that has not been packaged the call survives and answers with its own English fallback,
 -- which is what the simulator and the offline accounting run see.
