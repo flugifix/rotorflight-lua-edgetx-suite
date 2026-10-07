@@ -96,6 +96,10 @@ reads *Threshold [Model]* -- and is otherwise the radio-wide default that every 
 value of its own reads. The MCU threshold is always radio-wide, because the same flight controller
 is rated the same in every aircraft.
 
+When the model's file cannot be written, *Save* reports the failure and the model goes on with the
+threshold it had before. The page still shows the number that was entered, so saving again writes
+it once the file can be written.
+
 ### 7. Adjustments
 
 | Setting | Switch / Key | Default | Scope | Description |

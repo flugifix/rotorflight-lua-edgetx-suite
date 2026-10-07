@@ -702,6 +702,12 @@ function M.new(sectionKey)
     local modelEvents = modelAudioEvents(false)
     local modelDirty = false
     local modelScoped = false
+    -- What this save changes in the session's model table, so that a failed write of the model's
+    -- file can put it back. The next save decides whether to write that file by comparing the page
+    -- against this table, so a value left in it by a write that failed reads as saved: that save
+    -- writes nothing and answers success, and the value is gone at the next start.
+    local modelChanged, modelPrevious = {}, {}
+    local modelEventsCreated = false
     for _, field in ipairs(CONFIG_SCHEMA) do
       if ownsField(field) then
         local toModel = false
@@ -710,12 +716,19 @@ function M.new(sectionKey)
           if modelEvents and modelEvents[field.key] ~= nil then
             toModel = true
           elseif loadedConfig[field.key] ~= nil and ui.config[field.key] ~= loadedConfig[field.key] then
-            modelEvents = modelEvents or modelAudioEvents(true)
+            if not modelEvents then
+              modelEvents = modelAudioEvents(true)
+              modelEventsCreated = modelEvents ~= nil
+            end
             toModel = modelEvents ~= nil
           end
         end
         if toModel then
-          if modelEvents[field.key] ~= ui.config[field.key] then modelDirty = true end
+          if modelEvents[field.key] ~= ui.config[field.key] then
+            modelDirty = true
+            modelChanged[#modelChanged + 1] = field.key
+            modelPrevious[field.key] = modelEvents[field.key]
+          end
           modelEvents[field.key] = ui.config[field.key]
         else
           ctx.preferences.audio_events[field.key] = ui.config[field.key]
@@ -726,6 +739,17 @@ function M.new(sectionKey)
     local modelOk, modelErr = true, nil
     if modelDirty then
       modelOk, modelErr = saveModelStore()
+      if not modelOk then
+        -- The session's table goes back to what it held before this save: a key this save added
+        -- is removed again, and so is a table this save created.
+        for i = 1, #modelChanged do
+          modelEvents[modelChanged[i]] = modelPrevious[modelChanged[i]]
+        end
+        local session = modelEventsCreated and modelStore() or nil
+        if session and session.modelPreferences.audio_events == modelEvents then
+          session.modelPreferences.audio_events = nil
+        end
+      end
     end
 
     -- Diagnostic logging for save flow
