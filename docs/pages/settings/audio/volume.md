@@ -10,7 +10,7 @@ The Volume page allows you to configure Adaptive Audio-Level and the Master-Volu
 
 ## WAV-Volume Level (Layer A)
 
-* **Level:** Set the base volume level for audio announcements (1..5). Set to 0 (default) to let the radio's own volume setting rule.
+* **Level:** Set the base volume level for audio announcements (1..5). Set to 0 (default) to let the radio's own volume setting rule. The level applies to the sound file of an announcement and to the number and unit the radio speaks after it.
 * **Connected Only:** When enabled, the elevated audio level applies only when a flight controller is connected.
 
 ## Master-Volume Bridge (Layer B)
