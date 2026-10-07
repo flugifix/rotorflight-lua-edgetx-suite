@@ -1307,6 +1307,16 @@ function Audio.playEventFile(relativePath, opts)
   return playResolvedEventFile(relativePath, opts) == true
 end
 
+--- Speak a whole number through the radio's own number teller, at the level the files above
+--- play at. Exported for the same caller: its words come through playEventFile, and a
+--- playNumber of its own would speak the value after them at the radio's Wav volume instead.
+---
+--- Returns true when the call was handed to playNumber without an error.
+function Audio.playNumber(value, unit)
+  if type(playNumber) ~= "function" then return false end
+  return (pcall(playNumber, value, unit or 0, 0, audio_volume)) == true
+end
+
 function Audio.resetConnectionState(audioState)
   if type(audioState) ~= "table" then
     return
