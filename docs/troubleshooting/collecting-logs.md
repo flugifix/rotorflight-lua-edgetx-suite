@@ -17,7 +17,7 @@ appear, and then *System* → *Developer* → *Settings*:
 
 | Setting | What to set it to |
 | --- | --- |
-| **Debug Level** | *INFO* for a first report. *DEBUG* for a problem that needs the steps in between, and it is also the level from which the background decoder keeps a record of its own. *TRACE* only when asked — it prints the decoded telemetry payloads and fills a file in seconds. |
+| **Debug Level** | *INFO* for a first report. *DEBUG* for a problem that needs the steps in between, and it is also the level from which the background decoder keeps a record of its own. *TRACE* only when asked — it adds the raw bytes of every request to and reply from the flight controller. |
 | **Log Session To Card** | On. Nothing is written to the card while this is off, whatever the debug level says. |
 
 **Log Session To Card is the switch that decides whether anything is written.** With it on and
@@ -99,4 +99,6 @@ suite version, so that does not have to be written out separately.
 - **Opening the configuration tool pauses the background decoder** for as long as the tool is
   open, so a gap in `function_*` over that stretch is expected.
 - **A session file stops at 5000 lines** and says so on its last line, rather than dropping its
-  middle. At *TRACE* that is reached in well under a minute.
+  middle. Even at *TRACE* that takes a long session: the connect sequence writes a few hundred
+  lines, and after it a file grows by a few lines for each page opened in the tool and by about
+  one line every five seconds while the dashboard shows a disarmed model.
