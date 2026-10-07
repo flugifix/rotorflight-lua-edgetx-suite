@@ -77,6 +77,20 @@ both sides is shown as done rather than asked again.
   each of the two functions it needs.
 - **The assistant never selects a model.** EdgeTX registers no model-selection function for Lua, so
   every write lands on the model that is open.
+- **Why the Link step exists.** The flight controller does not measure the link: it is told the
+  packet rate and telemetry ratio and paces every telemetry frame it sends from that pair. Told more
+  than the link carries, it schedules more than drains away -- a backlog, dropped frames, values
+  that are stale rather than missing. Told less, bandwidth stays unused. Both read as laggy
+  telemetry, and neither side reports an error.
+- **What the Link step shows and writes.** *Probe* is the state of the last read or write, and
+  *Read* reads the flight controller and the transmitter module again. The *Flight controller* row
+  shows the pair it is set to, followed by *native* where its CRSF telemetry runs in Native mode;
+  the *Transmitter module* row shows the pair the module runs. Where the two agree, both rows say
+  so. Where they differ, each row carries a *use this* button: on the flight controller's row it
+  sets the module to the flight controller's pair, on the module's row it writes the module's pair
+  to the flight controller and saves it. *Packet rate* and *Telemetry ratio* set the module
+  directly; they offer this suite's own list, reduced to what the module reports it can do, or the
+  module's whole list where it offers none of them.
 
 ## Related
 
