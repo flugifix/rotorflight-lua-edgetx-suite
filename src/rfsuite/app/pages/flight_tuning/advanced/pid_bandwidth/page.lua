@@ -465,4 +465,10 @@ end
 
 ui.runtimeBase = nil
 M.ui = ui
+
+-- Asked before the page is left (ui/home.lua): true while an edit here is not saved.
+function M.hasUnsavedChanges()
+  return ui.dirty == true
+end
+
 return M

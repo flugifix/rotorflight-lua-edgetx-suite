@@ -59,7 +59,12 @@ return {
       eeprom_pending = "Gespeichert, aber der EEPROM-Schreibvorgang steht noch aus:",
       read_required = "Konfiguration zuerst vollständig lesen. Bitte das Laden abwarten oder mit Neu laden erneut versuchen.",
       page_changed = "Die Seite wurde gewechselt. Bitte zur Seite zurückkehren und erneut speichern.",
-      confirm_required = "Dieses Speichern muss bestätigt werden, und die Rückfrage konnte nicht angezeigt werden. Es wurde nichts geschrieben."
+      confirm_required = "Dieses Speichern muss bestätigt werden, und die Rückfrage konnte nicht angezeigt werden. Es wurde nichts geschrieben.",
+      leave_title = "Ungespeicherte Änderungen",
+      leave_message = "Diese Seite hat Änderungen, die nicht gespeichert sind. Verlassen verwirft sie.",
+      leave_stay = "Bleiben",
+      leave_save = "Speichern",
+      leave_discard = "Verwerfen"
     },
     closing_rfsuite = "RFSuite wird beendet...",
     model_armed_title = "Modell Armed",

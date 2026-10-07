@@ -577,6 +577,10 @@ state = {
   saveOutcome = nil,
   saveOverlayVisible = false,
   armedNoticeVisible = false,
+  -- The question put to a pilot who leaves a page with changes on it: save, discard, or stay.
+  leavePromptVisible = false,
+  -- Whether the header drawn last offered Save; the question above is only put where it did.
+  headerSaveOffered = false,
   armedFeedbackUntil = nil,
   armedFeedbackText = nil,
   lastSaveSnapshot = nil,
@@ -937,6 +941,17 @@ local function onBack(source, ev)
   -- before this line, so the window does not keep sliding while a key is held.
   state.lastBackTick = now
 
+  -- Back while the question about unsaved changes stands is the answer "stay": the box goes and
+  -- the page comes back with its changes. A second press in a row can therefore never discard.
+  if state.leavePromptVisible then
+    state.leavePromptVisible = false
+    if fromEvent then
+      state.suppressBackFrames = 6
+    end
+    scheduleBuildUI(false)
+    return
+  end
+
   -- A save that reboots holds the page: the values are on their way to a flight controller that
   -- is about to restart, and leaving would put a page on screen showing what it read before.
   -- Once the settings are in EEPROM there is nothing left to protect, so from that moment the
@@ -1005,6 +1020,27 @@ local function onBack(source, ev)
           state.suppressBackFrames = 6
         end
         scheduleBuildUI(true)
+        return
+      end
+    end
+
+    -- Leaving releases the page, and with it every value changed on it and not saved. A page
+    -- that can tell says so through `hasUnsavedChanges`, and then the pilot is asked first --
+    -- where the header offers Save, since that is the other answer. Not while the model is
+    -- armed: a save to the flight controller is refused then, and a question standing between
+    -- the pilot and the way out is the one thing that must not be.
+    if pageModule and type(pageModule.hasUnsavedChanges) == "function" and state.headerSaveOffered
+      and not isModelArmed() then
+      local ok, unsaved = pcall(pageModule.hasUnsavedChanges)
+      if not ok then
+        reportHookCrash("activePage.hasUnsavedChanges", currentMenuId, unsaved)
+      elseif unsaved == true then
+        logf("debug", "leave prompt on %s", tostring(currentMenuId))
+        state.leavePromptVisible = true
+        if fromEvent then
+          state.suppressBackFrames = 6
+        end
+        scheduleBuildUI(false)
         return
       end
     end
@@ -1361,6 +1397,9 @@ local function returnToRootOnDisconnect()
 
   closeHelpDialogIfOpen()
   state.pendingMenuOpen = nil
+  -- Nothing can be saved over a link that has gone, so the question is not asked: the page goes
+  -- with the rest of the menu.
+  state.leavePromptVisible = false
 
   local stepped = false
   while state.menu and (not state.menu.isRoot()) do
@@ -1985,7 +2024,11 @@ local function blockSaveWhileArmed()
   return false
 end
 
-local function onSave()
+-- `fromLeavePrompt` is the Save of the question asked when a page with changes is left. That
+-- answer IS the confirmation, so the preference's own question is not put a second time; the two
+-- that override the preference -- an arming state that cannot be read, a page that requires its
+-- question -- are asked as on any other save.
+local function onSave(fromLeavePrompt)
   if blockSaveWhileArmed() then return end
 
   local page = getActivePageModule()
@@ -2052,7 +2095,8 @@ local function onSave()
     end
 
     -- Check preference and show confirm dialog if enabled.
-    local savePref = state.preferences and state.preferences.general and state.preferences.general.save_confirm
+    local savePref = fromLeavePrompt ~= true and state.preferences and state.preferences.general
+      and state.preferences.general.save_confirm
     -- The confirmation is a preference, except when the armed state cannot be read: then it is
     -- asked whatever the preference says, because the alternative is writing to a flight
     -- controller that may be armed without anybody having been told the check did not run.
@@ -2144,6 +2188,26 @@ local function onSave()
     title = "Save",
     message = "Save to FBL is not wired yet."
   })
+end
+
+-- The three answers to the question about unsaved changes. Save is the header's own Save and the
+-- page stays: the save is watched where every save is, and the next Back leaves a page that has
+-- nothing unsaved left. Leaving at once instead would release the page while its writes are
+-- still out, and their replies would then arrive at a page that is gone.
+local function leavePromptSave()
+  state.leavePromptVisible = false
+  onSave(true)
+  scheduleBuildUI(false)
+end
+
+local function leavePromptDiscard()
+  state.leavePromptVisible = false
+  leaveCurrentPage(false)
+end
+
+local function leavePromptStay()
+  state.leavePromptVisible = false
+  scheduleBuildUI(false)
 end
 
 local function getCardPressHandler(cardId)
@@ -2500,6 +2564,40 @@ function M.buildUI()
     return
   end
 
+  -- The tool's own box rather than a native confirmation: that one has two answers, and Back on
+  -- it is the same answer as its No, so a three-way question cannot be put through it without
+  -- making the key that left the page also discard what was on it. Drawn here, the box is part of
+  -- the run loop like every other notice, and Back on it means stay (onBack). The first button is
+  -- the one that changes nothing, so a press of Enter straight after Back neither writes nor
+  -- discards.
+  if state.leavePromptVisible then
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    local lyt = {
+      {
+        type = "rectangle",
+        x = 0, y = 0, w = LCD_W or 320, h = LCD_H or 240,
+        color = COLOR_THEME_PRIMARY3,
+        filled = true
+      }
+    }
+    LoadingOverlay.append(lyt, {
+      x = 0,
+      y = 0,
+      w = LCD_W or 320,
+      h = LCD_H or 240,
+      title = "@i18n(app.save.leave_title)@",
+      message = "@i18n(app.save.leave_message)@",
+      bar = false,
+      actions = {
+        { text = "@i18n(app.save.leave_stay)@", press = leavePromptStay },
+        { text = "@i18n(app.save.leave_save)@", press = leavePromptSave },
+        { text = "@i18n(app.save.leave_discard)@", press = leavePromptDiscard }
+      }
+    })
+    lvgl.build(lyt)
+    return
+  end
+
   if state.armedNoticeVisible then
     if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
     local lyt = {
@@ -2590,6 +2688,9 @@ function M.buildUI()
     -- this one rather than growing a second wording for the same event.
     reportHookCrash = reportHookCrash
   })
+  -- What Back asks about unsaved changes depends on it: a page that does not offer Save has
+  -- nothing the pilot could save instead of leaving.
+  state.headerSaveOffered = actions.save == true
 
   -- Save and Reload remain interactive when armed on pages that declare them, so pressing
   -- either reaches onSave / onReload to report the armed refusal (modal dialog or non-blocking
@@ -2984,6 +3085,7 @@ function M.init(opts)
   state.saveOutcome = nil
   state.saveOverlayVisible = false
   state.armedNoticeVisible = false
+  state.leavePromptVisible = false
   state.armedFeedbackUntil = nil
   state.armedFeedbackText = nil
   state.connStatusNoticeVisible = false
@@ -3173,6 +3275,9 @@ function M.run(event, touchState)
         dropMspResponseCache()
       end
       if armed then
+        -- The question about unsaved changes is not left standing over an armed model. The page
+        -- comes back with its changes, and Back now leaves it without asking (onBack).
+        state.leavePromptVisible = false
         -- Clear MSP queue to abort any pending MSP operations immediately
         ensureMspRuntime()
         if MspRuntime and type(MspRuntime.getState) == "function" then
@@ -3259,6 +3364,7 @@ function M.run(event, touchState)
         state.pendingSaveAction = nil
         state.saveOutcome = nil
         state.saveOverlayVisible = false
+        state.leavePromptVisible = false
         state.pendingMenuOpen = nil
         closeHelpDialogIfOpen()
         
