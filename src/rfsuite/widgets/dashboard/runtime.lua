@@ -1764,7 +1764,13 @@ local function updateConnectionState(self)
   -- script loads from colliding with the LVGL scene build and blowing the instruction budget.
   --
   -- `startupComplete` keeps the audio on exactly the condition it had before.
+  --
+  -- A board whose MSP API version was refused is never ready, the soft timeout included: the
+  -- splash stays up and says why, and the dashboard is not drawn for a board the suite does not
+  -- talk to.
+  local refused = type(runtimeState) == "table" and runtimeState.unsupportedApi == true
   local rawReady = connected and batteryReady and rfReady and modelPrefsResolved and tasksDone
+    and not refused
   local now = nowSeconds()
 
   if connected and not rawReady then
@@ -1783,7 +1789,8 @@ local function updateConnectionState(self)
     self.readySince = nil
   end
 
-  local softTimeoutReady = connected and self.pendingSince ~= nil and (now - self.pendingSince) >= SPLASH_SOFT_TIMEOUT_SECONDS
+  local softTimeoutReady = connected and not refused and self.pendingSince ~= nil
+    and (now - self.pendingSince) >= SPLASH_SOFT_TIMEOUT_SECONDS
   -- The hold steadies a gate that flickers, and a flicker is a gate that has been open and has
   -- shut again. The FIRST time the conditions come true after the widget starts is not that:
   -- they have been false since boot and are now true. Spending the hold there costs a second of
@@ -1801,6 +1808,10 @@ local function updateConnectionState(self)
   if not connected then
     statusLine = (t and t("widgets.dashboard.waiting_for_msp_link")) or "Waiting for MSP link"
     self.batteryDialogState = "pending"
+  elseif refused then
+    local fmt = (t and t("widgets.dashboard.api_unsupported"))
+      or "MSP API %s not supported, needs Rotorflight 4.6+"
+    statusLine = string.format(fmt, tostring(runtimeState.refusedApiVersion or "?"))
   elseif not tasksDone then
     local pDone = 0
     local pTotal = 0
