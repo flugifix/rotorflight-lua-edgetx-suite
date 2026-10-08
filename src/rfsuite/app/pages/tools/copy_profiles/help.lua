@@ -10,11 +10,13 @@ return function(ctx)
   -- Joined in a local of its own, for the reason given in settings/general/help.lua.
   local p3Fallback = "SAVE asks which profile is about to be overwritten: the destination keeps none of "
     .. "its own settings afterwards and there is no undo. Only the profiles the flight "
-    .. "controller reports are offered; until it has reported them, SAVE waits and RELOAD asks again."
+    .. "controller reports are offered."
   local p3 = i18n and i18n.t and i18n.t("app.pages.tools_copy_profiles.help_p3") or p3Fallback
+  local p4 = i18n and i18n.t and i18n.t("app.pages.tools_copy_profiles.help_p4")
+    or "Until the flight controller has reported its profiles, SAVE waits; RELOAD asks it again."
 
   return {
     title = title,
-    message = p1 .. "\n\n" .. p2 .. "\n\n" .. p3
+    message = p1 .. "\n\n" .. p2 .. "\n\n" .. p3 .. "\n" .. p4
   }
 end
