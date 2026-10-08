@@ -78,9 +78,12 @@ is read and written.
 - The choices of *Motor Direction*, *Motor Timing*, *Demag Compensation*, *Beacon Delay* and
   *Power Rating* stand for the numbers Bluejay itself stores them as, which start at 1, and
   the chosen number is what the ESC receives. A number the ESC answers with that has no entry
-  -- 0 from an ESC whose settings were never programmed, say, which Bluejay would run as
-  bidirectional and reversed -- is shown as *Unknown (n)*, cannot be chosen, and is written
-  back unchanged by a Save. Until the ESC has been read these rows show *Unknown (0)*.
+  -- a 0 written by an earlier version of this page, say, which Bluejay runs as bidirectional
+  and reversed when it is the direction -- is shown as *Unknown (n)*, cannot be chosen, and is
+  written back unchanged by a Save. An ESC saved from an earlier version of this page holds
+  these settings one entry off what was picked there, so check them after updating. Until the
+  ESC has been read, *Motor Direction*, *Motor Timing* and *Demag Compensation* show
+  *Unknown (0)*.
 - *Threshold 96to48* is held at or below *Threshold 48to24* when the block is written, since
   the ESC steps down through both.
 - A BLHeli_S ESC answers with the same ESC family byte and the same block length as a Bluejay

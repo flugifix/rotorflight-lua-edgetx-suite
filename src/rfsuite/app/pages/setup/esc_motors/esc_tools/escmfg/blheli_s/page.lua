@@ -691,9 +691,10 @@ function M.build(ctx)
 
   if ui.currentSection == 1 then
     -- The option values are the bytes the ESC itself stores, which BLHeli_S numbers from 1
-    -- for these rows (BLHeli_S.asm, "Programming defaults"). The byte goes to the ESC as it
-    -- is, so a value numbered from 0 here would reach it one entry off. A byte with no entry
-    -- in a list (0 from an unprogrammed ESC, say) is shown as unknown and cannot be chosen.
+    -- for these rows (bitdump/BLHeli, BLHeli_S.asm, "Programming defaults"). The byte goes to
+    -- the ESC as it is, so a value numbered from 0 here would reach it one entry off. A byte
+    -- with no entry in a list (a 0 written by an earlier version of this page, say) is shown
+    -- as unknown and cannot be chosen.
     -- Basic Settings
     local dirOpts = {
       { value = 1, label = "Normal" },

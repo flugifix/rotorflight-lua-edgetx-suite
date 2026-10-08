@@ -721,7 +721,8 @@ function M.build(ctx)
   if ui.currentSection == 1 then
     -- The option values are the bytes the ESC itself stores, which Bluejay numbers from 1
     -- for direction, timing, demag compensation, beacon delay and power rating
-    -- (src/Settings/BluejaySettings.asm). The byte goes to the ESC as it is: a 0 is read by
+    -- (bird-sanctuary/bluejay, src/Settings/BluejaySettings.asm). The byte goes to the ESC as
+    -- it is: a 0 is read by
     -- the firmware as bidirectional and reversed. A byte with no entry in a list is shown as
     -- unknown and cannot be chosen.
     -- General Settings
