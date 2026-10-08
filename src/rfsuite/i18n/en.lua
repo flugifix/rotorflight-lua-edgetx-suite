@@ -2185,10 +2185,12 @@ return {
         help_p1 = "Copy settings between profiles.",
         help_p2 = "Select the type (PID or Rate) and the source/destination profiles.",
         help_p3 = "SAVE asks which profile is about to be overwritten: the destination keeps none of its own settings afterwards and there is no undo. Only the profiles the flight controller reports are offered.",
+        help_p4 = "Until the flight controller has reported its profiles, SAVE waits; RELOAD asks it again.",
         msgbox_save = "Copy Profile",
         msgbox_msg = "Overwrite %s profile %d with profile %d? This cannot be undone.",
         msp_unavailable = "No connection to the flight controller.",
-        warn_same_profile = "Source and destination profiles are the same."
+        warn_same_profile = "Source and destination profiles are the same.",
+        selection_out_of_range = "The flight controller has fewer profiles than were offered. Check the selection and save again."
       },
       diagnostics_profile_select = {
         pid_profile = "PID Profile",
@@ -3058,6 +3060,8 @@ return {
       inflight_custom_unread = "Custom layout not read",
       inflight_custom_range = "Row cannot be stepped",
       inflight_custom_empty = "No usable Custom rows",
+      inflight_hold_limit = "hold ended after 5 s - press again",
+      inflight_hold_limit_short = "5 s over - press again",
       inflight_prime_done_at = "Values read",
       inflight_board_step = "step differs: set the board up again",
       inflight_post_saved = "the board has saved this",

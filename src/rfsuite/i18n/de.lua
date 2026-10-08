@@ -2185,10 +2185,12 @@ return {
         help_p1 = "Hier kannst du Einstellungen zwischen den Profilen kopieren.",
         help_p2 = "Wähle den Typ (PID oder Rate) sowie Quell- und Zielprofil aus.",
         help_p3 = "SAVE fragt nach, welches Profil überschrieben wird: das Zielprofil behält danach nichts von seinen eigenen Einstellungen, und rückgängig machen lässt sich das nicht. Angeboten werden nur die Profile, die der Flight Controller meldet.",
+        help_p4 = "Bis der Flight Controller seine Profile gemeldet hat, wartet SAVE; RELOAD fragt erneut.",
         msgbox_save = "Profil kopieren",
         msgbox_msg = "%s-Profil %d mit Profil %d überschreiben? Das lässt sich nicht rückgängig machen.",
         msp_unavailable = "Keine Verbindung zum Flight Controller.",
-        warn_same_profile = "Quell- und Zielprofil sind identisch."
+        warn_same_profile = "Quell- und Zielprofil sind identisch.",
+        selection_out_of_range = "Der Flight Controller hat weniger Profile als angeboten. Auswahl prüfen und erneut speichern."
       },
       diagnostics_profile_select = {
         pid_profile = "PID-Profil",
@@ -3053,6 +3055,8 @@ return {
       inflight_custom_unread = "Custom nicht gelesen",
       inflight_custom_range = "Zeile nicht einstellbar",
       inflight_custom_empty = "Keine nutzbaren Custom-Zeilen",
+      inflight_hold_limit = "Halten nach 5 s beendet - neu drücken",
+      inflight_hold_limit_short = "5s Limit - neu drücken",
       inflight_prime_done_at = "Werte gelesen",
       inflight_board_step = "Schrittweite weicht ab: Flugregler neu einrichten",
       inflight_post_saved = "der Flugregler hat das gespeichert",

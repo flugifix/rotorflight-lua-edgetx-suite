@@ -226,6 +226,7 @@ local function queueSmartfuelRead()
 		logDebug("read skipped: pending")
 		return false, "read_pending"
 	end
+	ui.runtime.readComplete = false
 	if not ui.support.firmware then
 		logDebug("read skipped: firmware_not_supported")
 		return false, "firmware_not_supported"
@@ -257,8 +258,9 @@ local function queueSmartfuelRead()
 			ui.runtime.readPending = false
 			ui.loading = false
 			ui.progress = 1
+			local parsed = nil
 			if type(session) == "table" then
-				local parsed = api.parse and api.parse(buf) or nil
+				parsed = api.parse and api.parse(buf) or nil
 				if type(parsed) == "table" then
 					session.smartfuel_config = parsed
 					if type(session.battery_config) == "table" then
@@ -266,6 +268,8 @@ local function queueSmartfuelRead()
 					end
 				end
 			end
+			-- Only a reply the page takes over counts: with an edit pending, what it shows is not it.
+			ui.runtime.readComplete = type(parsed) == "table" and not ui.dirty
 			if not ui.dirty then
 				loadFromSession()
 			end
@@ -374,9 +378,18 @@ function M.onReload()
 	return false
 end
 
+-- Where the board has SmartFuel, the write sends all four values, so it waits for this visit's
+-- read: without it the page holds mode 0 (off) and its own defaults. Without firmware support the
+-- page saves the radio's own settings only, which need no read.
+function M.canSave()
+	if not isFirmwareSupported(getSession()) then return true end
+	return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+end
+
 function M.onSave(ctx)
 	ensureDeps()
 	ensureLoaded()
+	if not M.canSave() then return false, "loaded_data_missing" end
 
 	local session = getSession()
 	ui.support.firmware = isFirmwareSupported(session)
