@@ -563,7 +563,8 @@ function M.inputUsers(inputIndex, own)
       if count == nil then return nil end
       for index = 0, count - 1 do
         local mix = M.getMix(channel, index)
-        if mix and tonumber(mix.source) == mixSource then
+        -- A line that inverts its source stores it negated; the mixer reads `abs(srcRaw)`.
+        if mix and math.abs(tonumber(mix.source) or 0) == mixSource then
           users[#users + 1] = channel
           break
         end

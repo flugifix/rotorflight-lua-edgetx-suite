@@ -44,26 +44,34 @@ local ConfirmDialog = nil
 -- gain feeding CH9, and replacing it puts the arm switch on CH9. So where another channel uses an
 -- input about to be replaced, the press asks first and names the channels. Nothing to name, no
 -- question, and the press goes on (false). Otherwise the press ends here (true, `done(false)`):
--- a yes presses again with `w.data[flag]` set, which the next press consumes; a no, or a radio that
--- cannot put the question up, writes nothing and leaves `w.data[noticeKey]` saying so.
+-- a yes presses again with the question it answered kept in `w.data[flag]`, and the next press goes
+-- on only if it would ask exactly that question again -- a plan re-derived while the question stood
+-- is asked about anew. A no, or a radio that cannot put the question up, writes nothing and leaves
+-- `w.data[noticeKey]` saying so. Channels the same press lays out are not named: their own lines
+-- are replaced anyway.
 local function askInputsInUse(w, entries, flag, noticeKey, done)
-  if w.data[flag] then
-    w.data[flag] = nil
-    return false
-  end
+  local answered = w.data[flag]
+  w.data[flag] = nil
+
+  local writing = {}
+  for _, entry in ipairs(entries) do writing[entry.channel] = true end
 
   local i18n = w.i18n
   local lines = {}
   for _, entry in ipairs(entries) do
     local users = w.radio.inputUsers(entry.input, entry.channel)
-    if users and #users > 0 then
-      local names = {}
-      for _, channel in ipairs(users) do names[#names + 1] = "CH" .. tostring(channel) end
+    local names = {}
+    for _, channel in ipairs(users or {}) do
+      if not writing[channel] then names[#names + 1] = "CH" .. tostring(channel) end
+    end
+    if #names > 0 then
       lines[#lines + 1] = "I" .. tostring(entry.input + 1) .. " (CH" .. tostring(entry.channel) ..
         "): " .. table.concat(names, ", ")
     end
   end
   if #lines == 0 then return false end
+  local asked = table.concat(lines, "\n")
+  if answered == asked then return false end
 
   table.insert(lines, 1, t(i18n, "inputs_in_use",
     "Setting this up replaces these inputs, and other channels' mixer lines use them:"))
@@ -73,10 +81,10 @@ local function askInputsInUse(w, entries, flag, noticeKey, done)
     w.data[noticeKey] = notice
     w.rebuild()
   end
-  -- An answer given inside `show` itself is held until this press has ended.
+  -- An answer given inside `show` itself is acted on only after this press has called `done`.
   local pressing, confirmedNow = true, false
   local function confirm()
-    w.data[flag] = true
+    w.data[flag] = asked
     w.advance()
   end
 
@@ -1847,7 +1855,14 @@ procs[#procs + 1] = {
             return
           end
           -- What was just written is now what the next derivation must see, so the board is asked
-          -- again rather than the screen assuming.
+          -- again rather than the screen assuming. The adjustment table is 42 reads long, so it is
+          -- dropped rather than read here: the Profile channel's criterion is unknown until its step
+          -- reads it again, instead of judging the slots it moved by the records from before.
+          for _, action in ipairs(actions) do
+            if not actionBlocked(action) and action.role.kind == "adjustment" then
+              w.data.adjustments = nil
+            end
+          end
           w.msp.read("mode_ranges", function(parsed)
             w.data.modeRanges = parsed and parsed.mode_ranges or w.data.modeRanges
             done(true)

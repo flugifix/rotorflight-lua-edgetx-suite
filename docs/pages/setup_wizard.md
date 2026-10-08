@@ -74,7 +74,8 @@ page back, and on the first page it leaves the assistant.
   the window, not the presence of a range, decides which switch position arms. A range in another
   window leaves the channel open, and *Write* moves that range rather than adding a second one.
   For CH7 it is both profile adjustments read from the channel's own aux slot over its whole
-  travel, onto profiles 1 to 3.
+  travel, onto profiles 1 to 3; after *Write* has moved one, the step reads the slots again before
+  CH7 counts as done.
 - **The output stage of CH5 to CH8 has to be at its defaults**, and only of those four. The
   assistant tells the flight controller absolute microsecond windows, and what a channel finally
   puts on the wire is the mixer value after its output stage. A channel whose end points, subtrim,
@@ -94,7 +95,7 @@ page back, and on the first page it leaves the assistant.
   controller's map puts no aux slot on, or an output stage that cannot carry the window. The
   Profile channel is also blocked where the flight controller has no free adjustment slot left for
   each of the two functions it needs, and where an adjustment slot did not answer while the step
-  read them: the missing slot may already hold one of the two. Opening the step again reads them
+  read them and one of the two has not been found: the missing slot may already hold it. Opening the step again reads them
   again.
 - **Orientation writes only what it has read.** The step sends all three alignments back -- the
   board's, the second gyro's and the magnetometer's -- with only the first changed. Where the
