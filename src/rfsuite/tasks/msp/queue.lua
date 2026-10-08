@@ -583,7 +583,7 @@ function Queue:processQueue(now)
     end
     local cache = getCache()
     if cache and not isWriteMessage(msg) then
-      cache.put(msg.command, buf)
+      cache.put(msg.command, buf, msg.__cacheKey)
     end
     if type(msg.processReply) == "function" then
       msg.__retryCount = self.retryCount
@@ -621,6 +621,10 @@ function Queue:processQueue(now)
         -- api/ modules. A save is rare; the whole cache goes.
         local cache = getCache()
         if cache then cache.clear() end
+      elseif msg.__cacheKey == nil then
+        -- The cache key as the request leaves: the reply is kept only if it still holds then.
+        local cache = getCache()
+        msg.__cacheKey = cache and cache.keyFor(msg.command) or false
       end
       self.lastTimeCommandSent = now
       self.currentMessageStartTime = now -- Timeout-Fenster für jeden Retry neu setzen

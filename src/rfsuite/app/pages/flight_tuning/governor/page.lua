@@ -254,6 +254,8 @@ local function queueGovRead(isAutoReload)
 	end
 
 	local readValid = type(getSession()) == "table"
+	-- The profile this read is for; M.canSave holds the values on screen to it.
+	local readProfile = getLiveProfile()
 	ui.runtime.readPending = true
 	if not isAutoReload then
 		ui.loading = true
@@ -290,6 +292,7 @@ local function queueGovRead(isAutoReload)
 					end
 					if not ui.dirty then
 						loadFromSession()
+						ui.runtime.readProfile = readProfile
 					end
 					ui.runtime.readComplete = readValid
 					if type(ui.runtime.requestRebuild) == "function" then
@@ -327,9 +330,10 @@ local function ensureLoaded()
 	loadFromSession()
 	ui.loaded = true
 	ui.dirty = false
-	ui.runtime.lastSessionSignature = buildSessionSignature()
 	ui.baseTitle = getBaseTitle()
-	queueGovRead(false)
+	-- Taken over only with a read sent under it: a Reload while a read is out keeps the old one.
+	local signature = buildSessionSignature()
+	if queueGovRead(false) then ui.runtime.lastSessionSignature = signature end
 end
 
 local function queueGovWrite(session)
@@ -569,8 +573,14 @@ function M.onReload()
 	return false
 end
 
+-- MSP_SET_GOVERNOR_PROFILE carries no profile index: the board stores the record in whichever PID
+-- profile is active when it arrives. A profile switch after the read therefore refuses Save until the
+-- page has read the active profile; the second value is the reason the host shows.
 function M.canSave()
-	return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+	if ui.runtime == nil or ui.runtime.readComplete ~= true or ui.runtime.readPending then return false end
+	if ui.runtime.readProfile == nil then return false end
+	if getLiveProfile() ~= ui.runtime.readProfile then return false, "profile_changed" end
+	return true
 end
 
 function M.onSave(ctx)
@@ -625,12 +635,13 @@ function M.wakeup(ctx)
 	if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then
 		ui.runtime.syncHeaderTitle(ui.baseTitle or getBaseTitle(), ctx and ctx.navButtons or nil)
 	end
+	-- A switch is not read over a pending edit; M.canSave refuses until Reload reads the new profile.
 	if ui.dirty then return end
 
 	local signature = buildSessionSignature()
-	if signature ~= ui.runtime.lastSessionSignature then
+	-- Taken over only with a read sent under it: a read already out belongs to the old profile.
+	if signature ~= ui.runtime.lastSessionSignature and queueGovRead(true) then
 		ui.runtime.lastSessionSignature = signature
-		queueGovRead(true)
 	end
 end
 
@@ -649,7 +660,8 @@ function M.build(ctx)
 	local w = ctx.w
 	local h = ctx.h or 200
 	local i18n = ctx.i18n
-	local profileDisplay = getLiveProfile()
+	-- The profile the values on screen were read from; a pending edit keeps it after a switch.
+	local profileDisplay = ui.runtime.readProfile or getLiveProfile()
 
 	if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then
 		ui.runtime.syncHeaderTitle(ui.baseTitle or getBaseTitle(), ctx and ctx.navButtons or nil)

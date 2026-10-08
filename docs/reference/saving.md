@@ -101,6 +101,34 @@ read while they are open. If the link drops and comes back from a different flig
 another board, or one reporting a different MSP API version -- such a page reads again. A link that drops and comes back to the same
 board does not make it read again, so values edited and not yet saved stay on the page.
 
+## When the profile changes under an open page
+
+PIDs, Rates and Governor, and the advanced tuning pages except Filters, each show one PID or rate
+profile, and their Save writes the whole record of that profile. The flight controller has no way
+to be told which profile a record is for: it stores it in whichever profile is active when the
+write arrives. So a profile switch from the transmitter -- a profile switch or an adjustment --
+while such a page is open matters:
+
+- **Nothing edited:** the page reads the new profile, and the heading shows its number.
+- **An edit not yet saved:** the page keeps the edit and does not read over it, and its heading
+  keeps the number of the profile the values were read from. Save is refused
+  with **Not saved** and a notice that the profile changed after the page was read; nothing is
+  written and no EEPROM commit is queued. Switching back to the profile the page was read from
+  makes Save available again. **Reload** reads the active profile instead and replaces the edit,
+  after the usual question if *Confirm on Reload* is on. Leaving the page asks about the unsaved
+  change as on any other page.
+
+A page learns of a switch from the `pid_profile` and `rate_profile` telemetry sensors, or from the
+packed *System Config* sensor on MSP API 12.10 when those are not selected. Without any of them it
+cannot see a switch at all and keeps the profile the connection reported. The suite's MSP response
+cache keeps a PID profile's reply only while one of these sensors reports the profile, so such a
+model reads the PID profile from the flight controller on every visit instead of being served the
+profile of an earlier one.
+
+Power > Sources writes the battery configuration, whose cell values belong to the battery profiles
+on MSP API 12.10. Its Save sends every profile's cell values back as they were read, so a battery
+profile switch while the page is open leaves every profile's values where they were.
+
 ## Pages covered
 
 - Flight Tuning: PIDs, Rates and Governor.

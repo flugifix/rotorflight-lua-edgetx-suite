@@ -59,6 +59,7 @@ return {
       eeprom_pending = "Gespeichert, aber der EEPROM-Schreibvorgang steht noch aus:",
       read_required = "Konfiguration zuerst vollständig lesen. Bitte das Laden abwarten oder mit Neu laden erneut versuchen.",
       page_changed = "Die Seite wurde gewechselt. Bitte zur Seite zurückkehren und erneut speichern.",
+      profile_changed = "Der Flugcontroller hat das Profil gewechselt, nachdem diese Seite gelesen wurde; nichts wurde gespeichert. Zurückschalten oder mit Neu laden das aktive Profil lesen; Neu laden ersetzt die Änderungen auf dieser Seite.",
       confirm_required = "Dieses Speichern muss bestätigt werden, und die Rückfrage konnte nicht angezeigt werden. Es wurde nichts geschrieben.",
       leave_title = "Ungespeicherte Änderungen",
       leave_message = "Diese Seite hat Änderungen, die nicht gespeichert sind. Verlassen verwirft sie.",

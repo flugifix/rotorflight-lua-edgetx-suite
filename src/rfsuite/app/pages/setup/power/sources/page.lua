@@ -254,7 +254,7 @@ local function buildBatteryPayload(batteryConfig)
 		caps[i + 1] = tonumber(batteryConfig["batteryCapacity_" .. tostring(i)]) or 0
 	end
 
-	return BatteryConfigApi.buildWritePayload({
+	local data = {
 		batteryCapacity = tonumber(batteryConfig.batteryCapacity) or 0,
 		batteryCellCount = tonumber(batteryConfig.batteryCellCount) or 0,
 		voltageMeterSource = tonumber(batteryConfig.voltageMeterSource) or 0,
@@ -266,7 +266,21 @@ local function buildBatteryPayload(batteryConfig)
 		lvcPercentage = tonumber(batteryConfig.lvcPercentage) or 100,
 		consumptionWarningPercentage = tonumber(batteryConfig.consumptionWarningPercentage) or 35,
 		batteryCapacities = caps
-	})
+	}
+	-- On firmware that keeps the cells per battery profile, the single fields land in whichever
+	-- profile is active when the write arrives, and the per-profile blocks then set every profile.
+	-- Sending back the blocks the read carried keeps a battery-profile switch made while this page
+	-- is open from copying one profile's cells into another.
+	if batteryConfig.hasProfileCells == true then
+		data.hasProfileCells = true
+		for f = 1, #BatteryConfigApi.PROFILE_CELL_FIELDS do
+			for i = 0, 5 do
+				local key = BatteryConfigApi.PROFILE_CELL_FIELDS[f] .. "_" .. tostring(i)
+				data[key] = batteryConfig[key]
+			end
+		end
+	end
+	return BatteryConfigApi.buildWritePayload(data)
 end
 
 function M.getHeaderActions()
