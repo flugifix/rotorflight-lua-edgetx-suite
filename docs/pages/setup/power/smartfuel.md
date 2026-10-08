@@ -31,7 +31,9 @@ The three tuning values are greyed out unless the source is *VOLTAGE* or *COMBIN
 ## Notes
 
 - Saving writes the settings to the flight controller and keeps a copy in this model's
-  preferences on the radio. Where that copy cannot be written, the notice says the model's
+  preferences on the radio. It waits until the page has read the flight controller's settings on
+  this visit: until then what it shows may be an earlier read, or its own defaults with the source
+  *OFF (LOCAL)*. Where that copy cannot be written, the notice says the model's
   settings were not saved and why — for example *the settings file could not be written to the
   SD card*.
 - The page also carries a *Local Source* selector (*CURRENT*, *VOLTAGE*, *COMBINED*) for a
