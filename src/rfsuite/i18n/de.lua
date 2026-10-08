@@ -2180,11 +2180,12 @@ return {
         help_title = "Profile kopieren",
         help_p1 = "Hier kannst du Einstellungen zwischen den Profilen kopieren.",
         help_p2 = "Wähle den Typ (PID oder Rate) sowie Quell- und Zielprofil aus.",
-        help_p3 = "SAVE fragt nach, welches Profil überschrieben wird: das Zielprofil behält danach nichts von seinen eigenen Einstellungen, und rückgängig machen lässt sich das nicht. Angeboten werden nur die Profile, die der Flight Controller meldet.",
+        help_p3 = "SAVE fragt nach, welches Profil überschrieben wird: das Zielprofil behält danach nichts von seinen eigenen Einstellungen, und rückgängig machen lässt sich das nicht. Angeboten werden nur die Profile, die der Flight Controller meldet; bis er sie gemeldet hat, wartet SAVE, und RELOAD fragt erneut.",
         msgbox_save = "Profil kopieren",
         msgbox_msg = "%s-Profil %d mit Profil %d überschreiben? Das lässt sich nicht rückgängig machen.",
         msp_unavailable = "Keine Verbindung zum Flight Controller.",
-        warn_same_profile = "Quell- und Zielprofil sind identisch."
+        warn_same_profile = "Quell- und Zielprofil sind identisch.",
+        selection_out_of_range = "Der Flight Controller hat weniger Profile als angeboten. Auswahl prüfen und erneut speichern."
       },
       diagnostics_profile_select = {
         pid_profile = "PID-Profil",

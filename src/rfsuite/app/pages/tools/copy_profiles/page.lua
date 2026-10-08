@@ -26,6 +26,7 @@ local state = {
   sourceIndex = 0,
   destIndex = 0,
   isSaving = false,
+  isReading = false,
   requestRebuild = nil,
   i18n = nil
 }
@@ -50,8 +51,8 @@ end
 
 -- MSP_STATUS carries both counts and tasks/events/common/status.lua puts them in the session on
 -- every connect. Before that reply arrives there is no field at all; a zero can only come from a
--- reply that was short. Neither is a profile the pilot can pick, so both fall back.
-local function profileCount(profileType)
+-- reply that was short. Neither is a count the board has reported.
+local function reportedCount(profileType)
   local session = getSession()
   local count = nil
   if session then
@@ -62,7 +63,39 @@ local function profileCount(profileType)
     end
   end
   if count and count >= 1 then return count end
-  return DEFAULT_PROFILE_COUNT
+  return nil
+end
+
+-- What the lists offer: the reported count, or six until there is one.
+local function profileCount(profileType)
+  return reportedCount(profileType) or DEFAULT_PROFILE_COUNT
+end
+
+-- Reads MSP_STATUS for the two counts, as the connect does; RELOAD asks for them this way when
+-- the connect's own read has not delivered them.
+local function requestCounts()
+  if state.isReading then return end
+  local mspState = MspRuntime and type(MspRuntime.getState) == "function" and MspRuntime.getState()
+  if not mspState or not mspState.queue then return end
+  local statusApi = loadModule("tasks/msp/api/status.lua")
+  if not statusApi then return end
+
+  state.isReading = true
+  mspState.queue:add({
+    command = statusApi.command,
+    simulatorResponse = statusApi.simulatorResponse,
+    processReply = function(_, buf)
+      state.isReading = false
+      local parsed = statusApi.parse(buf)
+      local session = getSession()
+      if parsed and session then
+        session.pid_profile_count = parsed.pid_profile_count
+        session.control_rate_profile_count = parsed.control_rate_profile_count
+      end
+      if type(state.requestRebuild) == "function" then state.requestRebuild() end
+    end,
+    errorHandler = function() state.isReading = false end
+  })
 end
 
 local function clampIndex(index, count)
@@ -88,7 +121,7 @@ end
 -- answer changes.
 function M.getHeaderActions()
   return {
-    reload = false,
+    reload = not state.isSaving,
     save = not state.isSaving and state.sourceIndex ~= state.destIndex,
     help = true
   }
@@ -122,8 +155,22 @@ function M.getSaveConfirm(ctx)
   }
 end
 
+-- The copy is written only once the board has said how many profiles of the selected kind it
+-- has: the lists offer six before that, and the firmware ignores a copy onto a profile it does not
+-- have while still answering it as done. The host reports a SAVE refused here.
+function M.canSave()
+  return reportedCount(state.profileType) ~= nil
+end
+
+function M.onReload()
+  ensureDeps()
+  requestCounts()
+  return true
+end
+
 function M.onSave(ctx)
   if state.isSaving then return false end
+  if not M.canSave() then return false, "loaded_data_missing" end
   ensureDeps()
 
   local i18n = ctx and ctx.i18n or state.i18n
@@ -138,6 +185,16 @@ function M.onSave(ctx)
   if not mspState or not mspState.queue then
     reportRefusal(ctx, pageText(i18n, "msp_unavailable",
       "No connection to the flight controller."))
+    return false
+  end
+
+  -- The count can arrive after the lists were drawn with six. A choice beyond it is not sent: the
+  -- lists are redrawn to the board's size and the pilot checks the choice and saves again.
+  local count = profileCount(state.profileType)
+  if state.sourceIndex > count - 1 or state.destIndex > count - 1 then
+    if type(state.requestRebuild) == "function" then state.requestRebuild() end
+    reportRefusal(ctx, pageText(i18n, "selection_out_of_range",
+      "The flight controller has fewer profiles than were offered. Check the selection and save again."))
     return false
   end
 
@@ -269,6 +326,7 @@ end
 
 function M.closePage()
   state.isSaving = false
+  state.isReading = false
   state.requestRebuild = nil
   state.i18n = nil
   Common = nil
