@@ -68,7 +68,7 @@ started on the controller.
 
 ## Related
 
-- [Rotorflight documentation](https://www.rotorflight.org/docs/)
+- [Rotorflight documentation](https://doc.rotorflight.org/)
 - [Issue 302](https://github.com/rotorflight/rotorflight-lua-edgetx-suite/issues/302)
 
 *Documented against RFSuite 0.1.7.*

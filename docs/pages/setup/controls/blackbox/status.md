@@ -42,6 +42,6 @@ The page has no settings. It reads both media when it opens and again every two 
 
 ## Related
 
-- [Rotorflight documentation](https://www.rotorflight.org/docs/)
+- [Rotorflight documentation](https://doc.rotorflight.org/)
 
 *Documented against RFSuite 0.1.7.*

@@ -171,5 +171,5 @@ changed.
 
 ## Related
 
-- [Rotorflight documentation](https://www.rotorflight.org/docs/) — the adjustment functions
+- [Rotorflight documentation](https://doc.rotorflight.org/) — the adjustment functions
   themselves: what each one changes, its range, and how the slots are addressed.

@@ -96,7 +96,7 @@ the pilot's business.
 
 - [In-flight tuning overlay](../../../dashboard/inflight-tuning.md) — what the surface does in
   the air.
-- [Rotorflight documentation](https://www.rotorflight.org/docs/) — the flight controller's
+- [Rotorflight documentation](https://doc.rotorflight.org/) — the flight controller's
   adjustment functions, which are what this drives.
 
 *Documented against RFSuite 0.1.7.*

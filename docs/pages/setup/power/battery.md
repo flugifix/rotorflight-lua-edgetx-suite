@@ -64,7 +64,7 @@ values for every profile.
 
 ## Related
 
-- [Rotorflight documentation](https://www.rotorflight.org/docs/) — the battery profiles and the
+- [Rotorflight documentation](https://doc.rotorflight.org/) — the battery profiles and the
   voltage levels themselves are the flight controller's
 
 *Documented against RFSuite 0.1.7.*

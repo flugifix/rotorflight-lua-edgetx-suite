@@ -76,7 +76,7 @@ supplied a figure — a dashboard tile whose source is `esc_load` shows `--` rat
 
 - [SmartFuel page](smartfuel.md) — the estimate the flight controller computes, and its tuning
 - [Custom telemetry sensors](../../../reference/telemetry-sensors.md) — what `SmFt` and `SmCp` hold
-- [Rotorflight documentation: SmartFuel](https://www.rotorflight.org/docs/setup/smartfuel)
+- [Rotorflight documentation: SmartFuel](https://doc.rotorflight.org/setup/smartfuel/)
 - [Dashboard themes](../../../developer/dashboard-themes.md) — the `esc_load` box source, its
   unit and a sensible gauge range.
 

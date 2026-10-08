@@ -97,7 +97,7 @@ group is always shown.
   same ESC family, for ESCs running Bluejay rather than BLHeli_S.
 - [Saving configuration](../../../../../reference/saving.md) — what the ESC Configurator
   pages read and write, and when a read or a Save is refused.
-- [Rotorflight documentation](https://www.rotorflight.org/docs/) — what each of these
+- [Rotorflight documentation](https://doc.rotorflight.org/) — what each of these
   settings does inside the ESC.
 
 *Documented against RFSuite 0.1.7.*

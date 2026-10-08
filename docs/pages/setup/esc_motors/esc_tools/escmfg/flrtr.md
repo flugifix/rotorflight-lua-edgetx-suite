@@ -80,10 +80,10 @@ one line each.
 
 ## Related
 
-- [Rotorflight documentation](https://www.rotorflight.org/docs/) -- what each of these
+- [Rotorflight documentation](https://doc.rotorflight.org/) -- what each of these
   settings does inside the ESC, and how the ESC's own governor relates to the flight
   controller's.
-- [Flyrotor Governor setup](https://www.rotorflight.org/docs/setup/governor/governor-flyrotor-setup)
+- [Flyrotor Governor setup](https://doc.rotorflight.org/setup/governor-setup/#flyrotor)
   -- Rotorflight's own page on this ESC: wiring, the electrical angle, the starting torque and
   which ESC mode goes with which governor.
 

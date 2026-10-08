@@ -25,7 +25,7 @@ repeat it, because a copy would go out of date the first time the flight control
 sensor.
 
 For the meaning of an individual value — what `Vbat` measures, what the governor states are —
-see the [Rotorflight documentation](https://www.rotorflight.org/docs/); the suite does not
+see the [Rotorflight documentation](https://doc.rotorflight.org/); the suite does not
 redefine them.
 
 ## A sensor the suite does not know stops the frame
@@ -126,6 +126,6 @@ rows — nothing in the suite depends on them being visible.
 - [SmartFuel page](../pages/setup/power/smartfuel.md) — where `SmFt` and `SmCp` are configured
 - [Telemetry page](../pages/setup/telemetry.md) — where the sensors are selected
 - [Background decoder](background-decoder.md) — where the decoding runs
-- [Rotorflight documentation](https://www.rotorflight.org/docs/) — what each value means
+- [Rotorflight documentation](https://doc.rotorflight.org/) — what each value means
 
 *Documented against RFSuite 0.1.7.*
