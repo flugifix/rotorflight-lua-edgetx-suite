@@ -323,6 +323,7 @@ local SAVE_TEXT = {
   eeprom_pending  = "@i18n(app.save.eeprom_pending)@",
   read_required   = "@i18n(app.save.read_required)@",
   page_changed    = "@i18n(app.save.page_changed)@",
+  profile_changed = "@i18n(app.save.profile_changed)@",
   confirm_required = "@i18n(app.save.confirm_required)@",
 }
 
@@ -1980,10 +1981,11 @@ local function onReload()
 end
 
 -- Read-backed pages own the completion condition: a loading overlay disappearing is not
--- proof that every record needed by their write was received and accepted.
+-- proof that every record needed by their write was received and accepted. A page may name why
+-- it refuses as a second value; "profile_changed" is the one with a notice of its own.
 local function checkPageSaveReady(page)
   if type(page.canSave) ~= "function" then return true end
-  local ok, ready = pcall(page.canSave)
+  local ok, ready, reason = pcall(page.canSave)
   if not ok then
     reportHookCrash("activePage.canSave", state.activePageMenuId, ready)
   end
@@ -1991,7 +1993,7 @@ local function checkPageSaveReady(page)
   reportSaveOutcome({
     ok = false,
     title = SAVE_TEXT.failed_title,
-    message = SAVE_TEXT.read_required
+    message = (ok and reason == "profile_changed") and SAVE_TEXT.profile_changed or SAVE_TEXT.read_required
   })
   return false
 end

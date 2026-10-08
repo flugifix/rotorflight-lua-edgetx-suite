@@ -362,10 +362,11 @@ function M.wakeup(ctx)
     ui.runtime.requestRebuild = ctx.requestRebuild
   end
 
+  -- A switch is not read over a pending edit; M.canSave refuses until Reload reads the new profile.
+  -- The signature is taken over only with a read sent under it.
   local signature = buildSessionSignature()
-  if signature ~= ui.runtime.lastSessionSignature then
+  if signature ~= ui.runtime.lastSessionSignature and not ui.dirty and queueRcRead(false) then
     ui.runtime.lastSessionSignature = signature
-    queueRcRead(false)
   end
 end
 
@@ -483,8 +484,13 @@ function M.build(ctx)
   end
 end
 
+-- The write carries no profile index: the board stores the record in whichever profile is active
+-- when it arrives. A profile switch after the read therefore refuses Save until the page has read
+-- the active profile; the second value is the reason the host shows.
 function M.canSave()
-  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+  if ui.runtime == nil or ui.runtime.readComplete ~= true or ui.runtime.readPending then return false end
+  if buildSessionSignature() ~= ui.runtime.lastSessionSignature then return false, "profile_changed" end
+  return true
 end
 
 function M.onSave(ctx)
@@ -498,7 +504,8 @@ function M.onReload(ctx)
   if session then
     loadFromSession()
     ui.dirty = false
-    queueRcRead(false)
+    local signature = buildSessionSignature()
+    if queueRcRead(false) then ui.runtime.lastSessionSignature = signature end
   end
   return true
 end

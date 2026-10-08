@@ -569,8 +569,13 @@ function M.onReload()
 	return false
 end
 
+-- MSP_SET_GOVERNOR_PROFILE carries no profile index: the board stores the record in whichever PID
+-- profile is active when it arrives. A profile switch after the read therefore refuses Save until the
+-- page has read the active profile; the second value is the reason the host shows.
 function M.canSave()
-	return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+	if ui.runtime == nil or ui.runtime.readComplete ~= true or ui.runtime.readPending then return false end
+	if buildSessionSignature() ~= ui.runtime.lastSessionSignature then return false, "profile_changed" end
+	return true
 end
 
 function M.onSave(ctx)
@@ -625,12 +630,13 @@ function M.wakeup(ctx)
 	if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then
 		ui.runtime.syncHeaderTitle(ui.baseTitle or getBaseTitle(), ctx and ctx.navButtons or nil)
 	end
+	-- A switch is not read over a pending edit; M.canSave refuses until Reload reads the new profile.
 	if ui.dirty then return end
 
 	local signature = buildSessionSignature()
-	if signature ~= ui.runtime.lastSessionSignature then
+	-- Taken over only with a read sent under it: a read already out belongs to the old profile.
+	if signature ~= ui.runtime.lastSessionSignature and queueGovRead(true) then
 		ui.runtime.lastSessionSignature = signature
-		queueGovRead(true)
 	end
 end
 
