@@ -43,6 +43,6 @@ The three tuning values are greyed out unless the source is *VOLTAGE* or *COMBIN
 ## Related
 
 - [Custom telemetry sensors](../../../reference/telemetry-sensors.md) — what `SmFt` and `SmCp` are, and what can read them
-- [Rotorflight documentation: SmartFuel](https://www.rotorflight.org/docs/setup/smartfuel)
+- [Rotorflight documentation: SmartFuel](https://doc.rotorflight.org/setup/smartfuel/)
 
 *Documented against RFSuite 0.1.6.*

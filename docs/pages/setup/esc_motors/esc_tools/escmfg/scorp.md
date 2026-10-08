@@ -87,7 +87,7 @@ version the ESC reported. *Section* switches between three groups of settings.
 
 ## Related
 
-- [Rotorflight documentation](https://www.rotorflight.org/docs/)
+- [Rotorflight documentation](https://doc.rotorflight.org/)
 - [Scorpion Power System](https://www.scorpionsystem.com/) -- what each of these settings does
   inside the ESC, and which ESC models support it.
 

@@ -45,6 +45,6 @@ stand now (`-` while its enable channel is outside its range; a `*` marks an out
 
 ## Related
 
-- [Rotorflight documentation](https://www.rotorflight.org/docs/)
+- [Rotorflight documentation](https://doc.rotorflight.org/)
 
 *Documented against RFSuite 0.1.7.*

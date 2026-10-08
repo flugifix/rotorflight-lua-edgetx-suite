@@ -91,7 +91,7 @@ ground, the link up and the values read — once per profile.
   the air.
 - *Configuration* → *Setup* → *Controls* → *Adjustments* — the same adjustment slots,
   edited one at a time.
-- [Rotorflight documentation](https://www.rotorflight.org/docs/) — the adjustment functions
+- [Rotorflight documentation](https://doc.rotorflight.org/) — the adjustment functions
   themselves, their ranges and what each one does to the helicopter.
 
 *Documented against RFSuite 0.1.7.*

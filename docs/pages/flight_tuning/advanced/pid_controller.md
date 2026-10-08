@@ -34,6 +34,6 @@ Read-only while the model is armed.
 
 ## Related
 
-- [Rotorflight documentation: Profiles tab](https://www.rotorflight.org/docs/configurator/tabs/profiles)
+- [Rotorflight documentation: Profiles tab](https://doc.rotorflight.org/configurator/tabs/profiles/)
 
 *Documented against RFSuite 0.1.7.*

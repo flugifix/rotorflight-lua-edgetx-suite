@@ -216,7 +216,7 @@ Two things are worth knowing before adding an entry:
 - [In-flight tuning overlay](inflight-tuning.md) — another surface full screen can show.
 - [Flight Log](../pages/tools/flight_log.md) — the battery prompt, and the battery registry it
   offers.
-- [Rotorflight documentation](https://www.rotorflight.org/docs/) — battery profiles and the
+- [Rotorflight documentation](https://doc.rotorflight.org/) — battery profiles and the
   blackbox themselves: what a profile holds, and what the flight controller records.
 
 *Documented against RFSuite 0.1.7.*

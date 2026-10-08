@@ -72,7 +72,7 @@ same as a save on any other page.
 
 ## Related
 
-- [Rotorflight documentation](https://www.rotorflight.org/docs/) — the `crsf_telemetry_mode`,
+- [Rotorflight documentation](https://doc.rotorflight.org/) — the `crsf_telemetry_mode`,
   `crsf_telemetry_link_rate` and `crsf_telemetry_link_ratio` settings this page writes.
 - [ExpressLRS documentation](https://www.expresslrs.org/) — what packet rate and telemetry ratio
   do to the link.
