@@ -112,7 +112,7 @@ One parameter at a time, not a grid:
   -- 25 steps: if a redraw is still waiting then, the surface is drawn and the hold ends, so a
   release the radio never reports does not keep the redraw waiting. Every hold ends after those
   same five seconds, with or without a redraw, and the surface says **hold ended after 5 s -
-  press again**; lift the finger and press again to go on. The radio does not report every
+  press again** (**5 s over - press again** where the line is too narrow); lift the finger and press again to go on. The radio does not report every
   release -- the backlight going off under the finger (an alarm flash, the backlight timeout) or
   a *Disable Touch* special function can lose it -- and this limit is what stops the flight controller from stepping on
   after the finger is gone.

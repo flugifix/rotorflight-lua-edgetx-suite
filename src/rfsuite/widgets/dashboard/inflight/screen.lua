@@ -694,7 +694,8 @@ local function appendActive(children, widget, m, t, p)
     unread = fitText(t("widgets.dashboard.inflight_custom_unread", "Custom layout not read"), hintW, m.small),
     range = fitText(t("widgets.dashboard.inflight_custom_range", "Row cannot be stepped"), hintW, m.small),
     empty = fitText(t("widgets.dashboard.inflight_custom_empty", "No usable Custom rows"), hintW, m.small),
-    hold_limit = fitText(t("widgets.dashboard.inflight_hold_limit", "hold ended after 5 s - press again"), hintW, m.small)
+    hold_limit = pickText(t("widgets.dashboard.inflight_hold_limit", "hold ended after 5 s - press again"),
+                          t("widgets.dashboard.inflight_hold_limit_short", "5 s over - press again"), hintW, m.small)
   }
   children[#children + 1] = {
     type = "label", x = m.leftX, y = m.sideY + m.lineH * 2, w = hintW, align = LEFT, font = m.small,
