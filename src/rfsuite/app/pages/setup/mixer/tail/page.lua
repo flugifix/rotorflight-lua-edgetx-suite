@@ -437,6 +437,10 @@ function M.build(ctx)
     function(newVal)
       if ui.config.tail_rotor_mode ~= newVal then
         ui.config.tail_rotor_mode = newVal
+        -- A tail mode change starts Yaw Calibration from the value that mode is set up with, as
+        -- the Rotorflight Configurator does on the same change: 100 % for a motorised or
+        -- bidirectional tail, 25 % for variable pitch. The direction is kept.
+        ui.config.yaw_calibration = (newVal >= 1) and 1000 or 250
         ui.dirty = true
         if type(ui.runtime.requestRebuild) == "function" then
           ui.runtime.requestRebuild()

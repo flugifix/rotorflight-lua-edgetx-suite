@@ -162,7 +162,9 @@ count has arrived, Save is held and the lists offer six. Reload asks the flight 
 On Tail, the yaw limits and the centre trim are kept as the flight controller stores them, and
 changing Tail Mode changes only the unit they are shown in -- percent for a motorised tail, degrees
 for variable pitch. The firmware applies the same stored numbers in every tail mode, so a Save after
-a Tail Mode change writes them back unchanged unless one of those fields was edited.
+a Tail Mode change writes them back unchanged unless one of those fields was edited. Yaw Calibration
+is set to the new mode's starting value on that change -- 100 % for a motorised or bidirectional
+tail, 25 % for variable pitch -- as in the Rotorflight Configurator; the yaw direction is kept.
 
 The four Mixer pages show the values of their previous visit while they read again, and each
 writes whole records -- the mixer configuration, and on Swash, Swash Geometry and Tail the mixer
