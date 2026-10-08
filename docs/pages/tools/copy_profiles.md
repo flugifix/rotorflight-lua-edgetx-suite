@@ -30,8 +30,9 @@ smaller one has two and three. A profile the board does not have is not offered,
 ignores a copy onto it and still answers as if it had been made. Until the flight controller's
 status has been read, both lists offer six and SAVE is held: pressed before that, the save notice
 asks for the read to finish, and RELOAD asks the board again. A choice beyond the board's profiles
-that was made before its status arrived is not sent: the lists are redrawn to the board's size and
-the save notice asks to check the choice and save again.
+-- made before its status arrived, or carried over from the other type -- is not moved to another
+profile and is not sent: the list shows it as *Unknown (n)*, and the save notice asks to check the
+choice and save again.
 
 ## Notes
 

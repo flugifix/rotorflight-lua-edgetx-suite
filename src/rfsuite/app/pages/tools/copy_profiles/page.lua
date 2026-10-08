@@ -98,13 +98,6 @@ local function requestCounts()
   })
 end
 
-local function clampIndex(index, count)
-  local value = tonumber(index) or 0
-  if value < 0 then return 0 end
-  if value > count - 1 then return count - 1 end
-  return value
-end
-
 local function reportRefusal(ctx, message)
   local report = ctx and ctx.reportSave
   if type(report) ~= "function" then return end
@@ -191,7 +184,8 @@ function M.onSave(ctx)
   end
 
   -- The count can arrive after the lists were drawn with six. A choice beyond it is not sent: the
-  -- lists are redrawn to the board's size and the pilot checks the choice and saves again.
+  -- lists are redrawn to the board's size, the choice is kept and shown as unknown, and the pilot
+  -- picks again.
   local count = profileCount(state.profileType)
   if state.sourceIndex > count - 1 or state.destIndex > count - 1 then
     if type(state.requestRebuild) == "function" then state.requestRebuild() end
@@ -275,23 +269,26 @@ function M.build(ctx)
   )
 
   -- Source Profile
+  -- A choice beyond the count is not moved into range here: a copy has no undo, so a choice the
+  -- pilot did not make must not reach the overwrite question. It stays, the combo shows it as
+  -- unknown and will not hand it back, and M.onSave refuses it. The lists carry the profile
+  -- number (1-based) so that the unknown entry names the profile the pilot chose; the state and
+  -- the MSP payload stay 0-based.
   local availableProfiles = profileCount(state.profileType)
-  state.sourceIndex = clampIndex(state.sourceIndex, availableProfiles)
-  state.destIndex = clampIndex(state.destIndex, availableProfiles)
 
   local profileOptions = {}
   for i = 1, availableProfiles do
-    profileOptions[i] = { value = i - 1, label = tostring(i) }
+    profileOptions[i] = { value = i, label = tostring(i) }
   end
-  
+
   cursorY = cursorY + Controls.appendComboSelect(
     children, x, cursorY, w,
     pageText(i18n, "source_profile", "Source"),
     profileOptions,
-    state.sourceIndex,
+    state.sourceIndex + 1,
     function(val)
       local wasSame = state.sourceIndex == state.destIndex
-      state.sourceIndex = val
+      state.sourceIndex = val - 1
       if (state.sourceIndex == state.destIndex) ~= wasSame and type(state.requestRebuild) == "function" then
         state.requestRebuild()
       end
@@ -303,10 +300,10 @@ function M.build(ctx)
     children, x, cursorY, w,
     pageText(i18n, "dest_profile", "Destination"),
     profileOptions,
-    state.destIndex,
+    state.destIndex + 1,
     function(val)
       local wasSame = state.sourceIndex == state.destIndex
-      state.destIndex = val
+      state.destIndex = val - 1
       if (state.sourceIndex == state.destIndex) ~= wasSame and type(state.requestRebuild) == "function" then
         state.requestRebuild()
       end
