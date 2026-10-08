@@ -90,6 +90,9 @@ local function loadFromSession()
   end
   -- The mode as read, kept apart from the session record, which a save overwrites before the
   -- board has taken it; and the altitude-hold choice, kept while rescue is switched off and on.
+  -- boardMode is deliberately NOT refreshed when a write fails: the write's errorHandler leaves
+  -- ui.dirty set, so no read reply loads over it and the Altitude hold row stays. Open and Reload
+  -- run this from the session record and then read the board, whose reply sets its own mode.
   ui.boardMode = tonumber(ui.config.rescue_mode) or 0
   ui.altHold = ui.boardMode > 1
 end
@@ -198,6 +201,7 @@ local function queueRcWrite()
         queueRcRead(true)
       end
     end,
+    -- Leaves ui.dirty set on purpose; see loadFromSession, which keeps ui.boardMode through it.
     errorHandler = function() end
   })
 
