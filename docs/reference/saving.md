@@ -106,18 +106,27 @@ board does not make it read again, so values edited and not yet saved stay on th
 - Flight Tuning: PIDs, Rates and Governor.
 - Flight Tuning > Advanced: Autolevel, Filters, Main Rotor, PID Bandwidth, PID Controller,
   Rescue, Tail Rotor, and all three Rates Advanced pages.
-- Setup > Alignment.
+- Setup: Configuration, Radio Config, Accelerometer and Alignment.
 - Setup > Governor: General, Time, Filters and Curves.
 - Setup > ESC/Motors: RPM, Throttle and Telemetry.
 - Setup > Controls: Modes, Failsafe, Stats, both Beepers pages, and Blackbox Configuration
   and Logging.
-- Setup > Power: Battery and Sources.
+- Setup > Power: Battery, Sources and SmartFuel.
 - Setup > Mixer: Swash, Swash Geometry, Tail and Trims.
 - Setup > Servos: PWM Output and BUS Output.
 
 A chained load must finish successfully even if an earlier error allowed the page to continue
 reading other records. Previously read session values alone do not grant permission to save.
 The page's existing parameter help and save/reboot sequence are otherwise unchanged.
+
+Configuration, Radio Config, Accelerometer and SmartFuel write whole records from what the page
+holds, and before a read has succeeded that is the page's own starting values rather than the
+board's. On Configuration that would be every feature switched off -- the serial receiver
+included -- and an empty craft name, followed by a restart.
+
+**Tools > Copy Profiles** reads no record of its own; what its Save needs is how many profiles of
+the selected kind the flight controller has, which the connection reads straight away. Until that
+count has arrived, Save is held and the lists offer six. Reload asks the flight controller again.
 
 The four Mixer pages show the values of their previous visit while they read again, and each
 writes whole records -- the mixer configuration, and on Swash, Swash Geometry and Tail the mixer
