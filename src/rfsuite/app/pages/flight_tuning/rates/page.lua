@@ -410,6 +410,8 @@ local function queueRcRead(isAutoReload)
   end
 
   local readValid = type(getSession()) == "table"
+  -- The profile this read is for; M.canSave holds the values on screen to it.
+  local readProfile = getLiveProfile()
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true
@@ -433,11 +435,13 @@ local function queueRcRead(isAutoReload)
           for k, v in pairs(parsed) do
             rcConfig[k] = v
           end
-          loadFromSession()
-          
+          -- A pending edit is not read over: M.canSave refuses until it is resolved.
+          if not ui.dirty then
+            loadFromSession()
+            ui.runtime.readProfile = readProfile
+          end
           ui.runtime.readPending = false
           ui.loading = false
-          ui.dirty = false
           ui.progress = 100
           ui.runtime.readComplete = readValid
           
@@ -749,7 +753,8 @@ end
 -- has read the active profile; the second value is the reason the host shows.
 function M.canSave()
   if ui.runtime == nil or ui.runtime.readComplete ~= true or ui.runtime.readPending then return false end
-  if buildSessionSignature() ~= ui.runtime.lastSessionSignature then return false, "profile_changed" end
+  if ui.runtime.readProfile == nil then return false end
+  if getLiveProfile() ~= ui.runtime.readProfile then return false, "profile_changed" end
   return true
 end
 
@@ -843,7 +848,7 @@ function M.build(ctx)
   end
 
   -- The profile the values on screen were read from; a pending edit keeps it after a switch.
-  local profileDisplay = tonumber(ui.runtime.lastSessionSignature) or getLiveProfile()
+  local profileDisplay = ui.runtime.readProfile or getLiveProfile()
   local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 38
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then

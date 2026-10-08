@@ -164,10 +164,13 @@ local function queueRcRead(isAutoReload)
                   ui.runtime.governorReadComplete = false
                 end
                 
-                loadFromSession()
+                -- A pending edit is not read over: M.canSave refuses until it is resolved.
+                if not ui.dirty then
+                  loadFromSession()
+                  ui.runtime.readProfile = tonumber(ui.runtime.lastSessionSignature)
+                end
                 ui.runtime.readPending = false
                 ui.loading = false
-                ui.dirty = false
                 ui.progress = 100
                 ui.runtime.readComplete = readValid
                 if type(ui.runtime.requestRebuild) == "function" then
@@ -176,10 +179,13 @@ local function queueRcRead(isAutoReload)
               end,
               errorHandler = function()
                 ui.runtime.governorReadComplete = false
-                loadFromSession()
+                -- A pending edit is not read over: M.canSave refuses until it is resolved.
+                if not ui.dirty then
+                  loadFromSession()
+                  ui.runtime.readProfile = tonumber(ui.runtime.lastSessionSignature)
+                end
                 ui.runtime.readPending = false
                 ui.loading = false
-                ui.dirty = false
                 ui.progress = 100
                 -- Deliberately allow partial save: PID fields are valid even if governor profile read failed
                 ui.runtime.readComplete = readValid
@@ -189,10 +195,13 @@ local function queueRcRead(isAutoReload)
               end
             })
           else
-            loadFromSession()
+            -- A pending edit is not read over: M.canSave refuses until it is resolved.
+            if not ui.dirty then
+              loadFromSession()
+              ui.runtime.readProfile = tonumber(ui.runtime.lastSessionSignature)
+            end
             ui.runtime.readPending = false
             ui.loading = false
-            ui.dirty = false
             ui.progress = 100
             ui.runtime.readComplete = readValid
             if type(ui.runtime.requestRebuild) == "function" then
@@ -520,7 +529,7 @@ function M.build(ctx)
 
   local title = ui.baseTitle or getBaseTitle()
   -- The profile the values on screen were read from; a pending edit keeps it after a switch.
-  local profile = tonumber(ui.runtime.lastSessionSignature) or getLiveProfile()
+  local profile = ui.runtime.readProfile or getLiveProfile()
   local displayTitle = string.format("%s #%d", title, profile)
 
   if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then
@@ -618,7 +627,8 @@ end
 -- the active profile; the second value is the reason the host shows.
 function M.canSave()
   if ui.runtime == nil or ui.runtime.readComplete ~= true or ui.runtime.readPending then return false end
-  if buildSessionSignature() ~= ui.runtime.lastSessionSignature then return false, "profile_changed" end
+  if ui.runtime.readProfile == nil then return false end
+  if getLiveProfile() ~= ui.runtime.readProfile then return false, "profile_changed" end
   return true
 end
 
