@@ -3051,6 +3051,8 @@ return {
       inflight_custom_unread = "Custom nicht gelesen",
       inflight_custom_range = "Zeile nicht einstellbar",
       inflight_custom_empty = "Keine nutzbaren Custom-Zeilen",
+      inflight_hold_limit = "Halten nach 5 s beendet - neu drücken",
+      inflight_hold_limit_short = "5s Limit - neu drücken",
       inflight_prime_done_at = "Werte gelesen",
       inflight_board_step = "Schrittweite weicht ab: Flugregler neu einrichten",
       inflight_post_saved = "der Flugregler hat das gespeichert",

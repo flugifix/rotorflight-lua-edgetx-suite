@@ -110,7 +110,12 @@ One parameter at a time, not a grid:
   flight, a changed setting, a pack with a different cell count: the surface is drawn again once
   the control has been let go. That wait lasts at most five seconds from the start of the hold
   -- 25 steps: if a redraw is still waiting then, the surface is drawn and the hold ends, so a
-  release the radio never reports does not keep the redraw waiting.
+  release the radio never reports does not keep the redraw waiting. Every hold ends after those
+  same five seconds, with or without a redraw, and the surface says **hold ended after 5 s -
+  press again** (**5 s over - press again** where the line is too narrow); lift the finger and press again to go on. The radio does not report every
+  release -- the backlight going off under the finger (an alarm flash, the backlight timeout) or
+  a *Disable Touch* special function can lose it -- and this limit is what stops the flight controller from stepping on
+  after the finger is gone.
 - **The trims** do the same thing without looking down, in whichever of the two layouts the
   radio is set to. A trim press that steps the selected parameter comes and goes without
   rebuilding the screen; a trim that selects another row or bank redraws it for the new
