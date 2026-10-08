@@ -530,7 +530,8 @@ function M.build(ctx)
   end
 
   local title = ui.baseTitle or getBaseTitle()
-  local profile = getLiveProfile()
+  -- The profile the values on screen were read from; a pending edit keeps it after a switch.
+  local profile = tonumber(ui.runtime.lastSessionSignature) or getLiveProfile()
   local displayTitle = string.format("%s #%d", title, profile)
 
   if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then

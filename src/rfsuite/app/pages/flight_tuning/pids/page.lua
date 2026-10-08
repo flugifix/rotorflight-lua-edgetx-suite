@@ -563,7 +563,8 @@ function M.build(ctx)
 	local w = ctx.w
 	local h = ctx.h or 200
 	local i18n = ctx.i18n
-	local profileDisplay = getLiveProfile()
+	-- The profile the values on screen were read from; a pending edit keeps it after a switch.
+	local profileDisplay = tonumber(ui.runtime.lastSessionSignature) or getLiveProfile()
 	local layout = getLayoutProfile(w, h)
 
 	if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then

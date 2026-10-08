@@ -842,7 +842,8 @@ function M.build(ctx)
     ui.runtime.syncHeaderTitle(ui.baseTitle, M.getHeaderActions())
   end
 
-  local profileDisplay = getLiveProfile()
+  -- The profile the values on screen were read from; a pending edit keeps it after a switch.
+  local profileDisplay = tonumber(ui.runtime.lastSessionSignature) or getLiveProfile()
   local sectionHeaderH = (Controls and Controls.STATIC_SECTION_H) or 38
   local cursorY = y
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
