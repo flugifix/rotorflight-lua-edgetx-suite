@@ -3054,6 +3054,7 @@ return {
       inflight_custom_unread = "Custom layout not read",
       inflight_custom_range = "Row cannot be stepped",
       inflight_custom_empty = "No usable Custom rows",
+      inflight_hold_limit = "hold ended after 5 s - press again",
       inflight_prime_done_at = "Values read",
       inflight_board_step = "step differs: set the board up again",
       inflight_post_saved = "the board has saved this",

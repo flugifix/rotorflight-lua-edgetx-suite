@@ -707,7 +707,9 @@ local JOB_FAULT_LIMIT = 3
 -- 200 ms after the first 100 ms (fc/rc_adjustments.c), so five seconds is 25 steps: at the
 -- largest step of every row but the head speed, 10, that is 250 units -- the whole range of most
 -- parameters, which run 0-250 or 0-255. A hold that long has crossed the range or lost its
--- release. A hold with no rebuild waiting is not ended here.
+-- release. A hold with no rebuild waiting is not ended here: the drive ends every hold itself after
+-- the same five seconds (HOLD_LIMIT_SECONDS in widgets/dashboard/inflight/drive.lua), and the two
+-- are kept equal so that neither outlasts the other.
 local HOLD_DEFER_SECONDS = 5
 
 local function jobCapped(self, kind)
