@@ -552,6 +552,7 @@ return {
       flight_tuning_advanced_rescue = {
         title = "Rettung",
         mode_enable = "Rettungsmodus aktivieren",
+        alt_hold = "Höhe halten",
         flip_upright = "Aufrichten",
         pull_up = "Abfangen",
         climb = "Steigen",
@@ -570,6 +571,7 @@ return {
         loading_message = "Lese Rettungseinstellungen",
         help_title = "Rettungs-Hilfe",
         help_p1 = "Rettungsmodus aktivieren: Aktiviert den Rettungs-Autopiloten auf dem Flugcontroller.",
+        help_alt_hold = "Höhe halten: nur bei einem Profil sichtbar, das die Höhe bereits hält; aus lässt die Rettung stattdessen steigen.",
         help_p2 = "Aufrichten: Wählt, ob der Hubschrauber bei der Aktivierung der Rettung in eine normale aufrechte Fluglage gedreht wird.",
         help_p3 = "Abfangen: Definiert Pitch-Prozentsatz und Dauer, um das Sinken des Hubschraubers zu stoppen.",
         help_p4 = "Steigen: Definiert Pitch-Prozentsatz und Steigdauer für die Steigphase.",

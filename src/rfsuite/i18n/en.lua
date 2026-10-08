@@ -552,6 +552,7 @@ return {
       flight_tuning_advanced_rescue = {
         title = "Rescue",
         mode_enable = "Rescue mode enable",
+        alt_hold = "Altitude hold",
         flip_upright = "Flip to upright",
         pull_up = "Pull-up",
         climb = "Climb",
@@ -570,6 +571,7 @@ return {
         loading_message = "Reading Rescue Settings",
         help_title = "Rescue Help",
         help_p1 = "Rescue Mode Enable: Enables the rescue autopilot on the flight controller.",
+        help_alt_hold = "Altitude hold: shown only for a profile that already holds altitude; off makes rescue climb instead.",
         help_p2 = "Flip to upright: Chooses whether the helicopter flips to an upright orientation when rescue is triggered.",
         help_p3 = "Pull-up: Defines collective pitch percent and duration to stop the helicopter's descent.",
         help_p4 = "Climb: Defines collective pitch percent and climb duration for the climbing stage.",

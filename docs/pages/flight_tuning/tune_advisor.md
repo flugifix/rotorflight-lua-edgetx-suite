@@ -42,8 +42,8 @@ The suggestions follow these rules:
 
 - **Turns faster or slower than asked** (more than 15% off): change FF and the rates by the same amount in
   opposite directions, so the stick feel stays the same but the heli flies the rate you ask for. One step
-  changes FF by at most 20%. With Actual, Quick and Rotorflight rates the page gives the exact rate values;
-  with the other rate types it gives a percentage. An axis with FF set to 0 (often the tail) gets no FF advice.
+  changes FF by at most 20%. With Actual, Quick and Rotorflight rates the page gives the exact rate values,
+  never beyond what the *Rates* page takes for that column; with the other rate types it gives a percentage. An axis with FF set to 0 (often the tail) gets no FF advice.
 - **Full stick asks for more rate than the heli reaches** (roll and pitch), with the cyclic at its limit: lower
   the rates to what the heli reaches.
 - **Stops bounce back 12% or more**: if the I-term pushes back, lower *Advanced > PID Controller > Cut-off point*

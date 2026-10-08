@@ -91,6 +91,10 @@ local function getFieldLimit(key)
 	if key == "governor_headspeed" then
 		return { min = 0, max = 30000, step = 10 }
 	end
+	-- The firmware's range for both limits (cli/settings.c gov_min_throttle / gov_max_throttle)
+	if key == "governor_min_throttle" or key == "governor_max_throttle" then
+		return { min = 10, max = 100, step = 1 }
+	end
 	return { min = 0, max = 255, step = 1 }
 end
 
