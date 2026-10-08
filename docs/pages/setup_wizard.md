@@ -63,7 +63,18 @@ page back, and on the first page it leaves the assistant.
   there the value is the one the pilot picked.
 - **The channels the assistant lays out are CH5 to CH8 and the four stick channels.** It replaces
   every mixer line and every input line on the channels it writes, which the channel screen says
-  before it does so.
+  before it does so. Each channel has a fixed input -- the sticks I1 to I4, CH5 to CH8 I5 to I8 --
+  and another channel's mixer line may use the same input. Where one does, *Set up* on the Sticks
+  step and *Write* ask first and name the input and those channels, because after the write they
+  follow the new input. Declining writes nothing and the screen says *Nothing was written*; a
+  radio that cannot show the question writes nothing either.
+- **A channel counts as done when the flight controller acts on it the way this assistant
+  writes it.** For CH5 and CH8 that is a mode range on the channel's aux slot in the window the
+  assistant writes, 1700 to 2100 µs, and none for the same mode on that slot in another window --
+  the window, not the presence of a range, decides which switch position arms. A range in another
+  window leaves the channel open, and *Write* moves that range rather than adding a second one.
+  For CH7 it is both profile adjustments read from the channel's own aux slot over its whole
+  travel, onto profiles 1 to 3.
 - **The output stage of CH5 to CH8 has to be at its defaults**, and only of those four. The
   assistant tells the flight controller absolute microsecond windows, and what a channel finally
   puts on the wire is the mixer value after its output stage. A channel whose end points, subtrim,
@@ -73,7 +84,8 @@ page back, and on the first page it leaves the assistant.
   outputs page. A reverted channel is the exception and needs nothing: the assistant reads the
   direction and writes every line's weight to match it.
   **The four stick channels are not covered by this** -- their output stage is the pilot's servo
-  travel and the assistant neither reads it nor asks for it back.
+  travel and the assistant neither reads it nor asks for it back. Naming a stick channel keeps
+  its output stage as it is, its output curve included.
 - **Nothing is written before the Write step.** Every earlier screen reads, proposes or measures.
   The one exception is the Sticks step, which writes the four stick channels because its own check
   is what proves them.
@@ -81,7 +93,13 @@ page back, and on the first page it leaves the assistant.
   the answer belongs to: no switch chosen, a switch with too few positions, a channel the flight
   controller's map puts no aux slot on, or an output stage that cannot carry the window. The
   Profile channel is also blocked where the flight controller has no free adjustment slot left for
-  each of the two functions it needs.
+  each of the two functions it needs, and where an adjustment slot did not answer while the step
+  read them: the missing slot may already hold one of the two. Opening the step again reads them
+  again.
+- **Orientation writes only what it has read.** The step sends all three alignments back -- the
+  board's, the second gyro's and the magnetometer's -- with only the first changed. Where the
+  flight controller does not answer the read, the step says *could not be read* and writes
+  nothing.
 - **The assistant never selects a model.** EdgeTX registers no model-selection function for Lua, so
   every write lands on the model that is open.
 - **Why the Link step exists.** The flight controller does not measure the link: it is told the
