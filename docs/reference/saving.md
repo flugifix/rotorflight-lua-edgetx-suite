@@ -110,7 +110,8 @@ write arrives. So a profile switch from the transmitter -- a profile switch or a
 while such a page is open matters:
 
 - **Nothing edited:** the page reads the new profile, and the heading shows its number.
-- **An edit not yet saved:** the page keeps the edit and does not read over it. Save is refused
+- **An edit not yet saved:** the page keeps the edit and does not read over it, and its heading
+  keeps the number of the profile the values were read from. Save is refused
   with **Not saved** and a notice that the profile changed after the page was read; nothing is
   written and no EEPROM commit is queued. Switching back to the profile the page was read from
   makes Save available again. **Reload** reads the active profile instead and replaces the edit,
