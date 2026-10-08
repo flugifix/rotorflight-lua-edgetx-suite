@@ -101,23 +101,60 @@ read while they are open. If the link drops and comes back from a different flig
 another board, or one reporting a different MSP API version -- such a page reads again. A link that drops and comes back to the same
 board does not make it read again, so values edited and not yet saved stay on the page.
 
+## When the profile changes under an open page
+
+PIDs, Rates and Governor, and the advanced tuning pages except Filters, each show one PID or rate
+profile, and their Save writes the whole record of that profile. The flight controller has no way
+to be told which profile a record is for: it stores it in whichever profile is active when the
+write arrives. So a profile switch from the transmitter -- a profile switch or an adjustment --
+while such a page is open matters:
+
+- **Nothing edited:** the page reads the new profile, and the heading shows its number.
+- **An edit not yet saved:** the page keeps the edit and does not read over it, and its heading
+  keeps the number of the profile the values were read from. Save is refused
+  with **Not saved** and a notice that the profile changed after the page was read; nothing is
+  written and no EEPROM commit is queued. Switching back to the profile the page was read from
+  makes Save available again. **Reload** reads the active profile instead and replaces the edit,
+  after the usual question if *Confirm on Reload* is on. Leaving the page asks about the unsaved
+  change as on any other page.
+
+A page learns of a switch from the `pid_profile` and `rate_profile` telemetry sensors, or from the
+packed *System Config* sensor on MSP API 12.10 when those are not selected. Without any of them it
+cannot see a switch at all and keeps the profile the connection reported. The suite's MSP response
+cache keeps a PID profile's reply only while one of these sensors reports the profile, so such a
+model reads the PID profile from the flight controller on every visit instead of being served the
+profile of an earlier one.
+
+Power > Sources writes the battery configuration, whose cell values belong to the battery profiles
+on MSP API 12.10. Its Save sends every profile's cell values back as they were read, so a battery
+profile switch while the page is open leaves every profile's values where they were.
+
 ## Pages covered
 
 - Flight Tuning: PIDs, Rates and Governor.
 - Flight Tuning > Advanced: Autolevel, Filters, Main Rotor, PID Bandwidth, PID Controller,
   Rescue, Tail Rotor, and all three Rates Advanced pages.
-- Setup > Alignment.
+- Setup: Configuration, Radio Config, Accelerometer and Alignment.
 - Setup > Governor: General, Time, Filters and Curves.
 - Setup > ESC/Motors: RPM, Throttle and Telemetry.
 - Setup > Controls: Modes, Failsafe, Stats, both Beepers pages, and Blackbox Configuration
   and Logging.
-- Setup > Power: Battery and Sources.
+- Setup > Power: Battery, Sources and SmartFuel.
 - Setup > Mixer: Swash, Swash Geometry, Tail and Trims.
 - Setup > Servos: PWM Output and BUS Output.
 
 A chained load must finish successfully even if an earlier error allowed the page to continue
 reading other records. Previously read session values alone do not grant permission to save.
 The page's existing parameter help and save/reboot sequence are otherwise unchanged.
+
+Configuration, Radio Config, Accelerometer and SmartFuel write whole records from what the page
+holds, and before a read has succeeded that is the page's own starting values rather than the
+board's. On Configuration that would be every feature switched off -- the serial receiver
+included -- and an empty craft name, followed by a restart.
+
+**Tools > Copy Profiles** reads no record of its own; what its Save needs is how many profiles of
+the selected kind the flight controller has, which the connection reads straight away. Until that
+count has arrived, Save is held and the lists offer six. Reload asks the flight controller again.
 
 The four Mixer pages show the values of their previous visit while they read again, and each
 writes whole records -- the mixer configuration, and on Swash, Swash Geometry and Tail the mixer

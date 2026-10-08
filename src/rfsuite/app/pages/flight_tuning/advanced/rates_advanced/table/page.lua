@@ -187,10 +187,13 @@ local function queueRcRead(isAutoReload)
           for k, v in pairs(parsed) do
             rcConfig[k] = v
           end
-          loadFromSession()
+          -- A pending edit is not read over: M.canSave refuses until it is resolved.
+          if not ui.dirty then
+            loadFromSession()
+            ui.runtime.readProfile = tonumber(ui.runtime.lastSessionSignature)
+          end
           ui.runtime.readPending = false
           ui.loading = false
-          ui.dirty = false
           ui.progress = 100
           ui.runtime.readComplete = readValid
           if type(ui.runtime.requestRebuild) == "function" then
@@ -296,10 +299,11 @@ function M.wakeup(ctx)
     ui.runtime.requestRebuild = ctx.requestRebuild
   end
 
+  -- A switch is not read over a pending edit; M.canSave refuses until Reload reads the new profile.
+  -- The signature is taken over only with a read sent under it.
   local signature = buildSessionSignature()
-  if signature ~= ui.runtime.lastSessionSignature then
+  if signature ~= ui.runtime.lastSessionSignature and not ui.dirty and queueRcRead(false) then
     ui.runtime.lastSessionSignature = signature
-    queueRcRead(false)
   end
 end
 
@@ -335,7 +339,8 @@ function M.build(ctx)
   end
 
   local title = ui.baseTitle or getBaseTitle()
-  local profile = getLiveProfile()
+  -- The profile the values on screen were read from; a pending edit keeps it after a switch.
+  local profile = ui.runtime.readProfile or getLiveProfile()
   local displayTitle = string.format("%s #%d", title, profile)
 
   if type(ui.runtime) == "table" and type(ui.runtime.syncHeaderTitle) == "function" then
@@ -369,8 +374,14 @@ function M.build(ctx)
   end)
 end
 
+-- The write carries no profile index: the board stores the record in whichever profile is active
+-- when it arrives. A profile switch after the read therefore refuses Save until the page has read
+-- the active profile; the second value is the reason the host shows.
 function M.canSave()
-  return ui.runtime ~= nil and ui.runtime.readComplete == true and not ui.runtime.readPending
+  if ui.runtime == nil or ui.runtime.readComplete ~= true or ui.runtime.readPending then return false end
+  if ui.runtime.readProfile == nil then return false end
+  if getLiveProfile() ~= ui.runtime.readProfile then return false, "profile_changed" end
+  return true
 end
 
 function M.onSave(ctx)
@@ -382,6 +393,18 @@ function M.onSave(ctx)
         title = pageText(ctx and ctx.i18n, "warning_title", "@i18n(app.pages.flight_tuning_rates.warning_title)@"),
         message = pageText(ctx and ctx.i18n, "msg_reset_to_defaults", "@i18n(app.pages.flight_tuning_rates.msg_reset_to_defaults)@"),
         onConfirm = function()
+          -- The question can stand across a profile switch: check again before the write goes out.
+          local ready, reason = M.canSave()
+          if not ready then
+            if ctx and type(ctx.reportSave) == "function" then
+              ctx.reportSave({
+                ok = false,
+                title = "@i18n(app.save.failed_title)@",
+                message = reason == "profile_changed" and "@i18n(app.save.profile_changed)@" or "@i18n(app.save.read_required)@"
+              })
+            end
+            return
+          end
           queueRcWrite()
         end
       })
@@ -398,7 +421,8 @@ function M.onReload(ctx)
   if session then
     loadFromSession()
     ui.dirty = false
-    queueRcRead(false)
+    local signature = buildSessionSignature()
+    if queueRcRead(false) then ui.runtime.lastSessionSignature = signature end
   end
   return true
 end
