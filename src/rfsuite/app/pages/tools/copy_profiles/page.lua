@@ -138,6 +138,8 @@ end
 function M.getSaveConfirm(ctx)
   ensureDeps()
   if state.sourceIndex == state.destIndex then return nil end
+  local count = profileCount(state.profileType)
+  if state.sourceIndex > count - 1 or state.destIndex > count - 1 then return nil end
 
   local i18n = ctx and ctx.i18n or state.i18n
   local typeLabel = pageText(i18n, "profile_type_pid", "PID")

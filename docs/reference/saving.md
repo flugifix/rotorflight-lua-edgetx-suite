@@ -122,12 +122,11 @@ The page's existing parameter help and save/reboot sequence are otherwise unchan
 Configuration, Radio Config, Accelerometer and SmartFuel write whole records from what the page
 holds, and before a read has succeeded that is the page's own starting values rather than the
 board's. On Configuration that would be every feature switched off -- the serial receiver
-included -- and an empty craft name, followed by a restart. SmartFuel saves without a read where
-the flight controller has no SmartFuel, because the save then writes only the radio's own copy.
+included -- and an empty craft name, followed by a restart.
 
-**Tools > Copy Profiles** holds Save in the same way until the flight controller has reported how
-many profiles of the selected kind it has, which the connection normally reads straight away. Until
-then the lists offer six. Reload asks the flight controller again.
+**Tools > Copy Profiles** reads no record of its own; what its Save needs is how many profiles of
+the selected kind the flight controller has, which the connection reads straight away. Until that
+count has arrived, Save is held and the lists offer six. Reload asks the flight controller again.
 
 The four Mixer pages show the values of their previous visit while they read again, and each
 writes whole records -- the mixer configuration, and on Swash, Swash Geometry and Tail the mixer

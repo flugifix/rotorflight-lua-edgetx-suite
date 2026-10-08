@@ -268,7 +268,8 @@ local function queueSmartfuelRead()
 					end
 				end
 			end
-			ui.runtime.readComplete = type(parsed) == "table"
+			-- Only a reply the page takes over counts: with an edit pending, what it shows is not it.
+			ui.runtime.readComplete = type(parsed) == "table" and not ui.dirty
 			if not ui.dirty then
 				loadFromSession()
 			end
