@@ -79,6 +79,12 @@ group is always shown.
 - Leaving the page puts the settings, the model, firmware and version back to what the page
   shows before it has read anything, so a visit whose read does not arrive shows the page's
   own initial values rather than the last ESC's.
+- The choices of *Motor Direction*, *Startup Power*, *Motor Timing*, *Demag Compensation* and
+  *Beacon Delay* stand for the numbers BLHeli_S itself stores them as, which start at 1, and
+  the chosen number is what the ESC receives. A number the ESC answers with that has no entry
+  -- 0 from an ESC whose settings were never programmed, say -- is shown as *Unknown (n)*,
+  cannot be chosen, and is written back unchanged by a Save. Until the ESC has been read these
+  rows show *Unknown (0)*.
 - An unsaved edit is marked below the list, and is lost if the page is left without saving.
 - If the ESC does not answer the write, the page says so and nothing on the screen has been
   confirmed.
