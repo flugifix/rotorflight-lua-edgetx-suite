@@ -23,8 +23,8 @@ values off the flight controller. This page is the order to check things in.
 - **The firmware's MSP API version is one the suite speaks** — 12.09 or 12.10, which is
   Rotorflight 4.6 or later. An older board (Rotorflight 4.5 speaks 12.08) is refused rather than
   left silent: the tool shows the *Unsupported MSP API* notice with the version the board answered
-  with, the dashboard stays on its start screen with the same message, and the suite reads
-  nothing from that board. Updating the flight controller's firmware is the fix.
+  with, the dashboard stays on its start screen with the same message, the service widget's
+  tile names the version, and the suite reads nothing from that board. Updating the flight controller's firmware is the fix.
 
 ## What the suite does when it connects
 

@@ -3221,7 +3221,8 @@ return {
       waiting_for_link = "Warte auf MSP-Verbindung",
       loading = "Lade Daten...",
       connected = "Verbunden",
-      no_msp_reply = "Keine MSP-Antwort"
+      no_msp_reply = "Keine MSP-Antwort",
+      api_unsupported = "MSP-API %s nicht unterstützt"
     }
   }
 }

@@ -1773,7 +1773,9 @@ local function updateConnectionState(self)
     and not refused
   local now = nowSeconds()
 
-  if connected and not rawReady then
+  -- Not counted while refused, so a refusal that is lifted (a fresh connect re-reads the version)
+  -- does not find a soft timeout already run out.
+  if connected and not rawReady and not refused then
     if not self.pendingSince then
       self.pendingSince = now
     end
