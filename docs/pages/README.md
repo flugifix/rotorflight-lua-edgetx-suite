@@ -52,7 +52,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Radio Config | `setup/radio_config.md` | yes | read-only while armed | to write |
 | Telemetry | [setup/telemetry.md](setup/telemetry.md) | yes | read-only while armed | written |
 | Accelerometer | [setup/accelerometer.md](setup/accelerometer.md) | yes | read-only while armed | written |
-| Alignment | `setup/alignment.md` | yes | read-only while armed | to write |
+| Alignment | [setup/alignment.md](setup/alignment.md) | yes | read-only while armed | written |
 | Ports | [setup/ports.md](setup/ports.md) | yes | read-only while armed | written |
 | Mixer → Swash | `setup/mixer/swash.md` | no | read-only while armed | to write |
 | Mixer → Geometry | `setup/mixer/swashgeometry.md` | no | read-only while armed | to write |
