@@ -334,9 +334,11 @@ local function auxIndexToMember(auxIndex)
     if idx == 2 and map.aux3 ~= nil then return map.aux3 end
   end
 
-  local base = 5
-  if map and map.aux1 ~= nil then base = map.aux1 end
-  return base + idx
+  -- The flight controller reads AUX index idx from its channel 5 + idx (fc/rc_modes.h,
+  -- fc/rc_adjustments.c), and its channel map reorders only its first eight channels (rx/rx.c
+  -- readRxChannels, RX_MAPPABLE_CHANNEL_COUNT), the last three of which are AUX 1 to AUX 3.
+  -- AUX 4 and above therefore always sit on radio channels 9 and up, wherever the map puts AUX 1.
+  return 5 + idx
 end
 
 local function getAuxPulseUs(auxIndex)
