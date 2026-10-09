@@ -343,8 +343,13 @@ function Events.wakeup(carry)
 
     local armed = mspState and mspState.lastArmed == true
 
+    -- A board whose MSP API version was refused gets no connect chain: the MSP runtime sends
+    -- nothing to it, so every task would only wait out its timeout and retries in turn. The
+    -- refusal is reported by the tool's notice and the dashboard's status line instead.
+    local refused = mspState.unsupportedApi == true
+
     local onconnectActive = false
-    if state.linkStableUp and not armed then
+    if state.linkStableUp and not armed and not refused then
       local onconnect = ensureEventRunner("onconnect")
       if onconnect then
         local wasActive = false

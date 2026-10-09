@@ -285,6 +285,7 @@ return {
       unsupported_message_prefix = "MSP-API-Version ",
       unsupported_message_suffix = " wird nicht unterstuetzt.",
       supported_label = "Unterstuetzt: ",
+      minimum_firmware = "Diese Suite braucht Rotorflight 4.6 oder neuer.",
       init_progress = "MSP Initialisierung",
       no_reply_title = "Flight Controller antwortet nicht",
       no_reply_message_1 = "Keine MSP-Antwort vom Flight Controller empfangen.",
@@ -2860,6 +2861,7 @@ return {
       connecting_fbl = "Verbinde mit FBL...",
       please_wait_for_telemetry = "Bitte warten, Telemetrie wird empfangen",
       waiting_for_msp_link = "Warte auf MSP-Link",
+      api_unsupported = "MSP-API %s nicht unterstützt, braucht Rotorflight 4.6+",
       waiting_for_receiver_telemetry = "Warte auf Empfänger-Telemetrie (1RSS/2RSS)",
       waiting_for_battery_telemetry = "Warte auf Batterie-Telemetrie",
       connected_starting = "Verbunden, Dashboard wird gestartet...",
@@ -3221,7 +3223,8 @@ return {
       waiting_for_link = "Warte auf MSP-Verbindung",
       loading = "Lade Daten...",
       connected = "Verbunden",
-      no_msp_reply = "Keine MSP-Antwort"
+      no_msp_reply = "Keine MSP-Antwort",
+      api_unsupported = "MSP-API %s nicht unterstützt"
     }
   }
 }
