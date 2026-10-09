@@ -535,7 +535,10 @@ function M.wakeup()
         -- Answered, so the flight controller is usable again. A flag of 0 additionally proves
         -- the reset really happened; a flag of 1 means it could not be proven from here. That is
         -- not a failure -- the settings are stored -- and it is not reported as a finished
-        -- restart either: see clearsItself() and the outcome the host draws for it.
+        -- restart either: see clearsItself() and the outcome the host draws for it. The error is
+        -- one-sided: a GPS that sets the clock from its own date before this answer, or the connect
+        -- chain re-sending it after a link drop, makes a restarted board read 1 as well, but
+        -- nothing makes a board that did not restart read 0.
         S.run.rebootProven = (not S.run.probeDegraded) and value == 0
         startOnconnectWait()
       end)
