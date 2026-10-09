@@ -17,7 +17,7 @@
 --
 --   local msp = rfsuite and rfsuite.msp
 --   if msp then
---     local client = msp.register("mywidget", 1)
+--     local client = msp.register("mywidget", 2)
 --     client:request({
 --       command = 101,
 --       simulatorResponse = { 0, 0 },
@@ -112,9 +112,10 @@ Client.__index = Client
 --                              "refused"     the retries ran out and the flight controller had
 --                                            answered at least one of them with an error reply;
 --                              "max_retries" the retries ran out and no attempt was answered;
---                              "cleared"     the request was dropped before it was answered: the
---                                            link went, the API version is not supported, the
---                                            model was armed, or release() was called;
+--                              "cleared"     the request was dropped before it was answered, for
+--                                            example when the link went, the API version is not
+--                                            supported, the model was armed, or release() was
+--                                            called;
 --                              "cancelled"   cancel() dropped it.
 -- request.timeout            seconds to wait for a reply before a retry. Optional.
 -- request.simulatorResponse  byte array the simulator answers with. See status().simulator:
