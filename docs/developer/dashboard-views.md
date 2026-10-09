@@ -411,7 +411,12 @@ neither a view, the base layer nor the dashboard's own work runs beside it:
   asked while the tool is open, so that pass compares against what the conditions answered when
   it was opened: a theme's view whose condition held then and still holds stays closed, and one
   whose condition rises later opens as it would have. A widget sent to the background drops the
-  tool without the sequence, because it cannot paint it.
+  tool without the sequence, because it cannot paint it; twelve instruction-limit stops in a row
+  and an error that escapes `run` drop it the same way. Whichever way the tool ends, the host
+  first calls the tool's `releasePages()`, the page release of the closing sequence, so every page
+  the tool holds runs its `onClose`: a page switches its servo, mixer or motor override off there,
+  and the theme settings page ends its edit scope. What those queue is sent by the widget's own
+  MSP tick. After the closing sequence there is nothing left to release.
 
 A theme that binds its own controls reaches the tool with `ctx.action("openTool")`, or with
 `ctx.action("openTool:tools_flight_log_page")` on its *Flight Log* page.
