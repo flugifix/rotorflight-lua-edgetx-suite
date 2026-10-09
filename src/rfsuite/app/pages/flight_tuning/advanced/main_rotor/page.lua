@@ -435,7 +435,7 @@ function M.build(ctx)
   -- Specs
   local specComp   = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
   local specGain   = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
-  local specRatio  = { scale=1, mult=1, min=0, max=100, suffix="%", decimals=0 }
+  local specRatio  = { scale=1, mult=1, min=0, max=200, suffix="%", decimals=0 }
   local specCutoff = { scale=10, mult=1, min=0, max=250, suffix="Hz", decimals=1 }
 
   -- 1) Col. Pitch Compensation
