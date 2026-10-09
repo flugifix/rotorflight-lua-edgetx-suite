@@ -41,6 +41,8 @@ stand now (`-` while its enable channel is outside its range; a `*` marks an out
   slot in one reply and the selected slot's own settings, and reads another slot when it is
   selected. An older firmware is read in one read of the whole table.
 - Save writes each changed slot, then one EEPROM write.
+- Reload discards every unsaved change, on every slot: a slot changed before Reload is not
+  written by the next Save, and is read from the flight controller again when it is selected.
 - The function names are shown in the radio's language.
 
 ## Related
