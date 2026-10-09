@@ -391,6 +391,7 @@ return {
         save_error_title = "Fehler",
         saved_title = "Gespeichert",
         saved_message = "Servo-Einstellungen gespeichert",
+        switch_unsaved_msg = "Dieses Servo hat Änderungen, die nicht gespeichert sind. Die Wahl eines anderen Servos verwirft sie.",
       },
       flight_tuning_governor = {
         title = "Regler (Gov)",
