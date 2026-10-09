@@ -37,7 +37,7 @@ controller's slots (*Active ranges*), and whether there are unsaved changes.
 - Save writes each range that was changed, then one EEPROM write. A Save with nothing changed
   writes nothing.
 - While the save runs the page is covered by its progress, so a range cannot be changed half-way
-  through it.
+  through it; Save and Reload pressed in the header meanwhile do nothing.
 - Reload reads every range from the flight controller again and discards every unsaved change.
 
 ## Related
