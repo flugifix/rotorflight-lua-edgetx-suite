@@ -33,8 +33,9 @@ end
 local Service = {}
 
 -- The contract the names below are part of. A caller passes the version it was written against
--- to register(), which refuses when this module has moved on -- so a script built for an older
--- surface fails at the door with a reason instead of half-working somewhere further in. It is
+-- to register(), which refuses a version newer than this module's -- so a script built for a
+-- newer surface fails at the door on an older install, with a reason, instead of half-working
+-- somewhere further in. A script written against an older version is still accepted. It is
 -- raised when a published name changes meaning, not when the code behind it moves.
 -- 2: onError's "max_retries" no longer covers a request the board answered with an error reply;
 -- that one now arrives as "refused".

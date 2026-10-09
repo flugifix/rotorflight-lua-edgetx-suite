@@ -37,7 +37,7 @@ Not listed at all until *Developer Tools* is switched on under *System* → *Set
 | Retries | Repeated sends, summed over all reads. |
 | Checksum Errors | Not counted in this version; it stays at 0. |
 | Min / Max / Avg Query Time | Time from queuing a read to its answer, over the answered reads. |
-| Last Error | The reason the most recent read failed, or `-`: `max_retries` (no answer), `refused` (an error reply), `cleared` (the read was dropped unanswered, for example when the link went). |
+| Last Error | The reason the most recent read failed, or `-`: `max_retries` (no answer), `refused` (an error reply), `cleared` (the read was dropped unanswered: the link went, or the test ended while a read was still out, which also counts it in *Total Queries*). |
 
 While a test runs, a bar under the rows shows how much of it is done, and the rows are redrawn
 once a second.
