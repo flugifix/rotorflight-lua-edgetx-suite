@@ -594,9 +594,10 @@ local function resolvePack(get)
   cells = math.floor(cells + 0.5)
 
   -- Centi-volts, as tasks/msp/api/battery_config.lua parses it and the Battery page displays it.
-  -- Outside the range that page allows, the value is not a cell voltage and nothing is judged.
+  -- Outside the range that page and the flight controller allow (1.00 to 5.00 V), the value is not
+  -- a cell voltage and nothing is judged.
   local crit = tonumber(config.vbatmincellvoltage)
-  if crit == nil or crit < 250 or crit > 500 then return end
+  if crit == nil or crit < 100 or crit > 500 then return end
 
   values.cells = cells
   values.sagEnter = (crit * cells) / 100
