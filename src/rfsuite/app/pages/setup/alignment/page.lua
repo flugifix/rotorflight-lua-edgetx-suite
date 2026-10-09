@@ -1209,7 +1209,9 @@ function M.build(ctx)
     filled = true
   }
 
-  -- Left Panel: Readouts
+  -- Left Panel: Readouts. One line per row of the small font, measured on this radio: a fixed
+  -- 16 px pitch put each line half over the one before it where the font is taller.
+  local lineH = (Controls and Controls.estimateWrappedTextHeight and Controls.estimateWrappedTextHeight("Ag", 0, SMLSIZE)) or 16
   children[#children + 1] = {
     type = "label",
     x = x + 6, y = splitY + 2,
@@ -1222,7 +1224,7 @@ function M.build(ctx)
   local offsetText = string.format(pageText(i18n, "offset_fmt", "Offset R:%d  P:%d  Y:%d  Mag:%d"), ui.display.roll_degrees, ui.display.pitch_degrees, ui.display.yaw_degrees, ui.display.mag_alignment)
   children[#children + 1] = {
     type = "label",
-    x = x + 6, y = splitY + 18,
+    x = x + 6, y = splitY + 2 + lineH,
     w = leftW - 10,
     text = offsetText,
     color = COLOR_THEME_PRIMARY1,
@@ -1231,7 +1233,7 @@ function M.build(ctx)
 
   children[#children + 1] = {
     type = "label",
-    x = x + 6, y = splitY + 34,
+    x = x + 6, y = splitY + 2 + 2 * lineH,
     w = leftW - 10,
     text = viewYawTextFn,
     color = COLOR_THEME_PRIMARY1,
@@ -1239,9 +1241,11 @@ function M.build(ctx)
   }
 
   -- Nose Direction Box
-  local boxY = splitY + 50
-  local boxH = splitH - 52
-  if boxH > 28 then
+  local boxY = splitY + 4 + 3 * lineH
+  local boxH = splitH - (boxY - splitY) - 2
+  -- Room for the title and one line; two lines need a third.
+  local twoLineRoom = boxH >= 4 + 3 * lineH
+  if boxH > 4 + 2 * lineH then
     children[#children + 1] = {
       type = "rectangle",
       x = x + 6, y = boxY,
@@ -1260,10 +1264,10 @@ function M.build(ctx)
     }
 
     -- Two lines while the board also leans and there is room for them, one line otherwise.
-    if boxH >= 52 then
+    if twoLineRoom then
       children[#children + 1] = {
         type = "label",
-        x = x + 10, y = boxY + 18,
+        x = x + 10, y = boxY + 2 + lineH,
         w = leftW - 20,
         text = nosePrimaryFn,
         visible = noseTwoLineFn,
@@ -1272,7 +1276,7 @@ function M.build(ctx)
       }
       children[#children + 1] = {
         type = "label",
-        x = x + 10, y = boxY + 34,
+        x = x + 10, y = boxY + 2 + 2 * lineH,
         w = leftW - 20,
         text = noseSecondaryFn,
         visible = noseTwoLineFn,
@@ -1282,10 +1286,10 @@ function M.build(ctx)
     end
     children[#children + 1] = {
       type = "label",
-      x = x + 10, y = boxY + 16,
+      x = x + 10, y = boxY + 2 + lineH,
       w = leftW - 20,
       text = noseCombinedFn,
-      visible = boxH >= 52 and noseOneLineFn or nil,
+      visible = twoLineRoom and noseOneLineFn or nil,
       color = COLOR_THEME_SECONDARY1 or YELLOW,
       font = SMLSIZE
     }
