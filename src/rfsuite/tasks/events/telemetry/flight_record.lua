@@ -796,7 +796,12 @@ end
 ---
 --- The clock runs on every wakeup so that a flight's duration does not depend on how often the
 --- statistics are sampled; the statistics themselves run on UPDATE_INTERVAL.
-function Record.wakeup(armed)
+---
+--- `linked` false is a link that is not streaming. EdgeTX then answers every telemetry source
+--- with 0, which is not a reading: an ESC temperature, a fuel level or any other statistic without
+--- a gate of its own would take it as the flight's minimum. Nothing is sampled until the link is
+--- back; the clock keeps running, since the flight does.
+function Record.wakeup(armed, linked)
   local flight = ensureFlight()
   local session = _G.rfsuite.session
 
@@ -830,7 +835,8 @@ function Record.wakeup(armed)
     if shared ~= nil and shared.now ~= nil and (now - shared.now) < UPDATE_INTERVAL then
       sampleAt, due = shared.now, shared.reads
     end
-    if due and (lastSampleAt == nil or (sampleAt - lastSampleAt) >= UPDATE_INTERVAL) then
+    if linked ~= false and due
+       and (lastSampleAt == nil or (sampleAt - lastSampleAt) >= UPDATE_INTERVAL) then
       lastSampleAt = sampleAt
       if readSources() then
         updatePowered()

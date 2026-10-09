@@ -443,12 +443,18 @@ function Events.wakeup(carry)
     --
     -- Widget context only. The record belongs to the widget that runs this work; the tool has a
     -- clock of its own and is not a second writer.
+    --
+    -- `connected` is this pass's raw link state, not the held one: the MSP runtime ticked just
+    -- before this wakeup, and EdgeTX answers getRSSI() with 0 on the same condition on which it
+    -- answers every telemetry source with 0. The record samples nothing while it is false. (The two
+    -- are read a moment apart in the pass, so a gap that starts between them can still let one
+    -- sample through.)
     if context == "widget" then
       if FlightRecord == nil then
         FlightRecord = loadModule("tasks/events/telemetry/flight_record.lua") or false
       end
       if FlightRecord then
-        local ok, err = pcall(FlightRecord.wakeup, armed)
+        local ok, err = pcall(FlightRecord.wakeup, armed, connected)
         if not ok and Log and type(Log.emit) == "function" then
           pcall(Log.emit, "rfsuite.events", "flight_record.wakeup error: " .. tostring(err), "error")
         end
