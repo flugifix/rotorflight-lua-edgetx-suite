@@ -1852,6 +1852,11 @@ end
 function M.onReload(ctx)
   local session = getSession()
   if session then
+    -- Reload discards every edit, not only the one on screen: from API 12.09 it reads again only
+    -- the selected slot, and a slot left marked here would be written by the next Save.
+    ui.dirtySlots = {}
+    ui.autoDetectEnaSlots = {}
+    ui.autoDetectAdjSlots = {}
     loadFromSession()
     ui.dirty = false
     startLoad(ctx and ctx.requestRebuild)
