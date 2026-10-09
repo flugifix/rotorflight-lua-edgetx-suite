@@ -119,7 +119,9 @@ end
 -- or a page, not data to store (rotorflight-firmware src/main/msp/msp.c: the read cases of
 -- mspFcProcessOutCommandWithArg, and MSP_DATAFLASH_READ in mspFcProcessCommand). Left out of the
 -- same function on purpose: MSP_SET_SERVO_CONFIG, MSP_REBOOT and MSP_RESET_CONF change the board,
--- and MSP_MULTIPLE_MSP runs whichever commands it is given.
+-- and MSP_MULTIPLE_MSP runs whichever commands it is given. None of these is in the response
+-- cache's list, whose key is the command alone: one of them may only go there with its argument
+-- in the key, or one index would be answered with another's reply.
 local READ_WITH_ARGUMENT = {
   [71] = true,  -- MSP_DATAFLASH_READ
   [116] = true, -- MSP_BOXNAMES
@@ -134,9 +136,10 @@ local READ_WITH_ARGUMENT = {
 }
 
 -- A message that says what it is is taken at its word. Otherwise a payload still marks a write,
--- because most writes in this tree carry no flag -- except on a command the firmware reads with an
--- argument: there the payload is the index, and taking it for a write cleared the whole response
--- cache on every such read and kept the read past its page's teardown (see Queue:clear).
+-- because a write may come without the flag (the battery profile switch does, and so may any
+-- rfsuite.msp caller) -- except on a command the firmware reads with an argument: there the
+-- payload is the index, and taking it for a write cleared the whole response cache on every such
+-- read and kept the read past its page's teardown (see Queue:clear).
 local function isWriteMessage(msg)
   if msg == nil then return false end
   if msg.isWrite ~= nil then

@@ -107,7 +107,7 @@ Client.__index = Client
 --- Ask the flight controller something.
 --
 -- request.command            MSP command number. Required.
--- request.payload            byte array for a write. Optional.
+-- request.payload            byte array: the data of a write, or the argument of a read. Optional.
 -- request.onReply(buf, info) called with the reply body. info carries command and retries.
 -- request.onError(reason)    one of four reasons:
 --                              "refused"     the retries ran out and the flight controller had
@@ -122,8 +122,8 @@ Client.__index = Client
 -- request.simulatorResponse  byte array the simulator answers with. See status().simulator:
 --                            with no simulator there the radio never sends the request at all.
 -- request.isWrite            true for a write, false for a read. Optional: without it a payload
---                            means a write, except on a command the firmware reads with an index
---                            (MSP_GET_MIXER_INPUT, MSP_GET_SERVO_CONFIG and the like).
+--                            means a write, except on a command the firmware reads with an
+--                            argument (MSP_GET_MIXER_INPUT, MSP_GET_SERVO_CONFIG and the like).
 --
 -- Returns a request id, which cancel() takes, or nil and a reason.
 function Client:request(request)
