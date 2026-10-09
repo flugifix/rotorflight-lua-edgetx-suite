@@ -88,6 +88,13 @@ local function loadFromSession()
   for k, v in pairs(rcConfig) do
     ui.config[k] = v
   end
+  -- The mode as read, kept apart from the session record, which a save overwrites before the
+  -- board has taken it; and the altitude-hold choice, kept while rescue is switched off and on.
+  -- boardMode is deliberately NOT refreshed when a write fails: the write's errorHandler leaves
+  -- ui.dirty set, so no read reply loads over it and the Altitude hold row stays. Open and Reload
+  -- run this from the session record and then read the board, whose reply sets its own mode.
+  ui.boardMode = tonumber(ui.config.rescue_mode) or 0
+  ui.altHold = ui.boardMode > 1
 end
 
 local function queueRcRead(isAutoReload)
@@ -194,6 +201,7 @@ local function queueRcWrite()
         queueRcRead(true)
       end
     end,
+    -- Leaves ui.dirty set on purpose; see loadFromSession, which keeps ui.boardMode through it.
     errorHandler = function() end
   })
 
@@ -420,14 +428,28 @@ function M.build(ctx)
   end
 
   -- 1) Rescue Mode Enable (Switch)
-  local modeVal = (tonumber(ui.config.rescue_mode) or 0) == 1
+  -- rescue_mode is OFF = 0, CLIMB = 1, ALT_HOLD = 2 (firmware flight/rescue.h). Rescue is on for
+  -- any mode above 0, and the mode written is composed from both switches as the Configurator
+  -- does, so an altitude-hold profile is never turned into a climbing one by the enable switch.
+  local modeVal = (tonumber(ui.config.rescue_mode) or 0) > 0
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, pageText(i18n, "mode_enable", "Rescue mode enable"), modeVal, function(nextBool)
-    ui.config.rescue_mode = nextBool and 1 or 0
+    ui.config.rescue_mode = nextBool and (ui.altHold and 2 or 1) or 0
     ui.dirty = true
     if type(ui.runtime.requestRebuild) == "function" then
       ui.runtime.requestRebuild()
     end
   end)
+
+  -- Altitude hold is offered only to a profile that already uses it, as in the Configurator;
+  -- its own settings are not on this page.
+  if modeVal and (ui.boardMode or 0) > 1 then
+    local altHoldLabel = pageText(i18n, "alt_hold", "Altitude hold")
+    cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w, altHoldLabel, ui.altHold == true, function(nextBool)
+      ui.altHold = nextBool == true
+      ui.config.rescue_mode = ui.altHold and 2 or 1
+      ui.dirty = true
+    end)
+  end
 
   if modeVal then
     -- 2) Flip to upright (Switch)
@@ -438,7 +460,7 @@ function M.build(ctx)
     end)
 
     -- Specs
-    local specCollective = { scale=10, mult=1, min=0, max=1000, suffix="%", decimals=0 }
+    local specCollective = { scale=10, mult=1, min=0, max=1000, step=10, suffix="%", decimals=0 }
     local specTime       = { scale=10, mult=1, min=0, max=250, suffix="s", decimals=1 }
     local specGain       = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
     local specRate       = { scale=1, mult=1, min=5, max=1000, suffix="°/s", decimals=0 }

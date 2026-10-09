@@ -49,10 +49,10 @@ local RATE_TABLE_DEFAULTS = {
     rates_1 = 24, rates_2 = 24, rates_3 = 40, rates_4 = 104,
     rcExpo_1 = 0, rcExpo_2 = 0, rcExpo_3 = 0, rcExpo_4 = 0
   },
-  [6] = { -- Rotorflight
-    rcRates_1 = 49, rcRates_2 = 48, rcRates_3 = 25, rcRates_4 = 50,
+  [6] = { -- Rotorflight, the firmware's own defaults (src/main/pg/rates.c)
+    rcRates_1 = 50, rcRates_2 = 50, rcRates_3 = 80, rcRates_4 = 100,
     rates_1 = 12, rates_2 = 12, rates_3 = 12, rates_4 = 12,
-    rcExpo_1 = 0, rcExpo_2 = 0, rcExpo_3 = 0, rcExpo_4 = 0
+    rcExpo_1 = 40, rcExpo_2 = 40, rcExpo_3 = 50, rcExpo_4 = 0
   }
 }
 

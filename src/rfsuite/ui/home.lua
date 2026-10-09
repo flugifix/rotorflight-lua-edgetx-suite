@@ -1265,8 +1265,12 @@ local function maybeShowUnsupportedMspDialog()
     return
   end
 
+  -- The version the board answered with. `apiVersion` itself is reset to "0" by the refusal,
+  -- which is what this notice used to name.
   local apiVersion = nil
-  if type(session) == "table" and session.apiVersion ~= nil then
+  if type(session) == "table" and session.refusedApiVersion ~= nil then
+    apiVersion = session.refusedApiVersion
+  elseif type(session) == "table" and session.apiVersion ~= nil then
     apiVersion = session.apiVersion
   elseif type(diagnostics) == "table" and diagnostics.apiVersion ~= nil then
     apiVersion = diagnostics.apiVersion
@@ -1283,7 +1287,9 @@ local function maybeShowUnsupportedMspDialog()
   local prefix = tr("app.msp.unsupported_message_prefix", "MSP API version ")
   local suffix = tr("app.msp.unsupported_message_suffix", " is not supported.")
   local supportedLabel = tr("app.msp.supported_label", "Supported: ")
+  local minimum = tr("app.msp.minimum_firmware", "This suite needs Rotorflight 4.6 or newer.")
   local message = prefix .. version .. suffix .. "\n" .. supportedLabel .. tostring(supported)
+    .. "\n" .. minimum
 
   local dialog = getMspUnsupportedDialogModule()
   if dialog then

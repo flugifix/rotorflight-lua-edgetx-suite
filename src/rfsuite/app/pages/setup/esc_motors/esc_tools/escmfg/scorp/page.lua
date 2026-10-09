@@ -554,7 +554,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_bailout_time", "Bailout Time"), {
-      min = 0, max = 100000, step = 1000,
+      -- Bailout is a 16-bit count of milliseconds on the wire (esc_parameters_scorpion.lua),
+      -- so 65 s is the last whole second it holds; 66 s and up would wrap to under 35 s.
+      min = 0, max = 65000, step = 1000,
       display = function(val) return string.format("%ds", math.floor(val / 1000)) end,
       get = function() return ui.config.bailout end,
       set = function(val)

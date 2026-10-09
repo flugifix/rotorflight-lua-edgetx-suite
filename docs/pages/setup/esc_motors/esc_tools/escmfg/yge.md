@@ -33,7 +33,7 @@ while the model is armed.
 | BEC Voltage | The BEC output, 5.5 V to 8.4 V in 0.1 V steps. On an ESC model that has a 12 V BEC the range runs to 12.0 V, and setting exactly 12.0 V is what turns that BEC on. |
 | Auto Restart Type | What the ESC does after a cutoff: *Off*, *Slowdown* or *Cutoff*. |
 | Cell Cutoff | The per-cell voltage the ESC cuts at, 2.9 V to 3.4 V. |
-| Current Limit | The ESC's current limit, 0.01 A to 655.00 A, adjusted in 1 A steps. |
+| Current Limit | The ESC's current limit, 1 A to 655 A in 1 A steps. |
 | F3C Auto | The F3C autorotation setting, *Off* or *On*. |
 | Keep mAh | Whether the ESC keeps its consumed-capacity count across a power cycle, *Off* or *On*. |
 

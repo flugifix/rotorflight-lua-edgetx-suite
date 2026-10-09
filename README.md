@@ -38,8 +38,10 @@ also carries a short explanation in the tool, behind the `?` button in its heade
   `LVGL support required` and stops.
 - A **CRSF link** — Crossfire or ELRS. RFSuite carries MSP over CRSF telemetry, and that is
   the only transport it implements. S.Port and F.Port receivers are not supported.
-- Rotorflight firmware speaking **MSP API version 12.08, 12.09 or 12.10**. Pages that need a
-  newer API than the connected flight controller reports are hidden automatically.
+- Rotorflight firmware speaking **MSP API version 12.09 or 12.10** — Rotorflight 4.6 or
+  later. A flight controller on an older firmware (Rotorflight 4.5 speaks 12.08) is refused on
+  connect with a notice naming its version. Pages that need a newer API than the connected
+  flight controller reports are hidden automatically.
 
 
 ## Installation

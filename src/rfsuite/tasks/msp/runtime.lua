@@ -51,6 +51,9 @@ local state = {
     modelPreferencesFile = nil
   },
   unsupportedApi = false,
+  -- The version a refused board answered with. Kept apart from `values.apiVersion`, which the
+  -- refusal resets to "0" like any disconnect, so the notices can still name it.
+  refusedApiVersion = nil,
   limitedApi = false,
   unsupportedApiLogged = false,
   _disconnectHandled = false,
@@ -239,6 +242,7 @@ local function publish()
     end
   end
   session.apiSupported = not state.unsupportedApi
+  session.refusedApiVersion = state.refusedApiVersion
   session.apiLimited = state.limitedApi == true
   session.mspLastError = state.mspLastError
   session.mspLastErrorAt = state.mspLastErrorAt
@@ -489,6 +493,7 @@ local function enqueueVersionReads(now)
         local fullySupported = isApiVersionSupported(parsed.version)
         local limitedCompatible = (not fullySupported) and isApiVersionLimitedCompatible(parsed.version)
         state.unsupportedApi = not (fullySupported or limitedCompatible)
+        state.refusedApiVersion = state.unsupportedApi and parsed.version or nil
         state.limitedApi = limitedCompatible
         if limitedCompatible then
           log("MSP API version " .. tostring(parsed.version) .. " accepted in limited compatibility mode", "warn")
@@ -844,6 +849,7 @@ function Runtime.tick()
       state._disconnectHandled = false
       -- Re-negotiate API support on each fresh connect.
       state.unsupportedApi = false
+      state.refusedApiVersion = nil
       state.limitedApi = false
       state.unsupportedApiLogged = false
       state.mspLastError = nil

@@ -285,6 +285,7 @@ return {
       unsupported_message_prefix = "MSP API version ",
       unsupported_message_suffix = " is not supported.",
       supported_label = "Supported: ",
+      minimum_firmware = "This suite needs Rotorflight 4.6 or newer.",
       init_progress = "MSP init",
       no_reply_title = "Flight Controller Not Responding",
       no_reply_message_1 = "No MSP reply from flight controller.",
@@ -554,6 +555,7 @@ return {
       flight_tuning_advanced_rescue = {
         title = "Rescue",
         mode_enable = "Rescue mode enable",
+        alt_hold = "Altitude hold",
         flip_upright = "Flip to upright",
         pull_up = "Pull-up",
         climb = "Climb",
@@ -572,6 +574,7 @@ return {
         loading_message = "Reading Rescue Settings",
         help_title = "Rescue Help",
         help_p1 = "Rescue Mode Enable: Enables the rescue autopilot on the flight controller.",
+        help_alt_hold = "Altitude hold: shown only for a profile that already holds altitude; off makes rescue climb instead.",
         help_p2 = "Flip to upright: Chooses whether the helicopter flips to an upright orientation when rescue is triggered.",
         help_p3 = "Pull-up: Defines collective pitch percent and duration to stop the helicopter's descent.",
         help_p4 = "Climb: Defines collective pitch percent and climb duration for the climbing stage.",
@@ -2864,6 +2867,7 @@ return {
       connecting_fbl = "Connecting FBL...",
       please_wait_for_telemetry = "Please wait for telemetry",
       waiting_for_msp_link = "Waiting for MSP link",
+      api_unsupported = "MSP API %s not supported, needs Rotorflight 4.6+",
       waiting_for_receiver_telemetry = "Waiting for receiver telemetry (1RSS/2RSS)",
       waiting_for_battery_telemetry = "Waiting for battery telemetry",
       connected_starting = "Connected, starting dashboard...",
@@ -3233,7 +3237,8 @@ return {
       waiting_for_link = "Waiting for MSP link",
       loading = "Loading data...",
       connected = "Connected",
-      no_msp_reply = "No MSP reply"
+      no_msp_reply = "No MSP reply",
+      api_unsupported = "MSP API %s not supported"
     }
   }
 }
