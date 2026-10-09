@@ -45,7 +45,7 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 - The craft name and the model-name flag are read from the flight controller on every connect.
   Where it does not answer the craft-name read, the model is not renamed; where it does not answer
   the flag read, the radio's own preference decides, as it does below MSP API 12.09. The name and
-  the flag of a craft connected earlier, with the radio left on, are never used for the next one.
+  the flag of a craft connected earlier, with the radio left on, are not carried over to the next one.
 - The announcements at connect (the model name, the initial fuel) are switched under
   *System* → *Settings* → *Audio* → *Events*, not here.
 

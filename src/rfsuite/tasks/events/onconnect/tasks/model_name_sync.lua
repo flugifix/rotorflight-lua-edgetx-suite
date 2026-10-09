@@ -198,11 +198,15 @@ function M.wakeup()
   previousName = nil
   local s = store()
   if s then previousName = s.pending() end
+  -- Whether the migration below got its record onto the card. A second storeSet of the same name
+  -- would answer true from the entry `remember` keeps in memory, whatever the card said.
+  local legacyStored = nil
   if previousName == nil then
     local legacy = legacyPrevious()
     if legacy ~= nil then
       previousName = legacy
-      if storeSet(legacy) then legacyClear() end
+      legacyStored = storeSet(legacy)
+      if legacyStored then legacyClear() end
     end
   end
   previousName = previousName or info.name
@@ -216,7 +220,7 @@ function M.wakeup()
     -- Nothing to put back that is not what is being written. Do not remember it.
     previousName = nil
     storeSet(nil)
-  elseif not storeSet(previousName) then
+  elseif legacyStored == false or not storeSet(previousName) then
     -- The record is what puts the model's own name back after the radio was switched off while
     -- connected, and the card refused it. A rename without it could not be undone, so the model
     -- keeps its own name. `remember` keeps the entry in memory even when the write fails, and that
