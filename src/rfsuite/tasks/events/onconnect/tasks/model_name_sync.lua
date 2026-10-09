@@ -216,8 +216,16 @@ function M.wakeup()
     -- Nothing to put back that is not what is being written. Do not remember it.
     previousName = nil
     storeSet(nil)
-  else
-    storeSet(previousName)
+  elseif not storeSet(previousName) then
+    -- The record is what puts the model's own name back after the radio was switched off while
+    -- connected, and the card refused it. A rename without it could not be undone, so the model
+    -- keeps its own name. `remember` keeps the entry in memory even when the write fails, and that
+    -- entry goes as well: nothing was renamed, so nothing is owed back.
+    log("model name not set: the record of " .. tostring(previousName) ..
+        " could not be stored", "warn")
+    previousName = nil
+    storeSet(nil)
+    return
   end
 
   local written = setModelName(craftName)

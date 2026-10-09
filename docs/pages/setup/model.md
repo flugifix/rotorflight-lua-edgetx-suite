@@ -39,6 +39,13 @@ Greyed out until the flight controller answers. Read-only while the model is arm
   disconnects keeps the craft name; the configuration tool does not put it back. The model's own
   name stays recorded: once one of the two widgets is on the model again, it puts the name back the
   first time it runs without a link.
+- The model is renamed only once its own name is recorded on the card. Where the card refuses
+  that record, the model keeps its own name for that connection, because a rename the radio
+  could not undo after being switched off is worse than none.
+- The craft name and the model-name flag are read from the flight controller on every connect.
+  Where it does not answer the craft-name read, the model is not renamed; where it does not answer
+  the flag read, the radio's own preference decides, as it does below MSP API 12.09. The name and
+  the flag of a craft connected earlier, with the radio left on, are never used for the next one.
 - The announcements at connect (the model name, the initial fuel) are switched under
   *System* → *Settings* → *Audio* → *Events*, not here.
 
