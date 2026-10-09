@@ -280,6 +280,19 @@ local function reportHookCrash(hook, menuId, err)
   return message
 end
 
+-- How often in a row a page's build may be stopped at the instruction limit before it is shown
+-- as a page that cannot be drawn. A build stopped because its pass had already spent much of the
+-- limit -- the pass that also loads the page, say -- completes on one of these; a build that does
+-- not fit in what a pass leaves it, above all one that is above the limit on its own, never
+-- completes in a widget call, and gets the failure page after this many passes.
+local BUILD_LIMIT_RETRIES = 3
+
+local function isCpuLimitStop(err)
+  local fn = _G.rfsuite and _G.rfsuite.isCpuLimitError
+  if type(fn) == "function" then return fn(err) == true end
+  return type(err) == "string" and string.find(err, "CPU limit", 1, true) ~= nil
+end
+
 local function ensurePageRegistry()
   if not PageRegistry then
     PageRegistry = loadModule("app/pages/init.lua")
@@ -566,6 +579,9 @@ state = {
   -- It suppresses that page's `wakeup` while the failure page is on screen and is cleared the
   -- moment the menu moves, so re-entering the page tries the build again.
   pageBuildFailed = nil,
+  -- How many builds in a row of the page on screen were stopped at the instruction limit; see
+  -- BUILD_LIMIT_RETRIES. Counted per visit, like the latch.
+  buildLimitStops = 0,
   helpContent = nil,
   helpPageTitle = nil,
   helpPageSubtitle = nil,
@@ -857,6 +873,7 @@ local function syncActivePageModule()
   end
   -- The latch belongs to the page that is leaving. Re-entering it is a fresh attempt.
   state.pageBuildFailed = nil
+  state.buildLimitStops = 0
 
   -- From here everything queued belongs to the page that is up, without the page saying so: the
   -- pages hold the queue itself and none of them names a client.
@@ -2936,13 +2953,28 @@ function M.buildUI()
 
       if ok then
         state.pageBuildFailed = nil
+        state.buildLimitStops = 0
       else
-        reportHookCrash("activePage.build", currentMenuId, err)
+        -- Stopped at the instruction limit, which happens only where the tool runs inside the
+        -- dashboard widget. EdgeTX raises that stop once per call and lets the rest of the call
+        -- run, so this pass ends normally, and the build is simply run again on the next pass,
+        -- BUILD_LIMIT_RETRIES times in a row at most, rather than being reported at once as a page
+        -- that cannot be drawn. The body stays empty meanwhile.
+        local retry = isCpuLimitStop(err) and state.buildLimitStops < BUILD_LIMIT_RETRIES
+        if retry then
+          state.buildLimitStops = state.buildLimitStops + 1
+          logf("info", "build of %s stopped at the instruction limit, built again on the next pass (%d of %d)",
+            tostring(currentMenuId), state.buildLimitStops, BUILD_LIMIT_RETRIES)
+          scheduleBuildUI(false)
+        else
+          reportHookCrash("activePage.build", currentMenuId, err)
+        end
         -- The page's own `wakeup` keeps being called while this failure page is up, and a page
         -- that did not finish building is the likeliest one to raise there too -- once per tick,
         -- through a reporter that writes to the serial port whatever the preferences say. Worse,
         -- a `requestRebuild` from such a wakeup rebuilds into the same raise. The latch stops
-        -- that without deciding the page is dead: leaving the menu clears it.
+        -- that without deciding the page is dead: leaving the menu clears it, and so does the
+        -- next build that completes.
         state.pageBuildFailed = currentMenuId
         -- The header is resolved before the page is built, so a page that declared Save, Reload
         -- or a star still offers all three on a screen its own build never finished -- and each
@@ -2959,7 +2991,9 @@ function M.buildUI()
         if bannerH > 0 then
           appendArmedBanner(children, contentX, 0, contentW, bannerH, currentArmedBannerText())
         end
-        appendPageBuildError(children, contentX, contentY, contentW, pageBodyH, state.i18n, currentMenuId, err)
+        if not retry then
+          appendPageBuildError(children, contentX, contentY, contentW, pageBodyH, state.i18n, currentMenuId, err)
+        end
       end
     else
       local gridItems = state.menu.getCards()

@@ -11,12 +11,18 @@
 --
 -- Two things differ from the tool script, and both are the radio's rather than this file's:
 --
---   * A tool script is yielded when a call runs long; a widget call is stopped at the instruction
---     limit. A page that builds a lot in one call is therefore stopped part-way here, which is an
---     ordinary event for a page written for the tool script. The step below catches it and runs
---     the tool again on the next pass, and the page completes over several of them. A raise that
---     escapes the catch reaches the widget's entry point, which backs off as it does for any
---     other pass (src/widgets/rfsuite/main.lua).
+--   * A widget call is stopped at the instruction limit; the tool script, which a colour radio
+--     runs in a Lua state of its own, is not. EdgeTX raises that stop once per call and lets the
+--     rest of the call run, so it is caught by the innermost pcall around the code it lands in.
+--     For a page that builds a lot that is the build guard in ui/home.lua, which builds the page
+--     again on the next pass, a few passes in a row at most, before it shows the page as one that
+--     cannot be drawn: a build that fits in what a pass leaves it completes there, and a build
+--     that is above the limit on its own does not open here at all. A page's wakeup is stopped the same way
+--     and called again on the next pass, so a page that spreads its work over its wakeups has to
+--     keep each of them within what a pass leaves. A stop that escapes ui/home.lua reaches the
+--     step below, which runs the tool again on the next pass and gives up after CPU_GIVE_UP in a
+--     row; a raise that escapes that catch reaches the widget's entry point, which backs off as
+--     it does for any other pass (src/widgets/rfsuite/main.lua).
 --   * The tool's modules stay in this state's module cache after the tool is closed. The
 --     dashboard's own modules are in the same cache, so the cache cannot be emptied; only the
 --     entries the dashboard never uses -- the pages and the tool's interface -- are dropped.
@@ -45,9 +51,10 @@ local HOME_PATH = BASE_PATH .. "ui/home.lua"
 -- The module cache entries the tool brings and the dashboard does not use. Dropped on close.
 local TOOL_PREFIXES = { BASE_PATH .. "app/", BASE_PATH .. "ui/" }
 
--- How many instruction-limit stops in a row a phase may take before the tool is given up on. One
--- is normal for a page that builds a lot; a phase that is stopped every time is not going to
--- finish, and retrying it for ever would leave the widget showing nothing.
+-- How many instruction-limit stops in a row a phase may take before the tool is given up on. Only
+-- a stop that escapes ui/home.lua counts here (its page build and page wakeup catch their own); a
+-- phase that is stopped every time is not going to finish, and retrying it for ever would leave
+-- the widget showing nothing.
 local CPU_GIVE_UP = 12
 
 local requireModule = (_G.rfsuite and _G.rfsuite.require) or function(path)
