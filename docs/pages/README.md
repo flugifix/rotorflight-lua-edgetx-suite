@@ -60,7 +60,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Mixer → Trims | `setup/mixer/trims.md` | no | read-only while armed | to write |
 | Servos → PWM Output | `setup/servos/pwm.md` | no | read-only while armed | to write |
 | Servos → BUS Output | `setup/servos/bus.md` | no | read-only while armed | to write |
-| Controls → Modes | `setup/controls/modes.md` | yes | read-only while armed | to write |
+| Controls → Modes | [setup/controls/modes.md](setup/controls/modes.md) | yes | read-only while armed | written |
 | Controls → Adjustments | [setup/controls/adjustments.md](setup/controls/adjustments.md) | yes | read-only while armed | written |
 | Controls → Failsafe | `setup/controls/failsafe.md` | yes | read-only while armed | to write |
 | Controls → Beepers → Configuration | `setup/controls/beepers/configuration.md` | yes | read-only while armed | to write |

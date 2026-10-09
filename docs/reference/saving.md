@@ -208,6 +208,15 @@ is left with a change that was not saved -- it sends the value of this visit's r
 save that completed, not the value of the first visit. Reload on PWM Output then reads the flight
 controller again, as it does on BUS Output.
 
+Modes and Adjustments under Setup > Controls write only the ranges that were changed since the page
+last read or saved, then one EEPROM write; a Save with nothing changed writes nothing at all. A
+range the page did not touch stays on the flight controller as it was stored -- on Modes that
+includes an AUX channel above AUX 13 stored by another tool, which a save used to move to AUX 13.
+Reload discards every change -- on Adjustments that includes a slot other than the one shown, which
+is read again when it is next selected. While Modes writes its ranges, the page is covered by the
+save's progress, as Adjustments is, so a range cannot be changed half-way through a save, and Save or Reload pressed in
+the header meanwhile does nothing.
+
 ## ESC Configurator pages
 
 *Setup* > *ESC & Motors* > *ESC Tools* opens one page per ESC firmware. These pages do not use
