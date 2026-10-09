@@ -577,7 +577,9 @@ function M.build(ctx)
     cursorY = cursorY + rowH
 
     rowH = Controls.appendNumberField(children, x, cursorY, w, pageText(i18n, "esc_current_limit", "Current Limit"), {
-      min = 1, max = 65500, step = 100,
+      -- The ESC keeps the limit in hundredths of an amp and the control steps from min, so min
+      -- sits on the whole-amp grid: from 1, every step would land on x.01 A.
+      min = 100, max = 65500, step = 100,
       display = function(val) return string.format("%.2fA", val / 100) end,
       get = function() return ui.config.current_limit end,
       set = function(val)
