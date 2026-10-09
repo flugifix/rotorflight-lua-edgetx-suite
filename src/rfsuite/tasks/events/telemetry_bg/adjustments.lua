@@ -233,11 +233,12 @@ function M.wakeup()
   local now = nowSeconds()
 
   -- The firmware reports an adjustment for 3 s after it was made, and 0 otherwise. A first
-  -- reading that is not 0 is therefore an adjustment made just before this teller started --
-  -- most often one another Lua state's teller has already announced (the tool closing, the
-  -- background function script starting or stopping) -- and is joined rather than announced.
-  -- Once a 0 has been read, nothing was being adjusted, so the next report is the pilot's: this
-  -- is the first adjustment after every connect, since the teller is reset at each disconnect.
+  -- reading that is not 0 is therefore an adjustment made just before this teller started or
+  -- was reset, often one another Lua state's teller has already announced (the tool opening,
+  -- the background function script starting, or the widget taking over from it) -- and it is
+  -- joined rather than announced. Once a 0 has been read, nothing was being adjusted, so the
+  -- next report is the pilot's: in the widget and the tool that is the first adjustment after
+  -- every connect, since their teller is reset at each disconnect.
   if state.functionId == nil and not state.idleSeen then
     state.functionId, state.value = functionId, value
     return
