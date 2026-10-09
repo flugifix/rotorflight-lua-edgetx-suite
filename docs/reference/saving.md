@@ -84,6 +84,28 @@ Pages that ask:
 - System > Settings: General and Localization; Audio: Volume and all nine Audio Events pages;
   Dashboard: Design and Quick Settings.
 
+### Picking another servo with an unsaved change
+
+Setup > Servos > PWM Output and BUS Output show one servo at a time, and their Save writes the
+servo that is selected. So picking another servo in the *Servo* selector while the one on screen has
+a change that is not saved puts the same box up first, with a message about the servo rather than
+the page:
+
+- **Stay** keeps the servo on screen with its change; the selector goes back to it. Back on the box
+  does the same.
+- **Save** saves the servo on screen as the header's Save does, and the other servo is picked once
+  the flight controller has stored it. If the save is refused or fails, nothing is picked and the
+  change stays on screen, still unsaved. (The *Saved* notice of these pages comes up when the write
+  is sent, not when it is stored.)
+- **Discard** drops the change and picks the other servo. On PWM Output the servo goes back to the
+  values the page read from the flight controller (or last saved there), and its centre is sent to
+  the flight controller again where it differs, as Reload does. BUS Output reads the servo from the
+  flight controller again the next time it is picked; a centre sent under the servo override earlier
+  is still on the flight controller then, and the read shows it.
+
+The selector is locked while the servo override is on, as before. Back on either page still leaves
+without asking, for the reason given above.
+
 ## A save that restarts the flight controller
 
 A save on Configuration, Alignment, GPS, Ports, Radio Config, and ESC/Motors RPM, Telemetry and

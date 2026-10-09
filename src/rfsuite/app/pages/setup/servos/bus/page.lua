@@ -610,7 +610,12 @@ local function queueServosRead(isAutoReload)
   return true, nil
 end
 
-local function queueServoWrite(servoIdx)
+--- `onDone(ok)` is told once the write is over: true when the flight controller has taken the
+--- record (and the EEPROM write after it), false when either was refused or never answered.
+local function queueServoWrite(servoIdx, onDone)
+  local function done(ok)
+    if type(onDone) == "function" then onDone(ok) end
+  end
   if not M.canSave() then return false, "read_required" end
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
@@ -681,12 +686,14 @@ local function queueServoWrite(servoIdx)
             if type(ui.runtime.requestRebuild) == "function" then
               ui.runtime.requestRebuild()
             end
+            done(true)
           end,
           errorHandler = function()
             ui.loading = false
             if type(ui.runtime.requestRebuild) == "function" then
               ui.runtime.requestRebuild()
             end
+            done(false)
           end
         })
       else
@@ -696,6 +703,7 @@ local function queueServoWrite(servoIdx)
         if type(ui.runtime.requestRebuild) == "function" then
           ui.runtime.requestRebuild()
         end
+        done(true)
       end
     end,
     errorHandler = function()
@@ -703,10 +711,42 @@ local function queueServoWrite(servoIdx)
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
+      done(false)
     end
   })
 
   return true, nil
+end
+
+--- Makes servo `val` the one on screen, reading its record first where it has not been read on
+--- this visit. Only the paged route leaves a servo unread; the whole-table route brought them all.
+local function selectServo(val)
+  ui.selectedServoIndex = val
+  if hasPagedServoReads() and not ui.servoLoaded[val] then
+    ui.loading = true
+    queueServoRead(val, function()
+      ui.loading = false
+      if type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
+      end
+    end)
+  end
+  if type(ui.runtime.requestRebuild) == "function" then
+    ui.runtime.requestRebuild()
+  end
+end
+
+--- Discard on the unsaved-changes question put before another servo is picked. This page keeps
+--- no snapshot, so the servo is read from the board again: on the paged route it counts as unread
+--- and is read the next time it is picked (selectServo); the whole-table route reads the table.
+--- A centre sent live under the override is in the board's RAM, so that is what the read shows.
+local function discardServo(busIdx)
+  ui.dirty = false
+  if hasPagedServoReads() then
+    ui.servoLoaded[busIdx] = nil
+  else
+    queueServosRead(false)
+  end
 end
 
 local function ensureLoaded()
@@ -769,6 +809,7 @@ function M.build(ctx)
   ensureLoaded()
 
   ui.runtime.requestRebuild = ctx and ctx.requestRebuild or nil
+  ui.runtime.askUnsavedChanges = ctx and ctx.askUnsavedChanges or nil
 
   local children = ctx.children
   local x = ctx.x
@@ -825,21 +866,34 @@ function M.build(ctx)
     servoOptions,
     ui.selectedServoIndex,
     function(val)
-      if ui.selectedServoIndex ~= val then
-        ui.selectedServoIndex = val
-        -- Only the paged route leaves a servo unread; the whole-table route brought them all.
-        if hasPagedServoReads() and not ui.servoLoaded[val] then
-          ui.loading = true
-          queueServoRead(val, function()
-            ui.loading = false
-            if type(ui.runtime.requestRebuild) == "function" then
-              ui.runtime.requestRebuild()
-            end
-          end)
+      if ui.selectedServoIndex == val then return end
+      if not ui.dirty then
+        selectServo(val)
+        return
+      end
+      -- Save writes the selected servo only, so an edit left on this one would be dropped by
+      -- the pick. The host's unsaved-changes question comes first: Save stores this servo and
+      -- then picks, Discard puts back what the board holds and then picks, Stay keeps both.
+      -- Where it cannot be asked, the pick does not happen and the selector shows this servo.
+      -- The answers act only on this visit: ui.runtime is dropped on close and made anew on the
+      -- next visit, so a write that completes after the page has gone picks nothing.
+      local from = ui.selectedServoIndex
+      local visit = ui.runtime
+      local asked = type(visit.askUnsavedChanges) == "function" and visit.askUnsavedChanges({
+        message = pageText(i18n, "switch_unsaved_msg",
+          "This servo has changes that are not saved. Picking another servo discards them."),
+        saved = function()
+          if ui.runtime == visit and ui.selectedServoIndex == from then selectServo(val) end
+        end,
+        discard = function()
+          if ui.runtime == visit and ui.selectedServoIndex == from then
+            discardServo(from)
+            selectServo(val)
+          end
         end
-        if type(ui.runtime.requestRebuild) == "function" then
-          ui.runtime.requestRebuild()
-        end
+      })
+      if not asked and type(ui.runtime.requestRebuild) == "function" then
+        ui.runtime.requestRebuild()
       end
     end,
     {
@@ -1022,7 +1076,19 @@ function M.build(ctx)
 end
 
 function M.onSave(ctx)
-  local ok, err = queueServoWrite(ui.selectedServoIndex)
+  -- `ctx.onSaved` is the host's: the pilot answered Save to the question put before another servo
+  -- was picked, and the pick happens once this servo's record is stored, never before.
+  -- onSave clears the unsaved flag when the write is queued; a write that is not stored puts back
+  -- what the flag was, so an edit stays unsaved and an unedited servo does not become one.
+  local onSaved = ctx and ctx.onSaved
+  local hadEdit = ui.dirty
+  local ok, err = queueServoWrite(ui.selectedServoIndex, function(stored)
+    if not stored then
+      ui.dirty = hadEdit
+    elseif type(onSaved) == "function" then
+      onSaved()
+    end
+  end)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({

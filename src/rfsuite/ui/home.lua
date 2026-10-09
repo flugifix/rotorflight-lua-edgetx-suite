@@ -580,6 +580,9 @@ state = {
   armedNoticeVisible = false,
   -- The question put to a pilot who leaves a page with changes on it: save, discard, or stay.
   leavePromptVisible = false,
+  -- When a page put that question before a change of its own rather than before Back: the page,
+  -- its message, and what Save and Discard do there instead of what they do on Back.
+  leavePromptAnswers = nil,
   -- Whether the header drawn last offered Save; the question above is only put where it did.
   headerSaveOffered = false,
   armedFeedbackUntil = nil,
@@ -946,6 +949,7 @@ local function onBack(source, ev)
   -- the page comes back with its changes. A second press in a row can therefore never discard.
   if state.leavePromptVisible then
     state.leavePromptVisible = false
+    state.leavePromptAnswers = nil
     if fromEvent then
       state.suppressBackFrames = 6
     end
@@ -1041,6 +1045,7 @@ local function onBack(source, ev)
         reportHookCrash("activePage.hasUnsavedChanges", currentMenuId, unsaved)
       elseif unsaved == true then
         logf("debug", "leave prompt on %s", tostring(currentMenuId))
+        state.leavePromptAnswers = nil
         state.leavePromptVisible = true
         if fromEvent then
           state.suppressBackFrames = 6
@@ -1411,6 +1416,7 @@ local function returnToRootOnDisconnect()
   -- Nothing can be saved over a link that has gone, so the question is not asked: the page goes
   -- with the rest of the menu.
   state.leavePromptVisible = false
+  state.leavePromptAnswers = nil
 
   local stepped = false
   while state.menu and (not state.menu.isRoot()) do
@@ -2040,7 +2046,10 @@ end
 -- answer IS the confirmation, so the preference's own question is not put a second time; the two
 -- that override the preference -- an arming state that cannot be read, a page that requires its
 -- question -- are asked as on any other save.
-local function onSave(fromLeavePrompt)
+-- `onSaved` is what a page asked to happen once this save is done (askUnsavedChanges below). It is
+-- handed to the page's onSave, which alone knows when its writes have been taken, and is never run
+-- for a save that is refused before it reaches the page.
+local function onSave(fromLeavePrompt, onSaved)
   if blockSaveWhileArmed() then return end
 
   local page = getActivePageModule()
@@ -2071,7 +2080,8 @@ local function onSave(fromLeavePrompt)
           savePreferences = performSave,
           refresh = M.buildUI,
           requestRebuild = requestRebuild,
-          reportSave = reportSaveOutcome
+          reportSave = reportSaveOutcome,
+          onSaved = onSaved
         })
 
         if not ok then
@@ -2206,20 +2216,64 @@ end
 -- page stays: the save is watched where every save is, and the next Back leaves a page that has
 -- nothing unsaved left. Leaving at once instead would release the page while its writes are
 -- still out, and their replies would then arrive at a page that is gone.
+--
+-- Where a page put the question before a change of its own (askUnsavedChanges), Save and Discard
+-- do what that page asked instead, and only while it is still the page on screen.
 local function leavePromptSave()
+  local answers = state.leavePromptAnswers
   state.leavePromptVisible = false
-  onSave(true)
+  state.leavePromptAnswers = nil
+  if answers and answers.page ~= getActivePageModule() then
+    scheduleBuildUI(false)
+    return
+  end
+  onSave(true, answers and answers.saved or nil)
   scheduleBuildUI(false)
 end
 
 local function leavePromptDiscard()
+  local answers = state.leavePromptAnswers
   state.leavePromptVisible = false
-  leaveCurrentPage(false)
+  state.leavePromptAnswers = nil
+  if not answers then
+    leaveCurrentPage(false)
+    return
+  end
+  if answers.page == getActivePageModule() and type(answers.discard) == "function" then
+    local ok, err = pcall(answers.discard)
+    if not ok then
+      reportHookCrash("activePage.discard", state.activePageMenuId, err)
+    end
+  end
+  scheduleBuildUI(false)
 end
 
 local function leavePromptStay()
   state.leavePromptVisible = false
+  state.leavePromptAnswers = nil
   scheduleBuildUI(false)
+end
+
+-- The same question, put by a page before a change of its own that would drop what is not saved:
+-- the Servos pages hold the edit of one servo at a time, and picking another would lose it. The
+-- box, its buttons and Back on it are the ones above; the page gives the message, `saved` (run by
+-- its onSave once its write is done) and `discard` (run instead of leaving). It is put under the
+-- same conditions as on Back; where it cannot be, the answer is false and the page keeps what it
+-- has.
+local function askUnsavedChanges(page, answers)
+  if type(answers) ~= "table" or page == nil or page ~= getActivePageModule() then return false end
+  local saving = state.pendingSaveAction ~= nil
+    or (SavePipeline and type(SavePipeline.isActive) == "function" and SavePipeline.isActive())
+  if not state.headerSaveOffered or saving or isModelArmed() then return false end
+  state.leavePromptAnswers = {
+    page = page,
+    message = answers.message,
+    saved = answers.saved,
+    discard = answers.discard
+  }
+  state.leavePromptVisible = true
+  scheduleBuildUI(false)
+  return true
 end
 
 local function getCardPressHandler(cardId)
@@ -2598,7 +2652,7 @@ function M.buildUI()
       w = LCD_W or 320,
       h = LCD_H or 240,
       title = "@i18n(app.save.leave_title)@",
-      message = "@i18n(app.save.leave_message)@",
+      message = (state.leavePromptAnswers and state.leavePromptAnswers.message) or "@i18n(app.save.leave_message)@",
       bar = false,
       actions = {
         { text = "@i18n(app.save.leave_stay)@", press = leavePromptStay },
@@ -2867,6 +2921,8 @@ function M.buildUI()
         -- finished -- needs the same route the back key takes. Passing it here rather than having
         -- the page reach into the menu keeps the navigation in one place.
         requestClose = function() leaveCurrentPage(false) end,
+        -- The unsaved-changes question, for a page about to drop an edit of its own accord.
+        askUnsavedChanges = function(answers) return askUnsavedChanges(pageModule, answers) end,
         openHelp = function(message, title, subtitle)
           local resolvedTitle = title or pageTitle
           local resolvedSubtitle = subtitle
@@ -3099,6 +3155,7 @@ function M.init(opts)
   state.saveOverlayVisible = false
   state.armedNoticeVisible = false
   state.leavePromptVisible = false
+  state.leavePromptAnswers = nil
   state.headerSaveOffered = false
   state.armedFeedbackUntil = nil
   state.armedFeedbackText = nil
@@ -3292,6 +3349,7 @@ function M.run(event, touchState)
         -- The question about unsaved changes is not left standing over an armed model. The page
         -- comes back with its changes, and Back now leaves it without asking (onBack).
         state.leavePromptVisible = false
+        state.leavePromptAnswers = nil
         -- Clear MSP queue to abort any pending MSP operations immediately
         ensureMspRuntime()
         if MspRuntime and type(MspRuntime.getState) == "function" then
@@ -3379,6 +3437,7 @@ function M.run(event, touchState)
         state.saveOutcome = nil
         state.saveOverlayVisible = false
         state.leavePromptVisible = false
+        state.leavePromptAnswers = nil
         state.pendingMenuOpen = nil
         closeHelpDialogIfOpen()
         
