@@ -165,7 +165,9 @@ session, and the wakeup after that must not credit the flight with all of it.
 second, EdgeTX answers every telemetry value with 0, and a 0 there is not a reading: the lowest
 ESC temperature, which has no gate of its own, would take it as the flight's minimum. The record
 skips its samples for as long as the link is not streaming and takes the next one as soon as it
-is back; the flight clock keeps running through the gap, since the flight does.
+is back; the flight clock keeps running through the gap, since the flight does. A gap long enough
+for the link to count as lost — down for 2 s, about 3 s after the last frame — is a different case:
+it ends the session, and the record starts again when the link comes back (below).
 
 ## The readings a sampling pass offers, once
 

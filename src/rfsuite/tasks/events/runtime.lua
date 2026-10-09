@@ -445,8 +445,10 @@ function Events.wakeup(carry)
     -- clock of its own and is not a second writer.
     --
     -- `connected` is this pass's raw link state, not the held one: the MSP runtime ticked just
-    -- before this wakeup, and EdgeTX answers getRSSI() with 0 on exactly the condition on which it
-    -- answers every telemetry source with 0. The record samples nothing while it is false.
+    -- before this wakeup, and EdgeTX answers getRSSI() with 0 on the same condition on which it
+    -- answers every telemetry source with 0. The record samples nothing while it is false. (The two
+    -- are read a moment apart in the pass, so a gap that starts between them can still let one
+    -- sample through.)
     if context == "widget" then
       if FlightRecord == nil then
         FlightRecord = loadModule("tasks/events/telemetry/flight_record.lua") or false
