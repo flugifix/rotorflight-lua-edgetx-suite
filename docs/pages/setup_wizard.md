@@ -54,7 +54,10 @@ page back, and on the first page it leaves the assistant.
   open stays open across the arming edge. A *use this* or a picker that is started while the model
   is armed, or that is still running when it is armed, does not resume at the disarm: it stops
   there, sends nothing more, and the Probe row reads *Stopped: model was armed*. A write that had
-  already left before the arming is not undone.
+  already left before the arming is not undone. *Read* is refused while the model is armed, and a
+  probe running at the arming stops the same way. This rests on the flight controller's arming
+  flags reaching the radio as telemetry: an arming between two readings of them is not seen, and
+  without them the radio cannot tell at all (see *Tools > Diagnostics > ELRS Link*).
 - **Both *use this* buttons on the Link step ask before they write.** One sets the transmitter
   module's packet rate and telemetry ratio to the flight controller's, the other writes the flight
   controller's telemetry configuration to match the module and saves it. The question is the one

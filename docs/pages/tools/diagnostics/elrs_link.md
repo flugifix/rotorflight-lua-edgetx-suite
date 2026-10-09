@@ -52,18 +52,28 @@ is answered, so arming the model while the question stands cancels the write. A 
 write — the module is read parameter by parameter first and the writes follow over the next
 several seconds — so a transfer can still be running when the model is armed. It does not resume
 when the model is disarmed: it stops there, sends nothing more, and the Status row reads
-*Stopped: model was armed*. A write that had already left before the arming is not undone, so run
-the sync again. *Probe* only reads, but it too does nothing while the model is armed. A probe that
-was already running carries on after the disarm with its time limits counted through the armed
-period: it completes only from what the module had already answered, and otherwise ends as *No
-module found*, *Read timeout* or *RF config not ready* — press *Probe* again.
+*Stopped: model was armed* — also when the arming cleared a write to the flight controller that
+was waiting to be sent. A write that had already left before the arming is not undone, so run the
+sync again. *Probe* only reads, but it too does nothing while the model is armed, and a probe that
+was running when the model was armed stops the same way instead of finishing on half a walk;
+press *Probe* again.
 
 The Status row reads *Unavailable while armed* for as long as the model is armed, and shows what
 the page last did again once it is disarmed.
 
-Where the radio cannot read the arming state at all — the link is up and the flight controller
-does not report the arming flags — the question is still asked, says so in its last line, and
-answering yes writes. A save elsewhere in the suite asks the same question for the same reason.
+All of this rests on the flight controller's arming flags reaching the radio as telemetry; the
+radio sees the model armed only when such a reading says so. Two limits follow from that:
+
+- An arming that begins and ends between two readings of the arming flags is not seen at all, and
+  a sync confirmed before it carries on. How often the flags arrive depends on the link's telemetry
+  ratio — the setting this page manages — so a low ratio such as 1:64 widens that gap.
+- Where the flight controller does not report the arming flags at all, the radio cannot tell
+  armed from disarmed. The question is still asked, says so in its last line, and answering yes
+  writes; nothing then stops a sync at an arming. A save elsewhere in the suite asks the same
+  question for the same reason.
+
+Where the arming state cannot be read because a part of the suite itself is missing, nothing is
+written and the Status row reads *Arming state unknown*.
 
 ## Notes
 

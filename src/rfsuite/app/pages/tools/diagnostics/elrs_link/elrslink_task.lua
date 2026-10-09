@@ -89,6 +89,8 @@ local pendingWriteIndex = 1
 local manualSyncMode = SYNC_MODE_OFF
 -- lib/armed.lua's change count when the pilot said yes to a write; see the armed backstop below.
 local yesArmCount = nil
+-- The same count when this run of the task was first woken; nil until then.
+local walkArmCount = nil
 -- Defined with the armed backstop below; the MSP write's handlers further up call it.
 local failWrite
 local statusI18nKey = "status_idle"
@@ -566,6 +568,7 @@ function M.reset()
     clearFieldData()
     clearPendingWrites()
     yesArmCount = nil
+    walkArmCount = nil
     setStatus("status_idle")
 end
 
@@ -756,6 +759,18 @@ function M.wakeup()
         return
     end
 
+    -- A probe writes nothing, but one that spanned an arming wakes with its time limits spent
+    -- and would end on half a walk -- and a timeout still records what it had read as the
+    -- module's settings. So a probe stops the same way; Probe starts a fresh one.
+    local count = armChangeCount()
+    if walkArmCount == nil then walkArmCount = count end
+    if count ~= walkArmCount then
+        logMsg("probe abandoned: the model was armed while it ran", "warn")
+        setStatus("status_stopped_armed")
+        completeTask()
+        return
+    end
+
     if not session or session.isConnected ~= true or session.telemetryType ~= "crsf" then
         if not isSimulation() then
             setStatus("status_requires_active_link")
@@ -922,6 +937,7 @@ function M.selectOption(kind, index)
 
     manualSyncMode = SYNC_MODE_OFF
     yesArmCount = armChangeCount()
+    walkArmCount = yesArmCount
     taskComplete = false
     state = "write"
     nextActionAt = 0
