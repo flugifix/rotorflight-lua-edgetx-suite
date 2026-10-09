@@ -83,7 +83,8 @@ function M.remember(session, amps)
 
   -- The save writes the whole table, so the limit has to be in it while the file is written. It
   -- stays there only if the write succeeded: kept after a failed one, the next visit would find it
-  -- "unchanged" and never write it, and the dashboard, which reads the file, would not see it.
+  -- "unchanged" and never write it, and a dashboard in its own Lua state, which reads the file,
+  -- would not see it.
   local previous = battery[M.KEY]
   battery[M.KEY] = limit
   local ok, err = PowerModelPreferences.save(session)
