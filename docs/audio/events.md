@@ -109,7 +109,9 @@ it once the file can be written.
 | Adjustment events | `adjustment_events` | Off | Radio | Audio feedback when adjusting tuning parameters via in-flight switches or rotary knobs. |
 
 #### What an Adjustment Announcement Says
-The new value, preceded by the name of the adjustment function whenever the pilot moves on to a different function than the last one adjusted. The name is built from the words in `adj/` (for example *Pitch RC Expo*, *Governor Idle Throttle*). Every adjustment function the firmware defines is named this way except the four profile switches (rate, PID, LED and OSD profile) and the battery profile, for which the adjustment announcement says only the value. A rate or PID profile change is announced under *Profiles* and a battery profile change under *On Connect* (*Battery Capacity*), so naming them here as well would say the same event twice.
+The new value, preceded by the name of the adjustment function whenever the pilot moves on to a different function than the last one adjusted, and on the first adjustment after every connect. The name is built from the words in `adj/` (for example *Pitch RC Expo*, *Governor Idle Throttle*). Every adjustment function the firmware defines is named this way except the four profile switches (rate, PID, LED and OSD profile) and the battery profile, which the adjustment announcement does not speak at all. A rate or PID profile change is announced under *Profiles* and a battery profile change under *On Connect* (*Battery Capacity*), so announcing them here as well would say the same event twice; with those announcements switched off, such an adjustment is not spoken.
+
+The flight controller reports an adjustment for three seconds after it was made. An adjustment made in the three seconds before the announcements start -- right after the configuration tool is closed, for example, or after the [background decoder](../reference/background-decoder.md) has taken over or stopped -- is not announced by the part that starts, because another one has usually announced it already.
 
 ### 8. SmartFuel
 
