@@ -161,6 +161,12 @@ every wakeup, so a flight's duration does not depend on how often the statistics
 a single step of that clock is capped at one second — a widget can be suspended for a whole tool
 session, and the wakeup after that must not credit the flight with all of it.
 
+**Nothing is sampled while the telemetry link is down.** Once the link has not streamed for a
+second, EdgeTX answers every telemetry value with 0, and a 0 there is not a reading: the lowest
+ESC temperature, which has no gate of its own, would take it as the flight's minimum. The record
+skips its samples for as long as the link is not streaming and takes the next one as soon as it
+is back; the flight clock keeps running through the gap, since the flight does.
+
 ## The readings a sampling pass offers, once
 
 The record runs from the event runtimes, and a widget drives those at the top of its own pass —
