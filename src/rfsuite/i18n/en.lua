@@ -390,6 +390,7 @@ return {
         save_error_title = "Error",
         saved_title = "Saved",
         saved_message = "Servo settings saved",
+        switch_unsaved_msg = "This servo has changes that are not saved. Picking another servo discards them.",
       },
       flight_tuning_governor = {
         title = "Governor",
