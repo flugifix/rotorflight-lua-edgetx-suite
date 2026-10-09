@@ -202,6 +202,7 @@ function Queue.new(common, opts)
   self.lastTimeCommandSent = nil
 
   self.retryCount = 0
+  self.errorReplySeen = false
   self.maxRetries = tonumber(opts.maxRetries) or 3
   self.timeout = tonumber(opts.timeout) or DEFAULT_TIMEOUT_SECONDS
   self.retryBackoff = tonumber(opts.retryBackoff) or DEFAULT_RETRY_BACKOFF_SECONDS
@@ -452,6 +453,9 @@ function Queue:processQueue(now)
     self.currentMessageStartTime = nil
     self.lastTimeCommandSent = nil
     self.retryCount = 0
+    -- Kept on the queue, not on the message: a caller may add the same message table again,
+    -- and what the board answered last time says nothing about this time.
+    self.errorReplySeen = false
   end
 
   local msg = self.currentMessage
@@ -551,6 +555,14 @@ function Queue:processQueue(now)
 
   if cmd then
     self.lastTimeCommandSent = nil
+  end
+
+  -- An error reply is still retried, not taken as final: the firmware answers some reads with
+  -- one while it fetches the data (MSP_ESC_PARAMETERS until the ESC has delivered its
+  -- parameters), and a later attempt gets the answer. It is remembered so that a message given
+  -- up after its retries says the board refused it, not that the board never answered.
+  if cmd == msg.command and err then
+    self.errorReplySeen = true
   end
 
   if cmd == msg.command and err and msg.retryOnErrorReply == true then
@@ -656,25 +668,25 @@ function Queue:processQueue(now)
   -- immediately, and the message is abandoned before the flight controller could physically have
   -- answered. So the last retry is not a retry -- it is a send whose reply is never waited for,
   -- and a link that answers slowly loses the one attempt that would have succeeded.
-  -- The timeout branch below already waits for the window in exactly this way.
   if self.retryCount > maxRetries
     and (self.currentMessageStartTime == nil
          or (now - self.currentMessageStartTime) > timeoutSeconds) then
     msg.__retryCount = self.retryCount
+    -- The one place a message is given up after its retries, so its reason is decided here:
+    -- "refused" when the board answered this command with an error reply on any attempt,
+    -- "max_retries" when no attempt was answered at all.
+    local reason = self.errorReplySeen and "refused" or "max_retries"
     if type(msg.errorHandler) == "function" then
-      msg.errorHandler(msg, "max_retries")
+      msg.errorHandler(msg, reason)
     end
-    if type(msg.setErrorHandler) == "function" then
-      msg.setErrorHandler(msg)
-    end
-    self.logf("warn", "max retries cmd=%s rw=%s client=%s attempts=%d",
+    self.logf("warn", "%s cmd=%s rw=%s client=%s attempts=%d",
+      reason == "refused" and "refused" or "max retries",
       tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client), self.retryCount)
     -- Only the message that ran out of retries is given up. Clearing the whole queue here ran
     -- the errorHandler of every other message waiting -- and this one's a second time, since it
     -- has just been called above -- so a single unanswered command took down work belonging to
-    -- callers that had nothing to do with it. The timeout branch below already abandons just
-    -- the current message and carries on; this now does the same. The transmit buffer is still
-    -- cleared, because the chunks of a message being abandoned must not be left for the next.
+    -- callers that had nothing to do with it. The transmit buffer is still cleared, because the
+    -- chunks of a message being abandoned must not be left for the next.
     self.currentMessage = nil
     self.currentMessageStartTime = nil
     self.lastTimeCommandSent = nil
@@ -684,31 +696,6 @@ function Queue:processQueue(now)
     if self.common and self.common.clearRxBuf then
       self.common.clearRxBuf()
     end
-    if self.interMessageDelay > 0 then
-      self._nextMessageAt = now + self.interMessageDelay
-    end
-    return
-  end
-
-  -- Timeout: nur abbrechen, wenn keine weiteren Retries mehr erlaubt sind
-  if self.currentMessage and self.currentMessageStartTime and (now - self.currentMessageStartTime) > timeoutSeconds then
-    if self.retryCount < maxRetries + 1 then
-      -- Noch ein Retry erlaubt, warte auf Retry-Logik oben
-      return
-    end
-    msg.__retryCount = self.retryCount
-    if type(msg.errorHandler) == "function" then
-      msg.errorHandler(msg, "timeout")
-    end
-    if type(msg.setErrorHandler) == "function" then
-      msg.setErrorHandler(msg)
-    end
-    self.logf("warn", "timeout cmd=%s rw=%s client=%s attempt=%d/%d",
-      tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client),
-      self.retryCount, maxRetries + 1)
-    self.currentMessage = nil
-    self.currentMessageStartTime = nil
-    self.lastTimeCommandSent = nil
     if self.interMessageDelay > 0 then
       self._nextMessageAt = now + self.interMessageDelay
     end
