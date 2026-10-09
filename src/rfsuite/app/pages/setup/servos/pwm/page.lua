@@ -731,9 +731,6 @@ local function queueServoWrite(servoIdx, onDone)
           end,
           errorHandler = function()
             ui.loading = false
-            -- The record is not stored, so the edit is still unsaved: onSave cleared the flag
-            -- when the write was queued.
-            ui.dirty = true
             if type(ui.runtime.requestRebuild) == "function" then
               ui.runtime.requestRebuild()
             end
@@ -753,7 +750,6 @@ local function queueServoWrite(servoIdx, onDone)
     end,
     errorHandler = function()
       ui.loading = false
-      ui.dirty = true
       if type(ui.runtime.requestRebuild) == "function" then
         ui.runtime.requestRebuild()
       end
@@ -1140,9 +1136,16 @@ end
 function M.onSave(ctx)
   -- `ctx.onSaved` is the host's: the pilot answered Save to the question put before another servo
   -- was picked, and the pick happens once this servo's record is stored, never before.
+  -- onSave clears the unsaved flag when the write is queued; a write that is not stored puts back
+  -- what the flag was, so an edit stays unsaved and an unedited servo does not become one.
   local onSaved = ctx and ctx.onSaved
+  local hadEdit = ui.dirty
   local ok, err = queueServoWrite(ui.selectedServoIndex, function(stored)
-    if stored and type(onSaved) == "function" then onSaved() end
+    if not stored then
+      ui.dirty = hadEdit
+    elseif type(onSaved) == "function" then
+      onSaved()
+    end
   end)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then
