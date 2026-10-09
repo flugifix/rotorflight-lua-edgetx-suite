@@ -55,7 +55,7 @@ when the model is disarmed: it stops there, sends nothing more, and the Status r
 *Stopped: model was armed* — also when the arming cleared a write to the flight controller that
 was waiting to be sent. A write that had already left before the arming is not undone, so run the
 sync again. *Probe* only reads, but it too does nothing while the model is armed, and a probe that
-was running when the model was armed stops the same way instead of finishing on half a walk;
+had already started its walk when the model was armed stops the same way instead of finishing on half a walk;
 press *Probe* again.
 
 The Status row reads *Unavailable while armed* for as long as the model is armed, and shows what

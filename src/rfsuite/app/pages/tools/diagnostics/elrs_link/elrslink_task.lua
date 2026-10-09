@@ -91,8 +91,9 @@ local manualSyncMode = SYNC_MODE_OFF
 local yesArmCount = nil
 -- The same count when this run of the task was first woken; nil until then.
 local walkArmCount = nil
--- Defined with the armed backstop below; the MSP write's handlers further up call it.
+-- Defined with the armed backstop below; the MSP write's handlers further up call them.
 local failWrite
+local writeRefusal
 local statusI18nKey = "status_idle"
 local statusDetail = nil
 
@@ -488,6 +489,13 @@ local function syncElrsToRotorflight(fcConfig, moduleRate, moduleRatioLabel, rat
         payload = writeBuffer,
         isWrite = true,
         processReply = function()
+            -- The commit is a second write and is asked for only now, so it is held to the same
+            -- rule: an arming between the write and its answer ends the sync here.
+            if writeRefusal() then
+                logMsg("syncElrsToRotorflight: no EEPROM commit, the sync was stopped", "warn")
+                failWrite("status_rotorflight_save_failed")
+                return
+            end
             setStatus("status_saving_rotorflight")
             local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
             mspState.queue:add({
@@ -728,7 +736,7 @@ local function armChangeCount()
 end
 
 -- Why a write may not go on, as the status that says so; nil when it may.
-local function writeRefusal()
+writeRefusal = function()
     local armed = armedUsable()
     if not armed then return "status_arming_unknown" end
     if armed.isArmed() == true then return "status_stopped_armed" end
