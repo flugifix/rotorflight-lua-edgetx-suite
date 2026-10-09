@@ -143,8 +143,8 @@ local function isWriteMessage(msg)
     return msg.isWrite == true
   end
   if msg.write == true then return true end
-  if READ_WITH_ARGUMENT[msg.command] then return false end
-  return type(msg.payload) == "table" and #msg.payload > 0
+  if type(msg.payload) ~= "table" or #msg.payload == 0 then return false end
+  return not READ_WITH_ARGUMENT[msg.command]
 end
 
 -- A response buffer reaches this file as a byte table on one transport and as a string on
