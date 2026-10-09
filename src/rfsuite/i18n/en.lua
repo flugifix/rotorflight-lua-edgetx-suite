@@ -2271,6 +2271,7 @@ return {
         status_unavailable_inflight = "Unavailable in flight",
         status_unavailable_armed = "Unavailable while armed",
         status_stopped_armed = "Stopped: model was armed",
+        status_arming_unknown = "Arming state unknown",
         status_probe_requested = "Probe requested",
         status_sync_requested = "Sync requested: ",
         mode_native = "Native",

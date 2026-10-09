@@ -53,8 +53,10 @@ write — the module is read parameter by parameter first and the writes follow 
 several seconds — so a transfer can still be running when the model is armed. It does not resume
 when the model is disarmed: it stops there, sends nothing more, and the Status row reads
 *Stopped: model was armed*. A write that had already left before the arming is not undone, so run
-the sync again. *Probe* only reads, but it too does nothing while the model is armed; a probe that
-was already running finishes after the disarm.
+the sync again. *Probe* only reads, but it too does nothing while the model is armed. A probe that
+was already running carries on after the disarm with its time limits counted through the armed
+period: it completes only from what the module had already answered, and otherwise ends as *No
+module found*, *Read timeout* or *RF config not ready* — press *Probe* again.
 
 The Status row reads *Unavailable while armed* for as long as the model is armed, and shows what
 the page last did again once it is disarmed.

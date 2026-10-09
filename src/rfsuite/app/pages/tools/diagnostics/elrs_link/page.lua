@@ -328,7 +328,11 @@ local function rebuildRows(i18n)
   -- page then -- so the row says that instead of whatever the task last reported. It is read
   -- from the predicate on every build rather than kept, because a kept refusal outlives the
   -- arming it was about: the host rebuilds the page on both edges.
-  if armedRefusesTheWrite() then
+  -- Where the predicate itself is missing, every button refuses as well, and the row names that
+  -- rather than an arming nobody saw.
+  if type(Armed) ~= "table" or type(Armed.isArmed) ~= "function" then
+    status = pageText(i18n, "status_arming_unknown", "Arming state unknown")
+  elseif Armed.isArmed() == true then
     status = pageText(i18n, "status_unavailable_armed", "Unavailable while armed")
   end
 
