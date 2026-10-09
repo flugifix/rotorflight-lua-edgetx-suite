@@ -118,6 +118,19 @@ Once the flight controller has confirmed they are stored, the notice can be clos
 left, and the save finishes on its own. Its outcome is shown the next time that page is opened, in
 the same box a save reports in when it is watched to the end.
 
+The save is reported as finished only when the restart was seen. Before the restart the tool reads
+whether the flight controller's clock is set -- the connection sets it, and a restart clears it --
+and reads it again once the board answers. *Settings saved.* means the clock was cleared, so the
+board did restart, and the notice clears itself after two seconds. If the clock was still set, the
+reboot command never took effect (it can be lost on the link while the board keeps answering), and
+settings that take effect at boot, such as a port's function, are not in effect yet. The same
+applies where the clock was not set before the restart or could not be read -- a board built
+without a clock answers so -- because then nothing can show that the board restarted. In both cases the notice
+reads *Settings saved, but the flight controller's restart could not be confirmed. Power it off
+and on before flying.* and stays up until it is closed. The settings are stored either way. A
+board that does not answer again within 20 seconds is reported as *The flight controller has not
+come back yet*, as before.
+
 ## When a different flight controller answers
 
 Adjustments, Beepers, Blackbox, Failsafe and Stats under Setup > Controls, the four Governor pages,

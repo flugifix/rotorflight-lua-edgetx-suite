@@ -318,6 +318,7 @@ local SAVE_TEXT = {
   done_message = "@i18n(app.save.done_message)@",
   timeout_title   = "@i18n(app.save.timeout_title)@",
   timeout_message = "@i18n(app.save.timeout_message)@",
+  restart_unconfirmed = "@i18n(app.save.restart_unconfirmed)@",
   failed_title    = "@i18n(app.save.failed_title)@",
   failed_message  = "@i18n(app.save.failed_message)@",
   eeprom_pending  = "@i18n(app.save.eeprom_pending)@",
@@ -2574,6 +2575,12 @@ function M.buildUI()
         elseif saveProgress.status ~= "done" then
           title = SAVE_TEXT.failed_title
           message = SAVE_TEXT.failed_message
+        elseif result.reboot == true and result.rebootProven ~= true then
+          -- Stored, and the board answers again, but nothing showed that it restarted: settings
+          -- that take effect at boot may not be in effect yet. The pipeline leaves this notice
+          -- standing instead of clearing it as a success.
+          title = SAVE_TEXT.saved_title
+          message = SAVE_TEXT.restart_unconfirmed
         else
           title = SAVE_TEXT.saved_title
           message = SAVE_TEXT.done_message
