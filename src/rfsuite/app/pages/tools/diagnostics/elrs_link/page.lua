@@ -271,9 +271,9 @@ local function startSync(i18n, mode)
   -- Not while the craft is armed. The entry is locked against being ENTERED while armed, but a
   -- page opened before the arming edge stays open across it and its buttons stay live, so the
   -- press has to ask the question the menu asked earlier. The header's Save refuses on the same
-  -- predicate; this is the same refusal, one button over.
+  -- predicate; this is the same refusal, one button over. The Status row says why for as long as
+  -- the craft is armed (rebuildRows), so nothing is left standing once it is disarmed.
   if armedRefusesTheWrite() then
-    state.notice = pageText(i18n, "status_unavailable_armed", "Unavailable while armed")
     rebuild()
     return
   end
@@ -289,7 +289,6 @@ local function startSync(i18n, mode)
         -- The question stands over an arbitrary number of ticks and the craft can be armed
         -- under it, so the state is read again here rather than inherited from the press.
         if armedRefusesTheWrite() then
-          state.notice = pageText(i18n, "status_unavailable_armed", "Unavailable while armed")
           rebuild()
           return
         end
@@ -325,6 +324,13 @@ local function rebuildRows(i18n)
   -- written. It stands only while nothing is running, so a task that starts for any reason
   -- takes the row back rather than reporting underneath a stale line.
   if state.notice and not isRunning then status = state.notice end
+  -- While the craft is armed the tool runs none of this page's work -- the host does not wake a
+  -- page then -- so the row says that instead of whatever the task last reported. It is read
+  -- from the predicate on every build rather than kept, because a kept refusal outlives the
+  -- arming it was about: the host rebuilds the page on both edges.
+  if armedRefusesTheWrite() then
+    status = pageText(i18n, "status_unavailable_armed", "Unavailable while armed")
+  end
 
   local rows = {
     { label = pageText(i18n, "status", "Status"), value = status },
@@ -462,6 +468,12 @@ function M.build(ctx)
       textColor = WHITE,
       active = buttonsEnabled,
       press = function()
+        -- A probe only reads, but started while armed it would stand still until the disarm
+        -- (the host does not wake the page) and grey out all three buttons meanwhile.
+        if armedRefusesTheWrite() then
+          if type(state.requestRebuild) == "function" then state.requestRebuild() end
+          return
+        end
         state.notice = nil
         requestTelemetryConfig(true)
         ElrsTask.start(ElrsTask.MODE_PROBE)
