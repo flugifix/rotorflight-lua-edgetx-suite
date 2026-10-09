@@ -115,12 +115,36 @@ local function qpop(q)
   return v
 end
 
+-- Commands the firmware answers as a READ that takes an argument: the request payload is an index
+-- or a page, not data to store (rotorflight-firmware src/main/msp/msp.c: the read cases of
+-- mspFcProcessOutCommandWithArg, and MSP_DATAFLASH_READ in mspFcProcessCommand). Left out of the
+-- same function on purpose: MSP_SET_SERVO_CONFIG, MSP_REBOOT and MSP_RESET_CONF change the board,
+-- and MSP_MULTIPLE_MSP runs whichever commands it is given.
+local READ_WITH_ARGUMENT = {
+  [71] = true,  -- MSP_DATAFLASH_READ
+  [116] = true, -- MSP_BOXNAMES
+  [119] = true, -- MSP_BOXIDS
+  [125] = true, -- MSP_GET_SERVO_CONFIG
+  [137] = true, -- MSP_VTXTABLE_BAND
+  [138] = true, -- MSP_VTXTABLE_POWERLEVEL
+  [154] = true, -- MSP_RPM_FILTER_V2
+  [156] = true, -- MSP_GET_ADJUSTMENT_RANGE
+  [157] = true, -- MSP_GET_BUS_SERVO_CONFIG
+  [174] = true, -- MSP_GET_MIXER_INPUT
+}
+
+-- A message that says what it is is taken at its word. Otherwise a payload still marks a write,
+-- because most writes in this tree carry no flag -- except on a command the firmware reads with an
+-- argument: there the payload is the index, and taking it for a write cleared the whole response
+-- cache on every such read and kept the read past its page's teardown (see Queue:clear).
 local function isWriteMessage(msg)
   if msg == nil then return false end
   if msg.isWrite ~= nil then
     return msg.isWrite == true
   end
-  return msg.write == true or (type(msg.payload) == "table" and #msg.payload > 0)
+  if msg.write == true then return true end
+  if READ_WITH_ARGUMENT[msg.command] then return false end
+  return type(msg.payload) == "table" and #msg.payload > 0
 end
 
 -- A response buffer reaches this file as a byte table on one transport and as a string on
