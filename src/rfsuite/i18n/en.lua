@@ -5,6 +5,7 @@ return {
     erasing = "Erasing...",
     connecting = "Connecting",
     preparing = "Preparing suite",
+    read_failed = "Could not read the settings from the flight controller. Use Reload to try again.",
     unknown_value = "Unknown (%s)",
     page_error = {
       title = "This page could not be drawn",
