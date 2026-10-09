@@ -680,7 +680,7 @@ function M.build(ctx)
 
   -- Specs
   local specDecay  = { scale=10, mult=1, min=0, max=250, suffix="s", decimals=1 }
-  local specLimitC = { scale=1, mult=1, min=0, max=25, suffix="°", decimals=0 }
+  local specLimitC = { scale=1, mult=1, min=0, max=250, suffix="°", decimals=0 }
   local specLimitE = { scale=1, mult=1, min=0, max=180, suffix="°", decimals=0 }
   local specCutoff = { scale=1, mult=1, min=1, max=100, suffix="Hz", decimals=0 }
   local specGain   = { scale=1, mult=1, min=0, max=250, suffix="", decimals=0 }
