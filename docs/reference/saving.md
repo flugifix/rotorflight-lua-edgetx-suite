@@ -88,7 +88,10 @@ Pages that ask:
 
 A save on Configuration, Alignment, GPS, Ports, Radio Config, and ESC/Motors RPM, Telemetry and
 Throttle restarts the flight controller after writing; on Swash and Tail it does so when the swash
-type or the tail mode was changed. While the settings are being written the page cannot be left.
+type or the tail mode differs from what the page read. A Save that was refused or did not finish
+leaves that comparison as it was, so the next Save restarts the flight controller too; the page
+compares with the new values only once a save is done. While the settings are being written the
+page cannot be left.
 Once the flight controller has confirmed they are stored, the notice can be closed and the page
 left, and the save finishes on its own. Its outcome is shown the next time that page is opened, in
 the same box a save reports in when it is watched to the end.
@@ -155,6 +158,13 @@ included -- and an empty craft name, followed by a restart.
 **Tools > Copy Profiles** reads no record of its own; what its Save needs is how many profiles of
 the selected kind the flight controller has, which the connection reads straight away. Until that
 count has arrived, Save is held and the lists offer six. Reload asks the flight controller again.
+
+On Tail, the yaw limits and the centre trim are kept as the flight controller stores them, and
+changing Tail Mode changes only the unit they are shown in -- percent for a motorised tail, degrees
+for variable pitch. The firmware applies the same stored numbers in every tail mode, so a Save after
+a Tail Mode change writes them back unchanged unless one of those fields was edited. Yaw Calibration
+is set to the new mode's starting value on that change -- 100 % for a motorised or bidirectional
+tail, 25 % for variable pitch -- as in the Rotorflight Configurator; the yaw direction is kept.
 
 The four Mixer pages show the values of their previous visit while they read again, and each
 writes whole records -- the mixer configuration, and on Swash, Swash Geometry and Tail the mixer

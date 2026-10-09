@@ -285,6 +285,7 @@ return {
       unsupported_message_prefix = "MSP-API-Version ",
       unsupported_message_suffix = " wird nicht unterstuetzt.",
       supported_label = "Unterstuetzt: ",
+      minimum_firmware = "Diese Suite braucht Rotorflight 4.6 oder neuer.",
       init_progress = "MSP Initialisierung",
       no_reply_title = "Flight Controller antwortet nicht",
       no_reply_message_1 = "Keine MSP-Antwort vom Flight Controller empfangen.",
@@ -553,6 +554,7 @@ return {
       flight_tuning_advanced_rescue = {
         title = "Rettung",
         mode_enable = "Rettungsmodus aktivieren",
+        alt_hold = "Höhe halten",
         flip_upright = "Aufrichten",
         pull_up = "Abfangen",
         climb = "Steigen",
@@ -571,6 +573,7 @@ return {
         loading_message = "Lese Rettungseinstellungen",
         help_title = "Rettungs-Hilfe",
         help_p1 = "Rettungsmodus aktivieren: Aktiviert den Rettungs-Autopiloten auf dem Flugcontroller.",
+        help_alt_hold = "Höhe halten: nur bei einem Profil sichtbar, das die Höhe bereits hält; aus lässt die Rettung stattdessen steigen.",
         help_p2 = "Aufrichten: Wählt, ob der Hubschrauber bei der Aktivierung der Rettung in eine normale aufrechte Fluglage gedreht wird.",
         help_p3 = "Abfangen: Definiert Pitch-Prozentsatz und Dauer, um das Sinken des Hubschraubers zu stoppen.",
         help_p4 = "Steigen: Definiert Pitch-Prozentsatz und Steigdauer für die Steigphase.",
@@ -2858,6 +2861,7 @@ return {
       connecting_fbl = "Verbinde mit FBL...",
       please_wait_for_telemetry = "Bitte warten, Telemetrie wird empfangen",
       waiting_for_msp_link = "Warte auf MSP-Link",
+      api_unsupported = "MSP-API %s nicht unterstützt, braucht Rotorflight 4.6+",
       waiting_for_receiver_telemetry = "Warte auf Empfänger-Telemetrie (1RSS/2RSS)",
       waiting_for_battery_telemetry = "Warte auf Batterie-Telemetrie",
       connected_starting = "Verbunden, Dashboard wird gestartet...",
@@ -3219,7 +3223,8 @@ return {
       waiting_for_link = "Warte auf MSP-Verbindung",
       loading = "Lade Daten...",
       connected = "Verbunden",
-      no_msp_reply = "Keine MSP-Antwort"
+      no_msp_reply = "Keine MSP-Antwort",
+      api_unsupported = "MSP-API %s nicht unterstützt"
     }
   }
 }
