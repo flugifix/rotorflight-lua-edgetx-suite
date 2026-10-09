@@ -26,13 +26,13 @@ local floor = math.floor
 local sqrt = math.sqrt
 local max = math.max
 local min = math.min
+local abs = math.abs
 local t_sort = table.sort
 
 local MSP_ATTITUDE = 108
 local BASE_VIEW_PITCH_R = rad(-90)
 local BASE_VIEW_YAW_R = rad(90)
 local CAMERA_DIST = 7.0
-local CAMERA_NEAR_EPS = 0.25
 
 -- Each entry is a key and fallback pair in the form the packager translates in place, so an
 -- installed suite shows the choices in the pilot's language. The fallback is the English text
@@ -204,63 +204,65 @@ local function rotatePoint(x, y, z, cx, sx, cy, sy, cz, sz)
   return x3, y3, z3
 end
 
-local function projectPoint(px, py, pz, mx, my, scale)
-  local denom = CAMERA_DIST - pz
-  if denom <= CAMERA_NEAR_EPS then return nil, nil end
-  local f = CAMERA_DIST / denom
-  local sx = mx + (px * f * scale)
-  local sy = my - (py * f * scale)
-  return sx, sy
+-- The helicopter model, in model coordinates: x forward, y right, z up, the main shaft at the
+-- origin. It never changes, so it is built once with the module rather than on every page build.
+local nose = {2.25, 0.0, 0.03}
+local lf = {1.05, -0.42, 0.08}
+local rf = {1.05, 0.42, 0.08}
+local lb = {-0.45, -0.36, 0.06}
+local rb = {-0.45, 0.36, 0.06}
+local top = {0.15, 0.0, 0.80}
+local podAftTop = {-0.70, 0.0, 0.50}
+local podAftBot = {-0.70, 0.0, -0.06}
+local podAftL = {-0.70, -0.24, 0.17}
+local podAftR = {-0.70, 0.24, 0.17}
+local mastBase = {0.05, 0.0, 0.70}
+local hub = {0.05, 0.0, 1.00}
+-- The boom tapers from the pod to the tail.
+local boomSL = {-0.85, -0.09, 0.19}
+local boomSR = {-0.85, 0.09, 0.19}
+local boomSU = {-0.85, 0.0, 0.28}
+local boomSD = {-0.85, 0.0, 0.10}
+local boomEL = {-2.40, -0.035, 0.17}
+local boomER = {-2.40, 0.035, 0.17}
+local boomEU = {-2.40, 0.0, 0.205}
+local boomED = {-2.40, 0.0, 0.135}
+
+-- A closed circle of n segments around the z axis (main rotor) or the y axis (tail rotor).
+local function ring(cx, cy, cz, r, n, axis)
+  local pts = {}
+  for i = 0, n - 1 do
+    local a = (2 * math.pi * i) / n
+    local u, v = r * cos(a), r * sin(a)
+    if axis == "z" then
+      pts[#pts + 1] = {cx + u, cy + v, cz}
+    else
+      pts[#pts + 1] = {cx + u, cy, cz + v}
+    end
+  end
+  pts[#pts + 1] = pts[1]
+  return pts
 end
 
--- The helicopter model, in model coordinates. It never changes, so it is built once with the
--- module rather than on every page build.
-local nose = {2.35, 0.0, -0.02}
-local lf = {1.10, -0.62, 0.02}
-local rf = {1.10, 0.62, 0.02}
-local lb = {-0.55, -0.46, 0.05}
-local rb = {-0.55, 0.46, 0.05}
-local top = {0.05, 0.0, 0.84}
-local podAftTop = {-0.66, 0.0, 0.56}
-local podAftBot = {-0.66, 0.0, -0.12}
-local podAftL = {-0.66, -0.30, 0.14}
-local podAftR = {-0.66, 0.30, 0.14}
-local mast = {0.0, 0.0, 1.02}
-local finU = {-2.25, 0.0, 0.45}
-local finD = {-2.25, 0.0, -0.18}
-local boomSL = {-0.88, -0.10, 0.11}
-local boomSR = {-0.88, 0.10, 0.11}
-local boomSU = {-0.88, 0.0, 0.18}
-local boomSD = {-0.88, 0.0, 0.06}
-local boomEL = {-2.35, -0.06, 0.08}
-local boomER = {-2.35, 0.06, 0.08}
-local boomEU = {-2.35, 0.0, 0.12}
-local boomED = {-2.35, 0.0, 0.05}
+-- Both tips of a two-bladed rotor through (cx, cy, cz).
+local function blade(cx, cy, cz, r, angle, axis)
+  local u, v = r * cos(angle), r * sin(angle)
+  if axis == "z" then
+    return {cx + u, cy + v, cz}, {cx - u, cy - v, cz}
+  end
+  return {cx + u, cy, cz + v}, {cx - u, cy, cz - v}
+end
 
-local skidL1 = {1.12, -0.66, -0.69}
-local skidL2 = {0.76, -0.66, -0.64}
-local skidL3 = {0.00, -0.66, -0.62}
-local skidL4 = {-0.96, -0.66, -0.63}
-local skidL5 = {-1.24, -0.66, -0.67}
-local skidR1 = {1.12, 0.66, -0.69}
-local skidR2 = {0.76, 0.66, -0.64}
-local skidR3 = {0.00, 0.66, -0.62}
-local skidR4 = {-0.96, 0.66, -0.63}
-local skidR5 = {-1.24, 0.66, -0.67}
+-- A polyline: the points in order, with a colour index `c` and a thickness `w`.
+local function polyline(c, w, pts)
+  pts.c = c
+  pts.w = w
+  return pts
+end
 
-local strutLFTop = {0.52, -0.50, -0.12}
-local strutLFBot = {0.48, -0.66, -0.63}
-local strutLBTop = {-0.52, -0.44, -0.10}
-local strutLBBot = {-0.58, -0.66, -0.63}
-local strutRFTop = {0.52, 0.50, -0.12}
-local strutRFBot = {0.48, 0.66, -0.63}
-local strutRBTop = {-0.52, 0.44, -0.10}
-local strutRBBot = {-0.58, 0.66, -0.63}
-
-local rotorA = {0.0, -1.9, 1.02}
-local rotorB = {0.0, 1.9, 1.02}
-local rotorC = {-1.9, 0.0, 1.02}
-local rotorD = {1.9, 0.0, 1.02}
+local mainTipA, mainTipB = blade(hub[1], hub[2], hub[3], 1.9, rad(30), "z")
+local tailHub = {-2.48, 0.13, 0.40}
+local tailTipA, tailTipB = blade(tailHub[1], tailHub[2], tailHub[3], 0.30, rad(60), "y")
 
 -- Shades and line colours are indexes into scene.colors, resolved from the theme at build.
 local LIGHT, MID, DARK, MAIN, ACCENT, DISC = 1, 2, 3, 4, 5, 6
@@ -289,47 +291,41 @@ local FUSELAGE = {
   {boomSR, boomER, boomED, DARK}
 }
 
--- Rotor disc and mast: above the fuselage, below the nose plate.
+-- Main rotor (disc rim, blades, shaft): above the fuselage, below the nose plate.
 local DISC_LINES = {
-  {rotorA, rotorB, DISC},
-  {rotorC, rotorD, DISC},
-  {top, mast, DISC}
+  polyline(DISC, 1, ring(hub[1], hub[2], hub[3], 1.9, 24, "z")),
+  polyline(MAIN, 2, {mainTipA, hub, mainTipB}),
+  polyline(DISC, 2, {mastBase, hub})
 }
 
 local NOSE_PLATE = {nose, lf, rf}
 
--- Outline wires, boom, fin, skids and struts: above everything else.
+-- Outline, boom, fins, tail rotor and landing gear: above everything else.
 local OUTLINE_LINES = {
-  {lb, lf, MAIN},
-  {rb, rf, MAIN},
-  {lf, nose, MAIN},
-  {rf, nose, MAIN},
-  {top, nose, MAIN},
-  {boomSU, boomEU, MAIN},
-  {boomSL, boomEL, MAIN},
-  {boomSR, boomER, MAIN},
-  {boomSD, boomED, MAIN},
-  {boomSU, boomSL, ACCENT},
-  {boomSL, boomSD, ACCENT},
-  {boomSD, boomSR, ACCENT},
-  {boomSR, boomSU, ACCENT},
-  {finU, finD, ACCENT},
-  {skidL1, skidL2, MAIN},
-  {skidL2, skidL3, MAIN},
-  {skidL3, skidL4, MAIN},
-  {skidL4, skidL5, MAIN},
-  {skidR1, skidR2, MAIN},
-  {skidR2, skidR3, MAIN},
-  {skidR3, skidR4, MAIN},
-  {skidR4, skidR5, MAIN},
-  {strutLFTop, strutLFBot, MAIN},
-  {strutLBTop, strutLBBot, MAIN},
-  {strutRFTop, strutRFBot, MAIN},
-  {strutRBTop, strutRBBot, MAIN},
-  {strutLFBot, strutRFBot, MAIN},
-  {strutLBBot, strutRBBot, MAIN},
-  {strutLFTop, strutRFTop, MAIN},
-  {strutLBTop, strutRBTop, MAIN}
+  polyline(MAIN, 1, {lb, lf, nose, rf, rb}),
+  polyline(MAIN, 1, {nose, top, podAftTop}),
+  polyline(MAIN, 1, {boomSU, boomEU}),
+  polyline(MAIN, 1, {boomSL, boomEL}),
+  polyline(MAIN, 1, {boomSR, boomER}),
+  polyline(MAIN, 1, {boomSD, boomED}),
+  polyline(ACCENT, 1, {boomSU, boomSL, boomSD, boomSR, boomSU}),
+  -- Vertical fin above and below the boom end, horizontal stabiliser ahead of it.
+  polyline(MID, 2, {{-2.18, 0.0, 0.20}, {-2.50, 0.0, 0.66}, {-2.62, 0.0, 0.62}, {-2.46, 0.0, 0.20}}),
+  polyline(MID, 2, {{-2.26, 0.0, 0.14}, {-2.48, 0.0, -0.14}, {-2.58, 0.0, -0.10}, {-2.44, 0.0, 0.14}}),
+  polyline(MAIN, 1, {{-1.70, -0.40, 0.18}, {-1.86, -0.40, 0.18}, {-1.86, 0.40, 0.18}, {-1.70, 0.40, 0.18},
+    {-1.70, -0.40, 0.18}}),
+  -- Tail rotor beside the fin.
+  polyline(DISC, 1, ring(tailHub[1], tailHub[2], tailHub[3], 0.30, 12, "y")),
+  polyline(MAIN, 2, {tailTipA, tailHub, tailTipB}),
+  -- Skids with upturned front ends, and the two bent cross tubes.
+  polyline(MAIN, 2, {{1.30, -0.48, -0.40}, {1.12, -0.48, -0.60}, {0.92, -0.48, -0.66}, {-1.15, -0.48, -0.66},
+    {-1.30, -0.48, -0.62}}),
+  polyline(MAIN, 2, {{1.30, 0.48, -0.40}, {1.12, 0.48, -0.60}, {0.92, 0.48, -0.66}, {-1.15, 0.48, -0.66},
+    {-1.30, 0.48, -0.62}}),
+  polyline(MAIN, 1, {{0.55, -0.48, -0.66}, {0.50, -0.40, -0.30}, {0.48, -0.24, -0.04}, {0.48, 0.24, -0.04},
+    {0.50, 0.40, -0.30}, {0.55, 0.48, -0.66}}),
+  polyline(MAIN, 1, {{-0.55, -0.48, -0.66}, {-0.50, -0.40, -0.30}, {-0.48, -0.24, 0.02}, {-0.48, 0.24, 0.02},
+    {-0.50, 0.40, -0.30}, {-0.55, 0.48, -0.66}})
 }
 
 -- Every point the model uses, once.
@@ -343,8 +339,8 @@ do
     end
   end
   for _, tri in ipairs(FUSELAGE) do add(tri[1]); add(tri[2]); add(tri[3]) end
-  for _, line in ipairs(DISC_LINES) do add(line[1]); add(line[2]) end
-  for _, line in ipairs(OUTLINE_LINES) do add(line[1]); add(line[2]) end
+  for _, line in ipairs(DISC_LINES) do for _, p in ipairs(line) do add(p) end end
+  for _, line in ipairs(OUTLINE_LINES) do for _, p in ipairs(line) do add(p) end end
   add(NOSE_PLATE[1]); add(NOSE_PLATE[2]); add(NOSE_PLATE[3])
 end
 
@@ -388,8 +384,10 @@ local function nosePlatePtsFn() return nosePlatePts end
 local function newLineSlots(lines)
   local pts, fns = {}, {}
   for j = 1, #lines do
-    pts[j] = {{0, 0}, {0, 0}}
-    fns[j] = function() return pts[j] end
+    local slot = {}
+    for i = 1, #lines[j] do slot[i] = {0, 0} end
+    pts[j] = slot
+    fns[j] = function() return slot end
   end
   return pts, fns
 end
@@ -434,9 +432,11 @@ local function writeTriangle(dst, x1, y1, x2, y2, x3, y3, alternate)
   p = dst[3]; p[1] = cx; p[2] = cy
 end
 
-local function writeLine(dst, a, b)
-  local p = dst[1]; p[1] = projX[a]; p[2] = projY[a]
-  p = dst[2]; p[1] = projX[b]; p[2] = projY[b]
+local function writeLine(dst, line)
+  for i = 1, #line do
+    local p, q = dst[i], line[i]
+    p[1] = projX[q]; p[2] = projY[q]
+  end
 end
 
 local function updateTexts()
@@ -478,6 +478,8 @@ end
 -- per attitude sample; allocates nothing.
 local function updateScene()
   if not scene.ready then return end
+  scene.drawnRoll, scene.drawnPitch, scene.drawnYaw = ui.live.roll, ui.live.pitch, ui.live.yaw
+  scene.drawnViewYaw = ui.viewYawOffset
 
   local pitchVal = ui.live.pitch - (ui.loaded_pitch_degrees or 0) + ui.display.pitch_degrees
   local rollVal = ui.live.roll - (ui.loaded_roll_degrees or 0) + ui.display.roll_degrees
@@ -496,15 +498,22 @@ local function updateScene()
 
   local mx, my, scale = scene.mx, scene.my, scene.scale
   local ox, oy = scene.originX, scene.originY
+  -- rotatePoint is linear, so it is applied to the three unit vectors once and every point is then
+  -- a weighted sum of them: nine multiplications a point instead of a call and twelve.
+  local axx, axy, axz = rotatePoint(1, 0, 0, cx, sx, cy, sy, cz, sz)
+  local ayx, ayy, ayz = rotatePoint(0, 1, 0, cx, sx, cy, sy, cz, sz)
+  local azx, azy, azz = rotatePoint(0, 0, 1, cx, sx, cy, sy, cz, sz)
   for i = 1, #MODEL_POINTS do
     local p = MODEL_POINTS[i]
-    local rx, ry, rz = rotatePoint(p[1], p[2], p[3], cx, sx, cy, sy, cz, sz)
-    local px, py = projectPoint(rx, ry, rz, mx, my, scale)
+    local x, y, z = p[1], p[2], p[3]
+    local rx = x * axx + y * ayx + z * azx
+    local ry = x * axy + y * ayy + z * azy
+    local rz = x * axz + y * ayz + z * azz
     -- Rotation keeps a point's distance from the origin, and no model point is farther than 2.7
-    -- from it, so none can reach the near plane at CAMERA_DIST - CAMERA_NEAR_EPS.
-    if px == nil then px, py = mx, my end
-    projX[p] = floor(px) - ox
-    projY[p] = floor(py) - oy
+    -- from it, so the divisor never comes near zero and no point needs culling.
+    local f = CAMERA_DIST / (CAMERA_DIST - rz) * scale
+    projX[p] = floor(mx + rx * f) - ox
+    projY[p] = floor(my - ry * f) - oy
     projZ[p] = rz
   end
 
@@ -540,16 +549,30 @@ local function updateScene()
   end
 
   for j = 1, #DISC_LINES do
-    local line = DISC_LINES[j]
-    writeLine(discPts[j], line[1], line[2])
+    writeLine(discPts[j], DISC_LINES[j])
   end
   writeTriangle(nosePlatePts, projX[nose], projY[nose], projX[lf], projY[lf], projX[rf], projY[rf], false)
   for j = 1, #OUTLINE_LINES do
-    local line = OUTLINE_LINES[j]
-    writeLine(outlinePts[j], line[1], line[2])
+    writeLine(outlinePts[j], OUTLINE_LINES[j])
   end
 
   updateTexts()
+end
+
+-- A board at rest still reports attitude noise of a few tenths of a degree. The model is moved only
+-- when roll or pitch has changed by more than this since it was last drawn, or yaw (whole degrees
+-- in MSP_ATTITUDE) has changed at all; the readouts follow every reply.
+local ATTITUDE_DEADBAND = 0.3
+
+local function onAttitudeSample()
+  if not scene.ready then return end
+  local live = ui.live
+  if abs(live.roll - scene.drawnRoll) > ATTITUDE_DEADBAND or abs(live.pitch - scene.drawnPitch) > ATTITUDE_DEADBAND
+      or live.yaw ~= scene.drawnYaw or ui.viewYawOffset ~= scene.drawnViewYaw then
+    updateScene()
+  else
+    updateTexts()
+  end
 end
 
 local function updateLiveButtonText()
@@ -628,8 +651,8 @@ local function requestAttitude(queue, now)
     processReply = function(self, buf)
       parseAttitude(buf)
       ui.pendingAttitude = false
-      -- The sample is drawn in place (updateScene); the page is not rebuilt for it.
-      updateScene()
+      -- The sample is drawn in place (onAttitudeSample); the page is not rebuilt for it.
+      onAttitudeSample()
     end,
     errorHandler = function()
       ui.pendingAttitude = false
@@ -1154,14 +1177,16 @@ function M.build(ctx)
   end
   local disc = {}
   for j = 1, #DISC_LINES do
-    disc[j] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = discPtsFn[j], color = colors[DISC_LINES[j][3]], thickness = 1 }
+    local line = DISC_LINES[j]
+    disc[j] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = discPtsFn[j], color = colors[line.c], thickness = line.w }
   end
   local plate = {
     { type = "triangle", x = 0, y = 0, w = 0, h = 0, pts = nosePlatePtsFn, color = colors[ACCENT] }
   }
   local outline = {}
   for j = 1, #OUTLINE_LINES do
-    outline[j] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = outlinePtsFn[j], color = colors[OUTLINE_LINES[j][3]], thickness = 1 }
+    local line = OUTLINE_LINES[j]
+    outline[j] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = outlinePtsFn[j], color = colors[line.c], thickness = line.w }
   end
   local layers = { faces, disc, plate, outline }
   for i = 1, #layers do
