@@ -485,6 +485,12 @@ function M.build(ctx)
   )
 end
 
+-- Save waits for the visit's read: until it has answered, the fields hold the page's starting
+-- values, not the board's. A read that failed is refused in onSave, with the reason.
+function M.canSave()
+  return not (ui.runtime and ui.runtime.readPending)
+end
+
 function M.onSave(ctx)
   if ui.readFailed then
     if ctx and type(ctx.reportSave) == "function" then

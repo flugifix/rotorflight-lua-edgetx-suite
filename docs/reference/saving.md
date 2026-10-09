@@ -190,9 +190,11 @@ settings from the flight controller. Use Reload to try again.* in place of its f
 on screen stands for a value the flight controller did not send. The page does not ask again by
 itself; **Reload** does.
 
+- A read the suite abandons because the model was armed or the link dropped while it was out
+  counts as failed too; Reload reads again once the model is disarmed and connected.
 - GPS says the firmware was built without GPS support only where the flight controller answered
   the GPS read with an error, which is how such a firmware answers it. Save is refused in both
-  cases.
+  cases, and while the read is still out.
 - Motor Override offers no motor until it has read how many motors the flight controller has and
   what it is driving now. Its Reload ends a running override first, as leaving the page does.
 

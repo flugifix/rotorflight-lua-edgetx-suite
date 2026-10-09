@@ -93,7 +93,6 @@ end
 local function queueRcRead(isAutoReload)
   if ui.runtime.readPending then return false, "read_pending" end
   ui.runtime.readComplete = false
-  ui.runtime.readFailed = false
   if not PidProfileApi or not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end
@@ -106,6 +105,7 @@ local function queueRcRead(isAutoReload)
 
   local readValid = type(getSession()) == "table"
   local runtime, common = ui.runtime, Common
+  ui.runtime.readFailed = false
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true
