@@ -918,15 +918,18 @@ function M.build(ctx)
       -- the pick. The host's unsaved-changes question comes first: Save stores this servo and
       -- then picks, Discard puts back what the board holds and then picks, Stay keeps both.
       -- Where it cannot be asked, the pick does not happen and the selector shows this servo.
+      -- The answers act only on this visit: ui.runtime is dropped on close and made anew on the
+      -- next visit, so a write that completes after the page has gone picks nothing.
       local from = ui.selectedServoIndex
-      local asked = type(ui.runtime.askUnsavedChanges) == "function" and ui.runtime.askUnsavedChanges({
+      local visit = ui.runtime
+      local asked = type(visit.askUnsavedChanges) == "function" and visit.askUnsavedChanges({
         message = pageText(i18n, "switch_unsaved_msg",
           "This servo has changes that are not saved. Picking another servo discards them."),
         saved = function()
-          if ui.runtime and ui.selectedServoIndex == from then selectServo(val) end
+          if ui.runtime == visit and ui.selectedServoIndex == from then selectServo(val) end
         end,
         discard = function()
-          if ui.runtime and ui.selectedServoIndex == from then
+          if ui.runtime == visit and ui.selectedServoIndex == from then
             discardServo(from)
             selectServo(val)
           end

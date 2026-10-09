@@ -741,11 +741,16 @@ local function selectServo(val)
 end
 
 --- Discard on the unsaved-changes question put before another servo is picked. This page keeps
---- no snapshot, so servo `busIdx` counts as unread again: its record is read from the board
---- before it is shown or saved the next time it is picked (selectServo).
+--- no snapshot, so the servo is read from the board again: on the paged route it counts as unread
+--- and is read the next time it is picked (selectServo); the whole-table route reads the table.
+--- A centre sent live under the override is in the board's RAM, so that is what the read shows.
 local function discardServo(busIdx)
-  ui.servoLoaded[busIdx] = nil
   ui.dirty = false
+  if hasPagedServoReads() then
+    ui.servoLoaded[busIdx] = nil
+  else
+    queueServosRead(false)
+  end
 end
 
 local function ensureLoaded()
@@ -874,15 +879,18 @@ function M.build(ctx)
       -- the pick. The host's unsaved-changes question comes first: Save stores this servo and
       -- then picks, Discard puts back what the board holds and then picks, Stay keeps both.
       -- Where it cannot be asked, the pick does not happen and the selector shows this servo.
+      -- The answers act only on this visit: ui.runtime is dropped on close and made anew on the
+      -- next visit, so a write that completes after the page has gone picks nothing.
       local from = ui.selectedServoIndex
-      local asked = type(ui.runtime.askUnsavedChanges) == "function" and ui.runtime.askUnsavedChanges({
+      local visit = ui.runtime
+      local asked = type(visit.askUnsavedChanges) == "function" and visit.askUnsavedChanges({
         message = pageText(i18n, "switch_unsaved_msg",
           "This servo has changes that are not saved. Picking another servo discards them."),
         saved = function()
-          if ui.runtime and ui.selectedServoIndex == from then selectServo(val) end
+          if ui.runtime == visit and ui.selectedServoIndex == from then selectServo(val) end
         end,
         discard = function()
-          if ui.runtime and ui.selectedServoIndex == from then
+          if ui.runtime == visit and ui.selectedServoIndex == from then
             discardServo(from)
             selectServo(val)
           end
