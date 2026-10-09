@@ -2270,6 +2270,8 @@ return {
         status_unavailable_simulation = "Nicht verfügbar im Simulator",
         status_unavailable_inflight = "Nicht im Flug möglich",
         status_unavailable_armed = "Nicht im Arm-Zustand möglich",
+        status_stopped_armed = "Abgebrochen: Modell war im Arm-Zustand",
+        status_arming_unknown = "Arm-Zustand unbekannt",
         status_probe_requested = "Prüfung angefordert",
         status_sync_requested = "Abgleich angefordert: ",
         mode_native = "Nativ",

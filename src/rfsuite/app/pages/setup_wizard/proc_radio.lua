@@ -2140,12 +2140,7 @@ end
 -- answer.
 local Armed = nil
 
-local function askThenSync(w, i18n, mode, boardText, moduleText)
-  local task = linkTask(w)
-  -- Without the shared text helper there is no question to put up, and no answer to act on.
-  if task == nil or Common == nil then return end
-
-  if ConfirmDialog == nil then ConfirmDialog = loadModule("ui/confirm_dialog.lua") or false end
+local function ensureArmed()
   if Armed == nil then
     if _G.rfsuite and _G.rfsuite.require then
       Armed = _G.rfsuite.require("lib/armed.lua") or false
@@ -2153,6 +2148,27 @@ local function askThenSync(w, i18n, mode, boardText, moduleText)
       Armed = loadModule("lib/armed.lua") or false
     end
   end
+  return Armed
+end
+
+-- Nothing on this step runs while the model is armed -- the tool does not wake a page then -- so
+-- Read is refused like Probe on the ELRS Link page, and the row says why for as long as that
+-- lasts. Read from the predicate on every build, never kept, so nothing stands after the disarm.
+-- nil when disarmed, "armed", or "unknown" when the predicate itself is missing.
+local function linkArmedState()
+  local armed = ensureArmed()
+  if type(armed) ~= "table" or type(armed.isArmed) ~= "function" then return "unknown" end
+  if armed.isArmed() == true then return "armed" end
+  return nil
+end
+
+local function askThenSync(w, i18n, mode, boardText, moduleText)
+  local task = linkTask(w)
+  -- Without the shared text helper there is no question to put up, and no answer to act on.
+  if task == nil or Common == nil then return end
+
+  if ConfirmDialog == nil then ConfirmDialog = loadModule("ui/confirm_dialog.lua") or false end
+  ensureArmed()
 
   local lines = {}
   if mode == task.MODE_ROTORFLIGHT_TO_ELRS then
@@ -2388,12 +2404,22 @@ procs[#procs + 1] = {
         local statusKey, statusDefault = task.getStatus()
         local statusText = tLink(i18n, statusKey, statusDefault)
         if w.data.linkNotice ~= nil and not task.isRunning() then statusText = w.data.linkNotice end
+        local armedState = Common and linkArmedState() or nil
+        if armedState == "armed" then
+          statusText = Common.t(i18n, "diagnostics_elrs_link", "status_unavailable_armed", "Unavailable while armed")
+        elseif armedState == "unknown" then
+          statusText = Common.t(i18n, "diagnostics_elrs_link", "status_arming_unknown", "Arming state unknown")
+        end
         y = y + w.findingRow(children, area.x, y, area.w,
           t(i18n, "link_status", "Probe"), statusText,
           {
             { text = t(i18n, "link_probe", "Read"),
               active = function() return not task.isRunning() end,
               press = function()
+                if linkArmedState() ~= nil then
+                  w.rebuild()
+                  return
+                end
                 w.data.linkNotice = nil
                 w.data.linkConfigAsked = nil
                 readTelemetryConfig(w)

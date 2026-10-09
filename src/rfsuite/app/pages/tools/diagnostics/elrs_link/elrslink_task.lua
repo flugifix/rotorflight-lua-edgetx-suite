@@ -87,6 +87,13 @@ local pendingWrites = {}
 local pendingWriteCount = 0
 local pendingWriteIndex = 1
 local manualSyncMode = SYNC_MODE_OFF
+-- lib/armed.lua's change count when the pilot said yes to a write; see the armed backstop below.
+local yesArmCount = nil
+-- The same count when this run of the task was first woken; nil until then.
+local walkArmCount = nil
+-- Defined with the armed backstop below; the MSP write's handlers further up call them.
+local failWrite
+local writeRefusal
 local statusI18nKey = "status_idle"
 local statusDetail = nil
 
@@ -106,6 +113,8 @@ local STATUS_TEXT = {
     status_idle = { labelKey = "status_idle", labelFallback = "Idle" },
     status_reading_module = { labelKey = "status_reading_module", labelFallback = "Reading module..." },
     status_unavailable_armed = { labelKey = "status_unavailable_armed", labelFallback = "Unavailable while armed" },
+    status_stopped_armed = { labelKey = "status_stopped_armed", labelFallback = "Stopped: model was armed" },
+    status_arming_unknown = { labelKey = "status_arming_unknown", labelFallback = "Arming state unknown" },
     status_requires_active_link = { labelKey = "status_requires_active_link", labelFallback = "Requires active link" },
     status_waiting_rotorflight_config = { labelKey = "status_waiting_rotorflight_config", labelFallback = "Waiting for RF config" },
     status_rotorflight_config_not_ready = { labelKey = "status_rotorflight_config_not_ready", labelFallback = "RF config not ready" },
@@ -480,6 +489,13 @@ local function syncElrsToRotorflight(fcConfig, moduleRate, moduleRatioLabel, rat
         payload = writeBuffer,
         isWrite = true,
         processReply = function()
+            -- The commit is a second write and is asked for only now, so it is held to the same
+            -- rule: an arming between the write and its answer ends the sync here.
+            if writeRefusal() then
+                logMsg("syncElrsToRotorflight: no EEPROM commit, the sync was stopped", "warn")
+                failWrite("status_rotorflight_save_failed")
+                return
+            end
             setStatus("status_saving_rotorflight")
             local eepromApi = loadModule("tasks/msp/api/eeprom_write.lua")
             mspState.queue:add({
@@ -500,15 +516,13 @@ local function syncElrsToRotorflight(fcConfig, moduleRate, moduleRatioLabel, rat
                 end,
                 errorHandler = function()
                     logMsg("syncElrsToRotorflight: eeprom save failed", "warn")
-                    setStatus("status_rotorflight_save_failed")
-                    completeTask()
+                    failWrite("status_rotorflight_save_failed")
                 end
             })
         end,
         errorHandler = function()
             logMsg("syncElrsToRotorflight: MSP write failed", "warn")
-            setStatus("status_rotorflight_write_failed")
-            completeTask()
+            failWrite("status_rotorflight_write_failed")
         end
     })
 end
@@ -561,6 +575,8 @@ function M.reset()
     moduleRatioLabel = nil
     clearFieldData()
     clearPendingWrites()
+    yesArmCount = nil
+    walkArmCount = nil
     setStatus("status_idle")
 end
 
@@ -671,12 +687,23 @@ local CrsfManager = nil
 --
 -- A probe only reads and is left alone. The refusal fails CLOSED: a predicate that cannot be
 -- loaded is not a licence to write, which is the rule lib/armed.lua states for itself.
+--
+-- Being disarmed NOW is not enough. The tool wakes a page only while the craft is not armed, so
+-- this function never runs during an armed period: a sync that was walking when the craft was
+-- armed would simply carry on at the first pass after the disarm, and write on the strength of
+-- a yes given before the flight. So the yes is tied to the disarmed period it was given in --
+-- lib/armed.lua counts every change of its answer, the host asks it on every pass whether or not
+-- it wakes the page, and a count that has moved since the yes ends the sync here. The count is a
+-- witness only when it is the host's own instance, so a module that was not loaded through the
+-- suite's shared cache refuses as well.
 local Armed = nil
+local armedShared = false
 
-local function armedRefusesTheWrite()
+local function armedModule()
     if Armed == nil then
         if _G.rfsuite and _G.rfsuite.require then
             Armed = _G.rfsuite.require("lib/armed.lua")
+            armedShared = true
         else
             Armed = loadModule("lib/armed.lua")
         end
@@ -685,8 +712,43 @@ local function armedRefusesTheWrite()
             logMsg("lib/armed.lua did not load; a sync will be refused rather than risked", "error")
         end
     end
-    if type(Armed) ~= "table" or type(Armed.isArmed) ~= "function" then return true end
-    return Armed.isArmed() == true
+    if type(Armed) ~= "table" then return nil end
+    return Armed
+end
+
+local function armedUsable()
+    local armed = armedModule()
+    if not armed or not armedShared or type(armed.isArmed) ~= "function"
+        or type(armed.changeCount) ~= "function" then
+        return nil
+    end
+    return armed
+end
+
+-- The count at this moment. The current answer is asked for first: a disarm that nobody has
+-- asked about yet would otherwise be counted only after the yes, and end a sync that was
+-- confirmed on a disarmed model.
+local function armChangeCount()
+    local armed = armedUsable()
+    if not armed then return nil end
+    armed.isArmed()
+    return armed.changeCount()
+end
+
+-- Why a write may not go on, as the status that says so; nil when it may.
+writeRefusal = function()
+    local armed = armedUsable()
+    if not armed then return "status_arming_unknown" end
+    if armed.isArmed() == true then return "status_stopped_armed" end
+    if yesArmCount == nil or armed.changeCount() ~= yesArmCount then return "status_stopped_armed" end
+    return nil
+end
+
+-- A write the queue gave up on. The tool clears the MSP queue when the model is armed, and that
+-- reaches the handlers below; it is the arming the row has to name then, not a failed write.
+failWrite = function(key)
+    setStatus(writeRefusal() or key)
+    completeTask()
 end
 
 function M.wakeup()
@@ -696,10 +758,23 @@ function M.wakeup()
 
     -- `state == "write"` covers the single-option write, which runs with no sync mode set; the
     -- mode covers a sync from the moment it is started, before the walk has reached its writes.
-    if (state == "write" or manualSyncMode ~= SYNC_MODE_OFF) and armedRefusesTheWrite() then
-        logMsg("sync abandoned: the model is armed", "warn")
-        setStatus("status_unavailable_armed")
+    local refusal = (state == "write" or manualSyncMode ~= SYNC_MODE_OFF) and writeRefusal() or nil
+    if refusal then
+        logMsg("sync abandoned: " .. refusal, "warn")
+        setStatus(refusal)
         clearPendingWrites()
+        completeTask()
+        return
+    end
+
+    -- A probe writes nothing, but one that spanned an arming wakes with its time limits spent
+    -- and would end on half a walk -- and a timeout still records what it had read as the
+    -- module's settings. So a probe stops the same way; Probe starts a fresh one.
+    local count = armChangeCount()
+    if walkArmCount == nil then walkArmCount = count end
+    if count ~= walkArmCount then
+        logMsg("probe abandoned: the model was armed while it ran", "warn")
+        setStatus("status_stopped_armed")
         completeTask()
         return
     end
@@ -838,6 +913,7 @@ end
 function M.start(mode)
     manualSyncMode = mode or SYNC_MODE_OFF
     M.reset()
+    yesArmCount = armChangeCount()
     taskComplete = false
     return true
 end
@@ -868,6 +944,8 @@ function M.selectOption(kind, index)
                          value = index, label = label }
 
     manualSyncMode = SYNC_MODE_OFF
+    yesArmCount = armChangeCount()
+    walkArmCount = yesArmCount
     taskComplete = false
     state = "write"
     nextActionAt = 0
