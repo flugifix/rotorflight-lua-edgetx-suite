@@ -76,14 +76,19 @@ function M.remember(session, amps)
 
   if tonumber(battery[M.KEY]) == limit then return true, "unchanged" end
 
-  battery[M.KEY] = limit
-
   ensureDeps()
   if not PowerModelPreferences or type(PowerModelPreferences.save) ~= "function" then
     return false, "model_preferences_unavailable"
   end
 
+  -- The save writes the whole table, so the limit has to be in it while the file is written. It
+  -- stays there only if the write succeeded: kept after a failed one, the next visit would find it
+  -- "unchanged" and never write it, and a dashboard in its own Lua state, which reads the file,
+  -- would not see it.
+  local previous = battery[M.KEY]
+  battery[M.KEY] = limit
   local ok, err = PowerModelPreferences.save(session)
+  if not ok then battery[M.KEY] = previous end
   logD("remember " .. tostring(limit) .. " A: " .. (ok and "saved" or ("failed: " .. tostring(err or "io"))))
   return ok, err
 end

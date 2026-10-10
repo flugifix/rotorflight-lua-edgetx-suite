@@ -179,6 +179,16 @@ end
 
 local S = sharedState()
 
+--- Does this outcome need no acknowledgement? A save that asked for a restart is a plain success
+-- only once the restart was seen. An answer after the reboot proves only that the board is usable:
+-- a reboot command lost on the link leaves a board that never restarted answering just the same,
+-- and the settings that take effect at boot are then not in effect. Such an outcome stands like a
+-- failure, so that it cannot pass for a finished restart by clearing itself.
+local function clearsItself(result)
+  if type(result) ~= "table" or result.status ~= "done" then return false end
+  return result.reboot ~= true or result.rebootProven == true
+end
+
 local function finish(status, extra)
   if not S.run then return end
   local result = {
@@ -222,7 +232,7 @@ local function finish(status, extra)
   -- while it stands the tool's run() -- and with it the MSP tick -- does not run. The overlay is
   -- already on screen, already says what the save is doing, and answers touch.
   S.outcome = { status = status, result = result }
-  if status == "done" then
+  if clearsItself(result) then
     S.outcome.clearAt = nowSeconds() + OUTCOME_LINGER_SECONDS
   end
   if type(desc.onDone) == "function" then
@@ -523,8 +533,12 @@ function M.wakeup()
           return
         end
         -- Answered, so the flight controller is usable again. A flag of 0 additionally proves
-        -- the reset really happened; a flag of 1 means it could not be proven from here, which
-        -- is reported rather than treated as a failure.
+        -- the reset really happened; a flag of 1 means it could not be proven from here. That is
+        -- not a failure -- the settings are stored -- and it is not reported as a finished
+        -- restart either: see clearsItself() and the outcome the host draws for it. The error is
+        -- one-sided: a GPS that sets the clock from its own date before this answer, or the connect
+        -- chain re-sending it after a link drop, makes a restarted board read 1 as well, but once
+        -- the pre-flight read 1, only a reset clears the flag.
         S.run.rebootProven = (not S.run.probeDegraded) and value == 0
         startOnconnectWait()
       end)
@@ -663,7 +677,7 @@ function M.takeResult(pageId)
   local result = entry.result
   if type(result) == "table" then
     S.outcome = { status = result.status, result = result }
-    if result.status == "done" then
+    if clearsItself(result) then
       S.outcome.clearAt = nowSeconds() + OUTCOME_LINGER_SECONDS
     end
   end

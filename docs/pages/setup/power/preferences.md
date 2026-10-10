@@ -37,6 +37,8 @@ Scorpion and YGE. Opening that family's page under *ESC Tools* reads the block a
 limit is taken from it and stored here in the same step. Nothing is asked of the flight
 controller for it and nothing is added to the connect sequence; the figure is a by-product of a
 page that was opened for another reason. A later visit that finds the same limit writes nothing.
+If the preferences cannot be written to the card at that moment, the limit is not kept, and the
+next visit to the page tries again.
 
 The remaining seven families do not report one, and that is what this row is for. Typed in by
 hand it behaves in every other respect the same way. A controller that reports a limit of zero --
