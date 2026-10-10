@@ -71,9 +71,10 @@ dashboard widget silent 3.0 s, last pass 56 %
 The percentage is what the dashboard's last cycle cost, out of what it is allowed. Near or above
 100 is the reading that explains a dashboard that stopped drawing.
 
-A dashboard on another screen page, or behind a menu, is not reported: the radio keeps calling it
-there, and it keeps doing its work. Off screen, the percentage is that of the last cycle in which
-it was drawn.
+A dashboard on another screen page, or behind one of the radio's menu pages, is not reported: the
+radio keeps calling it there, and it keeps doing its work. Off screen, the percentage is that of the
+last cycle in which it was drawn, or 0 if it has not been drawn yet, so a low figure after a stop
+off screen says nothing about what the dashboard's last cycle there cost.
 
 `widget_step.txt` needs nothing but *Log Session To Card*. `function_step.txt` also needs the
 background decoder on the model and the debug level at *DEBUG* or above.

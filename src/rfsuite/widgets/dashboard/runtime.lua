@@ -256,7 +256,7 @@ local function traceInstructionUsage(self)
   --
   -- `widget.background` bumps the same counter. EdgeTX calls `background()` instead of
   -- `refresh()` for a widget that is not on the visible screen -- one on another screen page, or
-  -- behind a menu (WidgetsContainer::refreshWidgets,
+  -- behind one of the radio's menu pages (WidgetsContainer::refreshWidgets,
   -- radio/src/gui/colorlcd/mainview/widgets_container.cpp) -- and that pass still runs the
   -- dashboard's background work, so a counter bumped here alone would stand still for as long as
   -- the dashboard is off screen and the reader would record a running widget as stopped. Bumped
@@ -281,6 +281,14 @@ local function traceInstructionUsage(self)
   if self._shmPass >= SHM_PASS_WRAP then self._shmPass = 1 end
   if self._shmOn and type(setShmVar) == "function" then
     setShmVar(SHM_PASS_ID, self._shmPass * SHM_PASS_SHIFT + (percent > 255 and 255 or percent))
+    -- Which dashboard drew last, for widget.background. Every dashboard on the radio runs its own
+    -- copy of this file, so the mark is kept on the Lua state's shared table, as a token rather
+    -- than the widget itself so that a dashboard removed from the screen is not kept alive by it.
+    local shared = _G.rfsuite
+    if type(shared) == "table" then
+      self._shmToken = self._shmToken or {}
+      shared.dashboardHeartbeatOwner = self._shmToken
+    end
   end
 
   local now = nowSeconds()
@@ -4181,12 +4189,19 @@ function Runtime.new(zone, options)
     -- is the last one refresh sampled: getUsage() answers an LVGL widget the share of its last
     -- pass that DREW in either entry point (luaGetUsage, radio/src/lua/api_general.cpp), so a
     -- background pass has no figure of its own to give.
+    --
+    -- Only the dashboard that last drew publishes here, or any while none has drawn yet. A second
+    -- dashboard on another screen page would otherwise keep the counter moving after the one on
+    -- screen had been stopped by the instruction limit, and the stop would never be recorded.
     if self._shmOn == nil then
       self._shmOn = Log and type(Log.wanted) == "function" and Log.wanted("debug") or false
     end
     self._shmPass = (self._shmPass or 0) + 1
     if self._shmPass >= SHM_PASS_WRAP then self._shmPass = 1 end
-    if self._shmOn and type(setShmVar) == "function" then
+    local shared = _G.rfsuite
+    local owner = type(shared) == "table" and shared.dashboardHeartbeatOwner or nil
+    if self._shmOn and type(setShmVar) == "function"
+      and (owner == nil or owner == self._shmToken) then
       local usage = self._usageLast or 0
       setShmVar(SHM_PASS_ID, self._shmPass * SHM_PASS_SHIFT + (usage > 255 and 255 or usage))
     end
