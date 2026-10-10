@@ -4216,17 +4216,8 @@ function Runtime.new(zone, options)
     return 0
   end
 
-  -- The heartbeat mark for widget.background, claimed by the instance built last. A dashboard
-  -- built again in place -- its screen's layout changed, or the widget set again in its zone --
-  -- is built while a menu page covers it and draws nothing until that closes; the mark of the
-  -- instance it replaced would keep it from publishing meanwhile, and the background decoder,
-  -- which has seen the counter move, would record it as stopped. The one on screen takes the mark
-  -- back on its next pass.
+  -- This dashboard's heartbeat mark for widget.background; claimed at the end of this function.
   widget._shmToken = {}
-  if type(_G) == "table" then
-    _G.rfsuite = _G.rfsuite or {}
-    _G.rfsuite.dashboardHeartbeatOwner = widget._shmToken
-  end
 
   -- The battery prompt's handle for anything that is not this widget: a theme, another widget,
   -- the tool. It records a REQUEST exactly as a press in the picker
@@ -4278,6 +4269,18 @@ function Runtime.new(zone, options)
   end
 
   reloadActiveTheme(widget)
+
+  -- The heartbeat mark for widget.background, claimed by the instance built last. A dashboard
+  -- built again in place -- its screen's layout changed, or the widget set again in its zone --
+  -- is built while a menu page covers it and draws nothing until that closes; the mark of the
+  -- instance it replaced would keep it from publishing meanwhile, and the background decoder,
+  -- which has seen the counter move, would record it as stopped. The one on screen takes the mark
+  -- back on its next pass. Taken last here, so that a build that fails on the way leaves the
+  -- mark where it was.
+  if type(_G) == "table" then
+    _G.rfsuite = _G.rfsuite or {}
+    _G.rfsuite.dashboardHeartbeatOwner = widget._shmToken
+  end
   return widget
 end
 
