@@ -254,6 +254,18 @@ local function traceInstructionUsage(self)
   -- rate, and a widget at twelve per cent of budget and thirty passes a second is a different
   -- machine from one at twelve per cent and four.
   --
+  -- `widget.background` bumps the same counter. EdgeTX calls `background()` instead of
+  -- `refresh()` for a widget that is not on the visible screen -- one on another screen page, or
+  -- behind a menu (WidgetsContainer::refreshWidgets,
+  -- radio/src/gui/colorlcd/mainview/widgets_container.cpp) -- and that pass still runs the
+  -- dashboard's background work, so a counter bumped here alone would stand still for as long as
+  -- the dashboard is off screen and the reader would record a running widget as stopped. Bumped
+  -- by both, it stands still only while the radio calls this widget not at all, which is the case
+  -- it exists for: past the instruction budget the radio calls neither (LuaWidget::background
+  -- returns at once on a widget that has raised, radio/src/lua/lua_widget.cpp). The few lines
+  -- below are repeated there rather than shared through a function, because a call here would
+  -- cost every pass that draws.
+  --
   -- The gate is sampled on the report window below and cached, not asked per pass: this is a
   -- diagnostic, it belongs behind the debug level like every other, and asking the preferences
   -- for it thirty times a second would be the diagnostic becoming the cost.
@@ -4162,6 +4174,23 @@ function Runtime.new(zone, options)
     -- Off screen. The overlay's own tick refuses to drive from here and cleans up instead, which
     -- is what makes a widget scrolled away stop writing the two variables.
     self._foreground = false
+
+    -- Still running, so still passing: the heartbeat, as traceInstructionUsage publishes it at
+    -- the top of refresh. A dashboard on a screen page the radio does not start on is called
+    -- here before its first refresh, so the gate may not have been sampled yet. The usage figure
+    -- is the last one refresh sampled: getUsage() answers an LVGL widget the share of its last
+    -- pass that DREW in either entry point (luaGetUsage, radio/src/lua/api_general.cpp), so a
+    -- background pass has no figure of its own to give.
+    if self._shmOn == nil then
+      self._shmOn = Log and type(Log.wanted) == "function" and Log.wanted("debug") or false
+    end
+    self._shmPass = (self._shmPass or 0) + 1
+    if self._shmPass >= SHM_PASS_WRAP then self._shmPass = 1 end
+    if self._shmOn and type(setShmVar) == "function" then
+      local usage = self._usageLast or 0
+      setShmVar(SHM_PASS_ID, self._shmPass * SHM_PASS_SHIFT + (usage > 255 and 255 or usage))
+    end
+
     -- An open tool cannot paint from here and its closing sequence needs the screen, so it is
     -- dropped at once and the dashboard's own background work takes over again.
     if self._toolHost ~= nil then
