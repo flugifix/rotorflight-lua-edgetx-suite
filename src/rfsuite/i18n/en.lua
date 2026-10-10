@@ -54,6 +54,7 @@ return {
       dismiss = "Continue",
       timeout_title = "Saved",
       timeout_message = "Settings saved. The flight controller has not come back yet.",
+      restart_unconfirmed = "Settings saved, but the flight controller's restart could not be confirmed. Power it off and on before flying.",
       done_message = "Settings saved.",
       failed_title = "Not saved",
       failed_message = "The flight controller did not confirm the settings.",
