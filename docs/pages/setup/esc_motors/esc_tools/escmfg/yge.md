@@ -21,7 +21,6 @@ while the model is armed.
 
 | Setting | What it does |
 | --- | --- |
-| ESC Target | Meant to choose which of the model's ESCs is read and written. **The selection is not carried in the read or in the write on this page**, so both address the first ESC whatever the row shows. Present unless the flight controller has reported exactly one motor -- which includes the window before that read has answered, and permanently if it never does. |
 | Section | *Basic*, *Advanced* or *Other*. Switching it rebuilds the list below; nothing is read from the ESC again. |
 
 ### Basic
