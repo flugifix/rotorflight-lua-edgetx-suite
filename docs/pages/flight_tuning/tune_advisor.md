@@ -56,10 +56,10 @@ The suggestions follow these rules:
   rate type: *Center Sens* and *Max Rate* for Actual, *RC Rate* and *Max Rate* for Quick, *Rate* for Rotorflight.
 - With polar cyclic rates (*Advanced* → *Rates (Advanced)* → *Cyclic Behaviour*), the *Rates* page shows one
   *Cyclic* row, which edits the Pitch rates. While polar is on, the flight controller applies that one curve
-  to the whole cyclic stick, roll included, so a rate change for either axis is made on that row. The rate
-  values in a suggestion for Roll are still worked out from the Roll rates, which are not in use while polar
-  is on; take the rate values from the Pitch suggestion. The Roll rates are not changed by the row; they are
-  kept as they were and apply again once polar is switched off.
+  to the whole cyclic stick, roll included, and a rate change on that row changes both axes in flight. The
+  Roll rates are not changed by the row; they are kept as they were and apply again once polar is switched
+  off. This page does not take polar into account: a suggestion for Roll still names the Roll rates and works
+  its values out from them, although they are not in use while polar is on.
 
 ## Related
 
