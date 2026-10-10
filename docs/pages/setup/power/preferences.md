@@ -69,8 +69,9 @@ supplied a figure — a dashboard tile whose source is `esc_load` shows `--` rat
   something the parameter block says, so it is described here as the limit the controller is set
   to allow and nothing more.
 - The ESC current limit is the speed controller's, not the flight controller's. It is unrelated
-  to the battery alerts under *Setup* → *Power* → *Alerts*, which are the board's own and are
-  written to it.
+  to the battery alerts under *Setup* → *Power* → *Alerts*, which are the radio's: they are
+  kept in the same file on the card as these settings, checked by the suite on the radio, and
+  nothing of them is written to the flight controller.
 - An ESC load reading above 100 % is not an error: it means the controller is being asked for
   more than its configured limit, which is the condition worth seeing.
 
