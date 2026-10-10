@@ -332,6 +332,19 @@ function registry.releaseAll(ctx)
       released = true
     end
   end
+  -- The dashboard settings page is cached by its file rather than by a menu id (loadPageModule),
+  -- so the walk above never reaches it. Its onClose ends the theme edit scope it set on the
+  -- session, and the session outlives the tool when the tool runs inside the dashboard.
+  for fullPath, module in pairs(loadedByPagePath) do
+    if type(module) == "table" then
+      local hook = module.onClose or module.close or module.closePage or module.destroy
+      if type(hook) == "function" then
+        pcall(hook, ctx or {})
+      end
+      released = true
+    end
+    loadedByPagePath[fullPath] = nil
+  end
 
   return released
 end

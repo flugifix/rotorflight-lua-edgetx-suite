@@ -1144,8 +1144,11 @@ function G.tick()
         break
       end
     end
+    -- The header line is let go only once the phase has moved on. A tick can be stopped
+    -- anywhere in here (the tool opened from the dashboard runs under the widget's instruction
+    -- limit), and the next tick then starts this one again: with the line still there it finds
+    -- every column parsed and redoes only what follows.
     if done then
-      S.headerLine = nil
       local cols = S.columns
       S.isTelemetry = (cols[1] and cols[1].name == "Date" and cols[2] and cols[2].name == "Time")
                       and true or false
@@ -1156,10 +1159,12 @@ function G.tick()
         -- and only a caller after a plot is refused.
         if not S.wantStats then
           failWith("not_telemetry")
+          S.headerLine = nil
           return true
         end
       end
       S.phase = "scan"
+      S.headerLine = nil
     end
     return false
   end
