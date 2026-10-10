@@ -537,8 +537,8 @@ function M.wakeup()
         -- not a failure -- the settings are stored -- and it is not reported as a finished
         -- restart either: see clearsItself() and the outcome the host draws for it. The error is
         -- one-sided: a GPS that sets the clock from its own date before this answer, or the connect
-        -- chain re-sending it after a link drop, makes a restarted board read 1 as well, but
-        -- nothing makes a board that did not restart read 0.
+        -- chain re-sending it after a link drop, makes a restarted board read 1 as well, but once
+        -- the pre-flight read 1, only a reset clears the flag.
         S.run.rebootProven = (not S.run.probeDegraded) and value == 0
         startOnconnectWait()
       end)
