@@ -396,9 +396,16 @@ neither a view, the base layer nor the dashboard's own work runs beside it:
   was asked for.
 - **Running**, the tool's `run(event, touchState)` is called under the widget's event context, so
   the MSP queue bounds its loops by count and the event runner stays on the task list the widget
-  has already worked through. A widget call is stopped at the instruction limit where a tool
-  script is yielded; a stop inside the tool is caught and the tool is run again on the next pass,
-  and twelve stops in a row give the tool up.
+  has already worked through. A widget call is stopped at the instruction limit, which the tool
+  script on a colour radio is not. EdgeTX raises that stop once per call and lets the rest of the
+  call run, so the innermost `pcall` around the code it lands in catches it. A page whose `build`
+  is stopped gets an empty body and is built again on the next pass, up to three passes in a row,
+  before it shows *This page could not be drawn*; a build that is above the limit on its own
+  therefore does not open hosted. A page whose `wakeup` is stopped is called again on the next
+  pass, so a page that spreads its work over its wakeups keeps each one within what a pass leaves:
+  hosted, the Logs page reads one unit of a log per wakeup and bounds its search by a count of
+  entries rather than by the clock. A stop that escapes the tool is caught by the host, which runs
+  the tool again on the next pass, and twelve such stops in a row give the tool up.
 - **Closing** is the tool's own sequence: the back key at the top of its menu, or on the page
   `openTool:<menuId>` opened it on while that page is still the one up, or
   `requestClose()`, which the host calls on the first pass without an event (full screen has

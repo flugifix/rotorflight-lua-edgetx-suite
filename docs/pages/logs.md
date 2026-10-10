@@ -28,6 +28,11 @@ While it searches, the page shows how many folder entries it has read and how ma
 found so far. It shows no bar: how many entries a folder holds is not known before they have
 been read, and reading them is most of the search.
 
+Opened from the dashboard, the tool runs inside the dashboard widget, and the radio lets a widget
+do only a limited amount of work each time it draws. There the search, the reading of a log for
+its summary and the drawing of its graph are done in smaller steps than in the tool started from
+the radio's menu, so on a card with many logs, or for a long log, they take longer.
+
 The list shows 25 logs at a time. Scroll it by touch, or turn the rotary encoder to step from
 one log's *View* to the next. Where there are more logs, *Previous* above the list and *Next*
 below it show the 25 before or after, with which logs are shown out of how many beside them.
