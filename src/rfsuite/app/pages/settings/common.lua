@@ -193,14 +193,31 @@ end
 
 -- A received reply can still be rejected by its parser. Leave the page reloadable, but
 -- never let the defaults left on screen become a write to the flight controller.
+-- `readFailed` stays set until the page starts its next read, so a page can draw
+-- appendReadFailedNotice in place of values the flight controller never sent.
 function M.failPageRead(ui)
   if type(ui.runtime) ~= "table" then return end
   ui.runtime.readComplete = false
+  ui.runtime.readFailed = true
   ui.runtime.readPending = false
   ui.loading = false
   if type(ui.runtime.requestRebuild) == "function" then
     ui.runtime.requestRebuild()
   end
+end
+
+-- What a read-backed page draws instead of its fields once its read has failed: one sentence,
+-- the same on every page. The page's Reload reads again.
+function M.appendReadFailedNotice(children, x, y, w)
+  children[#children + 1] = {
+    type = "label",
+    x = x + 10,
+    y = y,
+    w = w - 20,
+    text = "@i18n(app.read_failed)@",
+    color = COLOR_THEME_PRIMARY1,
+    font = SMLSIZE
+  }
 end
 
 -- The reason a pilot reads after "Save failed" when a settings file could not be written. A store

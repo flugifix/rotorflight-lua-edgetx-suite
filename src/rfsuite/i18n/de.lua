@@ -5,6 +5,7 @@ return {
     erasing = "Lösche...",
     connecting = "Verbinde",
     preparing = "Bereite Suite vor",
+    read_failed = "Die Einstellungen konnten nicht vom Flugcontroller gelesen werden. Mit Neu laden erneut versuchen.",
     unknown_value = "Unbekannt (%s)",
     page_error = {
       title = "Diese Seite konnte nicht gezeichnet werden",
