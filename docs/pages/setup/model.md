@@ -30,6 +30,8 @@ Greyed out until the flight controller answers. Read-only while the model is arm
 
 - Saving writes the parameters and the model-name flag to the flight controller; the two
   radio-wide switches are saved on the radio.
+- Where the flight controller does not answer the read, the page says the settings could not be
+  read instead of showing its fields, and Save is refused until **Reload** has read them.
 - The rename is temporary. The model's own name is put back when the craft disconnects, or at
   the next start if the radio was switched off while connected. The dashboard widget (or the
   service widget) does both, not the configuration tool: a link that drops and comes back while

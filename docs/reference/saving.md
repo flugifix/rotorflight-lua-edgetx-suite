@@ -118,6 +118,21 @@ Once the flight controller has confirmed they are stored, the notice can be clos
 left, and the save finishes on its own. Its outcome is shown the next time that page is opened, in
 the same box a save reports in when it is watched to the end.
 
+The save is reported as a plain success only when the restart was seen. Before the restart the
+tool reads whether the flight controller's clock is set -- the connection sets it, and a restart
+clears it -- and reads it again as soon as the board answers. *Settings saved.* means the clock was
+cleared, so the board did restart, and the notice clears itself after two seconds. If the clock is
+still set, the reboot command most likely did not take effect (it can be lost on the link while the
+board keeps answering), and settings that take effect at boot, such as a port's function, are then
+not in effect yet. The same notice comes up where the clock was not set before the restart or could
+not be read -- a board built without a clock answers so, and the connection may have failed to set
+it -- because then nothing can show that the board restarted. A GPS that sends the date can also set
+the clock again before the board's first answer; a restart is then reported as unconfirmed although
+it happened. In all these cases the notice reads *Settings saved, but the flight controller's
+restart could not be confirmed. Power it off and on before flying.* and stays up until it is closed.
+The settings are stored either way. A board that does not answer again within 20 seconds is
+reported as *The flight controller has not come back yet*, as before.
+
 ## When a different flight controller answers
 
 Adjustments, Beepers, Blackbox, Failsafe and Stats under Setup > Controls, the four Governor pages,
@@ -159,7 +174,7 @@ profile switch while the page is open leaves every profile's values where they w
 - Flight Tuning: PIDs, Rates and Governor.
 - Flight Tuning > Advanced: Autolevel, Filters, Main Rotor, PID Bandwidth, PID Controller,
   Rescue, Tail Rotor, and all three Rates Advanced pages.
-- Setup: Configuration, Radio Config, Accelerometer and Alignment.
+- Setup: Configuration, Radio Config, Accelerometer, Alignment and Model.
 - Setup > Governor: General, Time, Filters and Curves.
 - Setup > ESC/Motors: RPM, Throttle and Telemetry.
 - Setup > Controls: Modes, Failsafe, Stats, both Beepers pages, and Blackbox Configuration
@@ -180,6 +195,23 @@ included -- and an empty craft name, followed by a restart.
 **Tools > Copy Profiles** reads no record of its own; what its Save needs is how many profiles of
 the selected kind the flight controller has, which the connection reads straight away. Until that
 count has arrived, Save is held and the lists offer six. Reload asks the flight controller again.
+
+## A read that fails
+
+On **Setup > GPS**, **Setup > Model**, **Flight Tuning > Advanced > Autolevel** and **Setup >
+ESC/Motors > Motor Override**, a read that fails -- no answer after the retries, a reply that
+cannot be read, or a request taken off the queue -- leaves the page showing *Could not read the
+settings from the flight controller. Use Reload to try again.* in place of its fields, so nothing
+on screen stands for a value the flight controller did not send. The page does not ask again by
+itself; **Reload** does.
+
+- A read the suite abandons because the model was armed or the link dropped while it was out
+  counts as failed too; Reload reads again once the model is disarmed and connected.
+- GPS says the firmware was built without GPS support only where the flight controller answered
+  the GPS read with an error, which is how such a firmware answers it. Save is refused in both
+  cases, and while the read is still out.
+- Motor Override offers no motor until it has read how many motors the flight controller has and
+  what it is driving now. Its Reload ends a running override first, as leaving the page does.
 
 On Tail, the yaw limits and the centre trim are kept as the flight controller stores them, and
 changing Tail Mode changes only the unit they are shown in -- percent for a motorised tail, degrees

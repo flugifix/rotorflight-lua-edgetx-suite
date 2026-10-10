@@ -254,6 +254,18 @@ local function traceInstructionUsage(self)
   -- rate, and a widget at twelve per cent of budget and thirty passes a second is a different
   -- machine from one at twelve per cent and four.
   --
+  -- `widget.background` bumps the same counter. EdgeTX calls `background()` instead of
+  -- `refresh()` for a widget that is not on the visible screen -- one on another screen page, or
+  -- behind one of the radio's menu pages (WidgetsContainer::refreshWidgets,
+  -- radio/src/gui/colorlcd/mainview/widgets_container.cpp) -- and that pass still runs the
+  -- dashboard's background work, so a counter bumped here alone would stand still for as long as
+  -- the dashboard is off screen and the reader would record a running widget as stopped. Bumped
+  -- by both, it stands still only while the radio calls this widget not at all, which is the case
+  -- it exists for: past the instruction budget the radio calls neither (LuaWidget::background
+  -- returns at once on a widget that has raised, radio/src/lua/lua_widget.cpp). The few lines
+  -- below are repeated there rather than shared through a function, because a call here would
+  -- cost every pass that draws.
+  --
   -- The gate is sampled on the report window below and cached, not asked per pass: this is a
   -- diagnostic, it belongs behind the debug level like every other, and asking the preferences
   -- for it thirty times a second would be the diagnostic becoming the cost.
@@ -269,6 +281,13 @@ local function traceInstructionUsage(self)
   if self._shmPass >= SHM_PASS_WRAP then self._shmPass = 1 end
   if self._shmOn and type(setShmVar) == "function" then
     setShmVar(SHM_PASS_ID, self._shmPass * SHM_PASS_SHIFT + (percent > 255 and 255 or percent))
+    -- Which dashboard drew last, for widget.background. Every dashboard on the radio runs its own
+    -- copy of this file, so the mark is kept on the Lua state's shared table, as a token rather
+    -- than the widget itself so that a dashboard removed from the screen is not kept alive by it.
+    local shared = _G.rfsuite
+    if type(shared) == "table" then
+      shared.dashboardHeartbeatOwner = self._shmToken
+    end
   end
 
   local now = nowSeconds()
@@ -4162,6 +4181,30 @@ function Runtime.new(zone, options)
     -- Off screen. The overlay's own tick refuses to drive from here and cleans up instead, which
     -- is what makes a widget scrolled away stop writing the two variables.
     self._foreground = false
+
+    -- Still running, so still passing: the heartbeat, as traceInstructionUsage publishes it at
+    -- the top of refresh. A dashboard on a screen page the radio does not start on is called
+    -- here before its first refresh, so the gate may not have been sampled yet. The usage figure
+    -- is the last one refresh sampled: getUsage() answers an LVGL widget the share of its last
+    -- pass that DREW in either entry point (luaGetUsage, radio/src/lua/api_general.cpp), so a
+    -- background pass has no figure of its own to give.
+    --
+    -- Only the dashboard that drew last publishes here, or the one built last until one draws. A
+    -- second dashboard on another screen page would otherwise keep the counter moving after the one
+    -- on screen had been stopped by the instruction limit, and the stop would never be recorded.
+    if self._shmOn == nil then
+      self._shmOn = Log and type(Log.wanted) == "function" and Log.wanted("debug") or false
+    end
+    self._shmPass = (self._shmPass or 0) + 1
+    if self._shmPass >= SHM_PASS_WRAP then self._shmPass = 1 end
+    local shared = _G.rfsuite
+    local owner = type(shared) == "table" and shared.dashboardHeartbeatOwner or nil
+    if self._shmOn and type(setShmVar) == "function"
+      and (owner == nil or owner == self._shmToken) then
+      local usage = self._usageLast or 0
+      setShmVar(SHM_PASS_ID, self._shmPass * SHM_PASS_SHIFT + (usage > 255 and 255 or usage))
+    end
+
     -- An open tool cannot paint from here and its closing sequence needs the screen, so it is
     -- dropped at once and the dashboard's own background work takes over again.
     if self._toolHost ~= nil then
@@ -4172,6 +4215,9 @@ function Runtime.new(zone, options)
     performBackgroundWork(self, true)
     return 0
   end
+
+  -- This dashboard's heartbeat mark for widget.background; claimed at the end of this function.
+  widget._shmToken = {}
 
   -- The battery prompt's handle for anything that is not this widget: a theme, another widget,
   -- the tool. It records a REQUEST exactly as a press in the picker
@@ -4223,6 +4269,18 @@ function Runtime.new(zone, options)
   end
 
   reloadActiveTheme(widget)
+
+  -- The heartbeat mark for widget.background, claimed by the instance built last. A dashboard
+  -- built again in place -- its screen's layout changed, or the widget set again in its zone --
+  -- is built while a menu page covers it and draws nothing until that closes; the mark of the
+  -- instance it replaced would keep it from publishing meanwhile, and the background decoder,
+  -- which has seen the counter move, would record it as stopped. The one on screen takes the mark
+  -- back on its next pass. Taken last here, so that a build that fails on the way leaves the
+  -- mark where it was.
+  if type(_G) == "table" then
+    _G.rfsuite = _G.rfsuite or {}
+    _G.rfsuite.dashboardHeartbeatOwner = widget._shmToken
+  end
   return widget
 end
 

@@ -104,6 +104,8 @@ local function queueRcRead(isAutoReload)
   end
 
   local readValid = type(getSession()) == "table"
+  local runtime, common = ui.runtime, Common
+  ui.runtime.readFailed = false
   ui.runtime.readPending = true
   if not isAutoReload then
     ui.loading = true
@@ -141,13 +143,11 @@ local function queueRcRead(isAutoReload)
         end
       end
     end,
+    -- The fields are not drawn after a failed read: what loadFromSession put there is an
+    -- earlier visit's profile, or nothing, not what the flight controller holds now.
     errorHandler = function()
       readValid = false
-      ui.runtime.readPending = false
-      ui.loading = false
-      if type(ui.runtime.requestRebuild) == "function" then
-        ui.runtime.requestRebuild()
-      end
+      if ui.runtime == runtime then common.failPageRead(ui) end
     end
   })
 
@@ -417,6 +417,11 @@ function M.build(ctx)
   if Controls and type(Controls.appendStaticSectionHeader) == "function" then
     Controls.appendStaticSectionHeader(children, x, cursorY, w, displayTitle)
     cursorY = cursorY + (Controls.STATIC_SECTION_H or 38)
+  end
+
+  if ui.runtime.readFailed then
+    Common.appendReadFailedNotice(children, x, cursorY + 10, w)
+    return
   end
 
   -- Specs

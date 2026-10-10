@@ -5,6 +5,7 @@ return {
     erasing = "Lösche...",
     connecting = "Verbinde",
     preparing = "Bereite Suite vor",
+    read_failed = "Die Einstellungen konnten nicht vom Flugcontroller gelesen werden. Mit Neu laden erneut versuchen.",
     unknown_value = "Unbekannt (%s)",
     page_error = {
       title = "Diese Seite konnte nicht gezeichnet werden",
@@ -53,6 +54,7 @@ return {
       dismiss = "Weiter",
       timeout_title = "Gespeichert",
       timeout_message = "Einstellungen gespeichert. Der Flugcontroller ist noch nicht zurück.",
+      restart_unconfirmed = "Einstellungen gespeichert, aber der Neustart des Flugcontrollers ließ sich nicht bestätigen. Vor dem Fliegen aus- und wieder einschalten.",
       done_message = "Einstellungen gespeichert.",
       failed_title = "Nicht gespeichert",
       failed_message = "Der Flugcontroller hat die Einstellungen nicht bestätigt.",
