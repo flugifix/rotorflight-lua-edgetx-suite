@@ -39,7 +39,8 @@
 -- The tool is closed by its own closing sequence wherever that can still run: the back key at
 -- the top of its menu, the model arming, and fullscreen being left. Arming closes it because
 -- while it is open it runs in place of the dashboard's pass, and the dashboard's pass is what
--- makes the callouts. A widget sent to the background cannot paint and is dropped at once.
+-- makes the callouts. A widget sent to the background cannot paint and is dropped at once; its
+-- pages are still released on the way out (see finish).
 --
 -- Loaded on the first press that opens the tool, never on a pass that does not.
 
@@ -169,6 +170,17 @@ local function finish(widget, reason)
   widget._toolHost = nil
   if host == nil then return end
 
+  -- The pages first, while everything their onClose may touch is still in place: a page switches
+  -- its override off or rolls back a live change only there, and a tool dropped without the
+  -- closing sequence -- abandoned, given up at the instruction limit, or stopped by an error --
+  -- would otherwise leave that change on the flight controller with nothing in this state able to
+  -- take it back. The writes it queues are sent by the dashboard's own MSP tick. A tool that went
+  -- through its closing sequence has released them already, and this finds nothing to do.
+  local home = host.home
+  if type(home) == "table" and type(home.releasePages) == "function" then
+    callInWidgetContext(home.releasePages)
+  end
+
   removeLoader(host)
 
   local MspRuntime = requireModule("tasks/msp/runtime.lua")
@@ -223,7 +235,8 @@ function M.isOpen(widget)
   return widget._toolHost ~= nil
 end
 
---- Drop the tool without its closing sequence, for a widget that can no longer paint it.
+--- Drop the tool without its closing sequence, for a widget that can no longer paint it. Its
+--- pages are released all the same (see finish).
 function M.abandon(widget, reason)
   finish(widget, reason or "abandoned")
 end

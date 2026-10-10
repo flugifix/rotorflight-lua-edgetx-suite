@@ -825,6 +825,29 @@ local function buildPageContext()
   }
 end
 
+-- Ends every page the registry holds: the page on screen loses its reads first, so none of them
+-- can come back to a torn-down tree, and each page's onClose then runs -- which is where a page
+-- queues the write that switches its override off or rolls back a live change. Those writes stay
+-- on the queue under the page's client. Safe to run more than once and in any phase: once the
+-- closing sequence has let go of the registry there is nothing left to release.
+local function releasePages()
+  if state.activePageMenuId ~= nil and MspRuntime and type(MspRuntime.dropClientReads) == "function" then
+    pcall(MspRuntime.dropClientReads, mspClientForMenu(state.activePageMenuId))
+  end
+  if PageRegistry and type(PageRegistry.releaseAll) == "function" then
+    logToFile("Releasing all pages in registry.")
+    pcall(PageRegistry.releaseAll, buildPageContext())
+  elseif state.activePageMenuId and PageRegistry and type(PageRegistry.release) == "function" then
+    logToFile("Releasing active page: " .. tostring(state.activePageMenuId))
+    pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
+  end
+  state.activePageMenuId = nil
+  state.pageBuildFailed = nil
+  if MspRuntime and type(MspRuntime.setDefaultClient) == "function" then
+    pcall(MspRuntime.setDefaultClient, TOOL_MSP_CLIENT)
+  end
+end
+
 local function scheduleBuildUI(withGc)
   state.pendingBuildUI = true
   if withGc == true then
@@ -3475,27 +3498,10 @@ function M.run(event, touchState)
         state.pendingMenuOpen = nil
         closeHelpDialogIfOpen()
         
-        -- Same as on a page change, and for the same reason: the page on screen loses its reads
-        -- before it is released, so none of them can come back to a torn-down tree. Its writes
-        -- stay -- the shutdown ticks below are there to get exactly those out.
-        if state.activePageMenuId ~= nil and MspRuntime and type(MspRuntime.dropClientReads) == "function" then
-          pcall(MspRuntime.dropClientReads, mspClientForMenu(state.activePageMenuId))
-        end
+        -- Release all pages in the registry (queues override/rollback resets). Its writes stay --
+        -- the shutdown ticks below are there to get exactly those out.
+        releasePages()
 
-        -- Release all pages in the registry to free their resources (queues override/rollback resets)
-        if PageRegistry and type(PageRegistry.releaseAll) == "function" then
-          logToFile("Releasing all pages in registry.")
-          pcall(PageRegistry.releaseAll, buildPageContext())
-        elseif state.activePageMenuId and PageRegistry and type(PageRegistry.release) == "function" then
-          logToFile("Releasing active page: " .. tostring(state.activePageMenuId))
-          pcall(PageRegistry.release, state.activePageMenuId, buildPageContext())
-        end
-        state.activePageMenuId = nil
-        state.pageBuildFailed = nil
-        if MspRuntime and type(MspRuntime.setDefaultClient) == "function" then
-          pcall(MspRuntime.setDefaultClient, TOOL_MSP_CLIENT)
-        end
-        
         -- Hosted, the event runner is the host's and stays running.
         if not state.hosted and Events and type(Events.reset) == "function" then
           logToFile("Resetting events.")
@@ -4064,6 +4070,11 @@ end
 -- `requestClose` starts the same closing sequence the back key starts at the top of the menu,
 -- for a host that has to end the tool on a condition of its own: the page's releases and the
 -- queued writes still go out over the ticks that follow, and `run` returns 2 when it is done.
+--
+-- `releasePages` is the part of that sequence a host cannot do without when it ends the tool at
+-- once, without the passes the sequence takes: every page's onClose, so a page cannot leave an
+-- override switched on or an edit scope set behind it. The writes it queues are the host's MSP
+-- runtime's to send.
 local function requestClose()
   if state.menu and not state.isClosing then
     state.isClosing = true
@@ -4075,5 +4086,6 @@ return {
   run = M.run,
   useLvgl = true,
   requestRebuild = scheduleBuildUI,
-  requestClose = requestClose
+  requestClose = requestClose,
+  releasePages = releasePages
 }
