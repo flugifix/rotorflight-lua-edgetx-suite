@@ -223,6 +223,11 @@ shown): a second Save would send every write again with a second EEPROM write, a
 bring the flight controller's stored values back onto the page -- from the page's last read, or
 from the new read's replies -- before the chain has built its remaining writes from it. Once the save has finished, both work as before.
 
+Stats, both Beepers pages and Blackbox Logging send a single write, built when Save is pressed, then
+one EEPROM write. They ignore Save and Reload while that runs as well, so every page under Setup >
+Controls that saves to the flight controller does: a second Save there used to send the same write
+again with a second EEPROM write.
+
 ## ESC Configurator pages
 
 *Setup* > *ESC & Motors* > *ESC Tools* opens one page per ESC firmware. These pages do not use
