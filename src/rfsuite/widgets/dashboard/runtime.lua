@@ -286,7 +286,6 @@ local function traceInstructionUsage(self)
     -- than the widget itself so that a dashboard removed from the screen is not kept alive by it.
     local shared = _G.rfsuite
     if type(shared) == "table" then
-      self._shmToken = self._shmToken or {}
       shared.dashboardHeartbeatOwner = self._shmToken
     end
   end
@@ -4190,9 +4189,9 @@ function Runtime.new(zone, options)
     -- pass that DREW in either entry point (luaGetUsage, radio/src/lua/api_general.cpp), so a
     -- background pass has no figure of its own to give.
     --
-    -- Only the dashboard that last drew publishes here, or any while none has drawn yet. A second
-    -- dashboard on another screen page would otherwise keep the counter moving after the one on
-    -- screen had been stopped by the instruction limit, and the stop would never be recorded.
+    -- Only the dashboard that drew last publishes here, or the one built last until one draws. A
+    -- second dashboard on another screen page would otherwise keep the counter moving after the one
+    -- on screen had been stopped by the instruction limit, and the stop would never be recorded.
     if self._shmOn == nil then
       self._shmOn = Log and type(Log.wanted) == "function" and Log.wanted("debug") or false
     end
@@ -4215,6 +4214,18 @@ function Runtime.new(zone, options)
     end
     performBackgroundWork(self, true)
     return 0
+  end
+
+  -- The heartbeat mark for widget.background, claimed by the instance built last. A dashboard
+  -- built again in place -- its screen's layout changed, or the widget set again in its zone --
+  -- is built while a menu page covers it and draws nothing until that closes; the mark of the
+  -- instance it replaced would keep it from publishing meanwhile, and the background decoder,
+  -- which has seen the counter move, would record it as stopped. The one on screen takes the mark
+  -- back on its next pass.
+  widget._shmToken = {}
+  if type(_G) == "table" then
+    _G.rfsuite = _G.rfsuite or {}
+    _G.rfsuite.dashboardHeartbeatOwner = widget._shmToken
   end
 
   -- The battery prompt's handle for anything that is not this widget: a theme, another widget,
