@@ -40,7 +40,8 @@ stand now (`-` while its enable channel is outside its range; a `*` marks an out
 - On a flight controller with MSP API 12.09 or later the page reads the function of every
   slot in one reply and the selected slot's own settings, and reads another slot when it is
   selected. An older firmware is read in one read of the whole table.
-- Save writes each changed slot, then one EEPROM write.
+- Save writes each changed slot, then one EEPROM write. While it does, the page is covered by the
+  save's progress, and Save or Reload pressed in the header has no effect until the save has finished.
 - Reload discards every unsaved change, on every slot: a slot changed before Reload is not
   written by the next Save, and is read from the flight controller again when it is selected.
 - The function names are shown in the radio's language.

@@ -1837,6 +1837,9 @@ function M.build(ctx)
 end
 
 function M.onSave(ctx)
+  -- The header's Save stays reachable over the overlay. A second chain beside the running one
+  -- would write the same slots twice, and the first one's reply would clear the marks under it.
+  if ui.saving then return false end
   local ok, err = queueAdjustmentsWrite(ctx and ctx.requestRebuild, ctx and ctx.i18n, ctx)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then
@@ -1852,6 +1855,8 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
+  -- A read started under a running save would replace the slots the chain has still to send.
+  if ui.saving then return true end
   local session = getSession()
   if session then
     -- Reload discards every edit, not only the one on screen: from API 12.09 it reads again only

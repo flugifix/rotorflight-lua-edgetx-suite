@@ -494,6 +494,9 @@ end
 
 function M.onSave(ctx)
   if not M.canSave() then return false, "loaded_data_missing" end
+  -- The header's Save stays reachable over the overlay. A second chain beside the running one
+  -- would write the same channels twice, and the first one's reply would clear the marks under it.
+  if ui.saving then return false end
   local ok, err = queueFailsafeWrite(ctx and ctx.requestRebuild)
   if not ok then
     if ctx and type(ctx.reportSave) == "function" then
@@ -508,6 +511,9 @@ function M.onSave(ctx)
 end
 
 function M.onReload(ctx)
+  -- A Reload under a running save would put the stored values back into the channels the chain
+  -- has still to send.
+  if ui.saving then return true end
   local session = getSession()
   if session then
     ui.dirtyChannels = {}

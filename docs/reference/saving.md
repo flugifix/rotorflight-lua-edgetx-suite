@@ -246,8 +246,19 @@ range the page did not touch stays on the flight controller as it was stored -- 
 includes an AUX channel above AUX 13 stored by another tool, which a save used to move to AUX 13.
 Reload discards every change -- on Adjustments that includes a slot other than the one shown, which
 is read again when it is next selected. While Modes writes its ranges, the page is covered by the
-save's progress, as Adjustments is, so a range cannot be changed half-way through a save, and Save or Reload pressed in
-the header meanwhile does nothing.
+save's progress, as Adjustments is, so a range cannot be changed half-way through a save.
+
+Modes, Adjustments, Failsafe and Blackbox Configuration send their save as a chain of writes,
+every write after the first built only when the one before it is answered, then one EEPROM write. While that chain runs, Save and
+Reload pressed in the header have no effect (a confirmation the preferences ask for first is still
+shown): a second Save would send every write again with a second EEPROM write, and a Reload would
+bring the flight controller's stored values back onto the page -- from the page's last read, or
+from the new read's replies -- before the chain has built its remaining writes from it. Once the save has finished, both work as before.
+
+Stats, both Beepers pages and Blackbox Logging send a single write, built when Save is pressed, then
+one EEPROM write. They ignore Save and Reload while that runs as well, so every page under Setup >
+Controls that saves to the flight controller does: a second Save there used to send the same write
+again with a second EEPROM write.
 
 ## ESC Configurator pages
 
