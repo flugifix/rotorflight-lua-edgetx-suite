@@ -312,6 +312,7 @@
   - What the lines say about the electrical angle, the starting torque, the ESC mode and the governor gains follows Rotorflight's own *Flyrotor Governor setup* page; the documentation page carries the same facts and now links that page.
 
 ### Bug Fixes & Improvements
+- **SmartFuel config rejects truncated replies (`tasks/msp/api/smartfuel_config.lua`) (fixes #647)**: A reply shorter than four bytes was read as a table of zeros, which could be shown and written back. The parser now returns nil, which the readers already treat as a failed read.
 - **Cross Coupling Ratio stops at the firmware's 200 (`app/pages/setup/controls/adjustments/page.lua`, `widgets/dashboard/inflight/functions.lua`) (fixes #662)**: The flight controller clamps the ratio to 200 (`src/main/fc/rc_adjustments.c:216`), so a range above 200 was saved and silently clamped. The adjustment range now ends at 200.
 - **Motorized tail trim and limits show their percent sign (`app/pages/setup/mixer/tail/page.lua`) (fixes #652)**: The `%` suffix was part of the `string.format` template, which failed on a trailing `%` and fell back to the raw unscaled value. The suffix is now appended after formatting.
 - **ERASE BLACKBOX on the dashboard's quick menu asks before it erases (`widgets/dashboard/fullscreen_menu.lua`, `widgets/dashboard/views.lua`, `widgets/dashboard/confirm_menu.lua`, `i18n/en.lua`, `i18n/de.lua`, `docs/dashboard/quick-menu.md`, `docs/developer/dashboard-views.md`, `bin/dashboard/verify_erase_confirm.lua`) (fixes #108)**:
