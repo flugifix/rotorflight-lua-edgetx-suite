@@ -326,35 +326,26 @@ local function triggerLiveWrite()
   ui.liveSent = true
   ui.liveConfig = copyFlat(ui.config)
 
-  -- The last acknowledgement leaves the page dirty: the values are in the board's RAM only, and
-  -- they stay a trial until Save writes them to EEPROM.
-  queue:add({
-    command = MixerConfigApi.writeCommand,
-    payload = mixerCfgPayload,
-    isWrite = true,
-    processReply = function()
-      queue:add({
-        command = MixerInputPitchApi.writeCommand,
-        payload = pitchPayload,
-        isWrite = true,
-        processReply = function()
-          queue:add({
-            command = MixerInputRollApi.writeCommand,
-            payload = rollPayload,
-            isWrite = true,
-            processReply = function()
-              queue:add({
-                command = MixerInputCollectiveApi.writeCommand,
-                payload = collectivePayload,
-                isWrite = true,
-                processReply = function() end
-              })
-            end
-          })
-        end
-      })
-    end
-  })
+  -- All four queued at once rather than each from the reply before it: a rollback or a read
+  -- queued while a chain was still running would otherwise land between its links, and the
+  -- rest of the trial would reach the board after it. The acknowledgements leave the page
+  -- dirty: the values are in the board's RAM only, and they stay a trial until Save writes them
+  -- to EEPROM. A write that is given up is sent again on the next pass.
+  local writes = {
+    { MixerConfigApi.writeCommand, mixerCfgPayload },
+    { MixerInputPitchApi.writeCommand, pitchPayload },
+    { MixerInputRollApi.writeCommand, rollPayload },
+    { MixerInputCollectiveApi.writeCommand, collectivePayload }
+  }
+  for i = 1, #writes do
+    queue:add({
+      command = writes[i][1],
+      payload = writes[i][2],
+      isWrite = true,
+      processReply = function() end,
+      errorHandler = function() ui.liveConfig = nil end
+    })
+  end
 end
 
 --- Leaving without Save, or Reload: geometry sent live in setup mode goes back to the snapshot on
@@ -575,6 +566,8 @@ local function queueGeometryWrite()
   local rollPayload = MixerInputRollApi.buildWritePayload(ui.apiData.GET_MIXER_INPUT_ROLL)
   local collectivePayload = MixerInputCollectiveApi.buildWritePayload(ui.apiData.GET_MIXER_INPUT_COLLECTIVE)
   local stored = takeSnapshot()
+  -- The save sends what is on screen, so the live loop has nothing to send until it changes.
+  ui.liveConfig = copyFlat(ui.config)
 
   queue:add({
     command = MixerConfigApi.writeCommand,

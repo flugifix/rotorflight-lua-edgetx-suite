@@ -495,9 +495,10 @@ local function queueServosRead(isAutoReload)
   -- it runs, but they are neither drawn as editable nor saved.
   ui.runtime.readComplete = false
   ui.servoLoaded = {}
+  if ui.runtime.readPending then return false, "read_pending" end
+  -- Dropped only when a read is really queued: the one already running keeps its snapshot.
   ui.originalServos = nil
   ui.liveSent = nil
-  if ui.runtime.readPending then return false, "read_pending" end
   if not MspRuntime or type(MspRuntime.getState) ~= "function" then
     return false, "msp_runtime_unavailable"
   end

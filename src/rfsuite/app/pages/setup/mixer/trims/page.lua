@@ -207,12 +207,13 @@ local function triggerLiveWrite()
   local mixerCfgPayload = MixerConfigApi.buildWritePayload(ui.apiData.MIXER_CONFIG)
 
   -- The acknowledgement leaves the page dirty: the value is in the board's RAM only, and it stays
-  -- a trial until Save writes it to EEPROM.
+  -- a trial until Save writes it to EEPROM. A write that is given up is sent again on the next pass.
   queue:add({
     command = MixerConfigApi.writeCommand,
     payload = mixerCfgPayload,
     isWrite = true,
-    processReply = function() end
+    processReply = function() end,
+    errorHandler = function() ui.liveConfig = nil end
   })
   ui.liveSent = true
   ui.liveConfig = copyFlat(ui.config)
@@ -335,6 +336,8 @@ local function queueTrimsWrite()
 
   local mixerCfgPayload = MixerConfigApi.buildWritePayload(ui.apiData.MIXER_CONFIG)
   local stored = takeSnapshot()
+  -- The save sends what is on screen, so the live loop has nothing to send until it changes.
+  ui.liveConfig = copyFlat(ui.config)
 
   queue:add({
     command = MixerConfigApi.writeCommand,
