@@ -149,9 +149,13 @@ local function ensureLoaded(prefs)
   ui.gvarWalk = nil
   ui.gvarWalkWanted = false
   ui.gvarConflicts = nil
+  ui.gvarUsed = nil
   ui.gvarNamesDone = false
   ui.gvarNamesWanted = false
   ui.gvarNames = nil
+  ui.gvarNameOf = nil
+  ui.gvarEditOpen = false
+  ui.gvarNote = nil
   ui.planNotice = nil
   ui.notesWanted = false
   ui.loaded = true
@@ -179,7 +183,13 @@ end
 -- when it has (see inWidgetCall), so `ui.gvarWalkDone` still false after this call means "being
 -- read".
 local function gvarConflicts()
-  if ui.gvarWalkDone then return ui.gvarConflicts end
+  if ui.gvarWalkDone then
+    -- Inside the widget's call the walk's own findings are kept (stepGvarWalk). They name the first
+    -- line of EVERY variable, whichever two are configured, so a changed variable is answered from
+    -- them without reading the model again.
+    if ui.gvarUsed ~= nil then return Setup.conflictsFromUsed(ui.gvarUsed, ui.config) end
+    return ui.gvarConflicts
+  end
   if inWidgetCall() then
     ui.gvarWalkWanted = true
     return nil
@@ -205,6 +215,9 @@ local function gvarNameClashes()
     ui.gvarNamesDone = true
     ui.gvarNames = Setup.gvarNameClashes(radio(), ui.config)
   end
+  -- Inside the widget's call every variable's name is kept, for the same reason as the walk's
+  -- findings in gvarConflicts.
+  if ui.gvarNameOf ~= nil then return Setup.nameClashesFromNames(ui.gvarNameOf, ui.config) end
   return ui.gvarNames
 end
 
@@ -270,7 +283,7 @@ local function stepGvarWalk()
     end
   end
   if not Setup.gvarWalkStep(ui.gvarWalk, Setup.GVAR_WALK_SLICE) then return false end
-  ui.gvarConflicts = Setup.conflictsFromUsed(ui.gvarWalk.used, ui.config)
+  ui.gvarUsed = ui.gvarWalk.used
   ui.gvarWalk = nil
   ui.gvarWalkDone = true
   ui.gvarWalkWanted = false
@@ -388,6 +401,24 @@ local function describeCheck(i18n, result)
   return table.concat(parts, " / ")
 end
 
+--- The conflict warning's text, or nil where there is nothing to warn about.
+local function conflictsText(i18n, conflicts)
+  if type(conflicts) ~= "table" or #conflicts == 0 then return nil end
+  local parts = {}
+  for i = 1, #conflicts do
+    parts[#parts + 1] = "GV" .. tostring(conflicts[i].index) .. " "
+      .. t(i18n, "gvar_in_use", "is in use by") .. " " .. tostring(conflicts[i].where)
+  end
+  return table.concat(parts, " / ")
+end
+
+--- What the line drawn while the variables are read says now (see appendGvarNote): the warning for
+-- the variables as they are set, once the walk has answered.
+local function refreshGvarNote()
+  if not ui.gvarWalkDone then return end
+  ui.gvarNote = conflictsText(ui.i18n, gvarConflicts()) or ""
+end
+
 --- A field changed, so the verdict on the screen was reached about a different model.
 local function markValue(key, value)
   if ui.config[key] == value then return end
@@ -396,14 +427,19 @@ local function markValue(key, value)
   -- The conflict warning names the variable that was configured when the walk ran, so a changed
   -- variable makes it a sentence about a setting nobody holds any more.
   if key == "value_gvar" or key == "bank_gvar" then
-    ui.gvarWalkDone = false
-    ui.gvarNamesDone = false
-    -- Inside the widget's call the walk starts again when the editor closes (gvarEdited), not here.
-    -- A number field calls this on every click while its editor is open, and the rebuild a finished
-    -- walk asks for would close that editor under the pilot's thumb.
-    ui.gvarWalk = nil
-    ui.gvarWalkWanted = false
-    ui.gvarNamesWanted = false
+    if hostedVisit() then
+      -- Opened from the dashboard nothing is read again: the walk and the names kept for the visit
+      -- answer for any pair (gvarConflicts, gvarNameClashes), and a walk still running goes on. Nor
+      -- is the page built again from here: a number field calls this on every click while its editor
+      -- is open, and a rebuild closes that editor. The screen follows when the editor closes
+      -- (gvarEdited); until then the line drawn while the variables are read is updated in place.
+      -- EdgeTX calls this from its event handling, outside the widget's call, hence hostedVisit.
+      ui.gvarEditOpen = true
+      refreshGvarNote()
+    else
+      ui.gvarWalkDone = false
+      ui.gvarNamesDone = false
+    end
   end
   ui.planNotice = nil
   ui.runtime.markValueChanged()
@@ -739,31 +775,57 @@ end
 
 --- The editor of one of the two variables has closed.
 --
--- Inside the widget's call a changed variable sets the walk going again from here, and M.wakeup
--- rebuilds the page when it is through, so the line saying the radio is being read never stands
--- with nothing behind it. Not before the editor closes: markValue runs on every click, and the
--- rebuild a finished walk asks for would close the editor being clicked. EdgeTX calls this from its
--- event handling, outside the widget's call, hence hostedVisit. The standalone tool walks in the
--- build, so there the warning is brought up to date by the next build, as before. EdgeTX does not
--- call this when an encoder edit ends because another control took the focus (NumberArea's focus
--- handler leaves edit mode without changeEnd), nor before 2.11.5 / 2.12.0; there the walk starts
--- again with the next build.
+-- Inside the widget's call this is where a change to one of them reaches the screen: the page is
+-- built again, and the warning is drawn from the walk kept for the visit, without a read. Not from
+-- markValue, which runs on every click while the editor is open, and a rebuild closes that editor.
+-- Where the walk is still running, its own end builds the page, now that no editor is open. EdgeTX
+-- calls this from its event handling, outside the widget's call, hence hostedVisit. It does not call
+-- it when an encoder edit ends because another control took the focus (NumberArea's focus handler
+-- leaves edit mode without changeEnd), nor before 2.11.5 / 2.12.0: there a walk still running puts
+-- its answer into the line under the fields in place (appendGvarNote), and a warning already drawn
+-- is brought up to date by the page's next build. The standalone tool walks in the build, so there
+-- the warning is brought up to date by the next build, as before.
 local function gvarEdited()
-  if not hostedVisit() then return end
-  if ui.gvarWalkDone and ui.gvarNamesDone then return end
-  ui.gvarWalkWanted = true
-  ui.gvarNamesWanted = true
+  if not hostedVisit() or not ui.gvarEditOpen then return end
+  ui.gvarEditOpen = false
+  if ui.gvarWalkDone and ui.gvarNamesDone then ui.runtime.markDirty() end
 end
 
---- The notes the wiring section draws whatever the model holds; see sectionHeldBack.
+--- The notes the wiring section draws whatever the model holds; see sectionHeldBack. The last two
+-- size the line drawn while the variables are read (appendGvarNote): what it says first, and the
+-- longest warning it can come to hold -- two variables, each on a channel or an input.
 local function wiringNotes(i18n)
   return t(i18n, "wiring_note", "One mixer line per channel: MAX at the named variable's weight, added, no switch."),
     t(i18n, "pulse_ms_note",
-      "One press is one step. The board counts nothing before 100 ms of stillness and repeats only after 200 ms more.")
+      "One press is one step. The board counts nothing before 100 ms of stillness and repeats only after 200 ms more."),
+    t(i18n, "reading_radio", "Reading the radio..."),
+    conflictsText(i18n, {
+      { index = Setup.GVAR_MAX_INDEX, where = "CH32" },
+      { index = Setup.GVAR_MAX_INDEX - 1, where = "CH32" }
+    })
+end
+
+--- The line drawn while the variables are read. Reached inside the widget's call only: the
+-- standalone tool walks in the build.
+--
+-- Drawn through a closure, the way setup/controls/inflight/page.lua draws its progress line,
+-- because one of the two variables can be edited while the walk runs. The walk's answer cannot
+-- then be shown by building the page again, which would close the editor (see markValue), and
+-- EdgeTX does not always say when that editor has closed (gvarEdited). So the walk's end, and every
+-- click after it, put the warning into this line instead; the full page follows once the editor is
+-- known to be closed. The line is as tall as the longest warning it can hold, so it never runs
+-- into what is drawn below it.
+local function appendGvarNote(children, x, y, w, readingNote, widestNote)
+  ui.gvarNote = readingNote
+  children[#children + 1] = {
+    type = "label", x = x, y = y, w = w, color = COLOR_THEME_PRIMARY1, font = SMLSIZE,
+    text = function() return ui.gvarNote or "" end
+  }
+  return math.max(noteLines(readingNote, w), noteLines(widestNote, w)) * 24
 end
 
 local function buildWiring(children, x, y, w, i18n)
-  local wiringNote, pulseNote = wiringNotes(i18n)
+  local wiringNote, pulseNote, readingNote, widestNote = wiringNotes(i18n)
   local cursorY = y
   cursorY = cursorY + appendNote(children, x, cursorY, w, wiringNote)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
@@ -784,14 +846,9 @@ local function buildWiring(children, x, y, w, i18n)
   local conflicts = gvarConflicts()
   local named = gvarNameClashes()
   if not ui.gvarWalkDone or not ui.gvarNamesDone then
-    cursorY = cursorY + appendNote(children, x, cursorY, w, t(i18n, "reading_radio", "Reading the radio..."))
+    cursorY = cursorY + appendGvarNote(children, x, cursorY, w, readingNote, widestNote)
   elseif type(conflicts) == "table" and #conflicts > 0 then
-    local parts = {}
-    for i = 1, #conflicts do
-      parts[#parts + 1] = "GV" .. tostring(conflicts[i].index) .. " "
-        .. t(i18n, "gvar_in_use", "is in use by") .. " " .. tostring(conflicts[i].where)
-    end
-    cursorY = cursorY + appendNote(children, x, cursorY, w, table.concat(parts, " / "))
+    cursorY = cursorY + appendNote(children, x, cursorY, w, conflictsText(i18n, conflicts))
   end
 
   -- And the other trace a variable can carry: the name, on a variable this setup does not drive. A
@@ -937,12 +994,16 @@ function M.build(ctx)
   -- ui/home.lua builds before it calls the page's wakeup in the same pass; see M.wakeup.
   ui.builtThisPass = true
   ui.hosted = inWidgetCall()
+  -- A build closes every editor that was open; see markValue.
+  ui.gvarEditOpen = false
 
   local children = ctx.children
   local x, w = ctx.x, ctx.w
   local i18n = ctx.i18n
   local cursorY = ctx.y
   ui.buildW = w
+  -- markValue writes the warning from a callback, which is handed no i18n.
+  ui.i18n = i18n
 
   for i = 1, #SECTIONS do
     local section = SECTIONS[i]
@@ -984,11 +1045,19 @@ function M.wakeup(ctx)
     if finished then ui.planNotice = nil end
   elseif ui.gvarWalkWanted and not ui.gvarWalkDone then
     finished = stepGvarWalk()
+    -- One of the two variables was edited while the walk ran, and its editor may still be open:
+    -- the answer goes into the line under the fields, and the page is built when the editor closes
+    -- (see appendGvarNote).
+    if finished and ui.gvarEditOpen then
+      refreshGvarNote()
+      finished = false
+    end
   elseif ui.gvarNamesWanted and not ui.gvarNamesDone then
-    ui.gvarNames = Setup.gvarNameClashes(radio(), ui.config)
+    -- Every variable's name, kept for the visit; see gvarNameClashes.
+    ui.gvarNameOf = Setup.gvarNames(radio())
     ui.gvarNamesDone = true
     ui.gvarNamesWanted = false
-    finished = true
+    finished = not ui.gvarEditOpen
   end
   if finished and ctx and type(ctx.requestRebuild) == "function" then ctx.requestRebuild() end
 end
@@ -1000,6 +1069,11 @@ function M.onClose()
   ui.trimNames = nil
   ui.trimScan = nil
   ui.gvarWalk = nil
+  ui.gvarUsed = nil
+  ui.gvarNameOf = nil
+  ui.gvarNote = nil
+  ui.gvarEditOpen = false
+  ui.i18n = nil
   ui.planNotice = nil
   ui.noteLines = nil
   ui.noteW = nil

@@ -1346,17 +1346,42 @@ function M.gvarNameClashes(radio, settings)
   if type(radio.globalVariableDetails) ~= "function" then return nil end
   local bank = settings.bank_gvar or 0
   local value = settings.value_gvar or 0
-  local out = {}
-  local looked = false
+  local names = {}
   for n = 1, M.GVAR_MAX_INDEX do
     if n ~= bank and n ~= value then
       local details = radio.globalVariableDetails(n - 1)
-      if type(details) == "table" then
-        looked = true
-        local name = tostring(details.name or "")
-        if name == GVAR_NAME_VALUE or name == GVAR_NAME_BANK then
-          out[#out + 1] = { index = n, name = name }
-        end
+      if type(details) == "table" then names[n] = tostring(details.name or "") end
+    end
+  end
+  return M.nameClashesFromNames(names, settings)
+end
+
+--- The name of every global variable, by number (nil where the details could not be read), for a
+-- caller that asks the question above again while the pilot changes the two variables: the names
+-- do not depend on which two he picks.
+function M.gvarNames(radio)
+  if type(radio) ~= "table" or type(radio.globalVariableDetails) ~= "function" then return nil end
+  local names = {}
+  for n = 1, M.GVAR_MAX_INDEX do
+    local details = radio.globalVariableDetails(n - 1)
+    if type(details) == "table" then names[n] = tostring(details.name or "") end
+  end
+  return names
+end
+
+--- The answer of gvarNameClashes from names already read (variable number -> name).
+function M.nameClashesFromNames(names, settings)
+  if type(names) ~= "table" or type(settings) ~= "table" then return nil end
+  local bank = settings.bank_gvar or 0
+  local value = settings.value_gvar or 0
+  local out = {}
+  local looked = false
+  for n = 1, M.GVAR_MAX_INDEX do
+    local name = names[n]
+    if n ~= bank and n ~= value and name ~= nil then
+      looked = true
+      if name == GVAR_NAME_VALUE or name == GVAR_NAME_BANK then
+        out[#out + 1] = { index = n, name = name }
       end
     end
   end
