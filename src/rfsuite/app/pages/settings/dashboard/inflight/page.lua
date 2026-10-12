@@ -398,9 +398,9 @@ local function markValue(key, value)
   if key == "value_gvar" or key == "bank_gvar" then
     ui.gvarWalkDone = false
     ui.gvarNamesDone = false
-    -- Inside the widget's call the walk starts again only when a build asks for it. A number field
-    -- calls this on every click while its editor is open, and the rebuild a finished walk asks for
-    -- would close that editor under the pilot's thumb.
+    -- Inside the widget's call the walk starts again when the editor closes (gvarEdited), not here.
+    -- A number field calls this on every click while its editor is open, and the rebuild a finished
+    -- walk asks for would close that editor under the pilot's thumb.
     ui.gvarWalk = nil
     ui.gvarWalkWanted = false
     ui.gvarNamesWanted = false
@@ -726,14 +726,30 @@ local function buildGeneral(children, x, y, w, i18n)
   return cursorY
 end
 
-local function appendNumber(children, x, y, w, label, key, minValue, maxValue, step)
+local function appendNumber(children, x, y, w, label, key, minValue, maxValue, step, edited)
   return Controls.appendNumberField(children, x, y, w, label, {
     min = minValue,
     max = maxValue,
     step = step or 1,
     get = function() return ui.config[key] end,
-    set = function(value) markValue(key, value) end
+    set = function(value) markValue(key, value) end,
+    edited = edited
   })
+end
+
+--- The editor of one of the two variables has closed.
+--
+-- Inside the widget's call a changed variable sets the walk going again from here, and M.wakeup
+-- rebuilds the page when it is through, so the line saying the radio is being read never stands
+-- with nothing behind it. Not before the editor closes: markValue runs on every click, and the
+-- rebuild a finished walk asks for would close the editor being clicked. EdgeTX calls this from its
+-- event handling, outside the widget's call, hence hostedVisit. The standalone tool walks in the
+-- build, so there the warning is brought up to date by the next build, as before.
+local function gvarEdited()
+  if not hostedVisit() then return end
+  if ui.gvarWalkDone and ui.gvarNamesDone then return end
+  ui.gvarWalkWanted = true
+  ui.gvarNamesWanted = true
 end
 
 --- The notes the wiring section draws whatever the model holds; see sectionHeldBack.
@@ -752,9 +768,9 @@ local function buildWiring(children, x, y, w, i18n)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
     t(i18n, "value_ch", "Value channel"), "value_ch", Setup.CHANNEL_MIN, Setup.CHANNEL_MAX)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
-    t(i18n, "bank_gvar", "Enable variable"), "bank_gvar", 0, Setup.GVAR_MAX_INDEX)
+    t(i18n, "bank_gvar", "Enable variable"), "bank_gvar", 0, Setup.GVAR_MAX_INDEX, nil, gvarEdited)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
-    t(i18n, "value_gvar", "Value variable"), "value_gvar", 0, Setup.GVAR_MAX_INDEX)
+    t(i18n, "value_gvar", "Value variable"), "value_gvar", 0, Setup.GVAR_MAX_INDEX, nil, gvarEdited)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
     t(i18n, "pulse_ms", "Pulse length (ms)"), "pulse_ms", Setup.PULSE_MS_MIN, Setup.PULSE_MS_MAX, 10)
   cursorY = cursorY + appendNote(children, x, cursorY, w, pulseNote)
