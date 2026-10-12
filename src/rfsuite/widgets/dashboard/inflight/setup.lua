@@ -1197,10 +1197,8 @@ end
 -- `where` names the line the reference was found on, and it is the whole point of the walk now
 -- that the two variables are defaulted rather than proposed: a warning that says a variable is
 -- taken and not where would send the pilot through thirty-two channels to find out.
-local function readWalkLine(walk, line, where)
+local function readWalkLine(indexOfGvar, used, line, where)
   if type(line) ~= "table" then return end
-  local indexOfGvar = walk.indexOfGvar
-  local used = walk.used
   local weight = tonumber(line.weight) or 0
   local offset = tonumber(line.offset) or 0
   local byWeight = indexOfGvar[weight] or indexOfGvar[-weight]
@@ -1216,9 +1214,8 @@ end
 -- proposal that overlooked it would hand the overlay a variable it pulses several times a second
 -- while a pilot is tuning, moving a control surface for a reason nobody could connect to it. A
 -- firmware without the input readers answers nil and this half is simply not walked.
-local function nextHalf(walk)
-  if walk.half == "mix" and type(walk.radio.inputsCount) == "function"
-    and type(walk.radio.input) == "function" then
+local function nextHalf(radio, half)
+  if half == "mix" and type(radio.inputsCount) == "function" and type(radio.input) == "function" then
     return "input"
   end
   return nil
@@ -1229,41 +1226,56 @@ end
 --
 -- A channel or an input whose line count reads nil ends its half, as the walk always has: the
 -- firmware answers nil past the last one it carries.
+--
+-- The standalone tool runs this whole inside the page's build, so it is written as the two loops
+-- it replaced: where the walk stands is held in locals and put back on the walk only when a slice
+-- stops. A walk that went back through its own table for every read cost that build several
+-- thousand instructions more on a model with lines on every channel.
 function M.gvarWalkStep(walk, budget)
   if type(walk) ~= "table" then return true end
   if walk.done then return true end
   local radio = walk.radio
-  local taken = 0
-  while walk.half ~= nil do
-    local mixHalf = walk.half == "mix"
+  local indexOfGvar, used = walk.indexOfGvar, walk.used
+  local half, at, count, line0, where, lines = walk.half, walk.at, walk.count, walk.line0, walk.where, walk.lines
+  -- Reads this slice may still take.
+  local left = budget or math.huge
+  local stopped = false
+  while half ~= nil and not stopped do
+    local mixHalf = half == "mix"
     local limit = mixHalf and MIX_SCAN_CHANNELS or INPUT_SCAN_COUNT
-    if walk.at > limit then
-      walk.half, walk.at, walk.count = nextHalf(walk), 1, nil
-    else
-      if budget ~= nil and taken >= budget then return false end
-      taken = taken + 1
-      if walk.count == nil then
-        local count
-        if mixHalf then count = radio.mixesCount(walk.at) else count = radio.inputsCount(walk.at - 1) end
-        if count == nil then
-          walk.half, walk.at, walk.count = nextHalf(walk), 1, nil
-        else
-          walk.count, walk.line0 = count, 0
-          walk.where = (mixHalf and "CH" or "IN") .. tostring(walk.at)
-        end
-      elseif walk.line0 >= walk.count then
-        walk.at, walk.count = walk.at + 1, nil
-        -- Moving on reads nothing, so it is not a read of the budget.
-        taken = taken - 1
-      else
-        walk.lines = walk.lines + 1
-        local line
-        if mixHalf then line = radio.mix(walk.at, walk.line0) else line = radio.input(walk.at - 1, walk.line0) end
-        readWalkLine(walk, line, walk.where)
-        walk.line0 = walk.line0 + 1
+    -- A mixer channel is numbered from 1, an input from 0.
+    local countOf = mixHalf and radio.mixesCount or radio.inputsCount
+    local lineOf = mixHalf and radio.mix or radio.input
+    local shift = mixHalf and 0 or -1
+    while at <= limit do
+      if count == nil then
+        if left <= 0 then stopped = true break end
+        left = left - 1
+        count = countOf(at + shift)
+        -- Past the last one the firmware carries: this half is over.
+        if count == nil then break end
+        line0 = 0
+        where = (mixHalf and "CH" or "IN") .. tostring(at)
       end
+      if line0 < count then
+        if left <= 0 then stopped = true break end
+        local last = count - 1
+        if line0 + left - 1 < last then last = line0 + left - 1 end
+        for l = line0, last do
+          readWalkLine(indexOfGvar, used, lineOf(at + shift, l), where)
+        end
+        local read = last - line0 + 1
+        lines, left, line0 = lines + read, left - read, last + 1
+      end
+      -- Moving on reads nothing, so it is not a read of the budget.
+      if line0 >= count then at, count = at + 1, nil end
+    end
+    if not stopped then
+      half, at, count = nextHalf(radio, half), 1, nil
     end
   end
+  walk.half, walk.at, walk.count, walk.line0, walk.where, walk.lines = half, at, count, line0, where, lines
+  if stopped then return false end
   walk.done = true
   return true
 end

@@ -97,8 +97,9 @@ the pilot's business.
   slice per frame instead of all at once. While it reads, the line under the interlock switch,
   the trim pickers and the variable warnings show *Reading the radio...*, and *Set up the model*
   answers with the same line; on a model with many logical switches and mixer lines this takes
-  a second or two. The tool started from the radio's tool menu reads everything when the page
-  opens, as before.
+  a second or two. *Channels and variables* and *Rows and trims*, when open, draw their header
+  at once and the rows under it a frame or two later, once their notes have been laid out. The
+  tool started from the radio's tool menu reads everything when the page opens, as before.
 
 ## Related
 

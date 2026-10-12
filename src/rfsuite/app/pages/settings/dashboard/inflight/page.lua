@@ -145,6 +145,7 @@ local function ensureLoaded(prefs)
   ui.gvarNamesWanted = false
   ui.gvarNames = nil
   ui.planNotice = nil
+  ui.notesWanted = false
   ui.loaded = true
 end
 
@@ -605,16 +606,13 @@ end
 -- The sections
 -- ---------------------------------------------------------------------------
 
-local function appendNote(children, x, y, w, text)
-  children[#children + 1] = {
-    type = "label", x = x, y = y, w = w, text = text, color = COLOR_THEME_PRIMARY1, font = SMLSIZE
-  }
-  -- A label narrower than its text WRAPS rather than clipping, so a constant advance draws
-  -- the next row on top of the second line -- which is what the longest note on this page
-  -- did at 800 pixels, and what every note here would do on a 480-pixel screen. The library
-  -- has the answer already: ui/controls.lua measures a wrapped label, and its own comment is
-  -- about precisely this mistake. One line keeps the row height it always had, so nothing
-  -- that fitted moves.
+-- A label narrower than its text WRAPS rather than clipping, so a constant advance draws
+-- the next row on top of the second line -- which is what the longest note on this page
+-- did at 800 pixels, and what every note here would do on a 480-pixel screen. The library
+-- has the answer already: ui/controls.lua measures a wrapped label, and its own comment is
+-- about precisely this mistake. One line keeps the row height it always had, so nothing
+-- that fitted moves.
+local function measureLines(text, w)
   local lines = 1
   if Controls and type(Controls.estimateWrappedTextHeight) == "function" then
     local total = Controls.estimateWrappedTextHeight(text, w, SMLSIZE)
@@ -624,7 +622,45 @@ local function appendNote(children, x, y, w, text)
       if lines < 1 then lines = 1 end
     end
   end
-  return lines * 24
+  return lines
+end
+
+--- How many lines a note wraps to, measured once per visit and width.
+--
+-- That measurement is a text-size call per word, and it was most of what this page's build cost:
+-- every note was measured again on every build, and the page builds again after each of the walks
+-- above. A note's height depends only on its text and the width, so the answer is kept for the
+-- visit; the arithmetic is the same, so the screen is the same.
+local function noteLines(text, w)
+  if type(text) ~= "string" then return measureLines(text, w) end
+  if ui.noteLines == nil or ui.noteW ~= w then
+    ui.noteLines = {}
+    ui.noteW = w
+  end
+  local lines = ui.noteLines[text]
+  if lines == nil then
+    lines = measureLines(text, w)
+    ui.noteLines[text] = lines
+  end
+  return lines
+end
+
+--- True when every note given has been measured at this width.
+local function notesMeasured(w, ...)
+  local cache = ui.noteLines
+  if cache == nil or ui.noteW ~= w then return select("#", ...) == 0 end
+  for i = 1, select("#", ...) do
+    local text = select(i, ...)
+    if type(text) == "string" and cache[text] == nil then return false end
+  end
+  return true
+end
+
+local function appendNote(children, x, y, w, text)
+  children[#children + 1] = {
+    type = "label", x = x, y = y, w = w, text = text, color = COLOR_THEME_PRIMARY1, font = SMLSIZE
+  }
+  return noteLines(text, w) * 24
 end
 
 local function buildGeneral(children, x, y, w, i18n)
@@ -688,10 +724,17 @@ local function appendNumber(children, x, y, w, label, key, minValue, maxValue, s
   })
 end
 
+--- The notes the wiring section draws whatever the model holds; see sectionHeldBack.
+local function wiringNotes(i18n)
+  return t(i18n, "wiring_note", "One mixer line per channel: MAX at the named variable's weight, added, no switch."),
+    t(i18n, "pulse_ms_note",
+      "One press is one step. The board counts nothing before 100 ms of stillness and repeats only after 200 ms more.")
+end
+
 local function buildWiring(children, x, y, w, i18n)
+  local wiringNote, pulseNote = wiringNotes(i18n)
   local cursorY = y
-  cursorY = cursorY + appendNote(children, x, cursorY, w,
-    t(i18n, "wiring_note", "One mixer line per channel: MAX at the named variable's weight, added, no switch."))
+  cursorY = cursorY + appendNote(children, x, cursorY, w, wiringNote)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
     t(i18n, "bank_ch", "Enable channel"), "bank_ch", Setup.CHANNEL_MIN, Setup.CHANNEL_MAX)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
@@ -702,9 +745,7 @@ local function buildWiring(children, x, y, w, i18n)
     t(i18n, "value_gvar", "Value variable"), "value_gvar", 0, Setup.GVAR_MAX_INDEX)
   cursorY = cursorY + appendNumber(children, x, cursorY, w,
     t(i18n, "pulse_ms", "Pulse length (ms)"), "pulse_ms", Setup.PULSE_MS_MIN, Setup.PULSE_MS_MAX, 10)
-  cursorY = cursorY + appendNote(children, x, cursorY, w,
-    t(i18n, "pulse_ms_note",
-      "One press is one step. The board counts nothing before 100 ms of stillness and repeats only after 200 ms more."))
+  cursorY = cursorY + appendNote(children, x, cursorY, w, pulseNote)
 
   -- The variables are fixed defaults now, so the model is walked to say when one of them is
   -- already spoken for rather than to choose a free pair. It is a warning and not a refusal: a
@@ -739,6 +780,13 @@ local function buildWiring(children, x, y, w, i18n)
   return cursorY
 end
 
+--- The notes the trims section can draw, in either layout; see sectionHeldBack.
+local function trimsNotes(i18n)
+  return t(i18n, "navigate_note", "One trim steps through the parameters, the other moves the one it selected."),
+    t(i18n, "bank_trim_note", "With a bank trim the walk trim stays inside the bank; without one it walks the whole set."),
+    t(i18n, "trims_unreadable", "This radio did not report its trims; the default order is used.")
+end
+
 --- Which trim does what.
 --
 -- Two arrangements, and the difference is how many trims a pilot has to spare. `rows` gives each
@@ -747,6 +795,7 @@ end
 -- what a radio with four trims can offer and what a pilot who does not want to remember six
 -- positions asks for.
 local function buildTrims(children, x, y, w, i18n)
+  local navigateNote, bankTrimNote, unreadableNote = trimsNotes(i18n)
   local cursorY = y
   cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
     t(i18n, "trims", "Drive rows from the trims"),
@@ -761,8 +810,7 @@ local function buildTrims(children, x, y, w, i18n)
   end
 
   if trimNames() == nil then
-    cursorY = cursorY + appendNote(children, x, cursorY, w,
-      t(i18n, "trims_unreadable", "This radio did not report its trims; the default order is used."))
+    cursorY = cursorY + appendNote(children, x, cursorY, w, unreadableNote)
   end
 
   local modeOptions = {
@@ -780,12 +828,10 @@ local function buildTrims(children, x, y, w, i18n)
     end)
 
   if ui.config.trim_mode == Setup.TRIM_MODE_NAVIGATE then
-    cursorY = cursorY + appendNote(children, x, cursorY, w,
-      t(i18n, "navigate_note", "One trim steps through the parameters, the other moves the one it selected."))
+    cursorY = cursorY + appendNote(children, x, cursorY, w, navigateNote)
     cursorY = cursorY + appendTrimPicker(children, x, cursorY, w,
       t(i18n, "bank_trim", "Bank trim"), trimField("bank_trim"))
-    cursorY = cursorY + appendNote(children, x, cursorY, w,
-      t(i18n, "bank_trim_note", "With a bank trim the walk trim stays inside the bank; without one it walks the whole set."))
+    cursorY = cursorY + appendNote(children, x, cursorY, w, bankTrimNote)
     cursorY = cursorY + appendTrimPicker(children, x, cursorY, w,
       t(i18n, "nav_trim", "Walk trim"), trimField("nav_trim"))
     cursorY = cursorY + appendTrimPicker(children, x, cursorY, w,
@@ -812,9 +858,46 @@ end
 
 local SECTIONS = {
   { key = "general", titleKey = "section_general", titleFallback = "In-flight tuning", build = buildGeneral },
-  { key = "wiring", titleKey = "section_wiring", titleFallback = "Channels and variables", build = buildWiring },
-  { key = "trims", titleKey = "section_trims", titleFallback = "Rows and trims", build = buildTrims }
+  { key = "wiring", titleKey = "section_wiring", titleFallback = "Channels and variables", build = buildWiring,
+    notes = wiringNotes },
+  { key = "trims", titleKey = "section_trims", titleFallback = "Rows and trims", build = buildTrims,
+    notes = trimsNotes }
 }
+
+--- True while an open section's body waits for its notes to be measured (inside the widget's call
+-- only; see inWidgetCall).
+--
+-- Measuring them was most of what such a section cost to build, and the page builds in one pass:
+-- with both sections open, the build alone did not fit beside the rest of a widget pass. So there
+-- the section's header is drawn at once and its body is held back; M.wakeup measures the notes, a
+-- section per pass, and the body is drawn on the rebuild that follows, from the measured heights.
+-- This is the dashboard's own scene job in small (widgets/dashboard/runtime.lua, sceneJobStep):
+-- prepare a slice per pass, then build in a pass of its own. The notes that only exist once the
+-- walks have answered are measured where they are drawn; they are short, and come one at a time.
+local function sectionHeldBack(section, i18n, w)
+  if section.notes == nil or not inWidgetCall() then return false end
+  return not notesMeasured(w, section.notes(i18n))
+end
+
+--- One open section's notes measured. Answers true on the pass after which no open section is
+-- held back any more, which is when the page has to be built again to show them.
+local function stepNotes(i18n)
+  -- The wakeup is not told the page's width; the build that held the section back was.
+  local w = ui.buildW
+  local measured = false
+  for i = 1, #SECTIONS do
+    local section = SECTIONS[i]
+    if ui.sections[section.key] and sectionHeldBack(section, i18n, w) then
+      -- One section per pass, and the pass that measured one asks whether another is still waiting.
+      if measured then return false end
+      local texts = { section.notes(i18n) }
+      for j = 1, #texts do noteLines(texts[j], w) end
+      measured = true
+    end
+  end
+  ui.notesWanted = false
+  return measured
+end
 
 function M.build(ctx)
   ensureDeps()
@@ -827,6 +910,7 @@ function M.build(ctx)
   local x, w = ctx.x, ctx.w
   local i18n = ctx.i18n
   local cursorY = ctx.y
+  ui.buildW = w
 
   for i = 1, #SECTIONS do
     local section = SECTIONS[i]
@@ -837,15 +921,20 @@ function M.build(ctx)
       ui.runtime.getSectionToggleHandler(section.key))
     cursorY = cursorY + Controls.SECTION_H
     if ui.sections[section.key] then
-      cursorY = section.build(children, x, cursorY, w, i18n)
+      if sectionHeldBack(section, i18n, w) then
+        ui.notesWanted = true
+      else
+        cursorY = section.build(children, x, cursorY, w, i18n)
+      end
     end
   end
 end
 
 --- The model walks, a slice per pass, while the page runs inside the widget's call (see
--- inWidgetCall). One walk at a time and one slice of it per pass; the trims first, because the
--- check and the setup button wait on them. The pass that completes a walk asks for one rebuild,
--- which is when the screen can say what the walk found.
+-- inWidgetCall). One job at a time and one slice of it per pass: first the notes of a section
+-- that is held back (see sectionHeldBack), because the pilot has just opened it; then the trims,
+-- because the check and the setup button wait on them. The pass that completes a job asks for one
+-- rebuild, which is when the screen can say what it found.
 function M.wakeup(ctx)
   if not ui.loaded or Setup == nil or not inWidgetCall() then return end
   -- Never in the pass that built the page: the build is the most expensive thing that pass does,
@@ -855,7 +944,9 @@ function M.wakeup(ctx)
     return
   end
   local finished = false
-  if ui.trimNames == nil then
+  if ui.notesWanted then
+    finished = stepNotes(ctx and ctx.i18n)
+  elseif ui.trimNames == nil then
     finished = stepTrimWalk()
     -- The only notice the setup button can have left while the walk ran is the one saying so.
     if finished then ui.planNotice = nil end
@@ -878,6 +969,10 @@ function M.onClose()
   ui.trimScan = nil
   ui.gvarWalk = nil
   ui.planNotice = nil
+  ui.noteLines = nil
+  ui.noteW = nil
+  ui.buildW = nil
+  ui.notesWanted = false
   Controls = nil
   Common = nil
   Setup = nil
