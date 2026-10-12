@@ -388,6 +388,26 @@ end
 -- bit 0 is ARMED like the arming flags' bit 0, so the same bit test applies.
 local ARM_SOURCES = { "ARM", "Arm", "ARMF", "ArmF", "STAT", "5140" }
 
+-- One source's value as the armed state, or nil for a value that says nothing.
+local function armedFromValue(value)
+  if type(value) == "number" then
+    if type(bit32) == "table" and type(bit32.btest) == "function" then
+      return bit32.btest(value, 1)
+    end
+    return value ~= 0
+  end
+  if type(value) == "boolean" then
+    return value
+  end
+  if type(value) == "string" then
+    local n = tonumber(value)
+    if type(n) == "number" then
+      return n ~= 0
+    end
+  end
+  return nil
+end
+
 local function readArmedState()
   if type(getValue) ~= "function" then
     return false
@@ -396,25 +416,34 @@ local function readArmedState()
   for i = 1, #ARM_SOURCES do
     local ok, value = pcall(getValue, ARM_SOURCES[i])
     if ok and value ~= nil then
-      if type(value) == "number" then
-        if type(bit32) == "table" and type(bit32.btest) == "function" then
-          return bit32.btest(value, 1)
-        end
-        return value ~= 0
-      end
-      if type(value) == "boolean" then
-        return value
-      end
-      if type(value) == "string" then
-        local n = tonumber(value)
-        if type(n) == "number" then
-          return n ~= 0
-        end
-      end
+      local armed = armedFromValue(value)
+      if armed ~= nil then return armed end
     end
   end
 
   return false
+end
+
+--- The armed state off the same sources tick() reads, and whether it was written since the link
+--- last came back.
+--
+-- getValue() answers a sensor that has stopped arriving with its last value, so once a lost link
+-- returns, tick() reads the armed state the craft had BEFORE the loss until a decoder writes the
+-- sensor again. getSourceValue()'s second result tells the two apart: EdgeTX marks every sensor
+-- old once the link stops streaming, and the next value written clears the mark. Answers
+-- `armed, current`, `current` true only for a reading written since; nil where no source
+-- answers or the radio has no getSourceValue().
+function Runtime.armedReading()
+  local getSrcV = _G.getSourceValue
+  if type(getSrcV) ~= "function" then return nil end
+  for i = 1, #ARM_SOURCES do
+    local ok, value, current = pcall(getSrcV, ARM_SOURCES[i])
+    if ok and value ~= nil then
+      local armed = armedFromValue(value)
+      if armed ~= nil then return armed, current == true end
+    end
+  end
+  return nil
 end
 
 local function isConnected()

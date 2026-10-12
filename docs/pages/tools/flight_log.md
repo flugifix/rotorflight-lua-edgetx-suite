@@ -124,6 +124,13 @@ buttons. The log says which of those happened, under the tag `rfsuite.battery_pi
 The first five fields are always there: the date and time the craft armed, the model name, the pack
 the flight was flown on, and the armed seconds.
 
+A flight during which the telemetry link was lost is still one line, written at the disarm, when
+the craft is still armed once the link is back: its start is when it armed, its armed seconds
+include the gap, and it is logged against the pack it armed with, counted no more than it would
+have been without the gap. Where
+the craft disarmed while the link was gone, the radio never saw the disarm, so the flight has no
+honest end and no line is written for it.
+
 Everything after them is the flight's own statistics, taken from the record the suite keeps while
 the craft is armed. A field that was never recorded is left empty, so a line may carry all of them,
 some of them or none.
