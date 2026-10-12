@@ -103,8 +103,9 @@ the pilot's business.
   and shows the warning for the new one when its field is closed with Enter, Return or the
   on-screen keypad (on EdgeTX 2.11.5, 2.12.0 and later). Changed while the page is still
   reading, the warning takes the place of *Reading the radio...* as soon as the reading is
-  through. A field left by touching another control, or an older firmware, has a warning
-  already on screen brought up to date the next time the page is laid out. The tool
+  through. A field left by touching another control, or an older firmware, has the warnings
+  (the variable's use and the variable names) brought up to date the next time the page is
+  laid out. After *Set up the model* the next change of a variable reads the model again. The tool
   started from the radio's tool menu reads everything when the page opens, as before.
 
 ## Related

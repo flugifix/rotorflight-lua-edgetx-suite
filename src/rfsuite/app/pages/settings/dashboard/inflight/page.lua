@@ -32,7 +32,8 @@
 --
 -- What it READS. The setup check walks the model's mixer lines, its variables and its trim modes.
 -- That walk runs ONCE per visit, and again only after a field has actually changed, latched on a
--- flag the next build consumes. It is not on a timer: a page that re-reads the model because a
+-- flag the next build consumes. (Opened from the dashboard the variable walk is kept for the visit
+-- instead and answers a changed variable without a read; see gvarConflicts.) It is not on a timer: a page that re-reads the model because a
 -- second has passed is a page that re-reads the model forever.
 
 local function loadModule(path)
@@ -156,6 +157,7 @@ local function ensureLoaded(prefs)
   ui.gvarNameOf = nil
   ui.gvarEditOpen = false
   ui.gvarNote = nil
+  ui.gvarModelChanged = false
   ui.planNotice = nil
   ui.notesWanted = false
   ui.loaded = true
@@ -180,8 +182,8 @@ end
 --
 -- Runs once per visit, off the same latch as the check, and writes nothing. Inside the widget's
 -- call the build only asks for it and answers nil; M.wakeup walks the model and rebuilds the page
--- when it has (see inWidgetCall), so `ui.gvarWalkDone` still false after this call means "being
--- read".
+-- when it has, unless a variable's editor may be open (see inWidgetCall, appendGvarNote), so
+-- `ui.gvarWalkDone` still false after this call means "being read".
 local function gvarConflicts()
   if ui.gvarWalkDone then
     -- Inside the widget's call the walk's own findings are kept (stepGvarWalk). They name the first
@@ -204,7 +206,8 @@ end
 -- A separate question from the walk above, and the walk above cannot answer it: a model set up once
 -- against a different pair keeps the names on the variables it used then, and a variable nothing
 -- refers to any more has no reference for a mixer walk to find. Nine detail reads, on the same
--- terms as the check -- once per visit, and again only when one of the two variables is changed.
+-- terms as the check -- once per visit, and in the standalone tool again when one of the two
+-- variables is changed (opened from the dashboard the names are kept; see below).
 local function gvarNameClashes()
   if not ui.gvarNamesDone then
     -- Inside the widget's call M.wakeup reads them, in a pass of their own; see gvarConflicts.
@@ -428,12 +431,24 @@ local function markValue(key, value)
   -- variable makes it a sentence about a setting nobody holds any more.
   if key == "value_gvar" or key == "bank_gvar" then
     if hostedVisit() then
-      -- Opened from the dashboard nothing is read again: the walk and the names kept for the visit
-      -- answer for any pair (gvarConflicts, gvarNameClashes), and a walk still running goes on. Nor
+      -- Opened from the dashboard nothing is read again (unless the model was written since): the
+      -- walk and the names kept for the visit answer for any pair (gvarConflicts, gvarNameClashes),
+      -- and a walk still running goes on. Nor
       -- is the page built again from here: a number field calls this on every click while its editor
       -- is open, and a rebuild closes that editor. The screen follows when the editor closes
       -- (gvarEdited); until then the line drawn while the variables are read is updated in place.
       -- EdgeTX calls this from its event handling, outside the widget's call, hence hostedVisit.
+      if ui.gvarModelChanged then
+        -- The model was written since the walk (Set up the model): read it again, without a
+        -- rebuild while the editor is open, its answer arriving the same way as a first walk's.
+        ui.gvarModelChanged = false
+        ui.gvarUsed = nil
+        ui.gvarNameOf = nil
+        ui.gvarWalkDone = false
+        ui.gvarNamesDone = false
+        ui.gvarWalkWanted = true
+        ui.gvarNamesWanted = true
+      end
       ui.gvarEditOpen = true
       refreshGvarNote()
     else
@@ -612,6 +627,9 @@ local function offerSetup(i18n)
     local report = Setup.applyPlan(radio(), plan)
     -- The verdict on the screen was reached about the model as it was; the model has just changed.
     ui.checkDone = false
+    -- So were the variable walk and the names kept for the visit (gvarConflicts): the next change
+    -- of a variable reads the model again, as the standalone tool does (markValue).
+    ui.gvarModelChanged = true
     if report.failed > 0 then
       ui.planNotice = string.format("%s (%d/%d)",
         t(i18n, "plan_failed", "The radio refused part of the setup"),
@@ -1027,7 +1045,8 @@ end
 -- inWidgetCall). One job at a time and one slice of it per pass: first the notes of a section
 -- that is held back (see sectionHeldBack), because the pilot has just opened it; then the trims,
 -- because the check and the setup button wait on them. The pass that completes a job asks for one
--- rebuild, which is when the screen can say what it found.
+-- rebuild, which is when the screen can say what it found -- except a variable job while one of the
+-- two variables' editors may be open (see appendGvarNote).
 function M.wakeup(ctx)
   if not ui.loaded or Setup == nil or not inWidgetCall() then return end
   -- Never in the pass that built the page: the build is the most expensive thing that pass does,
@@ -1073,6 +1092,7 @@ function M.onClose()
   ui.gvarNameOf = nil
   ui.gvarNote = nil
   ui.gvarEditOpen = false
+  ui.gvarModelChanged = false
   ui.i18n = nil
   ui.planNotice = nil
   ui.noteLines = nil
