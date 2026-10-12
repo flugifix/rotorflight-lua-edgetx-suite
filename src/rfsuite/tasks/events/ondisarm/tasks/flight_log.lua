@@ -217,6 +217,13 @@ function M.wakeup()
   end
 
   local batteryId = resolveBattery(FlightLog, session, record)
+  -- A link that dropped in flight -- for a second, long before the runtime holds it to be lost --
+  -- leaves no board identity until the MSP runtime reads it again after this disarm, and so no
+  -- store and no in-memory copy of it to ask. The pack the store held at the arm edge is then the
+  -- answer: the choice cannot move while the craft is armed.
+  if batteryId == nil and session.mcu_id == nil and type(record.batteryAtArm) == "string" then
+    batteryId = record.batteryAtArm
+  end
 
   local ok, written, reason = pcall(FlightLog.appendFlight, record.startDate, record.model or "",
     batteryId or "", seconds, flightStats(session))
