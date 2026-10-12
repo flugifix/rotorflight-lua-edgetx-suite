@@ -99,9 +99,12 @@ the pilot's business.
   answers with the same line; on a model with many logical switches and mixer lines this takes
   a second or two. *Channels and variables* and *Rows and trims*, when open, draw their header
   at once and the rows under it a frame or two later, once their notes have been laid out. A
-  variable changed there is read again when its field is closed with Enter, Return or the
-  on-screen keypad (on EdgeTX 2.11.5, 2.12.0 and later); a field left by touching another
-  control, or an older firmware, has it read the next time the page is laid out. The tool
+  variable changed there is not read again: the page keeps what it found for every variable,
+  and shows the warning for the new one when its field is closed with Enter, Return or the
+  on-screen keypad (on EdgeTX 2.11.5, 2.12.0 and later). Changed while the page is still
+  reading, the warning takes the place of *Reading the radio...* as soon as the reading is
+  through. A field left by touching another control, or an older firmware, has a warning
+  already on screen brought up to date the next time the page is laid out. The tool
   started from the radio's tool menu reads everything when the page opens, as before.
 
 ## Related
