@@ -221,8 +221,8 @@ end
 
 --- True while the trim block is still being walked, a slice per pass (see inWidgetCall). Every
 -- reader of trimNames() asks this first: until the walk is through, a stored trim cannot be told
--- from one this radio lacks, and nil would read as the second. The setup button reads it from its
--- press, hence hostedVisit.
+-- from one this radio lacks, and nil would read as the second. The setup button and the trim
+-- pickers read it from their callbacks, hence hostedVisit.
 local function trimsPending()
   return ui.trimNames == nil and hostedVisit()
 end
@@ -301,6 +301,9 @@ local function appendTrimPicker(children, x, y, w, label, get, set)
     filter = SW_TRIM | SW_NONE,
     get = get,
     set = function(value)
+      -- A picker of the previous build can still be on screen for a pass after Reload has started
+      -- the walk again; a pick made then is not taken rather than stored as off.
+      if trimsPending() then return end
       local wanted = Setup.normaliseTrim(trimNames(), value)
       if get() == wanted then return end
       set(wanted)
