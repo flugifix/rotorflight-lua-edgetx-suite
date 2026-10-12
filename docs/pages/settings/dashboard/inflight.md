@@ -31,7 +31,7 @@ Hidden until *System* → *Settings* → *General* → *Preview* → *In-flight 
 | --- | --- |
 | In-flight tuning on this radio | The master switch. With it off nothing drives on any model. Each model has one of its own on the flight controller page, and both have to be on. Off by default. |
 | Interlock switch | The switch that brings the surface up and makes it live. *None* by default, which leaves the overlay unreachable. |
-| *(the line under it)* | What the setup check found when it last walked the model: *Setup OK*, *Setup not checked*, or the faults it names. A fault refuses the interlock, so the surface does not go live while one stands. |
+| *(the line under it)* | What the setup check found when it last walked the model: *Setup OK*, *Setup not checked*, or the faults it names — or *Reading the radio...* while the page opened from the dashboard is still reading (see Notes). A fault refuses the interlock, so the surface does not go live while one stands. |
 | Set up the model | Writes the two mixer lines, the global variable details and the trim modes this model needs — and only the ones that differ from what the model already carries. It shows what it would remove and what it would add first, and writes nothing until that is confirmed. Where the model already carries all of it, it says so instead of asking. It writes the values as they stand on the page, saved or not. |
 
 *Set up the model* is a comparator, not a rewrite. A channel that already carries nothing but
@@ -91,6 +91,14 @@ the pilot's business.
   settings file could not be written to the SD card*. The widget takes a change to them on its
   own clock, and that clock is held while the model is armed — a change made in the air arrives
   after landing.
+- Opened from the dashboard's full screen, the page runs inside the dashboard widget, whose
+  every call the radio stops at an instruction limit. There it reads the radio's switch list
+  (to find the trims) and the model's mixer and input lines (for the variable warnings) a
+  slice per frame instead of all at once. While it reads, the line under the interlock switch,
+  the trim pickers and the variable warnings show *Reading the radio...*, and *Set up the model*
+  answers with the same line; on a model with many logical switches and mixer lines this takes
+  a second or two. The tool started from the radio's tool menu reads everything when the page
+  opens, as before.
 
 ## Related
 

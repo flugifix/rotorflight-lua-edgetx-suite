@@ -45,6 +45,7 @@ local Common = nil
 local Controls = nil
 local Setup = nil
 local ConfirmDialog = nil
+local Env = nil
 
 local M = {}
 
@@ -93,6 +94,21 @@ local function ensureDeps()
   if not t then
     t = Common.pageT("settings_dashboard_inflight")
   end
+  if Env == nil then
+    Env = loadModule("lib/env.lua")
+  end
+end
+
+--- True while the page runs inside the dashboard widget's call: the tool opened from the
+-- dashboard (see lib/env.lua).
+--
+-- That call is stopped at the widget's instruction limit, and the two model walks below do not
+-- fit in it beside the page's own build on a model with many logical switches or many mixer lines.
+-- There they are taken a slice per pass in M.wakeup, the way the dashboard's overlay takes the
+-- switch walk (inflight/drive.lua, ensureTrims). The standalone tool has no such limit, and its
+-- page wakeup is not called while the model is armed, so it keeps the whole walk in the build.
+local function inWidgetCall()
+  return type(Env) == "table" and Env.isWidget() == true
 end
 
 -- The radio's preferences, as the page context carries them. It is that table and no other: the
@@ -120,9 +136,13 @@ local function ensureLoaded(prefs)
   ui.checkDone = false
   ui.checkResult = nil
   ui.trimNames = nil
+  ui.trimScan = nil
   ui.gvarWalkDone = false
+  ui.gvarWalk = nil
+  ui.gvarWalkWanted = false
   ui.gvarConflicts = nil
   ui.gvarNamesDone = false
+  ui.gvarNamesWanted = false
   ui.gvarNames = nil
   ui.planNotice = nil
   ui.loaded = true
@@ -145,9 +165,16 @@ end
 -- an input line would move a control surface for a reason nobody could connect to it. It names the
 -- line, because a warning that says only "taken" sends the pilot through thirty-two channels.
 --
--- Runs once per visit, off the same latch as the check, and writes nothing.
+-- Runs once per visit, off the same latch as the check, and writes nothing. Inside the widget's
+-- call the build only asks for it and answers nil; M.wakeup walks the model and rebuilds the page
+-- when it has (see inWidgetCall), so `ui.gvarWalkDone` still false after this call means "being
+-- read".
 local function gvarConflicts()
   if ui.gvarWalkDone then return ui.gvarConflicts end
+  if inWidgetCall() then
+    ui.gvarWalkWanted = true
+    return nil
+  end
   ui.gvarWalkDone = true
   ui.gvarConflicts = Setup.gvarConflicts(radio(), ui.config)
   return ui.gvarConflicts
@@ -161,24 +188,83 @@ end
 -- terms as the check -- once per visit, and again only when one of the two variables is changed.
 local function gvarNameClashes()
   if not ui.gvarNamesDone then
+    -- Inside the widget's call M.wakeup reads them, in a pass of their own; see gvarConflicts.
+    if inWidgetCall() then
+      ui.gvarNamesWanted = true
+      return nil
+    end
     ui.gvarNamesDone = true
     ui.gvarNames = Setup.gvarNameClashes(radio(), ui.config)
   end
   return ui.gvarNames
 end
 
+--- The walked trim block is in: keep it, or `false` for a radio that reported none.
+local function trimsResolved(trims)
+  ui.trimNames = trims or false
+  -- A store written before the trims were picked with the radio's own picker holds semantic
+  -- indices, 1..6; from here on they are switch positions. The walk is the first moment this
+  -- page can say what an old index meant, so the conversion happens here -- in the working copy
+  -- only. It reaches the card on the next save, which is what the pilot asked for: nothing is
+  -- rewritten behind him, and a page he opens and leaves changes nothing.
+  if ui.trimNames ~= false then Setup.migrateTrims(ui.config, ui.trimNames) end
+end
+
+--- True while the trim block is still being walked, a slice per pass (see inWidgetCall). Every
+-- reader of trimNames() asks this first: until the walk is through, a stored trim cannot be told
+-- from one this radio lacks, and nil would read as the second.
+local function trimsPending()
+  return ui.trimNames == nil and inWidgetCall()
+end
+
 local function trimNames()
   if ui.trimNames == nil then
-    ui.trimNames = Setup.resolveTrims(radio()) or false
-    -- A store written before the trims were picked with the radio's own picker holds semantic
-    -- indices, 1..6; from here on they are switch positions. The walk is the first moment this
-    -- page can say what an old index meant, so the conversion happens here -- in the working copy
-    -- only. It reaches the card on the next save, which is what the pilot asked for: nothing is
-    -- rewritten behind him, and a page he opens and leaves changes nothing.
-    if ui.trimNames ~= false then Setup.migrateTrims(ui.config, ui.trimNames) end
+    if inWidgetCall() then return nil end
+    trimsResolved(Setup.resolveTrims(radio()))
   end
   if ui.trimNames == false then return nil end
   return ui.trimNames
+end
+
+--- One slice of the switch walk, as the overlay's own drive takes it. Answers true on the pass
+-- that completes it.
+local function stepTrimWalk()
+  local scan = ui.trimScan
+  if scan == nil then
+    scan = { list = {}, from = nil }
+    ui.trimScan = scan
+  end
+  local slice, resumeAt = radio().switchList(scan.from, Setup.SWITCH_SLICE)
+  scan.from = resumeAt
+  if type(slice) == "table" then
+    for i = 1, #slice do
+      scan.list[#scan.list + 1] = slice[i]
+    end
+  end
+  if resumeAt ~= nil and #scan.list < Setup.SWITCH_WALK_LIMIT then return false end
+  ui.trimScan = nil
+  trimsResolved(Setup.trimsFromList(scan.list))
+  return true
+end
+
+--- One slice of the variable walk. Answers true on the pass that completes it.
+local function stepGvarWalk()
+  if ui.gvarWalk == nil then
+    ui.gvarWalk = Setup.newGvarWalk(radio())
+    -- No mixer readers on this radio: the walk cannot be made, which the whole walk reports as nil.
+    if ui.gvarWalk == nil then
+      ui.gvarConflicts = nil
+      ui.gvarWalkDone = true
+      ui.gvarWalkWanted = false
+      return true
+    end
+  end
+  if not Setup.gvarWalkStep(ui.gvarWalk, Setup.GVAR_WALK_SLICE) then return false end
+  ui.gvarConflicts = Setup.conflictsFromUsed(ui.gvarWalk.used, ui.config)
+  ui.gvarWalk = nil
+  ui.gvarWalkDone = true
+  ui.gvarWalkWanted = false
+  return true
 end
 
 --- One trim, chosen with the radio's own switch picker rather than from a list this page wrote.
@@ -228,6 +314,9 @@ end
 -- field's `set` puts it back. So a screen laid out again for any other reason -- a section opened,
 -- a dialog closed, a rebuild the form runtime asked for -- costs no model reads at all.
 local function checkResult()
+  -- Not latched while the trims are still being walked: a check made without them leaves the trim
+  -- faults out, and the latch would keep that answer for the whole visit.
+  if trimsPending() then return "reading" end
   if not ui.checkDone then
     ui.checkDone = true
     -- The resolved block goes with it: a trim setting is a switch POSITION now, and the trim-mode
@@ -242,6 +331,7 @@ end
 -- the same thing.
 local function describeCheck(i18n, result)
   if result == nil then return t(i18n, "check_unchecked", "Setup not checked") end
+  if result == "reading" then return t(i18n, "reading_radio", "Reading the radio...") end
   if result == "ok" then return t(i18n, "check_ok", "Setup OK") end
   if type(result) ~= "table" then return "" end
 
@@ -295,6 +385,12 @@ local function markValue(key, value)
   if key == "value_gvar" or key == "bank_gvar" then
     ui.gvarWalkDone = false
     ui.gvarNamesDone = false
+    -- Inside the widget's call the walk starts again only when a build asks for it. A number field
+    -- calls this on every click while its editor is open, and the rebuild a finished walk asks for
+    -- would close that editor under the pilot's thumb.
+    ui.gvarWalk = nil
+    ui.gvarWalkWanted = false
+    ui.gvarNamesWanted = false
   end
   ui.planNotice = nil
   ui.runtime.markValueChanged()
@@ -437,6 +533,12 @@ local function offerSetup(i18n)
   -- The resolved trim block goes with the settings, exactly as it does into the check: a stored trim
   -- is a switch POSITION, and the plan's trim half indexes the firmware's own trim-mode table by the
   -- semantic number behind it. Without it no trim fault the check raises could be fixed here.
+  -- So while the walk is still running there is no plan to offer yet.
+  if trimsPending() then
+    ui.planNotice = t(i18n, "reading_radio", "Reading the radio...")
+    ui.runtime.markDirty()
+    return
+  end
   local plan = Setup.plan(radio(), ui.config, trimNames())
   if type(plan) ~= "table" or plan.ok ~= true then
     ui.planNotice = refusalText(i18n, type(plan) == "table" and plan.refused or nil)
@@ -608,7 +710,10 @@ local function buildWiring(children, x, y, w, i18n)
   -- already spoken for rather than to choose a free pair. It is a warning and not a refusal: a
   -- pilot who knows what that line does may well want it.
   local conflicts = gvarConflicts()
-  if type(conflicts) == "table" and #conflicts > 0 then
+  local named = gvarNameClashes()
+  if not ui.gvarWalkDone or not ui.gvarNamesDone then
+    cursorY = cursorY + appendNote(children, x, cursorY, w, t(i18n, "reading_radio", "Reading the radio..."))
+  elseif type(conflicts) == "table" and #conflicts > 0 then
     local parts = {}
     for i = 1, #conflicts do
       parts[#parts + 1] = "GV" .. tostring(conflicts[i].index) .. " "
@@ -619,8 +724,7 @@ local function buildWiring(children, x, y, w, i18n)
 
   -- And the other trace a variable can carry: the name, on a variable this setup does not drive. A
   -- model set up once against a different pair shows two VALs and two BNKs on the radio's own pages,
-  -- and only one of each pair does anything.
-  local named = gvarNameClashes()
+  -- and only one of each pair does anything. Read above, beside the walk.
   if type(named) == "table" and #named > 0 then
     local parts = {}
     for i = 1, #named do
@@ -648,6 +752,13 @@ local function buildTrims(children, x, y, w, i18n)
     t(i18n, "trims", "Drive rows from the trims"),
     ui.runtime.getBoolGetter("trims"),
     ui.runtime.getBoolSetter("trims"))
+
+  -- No picker until the walk is through: normaliseTrim needs the block, and a trim picked before it
+  -- would be stored as off.
+  if trimsPending() then
+    cursorY = cursorY + appendNote(children, x, cursorY, w, t(i18n, "reading_radio", "Reading the radio..."))
+    return cursorY
+  end
 
   if trimNames() == nil then
     cursorY = cursorY + appendNote(children, x, cursorY, w,
@@ -709,6 +820,8 @@ function M.build(ctx)
   ensureDeps()
   ensureLoaded(ctx.preferences)
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
+  -- ui/home.lua builds before it calls the page's wakeup in the same pass; see M.wakeup.
+  ui.builtThisPass = true
 
   local children = ctx.children
   local x, w = ctx.x, ctx.w
@@ -729,16 +842,47 @@ function M.build(ctx)
   end
 end
 
+--- The model walks, a slice per pass, while the page runs inside the widget's call (see
+-- inWidgetCall). One walk at a time and one slice of it per pass; the trims first, because the
+-- check and the setup button wait on them. The pass that completes a walk asks for one rebuild,
+-- which is when the screen can say what the walk found.
+function M.wakeup(ctx)
+  if not ui.loaded or Setup == nil or not inWidgetCall() then return end
+  -- Never in the pass that built the page: the build is the most expensive thing that pass does,
+  -- and a slice beside it is what would take the pass over the limit. One pass later costs nothing.
+  if ui.builtThisPass then
+    ui.builtThisPass = false
+    return
+  end
+  local finished = false
+  if ui.trimNames == nil then
+    finished = stepTrimWalk()
+    -- The only notice the setup button can have left while the walk ran is the one saying so.
+    if finished then ui.planNotice = nil end
+  elseif ui.gvarWalkWanted and not ui.gvarWalkDone then
+    finished = stepGvarWalk()
+  elseif ui.gvarNamesWanted and not ui.gvarNamesDone then
+    ui.gvarNames = Setup.gvarNameClashes(radio(), ui.config)
+    ui.gvarNamesDone = true
+    ui.gvarNamesWanted = false
+    finished = true
+  end
+  if finished and ctx and type(ctx.requestRebuild) == "function" then ctx.requestRebuild() end
+end
+
 function M.onClose()
   Common.resetPageState(ui)
   ui.radio = nil
   ui.checkResult = nil
   ui.trimNames = nil
+  ui.trimScan = nil
+  ui.gvarWalk = nil
   ui.planNotice = nil
   Controls = nil
   Common = nil
   Setup = nil
   ConfirmDialog = nil
+  Env = nil
   t = nil
 end
 
