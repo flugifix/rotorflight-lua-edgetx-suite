@@ -813,6 +813,18 @@ local function gvarEdited()
   if ui.gvarWalkDone and ui.gvarNamesDone then ui.runtime.markDirty() end
 end
 
+--- The longest warning the line drawn while the variables are read can come to hold, spelled once
+-- per visit: two variables, each on a channel or an input.
+local function widestWarning(i18n)
+  if ui.widestWarning == nil then
+    ui.widestWarning = conflictsText(i18n, {
+      { index = Setup.GVAR_MAX_INDEX, where = "CH32" },
+      { index = Setup.GVAR_MAX_INDEX - 1, where = "CH32" }
+    })
+  end
+  return ui.widestWarning
+end
+
 --- The notes the wiring section draws whatever the model holds; see sectionHeldBack. The last two
 -- size the line drawn while the variables are read (appendGvarNote): what it says first, and the
 -- longest warning it can come to hold -- two variables, each on a channel or an input.
@@ -821,10 +833,7 @@ local function wiringNotes(i18n)
     t(i18n, "pulse_ms_note",
       "One press is one step. The board counts nothing before 100 ms of stillness and repeats only after 200 ms more."),
     t(i18n, "reading_radio", "Reading the radio..."),
-    conflictsText(i18n, {
-      { index = Setup.GVAR_MAX_INDEX, where = "CH32" },
-      { index = Setup.GVAR_MAX_INDEX - 1, where = "CH32" }
-    })
+    widestWarning(i18n)
 end
 
 --- The line drawn while the variables are read. Reached inside the widget's call only: the
@@ -1097,6 +1106,7 @@ function M.onClose()
   ui.gvarNote = nil
   ui.gvarEditOpen = false
   ui.gvarModelChanged = false
+  ui.widestWarning = nil
   ui.i18n = nil
   ui.planNotice = nil
   ui.noteLines = nil
