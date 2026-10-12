@@ -40,7 +40,14 @@ local CONFIG_SCHEMA = {
   -- Seconds the pack voltage has to stay below the warning line before the alert speaks. 0 is
   -- the behaviour this setting was added to, where the first sample under the line announces.
   { key = "voltage_hold",      type = "number", default = 2, min = 0, max = 10, section = "voltage" },
+  -- Millivolts per cell above the warning line that the pack has to come back to before the
+  -- alert counts as cleared, so the number means the same on every pack, as the line does.
+  { key = "voltage_reset",     type = "number", default = 100, min = 50, max = 500, section = "voltage" },
   { key = "main_power_lost",   type = "bool", default = false, section = "voltage" },
+  -- How every flight-pack voltage is spoken: 0 the pack's voltage, 1 the voltage per cell.
+  -- It covers the low-voltage alert, the main pack coming back and the pack check on connect;
+  -- not the BEC voltage spoken with Main Power Lost, which is not the flight pack's.
+  { key = "voltage_announce",  type = "number", default = 0, min = 0, max = 1, section = "voltage" },
   -- Whether an alert repeats and whether it buzzes belong to a CATEGORY rather than to one
   -- alert: this page is where the pilot switches its alerts on, so it is where they say how
   -- those alerts behave. A repeat of 0 is "for as long as the condition holds", which is what
@@ -138,11 +145,16 @@ local SECTIONS = {
       { key = "voltage_alert", labelKey = "voltage_alert", labelFallback = "Voltage" },
       { kind = "number", key = "voltage_hold", labelKey = "voltage_hold", labelFallback = "Hold (s)",
         suffix = " s", enabledBy = "voltage_alert" },
+      { kind = "number", key = "voltage_reset", labelKey = "voltage_reset", labelFallback = "Reset (mV/cell)",
+        suffix = " mV", step = 50, enabledBy = "voltage_alert" },
       -- Its own subheader, because it is not a threshold on the pack voltage above but a
       -- different event that happens to be read off the same sensor.
       { kind = "subheader", labelKey = "section_main_power", labelFallback = "Main Power" },
       { kind = "bool", key = "main_power_lost", labelKey = "main_power_lost", labelFallback = "Main Power Lost" },
       { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
+      -- No enabledBy: besides the alert above it governs the main pack coming back and the pack
+      -- check on connect, which do not depend on the Voltage switch.
+      { kind = "choice", key = "voltage_announce", labelKey = "voltage_announce", labelFallback = "Announce as" },
       { kind = "choice", key = "voltage_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
       { kind = "bool", key = "voltage_haptic", labelKey = "alert_haptic", labelFallback = "Haptic" },
     },
@@ -275,7 +287,9 @@ local ROW_HELP = {
     return {
       voltage_alert = t(i18n, "help_voltage_alert"),
       voltage_hold = t(i18n, "help_voltage_hold"),
+      voltage_reset = t(i18n, "help_voltage_reset"),
       main_power_lost = t(i18n, "help_main_power_lost"),
+      voltage_announce = t(i18n, "help_voltage_announce"),
       voltage_repeat = t(i18n, "help_voltage_repeat"),
       voltage_haptic = t(i18n, "help_voltage_haptic"),
     }
@@ -404,7 +418,9 @@ function M.new(sectionKey)
       fuelCalloutGet = nil,
       fuelCalloutSet = nil,
       fuelHapticGet = nil,
-      fuelHapticSet = nil
+      fuelHapticSet = nil,
+      announceGet = nil,
+      announceSet = nil
     }
   }
   ui.runtimeBase = nil
@@ -571,6 +587,36 @@ function M.new(sectionKey)
       end
     end
     return cache[key]
+  end
+
+  -- How a flight-pack voltage is spoken. Two values, so its own pair rather than the repeat
+  -- row's, which would let a hand-edited value outside them through.
+  local function getAnnounceOptions(i18n)
+    return {
+      { value = 0, label = t(i18n, "voltage_announce_pack", "Pack") },
+      { value = 1, label = t(i18n, "voltage_announce_cell", "Cell") },
+    }
+  end
+
+  local function getAnnounceGetter()
+    if ui.runtime.announceGet then return ui.runtime.announceGet end
+    ui.runtime.announceGet = function()
+      if tonumber(ui.config.voltage_announce) == 1 then return 1 end
+      return 0
+    end
+    return ui.runtime.announceGet
+  end
+
+  local function getAnnounceSetter()
+    if ui.runtime.announceSet then return ui.runtime.announceSet end
+    ui.runtime.announceSet = function(value)
+      local nextValue = (tonumber(value) == 1) and 1 or 0
+      if ui.config.voltage_announce ~= nextValue then
+        ui.config.voltage_announce = nextValue
+        ui.runtime.markDirty()
+      end
+    end
+    return ui.runtime.announceSet
   end
 
   local function getFuelHapticGetter()
@@ -842,6 +888,8 @@ function M.new(sectionKey)
         local options, selected, onSelect
         if k == "fuel_callout_percent" then
           options, selected, onSelect = getFuelCalloutOptions(i18n), getFuelCalloutGetter()(), getFuelCalloutSetter()
+        elseif k == "voltage_announce" then
+          options, selected, onSelect = getAnnounceOptions(i18n), getAnnounceGetter()(), getAnnounceSetter()
         else
           options, selected, onSelect = getRepeatOptions(i18n), getRepeatGetter(k)(), getRepeatSetter(k, item.enabledBy)
         end
@@ -869,6 +917,7 @@ function M.new(sectionKey)
             enabled = getNumberEnabled(item.enabledBy),
             min = minVal,
             max = maxVal,
+            step = item.step,
             suffix = item.suffix or "",
             display = display,
             get = getNumberGetter(k, minVal, maxVal),
