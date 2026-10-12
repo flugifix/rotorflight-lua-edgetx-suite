@@ -591,9 +591,10 @@ local function buildFlights(children, x, y, w, h, i18n)
   end
 end
 
--- The statistics columns a line may carry. Nothing in this suite fills them, so this is what a
--- file written by something else reads as. Every key is spelled out because the packager
--- resolves a literal key and leaves a computed one to reach the radio as a raw marker.
+-- The statistics columns a line may carry. The disarm task fills them from the flight record
+-- (tasks/events/ondisarm/tasks/flight_log.lua, flightStats), and a line from another writer may
+-- carry any of them. Every key is spelled out because the packager resolves a literal key and
+-- leaves a computed one to reach the radio as a raw marker.
 local function statLabels(i18n)
   return {
     mah = pageText(i18n, "stat_mah", "Consumed"),
@@ -835,7 +836,8 @@ local function buildBatteryForm(children, x, y, w, h, i18n)
     pageText(i18n, "battery_capacity", "Capacity"), {
       min = 0,
       max = 30000,
-      step = 100,
+      -- Any whole mAh, as on the Battery page: a pack is matched against the board's profile
+      -- capacities exactly, so a value this field could not hold could never match.
       suffix = " mAh",
       get = function() return math.floor(tonumber(edit.cap) or 0) end,
       set = function(value) edit.cap = math.floor(tonumber(value) or 0) end
