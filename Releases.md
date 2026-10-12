@@ -317,6 +317,7 @@
   - **Behaviour change:** *Pack Not Full* spoke the voltage per cell; with the default *Pack* it now speaks the pack voltage, like the other flight pack announcements. *Cell* gives the per-cell value it spoke before.
   - The cell count is resolved in one place for the line, the reset and the spoken value: the flight controller's configured count, or the detected one where the configuration says auto-detect.
   - The *Voltage* page's `?` is one line per setting, and the *Repeat* row's `?` says that the voltage alert is cleared once the pack is back above the line plus the reset.
+  - Every *Audio* → *Events* page now loads only its own settings when it is built, instead of walking the whole settings table three times. With the two new settings in that table every page's build would have grown, and two of them past their row in `bin/accounting/budgets.lua`; instead `bin/accounting/measure.lua` reports every other events page about 1 230 instructions cheaper to build and the *Voltage* page, with its two new rows, 201 dearer (5112 to 5313).
 
 ### Bug Fixes & Improvements
 - **ELRS to Rotorflight sync stops reading parameters during its write (`app/pages/tools/diagnostics/elrs_link/elrslink_task.lua`) (fixes #669)**: The state stayed `read` while the telemetry write was in flight, so late parameter replies re-ran finalize and queued duplicate writes. The state is now `write_rf` for the write, and the arming refusal covers it.

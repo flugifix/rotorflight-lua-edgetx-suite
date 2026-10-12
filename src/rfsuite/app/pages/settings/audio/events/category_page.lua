@@ -115,6 +115,20 @@ for i = 1, #CONFIG_SCHEMA do
   SCHEMA_BY_KEY[CONFIG_SCHEMA[i].key] = CONFIG_SCHEMA[i]
 end
 
+-- The schema split by the page that owns each entry, built once when this file is loaded. A
+-- page loads its settings while it is first built, and walking only its own entries keeps that
+-- build from paying for every setting another page adds to the schema.
+local SECTION_FIELDS = {}
+for i = 1, #CONFIG_SCHEMA do
+  local field = CONFIG_SCHEMA[i]
+  local fields = SECTION_FIELDS[field.section]
+  if not fields then
+    fields = {}
+    SECTION_FIELDS[field.section] = fields
+  end
+  fields[#fields + 1] = field
+end
+
 -- ─── Sections ────────────────────────────────────────────────────────────────
 -- One entry per page. An item with `requires` is drawn only while that switch is on: the
 -- per-state rows qualify the governor master switch, and ten greyed-out rows under a switch
@@ -437,6 +451,8 @@ function M.new(sectionKey)
     return field.section == sectionKey
   end
 
+  local ownFields = SECTION_FIELDS[sectionKey] or {}
+
   local function ensureDeps()
     if not Common then
       Common = loadModule("app/pages/settings/common.lua")
@@ -645,25 +661,23 @@ function M.new(sectionKey)
   local function copyFromPrefs(prefs)
     local audio_events = (prefs and prefs.audio_events) or {}
     local modelEvents = modelAudioEvents(false)
-    for _, field in ipairs(CONFIG_SCHEMA) do
-      if ownsField(field) then
-        local raw = audio_events[field.key]
-        if field.scope == "model" and modelEvents and modelEvents[field.key] ~= nil then
-          raw = modelEvents[field.key]
-        end
-        if field.type == "number" then
-          ui.config[field.key] = tonumber(raw) or field.default
-        else
-          ui.config[field.key] = prefBool(raw, field.default)
-        end
+    for _, field in ipairs(ownFields) do
+      local raw = audio_events[field.key]
+      if field.scope == "model" and modelEvents and modelEvents[field.key] ~= nil then
+        raw = modelEvents[field.key]
+      end
+      if field.type == "number" then
+        ui.config[field.key] = tonumber(raw) or field.default
+      else
+        ui.config[field.key] = prefBool(raw, field.default)
       end
     end
 
     -- A stored value outside the schema's range is brought back into it, so that the number
     -- on screen is one the control could have produced. The bounds are the schema's, which
     -- is the same pair the control below is built with.
-    for _, field in ipairs(CONFIG_SCHEMA) do
-      if ownsField(field) and field.type == "number" then
+    for _, field in ipairs(ownFields) do
+      if field.type == "number" then
         local value = ui.config[field.key]
         if field.min and value < field.min then value = field.min end
         if field.max and value > field.max then value = field.max end
@@ -674,10 +688,8 @@ function M.new(sectionKey)
 
     -- After the clamps, so that correcting an out-of-range stored value does not read as an
     -- edit the pilot made.
-    for _, field in ipairs(CONFIG_SCHEMA) do
-      if ownsField(field) then
-        loadedConfig[field.key] = ui.config[field.key]
-      end
+    for _, field in ipairs(ownFields) do
+      loadedConfig[field.key] = ui.config[field.key]
     end
   end
 
