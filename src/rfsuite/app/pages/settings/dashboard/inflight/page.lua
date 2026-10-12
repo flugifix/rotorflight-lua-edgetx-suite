@@ -33,7 +33,8 @@
 -- What it READS. The setup check walks the model's mixer lines, its variables and its trim modes.
 -- That walk runs ONCE per visit, and again only after a field has actually changed, latched on a
 -- flag the next build consumes. (Opened from the dashboard the variable walk is kept for the visit
--- instead and answers a changed variable without a read; see gvarConflicts.) It is not on a timer: a page that re-reads the model because a
+-- instead and answers a changed variable without a read, until Set up the model writes the model;
+-- see gvarConflicts and markValue.) It is not on a timer: a page that re-reads the model because a
 -- second has passed is a page that re-reads the model forever.
 
 local function loadModule(path)
@@ -207,7 +208,8 @@ end
 -- against a different pair keeps the names on the variables it used then, and a variable nothing
 -- refers to any more has no reference for a mixer walk to find. Nine detail reads, on the same
 -- terms as the check -- once per visit, and in the standalone tool again when one of the two
--- variables is changed (opened from the dashboard the names are kept; see below).
+-- variables is changed (opened from the dashboard the names are kept, until Set up the model
+-- writes the model; see below).
 local function gvarNameClashes()
   if not ui.gvarNamesDone then
     -- Inside the widget's call M.wakeup reads them, in a pass of their own; see gvarConflicts.
@@ -433,15 +435,17 @@ local function markValue(key, value)
     if hostedVisit() then
       -- Opened from the dashboard nothing is read again (unless the model was written since): the
       -- walk and the names kept for the visit answer for any pair (gvarConflicts, gvarNameClashes),
-      -- and a walk still running goes on. Nor
-      -- is the page built again from here: a number field calls this on every click while its editor
-      -- is open, and a rebuild closes that editor. The screen follows when the editor closes
-      -- (gvarEdited); until then the line drawn while the variables are read is updated in place.
-      -- EdgeTX calls this from its event handling, outside the widget's call, hence hostedVisit.
+      -- and a walk still running goes on. Nor is the page built again from here: a number field
+      -- calls this on every click while its editor is open, and a rebuild closes that editor. The
+      -- screen follows when the editor closes (gvarEdited); until then the line drawn while the
+      -- variables are read, if it is on screen, is updated in place. EdgeTX calls this from its
+      -- event handling, outside the widget's call, hence hostedVisit.
       if ui.gvarModelChanged then
-        -- The model was written since the walk (Set up the model): read it again, without a
-        -- rebuild while the editor is open, its answer arriving the same way as a first walk's.
+        -- The model was written since the walk (Set up the model): read it again from the start,
+        -- without a rebuild while the editor is open. The warning on screen is brought up to date
+        -- when the editor closes (gvarEdited), or at the page's next build.
         ui.gvarModelChanged = false
+        ui.gvarWalk = nil
         ui.gvarUsed = nil
         ui.gvarNameOf = nil
         ui.gvarWalkDone = false
