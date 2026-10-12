@@ -744,7 +744,10 @@ end
 -- with nothing behind it. Not before the editor closes: markValue runs on every click, and the
 -- rebuild a finished walk asks for would close the editor being clicked. EdgeTX calls this from its
 -- event handling, outside the widget's call, hence hostedVisit. The standalone tool walks in the
--- build, so there the warning is brought up to date by the next build, as before.
+-- build, so there the warning is brought up to date by the next build, as before. EdgeTX does not
+-- call this when an encoder edit ends because another control took the focus (NumberArea's focus
+-- handler leaves edit mode without changeEnd), nor before 2.11.5 / 2.12.0; there the walk starts
+-- again with the next build.
 local function gvarEdited()
   if not hostedVisit() then return end
   if ui.gvarWalkDone and ui.gvarNamesDone then return end
