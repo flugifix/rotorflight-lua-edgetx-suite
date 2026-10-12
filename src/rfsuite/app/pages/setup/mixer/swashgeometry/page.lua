@@ -330,7 +330,8 @@ local function triggerLiveWrite()
   -- queued while a chain was still running would otherwise land between its links, and the
   -- rest of the trial would reach the board after it. The acknowledgements leave the page
   -- dirty: the values are in the board's RAM only, and they stay a trial until Save writes them
-  -- to EEPROM. A write that is given up is sent again on the next pass.
+  -- to EEPROM. A write that went unanswered or was dropped is sent again on the next pass; one
+  -- the board refused is not repeated until the value changes.
   local writes = {
     { MixerConfigApi.writeCommand, mixerCfgPayload },
     { MixerInputPitchApi.writeCommand, pitchPayload },
@@ -343,7 +344,7 @@ local function triggerLiveWrite()
       payload = writes[i][2],
       isWrite = true,
       processReply = function() end,
-      errorHandler = function() ui.liveConfig = nil end
+      errorHandler = function(_, reason) if reason ~= "refused" then ui.liveConfig = nil end end
     })
   end
 end

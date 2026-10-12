@@ -207,13 +207,14 @@ local function triggerLiveWrite()
   local mixerCfgPayload = MixerConfigApi.buildWritePayload(ui.apiData.MIXER_CONFIG)
 
   -- The acknowledgement leaves the page dirty: the value is in the board's RAM only, and it stays
-  -- a trial until Save writes it to EEPROM. A write that is given up is sent again on the next pass.
+  -- a trial until Save writes it to EEPROM. A write that went unanswered or was dropped is sent
+  -- again on the next pass; one the board refused is not repeated until the value changes.
   queue:add({
     command = MixerConfigApi.writeCommand,
     payload = mixerCfgPayload,
     isWrite = true,
     processReply = function() end,
-    errorHandler = function() ui.liveConfig = nil end
+    errorHandler = function(_, reason) if reason ~= "refused" then ui.liveConfig = nil end end
   })
   ui.liveSent = true
   ui.liveConfig = copyFlat(ui.config)
