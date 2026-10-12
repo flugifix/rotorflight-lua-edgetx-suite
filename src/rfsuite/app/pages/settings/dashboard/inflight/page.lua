@@ -111,6 +111,14 @@ local function inWidgetCall()
   return type(Env) == "table" and Env.isWidget() == true
 end
 
+--- The same answer for a reader that can run from a control's callback. EdgeTX calls a press or a
+-- set function from its own event handling, outside the widget's call, so inWidgetCall answers false
+-- there even in the tool opened from the dashboard; the build always runs inside that call, and
+-- what it found holds for the visit.
+local function hostedVisit()
+  return ui.hosted == true
+end
+
 -- The radio's preferences, as the page context carries them. It is that table and no other: the
 -- suite's writer puts down the one the context holds, so a section written anywhere else is
 -- written into a copy nobody saves. Answers an empty table rather than nil so that a first visit
@@ -213,14 +221,15 @@ end
 
 --- True while the trim block is still being walked, a slice per pass (see inWidgetCall). Every
 -- reader of trimNames() asks this first: until the walk is through, a stored trim cannot be told
--- from one this radio lacks, and nil would read as the second.
+-- from one this radio lacks, and nil would read as the second. The setup button reads it from its
+-- press, hence hostedVisit.
 local function trimsPending()
-  return ui.trimNames == nil and inWidgetCall()
+  return ui.trimNames == nil and hostedVisit()
 end
 
 local function trimNames()
   if ui.trimNames == nil then
-    if inWidgetCall() then return nil end
+    if hostedVisit() then return nil end
     trimsResolved(Setup.resolveTrims(radio()))
   end
   if ui.trimNames == false then return nil end
@@ -905,6 +914,7 @@ function M.build(ctx)
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
   -- ui/home.lua builds before it calls the page's wakeup in the same pass; see M.wakeup.
   ui.builtThisPass = true
+  ui.hosted = inWidgetCall()
 
   local children = ctx.children
   local x, w = ctx.x, ctx.w
@@ -972,6 +982,7 @@ function M.onClose()
   ui.noteLines = nil
   ui.noteW = nil
   ui.buildW = nil
+  ui.hosted = nil
   ui.notesWanted = false
   Controls = nil
   Common = nil
