@@ -191,6 +191,9 @@ end
 
 local function finish(status, extra)
   if not S.run then return end
+  -- A run whose screen went away before it could be dismissed (dismissWhenStored) ends as a
+  -- dismissed one, a failure before the EEPROM commit included: it is held for its page.
+  if S.run.dismissRequested == true then S.run.dismissed = true end
   local result = {
     status = status,
     saved = S.run.saved == true,
@@ -361,6 +364,7 @@ end
 
 local function afterCommit()
   S.run.saved = true
+  if S.run.dismissRequested == true then S.run.dismissed = true end
   if type(S.run.desc.onSaved) == "function" then
     -- Read before the call: the callback runs while S.run is still live and may end the run.
     local pageId = S.run.desc.pageId
@@ -606,6 +610,30 @@ function M.dismiss()
   if not S.run or S.run.saved ~= true then return false end
   S.run.dismissed = true
   return true
+end
+
+--- The screen showing a save that holds the page goes away without the press that would dismiss it:
+-- the tool opened from the dashboard closes when fullscreen is left or the model arms, and it cannot
+-- refuse to. Such a run is dismissed as Back dismisses it -- at once if its settings are stored, else
+-- the moment the EEPROM commit is acknowledged -- and one that ends before that is held for its page
+-- all the same, so its outcome is reported where Back's would be: when that page is entered again.
+-- A run that does not hold the page (no restart) is left alone, as Back leaves it.
+function M.dismissWhenStored()
+  if not M.blocksNavigation() then return false end
+  if S.run.saved == true then
+    S.run.dismissed = true
+  else
+    S.run.dismissRequested = true
+  end
+  return true
+end
+
+--- The screen comes back before a dismissal asked for by dismissWhenStored could be applied (the
+-- tool is opened again during the writes or the EEPROM commit): the request is withdrawn, so the
+-- run reports in the notice on that screen, a failure included, instead of being held for its page.
+-- A run that is already dismissed stays dismissed, as after Back.
+function M.reclaim()
+  if S.run and S.run.dismissed ~= true then S.run.dismissRequested = nil end
 end
 
 --- Whoever is on screen renders this; the pipeline draws nothing itself.
