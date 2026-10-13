@@ -632,8 +632,10 @@ local function offerSetup(i18n)
     -- The verdict on the screen was reached about the model as it was; the model has just changed.
     ui.checkDone = false
     -- So were the variable walk and the names kept for the visit (gvarConflicts): the next change
-    -- of a variable reads the model again, as the standalone tool does (markValue).
+    -- of a variable reads the model again, as the standalone tool does (markValue). A walk still
+    -- running has read part of the model as it was, so it starts again from the first channel.
     ui.gvarModelChanged = true
+    if hostedVisit() and not ui.gvarWalkDone then ui.gvarWalk = nil end
     if report.failed > 0 then
       ui.planNotice = string.format("%s (%d/%d)",
         t(i18n, "plan_failed", "The radio refused part of the setup"),

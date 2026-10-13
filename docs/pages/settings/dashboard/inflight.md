@@ -100,14 +100,15 @@ the pilot's business.
   a second or two. *Channels and variables* and *Rows and trims*, when open, draw their header
   at once and the rows under it a frame or two later, once their notes have been laid out. A
   variable changed there is not read again (until *Set up the model* has written the model; see
-  below): the page keeps what it found for every variable,
-  and shows the warning for the new one when its field is closed with Enter, Return or the
-  on-screen keypad (on EdgeTX 2.11.5, 2.12.0 and later). Changed while the page is still
-  reading, the warning takes the place of *Reading the radio...* as soon as the reading is
-  through. A field left by touching another control, or an older firmware, has the warnings
-  (the variable's use and the variable names) brought up to date the next time the page is
-  laid out. After *Set up the model* the next change of a variable reads the model again. The
-  tool started from the radio's tool menu reads everything when the page opens, as before.
+  below): the page keeps what it found for every variable, and shows the warning for the new
+  one when its field is closed with Enter, Return or the on-screen keypad (on EdgeTX 2.11.5,
+  2.12.0 and later). Changed while the page is still reading, the warning takes the place of
+  *Reading the radio...* as soon as the reading is through. A field left by touching another
+  control, or an older firmware, has the warnings (the variable's use and the variable names)
+  brought up to date the next time the page is laid out. After *Set up the model* the next
+  change of a variable reads the model again, and a reading of the mixer and input lines still
+  running when the model is written starts over. The tool started from the radio's tool menu
+  reads everything when the page opens, as before.
 
 ## Related
 
