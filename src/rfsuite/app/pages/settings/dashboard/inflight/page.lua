@@ -1065,6 +1065,8 @@ function M.wakeup(ctx)
   if not ui.loaded or Setup == nil or not inWidgetCall() then return end
   -- Never in the pass that built the page: the build is the most expensive thing that pass does,
   -- and a slice beside it is what would take the pass over the limit. One pass later costs nothing.
+  -- This relies on builds being event-driven: a page rebuilt on every pass would never take a
+  -- slice, and would show its reading notice for as long as it stays open.
   if ui.builtThisPass then
     ui.builtThisPass = false
     return
@@ -1102,10 +1104,17 @@ function M.onClose()
   ui.trimNames = nil
   ui.trimScan = nil
   ui.gvarWalk = nil
+  ui.gvarWalkDone = false
+  ui.gvarWalkWanted = false
+  ui.gvarConflicts = nil
   ui.gvarUsed = nil
+  ui.gvarNamesDone = false
+  ui.gvarNamesWanted = false
+  ui.gvarNames = nil
   ui.gvarNameOf = nil
   ui.gvarNote = nil
   ui.gvarEditOpen = false
+  ui.builtThisPass = false
   ui.gvarModelChanged = false
   ui.widestWarning = nil
   ui.i18n = nil
