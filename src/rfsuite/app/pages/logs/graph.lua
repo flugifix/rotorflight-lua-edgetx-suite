@@ -144,7 +144,8 @@ end
 resetState()
 
 -- Hands bytes s..e of str to onLine as one line, without its trailing carriage return, if
--- the line is neither empty nor longer than a telemetry row can be.
+-- the line is neither empty nor longer than a telemetry row can be. pumpLines carries a copy of
+-- this written out for the rows inside a chunk; a change to either rule goes into both.
 local function feedLine(onLine, str, s, e, off)
   if e >= s and string.byte(str, e) == 13 then e = e - 1 end
   local n = e - s + 1
