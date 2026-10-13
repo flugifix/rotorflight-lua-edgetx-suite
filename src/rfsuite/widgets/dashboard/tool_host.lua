@@ -172,16 +172,28 @@ end
 -- again. The close takes the screen away without that press, so it dismisses the save the same way
 -- (tasks/msp/save_pipeline.lua, dismissWhenStored), and the dashboard drives it to its end
 -- (driveLeftSave in widgets/dashboard/runtime.lua). A save that does not restart the flight
--- controller is left as Back leaves it, and so is an outcome already on screen. Asked when the close
--- starts, since a reply can end the save during the closing sequence, and again in finish for the
--- ways out that skip that sequence.
-local function leaveSave()
+-- controller is left as Back leaves it, and so is an outcome already on screen. Asked when a close
+-- this host starts begins (fullscreen left, the model armed), since a reply can end the save during
+-- the closing sequence, and again in finish for every way out, the pilot's own close and those that
+-- skip that sequence included.
+local function toSavePipeline(name)
   local pipeline = _G.rfsuite and _G.rfsuite.tasks and _G.rfsuite.tasks.savePipeline
   if type(pipeline) ~= "table" or pipeline.run == nil then return end
   local SavePipeline = requireModule("tasks/msp/save_pipeline.lua")
-  if type(SavePipeline) == "table" and type(SavePipeline.dismissWhenStored) == "function" then
-    pcall(SavePipeline.dismissWhenStored)
+  if type(SavePipeline) == "table" and type(SavePipeline[name]) == "function" then
+    pcall(SavePipeline[name])
   end
+end
+
+local function leaveSave()
+  toSavePipeline("dismissWhenStored")
+end
+
+-- The tool opened again while such a dismissal still waits for the EEPROM commit shows the run
+-- once more, so the request is withdrawn (reclaim) before the tool's first build: the save then
+-- reports on this screen, as it would have had the tool never closed.
+local function reclaimSave()
+  toSavePipeline("reclaim")
 end
 
 -- Hand the screen and the globals back to the dashboard. Safe to run in any phase.
@@ -306,6 +318,7 @@ local function loadStep(widget, host)
 end
 
 local function initStep(widget, host)
+  reclaimSave()
   local ok, err = callInWidgetContext(host.home.init, { hosted = true, landing = host.landing })
   if not ok then return stopped(widget, host, err, "init") end
   host.phase = "run"

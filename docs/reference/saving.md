@@ -159,7 +159,9 @@ is dismissed -- at once if the flight controller has confirmed the settings are 
 the moment it does -- and finishes without a screen. The dashboard carries it on: it waits for the
 board to answer, runs the connection steps again for the restarted board, and reads the clock as
 above. Its outcome is shown the next time that page is opened, a save that failed before the
-settings were stored included. A save that does not restart the flight controller is not dismissed,
+settings were stored included. If the tool is opened again before the flight controller has
+confirmed the settings, the save is shown there once more and reports there, as if the tool had
+never closed. A save that does not restart the flight controller is not dismissed,
 as Back does not dismiss it: a success clears itself, and a failure is shown when the tool is opened
 again, as is a notice that was still standing when the tool closed. Before, the save stopped waiting
 when the tool closed: the connection steps were not run again after the restart, and the next open
