@@ -2398,6 +2398,7 @@ return {
         row_6 = "Row 6",
         check_ok = "Setup OK",
         check_unchecked = "Setup not checked",
+        reading_radio = "Reading the radio...",
         check_unset = "Switch or variables not set",
         check_mix = "Mixer line missing or wrong",
         check_gvar = "Variable range or precision",

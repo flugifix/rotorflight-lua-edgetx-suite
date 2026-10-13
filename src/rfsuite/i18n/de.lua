@@ -2426,6 +2426,7 @@ return {
         row_6 = "Reihe 6",
         check_ok = "Setup in Ordnung",
         check_unchecked = "Setup nicht geprüft",
+        reading_radio = "Funkgerät wird gelesen ...",
         check_unset = "Schalter oder Variablen nicht gesetzt",
         check_mix = "Mischerzeile fehlt oder ist falsch",
         check_gvar = "Variablenbereich oder Nachkommastelle",
