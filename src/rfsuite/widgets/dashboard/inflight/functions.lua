@@ -789,17 +789,6 @@ function M.compareStep(work, budget)
   }
 end
 
---- The same comparison, run whole. For a caller that is not on a widget pass.
-function M.compare(records, map, bankChannel, valueChannel, steps)
-  local work = M.newComparison(records, map, bankChannel, valueChannel, steps)
-  if work == nil then return nil end
-  local done, result
-  repeat
-    done, result = M.compareStep(work)
-  until done
-  return result
-end
-
 --- The same verdict from the FUNCTION IDS alone, which is one reply rather than one per slot.
 --
 -- MSP_GET_ADJUSTMENT_FUNCTION_IDS answers every slot's function in a single forty-two byte reply,
@@ -843,7 +832,7 @@ function M.compareFunctionIds(ids, map, bankChannel, valueChannel)
     differ = differ,
     count = empty + differ,
     slots = list,
-    -- The flag that keeps this verdict from being read as the one M.compare makes. A board whose
+    -- The flag that keeps this verdict from being read as the one M.compareStep makes. A board whose
     -- every slot names the right function can still have every window wrong, and this comparison
     -- would call it a match.
     idsOnly = true
