@@ -161,7 +161,10 @@ board to answer, runs the connection steps again for the restarted board, and re
 above. Its outcome is shown the next time that page is opened, a save that failed before the
 settings were stored included. If the tool is opened again before the flight controller has
 confirmed the settings, the save's notice is shown again on whatever the tool opens on, and the
-outcome is reported in that notice instead of being held for the page. A save that does not restart
+outcome is reported in that notice instead of being held for the page. Once the settings are
+confirmed that is no longer so: a tool opened again while the board restarts or is being waited for
+shows no notice for the save, and its outcome is shown when the page is opened again, as after Back.
+A save that does not restart
 the flight controller is not dismissed, as Back does not dismiss it: a success clears itself, and a
 failure is shown when the tool is opened again, as is a notice that was still standing when the tool
 closed. Before, the save stopped waiting when the tool closed: the connection steps were not run
