@@ -169,8 +169,8 @@ end
 --
 -- For the same reason a chunk read from the card becomes the buffer as it is: only the one
 -- line it completes is joined to the unfinished line before it, and that line is fed with the
--- refill and counted as an iteration of its own, as it was when it was fed from the joined
--- buffer.
+-- refill and counted as an iteration of its own; a refill in a call's last iteration still feeds
+-- it, one iteration over maxIters, where the joined buffer left it to the next call.
 local function pumpLines(onLine, maxIters)
   local n = maxIters
   while n > 0 do
