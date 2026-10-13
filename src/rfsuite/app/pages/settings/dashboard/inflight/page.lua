@@ -828,8 +828,7 @@ local function widestWarning(i18n)
 end
 
 --- The notes the wiring section draws whatever the model holds; see sectionHeldBack. The last two
--- size the line drawn while the variables are read (appendGvarNote): what it says first, and the
--- longest warning it can come to hold -- two variables, each on a channel or an input.
+-- size the line drawn while the variables are read (appendGvarNote).
 local function wiringNotes(i18n)
   return t(i18n, "wiring_note", "One mixer line per channel: MAX at the named variable's weight, added, no switch."),
     t(i18n, "pulse_ms_note",
