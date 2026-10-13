@@ -191,7 +191,8 @@ end
 
 -- The tool opened again while such a dismissal still waits for the EEPROM commit shows the run
 -- once more, so the request is withdrawn (reclaim) before the tool's first build: the save then
--- reports on this screen, as it would have had the tool never closed.
+-- reports in the notice on this screen, whatever page the tool opens on, instead of being held for
+-- its page.
 local function reclaimSave()
   toSavePipeline("reclaim")
 end

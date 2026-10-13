@@ -387,8 +387,8 @@ local EventsRuntime = requireModule("tasks/events/runtime.lua")
 -- and the module is loaded only when there is something to drive. While the tool is open this
 -- widget does not reach it: the tool runs in place of the widget's pass and drives the save itself.
 -- A second dashboard on another screen page still does, from its background pass, and that is
--- harmless: every phase of wakeup() waits on a reply or a deadline, so a second call in the same
--- pass finds nothing new to do.
+-- harmless: every phase of wakeup() advances on a reply, a deadline or a one-time transition, so a
+-- call from a second instance soon after the tool's own finds nothing new to do.
 local SavePipeline = nil
 
 local function driveLeftSave()

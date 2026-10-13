@@ -630,8 +630,8 @@ end
 
 --- The screen comes back before a dismissal asked for by dismissWhenStored could be applied (the
 -- tool is opened again during the writes or the EEPROM commit): the request is withdrawn, so the
--- run reports on that screen, a failure included, as if the screen had never gone away. A run that
--- is already dismissed stays dismissed, as after Back.
+-- run reports in the notice on that screen, a failure included, instead of being held for its page.
+-- A run that is already dismissed stays dismissed, as after Back.
 function M.reclaim()
   if S.run and S.run.dismissed ~= true then S.run.dismissRequested = nil end
 end
