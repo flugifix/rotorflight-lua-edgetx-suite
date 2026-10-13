@@ -153,6 +153,19 @@ restart could not be confirmed. Power it off and on before flying.* and stays up
 The settings are stored either way. A board that does not answer again within 20 seconds is
 reported as *The flight controller has not come back yet*, as before.
 
+The tool opened from the dashboard closes when full screen is left or the model arms, and it can
+do so while such a save is still under way. The close does what Back does on that notice: the save
+is dismissed -- at once if the flight controller has confirmed the settings are stored, otherwise
+the moment it does -- and finishes without a screen. The dashboard carries it on: it waits for the
+board to answer, runs the connection steps again for the restarted board, and reads the clock as
+above. Its outcome is shown the next time that page is opened, a save that failed before the
+settings were stored included. A save that does not restart the flight controller is not dismissed,
+as Back does not dismiss it: a success clears itself, and a failure is shown when the tool is opened
+again, as is a notice that was still standing when the tool closed. Before, the save stopped waiting
+when the tool closed: the connection steps were not run again after the restart, and the next open
+of the tool reported a board that had come back long before as *The flight controller has not come
+back yet*.
+
 ## When a different flight controller answers
 
 Adjustments, Beepers, Blackbox, Failsafe and Stats under Setup > Controls, the four Governor pages,

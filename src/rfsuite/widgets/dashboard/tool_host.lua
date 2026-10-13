@@ -40,7 +40,10 @@
 -- the top of its menu, the model arming, and fullscreen being left. Arming closes it because
 -- while it is open it runs in place of the dashboard's pass, and the dashboard's pass is what
 -- makes the callouts. A widget sent to the background cannot paint and is dropped at once; its
--- pages are still released on the way out (see finish).
+-- pages are still released on the way out (see finish). A save the tool started is not ended by
+-- the close: one that restarts the flight controller is dismissed as Back dismisses it (see
+-- leaveSave), and the dashboard drives it on to its end (driveLeftSave in
+-- widgets/dashboard/runtime.lua).
 --
 -- Loaded on the first press that opens the tool, never on a pass that does not.
 
@@ -164,6 +167,23 @@ local function dropToolModules()
   end
 end
 
+-- A save that restarts the flight controller holds the page, and Back on it dismisses it once the
+-- settings are stored: the save then finishes without a screen and reports when its page is entered
+-- again. The close takes the screen away without that press, so it dismisses the save the same way
+-- (tasks/msp/save_pipeline.lua, dismissWhenStored), and the dashboard drives it to its end
+-- (driveLeftSave in widgets/dashboard/runtime.lua). A save that does not restart the flight
+-- controller is left as Back leaves it, and so is an outcome already on screen. Asked when the close
+-- starts, since a reply can end the save during the closing sequence, and again in finish for the
+-- ways out that skip that sequence.
+local function leaveSave()
+  local pipeline = _G.rfsuite and _G.rfsuite.tasks and _G.rfsuite.tasks.savePipeline
+  if type(pipeline) ~= "table" or pipeline.run == nil then return end
+  local SavePipeline = requireModule("tasks/msp/save_pipeline.lua")
+  if type(SavePipeline) == "table" and type(SavePipeline.dismissWhenStored) == "function" then
+    pcall(SavePipeline.dismissWhenStored)
+  end
+end
+
 -- Hand the screen and the globals back to the dashboard. Safe to run in any phase.
 local function finish(widget, reason)
   local host = widget._toolHost
@@ -180,6 +200,8 @@ local function finish(widget, reason)
   if type(home) == "table" and type(home.releasePages) == "function" then
     callInWidgetContext(home.releasePages)
   end
+
+  leaveSave()
 
   removeLoader(host)
 
@@ -297,6 +319,7 @@ local function runStep(widget, host, event, touchState)
   -- closing sequence takes it down over the passes that follow, writes included.
   if not host.closing and (event == nil or modelArmed()) then
     host.closing = true
+    leaveSave()
     if type(home.requestClose) == "function" then pcall(home.requestClose) end
   end
   local ok, result = callInWidgetContext(home.run, event, touchState)

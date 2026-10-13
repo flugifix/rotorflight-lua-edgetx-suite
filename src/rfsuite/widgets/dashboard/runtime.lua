@@ -373,6 +373,38 @@ end
 
 local EventsRuntime = requireModule("tasks/events/runtime.lua")
 
+-- A save started in the tool opened from this widget (widgets/dashboard/tool_host.lua) outlives
+-- the tool. Its messages are filed under the save's own client, which the tool's close leaves on
+-- the queue, so the replies keep advancing it on this widget's MSP tick: the writes, the EEPROM
+-- commit, the restart. The phases that wait on time instead -- the wait for a restarted flight
+-- controller to answer, the bound on the connect chain run after it, the short linger of a
+-- successful outcome -- advance only in SavePipeline.wakeup(), which the tool calls while it runs
+-- and which nothing called once it was closed. A restart under way when fullscreen was left then
+-- stayed in its probe phase, the connect chain was never run again for the restarted board, and
+-- the next open of the tool reported a board that had not come back.
+--
+-- The run is shared through the global table (tasks/msp/save_pipeline.lua), so the test is a read,
+-- and the module is loaded only when there is something to drive. While the tool is open this is
+-- not reached: the tool runs in place of the widget's pass and drives the save itself.
+local SavePipeline = nil
+
+local function driveLeftSave()
+  local tasks = _G.rfsuite and _G.rfsuite.tasks
+  local shared = tasks and tasks.savePipeline
+  if type(shared) ~= "table" then return end
+  -- A successful outcome that clears itself is driven too: left standing, it would be drawn by the
+  -- tool's first build at its next open, before the tool's own wakeup could clear it.
+  if shared.run == nil and not (type(shared.outcome) == "table" and shared.outcome.clearAt) then
+    return
+  end
+  if not SavePipeline then
+    SavePipeline = requireModule("tasks/msp/save_pipeline.lua")
+  end
+  if type(SavePipeline) == "table" and type(SavePipeline.wakeup) == "function" then
+    pcall(SavePipeline.wakeup)
+  end
+end
+
 -- Both widgets run in one Lua state and share the one ring in it, so exactly one of them may
 -- write it out -- two writers would append to the same file from two places and interleave.
 -- widgets/service/runtime.lua is the better owner, because its background() runs while it is off
@@ -415,6 +447,10 @@ local function tickMspRuntime(self, carry)
 
   MspRuntime.tick()
   
+  -- Ahead of the event runner, so a connect chain it asks for again starts on this pass, and of
+  -- the pump below, so a probe it queues goes out on this pass too.
+  driveLeftSave()
+
   if EventsRuntime and type(EventsRuntime.wakeup) == "function" then
     pcall(EventsRuntime.wakeup, carry)
   end
