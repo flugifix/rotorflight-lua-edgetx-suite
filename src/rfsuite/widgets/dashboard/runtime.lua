@@ -2935,6 +2935,16 @@ local function readTelemetry(state, audioState)
     end
   end
 
+  -- Whether the pack the model came up with was full: judged once per connection by lib/audio.lua's
+  -- *Pack Not Full* check, which takes it whether or not that announcement is switched on, and only
+  -- READ here, from the audio state that latches it, to publish it for a theme the way
+  -- `mainPowerLost` is published above. Not judged here: this read runs from the first pass of a
+  -- connection, while the voltage it has can still be the previous pack's. Nil until judged, so a theme
+  -- reading it with `== true` draws exactly what it drew before the verdict existed.
+  if DashboardAudio and type(DashboardAudio.packVerdict) == "function" then
+    state.packNotFull = DashboardAudio.packVerdict(audioState)
+  end
+
   if type(armState) == "number" then
     -- STICKY, and cleared only on the reconnect edge below. `armed` starting false is
     -- indistinguishable from `armed` never having been read at all -- a model whose telemetry
@@ -3159,6 +3169,9 @@ function Runtime.new(zone, options)
       -- published here so a theme can draw it. False rather than nil before the first read: a
       -- theme asking the question before any telemetry has arrived is not being told yes.
       mainPowerLost = false,
+      -- The pack plugged in was not full: true, false once judged full, nil until judged. Decided
+      -- once per connection in lib/audio.lua and published by readTelemetry.
+      packNotFull = nil,
       lastFlightEndingVoltage = nil,
       lastFlightEndingCells = nil,
       lastDisarmAt = nil,
@@ -3715,6 +3728,7 @@ function Runtime.new(zone, options)
       self.state.batteryTelemetrySeen = false
       self.state.rfTelemetrySeen = false
       self.state.fuelTelemetrySeen = false
+      self.state.packNotFull = nil
       self.state.previousSessionFuel = self.state.fuel
       self.state.fuel = 0
       if Sensors and type(Sensors.reset) == "function" then
