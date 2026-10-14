@@ -175,8 +175,13 @@ local function setContextPage(ctx)
   end
 end
 
+-- Asked once per page module, not on every call: the build, a save and a reload all reach the
+-- theme through here, and opened from the dashboard the build runs under the widget's per-call
+-- instruction limit. The module is loaded afresh when the page opens, so a theme copied onto the
+-- card is found at the next open, and Reload clears the list to ask again.
 local function ensureThemes()
   ensureDeps()
+  if ui.themes ~= nil then return end
   ui.themes = DashboardLib.listThemes()
   ui.configurableThemes = DashboardLib.getConfigurableThemes(ui.themes)
 end
