@@ -39,7 +39,8 @@ when the local source under *Power* → *Preferences* is *VOLTAGE* or *COMBINED*
   settings were not saved and why — for example *the settings file could not be written to the
   SD card*.
 - With *OFF (LOCAL)* the radio computes the estimate itself, from the local source set under
-  *Power* → *Preferences*, and with the same three tuning values.
+  *Power* → *Preferences*. Its voltage estimate (local source *VOLTAGE*) uses the same three
+  tuning values.
 - The radio's own estimate takes the cell count configured on the flight controller's *Battery*
   page. Where that is 0 (auto-detect), it takes the count the flight controller detected when the
   pack was plugged in (sensor `Cel#`), and infers one from the pack voltage only where neither is
