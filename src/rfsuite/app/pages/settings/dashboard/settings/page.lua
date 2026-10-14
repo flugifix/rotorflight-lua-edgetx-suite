@@ -14,9 +14,9 @@ end
 -- upvalues, and running the file again is the only way to get a module that has read nothing, so
 -- the standard values and a model's overrides are never shown by the same copy.
 --
--- A failure is answered with its reason and is not cached: it can be a lack of memory (a theme's
--- module compiles its own copies of the files it needs, inside the dashboard's Lua state when the
--- tool runs from the dashboard), which the next open of the page may not meet again.
+-- A failure is answered with its reason and is not cached: opened from the dashboard, loading a
+-- theme's module runs under the widget's per-call instruction limit and can be stopped with
+-- "CPU limit", which the next open of the page may not meet again.
 local function loadThemeConfig(configurePath, scope)
   local cacheKey = configurePath .. "|" .. tostring(scope)
   local cached = loadedThemeConfigs[cacheKey]
