@@ -2704,6 +2704,7 @@ return {
         battery_id = "Id",
         battery_name = "Name",
         battery_capacity = "Capacity",
+        battery_cells = "Cells",
         battery_models = "Models",
         battery_profile = "Battery profile",
         battery_cycles = "Cycles",
@@ -2737,7 +2738,8 @@ return {
         help_p5 = "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone.",
         help_p6 = "The tab you are on is marked. Editing a pack takes the whole screen until Save or Cancel.",
         help_p7 = "With the prompt on, the dashboard offers this model's packs in fullscreen once after connecting.",
-        help_p8 = "A pick in the prompt can also set the flight controller's battery profile, never while armed."
+        help_p8 = "A pick in the prompt can also set the flight controller's battery profile, never while armed.",
+        help_p9 = "Cells: where the flight controller keeps a cell count per profile, it has to match it too; 0 leaves it out. A tie sets no profile."
       },
       logs = {
         title = "Logs",
