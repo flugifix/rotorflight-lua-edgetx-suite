@@ -100,7 +100,7 @@ return {
     -- frames were built at the firmware's widths, "every frame decoded" meant five entries of
     -- each. Measured after every frame of the cycle has been through once, so no sensor in the
     -- backlog is published for the first time.
-    ["pass.function"] = { target = 10050, measured = 8019, proposed = 7300 },
+    ["pass.function"] = { target = 10050, measured = 8016, proposed = 7300 },
     -- The in-flight tuning overlay, in three rows: the pass that drives it, the pass a reply of
     -- its ground half lands on, and the build of its screens.
     --
@@ -251,7 +251,7 @@ return {
     -- of smart.lua's module loads, which the warm-up used to leave in the measured call, and
     -- every frame of the cycle has been through once before it, so no sensor is published here
     -- for the first time.
-    ["unit.telemetry.drain"] = { target = 3850, measured = 3068, proposed = 3300 },
+    ["unit.telemetry.drain"] = { target = 3850, measured = 3065, proposed = 3300 },
     -- The same wakeup while the background function script is draining for the
     -- whole radio: the drain and the adjustment teller are skipped and SmartFuel
     -- is not, so what is left is what only this Lua state can compute. The gap to
