@@ -1305,15 +1305,39 @@ end
 -- tasks.lua loads at most one module per wakeup and RETURNS, so a fixed number of warm-up calls
 -- is a number that goes stale the moment another module joins that chain -- and the symptom is
 -- silent: the measured call returns on a load instead of draining, and the row reports the load.
--- Warm until a call actually consumes a frame, and fail where none ever does.
+-- A consumed frame is not the end of the chain either: smart.lua, once loaded, takes its own five
+-- modules one per wakeup, and those wakeups drain as well -- so a warm-up that stopped at the first
+-- consumed frame left one of smart.lua's loads in whichever call came next, the measured one.
+-- Warm until a call consumes a frame AND loads nothing, and fail where none ever does. The loads
+-- are counted by wrapping loadScript and rfsuite.require for the warm-up only: every loader on
+-- this chain looks both up when it calls them, so nothing keeps the wrapper afterwards.
 local function warmTelemetryBg(Events)
-  for _ = 1, 10 do
+  local loads = 0
+  local loadScriptWas, requireWas = _G.loadScript, _G.rfsuite.require
+  _G.loadScript = function(...)
+    loads = loads + 1
+    return loadScriptWas(...)
+  end
+  _G.rfsuite.require = function(...)
+    loads = loads + 1
+    return requireWas(...)
+  end
+  local warm = false
+  for _ = 1, 20 do
+    loads = 0
     Stubs.telemetryFrames = {}
     Stubs.pushFrame(0x88, buildTelemetryFrame(0, sensorIds))
     Events.wakeup()
-    if #Stubs.telemetryFrames == 0 then return end
+    if #Stubs.telemetryFrames == 0 and loads == 0 then
+      warm = true
+      break
+    end
   end
-  error("accounting: telemetry_bg never consumed a frame; the drain row would measure a load")
+  _G.loadScript, _G.rfsuite.require = loadScriptWas, requireWas
+  if not warm then
+    error("accounting: telemetry_bg never consumed a frame without loading a module; "
+      .. "the drain row would measure a load")
+  end
 end
 
 World.reset()
