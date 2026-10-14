@@ -14,9 +14,11 @@ end
 -- upvalues, and running the file again is the only way to get a module that has read nothing, so
 -- the standard values and a model's overrides are never shown by the same copy.
 --
--- A failure is answered with its reason and is not cached: opened from the dashboard, loading a
--- theme's module runs under the widget's per-call instruction limit and can be stopped with
--- "CPU limit", which the next open of the page may not meet again.
+-- A failure is answered with its reason and is not cached here. It is not tried again on every
+-- build: loadThemeModule keeps what a finished load gave -- the module, or an empty one with
+-- `ui.loadError` beside it -- in `ui.activeModule` and returns that while the theme, page and
+-- scope are unchanged, so a failing module is loaded and logged once per open of the page and
+-- once per Reload, which both clear it.
 local function loadThemeConfig(configurePath, scope)
   local cacheKey = configurePath .. "|" .. tostring(scope)
   local cached = loadedThemeConfigs[cacheKey]
@@ -47,6 +49,51 @@ local function logLoadFailure(path, reason)
   if okMod and type(Log) == "table" and type(Log.emit) == "function" then
     pcall(Log.emit, "rfsuite", "theme settings not loaded: " .. tostring(path) .. ": " .. tostring(reason), "error")
   end
+end
+
+-- EdgeTX does not wrap a label, and a load error carries the file's path and line ahead of the
+-- message, so the line naming it is cut to the row with "..." (as fitToWidth in
+-- app/pages/logs/page.lua cuts a file name). The log keeps the whole reason. The cut is kept for
+-- the text and width it was made for, so a build that draws the same line measures nothing.
+local ELLIPSIS = "..."
+local fitted = {}
+
+local function textWidth(text, font)
+  local fn = lcd and lcd.sizeText
+  if type(fn) == "function" then
+    local ok, w = pcall(fn, text, font)
+    w = tonumber(w)
+    if ok and w then return w end
+  end
+  return #text * 7
+end
+
+local function fitToRow(text, font, maxW)
+  if fitted.text == text and fitted.w == maxW then return fitted.out end
+  local out = text
+  if type(maxW) == "number" and maxW > 0 and textWidth(text, font) > maxW then
+    local room = maxW - textWidth(ELLIPSIS, font)
+    local best, lo, hi = 0, 0, #text - 1
+    while lo <= hi do
+      local mid = math.floor((lo + hi) / 2)
+      local n = mid
+      -- Never end on half a UTF-8 sequence.
+      while n > 0 do
+        local b = string.byte(text, n + 1)
+        if not b or b < 0x80 or b >= 0xC0 then break end
+        n = n - 1
+      end
+      if textWidth(string.sub(text, 1, n), font) <= room then
+        if n > best then best = n end
+        lo = mid + 1
+      else
+        hi = mid - 1
+      end
+    end
+    out = (string.gsub(string.sub(text, 1, best), "[%.%s:]+$", "")) .. ELLIPSIS
+  end
+  fitted.text, fitted.w, fitted.out = text, maxW, out
+  return out
 end
 
 local Common = nil
@@ -212,6 +259,10 @@ local function loadThemeModule(ctx)
     return nil
   end
 
+  -- The bound on a failing load (see loadThemeConfig). `ui.activeModule` is set only once the
+  -- load has finished, so a build stopped part-way through it -- at the instruction limit, which
+  -- ui/home.lua answers by building again on the next pass -- loads again rather than finding
+  -- a module that was never loaded.
   if ui.activeThemeConfigPath == path and ui.activePageId == pageId and ui.activeScope == scope
     and ui.activeModule ~= nil then
     setContextPage(ctx)
@@ -224,11 +275,12 @@ local function loadThemeModule(ctx)
   ui.activeScope = scope
   ui.activePage = findThemePage(theme, pageId)
   ui.activeTheme = theme
-  ui.activeModule = false
+  ui.activeModule = nil
   ui.loadError = nil
   setContextPage(ctx)
 
   if not theme or type(theme.configurePath) ~= "string" or theme.configurePath == "" then
+    ui.activeModule = false
     return nil
   end
 
@@ -373,7 +425,7 @@ function M.build(ctx)
         x = ctx.x,
         y = ctx.y,
         w = ctx.w,
-        text = failed .. ": " .. ui.loadError,
+        text = fitToRow(failed .. ": " .. ui.loadError, SMLSIZE, ctx.w),
         color = COLOR_THEME_PRIMARY1,
         font = SMLSIZE
       }
