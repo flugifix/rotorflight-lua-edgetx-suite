@@ -976,13 +976,11 @@ return {
       setup_power_smartfuel = {
         section_mode = "SmartFuel Mode",
         firmware_mode = "Firmware Source",
-        local_mode = "Local Source",
         section_tuning = "SmartFuel Tuning",
         voltage_drop_rate = "Voltage drop rate",
         charge_drop_rate = "Charge drop rate",
         sag_gain = "Sag gain",
         help_firmware_mode = "Choose whether firmware SmartFuel is disabled, voltage-estimated, current consumption based, or combined. Combined uses the more pessimistic of voltage and current consumption.",
-        help_local_mode = "Choose whether local SmartFuel uses current consumption, pack voltage, or combined mode. Combined uses the more pessimistic of voltage and current consumption.",
         help_voltage_drop_rate = "Limits how quickly filtered voltage may fall in voltage mode to reduce brief load-sag spikes affecting SmartFuel.",
         help_charge_drop_rate = "Limits how quickly the reported SmartFuel value may drop in voltage mode once the model has been armed.",
         help_sag_gain = "Strength of load-sag compensation in voltage mode. Higher values compensate more aggressively.",
