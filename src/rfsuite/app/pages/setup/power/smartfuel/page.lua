@@ -463,8 +463,9 @@ end
 
 -- The three values tune the voltage track of the estimate, so they are offered where it has one:
 -- the board's own estimate with Firmware Source VOLTAGE (1) or COMBINED (3), and with it OFF (0)
--- the radio's, whose source is set under Power > Preferences (1 VOLTAGE, 2 COMBINED) and which
--- reads the same three values (tasks/events/telemetry_bg/smart.lua, getSmartConfig).
+-- the radio's, whose source is set under Power > Preferences (1 VOLTAGE, 2 COMBINED). The radio's
+-- voltage estimate reads the same three values (tasks/events/telemetry_bg/smart.lua,
+-- computeVoltageMode); its COMBINED source is offered under the same rule, for its voltage track.
 local function isTuningEnabled()
 	local mode = ui.config.firmware_mode
 	if mode == 0 then
