@@ -2918,13 +2918,15 @@ local function readTelemetry(state, audioState)
     if configuredCells and configuredCells > 0 then
       setField("batteryCellCount", roundInt(configuredCells, state.batteryCellCount or 0))
     else
-      -- Otherwise infer it from the battery config's max cell voltage.
+      -- Otherwise infer it from the battery config's max cell voltage. A voltage below half a
+      -- cell is not a 1S pack but no pack at all -- a meter with nothing on it, or a pack that is
+      -- gone -- so it implies a count of 0, which every reader of this field takes as unknown.
       local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
 
-      local inferredCells = math.max(1, math.floor((voltageValue / maxCellVoltage) + 0.5))
+      local inferredCells = math.floor((voltageValue / maxCellVoltage) + 0.5)
       local existingCells = tonumber(state.batteryCellCount)
       if not existingCells or existingCells <= 0 then
-        setField("batteryCellCount", inferredCells)
+        if inferredCells > 0 then setField("batteryCellCount", inferredCells) end
       else
         local perCell = voltageValue / existingCells
         -- Reconnect-safe: replace stale cell count if implied per-cell voltage is implausible.
@@ -3220,8 +3222,10 @@ function Runtime.new(zone, options)
 
     local voltage = tonumber(state and state.voltage)
     local maxCellVoltage = tonumber(batteryConfig and batteryConfig.vbatmaxcellvoltage) or 4.2
+    -- The same rule as readTelemetry's: a voltage below half a cell gives no count.
     if type(voltage) == "number" and voltage > 0 and maxCellVoltage > 0 then
-      return math.max(1, math.floor((voltage / maxCellVoltage) + 0.5))
+      local implied = math.floor((voltage / maxCellVoltage) + 0.5)
+      if implied > 0 then return implied end
     end
 
     return nil

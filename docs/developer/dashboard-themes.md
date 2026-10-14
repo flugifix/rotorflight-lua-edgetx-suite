@@ -713,7 +713,9 @@ on a model without that sensor, the widget takes the cell count configured on th
 (*Setup* → *Power* → *Battery*), which is the count the board itself uses for any pack plugged in.
 Only where that is 0, which leaves the detection to the board, or has not been read yet, does it
 estimate the count from the pack voltage. An estimate cannot tell every pack apart: 42 V is a full
-10S pack and a 12S pack at 3.5 V per cell.
+10S pack and a 12S pack at 3.5 V per cell. A voltage below half a cell gives no estimate at all:
+it is no pack, not a 1S pack, so `state.batteryCellCount` stays `0` and the bounds are left as
+they are rather than being fitted to one cell.
 
 ## Splitting the settings into pages
 

@@ -158,7 +158,9 @@ setting.
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the
 model — the cell count times the flight controller's minimum cell voltage — and the gauge, the
-voltage rows and the status line turn red while the main pack is lost.
+voltage rows and the status line turn red while the main pack is lost. While no cell count is
+known — the flight controller set to detect it and no pack voltage to detect it from — the cell
+voltage row shows `-` and is not coloured, except while the main pack is lost.
 
 The radio draws the frame around every button a script creates, and a script can neither switch
 it off nor change its colour, so *Off* covers it: the button gets square corners and lines in the
