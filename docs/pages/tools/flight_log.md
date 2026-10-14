@@ -114,14 +114,16 @@ the registry entry and from nowhere else:
    for its own six profiles, and an **exact** match selects that profile.
 3. Where the flight controller keeps a cell count per profile, the entry's `cells=` has to equal
    that profile's own cell count as well. This is what tells a 6S and a 12S pack of the same
-   capacity apart. A profile whose cell count is `0` is matched only by an entry without
-   `cells=`, and a `cells=` that agrees with no profile of that capacity matches none.
+   capacity apart. A profile whose cell count is `0` (the flight controller then detects the
+   count from the voltage when the pack is plugged in) names no count, so it is matched only by
+   an entry without `cells=`; a `cells=` that agrees with no profile of that capacity matches
+   none. On a board whose profiles are all left at `0`, leave *Cells* at `0` or use `profile=`.
 4. Where the entry names no profile and no board profile matches, **nothing is written**. A
    guessed profile would move the next flight's low-voltage cut.
 5. Where more than one board profile still matches — two profiles with the same capacity and an
    entry without `cells=`, or two with the same capacity and the same cell count — **nothing is
-   written either**, and the log says which profiles tied. `cells=` or `profile=` on the entry
-   settles it.
+   written either**, and the log says which profiles tied. `profile=` on the entry settles it,
+   and so does `cells=` where the tied profiles differ in cell count.
 
 Whether the flight controller keeps a cell count per profile is read off its battery
 configuration reply: firmware that does sends the six cell counts after the six capacities.

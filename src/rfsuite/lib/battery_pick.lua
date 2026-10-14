@@ -225,8 +225,10 @@ function M.targetProfile(entry, cfg)
     cells = math.floor(cells)
     if cells < 1 then cells = nil end
   end
-  local wanted = cells and string.format("%d mAh %dS", math.floor(cap), cells)
-    or string.format("%d mAh", math.floor(cap))
+  -- `%s`, not `%d`: a hand-written value too large for an integer stays a float after
+  -- math.floor, and `%d` would raise on it instead of reporting that nothing matched.
+  local wanted = cells and string.format("%s mAh %sS", tostring(math.floor(cap)), tostring(cells))
+    or string.format("%s mAh", tostring(math.floor(cap)))
 
   local found = {}
   for i = 0, PROFILE_COUNT - 1 do
