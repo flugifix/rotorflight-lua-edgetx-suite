@@ -1304,16 +1304,17 @@ end
 -- published before anything is measured. A sensor's first publication is cold-start cost, as the
 -- function script's warm-up below says of its own; with only one frame of the cycle in a warm-up,
 -- the measured call would publish what the other frames carry for the first time, where a steady
--- link with these constant values publishes nothing.
+-- link with these constant values publishes nothing. The frame ids end on 0 modulo 256, as the
+-- warm-up's do, so the backlog that follows (ids from 1) reads as the next frames, not a skip.
 local function primeTelemetryCycle(handle)
   buildTelemetryFrame(0, sensorIds)
-  for index = 0, #cycle - 1 do
+  for id = 257 - #cycle, 256 do
     Stubs.telemetryFrames = {}
-    Stubs.pushFrame(0x88, buildTelemetryFrame(index, sensorIds))
+    Stubs.pushFrame(0x88, buildTelemetryFrame(id, sensorIds))
     handle()
     if #Stubs.telemetryFrames ~= 0 then
       error(string.format("accounting: frame %d of the cycle was not consumed while priming the drain",
-        index))
+        id % #cycle))
     end
   end
 end
@@ -1329,7 +1330,8 @@ end
 -- Warm until a call consumes a frame AND calls no loader, and fail where none ever does. The calls
 -- are counted by wrapping loadScript and rfsuite.require for the warm-up only: every loader on
 -- this chain looks both up when it calls them, so nothing keeps the wrapper afterwards. (A call to
--- rfsuite.require that its cache answers counts too; that only makes the warm-up one call longer.)
+-- rfsuite.require that its cache answers counts too: a module that called it on every wakeup would
+-- keep the warm-up from ever ending, and the run would fail here rather than measure a load.)
 -- Then every frame of the cycle goes through once, so the measured call publishes no sensor for
 -- the first time either.
 local function warmTelemetryBg(Events)

@@ -77,7 +77,8 @@ EdgeTX keeps the decimals a sensor was created with and converts every later val
 dropping the digits it has no room for. So whichever of the two arrives first decides how many
 decimals the sensor shows, and the other is scaled to it; and a model that discovered these
 sensors with an older version of the suite shows the right values with its old decimals (a pitch
-of 12.3 degrees as 12) until the sensors are deleted and discovered again.
+of 12.3 degrees as 12) until the sensors are deleted and discovered again, or their precision is
+set on the sensor's page.
 
 ## The two sensors the suite computes itself
 
