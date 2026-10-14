@@ -976,13 +976,11 @@ return {
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",
         firmware_mode = "Firmware Quelle",
-        local_mode = "Lokale Quelle",
         section_tuning = "SmartFuel Tuning",
         voltage_drop_rate = "Spannungsabfallrate",
         charge_drop_rate = "Ladungsabfallrate",
         sag_gain = "Sag Gain",
         help_firmware_mode = "Waehlt, ob Firmware-SmartFuel deaktiviert, spannungsbasiert, stromverbrauchsbasiert oder kombiniert arbeitet. Kombiniert nimmt jeweils den pessimistischeren Wert aus Spannung und Verbrauch.",
-        help_local_mode = "Waehlt, ob lokales SmartFuel den Stromverbrauch, die Akkuspannung oder den kombinierten Modus nutzt. Kombiniert nimmt jeweils den pessimistischeren Wert aus Spannung und Verbrauch.",
         help_voltage_drop_rate = "Begrenzt, wie schnell die gefilterte Spannung im Spannungsmodus fallen darf, um kurze Lastsack-Spitzen fuer SmartFuel zu dämpfen.",
         help_charge_drop_rate = "Begrenzt, wie schnell der gemeldete SmartFuel-Wert im Spannungsmodus sinken darf, sobald das Modell scharf geschaltet wurde.",
         help_sag_gain = "Staerke der Lastsack-Kompensation im Spannungsmodus. Hoehere Werte kompensieren aggressiver.",
@@ -2700,6 +2698,7 @@ return {
         battery_id = "Kennung",
         battery_name = "Name",
         battery_capacity = "Kapazitaet",
+        battery_cells = "Zellen",
         battery_models = "Modelle",
         battery_profile = "Akkuprofil",
         battery_cycles = "Zyklen",
@@ -2733,7 +2732,8 @@ return {
         help_p5 = "Beide Dateien sind reiner Text. Eine Aenderung schreibt nur die eine Zeile neu.",
         help_p6 = "Der aktuelle Reiter ist markiert. Ein Akku wird im ganzen Bildschirm bearbeitet, bis Speichern oder Abbrechen.",
         help_p7 = "Ist die Abfrage an, bietet das Dashboard die Akkus dieses Modells nach dem Verbinden einmal im Vollbild an.",
-        help_p8 = "Eine Wahl in dieser Abfrage kann auch das Akkuprofil des Flugcontrollers setzen, nie im scharfen Zustand."
+        help_p8 = "Eine Wahl in dieser Abfrage kann auch das Akkuprofil des Flugcontrollers setzen, nie im scharfen Zustand.",
+        help_p9 = "Zellen: hat der Flugcontroller eine Zellenzahl je Akkuprofil, muss sie auch dazu passen; 0 laesst sie weg. Bei Gleichstand wird kein Profil gesetzt."
       },
       logs = {
         title = "Protokolle",

@@ -957,10 +957,10 @@ function M.fuel(state)
 end
 
 -- The fuel reading, decoded once per value change and shared by every node that follows it:
--- the ten gauge rows all ask this one closure, so the three-step colour is computed once per
--- change rather than once per row per frame, and no two rows can disagree about it.
+-- the ten gauge rows all ask this one closure, so the colour is computed once per change rather
+-- than once per row per frame, and no two rows can disagree about it.
 function M.fuelLevel(state)
-  local last, lastColor = UNSET, M.C.empty
+  local last, lastNotFull, lastColor = UNSET, nil, M.C.empty
   return function()
     -- With the main pack gone the fuel figure is not low, it is no longer being measured:
     -- the gauge empties rather than freezing on the last reading it took.
@@ -974,14 +974,20 @@ function M.fuelLevel(state)
       p = state.fuel
       if type(p) ~= "number" then p = nil end
     end
-    if p == last then return p, lastColor end
-    last = p
-    -- Critical at nothing left, low within twenty points of it, full otherwise. A fourth colour
-    -- for a pack that was not full when it was plugged in would need a verdict latched at the
-    -- connect, and a theme has no pass of its own to latch it in.
+    -- The host's verdict on the pack that was plugged in (`packNotFull`, judged once per
+    -- connection). It is part of the key as well as the reading: it arrives after the first fuel
+    -- reading, because it waits for the battery configuration over MSP, and a key on the reading
+    -- alone would keep the colour decided before it for as long as the reading stands still.
+    local notFull = state.packNotFull == true
+    if p == last and notFull == lastNotFull then return p, lastColor end
+    last, lastNotFull = p, notFull
+    -- Critical at nothing left, low within twenty points of it. Above that, orange for a pack
+    -- that was not full when it was plugged in and green for one that was: low and critical say
+    -- more about the pack in hand than how it started, so they come first.
     if p == nil then lastColor = M.C.empty
     elseif p <= 0 then lastColor = M.C.bar_crit
     elseif p <= 20 then lastColor = M.C.bar_low
+    elseif notFull then lastColor = M.C.bar_warn
     else lastColor = M.C.bar_ok end
     return p, lastColor
   end

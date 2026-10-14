@@ -976,13 +976,11 @@ return {
       setup_power_smartfuel = {
         section_mode = "SmartFuel Mode",
         firmware_mode = "Firmware Source",
-        local_mode = "Local Source",
         section_tuning = "SmartFuel Tuning",
         voltage_drop_rate = "Voltage drop rate",
         charge_drop_rate = "Charge drop rate",
         sag_gain = "Sag gain",
         help_firmware_mode = "Choose whether firmware SmartFuel is disabled, voltage-estimated, current consumption based, or combined. Combined uses the more pessimistic of voltage and current consumption.",
-        help_local_mode = "Choose whether local SmartFuel uses current consumption, pack voltage, or combined mode. Combined uses the more pessimistic of voltage and current consumption.",
         help_voltage_drop_rate = "Limits how quickly filtered voltage may fall in voltage mode to reduce brief load-sag spikes affecting SmartFuel.",
         help_charge_drop_rate = "Limits how quickly the reported SmartFuel value may drop in voltage mode once the model has been armed.",
         help_sag_gain = "Strength of load-sag compensation in voltage mode. Higher values compensate more aggressively.",
@@ -2705,6 +2703,7 @@ return {
         battery_id = "Id",
         battery_name = "Name",
         battery_capacity = "Capacity",
+        battery_cells = "Cells",
         battery_models = "Models",
         battery_profile = "Battery profile",
         battery_cycles = "Cycles",
@@ -2738,7 +2737,8 @@ return {
         help_p5 = "Both files are plain text. An edit rewrites one line and leaves the rest of the file alone.",
         help_p6 = "The tab you are on is marked. Editing a pack takes the whole screen until Save or Cancel.",
         help_p7 = "With the prompt on, the dashboard offers this model's packs in fullscreen once after connecting.",
-        help_p8 = "A pick in the prompt can also set the flight controller's battery profile, never while armed."
+        help_p8 = "A pick in the prompt can also set the flight controller's battery profile, never while armed.",
+        help_p9 = "Cells: where the flight controller keeps a cell count per profile, it has to match it too; 0 leaves it out. A tie sets no profile."
       },
       logs = {
         title = "Logs",
