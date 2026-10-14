@@ -1300,6 +1300,24 @@ end
 ------------------------------------------------------------------------------
 -- Per unit: the telemetry drain, the MSP poll quantum, the largest parse.
 ------------------------------------------------------------------------------
+--- Hand every frame of the cycle through once, one frame a call, so that each sensor has been
+-- published before anything is measured. A sensor's first publication is cold-start cost, as the
+-- function script's warm-up below says of its own; with only one frame of the cycle in a warm-up,
+-- the measured call would publish what the other frames carry for the first time, where a steady
+-- link with these constant values publishes nothing.
+local function primeTelemetryCycle(handle)
+  buildTelemetryFrame(0, sensorIds)
+  for index = 0, #cycle - 1 do
+    Stubs.telemetryFrames = {}
+    Stubs.pushFrame(0x88, buildTelemetryFrame(index, sensorIds))
+    handle()
+    if #Stubs.telemetryFrames ~= 0 then
+      error(string.format("accounting: frame %d of the cycle was not consumed while priming the drain",
+        index))
+    end
+  end
+end
+
 --- Warm telemetry_bg's staggered lazy loads, and prove they are warm.
 --
 -- tasks.lua loads at most one module per wakeup and RETURNS, so a fixed number of warm-up calls
@@ -1308,9 +1326,12 @@ end
 -- A consumed frame is not the end of the chain either: smart.lua, once loaded, takes its own five
 -- modules one per wakeup, and those wakeups drain as well -- so a warm-up that stopped at the first
 -- consumed frame left one of smart.lua's loads in whichever call came next, the measured one.
--- Warm until a call consumes a frame AND loads nothing, and fail where none ever does. The loads
+-- Warm until a call consumes a frame AND calls no loader, and fail where none ever does. The calls
 -- are counted by wrapping loadScript and rfsuite.require for the warm-up only: every loader on
--- this chain looks both up when it calls them, so nothing keeps the wrapper afterwards.
+-- this chain looks both up when it calls them, so nothing keeps the wrapper afterwards. (A call to
+-- rfsuite.require that its cache answers counts too; that only makes the warm-up one call longer.)
+-- Then every frame of the cycle goes through once, so the measured call publishes no sensor for
+-- the first time either.
 local function warmTelemetryBg(Events)
   local loads = 0
   local loadScriptWas, requireWas = _G.loadScript, _G.rfsuite.require
@@ -1335,9 +1356,10 @@ local function warmTelemetryBg(Events)
   end
   _G.loadScript, _G.rfsuite.require = loadScriptWas, requireWas
   if not warm then
-    error("accounting: telemetry_bg never consumed a frame without loading a module; "
+    error("accounting: telemetry_bg never consumed a frame without calling a loader; "
       .. "the drain row would measure a load")
   end
+  primeTelemetryCycle(Events.wakeup)
 end
 
 World.reset()
@@ -1412,6 +1434,9 @@ do
   if not warmed then
     error("accounting: the function script never consumed a frame; the row would measure a load")
   end
+  -- One frame of the cycle published only that frame's sensors; the rest of the cycle once more,
+  -- so the backlog below publishes none of them for the first time.
+  primeTelemetryCycle(script.run)
 
   for i = 1, FRAME_BACKLOG do
     Stubs.pushFrame(0x88, buildTelemetryFrame(i, sensorIds))
