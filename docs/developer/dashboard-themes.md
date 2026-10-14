@@ -985,15 +985,16 @@ closure may index it without guarding. A theme reads it and never writes it.
 | --- | --- |
 | `loaded` | the registry has been read for this connection |
 | `pending` | the prompt is on, this model has packs, and this connection the pilot has neither picked nor closed it and the model has not been armed |
-| `candidates` | the registry entries for this model: `id`, `name`, `cap`, `profile`, `cycles`, `last`, plus `targetProfile` |
+| `candidates` | the registry entries for this model: `id`, `name`, `cap`, `cells`, `profile`, `cycles`, `last`, plus `targetProfile` |
 | `selectedId`, `selectedName` | the pack picked this connection, else the one stored for the model, else `nil` |
 | `boardProfile` | the battery profile the flight controller reported on connecting, 0-based; `nil` until it has answered, and again after any profile write, which is not confirmed |
 | `dismissed` | the pilot closed the picker without picking, this connection |
 | `applied` | what became of the profile write: `nil`, `"queued"`, `"skipped"` or `"refused:<why>"` |
 
 `targetProfile` is 0-based like `boardProfile`, and is `nil` where the pack names no profile and
-no board profile is set to its capacity. The BatP telemetry sensor is 1-based and is a different
-number; do not mix the two.
+no board profile matches it, or more than one does
+([the rules](../pages/tools/flight_log.md#the-battery-profile)). The BatP telemetry sensor is
+1-based and is a different number; do not mix the two.
 
 ### `rfsuite.batteryPick`
 
