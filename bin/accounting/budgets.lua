@@ -184,7 +184,12 @@ return {
     -- foreground pass. The target is the measurement with the margin `pass.job.build` carries
     -- over its own (6200 over 5557, 11.6 %), rounded up to the next hundred. The tree holds 50
     -- references, more than any theme above, and that is what would move this row first.
-    ["theme.urban"] = { target = 17400, measured = 15331, proposed = 14000 },
+    --
+    -- Raised from 17 400 when the gauge's colour came to depend on the not-full verdict as well as
+    -- on two steps the pilot sets, which put the row inside the last tenth of its target (15 690).
+    -- The new target keeps the 10 % the report prints a warning under, rounded up to the next
+    -- hundred; `proposed` stays the shared ceiling this row was first written against.
+    ["theme.urban"] = { target = 17500, measured = 15690, proposed = 14000 },
 
     ----------------------------------------------------------------------------
     -- Per box type: one render into the node table, and one sweep of the reactive
