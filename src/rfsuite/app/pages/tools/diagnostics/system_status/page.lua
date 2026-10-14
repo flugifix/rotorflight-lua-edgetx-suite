@@ -192,16 +192,17 @@ local function loadNames(i18n)
   }
 end
 
--- The field `size` values wide at bit `shift` of `word` (`size` a power of two). Integer
--- operators: a float division would round the word on a radio whose numbers are single
+-- The field at bit `shift` of `word`, cut by `mask`: the *_SHIFT / *_MASK pairs of
+-- telemetry/status.h, written here as they read there (0x7 is three bits, 0x1 one flag bit).
+-- Integer operators: a float division would round the word on a radio whose numbers are single
 -- precision, and a word with any bit above 24 set (System Config always has one) then
 -- loses its low bits -- the PID profile among them.
-local function field(word, shift, size)
-  return (word >> shift) & (size - 1)
+local function field(word, shift, mask)
+  return (word >> shift) & mask
 end
 
 local function flag(names, word, bit)
-  return field(word, bit, 2) == 1 and names.yes or names.no
+  return field(word, bit, 0x1) == 1 and names.yes or names.no
 end
 
 local function enum(table_, value)
@@ -215,24 +216,24 @@ local STATUS_FIELDS = {
   { "airborne", function(n, w) return flag(n, w, 1) end },
   { "motors_running", function(n, w) return flag(n, w, 2) end },
   { "rx_link_up", function(n, w) return flag(n, w, 3) end },
-  { "failsafe_phase", function(n, w) return enum(n.failsafe, field(w, 6, 8)) end },
-  { "gps_fix", function(n, w) return enum(n.gpsFix, field(w, 9, 4)) end },
+  { "failsafe_phase", function(n, w) return enum(n.failsafe, field(w, 6, 0x7)) end },
+  { "gps_fix", function(n, w) return enum(n.gpsFix, field(w, 9, 0x3)) end },
   { "gps_healthy", function(n, w) return flag(n, w, 11) end },
   { "spooled_up", function(n, w) return flag(n, w, 12) end },
-  { "battery_state", function(n, w) return enum(n.battery, field(w, 14, 8)) end },
+  { "battery_state", function(n, w) return enum(n.battery, field(w, 14, 0x7)) end },
   { "control_saturated", function(n, w) return flag(n, w, 17) end },
   { "gyro_overflow", function(n, w) return flag(n, w, 18) end },
   { "acc_not_calibrated", function(n, w) return flag(n, w, 19) end },
   { "override_active", function(n, w) return flag(n, w, 20) end },
-  { "rescue_state", function(n, w) return enum(n.rescue, field(w, 21, 8)) end },
+  { "rescue_state", function(n, w) return enum(n.rescue, field(w, 21, 0x7)) end },
   { "blackbox_logging", function(n, w) return flag(n, w, 24) end },
-  { "governor_state", function(n, w) return enum(n.govState, field(w, 25, 16)) end },
+  { "governor_state", function(n, w) return enum(n.govState, field(w, 25, 0xF)) end },
 }
 
 local CONFIG_FIELDS = {
-  { "pid_profile", function(_, w) return tostring(field(w, 0, 8)) end },
-  { "rate_profile", function(_, w) return tostring(field(w, 3, 8)) end },
-  { "battery_profile", function(_, w) return tostring(field(w, 6, 8)) end },
+  { "pid_profile", function(_, w) return tostring(field(w, 0, 0x7)) end },
+  { "rate_profile", function(_, w) return tostring(field(w, 3, 0x7)) end },
+  { "battery_profile", function(_, w) return tostring(field(w, 6, 0x7)) end },
   { "unsaved_changes", function(n, w) return flag(n, w, 12) end },
   { "saving", function(n, w) return flag(n, w, 13) end },
   { "reboot_required", function(n, w) return flag(n, w, 14) end },
@@ -243,7 +244,7 @@ local CONFIG_FIELDS = {
   { "gps_present", function(n, w) return flag(n, w, 19) end },
   { "blackbox_full", function(n, w) return flag(n, w, 21) end },
   { "rpm_source_active", function(n, w) return flag(n, w, 22) end },
-  { "governor_mode", function(n, w) return enum(n.govMode, field(w, 23, 8)) end },
+  { "governor_mode", function(n, w) return enum(n.govMode, field(w, 23, 0x7)) end },
 }
 
 -- The five shared fields: the word, its decode, and how the dedicated sensor's value reads as the
@@ -251,13 +252,13 @@ local CONFIG_FIELDS = {
 local SHARED_FIELDS = {
   armflags = { word = "system_status", row = "armed", decode = function(n, w) return flag(n, w, 0) end,
     dedicated = function(n, v) return flag(n, v, 0) end },
-  governor = { word = "system_status", row = "governor_state", decode = function(n, w) return enum(n.govState, field(w, 25, 16)) end,
+  governor = { word = "system_status", row = "governor_state", decode = function(n, w) return enum(n.govState, field(w, 25, 0xF)) end,
     dedicated = function(n, v) return enum(n.govState, v) end },
-  pid_profile = { word = "system_config", row = "pid_profile", decode = function(_, w) return tostring(field(w, 0, 8)) end,
+  pid_profile = { word = "system_config", row = "pid_profile", decode = function(_, w) return tostring(field(w, 0, 0x7)) end,
     dedicated = function(_, v) return tostring(v) end },
-  rate_profile = { word = "system_config", row = "rate_profile", decode = function(_, w) return tostring(field(w, 3, 8)) end,
+  rate_profile = { word = "system_config", row = "rate_profile", decode = function(_, w) return tostring(field(w, 3, 0x7)) end,
     dedicated = function(_, v) return tostring(v) end },
-  battery_profile = { word = "system_config", row = "battery_profile", decode = function(_, w) return tostring(field(w, 6, 8)) end,
+  battery_profile = { word = "system_config", row = "battery_profile", decode = function(_, w) return tostring(field(w, 6, 0x7)) end,
     dedicated = function(_, v) return tostring(v) end },
 }
 
