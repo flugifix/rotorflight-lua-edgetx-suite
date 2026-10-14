@@ -285,6 +285,7 @@ return {
     ["page.diagnostics_rfstatus_page.build"] = { target = 7750, measured = 6162 },
     ["page.diagnostics_session_logs_page.build"] = { target = 3700, measured = 2942 },
     ["page.diagnostics_smartfuel_page.build"] = { target = 9000, measured = 7194 },
+    ["page.diagnostics_system_status_page.build"] = { target = 12850, measured = 10278 },
     ["page.diagnostics_validate_sensors_page.build"] = { target = 10650, measured = 8502 },
     ["page.flight_tuning_advanced_autolevel_page.build"] = { target = 5150, measured = 4107 },
     ["page.flight_tuning_advanced_filters_page.build"] = { target = 8550, measured = 6827 },
