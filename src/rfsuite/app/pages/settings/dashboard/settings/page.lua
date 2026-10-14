@@ -13,25 +13,40 @@ end
 -- Cached per scope as well as per file. A theme's module keeps the values it has read in its own
 -- upvalues, and running the file again is the only way to get a module that has read nothing, so
 -- the standard values and a model's overrides are never shown by the same copy.
+--
+-- A failure is answered with its reason and is not cached: it can be a lack of memory (a theme's
+-- module compiles its own copies of the files it needs, inside the dashboard's Lua state when the
+-- tool runs from the dashboard), which the next open of the page may not meet again.
 local function loadThemeConfig(configurePath, scope)
   local cacheKey = configurePath .. "|" .. tostring(scope)
   local cached = loadedThemeConfigs[cacheKey]
   if cached ~= nil then
-    if cached == false then return nil end
     return cached
   end
-  local ok, chunk = pcall(loadScript, configurePath, "t")
-  if not ok or type(chunk) ~= "function" then
-    loadedThemeConfigs[cacheKey] = false
-    return nil
+  local ok, chunk, loadErr = pcall(loadScript, configurePath, "t")
+  if not ok then
+    return nil, chunk
+  end
+  if type(chunk) ~= "function" then
+    return nil, loadErr
   end
   local loadedOk, loaded = pcall(chunk)
   if not loadedOk then
-    loadedThemeConfigs[cacheKey] = false
-    return nil
+    return nil, loaded
   end
   loadedThemeConfigs[cacheKey] = loaded
   return loaded
+end
+
+-- Written only when a theme's module fails to load, so the log module is read only then.
+local function logLoadFailure(path, reason)
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local okLoad, chunk = pcall(loadScript, "/SCRIPTS/TOOLS/rfsuite-core/lib/log.lua", mode)
+  if not okLoad or type(chunk) ~= "function" then return end
+  local okMod, Log = pcall(chunk)
+  if okMod and type(Log) == "table" and type(Log.emit) == "function" then
+    pcall(Log.emit, "rfsuite", "theme settings not loaded: " .. tostring(path) .. ": " .. tostring(reason), "error")
+  end
 end
 
 local Common = nil
@@ -49,6 +64,7 @@ local ui = {
   activePage = nil,
   activeTheme = nil,
   activeModule = nil,
+  loadError = nil,
 }
 
 ui.runtime = nil
@@ -204,13 +220,14 @@ local function loadThemeModule(ctx)
   ui.activePage = findThemePage(theme, pageId)
   ui.activeTheme = theme
   ui.activeModule = false
+  ui.loadError = nil
   setContextPage(ctx)
 
   if not theme or type(theme.configurePath) ~= "string" or theme.configurePath == "" then
     return nil
   end
 
-  local loaded = loadThemeConfig(theme.configurePath, scope)
+  local loaded, loadErr = loadThemeConfig(theme.configurePath, scope)
   if type(loaded) == "function" then
     local createdOk, created = pcall(loaded, {
       theme = theme,
@@ -222,10 +239,16 @@ local function loadThemeModule(ctx)
     if createdOk then
       loaded = created
     else
-      loaded = nil
+      loaded, loadErr = nil, created
     end
   end
   if type(loaded) ~= "table" then
+    -- Without the reason the page draws only its scope line, which reads as a theme with
+    -- nothing to set.
+    if loaded == nil then
+      ui.loadError = tostring(loadErr or "?")
+      logLoadFailure(theme.configurePath, ui.loadError)
+    end
     loaded = {}
   end
   ui.activeModule = loaded
@@ -249,6 +272,7 @@ function M.onReload(ctx)
   ui.activePage = nil
   ui.activeTheme = nil
   ui.activeModule = nil
+  ui.loadError = nil
 
   ensureLoaded(ctx.preferences)
   local module = loadThemeModule(ctx)
@@ -336,6 +360,20 @@ function M.build(ctx)
       }
       return
     end
+
+    if ui.loadError ~= nil then
+      local failed = t(ctx.i18n, "theme_settings_load_failed", "This theme's settings could not be loaded")
+      ctx.children[#ctx.children + 1] = {
+        type = "label",
+        x = ctx.x,
+        y = ctx.y,
+        w = ctx.w,
+        text = failed .. ": " .. ui.loadError,
+        color = COLOR_THEME_PRIMARY1,
+        font = SMLSIZE
+      }
+      return
+    end
   end
 
   if type(module) == "table" then
@@ -380,6 +418,7 @@ function M.onClose()
   ui.activePage = nil
   ui.activeTheme = nil
   ui.activeModule = nil
+  ui.loadError = nil
   Common = nil
   DashboardLib = nil
   t = nil

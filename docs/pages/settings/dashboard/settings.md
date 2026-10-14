@@ -69,6 +69,9 @@ page fits the screen. Themes that do not split show their settings directly.
   same theme discards what has not been saved, so save before stepping across.
 - Saving reloads the dashboard, so a change is visible on the widget as soon as the tool is
   closed.
+- A theme's page that cannot be loaded says so under its first line, with the reason, and the
+  same line goes to the log. Opened from the dashboard, the tool shares the dashboard's memory, so
+  a large theme's page can fail there for lack of memory and open on the next attempt.
 
 ## Related
 
