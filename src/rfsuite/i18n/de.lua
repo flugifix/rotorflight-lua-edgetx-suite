@@ -2697,6 +2697,7 @@ return {
         battery_id = "Kennung",
         battery_name = "Name",
         battery_capacity = "Kapazitaet",
+        battery_cells = "Zellen",
         battery_models = "Modelle",
         battery_profile = "Akkuprofil",
         battery_cycles = "Zyklen",
@@ -2730,7 +2731,8 @@ return {
         help_p5 = "Beide Dateien sind reiner Text. Eine Aenderung schreibt nur die eine Zeile neu.",
         help_p6 = "Der aktuelle Reiter ist markiert. Ein Akku wird im ganzen Bildschirm bearbeitet, bis Speichern oder Abbrechen.",
         help_p7 = "Ist die Abfrage an, bietet das Dashboard die Akkus dieses Modells nach dem Verbinden einmal im Vollbild an.",
-        help_p8 = "Eine Wahl in dieser Abfrage kann auch das Akkuprofil des Flugcontrollers setzen, nie im scharfen Zustand."
+        help_p8 = "Eine Wahl in dieser Abfrage kann auch das Akkuprofil des Flugcontrollers setzen, nie im scharfen Zustand.",
+        help_p9 = "Zellen: hat der Flugcontroller eine Zellenzahl je Akkuprofil, muss sie auch dazu passen; 0 laesst sie weg. Bei Gleichstand wird kein Profil gesetzt."
       },
       logs = {
         title = "Protokolle",
