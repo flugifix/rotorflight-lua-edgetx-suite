@@ -33,12 +33,12 @@ return {
     -- The ceiling below is unchanged, and the STATE target is derived from it --
     -- 14 000 less the largest shipped theme's sweep -- rather than chosen.
     ----------------------------------------------------------------------------
-    ["pass.state"] = { target = 12200, measured = 7733, proposed = 8000 },
+    ["pass.state"] = { target = 12200, measured = 8925, proposed = 8000 },
     -- The same class of pass with the model ARMED and telemetry moving between passes.
     -- It shares pass.state's ceiling because it is the same class of pass; it has a row
     -- of its own because every other steady-state row here is measured disarmed against
     -- a frozen sensor set, and a flight is neither.
-    ["pass.state.armed"] = { target = 12200, measured = 10506 },
+    ["pass.state.armed"] = { target = 12200, measured = 9541 },
     ["pass.job.prepare"] = { target = 1250, measured = 924 },
     -- Raised from 5700 when the object renderers began compiling a box's thresholds where the
     -- box is rendered instead of on the first value change in the sweep. The build is chunked at
@@ -83,7 +83,12 @@ return {
     -- billed to the suite -- and even that stops short of this row: removing the io.open wrapper
     -- puts all four rows that move back on master's figures, and this is not one of them. The
     -- dearest pass of this block is an early one-off rather than a look at the store.
-    ["pass.service"] = { target = 6000, measured = 5136, proposed = 2200 },
+    --
+    -- Raised from 6000 when the telemetry frames the run feeds became the ones the firmware
+    -- sends (measure.lua, WIRE_WIDTH): the old frame stopped the decoders after five of its
+    -- entries, so every pass here priced a drain that decoded almost nothing. The new target is
+    -- the measurement with the margin --emit gives a new row.
+    ["pass.service"] ={ target = 7850, measured = 6257, proposed = 6000 },
 
     -- One run() of SCRIPTS/FUNCTIONS/rfsbg.lua with a full frame backlog waiting,
     -- every frame of it decoded. This row is NOT a share of the widget ceiling
@@ -91,8 +96,10 @@ return {
     -- yielded once it has held the interpreter for a task period and resumed on
     -- the next turn, rather than cut off at an instruction count. It is here as a
     -- regression detector, and as the price of decoding a whole backlog instead of
-    -- its newest quarter.
-    ["pass.function"] = { target = 7300, measured = 5867 },
+    -- its newest quarter. Raised from 7300 for the same reason as pass.service: until the
+    -- frames were built at the firmware's widths, "every frame decoded" meant five entries of
+    -- each.
+    ["pass.function"] ={ target = 12650, measured = 10110, proposed = 7300 },
     -- The in-flight tuning overlay, in three rows: the pass that drives it, the pass a reply of
     -- its ground half lands on, and the build of its screens.
     --
@@ -133,8 +140,8 @@ return {
     -- second, which is the overlay's own answer to a setting that needed a radio restart. The
     -- steady pass was measured at 12 961 in the air and 13 080 on the ground; the target is set
     -- above the second of those and not the first.
-    ["pass.tuning.state"] = { target = 14200, measured = 9701, proposed = 13000 },
-    ["pass.tuning.prime"] = { target = 16700, measured = 14248 },
+    ["pass.tuning.state"] = { target = 14200, measured = 10790, proposed = 13000 },
+    ["pass.tuning.prime"] = { target = 16700, measured = 15121 },
     ["pass.job.tuning"] = { target = 15700, measured = 13155, proposed = 10600 },
 
     ----------------------------------------------------------------------------
@@ -143,13 +150,13 @@ return {
     -- 20 000 covers the C-side work, the difference between this interpreter and
     -- the firmware's, and the variance neither of them accounts for.
     ----------------------------------------------------------------------------
-    ["theme.@aerc"] = { target = 14000, measured = 12855 },
-    ["theme.@aerc-n"] = { target = 14000, measured = 12804 },
-    ["theme.@rt-rc"] = { target = 14000, measured = 12425 },
-    ["theme.@rt-rc-n"] = { target = 14000, measured = 12364 },
-    ["theme.@srb-rc"] = { target = 14000, measured = 12065 },
-    ["theme.default"] = { target = 14000, measured = 8885 },
-    ["theme.rfstatus"] = { target = 14000, measured = 9007 },
+    ["theme.@aerc"] = { target = 14000, measured = 13674 },
+    ["theme.@aerc-n"] = { target = 14000, measured = 13623 },
+    ["theme.@rt-rc"] = { target = 14000, measured = 13244 },
+    ["theme.@rt-rc-n"] = { target = 14000, measured = 13183 },
+    ["theme.@srb-rc"] = { target = 14000, measured = 12884 },
+    ["theme.default"] = { target = 14000, measured = 10077 },
+    ["theme.rfstatus"] = { target = 14000, measured = 10199 },
     -- A free-form theme builds its whole tree in the one pass that prepares the scene, where a
     -- theme of boxes spreads its build over passes of eight boxes each, so its worst pass is the
     -- build and this row sits above the 14 000 the shipped themes share, which stays its
@@ -222,7 +229,7 @@ return {
     -- The whole background half of a STATE pass: the event runner, the
     -- custom-telemetry drain and the arm/disarm edges. The largest single term in
     -- a STATE pass, at roughly two fifths of it.
-    ["unit.events.wakeup"] = { target = 5600, measured = 4169 },
+    ["unit.events.wakeup"] = { target = 5600, measured = 4976 },
     -- The same wakeup with the model ARMED and telemetry moving, which is the only
     -- shape in which the flight record does its work: it advances the flight clock on
     -- every wakeup and samples the tracked sensors on its own 0.5 s cadence, so the
@@ -232,16 +239,23 @@ return {
     -- With the clock advancing per pass the sample is in the worst wakeup by
     -- construction, which is what this row is for, and it costs 6137. The previous
     -- figure is kept in `proposed` so the report says so on every run.
-    ["unit.events.wakeup.armed"] = { target = 7700, measured = 5779, proposed = 5600 },
+    ["unit.events.wakeup.armed"] = { target = 7700, measured = 5662, proposed = 5600 },
     -- The custom-telemetry drain with a full frame backlog waiting: POP_CAP frames
     -- popped and accounted, DECODE_CAP of them walked through the per-sensor
     -- decoders. This is what the two counts in telemetry_bg/drain.lua buy.
-    ["unit.telemetry.drain"] = { target = 3300, measured = 2743 },
+    --
+    -- Raised from 3300 when the frames became the firmware's (measure.lua, WIRE_WIDTH): the
+    -- old frame was walked for five of its entries, these are walked to their last byte. The
+    -- row also no longer carries one of smart.lua's module loads, which the warm-up used to
+    -- leave in the measured call; that took 182 off before the target was set.
+    ["unit.telemetry.drain"] ={ target = 4350, measured = 3453, proposed = 3300 },
     -- The same wakeup while the background function script is draining for the
     -- whole radio: the drain and the adjustment teller are skipped and SmartFuel
     -- is not, so what is left is what only this Lua state can compute. The gap to
-    -- the row above is what a pass saves by handing over.
-    ["unit.telemetry.handoff"] = { target = 350, measured = 246 },
+    -- the row above is what a pass saves by handing over. Its SmartFuel is the pass of a
+    -- world with no session connected, which resets and returns; until the warm-up waited for
+    -- smart.lua's own module loads, one of them was in this call too.
+    ["unit.telemetry.handoff"] ={ target = 350, measured = 168 },
     -- One Runtime.pump() after twenty ticks of a connected runtime. Its queue is idle by then,
     -- so this prices the idle turn -- the refusals and the isProcessed() test that ends it --
     -- and not a pump that finds work. That pump's processQueue and publish have no row of
