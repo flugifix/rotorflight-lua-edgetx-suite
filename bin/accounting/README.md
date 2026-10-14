@@ -52,8 +52,9 @@ reported as a margin to widen rather than a pass to celebrate.
   backlog, one MSP pump on an idle queue (the turn that finds nothing to do, not a pump with
   work on it), and the API-layer parse of the largest scripted reply. The drain rows are
   measured once `telemetry_bg` is warm: the warm-up runs until a call has consumed its frame
-  without loading a module, so neither row carries one of the staggered loads of `tasks.lua`
-  or `smart.lua`.
+  without calling a loader, so neither row carries one of the staggered loads of `tasks.lua`
+  or `smart.lua`, and then hands every frame of the cycle through once, so the measured call
+  publishes no sensor for the first time. The function script's row is primed the same way.
 - **The telemetry frames** every scenario is fed are the flight controller's: each sensor of
   the decoder table that a firmware sends, at the width its encoder writes (`WIRE_WIDTH` in `measure.lua`,
   from the encoder column of the sensor table in the firmware's `telemetry/crsf.c`, not from

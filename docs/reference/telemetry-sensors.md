@@ -73,6 +73,12 @@ the same name, at the finer scale the flight controller sends the group in: the 
 the attitude (`Ptch`, `Roll`, `Yaw`) with one. Selected individually, each of these sensors
 carries one decimal fewer.
 
+EdgeTX keeps the decimals a sensor was created with and converts every later value to them,
+dropping the digits it has no room for. So whichever of the two arrives first decides how many
+decimals the sensor shows, and the other is scaled to it; and a model that discovered these
+sensors with an older version of the suite shows the right values with its old decimals (a pitch
+of 12.3 degrees as 12) until the sensors are deleted and discovered again.
+
 ## The two sensors the suite computes itself
 
 Besides decoding what the flight controller sends, the suite works out the remaining fuel of
