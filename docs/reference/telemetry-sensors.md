@@ -67,6 +67,12 @@ cell arrives, so sending just the cell that changed would leave the total behind
 A group whose values move in every frame is therefore sent as often as it arrives; the difference
 shows where values hold still, on the bench and while the model stands.
 
+The control, attitude and acceleration groups fill the same sensors as the individual values of
+the same name, at the finer scale the flight controller sends the group in: the control angles
+(`CPtc`, `CRol`, `CYaw`, `CCol`) and the acceleration (`AccX`, `AccY`, `AccZ`) with two decimals,
+the attitude (`Ptch`, `Roll`, `Yaw`) with one. Selected individually, each of these sensors
+carries one decimal fewer.
+
 ## The two sensors the suite computes itself
 
 Besides decoding what the flight controller sends, the suite works out the remaining fuel of
