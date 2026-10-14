@@ -2629,6 +2629,8 @@ return {
         urban_key_suite_tool = "Suite: Hauptmenü",
         urban_key_flight_log = "Suite: Flugbuch",
         urban_tap_frames = "Rahmen um Tippflächen",
+        urban_fuel_low = "Akku gelb bei",
+        urban_fuel_crit = "Akku rot bei",
         urban_key_exit = "Suite: Vollbild aus",
         -- The Telemetry page: what each tile of the telemetry view shows.
         urban_tile = "Kachel"
