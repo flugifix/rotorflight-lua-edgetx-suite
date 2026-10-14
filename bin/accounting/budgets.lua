@@ -98,8 +98,9 @@ return {
     -- regression detector, and as the price of decoding a whole backlog instead of
     -- its newest quarter. Raised from 7300 for the same reason as pass.service: until the
     -- frames were built at the firmware's widths, "every frame decoded" meant five entries of
-    -- each.
-    ["pass.function"] = { target = 12650, measured = 10110, proposed = 7300 },
+    -- each. Measured after every frame of the cycle has been through once, so no sensor in the
+    -- backlog is published for the first time.
+    ["pass.function"] = { target = 10050, measured = 8019, proposed = 7300 },
     -- The in-flight tuning overlay, in three rows: the pass that drives it, the pass a reply of
     -- its ground half lands on, and the build of its screens.
     --
@@ -245,10 +246,12 @@ return {
     -- decoders. This is what the two counts in telemetry_bg/drain.lua buy.
     --
     -- Raised from 3300 when the frames became the firmware's (measure.lua, WIRE_WIDTH): the
-    -- old frame was walked for five of its entries, these are walked to their last byte. The
-    -- row also no longer carries one of smart.lua's module loads, which the warm-up used to
-    -- leave in the measured call; that took 182 off before the target was set.
-    ["unit.telemetry.drain"] = { target = 4350, measured = 3453, proposed = 3300 },
+    -- old frame was walked for five of its entries, these are walked to their last byte, which
+    -- put the row inside the last tenth of its old target. The row also no longer carries one
+    -- of smart.lua's module loads, which the warm-up used to leave in the measured call, and
+    -- every frame of the cycle has been through once before it, so no sensor is published here
+    -- for the first time.
+    ["unit.telemetry.drain"] = { target = 3850, measured = 3068, proposed = 3300 },
     -- The same wakeup while the background function script is draining for the
     -- whole radio: the drain and the adjustment teller are skipped and SmartFuel
     -- is not, so what is left is what only this Lua state can compute. The gap to
