@@ -991,10 +991,11 @@ closure may index it without guarding. A theme reads it and never writes it.
 | `dismissed` | the pilot closed the picker without picking, this connection |
 | `applied` | what became of the profile write: `nil`, `"queued"`, `"skipped"` or `"refused:<why>"` |
 
-`targetProfile` is 0-based like `boardProfile`, and is `nil` where no profile can be named for
-the pack: it names none and no board profile matches it, or more than one does
+`targetProfile` is 0-based like `boardProfile`, and is `nil` where the pack names no profile (or
+one outside 1-6) and none can be derived for it: no board profile matches it, more than one does
 ([the rules](../pages/tools/flight_log.md#the-battery-profile)), or the board's battery
-configuration has not arrived yet. The BatP telemetry sensor is
+configuration was not there when the registry was read. It is resolved again for the picked pack
+when the pick is applied. The BatP telemetry sensor is
 1-based and is a different number; do not mix the two.
 
 ### `rfsuite.batteryPick`
