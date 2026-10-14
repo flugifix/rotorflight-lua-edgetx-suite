@@ -33,7 +33,12 @@ translations, like every other theme's, so it speaks the language of the package
   and the throttle, a status line, and the PID, rate and battery profile numbers.
 - **Middle** — a vertical battery gauge with the cell count, the fuel percentage and the capacity
   used. Until the model has reported a fuel reading the gauge is empty and reads `--%` rather
-  than an empty pack.
+  than an empty pack. The fill is red at 0 %, yellow at 20 % and below, and green above that —
+  or orange instead of green when the pack was not full when it was plugged in. That verdict is
+  the suite's own, taken once per connection against the flight controller's *Max cell voltage*
+  less the *Margin* of the *Pack Not Full* announcement (*Settings* → *Audio* → *Events* →
+  *On Connect*), and it is drawn whether or not that announcement is switched on. Yellow and red
+  still come first: a not-full pack that runs down turns yellow and then red like any other.
 - **Right panel** — five value rows, each chosen on the *Value Rows* page.
 - **Bottom bar** — the model name, the arm state, the transmitter power and the skipped-frame
   count. While the flight controller names reasons that block arming, the whole bar shows them
@@ -158,7 +163,9 @@ setting.
 
 The cell voltage row turns red below the minimum pack voltage the widget works out for the
 model — the cell count times the flight controller's minimum cell voltage — and the gauge, the
-voltage rows and the status line turn red while the main pack is lost.
+voltage rows and the status line turn red while the main pack is lost. While no cell count is
+known — the flight controller set to detect it and no pack voltage to detect it from — the cell
+voltage row shows `-` and is not coloured, except while the main pack is lost.
 
 The radio draws the frame around every button a script creates, and a script can neither switch
 it off nor change its colour, so *Off* covers it: the button gets square corners and lines in the
