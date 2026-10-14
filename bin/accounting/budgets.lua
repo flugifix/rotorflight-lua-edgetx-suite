@@ -88,7 +88,7 @@ return {
     -- sends (measure.lua, WIRE_WIDTH): the old frame stopped the decoders after five of its
     -- entries, so every pass here priced a drain that decoded almost nothing. The new target is
     -- the measurement with the margin --emit gives a new row.
-    ["pass.service"] ={ target = 7850, measured = 6257, proposed = 6000 },
+    ["pass.service"] = { target = 7850, measured = 6257, proposed = 6000 },
 
     -- One run() of SCRIPTS/FUNCTIONS/rfsbg.lua with a full frame backlog waiting,
     -- every frame of it decoded. This row is NOT a share of the widget ceiling
@@ -99,7 +99,7 @@ return {
     -- its newest quarter. Raised from 7300 for the same reason as pass.service: until the
     -- frames were built at the firmware's widths, "every frame decoded" meant five entries of
     -- each.
-    ["pass.function"] ={ target = 12650, measured = 10110, proposed = 7300 },
+    ["pass.function"] = { target = 12650, measured = 10110, proposed = 7300 },
     -- The in-flight tuning overlay, in three rows: the pass that drives it, the pass a reply of
     -- its ground half lands on, and the build of its screens.
     --
@@ -248,14 +248,16 @@ return {
     -- old frame was walked for five of its entries, these are walked to their last byte. The
     -- row also no longer carries one of smart.lua's module loads, which the warm-up used to
     -- leave in the measured call; that took 182 off before the target was set.
-    ["unit.telemetry.drain"] ={ target = 4350, measured = 3453, proposed = 3300 },
+    ["unit.telemetry.drain"] = { target = 4350, measured = 3453, proposed = 3300 },
     -- The same wakeup while the background function script is draining for the
     -- whole radio: the drain and the adjustment teller are skipped and SmartFuel
     -- is not, so what is left is what only this Lua state can compute. The gap to
     -- the row above is what a pass saves by handing over. Its SmartFuel is the pass of a
     -- world with no session connected, which resets and returns; until the warm-up waited for
-    -- smart.lua's own module loads, one of them was in this call too.
-    ["unit.telemetry.handoff"] ={ target = 350, measured = 168 },
+    -- smart.lua's own module loads, one of them was in this call too. Lowered from 350 once
+    -- that load left the call: the target is the measurement with the margin --emit gives a
+    -- new row, so the row keeps watching what is left rather than the load it no longer pays.
+    ["unit.telemetry.handoff"] = { target = 250, measured = 168, proposed = 350 },
     -- One Runtime.pump() after twenty ticks of a connected runtime. Its queue is idle by then,
     -- so this prices the idle turn -- the refusals and the isProcessed() test that ends it --
     -- and not a pump that finds work. That pump's processQueue and publish have no row of
