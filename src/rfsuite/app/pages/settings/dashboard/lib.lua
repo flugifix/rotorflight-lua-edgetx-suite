@@ -209,8 +209,9 @@ end
 local function collectDirectoryEntries(listBasePath)
   if type(dir) == "function" then
     local iterator = dir(listBasePath)
+    -- A folder that is not on the card, the user folder on most radios: the scan's line says
+    -- `unlisted(nil)` for it.
     if type(iterator) ~= "function" then
-      debugLog("dir unavailable for path=%s", listBasePath)
       return nil
     end
 
