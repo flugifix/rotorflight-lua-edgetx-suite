@@ -246,15 +246,15 @@ function M.targetProfile(entry, cfg)
     return nil, "nomatch"
   end
   -- `cells=` can only settle a tie whose profiles differ in cell count; otherwise only `profile=` can.
-  local names, hint = {}, "profile="
+  local names, advice = {}, "profile="
   for k = 1, #found do
     names[k] = tostring(found[k] + 1)
     if cells == nil and cfg["batteryCellCount_" .. found[k]] ~= cfg["batteryCellCount_" .. found[1]] then
-      hint = "cells= or profile="
+      advice = "cells= or profile="
     end
   end
   log(string.format("no target profile: a tie, profiles %s are all set to %s; give the entry %s",
-    table.concat(names, ", "), wanted, hint), "warn")
+    table.concat(names, ", "), wanted, advice), "warn")
   return nil, "tie"
 end
 
