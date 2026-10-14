@@ -33,8 +33,8 @@ stores, what the theme selector resolves and what the per-theme settings are key
 The scan (`app/pages/settings/dashboard/lib.lua`, `scanThemes`) takes every entry of the
 folder that is not `.` or `..` and whose name does not end in a dotted extension, loads
 `<folder>/init.lua`, and accepts the folder as a theme when that returns a table with a
-string `name`. A folder with no readable `init.lua` is skipped silently — it appears in the
-log at *DEBUG*, and nowhere else.
+string `name`. A folder with no readable `init.lua` is skipped silently — it is named, with the
+reason, in the one line the scan writes to the log at *DEBUG*, and nowhere else.
 
 `app/pages/settings/dashboard/theme_index.lua` is a checked-in list of the shipped themes and
 is read **only when the scan found nothing at all**, which is the case on a radio whose
