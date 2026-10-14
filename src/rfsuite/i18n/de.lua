@@ -976,13 +976,11 @@ return {
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",
         firmware_mode = "Firmware Quelle",
-        local_mode = "Lokale Quelle",
         section_tuning = "SmartFuel Tuning",
         voltage_drop_rate = "Spannungsabfallrate",
         charge_drop_rate = "Ladungsabfallrate",
         sag_gain = "Sag Gain",
         help_firmware_mode = "Waehlt, ob Firmware-SmartFuel deaktiviert, spannungsbasiert, stromverbrauchsbasiert oder kombiniert arbeitet. Kombiniert nimmt jeweils den pessimistischeren Wert aus Spannung und Verbrauch.",
-        help_local_mode = "Waehlt, ob lokales SmartFuel den Stromverbrauch, die Akkuspannung oder den kombinierten Modus nutzt. Kombiniert nimmt jeweils den pessimistischeren Wert aus Spannung und Verbrauch.",
         help_voltage_drop_rate = "Begrenzt, wie schnell die gefilterte Spannung im Spannungsmodus fallen darf, um kurze Lastsack-Spitzen fuer SmartFuel zu dämpfen.",
         help_charge_drop_rate = "Begrenzt, wie schnell der gemeldete SmartFuel-Wert im Spannungsmodus sinken darf, sobald das Modell scharf geschaltet wurde.",
         help_sag_gain = "Staerke der Lastsack-Kompensation im Spannungsmodus. Hoehere Werte kompensieren aggressiver.",
