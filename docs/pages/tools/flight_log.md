@@ -123,7 +123,7 @@ the registry entry and from nowhere else:
 5. Where more than one board profile still matches — two profiles with the same capacity and an
    entry without `cells=`, or two with the same capacity and the same cell count — **nothing is
    written either**, and the log says which profiles tied. `profile=` on the entry settles it,
-   and so does `cells=` where it equals the cell count of exactly one of them.
+   and so does `cells=` where it equals the non-zero cell count of exactly one of them.
 
 Whether the flight controller keeps a cell count per profile is read off its battery
 configuration reply: firmware that does sends the six cell counts after the six capacities.

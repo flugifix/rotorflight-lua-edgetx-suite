@@ -245,13 +245,16 @@ function M.targetProfile(entry, cfg)
     log(string.format("no target profile: no board profile is set to %s", wanted), "info")
     return nil, "nomatch"
   end
-  -- `cells=` can only settle a tie whose profiles differ in cell count; otherwise only `profile=` can.
-  local names, advice = {}, "profile="
+  -- `cells=` settles a tie only where one of the tied profiles has a cell count no other one has;
+  -- otherwise only `profile=` can.
+  local names, seen, advice = {}, {}, "profile="
   for k = 1, #found do
     names[k] = tostring(found[k] + 1)
-    if cells == nil and cfg["batteryCellCount_" .. found[k]] ~= cfg["batteryCellCount_" .. found[1]] then
-      advice = "cells= or profile="
-    end
+    local count = tonumber(cfg["batteryCellCount_" .. found[k]]) or 0
+    seen[count] = (seen[count] or 0) + 1
+  end
+  for count, n in pairs(seen) do
+    if cells == nil and count >= 1 and n == 1 then advice = "cells= or profile=" end
   end
   log(string.format("no target profile: a tie, profiles %s are all set to %s; give the entry %s",
     table.concat(names, ", "), wanted, advice), "warn")
