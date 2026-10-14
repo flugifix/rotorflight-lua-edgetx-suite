@@ -2704,6 +2704,8 @@ return {
         urban_key_suite_tool = "Suite: Main menu",
         urban_key_flight_log = "Suite: Flight log",
         urban_tap_frames = "Frames on tap areas",
+        urban_fuel_low = "Battery yellow at",
+        urban_fuel_crit = "Battery red at",
         urban_key_exit = "Suite: Exit full screen",
         -- The Telemetry page: what each tile of the telemetry view shows.
         urban_tile = "Tile"
