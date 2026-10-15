@@ -194,6 +194,14 @@ return {
     -- tree is smaller -- 31 references against Urban's 50, at its default 3 x 2 grid -- and the
     -- row sits below the shared ceiling. The target is what --emit printed for it.
     ["theme.grid"] = { target = 15200, measured = 12180 },
+    -- Deck is a free-form theme built from Urban's, so its worst pass is its build as well. It
+    -- draws more figures than Urban at its defaults -- four value cards and the big card each with
+    -- the least and the most of the flight under them, the big card's side column, the battery
+    -- strip -- in a smaller tree (38 references against Urban's 50). The target is set the way
+    -- Urban's was: the measurement with the margin `pass.job.build` carries, rounded up to the next
+    -- hundred. Not the 25 % --emit gives a new row, which would put the target above the 20 000
+    -- the theme rows keep their distance to.
+    ["theme.deck"] = { target = 18600, measured = 16625 },
 
     ----------------------------------------------------------------------------
     -- Per box type: one render into the node table, and one sweep of the reactive
