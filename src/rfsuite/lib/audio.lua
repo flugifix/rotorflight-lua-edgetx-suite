@@ -340,9 +340,9 @@ end
 --- Two questions, and the second is where each alert's own history comes in. The repeat count
 --- is spent per episode. The interval is measured from the last announcement, and an alert
 --- that zeroes its timestamp when its condition clears -- as the voltage, BEC and RX alerts do
---- -- therefore speaks at once when the condition returns, while one that keeps its timestamp
---- -- as the ESC and MCU alerts do -- waits the interval out even across a dip below the
---- threshold. Both behaviours are the ones those alerts already had.
+--- -- therefore speaks at once when the condition returns. The link quality and temperature
+--- alerts zero it on a rise into a level instead, and it is their hysteresis, not the
+--- timestamp, that keeps a reading resting on a level from announcing every rise.
 local function alertMaySpeak(audioState, events, alertKey, now)
   local limit = alertRepeatLimit(events, alertKey)
   if limit > 0 then
@@ -363,8 +363,9 @@ end
 --- Book an announcement that was made, and buzz if the pilot asked this category to.
 ---
 --- `haptic` is false for an announcement whose own severity rule says no even when the
---- category is set to buzz: the link alert buzzes at its critical level and not at its
---- warning one, which is a distinction inside that alert rather than a setting.
+--- category is set to buzz: the link quality and the ESC and MCU temperature alerts buzz at
+--- their critical level and not at their warning one, which is a distinction inside each alert
+--- rather than a setting.
 local function alertSpoken(audioState, events, alertKey, now, haptic)
   -- Audio.process builds this table on its first pass, and every alert but the lost-connection
   -- one is reached from inside that pass. That one is called from the caller's own loss branch.
@@ -450,7 +451,7 @@ local function readBatteryPrefs()
   return session.modelPreferences.battery
 end
 
--- The ESC's temperature limit describes the aircraft, so the model's own store wins over
+-- The ESC's temperature levels describe the aircraft, so the model's own store wins over
 -- the radio-wide default in the transmitter's own store. Reached the same way readBatteryPrefs above
 -- reaches the other half of the same file.
 local function readAudioEventPrefs()

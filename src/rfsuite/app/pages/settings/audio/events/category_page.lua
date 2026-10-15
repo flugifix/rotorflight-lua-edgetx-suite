@@ -68,8 +68,8 @@ local CONFIG_SCHEMA = {
   -- hardware as the warning level, so the same scope and range.
   { key = "esc_critical",      type = "number", default = 110, min = 60, max = 300, scope = "model", section = "esc" },
   { key = "mcu_temperature",   type = "bool", default = false, section = "esc" },
-  -- No `scope = "model"`, unlike the ESC threshold above: the flight controller's MCU is the
-  -- same silicon with the same rating in every aircraft, so a copy of this limit per model
+  -- No `scope = "model"`, unlike the ESC levels above: the flight controller's MCU is the
+  -- same silicon with the same rating in every aircraft, so a copy of these levels per model
   -- would be one more place to keep in step and nothing else.
   { key = "mcu_threshold",     type = "number", default = 80, min = 40, max = 150, section = "esc" },
   { key = "mcu_critical",      type = "number", default = 95, min = 40, max = 150, section = "esc" },
@@ -403,10 +403,11 @@ local function prefBool(value, default)
   return value == true or value == "true" or value == 1 or value == "1"
 end
 
--- The two temperature thresholds are stored in Celsius, the unit the flight controller reports
--- and lib/audio.lua compares in. On a radio set to Fahrenheit under Settings > Localization they
--- are shown in Fahrenheit, like every other temperature the suite shows. Only the text changes:
--- the control still steps one degree Celsius and stores what it shows, so nothing is rounded twice.
+-- The four temperature levels (ESC and MCU, warning and critical) are stored in Celsius, the
+-- unit the flight controller reports and lib/audio.lua compares in. On a radio set to
+-- Fahrenheit under Settings > Localization they are shown in Fahrenheit, like every other
+-- temperature the suite shows. Only the text changes: the control still steps one degree
+-- Celsius and stores what it shows, so nothing is rounded twice.
 local function usesFahrenheit(prefs)
   local localizations = prefs and prefs.localizations
   return tonumber(localizations and localizations.temperature_unit) == 1

@@ -337,6 +337,7 @@
   - *Settings* > *Audio* > *Events* > *ESC Temperature* gains a *Critical* row under each alert: 110 °C for the ESC, kept with the model as the warning level is, and 95 °C for the MCU, radio-wide. The existing threshold rows are now labelled *Warning* and keep their keys and values.
   - Both alerts work like the link quality alert: a rise into a level is spoken at once, falling back is not spoken, a level is left only once the reading is more than 5 °C below it, and *Haptic* vibrates at the critical level only -- the warning level, which vibrated before, now speaks without vibration.
   - The master volume (*Settings* > *Audio* > *Volume*) goes to its *Alert Level* at the critical level of either alert, for as long as the alert stays there. Before, the ESC alert raised it at its only threshold and the MCU alert never did.
+  - The *Volume* page's help is rewritten in one line per setting; its *Alert Level* line names every critical alert rather than a list, and the details moved to `docs/pages/settings/audio/volume.md`.
   - The ESC alert now says the temperature after its words, as the MCU alert already did, in the unit set under *Settings* > *Localization*. No new sound file.
   - A settings file written before keeps its warning levels; the critical levels start at their defaults. With both alerts off, which is the default, nothing changes.
 

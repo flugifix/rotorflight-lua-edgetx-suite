@@ -100,7 +100,9 @@ temperature warning* or *MCU temperature*, then the reading. It works like the l
 - **A rise into a level is spoken at once**, also when the alert spoke a moment before at the
   level below, and the level it has entered starts its own repeat count.
 - **Falling back is not spoken.** A level is left only once the reading is more than 5 °C below it, so a
-  sensor resting on a level does not announce every rise.
+  sensor resting on a level does not announce every rise. A fall from the critical to the warning
+  level starts the warning level's own repeat count, so with *Repeat* set to a count the warning
+  level speaks again (its own announcement, not a recovery), 10 s after the last one.
 - **Only the critical level vibrates**, and only while *Haptic* is on. The warning level speaks
   without vibration.
 - **Only the critical level raises the master volume** set up under [Volume](../pages/settings/audio/volume.md)

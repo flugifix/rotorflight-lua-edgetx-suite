@@ -10,12 +10,12 @@ The Volume page allows you to configure Adaptive Audio-Level and the Master-Volu
 
 ## WAV-Volume Level (Layer A)
 
-* **Level:** Set the base volume level for audio announcements (1..5). Set to 0 (default) to let the radio's own volume setting rule. The level applies to the sound file of an announcement and to the number and unit the radio speaks after it, and to the adjustment announcements the [background decoder](../../../reference/background-decoder.md) or the service widget makes.
-* **Connected Only:** When enabled, the elevated audio level applies only when a flight controller is connected. For adjustment announcements made where neither the dashboard nor the tool runs (by the background decoder, or by the service widget on its own), this means that the radio's RF link is up.
+* **Level:** Set the base volume level for audio announcements (1..5, 5 the loudest). Set to 0 (*Radio default*, the default) to let the radio's own volume setting rule. The level applies to the sound file of an announcement and to the number and unit the radio speaks after it, and to the adjustment announcements the [background decoder](../../../reference/background-decoder.md) or the service widget makes.
+* **Connected Only:** When enabled, the elevated audio level applies only when a flight controller is connected, so bench and menu work stays at the radio's own level. For adjustment announcements made where neither the dashboard nor the tool runs (by the background decoder, or by the service widget on its own), this means that the radio's RF link is up.
 
 ## Master-Volume Bridge (Layer B)
 
-The Master-Volume bridge dynamically changes the entire radio's volume during flight, and forces it to a loud level during critical alarms (like Low Voltage, or the ESC or MCU temperature at its critical level).
+The Master-Volume bridge dynamically changes the entire radio's volume during flight. While a flight controller is connected and no critical alert is active, the suite writes the *Normal Level*; while any critical alert is active it writes the *Alert Level* instead. The critical alerts are low voltage, an empty tank, telemetry lost in flight, and the ESC or MCU temperature at its critical level -- the tank and the temperatures only while their own alert is switched on.
 To use this, you must configure a Global Variable (GVAR) on your radio and link it to the volume.
 
 **Radio Setup (Once per model):**
