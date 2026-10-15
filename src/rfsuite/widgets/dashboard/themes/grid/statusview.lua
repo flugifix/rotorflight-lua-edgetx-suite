@@ -2,12 +2,12 @@
 -- way, the governor, the throttle and the speed controller, over the widget's history of what
 -- changed on the craft.
 --
--- Opened in full screen by a tap on the flight view's governor and status rows, or by a key the
--- pilot sets to it on the Keys settings page.
+-- Opened in full screen by a tap on the flight view's status bar, or by a key the pilot sets to
+-- it on the Keys settings page.
 --
 -- Everything it shows is already on the host's state: the arm state and the arming-disable flags,
 -- the governor and the throttle, the speed controller's live verdict (`esc_status_live`, which the
--- flight view declares whatever its rows show, layout.lua ALWAYS_DECLARED), and the event history
+-- flight view declares whatever its tiles show, layout.lua ALWAYS_DECLARED), and the event history
 -- (`state.eventLog`, widgets/dashboard/runtime.lua, noteEvent). So the view names no sources of its
 -- own and is never rebuilt for a reading: every figure is a closure, and a new history entry
 -- reaches the rows without a rebuild.
@@ -45,7 +45,7 @@ local function governorNames(T)
 end
 
 -- How many characters fit a box of `w` px in `font`, measured against a word of capitals as the
--- flight view's status line measures it (layout.lua, L.statusPanel), and a cut to that many made
+-- flight view's status bar measures its middle (layout.lua, L.statusBar), and a cut to that many made
 -- once per text rather than once per frame. The cut is made in the format path because a closure
 -- may make no firmware call.
 local CAPS_SAMPLE = "BOOTGRACE"
@@ -195,7 +195,7 @@ function M.build(children, zone, state, ctx)
   UD.label(children, colX + govW, labelY, thrW, f.subH, T.throttle, f.sub, C.label, CENTER)
   UD.label(children, colX + govW, valueY, thrW, valueH, UD.throttleText(state), valueFont, C.text, CENTER)
 
-  -- The speed controller's live verdict, as the flight view's status line reads it, in its level's
+  -- The speed controller's live verdict, as the flight view's status bar reads it, in its level's
   -- colour; `-` without a link or without a verdict.
   local fitEsc = fitter(UD, valueFont, escW)
   UD.label(children, colX + govW + thrW, labelY, escW, f.subH, T.esc, f.sub, C.label, RIGHT)

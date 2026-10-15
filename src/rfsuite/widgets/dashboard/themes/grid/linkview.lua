@@ -252,9 +252,9 @@ function M.build(children, zone, state, ctx)
   end), g.font, C.label, LEFT)
   UD.hline(children, x, footY - g.gap, w)
 
-  -- The rows, each a name, a bar and the figure -- the flight view's value rows in one line: the
-  -- name in its face and the label colour, the figure as large as the row takes, picked by the
-  -- rule its value panel uses (layout.lua, L.valuePanel: the row height less 2 px). The name column
+  -- The rows, each a name, a bar and the figure in one line: the name in the flight view's face
+  -- and the label colour, the figure as large as the row takes, its face picked against the row
+  -- height less 2 px. The name column
   -- is as wide as the widest name drawn, the figure column as wide as the widest figure.
   local rowsH = footY - g.gap - top - g.gap
   local rowH = math.floor(rowsH / #rows)

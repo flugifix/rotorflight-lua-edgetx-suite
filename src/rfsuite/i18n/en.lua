@@ -2805,6 +2805,20 @@ return {
         urban_fuel_low = "Battery yellow at",
         urban_fuel_crit = "Battery red at",
         urban_key_exit = "Suite: Exit full screen",
+        -- The Grid theme's settings pages that Urban has no counterpart for, and their rows.
+        grid_page_layout = "Layout",
+        grid_page_tiles = "Tiles",
+        grid_left = "Left panel",
+        grid_left_card = "Battery card",
+        grid_left_gauge = "Battery gauge",
+        grid_left_width = "Left panel width",
+        grid_width_narrow = "Narrow",
+        grid_width_normal = "Normal",
+        grid_width_wide = "Wide",
+        grid_size = "Grid size",
+        grid_extra = "Extra tile",
+        grid_extra_model = "Model image",
+        grid_extra_profiles = "Profiles P/R/B",
         -- The Telemetry page: what each tile of the telemetry view shows.
         urban_tile = "Tile"
       },
@@ -3346,6 +3360,8 @@ return {
       urban_bus_voltage = "Bus Voltage",
       urban_mcu_voltage = "MCU Voltage",
       urban_rsnr = "RSNR",
+      -- The Grid theme's battery card: the word beside the cell voltage.
+      grid_cell = "Cell",
       -- The Urban theme's battery page: its title, the three cell limits written out under the
       -- cell voltage bar, and the line at its foot.
       urban_battery = "Battery",

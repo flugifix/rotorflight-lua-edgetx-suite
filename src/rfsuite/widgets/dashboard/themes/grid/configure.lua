@@ -1,10 +1,10 @@
--- Settings page for this theme: which value the five rows of the right-hand panel show, which
--- the telemetry view's tiles show, and the rest of what the theme carries.
+-- Settings page for this theme: which value the six slots of the tile grid show, which the
+-- telemetry view's tiles show, and the rest of what the theme carries.
 --
 -- Follows the shipped default theme's configure module: load through
 -- DashboardLib.getThemeConfig, save through setThemeConfig plus the per-model store, and
 -- build the form with the shared Controls helpers. The source catalog itself lives in
--- layout.lua beside the rows that render it, so the page and the panel cannot drift apart.
+-- layout.lua beside the tiles that render it, so the page and the grid cannot drift apart.
 
 local function loadModule(path)
   local chunk = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, "t"))
@@ -21,19 +21,21 @@ local Layout = loadModule("widgets/dashboard/themes/grid/layout.lua")
 -- fallback for a caller that passes no theme.
 local THEME_PATH = "system/grid"
 
-local SLOT_COUNT = 5
+-- The tile grid's slots, as many as layout.lua fills the grid from.
+local SLOT_COUNT = Layout.SLOT_COUNT or 6
 
 -- The telemetry view's tiles, on the Telemetry page: as many as layout.lua draws, from the same
--- catalogue as the rows.
+-- catalogue as the slots.
 local TILE_COUNT = Layout.TILE_COUNT or 12
 
--- The arm-state colour choice. common.lua resolves the value; the default is green and red.
+-- The arm-state colour choice. common.lua resolves the value; this theme's default is amber and
+-- grey.
 local ARM_COLORS = {
-  { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_signal)@", value = "signal" },
   { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_amber)@", value = "amber" },
+  { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_signal)@", value = "signal" },
 }
 local ARM_COLORS_VALID = { amber = true, signal = true }
-local ARM_COLORS_DEFAULT = "signal"
+local ARM_COLORS_DEFAULT = "amber"
 
 -- The colour scheme: light or dark. The list and the default come from the theme itself, so
 -- this page cannot offer a scheme the palettes have no colours for. The default is `light`, so
@@ -46,7 +48,7 @@ for i = 1, #Layout.SCHEMES do
 end
 local SCHEME_DEFAULT = Layout.DEFAULT_SCHEME
 
--- Everything the theme carries beyond the five rows, the scheme and the arm colours comes from
+-- Everything the theme carries beyond the six slots, the scheme and the arm colours comes from
 -- Layout.SETTINGS: the key, the page it is set on, the values that are valid and the default, in
 -- one list that this page and the panels drawing the answers both read. A row added there
 -- appears here without this file being touched, which is what stops a setting from existing on a
@@ -356,10 +358,13 @@ end
 -- all of them rather than a hand-written block each: every one is the same control over the same
 -- kind of value, and nine blocks would be nine chances for a row to write into another row's
 -- key. Answers the cursor the caller continues from.
-local function appendSettings(children, x, cursorY, w, page)
+--
+-- `lead` picks the rows declared to stand ahead of the slot choices (true) or the rest (nil).
+local function appendSettings(children, x, cursorY, w, page, lead)
   for i = 1, #SETTINGS do
     local entry = SETTINGS[i]
-    if entry.page == page and entry.values == nil then
+    local here = entry.page == page and (entry.lead == true) == (lead == true)
+    if here and entry.values == nil then
       -- A number row. Its upper bound can move with the row it may not exceed, which a field's
       -- fixed range cannot follow, so the bound is held here: a value above the named row is
       -- taken as that row's value, and raising or lowering any row pulls down every row that
@@ -379,7 +384,7 @@ local function appendSettings(children, x, cursorY, w, page)
           holdNotAbove()
         end,
       })
-    elseif entry.page == page then
+    elseif here then
       local key = entry.key
       cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
         SETTINGS_ROW_LABEL[key], SETTINGS_OPTIONS[key], ui.config[key],
@@ -437,8 +442,8 @@ function M.build(ctx)
   -- Every id init.lua declares has to stand here as well. One that does not falls through to
   -- `only == nil`, which renders the whole form on that one tile and says nothing about it.
   local pageId = ctx and ctx.page and ctx.page.id
-  local only = (pageId == "look" or pageId == "rows" or pageId == "topbar" or pageId == "keys"
-    or pageId == "telemetry") and pageId or nil
+  local only = (pageId == "look" or pageId == "layout" or pageId == "tiles" or pageId == "topbar"
+    or pageId == "keys" or pageId == "telemetry") and pageId or nil
 
   local children = ctx.children
   local x, y, w = ctx.x, ctx.y, ctx.w
@@ -468,15 +473,25 @@ function M.build(ctx)
     cursorY = appendSettings(children, x, cursorY, w, "look")
   end
 
-  if only == nil or only == "rows" then
+  if only == nil or only == "layout" then
     Controls.appendSectionHeader(children, x, cursorY, w,
-      "@i18n(app.pages.settings_dashboard_settings.urban_page_rows)@", true, function() end)
+      "@i18n(app.pages.settings_dashboard_settings.grid_page_layout)@", true, function() end)
     cursorY = cursorY + Controls.SECTION_H
+    cursorY = appendSettings(children, x, cursorY, w, "layout")
+  end
+
+  if only == nil or only == "tiles" then
+    Controls.appendSectionHeader(children, x, cursorY, w,
+      "@i18n(app.pages.settings_dashboard_settings.grid_page_tiles)@", true, function() end)
+    cursorY = cursorY + Controls.SECTION_H
+
+    -- The grid size first: it decides how many of the slots below are drawn.
+    cursorY = appendSettings(children, x, cursorY, w, "tiles", true)
 
     for i = 1, SLOT_COUNT do
       local key = "slot" .. i
       cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-        "@i18n(app.pages.settings_dashboard_settings.urban_row)@ " .. i, OPTIONS, ui.config[key],
+        "@i18n(app.pages.settings_dashboard_settings.urban_tile)@ " .. i, OPTIONS, ui.config[key],
         function(value)
           if type(value) == "string" and VALID_IDS[value] then
             ui.config[key] = value
@@ -484,7 +499,7 @@ function M.build(ctx)
         end)
     end
 
-    cursorY = appendSettings(children, x, cursorY, w, "rows")
+    cursorY = appendSettings(children, x, cursorY, w, "tiles")
   end
 
   if only == nil or only == "topbar" then

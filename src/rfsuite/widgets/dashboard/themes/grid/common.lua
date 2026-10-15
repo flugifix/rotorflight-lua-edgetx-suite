@@ -50,7 +50,6 @@ local M = {}
 -- events' governor states, the status page's arming-disable reasons.
 M.T = {
   flights = "@i18n(widgets.dashboard.urban_flights)@",
-  total_time = "@i18n(widgets.dashboard.urban_total_time)@",
   governor = "@i18n(app.pages.logs.tpl_governor)@",
   throttle = "@i18n(app.pages.logs.throttle_title)@",
   profile = "@i18n(widgets.dashboard.urban_profile)@",
@@ -58,11 +57,6 @@ M.T = {
   battery_profile = "@i18n(widgets.dashboard.urban_battery_profile)@",
   -- The shorter word where the full one does not fit the narrow third column.
   battery_profile_short = "@i18n(widgets.dashboard.urban_battery_profile_short)@",
-  -- The status line's three placeholders: no flight controller answering, armed with nothing
-  -- to report, disarmed with nothing blocking.
-  no_telemetry = "@i18n(widgets.dashboard.urban_no_telemetry)@",
-  armed_ok = "@i18n(widgets.dashboard.urban_armed_ok)@",
-  ready = "@i18n(widgets.dashboard.urban_ready)@",
   -- The bottom bar's arm state. Without a flight controller the craft's state is not known, so
   -- the bar says so instead of claiming "Disarmed".
   armed = "@i18n(widgets.dashboard.urban_armed)@",
@@ -82,6 +76,8 @@ M.T = {
   throttle_unknown = "**",
   model_fallback = "Rotorflight",
   mah = "mAh",
+  -- The battery card's cell row.
+  cell = "@i18n(widgets.dashboard.grid_cell)@",
   -- The statistics view: its table rows, the three column heads, the link's state over the
   -- label column, and the totals and the line beneath the table.
   flight_time = "@i18n(app.pages.logs.flight_duration)@",
@@ -118,9 +114,8 @@ M.T = {
   gov_state_8 = "@i18n(app.pages.settings_audio_events.governor_state_bailout)@",
   gov_state_9 = "@i18n(app.pages.settings_audio_events.governor_state_bypass)@",
   gov_unknown = "@i18n(widgets.dashboard.urban_gov_unknown)@",
-  -- The readable names of the arming-disable bits, for the bottom bar's override. The compact
-  -- descriptors of the status line (NOGYRO, BOOTGRACE, ...) are the firmware's identifiers and
-  -- are not translated.
+  -- The readable names of the arming-disable bits, for the bottom bar's override and the status
+  -- view.
   arm_flag_0 = "@i18n(app.modules.fblstatus.arming_disable_flag_0)@",
   arm_flag_1 = "@i18n(app.modules.fblstatus.arming_disable_flag_1)@",
   arm_flag_2 = "@i18n(app.modules.fblstatus.arming_disable_flag_2)@",
@@ -241,17 +236,21 @@ end
 -- role for role:
 --
 --   text      every value
---   label     every label
---   line      the separators, the gauge and pill outlines, the menu glyph
---   frame     the gauge's cap, the link bars' outline
+--   label     every caption and label -- black on the light scheme, as every theme's labels are
+--   line      the outlines: the glyphs, the pill, the gauge, the buttons of the views, separators
+--   frame     the gauge's cap and body, the link bars' outline
+--   card      the outline of the battery card and of every tile
 --   empty     the gauge's empty segments
---   track     the link bars' empty track
+--   track     the link bars' and the fill bar's empty track
 --   tick      the threshold notches on the link bars, the units
---   disabled  the status line's placeholders, "No FC connected"
---   warning   the arming reasons, "Disarmed"
+--   disabled  the placeholders, "No FC connected"
+--   warning   the arming reasons
 --   ok / warn / crit / neut   the traffic light of the link bars and the arm state
---   bar_*     the battery fills, the same in both schemes
---   vtx_*     the radio battery pill's two fills, the same in both schemes
+--   bar_*     the battery fills: green, yellow at the low step, red at the critical one, and
+--             orange for a pack that was not full when it was plugged in
+--   vtx_*     the radio battery pill's two fills
+--   ink       the figures over the gauge's segments
+--   pill_ink  the percentage on the radio battery pill
 --
 -- A scheme is a FUNCTION and not a table of hex numbers: a body only runs for the scheme that is
 -- actually asked for. A Lua state draws one of the two, so the other's lcd.RGB calls -- C calls
@@ -260,57 +259,60 @@ end
 -- `M.C` is ONE table for the theme's whole life and applyScheme rewrites its FIELDS. Every
 -- helper, every node and every per-frame closure holds that one table, so a scheme change
 -- cannot leave half the tree on the previous palette.
-local function batteryFills(colors)
-  colors.bar_ok = rgb(0x00FF00, GREEN or 0x00FF00)
-  colors.bar_warn = rgb(0xF8C000, 0xFF8000)
-  colors.bar_low = rgb(0xFFFF00, 0xFFFF00)
-  colors.bar_crit = rgb(0xFF0000, 0xFF0000)
-  colors.vtx_ok = rgb(0x30C030, GREEN or 0x00FF00)
-  colors.vtx_low = rgb(0xFF3333, 0xFF0000)
-  colors.ink = BLACK                                  -- the overlay text on a filled bar
-  return colors
-end
-
 local SCHEMES = {
   dark = function()
-    return batteryFills({
-      bg = rgb(0x000000, BLACK),
-      text = rgb(0xFFFFFF, WHITE),
-      label = rgb(0xF0F4F8, WHITE),
-      line = rgb(0xF0F4F8, WHITE),
-      frame = rgb(0xF0F4F8, WHITE),
-      -- A muted mid-grey that does not glow on the black panel but stays light enough for the
-      -- black overlay ink on the gauge.
-      empty = rgb(0x6A6E72, COLOR_THEME_SECONDARY2),
-      track = rgb(0x283038, COLOR_THEME_SECONDARY2),
-      tick = rgb(0xC0C8D0, COLOR_THEME_DISABLED),
+    return {
+      bg = rgb(0x061014, BLACK),
+      text = rgb(0xE8F4FF, WHITE),
+      label = rgb(0x6C90A0, COLOR_THEME_DISABLED),
+      line = rgb(0x50707F, COLOR_THEME_SECONDARY1),
+      frame = rgb(0x50707F, COLOR_THEME_SECONDARY1),
+      card = rgb(0x1E2E38, COLOR_THEME_SECONDARY2),
+      empty = rgb(0x2A3A44, COLOR_THEME_SECONDARY2),
+      track = rgb(0x1E2E38, COLOR_THEME_SECONDARY2),
+      tick = rgb(0x6C90A0, COLOR_THEME_DISABLED),
       disabled = rgb(0xFFC400, 0xFFC000),
-      warning = rgb(0xFF1A40, 0xFF0000),
-      ok = rgb(0x39FF14, GREEN or 0x00FF00),          -- neon on a dark surface
-      warn = rgb(0xFFE000, 0xFFE000),
-      crit = rgb(0xFF1A40, 0xFF0000),
+      warning = rgb(0xFF4050, 0xFF0000),
+      ok = rgb(0x00E09B, GREEN or 0x00FF00),
+      warn = rgb(0xFFD24A, 0xFF8000),
+      crit = rgb(0xFF4050, 0xFF0000),
       neut = rgb(0xA8B0B8, COLOR_THEME_DISABLED),
-      pill_ink = rgb(0xFFFFFF, WHITE),                -- the % on the pill, white on the dark
-    })
+      bar_ok = rgb(0x00E09B, GREEN or 0x00FF00),
+      bar_low = rgb(0xFFD24A, 0xFFFF00),
+      bar_warn = rgb(0xFF9030, 0xFF8000),
+      bar_crit = rgb(0xFF4050, 0xFF0000),
+      vtx_ok = rgb(0x00E09B, GREEN or 0x00FF00),
+      vtx_low = rgb(0xFF4050, 0xFF0000),
+      ink = rgb(0x061014, BLACK),
+      pill_ink = rgb(0xE8F4FF, WHITE),
+    }
   end,
   light = function()
-    return batteryFills({
+    return {
       bg = rgb(0xFFFFFF, WHITE),
-      text = rgb(0x000000, BLACK),
+      text = rgb(0x101820, BLACK),
       label = rgb(0x000000, BLACK),
-      line = rgb(0x000000, BLACK),
-      frame = rgb(0x000000, BLACK),
-      empty = rgb(0xC8C8C8, COLOR_THEME_SECONDARY2),
-      track = rgb(0xC8C8C8, COLOR_THEME_SECONDARY2),
-      tick = rgb(0x909090, COLOR_THEME_DISABLED),
+      line = rgb(0xB0B6BC, COLOR_THEME_SECONDARY1),
+      frame = rgb(0xB0B6BC, COLOR_THEME_SECONDARY1),
+      card = rgb(0xD8DCE0, COLOR_THEME_SECONDARY2),
+      empty = rgb(0xC8CCD0, COLOR_THEME_SECONDARY2),
+      track = rgb(0xD8DCE0, COLOR_THEME_SECONDARY2),
+      tick = rgb(0x90969C, COLOR_THEME_DISABLED),
       disabled = rgb(0xF83C00, 0xFF8000),
-      warning = rgb(0xE83030, 0xFF0000),
-      ok = rgb(0x20B020, GREEN or 0x00FF00),          -- muted on a light surface
+      warning = rgb(0xE03030, 0xFF0000),
+      ok = rgb(0x22C55E, GREEN or 0x00FF00),
       warn = rgb(0xF0C000, 0xFF8000),
       crit = rgb(0xE03030, 0xFF0000),
       neut = rgb(0x4A4A4A, COLOR_THEME_SECONDARY1),
-      pill_ink = BLACK,                               -- the % on the pill, black on the light
-    })
+      bar_ok = rgb(0x22C55E, GREEN or 0x00FF00),
+      bar_low = rgb(0xF0C000, 0xFFFF00),
+      bar_warn = rgb(0xF08000, 0xFF8000),
+      bar_crit = rgb(0xE03030, 0xFF0000),
+      vtx_ok = rgb(0x22C55E, GREEN or 0x00FF00),
+      vtx_low = rgb(0xE03030, 0xFF0000),
+      ink = rgb(0x101820, BLACK),
+      pill_ink = rgb(0x101820, BLACK),
+    }
   end,
 }
 
@@ -490,7 +492,7 @@ function M.selectFont(availH, availW, sample, maxFont)
   return chosen
 end
 
--- M.fit for a string that is a constant of the code rather than data -- a value row's name in
+-- M.fit for a string that is a constant of the code rather than data -- a tile's caption in
 -- the package's language, a bounded set -- so its answer can be kept with the zone's other
 -- measurements, and a rebuild in the same zone measures nothing. A name that fits costs one cached
 -- width lookup.
@@ -556,6 +558,30 @@ end
 
 function M.hline(nodes, x, y, w, color)
   M.rect(nodes, x, y, w, 1, color or M.C.line, true)
+end
+
+-- The bordered card every tile and the battery card sit in: a rounded outline in the card
+-- colour, on the panel's background.
+function M.card(nodes, x, y, w, h)
+  M.rect(nodes, x, y, w, h, M.C.card, false, 8, 1)
+end
+
+-- A horizontal fill bar: a rounded track and one fill rectangle whose width is reactive. `fill`
+-- answers 0..100 or nil, `color` the fill colour; both are the caller's and already memoised, so
+-- the per-frame cost is two closures and a clamp.
+function M.hbar(nodes, x, y, w, h, fill, color)
+  local rounding = math.floor(h / 2)
+  M.rect(nodes, x, y, w, h, M.C.track, true, rounding)
+  nodes[#nodes + 1] = {
+    type = "rectangle", x = x, y = y, w = 1, h = h, filled = true, rounded = rounding,
+    size = function()
+      local p = fill()
+      if type(p) ~= "number" then return 1, h end
+      if p < 0 then p = 0 elseif p > 100 then p = 100 end
+      return math.max(1, math.floor(w * p / 100)), h
+    end,
+    color = color
+  }
 end
 
 -- Whether the firmware's own frame shows around this theme's buttons, as the pilot chose it on the
@@ -731,9 +757,9 @@ end
 -- answered, in which case this cell shows the state.
 --
 -- The host's object has two further branches ahead of this one, an arming-disable reason and a
--- disarmed label. Neither is repeated here: this theme already gives the disable reasons the
--- status line of the left panel and ARMED/DISARMED the bottom bar, and a cell that said the
--- same thing a third time would cost the one line that can say what the governor is doing.
+-- disarmed label. Neither is repeated here: this theme already gives the disable reasons and
+-- ARMED/DISARMED the bottom bar, and a cell that said the same thing a second time would cost
+-- the one line that can say what the governor is doing.
 local GOV_MODE_OFF = 0
 local GOV_MODE_LIMIT = 1
 
@@ -926,11 +952,11 @@ function M.tempColor(id, state, which, field)
 end
 
 -- The two arm-state colour schemes the pilot chooses between, stored under `arm_colors`:
--- `signal`, the default, is armed green and disarmed in the WARNING red; `amber` is armed in the
--- warning colour and disarmed in the label colour. Resolved per frame rather than captured at
--- build time -- it is two lookups on a state field, and every place that paints the arm state
+-- `amber`, this theme's default, is armed in the warn colour and disarmed in the label colour;
+-- `signal` is armed green and disarmed in the WARNING red. Resolved per frame rather than captured
+-- at build time -- it is two lookups on a state field, and every place that paints the arm state
 -- asks here, so one setting rules all of them.
-local ARM_COLORS_DEFAULT = "signal"
+local ARM_COLORS_DEFAULT = "amber"
 
 -- Answers the armed colour and the disarmed colour. M.C is indexed at call time, so nothing
 -- here can hold a colour the theme has stopped painting with.
@@ -942,8 +968,7 @@ function M.armColors(state)
   return M.C.warn, M.C.label
 end
 
--- "No FC connected" is muted, in the colour of the status line's placeholders: it is not an
--- arm state.
+-- "No FC connected" is muted, in the placeholder colour: it is not an arm state.
 function M.armedColor(state)
   return function()
     if state.rfConnected ~= true then return M.C.disabled end
@@ -960,10 +985,10 @@ end
 -- what it would draw with the pack present.
 --
 -- It is not the same fact as "the pack is low", and this theme draws it in the three places
--- the pack is drawn -- the status line says it in words, the gauge and the voltage rows turn --
--- rather than adding a tile for it. A reading that is no longer being measured is what the
--- gauge shows as no level at all; without the line beside it, that is indistinguishable from a
--- model with no fuel sensor.
+-- the pack is drawn -- the status bar says it in words, the battery panel and the voltage tiles
+-- turn -- rather than adding a tile for it. A reading that is no longer being measured is what
+-- the gauge shows as no level at all; without the words beside it, that is indistinguishable from
+-- a model with no fuel sensor.
 -- The colour a reading taken from the main pack is drawn in: critical while the pack is gone,
 -- otherwise whatever the caller would have used. One test per frame, no allocation.
 function M.packColor(state, base)
@@ -1059,18 +1084,8 @@ function M.clock(mode)
   end
 end
 
--- The firmware's arming-disable bit names in two spellings: the short upper-case descriptors the
--- status line strings together, and the readable names the bottom bar cycles through one at a
--- time.
-local ARM_DISABLE_DESCS = {
-  [0] = "NOGYRO", [1] = "FAILSAFE", [2] = "RXLOSS", [3] = "BADRX", [4] = "BOXFAILSAFE",
-  [5] = "GOVERNOR", [6] = "RPM_SIGNAL", [7] = "THROTTLE", [8] = "ANGLE", [9] = "BOOTGRACE",
-  [10] = "NOPREARM", [11] = "LOAD", [12] = "CALIB", [13] = "CLI", [14] = "CMS", [15] = "BST",
-  [16] = "MSP", [17] = "PARALYZE", [18] = "GPS", [19] = "RESCUE_SW", [20] = "RPMFILTER",
-  [21] = "REBOOT_REQD", [22] = "DSHOT_BBANG", [23] = "NO_ACC_CAL", [24] = "MOTOR_PROTO",
-  [25] = "ARMSWITCH"
-}
-
+-- The firmware's arming-disable bits by their readable names, which the bottom bar cycles
+-- through one at a time and the status view lists.
 -- The readable names are `M.T.arm_flag_<n>`, so they follow the package's language; the keys are built
 -- once here so the decode below concatenates nothing.
 local ARM_FLAG_KEYS = {}
@@ -1087,32 +1102,6 @@ local function flagBits(v)
   v = math.floor(v)
   if v < 0 then v = v + 4294967296 end
   return v
-end
-
--- Decoded arming-disable reasons in compact form, or "" when nothing blocks: "* " and the
--- descriptors in bit order, cut with "+" once they pass eighteen characters. One decode per
--- value change.
-function M.armDisableText(state)
-  return M.getter(M.field(state, "armDisableFlags"), function(v)
-    if v == nil or v == 0 then return "" end
-    v = flagBits(v)
-    local parts, len = {}, 0
-    for b = 0, 25 do
-      if v % 2 == 1 then
-        local desc = ARM_DISABLE_DESCS[b] or ("FLAG" .. b)
-        if len + #desc + 1 > 18 then
-          parts[#parts + 1] = "+"
-          break
-        end
-        parts[#parts + 1] = desc
-        len = len + #desc + 1
-      end
-      v = math.floor(v / 2)
-      if v == 0 then break end
-    end
-    if #parts == 0 then return "" end
-    return "* " .. table.concat(parts, " ")
-  end)
 end
 
 -- The readable names of the reasons that block arming, as a list, or nil -- for the bottom
@@ -1133,66 +1122,6 @@ function M.armDisableList(state)
     end
     if #out > 0 then list = out end
     return list
-  end
-end
-
--- What the status line says, and the colour it says it in, as ONE closure that the text node
--- and the colour node both ask -- two nodes over one closure, so a rule added to the text can
--- never be missing from the colour.
---
--- The precedence, worst news last so it wins:
---
---   placeholder          "No telemetry" without a flight controller, "Armed - OK" armed,
---                        "Ready" disarmed -- muted, so the line is visibly alive and never
---                        blank, which is what a broken line looks like.
---   speed controller     its verdict in its level's colour, whenever a flight controller
---                        answers: "YGE ESC OK" on a healthy controller, disarmed or armed.
---   arming reasons       what stands between the pilot and arming, while disarmed, in the
---                        WARNING colour -- above the controller.
---   main power lost      over everything: the board answers on its BEC and nothing else on the
---                        screen looks wrong.
---
--- The controller's verdict is the LIVE reading (`esc_status_live`), not the worst one since the
--- connect: a line that stays red over a fault the controller cleared seconds later says nothing
--- true about now. The record is not lost: the ESC Status value row reads the latched pair. Both
--- readings are the host's.
---
--- `capChars` is how many characters the caller measured its line to hold (L.statusPanel does the
--- measuring, because only the caller knows the font and the width). The cut is made HERE, in the
--- format path, because this runs in the reactive sweep, where lcd.sizeText -- a firmware call --
--- may not be made at all.
-function M.statusLine(state, capChars)
-  local why = M.armDisableText(state)
-  local cap = (type(capChars) == "number" and capChars > 4) and math.floor(capChars) or nil
-  -- One cut per value change, not one per frame: the memo is on the raw string.
-  local lastRaw, lastCut = nil, ""
-  local function fit(raw)
-    if cap == nil or #raw <= cap then return raw end
-    if raw ~= lastRaw then
-      lastRaw = raw
-      lastCut = M.cutUtf8(raw, cap - 1) .. "."
-    end
-    return lastCut
-  end
-  return function()
-    if state.mainPowerLost == true then return M.T.main_power_lost, M.C.crit end
-    if state.rfConnected ~= true then return M.T.no_telemetry, M.C.disabled end
-    if state.armed ~= true then
-      local reasons = why()
-      if reasons ~= "" then return fit(reasons), M.C.warning end
-    end
-    -- The pair is resolved together: a level without a text is a host that answered half, and
-    -- it is treated as no answer rather than as a blank alarm.
-    local derived = state.derived
-    local level = derived and derived.esc_status_live_level or nil
-    local esc = derived and derived.esc_status_live or nil
-    if type(esc) == "string" and esc ~= "" and level ~= nil then
-      if level >= 3 then return fit(esc), M.C.bar_crit end
-      if level == 2 then return fit(esc), M.C.bar_low end
-      return fit(esc), M.C.text
-    end
-    if state.armed == true then return M.T.armed_ok, M.C.disabled end
-    return M.T.ready, M.C.disabled
   end
 end
 
@@ -1364,8 +1293,8 @@ function M.fuelGauge(nodes, state, x, y, w, h)
   M.label(nodes, bodyX, percentY, bodyW, valueH,
     -- The same rule the segments take, so the figure and the level cannot disagree: with the
     -- main pack gone there is no reading, and the figure turns rather than holding the last
-    -- one it saw. The words for it are on the status line of the left panel; this is the
-    -- colour beside them, and it costs one comparison per frame.
+    -- one it saw. The words for it are on the status bar; this is the colour beside them, and
+    -- it costs one comparison per frame.
     M.getter(function()
       if state.mainPowerLost == true then return false end
       return M.fuel(state)
