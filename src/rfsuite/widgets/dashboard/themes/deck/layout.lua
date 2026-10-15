@@ -194,8 +194,8 @@ local CARD_PAD = 4
 -- binds a press of its own gets no host controls over it. This theme binds two small boxed glyphs
 -- at the left end of the header, before the model name: this one opens the quick menu, the one beside
 -- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves
--- full screen in the firmware, and init.lua declares that (`fullscreenExit`), which is what the host's theme check reads. The
--- page keys open the menu by the host's default.
+-- full screen in the firmware, and init.lua declares that (`fullscreenExit`), which is what the
+-- host's theme check reads. The page keys open the menu by the host's default.
 --
 -- The press is a `button`, and everything drawn over it is a LINE: on the full screen surface a
 -- rectangle takes a press and hands it to its PARENT, so a rectangle over the button would
@@ -789,7 +789,8 @@ end
 -- `minKey` / `maxKey` (optional) name the flight record's extremes of the reading
 -- (tasks/events/telemetry/flight_record.lua, FLIGHT_STATS), which the value columns and the
 -- telemetry view print under the figure at `places` decimals. A side the record does not keep
--- is absent and prints `-`; a reading with neither is not in the record at all and its tile has no range line.
+-- is absent and prints `-`; a reading with neither is not in the record at all and its tile has
+-- no range line.
 L.SOURCES = {
   { id = "cell_voltage", label = "@i18n(widgets.dashboard.urban_cell_voltage)@", unit = "V", sample = "4.20",
     minKey = "minVoltage", maxKey = "maxVoltage", places = 2, perCell = true,
@@ -807,8 +808,7 @@ L.SOURCES = {
         return v / cells
       end, 2)
     end,
-    -- Below the theme's own minimum the figure turns, the same bound the battery page's
-    -- cell bar is drawn against.
+    -- Below the theme's own minimum (`v_min`, where one is on file) the figure turns.
     color = function(state)
       return function()
         -- The pack being gone outranks the pack being low: the figure beside this colour is
@@ -1196,8 +1196,8 @@ end
 -- and the rest of its column or its row takes its room.
 --
 -- `first` marks a kind offered on the first position alone: the model picture is the one entry
--- that is not text, and only the tall first card fits it with its footer. The kinds' names are the
--- settings page's (L.kindLabels); what a kind draws carries its own words.
+-- that is not text, and only the tall first card fits it with its footer. The kinds' names are
+-- the settings page's (L.kindLabels); what a kind draws carries its own words.
 L.KINDS = {
   { id = "image", first = true },
   { id = "arm" },
@@ -1899,8 +1899,9 @@ end
 
 -- The arming override of the statistics view's bar: while the flight controller names reasons that
 -- block arming, the whole bar gives way to "Arming Disabled: <reason>", one reason at a time,
--- two seconds each, in the WARNING colour. The returned function is the visibility the bar's ordinary labels take in the
--- meantime. getTime is the radio's tick counter, not one of the probes a closure may not make.
+-- two seconds each, in the WARNING colour. The returned function is the visibility the bar's
+-- ordinary labels take in the meantime. getTime is the radio's tick counter, not one of the
+-- probes a closure may not make.
 --
 -- Common.label cuts nothing, and "Arming Disabled: " with the longest reason is wider than the
 -- bar in a longer language and on a small screen. The texts are a bounded set of constants -- the
@@ -2114,9 +2115,8 @@ local function statsRows(state)
   local vMin = num(tonumber(cfg.v_min))
   local cellMinColor = C.text
   if vMin ~= nil then
-    -- The least the pack reached against the theme's own minimum, the bound the battery page's
-    -- cell bar is drawn against. Without a minimum on file there is nothing to
-    -- compare with and the figure carries no closure at all.
+    -- The least the pack reached against the theme's own minimum (`v_min`). Without a minimum on
+    -- file there is nothing to compare with and the figure carries no closure at all.
     cellMinColor = function()
       local v = num(lastStat(state, "minVoltage", "lastMinVoltage"))
       if v ~= nil and v > 0 and v < vMin then return C.crit end
