@@ -127,8 +127,10 @@ local SCHEMA = {
       rate_profile = true,
       esc_temperature = false,
       esc_threshold = 90,
+      esc_critical = 110,
       mcu_temperature = false,
       mcu_threshold = 80,
+      mcu_critical = 95,
       lq_alert = false,
       lq_warn = 70,
       lq_critical = 50,
@@ -160,7 +162,7 @@ local SCHEMA = {
       -- The master level written to the GVAR while connected and no critical alert is active.
       master_normal        = 80,
       -- The master level written to the GVAR while a sustained critical alert is active
-      -- (low voltage, ESC over-temperature, empty tank).
+      -- (low voltage, the ESC or MCU temperature at its critical level, empty tank).
       master_alert         = 100,
     },
   },

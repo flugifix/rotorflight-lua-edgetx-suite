@@ -886,8 +886,10 @@ return {
         pid_profile = "PID-Profil",
         rate_profile = "Raten-Profil",
         esc_temperature = "ESC-Temperatur",
-        esc_threshold = "Schwellwert",
-        esc_threshold_model = "Schwellwert [Modell]",
+        esc_threshold = "Warnung",
+        esc_threshold_model = "Warnung [Modell]",
+        esc_critical = "Kritisch",
+        esc_critical_model = "Kritisch [Modell]",
         mcu_temperature = "MCU-Temperatur",
         section_telemetry = "Telemetrie",
         telemetry_lost = "Telemetrie verloren",
@@ -924,12 +926,14 @@ return {
         help_voltage_haptic = "Ob der Sender bei Spannung, Hauptstrom verloren und dem BEC/RX-Alarm vibriert. Standard: an.",
         help_pid_profile = "Sagt die Nummer des PID-Profils bei einem Wechsel. Standard: an.",
         help_rate_profile = "Sagt die Nummer des Raten-Profils bei einem Wechsel. Standard: an.",
-        help_esc_temperature = "Warnt, wenn die ESC-Temperatur den Schwellwert darunter erreicht. Standard: aus.",
-        help_esc_threshold = "Die ESC-Temperatur, ab der gewarnt wird, in der Einheit aus Einstellungen > Lokalisierung. Mit verbundenem Modell bei diesem gespeichert (die Zeile zeigt [Modell]). Standard: 90 °C.",
-        help_mcu_temperature = "Warnt mit der Temperatur, wenn die MCU des Flugreglers den Schwellwert darunter erreicht. Standard: aus.",
-        help_mcu_threshold = "Die MCU-Temperatur, ab der gewarnt wird, in der Einheit aus Einstellungen > Lokalisierung. Gilt immer radioweit. Standard: 80 °C.",
-        help_esc_repeat = "Wie oft die ESC- oder MCU-Warnung spricht, solange die Temperatur am oder über dem Schwellwert bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal.",
-        help_esc_haptic = "Ob der Sender bei den ESC- und MCU-Temperaturwarnungen vibriert. Standard: an.",
+        help_esc_temperature = "Sagt die ESC-Temperatur, wenn sie die Warn- oder kritische Stufe darunter erreicht. Die Erholung bleibt still. Standard: aus.",
+        help_esc_threshold = "Die untere ESC-Stufe, in der Einheit aus Einstellungen > Lokalisierung. Wird ohne Vibration gesagt. Mit verbundenem Modell bei diesem gespeichert (die Zeile zeigt [Modell]). Standard: 90 °C.",
+        help_esc_critical = "Die obere ESC-Stufe. Vibriert zusätzlich, wenn Haptisch an ist. Mit verbundenem Modell bei diesem gespeichert (die Zeile zeigt [Modell]). Standard: 110 °C.",
+        help_mcu_temperature = "Sagt die Temperatur der MCU des Flugreglers, wenn sie die Warn- oder kritische Stufe darunter erreicht. Die Erholung bleibt still. Standard: aus.",
+        help_mcu_threshold = "Die untere MCU-Stufe, in der Einheit aus Einstellungen > Lokalisierung. Wird ohne Vibration gesagt. Gilt immer radioweit. Standard: 80 °C.",
+        help_mcu_critical = "Die obere MCU-Stufe. Vibriert zusätzlich, wenn Haptisch an ist. Gilt immer radioweit. Standard: 95 °C.",
+        help_esc_repeat = "Wie oft die ESC- oder MCU-Warnung spricht, solange die Temperatur auf einer Stufe bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal.",
+        help_esc_haptic = "Ob der Sender bei den ESC- und MCU-Temperaturwarnungen auf der kritischen Stufe vibriert. Standard: an.",
         help_adjustment_events = "Sagt den neuen Wert, wenn eine Adjustment-Funktion eine Einstellung ändert, sobald er eine Sekunde steht; mit dem Namen der Funktion, wenn es eine andere als zuletzt ist. Standard: aus.",
         help_fuel_alerts = "Sagt den SmartFuel-Stand beim Unterschreiten der darunter gewählten Stufen und warnt bei 0 %. Standard: an.",
         help_fuel_callout_percent = "Die Stufen, bei denen der fallende Stand gesagt wird, jede einmal. Nur bei 10% sagt nur die 10-%-Stufe. Standard: alle 10 %.",
@@ -963,7 +967,7 @@ return {
         help_message = "Ansage bei einem Wechsel des PID- oder Raten-Profils."
       },
       settings_audio_events_esc = {
-        help_message = "Temperaturwarnungen für den ESC und die MCU des Flugreglers."
+        help_message = "Temperaturwarnungen für den ESC und die MCU des Flugreglers, mit der Temperatur gesagt.\nESC-Temperatur: Ansage, wenn der ESC eine Stufe erreicht; die Erholung bleibt still.\nWarnung: die untere Stufe, ohne Vibration. Beim Modell gespeichert.\nKritisch: die obere Stufe, mit Vibration, wenn Haptisch an ist. Beim Modell gespeichert.\nMCU-Temperatur: dieselben zwei Stufen für die MCU, radioweit.\nWiederholung: wie oft eine Warnung spricht, solange sie anhält, alle 10 s.\nHaptisch: vibriert auf der kritischen Stufe."
       },
       settings_audio_events_adjustment = {
         help_message = "Ansage von Werten, die über die Adjustment-Funktionen des Flugreglers geändert werden."

@@ -64,11 +64,15 @@ local CONFIG_SCHEMA = {
   -- written through the per-model store whenever there is one, and falls back to the
   -- global file on a radio that has none.
   { key = "esc_threshold",     type = "number", default = 90, min = 60, max = 300, scope = "model", section = "esc" },
+  -- The level above the warning one, where the alert vibrates as well. The same aircraft's
+  -- hardware as the warning level, so the same scope and range.
+  { key = "esc_critical",      type = "number", default = 110, min = 60, max = 300, scope = "model", section = "esc" },
   { key = "mcu_temperature",   type = "bool", default = false, section = "esc" },
   -- No `scope = "model"`, unlike the ESC threshold above: the flight controller's MCU is the
   -- same silicon with the same rating in every aircraft, so a copy of this limit per model
   -- would be one more place to keep in step and nothing else.
   { key = "mcu_threshold",     type = "number", default = 80, min = 40, max = 150, section = "esc" },
+  { key = "mcu_critical",      type = "number", default = 95, min = 40, max = 150, section = "esc" },
   { key = "esc_repeat",        type = "number", default = 0, min = 0, max = 10, section = "esc" },
   { key = "esc_haptic",        type = "bool", default = true,  section = "esc" },
   { key = "lq_alert",          type = "bool", default = false, section = "link" },
@@ -186,14 +190,18 @@ local SECTIONS = {
     titleFallback = "ESC Temperature",
     items = {
       { kind = "bool", key = "esc_temperature", labelKey = "esc_temperature", labelFallback = "ESC Temperature" },
-      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Threshold", suffix = "°C",
+      { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Warning", suffix = "°C",
+        temperature = true, enabledBy = "esc_temperature" },
+      { kind = "number", key = "esc_critical", labelKey = "esc_critical", labelFallback = "Critical", suffix = "°C",
         temperature = true, enabledBy = "esc_temperature" },
       { kind = "subheader", labelKey = "section_mcu", labelFallback = "MCU Temperature" },
       { kind = "bool", key = "mcu_temperature", labelKey = "mcu_temperature", labelFallback = "MCU Temperature" },
-      -- The label of the ESC threshold, on purpose: the row says the same thing, and the
-      -- subheader above it is what tells the two thresholds apart. modelScopeLabel keys on
-      -- the row's own key, so this one carries no [Model] marker.
-      { kind = "number", key = "mcu_threshold", labelKey = "esc_threshold", labelFallback = "Threshold", suffix = "°C",
+      -- The labels of the ESC levels, on purpose: the rows say the same thing, and the
+      -- subheader above them is what tells the two pairs apart. modelScopeLabel keys on
+      -- the row's own key, so these carry no [Model] marker.
+      { kind = "number", key = "mcu_threshold", labelKey = "esc_threshold", labelFallback = "Warning", suffix = "°C",
+        temperature = true, enabledBy = "mcu_temperature" },
+      { kind = "number", key = "mcu_critical", labelKey = "esc_critical", labelFallback = "Critical", suffix = "°C",
         temperature = true, enabledBy = "mcu_temperature" },
       { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
       { kind = "choice", key = "esc_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
@@ -318,8 +326,10 @@ local ROW_HELP = {
     return {
       esc_temperature = t(i18n, "help_esc_temperature"),
       esc_threshold = t(i18n, "help_esc_threshold"),
+      esc_critical = t(i18n, "help_esc_critical"),
       mcu_temperature = t(i18n, "help_mcu_temperature"),
       mcu_threshold = t(i18n, "help_mcu_threshold"),
+      mcu_critical = t(i18n, "help_mcu_critical"),
       esc_repeat = t(i18n, "help_esc_repeat"),
       esc_haptic = t(i18n, "help_esc_haptic"),
     }
@@ -699,16 +709,20 @@ function M.new(sectionKey)
     ui.loaded = true
   end
 
-  -- The threshold is edited in the model's own store while a flight controller is connected and
-  -- in the radio's file otherwise, and nothing on the page says which: a number entered with a
-  -- model connected reads as the radio-wide default it no longer is. So the label carries a
-  -- marker exactly while the model's store is the one being written.
+  -- The ESC's two levels are edited in the model's own store while a flight controller is
+  -- connected and in the radio's file otherwise, and nothing on the page says which: a number
+  -- entered with a model connected reads as the radio-wide default it no longer is. So the label
+  -- carries a marker exactly while the model's store is the one being written.
   --
-  -- The key is spelled out here rather than taken from the schema entry, because the packager
+  -- The keys are spelled out here rather than taken from the schema entry, because the packager
   -- resolves a translation whose key is a literal and a computed one would reach the radio raw.
   local function modelScopeLabel(i18n, key, plain)
-    if key ~= "esc_threshold" or not modelStore() then return plain end
-    return t(i18n, "esc_threshold_model", "Threshold [Model]")
+    if key == "esc_threshold" then
+      if modelStore() then return t(i18n, "esc_threshold_model", "Warning [Model]") end
+    elseif key == "esc_critical" then
+      if modelStore() then return t(i18n, "esc_critical_model", "Critical [Model]") end
+    end
+    return plain
   end
 
   -- A row's `?` opens the same sheet as the header's, through the host's openHelp, with the row's

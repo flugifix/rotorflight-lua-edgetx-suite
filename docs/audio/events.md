@@ -10,7 +10,7 @@ The suite provides spoken voice alerts and tone callouts for flight telemetry, b
 
 *System* → *Settings* → *Audio* → *Events*
 
-The nine category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature threshold) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
+The nine category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature levels) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
 
 A save that cannot be stored reports *Save failed* with the reason: *the settings file could not be written to the SD card* where the card refused a file, and *model settings store not available* where the part of the suite that writes the model's own file could not be loaded.
 
@@ -85,25 +85,53 @@ Monitors the main pack voltage and the model's power supply.
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
-| ESC temperature | `esc_temperature` | Off | Radio | Alerts when ESC temperature exceeds the configured threshold. |
-| ESC threshold | `esc_threshold` | 90 °C | Model | Maximum allowed ESC temperature (60 to 300 °C). Configured per model. |
-| MCU temperature | `mcu_temperature` | Off | Radio | Alerts when the flight controller MCU temperature exceeds the threshold. |
-| MCU threshold | `mcu_threshold` | 80 °C | Radio | Maximum allowed MCU temperature (40 to 150 °C). Global radio setting. |
-| Repeat | `esc_repeat` | Until cleared | Radio | How often either temperature alert speaks while the reading stays at or above its threshold -- see *Repeat and Haptic* below. |
-| Haptic | `esc_haptic` | On | Radio | Transmitter vibration alongside the ESC and MCU temperature alerts. |
+| ESC temperature | `esc_temperature` | Off | Radio | Speaks the ESC temperature when it reaches the warning or the critical level. |
+| ESC warning | `esc_threshold` | 90 °C | Model | The lower ESC level (60 to 300 °C). Configured per model. |
+| ESC critical | `esc_critical` | 110 °C | Model | The upper ESC level (60 to 300 °C). Configured per model. |
+| MCU temperature | `mcu_temperature` | Off | Radio | Speaks the flight controller's MCU temperature when it reaches the warning or the critical level. |
+| MCU warning | `mcu_threshold` | 80 °C | Radio | The lower MCU level (40 to 150 °C). Global radio setting. |
+| MCU critical | `mcu_critical` | 95 °C | Radio | The upper MCU level (40 to 150 °C). Global radio setting. |
+| Repeat | `esc_repeat` | Until cleared | Radio | How often either temperature alert speaks while the reading stays at a level -- see *Repeat and Haptic* below. |
+| Haptic | `esc_haptic` | On | Radio | Transmitter vibration alongside the ESC and MCU temperature alerts at their **critical** level. |
 
-Both thresholds are stored and compared in °C, the unit the flight controller reports. On a radio
+Each alert has two levels and says the same words at both, followed by the temperature: *ESC
+temperature warning* or *MCU temperature*, then the reading. It works like the link quality alert:
+
+- **A rise into a level is spoken at once**, also when the alert spoke a moment before at the
+  level below, and the level it has entered starts its own repeat count.
+- **Falling back is not spoken.** A level is left only once the reading is more than 5 °C below it, so a
+  sensor resting on a level does not announce every rise.
+- **Only the critical level vibrates**, and only while *Haptic* is on. The warning level speaks
+  without vibration.
+- **Only the critical level raises the master volume** set up under [Volume](../pages/settings/audio/volume.md)
+  to its *Alert Level*, for as long as the alert stays at that level. The warning level is spoken
+  at the normal level.
+- **A critical level set below the warning level** is taken as the warning level: both are then
+  crossed together, and the alert speaks at the critical level.
+
+The defaults put the MCU's critical level at 95 °C. The reading is the temperature of the chip
+itself, and the chips flight controllers are built on are rated for 105 °C or more at the
+junction in their commercial grades (STM32F4, F7 and G4 at 105 °C, STM32H7 at 125 °C), so 95 °C
+leaves a margin below the lowest of those ratings. The ESC's levels are a property of the ESC:
+set them to what its maker gives as its temperature limit.
+
+A settings file written before the critical levels existed keeps its warning levels; the critical
+levels start at their defaults. A warning level stored above 110 °C (ESC) or 95 °C (MCU) is then
+above the critical default, and the alert speaks at the critical level from that warning level on
+until a critical level is set.
+
+All four levels are stored and compared in °C, the unit the flight controller reports. On a radio
 set to Fahrenheit under [Localization](../pages/settings/localization.md) the page shows them in
-°F -- each step is still one degree Celsius, so they move in steps of about 2 °F -- and the MCU
-alert speaks the temperature in °F.
+°F -- each step is still one degree Celsius, so they move in steps of about 2 °F -- and both
+alerts speak the temperature in °F.
 
-The ESC threshold is stored with the model while a flight controller is connected -- the row then
-reads *Threshold [Model]* -- and is otherwise the radio-wide default that every model without a
-value of its own reads. The MCU threshold is always radio-wide, because the same flight controller
-is rated the same in every aircraft.
+The ESC levels are stored with the model while a flight controller is connected -- the rows then
+read *Warning [Model]* and *Critical [Model]* -- and are otherwise the radio-wide defaults that every
+model without a value of its own reads. Each level is taken from the model where the model has one
+and from the radio where it has not. The MCU levels are always radio-wide.
 
 When the model's file cannot be written, *Save* reports the failure and the model goes on with the
-threshold it had before. The page still shows the number that was entered, so saving again writes
+levels it had before. The page still shows the number that was entered, so saving again writes
 it once the file can be written.
 
 ### 7. Adjustments
@@ -157,7 +185,7 @@ the page that switches an alert on is the page that says how it behaves.
 | --- | --- | --- |
 | Voltage | `voltage_repeat`, `voltage_haptic` | Low pack voltage, Main power lost, and the BEC / receiver alert set up under *Setup* → *Power* → *Alerts*. |
 | Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost. |
-| ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature, MCU temperature. |
+| ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature and MCU temperature (warning and critical). |
 | SmartFuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
 
 - **Repeat** is *Until cleared*, or a count from 1 to 10. Announcements are ten seconds apart
@@ -168,8 +196,9 @@ the page that switches an alert on is the page that says how it behaves.
   announcement. It defaults to on for the
   three categories whose alerts already buzzed with no way of switching it off, and to off for
   SmartFuel, which already had this setting and keeps its value.
-- **Two alerts have their own rule inside the category, and a setting does not overrule it.**
-  The link quality alert buzzes at its *critical* level only, never at the warning level. The
+- **Some alerts have their own rule inside the category, and a setting does not overrule it.**
+  The link quality alert and the ESC and MCU temperature alerts buzz at their *critical* level
+  only, never at the warning level. The
   lost telemetry announcement says itself once per loss, so it takes the haptic and ignores the
   repeat.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once

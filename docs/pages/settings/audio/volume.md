@@ -15,7 +15,7 @@ The Volume page allows you to configure Adaptive Audio-Level and the Master-Volu
 
 ## Master-Volume Bridge (Layer B)
 
-The Master-Volume bridge dynamically changes the entire radio's volume during flight, and forces it to a loud level during critical alarms (like Low Voltage or ESC Temperature).
+The Master-Volume bridge dynamically changes the entire radio's volume during flight, and forces it to a loud level during critical alarms (like Low Voltage, or the ESC or MCU temperature at its critical level).
 To use this, you must configure a Global Variable (GVAR) on your radio and link it to the volume.
 
 **Radio Setup (Once per model):**
