@@ -136,8 +136,23 @@ Callouts of the SmartFuel level while the model is connected. The flight control
 | Warning level | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical level | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
 | Telemetry lost | `telemetry_lost` | Off | Radio | Announces a flight controller that stops sending telemetry while the model is armed and the radio link is up, and announces it again when its telemetry is back. |
-| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality alert speaks while it stays at a level -- see *Repeat and Haptic* below. |
-| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality alert at its **critical** level, and alongside the lost telemetry announcement. |
+| TX power | `tpwr_alert` | Off | Radio | While armed, speaks the transmitter's power as a percentage of its maximum when it climbs to the warning or critical level. Speaks only where the ExpressLRS module reports dynamic power on -- see *TX Power* below. |
+| Warning level | `tpwr_warn` | 60% | Radio | The lower TX power level (1 to 100% of the maximum). Spoken without vibration. |
+| Critical level | `tpwr_critical` | 85% | Radio | The upper TX power level (1 to 100% of the maximum). A critical level entered below the warning level is taken as the warning level. |
+| Hold | `tpwr_hold` | 2 s | Radio | How long the power has to stay at or above a level before it is spoken (0 to 10 s; 0 speaks at once). |
+| Own maximum | `tpwr_limit` | Off | Radio | Takes *Maximum* below as 100% instead of the Max Power read from the module. |
+| Maximum | `tpwr_max` | 100 mW | Radio | The power taken as 100% while *Own maximum* is on: 25, 50, 100, 250, 500, 1000 or 2000 mW. |
+| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality and TX power alerts speak while they stay at a level -- see *Repeat and Haptic* below. |
+| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality and TX power alerts at their **critical** level, and alongside the lost telemetry announcement. |
+
+#### TX Power
+The transmitter module's power (the `TPWR` reading, in mW) is judged as a share of the most the module may send with. That maximum and whether dynamic power is on are not on any telemetry frame, so the suite asks the module for them over the CRSF parameter protocol: the ExpressLRS fields *Max Power* and *Dynamic* in its *TX Power* folder, the same ones the module's own Lua script shows. Both are shown read-only on *Tools* → *Diagnostics* → *ELRS Link*.
+
+- **Only with dynamic power.** With fixed power the module sends at its maximum all the time, so the share says nothing about the link and the alert stays silent. Any *Dynamic* choice other than *Off* counts as on, including the AUX choices, which add a switch that boosts the module to its maximum -- the alert then speaks at the critical level, because the power is at its maximum.
+- **Silent where the maximum is not known**: a module that is not ExpressLRS or does not answer, and a dual-band module built for the CE domain, whose *Max Power* labels are pairs (one limit per band) and do not say which applies. *Own maximum* gives the alert a maximum there, but not dynamic power: it too speaks only where the module has said dynamic power is on.
+- **When the module is asked.** Once per connection, after the connect sequence, only while the alert is on and the model is disarmed, one frame per announcement pass. Every frame sent to the module goes out in place of one RC channels frame, which is why nothing is sent while armed. The first time a module is seen, its parameter list is walked by name up to the two fields (about ten frames); their positions are then kept for that module for as long as the tool or the widget runs, and every later connection asks for the two fields directly (three frames). A change made in the module's settings is seen at the next connection.
+- **In the tool**, while *ELRS Link* is reading the module itself, the alert waits and reads afterwards: the two would otherwise take each other's answers.
+- **Levels** as the link quality alert: a level entered is spoken at once with the percentage, recovering is silent, a level is left only 5 points below its line, and only the critical level vibrates. The power moves in the module's steps (for example 100 and 250 mW against a 250 mW maximum, 40% and 100%), so a module that steps down and back up again starts a new announcement each time it climbs back for longer than the hold.
 
 #### What Telemetry Lost Covers, and What It Leaves to the Radio
 Only a flight controller that stops sending while the radio link is still up is announced: the link statistics keep arriving and the radio stays connected, but the flight controller's telemetry frames have stayed away for 6 seconds. The radio cannot tell this case apart on its own until it reports each sensor as lost, 20 seconds later. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once, so a lost link stays silent here -- also when the flight controller's frames stopped with it. A drop while the model is disarmed is a normal power-off and stays silent too.
@@ -156,7 +171,7 @@ the page that switches an alert on is the page that says how it behaves.
 | Category page | Repeat / Haptic keys | The alerts they govern |
 | --- | --- | --- |
 | Voltage | `voltage_repeat`, `voltage_haptic` | Low pack voltage, Main power lost, and the BEC / receiver alert set up under *Setup* → *Power* → *Alerts*. |
-| Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost. |
+| Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), TX power (warning and critical), Telemetry lost. |
 | ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature, MCU temperature. |
 | SmartFuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
 
@@ -169,7 +184,7 @@ the page that switches an alert on is the page that says how it behaves.
   three categories whose alerts already buzzed with no way of switching it off, and to off for
   SmartFuel, which already had this setting and keeps its value.
 - **Two alerts have their own rule inside the category, and a setting does not overrule it.**
-  The link quality alert buzzes at its *critical* level only, never at the warning level. The
+  The link quality and TX power alerts buzz at their *critical* level only, never at the warning level. The
   lost telemetry announcement says itself once per loss, so it takes the haptic and ignores the
   repeat.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
@@ -181,12 +196,13 @@ the page that switches an alert on is the page that says how it behaves.
 
 Announcements are played from the sound pack under `/SOUNDS/rf/<language>/`. Numbers and their units are spoken by the radio itself, so they follow the language set on the radio rather than the language of the pack.
 
-Every announcement has a file of its own in both packs. Two have no substitute and stay silent in an older pack that lacks theirs:
+Every announcement has a file of its own in both packs. Three have no substitute and stay silent in an older pack that lacks theirs:
 
 | File | Announcement |
 | --- | --- |
 | `stat/alerts/telemetrylost.wav` | Telemetry lost |
 | `stat/alerts/telemetryok.wav` | Telemetry recovered |
+| `stat/alerts/txpower.wav` | TX power, followed by the percentage |
 
 Three have a file of their own in both packs, and fall back to another file in an older pack that lacks it:
 
