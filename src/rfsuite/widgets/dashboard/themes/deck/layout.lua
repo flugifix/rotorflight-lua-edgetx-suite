@@ -1313,6 +1313,11 @@ local function chipGetter(state, def, compact)
   end)
 end
 
+-- The widest range and the widest most-alone the catalogue can put in a value column, which the row
+-- decides its range form against.
+local S_CHIP = "888.8 .. 888.8"
+local S_CHIP_SHORT = "Max 888.8"
+
 -- The widest string a range of this reading can be, for the decision whether it fits.
 local function chipSample(def)
   if def.perCell then return "4.20 .. 4.20" end
@@ -1701,9 +1706,11 @@ end
 -- A column set to Off drops out and the rest share the width. Every figure shares ONE face, fitted
 -- by pixel width to the widest figure among the columns that are drawn, so the row reads even; a
 -- reading in words takes the largest face up to the shared one in which its own sample fits. The
--- range is "least .. most" where the column is wide enough for the widest the catalogue can put
--- there, the most alone where only that fits, and nothing where neither does: a range that does not
--- fit would wrap and be cut off by the row. In full screen, on a host with theme views, the row is
+-- range is "least .. most" where the columns are wide enough for the widest range the catalogue
+-- can put there, the most alone where only that fits, and nothing where neither does -- decided
+-- once for the row, against two samples that are constants of the code, so every column reads the
+-- same way and a rebuild measures nothing new. A range that does not fit would wrap and be cut off
+-- by the row. In full screen, on a host with theme views, the row is
 -- the press that opens the telemetry view, which shows the same readings and more.
 local function valueRow(nodes, state, cfg, g, x, y, w, h, ctx)
   local slots = {}
@@ -1730,6 +1737,8 @@ local function valueRow(nodes, state, cfg, g, x, y, w, h, ctx)
   end
   local valueFont = Common.selectFont(valAvailH, colW - 12, sample)
   local valueH = Common.measure(valueFont, sample)
+  local compact = Common.textWidth(g.sml, S_CHIP) > textW
+  local noChip = compact and Common.textWidth(g.sml, S_CHIP_SHORT) > textW
 
   for i = 1, n do
     local def = slots[i]
@@ -1752,11 +1761,7 @@ local function valueRow(nodes, state, cfg, g, x, y, w, h, ctx)
     end
     Common.label(nodes, cx + 6, y + 5 + g.smlH + math.max(0, math.floor((h - 10 - g.smlH - chipH - fontH) / 2)),
       math.max(1, colW - 12), fontH, def.make(state), font, def.color and def.color(state) or C.text, CENTER)
-    local compact = Common.textWidth(g.sml, chipSample(def)) > textW
-    local chip = nil
-    if not (compact and Common.textWidth(g.sml, T.max .. " " .. def.sample) > textW) then
-      chip = chipGetter(state, def, compact)
-    end
+    local chip = (not noChip) and chipGetter(state, def, compact) or nil
     if chip ~= nil then
       Common.label(nodes, cx + 5, y + h - chipH - 4, textW, chipH, chip, g.sml, C.label, CENTER)
     end
@@ -1975,7 +1980,6 @@ end
 -- every caption, range and the strip are set in follows the SCREEN, not the card, so every caption
 -- on the panel is set in one face.
 local LEFT_WIDTH = 0.35
-local S_CHIP = "888.8 .. 888.8"
 
 function L.buildFlight(zone, state, ctx)
   local nodes = {}
