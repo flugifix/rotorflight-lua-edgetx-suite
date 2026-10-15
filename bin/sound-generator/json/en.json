@@ -594,6 +594,12 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/txpower.wav",
+    "english": "TX Power",
+    "translation": "TX Power",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/voltage.wav",
     "english": "voltage",
     "translation": "voltage",
