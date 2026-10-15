@@ -2969,6 +2969,15 @@ local function readTelemetry(state, audioState)
   setField("rss1", rss1)
   local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   setField("rss2", rss2)
+  -- The transmitter's power, which only lib/audio.lua's TX power alert uses: read only while that
+  -- alert is on (`txPowerWanted`, set by lib/audio.lua), so a radio that never switches it on pays
+  -- no sensor search for it; this pass's reading or nil, assigned rather than set through setField,
+  -- because nothing draws it. ui/home.lua reads it into the same field for the tool.
+  if audioState and audioState.txPowerWanted then
+    state.tpwr = getSensor("TPWR")
+  else
+    state.tpwr = nil
+  end
 
   if telemetryChanged then updateDerivedFlightState(state) end
   readFlightRecord(state)
@@ -3671,6 +3680,9 @@ function Runtime.new(zone, options)
       self.state.linkRfModeTick = nil
       self.state.linkGeneration = nil
       self.state.linkPingSent = nil
+      -- And the reading only the audio's TX power alert takes (readTelemetry), so the new session's
+      -- first pass judges its own link rather than the last one's.
+      self.state.tpwr = nil
       -- The flight clock and the statistics are the record's; the event runtime drops them on
       -- the connect edge of its own link detector, which follows this one once the link has held
       -- for its CONNECT_STABLE_SECONDS -- not on the disconnect before it, which the post-flight

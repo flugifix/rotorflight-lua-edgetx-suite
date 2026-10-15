@@ -3950,6 +3950,14 @@ function M.run(event, touchState)
 
           ts.rss1 = readFirstSensorNumber(RSS1_SOURCES, ts.rss1)
           ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
+          -- The transmitter's power, which only the TX power alert uses: read only while that alert
+          -- is on (`txPowerWanted`, set by lib/audio.lua), into the field the dashboard widget uses,
+          -- and this pass's reading or nil -- never a held value.
+          if state.audioState and state.audioState.txPowerWanted then
+            ts.tpwr = Sensors.getValue("TPWR")
+          else
+            ts.tpwr = nil
+          end
         end
 
         local modelName = nil
@@ -4007,6 +4015,7 @@ function M.run(event, touchState)
         state.telemetryState.batteryCellCount = nil
         state.telemetryState.rss1 = nil
         state.telemetryState.rss2 = nil
+        state.telemetryState.tpwr = nil
       else
         -- Still not ready, and not the edge either -- the stretch in between. Nothing here is
         -- connection state, so there is nothing to announce and nothing to clear, but the

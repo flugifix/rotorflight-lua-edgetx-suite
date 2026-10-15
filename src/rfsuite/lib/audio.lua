@@ -19,6 +19,10 @@ local AUDIO_PACK_BASE = "/SOUNDS/"
 local AUDIO_DEFAULT_FALLBACK = "en"
 local AUDIO_ROOT_BASE = "/audio/"
 local localeModule = nil
+-- lib/elrs_power.lua and lib/crsf.lua, loaded the first time the TX power alert is on, so a radio
+-- that never switches it on never loads either.
+local powerReadModule = nil
+local crsfModule = nil
 
 local ARM_FILE_MAP = {
   [0] = "disarm.wav",
@@ -203,6 +207,21 @@ local RSSI_LINK_SOURCES = {
 -- would speak.
 local LQ_HYSTERESIS = 5
 
+-- The TX power alert: the transmitter's power (`TPWR`) as a share of the most it may send with,
+-- spoken as a percentage. Higher is worse, so its levels are lines the share climbs to, and a level
+-- is left only once the share has fallen this many points below its line. The share moves in the
+-- module's power steps (10, 25, 50, 100, 250 mW and so on), so a step that lands on a line does not
+-- announce again each time the module steps down and back up.
+local TX_POWER_WARN = 60
+local TX_POWER_CRITICAL = 85
+local TX_POWER_HOLD = 2
+local TX_POWER_HYSTERESIS = 5
+-- The own maximum, in mW, where the pilot has switched it on and not chosen a value.
+local TX_POWER_OWN_MAX = 100
+-- How long after the ELRS Link page last drove its own walk of the module's parameters the TX power
+-- alert keeps out of the same conversation (see txPowerModuleRead).
+local TX_POWER_PAGE_QUIET_SECONDS = 1.0
+
 -- What separates "the pack is gone" from "the pack is low". A disconnected main battery reads
 -- as no voltage at all, and the lowest a flight pack is ever taken to is far above this, so
 -- nothing a discharge can reach falls inside the window.
@@ -265,6 +284,7 @@ local ALERT_CATEGORY = {
   rx_voltage      = "voltage",
   lq              = "link",
   telemetry_lost  = "link",
+  tpwr            = "link",
   esc_temperature = "esc",
   mcu_temperature = "esc",
   fuel_empty      = "fuel"
@@ -1360,6 +1380,181 @@ local function linkIsQuality(self, audioState, lq, opts)
   return false
 end
 
+-- A core module, through the suite's module cache where there is one and off the card where there
+-- is not -- the two routes the dashboard's own link sources load their libraries by
+-- (widgets/dashboard/objects/common.lua, loadCoreModule).
+local function loadCoreModule(path)
+  if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.require) == "function" then
+    local ok, mod = pcall(_G.rfsuite.require, path)
+    if ok and type(mod) == "table" then return mod end
+  end
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, mode)
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then return mod end
+  end
+  return nil
+end
+
+-- Has the connect chain finished? Asked of the events runtime that both callers already hold in
+-- the suite's module cache (ui/home.lua, widgets/dashboard/runtime.lua), with the test the
+-- dashboard makes before it draws (done >= total, widgets/dashboard/runtime.lua). The tool runs
+-- this module as soon as the link and a battery reading are up, which is before the chain is
+-- through. Where the runtime is not in the cache there is no chain to wait for.
+local EVENTS_RUNTIME_PATH = "/SCRIPTS/TOOLS/rfsuite-core/tasks/events/runtime.lua"
+local function connectChainDone()
+  local modules = type(_G) == "table" and _G.rfsuite and _G.rfsuite.modules or nil
+  local events = type(modules) == "table" and modules[EVENTS_RUNTIME_PATH] or nil
+  if type(events) ~= "table" or type(events.getOnconnectProgress) ~= "function" then return true end
+  local progress = events.getOnconnectProgress()
+  if type(progress) ~= "table" or type(progress.total) ~= "number" or type(progress.done) ~= "number" then
+    return true
+  end
+  return progress.total > 0 and progress.done >= progress.total
+end
+
+--- The transmitter module's maximum power and dynamic-power state for this connection, as the
+--- table lib/elrs_power.lua fills in; `done` set once it has answered or given up.
+---
+--- The module is asked over the CRSF parameter protocol, and every frame sent to it goes out in
+--- place of one RC channels frame (EdgeTX radio/src/pulses/crossfire.cpp, the Lua frame is copied
+--- into the slot the channels would take). So it is asked only after the connect chain, only while
+--- the model is disarmed -- the suite's MSP traffic stops while armed for the same reason
+--- (tasks/msp/runtime.lua) -- and one frame per audio pass. A read an arming cuts short starts again
+--- after the disarm. The answer is kept for the rest of the connection; the reset on the connection
+--- edge drops it.
+---
+--- In the tool the ELRS Link page may be walking the same parameter list (elrslink_task.lua), and
+--- that walk drops every entry that is not the one it asked for. While it runs -- it stamps
+--- `session.elrsProbeAt` on every pass -- this read stands aside and starts afresh afterwards.
+local function txPowerModuleRead(audioState, armed, now)
+  local st = audioState.txPowerRead
+  if st and st.done then return st end
+  if armed then
+    audioState.txPowerRead = nil
+    return nil
+  end
+  if not connectChainDone() then return nil end
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local pageAt = session and tonumber(session.elrsProbeAt) or nil
+  if pageAt and (now - pageAt) < TX_POWER_PAGE_QUIET_SECONDS then
+    audioState.txPowerRead = nil
+    return nil
+  end
+  if not powerReadModule then powerReadModule = loadCoreModule("lib/elrs_power.lua") end
+  if not crsfModule then crsfModule = loadCoreModule("lib/crsf.lua") end
+  if not powerReadModule then return nil end
+  if not st then
+    st = {}
+    audioState.txPowerRead = st
+  end
+  powerReadModule.step(st, crsfModule, _G.crossfireTelemetryPush, now)
+  return st
+end
+
+--- The TX power alert for one pass, called while it is on.
+---
+--- The power is judged as a share of the most the module may send with: the module's own Max
+--- Power, or the pilot's own maximum where that is switched on. It speaks only where the module
+--- has said dynamic power is on. With fixed power the module sends at its maximum all the time,
+--- so a share near 100 % says nothing about the link; and where the module could not be read --
+--- not ExpressLRS, no answer, a power label that is not a plain number -- there is nothing to
+--- hold the reading against, and it stays silent rather than guessing.
+---
+--- The shape of the link quality alert with the hold of the voltage alert: a level is entered once
+--- the share has stayed at or above its line for the hold, a level entered is spoken at once with
+--- the share after it, leaving a level costs TX_POWER_HYSTERESIS points below its line, recovering
+--- is not spoken, and only the critical level buzzes, where the Link page's Haptic is on. Armed
+--- only; disarming ends the episode.
+local function txPowerAlert(self, audioState, events, now, opts)
+  local state = self.state
+  local armed = isArmedFromState(state)
+  local read = txPowerModuleRead(audioState, armed, now)
+
+  if not armed then
+    if audioState.txPower ~= nil then
+      audioState.txPower = nil
+      alertCleared(audioState, "tpwr")
+    end
+    return
+  end
+  local slot = audioState.txPower
+  if not slot then
+    slot = {}
+    audioState.txPower = slot
+  end
+
+  if not (read and read.done and read.dynamic == true) then return end
+  local maximum
+  if prefEnabled(events, "tpwr_limit", false) then
+    maximum = tonumber(events.tpwr_max) or TX_POWER_OWN_MAX
+  else
+    maximum = read.maxMilliwatts
+  end
+  local power = tonumber(state.tpwr)
+  if maximum == nil or maximum <= 0 or power == nil then return end
+  local share = math.floor(100 * power / maximum + 0.5)
+  if share > 100 then share = 100 end
+
+  local warn = tonumber(events.tpwr_warn) or TX_POWER_WARN
+  local critical = tonumber(events.tpwr_critical) or TX_POWER_CRITICAL
+  -- A critical level below the warning level cannot be reached second, so the higher of the two
+  -- is the critical one. Nothing is refused over it; the pair is just ordered.
+  if critical < warn then critical = warn end
+  local hold = tonumber(events.tpwr_hold) or TX_POWER_HOLD
+  if hold < 0 then hold = 0 end
+
+  -- When the share last reached each line and has stayed there since.
+  if share >= warn then
+    if slot.warnSince == nil then slot.warnSince = now end
+  else
+    slot.warnSince = nil
+  end
+  if share >= critical then
+    if slot.criticalSince == nil then slot.criticalSince = now end
+  else
+    slot.criticalSince = nil
+  end
+
+  local level = 0
+  if slot.criticalSince ~= nil and (now - slot.criticalSince) >= hold then
+    level = 2
+  elseif slot.warnSince ~= nil and (now - slot.warnSince) >= hold then
+    level = 1
+  end
+
+  local spoken = slot.level or 0
+  if level < spoken then
+    if spoken >= 2 and share >= critical - TX_POWER_HYSTERESIS then
+      level = 2
+    elseif level < 1 and spoken >= 1 and share >= warn - TX_POWER_HYSTERESIS then
+      level = 1
+    end
+  end
+
+  if level < spoken then
+    -- Recovering is not announced; the next rise is, with a full repeat count.
+    slot.level = level
+    alertCleared(audioState, "tpwr")
+  elseif level > 0 then
+    if level > spoken then
+      audioState.lastAlertAt.tpwr = 0
+      alertCleared(audioState, "tpwr")
+    end
+    if alertMaySpeak(audioState, events, "tpwr", now) then
+      if tryPlayEventFile(audioState, now, "stat/alerts/txpower.wav", opts) then
+        if type(playNumber) == "function" then
+          local ok, err = pcall(playNumber, share, unitPercent(), 0, audio_volume)
+          if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+        end
+        alertSpoken(audioState, events, "tpwr", now, level >= 2)
+        slot.level = level
+      end
+    end
+  end
+end
+
 --- The flight controller has stopped sending. Called from `Audio.process` once its telemetry
 --- frames have stayed away for TELEMETRY_QUIET_SECONDS.
 ---
@@ -1482,6 +1677,11 @@ function Audio.resetConnectionState(audioState)
   audioState.smartfuelEmptySound = nil
   audioState.lqLevel = nil
   audioState.lqNotQualityLogged = nil
+  -- The TX power alert's episode and what the module said about its power. The pilot may have
+  -- changed the module's power settings since, so the next connection asks again -- two reads
+  -- where lib/elrs_power.lua already knows the module's field ids.
+  audioState.txPower = nil
+  audioState.txPowerRead = nil
   audioState.packCheckDone = false
   audioState.packJudged = false
   audioState.packNotFull = nil
@@ -1526,6 +1726,7 @@ function Audio.resetConnectionState(audioState)
     audioState.lastAlertAt.flight_time = 0
     audioState.lastAlertAt.lq = 0
     audioState.lastAlertAt.mcu_temperature = 0
+    audioState.lastAlertAt.tpwr = 0
     -- Was missing from this list while it was read by one alert only, which is why a
     -- reconnect after a main-power announcement used to carry that alert's timestamp into
     -- the new connection. The interval is now measured for every alert here.
@@ -1846,6 +2047,19 @@ function Audio.process(self, opts)
         end
       end
     end
+  end
+
+  -- The TX power alert. `txPowerWanted` tells both callers whether to read `TPWR`, which only this
+  -- alert uses (ui/home.lua, widgets/dashboard/runtime.lua), so a radio with it off pays no search
+  -- for it, and nothing is sent to the module.
+  local txPowerOn = prefEnabled(events, "tpwr_alert", false)
+  audioState.txPowerWanted = txPowerOn
+  if txPowerOn then
+    txPowerAlert(self, audioState, events, now, opts)
+  elseif audioState.txPower ~= nil or audioState.txPowerRead ~= nil then
+    audioState.txPower = nil
+    audioState.txPowerRead = nil
+    alertCleared(audioState, "tpwr")
   end
 
   do

@@ -894,6 +894,10 @@ return {
         lq_alert = "Link Quality",
         lq_warn = "Warning (%)",
         lq_critical = "Critical (%)",
+        section_tx_power = "TX Power",
+        tpwr_alert = "TX Power",
+        tpwr_limit = "Own Maximum",
+        tpwr_max = "Maximum (mW)",
         adjustment_events = "Adjustment Announcements",
         fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Callout %",
@@ -939,8 +943,14 @@ return {
         help_lq_warn = "The upper level in percent. Spoken without vibration. Default 70 %.",
         help_lq_critical = "The lower level in percent. Vibrates too if Haptic is on. Default 50 %.",
         help_telemetry_lost = "Speaks when the armed model's flight controller stops sending while the radio link is up, and again when it is back. A lost link is the radio's own announcement. Off by default.",
-        help_link_repeat = "How often the link quality alert speaks while it stays at a level, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
-        help_link_haptic = "Whether the transmitter vibrates with the critical link quality level and with Telemetry Lost. On by default.",
+        help_tpwr_alert = "Armed: speaks the transmitter's power in percent of its maximum when it climbs to the warning or critical level. Only with dynamic power on in the ExpressLRS module; silent with fixed power or a module that cannot be read. Off by default.",
+        help_tpwr_warn = "The lower level in percent of the maximum. Spoken without vibration. Default 60 %.",
+        help_tpwr_critical = "The upper level in percent of the maximum. Vibrates too if Haptic is on. Default 85 %.",
+        help_tpwr_hold = "How long the power has to stay at or above a level before it is spoken. 0 speaks at once. Default 2 s.",
+        help_tpwr_limit = "Takes Maximum (mW) below as 100 % instead of the Max Power read from the module. Off by default.",
+        help_tpwr_max = "The power taken as 100 % while Own Maximum is on. Default 100 mW.",
+        help_link_repeat = "How often the Link Quality and TX Power alerts speak while they stay at a level, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
+        help_link_haptic = "Whether the transmitter vibrates with the critical level of Link Quality and TX Power, and with Telemetry Lost. On by default.",
         help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
         saved_title = "Saved",
         saved_message = "Audio events saved",
@@ -972,7 +982,7 @@ return {
         help_message = "Callouts of the SmartFuel level while the model is connected.\nThe flight controller computes the value when SmartFuel is on there (Setup > Power > SmartFuel, MSP API 12.0.9 or later).\nOtherwise the radio computes it from the local source set in Setup > Power > Preferences."
       },
       settings_audio_events_link = {
-        help_message = "Alerts about the radio link and the flight controller's telemetry."
+        help_message = "Alerts about the radio link and the flight controller's telemetry.\nLink Quality: speaks the quality when it falls to a level.\nWarning (%): the first level, without vibration.\nCritical (%): the second level, with vibration if Haptic is on.\nTelemetry Lost: armed, the flight controller stops sending.\nTX Power: armed, the power in % of the maximum; only with dynamic power.\nHold (s): how long a level has to hold before it is spoken.\nOwn Maximum: use Maximum (mW) instead of the module's Max Power.\nMaximum (mW): the power taken as 100 %.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at Critical and with Telemetry Lost."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Mode",
@@ -2360,7 +2370,10 @@ return {
         confirm_elrs_to_rf = "Set Rotorflight's telemetry configuration to match the ELRS module, and save it?",
         confirm_cancelled = "Nothing was written",
         confirm_no_dialog = "This radio cannot show the confirmation.",
-        help_message = "Compares the packet rate and telemetry ratio of the ExpressLRS transmitter module with the link rate and ratio the flight controller was configured for. Probe only reads. RF -> ELRS writes the module to match the flight controller; ELRS -> RF writes the flight controller and saves it. Both ask before they write, and neither writes while the model is armed."
+        tx_power = "TX Power",
+        power_dynamic = "dynamic",
+        power_fixed = "fixed",
+        help_message = "Compares the packet rate and telemetry ratio of the ExpressLRS transmitter module with the link rate and ratio the flight controller was configured for. Probe only reads. RF -> ELRS writes the module to match the flight controller; ELRS -> RF writes the flight controller and saves it. Both ask before they write, and neither writes while the model is armed.\nTX Power: the module's Max Power and whether dynamic power is on, read only."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",

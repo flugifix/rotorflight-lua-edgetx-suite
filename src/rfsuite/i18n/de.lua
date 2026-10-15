@@ -894,6 +894,10 @@ return {
         lq_alert = "Linkqualität",
         lq_warn = "Warnung (%)",
         lq_critical = "Kritisch (%)",
+        section_tx_power = "Sendeleistung",
+        tpwr_alert = "Sendeleistung",
+        tpwr_limit = "Eigenes Maximum",
+        tpwr_max = "Maximum (mW)",
         adjustment_events = "Einstellungsansagen",
         fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Ansage %",
@@ -939,8 +943,14 @@ return {
         help_lq_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 70 %.",
         help_lq_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 50 %.",
         help_telemetry_lost = "Ansage, wenn der Flugregler des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst. Standard: aus.",
-        help_link_repeat = "Wie oft die Linkqualitäts-Warnung spricht, solange sie auf einer Stufe bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
-        help_link_haptic = "Ob der Sender bei der kritischen Linkqualität und bei Telemetrie verloren vibriert. Standard: an.",
+        help_tpwr_alert = "Scharf: sagt die Sendeleistung in Prozent des Maximums, wenn sie auf die Warn- oder kritische Stufe steigt. Nur mit dynamischer Leistung im ExpressLRS-Modul; still bei fester Leistung oder einem Modul, das sich nicht lesen lässt. Standard: aus.",
+        help_tpwr_warn = "Die untere Stufe in Prozent des Maximums. Wird ohne Vibration gesagt. Standard: 60 %.",
+        help_tpwr_critical = "Die obere Stufe in Prozent des Maximums. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 85 %.",
+        help_tpwr_hold = "So lange muss die Leistung auf oder über einer Stufe bleiben, bevor sie gesagt wird. 0 sagt sofort. Standard: 2 s.",
+        help_tpwr_limit = "Nimmt Maximum (mW) darunter als 100 % statt der Max Power, die aus dem Modul gelesen wird. Standard: aus.",
+        help_tpwr_max = "Die Leistung, die als 100 % gilt, solange Eigenes Maximum an ist. Standard: 100 mW.",
+        help_link_repeat = "Wie oft die Alarme Linkqualität und Sendeleistung sprechen, solange sie auf einer Stufe bleiben, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
+        help_link_haptic = "Ob der Sender bei der kritischen Stufe von Linkqualität und Sendeleistung und bei Telemetrie verloren vibriert. Standard: an.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
         saved_title = "Gespeichert",
         saved_message = "Audio-Ereignisse gespeichert",
@@ -972,7 +982,7 @@ return {
         help_message = "Ansagen des SmartFuel-Stands, solange das Modell verbunden ist.\nDen Wert berechnet der Flugregler, wenn SmartFuel dort an ist (Setup > Power > SmartFuel, ab MSP API 12.0.9).\nSonst berechnet ihn der Sender aus der lokalen Quelle in Setup > Power > Einstellungen."
       },
       settings_audio_events_link = {
-        help_message = "Warnungen zur Funkverbindung und zur Telemetrie des Flugreglers."
+        help_message = "Alarme zur Funkverbindung und zur Telemetrie des Flugreglers.\nLinkqualität: Ansage, wenn sie auf eine Stufe fällt.\nWarnung (%): die erste Stufe, ohne Vibration.\nKritisch (%): die zweite Stufe, mit Vibration, wenn Haptisch an ist.\nTelemetrie verloren: scharf, der Flugregler verstummt.\nSendeleistung: scharf, in % des Maximums; nur mit dynamischer Leistung.\nHaltezeit (s): so lange muss eine Stufe erst anstehen.\nEigenes Maximum: Maximum (mW) statt Max Power des Moduls.\nMaximum (mW): die Leistung, die 100 % ist.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert bei Kritisch und bei Telemetrie verloren."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",
@@ -2360,7 +2370,10 @@ return {
         confirm_elrs_to_rf = "Telemetrie-Konfiguration von Rotorflight an das ELRS-Modul angleichen und speichern?",
         confirm_cancelled = "Es wurde nichts geschrieben",
         confirm_no_dialog = "Dieses Radio kann die Rückfrage nicht anzeigen.",
-        help_message = "Vergleicht Paketrate und Telemetrie-Verhältnis des ExpressLRS-Sendemoduls mit Link-Rate und -Verhältnis, für die der Flight Controller konfiguriert ist. Prüfen liest nur. RF -> ELRS schreibt das Modul passend zum Flight Controller, ELRS -> RF schreibt den Flight Controller und speichert ihn. Beide fragen vor dem Schreiben nach, und im Arm-Zustand schreibt keiner von beiden."
+        tx_power = "Sendeleistung",
+        power_dynamic = "dynamisch",
+        power_fixed = "fest",
+        help_message = "Vergleicht Paketrate und Telemetrie-Verhältnis des ExpressLRS-Sendemoduls mit Link-Rate und -Verhältnis, für die der Flight Controller konfiguriert ist. Prüfen liest nur. RF -> ELRS schreibt das Modul passend zum Flight Controller, ELRS -> RF schreibt den Flight Controller und speichert ihn. Beide fragen vor dem Schreiben nach, und im Arm-Zustand schreibt keiner von beiden.\nSendeleistung: Max Power des Moduls und ob dynamische Leistung an ist, nur lesend."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",
