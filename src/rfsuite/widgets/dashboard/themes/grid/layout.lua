@@ -84,7 +84,7 @@ local ON_OFF = { "on", "off" }
 
 L.SETTINGS = {
   -- The firmware's own frame around every place on the full screen that takes a press -- the
-  -- menu and tool buttons, the profile row, the link bars, the buttons of the views. Off covers
+  -- menu and tool buttons, the link bars, the battery panel, the tiles, the status bar, the buttons of the views. Off covers
   -- it (Common.button); the outlines this theme draws itself stay.
   { page = "look",   key = "tap_frames", values = ON_OFF,                      default = "on" },
   -- The battery gauge's yellow and red steps, in percent of the fuel reading. The defaults are
@@ -1011,7 +1011,7 @@ L.DEFAULT_TILES = {
 --                                            whose pilot has not put it in a tile, and the bar would then say
 --                                            nothing for a reason no pilot could ever see.
 --   TQly, TPWR                               the transmitter's link quality and power, for the
---                                            TQ bar and the bottom bar.
+--                                            TQ bar and the status bar.
 --   link_floor                               the sensitivity floor of the air rate, which the
 --                                            signal bars measure their headroom against.
 --   link_diversity                           whether a second antenna has been seen.
@@ -1452,10 +1452,16 @@ function L.tileGrid(nodes, state, x, y, w, h, ctx, lblFont, lblH)
   local cellH = math.floor((h - (rows - 1) * CARD_GAP) / rows)
   if cellW < 16 or cellH < lblH + 8 then return end
   local slots = placedSlots(state, cells)
+  -- Widest by pixels, not by characters: "-99.9" and "99999" are both five characters, and a
+  -- face fitted to the narrower one does not hold the other (a label is not clipped).
   local sample = "8888"
+  local sampleW = Common.textWidth(lblFont, sample)
   for i = 1, #slots do
     local s = slots[i].sample
-    if isFigure(s) and #s > #sample then sample = s end
+    if isFigure(s) then
+      local sw = Common.textWidth(lblFont, s)
+      if sw > sampleW then sample, sampleW = s, sw end
+    end
   end
   local vpad = math.max(2, math.min(8, math.floor(cellH * 0.07)))
   local hpad = math.max(3, math.min(10, math.floor(cellW * 0.08)))
@@ -1493,7 +1499,7 @@ function L.tileGrid(nodes, state, x, y, w, h, ctx, lblFont, lblH)
 end
 
 -- ---------------------------------------------------------------------------
--- bottom bar
+-- status bar
 -- ---------------------------------------------------------------------------
 
 -- A reading the host resolves only because this theme declared it (L.sources): the transmitter

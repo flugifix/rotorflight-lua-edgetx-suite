@@ -57,7 +57,7 @@ M.T = {
   battery_profile = "@i18n(widgets.dashboard.urban_battery_profile)@",
   -- The shorter word where the full one does not fit the narrow third column.
   battery_profile_short = "@i18n(widgets.dashboard.urban_battery_profile_short)@",
-  -- The bottom bar's arm state. Without a flight controller the craft's state is not known, so
+  -- The status bar's arm state. Without a flight controller the craft's state is not known, so
   -- the bar says so instead of claiming "Disarmed".
   armed = "@i18n(widgets.dashboard.urban_armed)@",
   disarmed = "@i18n(widgets.dashboard.urban_disarmed)@",
@@ -114,7 +114,7 @@ M.T = {
   gov_state_8 = "@i18n(app.pages.settings_audio_events.governor_state_bailout)@",
   gov_state_9 = "@i18n(app.pages.settings_audio_events.governor_state_bypass)@",
   gov_unknown = "@i18n(widgets.dashboard.urban_gov_unknown)@",
-  -- The readable names of the arming-disable bits, for the bottom bar's override and the status
+  -- The readable names of the arming-disable bits, for the status bar's override and the status
   -- view.
   arm_flag_0 = "@i18n(app.modules.fblstatus.arming_disable_flag_0)@",
   arm_flag_1 = "@i18n(app.modules.fblstatus.arming_disable_flag_1)@",
@@ -268,7 +268,9 @@ local SCHEMES = {
       line = rgb(0x50707F, COLOR_THEME_SECONDARY1),
       frame = rgb(0x50707F, COLOR_THEME_SECONDARY1),
       card = rgb(0x1E2E38, COLOR_THEME_SECONDARY2),
-      empty = rgb(0x2A3A44, COLOR_THEME_SECONDARY2),
+      -- Light enough for the dark overlay ink: the gauge and the Battery page draw their
+      -- figures in `ink` over these segments, and a segment is empty below its own step.
+      empty = rgb(0x6A7A84, COLOR_THEME_SECONDARY2),
       track = rgb(0x1E2E38, COLOR_THEME_SECONDARY2),
       tick = rgb(0x6C90A0, COLOR_THEME_DISABLED),
       disabled = rgb(0xFFC400, 0xFFC000),
@@ -623,10 +625,10 @@ function M.button(nodes, x, y, w, h, fill, press)
   end
 end
 
--- A label above a value, both centred in their column -- the shape the flight totals and
--- the profile row are built from.
--- `labelColor` is optional and defaults to the muted label colour; the battery-profile cell in
--- the status panel is the one caller that raises it to a warning.
+-- A label above a value, both centred in their column -- the shape the extra tile's profile
+-- numbers are built from.
+-- `labelColor` is optional and defaults to the muted label colour; the extra tile raises the
+-- battery profile's label to a warning while a pack is still to be picked.
 function M.stacked(nodes, x, y, w, pad, labelText, valueText, labelFont, labelH, valueFont, valueH, labelColor)
   M.label(nodes, x, y + pad, w, labelH, labelText, labelFont, labelColor or M.C.label, CENTER)
   M.label(nodes, x, y + pad + labelH, w, valueH, valueText, valueFont, M.C.text, CENTER)
@@ -758,7 +760,7 @@ end
 --
 -- The host's object has two further branches ahead of this one, an arming-disable reason and a
 -- disarmed label. Neither is repeated here: this theme already gives the disable reasons and
--- ARMED/DISARMED the bottom bar, and a cell that said the same thing a second time would cost
+-- ARMED/DISARMED the status bar, and a cell that said the same thing a second time would cost
 -- the one line that can say what the governor is doing.
 local GOV_MODE_OFF = 0
 local GOV_MODE_LIMIT = 1
@@ -806,7 +808,7 @@ function M.throttleText(state)
   end)
 end
 
--- The bottom bar's arm state: "No FC connected" while no flight controller answers, since the
+-- The status bar's arm state: "No FC connected" while no flight controller answers, since the
 -- craft's state is then not known and "Disarmed" would be a claim.
 function M.armedText(state)
   return function()
@@ -1084,7 +1086,7 @@ function M.clock(mode)
   end
 end
 
--- The firmware's arming-disable bits by their readable names, which the bottom bar cycles
+-- The firmware's arming-disable bits by their readable names, which the status bar cycles
 -- through one at a time and the status view lists.
 -- The readable names are `M.T.arm_flag_<n>`, so they follow the package's language; the keys are built
 -- once here so the decode below concatenates nothing.

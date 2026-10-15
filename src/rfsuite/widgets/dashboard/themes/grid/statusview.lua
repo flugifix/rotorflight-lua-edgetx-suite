@@ -133,7 +133,7 @@ function M.build(children, zone, state, ctx)
   UD.rect(children, x, top, armW, cardH, C.track, false, math.max(4, math.floor(cardH * 0.12)), 1)
   UD.rect(children, infoX, top, infoW, cardH, C.track, false, math.max(4, math.floor(cardH * 0.12)), 1)
 
-  -- The arm word, in the colours the bottom bar gives it: the very closure the flight view draws its
+  -- The arm word, in the colours the status bar gives it: the very closure the flight view draws its
   -- arm state with (common.lua, M.armedColor), so the pilot's *Arm state colours* on the Look page
   -- (`arm_colors`) colour it here as there, whichever way round they are set. Without a flight
   -- controller the state is not known, so it says nothing and the line under it says why.
@@ -144,7 +144,7 @@ function M.build(children, zone, state, ctx)
     return T.disarmed_caps
   end, armFont, armColor, CENTER)
 
-  -- The line under it: why the model cannot be armed, in the bottom bar's readable names and its
+  -- The line under it: why the model cannot be armed, in the status bar's readable names and its
   -- warning colour, joined and cut to the card once per change of the flags; "Ready to arm" while
   -- nothing stands in the way; nothing while armed.
   local reasons = UD.armDisableList(state)

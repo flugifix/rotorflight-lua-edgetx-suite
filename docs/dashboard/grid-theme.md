@@ -128,8 +128,11 @@ reads the flight record. A reading the model does not carry shows `-`.
   tile shows them**: Grid has no panel for them. The governor, the profiles, the flight time,
   the total flight time and the flight count can be put in a tile; the throttle shows on the
   *Status* page.
-- **With the status bar off, the arming reasons and the transmitter power are not on the flight
-  screen**, and the *Status* page is reached by a key only.
+- **With the status bar off, the flight screen loses everything the bar says**: the model name,
+  the arm state and the arming reasons, *MAIN POWER LOST* in words, the speed controller's live
+  warning or fault, the transmitter power and the skipped frames. A lost main pack still shows on
+  the battery panel (`--%` in red, the cell row red). The *Status* page is then reached by a key
+  only.
 - **A copy in the user folder draws with the shipped files**, as Urban's does.
 - What Urban's page lists for its *Telemetry* and *ELRS* pages and its statistics bar holds for
   Grid's too.
