@@ -207,7 +207,7 @@ return {
       audio_events_adjustment = { name = "Einstellungen" },
       audio_events_fuel = { name = "SmartFuel" },
       audio_events_link = { name = "Link" },
-      audio_events_rescue = { name = "Rescue" },
+      audio_events_rescue = { name = "Rettung" },
       audio_volume = { name = "Lautstärke" },
       msp_speed = { name = "MSP-Geschwindigkeit" },
       api_tester = { name = "API Tester" },
@@ -855,7 +855,7 @@ return {
         section_fuel = "Kraftstoff",
         section_smartfuel = "SmartFuel",
         section_connect = "Beim Verbinden",
-        section_rescue = "Rescue",
+        section_rescue = "Rettung",
         section_alert_behaviour = "Verhalten der Warnungen",
         alert_repeat = "Wiederholung",
         alert_haptic = "Haptisch",
@@ -909,8 +909,8 @@ return {
         battery_profile = "Akkukapazität",
         initial_fuel = "SmartFuel",
         model_announcement = "Modellname",
-        rescue_active = "Rescue aktiv",
-        rescue_off = "Rescue aus",
+        rescue_active = "Rettung aktiv",
+        rescue_off = "Rettung beendet",
         help_model_announcement = "Spielt die nach dem Modell benannte Sounddatei SOUNDS/<Name>.wav einmal beim Verbinden. Fehlt die Datei auf der Karte, bleibt es still. Standard: aus.",
         help_battery_profile = "Sagt die Kapazität des aktiven Akkuprofils in mAh beim Verbinden und bei jedem Profilwechsel; ohne eingestellte Kapazität die Profilnummer. Standard: an.",
         help_pack_not_full = "Einmal beim Verbinden: warnt, wenn die Spannung pro Zelle unter Max Zellspannung (Setup > Power > Batterie) minus der Toleranz liegt, gesagt wie unter Spannung > Ansage als. Standard: aus.",
@@ -981,7 +981,7 @@ return {
         help_message = "Warnungen zur Funkverbindung und zur Telemetrie des Flugreglers."
       },
       settings_audio_events_rescue = {
-        help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetry.\nRescue aktiv: wird gesprochen, sobald eine Rettung beginnt.\nRescue aus: wird gesprochen, wenn die Rettung vorbei ist."
+        help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetrie.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",
