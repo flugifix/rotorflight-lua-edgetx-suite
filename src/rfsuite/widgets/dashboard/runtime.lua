@@ -1935,6 +1935,10 @@ local function updateConnectionState(self)
         self.audioState.initialized = false
         self.audioState.modelAnnounced = false
       end
+      -- After an armed flight the telemetry read stops while the link is down, so the rescue
+      -- state would stand as last read and pass for this connection's first reading. Dropped
+      -- here, the first reading after the link returns is only recorded, as on the tool's path.
+      if self.state then self.state.rescue = nil end
     end
   end
 

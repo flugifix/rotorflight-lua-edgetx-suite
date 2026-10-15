@@ -29,13 +29,13 @@ announcement can be had without the other.
 
 - The state is read from the *Rescue State* sensor (92), or from *System Status* (120) where the
   flight controller does not send the first; select either under *Configuration* → *Setup* →
-  *Telemetry*. Without both, nothing is spoken.
+  *Telemetry*. With neither, nothing is spoken.
 - Only a change of state is spoken. A model that connects during a rescue, or a switch turned on
   during one, does not announce it as just begun; its end is announced.
 - The phases of a rescue (pull-up, flip, climb, hover, exit) are not spoken one by one; the
   current phase is shown under *System* → *Tools* → *Diagnostics* → *System Status*.
-- The announcements do not wait for the model to be armed. The flight controller enters its
-  rescue whenever the switch assigned to it is on, so flicking that switch with the model
+- The announcements do not wait for the model to be armed. A flight controller with rescue
+  enabled enters it whenever the switch assigned to it is on, so flicking that switch with the model
   disarmed on the bench speaks both announcements, which checks the switch.
 - When the announcements are made, and the files they play, are on
   [Audio Events](../../../../audio/events.md).
