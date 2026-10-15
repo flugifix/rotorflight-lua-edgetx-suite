@@ -358,7 +358,8 @@ local function parseTelemetryField()
             dynamicPowerSeen = true
             moduleDynamicPower = PowerRead.dynamicOn(field)
         end
-        logMsg("parseTelemetryField: power field " .. powerKind .. " maxPower=" .. tostring(moduleMaxPower) .. " dynamic=" .. tostring(moduleDynamicPower))
+        logMsg("parseTelemetryField: power field " .. powerKind .. " maxPower=" .. tostring(moduleMaxPower)
+            .. " dynamic=" .. tostring(moduleDynamicPower))
         return
     end
 

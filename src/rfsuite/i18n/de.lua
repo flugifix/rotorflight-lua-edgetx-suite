@@ -943,7 +943,7 @@ return {
         help_lq_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 70 %.",
         help_lq_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 50 %.",
         help_telemetry_lost = "Ansage, wenn der Flugregler des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst. Standard: aus.",
-        help_tpwr_alert = "Scharf: sagt die Sendeleistung in Prozent des Maximums, wenn sie auf die Warn- oder kritische Stufe steigt. Nur mit dynamischer Leistung im ExpressLRS-Modul; still bei fester Leistung oder einem Modul, das sich nicht lesen lässt. Standard: aus.",
+        help_tpwr_alert = "Scharf: sagt die Sendeleistung in % des Maximums an der Warn- oder kritischen Stufe. Nur mit dynamischer Leistung im ExpressLRS-Modul, sonst still. Standard: aus.",
         help_tpwr_warn = "Die untere Stufe in Prozent des Maximums. Wird ohne Vibration gesagt. Standard: 60 %.",
         help_tpwr_critical = "Die obere Stufe in Prozent des Maximums. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 85 %.",
         help_tpwr_hold = "So lange muss die Leistung auf oder über einer Stufe bleiben, bevor sie gesagt wird. 0 sagt sofort. Standard: 2 s.",
@@ -982,7 +982,7 @@ return {
         help_message = "Ansagen des SmartFuel-Stands, solange das Modell verbunden ist.\nDen Wert berechnet der Flugregler, wenn SmartFuel dort an ist (Setup > Power > SmartFuel, ab MSP API 12.0.9).\nSonst berechnet ihn der Sender aus der lokalen Quelle in Setup > Power > Einstellungen."
       },
       settings_audio_events_link = {
-        help_message = "Alarme zur Funkverbindung und zur Telemetrie des Flugreglers.\nLinkqualität: Ansage, wenn sie auf eine Stufe fällt.\nWarnung (%): die erste Stufe, ohne Vibration.\nKritisch (%): die zweite Stufe, mit Vibration, wenn Haptisch an ist.\nTelemetrie verloren: scharf, der Flugregler verstummt.\nSendeleistung: scharf, in % des Maximums; nur mit dynamischer Leistung.\nHaltezeit (s): so lange muss eine Stufe erst anstehen.\nEigenes Maximum: Maximum (mW) statt Max Power des Moduls.\nMaximum (mW): die Leistung, die 100 % ist.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert bei Kritisch und bei Telemetrie verloren."
+        help_message = "Alarme zur Funkverbindung und zur Telemetrie des Flugreglers.\nLinkqualität: Ansage, wenn sie auf eine Stufe fällt.\nWarnung (%): die erste Stufe, ohne Vibration.\nKritisch (%): die zweite Stufe, vibriert, wenn Haptisch an ist.\nTelemetrie verloren: scharf, der Flugregler verstummt.\nSendeleistung: scharf, in % des Maximums; nur dynamisch.\nHaltezeit (s): so lange muss eine Stufe anstehen.\nEigenes Maximum: Maximum (mW) statt Max Power.\nMaximum (mW): die Leistung, die 100 % ist.\nWiederholung: wie oft ein Alarm spricht, alle 10 s.\nHaptisch: vibriert bei Kritisch und Telemetrie verloren."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",
@@ -2373,7 +2373,7 @@ return {
         tx_power = "Sendeleistung",
         power_dynamic = "dynamisch",
         power_fixed = "fest",
-        help_message = "Vergleicht Paketrate und Telemetrie-Verhältnis des ExpressLRS-Sendemoduls mit Link-Rate und -Verhältnis, für die der Flight Controller konfiguriert ist. Prüfen liest nur. RF -> ELRS schreibt das Modul passend zum Flight Controller, ELRS -> RF schreibt den Flight Controller und speichert ihn. Beide fragen vor dem Schreiben nach, und im Arm-Zustand schreibt keiner von beiden.\nSendeleistung: Max Power des Moduls und ob dynamische Leistung an ist, nur lesend."
+        help_message = "Vergleicht die Link-Einstellungen des ExpressLRS-Moduls mit denen des Flight Controllers.\nRotorflight: Telemetrie-Modus, Link-Rate und -Verhältnis auf dem Board.\nELRS-Modul: Paketrate und Telemetrie-Verhältnis des Moduls.\nSendeleistung: Max Power des Moduls und ob dynamische Leistung an ist; nur lesend.\nPrüfen: liest beide Seiten neu und schreibt nichts.\nRF -> ELRS: stellt das Modul auf Rate und Verhältnis des Flight Controllers.\nELRS -> RF: stellt den Flight Controller auf die des Moduls und speichert.\nBeide fragen vorher und schreiben nicht, solange das Modell scharf ist."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",
