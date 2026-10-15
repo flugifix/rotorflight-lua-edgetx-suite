@@ -207,6 +207,7 @@ return {
       audio_events_adjustment = { name = "Adjustments" },
       audio_events_fuel = { name = "SmartFuel" },
       audio_events_link = { name = "Link" },
+      audio_events_rescue = { name = "Rescue" },
       audio_volume = { name = "Volume" },
       msp_speed = { name = "MSP Speed" },
       api_tester = { name = "API Tester" },
@@ -854,6 +855,7 @@ return {
         section_fuel = "Fuel",
         section_smartfuel = "SmartFuel",
         section_connect = "On Connect",
+        section_rescue = "Rescue",
         section_alert_behaviour = "Alert Behaviour",
         alert_repeat = "Repeat",
         alert_haptic = "Haptic",
@@ -907,6 +909,8 @@ return {
         battery_profile = "Battery Capacity",
         initial_fuel = "SmartFuel",
         model_announcement = "Model Name",
+        rescue_active = "Rescue Active",
+        rescue_off = "Rescue Off",
         help_model_announcement = "Plays the sound file named after the model, SOUNDS/<name>.wav, once when the model connects. Nothing is said if the card has no such file. Off by default.",
         help_battery_profile = "Speaks the active battery profile's capacity in mAh when the model connects and whenever the profile changes; the profile number if no capacity is set. On by default.",
         help_pack_not_full = "Once when the model connects: warns if the voltage per cell is below Max cell voltage (Setup > Power > Battery) less the margin below, spoken as set under Voltage > Announce as. Off by default.",
@@ -941,6 +945,8 @@ return {
         help_telemetry_lost = "Speaks when the armed model's flight controller stops sending while the radio link is up, and again when it is back. A lost link is the radio's own announcement. Off by default.",
         help_link_repeat = "How often the link quality alert speaks while it stays at a level, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
         help_link_haptic = "Whether the transmitter vibrates with the critical link quality level and with Telemetry Lost. On by default.",
+        help_rescue_active = "Speaks once when the flight controller starts a rescue, whichever phase it starts in. Off by default.",
+        help_rescue_off = "Speaks once when the rescue is over and the flight controller is back to normal control. Off by default.",
         help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
         saved_title = "Saved",
         saved_message = "Audio events saved",
@@ -973,6 +979,9 @@ return {
       },
       settings_audio_events_link = {
         help_message = "Alerts about the radio link and the flight controller's telemetry."
+      },
+      settings_audio_events_rescue = {
+        help_message = "Announces the start and the end of a rescue, once each and without vibration. Needs the Rescue State (92) or System Status (120) sensor, Setup > Telemetry.\nRescue Active: spoken as soon as a rescue starts.\nRescue Off: spoken when the rescue is over."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Mode",

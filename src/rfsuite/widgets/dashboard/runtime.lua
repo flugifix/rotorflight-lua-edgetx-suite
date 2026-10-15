@@ -2821,6 +2821,18 @@ local function readTelemetry(state, audioState)
     setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
   end
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
+  -- The rescue state (rotorflight-firmware flight/rescue.h, 0 = off), for lib/audio.lua. This
+  -- pass's reading and nil while nothing answers, assigned rather than set through setField,
+  -- which never clears: the announcement speaks on a change between two readings, so neither a
+  -- value held over from the last connection nor a 0 standing in for a sensor not found yet
+  -- may pass for one. Nothing draws it, so it does not mark the telemetry as changed. Read only
+  -- while one of its announcements is on (`rescueWanted`, set by lib/audio.lua), so a radio that
+  -- never switches them on pays no sensor search for it.
+  if audioState and audioState.rescueWanted then
+    state.rescue = roundInt(getSensor("rescue"), nil)
+  else
+    state.rescue = nil
+  end
   -- The governor MODE, which is configuration rather than telemetry: the connect chain reads it
   -- once over MSP (tasks/events/common/governor_config.lua) and leaves it on the session. It is
   -- carried onto the state here so that an object needing it reads precomputed state, which is

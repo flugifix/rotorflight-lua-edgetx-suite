@@ -10,7 +10,7 @@ The suite provides spoken voice alerts and tone callouts for flight telemetry, b
 
 *System* → *Settings* → *Audio* → *Events*
 
-The nine category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature threshold) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
+The ten category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature threshold) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
 
 A save that cannot be stored reports *Save failed* with the reason: *the settings file could not be written to the SD card* where the card refused a file, and *model settings store not available* where the part of the suite that writes the model's own file could not be loaded.
 
@@ -144,6 +144,21 @@ Only a flight controller that stops sending while the radio link is still up is 
 
 The loss is announced **once**. A model that stays silent keeps the announcement's recovery window open, and it is the return that speaks again -- not the silence, however long it lasts.
 
+### 10. Rescue
+
+| Setting | Switch / Key | Default | Scope | Description |
+| --- | --- | --- | --- | --- |
+| Rescue Active | `rescue_active` | Off | Radio | Speaks "Rescue -- Active" once when the flight controller's rescue starts. |
+| Rescue Off | `rescue_off` | Off | Radio | Speaks "Rescue -- Off" once when the rescue is over. |
+
+#### When a Rescue Is Spoken
+
+The flight controller reports its rescue as a state: off, or one of the phases pull-up, flip, climb, hover and exit. Leaving *off* for any phase is the start of a rescue and is spoken at once; coming back to *off* is its end and is spoken at once. The phases in between are not spoken, and neither announcement repeats or vibrates: the pilot usually starts a rescue himself, and a confirmation is all it needs. The two switches are independent, so either announcement can be had without the other.
+
+The state comes from the *Rescue State* sensor (92); where the flight controller does not send it, it is taken from *System Status* (120), which carries the same state. Select either under *Setup* → *Telemetry*. Without both, nothing is spoken.
+
+Only a change is spoken. A model that connects in the middle of a rescue, or a switch turned on during one, is not announced as a rescue that has just begun; its end is. The announcements do not wait for the model to be armed: the flight controller enters its rescue whenever the switch assigned to it is on, so turning that switch on and off with the model disarmed on the bench speaks both, which is a way to check the switch.
+
 ---
 
 ## Repeat and Haptic
@@ -173,7 +188,8 @@ the page that switches an alert on is the page that says how it behaves.
   lost telemetry announcement says itself once per loss, so it takes the haptic and ignores the
   repeat.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
-  when the model connects and is latched for the rest of that connection.
+  when the model connects and is latched for the rest of that connection. **Neither is
+  Rescue**, whose two announcements are spoken once per change of state.
 
 ---
 
@@ -181,12 +197,14 @@ the page that switches an alert on is the page that says how it behaves.
 
 Announcements are played from the sound pack under `/SOUNDS/rf/<language>/`. Numbers and their units are spoken by the radio itself, so they follow the language set on the radio rather than the language of the pack.
 
-Every announcement has a file of its own in both packs. Two have no substitute and stay silent in an older pack that lacks theirs:
+Every announcement has a file of its own in both packs. Four have no substitute and stay silent in an older pack that lacks theirs:
 
 | File | Announcement |
 | --- | --- |
 | `stat/alerts/telemetrylost.wav` | Telemetry lost |
 | `stat/alerts/telemetryok.wav` | Telemetry recovered |
+| `stat/alerts/rescue_on.wav` | Rescue -- Active |
+| `stat/alerts/rescue_off.wav` | Rescue -- Off |
 
 Three have a file of their own in both packs, and fall back to another file in an older pack that lacks it:
 
