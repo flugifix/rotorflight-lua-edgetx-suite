@@ -89,8 +89,12 @@ Monitors the main pack voltage and the model's power supply.
 | ESC threshold | `esc_threshold` | 90 °C | Model | Maximum allowed ESC temperature (60 to 300 °C). Configured per model. |
 | MCU temperature | `mcu_temperature` | Off | Radio | Alerts when the flight controller MCU temperature exceeds the threshold. |
 | MCU threshold | `mcu_threshold` | 80 °C | Radio | Maximum allowed MCU temperature (40 to 150 °C). Global radio setting. |
-| Repeat | `esc_repeat` | Until cleared | Radio | How often either temperature alert speaks while the reading stays at or above its threshold -- see *Repeat and Haptic* below. |
-| Haptic | `esc_haptic` | On | Radio | Transmitter vibration alongside the ESC and MCU temperature alerts. |
+| ESC Load | `esc_load` | Off | Radio | Speaks "ESC Load" and the load in percent when it reaches the warning or critical level below, while the model is armed. Silent without an ESC current limit -- see *ESC load* below. |
+| Warning (%) | `esc_load_warn` | 80 % | Radio | The lower load level (10 to 200 %, in steps of 5). Spoken without vibration. |
+| Critical (%) | `esc_load_critical` | 100 % | Radio | The upper load level (10 to 200 %, in steps of 5). Vibrates as well when *Haptic* is on. |
+| Hold (s) | `esc_load_hold` | 5 s | Radio | How long the load has to stay at or above a level before it is spoken (0 to 30 s). |
+| Repeat | `esc_repeat` | Until cleared | Radio | How often a temperature alert or the ESC load alert speaks while it holds -- see *Repeat and Haptic* below. |
+| Haptic | `esc_haptic` | On | Radio | Transmitter vibration alongside the ESC and MCU temperature alerts, and at the critical ESC load level. |
 
 Both thresholds are stored and compared in °C, the unit the flight controller reports. On a radio
 set to Fahrenheit under [Localization](../pages/settings/localization.md) the page shows them in
@@ -105,6 +109,32 @@ is rated the same in every aircraft.
 When the model's file cannot be written, *Save* reports the failure and the model goes on with the
 threshold it had before. The page still shows the number that was entered, so saving again writes
 it once the file can be written.
+
+#### ESC load
+
+The ESC load is the current as a percentage of the limit the speed controller is set to allow,
+the *ESC Current Limit* under *Setup* → *Power* → *Preferences* ([Power Preferences](../pages/setup/power/preferences.md)).
+An AM32, Scorpion or YGE controller fills that limit in when its settings page is opened; for any
+other it is typed in there by hand. **Without a limit on file the alert is silent**, whatever the
+current. A load above 100 % is the controller being asked for more than its limit, which is why
+the levels reach 200 %.
+
+- **Armed only.** A load on the bench is not announced.
+- **A level is entered once the load has stayed at or above it for the hold**, so a punch-out that
+  is over within a few seconds stays quiet. A level that has been entered is spoken at once,
+  followed by the load in percent; reaching the critical level from the warning one is spoken at
+  once as well, after its own hold.
+- **Leaving a level costs 5 percentage points** below its line, so a load riding on a line does
+  not announce every time it climbs back over it. Recovering is not announced: a load that falls
+  from critical back to the warning level is spoken again only when the warning level's next
+  *Repeat* is due, and a load that falls below both levels is not spoken at all.
+- **Only the critical level vibrates**, and only while *Haptic* is on -- the rule the link
+  quality alert follows.
+- **Radio-wide**, unlike the ESC temperature threshold: the load is already a share of the
+  model's own limit, so one pair of percentages means the same in every model.
+- The load is computed the same way whether the dashboard widget or the RFSuite tool is running --
+  this pass's current over the limit stored for the model -- so the alert speaks from either.
+- The ESC load alert does not raise the master volume (see [Volume](../pages/settings/audio/volume.md)).
 
 ### 7. Adjustments
 
@@ -157,7 +187,7 @@ the page that switches an alert on is the page that says how it behaves.
 | --- | --- | --- |
 | Voltage | `voltage_repeat`, `voltage_haptic` | Low pack voltage, Main power lost, and the BEC / receiver alert set up under *Setup* → *Power* → *Alerts*. |
 | Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost. |
-| ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature, MCU temperature. |
+| ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature, MCU temperature, ESC load (haptic at its critical level only). |
 | SmartFuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
 
 - **Repeat** is *Until cleared*, or a count from 1 to 10. Announcements are ten seconds apart
@@ -168,10 +198,10 @@ the page that switches an alert on is the page that says how it behaves.
   announcement. It defaults to on for the
   three categories whose alerts already buzzed with no way of switching it off, and to off for
   SmartFuel, which already had this setting and keeps its value.
-- **Two alerts have their own rule inside the category, and a setting does not overrule it.**
-  The link quality alert buzzes at its *critical* level only, never at the warning level. The
-  lost telemetry announcement says itself once per loss, so it takes the haptic and ignores the
-  repeat.
+- **Three alerts have their own rule inside the category, and a setting does not overrule it.**
+  The link quality alert and the ESC load alert buzz at their *critical* level only, never at the
+  warning level. The lost telemetry announcement says itself once per loss, so it takes the haptic
+  and ignores the repeat.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
   when the model connects and is latched for the rest of that connection.
 

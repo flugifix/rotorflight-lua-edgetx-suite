@@ -203,6 +203,12 @@ local RSSI_LINK_SOURCES = {
 -- would speak.
 local LQ_HYSTERESIS = 5
 
+-- The same for the ESC load, in percentage points of the current limit: a level is left only
+-- once the load has dropped this far below its line, so a load riding on the line under a
+-- steady collective does not announce every time it climbs back over it.
+local ESC_LOAD_HYSTERESIS = 5
+local ESC_LOAD_SOUND = "stat/alerts/escload.wav"
+
 -- What separates "the pack is gone" from "the pack is low". A disconnected main battery reads
 -- as no voltage at all, and the lowest a flight pack is ever taken to is far above this, so
 -- nothing a discharge can reach falls inside the window.
@@ -267,6 +273,7 @@ local ALERT_CATEGORY = {
   telemetry_lost  = "link",
   esc_temperature = "esc",
   mcu_temperature = "esc",
+  esc_load        = "esc",
   fuel_empty      = "fuel"
 }
 
@@ -1482,6 +1489,9 @@ function Audio.resetConnectionState(audioState)
   audioState.smartfuelEmptySound = nil
   audioState.lqLevel = nil
   audioState.lqNotQualityLogged = nil
+  audioState.escLoadLevel = nil
+  audioState.escLoadWarnSince = nil
+  audioState.escLoadCriticalSince = nil
   audioState.packCheckDone = false
   audioState.packJudged = false
   audioState.packNotFull = nil
@@ -1526,6 +1536,7 @@ function Audio.resetConnectionState(audioState)
     audioState.lastAlertAt.flight_time = 0
     audioState.lastAlertAt.lq = 0
     audioState.lastAlertAt.mcu_temperature = 0
+    audioState.lastAlertAt.esc_load = 0
     -- Was missing from this list while it was read by one alert only, which is why a
     -- reconnect after a main-power announcement used to carry that alert's timestamp into
     -- the new connection. The interval is now measured for every alert here.
@@ -1791,6 +1802,92 @@ function Audio.process(self, opts)
     else
       -- The same reading as the ESC alert above, for the same reason.
       alertCleared(audioState, "mcu_temperature")
+    end
+  end
+
+  -- ESC load: the current as a percentage of the limit the speed controller is set to allow.
+  -- Both callers hand it over as `escLoad`, computed from the same current reading and the same
+  -- limit (the per-model store's esc_current_limit), and leave it nil where either is missing --
+  -- so a model with no limit on file never speaks here, and a pass that carried no current
+  -- reading judges nothing rather than counting as a load of nought.
+  --
+  -- The shape of the link quality alert below, with the hold of the voltage alert above. A level
+  -- is entered once the load has stayed at or above its line for the hold, so a punch-out that is
+  -- over within a few seconds stays quiet; a level that has been entered is spoken at once rather
+  -- than at the next interval. Leaving a level costs ESC_LOAD_HYSTERESIS points below its line,
+  -- recovering is not spoken, and only the critical level buzzes. Radio-wide: the load is already
+  -- a share of the model's own limit, so one pair of percentages means the same in every model.
+  -- Armed only, because a load on the bench is not one worth being told about.
+  if prefEnabled(events, "esc_load", false) then
+    if not isArmedFromState(self.state) then
+      if audioState.escLoadLevel ~= nil or audioState.escLoadWarnSince ~= nil
+          or audioState.escLoadCriticalSince ~= nil then
+        audioState.escLoadLevel = nil
+        audioState.escLoadWarnSince = nil
+        audioState.escLoadCriticalSince = nil
+        alertCleared(audioState, "esc_load")
+      end
+    else
+      local load = tonumber(self.state.escLoad)
+      if type(load) == "number" then
+        local warn = tonumber(events.esc_load_warn) or 80
+        local critical = tonumber(events.esc_load_critical) or 100
+        -- A critical level below the warning level cannot be reached second, so the higher of
+        -- the two is the critical one. Nothing is refused over it; the pair is just ordered.
+        if critical < warn then critical = warn end
+        local hold = tonumber(events.esc_load_hold) or 5
+        if hold < 0 then hold = 0 end
+
+        -- When the load last went over each line and has stayed there since.
+        if load >= warn then
+          if audioState.escLoadWarnSince == nil then audioState.escLoadWarnSince = now end
+        else
+          audioState.escLoadWarnSince = nil
+        end
+        if load >= critical then
+          if audioState.escLoadCriticalSince == nil then audioState.escLoadCriticalSince = now end
+        else
+          audioState.escLoadCriticalSince = nil
+        end
+
+        local level = 0
+        local criticalSince = audioState.escLoadCriticalSince
+        local warnSince = audioState.escLoadWarnSince
+        if criticalSince ~= nil and (now - criticalSince) >= hold then
+          level = 2
+        elseif warnSince ~= nil and (now - warnSince) >= hold then
+          level = 1
+        end
+
+        local spoken = tonumber(audioState.escLoadLevel) or 0
+        if level < spoken then
+          if spoken >= 2 and load >= critical - ESC_LOAD_HYSTERESIS then
+            level = 2
+          elseif level < 1 and spoken >= 1 and load >= warn - ESC_LOAD_HYSTERESIS then
+            level = 1
+          end
+        end
+
+        if level < spoken then
+          audioState.escLoadLevel = level
+          alertCleared(audioState, "esc_load")
+        elseif level > 0 then
+          if level > spoken then
+            audioState.lastAlertAt.esc_load = 0
+            alertCleared(audioState, "esc_load")
+          end
+          if alertMaySpeak(audioState, events, "esc_load", now) then
+            if tryPlayEventFile(audioState, now, ESC_LOAD_SOUND, opts) then
+              if type(playNumber) == "function" then
+                local ok, err = pcall(playNumber, math.floor(load + 0.5), unitPercent(), 0, audio_volume)
+                if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+              end
+              alertSpoken(audioState, events, "esc_load", now, level >= 2)
+              audioState.escLoadLevel = level
+            end
+          end
+        end
+      end
     end
   end
 

@@ -849,6 +849,7 @@ return {
         section_profiles = "PID/Rate Profile",
         section_esc = "ESC Temperature",
         section_mcu = "MCU Temperature",
+        section_esc_load = "ESC Load",
         section_link = "Link Quality",
         section_adjustment = "Adjustment Announcements",
         section_fuel = "Fuel",
@@ -889,6 +890,7 @@ return {
         esc_threshold = "Threshold",
         esc_threshold_model = "Threshold [Model]",
         mcu_temperature = "MCU Temperature",
+        esc_load = "ESC Load",
         section_telemetry = "Telemetry",
         telemetry_lost = "Telemetry Lost",
         lq_alert = "Link Quality",
@@ -928,8 +930,12 @@ return {
         help_esc_threshold = "The ESC temperature that sets off the warning, in the unit set in Settings > Localization. Kept with the model while one is connected (the row reads [Model]). Default 90 °C.",
         help_mcu_temperature = "Speaks a warning with the temperature when the flight controller's MCU reaches the threshold below it. Off by default.",
         help_mcu_threshold = "The MCU temperature that sets off the warning, in the unit set in Settings > Localization. Always radio-wide. Default 80 °C.",
-        help_esc_repeat = "How often the ESC or MCU warning speaks while the temperature stays at or above its threshold, 10 s apart: until cleared, or 1 to 10 times.",
-        help_esc_haptic = "Whether the transmitter vibrates with the ESC and MCU temperature warnings. On by default.",
+        help_esc_load = "Speaks the load, the current as a % of ESC Current Limit (Setup > Power > Preferences), at the warning or critical level below. Armed only; silent without a limit. Off by default.",
+        help_esc_load_warn = "The lower load level in percent. Spoken without vibration. Default 80 %.",
+        help_esc_load_critical = "The upper load level in percent; above 100 % is past the limit. Vibrates too if Haptic is on. Default 100 %.",
+        help_esc_load_hold = "How long the load has to stay at or above a level before it is spoken, so a short punch-out stays quiet. 0 speaks at once. Default 5 s.",
+        help_esc_repeat = "How often the ESC or MCU temperature warning or the ESC load alert speaks while it holds, 10 s apart: until cleared, or 1 to 10 times.",
+        help_esc_haptic = "Whether the transmitter vibrates with the ESC and MCU temperature warnings and the critical ESC load level. On by default.",
         help_adjustment_events = "Speaks the new value when an adjustment function changes a setting, once it has held for a second; with the function's name when it differs from the last one. Off by default.",
         help_fuel_alerts = "Speaks the SmartFuel level as it falls past the steps chosen below, and warns when it reaches 0 %. On by default.",
         help_fuel_callout_percent = "The steps at which the falling level is spoken, each once. Only at 10% speaks just the 10 % step. Default every 10 %.",
@@ -963,7 +969,7 @@ return {
         help_message = "Announces a change of PID or rate profile."
       },
       settings_audio_events_esc = {
-        help_message = "Temperature warnings for the ESC and the flight controller's MCU."
+        help_message = "ESC Temperature: speaks when the ESC reaches the threshold.\nThreshold: that temperature, kept with the model.\nMCU Temperature: the same for the MCU and its threshold, radio-wide.\nESC Load: the current as a % of ESC Current Limit (Setup > Power > Preferences); armed only, silent without a limit.\nWarning (%): the lower load level, without vibration.\nCritical (%): the upper load level, with vibration.\nHold (s): how long the load must stay at a level first.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates with the temperature alerts and at critical load."
       },
       settings_audio_events_adjustment = {
         help_message = "Announces values changed with the flight controller's adjustment functions."
@@ -1096,7 +1102,12 @@ return {
         publish_sensors = "Publish SmFt / SmCp",
         esc_current_limit = "ESC Current Limit",
         value_not_set = "NOT SET",
-        help_esc_current_limit = "The current limit the speed controller is set to allow, in amps. It is what the dashboard's ESC load reading is a percentage of. An AM32, Scorpion or YGE controller reports its own limit and fills this in the first time its settings page is opened, so it is set by hand only for a controller that does not. Left at NOT SET, an ESC load tile shows no reading.",
+        help_esc_current_limit = "The limit the speed controller is set to allow, in amps; the ESC load and its alert are a % of it. AM32, Scorpion and YGE fill it in from their page; the label says where it came from.",
+        origin_hand = "by hand",
+        origin_am32 = "AM32",
+        origin_scorpion = "Scorpion",
+        origin_yge = "YGE",
+        origin_unknown = "unknown",
         value_auto = "AUTO",
         value_electric = "ELECTRIC",
         value_nitro = "NITRO",
@@ -1106,7 +1117,7 @@ return {
         help_model_type = "Select the model type used for SmartFuel and audio behavior.",
         help_calcfuel_local = "Select the local SmartFuel source fallback used when firmware SmartFuel mode is unavailable.",
         help_publish_sensors = "Publish the remaining fuel and the estimated consumption as the SmFt and SmCp telemetry sensors, for logical switches, special functions and the telemetry screens. The dashboard and the announcements do not need them.",
-        help_message = "Configure the model type, the local SmartFuel source, whether SmFt and SmCp are published as sensors, and the current limit the speed controller is set to allow. Nothing here is written to the flight controller: the settings are kept on the radio, per flight controller.",
+        help_message = "Power settings kept on the radio per flight controller; nothing here is written to it.\nModel Type: what the fuel estimate and the announcements treat the model as.\nLocal SmartFuel Source: the estimate the radio computes when the flight controller computes none.\nPublish SmFt / SmCp: publish the remaining fuel and the consumption as two telemetry sensors.\nESC Current Limit: the limit the ESC load is a percentage of; the label says where it came from.",
         saved_title = "Saved",
         saved_message = "Power preferences saved",
         save_error_title = "Error",

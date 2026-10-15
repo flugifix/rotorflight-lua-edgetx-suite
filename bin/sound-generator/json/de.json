@@ -504,6 +504,12 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/escload.wav",
+    "english": "ESC Load",
+    "translation": "ESC-Last",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/fuel.wav",
     "english": "Fuel",
     "translation": "Kraftstoff",
