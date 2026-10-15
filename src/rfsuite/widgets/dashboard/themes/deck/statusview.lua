@@ -2,12 +2,12 @@
 -- way, the governor, the throttle and the speed controller, over the widget's history of what
 -- changed on the craft.
 --
--- Opened in full screen by a tap on the flight view's governor and status rows, or by a key the
+-- Opened in full screen by a tap on the flight view's arm card or governor card, or by a key the
 -- pilot sets to it on the Keys settings page.
 --
 -- Everything it shows is already on the host's state: the arm state and the arming-disable flags,
 -- the governor and the throttle, the speed controller's live verdict (`esc_status_live`, which the
--- flight view declares whatever its rows show, layout.lua ALWAYS_DECLARED), and the event history
+-- flight view declares whatever its cards show, layout.lua ALWAYS_DECLARED), and the event history
 -- (`state.eventLog`, widgets/dashboard/runtime.lua, noteEvent). So the view names no sources of its
 -- own and is never rebuilt for a reading: every figure is a closure, and a new history entry
 -- reaches the rows without a rebuild.
@@ -45,7 +45,7 @@ local function governorNames(T)
 end
 
 -- How many characters fit a box of `w` px in `font`, measured against a word of capitals as the
--- flight view's status line measures it (layout.lua, L.statusPanel), and a cut to that many made
+-- flight view's arm card measures it (layout.lua, capsFit), and a cut to that many made
 -- once per text rather than once per frame. The cut is made in the format path because a closure
 -- may make no firmware call.
 local CAPS_SAMPLE = "BOOTGRACE"
@@ -133,7 +133,7 @@ function M.build(children, zone, state, ctx)
   UD.rect(children, x, top, armW, cardH, C.track, false, math.max(4, math.floor(cardH * 0.12)), 1)
   UD.rect(children, infoX, top, infoW, cardH, C.track, false, math.max(4, math.floor(cardH * 0.12)), 1)
 
-  -- The arm word, in the colours the bottom bar gives it: the very closure the flight view draws its
+  -- The arm word, in the colours the arm card gives it: the very closure the flight view draws its
   -- arm state with (common.lua, M.armedColor), so the pilot's *Arm state colours* on the Look page
   -- (`arm_colors`) colour it here as there, whichever way round they are set. Without a flight
   -- controller the state is not known, so it says nothing and the line under it says why.
@@ -144,7 +144,7 @@ function M.build(children, zone, state, ctx)
     return T.disarmed_caps
   end, armFont, armColor, CENTER)
 
-  -- The line under it: why the model cannot be armed, in the bottom bar's readable names and its
+  -- The line under it: why the model cannot be armed, in the statistics bar's readable names and its
   -- warning colour, joined and cut to the card once per change of the flags; "Ready to arm" while
   -- nothing stands in the way; nothing while armed.
   local reasons = UD.armDisableList(state)
@@ -195,7 +195,7 @@ function M.build(children, zone, state, ctx)
   UD.label(children, colX + govW, labelY, thrW, f.subH, T.throttle, f.sub, C.label, CENTER)
   UD.label(children, colX + govW, valueY, thrW, valueH, UD.throttleText(state), valueFont, C.text, CENTER)
 
-  -- The speed controller's live verdict, as the flight view's status line reads it, in its level's
+  -- The speed controller's live verdict, as the flight view's arm card reads it, in its level's
   -- colour; `-` without a link or without a verdict.
   local fitEsc = fitter(UD, valueFont, escW)
   UD.label(children, colX + govW + thrW, labelY, escW, f.subH, T.esc, f.sub, C.label, RIGHT)

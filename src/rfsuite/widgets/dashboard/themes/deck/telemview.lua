@@ -2,10 +2,11 @@
 -- tiles, three to a row, each with its name, its figure and -- where the flight record keeps one
 -- -- the least and the most the flight reached.
 --
--- Opened in full screen by a tap on the flight view's value rows, or by a key the pilot sets to it
--- on the Keys settings page. The tiles are chosen on the Telemetry settings page, from the
--- catalogue the five value rows choose from (layout.lua, L.SOURCES), so a tile shows a reading
--- exactly as a row does: the same name, the same figure, the same colour, the same unit setting.
+-- Opened in full screen by a tap on the flight view's value row or on a card showing a reading, or
+-- by a key the pilot sets to it on the Keys settings page. The tiles are chosen on the Telemetry
+-- settings page, from the catalogue the flight view's cards choose from (layout.lua, L.SOURCES),
+-- so a tile shows a reading exactly as a card does: the same name, the same figure, the same
+-- colour, the same unit setting.
 -- A tile set to nothing is left out and the others close up.
 --
 -- The range line is the flight record's (tasks/events/telemetry/flight_record.lua): the flight in

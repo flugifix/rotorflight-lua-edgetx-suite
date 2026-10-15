@@ -6,10 +6,18 @@
 -- phase modules: buildFlight, buildStats, sources and renderKey, so that a phase module is
 -- one require and a few forwards.
 --
+-- The look: a header (the menu and tool glyphs, the model name, the link cluster, the clock and
+-- the radio battery), a left column of three cards, a right column with one big card over a row
+-- of up to four value columns, and a wide battery strip at the foot. Each card shows a reading or
+-- one of a few kinds that are not a single reading (L.KINDS); each value column a reading with its
+-- range under it.
+--
 -- Extending the theme -- where a change goes, and what it costs:
 --
---   a new value the five rows can show     one entry in L.SOURCES; the configure page and the
---                                          panel both read that list, nothing else changes.
+--   a new value a card can show            one entry in L.SOURCES; the configure page and the
+--                                          cards both read that list, nothing else changes.
+--   a new kind of card (not a value)       one entry in L.KINDS, its name in L.kindLabels, and
+--                                          its drawing in drawCard.
 --   a new panel or a new box in a panel    a build-time function here appending nodes; every
 --                                          moving field a Common.getter over `state`; every
 --                                          firmware probe at build time, never in a closure.
@@ -52,14 +60,14 @@ local num = Common.num
 L.SCHEMES = Common.SCHEMES
 L.DEFAULT_SCHEME = Common.DEFAULT_SCHEME
 
--- The settings this theme carries beyond the five value rows, the colour scheme and the arm
+-- The settings this theme carries beyond the eight card positions, the colour scheme and the arm
 -- colours. They are declared HERE for the reason the value catalogue is here: the settings page
 -- loads this module, so the list a pilot chooses from and the list the panels draw from are one
 -- list and cannot drift apart.
 --
 -- This half is what the DRAWING needs and nothing else: the key, the page of init.lua the row is
--- set on, the values that are valid, and the default. The defaults are the plainest picture: the
--- clock shows the time alone and the rows carry no units.
+-- set on, the values that are valid, and the default. The defaults draw a complete screen with
+-- nothing touched: the clock showing the time alone, the units beside every caption.
 --
 -- Values are STRINGS, the numbers included. common.lua says why; the two numeric rows are read
 -- back through tonumber() at build time.
@@ -76,11 +84,11 @@ local ON_OFF = { "on", "off" }
 
 L.SETTINGS = {
   -- The firmware's own frame around every place on the full screen that takes a press -- the
-  -- menu and tool buttons, the profile row, the link bars, the buttons of the views. Off covers
+  -- menu and tool buttons, the link cluster, the cards, the battery strip, the buttons of the views. Off covers
   -- it (Common.button); the outlines this theme draws itself stay.
   { page = "look",   key = "tap_frames", values = ON_OFF,                      default = "on" },
-  -- The battery gauge's yellow and red steps, in percent of the fuel reading. The defaults are
-  -- the steps the gauge draws with when nobody has set them.
+  -- The battery strip's and the charge card's yellow and red steps, in percent of the fuel
+  -- reading. The defaults are the steps they draw with when nobody has set them.
   { page = "look",   key = "fuel_low",   min = 0, max = 100, default = tostring(Common.FUEL_LOW_DEFAULT) },
   { page = "look",   key = "fuel_crit",  min = 0, max = 100, default = tostring(Common.FUEL_CRIT_DEFAULT),
     notAbove = "fuel_low" },
@@ -92,8 +100,6 @@ L.SETTINGS = {
   { page = "topbar", key = "rssi_bars",  values = ON_OFF,                      default = "on" },
   { page = "topbar", key = "tx_battery", values = ON_OFF,                      default = "on" },
   { page = "topbar", key = "bar_colors", values = { "always", "warn" },        default = "always" },
-  -- The status bar's transmitter power.
-  { page = "topbar", key = "tpwr",       values = ON_OFF,                      default = "on" },
   -- One number rather than the pair the bar actually draws with: what a pilot is deciding is
   -- where "good" ends, and the critical step follows it thirty points down -- 80 / 50 at the
   -- default.
@@ -107,8 +113,10 @@ L.SETTINGS = {
   -- limit and red from 85 %, where dynamic power is close to having nothing left to add.
   { page = "topbar", key = "tpwr_max",   values = { "25", "50", "100", "250", "500", "1000", "2000" },
     default = "100" },
-  { page = "rows",   key = "units",      values = ON_OFF,                      default = "off" },
-  { page = "rows",   key = "temp_colors", values = { "off", "standard", "early" }, default = Common.TEMP_COLORS_DEFAULT },
+  -- The unit in brackets after each caption. On by default here: a card's caption has the room
+  -- for it, and the figure under it does not grow when it is off.
+  { page = "values", key = "units",      values = ON_OFF,                      default = "on" },
+  { page = "values", key = "temp_colors", values = { "off", "standard", "early" }, default = Common.TEMP_COLORS_DEFAULT },
 }
 
 -- And this half is what the SETTINGS PAGE needs: the row's label and a label per value. It is a
@@ -139,7 +147,6 @@ function L.settingsLabels()
     tq_bar = { label = "@i18n(app.pages.settings_dashboard_settings.urban_tq_bar)@", values = onOff() },
     rssi_bars = { label = "@i18n(app.pages.settings_dashboard_settings.urban_rssi_bars)@", values = onOff() },
     tx_battery = { label = "@i18n(app.pages.settings_dashboard_settings.urban_tx_battery)@", values = onOff() },
-    tpwr = { label = "@i18n(app.pages.settings_dashboard_settings.urban_status_bar)@: TPWR", values = onOff() },
     bar_colors = { label = "@i18n(app.pages.settings_dashboard_settings.urban_bar_colors)@",
                    values = { always = "@i18n(app.pages.setup_adjustments.channel_always)@",
                               warn = "@i18n(app.pages.settings_dashboard_settings.urban_bar_colors_warn)@" } },
@@ -175,9 +182,9 @@ local function setting(state, key)
 end
 L.setting = setting
 
-local OUTER_PAD = 2
-local CARD_GAP = 2
-local CARD_PAD = 3
+local OUTER_PAD = 4
+local CARD_GAP = 4
+local CARD_PAD = 4
 
 -- ---------------------------------------------------------------------------
 -- the full screen surface: the menu control
@@ -185,7 +192,7 @@ local CARD_PAD = 3
 
 -- On the full screen surface the host hands the build a `ctx` (and only there), and a theme that
 -- binds a press of its own gets no host controls over it. This theme binds two small boxed glyphs
--- at the left end of the top bar, before the clock: this one opens the quick menu, the one beside
+-- at the left end of the header, before the model name: this one opens the quick menu, the one beside
 -- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves full screen in the firmware, and
 -- init.lua declares that (`fullscreenExit`), which is what the host's theme check reads. The
 -- page keys open the menu by the host's default.
@@ -196,7 +203,7 @@ local CARD_PAD = 3
 -- the panel's, so what shows is the outline and the three bars, drawn as lines over it. EdgeTX
 -- gives every button a theme-coloured border of its own; the outline lines lie over it.
 --
--- Returns the width it took, so the clock can start after it. Without a ctx -- the widget zone,
+-- Returns the width it took, so the model name can start after it. Without a ctx -- the widget zone,
 -- a host that does not know the key -- nothing is drawn and nothing is taken: the glyph is a
 -- full screen control only.
 function L.menuControl(nodes, ctx, x, y, h)
@@ -225,7 +232,7 @@ function L.menuControl(nodes, ctx, x, y, h)
   for i = -1, 1 do
     local lineY = midY + i * gap + math.floor(barTh / 2)
     nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
-      pts = { { barX, lineY }, { barX + barW, lineY } }, color = C.line, thickness = barTh }
+      pts = { { barX, lineY }, { barX + barW, lineY } }, color = C.text, thickness = barTh }
   end
   return boxW + 4
 end
@@ -238,7 +245,7 @@ local function hasViews(ctx)
 end
 L.hasViews = hasViews
 
--- The second control of the top bar, beside the menu glyph and of its size and outline: it opens
+-- The second control of the header, beside the menu glyph and of its size and outline: it opens
 -- the suite's tool (`openTool`), on a host with theme views -- the host this theme's views run on,
 -- whose quick menu offers the tool as well. Returns the width it took, as L.menuControl does.
 --
@@ -246,7 +253,7 @@ L.hasViews = hasViews
 -- armed (widgets/dashboard/tool_host.lua, `request`), as its quick menu offers the tool only while
 -- disarmed. So the control says so: while armed, its outline and its glyph are drawn in the
 -- track colour, the colour of a row that is not available in this theme's views. The arm state
--- is read per frame by one colour function every line of the control shares, rather than at
+-- is read per frame by the two colour functions the lines of the control share, rather than at
 -- build time: the render key does not carry it, so the flight view is not rebuilt on the arm
 -- edge (L.renderKey).
 --
@@ -255,9 +262,15 @@ L.hasViews = hasViews
 function L.toolControl(nodes, state, ctx, x, y, h)
   if not hasViews(ctx) then return 0 end
   local action = ctx.action
-  local ink = function()
+  -- The outline in the line colour and the squares in the text colour, as the menu glyph draws
+  -- its outline and its bars.
+  local edge = function()
     if state.armed == true then return C.track end
     return C.line
+  end
+  local ink = function()
+    if state.armed == true then return C.track end
+    return C.text
   end
   local boxH = math.max(8, h - 2)
   local boxW = boxH
@@ -270,7 +283,7 @@ function L.toolControl(nodes, state, ctx, x, y, h)
   }
   for i = 1, 4 do
     nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = edges[i],
-      color = ink, thickness = 2 }
+      color = edge, thickness = 2 }
   end
   local s = math.max(2, math.floor(boxH * 0.22))
   local gap = math.max(2, math.floor(boxH * 0.12))
@@ -363,7 +376,7 @@ function L.bindKeys(state, ctx)
 end
 
 -- ---------------------------------------------------------------------------
--- top bar: menu and tool glyphs, clock, link bars, TX battery pill
+-- the header: menu and tool glyphs, model name, link cluster, clock, TX battery pill
 -- ---------------------------------------------------------------------------
 
 -- The radio battery is read at BUILD time, never in a closure: getValue is a sensor probe
@@ -434,30 +447,38 @@ local function barLength(read, full, fh)
   end
 end
 
--- The top bar, left to right: the menu and tool glyphs (full screen only), the clock, the link bars
--- centred on the bar's midline, the radio battery pill at the right end.
+-- Whether the reading behind `state.lq` is a link QUALITY in percent or a signal STRENGTH in dBm.
+-- The suite's search for the link sensor ends in 1RSS and 2RSS, which carry an RSSI; the widget
+-- publishes which sensor answered as `lqSource` (widgets/dashboard/runtime.lua), and the flight
+-- record refuses to keep a link quality from the same two (tasks/events/telemetry/flight_record.lua,
+-- RSSI_LINK_SOURCES). A build-time reading and a term of the render key: what the RQ bar and its
+-- figure draw is decided when they are built.
+local RSSI_LINK_SOURCES = { ["1RSS"] = true, ["2RSS"] = true }
+
+function L.lqIsRssi(state)
+  local s = state and state.lqSource
+  return type(s) == "string" and RSSI_LINK_SOURCES[s] == true
+end
+
+-- The header, left to right: the menu and tool glyphs (full screen only), the model name, the link
+-- cluster centred on the header's midline -- the receiver's link figure beside the stacked link
+-- bars -- the clock, and the radio battery pill at the right end.
 --
--- `showLink` false draws the clock and the pill and nothing between them, whatever the pilot
--- set for the bars: the statistics view is the one caller that passes it, and after a flight
--- the link has nothing left to report that the table below does not say better.
-function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
+-- `showLink` false draws everything but the link cluster, whatever the pilot set for the bars: the
+-- statistics view is the one caller that passes it, and after a flight the link has nothing left
+-- to report that the table below does not say better.
+function L.header(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   local textY = y + math.floor((h - fontH) / 2)
 
-  -- Every setting this bar reads is a BUILD-TIME read of state.themeConfig, and none of them is
+  -- Every setting this header reads is a BUILD-TIME read of state.themeConfig, and none of them is
   -- in the render key: the host reloads the theme when its preferences change.
   local quietBars = setting(state, "bar_colors") == "warn"
 
-  local clockX = x + 1 + L.menuControl(nodes, ctx, x + 1, y, h)
-  clockX = clockX + L.toolControl(nodes, state, ctx, clockX, y, h)
-
-  -- The clock, in the mode the pilot chose, and its width measured against THAT mode's own
-  -- sample -- common.lua keeps the format and the sample in one entry.
-  local clock = Common.clockMode(setting(state, "clock"))
-  local clockW = Common.textWidth(font, clock.sample) + 8
-  Common.label(nodes, clockX, textY, clockW, fontH, Common.clock(clock), font, C.text, LEFT)
+  local nameX = x + 1 + L.menuControl(nodes, ctx, x + 1, y, h)
+  nameX = nameX + L.toolControl(nodes, state, ctx, nameX, y, h)
 
   -- The TX battery as a pill: fill, terminal, outline, and the percentage over it. Switched
-  -- off, the pill is not drawn AND its width is given back to the link bars.
+  -- off, the pill is not drawn AND its width is given back to the rest of the header.
   local rightLimit = x + w
   if setting(state, "tx_battery") == "on" then
     local pillH = math.max(8, math.floor((h - 2) * ((h >= 28) and 0.76 or 0.92)))
@@ -480,21 +501,61 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
       (pct ~= nil) and string.format("%d%%", pct)
         or (volts and string.format("%.1fV", volts) or "--"),
       pillFont, C.pill_ink, CENTER)
-    rightLimit = pillX
+    rightLimit = pillX - 4
   end
+
+  -- The clock, in the mode the pilot chose, right-aligned against the pill, and its width measured
+  -- against THAT mode's own sample -- common.lua keeps the format and the sample in one entry.
+  local clock = Common.clockMode(setting(state, "clock"))
+  local clockW = Common.textWidth(font, clock.sample) + 4
+  local clockX = rightLimit - clockW
+  Common.label(nodes, clockX, textY, clockW, fontH, Common.clock(clock), font, C.text, RIGHT)
+  rightLimit = clockX
+
+  -- The link cluster's room comes first: centred on the header's midline, so it never moves when
+  -- the name, the clock or the pill change width, at most 36 % of the header, and shrunk
+  -- symmetrically where the clock or the pill would touch it.
+  local mid = x + math.floor(w / 2)
+  local clusterW = math.max(0, math.min(math.floor(w * 0.36), 2 * ((rightLimit - 6) - mid)))
+  if showLink == false then clusterW = 0 end
+
+  -- The model name, at most 30 % of the header and never into the cluster. Common.label cuts
+  -- nothing, and a name is data, so it is held to the number of characters its box takes, measured
+  -- once per build against a word of ordinary mixed case and cut once per change of the name.
+  local nameLimit = (clusterW > 0) and (mid - math.floor(clusterW / 2) - 6) or (rightLimit - 6)
+  local nameW = math.max(1, math.min(math.floor(w * 0.30), nameLimit - nameX))
+  local NAME_SAMPLE = "Rotorflight"
+  local nameChars = math.max(4, math.floor(nameW * #NAME_SAMPLE / math.max(1, Common.textWidth(font, NAME_SAMPLE))))
+  local name = Common.modelName(state)
+  local lastName, nameText = nil, ""
+  Common.label(nodes, nameX, textY, nameW, fontH, function()
+    local n = name()
+    if n ~= lastName then
+      lastName = n
+      nameText = (#n > nameChars) and (Common.cutUtf8(n, nameChars - 1) .. ".") or n
+    end
+    return nameText
+  end, font, C.text, LEFT)
   if showLink == false then return end
 
   -- The link bars, stacked: RQ, TQ, the receiver's first antenna and -- once the link has shown
   -- that a second one is there -- the second. Each bar is its reading across the width, with
   -- notches at its warning and critical steps, green / amber / red by those steps (or neutral
   -- while fine, where the pilot chose colour only on warning).
+  --
+  -- On a receiver whose link reading is a signal strength (L.lqIsRssi) there is no link quality to
+  -- draw: the RQ bar stays an empty track, and the figure beside the bars says the strength in dBm
+  -- instead of a percentage.
+  local rssiLink = L.lqIsRssi(state)
   local lqWarn = tonumber(setting(state, "lq_warn")) or 80
   local lqCrit = math.max(0, lqWarn - 30)
   local rsWarn = tonumber(setting(state, "rssi_warn")) or 15
   local rsCrit = math.floor(rsWarn / 2 + 0.5)
   local bars = {}
-  if setting(state, "lq_bar") == "on" then
-    bars[#bars + 1] = { read = Common.field(state, "lq"), warn = lqWarn, crit = lqCrit }
+  local showFigure = setting(state, "lq_bar") == "on"
+  if showFigure then
+    local readLq = Common.field(state, "lq")
+    bars[#bars + 1] = { read = rssiLink and function() return nil end or readLq, warn = lqWarn, crit = lqCrit }
   end
   if setting(state, "tq_bar") == "on" then
     bars[#bars + 1] = { read = function()
@@ -527,13 +588,14 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   local n = #bars
   if n == 0 then return end
 
-  -- Always centred on the bar's midline, so the cluster never moves when the clock or the pill
-  -- change width; at most 40 % of the bar, and shrunk symmetrically if either side would touch.
-  local leftLimit = clockX + clockW + 6
-  local mid = x + math.floor(w / 2)
-  local half = math.min(mid - leftLimit, (rightLimit - 6) - mid)
-  local barW = math.max(8, math.min(2 * half, math.floor(w * 0.40)))
-  local barX = mid - math.floor(barW / 2)
+  -- The figure stands at the cluster's left end and the bars take the rest of it. Where the cluster
+  -- is too narrow for both, the figure is left out before the bars are.
+  local figSample = rssiLink and "-120" or "100%"
+  local figW = showFigure and (Common.textWidth(font, figSample) + 4) or 0
+  if clusterW - figW < 24 then figW, showFigure = 0, false end
+  if clusterW < 8 then return end
+  local barX = mid - math.floor(clusterW / 2) + figW
+  local barW = clusterW - figW
   local availH = math.max(n * 2, h - 2)
   local slotH = math.floor(availH / n)
   local barH = math.max(2, slotH - 1)
@@ -543,20 +605,37 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   local outlined = barH >= 6
   local good = quietBars and C.neut or C.ok
 
-  -- In full screen, on a host with theme views, the cluster is the tap that opens the link view:
-  -- the bars are what that page shows in detail. Everything over the press is then a line rather
-  -- than a rectangle, in the same places and colours; the widget zone draws the rectangles it
-  -- always drew.
+  -- In full screen, on a host with theme views, the cluster -- figure and bars -- is the tap that
+  -- opens the link view: the bars are what that page shows in detail. Everything over the press is
+  -- then a label or a line rather than a rectangle, in the same places and colours; the widget zone
+  -- draws the rectangles it always drew.
   local asLines = hasViews(ctx)
   if asLines then
     local action = ctx.action
-    tapArea(nodes, barX - 2, topY - 1, barW + 4, slotH * n + 1, function() action("openView:deck_link") end)
+    tapArea(nodes, barX - figW - 2, topY - 1, barW + figW + 4, slotH * n + 1, function() action("openView:deck_link") end)
+  end
+
+  if showFigure then
+    local lastQ, figText = Common.UNSET, "--"
+    Common.label(nodes, barX - figW, textY, figW - 2, fontH, function()
+      local q = num(state.lq)
+      if q == lastQ then return figText end
+      lastQ = q
+      if q == nil then
+        figText = "--"
+      elseif rssiLink then
+        figText = string.format("%d", math.floor(q + 0.5))
+      else
+        figText = string.format("%d%%", math.floor(q + 0.5))
+      end
+      return figText
+    end, font, C.text, RIGHT)
   end
 
   for i = 1, n do
     local read, warn, crit = bars[i].read, bars[i].warn, bars[i].crit
     local by = topY + (i - 1) * slotH
-    -- Decided once per change of the reading, as the gauge's fill colour is (Common.fuelLevel).
+    -- Decided once per change of the reading, as the battery strip's fill colour is (Common.fuelLevel).
     local lastV, lastColor = Common.UNSET, nil
     local color = function()
       local v = read()
@@ -647,218 +726,7 @@ function L.diversity(state)
 end
 
 -- ---------------------------------------------------------------------------
--- left panel: model, totals, governor and throttle, status line, profiles
--- ---------------------------------------------------------------------------
-
-function L.statusPanel(nodes, state, x, y, w, h, font, fontH, ctx)
-  local pad = CARD_PAD
-  local innerW = math.max(20, w - 2 * pad)
-
-  -- Fixed image slot: the sections below must not move when one model has a taller
-  -- picture than the next.
-  local imageSlotH = math.max(1, math.floor(h * 0.32))
-  local yMeta = pad + imageSlotH
-  local rest = math.max(1, h - yMeta - pad)
-  local hMeta = math.max(fontH + 4, math.floor(rest * 0.28))
-  local hGov = math.max(fontH + 2, math.floor(rest * 0.30))
-  local hStat = math.max(fontH + 2, math.floor(rest * 0.16))
-  local hGrid = math.max(fontH + 2, rest - hMeta - hGov - hStat)
-
-  local yGov = yMeta + hMeta
-  local yStat = yGov + hGov
-  local yGrid = yStat + hStat
-
-  local halfW = math.floor(innerW / 2)
-  local govW = math.floor(innerW * 0.62)
-  local thrW = innerW - govW
-  local thirdW = math.floor(innerW / 3)
-  local thirdLastW = innerW - 2 * thirdW
-
-  -- The picture top-anchored in its slot at its own aspect ratio: the node is as tall as the
-  -- scaled picture, not as the slot, so it hugs the top instead of floating in the middle. Where
-  -- the size cannot be read the node fills the slot.
-  local imagePath = Common.modelImage(state)
-  local imageH = imageSlotH
-  local bw, bh = Common.imageSize(imagePath)
-  if bw and bh then
-    local scale = math.min(innerW / bw, imageSlotH / bh)
-    imageH = math.max(1, math.floor(bh * scale))
-  end
-  nodes[#nodes + 1] = {
-    type = "image", x = x + pad, y = y + pad, w = innerW, h = imageH,
-    file = imagePath, fill = false
-  }
-
-  -- Both totals share one font so their baselines cannot drift apart: picked against the
-  -- wider of the two samples.
-  local metaFont = Common.selectFont(hMeta - fontH, innerW - halfW, "999:59:59")
-  local metaH = Common.measure(metaFont, "999:59:59")
-  local metaPad = math.max(0, math.floor((hMeta - fontH - metaH) / 2))
-  Common.stacked(nodes, x + pad, y + yMeta, halfW, metaPad, T.flights,
-    Common.getter(Common.field(state, "flights"), Common.integer), font, fontH, metaFont, metaH)
-  Common.stacked(nodes, x + pad + halfW, y + yMeta, innerW - halfW, metaPad, T.total_time,
-    Common.getter(Common.field(state, "totalFlightSeconds"), Common.longDuration), font, fontH, metaFont, metaH)
-
-  -- The governor is sized against the widest governor name and never above MIDSIZE, the
-  -- throttle against "100%" on its own -- which is why "Safe" beside "Throttle off" is the
-  -- larger of the two.
-  local govSample = Common.governorSample()
-  local govFont = Common.selectFont(hGov - fontH, govW, govSample, MIDSIZE)
-  local govH = Common.measure(govFont, govSample)
-  local thrFont = Common.selectFont(hGov - fontH, thrW, "100%")
-  local thrH = Common.measure(thrFont, "100%")
-  local govPad = math.max(0, math.floor((hGov - fontH - math.max(govH, thrH)) / 2))
-  -- In full screen, on a host with theme views, the governor row and the status line under it are
-  -- the tap that opens the status view (statusview.lua), which says more about both. Drawn before
-  -- their labels, which lie over it; the separator between the two is then a line, which takes no
-  -- press, and the area stops a pixel short of the separator under it.
-  local statusTap = hasViews(ctx)
-  if statusTap then
-    local action = ctx.action
-    tapArea(nodes, x + pad, y + yGov, innerW, hGov + hStat - 1, function() action("openView:deck_status") end)
-  end
-  Common.stacked(nodes, x + pad, y + yGov, govW, govPad, T.governor,
-    Common.governorText(state), font, fontH, govFont, govH)
-  Common.stacked(nodes, x + pad + govW, y + yGov, thrW, govPad, T.throttle,
-    Common.throttleText(state), font, fontH, thrFont, thrH)
-
-  -- The status line. What it says in which order, and why, is Common.statusLine's -- one
-  -- closure, which the text node and the colour node both read.
-  --
-  -- The font is picked against "ESC Motor Connection" across the whole width. The strings the
-  -- line draws are mostly CAPITALS -- the controller's verdicts and the compact arming reasons --
-  -- and Common.label truncates nothing, it draws past the end of its box. So the number of
-  -- characters that fits is MEASURED, in the chosen font, against a word of ordinary capitals:
-  -- the average capital rather than the widest one (a "W"), because a cut at the widest would
-  -- shorten arming reasons that fit whole. One extra lcd.sizeText per build; the cut itself
-  -- happens per value change.
-  local STAT_SAMPLE = "ESC Motor Connection"
-  local CAPS_SAMPLE = "BOOTGRACE"
-  local statFont = Common.selectFont(hStat - 2, innerW, STAT_SAMPLE)
-  local statH = Common.measure(statFont, STAT_SAMPLE)
-  local statLine = Common.statusLine(state,
-    math.floor(innerW * #CAPS_SAMPLE / math.max(1, Common.textWidth(statFont, CAPS_SAMPLE))))
-  Common.label(nodes, x + pad, y + yStat + math.floor((hStat - statH) / 2), innerW, statH,
-    function()
-      local text = statLine()
-      return text
-    end, statFont,
-    function()
-      local _, color = statLine()
-      return color
-    end, CENTER)
-
-  local gridFont = Common.selectFont(hGrid - fontH, thirdLastW, "9999")
-  local gridH = Common.measure(gridFont, "9999")
-  local gridPad = math.max(0, math.floor((hGrid - fontH - gridH) / 2))
-  -- In full screen, on a host with theme views, the profile row is the tap that opens this
-  -- theme's own menu -- the battery profiles and the tuning surface -- which changes what this row
-  -- shows. Drawn before the row's labels, which lie over it.
-  if hasViews(ctx) then
-    local action = ctx.action
-    tapArea(nodes, x + pad, y + yGrid, innerW, hGrid, function() action("openView:deck_menu") end)
-  end
-  Common.stacked(nodes, x + pad, y + yGrid, thirdW, gridPad, T.profile,
-    Common.getter(Common.field(state, "profile"), Common.integer), font, fontH, gridFont, gridH)
-  Common.stacked(nodes, x + pad + thirdW, y + yGrid, thirdW, gridPad, T.rate,
-    Common.getter(Common.field(state, "rateProfile"), Common.integer), font, fontH, gridFont, gridH)
-  -- The B-Profile cell: the word "B-Profile" over the board's battery profile number, and the
-  -- shorter "B-Prof" where the word does not fit the narrow third column. While the host is
-  -- still waiting for a battery pick on this connection the word is drawn in the warn colour, a
-  -- cue that costs the cell nothing.
-  --
-  -- A constant of the build; L.renderKey carries `pending`, so the colour follows the prompt.
-  local bp = type(state.batteryPick) == "table" and state.batteryPick or nil
-  local bpLabel = T.battery_profile
-  if Common.textWidth(font, bpLabel) > thirdLastW then bpLabel = T.battery_profile_short end
-  local bpLabelColor = (bp and bp.pending == true) and C.warn or nil
-  Common.stacked(nodes, x + pad + 2 * thirdW, y + yGrid, thirdLastW, gridPad, bpLabel,
-    Common.getter(Common.field(state, "batteryProfile"), Common.integer), font, fontH, gridFont, gridH,
-    bpLabelColor)
-
-  Common.hline(nodes, x + pad, y + yMeta - 1, innerW)
-  Common.hline(nodes, x + pad, y + yGov - 1, innerW)
-  if statusTap then
-    nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
-      pts = { { x + pad, y + yStat - 1 }, { x + pad + innerW, y + yStat - 1 } }, color = C.line, thickness = 1 }
-  else
-    Common.hline(nodes, x + pad, y + yStat - 1, innerW)
-  end
-  Common.hline(nodes, x + pad, y + yGrid - 1, innerW)
-end
-
--- ---------------------------------------------------------------------------
--- right panel: five rows, label left and value right
--- ---------------------------------------------------------------------------
-
--- Each row picks its own value font against its own widest sample, so one wide row does
--- not shrink the whole panel.
---
--- In full screen, on a host with theme views, the panel is the tap that opens the telemetry view
--- (telemview.lua): the rows are what that page shows more of. Everything over the press is then
--- a label or a line -- the separators become lines -- and the widget zone draws what it always did.
-function L.valuePanel(nodes, state, x, y, w, h, font, fontH, rows, ctx)
-  local pad = math.max(2, CARD_PAD - 1)
-  local rowGap = 1
-  local count = #rows
-  if count == 0 then return end
-  local asLines = hasViews(ctx)
-  if asLines then
-    local action = ctx.action
-    tapArea(nodes, x, y, w, h, function() action("openView:deck_telemetry") end)
-  end
-  local rowH = math.floor((h - 2 * pad - (count - 1) * rowGap) / count)
-  local usedH = rowH * count + (count - 1) * rowGap
-  local startY = pad + math.floor((h - usedH) / 2)
-  local labelW = math.floor(w * 0.55)
-  local valueX = pad + labelW
-  local valueW = w - valueX - pad
-
-  -- The unit beside each value is a setting, and switching it off gives the width back to the
-  -- figure rather than leaving the gap: the value font is picked against the width that is
-  -- actually free, so the numbers grow. A pilot who knows his own model reads `24.6` as volts
-  -- without being told, and on the narrow screens this panel is a third of, those characters are
-  -- the difference between reading the row at arm's length and squinting at it.
-  local showUnits = setting(state, "units") == "on"
-  -- The unit: SMLSIZE in the dim colour, whatever the row height.
-  local unitFont = SMLSIZE
-  local unitH = Common.measure(unitFont, "rpm")
-
-  for i = 1, count do
-    local row = rows[i]
-    local unit = showUnits and (row.unit or "") or ""
-    local unitW = (unit ~= "") and (Common.textWidth(unitFont, unit) + 3) or 0
-    local valueFont = Common.selectFont(rowH - 2, valueW - (unitW > 0 and (unitW + 2) or 0), row.sample or "8888")
-    local valueH = Common.measure(valueFont, row.sample or "8888")
-    local rowY = startY + (i - 1) * (rowH + rowGap)
-    local valueY = rowY + math.floor((rowH - valueH) / 2)
-
-    -- A name can be wider than its column in a longer language; it is cut with two dots rather
-    -- than drawn over the figure. Cached with the zone's other measurements, so a rebuild
-    -- measures nothing.
-    local label = Common.fitLabel(font, row.label, labelW - pad)
-    Common.label(nodes, x + pad, y + rowY + math.floor((rowH - fontH) / 2), labelW - pad, fontH,
-      label, font, C.label, LEFT)
-    if unitW > 0 then
-      Common.label(nodes, x + valueX + valueW - unitW, y + valueY + math.floor((valueH - unitH) / 2), unitW, unitH,
-        unit, unitFont, C.tick, RIGHT)
-    end
-    Common.label(nodes, x + valueX, y + valueY, valueW - unitW, valueH, row.value, valueFont, row.color or C.text, RIGHT)
-
-    if i < count then
-      local lineY = y + rowY + rowH
-      if asLines then
-        nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
-          pts = { { x + pad, lineY }, { x + w - pad, lineY } }, color = C.line, thickness = 1 }
-      else
-        Common.hline(nodes, x + pad, lineY, w - 2 * pad)
-      end
-    end
-  end
-end
-
--- ---------------------------------------------------------------------------
--- the value catalog the five slots choose from
+-- the value catalogue the card positions choose from
 -- ---------------------------------------------------------------------------
 
 local function intGetter(field)
@@ -905,22 +773,22 @@ local function rawSource(id, label, sensor, unit, sample, places)
 end
 
 -- Every source reads a state field the runtime's telemetry pass fills; nothing here probes.
--- `list` is the configure page's order, `id` the cfg value it stores, `label` the row's name as a
--- translation marker -- the configure page lists it as the option and the panel draws it, so the
--- two cannot name a row differently. This list is the one
--- extension point a new value needs: `make` returns the row's reactive getter over `state`,
+-- `list` is the configure page's order, `id` the cfg value it stores, `label` the card's caption
+-- as a translation marker -- the configure page lists it as the option and the card draws it, so
+-- the two cannot name a reading differently. This list is the one
+-- extension point a new value needs: `make` returns the card's reactive getter over `state`,
 -- `color` (optional) its reactive colour, `sample` the widest string the font is picked against.
 --
 -- `source` (optional) is the name the HOST knows the reading by, and it is what L.sources below
--- adds for a row a pilot chose. A row without one reads a fixed field of the state and costs the
--- host nothing to supply; a row with one is a reading the host resolves only because this theme
--- asked for it, so the slot half of the list is built from the five slots a pilot actually
--- chose. None of the five defaults carries a `source`; the readings the theme declares whatever
--- the slots say are listed in L.sources, with the reason for each.
+-- adds for a position a pilot chose. An entry without one reads a fixed field of the state and
+-- costs the host nothing to supply; an entry with one is a reading the host resolves only because
+-- this theme asked for it, so the position half of the list is built from the positions a pilot
+-- actually chose. None of the defaults carries a `source`; the readings the theme declares whatever
+-- the positions say are listed in L.sources, with the reason for each.
 --
 -- `minKey` / `maxKey` (optional) name the flight record's extremes of the reading
--- (tasks/events/telemetry/flight_record.lua, FLIGHT_STATS), which the telemetry view prints under
--- the figure at `places` decimals. A side the record does not keep is absent and prints `-`; a
+-- (tasks/events/telemetry/flight_record.lua, FLIGHT_STATS), which the value columns and the
+-- telemetry view print under the figure at `places` decimals. A side the record does not keep is absent and prints `-`; a
 -- reading with neither is not in the record at all and its tile has no range line.
 L.SOURCES = {
   { id = "cell_voltage", label = "@i18n(widgets.dashboard.urban_cell_voltage)@", unit = "V", sample = "4.20",
@@ -958,8 +826,8 @@ L.SOURCES = {
     end },
   { id = "voltage", label = "@i18n(app.pages.logs.voltage_title)@", unit = "V", sample = "99.9", make = decimalGetter("voltage", 1),
     minKey = "minVoltage", maxKey = "maxVoltage", places = 1,
-    -- The pack voltage turns with the gauge and the status line when the main pack is gone.
-    -- This row has no minimum of its own -- the cell figure is the one the theme's configured
+    -- The pack voltage turns with the battery strip and the arm card when the main pack is gone.
+    -- This reading has no minimum of its own -- the cell figure is the one the theme's configured
     -- bounds apply to -- so this is its only colour.
     color = function(state) return Common.packColor(state, C.text) end },
   { id = "rpm", label = "@i18n(app.pages.logs.rpm_title)@", unit = "rpm", sample = "9999", make = intGetter("rpm"),
@@ -1012,11 +880,11 @@ L.SOURCES = {
   -- flight ended early -- and it is a translated string, which is why the colour comes from a
   -- second reading rather than from a threshold on the text.
   --
-  -- THIS ROW KEEPS THE RECORD, AND THE STATUS LINE ABOVE IT DELIBERATELY DOES NOT. The host
-  -- publishes both readings; the line takes `esc_status_live` and this row takes `esc_status`,
-  -- so on a controller that faulted and recovered the two say different things at the same time.
-  -- That is the design and not a bug to tidy away: the line answers "what is wrong now" and would
-  -- be lying if it held a withdrawn alarm, while this row answers "what has this flight seen" and
+  -- THIS READING KEEPS THE RECORD, AND THE ARM CARD DELIBERATELY DOES NOT. The host publishes
+  -- both readings; the arm card takes `esc_status_live` and this reading takes `esc_status`, so on
+  -- a controller that faulted and recovered the two say different things at the same time.
+  -- That is the design and not a bug to tidy away: the card answers "what is wrong now" and would
+  -- be lying if it held a withdrawn alarm, while this reading answers "what has this flight seen" and
   -- would be useless if it forgot the fault that ended the flight. Changing either one to match
   -- the other destroys a reading nothing else on the screen provides.
   --
@@ -1105,11 +973,8 @@ L.SOURCES = {
 local SOURCES_BY_ID = {}
 for i = 1, #L.SOURCES do SOURCES_BY_ID[L.SOURCES[i].id] = L.SOURCES[i] end
 
--- The defaults: cell voltage, headspeed, current, ESC temperature, BEC.
-L.DEFAULT_SLOTS = { "cell_voltage", "rpm", "current", "esc_temp", "bec_voltage" }
-
 -- The telemetry view's tiles (telemview.lua), chosen on the Telemetry settings page from the same
--- catalogue as the five rows. Up to twelve, three to a row; a tile set to `none` is left out and
+-- catalogue as the card positions. Up to twelve, three to a row; a tile set to `none` is left out and
 -- the others close up. Nine are on by default, the pack, the drive and the electronics, so a
 -- page nobody has configured is already worth opening.
 L.TILE_COUNT = 12
@@ -1129,16 +994,17 @@ L.DEFAULT_TILES = {
 -- flight record, so a reading a pilot put on the flight screen costs nothing once the flight is
 -- over.
 --
--- Two halves. The readings the flight view draws whatever the five slots say:
+-- Two halves. The readings the flight view draws whatever the positions say:
 --
---   esc_status_live, esc_status_live_level   the speed controller's LIVE status, which the
---                                            status line reads. Declared unconditionally: a
---                                            declaration built from the slots alone would
---                                            leave it unresolved on every radio whose pilot has
---                                            not put it in a row, and the line would then say
---                                            nothing for a reason no pilot could ever see.
+--   esc_status_live, esc_status_live_level   the speed controller's LIVE status, which the arm
+--                                            card and the status view read. Declared
+--                                            unconditionally: a declaration built from the
+--                                            positions alone would leave it unresolved on every
+--                                            radio whose pilot has not put it on a card, and the
+--                                            card would then say nothing for a reason no pilot
+--                                            could ever see.
 --   TQly, TPWR                               the transmitter's link quality and power, for the
---                                            TQ bar and the bottom bar.
+--                                            TQ bar and the statistics view's bar.
 --   link_floor                               the sensitivity floor of the air rate, which the
 --                                            signal bars measure their headroom against.
 --   link_diversity                           whether a second antenna has been seen.
@@ -1148,27 +1014,29 @@ L.DEFAULT_TILES = {
 --                                            declared: no current source creates it, and an
 --                                            absent name is still a read on every pass.
 --
--- And the `source` of each row a pilot put in one of the five slots.
+-- And the `source` of each reading a pilot put on a card or in a value column -- with, for a raw
+-- sensor, the `-` and `+` forms of its name, the radio's own least and most of it, which the range
+-- under the figure reads.
 --
 -- BOTH names of the live pair are declared, and the second one is not redundant even though the
 -- host pairs them itself: that pairing runs as a pass over the collected list, so it only sees a
 -- declaration collected BEFORE it. If the order of those two steps ever reversed, the level would
--- go undeclared, the severity would arrive as nil, and the status line would fall back to READY
--- on a model with a faulty controller, with nothing going red. Naming it costs a table entry the
+-- go undeclared, the severity would arrive as nil, and the arm card would fall back to the arm
+-- state on a model with a faulty controller, with nothing going red. Naming it costs a table entry the
 -- host would have added anyway, and it turns an ordering assumption into no assumption at all.
 --
 -- `esc_status` -- the worst reading since the flight controller connected -- is NOT in the first
--- half. It is the ESC Status value row's reading, so it arrives through the slot loop when a
--- pilot selects that row, and a pilot who has not selected it does not pay for it.
+-- half. It is the ESC Status reading's, so it arrives through the position loop when a pilot
+-- selects that reading, and a pilot who has not selected it does not pay for it.
 --
 -- That is a cost on the HOST, per snapshot, and it is stated rather than hidden: each name is
 -- resolved on every snapshot, an absent one is searched again on the host's back-off of 2 s
 -- rising to 30 s, and `link_floor` makes the host ask the transmitter module once per link which
 -- ExpressLRS generation it runs. A host without `sources` support resolves none of it, and those
--- cells read "-" while the status line falls through to the arming reasons and READY.
+-- cards read "-" while the arm card falls back to the arm state.
 --
--- Duplicates are dropped here rather than left to the host: two slots showing one reading is a
--- thing a pilot can do, and the list is a declaration, not a count.
+-- Duplicates are dropped here rather than left to the host: two positions showing one reading is
+-- a thing a pilot can do, and the list is a declaration, not a count.
 local ALWAYS_DECLARED = {
   "esc_status_live", "esc_status_live_level",
   "TQly", "TPWR", "link_floor", "link_diversity", "*Skp",
@@ -1177,18 +1045,28 @@ local ALWAYS_DECLARED = {
 function L.sources(state)
   local cfg = (state and state.themeConfig) or {}
   local list, seen = {}, {}
-  for i = 1, #ALWAYS_DECLARED do
-    list[i] = ALWAYS_DECLARED[i]
-    seen[ALWAYS_DECLARED[i]] = true
-  end
-  for i = 1, 5 do
-    local def = SOURCES_BY_ID[cfg["slot" .. i]] or SOURCES_BY_ID[L.DEFAULT_SLOTS[i]]
-    local src = def and def.source
-    if src and not seen[src] then
-      seen[src] = true
-      list[#list + 1] = src
+  local function add(name)
+    if not seen[name] then
+      seen[name] = true
+      list[#list + 1] = name
     end
   end
+  for i = 1, #ALWAYS_DECLARED do add(ALWAYS_DECLARED[i]) end
+  local function addDef(def)
+    local src = def and def.source
+    if src then
+      add(src)
+      if def.rawRange then
+        add(src .. "-")
+        add(src .. "+")
+      end
+    end
+  end
+  for i = 1, L.CARD_COUNT do
+    local entry = L.resolveCard(cfg, i)
+    if entry.kind == "value" then addDef(entry.def) end
+  end
+  for i = 1, L.VALUE_COUNT do addDef(L.resolveValue(cfg, i)) end
   return list
 end
 
@@ -1307,25 +1185,680 @@ function L.tileRows(state)
   return tiles
 end
 
-function L.slotRows(state)
-  local cfg = state.themeConfig or {}
-  local rows = {}
-  for i = 1, 5 do
-    local id = cfg["slot" .. i]
-    local def = SOURCES_BY_ID[id] or SOURCES_BY_ID[L.DEFAULT_SLOTS[i]]
-    rows[i] = {
-      label = (def.id == "none") and "" or def.label,
-      unit = def.unit,
-      sample = def.sample,
-      value = def.make(state),
-      color = def.color and def.color(state) or nil
-    }
+-- ---------------------------------------------------------------------------
+-- the cards: what a position shows
+-- ---------------------------------------------------------------------------
+
+-- Eight positions: three cards down the left column, one big card over the value row on the right
+-- (`card1` .. `card4`), and the four columns of the value row (`value1` .. `value4`). A card shows
+-- a reading of the catalogue above or one of these kinds, which are not a single reading; a column
+-- of the value row shows a reading. `none` -- the catalogue's own Off -- leaves a position empty,
+-- and the rest of its column or its row takes its room.
+--
+-- `first` marks a kind offered on the first position alone: the model picture is the one entry
+-- that is not text, and the flat middle card is no place for it. The kinds' names are the
+-- settings page's (L.kindLabels); what a kind draws carries its own words.
+L.KINDS = {
+  { id = "image", first = true },
+  { id = "arm" },
+  { id = "gov" },
+  { id = "charge" },
+  { id = "ftime" },
+  { id = "ttime" },
+}
+L.CARD_COUNT = 4
+L.VALUE_COUNT = 4
+
+-- The defaults draw a complete screen with nothing configured: the model picture over the arm
+-- state over the governor on the left, the headspeed as the big card, and current, cell voltage,
+-- BEC and ESC temperature in the value row.
+L.DEFAULT_CARDS = { "image", "arm", "gov", "rpm" }
+L.DEFAULT_VALUES = { "current", "cell_voltage", "bec_voltage", "esc_temp" }
+
+-- The kinds' names on the settings page. A function for the reason L.settingsLabels is one: the
+-- widget's Lua state never draws them.
+function L.kindLabels()
+  return {
+    image = "@i18n(app.pages.settings_dashboard_settings.deck_kind_image)@",
+    arm = "@i18n(app.pages.settings_dashboard_settings.deck_kind_arm)@",
+    gov = "@i18n(app.pages.logs.tpl_governor)@",
+    charge = "@i18n(widgets.dashboard.urban_battery)@",
+    ftime = "@i18n(app.pages.logs.flight_duration)@",
+    ttime = "@i18n(widgets.dashboard.urban_total_time)@",
+  }
+end
+
+local KIND_BY_ID = {}
+for i = 1, #L.KINDS do KIND_BY_ID[L.KINDS[i].id] = L.KINDS[i] end
+
+-- Whether `id` may stand on card position `slot`: a kind (the picture on the first position only)
+-- or any reading of the catalogue, `none` included. The settings page asks the same question, so
+-- it offers exactly what the flight view draws.
+function L.cardAllows(slot, id)
+  local kind = KIND_BY_ID[id]
+  if kind ~= nil then return slot == 1 or not kind.first end
+  return SOURCES_BY_ID[id] ~= nil
+end
+
+-- What a card position resolves to: `{ kind = <kind id> }`, `{ kind = "value", def = <entry> }`
+-- or `{ kind = "none" }`. A stored id the position does not allow -- a hand-edited file naming the
+-- picture on another position, an id a newer build offered -- is the position's default.
+function L.resolveCard(cfg, slot)
+  local id = cfg["card" .. slot]
+  if type(id) ~= "string" or not L.cardAllows(slot, id) then id = L.DEFAULT_CARDS[slot] end
+  if KIND_BY_ID[id] ~= nil then return { kind = id } end
+  if id == "none" then return { kind = "none" } end
+  return { kind = "value", def = SOURCES_BY_ID[id] }
+end
+
+-- What a column of the value row shows: a catalogue entry, or nil for `none`.
+function L.resolveValue(cfg, slot)
+  local id = cfg["value" .. slot]
+  local def = (type(id) == "string") and SOURCES_BY_ID[id] or nil
+  if def == nil then def = SOURCES_BY_ID[L.DEFAULT_VALUES[slot]] end
+  if def == nil or def.id == "none" then return nil end
+  return def
+end
+
+-- A reading's caption: its name, and its unit in brackets where the pilot has the units on and the
+-- reading has one. A signal strength stands in the link reading's place on a receiver without a
+-- link quality (L.lqIsRssi), so that reading's unit follows it. Both halves are constants of the
+-- build.
+local function caption(state, def, showUnits)
+  local unit = def.unit or ""
+  if def.id == "link" and L.lqIsRssi(state) then unit = "dBm" end
+  if not showUnits or unit == "" then return def.label, "" end
+  return def.label, " (" .. unit .. ")"
+end
+
+-- A caption fitted to `w`: the unit goes first where the two do not fit together, and the name is
+-- cut with two dots only where it does not fit alone -- a cut name says less than a name without
+-- its unit. Cached with the zone's other measurements.
+local function fitCaption(font, name, unit, w)
+  if unit ~= "" and Common.textWidth(font, name .. unit) <= w then return name .. unit end
+  return Common.fitLabel(font, name, w)
+end
+
+-- The range under a reading: "<least> .. <most>" of the flight record -- the flight in progress
+-- where it has taken a value, the flight that ended otherwise, the rule the telemetry view's tiles
+-- read the record by -- or of the radio's own least and most for a raw sensor. `compact` is the
+-- form for a column too narrow for both ends: the most alone, after the word for it. Nil for a
+-- reading nothing keeps a range of.
+local function chipGetter(state, def, compact)
+  local cells = def.perCell and Common.cells(state) or nil
+  if not compact then
+    if def.rawRange then return rawRangeGetter(state, def) end
+    if def.minKey or def.maxKey then return rangeGetter(state, def, cells) end
+    return nil
   end
-  return rows
+  local read
+  if def.rawRange then
+    local highName = def.source .. "+"
+    read = function()
+      local d = state.derived
+      local v = d and d[highName]
+      if type(v) ~= "number" then return nil end
+      return v
+    end
+  elseif def.maxKey then
+    read = extremeReader(state, def.maxKey, cells)
+  else
+    return nil
+  end
+  local fmt = "%." .. tostring(def.places or 0) .. "f"
+  local prefix = T.max .. " "
+  return Common.getter(read, function(v)
+    if v == nil then return prefix .. "-" end
+    return prefix .. string.format(fmt, v)
+  end)
+end
+
+-- The widest string a range of this reading can be, for the decision whether it fits.
+local function chipSample(def)
+  if def.perCell then return "4.20 .. 4.20" end
+  return def.sample .. " .. " .. def.sample
+end
+
+-- Whether a sample is a figure (digits, a point, a sign, a colon) rather than words. Figures in one
+-- row share a face; a reading in words takes its own, so one word does not shrink every figure.
+local function isFigure(sample)
+  return string.find(sample, "^[%d%.%-:]+$") ~= nil
+end
+
+-- A caption over one large figure, with an optional line under it. As the card gets flatter the
+-- line goes first and then the caption, decided against the height LEFT FOR THE FIGURE: a card
+-- exists to show its figure, and a caption and a line in a flat card can leave it a few pixels.
+local MIN_VALUE_H = 12
+
+local function cardBody(nodes, g, x, y, w, h, cap, value, valueColor, valueSample, sub, subColor)
+  local iw = math.max(1, w - 2 * CARD_PAD)
+  local capH, subH = g.smlH + 6, g.smlH + 4
+  local showSub = sub ~= nil and (h - capH - subH - 4) >= MIN_VALUE_H
+  local showCap = cap ~= nil and (h - capH - (showSub and subH or 4)) >= MIN_VALUE_H
+  local top = showCap and capH or 4
+  local room = h - top - (showSub and subH or 4)
+  if room < MIN_VALUE_H then top, room = 2, math.max(1, h - 4) end
+  local valueFont = Common.selectFont(room, iw - 4, valueSample)
+  local valueH = math.min(Common.measure(valueFont, valueSample), room)
+  local valueY = top + math.max(0, math.floor((room - valueH) / 2))
+  if valueY + valueH > h - 2 then valueY = math.max(2, h - 2 - valueH) end
+  if showCap then
+    Common.label(nodes, x + CARD_PAD, y + 4, iw, g.smlH, cap, g.sml, C.label, CENTER)
+  end
+  Common.label(nodes, x + CARD_PAD, y + valueY, iw, valueH, value, valueFont, valueColor or C.text, CENTER)
+  if showSub then
+    Common.label(nodes, x + CARD_PAD, y + h - g.smlH - 5, iw, g.smlH, sub, g.sml, subColor or C.label, CENTER)
+  end
+end
+
+-- What the arm card says, and in which colour, as ONE closure the text node and the colour node
+-- both ask. The arm state, unless something outranks it:
+--
+--   main power lost      over everything: the board answers on its BEC and nothing else on the
+--                        screen looks wrong.
+--   speed controller     its LIVE verdict where it reports a warning or a fault, in that level's
+--                        colour, while a flight controller answers. "OK" is not worth the arm
+--                        state's place, and a fault the controller has cleared is not shown -- the
+--                        ESC Status reading keeps the record (L.SOURCES).
+--   arm state            ARMED / DISARMED in the colours the pilot chose, "No FC connected" muted.
+--
+-- `capChars` is the number of characters the caller measured the card to hold; the cut is made
+-- once per change of the text, never per frame.
+local function stateCell(state, capChars)
+  local armedText, armedColor = Common.armedText(state), Common.armedColor(state)
+  local lastRaw, lastCut = nil, ""
+  local function fit(raw)
+    if #raw <= capChars then return raw end
+    if raw ~= lastRaw then
+      lastRaw = raw
+      lastCut = Common.cutUtf8(raw, capChars - 1) .. "."
+    end
+    return lastCut
+  end
+  return function()
+    if state.mainPowerLost == true then return fit(T.main_power_lost), C.crit end
+    if state.rfConnected == true then
+      local derived = state.derived
+      local level = derived and derived.esc_status_live_level or nil
+      local esc = derived and derived.esc_status_live or nil
+      if type(esc) == "string" and esc ~= "" and type(level) == "number" and level >= 2 then
+        if level >= 3 then return fit(esc), C.bar_crit end
+        return fit(esc), C.bar_low
+      end
+    end
+    return armedText(), armedColor()
+  end
+end
+
+-- How many characters of ordinary capitals fit `w` px in `font`: the arm card's and the governor
+-- card's strings are capitals -- the controller's verdicts, the arming descriptors.
+local CAPS_SAMPLE = "BOOTGRACE"
+local function capsFit(font, w)
+  return math.max(4, math.floor(w * #CAPS_SAMPLE / math.max(1, Common.textWidth(font, CAPS_SAMPLE))))
+end
+
+-- The widest of the arm card's own words, by bytes, which over-counts a multi-byte character and
+-- errs towards the smaller face.
+local function armSample()
+  local best = T.disarmed
+  local list = { T.armed, T.no_fc, T.main_power_lost }
+  for i = 1, #list do
+    if #list[i] > #best then best = list[i] end
+  end
+  return best
+end
+
+-- Under the model picture: the flight controller's flight count and total flight time, and the
+-- board's battery profile -- in the warn colour while the host still waits for a battery pick on
+-- this connection (L.renderKey carries `pending`, so the colour follows the prompt).
+local function imageFooter(nodes, state, g, x, y, w, footH)
+  local inner = w - 2 * CARD_PAD
+  local w3 = math.floor(inner * 0.28)
+  local w1 = math.floor((inner - w3) * 0.40)
+  local w2 = inner - w3 - w1
+  local capH = g.smlH
+  local valueH = footH - capH
+  local valueFont = Common.selectFont(valueH, w2 - 4, "999:59:59")
+  local vH = Common.measure(valueFont, "999:59:59")
+  local bp = type(state.batteryPick) == "table" and state.batteryPick or nil
+  local bpLabel = T.battery_profile
+  if Common.textWidth(g.sml, bpLabel) > w3 then bpLabel = T.battery_profile_short end
+  local cx = x + CARD_PAD
+  Common.stacked(nodes, cx, y, w1, 0, Common.fitLabel(g.sml, T.flights, w1),
+    Common.getter(Common.field(state, "flights"), Common.integer), g.sml, capH, valueFont, vH)
+  Common.stacked(nodes, cx + w1, y, w2, 0, Common.fitLabel(g.sml, T.total_time, w2),
+    Common.getter(Common.field(state, "totalFlightSeconds"), Common.longDuration), g.sml, capH, valueFont, vH)
+  Common.label(nodes, cx + w1 + w2, y, w3, capH, Common.fitLabel(g.sml, bpLabel, w3), g.sml,
+    (bp and bp.pending == true) and C.warn or C.label, CENTER)
+  Common.label(nodes, cx + w1 + w2, y + capH, w3, vH,
+    Common.getter(Common.field(state, "batteryProfile"), Common.integer), valueFont, C.accent, CENTER)
+end
+
+-- Which view a card's press opens, by what it shows: a reading opens the telemetry view, the arm
+-- state and the governor the status view, the charge the battery view, the picture this theme's
+-- own menu (the battery profiles and the tuning surface).
+local CARD_VIEW = {
+  value = "openView:deck_telemetry", ftime = "openView:deck_telemetry", ttime = "openView:deck_telemetry",
+  arm = "openView:deck_status", gov = "openView:deck_status",
+  charge = "openView:deck_battery", image = "openView:deck_menu",
+}
+
+-- A button's children are placed against its content area, which starts inside its padding:
+-- `pad_button`, PAD_MEDIUM left and right and PAD_TINY above and below, both scaled by the screen
+-- class (radio/src/gui/colorlcd/libui/etx_lv_theme.cpp and etx_lv_theme.h, LAYOUT_SCALE), plus
+-- the 2 px frame (PAD_BORDER). A Lua button takes no padding parameter, so a picture built into
+-- one is placed that far up and to the left, and lands where the widget zone draws it.
+local function layoutScale(v)
+  if LCD_W == 800 then return math.floor((v * 11 + 4) / 8) end
+  if LCD_W == 320 then return math.floor((v * 8 + 5) / 10) end
+  return v
+end
+local BUTTON_BORDER = 2
+L.buttonInset = function() return layoutScale(6) + BUTTON_BORDER, layoutScale(2) + BUTTON_BORDER end
+
+-- A card's surface and outline. In the widget zone, and on a host without theme views, the
+-- rounded card. Over a press, the press itself is the surface -- a button in the card colour --
+-- and the outline is four lines, because a line takes no press where a rectangle would take it.
+-- Cards stand next to each other, so the outline cannot be built into the button the way a single
+-- panel can: the children of a button are drawn up and to the left of it by the button's padding,
+-- into the gap beside the next card. `outline` may be a colour or a per-frame colour function.
+-- Answers the index of the button node, or nil.
+local function cardFrame(nodes, x, y, w, h, ctx, view, outline)
+  if not (view and hasViews(ctx)) then
+    Common.card(nodes, x, y, w, h, outline)
+    return nil
+  end
+  local action = ctx.action
+  local at = #nodes + 1
+  Common.button(nodes, x, y, w, h, C.card, function() action(view) end)
+  local color = outline or C.line
+  local x1, y1 = x + w - 1, y + h - 1
+  local edges = {
+    { { x, y }, { x1, y } }, { { x, y1 }, { x1, y1 } },
+    { { x, y }, { x, y1 } }, { { x1, y }, { x1, y1 } },
+  }
+  for i = 1, 4 do
+    nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = edges[i], color = color, thickness = 1 }
+  end
+  return at
+end
+
+-- One card: its frame and what its position resolved to, drawn into the rectangle it is given.
+-- Every kind shrinks by DROPPING a part, never by clipping one.
+local function drawCard(nodes, state, g, entry, x, y, w, h, ctx, bodyW)
+  local kind = entry.kind
+  if kind == "none" then return end
+  local outline = (kind == "gov") and Common.governorFrameColor(state) or nil
+  local at = cardFrame(nodes, x, y, w, h, ctx, CARD_VIEW[kind], outline)
+  w = bodyW or w
+  local iw = math.max(1, w - 2 * CARD_PAD)
+
+  if kind == "arm" then
+    -- One line, fitted to the card: the state is the one thing a pilot checks at a glance.
+    local sample = armSample()
+    local font = Common.selectFont(math.max(10, h - 8), iw - 8, sample)
+    local fh = math.min(Common.measure(font, sample), math.max(1, h - 4))
+    local cell = stateCell(state, capsFit(font, iw - 8))
+    Common.label(nodes, x + CARD_PAD, y + math.max(2, math.floor((h - fh) / 2)), iw, fh,
+      function()
+        local said = cell()
+        return said
+      end, font,
+      function()
+        local _, color = cell()
+        return color
+      end, CENTER)
+
+  elseif kind == "gov" then
+    -- The governor, and under it what stands between the pilot and arming, while disarmed, in the
+    -- firmware's own short descriptors -- the one line on this screen that says why the model will
+    -- not arm.
+    local why = Common.armDisableText(state)
+    local chars = capsFit(g.sml, iw)
+    local lastRaw, lastCut = nil, ""
+    cardBody(nodes, g, x, y, w, h, Common.fitLabel(g.sml, T.governor, iw),
+      Common.governorText(state), Common.governorColor(state), Common.governorSample(),
+      function()
+        if state.armed == true or state.rfConnected ~= true then return "" end
+        local raw = why()
+        if raw ~= lastRaw then
+          lastRaw = raw
+          lastCut = (#raw > chars) and (Common.cutUtf8(raw, chars - 1) .. ".") or raw
+        end
+        return lastCut
+      end, C.warning)
+
+  elseif kind == "charge" then
+    -- The pack's charge as the battery strip reads it (Common.fuelLevel: the steps the pilot set,
+    -- no reading with the main pack gone), the figure turning yellow and red at those steps; the
+    -- capacity used under it. The cell count is a render key term, so the caption is a constant.
+    local level = Common.fuelLevel(state)
+    cardBody(nodes, g, x, y, w, h,
+      Common.fitLabel(g.sml, T.view_battery .. " " .. tostring(Common.cells(state)) .. "S", iw),
+      Common.getter(function()
+        local p = level()
+        return p
+      end, function(p)
+        if p == nil then return "--%" end
+        return string.format("%d%%", math.floor(p + 0.5))
+      end),
+      function()
+        if state.mainPowerLost == true then return C.crit end
+        local _, fill = level()
+        if fill == C.bar_crit then return C.crit end
+        if fill == C.bar_low then return C.warn end
+        return C.text
+      end, "100%",
+      Common.getter(Common.field(state, "consumedMah"), function(v)
+        if v == nil then return "- " .. T.mah end
+        return string.format("%d ", math.floor(v + 0.5)) .. T.mah
+      end))
+
+  elseif kind == "ftime" then
+    cardBody(nodes, g, x, y, w, h, Common.fitLabel(g.sml, T.flight_time, iw),
+      Common.getter(Common.field(state, "flightSeconds"), Common.duration), nil, "88:88")
+
+  elseif kind == "ttime" then
+    cardBody(nodes, g, x, y, w, h, Common.fitLabel(g.sml, T.total_time, iw),
+      Common.getter(Common.field(state, "totalFlightSeconds"), Common.longDuration), nil, "999:59:59")
+
+  elseif kind == "image" then
+    -- The picture, top-anchored at its own aspect ratio, with the totals under it -- which go first
+    -- where the card is too flat for both. In full screen the picture is built into the card's
+    -- button, against its content area, so a press on it reaches the button whatever the picture
+    -- does with one.
+    local footH = 2 * g.smlH + 2
+    local showFoot = h >= footH + 2 * g.smlH + 12
+    local slotH = math.max(8, h - (showFoot and (footH + 10) or 8))
+    local slotW = math.max(1, w - 8)
+    local path = Common.modelImage(state)
+    local imgW, imgH = slotW, slotH
+    local bw, bh = Common.imageSize(path)
+    if bw and bh then
+      local scale = math.min(slotW / bw, slotH / bh)
+      imgW = math.max(1, math.floor(bw * scale))
+      imgH = math.max(1, math.floor(bh * scale))
+    end
+    local image = { type = "image", x = x + 4 + math.floor((slotW - imgW) / 2), y = y + 4, w = imgW, h = imgH,
+      file = path, fill = false }
+    if at ~= nil then
+      local insetX, insetY = L.buttonInset()
+      image.x, image.y = image.x - x - insetX, image.y - y - insetY
+      nodes[at].children = { image }
+    else
+      nodes[#nodes + 1] = image
+    end
+    if showFoot then
+      imageFooter(nodes, state, g, x, y + h - footH - 4, w, footH)
+    end
+
+  elseif kind == "value" then
+    local def = entry.def
+    local name, unit = caption(state, def, g.showUnits)
+    local chip = chipGetter(state, def, Common.textWidth(g.sml, chipSample(def)) > iw)
+    cardBody(nodes, g, x, y, w, h, fitCaption(g.sml, name, unit, iw),
+      def.make(state), def.color and def.color(state) or nil, def.sample, chip)
+  end
+end
+
+-- The left column's three cards. A card's HEIGHT belongs to its POSITION, never to its content, so
+-- a reading added to the catalogue only has to scale into a rectangle that already exists. Their
+-- shares are 54 / 14 / 32 of the column; a position set to Off gives its share to the others in
+-- proportion, so nothing gapes and the heights depend on HOW MANY cards are on, never on WHICH
+-- content they show. The middle card keeps room for one line and the bottom one for a caption and
+-- a line under the figure.
+local LEFT_SHARE = { 0.54, 0.14, 0.32 }
+
+local function leftColumn(nodes, state, cfg, g, x, y, w, h, ctx)
+  local entries, shown, onCount, shareSum = {}, {}, 0, 0
+  for i = 1, 3 do
+    entries[i] = L.resolveCard(cfg, i)
+    if entries[i].kind ~= "none" then
+      shown[i] = true
+      onCount = onCount + 1
+      shareSum = shareSum + LEFT_SHARE[i]
+    end
+  end
+  if onCount == 0 or w <= 0 or h <= 0 then return end
+  local floors = { 0, g.smlH + 8, g.smlH + 18 }
+  local avail = h - (onCount - 1) * CARD_GAP
+  local heights, fixed, flex = { 0, 0, 0 }, 0, 0
+  for i = 1, 3 do
+    if shown[i] then
+      if avail * LEFT_SHARE[i] / shareSum < floors[i] then
+        heights[i] = floors[i]
+        fixed = fixed + floors[i]
+      else
+        heights[i] = -1
+        flex = flex + LEFT_SHARE[i]
+      end
+    end
+  end
+  local total = 0
+  for i = 1, 3 do
+    if heights[i] == -1 then
+      heights[i] = math.max(1, math.floor(math.max(1, avail - fixed) * LEFT_SHARE[i] / flex))
+    end
+    total = total + heights[i]
+  end
+  -- Every position on its floor can still overshoot -- a small widget zone -- and an overshooting
+  -- column runs into the strip: the whole column is scaled back rather than one card overflowing.
+  if total > avail then
+    for i = 1, 3 do
+      if heights[i] > 0 then heights[i] = math.max(1, math.floor(heights[i] * avail / total)) end
+    end
+  end
+  local cy = y
+  for i = 1, 3 do
+    if shown[i] then
+      drawCard(nodes, state, g, entries[i], x, cy, w, heights[i], ctx)
+      cy = cy + heights[i] + CARD_GAP
+    end
+  end
+end
+
+-- The big card, with a side column of its own at its right: the most the reading reached in this
+-- flight where the record keeps a most, and the throttle under it. The side column belongs to the
+-- POSITION, so it is there whatever the card shows.
+local BIG_SHARE = 0.46
+local SIDE_SHARE = 0.34
+
+local function bigCard(nodes, state, cfg, g, x, y, w, h, ctx)
+  local entry = L.resolveCard(cfg, 4)
+  if entry.kind == "none" then return end
+  local sideW = math.floor(w * SIDE_SHARE)
+  if sideW <= 30 then sideW = 0 end
+  drawCard(nodes, state, g, entry, x, y, w, h, ctx, w - sideW)
+  if sideW == 0 then return end
+  local sideX = x + w - sideW
+  local valueW = math.min(sideW - 16, Common.textWidth(g.sml, "88888") + 6)
+  local labelW = math.max(1, sideW - 10 - valueW)
+  local rowY = y + math.floor(h * 0.30)
+  local def = entry.def
+  if entry.kind == "value" and (def.maxKey or def.rawRange) then
+    local read
+    if def.rawRange then
+      local highName = def.source .. "+"
+      read = function()
+        local d = state.derived
+        local v = d and d[highName]
+        if type(v) ~= "number" then return nil end
+        return v
+      end
+    else
+      read = extremeReader(state, def.maxKey, def.perCell and Common.cells(state) or nil)
+    end
+    Common.label(nodes, sideX, rowY, labelW, g.smlH, Common.fitLabel(g.sml, T.max, labelW), g.sml, C.label, LEFT)
+    Common.label(nodes, sideX + labelW, rowY, valueW, g.smlH,
+      Common.scaledGetter(read, def.places or 0), g.sml, C.text, RIGHT)
+    rowY = rowY + g.smlH + 4
+  end
+  Common.label(nodes, sideX, rowY, labelW, g.smlH, Common.fitLabel(g.sml, T.throttle, labelW), g.sml, C.label, LEFT)
+  Common.label(nodes, sideX + labelW, rowY, valueW, g.smlH, Common.throttleText(state), g.sml, C.text, RIGHT)
+end
+
+-- The value row: one card with up to four columns, each a caption over a figure over its range.
+-- A column set to Off drops out and the rest share the width. Every figure shares ONE face, fitted
+-- by pixel width to the widest figure among the columns that are drawn, so the row reads even; a
+-- reading in words takes the largest face up to the shared one in which its own sample fits. The
+-- range is "least .. most" where the column is wide enough for the widest the catalogue can put
+-- there, the most alone where only that fits, and nothing where neither does: a range that does not
+-- fit would wrap and be cut off by the row. In full screen, on a host with theme views, the row is
+-- the press that opens the telemetry view, which shows the same readings and more.
+local function valueRow(nodes, state, cfg, g, x, y, w, h, ctx)
+  local slots = {}
+  for i = 1, L.VALUE_COUNT do
+    local def = L.resolveValue(cfg, i)
+    if def ~= nil then slots[#slots + 1] = def end
+  end
+  if #slots == 0 or w <= 0 or h <= g.smlH + 12 then return end
+  local asLines = hasViews(ctx)
+  cardFrame(nodes, x, y, w, h, ctx, "openView:deck_telemetry")
+  local n = #slots
+  local colW = math.floor((w - 2 * CARD_PAD) / n)
+  local textW = math.max(1, colW - 10)
+  local chipH = g.smlH
+  local valAvailH = math.max(12, h - g.smlH - chipH - 14)
+
+  local sample, sampleW = "8888", Common.textWidth(g.sml, "8888")
+  for i = 1, n do
+    local s = slots[i].sample
+    if isFigure(s) then
+      local sw = Common.textWidth(g.sml, s)
+      if sw > sampleW then sample, sampleW = s, sw end
+    end
+  end
+  local valueFont = Common.selectFont(valAvailH, colW - 12, sample)
+  local valueH = Common.measure(valueFont, sample)
+
+  for i = 1, n do
+    local def = slots[i]
+    local cx = x + CARD_PAD + (i - 1) * colW
+    if i > 1 then
+      local lx = cx
+      if asLines then
+        nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0,
+          pts = { { lx, y + 5 }, { lx, y + h - 6 } }, color = C.line, thickness = 1 }
+      else
+        Common.rect(nodes, lx, y + 5, 1, math.max(1, h - 10), C.line, true)
+      end
+    end
+    local name, unit = caption(state, def, g.showUnits)
+    Common.label(nodes, cx + 5, y + 5, textW, g.smlH, fitCaption(g.sml, name, unit, textW), g.sml, C.label, LEFT)
+    local font, fontH = valueFont, valueH
+    if not isFigure(def.sample) then
+      font = Common.selectFont(valAvailH, colW - 12, def.sample, valueFont)
+      fontH = Common.measure(font, def.sample)
+    end
+    Common.label(nodes, cx + 6, y + 5 + g.smlH + math.max(0, math.floor((h - 10 - g.smlH - chipH - fontH) / 2)),
+      math.max(1, colW - 12), fontH, def.make(state), font, def.color and def.color(state) or C.text, CENTER)
+    local compact = Common.textWidth(g.sml, chipSample(def)) > textW
+    local chip = nil
+    if not (compact and Common.textWidth(g.sml, T.max .. " " .. def.sample) > textW) then
+      chip = chipGetter(state, def, compact)
+    end
+    if chip ~= nil then
+      Common.label(nodes, cx + 5, y + h - chipH - 4, textW, chipH, chip, g.sml, C.label, CENTER)
+    end
+  end
 end
 
 -- ---------------------------------------------------------------------------
--- bottom bar
+-- the battery strip
+-- ---------------------------------------------------------------------------
+
+-- A wide charge bar across the foot: a headline over it -- the word, the cell count, the pack
+-- voltage and the capacity used -- with the percentage at its right end, and a 0 .. 100 % scale
+-- under it. The fill reads the one fuel closure every place this theme draws the charge asks
+-- (Common.fuelLevel), so the steps the pilot set, the orange of a pack that was not full when it
+-- was plugged in and the empty reading of a main pack that is gone are the same here as on the
+-- charge card.
+local QUARTERS = { 25, 50, 75 }
+
+-- The bar in lines, for the press over it in full screen: the same track, fill, ticks and outline
+-- as the rectangles, at the same coordinates. A line's `y` is its middle and its `h` its thickness.
+local function stripLines(nodes, x, y, w, h, read, color)
+  local midY = y + math.floor(h / 2)
+  nodes[#nodes + 1] = { type = "hline", x = x, y = midY, w = w, h = h, color = C.track }
+  nodes[#nodes + 1] = { type = "hline", x = x, y = midY, w = 1, h = h, color = color, size = barLength(read, w, h) }
+  for i = 1, #QUARTERS do
+    vline(nodes, x + math.floor(w * QUARTERS[i] / 100), y + 1, y + h - 2, C.tick, 1)
+  end
+  local x1, y1 = x + w - 1, y + h - 1
+  local edges = {
+    { { x, y }, { x1, y } }, { { x, y1 }, { x1, y1 } },
+    { { x, y }, { x, y1 } }, { { x1, y }, { x1, y1 } },
+  }
+  for i = 1, 4 do
+    nodes[#nodes + 1] = { type = "line", x = 0, y = 0, w = 0, h = 0, pts = edges[i], color = C.line, thickness = 1 }
+  end
+end
+
+function L.battStrip(nodes, state, g, x, y, w, barH, ctx)
+  local level = Common.fuelLevel(state)
+  local stripH = g.smlH + 2 + barH + 1 + g.smlH
+  if hasViews(ctx) then
+    local action = ctx.action
+    tapArea(nodes, x, y, w, stripH, function() action("openView:deck_battery") end)
+  end
+  local pctW = math.max(30, math.floor(w * 0.14))
+  local cells = Common.cells(state)
+  local head = T.view_battery .. " " .. tostring(cells) .. "S   "
+  local headSample = T.view_battery .. " 12S   88.8V   8888 " .. T.mah_used
+  local headFont = Common.selectFont(g.smlH, w - pctW - 8, headSample)
+  local headH = Common.measure(headFont, headSample)
+  -- One string over two readings, formatted once per change of either: the voltage at the tenth it
+  -- is printed with, and the capacity used.
+  local lastV, lastMah, headText = Common.UNSET, Common.UNSET, ""
+  Common.label(nodes, x, y, w - pctW - 4, headH, function()
+    local v = num(state.voltage)
+    if v ~= nil then v = math.floor(v * 10 + 0.5) end
+    local mah = num(state.consumedMah)
+    if mah ~= nil then mah = math.floor(mah + 0.5) end
+    if v == lastV and mah == lastMah then return headText end
+    lastV, lastMah = v, mah
+    headText = head .. ((v ~= nil) and string.format("%.1fV", v / 10) or "-")
+      .. "   " .. ((mah ~= nil) and string.format("%d ", mah) or "- ") .. T.mah_used
+    return headText
+  end, headFont, C.label, LEFT)
+  Common.label(nodes, x + w - pctW, y, pctW, g.smlH,
+    Common.getter(function()
+      local p = level()
+      return p
+    end, function(p)
+      if p == nil then return "--%" end
+      return string.format("%d%%", math.floor(p + 0.5))
+    end), g.sml, Common.packColor(state, C.text), RIGHT)
+
+  local barY = y + g.smlH + 2
+  local fill = function()
+    local p = level()
+    return p
+  end
+  local color = function()
+    local _, c = level()
+    return c
+  end
+  if hasViews(ctx) then
+    stripLines(nodes, x, barY, w, barH, fill, color)
+  else
+    Common.hbar(nodes, x, barY, w, barH, fill, color, QUARTERS)
+  end
+
+  -- The 0 / 25 / 50 / 75 / 100 % scale.
+  local scaleY = barY + barH + 1
+  local labelW = math.max(20, math.floor(w * 0.14))
+  Common.label(nodes, x, scaleY, labelW, g.smlH, "0%", g.sml, C.label, LEFT)
+  for i = 1, #QUARTERS do
+    local p = QUARTERS[i]
+    Common.label(nodes, x + math.floor(w * p / 100) - math.floor(labelW / 2), scaleY, labelW, g.smlH,
+      string.format("%d%%", p), g.sml, C.label, CENTER)
+  end
+  Common.label(nodes, x + w - labelW, scaleY, labelW, g.smlH, "100%", g.sml, C.label, RIGHT)
+end
+
+-- ---------------------------------------------------------------------------
+-- the statistics view's bar
 -- ---------------------------------------------------------------------------
 
 -- A reading the host resolves only because this theme declared it (L.sources): the transmitter
@@ -1345,8 +1878,8 @@ local function labelled(label, read, fmt)
   end)
 end
 
--- The arming override: while the flight controller names reasons that block arming, the whole
--- bar gives way to "Arming Disabled: <reason>", one reason at a time, two seconds each, in the
+-- The arming override of the statistics view's bar: while the flight controller names reasons that
+-- block arming, the whole bar gives way to "Arming Disabled: <reason>", one reason at a time, two seconds each, in the
 -- WARNING colour. The returned function is the visibility the bar's ordinary labels take in the
 -- meantime. getTime is the radio's tick counter, not one of the probes a closure may not make.
 --
@@ -1404,35 +1937,6 @@ local function armingOverride(nodes, state, x, y, w, fontH, font)
   return function() return list() == nil end
 end
 
--- The flight view's bar: "Model: <name>" in the left 46 %, the arm state centred on the whole
--- bar, the transmitter power right-aligned in the next 24 % and the skipped-packet count in the
--- last 16 %.
-function L.statusBar(nodes, state, x, y, w, h, font, fontH)
-  local textY = y + math.floor((h - fontH) / 2)
-  local shown = armingOverride(nodes, state, x, textY, w, fontH, font)
-  local modelW = math.floor(w * 0.46)
-  local skpW = math.floor(w * 0.16)
-  local tpwrW = math.floor(w * 0.24)
-  local name = Common.modelName(state)
-  local last, text = nil, nil
-  local nodesBefore = #nodes
-  Common.label(nodes, x + CARD_PAD, textY, math.max(1, modelW - 2 * CARD_PAD), fontH, function()
-    local n = name()
-    if n ~= last then last, text = n, T.model_prefix .. n end
-    return text
-  end, font, C.text, LEFT)
-  Common.label(nodes, x, textY, w, fontH, Common.armedText(state), font, Common.armedColor(state), CENTER)
-  if setting(state, "tpwr") == "on" then
-    Common.label(nodes, x + w - skpW - tpwrW, textY, tpwrW, fontH,
-      labelled(T.tpwr, function() return derivedNumber(state, "TPWR") end, "%dmW"),
-      font, C.text, RIGHT)
-  end
-  Common.label(nodes, x + w - skpW, textY, skpW - CARD_PAD, fontH,
-    labelled(T.skp, function() return derivedNumber(state, "*Skp") end, "%d"),
-    font, C.text, RIGHT)
-  for i = nodesBefore + 1, #nodes do nodes[i].visible = shown end
-end
-
 -- The statistics view's bar, four link and board figures in four equal cells: the transmitter
 -- power, the least link quality, the hottest the flight controller got, and the skipped packets.
 -- The host keeps no record of the power, so that cell is the reading the link delivered last,
@@ -1461,13 +1965,18 @@ end
 -- the flight view
 -- ---------------------------------------------------------------------------
 
--- Five zones: the top bar, the model and its status on the left, the battery down the middle,
--- five telemetry rows on the right, the status bar at the foot. The gauge takes a fifth of the
--- content width, with a readable floor that is itself capped -- in a narrow widget zone an
--- uncapped floor gives the side panels a negative width.
+-- Four zones: the header, a left column of three cards, a right column with the big card over the
+-- value row, and the battery strip at the foot. The left column takes 35 % of the content width.
+-- The big card takes 46 % of the right column's height when it is on; off, the value row takes the
+-- whole column.
 --
--- Both bars are 7.5 % of the height (at least 18 px), their boxes two pixels shorter, and
--- nothing is reserved for controls: the two controls this theme draws sit inside the top bar.
+-- The header is 7.5 % of the height (at least 18 px), its box two pixels shorter, and nothing is
+-- reserved for controls: the two controls this theme draws sit inside the header. The small face
+-- every caption, range and the strip are set in follows the SCREEN, not the card, so every caption
+-- on the panel is set in one face.
+local LEFT_WIDTH = 0.35
+local S_CHIP = "888.8 .. 888.8"
+
 function L.buildFlight(zone, state, ctx)
   local nodes = {}
   local x0, y0, w, h = zone.x or 0, zone.y or 0, zone.w or 0, zone.h or 0
@@ -1475,7 +1984,8 @@ function L.buildFlight(zone, state, ctx)
   -- The scheme FIRST, before a single node is appended: every colour below, in a node and in
   -- a closure alike, is then the one the pilot chose. It is a build-time reading and needs no
   -- term in the render key -- the host reloads the theme when its preferences change.
-  Common.applyScheme((state.themeConfig or {}).scheme)
+  local cfg = state.themeConfig or {}
+  Common.applyScheme(cfg.scheme)
   Common.applyFrames(state.themeConfig)
   Common.beginBuild(zone)
   L.bindKeys(state, ctx)
@@ -1484,76 +1994,45 @@ function L.buildFlight(zone, state, ctx)
   local boxH = math.max(1, barH - 2)
   local font = Common.selectFont(boxH, nil, "Total Time")
   local fontH = Common.measure(font, "Total Time")
+  local sml = Common.selectFont(math.max(8, math.floor(h * 0.05)), math.floor(w * 0.14), S_CHIP)
+  local g = { sml = sml, smlH = Common.measure(sml, S_CHIP), showUnits = setting(state, "units") == "on" }
 
   local contentW = w - 2 * OUTER_PAD
-  local contentH = h - 2 * barH - 2 * CARD_GAP - 2 * OUTER_PAD
+  local stripBarH = math.max(8, math.floor(h * 0.055))
+  local stripH = g.smlH + 2 + stripBarH + 1 + g.smlH
   local yContent = y0 + OUTER_PAD + barH + CARD_GAP
-  local yStatus = yContent + contentH + CARD_GAP
+  local yStrip = y0 + h - OUTER_PAD - stripH
+  local contentH = math.max(30, yStrip - CARD_GAP - yContent)
 
-  local fuelW = math.min(math.max(8, contentW - 8), math.max(46, math.floor(contentW * 0.20)))
-  local remainingW = math.max(0, contentW - fuelW - 2 * CARD_GAP)
-  local leftW = math.floor(remainingW / 2)
-  local rightW = remainingW - leftW
-  local fuelX = x0 + OUTER_PAD + leftW + CARD_GAP
-  local rightX = fuelX + fuelW + CARD_GAP
+  local leftX = x0 + OUTER_PAD
+  local leftW = math.floor(contentW * LEFT_WIDTH)
+  local rightX = leftX + leftW + CARD_GAP
+  local rightW = math.max(0, x0 + w - OUTER_PAD - rightX)
 
   Common.rect(nodes, x0, y0, w, h, C.bg, true)
-  L.topBar(nodes, state, x0, y0 + OUTER_PAD, w - 4, boxH, font, fontH, ctx)
+  L.header(nodes, state, x0, y0 + 2, w - 4, boxH, font, fontH, ctx)
 
-  if leftW > 0 and contentH > 0 then
-    L.statusPanel(nodes, state, x0 + OUTER_PAD, yContent, leftW, contentH, font, fontH, ctx)
-  end
-  if contentH > 0 then
-    L.gauge(nodes, state, fuelX, yContent, fuelW, contentH, ctx)
-  end
-  if rightW > 0 and contentH > 0 then
-    L.valuePanel(nodes, state, rightX, yContent, rightW, contentH, font, fontH,
-      L.slotRows(state), ctx)
+  leftColumn(nodes, state, cfg, g, leftX, yContent, leftW, contentH, ctx)
+
+  if rightW > 0 then
+    local bigOn = L.resolveCard(cfg, 4).kind ~= "none"
+    local bigH = bigOn and math.floor(contentH * BIG_SHARE) or 0
+    if bigOn then
+      bigCard(nodes, state, cfg, g, rightX, yContent, rightW, bigH, ctx)
+    end
+    local valuesY = yContent + bigH + (bigOn and CARD_GAP or 0)
+    valueRow(nodes, state, cfg, g, rightX, valuesY, rightW, yContent + contentH - valuesY, ctx)
   end
 
-  L.statusBar(nodes, state, x0, yStatus, w - 4, boxH, font, fontH)
+  L.battStrip(nodes, state, g, x0 + OUTER_PAD + 2, yStrip, contentW - 4, stripBarH, ctx)
   return nodes
-end
-
--- The battery gauge, and in full screen on a host with theme views the tap that opens the battery
--- view. The gauge is built of rectangles, and a rectangle over a press takes it -- but a rectangle
--- hands a press it takes on to the object it was built INTO (radio/src/gui/colorlcd/libui/
--- window.cpp, Window::onClicked). So there the gauge is built as the children of the button that
--- opens the view, and a tap anywhere on it reaches the button. The widget zone and a host without
--- theme views draw the gauge as it always was.
---
--- A button's children are placed against its content area, which starts inside its padding:
--- `pad_button`, PAD_MEDIUM left and right and PAD_TINY above and below, both scaled by the screen
--- class (radio/src/gui/colorlcd/libui/etx_lv_theme.cpp and etx_lv_theme.h, LAYOUT_SCALE), plus
--- the 2 px frame (PAD_BORDER). A Lua button takes no padding parameter, so the gauge is drawn
--- that far up and to the left, and lands where the widget zone draws it.
-local function layoutScale(v)
-  if LCD_W == 800 then return math.floor((v * 11 + 4) / 8) end
-  if LCD_W == 320 then return math.floor((v * 8 + 5) / 10) end
-  return v
-end
-local BUTTON_BORDER = 2
-L.buttonInset = function() return layoutScale(6) + BUTTON_BORDER, layoutScale(2) + BUTTON_BORDER end
-
-function L.gauge(nodes, state, x, y, w, h, ctx)
-  if not hasViews(ctx) then
-    Common.fuelGauge(nodes, state, x, y, w, h)
-    return
-  end
-  local action = ctx.action
-  local at = #nodes + 1
-  Common.button(nodes, x, y, w, h, C.bg, function() action("openView:deck_battery") end)
-  local insetX, insetY = L.buttonInset()
-  local inner = {}
-  Common.fuelGauge(inner, state, -insetX, -insetY, w, h)
-  nodes[at].children = inner
 end
 
 -- ---------------------------------------------------------------------------
 -- the statistics view
 -- ---------------------------------------------------------------------------
 
--- The statistics view: the clock and the radio battery across the top, the model and its totals
+-- The statistics view: the header without its link cluster across the top, the model and its totals
 -- over a table of what the flight reached -- the reading now, the least and the most of every
 -- row -- then one line with the flight time and the capacity used, and the status bar at the
 -- foot.
@@ -1736,8 +2215,9 @@ function L.buildStats(zone, state, ctx)
   Common.beginBuild(zone)
   L.bindKeys(state, ctx)
 
-  -- The bars as the flight view has them, so the two screens share their top and their foot
-  -- (see L.buildFlight). The table and the line beneath it are set in the same face.
+  -- The header as the flight view has it, so the two screens share their top (see
+  -- L.buildFlight). The table and the line beneath it are set in the same face, and the bar at the
+  -- foot is the statistics bar.
   local barH = math.max(18, math.floor(h * 0.075))
   local boxH = math.max(1, barH - 2)
   local font = Common.selectFont(boxH, nil, "Total Time")
@@ -1753,7 +2233,7 @@ function L.buildStats(zone, state, ctx)
   local tableH = math.max(1, yInfo - CARD_GAP - yContent)
 
   Common.rect(nodes, x0, y0, w, h, C.bg, true)
-  L.topBar(nodes, state, x0, y0 + OUTER_PAD, w - 4, boxH, font, fontH, ctx, false)
+  L.header(nodes, state, x0, y0 + 2, w - 4, boxH, font, fontH, ctx, false)
   Common.hline(nodes, xContent, yContent - 1, contentW)
 
   -- The table: a label column of about a third, and three equal value columns in what is left.
@@ -1880,16 +2360,17 @@ local function txBatteryStep()
 end
 
 -- Everything that moves is a reactive closure, so the tree only has to be rebuilt when its
--- geometry or one of the build-time readings changes: the zone, the cell count the gauge
--- figures are sized from, the model picture, and the TX battery the pill was painted from.
+-- geometry or one of the build-time readings changes: the zone, the cell count the battery
+-- figures are stated in, the model picture, the TX battery the pill was painted from, and which
+-- sensor answered for the link -- which decides whether the RQ bar can fill at all.
 -- Without a key of its own a free-form theme is built once and never again, and a model
 -- change would leave the previous picture up. A slot change needs no term here: the
 -- preference watcher reloads the theme and clears `built` itself. The phase is in the key
 -- although the host reloads the theme on every mode change -- one tostring, and the key then
 -- stays right on a host that stops doing so.
 --
--- The battery pick's `pending` is a build-time reading for the same reason: the B-Profile
--- label's colour is a constant of the build, so without the term the warn colour would never
+-- The battery pick's `pending` is a build-time reading for the same reason: the battery profile's
+-- word under the model picture is coloured at build time, so without the term the warn colour would never
 -- clear. The picked pack is not a term: nothing drawn depends on it.
 --
 -- This runs every 0.5 s inside the host's STATE pass: one sensor read, no table allocation,
@@ -1925,7 +2406,8 @@ function L.renderKey(zone, state)
     -- refinement phases do not exist either, so the term is what it always was.
     tostring(state and (state.themePhase or state.flightMode) or ""),
     tostring(txBatteryStep()),
-    tostring(bp and bp.pending or false)
+    tostring(bp and bp.pending or false),
+    tostring(state and state.lqSource or "")
   }, "|")
 end
 

@@ -58,13 +58,8 @@ M.T = {
   battery_profile = "@i18n(widgets.dashboard.urban_battery_profile)@",
   -- The shorter word where the full one does not fit the narrow third column.
   battery_profile_short = "@i18n(widgets.dashboard.urban_battery_profile_short)@",
-  -- The status line's three placeholders: no flight controller answering, armed with nothing
-  -- to report, disarmed with nothing blocking.
-  no_telemetry = "@i18n(widgets.dashboard.urban_no_telemetry)@",
-  armed_ok = "@i18n(widgets.dashboard.urban_armed_ok)@",
-  ready = "@i18n(widgets.dashboard.urban_ready)@",
-  -- The bottom bar's arm state. Without a flight controller the craft's state is not known, so
-  -- the bar says so instead of claiming "Disarmed".
+  -- The arm card's state. Without a flight controller the craft's state is not known, so the
+  -- card says so instead of claiming "Disarmed".
   armed = "@i18n(widgets.dashboard.urban_armed)@",
   disarmed = "@i18n(widgets.dashboard.urban_disarmed)@",
   no_fc = "@i18n(widgets.dashboard.urban_no_fc)@",
@@ -118,9 +113,9 @@ M.T = {
   gov_state_8 = "@i18n(app.pages.settings_audio_events.governor_state_bailout)@",
   gov_state_9 = "@i18n(app.pages.settings_audio_events.governor_state_bypass)@",
   gov_unknown = "@i18n(widgets.dashboard.urban_gov_unknown)@",
-  -- The readable names of the arming-disable bits, for the bottom bar's override. The compact
-  -- descriptors of the status line (NOGYRO, BOOTGRACE, ...) are the firmware's identifiers and
-  -- are not translated.
+  -- The readable names of the arming-disable bits, for the statistics bar's override and the
+  -- status view. The compact descriptors of the governor card's line (NOGYRO, BOOTGRACE, ...) are
+  -- the firmware's identifiers and are not translated.
   arm_flag_0 = "@i18n(app.modules.fblstatus.arming_disable_flag_0)@",
   arm_flag_1 = "@i18n(app.modules.fblstatus.arming_disable_flag_1)@",
   arm_flag_2 = "@i18n(app.modules.fblstatus.arming_disable_flag_2)@",
@@ -240,18 +235,24 @@ end
 -- The theme's two colour schemes, stored under `scheme`: `light`, the default, and `dark`,
 -- role for role:
 --
+--   bg        the panel behind the cards
+--   card      the surface of every card
 --   text      every value
---   label     every label
---   line      the separators, the gauge and pill outlines, the menu glyph
---   frame     the gauge's cap, the link bars' outline
---   empty     the gauge's empty segments
---   track     the link bars' empty track
---   tick      the threshold notches on the link bars, the units
---   disabled  the status line's placeholders, "No FC connected"
---   warning   the arming reasons, "Disarmed"
---   ok / warn / crit / neut   the traffic light of the link bars and the arm state
---   bar_*     the battery fills, the same in both schemes
---   vtx_*     the radio battery pill's two fills, the same in both schemes
+--   label     every caption and label -- black on the light scheme, as every theme's labels are
+--   line      the outlines: the cards, the pill, the buttons of the views, separators
+--   frame     the battery page's gauge, the link bars' outline
+--   empty     the battery page's empty segments
+--   track     the link bars' and the battery strip's empty track
+--   tick      the threshold notches on the link bars and the strip, the units
+--   disabled  "No FC connected"
+--   warning   the arming reasons
+--   accent    the battery profile's number under the model picture
+--   ok / warn / crit / neut   the traffic light of the link bars, the arm state and the governor
+--   bar_*     the battery fills: green, yellow at the low step, red at the critical one, and
+--             orange for a pack that was not full when it was plugged in
+--   vtx_*     the radio battery pill's two fills
+--   ink       the figures over a filled bar or segment
+--   pill_ink  the percentage on the radio battery pill
 --
 -- A scheme is a FUNCTION and not a table of hex numbers: a body only runs for the scheme that is
 -- actually asked for. A Lua state draws one of the two, so the other's lcd.RGB calls -- C calls
@@ -260,57 +261,65 @@ end
 -- `M.C` is ONE table for the theme's whole life and applyScheme rewrites its FIELDS. Every
 -- helper, every node and every per-frame closure holds that one table, so a scheme change
 -- cannot leave half the tree on the previous palette.
-local function batteryFills(colors)
-  colors.bar_ok = rgb(0x00FF00, GREEN or 0x00FF00)
-  colors.bar_warn = rgb(0xF8C000, 0xFF8000)
-  colors.bar_low = rgb(0xFFFF00, 0xFFFF00)
-  colors.bar_crit = rgb(0xFF0000, 0xFF0000)
-  colors.vtx_ok = rgb(0x30C030, GREEN or 0x00FF00)
-  colors.vtx_low = rgb(0xFF3333, 0xFF0000)
-  colors.ink = BLACK                                  -- the overlay text on a filled bar
-  return colors
-end
-
 local SCHEMES = {
   dark = function()
-    return batteryFills({
-      bg = rgb(0x000000, BLACK),
-      text = rgb(0xFFFFFF, WHITE),
-      label = rgb(0xF0F4F8, WHITE),
-      line = rgb(0xF0F4F8, WHITE),
-      frame = rgb(0xF0F4F8, WHITE),
-      -- A muted mid-grey that does not glow on the black panel but stays light enough for the
-      -- black overlay ink on the gauge.
-      empty = rgb(0x6A6E72, COLOR_THEME_SECONDARY2),
-      track = rgb(0x283038, COLOR_THEME_SECONDARY2),
-      tick = rgb(0xC0C8D0, COLOR_THEME_DISABLED),
+    return {
+      bg = rgb(0x0C0E10, BLACK),
+      card = rgb(0x1E242A, COLOR_THEME_SECONDARY2),
+      text = rgb(0xF2F4F6, WHITE),
+      label = rgb(0x9AA4AE, COLOR_THEME_DISABLED),
+      line = rgb(0x4A545E, COLOR_THEME_SECONDARY1),
+      frame = rgb(0x4A545E, COLOR_THEME_SECONDARY1),
+      -- Light enough for the dark overlay ink: the battery page draws its figure in `ink` over
+      -- these segments, and a segment is empty below its own step.
+      empty = rgb(0x6A747E, COLOR_THEME_SECONDARY2),
+      track = rgb(0x2A323A, COLOR_THEME_SECONDARY2),
+      tick = rgb(0xC8CED4, COLOR_THEME_DISABLED),
       disabled = rgb(0xFFC400, 0xFFC000),
-      warning = rgb(0xFF1A40, 0xFF0000),
-      ok = rgb(0x39FF14, GREEN or 0x00FF00),          -- neon on a dark surface
-      warn = rgb(0xFFE000, 0xFFE000),
-      crit = rgb(0xFF1A40, 0xFF0000),
-      neut = rgb(0xA8B0B8, COLOR_THEME_DISABLED),
-      pill_ink = rgb(0xFFFFFF, WHITE),                -- the % on the pill, white on the dark
-    })
+      warning = rgb(0xFF4550, 0xFF0000),
+      accent = rgb(0x2ED16E, GREEN or 0x00FF00),
+      ok = rgb(0x2ED16E, GREEN or 0x00FF00),
+      warn = rgb(0xFFD24A, 0xFF8000),
+      crit = rgb(0xFF4550, 0xFF0000),
+      neut = rgb(0x8A9096, COLOR_THEME_DISABLED),
+      bar_ok = rgb(0x2ED16E, GREEN or 0x00FF00),
+      bar_low = rgb(0xFFD24A, 0xFFFF00),
+      bar_warn = rgb(0xFF9030, 0xFF8000),
+      bar_crit = rgb(0xFF4550, 0xFF0000),
+      vtx_ok = rgb(0x2ED16E, GREEN or 0x00FF00),
+      vtx_low = rgb(0xFF4550, 0xFF0000),
+      ink = rgb(0x0C0E10, BLACK),
+      pill_ink = rgb(0xF2F4F6, WHITE),
+    }
   end,
   light = function()
-    return batteryFills({
-      bg = rgb(0xFFFFFF, WHITE),
-      text = rgb(0x000000, BLACK),
+    return {
+      bg = rgb(0xF4F6F8, WHITE),
+      card = rgb(0xE2E6EA, COLOR_THEME_SECONDARY2),
+      text = rgb(0x14181C, BLACK),
       label = rgb(0x000000, BLACK),
-      line = rgb(0x000000, BLACK),
-      frame = rgb(0x000000, BLACK),
-      empty = rgb(0xC8C8C8, COLOR_THEME_SECONDARY2),
-      track = rgb(0xC8C8C8, COLOR_THEME_SECONDARY2),
-      tick = rgb(0x909090, COLOR_THEME_DISABLED),
+      line = rgb(0xB0B8C0, COLOR_THEME_SECONDARY1),
+      frame = rgb(0xB0B8C0, COLOR_THEME_SECONDARY1),
+      empty = rgb(0xB0B8C0, COLOR_THEME_SECONDARY2),
+      -- A shade darker than the card, so the battery strip's empty part reads on the panel.
+      track = rgb(0xD0D6DC, COLOR_THEME_SECONDARY2),
+      tick = rgb(0x2A3038, COLOR_THEME_DISABLED),
       disabled = rgb(0xF83C00, 0xFF8000),
-      warning = rgb(0xE83030, 0xFF0000),
-      ok = rgb(0x20B020, GREEN or 0x00FF00),          -- muted on a light surface
+      warning = rgb(0xE03030, 0xFF0000),
+      accent = rgb(0x2E8BE0, COLOR_THEME_PRIMARY1),
+      ok = rgb(0x22C55E, GREEN or 0x00FF00),
       warn = rgb(0xF0C000, 0xFF8000),
       crit = rgb(0xE03030, 0xFF0000),
-      neut = rgb(0x4A4A4A, COLOR_THEME_SECONDARY1),
-      pill_ink = BLACK,                               -- the % on the pill, black on the light
-    })
+      neut = rgb(0x9AA2AA, COLOR_THEME_SECONDARY1),
+      bar_ok = rgb(0x22C55E, GREEN or 0x00FF00),
+      bar_low = rgb(0xF0C000, 0xFFFF00),
+      bar_warn = rgb(0xF08000, 0xFF8000),
+      bar_crit = rgb(0xE03030, 0xFF0000),
+      vtx_ok = rgb(0x22C55E, GREEN or 0x00FF00),
+      vtx_low = rgb(0xE03030, 0xFF0000),
+      ink = rgb(0x14181C, BLACK),
+      pill_ink = rgb(0x14181C, BLACK),
+    }
   end,
 }
 
@@ -558,6 +567,40 @@ function M.hline(nodes, x, y, w, color)
   M.rect(nodes, x, y, w, 1, color or M.C.line, true)
 end
 
+-- A card as the widget zone draws it: the card surface with a hairline outline over it. In full
+-- screen a card that takes a press is drawn by layout.lua instead -- a button in the card colour
+-- with its outline as lines -- because a rectangle over a press takes the press away from it.
+M.CARD_R = 6
+
+function M.card(nodes, x, y, w, h, outline)
+  M.rect(nodes, x, y, w, h, M.C.card, true, M.CARD_R)
+  M.rect(nodes, x, y, w, h, outline or M.C.line, false, M.CARD_R, 1)
+end
+
+-- A horizontal fill bar with tick marks at `marks` percent: a track, one fill rectangle whose
+-- width is reactive, the ticks and an outline. `fill` answers 0..100 or nil and `color` the fill
+-- colour; both are the caller's and already memoised, so the per-frame cost is two closures and
+-- a clamp. Nil draws the narrowest fill: the node list is fixed at build time.
+function M.hbar(nodes, x, y, w, h, fill, color, marks)
+  M.rect(nodes, x, y, w, h, M.C.track, true, 2)
+  nodes[#nodes + 1] = {
+    type = "rectangle", x = x, y = y, w = 1, h = h, filled = true, rounded = 2,
+    color = color,
+    size = function()
+      local p = fill()
+      if type(p) ~= "number" then return 1, h end
+      if p < 0 then p = 0 elseif p > 100 then p = 100 end
+      return math.max(1, math.floor(w * p / 100)), h
+    end
+  }
+  if marks ~= nil and h >= 6 then
+    for i = 1, #marks do
+      M.rect(nodes, x + math.floor(w * marks[i] / 100), y + 1, 1, h - 2, M.C.tick, true)
+    end
+  end
+  M.rect(nodes, x, y, w, h, M.C.line, false, 2, 1)
+end
+
 -- Whether the firmware's own frame shows around this theme's buttons, as the pilot chose it on the
 -- Look page (`tap_frames`, layout.lua L.SETTINGS). Set at the start of every build, as the colour
 -- scheme is, because one module serves the flight view, the statistics view and every view.
@@ -670,7 +713,7 @@ function M.scaledGetter(read, places)
   end
 end
 
--- The cell count the gauge figures are sized from: the flight controller's own where the
+-- The cell count the battery figures are stated in: the flight controller's own where the
 -- runtime has read it, otherwise derived from the theme's configured full-pack voltage. The
 -- same rule the shipped themes' estimateCellCount applies, clamped to 1..14.
 function M.cells(state)
@@ -731,9 +774,9 @@ end
 -- answered, in which case this cell shows the state.
 --
 -- The host's object has two further branches ahead of this one, an arming-disable reason and a
--- disarmed label. Neither is repeated here: this theme already gives the disable reasons the
--- status line of the left panel and ARMED/DISARMED the bottom bar, and a cell that said the
--- same thing a third time would cost the one line that can say what the governor is doing.
+-- disarmed label. Neither is repeated here: this theme gives the disable reasons the governor
+-- card's line under the figure and ARMED/DISARMED the arm card, and a figure that said the same
+-- thing again would cost the one line that can say what the governor is doing.
 local GOV_MODE_OFF = 0
 local GOV_MODE_LIMIT = 1
 
@@ -760,6 +803,41 @@ function M.governorText(state)
     local key = GOV_STATE_KEYS[v]
     return (key and M.T[key]) or M.T.gov_unknown
   end)
+end
+
+-- The governor card's colours. FALLBACK and AUTOROTATION are alarms (the flight controller's
+-- states 6 and 7): the figure turns critical and so does the card's outline, for those two and
+-- for nothing else -- the governor OFF is a mode a pilot runs on purpose, and a card that stood
+-- red for it would cry wolf. ACTIVE is ok, SPOOLUP, RECOVERY and BAILOUT are on the way to or
+-- from it. In the OFF and LIMIT modes there is no state to colour (M.governorText shows the mode).
+local function govState(state)
+  local mode = num(state.governorMode)
+  if mode ~= nil then
+    mode = math.floor(mode + 0.5)
+    if mode == GOV_MODE_OFF or mode == GOV_MODE_LIMIT then return nil end
+  end
+  local v = num(state.governor)
+  if v == nil then return nil end
+  return math.floor(v + 0.5)
+end
+
+function M.governorColor(state)
+  return function()
+    local v = govState(state)
+    if v == nil then return M.C.text end
+    if v == 6 or v == 7 then return M.C.crit end
+    if v == 4 then return M.C.ok end
+    if v == 2 or v == 3 or v == 8 then return M.C.warn end
+    return M.C.text
+  end
+end
+
+function M.governorFrameColor(state)
+  return function()
+    local v = govState(state)
+    if v == 6 or v == 7 then return M.C.crit end
+    return M.C.line
+  end
 end
 
 -- The throttle cell: "**" without a link, "Safe" while disarmed, and the throttle only once the
@@ -844,12 +922,12 @@ function M.percent(state, key, default)
   return math.floor(v)
 end
 
--- The battery gauge's two steps, in percent of the fuel reading: yellow at or below the first,
--- red at or below the second. The defaults are the steps the gauge has always drawn with.
+-- The battery fill's two steps, in percent of the fuel reading: yellow at or below the first,
+-- red at or below the second. The defaults are Urban's.
 M.FUEL_LOW_DEFAULT = 20
 M.FUEL_CRIT_DEFAULT = 0
 
--- Both steps as the gauge uses them. Red is never above yellow: the settings page does not let a
+-- Both steps as the fill uses them. Red is never above yellow: the settings page does not let a
 -- pilot set it there, and a stored pair that has it there anyway -- a hand-edited file, say -- is
 -- drawn with red pulled down to yellow, so a reading can never be red while a higher one is still
 -- yellow.
@@ -926,11 +1004,11 @@ function M.tempColor(id, state, which, field)
 end
 
 -- The two arm-state colour schemes the pilot chooses between, stored under `arm_colors`:
--- `signal`, the default, is armed green and disarmed in the WARNING red; `amber` is armed in the
--- warning colour and disarmed in the label colour. Resolved per frame rather than captured at
--- build time -- it is two lookups on a state field, and every place that paints the arm state
+-- `amber`, this theme's default, is armed in the warn colour and disarmed in the label colour;
+-- `signal` is armed green and disarmed in the WARNING red. Resolved per frame rather than captured
+-- at build time -- it is two lookups on a state field, and every place that paints the arm state
 -- asks here, so one setting rules all of them.
-local ARM_COLORS_DEFAULT = "signal"
+local ARM_COLORS_DEFAULT = "amber"
 
 -- Answers the armed colour and the disarmed colour. M.C is indexed at call time, so nothing
 -- here can hold a colour the theme has stopped painting with.
@@ -942,8 +1020,7 @@ function M.armColors(state)
   return M.C.warn, M.C.label
 end
 
--- "No FC connected" is muted, in the colour of the status line's placeholders: it is not an
--- arm state.
+-- "No FC connected" is muted, in the placeholder colour: it is not an arm state.
 function M.armedColor(state)
   return function()
     if state.rfConnected ~= true then return M.C.disabled end
@@ -959,10 +1036,10 @@ end
 -- declaration. It is read with `== true` everywhere, so a host without the field draws exactly
 -- what it would draw with the pack present.
 --
--- It is not the same fact as "the pack is low", and this theme draws it in the three places
--- the pack is drawn -- the status line says it in words, the gauge and the voltage rows turn --
--- rather than adding a tile for it. A reading that is no longer being measured is what the
--- gauge shows as no level at all; without the line beside it, that is indistinguishable from a
+-- It is not the same fact as "the pack is low", and this theme draws it where the pack is drawn
+-- -- the arm card says it in words, the battery strip, the charge card and the voltage readings
+-- turn -- rather than adding a card for it. A reading that is no longer being measured is what the
+-- strip shows as no level at all; without the words beside it, that is indistinguishable from a
 -- model with no fuel sensor.
 -- The colour a reading taken from the main pack is drawn in: critical while the pack is gone,
 -- otherwise whatever the caller would have used. One test per frame, no allocation.
@@ -985,21 +1062,22 @@ function M.fuel(state)
 end
 
 -- The fuel reading, decoded once per value change and shared by every node that follows it:
--- the ten gauge rows all ask this one closure, so the colour is computed once per change rather
--- than once per row per frame, and no two rows can disagree about it.
+-- the battery strip, the charge card and the battery page's segments all ask one such closure, so
+-- the colour is computed once per change rather than once per node per frame, and no two of them
+-- can disagree about it.
 function M.fuelLevel(state)
   local last, lastNotFull, lastColor = UNSET, nil, M.C.empty
-  -- The steps are settings, read once here, when the gauge is built: the host rebuilds the
+  -- The steps are settings, read once here, when the view is built: the host rebuilds the
   -- theme when its settings change, so no frame reads the configuration.
   local low, crit = M.fuelSteps(state)
   return function()
     -- With the main pack gone the fuel figure is not low, it is no longer being measured:
-    -- the gauge empties rather than freezing on the last reading it took.
+    -- the fill empties rather than freezing on the last reading it took.
     --
     -- Written out rather than as `cond and nil or value`: that idiom cannot yield nil in Lua --
     -- `true and nil` is false, so the `or` arm runs and the reading comes back anyway.
     --
-    -- M.fuel is written out here too: up to twelve gauge rows ask this closure every frame.
+    -- M.fuel is written out here too: up to a dozen nodes ask this closure every frame.
     local p = nil
     if state.fuelTelemetrySeen == true and state.mainPowerLost ~= true then
       p = state.fuel
@@ -1021,15 +1099,6 @@ function M.fuelLevel(state)
     elseif notFull then lastColor = M.C.bar_warn
     else lastColor = M.C.bar_ok end
     return p, lastColor
-  end
-end
-
--- Fill colour of the gauge as one closure, for a caller that wants the colour alone.
-function M.fuelColor(state)
-  local level = M.fuelLevel(state)
-  return function()
-    local _, color = level()
-    return color
   end
 end
 
@@ -1060,8 +1129,8 @@ function M.clock(mode)
 end
 
 -- The firmware's arming-disable bit names in two spellings: the short upper-case descriptors the
--- status line strings together, and the readable names the bottom bar cycles through one at a
--- time.
+-- governor card's line strings together, and the readable names the statistics bar cycles through
+-- one at a time and the status view lists.
 local ARM_DISABLE_DESCS = {
   [0] = "NOGYRO", [1] = "FAILSAFE", [2] = "RXLOSS", [3] = "BADRX", [4] = "BOXFAILSAFE",
   [5] = "GOVERNOR", [6] = "RPM_SIGNAL", [7] = "THROTTLE", [8] = "ANGLE", [9] = "BOOTGRACE",
@@ -1115,8 +1184,8 @@ function M.armDisableText(state)
   end)
 end
 
--- The readable names of the reasons that block arming, as a list, or nil -- for the bottom
--- bar, which shows them one at a time. Decoded once per value change.
+-- The readable names of the reasons that block arming, as a list, or nil -- for the statistics
+-- bar, which shows them one at a time, and the status view. Decoded once per value change.
 function M.armDisableList(state)
   local last, list, primed = nil, nil, false
   return function()
@@ -1133,66 +1202,6 @@ function M.armDisableList(state)
     end
     if #out > 0 then list = out end
     return list
-  end
-end
-
--- What the status line says, and the colour it says it in, as ONE closure that the text node
--- and the colour node both ask -- two nodes over one closure, so a rule added to the text can
--- never be missing from the colour.
---
--- The precedence, worst news last so it wins:
---
---   placeholder          "No telemetry" without a flight controller, "Armed - OK" armed,
---                        "Ready" disarmed -- muted, so the line is visibly alive and never
---                        blank, which is what a broken line looks like.
---   speed controller     its verdict in its level's colour, whenever a flight controller
---                        answers: "YGE ESC OK" on a healthy controller, disarmed or armed.
---   arming reasons       what stands between the pilot and arming, while disarmed, in the
---                        WARNING colour -- above the controller.
---   main power lost      over everything: the board answers on its BEC and nothing else on the
---                        screen looks wrong.
---
--- The controller's verdict is the LIVE reading (`esc_status_live`), not the worst one since the
--- connect: a line that stays red over a fault the controller cleared seconds later says nothing
--- true about now. The record is not lost: the ESC Status value row reads the latched pair. Both
--- readings are the host's.
---
--- `capChars` is how many characters the caller measured its line to hold (L.statusPanel does the
--- measuring, because only the caller knows the font and the width). The cut is made HERE, in the
--- format path, because this runs in the reactive sweep, where lcd.sizeText -- a firmware call --
--- may not be made at all.
-function M.statusLine(state, capChars)
-  local why = M.armDisableText(state)
-  local cap = (type(capChars) == "number" and capChars > 4) and math.floor(capChars) or nil
-  -- One cut per value change, not one per frame: the memo is on the raw string.
-  local lastRaw, lastCut = nil, ""
-  local function fit(raw)
-    if cap == nil or #raw <= cap then return raw end
-    if raw ~= lastRaw then
-      lastRaw = raw
-      lastCut = M.cutUtf8(raw, cap - 1) .. "."
-    end
-    return lastCut
-  end
-  return function()
-    if state.mainPowerLost == true then return M.T.main_power_lost, M.C.crit end
-    if state.rfConnected ~= true then return M.T.no_telemetry, M.C.disabled end
-    if state.armed ~= true then
-      local reasons = why()
-      if reasons ~= "" then return fit(reasons), M.C.warning end
-    end
-    -- The pair is resolved together: a level without a text is a host that answered half, and
-    -- it is treated as no answer rather than as a blank alarm.
-    local derived = state.derived
-    local level = derived and derived.esc_status_live_level or nil
-    local esc = derived and derived.esc_status_live or nil
-    if type(esc) == "string" and esc ~= "" and level ~= nil then
-      if level >= 3 then return fit(esc), M.C.bar_crit end
-      if level == 2 then return fit(esc), M.C.bar_low end
-      return fit(esc), M.C.text
-    end
-    if state.armed == true then return M.T.armed_ok, M.C.disabled end
-    return M.T.ready, M.C.disabled
   end
 end
 
@@ -1283,102 +1292,6 @@ function M.modelImage(state)
   local hostPath = derived and derived.model_image
   if type(hostPath) == "string" and hostPath ~= "" then return hostPath end
   return ownLookup(state, derived)
-end
-
--- ---------------------------------------------------------------------------
--- the vertical segmented battery
--- ---------------------------------------------------------------------------
-
--- A cap, an outline, up to ten rounded rows and three figures laid over them: cell count at
--- the top, the percentage across the middle, consumption at the foot. Every row's colour is
--- a closure over a build-time constant threshold, so the gauge follows the reading without a
--- rebuild and without any per-frame geometry.
-function M.fuelGauge(nodes, state, x, y, w, h)
-  local pad = 3
-  local sideInset = math.max(1, math.floor(w * 0.04))
-  local capH = math.max(5, math.floor(h * 0.06))
-  local capW = math.max(10, math.floor((w - 2 * sideInset) * 0.36))
-  local capX = x + math.floor((w - capW) / 2)
-  local bodyX = x + pad + sideInset
-  local bodyY = y + pad + capH
-  local bodyW = math.max(12, w - 2 * (pad + sideInset))
-  local bodyH = math.max(20, h - 2 * pad - capH)
-  local bodyRounding = math.max(3, math.floor(bodyW * 0.10))
-  local innerPad = math.max(3, math.floor(bodyW * 0.10))
-  local innerX = bodyX + innerPad
-  local innerY = bodyY + innerPad
-  local innerW = math.max(4, bodyW - 2 * innerPad)
-  local innerH = math.max(8, bodyH - 2 * innerPad)
-  local segRounding = math.max(1, math.floor(innerW * 0.10))
-  local segGap = math.max(1, math.floor(bodyH * 0.01))
-  -- Capped at ten so one row reads as a clean ten-percent step.
-  local segCount = math.max(6, math.min(10, math.floor(innerH / 16)))
-  local segH = math.floor((innerH - (segCount - 1) * segGap) / segCount)
-  local segLastH = innerH - segH * (segCount - 1) - segGap * (segCount - 1)
-
-  -- The cap is rounded on top and square where it meets the body: a rounded block with a flat
-  -- strip over its lower third.
-  local capBaseH = math.max(1, math.floor(capH * 0.35))
-  M.rect(nodes, capX, y + pad, capW, capH, M.C.frame, true, math.max(2, math.floor(capH * 0.45)))
-  M.rect(nodes, capX, y + pad + capH - capBaseH, capW, capBaseH, M.C.frame, true, 0)
-  M.rect(nodes, bodyX, bodyY, bodyW, bodyH, M.C.frame, false, bodyRounding, 1)
-
-  local level = M.fuelLevel(state)
-  local empty = M.C.empty
-  for i = 1, segCount do
-    local top = i - 1
-    local segY = innerY + top * (segH + segGap)
-    local thisH = (i == segCount) and segLastH or segH
-    local threshold = ((segCount - top) / segCount) * 100
-    local color = function()
-      local p, fill = level()
-      if p ~= nil and p >= threshold then return fill end
-      return empty
-    end
-    local corner = (i == 1 or i == segCount) and segRounding or 0
-    M.rect(nodes, innerX, segY, innerW, thisH, color, true, corner)
-    if corner > 0 then
-      -- The first and last rows keep their outer corners and lose the inner pair, so
-      -- consecutive rows still tile into one column.
-      local flatH = math.max(1, math.min(segRounding, thisH))
-      local flatY = (i == 1) and (segY + thisH - flatH) or segY
-      M.rect(nodes, innerX, flatY, innerW, flatH, color, true, 0)
-    end
-  end
-
-  local valueFont = M.selectFont(math.floor(bodyH * 0.22), bodyW - 2 * innerPad, "100%")
-  local valueH = M.measure(valueFont, "100%")
-  local smallFont = M.selectFont(math.max(6, math.floor(bodyH * 0.11)), bodyW - 2 * innerPad, "mAh")
-  local smallH = M.measure(smallFont, "mAh")
-  local mahFont = M.selectFont(math.floor(bodyH * 0.17), bodyW - 2 * innerPad, "8888")
-  local mahH = M.measure(mahFont, "8888")
-  local overlayPad = math.max(1, math.floor(bodyH * 0.02))
-
-  local cellsY = bodyY + innerPad + overlayPad
-  local percentY = bodyY + math.floor((bodyH - valueH) / 2)
-  local mahY = bodyY + bodyH - innerPad - overlayPad - mahH - smallH
-
-  M.label(nodes, bodyX, cellsY, bodyW, smallH,
-    M.getter(function() return M.cells(state) end, function(c) return string.format("%dS", c) end),
-    smallFont, M.C.ink, CENTER)
-  M.label(nodes, bodyX, percentY, bodyW, valueH,
-    -- The same rule the segments take, so the figure and the level cannot disagree: with the
-    -- main pack gone there is no reading, and the figure turns rather than holding the last
-    -- one it saw. The words for it are on the status line of the left panel; this is the
-    -- colour beside them, and it costs one comparison per frame.
-    M.getter(function()
-      if state.mainPowerLost == true then return false end
-      return M.fuel(state)
-    end, function(p)
-      if p == nil or p == false then return "--%" end
-      return string.format("%d%%", math.floor(p + 0.5))
-    end), valueFont, M.packColor(state, M.C.ink), CENTER)
-  M.label(nodes, bodyX, mahY, bodyW, mahH,
-    M.getter(M.field(state, "consumedMah"), function(v)
-      if v == nil then return "-" end
-      return string.format("%d", math.floor(v + 0.5))
-    end), mahFont, M.C.ink, CENTER)
-  M.label(nodes, bodyX, mahY + mahH, bodyW, smallH, M.T.mah, smallFont, M.C.ink, CENTER)
 end
 
 if type(_G) == "table" then _G.__rfsuiteThemeDeckCommonModule = M end

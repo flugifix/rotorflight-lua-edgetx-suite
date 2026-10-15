@@ -2789,6 +2789,15 @@ return {
         urban_temp_colors = "Temperature colours",
         urban_temp_colors_early = "Early",
         urban_link_switch = "Link view switch",
+        -- The Deck theme's settings pages that Urban has no counterpart for, their rows, and the
+        -- kinds a card shows that are not a single reading.
+        deck_page_cards = "Cards",
+        deck_page_values = "Value Cards",
+        deck_left_card = "Left card",
+        deck_big_card = "Big card",
+        deck_value_card = "Value card",
+        deck_kind_image = "Model image",
+        deck_kind_arm = "Arm state",
         -- The Keys page: what a key does in full screen. Each choice but "Nothing" opens with whose it
         -- is: "Suite:" for what the dashboard does on every theme, "Theme:" for a page Urban draws itself.
         urban_key = "Key",

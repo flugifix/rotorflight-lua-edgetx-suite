@@ -1,10 +1,10 @@
--- Settings page for this theme: which value the five rows of the right-hand panel show, which
--- the telemetry view's tiles show, and the rest of what the theme carries.
+-- Settings page for this theme: what the four cards and the four value columns of the flight view
+-- show, which the telemetry view's tiles show, and the rest of what the theme carries.
 --
 -- Follows the shipped default theme's configure module: load through
 -- DashboardLib.getThemeConfig, save through setThemeConfig plus the per-model store, and
 -- build the form with the shared Controls helpers. The source catalog itself lives in
--- layout.lua beside the rows that render it, so the page and the panel cannot drift apart.
+-- layout.lua beside the cards that render it, so the page and the cards cannot drift apart.
 
 local function loadModule(path)
   local chunk = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, "t"))
@@ -21,19 +21,22 @@ local Layout = loadModule("widgets/dashboard/themes/deck/layout.lua")
 -- fallback for a caller that passes no theme.
 local THEME_PATH = "system/deck"
 
-local SLOT_COUNT = 5
+-- The card positions and the value columns, as many as layout.lua draws.
+local CARD_COUNT = Layout.CARD_COUNT or 4
+local VALUE_COUNT = Layout.VALUE_COUNT or 4
 
 -- The telemetry view's tiles, on the Telemetry page: as many as layout.lua draws, from the same
--- catalogue as the rows.
+-- catalogue as the cards.
 local TILE_COUNT = Layout.TILE_COUNT or 12
 
--- The arm-state colour choice. common.lua resolves the value; the default is green and red.
+-- The arm-state colour choice. common.lua resolves the value; this theme's default is amber and
+-- grey.
 local ARM_COLORS = {
-  { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_signal)@", value = "signal" },
   { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_amber)@", value = "amber" },
+  { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_signal)@", value = "signal" },
 }
 local ARM_COLORS_VALID = { amber = true, signal = true }
-local ARM_COLORS_DEFAULT = "signal"
+local ARM_COLORS_DEFAULT = "amber"
 
 -- The colour scheme: light or dark. The list and the default come from the theme itself, so
 -- this page cannot offer a scheme the palettes have no colours for. The default is `light`, so
@@ -46,7 +49,7 @@ for i = 1, #Layout.SCHEMES do
 end
 local SCHEME_DEFAULT = Layout.DEFAULT_SCHEME
 
--- Everything the theme carries beyond the five rows, the scheme and the arm colours comes from
+-- Everything the theme carries beyond the card positions, the scheme and the arm colours comes from
 -- Layout.SETTINGS: the key, the page it is set on, the values that are valid and the default, in
 -- one list that this page and the panels drawing the answers both read. A row added there
 -- appears here without this file being touched, which is what stops a setting from existing on a
@@ -123,8 +126,11 @@ local THEME_DEFAULTS = {
   scheme = SCHEME_DEFAULT,
   link_switch = LINK_SWITCH_DEFAULT,
 }
-for i = 1, SLOT_COUNT do
-  THEME_DEFAULTS["slot" .. i] = Layout.DEFAULT_SLOTS[i]
+for i = 1, CARD_COUNT do
+  THEME_DEFAULTS["card" .. i] = Layout.DEFAULT_CARDS[i]
+end
+for i = 1, VALUE_COUNT do
+  THEME_DEFAULTS["value" .. i] = Layout.DEFAULT_VALUES[i]
 end
 for i = 1, TILE_COUNT do
   THEME_DEFAULTS["tile" .. i] = (Layout.DEFAULT_TILES or {})[i] or "none"
@@ -150,6 +156,30 @@ for i = 1, #Layout.SOURCES do
   OPTIONS[i] = { label = src.label, value = src.id }
 end
 
+-- A card position's choices: the kinds it allows (Layout.cardAllows -- the model picture on the
+-- first position only) ahead of the readings, which end in the catalogue's Off. One list and one
+-- check per position, because a choice legal on one position is not legal on every other, and a
+-- value read back from a hand-edited file has to be checked against the position it belongs to.
+local KIND_LABELS = (type(Layout.kindLabels) == "function") and Layout.kindLabels() or {}
+local CARD_OPTIONS = {}
+local CARD_VALID = {}
+for slot = 1, CARD_COUNT do
+  local options, valid = {}, {}
+  for i = 1, #(Layout.KINDS or {}) do
+    local id = Layout.KINDS[i].id
+    if Layout.cardAllows(slot, id) then
+      options[#options + 1] = { label = KIND_LABELS[id] or id, value = id }
+      valid[id] = true
+    end
+  end
+  for i = 1, #OPTIONS do
+    options[#options + 1] = OPTIONS[i]
+    valid[OPTIONS[i].value] = true
+  end
+  CARD_OPTIONS[slot] = options
+  CARD_VALID[slot] = valid
+end
+
 local ui = {
   loaded = false,
   config = {},
@@ -159,7 +189,7 @@ local ui = {
 
 -- A number row's stored value as a whole number inside its range, or nil for anything that is not
 -- a number. Out of range is pulled to the edge rather than thrown away, the way the theme reads it
--- (Common.percent), so the page shows the step the gauge actually draws with.
+-- (Common.percent), so the page shows the step the battery strip actually draws with.
 local function wholeNumber(entry, value)
   local n = tonumber(value)
   if n == nil or n ~= n then return nil end
@@ -193,8 +223,16 @@ local function loadConfig(prefs)
   local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
   local cfg = DashboardLib.getThemeConfig(prefs, THEME_PATH, THEME_DEFAULTS, modelPrefs)
-  for i = 1, SLOT_COUNT do
-    local key = "slot" .. i
+  for i = 1, CARD_COUNT do
+    local key = "card" .. i
+    local value = cfg[key]
+    if type(value) ~= "string" or not CARD_VALID[i][value] then
+      value = THEME_DEFAULTS[key]
+    end
+    ui.config[key] = value
+  end
+  for i = 1, VALUE_COUNT do
+    local key = "value" .. i
     local value = cfg[key]
     if type(value) ~= "string" or not VALID_IDS[value] then
       value = THEME_DEFAULTS[key]
@@ -263,8 +301,12 @@ local function saveConfig(prefs)
   local modelPrefs = session and session.mcu_id and session.modelPreferences or nil
 
   local values = {}
-  for i = 1, SLOT_COUNT do
-    local key = "slot" .. i
+  for i = 1, CARD_COUNT do
+    local key = "card" .. i
+    values[key] = ui.config[key] or THEME_DEFAULTS[key]
+  end
+  for i = 1, VALUE_COUNT do
+    local key = "value" .. i
     values[key] = ui.config[key] or THEME_DEFAULTS[key]
   end
   for i = 1, TILE_COUNT do
@@ -437,8 +479,8 @@ function M.build(ctx)
   -- Every id init.lua declares has to stand here as well. One that does not falls through to
   -- `only == nil`, which renders the whole form on that one tile and says nothing about it.
   local pageId = ctx and ctx.page and ctx.page.id
-  local only = (pageId == "look" or pageId == "rows" or pageId == "topbar" or pageId == "keys"
-    or pageId == "telemetry") and pageId or nil
+  local only = (pageId == "look" or pageId == "cards" or pageId == "values" or pageId == "topbar"
+    or pageId == "keys" or pageId == "telemetry") and pageId or nil
 
   local children = ctx.children
   local x, y, w = ctx.x, ctx.y, ctx.w
@@ -468,15 +510,37 @@ function M.build(ctx)
     cursorY = appendSettings(children, x, cursorY, w, "look")
   end
 
-  if only == nil or only == "rows" then
+  if only == nil or only == "cards" then
     Controls.appendSectionHeader(children, x, cursorY, w,
-      "@i18n(app.pages.settings_dashboard_settings.urban_page_rows)@", true, function() end)
+      "@i18n(app.pages.settings_dashboard_settings.deck_page_cards)@", true, function() end)
     cursorY = cursorY + Controls.SECTION_H
 
-    for i = 1, SLOT_COUNT do
-      local key = "slot" .. i
+    -- The left column's three cards top to bottom, then the big card.
+    for i = 1, CARD_COUNT do
+      local key = "card" .. i
+      local valid = CARD_VALID[i]
+      local label = (i < CARD_COUNT)
+        and ("@i18n(app.pages.settings_dashboard_settings.deck_left_card)@ " .. i)
+        or "@i18n(app.pages.settings_dashboard_settings.deck_big_card)@"
       cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
-        "@i18n(app.pages.settings_dashboard_settings.urban_row)@ " .. i, OPTIONS, ui.config[key],
+        label, CARD_OPTIONS[i], ui.config[key],
+        function(value)
+          if type(value) == "string" and valid[value] then
+            ui.config[key] = value
+          end
+        end)
+    end
+  end
+
+  if only == nil or only == "values" then
+    Controls.appendSectionHeader(children, x, cursorY, w,
+      "@i18n(app.pages.settings_dashboard_settings.deck_page_values)@", true, function() end)
+    cursorY = cursorY + Controls.SECTION_H
+
+    for i = 1, VALUE_COUNT do
+      local key = "value" .. i
+      cursorY = cursorY + Controls.appendComboSelect(children, x, cursorY, w,
+        "@i18n(app.pages.settings_dashboard_settings.deck_value_card)@ " .. i, OPTIONS, ui.config[key],
         function(value)
           if type(value) == "string" and VALID_IDS[value] then
             ui.config[key] = value
@@ -484,7 +548,7 @@ function M.build(ctx)
         end)
     end
 
-    cursorY = appendSettings(children, x, cursorY, w, "rows")
+    cursorY = appendSettings(children, x, cursorY, w, "values")
   end
 
   if only == nil or only == "topbar" then

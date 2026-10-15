@@ -1,7 +1,7 @@
 -- The link detail view (init.lua registers it as `deck_link`, in full screen and in the widget
 -- zone): the ELRS link in detail, both directions of it.
 --
--- Opened in full screen by a tap on the top bar's link bars, and -- in full screen and in the
+-- Opened in full screen by a tap on the header's link cluster, and -- in full screen and in the
 -- zone alike -- by the switch the pilot names on the settings page (`link_switch`), held: it shows
 -- while the switch is in that position. In the zone it is display only: the host builds it
 -- without a `ctx`, and it then binds nothing, not even its close box.
@@ -29,7 +29,7 @@
 --                    progress where it has one, the last flight otherwise -- the rule the host's
 --                    own boxes read the record by. `-` until the model has been armed once.
 --
--- The bars take the warning steps the top bar takes from the settings. `TRSS`, `RSNR`, `TSNR` and
+-- The bars take the warning steps the header takes from the settings. `TRSS`, `RSNR`, `TSNR` and
 -- the air rate are this view's own `sources`: a widget with view sources reads them while the view
 -- is on top in full screen and at no other time, so the flight pays nothing for them. In the zone
 -- and on a widget without view sources the host resolves none of them, and those figures read `-`.
@@ -252,9 +252,9 @@ function M.build(children, zone, state, ctx)
   end), g.font, C.label, LEFT)
   UD.hline(children, x, footY - g.gap, w)
 
-  -- The rows, each a name, a bar and the figure -- the flight view's value rows in one line: the
-  -- name in its face and the label colour, the figure as large as the row takes, picked by the
-  -- rule its value panel uses (layout.lua, L.valuePanel: the row height less 2 px). The name column
+  -- The rows, each a name, a bar and the figure in one line: the name in the flight view's face
+  -- and the label colour, the figure as large as the row takes, its face picked against the row
+  -- height less 2 px. The name column
   -- is as wide as the widest name drawn, the figure column as wide as the widest figure.
   local rowsH = footY - g.gap - top - g.gap
   local rowH = math.floor(rowsH / #rows)

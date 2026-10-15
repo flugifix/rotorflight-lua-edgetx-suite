@@ -34,12 +34,12 @@ end
 
 -- The telemetry this view reads that no box of this theme names -- which for a free-form theme
 -- is all of it, since a free-form theme declares no boxes for the host to walk. Without this,
--- a value row showing one of the host's derived readings would find an empty snapshot and draw
--- "-" for ever.
+-- a card showing one of the host's derived readings would find an empty snapshot and draw "-"
+-- for ever.
 --
--- It is a FUNCTION rather than a list because the answer depends on what the pilot put in the
--- five rows: the host calls it once per theme load, with the state, after it has resolved this
--- theme's configuration -- so the list is built from the slots that are actually on screen.
+-- It is a FUNCTION rather than a list because the answer depends on what the pilot put on the
+-- cards: the host calls it once per theme load, with the state, after it has resolved this
+-- theme's configuration -- so the list is built from the positions that are actually on screen.
 --
 -- It belongs to this module and not to the statistics one, and that is what the host makes the
 -- list per phase for: the statistics view reads the frozen flight record instead, so a reading a

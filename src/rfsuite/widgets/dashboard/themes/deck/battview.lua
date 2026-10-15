@@ -1,5 +1,5 @@
 -- The battery detail view (init.lua registers it as `deck_battery`, in full screen only): the
--- main pack in detail, opened by a tap on the flight view's battery gauge.
+-- main pack in detail, opened by a tap on the flight view's charge card or battery strip.
 --
 -- Three parts, top to bottom:
 --

@@ -1,5 +1,5 @@
--- This theme's own menu (init.lua registers it as `deck_menu`), opened by a tap on the profile
--- row of the flight view's status panel: the battery profiles and the in-flight tuning surface,
+-- This theme's own menu (init.lua registers it as `deck_menu`), opened by a tap on the model
+-- picture's card of the flight view: the battery profiles and the in-flight tuning surface,
 -- with what the host says about each.
 --
 -- Both rows are the host's quick menu records (`ctx.entry`), and every press is `ctx.run`: the

@@ -73,8 +73,8 @@ end
 
 -- The geometry alone, without touching the scheme: the paddings, the close box and the face.
 --
--- The face is the flight view's own -- the one its top bar, its clock and its value-row names are
--- drawn in (layout.lua, L.buildFlight: a bar of 7.5 % of the height, at least 18 px, its face
+-- The face is the flight view's own -- the one its header, its clock and its model name are
+-- drawn in (layout.lua, L.buildFlight: a header of 7.5 % of the height, at least 18 px, its face
 -- sized against "Total Time"). Taken by the same rule from the same height, a view's row names
 -- are the size of the screen the view opens from, on every screen size; the title is up to one
 -- face larger (K.header).
@@ -150,8 +150,8 @@ function K.header(nodes, g, title, closePress, aside)
   end
 
   -- The title on one line, in the largest face up to 1.4 times the flight view's that fits the
-  -- room beside the close box: a face above the top bar's where the header has the height, the
-  -- top bar's own where it has not (a header without a close box is exactly as tall as that).
+  -- room beside the close box: a face above the flight view's header's where this header has the
+  -- height, that header's own where it has not (a header without a close box is exactly as tall as that).
   local titleW = math.max(10, right - (g.x + g.pad))
   local titleFont = UD.selectFont(math.min(headerH - 2 * g.textPad, math.floor(g.fontH * 1.4)), titleW, title)
   local titleH = UD.measure(titleFont, title)

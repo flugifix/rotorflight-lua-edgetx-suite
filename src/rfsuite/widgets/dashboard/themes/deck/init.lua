@@ -12,7 +12,7 @@ local init = {
   -- already standing is the one that would be built.
   --
   -- `armed` would draw this theme's flight view either way: the view does not change shape at
-  -- spool-up, and the bottom bar already says ARMED in the arm-state colour the moment the arm
+  -- spool-up, and the arm card already says ARMED in the arm-state colour the moment the arm
   -- flag turns. A module for it would be a second copy of one file to keep in step for nothing.
   --
   -- `offline` DOES show something different -- the numbers are final and the model cannot be
@@ -27,9 +27,9 @@ local init = {
   fullscreen = "theme",
   -- The way out of full screen is a long press on RTN, which the firmware always honours, so
   -- this theme draws no close control. The two controls it binds are the menu and the tool
-  -- glyphs in the top bar (layout.lua, L.menuControl, L.toolControl).
+  -- glyphs in the header (layout.lua, L.menuControl, L.toolControl).
   fullscreenExit = "longRtn",
-  -- The settings of this theme are three pages rather than one long form. A host that knows
+  -- The settings of this theme are six pages rather than one long form. A host that knows
   -- `pages` opens the theme's tile on a grid of these and hands the chosen one to the
   -- configure module as `ctx.page`; a host that does not know it ignores the field and shows
   -- the whole form, which is what the module does when no page arrives. `icon` is relative
@@ -48,7 +48,8 @@ local init = {
   -- and in this file alike, and a radio reading either one gets the title in its language.
   pages = {
     { id = "look",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_look)@",   icon = "icons/look.png" },
-    { id = "rows",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_rows)@",   icon = "icons/rows.png" },
+    { id = "cards",  title = "@i18n(app.pages.settings_dashboard_settings.deck_page_cards)@",  icon = "icons/cards.png" },
+    { id = "values", title = "@i18n(app.pages.settings_dashboard_settings.deck_page_values)@", icon = "icons/values.png" },
     { id = "topbar", title = "@i18n(app.pages.settings_dashboard_settings.urban_page_topbar)@", icon = "icons/topbar.png" },
     { id = "keys",   title = "@i18n(app.pages.settings_dashboard_settings.urban_page_keys)@",   icon = "icons/keys.png" },
     { id = "telemetry", title = "@i18n(app.pages.settings_dashboard_settings.urban_page_telemetry)@", icon = "icons/telemetry.png" },
@@ -56,13 +57,12 @@ local init = {
   -- The full screen views, on a host that has theme views; any other host ignores the key and
   -- draws its own menu and picker. `menu` and `battery_pick` are the host's own two, drawn in this
   -- theme's look: what they offer and what their presses do stay the host's. `deck_menu` is this
-  -- theme's own menu (the battery profiles and the tuning surface, opened by a tap on the flight
-  -- view's profile row), `deck_link` its ELRS link page (opened by a tap on the link bars),
-  -- `deck_telemetry` its telemetry page (opened by a tap on the value rows; its tiles are chosen
-  -- on the Telemetry settings page).
-  -- `deck_battery` its battery page (opened by a tap on the battery gauge).
-  -- `deck_status` its status page (opened by a tap on the governor and status rows of the
-  -- left panel).
+  -- theme's own menu (the battery profiles and the tuning surface, opened by a tap on the model
+  -- picture's card), `deck_link` its ELRS link page (opened by a tap on the link cluster),
+  -- `deck_telemetry` its telemetry page (opened by a tap on a card showing a reading or on the
+  -- value row; its tiles are chosen on the Telemetry settings page).
+  -- `deck_battery` its battery page (opened by a tap on the charge card or the battery strip).
+  -- `deck_status` its status page (opened by a tap on the arm card or the governor card).
   --
   -- The link view also opens on a switch, in full screen and in the widget zone alike, and shows
   -- while the switch holds the position: a glance at the link without a tap, in flight too. The
@@ -72,12 +72,12 @@ local init = {
   views = {
     { id = "menu",         module = "menuview.lua" },
     { id = "battery_pick", module = "pickview.lua" },
-    { id = "deck_menu",   module = "toolsview.lua" },
-    { id = "deck_link",   module = "linkview.lua", where = "both",
+    { id = "deck_menu",    module = "toolsview.lua" },
+    { id = "deck_link",    module = "linkview.lua", where = "both",
       openWhen = { switch = { pref = "link_switch", default = 0 } } },
     { id = "deck_telemetry", module = "telemview.lua" },
     { id = "deck_battery", module = "battview.lua" },
-    { id = "deck_status", module = "statusview.lua" },
+    { id = "deck_status",  module = "statusview.lua" },
   },
 }
 
