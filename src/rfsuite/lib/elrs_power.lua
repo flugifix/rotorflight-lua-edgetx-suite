@@ -237,6 +237,12 @@ function PowerRead.step(st, crsf, push, now)
   if st.startedAt == nil then
     st.startedAt = now
     st.buf = st.buf or {}
+    -- Parameter entries that are still waiting are another conversation's: a late answer to an
+    -- earlier connection's read, or the ELRS Link page's walk, which reaches every Lua state's
+    -- queue. lib/crsf.lua keeps them for this reader once it has asked for the type, and one for a
+    -- field of the same id would pass for this conversation's answer with the value of before.
+    -- Device information is left alone, because another reader may be waiting for its answer.
+    while crsf.popFrame(FRAME_PARAMETER_ENTRY) ~= nil do end
   end
   if (now - st.startedAt) >= DEADLINE_SECONDS then
     finish(st)
@@ -288,10 +294,12 @@ function PowerRead.step(st, crsf, push, now)
     end
   end
 
+  -- An entry counts only while a request of this conversation is out; one that arrives between the
+  -- answer and the next request is a repeat of an answer already taken.
   while not st.done do
     local data = crsf.popFrame(FRAME_PARAMETER_ENTRY)
     if data == nil then break end
-    if data[2] == ADDRESS_MODULE and data[3] == st.field then takeEntry(st, data) end
+    if st.requestAt ~= nil and data[2] == ADDRESS_MODULE and data[3] == st.field then takeEntry(st, data) end
   end
   if st.done then return end
 
