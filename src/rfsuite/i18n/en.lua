@@ -894,6 +894,8 @@ return {
         lq_alert = "Link Quality",
         lq_warn = "Warning (%)",
         lq_critical = "Critical (%)",
+        rssi_alert = "RSSI",
+        trss_alert = "Downlink",
         adjustment_events = "Adjustment Announcements",
         fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Callout %",
@@ -939,8 +941,13 @@ return {
         help_lq_warn = "The upper level in percent. Spoken without vibration. Default 70 %.",
         help_lq_critical = "The lower level in percent. Vibrates too if Haptic is on. Default 50 %.",
         help_telemetry_lost = "Speaks when the armed model's flight controller stops sending while the radio link is up, and again when it is back. A lost link is the radio's own announcement. Off by default.",
-        help_link_repeat = "How often the link quality alert speaks while it stays at a level, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
-        help_link_haptic = "Whether the transmitter vibrates with the critical link quality level and with Telemetry Lost. On by default.",
+        help_rssi_alert = "Armed: speaks the headroom at the receiver antenna in use (ANT) at the warning or critical level; 0 % is the air rate's floor, 100 % is -40 dBm. Silent without a known floor. Off by default.",
+        help_trss_alert = "Armed: the same for the signal at the transmitter module, the downlink, with levels of its own. Off by default.",
+        help_headroom_warn = "The upper level in percent. Spoken without vibration. Default 15 %.",
+        help_headroom_critical = "The lower level in percent. Vibrates too if Haptic is on. Default 8 %.",
+        help_headroom_hold = "How long the headroom has to stay at or below a level before it is spoken, so a short antenna null stays quiet. 0 speaks at once. Default 2 s.",
+        help_link_repeat = "How often the Link Quality, RSSI and Downlink alerts speak while they stay at a level, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
+        help_link_haptic = "Whether the transmitter vibrates with the critical level of Link Quality, RSSI and Downlink, and with Telemetry Lost. On by default.",
         help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
         saved_title = "Saved",
         saved_message = "Audio events saved",
@@ -972,7 +979,7 @@ return {
         help_message = "Callouts of the SmartFuel level while the model is connected.\nThe flight controller computes the value when SmartFuel is on there (Setup > Power > SmartFuel, MSP API 12.0.9 or later).\nOtherwise the radio computes it from the local source set in Setup > Power > Preferences."
       },
       settings_audio_events_link = {
-        help_message = "Alerts about the radio link and the flight controller's telemetry."
+        help_message = "Alerts about the radio link and the flight controller's telemetry.\nLink Quality: speaks the quality when it falls to a level.\nWarning (%): the upper level, without vibration.\nCritical (%): the lower level, with vibration if Haptic is on.\nTelemetry Lost: armed, the flight controller stops sending.\nRSSI: armed, the receiver's signal headroom over the air rate's floor.\nDownlink: the same at the transmitter module.\nHold (s): how long a level has to hold before it is spoken.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at Critical and with Telemetry Lost."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Mode",

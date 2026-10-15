@@ -894,6 +894,8 @@ return {
         lq_alert = "Linkqualität",
         lq_warn = "Warnung (%)",
         lq_critical = "Kritisch (%)",
+        rssi_alert = "RSSI",
+        trss_alert = "Downlink",
         adjustment_events = "Einstellungsansagen",
         fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Ansage %",
@@ -939,8 +941,13 @@ return {
         help_lq_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 70 %.",
         help_lq_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 50 %.",
         help_telemetry_lost = "Ansage, wenn der Flugregler des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst. Standard: aus.",
-        help_link_repeat = "Wie oft die Linkqualitäts-Warnung spricht, solange sie auf einer Stufe bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
-        help_link_haptic = "Ob der Sender bei der kritischen Linkqualität und bei Telemetrie verloren vibriert. Standard: an.",
+        help_rssi_alert = "Scharf: sagt die Reserve der aktiven Empfängerantenne (ANT) an der Warn- oder kritischen Stufe; 0 % ist die Empfindlichkeitsgrenze der Paketrate, 100 % sind -40 dBm. Still ohne Grenze. Standard: aus.",
+        help_trss_alert = "Scharf: dasselbe für das Signal am Sendermodul, den Downlink, mit eigenen Stufen. Standard: aus.",
+        help_headroom_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 15 %.",
+        help_headroom_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 8 %.",
+        help_headroom_hold = "So lange muss die Reserve auf oder unter einer Stufe bleiben, bevor sie gesagt wird; ein kurzes Antennenloch bleibt still. 0 sagt sofort. Standard: 2 s.",
+        help_link_repeat = "Wie oft die Alarme Linkqualität, RSSI und Downlink sprechen, solange sie auf einer Stufe bleiben, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
+        help_link_haptic = "Ob der Sender bei der kritischen Stufe von Linkqualität, RSSI und Downlink und bei Telemetrie verloren vibriert. Standard: an.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
         saved_title = "Gespeichert",
         saved_message = "Audio-Ereignisse gespeichert",
@@ -972,7 +979,7 @@ return {
         help_message = "Ansagen des SmartFuel-Stands, solange das Modell verbunden ist.\nDen Wert berechnet der Flugregler, wenn SmartFuel dort an ist (Setup > Power > SmartFuel, ab MSP API 12.0.9).\nSonst berechnet ihn der Sender aus der lokalen Quelle in Setup > Power > Einstellungen."
       },
       settings_audio_events_link = {
-        help_message = "Warnungen zur Funkverbindung und zur Telemetrie des Flugreglers."
+        help_message = "Alarme zur Funkverbindung und zur Telemetrie des Flugreglers.\nLinkqualität: Ansage, wenn sie auf eine Stufe fällt.\nWarnung (%): die obere Stufe, ohne Vibration.\nKritisch (%): die untere Stufe, mit Vibration, wenn Haptisch an ist.\nTelemetrie verloren: scharf, der Flugregler verstummt.\nRSSI: scharf, die Signalreserve des Empfängers über der Grenze der Paketrate.\nDownlink: dasselbe am Sendermodul.\nHaltezeit (s): so lange muss eine Stufe erst anstehen.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert bei Kritisch und bei Telemetrie verloren."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",

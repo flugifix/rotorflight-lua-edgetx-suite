@@ -3950,6 +3950,19 @@ function M.run(event, touchState)
 
           ts.rss1 = readFirstSensorNumber(RSS1_SOURCES, ts.rss1)
           ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
+          -- The readings only the link headroom alerts use: the air rate, the antenna in use and
+          -- the signal at the transmitter module. Read only while one of those alerts is on
+          -- (`linkHeadroomWanted`, set by lib/audio.lua), into the fields the dashboard widget
+          -- uses, and this pass's reading or nil -- never a held value.
+          if state.audioState and state.audioState.linkHeadroomWanted then
+            ts.rfMode = Sensors.getValue("RFMD")
+            ts.antenna = Sensors.getValue("ANT")
+            ts.trss = Sensors.getValue("TRSS")
+          else
+            ts.rfMode = nil
+            ts.antenna = nil
+            ts.trss = nil
+          end
         end
 
         local modelName = nil
@@ -4007,6 +4020,15 @@ function M.run(event, touchState)
         state.telemetryState.batteryCellCount = nil
         state.telemetryState.rss1 = nil
         state.telemetryState.rss2 = nil
+        state.telemetryState.rfMode = nil
+        state.telemetryState.antenna = nil
+        state.telemetryState.trss = nil
+        -- What the link headroom alerts learned about this link (lib/audio.lua, lib/link_rates.lua),
+        -- cleared where the dashboard widget clears the same fields on its own state
+        -- (widgets/dashboard/runtime.lua, updateConnectionState): the next link may be a
+        -- reflashed or swapped module.
+        state.telemetryState.linkGeneration = nil
+        state.telemetryState.linkPingSent = nil
       else
         -- Still not ready, and not the edge either -- the stretch in between. Nothing here is
         -- connection state, so there is nothing to announce and nothing to clear, but the

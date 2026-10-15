@@ -136,13 +136,32 @@ Callouts of the SmartFuel level while the model is connected. The flight control
 | Warning level | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical level | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
 | Telemetry lost | `telemetry_lost` | Off | Radio | Announces a flight controller that stops sending telemetry while the model is armed and the radio link is up, and announces it again when its telemetry is back. |
-| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality alert speaks while it stays at a level -- see *Repeat and Haptic* below. |
-| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality alert at its **critical** level, and alongside the lost telemetry announcement. |
+| RSSI | `rssi_alert` | Off | Radio | While the model is armed, speaks "RSSI" and the receiver's signal headroom in percent when it falls to the warning or critical level -- see *RSSI and Downlink Headroom* below. |
+| Warning level | `rssi_warn` | 15% | Radio | The upper level of the RSSI alert (1 to 100%). |
+| Critical level | `rssi_critical` | 8% | Radio | The lower level of the RSSI alert (1 to 100%). |
+| Hold | `rssi_hold` | 2 s | Radio | How long the headroom has to stay at or below a level before the RSSI alert speaks it (0 to 10 seconds). |
+| Downlink | `trss_alert` | Off | Radio | The same for the signal at the transmitter module (`TRSS`): speaks "Downlink" and its headroom. |
+| Warning level | `trss_warn` | 15% | Radio | The upper level of the Downlink alert (1 to 100%). |
+| Critical level | `trss_critical` | 8% | Radio | The lower level of the Downlink alert (1 to 100%). |
+| Hold | `trss_hold` | 2 s | Radio | How long the headroom has to stay at or below a level before the Downlink alert speaks it (0 to 10 seconds). |
+| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality, RSSI and Downlink alerts speak while they stay at a level -- see *Repeat and Haptic* below. |
+| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality, RSSI and Downlink alerts at their **critical** level, and alongside the lost telemetry announcement. |
 
 #### What Telemetry Lost Covers, and What It Leaves to the Radio
 Only a flight controller that stops sending while the radio link is still up is announced: the link statistics keep arriving and the radio stays connected, but the flight controller's telemetry frames have stayed away for 6 seconds. The radio cannot tell this case apart on its own until it reports each sensor as lost, 20 seconds later. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once, so a lost link stays silent here -- also when the flight controller's frames stopped with it. A drop while the model is disarmed is a normal power-off and stays silent too.
 
 The loss is announced **once**. A model that stays silent keeps the announcement's recovery window open, and it is the return that speaks again -- not the silence, however long it lasts.
+
+#### RSSI and Downlink Headroom
+A signal strength in dBm means little without the rate the link runs at: ExpressLRS specifies, for every air rate, the weakest signal its receiver still decodes -- the rate's *sensitivity floor* -- and a faster rate has a higher floor. So both alerts speak the **headroom** above that floor rather than the dBm figure: 0% is the floor, 100% is -40 dBm or stronger, in whole percent, the scale the Urban theme's link bars draw. On a 500 Hz LoRa rate on ExpressLRS 4.x (floor -105 dBm) the default warning level of 15% is about -95 dBm, the critical level of 8% about -100 dBm.
+
+- **RSSI** is the signal at the receiver, the uplink, at the antenna the link statistics name as the one in use (`ANT`): `2RSS` while `ANT` names the second antenna, otherwise `1RSS` -- also on a link that reports no `ANT`. It is not the stronger of the two readings, because a receiver with one radio and an antenna switch updates only the antenna in use, so the other reading is the value it had when that antenna was last in use.
+- **Downlink** is the signal at the transmitter module (`TRSS`), the telemetry coming back. Both directions run at one air rate, so both are measured against the one floor; the two alerts have their own switches and levels.
+- **The floor comes from the module.** The `RFMD` value the link reports means a different rate on ExpressLRS 3.x and 4.x, so the suite asks the transmitter module once per connection which release it runs (one CRSF device ping). Until it has answered, with a module that is not ExpressLRS 3.x or 4.x, and on the two 3.x rates whose floor depends on the band (`50Hz` and `250Hz`), there is no floor and both alerts stay **silent** rather than guess one. The rates and floors are listed in `lib/link_rates.lua`.
+- A level is spoken once the headroom has stayed at or below it for *Hold* -- the default 2 seconds lets a short antenna null with the rotor turning pass -- and a worsening is spoken at once. A level is left only once the headroom is 5 points above it again, so a reading resting on a level does not announce every time it dips under. Recovery is not spoken.
+- Only while the model is armed. The device ping is sent as soon as an alert is on and the link is up, armed or not, so the floor is known by the time the model is armed.
+- The critical level vibrates where the page's *Haptic* is on; the warning level never does, as with the link quality alert.
+- Both alerts work under the dashboard widget and under the tool alike.
 
 ---
 
@@ -156,7 +175,7 @@ the page that switches an alert on is the page that says how it behaves.
 | Category page | Repeat / Haptic keys | The alerts they govern |
 | --- | --- | --- |
 | Voltage | `voltage_repeat`, `voltage_haptic` | Low pack voltage, Main power lost, and the BEC / receiver alert set up under *Setup* → *Power* → *Alerts*. |
-| Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost. |
+| Link Quality | `link_repeat`, `link_haptic` | Link quality, RSSI and Downlink (warning and critical), Telemetry lost. |
 | ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature, MCU temperature. |
 | SmartFuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
 
@@ -169,7 +188,7 @@ the page that switches an alert on is the page that says how it behaves.
   three categories whose alerts already buzzed with no way of switching it off, and to off for
   SmartFuel, which already had this setting and keeps its value.
 - **Two alerts have their own rule inside the category, and a setting does not overrule it.**
-  The link quality alert buzzes at its *critical* level only, never at the warning level. The
+  The link quality, RSSI and Downlink alerts buzz at their *critical* level only, never at the warning level. The
   lost telemetry announcement says itself once per loss, so it takes the haptic and ignores the
   repeat.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
@@ -181,12 +200,14 @@ the page that switches an alert on is the page that says how it behaves.
 
 Announcements are played from the sound pack under `/SOUNDS/rf/<language>/`. Numbers and their units are spoken by the radio itself, so they follow the language set on the radio rather than the language of the pack.
 
-Every announcement has a file of its own in both packs. Two have no substitute and stay silent in an older pack that lacks theirs:
+Every announcement has a file of its own in both packs. Four have no substitute and stay silent in an older pack that lacks theirs:
 
 | File | Announcement |
 | --- | --- |
 | `stat/alerts/telemetrylost.wav` | Telemetry lost |
 | `stat/alerts/telemetryok.wav` | Telemetry recovered |
+| `stat/alerts/rssi.wav` | RSSI headroom |
+| `stat/alerts/downlink.wav` | Downlink headroom |
 
 Three have a file of their own in both packs, and fall back to another file in an older pack that lacks it:
 

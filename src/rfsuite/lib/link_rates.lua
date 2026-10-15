@@ -3,7 +3,10 @@
 -- Two things live here, and both are the frame's own semantics rather than presentation: the
 -- packet rate the `RFMD` field names, and the test that decides whether the `2RSS` and `ANT`
 -- fields prove a receiver has a second antenna. Neither needs a radio to evaluate, which is
--- why they are data and a pair of pure functions rather than part of the widget.
+-- why they are data and a pair of pure functions rather than part of the widget. Beside them
+-- sit the two things both the dashboard and the audio announcements build on that: the query
+-- that learns which ExpressLRS generation the module runs (its frame functions are passed in,
+-- so it too runs without a radio), and the headroom a signal reading has above its rate's floor.
 --
 -- THE RATE TABLES ARE EXPRESSLRS'S, ONE PER GENERATION, AND THE BYTE DOES NOT SAY WHICH.
 --
@@ -222,6 +225,72 @@ function LinkRates.generationFromDeviceInfo(data)
   end
   if LinkRates.byGeneration[major] then return major end
   return 0
+end
+
+--- The ExpressLRS generation of the transmitter module -- 3, 4, or 0 for anything else -- or
+--- nil while it is not known, asked for once and remembered on `state`.
+---
+--- The `RFMD` byte means different rates on ExpressLRS 3.x and 4.x and does not say which, so
+--- the module is asked: one device ping, and the device-information frame it answers with names
+--- the release (`generationFromDeviceInfo` above). The answer is kept in `state.linkGeneration`
+--- and the fact that the ping went out in `state.linkPingSent`; a caller clears both where the
+--- next connection may be a different module.
+---
+--- `crsf` is lib/crsf.lua, the one frame multiplexer of the caller's Lua state: asking it for
+--- 0x29 before the ping is what makes it keep the answer when another consumer drains the queue
+--- first, and it keeps every other consumer's frames while this one drains. `push` is
+--- crossfireTelemetryPush. Both are arguments so that the rule can be run without a radio.
+--- Nothing calls this unless it needs a rate: a dashboard theme that declares one of the rate
+--- sources, or an announcement that measures the link against its rate.
+function LinkRates.resolveGeneration(state, crsf, push)
+  if type(state) ~= "table" then return nil end
+  if state.linkGeneration ~= nil then return state.linkGeneration end
+  if not (crsf and type(crsf.popFrame) == "function") then return nil end
+  while true do
+    local data = crsf.popFrame(LinkRates.FRAME_DEVICE_INFO)
+    if data == nil then break end
+    local generation = LinkRates.generationFromDeviceInfo(data)
+    if generation ~= nil then
+      state.linkGeneration = generation
+      return generation
+    end
+  end
+  if state.linkPingSent or type(push) ~= "function" then return nil end
+  local ok, queued = pcall(push, LinkRates.FRAME_DEVICE_PING, LinkRates.PING_PAYLOAD)
+  if not ok then return nil end
+  -- Nil is EdgeTX saying no module runs the CRSF protocol, so nothing will answer and nothing
+  -- ExpressLRS is there. False is a full output buffer, which the next call tries again.
+  if queued == nil then
+    state.linkGeneration = 0
+    return 0
+  end
+  if queued == true then state.linkPingSent = true end
+  return nil
+end
+
+--- The top of the headroom scale below, in dBm: a reading this strong or stronger counts as
+--- the whole window. It is a convention of the scale rather than a figure of ExpressLRS's, and it
+--- is the one the Urban theme's link bars already draw with (themes/urban/layout.lua, RSSI_TOP).
+LinkRates.HEADROOM_TOP = -40
+
+--- How much of the window between the air rate's sensitivity floor and HEADROOM_TOP a signal
+--- reading still has above the floor, in whole percent, 0 to 100: 0 at the floor, where
+--- ExpressLRS expects the receiver to stop decoding, 100 at HEADROOM_TOP and above.
+---
+--- `rssi` is a reading in dBm as EdgeTX carries it (negative), `floor` the `floor` of a row of
+--- the tables above. Nil without a reading -- 0 is what the sensors read once their value has
+--- aged out -- and without a floor, because a headroom against a guessed floor is a wrong number
+--- with a percent sign. Rounded down, as the Urban bars round it, so a spoken figure and a drawn
+--- one agree.
+function LinkRates.headroom(rssi, floor)
+  if type(rssi) ~= "number" or rssi == 0 then return nil end
+  local top = LinkRates.HEADROOM_TOP
+  if type(floor) ~= "number" or floor >= top then return nil end
+  local reading = rssi
+  if reading > top then reading = top end
+  local pct = 100 * (reading - floor) / (top - floor)
+  if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
+  return math.floor(pct)
 end
 
 --- Do these two readings prove the receiver has a second antenna?

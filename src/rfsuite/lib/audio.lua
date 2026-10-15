@@ -19,6 +19,10 @@ local AUDIO_PACK_BASE = "/SOUNDS/"
 local AUDIO_DEFAULT_FALLBACK = "en"
 local AUDIO_ROOT_BASE = "/audio/"
 local localeModule = nil
+-- lib/link_rates.lua and lib/crsf.lua, loaded the first time a link headroom alert is on, so a
+-- radio that never switches one on never loads either.
+local linkRatesModule = nil
+local crsfModule = nil
 
 local ARM_FILE_MAP = {
   [0] = "disarm.wav",
@@ -203,6 +207,47 @@ local RSSI_LINK_SOURCES = {
 -- would speak.
 local LQ_HYSTERESIS = 5
 
+-- The same for the link headroom alerts below, in percentage points of the headroom scale
+-- (lib/link_rates.lua, LinkRates.headroom): a level is left only once the headroom has climbed
+-- this far above its line. On the scale's usual span of 60 to 80 dB one point is under a dB,
+-- so 5 points is a few dB -- about what a reading wanders by while the rotor turns -- and a
+-- headroom riding on its line does not announce each time it dips back under it.
+local LINK_HEADROOM_HYSTERESIS = 5
+
+-- The link headroom alerts: how much of the window between the air rate's sensitivity floor and
+-- a strong signal a reading still has, spoken as a percentage. One entry per alert, each with its
+-- own switch, its own two levels and its own hold on Settings > Audio > Events > Link; all of them
+-- take the Link page's Repeat and Haptic. `read` picks the reading in dBm off the state the caller
+-- hands over. The uplink is the signal at the receiver antenna in use; the downlink is the signal
+-- at the transmitter module. Both directions run at the one air rate, so they are measured against
+-- the one floor.
+--
+-- The antenna in use is the one `ANT` names, counted from nought as ExpressLRS fills it: 1 is the
+-- second antenna (`2RSS`), anything else the first (`1RSS`), and so is a link that reports no
+-- `ANT` at all. Not the stronger of the two fields: a receiver with one radio and an antenna switch
+-- writes only the field of the antenna it is on and leaves the other at its last value
+-- (ExpressLRS 4.1.0, src/src/rx_main.cpp, getRFlinkInfo), and the frame does not say which kind
+-- of receiver filled it. Where `ANT` names the second antenna and its field has no reading, there
+-- is no reading this pass; the first antenna's field is not taken in its place.
+local function uplinkRssi(state)
+  if tonumber(state.antenna) == 1 then return tonumber(state.rss2) end
+  return tonumber(state.rss1)
+end
+
+local function downlinkRssi(state)
+  return tonumber(state.trss)
+end
+
+local LINK_HEADROOM_ALERTS = {
+  { alertKey = "rssi", enableKey = "rssi_alert", warnKey = "rssi_warn", criticalKey = "rssi_critical",
+    holdKey = "rssi_hold", sound = "stat/alerts/rssi.wav", read = uplinkRssi },
+  { alertKey = "trss", enableKey = "trss_alert", warnKey = "trss_warn", criticalKey = "trss_critical",
+    holdKey = "trss_hold", sound = "stat/alerts/downlink.wav", read = downlinkRssi },
+}
+local LINK_HEADROOM_WARN = 15
+local LINK_HEADROOM_CRITICAL = 8
+local LINK_HEADROOM_HOLD = 2
+
 -- What separates "the pack is gone" from "the pack is low". A disconnected main battery reads
 -- as no voltage at all, and the lowest a flight pack is ever taken to is far above this, so
 -- nothing a discharge can reach falls inside the window.
@@ -265,6 +310,8 @@ local ALERT_CATEGORY = {
   rx_voltage      = "voltage",
   lq              = "link",
   telemetry_lost  = "link",
+  rssi            = "link",
+  trss            = "link",
   esc_temperature = "esc",
   mcu_temperature = "esc",
   fuel_empty      = "fuel"
@@ -1360,6 +1407,154 @@ local function linkIsQuality(self, audioState, lq, opts)
   return false
 end
 
+-- A core module, through the loader where there is one and off the card where there is not --
+-- the same two routes the dashboard's own link sources load lib/link_rates.lua by
+-- (widgets/dashboard/objects/common.lua, loadCoreModule).
+local function loadCoreModule(path)
+  if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.require) == "function" then
+    local ok, mod = pcall(_G.rfsuite.require, path)
+    if ok and type(mod) == "table" then return mod end
+  end
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, mode)
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then return mod end
+  end
+  return nil
+end
+
+--- What the link is running, as a row of lib/link_rates.lua, or nil.
+---
+--- `state` is the caller's: `rfMode` is this pass's `RFMD` reading, and the transmitter module's
+--- ExpressLRS generation is asked for and kept on the same table (LinkRates.resolveGeneration),
+--- which on the dashboard widget is the table its link sources keep it on, so the two share one
+--- ping. Nil while the link is down, before `RFMD` has a reading, while the generation is not
+--- known, and for a module that is not ExpressLRS 3.x or 4.x.
+local function linkRateRow(state, rates)
+  if state.rfConnected ~= true then return nil end
+  local mode = tonumber(state.rfMode)
+  if mode == nil then return nil end
+  if not crsfModule then crsfModule = loadCoreModule("lib/crsf.lua") end
+  local generation = rates.resolveGeneration(state, crsfModule, _G.crossfireTelemetryPush)
+  if generation == nil then return nil end
+  return rates.forMode(mode, generation)
+end
+
+--- One link headroom alert for one pass: the shape of the link quality alert, with the hold of
+--- the voltage alert. A level is entered once the headroom has stayed at or below its line for
+--- the hold, so a rotor-induced antenna null that is over within the hold stays quiet; a level
+--- that has been entered is spoken at once rather than at the next interval, with the headroom
+--- after it. Leaving a level costs LINK_HEADROOM_HYSTERESIS points above its line, recovering is
+--- not spoken, and only the critical level buzzes, where the Link page's Haptic is on.
+local function linkHeadroomAlert(audioState, events, alert, headroom, now, opts)
+  local slots = audioState.linkHeadroom
+  local slot = slots[alert.alertKey]
+  if not slot then
+    slot = {}
+    slots[alert.alertKey] = slot
+  end
+  -- No reading, or no floor to hold it against: nothing to judge this pass. The hold timers are
+  -- left as they are, so a single pass whose sensor read comes back empty neither restarts a hold
+  -- nor counts as a recovery.
+  if headroom == nil then return end
+
+  local warn = tonumber(events[alert.warnKey]) or LINK_HEADROOM_WARN
+  local critical = tonumber(events[alert.criticalKey]) or LINK_HEADROOM_CRITICAL
+  -- A critical level above the warning level cannot be crossed second, so the lower of the two
+  -- is the critical one. Nothing is refused over it; the pair is just ordered.
+  if critical > warn then critical = warn end
+  local hold = tonumber(events[alert.holdKey]) or LINK_HEADROOM_HOLD
+  if hold < 0 then hold = 0 end
+
+  -- When the headroom last went under each line and has stayed there since.
+  if headroom <= warn then
+    if slot.warnSince == nil then slot.warnSince = now end
+  else
+    slot.warnSince = nil
+  end
+  if headroom <= critical then
+    if slot.criticalSince == nil then slot.criticalSince = now end
+  else
+    slot.criticalSince = nil
+  end
+
+  local level = 0
+  if slot.criticalSince ~= nil and (now - slot.criticalSince) >= hold then
+    level = 2
+  elseif slot.warnSince ~= nil and (now - slot.warnSince) >= hold then
+    level = 1
+  end
+
+  local spoken = slot.level or 0
+  if level < spoken then
+    if spoken >= 2 and headroom <= critical + LINK_HEADROOM_HYSTERESIS then
+      level = 2
+    elseif level < 1 and spoken >= 1 and headroom <= warn + LINK_HEADROOM_HYSTERESIS then
+      level = 1
+    end
+  end
+
+  local key = alert.alertKey
+  if level < spoken then
+    slot.level = level
+    alertCleared(audioState, key)
+  elseif level > 0 then
+    if level > spoken then
+      audioState.lastAlertAt[key] = 0
+      alertCleared(audioState, key)
+    end
+    if alertMaySpeak(audioState, events, key, now) then
+      if tryPlayEventFile(audioState, now, alert.sound, opts) then
+        if type(playNumber) == "function" then
+          local ok, err = pcall(playNumber, headroom, unitPercent(), 0, audio_volume)
+          if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+        end
+        alertSpoken(audioState, events, key, now, level >= 2)
+        slot.level = level
+      end
+    end
+  end
+end
+
+--- The link headroom alerts for one pass, called while at least one of them is on.
+---
+--- The rate is resolved whether or not the model is armed, so that the generation query -- one
+--- device ping per connection -- has been answered by the time it is; the alerts themselves speak
+--- only while armed, and disarming ends their episodes.
+local function announceLinkHeadroom(self, audioState, events, enabled, now, opts)
+  if not linkRatesModule then linkRatesModule = loadCoreModule("lib/link_rates.lua") end
+  local rates = linkRatesModule
+  if not rates then return end
+  local state = self.state
+  local row = linkRateRow(state, rates)
+
+  if type(audioState.linkHeadroom) ~= "table" then audioState.linkHeadroom = {} end
+  if not isArmedFromState(state) then
+    if next(audioState.linkHeadroom) ~= nil then
+      audioState.linkHeadroom = {}
+      for i = 1, #LINK_HEADROOM_ALERTS do alertCleared(audioState, LINK_HEADROOM_ALERTS[i].alertKey) end
+    end
+    return
+  end
+
+  local floor = row and row.floor
+  for i = 1, #LINK_HEADROOM_ALERTS do
+    local alert = LINK_HEADROOM_ALERTS[i]
+    if enabled[i] then
+      linkHeadroomAlert(audioState, events, alert, rates.headroom(alert.read(state), floor), now, opts)
+    elseif audioState.linkHeadroom[alert.alertKey] ~= nil then
+      -- Switched off mid-flight: its episode ends, so switching it on again starts a new one.
+      audioState.linkHeadroom[alert.alertKey] = nil
+      alertCleared(audioState, alert.alertKey)
+    end
+  end
+end
+
+-- Which link headroom alerts are on this pass, in LINK_HEADROOM_ALERTS order. Filled by
+-- Audio.process on every pass rather than built there, so a pass allocates nothing for it.
+local linkHeadroomEnabled = {}
+
 --- The flight controller has stopped sending. Called from `Audio.process` once its telemetry
 --- frames have stayed away for TELEMETRY_QUIET_SECONDS.
 ---
@@ -1482,6 +1677,7 @@ function Audio.resetConnectionState(audioState)
   audioState.smartfuelEmptySound = nil
   audioState.lqLevel = nil
   audioState.lqNotQualityLogged = nil
+  audioState.linkHeadroom = nil
   audioState.packCheckDone = false
   audioState.packJudged = false
   audioState.packNotFull = nil
@@ -1526,6 +1722,8 @@ function Audio.resetConnectionState(audioState)
     audioState.lastAlertAt.flight_time = 0
     audioState.lastAlertAt.lq = 0
     audioState.lastAlertAt.mcu_temperature = 0
+    audioState.lastAlertAt.rssi = 0
+    audioState.lastAlertAt.trss = 0
     -- Was missing from this list while it was read by one alert only, which is why a
     -- reconnect after a main-power announcement used to carry that alert's timestamp into
     -- the new connection. The interval is now measured for every alert here.
@@ -1846,6 +2044,23 @@ function Audio.process(self, opts)
         end
       end
     end
+  end
+
+  -- The link headroom alerts. `linkHeadroomWanted` tells both callers whether to read the
+  -- sensors only these alerts use (`RFMD`, `ANT`, `TRSS`; ui/home.lua and
+  -- widgets/dashboard/runtime.lua), so a radio with all of them off pays no search for them.
+  local headroomOn = false
+  for i = 1, #LINK_HEADROOM_ALERTS do
+    local on = prefEnabled(events, LINK_HEADROOM_ALERTS[i].enableKey, false)
+    linkHeadroomEnabled[i] = on
+    if on then headroomOn = true end
+  end
+  audioState.linkHeadroomWanted = headroomOn
+  if headroomOn then
+    announceLinkHeadroom(self, audioState, events, linkHeadroomEnabled, now, opts)
+  elseif audioState.linkHeadroom ~= nil then
+    audioState.linkHeadroom = nil
+    for i = 1, #LINK_HEADROOM_ALERTS do alertCleared(audioState, LINK_HEADROOM_ALERTS[i].alertKey) end
   end
 
   do

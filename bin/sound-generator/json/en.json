@@ -504,6 +504,12 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/downlink.wav",
+    "english": "Downlink",
+    "translation": "Downlink",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/esc.wav",
     "english": "Esc Temperature",
     "translation": "Esc Temperature",
@@ -573,6 +579,12 @@
     "file": "stat/alerts/remaining.wav",
     "english": "remaining",
     "translation": "remaining",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/rssi.wav",
+    "english": "RSSI",
+    "translation": "RSSI",
     "needs_translation": false
   },
   {

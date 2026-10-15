@@ -2969,6 +2969,20 @@ local function readTelemetry(state, audioState)
   setField("rss1", rss1)
   local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   setField("rss2", rss2)
+  -- The readings only lib/audio.lua's link headroom alerts use: the air rate, the antenna in use
+  -- and the signal at the transmitter module. Read only while one of those alerts is on
+  -- (`linkHeadroomWanted`, set by lib/audio.lua), so a radio that never switches one on pays no
+  -- sensor search for them; this pass's reading or nil, assigned rather than set through setField,
+  -- because nothing draws them. ui/home.lua reads the same three into the same fields for the tool.
+  if audioState and audioState.linkHeadroomWanted then
+    state.rfMode = getSensor("RFMD")
+    state.antenna = getSensor("ANT")
+    state.trss = getSensor("TRSS")
+  else
+    state.rfMode = nil
+    state.antenna = nil
+    state.trss = nil
+  end
 
   if telemetryChanged then updateDerivedFlightState(state) end
   readFlightRecord(state)
@@ -3671,6 +3685,11 @@ function Runtime.new(zone, options)
       self.state.linkRfModeTick = nil
       self.state.linkGeneration = nil
       self.state.linkPingSent = nil
+      -- And the three readings only the audio's link headroom alerts take (readTelemetry), so the
+      -- new session's first pass judges its own link rather than the last one's.
+      self.state.rfMode = nil
+      self.state.antenna = nil
+      self.state.trss = nil
       -- The flight clock and the statistics are the record's; the event runtime drops them on
       -- the connect edge of its own link detector, which follows this one once the link has held
       -- for its CONNECT_STABLE_SECONDS -- not on the disconnect before it, which the post-flight

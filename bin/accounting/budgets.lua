@@ -352,7 +352,9 @@ return {
     ["page.settings_audio_events_esc_page.build"] = { target = 6000, measured = 5910 },
     ["page.settings_audio_events_fuel_page.build"] = { target = 5550, measured = 5189 },
     ["page.settings_audio_events_governor_page.build"] = { target = 6300, measured = 6008 },
-    ["page.settings_audio_events_link_page.build"] = { target = 5750, measured = 5717 },
+    -- Raised when the page gained the RSSI and Downlink alerts: two subheaders, two switches and
+    -- six number rows. Target: measured x 1.25, rounded up to the next 50.
+    ["page.settings_audio_events_link_page.build"] = { target = 11900, measured = 9514, proposed = 5750 },
     ["page.settings_audio_events_profiles_page.build"] = { target = 2650, measured = 2498 },
     ["page.settings_audio_events_voltage_page.build"] = { target = 6100, measured = 5112 },
     ["page.settings_audio_volume_page.build"] = { target = 2100, measured = 1674 },
