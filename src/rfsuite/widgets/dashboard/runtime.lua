@@ -2969,6 +2969,16 @@ local function readTelemetry(state, audioState)
   setField("rss1", rss1)
   local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   setField("rss2", rss2)
+  -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua: this pass's
+  -- reading, or nil while nothing answers. Assigned rather than set through setField, because
+  -- nothing draws it and a reading must not mark the telemetry as changed. Read only while that
+  -- alert is on (`dropoutsWanted`, set by lib/audio.lua), so a radio that never switches it on pays
+  -- no sensor search for it.
+  if audioState and audioState.dropoutsWanted then
+    state.skippedFrames = getSensor("skipped_frames")
+  else
+    state.skippedFrames = nil
+  end
 
   if telemetryChanged then updateDerivedFlightState(state) end
   readFlightRecord(state)

@@ -136,13 +136,28 @@ Callouts of the SmartFuel level while the model is connected. The flight control
 | Warning level | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical level | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
 | Telemetry lost | `telemetry_lost` | Off | Radio | Announces a flight controller that stops sending telemetry while the model is armed and the radio link is up, and announces it again when its telemetry is back. |
-| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality alert speaks while it stays at a level -- see *Repeat and Haptic* below. |
-| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality alert at its **critical** level, and alongside the lost telemetry announcement. |
+| Telemetry dropouts | `dropouts_alert` | Off | Radio | Speaks "Telemetry Dropouts" while the model is armed and the flight controller's telemetry frames go missing too often -- see *Telemetry Dropouts* below. |
+| Dropouts | `dropouts_count` | 3 | Radio | How many gaps in the telemetry frames within the window set the alert off (1 to 50). |
+| Window | `dropouts_window` | 10 s | Radio | The time the gaps are counted over (4 to 60 seconds). |
+| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality alert and the dropouts alert speak while their condition holds -- see *Repeat and Haptic* below. |
+| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality alert at its **critical** level, and alongside the lost telemetry announcement. Never alongside the dropouts alert. |
 
 #### What Telemetry Lost Covers, and What It Leaves to the Radio
 Only a flight controller that stops sending while the radio link is still up is announced: the link statistics keep arriving and the radio stays connected, but the flight controller's telemetry frames have stayed away for 6 seconds. The radio cannot tell this case apart on its own until it reports each sensor as lost, 20 seconds later. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once, so a lost link stays silent here -- also when the flight controller's frames stopped with it. A drop while the model is disarmed is a normal power-off and stays silent too.
 
 The loss is announced **once**. A model that stays silent keeps the announcement's recovery window open, and it is the return that speaks again -- not the silence, however long it lasts.
+
+#### Telemetry Dropouts
+Every frame of the flight controller's custom telemetry carries a frame number, and the suite counts each place where the numbers jump -- a gap of one or more frames that never arrived. It publishes that count itself as the sensor `*Skp`, at most every 2 seconds, from the moment the link comes up. The background function script, the dashboard and the tool each decode the frames while the others stand aside. When the decoding moves from one to another -- the tool opened or closed, the script pausing for a moment -- the count continues from the value the radio shows, and the first second of frames after the move is not counted, so a hand-over is not a gap. A lost link starts the count over at 0 where the dashboard or the tool that saw the loss decodes; the function script, and a tool opened after the loss, carry it on.
+
+The count says that a flight *had* gaps. The alert asks whether the link is stuttering *now*: it compares the rise of the count within the last *Window* seconds against *Dropouts*. With the defaults, three gaps within ten seconds speak; two do not, and nor does a large total collected slowly over a long flight. The window starts at 4 seconds because the count only changes every 2.
+
+- Only while the model is armed. Gaps on the ground before arming are not counted into the flight: the window starts with the first reading after arming.
+- A count that starts over -- after a lost link -- is a new start, never an alert.
+- The alert needs the `*Skp` sensor, that is the flight controller's custom CRSF telemetry decoded by the suite. Without it the alert stays silent.
+- Spoken at once when the count is reached, then as often as *Repeat* says, ten seconds apart, until the rise has stayed below the count for a whole window. A rate resting on the count -- falling below it and climbing back with the next gap -- is therefore one alert, not a new one at every gap. Recovery is not spoken.
+- It never vibrates, whatever *Haptic* says: it has one level, and the link quality alert's lower level does not vibrate either.
+- The gaps counted are those of the flight controller's telemetry on its way to the radio. A receiver that drops control frames on the way to the model is what *Link Quality* reports.
 
 ---
 
@@ -156,7 +171,7 @@ the page that switches an alert on is the page that says how it behaves.
 | Category page | Repeat / Haptic keys | The alerts they govern |
 | --- | --- | --- |
 | Voltage | `voltage_repeat`, `voltage_haptic` | Low pack voltage, Main power lost, and the BEC / receiver alert set up under *Setup* → *Power* → *Alerts*. |
-| Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost. |
+| Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost, Telemetry dropouts. |
 | ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature, MCU temperature. |
 | SmartFuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
 
@@ -171,7 +186,7 @@ the page that switches an alert on is the page that says how it behaves.
 - **Two alerts have their own rule inside the category, and a setting does not overrule it.**
   The link quality alert buzzes at its *critical* level only, never at the warning level. The
   lost telemetry announcement says itself once per loss, so it takes the haptic and ignores the
-  repeat.
+  repeat. The telemetry dropouts alert takes the repeat and never buzzes.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
   when the model connects and is latched for the rest of that connection.
 
@@ -181,12 +196,13 @@ the page that switches an alert on is the page that says how it behaves.
 
 Announcements are played from the sound pack under `/SOUNDS/rf/<language>/`. Numbers and their units are spoken by the radio itself, so they follow the language set on the radio rather than the language of the pack.
 
-Every announcement has a file of its own in both packs. Two have no substitute and stay silent in an older pack that lacks theirs:
+Every announcement has a file of its own in both packs. Three have no substitute and stay silent in an older pack that lacks theirs:
 
 | File | Announcement |
 | --- | --- |
 | `stat/alerts/telemetrylost.wav` | Telemetry lost |
 | `stat/alerts/telemetryok.wav` | Telemetry recovered |
+| `stat/alerts/dropouts.wav` | Telemetry dropouts |
 
 Three have a file of their own in both packs, and fall back to another file in an older pack that lacks it:
 

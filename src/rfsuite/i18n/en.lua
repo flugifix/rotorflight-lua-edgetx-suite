@@ -891,6 +891,9 @@ return {
         mcu_temperature = "MCU Temperature",
         section_telemetry = "Telemetry",
         telemetry_lost = "Telemetry Lost",
+        dropouts_alert = "Telemetry Dropouts",
+        dropouts_count = "Dropouts",
+        dropouts_window = "Window (s)",
         lq_alert = "Link Quality",
         lq_warn = "Warning (%)",
         lq_critical = "Critical (%)",
@@ -939,8 +942,11 @@ return {
         help_lq_warn = "The upper level in percent. Spoken without vibration. Default 70 %.",
         help_lq_critical = "The lower level in percent. Vibrates too if Haptic is on. Default 50 %.",
         help_telemetry_lost = "Speaks when the armed model's flight controller stops sending while the radio link is up, and again when it is back. A lost link is the radio's own announcement. Off by default.",
-        help_link_repeat = "How often the link quality alert speaks while it stays at a level, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
-        help_link_haptic = "Whether the transmitter vibrates with the critical link quality level and with Telemetry Lost. On by default.",
+        help_dropouts_alert = "Speaks when the armed model's telemetry frames go missing too often: as many gaps as Dropouts within Window (s). Recovering is silent, and it never vibrates. Off by default.",
+        help_dropouts_count = "How many gaps in the flight controller's telemetry frames within the window set off the alert (1 to 50). Default 3.",
+        help_dropouts_window = "The time the gaps are counted over, in seconds (4 to 60). Default 10 s.",
+        help_link_repeat = "How often the link quality alert and Telemetry Dropouts speak while their condition holds, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
+        help_link_haptic = "Whether the transmitter vibrates with the critical link quality level and with Telemetry Lost. Telemetry Dropouts never vibrates. On by default.",
         help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
         saved_title = "Saved",
         saved_message = "Audio events saved",
@@ -972,7 +978,7 @@ return {
         help_message = "Callouts of the SmartFuel level while the model is connected.\nThe flight controller computes the value when SmartFuel is on there (Setup > Power > SmartFuel, MSP API 12.0.9 or later).\nOtherwise the radio computes it from the local source set in Setup > Power > Preferences."
       },
       settings_audio_events_link = {
-        help_message = "Alerts about the radio link and the flight controller's telemetry."
+        help_message = "Alerts about the radio link and the flight controller's telemetry.\nLink Quality: speaks the quality when it falls to a level.\nWarning (%): the upper level, without vibration.\nCritical (%): the lower level, with vibration if Haptic is on.\nTelemetry Lost: armed, the flight controller stops sending.\nTelemetry Dropouts: armed, its frames go missing too often.\nDropouts: how many gaps set it off.\nWindow (s): the time they are counted over.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at Critical and with Telemetry Lost."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Mode",

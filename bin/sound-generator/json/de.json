@@ -498,6 +498,12 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/dropouts.wav",
+    "english": "Telemetry Dropouts",
+    "translation": "Telemetrie-Aussetzer",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/esc.wav",
     "english": "Esc Temperature",
     "translation": "ESC-Temperatur",

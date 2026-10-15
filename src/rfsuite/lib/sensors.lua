@@ -556,6 +556,10 @@ Sensors.aliases = {
   voltage = "Vbat",
   rpm = "Hspd",
   link = "RQly",
+  -- The number of gaps in the frame ids of the flight controller's custom telemetry since the
+  -- link came up, which the suite counts and publishes itself (tasks/events/telemetry_bg/drain.lua,
+  -- publishCounters). No row in Sensors.map: it is a counter of the suite's own, not a reading.
+  skipped_frames = "*Skp",
   fuel = "Bat%",
   smartfuel = "SmFt",
   smartconsumption = "SmCp",
@@ -584,6 +588,7 @@ Sensors.search_paths = {
   smartfuel = { "SmFt", "Smart Fuel", "smartfuel", "Bat%", "fuel" },
   rpm = { "Hspd", "RPM", "rpm" },
   link = { "RQly", "LQ", "Link", "link_quality", "1RSS", "2RSS" },
+  skipped_frames = { "*Skp" },
   current = { "Curr", "Current", "current" },
   bec_voltage = { "Vbec", "BecV", "BECV", "bec_voltage" },
   pid_profile = { "PID#", "PIDP", "PidP", "PID Profile", "PID" },
