@@ -57,10 +57,10 @@ come from the suite's translations, so it speaks the language of the package tha
 - **Value cards** — up to four columns under the big card, chosen on the *Value Cards* page: the
   reading's name with its unit in brackets, the figure, and under it the least and the most the
   flight reached (the flight in progress where it has a value, the last flight before that) --
-  or, where the columns are too narrow for both, the most alone. A raw telemetry sensor shows the
-  radio's own least and most of it. Every figure shares one size; a reading in words (ESC status,
-  air rate) takes the largest size up to that one in which it fits. A column set to nothing gives
-  its width to the others.
+  or, where the columns are too narrow for both, the most alone, and nothing where even that does
+  not fit. A raw telemetry sensor shows the radio's own least and most of it. Every figure shares
+  one size; a reading in words (ESC status, air rate) takes the largest size up to that one in
+  which it fits. A column set to nothing gives its width to the others.
 - **Battery strip** — across the foot: the cell count, the pack voltage and the capacity used,
   the fuel percentage at the right, a fill bar with marks at 25, 50 and 75 % and a scale under
   it. Until the model has reported a fuel reading the percentage reads `--%`. The fill is red at

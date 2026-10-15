@@ -84,8 +84,8 @@ local ON_OFF = { "on", "off" }
 
 L.SETTINGS = {
   -- The firmware's own frame around every place on the full screen that takes a press -- the
-  -- menu and tool buttons, the link cluster, the cards, the battery strip, the buttons of the views. Off covers
-  -- it (Common.button); the outlines this theme draws itself stay.
+  -- menu and tool buttons, the link cluster, the cards, the battery strip, the buttons of the
+  -- views. Off covers it (Common.button); the outlines this theme draws itself stay.
   { page = "look",   key = "tap_frames", values = ON_OFF,                      default = "on" },
   -- The battery strip's and the charge card's yellow and red steps, in percent of the fuel
   -- reading. The defaults are the steps they draw with when nobody has set them.
@@ -193,8 +193,8 @@ local CARD_PAD = 4
 -- On the full screen surface the host hands the build a `ctx` (and only there), and a theme that
 -- binds a press of its own gets no host controls over it. This theme binds two small boxed glyphs
 -- at the left end of the header, before the model name: this one opens the quick menu, the one beside
--- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves full screen in the firmware, and
--- init.lua declares that (`fullscreenExit`), which is what the host's theme check reads. The
+-- it the suite's tool (L.toolControl). There is no close control -- a long press on RTN leaves
+-- full screen in the firmware, and init.lua declares that (`fullscreenExit`), which is what the host's theme check reads. The
 -- page keys open the menu by the host's default.
 --
 -- The press is a `button`, and everything drawn over it is a LINE: on the full screen surface a
@@ -788,8 +788,8 @@ end
 --
 -- `minKey` / `maxKey` (optional) name the flight record's extremes of the reading
 -- (tasks/events/telemetry/flight_record.lua, FLIGHT_STATS), which the value columns and the
--- telemetry view print under the figure at `places` decimals. A side the record does not keep is absent and prints `-`; a
--- reading with neither is not in the record at all and its tile has no range line.
+-- telemetry view print under the figure at `places` decimals. A side the record does not keep
+-- is absent and prints `-`; a reading with neither is not in the record at all and its tile has no range line.
 L.SOURCES = {
   { id = "cell_voltage", label = "@i18n(widgets.dashboard.urban_cell_voltage)@", unit = "V", sample = "4.20",
     minKey = "minVoltage", maxKey = "maxVoltage", places = 2, perCell = true,
@@ -807,8 +807,8 @@ L.SOURCES = {
         return v / cells
       end, 2)
     end,
-    -- The one coloured row: below the theme's own minimum the figure turns, the same
-    -- bounds the gauge is scaled by.
+    -- Below the theme's own minimum the figure turns, the same bound the battery page's
+    -- cell bar is drawn against.
     color = function(state)
       return function()
         -- The pack being gone outranks the pack being low: the figure beside this colour is
@@ -850,7 +850,7 @@ L.SOURCES = {
     maxKey = "maxWatts", places = 0 },
   { id = "throttle", label = "@i18n(app.pages.logs.throttle_title)@", unit = "%", sample = "888", make = intGetter("throttlePercent"),
     maxKey = "maxThrottlePercent", places = 0 },
-  -- The fuel row reads what the gauge reads: nothing until the host has seen a fuel reading.
+  -- The fuel reading is the battery strip's: nothing until the host has seen a fuel reading.
   { id = "fuel", label = "@i18n(app.pages.settings_audio_events.section_fuel)@", unit = "%", sample = "888",
     minKey = "minFuel", places = 0,
     make = function(state)
@@ -929,8 +929,8 @@ L.SOURCES = {
     end) },
 
   -- The receiver sensitivity that rate is specified down to, in dBm and negative. It is the
-  -- floor as ExpressLRS states it. The row shows the floor itself; the RSSI bars in the top bar
-  -- draw the headroom above it.
+  -- floor as ExpressLRS states it. The reading shows the floor itself; the RSSI bars in the
+  -- header draw the headroom above it.
   { id = "link_floor", label = "@i18n(widgets.dashboard.urban_rate_floor)@", unit = "dBm", sample = "-888",
     source = "link_floor",
     make = derivedGetter("link_floor", Common.integer) },
@@ -1155,7 +1155,7 @@ local function rawRangeGetter(state, def)
 end
 
 -- The telemetry view's tiles, in the order the settings page lists them, without the ones set to
--- `none`. Each is a row of the five-row panel -- the same label, unit, figure and colour -- plus
+-- `none`. Each is a reading of the catalogue -- the same label, unit, figure and colour -- plus
 -- `range`, the record's extremes as one string, nil for a reading the record does not keep.
 function L.tileRows(state)
   local cfg = state.themeConfig or {}
@@ -1196,7 +1196,7 @@ end
 -- and the rest of its column or its row takes its room.
 --
 -- `first` marks a kind offered on the first position alone: the model picture is the one entry
--- that is not text, and the flat middle card is no place for it. The kinds' names are the
+-- that is not text, and only the tall first card fits it with its footer. The kinds' names are the
 -- settings page's (L.kindLabels); what a kind draws carries its own words.
 L.KINDS = {
   { id = "image", first = true },
@@ -1313,10 +1313,8 @@ local function chipGetter(state, def, compact)
   end)
 end
 
--- The widest range and the widest most-alone the catalogue can put in a value column, which the row
--- decides its range form against.
+-- The sample the small face is fitted to: a range of two four-figure readings.
 local S_CHIP = "888.8 .. 888.8"
-local S_CHIP_SHORT = "Max 888.8"
 
 -- The widest string a range of this reading can be, for the decision whether it fits.
 local function chipSample(def)
@@ -1706,10 +1704,10 @@ end
 -- A column set to Off drops out and the rest share the width. Every figure shares ONE face, fitted
 -- by pixel width to the widest figure among the columns that are drawn, so the row reads even; a
 -- reading in words takes the largest face up to the shared one in which its own sample fits. The
--- range is "least .. most" where the columns are wide enough for the widest range the catalogue
--- can put there, the most alone where only that fits, and nothing where neither does -- decided
--- once for the row, against two samples that are constants of the code, so every column reads the
--- same way and a rebuild measures nothing new. A range that does not fit would wrap and be cut off
+-- range is "least .. most" where the columns are wide enough for the widest range among the
+-- columns drawn, the most alone (after the word for it) where only that fits, and nothing where
+-- neither does -- decided once for the row from the readings' own samples, so every column reads
+-- the same way. A range that does not fit would wrap and be cut off
 -- by the row. In full screen, on a host with theme views, the row is
 -- the press that opens the telemetry view, which shows the same readings and more.
 local function valueRow(nodes, state, cfg, g, x, y, w, h, ctx)
@@ -1737,8 +1735,24 @@ local function valueRow(nodes, state, cfg, g, x, y, w, h, ctx)
   end
   local valueFont = Common.selectFont(valAvailH, colW - 12, sample)
   local valueH = Common.measure(valueFont, sample)
-  local compact = Common.textWidth(g.sml, S_CHIP) > textW
-  local noChip = compact and Common.textWidth(g.sml, S_CHIP_SHORT) > textW
+  local compact, noChip = false, false
+  for i = 1, n do
+    local def = slots[i]
+    if (def.rawRange or def.minKey or def.maxKey) and Common.textWidth(g.sml, chipSample(def)) > textW then
+      compact = true
+      break
+    end
+  end
+  if compact then
+    local prefix = T.max .. " "
+    for i = 1, n do
+      local def = slots[i]
+      if (def.rawRange or def.maxKey) and Common.textWidth(g.sml, prefix .. (def.perCell and "4.20" or def.sample)) > textW then
+        noChip = true
+        break
+      end
+    end
+  end
 
   for i = 1, n do
     local def = slots[i]
@@ -1884,8 +1898,8 @@ local function labelled(label, read, fmt)
 end
 
 -- The arming override of the statistics view's bar: while the flight controller names reasons that
--- block arming, the whole bar gives way to "Arming Disabled: <reason>", one reason at a time, two seconds each, in the
--- WARNING colour. The returned function is the visibility the bar's ordinary labels take in the
+-- block arming, the whole bar gives way to "Arming Disabled: <reason>", one reason at a time,
+-- two seconds each, in the WARNING colour. The returned function is the visibility the bar's ordinary labels take in the
 -- meantime. getTime is the radio's tick counter, not one of the probes a closure may not make.
 --
 -- Common.label cuts nothing, and "Arming Disabled: " with the longest reason is wider than the
@@ -1996,8 +2010,8 @@ function L.buildFlight(zone, state, ctx)
 
   local barH = math.max(18, math.floor(h * 0.075))
   local boxH = math.max(1, barH - 2)
-  local font = Common.selectFont(boxH, nil, "Total Time")
-  local fontH = Common.measure(font, "Total Time")
+  local font = Common.selectFont(boxH, nil, T.total_time)
+  local fontH = Common.measure(font, T.total_time)
   local sml = Common.selectFont(math.max(8, math.floor(h * 0.05)), math.floor(w * 0.14), S_CHIP)
   local g = { sml = sml, smlH = Common.measure(sml, S_CHIP), showUnits = setting(state, "units") == "on" }
 
@@ -2100,8 +2114,8 @@ local function statsRows(state)
   local vMin = num(tonumber(cfg.v_min))
   local cellMinColor = C.text
   if vMin ~= nil then
-    -- The least the pack reached against the theme's own minimum, the bound the gauge and the
-    -- flight view's cell row are drawn against. Without a minimum on file there is nothing to
+    -- The least the pack reached against the theme's own minimum, the bound the battery page's
+    -- cell bar is drawn against. Without a minimum on file there is nothing to
     -- compare with and the figure carries no closure at all.
     cellMinColor = function()
       local v = num(lastStat(state, "minVoltage", "lastMinVoltage"))
@@ -2224,8 +2238,8 @@ function L.buildStats(zone, state, ctx)
   -- foot is the statistics bar.
   local barH = math.max(18, math.floor(h * 0.075))
   local boxH = math.max(1, barH - 2)
-  local font = Common.selectFont(boxH, nil, "Total Time")
-  local fontH = Common.measure(font, "Total Time")
+  local font = Common.selectFont(boxH, nil, T.total_time)
+  local fontH = Common.measure(font, T.total_time)
   local textFont, textH = font, fontH
 
   local contentW = w - 2 * OUTER_PAD

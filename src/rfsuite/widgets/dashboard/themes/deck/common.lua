@@ -53,8 +53,6 @@ M.T = {
   total_time = "@i18n(widgets.dashboard.urban_total_time)@",
   governor = "@i18n(app.pages.logs.tpl_governor)@",
   throttle = "@i18n(app.pages.logs.throttle_title)@",
-  profile = "@i18n(widgets.dashboard.urban_profile)@",
-  rate = "@i18n(widgets.dashboard.urban_rate)@",
   battery_profile = "@i18n(widgets.dashboard.urban_battery_profile)@",
   -- The shorter word where the full one does not fit the narrow third column.
   battery_profile_short = "@i18n(widgets.dashboard.urban_battery_profile_short)@",
@@ -63,7 +61,6 @@ M.T = {
   armed = "@i18n(widgets.dashboard.urban_armed)@",
   disarmed = "@i18n(widgets.dashboard.urban_disarmed)@",
   no_fc = "@i18n(widgets.dashboard.urban_no_fc)@",
-  model_prefix = "@i18n(app.pages.tools_flight_log.field_model)@: ",
   tpwr = "TPWR",
   skp = "Skp",
   arming_disabled = "@i18n(widgets.dashboard.urban_arming_disabled)@: ",
@@ -307,8 +304,11 @@ local SCHEMES = {
       disabled = rgb(0xF83C00, 0xFF8000),
       warning = rgb(0xE03030, 0xFF0000),
       accent = rgb(0x2E8BE0, COLOR_THEME_PRIMARY1),
-      ok = rgb(0x22C55E, GREEN or 0x00FF00),
-      warn = rgb(0xF0C000, 0xFF8000),
+      -- `ok` and `warn` are words as well as fills -- the arm state, the governor, a figure at its
+      -- yellow step -- so on this light card they are a shade darker than the battery fills
+      -- below: the bright amber of `bar_low` reads at about 1.4 : 1 against the card.
+      ok = rgb(0x168A40, GREEN or 0x00FF00),
+      warn = rgb(0xA06800, 0xFF8000),
       crit = rgb(0xE03030, 0xFF0000),
       neut = rgb(0x9AA2AA, COLOR_THEME_SECONDARY1),
       bar_ok = rgb(0x22C55E, GREEN or 0x00FF00),
@@ -640,10 +640,8 @@ function M.button(nodes, x, y, w, h, fill, press)
   end
 end
 
--- A label above a value, both centred in their column -- the shape the flight totals and
--- the profile row are built from.
--- `labelColor` is optional and defaults to the muted label colour; the battery-profile cell in
--- the status panel is the one caller that raises it to a warning.
+-- A label above a value, both centred in their column -- the shape the model picture's footer is
+-- built from. `labelColor` is optional and defaults to the muted label colour.
 function M.stacked(nodes, x, y, w, pad, labelText, valueText, labelFont, labelH, valueFont, valueH, labelColor)
   M.label(nodes, x, y + pad, w, labelH, labelText, labelFont, labelColor or M.C.label, CENTER)
   M.label(nodes, x, y + pad + labelH, w, valueH, valueText, valueFont, M.C.text, CENTER)
@@ -858,7 +856,7 @@ function M.throttleText(state)
   end)
 end
 
--- The bottom bar's arm state: "No FC connected" while no flight controller answers, since the
+-- The arm card's arm state: "No FC connected" while no flight controller answers, since the
 -- craft's state is then not known and "Disarmed" would be a claim.
 function M.armedText(state)
   return function()
@@ -923,7 +921,7 @@ function M.percent(state, key, default)
 end
 
 -- The battery fill's two steps, in percent of the fuel reading: yellow at or below the first,
--- red at or below the second. The defaults are Urban's.
+-- red at or below the second. The defaults are 20 % and 0 % (no red step).
 M.FUEL_LOW_DEFAULT = 20
 M.FUEL_CRIT_DEFAULT = 0
 
@@ -940,12 +938,12 @@ end
 
 -- The two clock modes, with the format string and the WIDTH SAMPLE of each in one place.
 --
--- The top bar measures the clock's width against the sample, so the two have to agree: a format
+-- The header measures the clock's width against the sample, so the two have to agree: a format
 -- one character longer than its sample clips the clock, one character shorter wastes bar width
 -- the link bars could have used. Keeping them in one entry means the only way to change one is
 -- to change the other.
 --
--- Time only frees about eleven characters of the top bar, and the bar layout follows the choice
+-- Time only frees about eleven characters of the header, and the header follows the choice
 -- rather than keeping the gap: the link bars have the room the clock does not take.
 M.CLOCK_MODES = {
   date_time = {

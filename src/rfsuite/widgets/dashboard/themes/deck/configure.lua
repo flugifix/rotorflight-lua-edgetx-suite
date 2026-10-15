@@ -29,8 +29,8 @@ local VALUE_COUNT = Layout.VALUE_COUNT or 4
 -- catalogue as the cards.
 local TILE_COUNT = Layout.TILE_COUNT or 12
 
--- The arm-state colour choice. common.lua resolves the value; this theme's default is amber and
--- grey.
+-- The arm-state colour choice. common.lua resolves the value; this theme's default is amber:
+-- armed in amber, disarmed in the label colour.
 local ARM_COLORS = {
   { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_amber)@", value = "amber" },
   { label = "@i18n(app.pages.settings_dashboard_settings.urban_arm_signal)@", value = "signal" },

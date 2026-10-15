@@ -8,8 +8,8 @@
 --     beside it and the three limits written out under it. The fill turns at the same limits.
 --   * The pack as a battery laid on its side, filling towards the terminal: the fuel figure in
 --     the middle, the cell count and the used capacity in a pill at either end. Its steps and
---     colours are the flight view's gauge's (common.lua, M.fuelLevel), so the two cannot
---     disagree about how full the pack is.
+--     colours are the flight view's battery strip's (common.lua, M.fuelLevel), so the two
+--     cannot disagree about how full the pack is.
 --   * One line: the pack voltage, the least cell voltage of the flight, and the reserve the
 --     fuel figure keeps back.
 --
@@ -239,7 +239,7 @@ function M.build(children, zone, state, ctx)
   local innerW, innerH = bodyW - 2 * innerPad, bodyH - 2 * innerPad
   local segRounding = math.max(1, math.floor(innerH * 0.10))
   local segGap = math.max(1, math.floor(innerW * 0.01))
-  -- The flight view's gauge's steps: at most ten, so one segment reads as ten percent.
+  -- At most ten segments, so one segment reads as ten percent.
   local segCount = math.max(6, math.min(10, math.floor(innerW / 16)))
   local segW = math.floor((innerW - (segCount - 1) * segGap) / segCount)
   local segLastW = innerW - segW * (segCount - 1) - segGap * (segCount - 1)
@@ -319,7 +319,7 @@ function M.build(children, zone, state, ctx)
       return string.format("%d %s", v, T.mah)
     end), pillFont, pillInk, RIGHT)
 
-  -- The fuel figure across the middle, the flight view's gauge's rule: with the main pack gone
+  -- The fuel figure across the middle, the battery strip's rule: with the main pack gone
   -- there is no reading, and the figure turns rather than holding the last one.
   local pctFont = UD.selectFont(math.floor(bodyH * 0.50), math.floor(innerW * 0.40), "100%")
   local pctH = UD.measure(pctFont, "100%")
