@@ -2,6 +2,9 @@
 
 ### Features & Enhancements
 
+- **The shipped dashboard themes have a documentation page, with a picture of each screen (`docs/dashboard/themes.md`, `docs/images/dashboard/themes/`, `docs/dashboard/urban-theme.md`)**:
+  - Every theme the suite ships -- Default, RF Status, @AERC, @AERC Nitro, @RT-RC, @RT-RC Nitro, @SRB-RC and Urban -- is shown on a TX16S MK3 before, during and after a flight (the two nitro themes during and after it), with a short list of what each screen carries, so a pilot can pick one without trying them all on the radio.
+  - The page also says what every theme has in common: which screen the flight puts on, the connecting screen before the first one, and where a theme is chosen and configured. The Design page and the dashboard index link to it.
 - **The documentation under `docs/` is published as a website (`mkdocs.yml`, `bin/docs/`, `.github/workflows/docs.yml`)**:
   - MkDocs with the Material theme builds the site from `docs/` as it is, with search, a navigation tree and previous/next links; GitHub Pages publishes it on every push to master that touches the documentation. The files stay plain Markdown that reads on GitHub unchanged.
   - A relative link that leaves `docs/` is pointed at the file on GitHub, and each section is ordered by the `sidebar_position` of its pages, the order of the tiles on the radio.
