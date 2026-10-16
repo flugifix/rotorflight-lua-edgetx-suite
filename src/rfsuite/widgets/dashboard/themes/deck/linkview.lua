@@ -17,19 +17,24 @@
 --   TRSS             the signal at the transmitter module, the downlink, against the same floor:
 --                    both directions run at the one air rate.
 --   SNR              the signal-to-noise ratio at the receiver and at the transmitter
---                    (`RSNR` / `TSNR`, "9 / 8dB"), the bar the receiver's figure mapped from
---                    -10 dB (empty) to +10 dB (full), so its steps at 70 and 50 are 4 dB and 0 dB.
---                    `-` on an FLRC or FSK rate, which reports no signal-to-noise ratio (the
---                    rows' `noSnr`), so a 0 there is not drawn as a bad link.
---   TPWR             the transmitter power in mW, the bar its share of the module's power limit
---                    the pilot sets on the Top Bar page (`tpwr_max`, 100 mW by default). High is
---                    the bad end here: dynamic power raises the power as the link weakens, so the
---                    bar turns amber from 60 % of the limit and red from 85 %.
+--                    (`RSNR` / `TSNR`, "9 / 8dB"), the bar the receiver's figure as a position
+--                    between the air rate's two dynamic-power thresholds (LinkRates.snrPercent):
+--                    empty at the one where ExpressLRS asks for more power, full at the one where
+--                    it asks for less. `-` on an FLRC or FSK rate, which reports no
+--                    signal-to-noise ratio, so a 0 there is not drawn as a bad link; an empty bar
+--                    on a rate whose thresholds are not known.
+--   TPWR             the transmitter power in mW, the bar its share of the TX power maximum the
+--                    announcements use (`state.alerts.tpwr.max`). High is the bad end here:
+--                    dynamic power raises the power as the link weakens, so the bar warns as it
+--                    grows.
 --   the foot line    the least link quality of the flight record (`minLq`): the flight in
 --                    progress where it has one, the last flight otherwise -- the rule the host's
 --                    own boxes read the record by. `-` until the model has been armed once.
 --
--- The bars take the warning steps the header takes from the settings. `TRSS`, `RSNR`, `TSNR` and
+-- Every bar's warning and critical steps are the levels of the matching announcement
+-- (`state.alerts`, layout.lua L.alertSteps): link quality's for RQ and TQ, the RSSI alert's for the
+-- receiver antennas, the Downlink alert's for TRSS, the SNR alert's for SNR, the TX power alert's for
+-- TPWR. A bar with no levels published draws without steps. `TRSS`, `RSNR`, `TSNR` and
 -- the air rate are this view's own `sources`: a widget with view sources reads them while the view
 -- is on top in full screen and at no other time, so the flight pays nothing for them. In the zone
 -- and on a widget without view sources the host resolves none of them, and those figures read `-`.
@@ -139,10 +144,12 @@ function M.build(children, zone, state, ctx)
     return aside
   end)
 
-  local lqWarn = tonumber(L.setting(state, "lq_warn")) or 80
-  local lqCrit = math.max(0, lqWarn - 30)
-  local rsWarn = tonumber(L.setting(state, "rssi_warn")) or 15
-  local rsCrit = math.floor(rsWarn / 2 + 0.5)
+  local steps = L.alertSteps
+  local lqWarn, lqCrit = steps(state, "lq")
+  local rsWarn, rsCrit = steps(state, "rssi")
+  local trWarn, trCrit = steps(state, "trss")
+  local snWarn, snCrit = steps(state, "rsnr")
+  local pwWarn, pwCrit = steps(state, "tpwr")
   -- Kept per pair of raw readings: the bar's colour and its length both ask every frame.
   -- rssiPercent tests both for a number itself.
   local function rss(read)
@@ -172,23 +179,30 @@ function M.build(children, zone, state, ctx)
 
   -- SNR: `-` and an empty bar on a rate that reports none, rather than a 0 dB link drawn in the
   -- warning colour. Each closure reads the snapshot once and keeps the rate beside the figures,
-  -- so a standing link costs it two or three comparisons.
-  local lastS, lastSRate, lastSOk, lastSP = UNSET, UNSET, true, nil
+  -- so a standing link costs it two or three comparisons. The bar is the scale the SNR alert
+  -- speaks on: the reading's position between the rate's two dynamic-power thresholds, out of the
+  -- rate's row, looked up from the air-rate byte and the module generation the host resolved
+  -- `link_packet_rate` from, which it keeps on the state. Keyed on the byte and the generation, not
+  -- on the rate's name: several bytes share a name ("50Hz" on 2.4 GHz and on 900 MHz) with
+  -- different thresholds.
+  local lastS, lastSRate, lastSMode, lastSGen, lastSRow, lastSP = UNSET, UNSET, UNSET, UNSET, nil, nil
   local function snrPercent()
     local d = state.derived
     local s, rate = d and d.RSNR, d and d.link_packet_rate
-    if s == lastS and rate == lastSRate then return lastSP end
+    local mode, gen = state.linkRfMode, state.linkGeneration
+    if s == lastS and rate == lastSRate and mode == lastSMode and gen == lastSGen then return lastSP end
     lastS = s
-    if rate ~= lastSRate then
-      lastSRate = rate
-      lastSOk = snrReported(rate)
+    if rate ~= lastSRate or mode ~= lastSMode or gen ~= lastSGen then
+      lastSRate, lastSMode, lastSGen = rate, mode, gen
+      lastSRow = nil
+      if type(rate) == "string" and type(Rates.forMode) == "function" then
+        lastSRow = Rates.forMode(mode, gen)
+      end
     end
-    if type(s) ~= "number" or not lastSOk then
+    if lastSRow == nil or type(Rates.snrPercent) ~= "function" then
       lastSP = nil
     else
-      local p = math.floor((s + 10) * 5)
-      if p < 0 then p = 0 elseif p > 100 then p = 100 end
-      lastSP = p
+      lastSP = Rates.snrPercent(s, lastSRow)
     end
     return lastSP
   end
@@ -213,13 +227,15 @@ function M.build(children, zone, state, ctx)
   end
 
   local readTpwr = derivedField(state, "TPWR")
-  local tpwrMax = tonumber(L.setting(state, "tpwr_max")) or 100
+  local tpwrLevels = type(state.alerts) == "table" and state.alerts.tpwr or nil
+  local tpwrMax = type(tpwrLevels) == "table" and tonumber(tpwrLevels.max) or nil
+  if tpwrMax ~= nil and tpwrMax <= 0 then tpwrMax = nil end
   local lastPw, lastPwP = UNSET, nil
   local function tpwrPercent()
     local v = readTpwr()
     if v == lastPw then return lastPwP end
     lastPw = v
-    if v == nil or v <= 0 then lastPwP = nil else lastPwP = math.min(100, 100 * v / tpwrMax) end
+    if v == nil or v <= 0 or tpwrMax == nil then lastPwP = nil else lastPwP = math.min(100, math.floor(100 * v / tpwrMax + 0.5)) end
     return lastPwP
   end
 
@@ -236,12 +252,12 @@ function M.build(children, zone, state, ctx)
     rows[#rows + 1] = { label = T.link_rss2, value = dbm(stateField(state, "rss2")),
       bar = rss(stateField(state, "rss2")), warn = rsWarn, crit = rsCrit }
   end
-  rows[#rows + 1] = { label = T.link_trss, value = dbm(readTrss), bar = rss(readTrss), warn = rsWarn, crit = rsCrit }
-  rows[#rows + 1] = { label = T.link_snr, value = snrValue, bar = snrPercent, warn = 70, crit = 50 }
+  rows[#rows + 1] = { label = T.link_trss, value = dbm(readTrss), bar = rss(readTrss), warn = trWarn, crit = trCrit }
+  rows[#rows + 1] = { label = T.link_snr, value = snrValue, bar = snrPercent, warn = snWarn, crit = snCrit }
   rows[#rows + 1] = { label = T.tpwr, value = UD.getter(readTpwr, function(v)
     if v == nil or v <= 0 then return "-" end
     return string.format("%dmW", math.floor(v))
-  end), bar = tpwrPercent, warn = 60, crit = 85, high = true }
+  end), bar = tpwrPercent, warn = pwWarn, crit = pwCrit, high = true }
 
   -- The foot line: the least link quality of the flight, in the row names' face.
   local x, w = g.x + g.pad, g.w - 2 * g.pad
@@ -285,6 +301,7 @@ function M.build(children, zone, state, ctx)
         if v == lastV then return lastColor end
         lastV = v
         if v == nil then lastColor = C.track
+        elseif crit == nil then lastColor = C.ok
         elseif high then
           if v >= crit then lastColor = C.crit
           elseif v >= warn then lastColor = C.warn
@@ -305,8 +322,10 @@ function M.build(children, zone, state, ctx)
         return lastW, barH
       end
     }
-    UD.rect(children, barX + math.floor(barW * crit / 100), by, 2, barH, C.tick, true, 0)
-    UD.rect(children, barX + math.floor(barW * warn / 100), by, 2, barH, C.tick, true, 0)
+    if crit ~= nil then
+      UD.rect(children, barX + math.floor(barW * crit / 100), by, 2, barH, C.tick, true, 0)
+      UD.rect(children, barX + math.floor(barW * warn / 100), by, 2, barH, C.tick, true, 0)
+    end
     UD.rect(children, barX, by, barW, barH, C.frame, false, 2, 1)
     UD.label(children, x + w - valueW, ty, valueW, fontH, row.value, font, C.text, RIGHT)
   end
