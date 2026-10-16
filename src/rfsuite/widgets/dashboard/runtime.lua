@@ -1929,6 +1929,14 @@ local function updateConnectionState(self)
       -- Nothing is announced here. The gate shuts on `connected`, i.e. on the RF link, and a lost
       -- link is the radio's own announcement; a flight controller that stops sending with the
       -- link up never shuts it, and lib/audio.lua hears that case from the telemetry frames.
+      --
+      -- The skipped-frame count goes with the connection, as the tool's does when its telemetry
+      -- stops being ready: after an armed flight the telemetry read stops while the link is down,
+      -- so the last count would otherwise stand until the next read. That read resumes on the
+      -- first pass the link is back, and the gate reopens no sooner than the ready hold after it,
+      -- so the dropouts alert already starts its window from a fresh reading; this keeps the
+      -- state from carrying the previous connection's count at all.
+      if self.state then self.state.skippedFrames = nil end
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       elseif self.audioState then
