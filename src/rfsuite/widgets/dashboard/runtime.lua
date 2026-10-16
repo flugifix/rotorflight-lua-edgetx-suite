@@ -1929,6 +1929,14 @@ local function updateConnectionState(self)
       -- Nothing is announced here. The gate shuts on `connected`, i.e. on the RF link, and a lost
       -- link is the radio's own announcement; a flight controller that stops sending with the
       -- link up never shuts it, and lib/audio.lua hears that case from the telemetry frames.
+      --
+      -- The skipped-frame count goes with the connection, as the tool's does when its telemetry
+      -- stops being ready: after an armed flight the telemetry read stops while the link is down,
+      -- so the last count would otherwise stand until the next read. That read resumes on the
+      -- first pass the link is back, and the gate reopens no sooner than the ready hold after it,
+      -- so the dropouts alert already starts its window from a fresh reading; this keeps the
+      -- state from carrying the previous connection's count at all.
+      if self.state then self.state.skippedFrames = nil end
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       elseif self.audioState then
@@ -2986,6 +2994,17 @@ local function readTelemetry(state, audioState)
   setField("rss1", rss1)
   local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   setField("rss2", rss2)
+  -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua: the last
+  -- reading, taken at most TELEMETRY_READ_SECONDS (0.5 s) ago because this runs only when a read
+  -- is due, or nil while nothing answers. Assigned rather than set through setField, because
+  -- nothing draws it and a reading must not mark the telemetry as changed. Read only while that
+  -- alert is on (`dropoutsWanted`, set by lib/audio.lua), so a radio that never switches it on pays
+  -- no sensor search for it.
+  if audioState and audioState.dropoutsWanted then
+    state.skippedFrames = getSensor("skipped_frames")
+  else
+    state.skippedFrames = nil
+  end
 
   if telemetryChanged then updateDerivedFlightState(state) end
   readFlightRecord(state)

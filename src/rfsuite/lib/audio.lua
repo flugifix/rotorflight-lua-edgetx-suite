@@ -198,6 +198,10 @@ local RSSI_LINK_SOURCES = {
   ["2RSS"] = true
 }
 
+-- Telemetry dropouts. A file of its own with no substitute: an older pack that lacks it stays
+-- silent rather than borrowing the words of another alert.
+local DROPOUTS_SOUND = "stat/alerts/dropouts.wav"
+
 -- How far the link has to climb back above a threshold before that level is left again. A
 -- quality resting on the threshold otherwise alternates between two levels, and each rise
 -- would speak.
@@ -277,6 +281,7 @@ local ALERT_CATEGORY = {
   rx_voltage      = "voltage",
   lq              = "link",
   telemetry_lost  = "link",
+  dropouts        = "link",
   esc_temperature = "esc",
   mcu_temperature = "esc",
   fuel_empty      = "fuel"
@@ -1508,6 +1513,121 @@ local function linkIsQuality(self, audioState, lq, opts)
   return false
 end
 
+-- The two ends of the range the page offers for each setting; a hand-edited preferences file is
+-- brought back inside them rather than trusted.
+local function clampedSetting(events, key, default, minValue, maxValue)
+  local value = tonumber(events and events[key])
+  if value == nil then return default end
+  value = math.floor(value)
+  if value < minValue then return minValue end
+  if value > maxValue then return maxValue end
+  return value
+end
+
+-- Ends a telemetry dropouts episode: the next one starts with a full repeat count.
+local function clearDropouts(audioState)
+  audioState.dropoutsBelowSince = nil
+  if audioState.dropoutsActive then
+    audioState.dropoutsActive = nil
+    alertCleared(audioState, "dropouts")
+  end
+end
+
+--- Telemetry dropouts: the flight controller's frames are being missed too often, right now.
+---
+--- The source is the suite's own skipped-frame counter (`skipped_frames`), the number of gaps in
+--- the frame ids of the flight controller's custom telemetry since the link came up. It is
+--- cumulative, so it says that a flight HAD gaps; what is spoken is a RATE instead -- the rise of
+--- the counter within the last `dropouts_window` seconds against `dropouts_count`.
+---
+--- The counter is published every 2 s at most, so the window is held as the readings in which it
+--- rose: `audioState.dropoutSamples`, a list of `{ at = seconds, value = count }`, oldest first.
+--- The baseline is the newest sample taken at or before `now - window`, or the oldest one while
+--- none is that old (the first reading of this episode); everything older than the baseline is
+--- dropped, so the list holds at most one entry per publication inside the window plus one.
+---
+--- A reading below the last one is the counter starting over (the widget's and the tool's
+--- decoder reset it when the link is lost): a new start, never a negative rise and never an
+--- alarm. A missing reading leaves the window as it is. Disarmed, or switched off, the window is
+--- dropped, so gaps on the ground before arming are never counted into the flight.
+---
+--- Spoken at once when the rise reaches the count, then repeated as the link category's Repeat
+--- says; re-armed once the rise within the window has stayed below the count for a whole window.
+--- Recovery is not spoken, and it never vibrates: it has one level, and the link alert's lower
+--- level does not vibrate either. `dropoutsWanted` tells both callers whether to read the counter
+--- at all (ui/home.lua and widgets/dashboard/runtime.lua), so a radio that never switches this on
+--- pays no sensor search for it.
+local function announceDropoutsEvent(self, events, opts)
+  local audioState = self.audioState
+  local enabled = prefEnabled(events, "dropouts_alert", false)
+  audioState.dropoutsWanted = enabled
+  if not enabled or not isArmedFromState(self.state) then
+    audioState.dropoutSamples = nil
+    clearDropouts(audioState)
+    return
+  end
+
+  local reading = tonumber(self.state.skippedFrames)
+  if reading == nil then return end
+  reading = math.floor(reading + 0.5)
+
+  local now = nowSeconds()
+  local samples = audioState.dropoutSamples
+  if samples == nil or reading < samples[#samples].value then
+    audioState.dropoutSamples = { { at = now, value = reading } }
+    clearDropouts(audioState)
+    return
+  end
+  if reading > samples[#samples].value then
+    samples[#samples + 1] = { at = now, value = reading }
+  end
+
+  local window = clampedSetting(events, "dropouts_window", 10, 4, 60)
+  local count = clampedSetting(events, "dropouts_count", 3, 1, 50)
+  local since = now - window
+  while #samples >= 2 and samples[2].at <= since do
+    table.remove(samples, 1)
+  end
+
+  if reading - samples[1].value < count then
+    -- Leaving costs a whole window below the count, as leaving a link quality level costs
+    -- LQ_HYSTERESIS points. A rate resting on the count otherwise falls below and climbs back
+    -- with every gap, and each climb would be a new episode, spoken at once with a full repeat
+    -- count. Nothing is spoken while it holds below.
+    if audioState.dropoutsActive then
+      local below = audioState.dropoutsBelowSince
+      if below == nil then
+        audioState.dropoutsBelowSince = now
+      elseif now - below >= window then
+        clearDropouts(audioState)
+      end
+    end
+    return
+  end
+  audioState.dropoutsBelowSince = nil
+
+  if not audioState.dropoutsActive then
+    -- Reaching the count is announced at once rather than at the next interval, with a full
+    -- repeat count.
+    audioState.dropoutsActive = true
+    audioState.lastAlertAt.dropouts = 0
+    alertCleared(audioState, "dropouts")
+  end
+
+  if not resolveEventPath(DROPOUTS_SOUND) then
+    if not audioState.dropoutsSoundMissingLogged then
+      audioState.dropoutsSoundMissingLogged = true
+      emitLog(opts, "no " .. DROPOUTS_SOUND .. " in this sound pack; nothing is spoken", "warn")
+    end
+    return
+  end
+
+  if alertMaySpeak(audioState, events, "dropouts", now)
+      and tryPlayEventFile(audioState, now, DROPOUTS_SOUND, opts) then
+    alertSpoken(audioState, events, "dropouts", now, false)
+  end
+end
+
 --- The flight controller has stopped sending. Called from `Audio.process` once its telemetry
 --- frames have stayed away for TELEMETRY_QUIET_SECONDS.
 ---
@@ -1632,6 +1752,10 @@ function Audio.resetConnectionState(audioState)
   audioState.escTempLevel = nil
   audioState.mcuTempLevel = nil
   audioState.lqNotQualityLogged = nil
+  audioState.dropoutSamples = nil
+  audioState.dropoutsActive = nil
+  audioState.dropoutsBelowSince = nil
+  audioState.dropoutsSoundMissingLogged = nil
   audioState.packCheckDone = false
   audioState.packJudged = false
   audioState.packNotFull = nil
@@ -1967,6 +2091,8 @@ function Audio.process(self, opts)
       end
     end
   end
+
+  announceDropoutsEvent(self, events, opts)
 
   do
     local batteryPrefs = readBatteryPrefs()

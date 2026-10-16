@@ -3959,6 +3959,14 @@ function M.run(event, touchState)
 
           ts.rss1 = readFirstSensorNumber(RSS1_SOURCES, ts.rss1)
           ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
+          -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua, as the
+          -- widget's readTelemetry reads it: a reading or nil, and only while that alert is on
+          -- (`dropoutsWanted`, set by lib/audio.lua). Here it is read on every audio tick.
+          if state.audioState and state.audioState.dropoutsWanted then
+            ts.skippedFrames = Sensors.getValue("skipped_frames")
+          else
+            ts.skippedFrames = nil
+          end
         end
 
         local modelName = nil
@@ -4017,6 +4025,7 @@ function M.run(event, touchState)
         state.telemetryState.batteryCellCount = nil
         state.telemetryState.rss1 = nil
         state.telemetryState.rss2 = nil
+        state.telemetryState.skippedFrames = nil
       else
         -- Still not ready, and not the edge either -- the stretch in between. Nothing here is
         -- connection state, so there is nothing to announce and nothing to clear, but the

@@ -895,6 +895,9 @@ return {
         mcu_temperature = "MCU-Temperatur",
         section_telemetry = "Telemetrie",
         telemetry_lost = "Telemetrie verloren",
+        dropouts_alert = "Telemetrie-Aussetzer",
+        dropouts_count = "Aussetzer",
+        dropouts_window = "Zeitfenster (s)",
         lq_alert = "Linkqualität",
         lq_warn = "Warnung (%)",
         lq_critical = "Kritisch (%)",
@@ -947,8 +950,11 @@ return {
         help_lq_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 70 %.",
         help_lq_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 50 %.",
         help_telemetry_lost = "Ansage, wenn der Flugregler des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst. Standard: aus.",
-        help_link_repeat = "Wie oft die Linkqualitäts-Warnung spricht, solange sie auf einer Stufe bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
-        help_link_haptic = "Ob der Sender bei der kritischen Linkqualität und bei Telemetrie verloren vibriert. Standard: an.",
+        help_dropouts_alert = "Ansage, wenn beim scharfen Modell zu oft Telemetrie-Frames fehlen: so viele Lücken wie Aussetzer innerhalb von Zeitfenster (s). Die Erholung bleibt still, und es vibriert nie. Standard: aus.",
+        help_dropouts_count = "Wie viele Lücken in den Telemetrie-Frames des Flugreglers innerhalb des Zeitfensters den Alarm auslösen (1 bis 50). Standard: 3.",
+        help_dropouts_window = "Die Zeit, über die die Lücken gezählt werden, in Sekunden (4 bis 60). Standard: 10 s.",
+        help_link_repeat = "Wie oft die Alarme Linkqualität und Telemetrie-Aussetzer sprechen, solange ihr Zustand anhält, alle 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
+        help_link_haptic = "Ob der Sender bei der kritischen Linkqualität und bei Telemetrie verloren vibriert. Telemetrie-Aussetzer vibriert nie. Standard: an.",
         help_rescue_active = "Spricht einmal, sobald der Flugregler eine Rettung beginnt, in welcher Phase auch immer. Standard: aus.",
         help_rescue_off = "Spricht einmal, wenn die Rettung vorbei ist und der Flugregler wieder normal steuert. Standard: aus.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
@@ -982,7 +988,7 @@ return {
         help_message = "Ansagen des SmartFuel-Stands, solange das Modell verbunden ist.\nDen Wert berechnet der Flugregler, wenn SmartFuel dort an ist (Setup > Power > SmartFuel, ab MSP API 12.0.9).\nSonst berechnet ihn der Sender aus der lokalen Quelle in Setup > Power > Einstellungen."
       },
       settings_audio_events_link = {
-        help_message = "Warnungen zur Funkverbindung und zur Telemetrie des Flugreglers."
+        help_message = "Alarme zur Funkverbindung und zur Telemetrie des Flugreglers.\nLinkqualität: Ansage, wenn sie auf eine Stufe fällt.\nWarnung (%): die obere Stufe, ohne Vibration.\nKritisch (%): die untere Stufe, mit Vibration, wenn Haptisch an ist.\nTelemetrie verloren: scharf, der Flugregler verstummt.\nTelemetrie-Aussetzer: scharf, zu oft fehlen seine Frames.\nAussetzer: wie viele Lücken sie auslösen.\nZeitfenster (s): die Zeit, über die sie gezählt werden.\nWiederholung: wie oft Linkqualität und Telemetrie-Aussetzer sprechen, alle 10 s.\nHaptisch: vibriert bei Kritisch und bei Telemetrie verloren."
       },
       settings_audio_events_rescue = {
         help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetry.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
