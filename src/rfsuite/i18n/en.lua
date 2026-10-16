@@ -882,7 +882,7 @@ return {
         test_locked_uncertain = "Locked: the arming state is not known yet.",
         test_locked_chain = "Needs the whole chain above.",
         help_test_level = "Test: Play speaks a sample announcement at the Level shown, also before it is saved.",
-        help_chain = "Model chain: what the master volume needs in the model; every slot is searched, mixes are not. Before removing it, set the GV to -1024 (or switch the mode off), or the pot stays overridden.\nInput: one line, the GV as its source, weight 100, both sides.\nLogical switch: a > x with a = the GV and x = -1024.\nSpecial function: Volume, switched by that logical switch, with that input as its source.",
+        help_chain = "Model chain: what the master volume needs in the model; every slot is searched, mixes are not. Before removing it, set the GV to -1024 (or Mode Off with the tool open), or the pot stays overridden.\nInput: one line, the GV as its source, weight 100, both sides.\nLogical switch: a > x with a = the GV and x = -1024.\nSpecial function: Volume, switched by that logical switch, with that input as its source.",
         help_test_master = "Test: Normal and Alarm set the GV to that level, speak a sample and put the earlier value back after 5 s; only with the whole chain, not while armed or the arming state is unknown."
       },
       settings_audio_events = {

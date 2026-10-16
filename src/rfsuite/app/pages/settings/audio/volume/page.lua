@@ -324,22 +324,25 @@ end
 -- an estimate: the sample is a word and a number, about two seconds, plus whatever was queued.
 local TEST_HOLD_TICKS = 500
 
--- How often, in getTime() ticks of 10 ms, a page locked because the arming state is not known
--- asks again. The tool rebuilds the page on an arming edge, but not when the arming flags first
--- arrive, so the page asks for that rebuild itself.
+-- How often, in getTime() ticks of 10 ms, Master volume's test row asks for the arming state
+-- again. The tool rebuilds the page on an arming edge, but not when the arming flags first arrive
+-- or go away, so the page asks for that rebuild itself.
 local LOCK_POLL_TICKS = 100
 
 local pageWakeup
 
 -- The page has a wakeup only while there is something for it to do: a test holding its value, or
--- a lock waiting for the arming state. ui/home.lua calls a page's wakeup on every pass.
+-- Master volume's test row watching the arming state. ui/home.lua calls a page's wakeup on every
+-- pass while the craft is not armed.
 local function updateWakeup()
   if ui.test or ui.lockPoll then M.wakeup = pageWakeup else M.wakeup = nil end
 end
 
 -- A test's earlier value goes back only while the global variable still holds what the test
 -- wrote. If something else wrote to it in between -- the suite's own master volume on a change of
--- the link, a critical alert -- that newer value is the one to keep.
+-- the link, a critical alert -- that newer value is the one to keep. Should that writer have
+-- written the very value the test held, the restore cannot tell; the suite is then told to write
+-- what it wants again on its next refresh rather than trust what it wrote last.
 local function restoreTest()
   local pending = ui.test
   ui.test = nil
@@ -349,23 +352,27 @@ local function restoreTest()
   local ok, current = pcall(model.getGlobalVariable, pending.idx, 0)
   if ok and current == pending.wrote then
     pcall(model.setGlobalVariable, pending.idx, 0, pending.prev)
+    local audio = getAudio()
+    if audio and type(audio.forgetMasterVolume) == "function" then audio.forgetMasterVolume() end
   end
 end
 
 -- Called only while the craft is NOT armed; the arming edge is covered by the rebuild it causes
--- (see M.build). A test holding its value puts the earlier one back after the hold, or at once
--- when the arming state can no longer be told. A lock on an unknown arming state asks again once
--- a second and rebuilds the page when the answer has changed.
+-- (see M.build). A test holding its value puts the earlier one back after the hold. Once a second
+-- the page asks for the arming state again and rebuilds when the answer has changed -- the flags
+-- arriving, or going away, is no arming edge -- and the rebuild puts a held value back at once
+-- when the answer is no longer "disarmed".
 pageWakeup = function()
   local now = getTime and getTime() or 0
   local pending = ui.test
-  if pending and (now >= pending.untilTick or lockReason() ~= nil) then restoreTest() end
+  if pending and now >= pending.untilTick then restoreTest() end
   local poll = ui.lockPoll
   if poll and now >= poll.nextTick then
     poll.nextTick = now + LOCK_POLL_TICKS
     if lockReason() ~= poll.reason then
       ui.lockPoll = nil
       updateWakeup()
+      if ui.test then restoreTest() end
       if type(poll.rebuild) == "function" then poll.rebuild() end
     end
   end
@@ -625,6 +632,9 @@ function M.build(ctx)
   -- Only Master volume's tests wait for the arming state; it sets this again below.
   ui.lockPoll = nil
   updateWakeup()
+  -- A test still holding its value goes back on the rebuild an arming edge causes, whichever mode
+  -- the page shows by then: while armed the page has no wakeup to do it later.
+  if ui.test and lockReason() ~= nil then restoreTest() end
 
   local modeLabel = t(i18n, "mode", "Mode")
   cursorY = cursorY + Controls.appendComboSelect(
@@ -707,11 +717,11 @@ function M.build(ctx)
 
   -- Normal and Alarm write into the model, so they wait for a disarmed craft and a complete
   -- chain; the reason stands under them while they wait. An arming edge rebuilds the page, and a
-  -- test still holding its value then puts the earlier one back at once.
+  -- test still holding its value has then been put back at the top of the build.
   local reason = lockReason()
-  if reason then restoreTest() end
-  -- The arming flags arriving is no arming edge, so nothing would rebuild the page for it.
-  if reason == "uncertain" then
+  -- The arming flags arriving or going away is no arming edge, so nothing would rebuild the page
+  -- for it; while not armed the page asks itself, once a second.
+  if reason ~= "armed" then
     ui.lockPoll = { reason = reason, rebuild = ctx.requestRebuild,
       nextTick = (getTime and getTime() or 0) + LOCK_POLL_TICKS }
     updateWakeup()

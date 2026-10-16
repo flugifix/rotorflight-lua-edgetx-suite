@@ -2193,6 +2193,14 @@ end
 --- Normal and Alarm tests, which write what the announcements' own path would.
 Audio.volumeRaw = pct_to_vol_raw
 
+--- Forget which master-volume value this Lua state wrote last, so that its next refresh writes the
+--- value it wants even when that is the value it wrote before. For the Volume page's tests: a test
+--- that puts the earlier value back over the same value the suite wrote meanwhile (a link coming
+--- up, a critical alert) would otherwise leave the suite believing its own value still stands.
+function Audio.forgetMasterVolume()
+  master_gvar_last = nil
+end
+
 -- What the Volume page's tests play: a word and a number, the shape most announcements have, so
 -- the level is heard on both halves of it (the level reaches playFile and playNumber alike).
 local SAMPLE_FILE = "evt/battery.wav"
