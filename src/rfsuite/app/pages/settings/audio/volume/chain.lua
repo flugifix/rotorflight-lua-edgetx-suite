@@ -76,6 +76,13 @@ end
 ---             the mix source of the input found and the switch of the logical switch found, for
 ---             the page's names.
 ---   warn      the conditions that let the chain be found and still not do what it should.
+---   free      { input, ls, sf }: the LAST free slot of each kind, 0-based, or nil when none is free
+---             -- an input with no line, a logical switch with no function, a special function with no
+---             switch (EdgeTX's own CFN_EMPTY; function 0 is a real function, Override channel).
+---   lines     the input lines the model uses; EdgeTX holds 64 in all (MAX_EXPOS), and inserting
+---             one more silently writes nothing.
+---   gvSource, firstInput, lsBase, vpos, volume
+---             the encodings this answer was read with, for the page's names and for create.lua.
 function M.read(gv, gvSource)
   local result = { readable = false }
   local getInputsCount, getInput = api("getInputsCount"), api("getInput")
@@ -89,11 +96,17 @@ function M.read(gv, gvSource)
     return result
   end
   result.readable = true
+  result.gvSource, result.firstInput, result.lsBase = gvSource, firstInput, lsBase
+  result.vpos, result.volume = vpos, volume
+  local free, lines = {}, 0
+  result.free = free
 
   -- Inputs whose source is GVx: by mix source number, the line that carries it.
   local inputs, firstFound = {}, nil
   for i = 0, MAX_INPUTS - 1 do
     local count = tonumber(call(getInputsCount, i)) or 0
+    lines = lines + count
+    if count == 0 then free.input = i end
     for l = 0, count - 1 do
       local line = call(getInput, i, l)
       if type(line) == "table" and tonumber(line.source) == gvSource then
@@ -108,6 +121,7 @@ function M.read(gv, gvSource)
   local switches, firstSwitch, wrongX = {}, nil, nil
   for k = 0, MAX_LOGICAL_SWITCHES - 1 do
     local ls = call(getLogicalSwitch, k)
+    if type(ls) == "table" and tonumber(ls.func) == 0 then free.ls = k end
     if type(ls) == "table" and ls.func == vpos and tonumber(ls.v1) == gvSource then
       if tonumber(ls.v2) == RELEASE then
         switches[lsBase + k] = { slot = k, ls = ls }
@@ -122,6 +136,7 @@ function M.read(gv, gvSource)
   local chain, volumes = nil, {}
   for f = 0, MAX_SPECIAL_FUNCTIONS - 1 do
     local cf = call(getCustomFunction, f)
+    if type(cf) == "table" and tonumber(cf.switch) == 0 then free.sf = f end
     if type(cf) == "table" and cf.func == volume then
       local entry = { slot = f, cf = cf, sw = tonumber(cf.switch), src = tonumber(cf.value) }
       volumes[#volumes + 1] = entry
@@ -150,6 +165,7 @@ function M.read(gv, gvSource)
     if switchKey == nil then result.lsWrongX = wrongX end
   end
 
+  result.lines = lines
   local warn = {}
   result.warn = warn
   local input = inputKey and inputs[inputKey]
@@ -197,6 +213,64 @@ function M.read(gv, gvSource)
   if type(gvDetails) == "table" and gvDetails.popup and gvDetails.popup ~= 0 then warn.popup = true end
 
   return result
+end
+
+-- EdgeTX's MAX_EXPOS: the input lines of all inputs together (radio/src/dataconstants.h).
+local MAX_INPUT_LINES = 64
+
+--- What creating the chain would do with the model `read` described, or why it cannot.
+---
+--- Returns nil when there is nothing to create (unreadable, or complete). Otherwise a table:
+---   input, ls, sf  { slot, create }: the slot of each link, `create` true where the link is missing
+---                  and that slot is the last free one, false where a correct link is reused.
+---   blocked        nil when Create can go ahead, else why not: "input_fault", "ls_fault",
+---                  "ls_wrong_x", "sf_fault" (a link exists and is faulty -- it is never changed, the
+---                  check above names the fault), "no_input", "no_lines", "no_ls", "no_sf" (no free slot).
+function M.plan(result)
+  if type(result) ~= "table" or not result.readable or result.complete then return nil end
+  local warn, free = result.warn or {}, result.free or {}
+  local plan = {}
+  if result.input then
+    if warn.weight or warn.offset or warn.curve or warn.inputSwitch or warn.flightModes
+      or warn.side or warn.lines then
+      plan.blocked = "input_fault"
+    end
+    plan.input = { slot = result.input, create = false }
+  elseif free.input == nil then
+    plan.blocked = plan.blocked or "no_input"
+  elseif (tonumber(result.lines) or MAX_INPUT_LINES) >= MAX_INPUT_LINES then
+    plan.blocked = plan.blocked or "no_lines"
+  else
+    plan.input = { slot = free.input, create = true }
+  end
+  if result.ls then
+    if warn.andSwitch or warn.delay or warn.duration then plan.blocked = plan.blocked or "ls_fault" end
+    plan.ls = { slot = result.ls, create = false }
+  elseif result.lsWrongX then
+    plan.blocked = plan.blocked or "ls_wrong_x"
+  elseif free.ls == nil then
+    plan.blocked = plan.blocked or "no_ls"
+  else
+    plan.ls = { slot = free.ls, create = true }
+  end
+  if result.sfFault then
+    plan.blocked = plan.blocked or "sf_fault"
+  elseif free.sf == nil then
+    plan.blocked = plan.blocked or "no_sf"
+  else
+    plan.sf = { slot = free.sf, create = true }
+  end
+  return plan
+end
+
+--- True when two plans would write the same links into the same slots.
+function M.samePlan(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" or a.blocked or b.blocked then return false end
+  for _, kind in ipairs({ "input", "ls", "sf" }) do
+    local x, y = a[kind], b[kind]
+    if not x or not y or x.slot ~= y.slot or x.create ~= y.create then return false end
+  end
+  return true
 end
 
 return M
