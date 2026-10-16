@@ -166,18 +166,15 @@ for i = 1, #GOVERNOR_STATES do
 end
 
 -- The schema by key, so that a row being drawn can reach its own range without walking the
--- list once per row.
+-- list once per row; and the schema split by the page that owns each entry, so that a page
+-- loading its settings walks only its own entries rather than every setting another page adds.
+-- Both are built in one walk when this file is loaded, which happens in the pass that opens a
+-- page.
 local SCHEMA_BY_KEY = {}
-for i = 1, #CONFIG_SCHEMA do
-  SCHEMA_BY_KEY[CONFIG_SCHEMA[i].key] = CONFIG_SCHEMA[i]
-end
-
--- The schema split by the page that owns each entry, built once when this file is loaded. A
--- page loads its settings while it is first built, and walking only its own entries keeps that
--- build from paying for every setting another page adds to the schema.
 local SECTION_FIELDS = {}
 for i = 1, #CONFIG_SCHEMA do
   local field = CONFIG_SCHEMA[i]
+  SCHEMA_BY_KEY[field.key] = field
   local fields = SECTION_FIELDS[field.section]
   if not fields then
     fields = {}
@@ -475,7 +472,15 @@ local ROW_HELP = {
       fuel_haptic_below_zero = t(i18n, "help_fuel_haptic_below_zero"),
     }
   end,
+  -- The RSSI and Downlink rows share their three level texts, and so do the two SNR alerts:
+  -- each shared text is looked up once.
   link = function(t, i18n)
+    local headroomWarn = t(i18n, "help_headroom_warn")
+    local headroomCritical = t(i18n, "help_headroom_critical")
+    local headroomHold = t(i18n, "help_headroom_hold")
+    local snrWarn = t(i18n, "help_snr_warn")
+    local snrCritical = t(i18n, "help_snr_critical")
+    local snrHold = t(i18n, "help_snr_hold")
     return {
       lq_alert = t(i18n, "help_lq_alert"),
       lq_warn = t(i18n, "help_lq_warn"),
@@ -488,21 +493,21 @@ local ROW_HELP = {
       tpwr_limit = t(i18n, "help_tpwr_limit"),
       tpwr_max = t(i18n, "help_tpwr_max"),
       rssi_alert = t(i18n, "help_rssi_alert"),
-      rssi_warn = t(i18n, "help_headroom_warn"),
-      rssi_critical = t(i18n, "help_headroom_critical"),
-      rssi_hold = t(i18n, "help_headroom_hold"),
+      rssi_warn = headroomWarn,
+      rssi_critical = headroomCritical,
+      rssi_hold = headroomHold,
       trss_alert = t(i18n, "help_trss_alert"),
-      trss_warn = t(i18n, "help_headroom_warn"),
-      trss_critical = t(i18n, "help_headroom_critical"),
-      trss_hold = t(i18n, "help_headroom_hold"),
+      trss_warn = headroomWarn,
+      trss_critical = headroomCritical,
+      trss_hold = headroomHold,
       rsnr_alert = t(i18n, "help_rsnr_alert"),
-      rsnr_warn = t(i18n, "help_snr_warn"),
-      rsnr_critical = t(i18n, "help_snr_critical"),
-      rsnr_hold = t(i18n, "help_snr_hold"),
+      rsnr_warn = snrWarn,
+      rsnr_critical = snrCritical,
+      rsnr_hold = snrHold,
       tsnr_alert = t(i18n, "help_tsnr_alert"),
-      tsnr_warn = t(i18n, "help_snr_warn"),
-      tsnr_critical = t(i18n, "help_snr_critical"),
-      tsnr_hold = t(i18n, "help_snr_hold"),
+      tsnr_warn = snrWarn,
+      tsnr_critical = snrCritical,
+      tsnr_hold = snrHold,
       dropouts_alert = t(i18n, "help_dropouts_alert"),
       dropouts_count = t(i18n, "help_dropouts_count"),
       dropouts_window = t(i18n, "help_dropouts_window"),
@@ -620,15 +625,18 @@ function M.new(sectionKey)
   -- from one that merely carries the value it was loaded with.
   local loadedConfig = {}
 
-  for _, field in ipairs(CONFIG_SCHEMA) do
-    ui.config[field.key] = field.default
-  end
-
   local function ownsField(field)
     return field.section == sectionKey
   end
 
   local ownFields = SECTION_FIELDS[sectionKey] or {}
+
+  -- Only this page's own keys: every read and write of ui.config here is of a key the page draws
+  -- or saves, so another page's defaults would be built for nothing in the pass that opens it.
+  for i = 1, #ownFields do
+    local field = ownFields[i]
+    ui.config[field.key] = field.default
+  end
 
   local function ensureDeps()
     if not Common then
@@ -663,9 +671,10 @@ function M.new(sectionKey)
   end
 
   -- Nil for a row that has no `enabledBy`: appendNumberField then leaves the control enabled.
-  local function getNumberEnabled(enabledBy)
+  -- The three number-row helpers take their cache from the caller, which looks each one up once
+  -- per build rather than once per row.
+  local function getNumberEnabled(cache, enabledBy)
     if type(enabledBy) ~= "string" then return nil end
-    local cache = numberCache("numberEnabled")
     if cache[enabledBy] then return cache[enabledBy] end
     cache[enabledBy] = function()
       return ui.config[enabledBy] == true
@@ -673,8 +682,7 @@ function M.new(sectionKey)
     return cache[enabledBy]
   end
 
-  local function getNumberGetter(key, minVal, maxVal)
-    local cache = numberCache("numberGetters")
+  local function getNumberGetter(cache, key, minVal, maxVal)
     if cache[key] then return cache[key] end
     cache[key] = function()
       local current = tonumber(ui.config[key]) or minVal
@@ -685,8 +693,7 @@ function M.new(sectionKey)
     return cache[key]
   end
 
-  local function getNumberSetter(key, enabledBy, minVal, maxVal)
-    local cache = numberCache("numberSetters")
+  local function getNumberSetter(cache, key, enabledBy, minVal, maxVal)
     if cache[key] then return cache[key] end
     cache[key] = function(value)
       if type(enabledBy) == "string" and ui.config[enabledBy] ~= true then return end
@@ -873,36 +880,35 @@ function M.new(sectionKey)
   local function copyFromPrefs(prefs)
     local audio_events = (prefs and prefs.audio_events) or {}
     local modelEvents = modelAudioEvents(false)
-    for _, field in ipairs(ownFields) do
-      local raw = audio_events[field.key]
-      if field.scope == "model" and modelEvents and modelEvents[field.key] ~= nil then
-        raw = modelEvents[field.key]
+    -- One walk over the page's own fields, which runs in the pass that builds the page.
+    for i = 1, #ownFields do
+      local field = ownFields[i]
+      local key = field.key
+      local raw = audio_events[key]
+      if field.scope == "model" and modelEvents and modelEvents[key] ~= nil then
+        raw = modelEvents[key]
       end
+      local value
       if field.type == "number" then
-        ui.config[field.key] = tonumber(raw) or field.default
-      else
-        ui.config[field.key] = prefBool(raw, field.default)
-      end
-    end
-
-    -- A stored value outside the schema's range is brought back into it, so that the number
-    -- on screen is one the control could have produced. The bounds are the schema's, which
-    -- is the same pair the control below is built with.
-    for _, field in ipairs(ownFields) do
-      if field.type == "number" then
-        local value = ui.config[field.key]
+        value = tonumber(raw) or field.default
+        -- A stored value outside the schema's range is brought back into it, so that the number
+        -- on screen is one the control could have produced. The bounds are the schema's, which
+        -- is the same pair the control below is built with; a choice out of a list falls back
+        -- to its default.
         if field.min and value < field.min then value = field.min end
         if field.max and value > field.max then value = field.max end
-        ui.config[field.key] = value
+        if key == "fuel_callout_percent" then
+          if not FUEL_CALLOUT_VALUES[value] then value = 10 end
+        elseif key == "tpwr_max" then
+          if not TX_POWER_MAX_VALUES[value] then value = 100 end
+        end
+      else
+        value = prefBool(raw, field.default)
       end
-    end
-    if not FUEL_CALLOUT_VALUES[ui.config.fuel_callout_percent] then ui.config.fuel_callout_percent = 10 end
-    if not TX_POWER_MAX_VALUES[ui.config.tpwr_max] then ui.config.tpwr_max = 100 end
-
-    -- After the clamps, so that correcting an out-of-range stored value does not read as an
-    -- edit the pilot made.
-    for _, field in ipairs(ownFields) do
-      loadedConfig[field.key] = ui.config[field.key]
+      ui.config[key] = value
+      -- After the corrections, so that correcting an out-of-range stored value does not read as
+      -- an edit the pilot made.
+      loadedConfig[key] = value
     end
   end
 
@@ -942,11 +948,12 @@ function M.new(sectionKey)
   end
 
   -- The options table every row control takes for its `?` button. Nil when the row has no text,
-  -- which leaves the control exactly as it is drawn without one.
-  local function helpOpts(texts, key, title)
+  -- which leaves the control exactly as it is drawn without one. `onHelp` is the handler above,
+  -- fetched once per build by the caller.
+  local function helpOpts(texts, key, title, onHelp)
     local text = texts[key]
     if type(text) ~= "string" or text == "" then return nil end
-    return { helpText = text, helpTitle = title, onHelp = getInlineHelpHandler() }
+    return { helpText = text, helpTitle = title, onHelp = onHelp }
   end
 
   -- ─── Module API ────────────────────────────────────────────────────────────
@@ -1100,6 +1107,15 @@ function M.new(sectionKey)
     ui.runtime.openHelp = ctx.openHelp
     local cursorY        = ctx.y
     local helpTexts      = ROW_HELP[sectionKey](t, i18n)
+    local onHelp         = getInlineHelpHandler()
+    -- The number rows' closure caches, looked up at the first number row rather than per row.
+    local enabledCache, getterCache, setterCache = nil, nil, nil
+
+    -- Rows of one page share labels -- Link's six level pairs and five holds read the same two
+    -- and one texts -- so each label key is translated once per build. Every row sharing a key
+    -- also shares its fallback, so the first row's lookup is the one every later row would make.
+    -- Per build rather than per page: the language can change while the page is open.
+    local labels = {}
 
     Controls.appendStaticSectionHeader(children, x, cursorY, w, t(i18n, section.titleKey, section.titleFallback))
     cursorY = cursorY + Controls.STATIC_SECTION_H
@@ -1108,72 +1124,83 @@ function M.new(sectionKey)
       local k = item.key
       if item.requires and ui.config[item.requires] ~= true then
         -- drawn only while the switch it qualifies is on
-      elseif item.kind == "subheader" then
-        cursorY = cursorY + 10
-        Controls.appendStaticSectionHeader(children, x, cursorY, w, t(i18n, item.labelKey, item.labelFallback))
-        cursorY = cursorY + Controls.STATIC_SECTION_H
-      elseif item.kind == "choice" then
-        local labelText = t(i18n, item.labelKey, item.labelFallback)
-        local options, selected, onSelect
-        if k == "fuel_callout_percent" then
-          options, selected, onSelect = getFuelCalloutOptions(i18n), getFuelCalloutGetter()(), getFuelCalloutSetter()
-        elseif k == "voltage_announce" then
-          options, selected, onSelect = getAnnounceOptions(i18n), getAnnounceGetter()(), getAnnounceSetter()
-        elseif k == "tpwr_max" then
-          options, selected, onSelect = getTxPowerMaxOptions(), getTxPowerMaxGetter()(), getTxPowerMaxSetter()
-        else
-          options, selected, onSelect = getRepeatOptions(i18n), getRepeatGetter(k)(), getRepeatSetter(k, item.enabledBy)
-        end
-        cursorY = cursorY + Controls.appendComboSelect(
-          children, x, cursorY, w,
-          labelText,
-          options,
-          selected,
-          onSelect,
-          helpOpts(helpTexts, k, labelText)
-        )
-      elseif item.kind == "number" then
-        local field = SCHEMA_BY_KEY[k]
-        local minVal = (field and field.min) or 0
-        local maxVal = (field and field.max) or 100
-        local labelText = t(i18n, item.labelKey, item.labelFallback)
-        labelText = modelScopeLabel(i18n, k, labelText)
-        local display = nil
-        if item.temperature and usesFahrenheit(ctx.preferences) then display = fahrenheitText end
-        local help = helpOpts(helpTexts, k, labelText) or {}
-        cursorY = cursorY + Controls.appendNumberField(
-          children, x, cursorY, w,
-          labelText,
-          {
-            enabled = getNumberEnabled(item.enabledBy),
-            min = minVal,
-            max = maxVal,
-            step = item.step,
-            suffix = item.suffix or "",
-            display = display,
-            get = getNumberGetter(k, minVal, maxVal),
-            set = getNumberSetter(k, item.enabledBy, minVal, maxVal),
-            helpText = help.helpText,
-            helpTitle = help.helpTitle,
-            onHelp = help.onHelp
-          }
-        )
-      elseif item.kind == "bool" and k == "fuel_haptic_below_zero" then
-        local labelText = t(i18n, item.labelKey, item.labelFallback)
-        cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-          labelText,
-          getFuelHapticGetter(),
-          getFuelHapticSetter(),
-          helpOpts(helpTexts, k, labelText)
-        )
       else
-        local labelText = t(i18n, item.labelKey, item.labelFallback)
-        cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
-          labelText,
-          ui.runtime.getBoolGetter(k),
-          ui.runtime.getBoolSetter(k),
-          helpOpts(helpTexts, k, labelText)
-        )
+        local labelKey = item.labelKey
+        local labelText = labels[labelKey]
+        if labelText == nil then
+          labelText = t(i18n, item.labelKey, item.labelFallback)
+          labels[labelKey] = labelText
+        end
+        if item.kind == "subheader" then
+          cursorY = cursorY + 10
+          Controls.appendStaticSectionHeader(children, x, cursorY, w, labelText)
+          cursorY = cursorY + Controls.STATIC_SECTION_H
+        elseif item.kind == "choice" then
+          local options, selected, onSelect
+          if k == "fuel_callout_percent" then
+            options, selected, onSelect = getFuelCalloutOptions(i18n), getFuelCalloutGetter()(), getFuelCalloutSetter()
+          elseif k == "voltage_announce" then
+            options, selected, onSelect = getAnnounceOptions(i18n), getAnnounceGetter()(), getAnnounceSetter()
+          elseif k == "tpwr_max" then
+            options, selected, onSelect = getTxPowerMaxOptions(), getTxPowerMaxGetter()(), getTxPowerMaxSetter()
+          else
+            options, selected, onSelect = getRepeatOptions(i18n), getRepeatGetter(k)(), getRepeatSetter(k, item.enabledBy)
+          end
+          cursorY = cursorY + Controls.appendComboSelect(
+            children, x, cursorY, w,
+            labelText,
+            options,
+            selected,
+            onSelect,
+            helpOpts(helpTexts, k, labelText, onHelp)
+          )
+        elseif item.kind == "number" then
+          if not getterCache then
+            enabledCache = numberCache("numberEnabled")
+            getterCache = numberCache("numberGetters")
+            setterCache = numberCache("numberSetters")
+          end
+          local field = SCHEMA_BY_KEY[k]
+          local minVal = (field and field.min) or 0
+          local maxVal = (field and field.max) or 100
+          labelText = modelScopeLabel(i18n, k, labelText)
+          local display = nil
+          if item.temperature and usesFahrenheit(ctx.preferences) then display = fahrenheitText end
+          -- The `?` fields go straight into the control's options, as helpOpts would set them.
+          local helpText = helpTexts[k]
+          if type(helpText) ~= "string" or helpText == "" then helpText = nil end
+          cursorY = cursorY + Controls.appendNumberField(
+            children, x, cursorY, w,
+            labelText,
+            {
+              enabled = getNumberEnabled(enabledCache, item.enabledBy),
+              min = minVal,
+              max = maxVal,
+              step = item.step,
+              suffix = item.suffix or "",
+              display = display,
+              get = getNumberGetter(getterCache, k, minVal, maxVal),
+              set = getNumberSetter(setterCache, k, item.enabledBy, minVal, maxVal),
+              helpText = helpText,
+              helpTitle = helpText and labelText,
+              onHelp = helpText and onHelp
+            }
+          )
+        elseif item.kind == "bool" and k == "fuel_haptic_below_zero" then
+          cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+            labelText,
+            getFuelHapticGetter(),
+            getFuelHapticSetter(),
+            helpOpts(helpTexts, k, labelText, onHelp)
+          )
+        else
+          cursorY = cursorY + Controls.appendRadioSwitch(children, x, cursorY, w,
+            labelText,
+            ui.runtime.getBoolGetter(k),
+            ui.runtime.getBoolSetter(k),
+            helpOpts(helpTexts, k, labelText, onHelp)
+          )
+        end
       end
     end
   end
