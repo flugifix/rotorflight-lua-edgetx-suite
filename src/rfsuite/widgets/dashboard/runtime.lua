@@ -3007,6 +3007,8 @@ local function readTelemetry(state, audioState)
     state.rfMode = nil
     state.antenna = nil
     state.trss = nil
+  end
+
   -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua: the last
   -- reading, taken at most TELEMETRY_READ_SECONDS (0.5 s) ago because this runs only when a read
   -- is due, or nil while nothing answers. Assigned rather than set through setField, because

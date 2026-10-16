@@ -3982,6 +3982,8 @@ function M.run(event, touchState)
             ts.rfMode = nil
             ts.antenna = nil
             ts.trss = nil
+          end
+
           -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua, as the
           -- widget's readTelemetry reads it: a reading or nil, and only while that alert is on
           -- (`dropoutsWanted`, set by lib/audio.lua). Here it is read on every audio tick.
