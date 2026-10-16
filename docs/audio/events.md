@@ -190,25 +190,35 @@ Callouts of the SmartFuel level while the model is connected. The flight control
 
 ### 9. Link Quality
 
+Alerts about the radio link and the flight controller's telemetry.
+
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
-| Link alert | `lq_alert` | Off | Radio | Spoken warning when RC link quality drops below defined levels. A receiver that reports no link quality stays silent: the value that arrives in its place is a signal strength in dBm, not a percentage. |
-| Warning level | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
-| Critical level | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
-| Telemetry lost | `telemetry_lost` | Off | Radio | Announces a flight controller that stops sending telemetry while the model is armed and the radio link is up, and announces it again when its telemetry is back. |
+| Link Quality | `lq_alert` | Off | Radio | Spoken warning when RC link quality drops below defined levels. A receiver that reports no link quality stays silent: the value that arrives in its place is a signal strength in dBm, not a percentage. |
+| Warning (%) | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
+| Critical (%) | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
+| Telemetry Lost | `telemetry_lost` | Off | Radio | Announces a flight controller that stops sending telemetry while the model is armed and the radio link is up, and announces it again when its telemetry is back. |
 | RSSI | `rssi_alert` | Off | Radio | While the model is armed, speaks "RSSI" and the receiver's signal headroom in percent when it falls to the warning or critical level -- see *RSSI and Downlink Headroom* below. |
-| Warning level | `rssi_warn` | 15% | Radio | The upper level of the RSSI alert (1 to 100%). |
-| Critical level | `rssi_critical` | 8% | Radio | The lower level of the RSSI alert (1 to 100%). |
-| Hold | `rssi_hold` | 2 s | Radio | How long the headroom has to stay at or below a level before the RSSI alert speaks it (0 to 10 seconds). |
+| Warning (%) | `rssi_warn` | 15% | Radio | The upper level of the RSSI alert (1 to 100%). |
+| Critical (%) | `rssi_critical` | 8% | Radio | The lower level of the RSSI alert (1 to 100%). |
+| Hold (s) | `rssi_hold` | 2 s | Radio | How long the headroom has to stay at or below a level before the RSSI alert speaks it (0 to 10 seconds). |
 | Downlink | `trss_alert` | Off | Radio | The same for the signal at the transmitter module (`TRSS`): speaks "Downlink" and its headroom. |
-| Warning level | `trss_warn` | 15% | Radio | The upper level of the Downlink alert (1 to 100%). |
-| Critical level | `trss_critical` | 8% | Radio | The lower level of the Downlink alert (1 to 100%). |
-| Hold | `trss_hold` | 2 s | Radio | How long the headroom has to stay at or below a level before the Downlink alert speaks it (0 to 10 seconds). |
+| Warning (%) | `trss_warn` | 15% | Radio | The upper level of the Downlink alert (1 to 100%). |
+| Critical (%) | `trss_critical` | 8% | Radio | The lower level of the Downlink alert (1 to 100%). |
+| Hold (s) | `trss_hold` | 2 s | Radio | How long the headroom has to stay at or below a level before the Downlink alert speaks it (0 to 10 seconds). |
+| SNR | `rsnr_alert` | Off | Radio | While the model is armed, speaks "SNR" and where the receiver's signal-to-noise ratio sits between the air rate's two dynamic-power thresholds, in percent, when it falls to the warning or critical level -- see *SNR and Downlink SNR* below. |
+| Warning (%) | `rsnr_warn` | 30% | Radio | The upper level of the SNR alert (0 to 100%). |
+| Critical (%) | `rsnr_critical` | 0% | Radio | The lower level of the SNR alert (0 to 100%); 0% is the threshold at which ExpressLRS asks for more power. |
+| Hold (s) | `rsnr_hold` | 2 s | Radio | How long the SNR has to stay at or below a level before the SNR alert speaks it (0 to 10 seconds). |
+| Downlink SNR | `tsnr_alert` | Off | Radio | The same for the signal-to-noise ratio at the transmitter module (`TSNR`): speaks "Downlink SNR" and its percentage. |
+| Warning (%) | `tsnr_warn` | 30% | Radio | The upper level of the Downlink SNR alert (0 to 100%). |
+| Critical (%) | `tsnr_critical` | 0% | Radio | The lower level of the Downlink SNR alert (0 to 100%). |
+| Hold (s) | `tsnr_hold` | 2 s | Radio | How long the SNR has to stay at or below a level before the Downlink SNR alert speaks it (0 to 10 seconds). |
 | Telemetry dropouts | `dropouts_alert` | Off | Radio | Speaks "Telemetry Dropouts" while the model is armed and the flight controller's telemetry frames go missing too often -- see *Telemetry Dropouts* below. |
 | Dropouts | `dropouts_count` | 3 | Radio | How many gaps in the telemetry frames within the window set the alert off (1 to 50). |
 | Window | `dropouts_window` | 10 s | Radio | The time the gaps are counted over (4 to 60 seconds). |
-| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality, RSSI, Downlink and dropouts alerts speak while their condition holds -- see *Repeat and Haptic* below. |
-| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality, RSSI and Downlink alerts at their **critical** level, and alongside the lost telemetry announcement. Never alongside the dropouts alert. |
+| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality, RSSI, Downlink, both SNR and dropouts alerts speak while their condition holds -- see *Repeat and Haptic* below. |
+| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality, RSSI, Downlink and both SNR alerts at their **critical** level, and alongside the lost telemetry announcement. Never alongside the dropouts alert. |
 
 #### What Telemetry Lost Covers, and What It Leaves to the Radio
 Only a flight controller that stops sending while the radio link is still up is announced: the link statistics keep arriving and the radio stays connected, but the flight controller's telemetry frames have stayed away for 6 seconds. The radio cannot tell this case apart on its own until it reports each sensor as lost, 20 seconds later. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once, so a lost link stays silent here -- also when the flight controller's frames stopped with it. A drop while the model is disarmed is a normal power-off and stays silent too.
@@ -225,6 +235,15 @@ A signal strength in dBm means little without the rate the link runs at: Express
 - Only while the model is armed. The device ping is sent as soon as an alert is on and the link is up, armed or not, so the floor is known by the time the model is armed.
 - The critical level vibrates where the page's *Haptic* is on; the warning level never does, as with the link quality alert.
 - Both alerts work under the dashboard widget and under the tool alike.
+
+#### SNR and Downlink SNR
+A signal-to-noise ratio in dB means little without the rate either: ExpressLRS's dynamic power asks for more power while the receiver's average SNR is at or below one threshold of the air rate and for less at or above a second one, and both differ per rate -- on 2.4 GHz LoRa 5 and 9.5 dB at 500 Hz, 3 and 9.5 dB at 250 Hz, 0 and 8.5 dB at 150 Hz, -1 and 6.5 dB at 50 Hz. So both alerts speak where the reading sits between the two: **0%** at or below the lower threshold, **100%** at or above the upper one, in whole percent. A fixed dB line would be wrong at both ends of the rate list.
+
+- **SNR** is the receiver's figure (`RSNR`), **Downlink SNR** the transmitter module's (`TSNR`); each has its own switch and levels. ExpressLRS sets thresholds only for the receiver's SNR, so the downlink is measured on the same pair as a reference scale.
+- **With dynamic power on, ExpressLRS holds the SNR inside this window on purpose**: it lowers the power whenever the SNR is above the upper threshold and raises it at the lower one, so a low figure is what it steers towards while the link is fine, and the transmit power is the better sign of a link running out. These alerts say most with a fixed transmit power. (ExpressLRS 4.x goes further and, once it has gathered enough readings, moves both thresholds to fit the link's own SNR spread; the alerts keep to the rate's configured figures, which are its starting point.)
+- **On 900 MHz the window is narrow**: 1.5 to 3.5 dB between the two thresholds, while the link reports the SNR in whole dB. A single dB moves the figure by 29 to 67 points, so the warning and critical levels can be crossed in one step. ExpressLRS itself marks its 900 MHz figures for the LR1121 radio as still to be checked. With such a window the critical level can stay until the reading reaches the upper threshold.
+- **Silent where there is no threshold**: on the FLRC and FSK rates, which report no usable SNR; on the three ExpressLRS 3.x rates whose thresholds depend on the band, which the link does not report (`50Hz`, `100Hz Full` and `250Hz`); and wherever the rate is not known, as for the headroom alerts above. The thresholds are listed per rate in `lib/link_rates.lua`.
+- The rest is the shape of the headroom alerts: *Hold*, a worsening spoken at once, recovery silent, armed only, the critical level vibrating where *Haptic* is on, both call paths. A level is left only once the SNR is **more than one dB** above it again, counted on that rate's scale -- the smallest step the reading takes; on a level that sits on a whole dB, the second dB above it -- so an SNR flickering by one dB across a level does not announce at every flicker. The one exception is the top of the window: a reading at or above the upper threshold leaves every level set below 100%, since on a narrow window one dB above a high level would lie past the top and the level could never be left. Where a level sits on the step just below the top, a reading flickering between the two is therefore spoken at each dip with *Hold* 0; the default *Hold* of 2 seconds keeps a quick flicker quiet.
 
 #### Telemetry Dropouts
 Every frame of the flight controller's custom telemetry carries a frame number, and the suite counts each place where the numbers jump -- a gap of one or more frames that never arrived. It publishes that count itself as the sensor `*Skp`, at most every 2 seconds, from the moment the link comes up. The background function script, the dashboard and the tool each decode the frames while the others stand aside. When the decoding moves from one to another -- the tool opened or closed, the script pausing for a moment -- the count continues from the value the radio shows, and the first second of frames after the move is not counted, so a hand-over is not a gap. A lost link starts the count over at 0 where the dashboard or the tool that saw the loss decodes; the function script, and a tool opened after the loss, carry it on.
@@ -265,7 +284,7 @@ the page that switches an alert on is the page that says how it behaves.
 | Category page | Repeat / Haptic keys | The alerts they govern |
 | --- | --- | --- |
 | Voltage | `voltage_repeat`, `voltage_haptic` | Low pack voltage, Main power lost, and the BEC / receiver alert set up under *Setup* → *Power* → *Alerts*. |
-| Link Quality | `link_repeat`, `link_haptic` | Link quality, RSSI and Downlink (warning and critical), Telemetry lost, Telemetry dropouts. |
+| Link Quality | `link_repeat`, `link_haptic` | Link quality, RSSI, Downlink, SNR and Downlink SNR (warning and critical), Telemetry lost, Telemetry dropouts. |
 | ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature and MCU temperature (warning and critical), ESC load (haptic at its critical level only). |
 | SmartFuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
 
@@ -278,8 +297,8 @@ the page that switches an alert on is the page that says how it behaves.
   three categories whose alerts already buzzed with no way of switching it off, and to off for
   SmartFuel, which already had this setting and keeps its value.
 - **Some alerts have their own rule inside the category, and a setting does not overrule it.**
-  The link quality, RSSI and Downlink alerts, the ESC and MCU temperature alerts and the ESC load
-  alert buzz at their *critical* level only, never at the warning level. The lost telemetry
+  The link quality, RSSI, Downlink and both SNR alerts, the ESC and MCU temperature alerts and the
+  ESC load alert buzz at their *critical* level only, never at the warning level. The lost telemetry
   announcement says itself once per loss, so it takes the haptic and ignores the repeat. The
   telemetry dropouts alert takes the repeat and never buzzes.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
@@ -292,7 +311,7 @@ the page that switches an alert on is the page that says how it behaves.
 
 Announcements are played from the sound pack under `/SOUNDS/rf/<language>/`. Numbers and their units are spoken by the radio itself, so they follow the language set on the radio rather than the language of the pack.
 
-Every announcement has a file of its own in both packs. Seven have no substitute and stay silent in an older pack that lacks theirs:
+Every announcement has a file of its own in both packs. Nine have no substitute and stay silent in an older pack that lacks theirs:
 
 | File | Announcement |
 | --- | --- |
@@ -300,6 +319,8 @@ Every announcement has a file of its own in both packs. Seven have no substitute
 | `stat/alerts/telemetryok.wav` | Telemetry recovered |
 | `stat/alerts/rssi.wav` | RSSI headroom |
 | `stat/alerts/downlink.wav` | Downlink headroom |
+| `stat/alerts/snr.wav` | SNR |
+| `stat/alerts/downlink_snr.wav` | Downlink SNR |
 | `stat/alerts/dropouts.wav` | Telemetry dropouts |
 | `stat/alerts/rescue_on.wav` | Rescue -- Active |
 | `stat/alerts/rescue_off.wav` | Rescue -- Off |

@@ -501,6 +501,12 @@
     "file": "stat/alerts/downlink.wav",
     "english": "Downlink",
     "translation": "Downlink",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/downlink_snr.wav",
+    "english": "Downlink SNR",
+    "translation": "Downlink SNR",
     "file": "stat/alerts/dropouts.wav",
     "english": "Telemetry Dropouts",
     "translation": "Telemetrie-Aussetzer",
@@ -588,6 +594,12 @@
     "file": "stat/alerts/rssi.wav",
     "english": "RSSI",
     "translation": "RSSI",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/snr.wav",
+    "english": "SNR",
+    "translation": "SNR",
     "file": "stat/alerts/rescue_off.wav",
     "english": "Rescue – Off",
     "translation": "Rescue aus",

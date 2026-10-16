@@ -2994,19 +2994,32 @@ local function readTelemetry(state, audioState)
   setField("rss1", rss1)
   local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   setField("rss2", rss2)
-  -- The readings only lib/audio.lua's link headroom alerts use: the air rate, the antenna in use
-  -- and the signal at the transmitter module. Read only while one of those alerts is on
-  -- (`linkHeadroomWanted`, set by lib/audio.lua), so a radio that never switches one on pays no
+  -- The readings only lib/audio.lua's link headroom and SNR alerts use, each read only while an
+  -- alert that needs it is on (flags set by lib/audio.lua): the air rate under either flag, the
+  -- antenna in use and the signal at the transmitter module under `linkHeadroomWanted`, the two
+  -- signal-to-noise ratios under `linkSnrWanted`. So a radio that never switches one on pays no
   -- sensor search for them; this pass's reading or nil, assigned rather than set through setField,
-  -- because nothing draws them. ui/home.lua reads the same three into the same fields for the tool.
-  if audioState and audioState.linkHeadroomWanted then
+  -- because nothing draws them. ui/home.lua reads the same ones into the same fields for the tool.
+  local headroomWanted = audioState and audioState.linkHeadroomWanted
+  local snrWanted = audioState and audioState.linkSnrWanted
+  if headroomWanted or snrWanted then
     state.rfMode = getSensor("RFMD")
+  else
+    state.rfMode = nil
+  end
+  if headroomWanted then
     state.antenna = getSensor("ANT")
     state.trss = getSensor("TRSS")
   else
-    state.rfMode = nil
     state.antenna = nil
     state.trss = nil
+  end
+  if snrWanted then
+    state.rsnr = getSensor("RSNR")
+    state.tsnr = getSensor("TSNR")
+  else
+    state.rsnr = nil
+    state.tsnr = nil
   end
 
   -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua: the last
@@ -3727,6 +3740,8 @@ function Runtime.new(zone, options)
       self.state.rfMode = nil
       self.state.antenna = nil
       self.state.trss = nil
+      self.state.rsnr = nil
+      self.state.tsnr = nil
       -- The flight clock and the statistics are the record's; the event runtime drops them on
       -- the connect edge of its own link detector, which follows this one once the link has held
       -- for its CONNECT_STABLE_SECONDS -- not on the disconnect before it, which the post-flight

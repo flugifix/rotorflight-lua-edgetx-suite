@@ -913,6 +913,8 @@ return {
         lq_critical = "Critical (%)",
         rssi_alert = "RSSI",
         trss_alert = "Downlink",
+        rsnr_alert = "SNR",
+        tsnr_alert = "Downlink SNR",
         adjustment_events = "Adjustment Announcements",
         fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Callout %",
@@ -971,11 +973,16 @@ return {
         help_headroom_warn = "The upper level in percent. Spoken without vibration. Default 15 %.",
         help_headroom_critical = "The lower level in percent. Vibrates too if Haptic is on. Default 8 %.",
         help_headroom_hold = "How long the headroom has to stay at or below a level before it is spoken, so a short antenna null stays quiet. 0 speaks at once. Default 2 s.",
+        help_rsnr_alert = "Armed: speaks where the receiver's SNR sits between the air rate's two dynamic-power thresholds, as a percentage.\n0 %: ExpressLRS asks for more power. 100 %: it asks for less. Silent on FLRC and FSK rates, on three ExpressLRS 3.x rates and without a known rate. Off by default.\nWith dynamic power on, ExpressLRS holds the SNR inside this window on purpose; the transmit power says more there.\nOn 900 MHz the window is only 1.5 to 3.5 dB wide, so the figure moves in large steps.",
+        help_tsnr_alert = "Armed: the same for the SNR at the transmitter module, the downlink, with levels of its own; the notes on SNR apply here too. Off by default.",
+        help_snr_warn = "The upper level in percent. Spoken without vibration. Default 30 %.",
+        help_snr_critical = "The lower level in percent; 0 % is the threshold itself. Vibrates too if Haptic is on. Default 0 %.",
+        help_snr_hold = "How long the SNR has to stay at or below a level before it is spoken. 0 speaks at once. Default 2 s.",
         help_dropouts_alert = "Speaks when the armed model's telemetry frames go missing too often: as many gaps as Dropouts within Window (s). Recovering is silent, and it never vibrates. Off by default.",
         help_dropouts_count = "How many gaps in the flight controller's telemetry frames within the window set off the alert (1 to 50). Default 3.",
         help_dropouts_window = "The time the gaps are counted over, in seconds (4 to 60). Default 10 s.",
-        help_link_repeat = "How often the Link Quality, Telemetry Dropouts, RSSI and Downlink alerts speak while they hold, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
-        help_link_haptic = "Whether the transmitter vibrates with the critical level of Link Quality, RSSI and Downlink, and with Telemetry Lost. Telemetry Dropouts never vibrates. On by default.",
+        help_link_repeat = "How often the Link Quality, Telemetry Dropouts, RSSI, Downlink and both SNR alerts speak while they hold, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
+        help_link_haptic = "Whether the transmitter vibrates with the critical level of Link Quality, RSSI, Downlink and both SNR alerts, and with Telemetry Lost. Telemetry Dropouts never vibrates. On by default.",
         help_rescue_active = "Speaks once when the flight controller starts a rescue, whichever phase it starts in. Off by default.",
         help_rescue_off = "Speaks once when the rescue is over and the flight controller is back to normal control. Off by default.",
         help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
@@ -1009,7 +1016,7 @@ return {
         help_message = "Callouts of the SmartFuel level while the model is connected.\nThe flight controller computes the value when SmartFuel is on there (Setup > Power > SmartFuel, MSP API 12.0.9 or later).\nOtherwise the radio computes it from the local source set in Setup > Power > Preferences."
       },
       settings_audio_events_link = {
-        help_message = "Alerts about the radio link and telemetry.\nLink Quality: spoken when it falls to a level; Warning (%) and Critical (%) are its levels, and only Critical vibrates.\nTelemetry Lost: armed, the flight controller stops sending.\nTelemetry Dropouts: armed, its frames go missing too often; Dropouts is how many gaps set it off, Window (s) the time counted.\nRSSI and Downlink: the headroom at the receiver and at the transmitter module.\nHold (s): how long a level must hold first. Repeat: how often an alert speaks while it holds, 10 s apart. Haptic: vibrates at Critical and with Telemetry Lost."
+        help_message = "Alerts about the radio link and telemetry.\nLink Quality: spoken when it falls to a level; Warning (%) and Critical (%) are its levels, only Critical vibrates.\nTelemetry Lost: armed, the controller stops sending.\nTelemetry Dropouts: armed, its frames go missing too often; Dropouts is how many gaps set it off, Window (s) the time.\nRSSI, Downlink and both SNR: armed, the headroom over the air rate's floor and the SNR between its thresholds.\nHold (s): how long a level must hold first. Repeat: how often an alert speaks while it holds, 10 s apart. Haptic: vibrates at Critical and Telemetry Lost."
       },
       settings_audio_events_rescue = {
         help_message = "Announces the start and the end of a rescue, once each and without vibration. Needs the Rescue State (92) or System Status (120) sensor, Setup > Telemetry.\nRescue Active: spoken as soon as a rescue starts.\nRescue Off: spoken when the rescue is over."
