@@ -507,12 +507,21 @@
     "file": "stat/alerts/downlink.wav",
     "english": "Downlink",
     "translation": "Downlink",
+    "file": "stat/alerts/dropouts.wav",
+    "english": "Telemetry Dropouts",
+    "translation": "Telemetry Dropouts",
     "needs_translation": false
   },
   {
     "file": "stat/alerts/esc.wav",
     "english": "Esc Temperature",
     "translation": "Esc Temperature",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/escload.wav",
+    "english": "ESC Load",
+    "translation": "ESC Load",
     "needs_translation": false
   },
   {
@@ -585,6 +594,15 @@
     "file": "stat/alerts/rssi.wav",
     "english": "RSSI",
     "translation": "RSSI",
+    "file": "stat/alerts/rescue_off.wav",
+    "english": "Rescue – Off",
+    "translation": "Rescue – Off",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/rescue_on.wav",
+    "english": "Rescue – Active",
+    "translation": "Rescue – Active",
     "needs_translation": false
   },
   {
