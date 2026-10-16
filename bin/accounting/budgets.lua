@@ -361,9 +361,8 @@ return {
     -- RSSI and Downlink alerts (two subheaders, two switches and six number rows), the SNR and
     -- Downlink SNR alerts (the same ten rows once more), and then the TX Power alert (a subheader,
     -- a switch, three number rows, a second switch and a choice). Target: measured x 1.25, rounded
-    -- up to the next 50, from the highest of the measurements (14514, taken with the four link
-    -- alerts; the TX Power rows are measured by the gate).
-    ["page.settings_audio_events_link_page.build"] = { target = 18150, measured = 14514, proposed = 5750 },
+    -- up to the next 50, from the measurement with all five alerts (19896, the gate's own run).
+    ["page.settings_audio_events_link_page.build"] = { target = 24900, measured = 19896, proposed = 5750 },
     ["page.settings_audio_events_profiles_page.build"] = { target = 2650, measured = 2498 },
     ["page.settings_audio_events_rescue_page.build"] = { target = 1600, measured = 1272 },
     ["page.settings_audio_events_voltage_page.build"] = { target = 6100, measured = 5112 },
