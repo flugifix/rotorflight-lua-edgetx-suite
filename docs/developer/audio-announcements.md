@@ -49,7 +49,12 @@ time on a table the caller keeps, with the frame multiplexer (`lib/crsf.lua`) an
 that: every frame sent replaces one RC channels frame, so nothing is sent while the model is
 armed and at most one frame per pass; nothing is sent before the connect sequence is through;
 and in the tool, *Diagnostics* → *ELRS Link* talks to the same module and drops every entry it
-did not ask for, so the alert stands aside while that page stamps `session.elrsProbeAt`.
+did not ask for, so the alert stands aside while that page stamps `session.elrsProbeAt`. A
+conversation that gets no answer ends after a budget of tries to send a frame (`FRAME_BUDGET`,
+36: three per frame of the longest first read measured, 12; a refused try counts too, so it
+always ends), not after a time, since a slow radio sends one frame per pass and a time limit
+would end a read that is still being answered. The caller keeps one table per attempt, so an
+attempt an arming cuts short starts the count afresh after the disarm.
 
 ## The switch
 

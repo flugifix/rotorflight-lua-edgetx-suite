@@ -42,17 +42,26 @@ local SERIAL_ELRS = { 0x45, 0x4C, 0x52, 0x53 }  -- 'E' 'L' 'R' 'S'
 
 local TYPE_TEXT_SELECTION = 9
 
--- How long an unanswered request waits before it is sent again, and how long one conversation may
--- take in all before the values are left unknown for this connection.
+-- How long an unanswered request waits before it is sent again.
 local PING_RETRY_SECONDS = 1.0
 local REQUEST_RETRY_SECONDS = 0.5
-local DEADLINE_SECONDS = 10
+
+-- How many tries one conversation may make to send a frame, in all, before the values are left
+-- unknown. Every try counts -- a repeat, and one the full output buffer refused -- so that the
+-- conversation ends on any radio. A budget in tries rather than seconds, because a radio running
+-- its passes slowly sends one frame per pass and would run out of seconds while the module is
+-- still answering. The longest first read measured is 12 frames, the ping included (a dual-band
+-- module with RF Band and Antenna Mode ahead of the power fields, Max Power in two chunks); 36 is
+-- three tries per frame of that read on average, so a slow or lossy module still finishes, and a
+-- module that never answers is left after 36 pings. An attempt an arming cuts short starts again
+-- after the disarm on a fresh table, with a fresh count.
+local FRAME_BUDGET = 36
 
 -- Field ids per module, for the life of this Lua state. The key is the module's name, versions and
 -- field count off its device information: the same key is the same numbering.
 local idsByModule = {}
 
-PowerRead.DEADLINE_SECONDS = DEADLINE_SECONDS
+PowerRead.FRAME_BUDGET = FRAME_BUDGET
 
 --- The module's identity and field count from a device-information payload; nil where the payload
 --- is not the transmitter module's answer, false where the module is not ExpressLRS.
@@ -234,8 +243,8 @@ function PowerRead.step(st, crsf, push, now)
     finish(st)
     return
   end
-  if st.startedAt == nil then
-    st.startedAt = now
+  if st.sent == nil then
+    st.sent = 0
     st.buf = st.buf or {}
     -- Parameter entries that are still waiting are another conversation's: a late answer to an
     -- earlier connection's read, or the ELRS Link page's walk, which reaches every Lua state's
@@ -244,11 +253,6 @@ function PowerRead.step(st, crsf, push, now)
     -- Device information is left alone, because another reader may be waiting for its answer.
     while crsf.popFrame(FRAME_PARAMETER_ENTRY) ~= nil do end
   end
-  if (now - st.startedAt) >= DEADLINE_SECONDS then
-    finish(st)
-    return
-  end
-
   if st.phase == nil then
     -- Device information is taken only once this conversation has pinged: an answer that was
     -- already waiting is another reader's (the dashboard pings once for the link's generation).
@@ -283,6 +287,11 @@ function PowerRead.step(st, crsf, push, now)
     end
     if st.phase == nil then
       if st.pingAt == nil or (now - st.pingAt) >= PING_RETRY_SECONDS then
+        if st.sent >= FRAME_BUDGET then
+          finish(st)
+          return
+        end
+        st.sent = st.sent + 1
         local ok, queued = pcall(push, FRAME_DEVICE_PING, PING_PAYLOAD)
         -- Nil is EdgeTX saying no module runs the CRSF protocol; false is a full output buffer,
         -- which the next call tries again.
@@ -306,6 +315,12 @@ function PowerRead.step(st, crsf, push, now)
   if st.done then return end
 
   if st.requestAt == nil or (now - st.requestAt) >= REQUEST_RETRY_SECONDS then
+    -- The budget is spent: the answer to the last frame had its chance until now.
+    if st.sent >= FRAME_BUDGET then
+      finish(st)
+      return
+    end
+    st.sent = st.sent + 1
     local ok, queued = pcall(push, FRAME_PARAMETER_READ, { ADDRESS_MODULE, ADDRESS_ELRS_LUA, st.field, st.chunk })
     if ok and queued then st.requestAt = now end
   end
