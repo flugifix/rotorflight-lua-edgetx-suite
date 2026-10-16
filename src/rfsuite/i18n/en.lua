@@ -841,7 +841,7 @@ return {
         saved_message = "Volume settings saved",
         save_error_title = "Error",
         save_error_message = "Save failed",
-        help_message = "The WAV Volume Level sets a per-callout volume for all RFSuite announcements. 'Radio default' leaves it to the radio's own WAV volume; levels 1 through 5 explicitly set it, with 5 being the loudest. 'Connected only' restricts the override to active flights, so bench and menu work stays at the radio's own level.\n\nThe Master Volume section lets the suite temporarily override the radio's master volume through a global variable. To use it, pick a free GV slot and configure an input, logical switch, and special function in your model:\n\n  1. Inputs: Add input (e.g. I15 'Vol'), Source = GV<n>, weight 100\n  2. Logical Switch: L10: a > x | a = GV<n> | x = -1024\n  3. Special Function: SF: L10 -> Volume = I15 (Vol)\n\nWhile connected, the suite writes the Normal Level to the chosen GV. During a sustained critical alert (low voltage, ESC over-temperature, empty tank) it writes the Alert Level instead. When disconnected or the feature is off, it writes -1024 so that L10 turns off and your regular volume pot regains control."
+        help_message = "Sets how loud the suite speaks and lets it set the radio's master volume; the model setup is on the docs page.\nWAV Volume Level: Radio default keeps the radio's own WAV volume; 1 to 5 sets it for every announcement, 5 loudest.\nConnected only: the level applies only while a flight controller is connected.\nGlobal Variable: the GV the suite writes the master volume to, -1024 when it lets go; Off turns the feature off.\nNormal Level (%): written while connected and no critical alert is active.\nAlert Level (%): written while any critical alert is active."
       },
       settings_audio_events = {
         section_arming = "Arming Flags",
@@ -888,8 +888,10 @@ return {
         pid_profile = "PID Profile",
         rate_profile = "Rate Profile",
         esc_temperature = "ESC Temperature",
-        esc_threshold = "Threshold",
-        esc_threshold_model = "Threshold [Model]",
+        esc_threshold = "Warning",
+        esc_threshold_model = "Warning [Model]",
+        esc_critical = "Critical",
+        esc_critical_model = "Critical [Model]",
         mcu_temperature = "MCU Temperature",
         section_telemetry = "Telemetry",
         telemetry_lost = "Telemetry Lost",
@@ -928,12 +930,14 @@ return {
         help_voltage_haptic = "Whether the transmitter vibrates with Voltage, Main Power Lost and the BEC/RX alert. On by default.",
         help_pid_profile = "Speaks the PID profile's number when it changes. On by default.",
         help_rate_profile = "Speaks the rate profile's number when it changes. On by default.",
-        help_esc_temperature = "Speaks a warning when the ESC temperature reaches the threshold below it. Off by default.",
-        help_esc_threshold = "The ESC temperature that sets off the warning, in the unit set in Settings > Localization. Kept with the model while one is connected (the row reads [Model]). Default 90 °C.",
-        help_mcu_temperature = "Speaks a warning with the temperature when the flight controller's MCU reaches the threshold below it. Off by default.",
-        help_mcu_threshold = "The MCU temperature that sets off the warning, in the unit set in Settings > Localization. Always radio-wide. Default 80 °C.",
-        help_esc_repeat = "How often the ESC or MCU warning speaks while the temperature stays at or above its threshold, 10 s apart: until cleared, or 1 to 10 times.",
-        help_esc_haptic = "Whether the transmitter vibrates with the ESC and MCU temperature warnings. On by default.",
+        help_esc_temperature = "Speaks the ESC temperature when it reaches the warning or critical level below. Recovering is silent. Off by default.",
+        help_esc_threshold = "The lower ESC level, in the unit set in Settings > Localization. Spoken without vibration. Kept with the model while one is connected (the row reads [Model]). Default 90 °C.",
+        help_esc_critical = "The upper ESC level. Vibrates too if Haptic is on. Kept with the model while one is connected (the row reads [Model]). Default 110 °C.",
+        help_mcu_temperature = "Speaks the flight controller's MCU temperature when it reaches the warning or critical level below. Recovering is silent. Off by default.",
+        help_mcu_threshold = "The lower MCU level, in the unit set in Settings > Localization. Spoken without vibration. Always radio-wide. Default 80 °C.",
+        help_mcu_critical = "The upper MCU level. Vibrates too if Haptic is on. Always radio-wide. Default 95 °C.",
+        help_esc_repeat = "How often the ESC or MCU alert speaks while the temperature stays at a level, 10 s apart: until cleared, or 1 to 10 times.",
+        help_esc_haptic = "Whether the transmitter vibrates with the ESC and MCU temperature alerts at their critical level. On by default.",
         help_adjustment_events = "Speaks the new value when an adjustment function changes a setting, once it has held for a second; with the function's name when it differs from the last one. Off by default.",
         help_fuel_alerts = "Speaks the SmartFuel level as it falls past the steps chosen below, and warns when it reaches 0 %. On by default.",
         help_fuel_callout_percent = "The steps at which the falling level is spoken, each once. Only at 10% speaks just the 10 % step. Default every 10 %.",
@@ -969,7 +973,7 @@ return {
         help_message = "Announces a change of PID or rate profile."
       },
       settings_audio_events_esc = {
-        help_message = "Temperature warnings for the ESC and the flight controller's MCU."
+        help_message = "Temperature alerts for the ESC and the flight controller's MCU, spoken with the temperature.\nESC Temperature: speaks when the ESC reaches a level; recovering is silent.\nWarning: the lower level, without vibration. Kept with the model.\nCritical: the upper level, with vibration if Haptic is on. Kept with the model.\nMCU Temperature: the same two levels for the MCU, radio-wide.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at the critical level."
       },
       settings_audio_events_adjustment = {
         help_message = "Announces values changed with the flight controller's adjustment functions."
