@@ -79,6 +79,12 @@ local CONFIG_SCHEMA = {
   { key = "lq_warn",           type = "number", default = 70, min = 1, max = 100, section = "link" },
   { key = "lq_critical",       type = "number", default = 50, min = 1, max = 100, section = "link" },
   { key = "telemetry_lost",    type = "bool", default = false, section = "link" },
+  -- Telemetry dropouts: spoken when the flight controller's frames are missed `dropouts_count`
+  -- times within `dropouts_window` seconds. The window starts at 4 s because the skipped-frame
+  -- counter it watches is published every 2 s.
+  { key = "dropouts_alert",    type = "bool", default = false, section = "link" },
+  { key = "dropouts_count",    type = "number", default = 3, min = 1, max = 50, section = "link" },
+  { key = "dropouts_window",   type = "number", default = 10, min = 4, max = 60, section = "link" },
   { key = "link_repeat",       type = "number", default = 0, min = 0, max = 10, section = "link" },
   { key = "link_haptic",       type = "bool", default = true,  section = "link" },
   { key = "adjustment_events", type = "bool", default = false, section = "adjustment" },
@@ -102,6 +108,10 @@ local CONFIG_SCHEMA = {
   { key = "pack_not_full_margin", type = "number", default = 100, min = 10, max = 500, section = "connect" },
   { key = "battery_profile",   type = "bool", default = true,  section = "connect" },
   { key = "initial_fuel",      type = "bool", default = true,  section = "connect" },
+  -- The start of a rescue and its end, each spoken under a switch of its own. Both default to off,
+  -- so a radio that never opens this page announces nothing new.
+  { key = "rescue_active",     type = "bool", default = false, section = "rescue" },
+  { key = "rescue_off",        type = "bool", default = false, section = "rescue" },
 }
 
 -- One enable per governor state, under the `governor_state` master switch. They default to on,
@@ -219,6 +229,11 @@ local SECTIONS = {
         enabledBy = "lq_alert" },
       { kind = "subheader", labelKey = "section_telemetry", labelFallback = "Telemetry" },
       { kind = "bool", key = "telemetry_lost", labelKey = "telemetry_lost", labelFallback = "Telemetry Lost" },
+      { kind = "bool", key = "dropouts_alert", labelKey = "dropouts_alert", labelFallback = "Telemetry Dropouts" },
+      { kind = "number", key = "dropouts_count", labelKey = "dropouts_count", labelFallback = "Dropouts",
+        enabledBy = "dropouts_alert" },
+      { kind = "number", key = "dropouts_window", labelKey = "dropouts_window", labelFallback = "Window (s)",
+        suffix = " s", enabledBy = "dropouts_alert" },
       { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
       { kind = "choice", key = "link_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
       { kind = "bool", key = "link_haptic", labelKey = "alert_haptic", labelFallback = "Haptic" },
@@ -262,6 +277,16 @@ local SECTIONS = {
         suffix = " mV", enabledBy = "pack_not_full" },
       { kind = "bool", key = "battery_profile", labelKey = "battery_profile", labelFallback = "Battery Capacity" },
       { kind = "bool", key = "initial_fuel", labelKey = "initial_fuel", labelFallback = "SmartFuel" },
+    },
+  },
+  -- Two events rather than an alert, so no Repeat and no Haptic: the pilot usually starts a rescue
+  -- himself, and a confirmation is all it needs.
+  rescue = {
+    titleKey = "section_rescue",
+    titleFallback = "Rescue",
+    items = {
+      { kind = "bool", key = "rescue_active", labelKey = "rescue_active", labelFallback = "Rescue Active" },
+      { kind = "bool", key = "rescue_off", labelKey = "rescue_off", labelFallback = "Rescue Off" },
     },
   },
 }
@@ -353,8 +378,17 @@ local ROW_HELP = {
       lq_warn = t(i18n, "help_lq_warn"),
       lq_critical = t(i18n, "help_lq_critical"),
       telemetry_lost = t(i18n, "help_telemetry_lost"),
+      dropouts_alert = t(i18n, "help_dropouts_alert"),
+      dropouts_count = t(i18n, "help_dropouts_count"),
+      dropouts_window = t(i18n, "help_dropouts_window"),
       link_repeat = t(i18n, "help_link_repeat"),
       link_haptic = t(i18n, "help_link_haptic"),
+    }
+  end,
+  rescue = function(t, i18n)
+    return {
+      rescue_active = t(i18n, "help_rescue_active"),
+      rescue_off = t(i18n, "help_rescue_off"),
     }
   end,
 }

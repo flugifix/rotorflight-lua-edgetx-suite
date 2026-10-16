@@ -26,6 +26,23 @@ names**, or an announcement works under the widget and is silently mute under th
 symmetry is the reason the tool builds its `telemetryState` the way the widget's `readTelemetry`
 does, rounding included; if you read a new field, check both sides write it.
 
+**A sensor that only your announcement needs is read only while it is switched on.** Both callers
+read their telemetry over and over, and a sensor the radio does not carry costs a name search each
+time it is retried. So the announcement says whether it wants the reading -- the dropouts alert sets
+`audioState.dropoutsWanted` on every pass of `Audio.process` -- and both callers read the sensor
+only while that flag is set, and leave the field nil otherwise:
+
+```lua
+if audioState and audioState.dropoutsWanted then
+  state.skippedFrames = getSensor("skipped_frames")
+else
+  state.skippedFrames = nil
+end
+```
+
+A radio that never switches the announcement on then pays nothing for it. The first pass after it
+is switched on reads nothing yet; the reading arrives one pass later.
+
 `Audio.process` throttles itself to 0.25–0.60 s depending on the screen height, so it is cheap to
 call and you do not need a throttle of your own. Under the widget a call that would share a pass
 with the telemetry read waits one logic tick (0.1 s), so two passes can be that much further apart
