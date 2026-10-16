@@ -93,20 +93,22 @@ local volume_driven = false
 
 -- What Settings > Audio > Volume asks for: one mode, and whether it waits for the link
 -- (lib/audio_volume.lua, which the page reads too). Loaded on the first refresh of this Lua state
--- and kept. The two mode numbers are that module's LEVEL and MASTER.
+-- and kept, a failed load as well, so a broken install does not reach for the card on every pass.
+-- The two mode numbers are that module's LEVEL and MASTER.
 local VOLUME_MODE_LEVEL = 1
 local VOLUME_MODE_MASTER = 2
 local volumeRules = nil
 
 local function getVolumeRules()
-  if volumeRules then return volumeRules end
+  if volumeRules ~= nil then return volumeRules or nil end
+  volumeRules = false
   local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
   local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/audio_volume.lua", mode)
   if chunk then
     local ok, mod = pcall(chunk)
     if ok and type(mod) == "table" then volumeRules = mod end
   end
-  return volumeRules
+  return volumeRules or nil
 end
 
 -- The mode and the link rule for one settings table. With the rules missing nothing is driven.

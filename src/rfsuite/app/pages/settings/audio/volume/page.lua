@@ -174,6 +174,12 @@ local function appendGvarPicker(children, x, y, w, labelText, help)
   local pickerW = PICKER_W
   if pickerW > w then pickerW = w end
   local pickerX = x + w - pickerW - 10 - HELP_BTN_W - HELP_BTN_GAP
+  -- Asked once per build rather than on every refresh of the picker: both answers are tables
+  -- the firmware allocates, and neither changes while the page is open. A pick rebuilds the page.
+  local base = gvarSourceBase()
+  local storedGv = tonumber(ui.config.master_gvar) or 0
+  local shown = 0
+  if storedGv > 0 and base ~= nil and Rules.gvarOnBoard(storedGv) then shown = base + storedGv - 1 end
 
   children[#children + 1] = {
     type = "label",
@@ -185,23 +191,18 @@ local function appendGvarPicker(children, x, y, w, labelText, help)
     x = pickerX, y = Controls.controlY(y, rowH), w = pickerW, h = Controls.CTRL_H,
     -- NO `title`: the source picker does not take one (see app/pages/setup_wizard/proc_radio.lua).
     filter = SRC_GVAR_FILTER,
-    get = function()
-      local gv = tonumber(ui.config.master_gvar) or 0
-      local base = gvarSourceBase()
-      -- A variable this radio lacks shows as the empty entry: past the last one come the
-      -- radio's own sources (TX voltage, time, GPS), and the picker would name one of those.
-      if gv <= 0 or base == nil or not Rules.gvarOnBoard(gv) then return 0 end
-      return base + gv - 1
-    end,
+    -- A variable this radio lacks shows as the empty entry: past the last one come the radio's
+    -- own sources (TX voltage, time, GPS), and the picker would name one of those.
+    get = function() return shown end,
     set = function(value)
       value = tonumber(value) or 0
       local gv = 0
       if value ~= 0 then
-        local base = gvarSourceBase()
         local n = base and (value - base + 1) or 0
         if n < 1 or n > Rules.MAX_GVARS then return end
         gv = n
       end
+      shown = value
       if gv == (tonumber(ui.config.master_gvar) or 0) then return end
       ui.config.master_gvar = gv
       -- Normal and Alert are drawn only with a variable picked.
@@ -328,7 +329,7 @@ function M.build(ctx)
 
   if mode == MODE_LEVEL then
     local levelLabel = t(i18n, "level", "Level")
-    cursorY = cursorY + Controls.appendComboSelect(
+    Controls.appendComboSelect(
       children, x, cursorY, w,
       levelLabel,
       getLevelOptions(),
