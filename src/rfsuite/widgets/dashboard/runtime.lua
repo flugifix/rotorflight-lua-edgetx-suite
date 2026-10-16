@@ -2825,8 +2825,9 @@ local function readTelemetry(state, audioState)
     setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
   end
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
-  -- The rescue state (rotorflight-firmware flight/rescue.h, 0 = off), for lib/audio.lua. This
-  -- pass's reading and nil while nothing answers, assigned rather than set through setField,
+  -- The rescue state (rotorflight-firmware flight/rescue.h, 0 = off), for lib/audio.lua. The
+  -- last reading, taken at most TELEMETRY_READ_SECONDS (0.5 s) ago because this runs only when
+  -- a read is due, and nil while nothing answers. Assigned rather than set through setField,
   -- which never clears: the announcement speaks on a change between two readings, so neither a
   -- value held over from the last connection nor a 0 standing in for a sensor not found yet
   -- may pass for one. Nothing draws it, so it does not mark the telemetry as changed. Read only
