@@ -87,7 +87,10 @@ allows. Six places on the screen open a page over it, and a seventh opens the su
   rate, empty at the one where it asks for more power and full at the one where it asks for less,
   and stays empty on a rate whose thresholds are not known. The *TPWR* bar is the power as a share
   of the maximum the *TX Power* announcement uses -- *Maximum (mW)* where *Own Maximum* is on, the
-  module's own Max Power once that announcement has read it, *Maximum (mW)* until then -- and warns
+  module's own Max Power where that announcement had read it when the dashboard was last loaded,
+  *Maximum (mW)* otherwise; the module is read only while that announcement is on, and a read that
+  finishes after the dashboard was loaded is taken at its next load (a save of the settings, or the
+  change to the post-flight screen) -- and warns
   the other way round: dynamic power raises the power as the link weakens. Each bar turns amber
   and red at the levels of its announcement, see [the link steps](#the-link-steps) below. On an FLRC
   or FSK rate, which reports no signal-to-noise ratio, *SNR* reads `-`. *RQ min* is the flight record's: the flight in progress, the last flight
@@ -148,7 +151,7 @@ setting.
 ## The link steps
 
 The link bars, in the top bar and on the *ELRS* page, turn amber and red where the link
-announcements under *System* → *Settings* → *Audio* → *Events* → *Link Quality* speak: each bar
+announcements under *System* → *Settings* → *Audio* → *Events* → *Link* speak: each bar
 takes the *Warning (%)* and *Critical (%)* of its announcement, whether or not that announcement is
 switched on, so the colour on the screen and the voice agree.
 

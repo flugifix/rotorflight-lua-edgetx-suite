@@ -181,19 +181,22 @@ function M.build(children, zone, state, ctx)
   -- warning colour. Each closure reads the snapshot once and keeps the rate beside the figures,
   -- so a standing link costs it two or three comparisons. The bar is the scale the SNR alert
   -- speaks on: the reading's position between the rate's two dynamic-power thresholds, out of the
-  -- rate's row, looked up when the rate changes from the air-rate byte and the module generation
-  -- the host resolved `link_packet_rate` from, which it keeps on the state.
-  local lastS, lastSRate, lastSRow, lastSP = UNSET, UNSET, nil, nil
+  -- rate's row, looked up from the air-rate byte and the module generation the host resolved
+  -- `link_packet_rate` from, which it keeps on the state. Keyed on the byte and the generation, not
+  -- on the rate's name: several bytes share a name ("50Hz" on 2.4 GHz and on 900 MHz) with
+  -- different thresholds.
+  local lastS, lastSRate, lastSMode, lastSGen, lastSRow, lastSP = UNSET, UNSET, UNSET, UNSET, nil, nil
   local function snrPercent()
     local d = state.derived
     local s, rate = d and d.RSNR, d and d.link_packet_rate
-    if s == lastS and rate == lastSRate then return lastSP end
+    local mode, gen = state.linkRfMode, state.linkGeneration
+    if s == lastS and rate == lastSRate and mode == lastSMode and gen == lastSGen then return lastSP end
     lastS = s
-    if rate ~= lastSRate then
-      lastSRate = rate
+    if rate ~= lastSRate or mode ~= lastSMode or gen ~= lastSGen then
+      lastSRate, lastSMode, lastSGen = rate, mode, gen
       lastSRow = nil
       if type(rate) == "string" and type(Rates.forMode) == "function" then
-        lastSRow = Rates.forMode(state.linkRfMode, state.linkGeneration)
+        lastSRow = Rates.forMode(mode, gen)
       end
     end
     if lastSRow == nil or type(Rates.snrPercent) ~= "function" then
@@ -232,7 +235,7 @@ function M.build(children, zone, state, ctx)
     local v = readTpwr()
     if v == lastPw then return lastPwP end
     lastPw = v
-    if v == nil or v <= 0 or tpwrMax == nil then lastPwP = nil else lastPwP = math.min(100, 100 * v / tpwrMax) end
+    if v == nil or v <= 0 or tpwrMax == nil then lastPwP = nil else lastPwP = math.min(100, math.floor(100 * v / tpwrMax + 0.5)) end
     return lastPwP
   end
 

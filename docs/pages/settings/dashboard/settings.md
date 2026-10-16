@@ -39,7 +39,7 @@ nothing opens a page saying so.
 | Setting | What it does |
 | --- | --- |
 | Minimum, Maximum | The battery voltage the gauge spans. |
-| Colour at alert levels | Off by default. On, the link quality box turns amber at the *Warning (%)* and red at the *Critical (%)* of the *Link Quality* announcement (*Settings* → *Audio* → *Events* → *Link Quality*) — but only while that announcement is switched on; with it off, or with this setting off, the box draws as it always did. |
+| Colour at alert levels | Off by default. On, the link quality box turns amber at the *Warning (%)* and red at the *Critical (%)* of the *Link Quality* announcement (*Settings* → *Audio* → *Events* → *Link*) — but only while that announcement is switched on; with it off, or with this setting off, the box draws as it always did. |
 
 A theme may split its settings into pages. Its tile then opens a second grid, one tile per
 page, and each of those opens part of the theme's settings — the same settings, divided so a
