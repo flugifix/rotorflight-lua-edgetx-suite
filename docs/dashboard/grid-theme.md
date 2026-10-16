@@ -106,12 +106,18 @@ radio's frame around it while *Frames on tap areas* is on.
 | Tiles | Extra tile | *Model image* (default), *Profiles P/R/B* or *Off*. |
 | Tiles | Units beside the values | The unit in each tile's caption and beside the battery card's cell voltage. On by default. |
 | Tiles | Temperature colours | Colours the ESC and MCU temperature tiles, as on Urban. *Off* (default), *Standard* or *Early*. |
-| Top Bar | Clock, RQ bar, TQ bar, RSSI bars, Transmitter battery, Colour the bars, Link good above, Signal good above, TX power limit, Link view switch | As on Urban, with Urban's defaults. |
+| Top Bar | Clock, RQ bar, TQ bar, RSSI bars, Transmitter battery, Colour the bars, Link view switch | As on Urban, with Urban's defaults. The link bars' warning and critical steps are not set here: they are the levels of the link announcements, as on Urban -- see [the link steps](urban-theme.md#the-link-steps). |
 | Keys | Key PAGE >, Key PAGE <, Key MDL, Key SYS, Key TELE | As on Urban, with Urban's defaults; *Theme: Tuning* opens *Profile & Tuning*, *Theme: Status* the *Status* page, and so on. |
 | Telemetry | Tile 1 … Tile 12 | The reading each tile of the *Telemetry* page shows, from the same list as the six slots. Defaults as on Urban. |
 
 Every setting Urban has is carried; *Status bar: TPWR* moved from the top bar's page to the
 *Layout* page, beside the status bar it belongs to.
+
+The link bars, in the top bar and on the *ELRS* page, take their amber and red steps from the
+announcements under *System* → *Settings* → *Audio* → *Events* → *Link*, exactly as Urban's do:
+the [Urban page](urban-theme.md#the-link-steps) lists which announcement each bar follows. A value
+an earlier version of Grid stored for *Link good above*, *Signal good above* or *TX power limit*
+stays in the settings file and is no longer read.
 
 ## What it reads
 
