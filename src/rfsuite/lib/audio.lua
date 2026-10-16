@@ -91,17 +91,59 @@ end
 -- widget run the adjustment teller without them and never do.
 local volume_driven = false
 
+-- What Settings > Audio > Volume asks for: one mode, and whether it waits for the link
+-- (lib/audio_volume.lua, which the page reads too). Loaded on the first refresh of this Lua state
+-- and kept. The two mode numbers are that module's LEVEL and MASTER.
+local VOLUME_MODE_LEVEL = 1
+local VOLUME_MODE_MASTER = 2
+local volumeRules = nil
+
+local function getVolumeRules()
+  if volumeRules then return volumeRules end
+  local mode = (_G.rfsuite and _G.rfsuite.loadMode) or "bt"
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/audio_volume.lua", mode)
+  if chunk then
+    local ok, mod = pcall(chunk)
+    if ok and type(mod) == "table" then volumeRules = mod end
+  end
+  return volumeRules
+end
+
+-- The mode and the link rule for one settings table. With the rules missing nothing is driven.
+local function resolve_volume_mode(prefs)
+  local rules = prefs and getVolumeRules()
+  if not rules then return 0, false end
+  local mode = rules.mode(prefs)
+  return mode, rules.connectedOnly(prefs, mode)
+end
+
+-- Whether the board has the global variable the settings name, asked once per variable: the
+-- answer cannot change while the radio runs, and the question allocates a table.
+local gvar_board_checked = nil
+local gvar_board_ok = false
+
+local function master_gvar_usable(gv)
+  if gv ~= gvar_board_checked then
+    gvar_board_checked = gv
+    local rules = getVolumeRules()
+    gvar_board_ok = rules ~= nil and rules.gvarOnBoard(gv)
+  end
+  return gvar_board_ok
+end
+
 local function refresh_volume_state(self, isCritical)
   volume_driven = true
   local prefs = self and self.preferences and self.preferences.audio
   if not prefs and type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences then
     prefs = _G.rfsuite.preferences.audio
   end
-  
-  -- Layer A
-  local v = prefs and tonumber(prefs.level) or 0
+  local mode, connectedOnly = resolve_volume_mode(prefs)
+  local linkUp = is_rf_connected(self)
+
+  -- Callout level: handed to playFile and playNumber, in its own mode only.
+  local v = mode == VOLUME_MODE_LEVEL and tonumber(prefs.level) or 0
   if v ~= nil and v > 0 then
-    if prefs.level_connected_only and not is_rf_connected(self) then
+    if connectedOnly and not linkUp then
       audio_volume = nil
     else
       audio_volume = v
@@ -110,10 +152,12 @@ local function refresh_volume_state(self, isCritical)
     audio_volume = nil
   end
 
-  -- Layer B
+  -- Master volume, through the global variable, in its own mode only.
   if type(model) ~= "table" or type(model.setGlobalVariable) ~= "function" then return end
-  local gv = prefs and tonumber(prefs.master_gvar) or 0
-  
+  local gv = mode == VOLUME_MODE_MASTER and tonumber(prefs.master_gvar) or 0
+  -- A variable this board does not have leaves the feature off rather than writing to nowhere.
+  if gv ~= 0 and not master_gvar_usable(gv) then gv = 0 end
+
   if gv == 0 or (master_gvar_idx ~= nil and master_gvar_idx ~= gv - 1) then
     if master_gvar_idx ~= nil then
       pcall(model.setGlobalVariable, master_gvar_idx, 0, VOL_GVAR_OFF)
@@ -124,8 +168,12 @@ local function refresh_volume_state(self, isCritical)
   end
   master_gvar_idx = gv - 1
   local pct = isCritical and (tonumber(prefs.master_alert) or 100) or (tonumber(prefs.master_normal) or 80)
-  
-  local raw = (is_rf_connected(self) or isCritical) and pct_to_vol_raw(pct) or VOL_GVAR_OFF
+
+  -- Connected only: the pot rules until the link is up and again once it is down. Without it the
+  -- level is set on the first refresh -- the dashboard or the tool starting -- and the link
+  -- changes nothing, so the pot stays overridden for as long as the mode is on.
+  local raw = pct_to_vol_raw(pct)
+  if connectedOnly and not (linkUp or isCritical) then raw = VOL_GVAR_OFF end
   if raw ~= master_gvar_last then
     if pcall(model.setGlobalVariable, master_gvar_idx, 0, raw) then
       master_gvar_last = raw
@@ -133,17 +181,18 @@ local function refresh_volume_state(self, isCritical)
   end
 end
 
--- The level in a Lua state where nothing calls refresh_volume_state: layer A only, since the
--- master-volume global variable belongs to the widget and the tool. Read on every call rather
+-- The level in a Lua state where nothing calls refresh_volume_state: the callout level only, since
+-- the master-volume global variable belongs to the widget and the tool. Read on every call rather
 -- than kept, because the background function script replaces its preferences table whenever it
--- reloads the file. `level_connected_only` asks the radio whether the RF link is up, because the
+-- reloads the file. Connected only asks the radio whether the RF link is up, because the
 -- background function script keeps no connection state of its own.
 local function resolve_undriven_level()
   if volume_driven then return end
   local root = _G.rfsuite
   local prefs = root and root.preferences and root.preferences.audio
-  local v = prefs and tonumber(prefs.level) or 0
-  if v > 0 and not (prefs.level_connected_only and not rf_link_up()) then
+  local mode, connectedOnly = resolve_volume_mode(prefs)
+  local v = mode == VOLUME_MODE_LEVEL and tonumber(prefs.level) or 0
+  if v > 0 and not (connectedOnly and not rf_link_up()) then
     audio_volume = v
   else
     audio_volume = nil
