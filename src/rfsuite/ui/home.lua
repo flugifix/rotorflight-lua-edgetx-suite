@@ -3902,6 +3902,15 @@ function M.run(event, touchState)
             ts.armDisableFlags = math.max(0, math.floor(armDisableFlagsValue + 0.5))
           end
           ts.governor = roundInt(Sensors.getValue("governor") or ts.governor, ts.governor or 0)
+          -- This pass's reading and nil while nothing answers, never a held or a made-up 0:
+          -- lib/audio.lua speaks a rescue on a change between two readings, and a 0 standing in
+          -- for a sensor not found yet would make its first real reading look like one. Read
+          -- only while one of its announcements is on (`rescueWanted`, set by lib/audio.lua).
+          if state.audioState and state.audioState.rescueWanted then
+            ts.rescue = roundInt(Sensors.getValue("rescue"), nil)
+          else
+            ts.rescue = nil
+          end
           ts.mcuTemp = roundInt(Sensors.getValue("temp_mcu") or ts.mcuTemp, ts.mcuTemp or 0)
           ts.escTemp = roundInt(Sensors.getValue("temp_esc") or ts.escTemp, ts.escTemp or 0)
           ts.bec_voltage = Sensors.getValue("bec_voltage") or ts.bec_voltage
@@ -3961,6 +3970,14 @@ function M.run(event, touchState)
 
           ts.rss1 = readFirstSensorNumber(RSS1_SOURCES, ts.rss1)
           ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
+          -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua, as the
+          -- widget's readTelemetry reads it: a reading or nil, and only while that alert is on
+          -- (`dropoutsWanted`, set by lib/audio.lua). Here it is read on every audio tick.
+          if state.audioState and state.audioState.dropoutsWanted then
+            ts.skippedFrames = Sensors.getValue("skipped_frames")
+          else
+            ts.skippedFrames = nil
+          end
         end
 
         local modelName = nil
@@ -4008,6 +4025,7 @@ function M.run(event, touchState)
         state.telemetryState.armDisableFlags = nil
         state.telemetryState.armed = nil
         state.telemetryState.governor = nil
+        state.telemetryState.rescue = nil
         state.telemetryState.mcuTemp = nil
         state.telemetryState.escTemp = nil
         state.telemetryState.throttlePercent = nil
@@ -4019,6 +4037,7 @@ function M.run(event, touchState)
         state.telemetryState.batteryCellCount = nil
         state.telemetryState.rss1 = nil
         state.telemetryState.rss2 = nil
+        state.telemetryState.skippedFrames = nil
       else
         -- Still not ready, and not the edge either -- the stretch in between. Nothing here is
         -- connection state, so there is nothing to announce and nothing to clear, but the

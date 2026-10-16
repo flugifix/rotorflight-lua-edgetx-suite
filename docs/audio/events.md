@@ -10,7 +10,7 @@ The suite provides spoken voice alerts and tone callouts for flight telemetry, b
 
 *System* → *Settings* → *Audio* → *Events*
 
-The nine category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature threshold) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
+The ten category pages share a common configuration table (`preferences.audio_events`), stored with the radio in `/SCRIPTS/TOOLS/rfsuite.user/preferences.lua` with model-specific overrides (such as the ESC temperature levels) in each flight controller's own file beside it. See [Configuration files](../reference/configuration-files.md).
 
 A save that cannot be stored reports *Save failed* with the reason: *the settings file could not be written to the SD card* where the card refused a file, and *model settings store not available* where the part of the suite that writes the model's own file could not be loaded.
 
@@ -85,29 +85,59 @@ Monitors the main pack voltage and the model's power supply.
 
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
-| ESC temperature | `esc_temperature` | Off | Radio | Alerts when ESC temperature exceeds the configured threshold. |
-| ESC threshold | `esc_threshold` | 90 °C | Model | Maximum allowed ESC temperature (60 to 300 °C). Configured per model. |
-| MCU temperature | `mcu_temperature` | Off | Radio | Alerts when the flight controller MCU temperature exceeds the threshold. |
-| MCU threshold | `mcu_threshold` | 80 °C | Radio | Maximum allowed MCU temperature (40 to 150 °C). Global radio setting. |
+| ESC temperature | `esc_temperature` | Off | Radio | Speaks the ESC temperature when it reaches the warning or the critical level. |
+| ESC warning | `esc_threshold` | 90 °C | Model | The lower ESC level (60 to 300 °C). Configured per model. |
+| ESC critical | `esc_critical` | 110 °C | Model | The upper ESC level (60 to 300 °C). Configured per model. |
+| MCU temperature | `mcu_temperature` | Off | Radio | Speaks the flight controller's MCU temperature when it reaches the warning or the critical level. |
+| MCU warning | `mcu_threshold` | 80 °C | Radio | The lower MCU level (40 to 150 °C). Global radio setting. |
+| MCU critical | `mcu_critical` | 95 °C | Radio | The upper MCU level (40 to 150 °C). Global radio setting. |
 | ESC Load | `esc_load` | Off | Radio | Speaks "ESC Load" and the load in percent when it reaches the warning or critical level below, while the model is armed. Silent without an ESC current limit -- see *ESC load* below. |
 | Warning (%) | `esc_load_warn` | 80 % | Radio | The lower load level (10 to 200 %, in steps of 5). Spoken without vibration. |
 | Critical (%) | `esc_load_critical` | 100 % | Radio | The upper load level (10 to 200 %, in steps of 5). Vibrates as well when *Haptic* is on. |
 | Hold (s) | `esc_load_hold` | 5 s | Radio | How long the load has to stay at or above a level before it is spoken (0 to 30 s). |
-| Repeat | `esc_repeat` | Until cleared | Radio | How often a temperature alert or the ESC load alert speaks while it holds -- see *Repeat and Haptic* below. |
-| Haptic | `esc_haptic` | On | Radio | Transmitter vibration alongside the ESC and MCU temperature alerts, and at the critical ESC load level. |
+| Repeat | `esc_repeat` | Until cleared | Radio | How often either temperature alert or the ESC load alert speaks while it holds -- see *Repeat and Haptic* below. |
+| Haptic | `esc_haptic` | On | Radio | Transmitter vibration alongside the ESC and MCU temperature alerts at their **critical** level, and at the critical ESC load level. |
 
-Both thresholds are stored and compared in °C, the unit the flight controller reports. On a radio
+Each alert has two levels and says the same words at both, followed by the temperature: *ESC
+temperature warning* or *MCU temperature*, then the reading. It works like the link quality alert:
+
+- **A rise into a level is spoken at once**, also when the alert spoke a moment before at the
+  level below, and the level it has entered starts its own repeat count.
+- **Falling back is not spoken.** A level is left only once the reading is more than 5 °C below it, so a
+  sensor resting on a level does not announce every rise. A fall from the critical to the warning
+  level starts the warning level's own repeat count, so with *Repeat* set to a count the warning
+  level speaks again (its own announcement, not a recovery), 10 s after the last one.
+- **Only the critical level vibrates**, and only while *Haptic* is on. The warning level speaks
+  without vibration.
+- **Only the critical level raises the master volume** set up under [Volume](../pages/settings/audio/volume.md)
+  to its *Alert Level*, for as long as the alert stays at that level. The warning level is spoken
+  at the normal level.
+- **A critical level set below the warning level** is taken as the warning level: both are then
+  crossed together, and the alert speaks at the critical level.
+
+The defaults put the MCU's critical level at 95 °C. The reading is the temperature of the chip
+itself, and the chips flight controllers are built on are rated for 105 °C or more at the
+junction in their commercial grades (STM32F4, F7 and G4 at 105 °C, STM32H7 at 125 °C), so 95 °C
+leaves a margin below the lowest of those ratings. The ESC's levels are a property of the ESC:
+set them to what its maker gives as its temperature limit.
+
+A settings file written before the critical levels existed keeps its warning levels; the critical
+levels start at their defaults. A warning level stored above 110 °C (ESC) or 95 °C (MCU) is then
+above the critical default, and the alert speaks at the critical level from that warning level on
+until a critical level is set.
+
+All four levels are stored and compared in °C, the unit the flight controller reports. On a radio
 set to Fahrenheit under [Localization](../pages/settings/localization.md) the page shows them in
-°F -- each step is still one degree Celsius, so they move in steps of about 2 °F -- and the MCU
-alert speaks the temperature in °F.
+°F -- each step is still one degree Celsius, so they move in steps of about 2 °F -- and both
+alerts speak the temperature in °F.
 
-The ESC threshold is stored with the model while a flight controller is connected -- the row then
-reads *Threshold [Model]* -- and is otherwise the radio-wide default that every model without a
-value of its own reads. The MCU threshold is always radio-wide, because the same flight controller
-is rated the same in every aircraft.
+The ESC levels are stored with the model while a flight controller is connected -- the rows then
+read *Warning [Model]* and *Critical [Model]* -- and are otherwise the radio-wide defaults that every
+model without a value of its own reads. Each level is taken from the model where the model has one
+and from the radio where it has not. The MCU levels are always radio-wide.
 
 When the model's file cannot be written, *Save* reports the failure and the model goes on with the
-threshold it had before. The page still shows the number that was entered, so saving again writes
+levels it had before. The page still shows the number that was entered, so saving again writes
 it once the file can be written.
 
 #### ESC load
@@ -166,13 +196,42 @@ Callouts of the SmartFuel level while the model is connected. The flight control
 | Warning level | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical level | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
 | Telemetry lost | `telemetry_lost` | Off | Radio | Announces a flight controller that stops sending telemetry while the model is armed and the radio link is up, and announces it again when its telemetry is back. |
-| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality alert speaks while it stays at a level -- see *Repeat and Haptic* below. |
-| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality alert at its **critical** level, and alongside the lost telemetry announcement. |
+| Telemetry dropouts | `dropouts_alert` | Off | Radio | Speaks "Telemetry Dropouts" while the model is armed and the flight controller's telemetry frames go missing too often -- see *Telemetry Dropouts* below. |
+| Dropouts | `dropouts_count` | 3 | Radio | How many gaps in the telemetry frames within the window set the alert off (1 to 50). |
+| Window | `dropouts_window` | 10 s | Radio | The time the gaps are counted over (4 to 60 seconds). |
+| Repeat | `link_repeat` | Until cleared | Radio | How often the link quality alert and the dropouts alert speak while their condition holds -- see *Repeat and Haptic* below. |
+| Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality alert at its **critical** level, and alongside the lost telemetry announcement. Never alongside the dropouts alert. |
 
 #### What Telemetry Lost Covers, and What It Leaves to the Radio
 Only a flight controller that stops sending while the radio link is still up is announced: the link statistics keep arriving and the radio stays connected, but the flight controller's telemetry frames have stayed away for 6 seconds. The radio cannot tell this case apart on its own until it reports each sensor as lost, 20 seconds later. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once, so a lost link stays silent here -- also when the flight controller's frames stopped with it. A drop while the model is disarmed is a normal power-off and stays silent too.
 
 The loss is announced **once**. A model that stays silent keeps the announcement's recovery window open, and it is the return that speaks again -- not the silence, however long it lasts.
+
+#### Telemetry Dropouts
+Every frame of the flight controller's custom telemetry carries a frame number, and the suite counts each place where the numbers jump -- a gap of one or more frames that never arrived. It publishes that count itself as the sensor `*Skp`, at most every 2 seconds, from the moment the link comes up. The background function script, the dashboard and the tool each decode the frames while the others stand aside. When the decoding moves from one to another -- the tool opened or closed, the script pausing for a moment -- the count continues from the value the radio shows, and the first second of frames after the move is not counted, so a hand-over is not a gap. A lost link starts the count over at 0 where the dashboard or the tool that saw the loss decodes; the function script, and a tool opened after the loss, carry it on.
+
+The count says that a flight *had* gaps. The alert asks whether the link is stuttering *now*: it compares the rise of the count within the last *Window* seconds against *Dropouts*. With the defaults, three gaps within ten seconds speak; two do not, and nor does a large total collected slowly over a long flight. The window starts at 4 seconds because the count only changes every 2.
+
+- Only while the model is armed. Gaps on the ground before arming are not counted into the flight: the window starts with the first reading after arming.
+- A count that starts over -- after a lost link -- is a new start, never an alert.
+- The alert needs the `*Skp` sensor, that is the flight controller's custom CRSF telemetry decoded by the suite. Without it the alert stays silent.
+- Spoken at once when the count is reached, then as often as *Repeat* says, ten seconds apart, while the rise stays at or above the count; nothing is spoken while it is below. It stays one alert until the rise has stayed below the count for a whole window, so a rate resting on the count -- falling below it and climbing back with the next gap -- neither starts a new alert nor a new repeat count. Recovery is not spoken.
+- It never vibrates, whatever *Haptic* says: it has one level, and the link quality alert's lower level does not vibrate either.
+- The gaps counted are those of the flight controller's telemetry on its way to the radio. A receiver that drops control frames on the way to the model is what *Link Quality* reports.
+### 10. Rescue
+
+| Setting | Switch / Key | Default | Scope | Description |
+| --- | --- | --- | --- | --- |
+| Rescue Active | `rescue_active` | Off | Radio | Speaks "Rescue -- Active" once when the flight controller's rescue starts. |
+| Rescue Off | `rescue_off` | Off | Radio | Speaks "Rescue -- Off" once when the rescue is over. |
+
+#### When a Rescue Is Spoken
+
+The flight controller reports its rescue as a state: off, or one of the phases pull-up, flip, climb, hover and exit. Leaving *off* for any phase is the start of a rescue and is spoken at once; coming back to *off* is its end and is spoken at once. The phases in between are not spoken, and neither announcement repeats or vibrates: the pilot usually starts a rescue himself, and a confirmation is all it needs. The two switches are independent, so either announcement can be had without the other.
+
+The state comes from the *Rescue State* sensor (92); where the flight controller does not send it, it is taken from *System Status* (120), which carries the same state. Select either under *Configuration* → *Setup* → *Telemetry* (*System Status* is offered there on MSP API 12.10 and later). With neither, nothing is spoken.
+
+Only a change is spoken. A model that connects in the middle of a rescue, or a switch turned on during one, is not announced as a rescue that has just begun; its end is. The announcements do not wait for the model to be armed: a flight controller with rescue enabled (*Flight Tuning* → *Advanced* → *Rescue*) enters it whenever the switch assigned to it is on, so turning that switch on and off with the model disarmed on the bench speaks both, which is a way to check the switch.
 
 ---
 
@@ -186,8 +245,8 @@ the page that switches an alert on is the page that says how it behaves.
 | Category page | Repeat / Haptic keys | The alerts they govern |
 | --- | --- | --- |
 | Voltage | `voltage_repeat`, `voltage_haptic` | Low pack voltage, Main power lost, and the BEC / receiver alert set up under *Setup* → *Power* → *Alerts*. |
-| Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost. |
-| ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature, MCU temperature, ESC load (haptic at its critical level only). |
+| Link Quality | `link_repeat`, `link_haptic` | Link quality (warning and critical), Telemetry lost, Telemetry dropouts. |
+| ESC & MCU Temperature | `esc_repeat`, `esc_haptic` | ESC temperature and MCU temperature (warning and critical), ESC load (haptic at its critical level only). |
 | SmartFuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
 
 - **Repeat** is *Until cleared*, or a count from 1 to 10. Announcements are ten seconds apart
@@ -198,12 +257,14 @@ the page that switches an alert on is the page that says how it behaves.
   announcement. It defaults to on for the
   three categories whose alerts already buzzed with no way of switching it off, and to off for
   SmartFuel, which already had this setting and keeps its value.
-- **Three alerts have their own rule inside the category, and a setting does not overrule it.**
-  The link quality alert and the ESC load alert buzz at their *critical* level only, never at the
-  warning level. The lost telemetry announcement says itself once per loss, so it takes the haptic
-  and ignores the repeat.
+- **Some alerts have their own rule inside the category, and a setting does not overrule it.**
+  The link quality alert, the ESC and MCU temperature alerts and the ESC load alert buzz at their
+  *critical* level only, never at the warning level. The lost telemetry announcement says itself
+  once per loss, so it takes the haptic and ignores the repeat. The telemetry dropouts alert takes
+  the repeat and never buzzes.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
-  when the model connects and is latched for the rest of that connection.
+  when the model connects and is latched for the rest of that connection. **Neither is
+  Rescue**, whose two announcements are spoken once per change of state.
 
 ---
 
@@ -211,12 +272,15 @@ the page that switches an alert on is the page that says how it behaves.
 
 Announcements are played from the sound pack under `/SOUNDS/rf/<language>/`. Numbers and their units are spoken by the radio itself, so they follow the language set on the radio rather than the language of the pack.
 
-Every announcement has a file of its own in both packs. Two have no substitute and stay silent in an older pack that lacks theirs:
+Every announcement has a file of its own in both packs. Five have no substitute and stay silent in an older pack that lacks theirs:
 
 | File | Announcement |
 | --- | --- |
 | `stat/alerts/telemetrylost.wav` | Telemetry lost |
 | `stat/alerts/telemetryok.wav` | Telemetry recovered |
+| `stat/alerts/dropouts.wav` | Telemetry dropouts |
+| `stat/alerts/rescue_on.wav` | Rescue -- Active |
+| `stat/alerts/rescue_off.wav` | Rescue -- Off |
 
 Three have a file of their own in both packs, and fall back to another file in an older pack that lacks it:
 

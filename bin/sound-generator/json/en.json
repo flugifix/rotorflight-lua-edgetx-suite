@@ -504,6 +504,12 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/dropouts.wav",
+    "english": "Telemetry Dropouts",
+    "translation": "Telemetry Dropouts",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/esc.wav",
     "english": "Esc Temperature",
     "translation": "Esc Temperature",
@@ -579,6 +585,18 @@
     "file": "stat/alerts/remaining.wav",
     "english": "remaining",
     "translation": "remaining",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/rescue_off.wav",
+    "english": "Rescue – Off",
+    "translation": "Rescue – Off",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/rescue_on.wav",
+    "english": "Rescue – Active",
+    "translation": "Rescue – Active",
     "needs_translation": false
   },
   {

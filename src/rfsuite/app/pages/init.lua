@@ -30,6 +30,7 @@ local entries = {
   settings_audio_events_adjustment_page = definePage("settings/audio/events/adjustment"),
   settings_audio_events_fuel_page = definePage("settings/audio/events/fuel"),
   settings_audio_events_link_page = definePage("settings/audio/events/link"),
+  settings_audio_events_rescue_page = definePage("settings/audio/events/rescue"),
   settings_audio_volume_page = definePage("settings/audio/volume"),
   setup_wizard_page = definePage("setup_wizard"),
   -- The same page, entered under three names. Which name it was opened under is what bounds the
