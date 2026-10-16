@@ -3951,8 +3951,8 @@ function M.run(event, touchState)
           ts.rss1 = readFirstSensorNumber(RSS1_SOURCES, ts.rss1)
           ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
           -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua, as the
-          -- widget's readTelemetry reads it: this pass's reading or nil, and only while that alert
-          -- is on (`dropoutsWanted`, set by lib/audio.lua).
+          -- widget's readTelemetry reads it: a reading or nil, and only while that alert is on
+          -- (`dropoutsWanted`, set by lib/audio.lua). Here it is read on every audio tick.
           if state.audioState and state.audioState.dropoutsWanted then
             ts.skippedFrames = Sensors.getValue("skipped_frames")
           else

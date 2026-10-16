@@ -2977,8 +2977,9 @@ local function readTelemetry(state, audioState)
   setField("rss1", rss1)
   local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   setField("rss2", rss2)
-  -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua: this pass's
-  -- reading, or nil while nothing answers. Assigned rather than set through setField, because
+  -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua: the last
+  -- reading, taken at most TELEMETRY_READ_SECONDS (0.5 s) ago because this runs only when a read
+  -- is due, or nil while nothing answers. Assigned rather than set through setField, because
   -- nothing draws it and a reading must not mark the telemetry as changed. Read only while that
   -- alert is on (`dropoutsWanted`, set by lib/audio.lua), so a radio that never switches it on pays
   -- no sensor search for it.
