@@ -6,7 +6,9 @@ unchanged. Two things GitHub gets right on its own and MkDocs does not are done 
   * A relative link that leaves `docs/` -- `../GEMINI.md`, `../../bin/themes/README.md`
     -- resolves on GitHub because GitHub serves the whole tree. The site holds `docs/`
     only, so such a link is rewritten to the file on GitHub instead of being left broken.
-    The same goes for a page the site leaves out, `_template.md`.
+    The same goes for a page the site leaves out, `_template.md`; that one is not broken
+    on the site, only absent from it. A link to a page inside `docs/` that does not exist
+    is left as it is, so the strict build reports it rather than pointing it at GitHub.
   * The order of a section follows `sidebar_position` in the front matter, the position
     of the tile on the radio, rather than the alphabetical order of the file names.
     Entries without one keep their alphabetical order after the ones that have it, and a
@@ -41,7 +43,7 @@ def on_page_markdown(markdown, page, config, files):
         resolved = posixpath.normpath(posixpath.join("docs", page_dir, path))
         if resolved == "docs" or resolved.startswith("docs/"):
             inside = files.get_file_from_path(resolved[len("docs/"):]) if resolved != "docs" else None
-            if resolved == "docs" or not resolved.endswith(".md") or (inside is not None and not inside.inclusion.is_excluded()):
+            if inside is None or not inside.inclusion.is_excluded():
                 return match.group(0)
         if path.endswith("/"):
             resolved += "/"
