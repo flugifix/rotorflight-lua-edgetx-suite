@@ -1,6 +1,18 @@
-# 0.1.7
+# 0.2.1
 
 ### Features & Enhancements
+
+- **The documentation under `docs/` is published as a website (`mkdocs.yml`, `bin/docs/`, `.github/workflows/docs.yml`)**:
+  - MkDocs with the Material theme builds the site from `docs/` as it is, with search, a navigation tree and previous/next links; GitHub Pages publishes it on every push to master that touches the documentation. The files stay plain Markdown that reads on GitHub unchanged.
+  - A relative link that leaves `docs/` is pointed at the file on GitHub, and each section is ordered by the `sidebar_position` of its pages, the order of the tiles on the radio.
+  - A pull request that touches the documentation builds the site with `--strict`, so a link the site cannot resolve turns the job red.
+
+# 0.2.0
+
+### Features & Enhancements
+- **Bound release notes extraction to GitHub's release body character limit (`.github/scripts/extract-release-notes.py`)**:
+  - GitHub releases reject bodies exceeding 125,000 characters with HTTP 422. With over 500 changes in 0.2.0, the cumulative release section reached ~480,000 characters.
+  - Added character bounding (default: 120,000 characters) cutting cleanly at line boundaries with a truncation note pointing to `Releases.md` for the full changelog, plus a regression self-test suite.
 - **Dashboard per-model settings are switched on explicitly, and a model's theme settings are edited on a page of their own (`app/pages/settings/dashboard/`, `app/lib/dashboard_builder.lua`, `app/pages/init.lua`, `lib/preferences.lua`, `lib/model_preferences.lua`, `widgets/dashboard/runtime.lua`, `docs/pages/settings/dashboard/`)**:
   - Whether a model uses its own theme and its own theme settings is decided by two switches on *Dashboard* → *Design*: *Allow per-model settings* for the radio, and *Own settings for this model* for the connected model. Before, a theme setting saved while a flight controller was connected went into that model's file and was used by it from then on, with nothing on screen saying so.
   - Theme settings are saved into the scope the page edits instead of wherever a connected flight controller points. The theme tiles under *Dashboard* → *Settings* edit the standard values of every model, and their first line says so. A new *Per-Model Settings* tile, first in that grid and shown while a flight controller is connected and per-model settings are on for its model, opens the settings of each theme that model draws — named by the flight phases it is drawn in — for that model alone, where only a value that differs from the standard is stored; below them it lists what that model changes beside the standard value and resets one or all of them.
@@ -333,10 +345,13 @@
   - Red can never stand above yellow: the page holds *Battery red at* at or below *Battery yellow at* and pulls it down when yellow is lowered beneath it, and the theme draws a stored pair with red above yellow as if red were equal to yellow.
   - The steps are read once when the theme is built; the gauge still decides its colour once per change of the fuel reading or of the not-full verdict. The flight screen's gauge and the *Battery* page take the same steps.
   - `Layout.SETTINGS` can declare a whole-number row (`min`, `max`, optionally `notAbove`) beside its list rows; the settings page draws it as a number field.
-- **The documentation under `docs/` is published as a website (`mkdocs.yml`, `bin/docs/`, `.github/workflows/docs.yml`)**:
-  - MkDocs with the Material theme builds the site from `docs/` as it is, with search, a navigation tree and previous/next links; GitHub Pages publishes it on every push to master that touches the documentation. The files stay plain Markdown that reads on GitHub unchanged.
-  - A relative link that leaves `docs/` is pointed at the file on GitHub, and each section is ordered by the `sidebar_position` of its pages, the order of the tiles on the radio.
-  - A pull request that touches the documentation builds the site with `--strict`, so a link the site cannot resolve turns the job red.
+- **A critical level for the ESC and MCU temperature alerts, and the ESC alert speaks its temperature (`lib/audio.lua`, `app/pages/settings/audio/events/category_page.lua`, `lib/preferences.lua`, `i18n/en.lua`, `i18n/de.lua`, `docs/audio/events.md`)**:
+  - *Settings* > *Audio* > *Events* > *ESC Temperature* gains a *Critical* row under each alert: 110 °C for the ESC, kept with the model as the warning level is, and 95 °C for the MCU, radio-wide. The existing threshold rows are now labelled *Warning* and keep their keys and values.
+  - Both alerts work like the link quality alert: a rise into a level is spoken at once, falling back is not spoken, a level is left only once the reading is more than 5 °C below it, and *Haptic* vibrates at the critical level only -- the warning level, which vibrated before, now speaks without vibration.
+  - The master volume (*Settings* > *Audio* > *Volume*) goes to its *Alert Level* at the critical level of either alert, for as long as the alert stays there. Before, the ESC alert raised it at its only threshold and the MCU alert never did.
+  - The *Volume* page's help is rewritten in one line per setting; its *Alert Level* line names every critical alert rather than a list, and the details moved to `docs/pages/settings/audio/volume.md`.
+  - The ESC alert now says the temperature after its words, as the MCU alert already did, in the unit set under *Settings* > *Localization*. No new sound file.
+  - A settings file written before keeps its warning levels; the critical levels start at their defaults. With both alerts off, which is the default, nothing changes.
 
 ### Bug Fixes & Improvements
 - **Bus servo writes use the packed index when no PWM servo is configured (`app/pages/setup/servos/bus/page.lua`, `app/pages/setup/servos/pwm/page.lua`) (fixes #659)**: With bus servos enabled and zero PWM servos, the packed total of 18 was read as 18 PWM servos, so bus servo n was sent as index 18 + n and rejected. The PWM count now subtracts the bus channels at 18, not only above 18. The PWM Output selector lists no servo in that case instead of listing 18 entries, and Save is refused there, so servo 0 (which is bus servo 1 on such a board) is never written.
@@ -1198,7 +1213,7 @@
   - Measured on `bin/accounting` against the master this entry was rebased on (after #389, #390, #391 and #399): `pass.state` 11340 -> 10741, `unit.events.wakeup` 4506 -> 4287, `pass.state.armed` 11156 -> 10988, `pass.tuning.state` 12421 -> 11808, `pass.service` 1274 -> 1184 (the 200-pass row; #348 widens that row to 600 passes, so its figures are on a different window); `pass.startup.worst` 10618 -> 10639, the view being built while the sequence runs. After the sequence each of the three questions costs what it cost against an empty queue, and the progress question allocates nothing.
   - The configuration tool's home screen already stopped asking once the sequence was through, so the saving is in the widget states.
 - **Release Version (`lib/version.lua`)**:
-  - Bumped the Rotorflight Lua EdgeTX Suite version to `0.1.7`.
+  - Bumped the Rotorflight Lua EdgeTX Suite version to `0.2.0`.
 - **The flight controller's UID is read once per connect (`tasks/msp/runtime.lua`, `tasks/events/onconnect/tasks/uid.lua`, `docs/troubleshooting/no-connection.md`) (fixes #410)**:
   - The MSP runtime reads `MSP_UID` itself once the API version is in and its queue is idle, and the `uid` connect task queued a second read of its own whenever the runtime's answer was not yet in the session when the task started. On a link with round trips of a couple of hundred milliseconds that was the usual case: two requests, and two loads of the per-model preferences file within a few hundred milliseconds.
   - The task's read could not deliver anything the runtime's did not. The runtime's `publish()` copies its own UID over `session.mcu_id` after every queue pass, so where the task's reply was the first to land, the UID and the preferences it had written were gone again in the same pass, and the runtime then read the UID a second time anyway.
