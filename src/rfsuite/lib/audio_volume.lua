@@ -39,7 +39,7 @@ end
 
 --- Whether the mode acts only while the radio's link to the model is up.
 ---
---- One setting for both modes, `connected_only`, written by the page from the first save on. A
+--- One setting for both modes, `connected_only`, written by the page once it is set or saved in a mode. A
 --- file without it keeps what each layer did before it existed: the callout level followed
 --- `level_connected_only`, and the master volume let go of the pot only while connected -- so a
 --- master-volume file reads as on, whatever `level_connected_only` says.

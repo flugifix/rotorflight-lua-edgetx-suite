@@ -346,7 +346,7 @@
   - The global variable is picked with EdgeTX's own source picker, filtered to the global variables the radio has (GV1 to GV15 where there are fifteen) with their names, plus `---` for off. A settings file naming one the radio does not have leaves the master volume off, and the page says so.
   - Every row has its own `?`, and the page's help is one line per mode.
   - A settings file written before keeps working as it did: a global variable set reads as *Master volume*, a level set as *Callout level*, and *Connected only* keeps each layer's earlier behaviour. A file that had both a level and a global variable set opens in *Master volume* and its level is ignored, so the announcements play at the radio's own Wav volume instead; the level stays in the file. With neither set, which is the default, nothing changes.
-  - The mode and *Connected only* are written to the settings file on the page's first save; a fresh install's file does not grow.
+  - The mode is written to the settings file on the page's first save, and *Connected only* on the first save in *Callout level* or *Master volume*, or once it is set; a fresh install's file does not grow.
 
 ### Bug Fixes & Improvements
 - **Bus servo writes use the packed index when no PWM servo is configured (`app/pages/setup/servos/bus/page.lua`, `app/pages/setup/servos/pwm/page.lua`) (fixes #659)**: With bus servos enabled and zero PWM servos, the packed total of 18 was read as 18 PWM servos, so bus servo n was sent as index 18 + n and rejected. The PWM count now subtracts the bus channels at 18, not only above 18. The PWM Output selector lists no servo in that case instead of listing 18 entries, and Save is refused there, so servo 0 (which is bus servo 1 on such a board) is never written.

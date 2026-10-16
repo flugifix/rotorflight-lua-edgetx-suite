@@ -168,7 +168,8 @@ local SCHEMA = {
     -- `volume_mode` (0 off, 1 callout level, 2 master volume) and `connected_only` (for either
     -- mode) carry no default on purpose: a file without them is read the way the suite used
     -- `level` and `master_gvar` before the page offered one mode, and lib/audio_volume.lua is
-    -- where that reading lives. Both are written from the Volume page's first save on.
+    -- where that reading lives. The page writes `volume_mode` on its first save, `connected_only` once
+    -- it is set or saved in one of the two modes.
     optional = { "volume_mode", "connected_only" },
   },
   flightlog = {
