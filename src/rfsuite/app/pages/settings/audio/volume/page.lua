@@ -35,8 +35,9 @@ local MODE_OFF, MODE_LEVEL, MODE_MASTER = 0, 1, 2
 local LEVEL_START = 3
 
 -- The global variables, and the empty entry that switches the master volume off. Read from the
--- lvgl table where the firmware has it; SRC_GVAR is 1 << 15 and SRC_NONE 1 << 30
--- (radio/src/dataconstants.h).
+-- lvgl table, which every firmware with lvgl.source exports; the numbers behind it are only a
+-- fallback, EdgeTX 2.12's SRC_GVAR 1 << 15 and SRC_NONE 1 << 30 (radio/src/dataconstants.h --
+-- 2.11 has SRC_NONE at 1 << 20).
 local SRC_GVAR_FILTER = ((lvgl ~= nil and lvgl.SRC_GVAR) or 0x8000)
   | ((lvgl ~= nil and lvgl.SRC_CLEAR) or 0x40000000)
 
@@ -99,6 +100,9 @@ local function copyFromPrefs(prefs)
   local mode = Rules.mode(audio)
   ui.config.volume_mode = mode
   ui.config.connected_only = Rules.connectedOnly(audio, mode)
+  -- Until the pilot sets Connected only, or a save has stored it, it follows the mode the way a
+  -- file without it is read: on for Master volume, the level's own switch for Callout level.
+  ui.connectedOnlySet = audio.connected_only ~= nil
 end
 
 local function ensureLoaded(prefs)
@@ -130,8 +134,17 @@ local function onModeSelected(value)
   if value == MODE_LEVEL and (tonumber(ui.config.level) or 0) <= 0 then
     ui.config.level = LEVEL_START
   end
+  if not ui.connectedOnlySet then
+    ui.config.connected_only = Rules.connectedOnly(
+      { level_connected_only = ui.config.level_connected_only }, value)
+  end
   -- The rows below depend on the mode, so this asks for a rebuild.
   ui.runtime.markDirty()
+end
+
+local function onConnectedOnlySet(value)
+  ui.connectedOnlySet = true
+  ui.runtime.getBoolSetter("connected_only")(value)
 end
 
 -- The source index of GV1. The global variables are one block of mix sources, so GV n is that
@@ -280,6 +293,7 @@ function M.onSave(ctx)
   local ok, err = ctx.savePreferences()
   if ok then
     ui.dirty = false
+    ui.connectedOnlySet = true
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
     end
@@ -322,7 +336,7 @@ function M.build(ctx)
     children, x, cursorY, w,
     connectedLabel,
     ui.config.connected_only,
-    ui.runtime.getBoolSetter("connected_only"),
+    onConnectedOnlySet,
     nil,
     helpOpts(t(i18n, "help_connected_only"), connectedLabel)
   )
@@ -350,7 +364,7 @@ function M.build(ctx)
     -- Kept in the file and not acted on (lib/audio.lua); said here, so the empty picker is not
     -- taken for a setting that was never made.
     local missing = t(i18n, "gvar_missing", "GV%d is not on this radio, so the master volume is off. Pick one it has.")
-    appendNote(children, x, cursorY + 2, w, string.format(missing, gv))
+    appendNote(children, x, cursorY + 2, w, string.format(missing, math.floor(gv)))
     return
   end
 

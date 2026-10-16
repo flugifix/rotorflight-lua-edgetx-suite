@@ -22,7 +22,7 @@ The two cannot be combined because they multiply: the level scales the sound fil
 * **Connected only:** shown in both modes, under *Mode*.
   * **On:** the mode acts only while the radio's link to the model is up, so bench and menu work stays at the radio's own volume. In *Master volume* the pot rules until the link comes up, the *Normal Level* is written then, and `-1024` is written when the link goes down (unless a critical alert is still active, see below).
   * **Off:** the mode acts from the moment the dashboard or the tool starts, and the link changes nothing. In *Master volume* the pot therefore stays overridden for as long as the mode is on.
-  * A file written before this setting existed keeps what it did: in *Callout level* the earlier *Connected only* of the level, and in *Master volume* on, which is how the master volume always behaved.
+  * Until it is set, it follows the mode: in *Callout level* the earlier *Connected only* of the level, in *Master volume* on, which is how the master volume always behaved. A file written before this setting existed reads the same way, and so does a mode picked on the page before *Connected only* is touched or saved.
   * For adjustment announcements made where neither the dashboard nor the tool runs (by the [background decoder](../../../reference/background-decoder.md), or by the service widget on its own), *on* means that the radio's RF link is up.
 
 ## Callout level
@@ -45,7 +45,7 @@ The setting is radio-wide: every model memory that carries the chain below uses 
 3. **Logical Switch:** Create a logical switch `L10: a > x` with **a = GV9**, **x = -1024**. This is true while the suite is driving the volume.
 4. **Special Function:** Create a special function `SF: L10 -> Volume = I15 (Vol)`. (Use the **input**, not the GVAR).
 
-When the suite is not driving the volume (e.g. disconnected with *Connected only* on, another mode picked, or the global variable set to `---`), it writes `-1024` to the GVAR. This makes the logical switch false, the special function releases, and your regular volume pot regains control. Each changed value is a write into the model, which EdgeTX saves with the model.
+When the suite stops driving the volume while the dashboard or the tool runs (the link goes down with *Connected only* on, another mode is picked, or the global variable is set to `---`), it writes `-1024` to the GVAR. This makes the logical switch false, the special function releases, and your regular volume pot regains control. Each changed value is a write into the model, which EdgeTX saves with the model.
 
 > [!NOTE]
-> Retiring the feature does not automatically release the GVAR. The last written value stays in the model file, so the pot will remain overridden until something writes `-1024` again.
+> Retiring the feature does not automatically release the GVAR. The last written value stays in the model file, so the pot will remain overridden until something writes `-1024` again. The same holds when the radio is switched off while the suite holds the volume and the mode is changed before the next start: only a running dashboard or tool that wrote the global variable releases it, so write `-1024` by hand (or pick the mode again, start the dashboard, then change it) before relying on the pot.
