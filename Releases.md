@@ -1,5 +1,12 @@
 # 0.2.1
 
+### Features & Enhancements
+
+- **The documentation under `docs/` is published as a website (`mkdocs.yml`, `bin/docs/`, `.github/workflows/docs.yml`)**:
+  - MkDocs with the Material theme builds the site from `docs/` as it is, with search, a navigation tree and previous/next links; GitHub Pages publishes it on every push to master that touches the documentation. The files stay plain Markdown that reads on GitHub unchanged.
+  - A relative link that leaves `docs/` is pointed at the file on GitHub, and each section is ordered by the `sidebar_position` of its pages, the order of the tiles on the radio.
+  - A pull request that touches the documentation builds the site with `--strict`, so a link the site cannot resolve turns the job red.
+
 # 0.2.0
 
 ### Features & Enhancements
