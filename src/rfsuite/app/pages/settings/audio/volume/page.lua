@@ -34,12 +34,11 @@ local MODE_OFF, MODE_LEVEL, MODE_MASTER = 0, 1, 2
 -- radio/src/audio.cpp, WavContext::mixBuffer).
 local LEVEL_START = 3
 
--- The global variables, and the empty entry that switches the master volume off. Read from the
--- lvgl table, which every firmware with lvgl.source exports; the numbers behind it are only a
--- fallback, EdgeTX 2.12's SRC_GVAR 1 << 15 and SRC_NONE 1 << 30 (radio/src/dataconstants.h --
--- 2.11 has SRC_NONE at 1 << 20).
-local SRC_GVAR_FILTER = ((lvgl ~= nil and lvgl.SRC_GVAR) or 0x8000)
-  | ((lvgl ~= nil and lvgl.SRC_CLEAR) or 0x40000000)
+-- The global variables only. The picker has no empty entry: Mode's Off is what turns the master
+-- volume off, so there is one place for it. Read from the lvgl table, which every firmware with
+-- lvgl.source exports; the number is only a fallback, EdgeTX 2.12's SRC_GVAR 1 << 15
+-- (radio/src/dataconstants.h).
+local SRC_GVAR_FILTER = (lvgl ~= nil and lvgl.SRC_GVAR) or 0x8000
 
 local function buildDefaultConfig()
   local cfg = {}
@@ -178,8 +177,8 @@ local function helpOpts(text, title)
 end
 
 -- The global variable row. The picker is EdgeTX's own source picker, filtered to the global
--- variables this radio has, with their names, plus the empty entry. Controls has no wrapper for
--- it, so the row draws its label, the picker and its `?` where appendComboSelect places them.
+-- variables this radio has, with their names. Controls has no wrapper for it, so the row draws
+-- its label, the picker and its `?` where appendComboSelect places them.
 local HELP_BTN_W, HELP_BTN_H, HELP_BTN_GAP, PICKER_W = 30, 30, 6, 172
 
 local function appendGvarPicker(children, x, y, w, labelText, help)
@@ -204,17 +203,14 @@ local function appendGvarPicker(children, x, y, w, labelText, help)
     x = pickerX, y = Controls.controlY(y, rowH), w = pickerW, h = Controls.CTRL_H,
     -- NO `title`: the source picker does not take one (see app/pages/setup_wizard/proc_radio.lua).
     filter = SRC_GVAR_FILTER,
-    -- A variable this radio lacks shows as the empty entry: past the last one come the radio's
-    -- own sources (TX voltage, time, GPS), and the picker would name one of those.
+    -- None picked yet, or a variable this radio lacks, is 0, which EdgeTX draws as its empty
+    -- source: past the last variable come the radio's own sources (TX voltage, time, GPS), and
+    -- the picker would name one of those.
     get = function() return shown end,
     set = function(value)
       value = tonumber(value) or 0
-      local gv = 0
-      if value ~= 0 then
-        local n = base and (value - base + 1) or 0
-        if n < 1 or n > Rules.MAX_GVARS then return end
-        gv = n
-      end
+      local gv = base and (value - base + 1) or 0
+      if gv < 1 or gv > Rules.MAX_GVARS then return end
       shown = value
       if gv == (tonumber(ui.config.master_gvar) or 0) then return end
       ui.config.master_gvar = gv
@@ -364,10 +360,16 @@ function M.build(ctx)
     gvarLabel, helpOpts(t(i18n, "help_master_gvar"), gvarLabel))
 
   local gv = tonumber(ui.config.master_gvar) or 0
-  if gv <= 0 then return end
+  if gv <= 0 then
+    -- Master volume with no variable picked writes nothing (lib/audio.lua); said here, so the
+    -- mode is not taken for one that acts.
+    local none = t(i18n, "gvar_none", "No global variable picked, so the master volume does nothing yet. Pick one above.")
+    appendNote(children, x, cursorY + 2, w, none)
+    return
+  end
   if not Rules.gvarOnBoard(gv) then
-    -- Kept in the file and not acted on (lib/audio.lua); said here, so the empty picker is not
-    -- taken for a setting that was never made.
+    -- Kept in the file and not acted on (lib/audio.lua); said here, so the picker showing none is
+    -- not taken for a setting that was never made.
     local missing = t(i18n, "gvar_missing", "GV%d is not on this radio, so the master volume is off. Pick one it has.")
     appendNote(children, x, cursorY + 2, w, string.format(missing, math.tointeger(math.floor(math.min(gv, 99999))) or 0))
     return
