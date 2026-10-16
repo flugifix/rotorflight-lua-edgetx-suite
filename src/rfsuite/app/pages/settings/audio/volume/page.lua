@@ -289,13 +289,20 @@ local function getAudio()
   return Audio or nil
 end
 
--- Whether a test that writes into the model is refused. It fails CLOSED: without lib/armed.lua
--- the page cannot tell, and "cannot tell" is not "disarmed".
-local function armedLocks()
+-- Why a test that writes into the model is refused right now: "armed", "uncertain" (the arming
+-- state cannot be told: the link is up and no arming flags are reported), or nil when it is not.
+-- It fails CLOSED: without lib/armed.lua, or with a question that raises, the page cannot tell,
+-- and "cannot tell" is not "disarmed".
+local function lockReason()
   if Armed == nil then Armed = requireShared("lib/armed.lua") or false end
-  if type(Armed) ~= "table" or type(Armed.isArmed) ~= "function" then return true end
+  if type(Armed) ~= "table" or type(Armed.isArmed) ~= "function"
+    or type(Armed.isUncertain) ~= "function" then return "uncertain" end
   local ok, armed = pcall(Armed.isArmed)
-  return (not ok) or armed == true
+  if not ok then return "uncertain" end
+  if armed == true then return "armed" end
+  local okU, uncertain = pcall(Armed.isUncertain)
+  if not okU or uncertain == true then return "uncertain" end
+  return nil
 end
 
 -- What the model holds for the global variable being shown, read once per visit and per global
@@ -317,13 +324,26 @@ end
 -- an estimate: the sample is a word and a number, about two seconds, plus whatever was queued.
 local TEST_HOLD_TICKS = 500
 
+-- How often, in getTime() ticks of 10 ms, a page locked because the arming state is not known
+-- asks again. The tool rebuilds the page on an arming edge, but not when the arming flags first
+-- arrive, so the page asks for that rebuild itself.
+local LOCK_POLL_TICKS = 100
+
+local pageWakeup
+
+-- The page has a wakeup only while there is something for it to do: a test holding its value, or
+-- a lock waiting for the arming state. ui/home.lua calls a page's wakeup on every pass.
+local function updateWakeup()
+  if ui.test or ui.lockPoll then M.wakeup = pageWakeup else M.wakeup = nil end
+end
+
 -- A test's earlier value goes back only while the global variable still holds what the test
 -- wrote. If something else wrote to it in between -- the suite's own master volume on a change of
 -- the link, a critical alert -- that newer value is the one to keep.
 local function restoreTest()
   local pending = ui.test
   ui.test = nil
-  M.wakeup = nil
+  updateWakeup()
   if type(pending) ~= "table" or type(model) ~= "table" then return end
   if type(model.getGlobalVariable) ~= "function" or type(model.setGlobalVariable) ~= "function" then return end
   local ok, current = pcall(model.getGlobalVariable, pending.idx, 0)
@@ -332,18 +352,29 @@ local function restoreTest()
   end
 end
 
--- The page's wakeup exists only while a test holds its value: ui/home.lua calls a page's wakeup on
--- every pass, and the page has nothing else to do there. Called only while the craft is NOT armed;
--- the arming edge is covered by the rebuild it causes (see M.build).
-local function testWakeup()
+-- Called only while the craft is NOT armed; the arming edge is covered by the rebuild it causes
+-- (see M.build). A test holding its value puts the earlier one back after the hold, or at once
+-- when the arming state can no longer be told. A lock on an unknown arming state asks again once
+-- a second and rebuilds the page when the answer has changed.
+pageWakeup = function()
+  local now = getTime and getTime() or 0
   local pending = ui.test
-  if pending == nil or (getTime and getTime() or 0) >= pending.untilTick then restoreTest() end
+  if pending and (now >= pending.untilTick or lockReason() ~= nil) then restoreTest() end
+  local poll = ui.lockPoll
+  if poll and now >= poll.nextTick then
+    poll.nextTick = now + LOCK_POLL_TICKS
+    if lockReason() ~= poll.reason then
+      ui.lockPoll = nil
+      updateWakeup()
+      if type(poll.rebuild) == "function" then poll.rebuild() end
+    end
+  end
 end
 
 -- Normal or Alarm: the global variable at that level, the sample at the radio's own Wav volume
 -- (the master volume carries the level), then the earlier value back. Not an edit of the page.
 local function startMasterTest(gv, pct)
-  if armedLocks() then return end
+  if lockReason() ~= nil then return end
   local result = ui.diag and ui.diag.gv == gv and ui.diag.result
   if not (result and result.complete) then return end
   local audio = getAudio()
@@ -362,7 +393,7 @@ local function startMasterTest(gv, pct)
   if raw ~= prev then
     if not pcall(model.setGlobalVariable, idx, 0, raw) then return end
     ui.test = { idx = idx, prev = prev, wrote = raw, untilTick = (getTime and getTime() or 0) + TEST_HOLD_TICKS }
-    M.wakeup = testWakeup
+    updateWakeup()
   end
   audio.playSample(nil)
 end
@@ -494,6 +525,14 @@ local function appendDiagnosis(children, x, y, w, i18n, gv, result, help)
   if warn.curve then line(t(i18n, "chain_warn_curve", "Warning: the input has a curve.")) end
   if warn.inputSwitch then line(t(i18n, "chain_warn_input_switch", "Warning: the input has a switch.")) end
   if warn.flightModes then line(t(i18n, "chain_warn_flight_modes", "Warning: the input is limited to some flight modes.")) end
+  if warn.side then
+    -- As the input's Side choice names it (EdgeTX's x>0 for the positive half, x<0 for the other).
+    local side = (warn.side == 2 and "x>0") or (warn.side == 1 and "x<0") or tostring(warn.side)
+    line(string.format(t(i18n, "chain_warn_side", "Warning: the input's Side is %s, not both sides."), side))
+  end
+  if warn.lines then
+    line(string.format(t(i18n, "chain_warn_lines", "Warning: the input has %d lines; the first one that is on is used."), warn.lines))
+  end
   if warn.andSwitch then line(t(i18n, "chain_warn_and", "Warning: the logical switch has an AND switch.")) end
   if warn.delay then line(t(i18n, "chain_warn_delay", "Warning: the logical switch has a delay.")) end
   if warn.duration then line(t(i18n, "chain_warn_duration", "Warning: the logical switch has a duration.")) end
@@ -563,6 +602,9 @@ function M.build(ctx)
 
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
   ui.runtime.openHelp = ctx.openHelp
+  -- Only Master volume's tests wait for the arming state; it sets this again below.
+  ui.lockPoll = nil
+  updateWakeup()
 
   local modeLabel = t(i18n, "mode", "Mode")
   cursorY = cursorY + Controls.appendComboSelect(
@@ -646,9 +688,15 @@ function M.build(ctx)
   -- Normal and Alarm write into the model, so they wait for a disarmed craft and a complete
   -- chain; the reason stands under them while they wait. An arming edge rebuilds the page, and a
   -- test still holding its value then puts the earlier one back at once.
-  local locked = armedLocks()
-  if locked then restoreTest() end
-  local usable = (not locked) and result.complete == true
+  local reason = lockReason()
+  if reason then restoreTest() end
+  -- The arming flags arriving is no arming edge, so nothing would rebuild the page for it.
+  if reason == "uncertain" then
+    ui.lockPoll = { reason = reason, rebuild = ctx.requestRebuild,
+      nextTick = (getTime and getTime() or 0) + LOCK_POLL_TICKS }
+    updateWakeup()
+  end
+  local usable = reason == nil and result.complete == true
   local function isUsable() return usable end
   local testLabel = t(i18n, "test", "Test")
   cursorY = cursorY + appendButtonRow(children, x, cursorY, w, testLabel, {
@@ -657,8 +705,10 @@ function M.build(ctx)
     { text = t(i18n, "test_alarm", "Alarm"), active = isUsable,
       press = function() startMasterTest(gv, ui.config.master_alert) end },
   }, helpOpts(t(i18n, "help_test_master"), testLabel))
-  if locked then
+  if reason == "armed" then
     appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_armed", "Locked while the model is armed."))
+  elseif reason == "uncertain" then
+    appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_uncertain", "Locked: the arming state is not known yet."))
   elseif not usable then
     appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_chain", "Needs the whole chain above."))
   end
@@ -667,6 +717,7 @@ end
 function M.onClose()
   -- A test still holding its value puts the earlier one back before the page goes, and nothing
   -- read from the model outlives the visit (resetPageState clears only what it knows of).
+  ui.lockPoll = nil
   restoreTest()
   ui.diag = nil
   Common.resetPageState(ui)

@@ -97,7 +97,7 @@ function M.read(gv, gvSource)
     for l = 0, count - 1 do
       local line = call(getInput, i, l)
       if type(line) == "table" and tonumber(line.source) == gvSource then
-        inputs[firstInput + i] = { slot = i, line = line }
+        inputs[firstInput + i] = { slot = i, line = line, lines = count }
         if firstFound == nil then firstFound = firstInput + i end
         break
       end
@@ -164,6 +164,15 @@ function M.read(gv, gvSource)
     if (tonumber(line.curveValue) or 0) ~= 0 then warn.curve = true end
     if (tonumber(line.switch) or 0) ~= 0 then warn.inputSwitch = true end
     if (tonumber(line.flightModes) or 0) ~= 0 then warn.flightModes = true end
+    -- `side` is the line's Side (radio/src/myeeprom.h, EXPO_MODE_ENABLE): bit 1 lets negative
+    -- values through, bit 2 positive ones, 3 both. On one side, the other half of the global
+    -- variable's span reads as 0. Firmware before EdgeTX 2.11 has no `side` and is not warned.
+    local side = tonumber(line.side)
+    if side ~= nil and side ~= 3 then warn.side = side end
+    -- Of an input's lines, the first one whose switch and flight modes let it through is the
+    -- input's value and the lines after it are not looked at (mixer.cpp, applyExpos), so
+    -- another line can take the input over from the global variable's.
+    if input.lines > 1 then warn.lines = input.lines end
   end
   local switch = switchKey and switches[switchKey]
   if switch then
