@@ -845,7 +845,7 @@ return {
         help_mode = "Modus: Aus überlässt die Lautstärke dem Sender; Ansage-Stufe legt fest, wie laut die Ansagen sind; Master-Lautstärke setzt die gesamte Lautstärke des Senders über eine globale Variable.",
         help_connected_only = "Nur wenn verbunden: an, wirkt der Modus nur bei bestehender Verbindung zum Modell; aus, ab dem Start, und bei Master-Lautstärke bleibt das Poti dann übersteuert, solange der Modus an ist.",
         help_level = "Stufe: 1 bis 5 für jede Ansage und die Zahl danach; 3 klingt so laut wie die WAV-Lautstärke 0 des Senders, 5 am lautesten.",
-        help_master_gvar = "Globale Variable: die GV, in die die Suite die Master-Lautstärke schreibt, -1024 beim Freigeben; --- schaltet sie ab. Zur Wahl stehen nur die GVs dieses Senders.",
+        help_master_gvar = "Globale Variable: die GV, in die die Suite die Master-Lautstärke schreibt, -1024 beim Freigeben; der leere Eintrag schaltet sie ab. Zur Wahl stehen nur die GVs dieses Senders.",
         help_master_normal = "Normale Stufe (%): wird geschrieben, solange kein kritischer Alarm aktiv ist; mit Nur wenn verbunden nur bei bestehender Verbindung.",
         help_master_alert = "Alarm-Stufe (%): wird geschrieben, solange ein kritischer Alarm aktiv ist."
       },
