@@ -155,7 +155,7 @@ The count says that a flight *had* gaps. The alert asks whether the link is stut
 - Only while the model is armed. Gaps on the ground before arming are not counted into the flight: the window starts with the first reading after arming.
 - A count that starts over -- after a lost link -- is a new start, never an alert.
 - The alert needs the `*Skp` sensor, that is the flight controller's custom CRSF telemetry decoded by the suite. Without it the alert stays silent.
-- Spoken at once when the count is reached, then as often as *Repeat* says, ten seconds apart, until the rise has stayed below the count for a whole window. A rate resting on the count -- falling below it and climbing back with the next gap -- is therefore one alert, not a new one at every gap. Recovery is not spoken.
+- Spoken at once when the count is reached, then as often as *Repeat* says, ten seconds apart, while the rise stays at or above the count; nothing is spoken while it is below. It stays one alert until the rise has stayed below the count for a whole window, so a rate resting on the count -- falling below it and climbing back with the next gap -- neither starts a new alert nor a new repeat count. Recovery is not spoken.
 - It never vibrates, whatever *Haptic* says: it has one level, and the link quality alert's lower level does not vibrate either.
 - The gaps counted are those of the flight controller's telemetry on its way to the radio. A receiver that drops control frames on the way to the model is what *Link Quality* reports.
 
@@ -183,7 +183,7 @@ the page that switches an alert on is the page that says how it behaves.
   announcement. It defaults to on for the
   three categories whose alerts already buzzed with no way of switching it off, and to off for
   SmartFuel, which already had this setting and keeps its value.
-- **Two alerts have their own rule inside the category, and a setting does not overrule it.**
+- **Three alerts have their own rule inside the category, and a setting does not overrule it.**
   The link quality alert buzzes at its *critical* level only, never at the warning level. The
   lost telemetry announcement says itself once per loss, so it takes the haptic and ignores the
   repeat. The telemetry dropouts alert takes the repeat and never buzzes.

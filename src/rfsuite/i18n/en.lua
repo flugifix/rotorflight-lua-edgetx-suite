@@ -978,7 +978,7 @@ return {
         help_message = "Callouts of the SmartFuel level while the model is connected.\nThe flight controller computes the value when SmartFuel is on there (Setup > Power > SmartFuel, MSP API 12.0.9 or later).\nOtherwise the radio computes it from the local source set in Setup > Power > Preferences."
       },
       settings_audio_events_link = {
-        help_message = "Alerts about the radio link and the flight controller's telemetry.\nLink Quality: speaks the quality when it falls to a level.\nWarning (%): the upper level, without vibration.\nCritical (%): the lower level, with vibration if Haptic is on.\nTelemetry Lost: armed, the flight controller stops sending.\nTelemetry Dropouts: armed, its frames go missing too often.\nDropouts: how many gaps set it off.\nWindow (s): the time they are counted over.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at Critical and with Telemetry Lost."
+        help_message = "Alerts about the radio link and the flight controller's telemetry.\nLink Quality: speaks the quality when it falls to a level.\nWarning (%): the upper level, without vibration.\nCritical (%): the lower level, with vibration if Haptic is on.\nTelemetry Lost: armed, the flight controller stops sending.\nTelemetry Dropouts: armed, its frames go missing too often.\nDropouts: how many gaps set it off.\nWindow (s): the time they are counted over.\nRepeat: how often Link Quality and Telemetry Dropouts speak while they hold, 10 s apart.\nHaptic: vibrates at Critical and with Telemetry Lost."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Mode",
