@@ -2,6 +2,13 @@
 
 ### Features & Enhancements
 
+- **Rescue is announced, on a page of its own under *Settings* → *Audio* → *Events* (`app/pages/settings/audio/events/`, `lib/audio.lua`, `lib/sensors.lua`, `ui/home.lua`, `widgets/dashboard/runtime.lua`, `docs/audio/events.md`, `docs/pages/settings/audio/events/rescue.md`)**:
+  - A tenth tile, *Rescue*, with two switches, *Rescue Active* and *Rescue Off*, both off by default and radio-wide. The first speaks "Rescue – Active" once when the flight controller's rescue starts, the second "Rescue – Off" once when it is over; the phases in between are not spoken, and neither repeats or vibrates.
+  - The state is read from the *Rescue State* sensor, or from the rescue bits of *System Status* where that sensor is not sent (`rescue`, a new key in `lib/sensors.lua`), on both the tool's and the dashboard's path. Only a change between two readings is spoken, so a model that connects mid-rescue is not announced as one that has just begun.
+  - Two new files per language, `stat/alerts/rescue_on.wav` and `stat/alerts/rescue_off.wav`, built with `bin/sound-generator/` from new entries in its word lists; `adj/rescue.wav` stays with the adjustment announcements.
+
+### Features & Enhancements
+
 - **The shipped dashboard themes have a documentation page, with a picture of each screen (`docs/dashboard/themes.md`, `docs/images/dashboard/themes/`, `docs/dashboard/urban-theme.md`)**:
   - Every theme the suite ships -- Default, RF Status, @AERC, @AERC Nitro, @RT-RC, @RT-RC Nitro, @SRB-RC and Urban -- is shown on a TX16S MK3 before, during and after a flight (the two nitro themes during and after it), with a short list of what each screen carries, so a pilot can pick one without trying them all on the radio.
   - The page also says what every theme has in common: which screen the flight puts on, the connecting screen before the first one, and where a theme is chosen and configured. The Design page and the dashboard index link to it.

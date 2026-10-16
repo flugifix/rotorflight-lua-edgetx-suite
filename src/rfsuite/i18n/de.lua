@@ -207,6 +207,7 @@ return {
       audio_events_adjustment = { name = "Einstellungen" },
       audio_events_fuel = { name = "SmartFuel" },
       audio_events_link = { name = "Link" },
+      audio_events_rescue = { name = "Rettung" },
       audio_volume = { name = "Lautstärke" },
       msp_speed = { name = "MSP-Geschwindigkeit" },
       api_tester = { name = "API Tester" },
@@ -854,6 +855,7 @@ return {
         section_fuel = "Kraftstoff",
         section_smartfuel = "SmartFuel",
         section_connect = "Beim Verbinden",
+        section_rescue = "Rettung",
         section_alert_behaviour = "Verhalten der Warnungen",
         alert_repeat = "Wiederholung",
         alert_haptic = "Haptisch",
@@ -909,6 +911,8 @@ return {
         battery_profile = "Akkukapazität",
         initial_fuel = "SmartFuel",
         model_announcement = "Modellname",
+        rescue_active = "Rettung aktiv",
+        rescue_off = "Rettung beendet",
         help_model_announcement = "Spielt die nach dem Modell benannte Sounddatei SOUNDS/<Name>.wav einmal beim Verbinden. Fehlt die Datei auf der Karte, bleibt es still. Standard: aus.",
         help_battery_profile = "Sagt die Kapazität des aktiven Akkuprofils in mAh beim Verbinden und bei jedem Profilwechsel; ohne eingestellte Kapazität die Profilnummer. Standard: an.",
         help_pack_not_full = "Einmal beim Verbinden: warnt, wenn die Spannung pro Zelle unter Max Zellspannung (Setup > Power > Batterie) minus der Toleranz liegt, gesagt wie unter Spannung > Ansage als. Standard: aus.",
@@ -945,6 +949,8 @@ return {
         help_telemetry_lost = "Ansage, wenn der Flugregler des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst. Standard: aus.",
         help_link_repeat = "Wie oft die Linkqualitäts-Warnung spricht, solange sie auf einer Stufe bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
         help_link_haptic = "Ob der Sender bei der kritischen Linkqualität und bei Telemetrie verloren vibriert. Standard: an.",
+        help_rescue_active = "Spricht einmal, sobald der Flugregler eine Rettung beginnt, in welcher Phase auch immer. Standard: aus.",
+        help_rescue_off = "Spricht einmal, wenn die Rettung vorbei ist und der Flugregler wieder normal steuert. Standard: aus.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
         saved_title = "Gespeichert",
         saved_message = "Audio-Ereignisse gespeichert",
@@ -977,6 +983,9 @@ return {
       },
       settings_audio_events_link = {
         help_message = "Warnungen zur Funkverbindung und zur Telemetrie des Flugreglers."
+      },
+      settings_audio_events_rescue = {
+        help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetry.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",

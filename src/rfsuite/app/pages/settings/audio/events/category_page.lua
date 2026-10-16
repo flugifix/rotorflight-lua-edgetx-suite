@@ -102,6 +102,10 @@ local CONFIG_SCHEMA = {
   { key = "pack_not_full_margin", type = "number", default = 100, min = 10, max = 500, section = "connect" },
   { key = "battery_profile",   type = "bool", default = true,  section = "connect" },
   { key = "initial_fuel",      type = "bool", default = true,  section = "connect" },
+  -- The start of a rescue and its end, each spoken under a switch of its own. Both default to off,
+  -- so a radio that never opens this page announces nothing new.
+  { key = "rescue_active",     type = "bool", default = false, section = "rescue" },
+  { key = "rescue_off",        type = "bool", default = false, section = "rescue" },
 }
 
 -- One enable per governor state, under the `governor_state` master switch. They default to on,
@@ -264,6 +268,16 @@ local SECTIONS = {
       { kind = "bool", key = "initial_fuel", labelKey = "initial_fuel", labelFallback = "SmartFuel" },
     },
   },
+  -- Two events rather than an alert, so no Repeat and no Haptic: the pilot usually starts a rescue
+  -- himself, and a confirmation is all it needs.
+  rescue = {
+    titleKey = "section_rescue",
+    titleFallback = "Rescue",
+    items = {
+      { kind = "bool", key = "rescue_active", labelKey = "rescue_active", labelFallback = "Rescue Active" },
+      { kind = "bool", key = "rescue_off", labelKey = "rescue_off", labelFallback = "Rescue Off" },
+    },
+  },
 }
 
 for i = 1, #GOVERNOR_STATES do
@@ -355,6 +369,12 @@ local ROW_HELP = {
       telemetry_lost = t(i18n, "help_telemetry_lost"),
       link_repeat = t(i18n, "help_link_repeat"),
       link_haptic = t(i18n, "help_link_haptic"),
+    }
+  end,
+  rescue = function(t, i18n)
+    return {
+      rescue_active = t(i18n, "help_rescue_active"),
+      rescue_off = t(i18n, "help_rescue_off"),
     }
   end,
 }

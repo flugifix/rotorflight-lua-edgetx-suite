@@ -357,6 +357,7 @@ return {
     ["page.settings_audio_events_governor_page.build"] = { target = 6300, measured = 6008 },
     ["page.settings_audio_events_link_page.build"] = { target = 5750, measured = 5717 },
     ["page.settings_audio_events_profiles_page.build"] = { target = 2650, measured = 2498 },
+    ["page.settings_audio_events_rescue_page.build"] = { target = 1600, measured = 1272 },
     ["page.settings_audio_events_voltage_page.build"] = { target = 6100, measured = 5112 },
     ["page.settings_audio_volume_page.build"] = { target = 2100, measured = 1674 },
     ["page.settings_dashboard_inflight_page.build"] = { target = 10200, measured = 8152 },

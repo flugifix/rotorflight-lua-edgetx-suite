@@ -574,6 +574,7 @@ Sensors.aliases = {
   yaw = "Yaw",
   armflags = "ARM",
   governor = "Gov",
+  rescue = "Resc",
   system_status = "STAT",
   system_config = "SCFG",
 }
@@ -599,6 +600,7 @@ Sensors.search_paths = {
   armdisableflags = { "ARMD", "ArmD", "arming_disable_flags", "armdisableflags" },
   smartconsumption = { "SmCp", "Smart Consumption", "smartconsumption", "Capa", "consumption" },
   governor = { "Gov", "Governor", "governor" },
+  rescue = { "Resc", "rescue" },
   -- CRSF names them STAT/SCFG (lib/rf2tlm_sensors.lua); S.Port sensors are
   -- named by EdgeTX after their appId.
   system_status = { "STAT", "5140", "system_status" },
@@ -717,11 +719,12 @@ local readValue
 -- Readings the packed status words also carry (rotorflight-firmware
 -- src/main/telemetry/status.h). When the dedicated sensor is not there, the
 -- value is taken from System Status / System Config instead, so firmware that
--- only sends the packed words still drives arm state, governor and profiles.
+-- only sends the packed words still drives arm state, governor, rescue and profiles.
 -- armflags is reduced to its ARMED bit, the only bit its readers use.
 local DERIVED = {
   armflags        = { word = "system_status", shift = 0,  mask = 0x1 },
   governor        = { word = "system_status", shift = 25, mask = 0xF },
+  rescue          = { word = "system_status", shift = 21, mask = 0x7 },
   pid_profile     = { word = "system_config", shift = 0,  mask = 0x7 },
   rate_profile    = { word = "system_config", shift = 3,  mask = 0x7 },
   battery_profile = { word = "system_config", shift = 6,  mask = 0x7 },

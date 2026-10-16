@@ -570,6 +570,18 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/rescue_off.wav",
+    "english": "Rescue – Off",
+    "translation": "Rescue aus",
+    "needs_translation": false
+  },
+  {
+    "file": "stat/alerts/rescue_on.wav",
+    "english": "Rescue – Active",
+    "translation": "Rescue aktiv",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/telemetrylost.wav",
     "english": "Telemetry Lost",
     "translation": "Telemetrie verloren",

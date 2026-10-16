@@ -224,6 +224,13 @@ local CONNECTION_OK_SOUND = "stat/alerts/telemetryok.wav"
 local MAIN_POWER_LOST_SOUNDS = { "stat/alerts/mainpower.wav", "stat/alerts/batteryempty.wav", "stat/alerts/lowvoltage.wav" }
 local MAIN_POWER_OK_SOUNDS = { "stat/alerts/mainpowerok.wav", "evt/battery.wav" }
 
+-- Rescue, spoken on its two edges only: out of RESCUE_STATE_OFF (0 in rotorflight-firmware
+-- flight/rescue.h) into any of its phases, and back to it. The phases in between are not spoken.
+-- Files of their own rather than adj/rescue.wav, which is the first word of the rescue
+-- adjustment announcements.
+local RESCUE_ACTIVE_SOUND = "stat/alerts/rescue_on.wav"
+local RESCUE_OFF_SOUND = "stat/alerts/rescue_off.wav"
+
 -- How long an alert whose condition still holds waits before it speaks again. Every repeating
 -- alert in this file already waited exactly this long, with the number written out at each of
 -- them; one constant is what lets the repeat count below mean the same thing everywhere.
@@ -1122,6 +1129,47 @@ local function announceGovernorEvent(self, events, opts)
   return tryPlayEventFile(audioState, now, "gov/" .. file, opts)
 end
 
+-- A change between two readings of the rescue state is spoken at once, the start of a rescue
+-- and its end each under a switch of its own; no repeat and no vibration. A first reading -- after
+-- a connect, or after the switches were off -- is only recorded, so a rescue already under way
+-- is not announced as if it had just begun. While both switches are off nothing is tracked.
+--
+-- `rescueWanted` tells both callers whether to read the state at all (ui/home.lua and
+-- widgets/dashboard/runtime.lua): a radio that never switches this on pays no sensor search
+-- for it, which on a flight controller sending neither Rescue State nor System Status is two
+-- searches that find nothing.
+local function announceRescueEvent(self, events, opts)
+  local audioState = self.audioState
+  local announceActive = prefEnabled(events, "rescue_active", false)
+  local announceOff = prefEnabled(events, "rescue_off", false)
+  audioState.rescueWanted = announceActive or announceOff
+  if not (announceActive or announceOff) then
+    audioState.lastValues.rescue = nil
+    return
+  end
+
+  local value = roundProfileValue(self.state.rescue)
+  if value == nil then return end
+  local active = value ~= 0
+  local last = audioState.lastValues.rescue
+  if last == active then return end
+  if last == nil then
+    audioState.lastValues.rescue = active
+    return
+  end
+
+  -- Left unrecorded while the previous file's cooldown runs, so the next pass speaks it.
+  local now = nowSeconds()
+  if now < (audioState.nextAllowedAt or 0) then return end
+
+  audioState.lastValues.rescue = active
+  if active and announceActive then
+    tryPlayEventFile(audioState, now, RESCUE_ACTIVE_SOUND, opts)
+  elseif not active and announceOff then
+    tryPlayEventFile(audioState, now, RESCUE_OFF_SOUND, opts)
+  end
+end
+
 local function announceBatteryCapacityEvent(self, opts)
   local profile = roundProfileValue(self.state.batteryProfile)
   if profile == nil or profile < 1 or profile > 6 then
@@ -1775,6 +1823,8 @@ function Audio.process(self, opts)
   if governorEnabled then
     announceGovernorEvent(self, events, opts)
   end
+
+  announceRescueEvent(self, events, opts)
 
   announceProfileEvent(self, "pid_profile", self.state.profile, "evt/profile.wav", opts)
   announceProfileEvent(self, "rate_profile", self.state.rateProfile, "evt/rates.wav", opts)
