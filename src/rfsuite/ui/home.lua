@@ -3902,6 +3902,15 @@ function M.run(event, touchState)
             ts.armDisableFlags = math.max(0, math.floor(armDisableFlagsValue + 0.5))
           end
           ts.governor = roundInt(Sensors.getValue("governor") or ts.governor, ts.governor or 0)
+          -- This pass's reading and nil while nothing answers, never a held or a made-up 0:
+          -- lib/audio.lua speaks a rescue on a change between two readings, and a 0 standing in
+          -- for a sensor not found yet would make its first real reading look like one. Read
+          -- only while one of its announcements is on (`rescueWanted`, set by lib/audio.lua).
+          if state.audioState and state.audioState.rescueWanted then
+            ts.rescue = roundInt(Sensors.getValue("rescue"), nil)
+          else
+            ts.rescue = nil
+          end
           ts.mcuTemp = roundInt(Sensors.getValue("temp_mcu") or ts.mcuTemp, ts.mcuTemp or 0)
           ts.escTemp = roundInt(Sensors.getValue("temp_esc") or ts.escTemp, ts.escTemp or 0)
           ts.bec_voltage = Sensors.getValue("bec_voltage") or ts.bec_voltage
@@ -3914,6 +3923,17 @@ function M.run(event, touchState)
           end
           ts.current = currentValue or ts.current
           ts.watts = wattsValue or ts.watts
+          -- ESC load, as the dashboard widget derives it (widgets/dashboard/runtime.lua): this
+          -- tick's current as a share of the limit in the per-model store, and nil -- not the last
+          -- value -- where either is missing, so the ESC load alert judges what the widget's would.
+          local modelPrefs = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.modelPreferences
+          local escLimit = tonumber(type(modelPrefs) == "table" and type(modelPrefs.battery) == "table"
+            and modelPrefs.battery.esc_current_limit or nil)
+          if escLimit and escLimit > 0 and type(currentValue) == "number" then
+            ts.escLoad = currentValue / escLimit * 100
+          else
+            ts.escLoad = nil
+          end
           ts.altitude = Sensors.getValue("altitude") or ts.altitude
           ts.consumedMah = (smart and smart.consumption) or Sensors.getValue("smartconsumption") or ts.consumedMah
 
@@ -3977,6 +3997,15 @@ function M.run(event, touchState)
             ts.rsnr = nil
             ts.tsnr = nil
           end
+
+          -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua, as the
+          -- widget's readTelemetry reads it: a reading or nil, and only while that alert is on
+          -- (`dropoutsWanted`, set by lib/audio.lua). Here it is read on every audio tick.
+          if state.audioState and state.audioState.dropoutsWanted then
+            ts.skippedFrames = Sensors.getValue("skipped_frames")
+          else
+            ts.skippedFrames = nil
+          end
         end
 
         local modelName = nil
@@ -4024,11 +4053,13 @@ function M.run(event, touchState)
         state.telemetryState.armDisableFlags = nil
         state.telemetryState.armed = nil
         state.telemetryState.governor = nil
+        state.telemetryState.rescue = nil
         state.telemetryState.mcuTemp = nil
         state.telemetryState.escTemp = nil
         state.telemetryState.throttlePercent = nil
         state.telemetryState.current = nil
         state.telemetryState.watts = nil
+        state.telemetryState.escLoad = nil
         state.telemetryState.altitude = nil
         state.telemetryState.consumedMah = nil
         state.telemetryState.batteryCellCount = nil
@@ -4045,6 +4076,7 @@ function M.run(event, touchState)
         -- reflashed or swapped module.
         state.telemetryState.linkGeneration = nil
         state.telemetryState.linkPingSent = nil
+        state.telemetryState.skippedFrames = nil
       else
         -- Still not ready, and not the edge either -- the stretch in between. Nothing here is
         -- connection state, so there is nothing to announce and nothing to clear, but the
