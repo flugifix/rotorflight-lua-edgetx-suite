@@ -3970,6 +3970,15 @@ function M.run(event, touchState)
 
           ts.rss1 = readFirstSensorNumber(RSS1_SOURCES, ts.rss1)
           ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
+          -- The transmitter's power, which only the TX power alert uses: read only while that alert
+          -- is on (`txPowerWanted`, set by lib/audio.lua), into the field the dashboard widget uses,
+          -- and this pass's reading or nil -- never a held value.
+          if state.audioState and state.audioState.txPowerWanted then
+            ts.tpwr = Sensors.getValue("TPWR")
+          else
+            ts.tpwr = nil
+          end
+
           -- The readings only the link headroom and SNR alerts use, each read only while an alert
           -- that needs it is on (flags set by lib/audio.lua): the air rate under either flag, the
           -- antenna in use and the signal at the transmitter module under `linkHeadroomWanted`,
@@ -4065,6 +4074,7 @@ function M.run(event, touchState)
         state.telemetryState.batteryCellCount = nil
         state.telemetryState.rss1 = nil
         state.telemetryState.rss2 = nil
+        state.telemetryState.tpwr = nil
         state.telemetryState.rfMode = nil
         state.telemetryState.antenna = nil
         state.telemetryState.trss = nil

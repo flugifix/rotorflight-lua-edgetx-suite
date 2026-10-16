@@ -87,6 +87,17 @@ local CONFIG_SCHEMA = {
   { key = "lq_warn",           type = "number", default = 70, min = 1, max = 100, section = "link" },
   { key = "lq_critical",       type = "number", default = 50, min = 1, max = 100, section = "link" },
   { key = "telemetry_lost",    type = "bool", default = false, section = "link" },
+  -- The TX power alert: the transmitter's power as a share of its maximum, which rises as the link
+  -- weakens, so its levels are lines the share climbs to and the critical one is the higher. The
+  -- maximum is the module's own Max Power, read from the module; `tpwr_limit` puts `tpwr_max` in its
+  -- place. All of it is the transmitter's rather than the aircraft's, so none of it is per model.
+  { key = "tpwr_alert",        type = "bool", default = false, section = "link" },
+  { key = "tpwr_warn",         type = "number", default = 60, min = 1, max = 100, section = "link" },
+  { key = "tpwr_critical",     type = "number", default = 85, min = 1, max = 100, section = "link" },
+  { key = "tpwr_hold",         type = "number", default = 2, min = 0, max = 10, section = "link" },
+  { key = "tpwr_limit",        type = "bool", default = false, section = "link" },
+  -- No range: a choice out of TX_POWER_MAX_VALUES below, the power steps a module offers.
+  { key = "tpwr_max",          type = "number", default = 100, section = "link" },
   -- The signal headroom over the air rate's sensitivity floor, in percent of the scale
   -- lib/link_rates.lua defines (LinkRates.headroom): RSSI at the receiver, Downlink at the
   -- transmitter module. Each has its own switch, its own pair of levels and its own hold, the
@@ -271,6 +282,18 @@ local SECTIONS = {
         enabledBy = "lq_alert" },
       { kind = "subheader", labelKey = "section_telemetry", labelFallback = "Telemetry" },
       { kind = "bool", key = "telemetry_lost", labelKey = "telemetry_lost", labelFallback = "Telemetry Lost" },
+      -- The level rows take the labels of the link quality rows above and the hold row the label of
+      -- the voltage page's: they say the same thing, and the subheader tells the alerts apart.
+      { kind = "subheader", labelKey = "section_tx_power", labelFallback = "TX Power" },
+      { kind = "bool", key = "tpwr_alert", labelKey = "tpwr_alert", labelFallback = "TX Power" },
+      { kind = "number", key = "tpwr_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
+        enabledBy = "tpwr_alert" },
+      { kind = "number", key = "tpwr_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
+        enabledBy = "tpwr_alert" },
+      { kind = "number", key = "tpwr_hold", labelKey = "voltage_hold", labelFallback = "Hold (s)", suffix = " s",
+        enabledBy = "tpwr_alert" },
+      { kind = "bool", key = "tpwr_limit", labelKey = "tpwr_limit", labelFallback = "Own Maximum" },
+      { kind = "choice", key = "tpwr_max", labelKey = "tpwr_max", labelFallback = "Maximum (mW)", enabledBy = "tpwr_limit" },
       -- The level labels of the link quality alert and the hold label of the voltage alert: the
       -- rows mean the same thing, and the subheader says which alert they belong to.
       { kind = "subheader", labelKey = "rssi_alert", labelFallback = "RSSI" },
@@ -458,6 +481,12 @@ local ROW_HELP = {
       lq_warn = t(i18n, "help_lq_warn"),
       lq_critical = t(i18n, "help_lq_critical"),
       telemetry_lost = t(i18n, "help_telemetry_lost"),
+      tpwr_alert = t(i18n, "help_tpwr_alert"),
+      tpwr_warn = t(i18n, "help_tpwr_warn"),
+      tpwr_critical = t(i18n, "help_tpwr_critical"),
+      tpwr_hold = t(i18n, "help_tpwr_hold"),
+      tpwr_limit = t(i18n, "help_tpwr_limit"),
+      tpwr_max = t(i18n, "help_tpwr_max"),
       rssi_alert = t(i18n, "help_rssi_alert"),
       rssi_warn = t(i18n, "help_headroom_warn"),
       rssi_critical = t(i18n, "help_headroom_critical"),
@@ -490,6 +519,13 @@ local ROW_HELP = {
 }
 
 local FUEL_CALLOUT_VALUES = { [0] = true, [5] = true, [10] = true, [20] = true, [25] = true, [50] = true }
+
+-- The own maximum of the TX power alert, in mW: the power steps ExpressLRS offers above its lowest
+-- (TXModuleParameters.cpp, strPowerLevels), which is also the list the Urban theme's own power
+-- limit offers.
+local TX_POWER_MAX_LIST = { 25, 50, 100, 250, 500, 1000, 2000 }
+local TX_POWER_MAX_VALUES = {}
+for i = 1, #TX_POWER_MAX_LIST do TX_POWER_MAX_VALUES[TX_POWER_MAX_LIST[i]] = true end
 
 -- The per-model store hangs off the session and exists only once the flight controller's
 -- id has been read, so every caller here has to cope with it being absent. The session is
@@ -746,6 +782,41 @@ function M.new(sectionKey)
     return cache[key]
   end
 
+  -- The TX power alert's own maximum: a power step out of TX_POWER_MAX_LIST, shown in mW as the
+  -- row's label says. A stored value that is not one of them reads as the default.
+  local function getTxPowerMaxOptions()
+    local options = {}
+    for i = 1, #TX_POWER_MAX_LIST do
+      local mw = TX_POWER_MAX_LIST[i]
+      options[i] = { value = mw, label = tostring(mw) }
+    end
+    return options
+  end
+
+  local function getTxPowerMaxGetter()
+    if ui.runtime.txPowerMaxGet then return ui.runtime.txPowerMaxGet end
+    ui.runtime.txPowerMaxGet = function()
+      local value = tonumber(ui.config.tpwr_max) or 100
+      if not TX_POWER_MAX_VALUES[value] then return 100 end
+      return value
+    end
+    return ui.runtime.txPowerMaxGet
+  end
+
+  local function getTxPowerMaxSetter()
+    if ui.runtime.txPowerMaxSet then return ui.runtime.txPowerMaxSet end
+    ui.runtime.txPowerMaxSet = function(value)
+      if ui.config.tpwr_limit ~= true then return end
+      local nextValue = tonumber(value) or 100
+      if not TX_POWER_MAX_VALUES[nextValue] then nextValue = 100 end
+      if ui.config.tpwr_max ~= nextValue then
+        ui.config.tpwr_max = nextValue
+        ui.runtime.markDirty()
+      end
+    end
+    return ui.runtime.txPowerMaxSet
+  end
+
   -- How a flight-pack voltage is spoken. Two values, so its own pair rather than the repeat
   -- row's, which would let a hand-edited value outside them through.
   local function getAnnounceOptions(i18n)
@@ -826,6 +897,7 @@ function M.new(sectionKey)
       end
     end
     if not FUEL_CALLOUT_VALUES[ui.config.fuel_callout_percent] then ui.config.fuel_callout_percent = 10 end
+    if not TX_POWER_MAX_VALUES[ui.config.tpwr_max] then ui.config.tpwr_max = 100 end
 
     -- After the clamps, so that correcting an out-of-range stored value does not read as an
     -- edit the pilot made.
@@ -1047,6 +1119,8 @@ function M.new(sectionKey)
           options, selected, onSelect = getFuelCalloutOptions(i18n), getFuelCalloutGetter()(), getFuelCalloutSetter()
         elseif k == "voltage_announce" then
           options, selected, onSelect = getAnnounceOptions(i18n), getAnnounceGetter()(), getAnnounceSetter()
+        elseif k == "tpwr_max" then
+          options, selected, onSelect = getTxPowerMaxOptions(), getTxPowerMaxGetter()(), getTxPowerMaxSetter()
         else
           options, selected, onSelect = getRepeatOptions(i18n), getRepeatGetter(k)(), getRepeatSetter(k, item.enabledBy)
         end

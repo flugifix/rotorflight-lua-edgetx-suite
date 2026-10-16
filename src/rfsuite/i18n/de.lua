@@ -911,6 +911,10 @@ return {
         lq_alert = "Linkqualität",
         lq_warn = "Warnung (%)",
         lq_critical = "Kritisch (%)",
+        section_tx_power = "Sendeleistung",
+        tpwr_alert = "Sendeleistung",
+        tpwr_limit = "Eigenes Maximum",
+        tpwr_max = "Maximum (mW)",
         rssi_alert = "RSSI",
         trss_alert = "Downlink",
         rsnr_alert = "SNR",
@@ -968,6 +972,12 @@ return {
         help_lq_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 70 %.",
         help_lq_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 50 %.",
         help_telemetry_lost = "Ansage, wenn der Flugregler des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst. Standard: aus.",
+        help_tpwr_alert = "Scharf: sagt die Sendeleistung in % des Maximums an der Warn- oder kritischen Stufe. Nur mit dynamischer Leistung im ExpressLRS-Modul, sonst still. Standard: aus.",
+        help_tpwr_warn = "Die untere Stufe in Prozent des Maximums. Wird ohne Vibration gesagt. Standard: 60 %.",
+        help_tpwr_critical = "Die obere Stufe in Prozent des Maximums. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 85 %.",
+        help_tpwr_hold = "So lange muss die Leistung auf oder über einer Stufe bleiben, bevor sie gesagt wird. 0 sagt sofort. Standard: 2 s.",
+        help_tpwr_limit = "Nimmt Maximum (mW) darunter als 100 % statt der Max Power, die aus dem Modul gelesen wird. Standard: aus.",
+        help_tpwr_max = "Die Leistung, die als 100 % gilt, solange Eigenes Maximum an ist. Standard: 100 mW.",
         help_rssi_alert = "Scharf: sagt die Reserve der aktiven Empfängerantenne (ANT) an der Warn- oder kritischen Stufe; 0 % ist die Empfindlichkeitsgrenze der Paketrate, 100 % sind -40 dBm. Still ohne Grenze. Standard: aus.",
         help_trss_alert = "Scharf: dasselbe für das Signal am Sendermodul, den Downlink, mit eigenen Stufen. Standard: aus.",
         help_headroom_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 15 %.",
@@ -981,8 +991,8 @@ return {
         help_dropouts_alert = "Ansage, wenn beim scharfen Modell zu oft Telemetrie-Frames fehlen: so viele Lücken wie Aussetzer innerhalb von Zeitfenster (s). Die Erholung bleibt still, und es vibriert nie. Standard: aus.",
         help_dropouts_count = "Wie viele Lücken in den Telemetrie-Frames des Flugreglers innerhalb des Zeitfensters den Alarm auslösen (1 bis 50). Standard: 3.",
         help_dropouts_window = "Die Zeit, über die die Lücken gezählt werden, in Sekunden (4 bis 60). Standard: 10 s.",
-        help_link_repeat = "Wie oft die Alarme Linkqualität, Telemetrie-Aussetzer, RSSI, Downlink und beide SNR sprechen, solange sie anhalten, alle 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
-        help_link_haptic = "Ob der Sender bei der kritischen Stufe von Linkqualität, RSSI, Downlink und beiden SNR-Alarmen und bei Telemetrie verloren vibriert. Telemetrie-Aussetzer vibriert nie. Standard: an.",
+        help_link_repeat = "Wie oft die Alarme Linkqualität, Telemetrie-Aussetzer, RSSI, Downlink, beide SNR und Sendeleistung sprechen, solange sie anhalten, alle 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
+        help_link_haptic = "Ob der Sender bei der kritischen Stufe von Linkqualität, RSSI, Downlink, beiden SNR-Alarmen und Sendeleistung und bei Telemetrie verloren vibriert. Telemetrie-Aussetzer vibriert nie. Standard: an.",
         help_rescue_active = "Spricht einmal, sobald der Flugregler eine Rettung beginnt, in welcher Phase auch immer. Standard: aus.",
         help_rescue_off = "Spricht einmal, wenn die Rettung vorbei ist und der Flugregler wieder normal steuert. Standard: aus.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
@@ -1016,7 +1026,7 @@ return {
         help_message = "Ansagen des SmartFuel-Stands, solange das Modell verbunden ist.\nDen Wert berechnet der Flugregler, wenn SmartFuel dort an ist (Setup > Power > SmartFuel, ab MSP API 12.0.9).\nSonst berechnet ihn der Sender aus der lokalen Quelle in Setup > Power > Einstellungen."
       },
       settings_audio_events_link = {
-        help_message = "Alarme zu Funkverbindung und Telemetrie.\nLinkqualität: gesagt, wenn sie auf eine Stufe fällt; Warnung (%) und Kritisch (%) sind ihre Stufen, nur Kritisch vibriert.\nTelemetrie verloren: scharf, der Flugregler schweigt.\nTelemetrie-Aussetzer: scharf, die Frames fehlen zu oft; Aussetzer: wie viele Lücken, Zeitfenster (s): die Zeit.\nRSSI, Downlink und beide SNR: scharf, die Reserve über der Grenze der Paketrate und der SNR zwischen den Schwellen.\nHaltezeit (s): so lange muss eine Stufe anstehen. Wiederholung: wie oft ein Alarm spricht, alle 10 s. Haptisch: vibriert bei Kritisch und Telemetrie."
+        help_message = "Alarme zu Funk und Telemetrie.\nLinkqualität, RSSI, Downlink und beide SNR: gesagt, wenn die Stufe erreicht ist; die Signalalarme messen die Reserve über der Grenze bzw. den SNR zwischen den Schwellen; nur Kritisch vibriert.\nTelemetrie verloren: scharf, der Flugregler schweigt.\nTelemetrie-Aussetzer: scharf, Frames fehlen zu oft; Aussetzer: wie viele Lücken, Zeitfenster (s): die Zeit.\nSendeleistung: scharf, in % des Maximums, nur dynamisch; Eigenes Maximum setzt es.\nHaltezeit (s): so lange muss eine Stufe anstehen. Wiederholung: wie oft ein Alarm spricht, alle 10 s. Haptisch: bei Kritisch."
       },
       settings_audio_events_rescue = {
         help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetry.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
@@ -2412,7 +2422,10 @@ return {
         confirm_elrs_to_rf = "Telemetrie-Konfiguration von Rotorflight an das ELRS-Modul angleichen und speichern?",
         confirm_cancelled = "Es wurde nichts geschrieben",
         confirm_no_dialog = "Dieses Radio kann die Rückfrage nicht anzeigen.",
-        help_message = "Vergleicht Paketrate und Telemetrie-Verhältnis des ExpressLRS-Sendemoduls mit Link-Rate und -Verhältnis, für die der Flight Controller konfiguriert ist. Prüfen liest nur. RF -> ELRS schreibt das Modul passend zum Flight Controller, ELRS -> RF schreibt den Flight Controller und speichert ihn. Beide fragen vor dem Schreiben nach, und im Arm-Zustand schreibt keiner von beiden."
+        tx_power = "Sendeleistung",
+        power_dynamic = "dynamisch",
+        power_fixed = "fest",
+        help_message = "Vergleicht die Link-Einstellungen des ExpressLRS-Moduls mit denen des Flight Controllers.\nRotorflight: Telemetrie-Modus, Link-Rate und -Verhältnis auf dem Board.\nELRS-Modul: Paketrate und Telemetrie-Verhältnis des Moduls.\nSendeleistung: Max Power des Moduls und ob dynamische Leistung an ist; nur lesend.\nPrüfen: liest beide Seiten neu und schreibt nichts.\nRF -> ELRS: stellt das Modul auf Rate und Verhältnis des Flight Controllers.\nELRS -> RF: stellt den Flight Controller auf die des Moduls und speichert.\nBeide fragen vorher und schreiben nicht, solange das Modell scharf ist."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",

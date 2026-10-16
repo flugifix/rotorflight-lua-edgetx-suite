@@ -630,6 +630,12 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/txpower.wav",
+    "english": "TX Power",
+    "translation": "Sendeleistung",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/voltage.wav",
     "english": "voltage",
     "translation": "Spannung",

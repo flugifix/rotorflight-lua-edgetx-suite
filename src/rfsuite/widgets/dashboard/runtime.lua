@@ -2994,6 +2994,16 @@ local function readTelemetry(state, audioState)
   setField("rss1", rss1)
   local rss2 = readFirstNumber(RSS2_SOURCES, state.rss2)
   setField("rss2", rss2)
+  -- The transmitter's power, which only lib/audio.lua's TX power alert uses: read only while that
+  -- alert is on (`txPowerWanted`, set by lib/audio.lua), so a radio that never switches it on pays
+  -- no sensor search for it; this pass's reading or nil, assigned rather than set through setField,
+  -- because nothing draws it. ui/home.lua reads it into the same field for the tool.
+  if audioState and audioState.txPowerWanted then
+    state.tpwr = getSensor("TPWR")
+  else
+    state.tpwr = nil
+  end
+
   -- The readings only lib/audio.lua's link headroom and SNR alerts use, each read only while an
   -- alert that needs it is on (flags set by lib/audio.lua): the air rate under either flag, the
   -- antenna in use and the signal at the transmitter module under `linkHeadroomWanted`, the two
@@ -3735,8 +3745,9 @@ function Runtime.new(zone, options)
       self.state.linkRfModeTick = nil
       self.state.linkGeneration = nil
       self.state.linkPingSent = nil
-      -- And the three readings only the audio's link headroom alerts take (readTelemetry), so the
-      -- new session's first pass judges its own link rather than the last one's.
+      -- And the readings only the audio's link alerts take (readTelemetry), so the new session's
+      -- first pass judges its own link rather than the last one's.
+      self.state.tpwr = nil
       self.state.rfMode = nil
       self.state.antenna = nil
       self.state.trss = nil

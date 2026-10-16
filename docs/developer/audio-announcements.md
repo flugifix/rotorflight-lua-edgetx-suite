@@ -54,6 +54,24 @@ kept in `audioState.lastAlertAt.<key>`.
 announcement latches — "already said once this session", "the threshold is currently breached" —
 belongs in that function's clear list, or it will carry into the next flight.
 
+A reading only one alert uses is read only while that alert is on: the engine sets a flag on
+`audioState` (the TX power alert's `txPowerWanted`) and both callers read the sensor into `state`
+while it is set, and give nil otherwise. A radio with the alert off then pays no sensor search.
+
+An alert that needs something the transmitter module knows but no telemetry frame carries asks
+the module itself. The TX power alert does that for the module's Max Power and dynamic-power
+setting through `lib/elrs_power.lua`, which drives one CRSF parameter conversation a pass at a
+time on a table the caller keeps, with the frame multiplexer (`lib/crsf.lua`) and
+`crossfireTelemetryPush` passed in, so it can be checked without a radio. Three rules come with
+that: every frame sent replaces one RC channels frame, so nothing is sent while the model is
+armed and at most one frame per pass; nothing is sent before the connect sequence is through;
+and in the tool, *Diagnostics* → *ELRS Link* talks to the same module and drops every entry it
+did not ask for, so the alert stands aside while that page stamps `session.elrsProbeAt`. A
+conversation that gets no answer ends after a budget of tries to send a frame (`FRAME_BUDGET`,
+36: three per frame of the longest first read measured, 12; a refused try counts too, so it
+always ends), not after a time, since a slow radio sends one frame per pass and a time limit
+would end a read that is still being answered. The caller keeps one table per attempt, so an
+attempt an arming cuts short starts the count afresh after the disarm.
 **An announcement measured against the air rate** -- the RSSI and Downlink headroom alerts -- needs
 the row of `lib/link_rates.lua` for the rate the link runs. `linkRateRow` in `lib/audio.lua` resolves
 it from the `RFMD` reading on the state and the transmitter module's ExpressLRS generation, which
