@@ -879,10 +879,10 @@ return {
         test_normal = "\xEF\x81\x8B Normal",
         test_alarm = "\xEF\x81\x8B Alarm",
         test_locked_armed = "Gesperrt, solange das Modell scharf ist.",
-        test_locked_uncertain = "Gesperrt: ob das Modell scharf ist, ist noch nicht bekannt.",
+        test_locked_uncertain = "Gesperrt: ob das Modell scharf ist, ist nicht bekannt.",
         test_locked_chain = "Braucht die vollständige Kette oben.",
         help_test_level = "Test: Abspielen spricht eine Beispiel-Ansage in der angezeigten Stufe, auch vor dem Speichern.",
-        help_chain = "Modell-Kette: was die Master-Lautstärke braucht; alle Plätze werden gesucht, Mischer nicht. Vor dem Entfernen GV auf -1024 setzen (oder Modus Aus bei offenem Tool), sonst bleibt das Poti übersteuert.\nGeber: eine Zeile, die GV als Quelle, Gewicht 100, beide Seiten.\nLogikschalter: a > x mit a = die GV und x = -1024.\nSpezialfunktion: Lautstärke, geschaltet von diesem Logikschalter, mit diesem Geber als Quelle.",
+        help_chain = "Modell-Kette: was die Master-Lautstärke braucht; alle Plätze werden gesucht, Mischer nicht. Vor dem Löschen GV auf -1024 setzen (oder bei offenem Tool Modus Aus speichern), sonst wirkt das Poti nicht.\nGeber: eine Zeile, die GV als Quelle, Gewicht 100, beide Seiten.\nLogikschalter: a > x mit a = die GV und x = -1024.\nSpezialfunktion: Lautstärke, geschaltet von diesem Logikschalter, mit diesem Geber als Quelle.",
         help_test_master = "Test: Normal und Alarm setzen die GV auf diese Stufe, sprechen eine Beispiel-Ansage und stellen nach 5 s den vorigen Wert her; nur mit ganzer Kette, nicht wenn scharf oder der Zustand unbekannt ist."
       },
       settings_audio_events = {

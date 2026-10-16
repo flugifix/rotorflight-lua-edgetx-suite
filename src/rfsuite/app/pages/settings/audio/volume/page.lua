@@ -738,7 +738,7 @@ function M.build(ctx)
   if reason == "armed" then
     appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_armed", "Locked while the model is armed."))
   elseif reason == "uncertain" then
-    appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_uncertain", "Locked: the arming state is not known yet."))
+    appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_uncertain", "Locked: the arming state is not known."))
   elseif not usable then
     appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_chain", "Needs the whole chain above."))
   end
