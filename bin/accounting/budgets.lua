@@ -357,9 +357,11 @@ return {
     ["page.settings_audio_events_esc_page.build"] = { target = 9050, measured = 7205, proposed = 6000 },
     ["page.settings_audio_events_fuel_page.build"] = { target = 5550, measured = 5189 },
     ["page.settings_audio_events_governor_page.build"] = { target = 6300, measured = 6008 },
-    -- Raised when the page gained the telemetry dropouts alert: a switch and two number rows.
-    -- Target: measured x 1.25, rounded up to the next 50.
-    ["page.settings_audio_events_link_page.build"] = { target = 7800, measured = 6231, proposed = 5750 },
+    -- Raised when the page gained the telemetry dropouts alert (a switch and two number rows)
+    -- and then the RSSI and Downlink alerts (two subheaders, two switches and six number rows).
+    -- Target: measured x 1.25, rounded up to the next 50, from the higher of the two
+    -- measurements (9514, taken with the RSSI and Downlink rows).
+    ["page.settings_audio_events_link_page.build"] = { target = 11900, measured = 9514, proposed = 5750 },
     ["page.settings_audio_events_profiles_page.build"] = { target = 2650, measured = 2498 },
     ["page.settings_audio_events_rescue_page.build"] = { target = 1600, measured = 1272 },
     ["page.settings_audio_events_voltage_page.build"] = { target = 6100, measured = 5112 },

@@ -33,6 +33,12 @@ Status row reads *Unavailable while armed* and the buttons do nothing; see *Sett
 Opening the page reads the flight controller and then asks the transmitter module for its
 parameters. The three buttons become available once that has finished.
 
+The packet rate also sets the link's **sensitivity floor**: the weakest signal, in dBm, ExpressLRS
+specifies its receiver to decode at that rate -- about -105 dBm at 500 Hz LoRa, down to -123 dBm at
+25 Hz. The RSSI and Downlink alerts under *Settings* → *Audio* → *Events* → *Link Quality* speak a
+signal's headroom above that floor, so a faster rate gives the same signal less headroom (see
+[Audio Events](../../../audio/events.md)).
+
 ## Settings
 
 | Setting | What it does |

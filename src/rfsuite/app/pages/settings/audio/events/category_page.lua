@@ -87,6 +87,18 @@ local CONFIG_SCHEMA = {
   { key = "lq_warn",           type = "number", default = 70, min = 1, max = 100, section = "link" },
   { key = "lq_critical",       type = "number", default = 50, min = 1, max = 100, section = "link" },
   { key = "telemetry_lost",    type = "bool", default = false, section = "link" },
+  -- The signal headroom over the air rate's sensitivity floor, in percent of the scale
+  -- lib/link_rates.lua defines (LinkRates.headroom): RSSI at the receiver, Downlink at the
+  -- transmitter module. Each has its own switch, its own pair of levels and its own hold, the
+  -- seconds a level has to hold before it is spoken.
+  { key = "rssi_alert",        type = "bool", default = false, section = "link" },
+  { key = "rssi_warn",         type = "number", default = 15, min = 1, max = 100, section = "link" },
+  { key = "rssi_critical",     type = "number", default = 8, min = 1, max = 100, section = "link" },
+  { key = "rssi_hold",         type = "number", default = 2, min = 0, max = 10, section = "link" },
+  { key = "trss_alert",        type = "bool", default = false, section = "link" },
+  { key = "trss_warn",         type = "number", default = 15, min = 1, max = 100, section = "link" },
+  { key = "trss_critical",     type = "number", default = 8, min = 1, max = 100, section = "link" },
+  { key = "trss_hold",         type = "number", default = 2, min = 0, max = 10, section = "link" },
   -- Telemetry dropouts: spoken when the flight controller's frames are missed `dropouts_count`
   -- times within `dropouts_window` seconds. The window starts at 4 s because the skipped-frame
   -- counter it watches is published every 2 s.
@@ -247,6 +259,24 @@ local SECTIONS = {
         enabledBy = "lq_alert" },
       { kind = "subheader", labelKey = "section_telemetry", labelFallback = "Telemetry" },
       { kind = "bool", key = "telemetry_lost", labelKey = "telemetry_lost", labelFallback = "Telemetry Lost" },
+      -- The level labels of the link quality alert and the hold label of the voltage alert: the
+      -- rows mean the same thing, and the subheader says which alert they belong to.
+      { kind = "subheader", labelKey = "rssi_alert", labelFallback = "RSSI" },
+      { kind = "bool", key = "rssi_alert", labelKey = "rssi_alert", labelFallback = "RSSI" },
+      { kind = "number", key = "rssi_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
+        enabledBy = "rssi_alert" },
+      { kind = "number", key = "rssi_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
+        enabledBy = "rssi_alert" },
+      { kind = "number", key = "rssi_hold", labelKey = "voltage_hold", labelFallback = "Hold (s)", suffix = " s",
+        enabledBy = "rssi_alert" },
+      { kind = "subheader", labelKey = "trss_alert", labelFallback = "Downlink" },
+      { kind = "bool", key = "trss_alert", labelKey = "trss_alert", labelFallback = "Downlink" },
+      { kind = "number", key = "trss_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
+        enabledBy = "trss_alert" },
+      { kind = "number", key = "trss_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
+        enabledBy = "trss_alert" },
+      { kind = "number", key = "trss_hold", labelKey = "voltage_hold", labelFallback = "Hold (s)", suffix = " s",
+        enabledBy = "trss_alert" },
       { kind = "bool", key = "dropouts_alert", labelKey = "dropouts_alert", labelFallback = "Telemetry Dropouts" },
       { kind = "number", key = "dropouts_count", labelKey = "dropouts_count", labelFallback = "Dropouts",
         enabledBy = "dropouts_alert" },
@@ -400,6 +430,14 @@ local ROW_HELP = {
       lq_warn = t(i18n, "help_lq_warn"),
       lq_critical = t(i18n, "help_lq_critical"),
       telemetry_lost = t(i18n, "help_telemetry_lost"),
+      rssi_alert = t(i18n, "help_rssi_alert"),
+      rssi_warn = t(i18n, "help_headroom_warn"),
+      rssi_critical = t(i18n, "help_headroom_critical"),
+      rssi_hold = t(i18n, "help_headroom_hold"),
+      trss_alert = t(i18n, "help_trss_alert"),
+      trss_warn = t(i18n, "help_headroom_warn"),
+      trss_critical = t(i18n, "help_headroom_critical"),
+      trss_hold = t(i18n, "help_headroom_hold"),
       dropouts_alert = t(i18n, "help_dropouts_alert"),
       dropouts_count = t(i18n, "help_dropouts_count"),
       dropouts_window = t(i18n, "help_dropouts_window"),

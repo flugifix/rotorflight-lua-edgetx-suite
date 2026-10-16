@@ -504,6 +504,9 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/downlink.wav",
+    "english": "Downlink",
+    "translation": "Downlink",
     "file": "stat/alerts/dropouts.wav",
     "english": "Telemetry Dropouts",
     "translation": "Telemetry Dropouts",
@@ -588,6 +591,9 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/rssi.wav",
+    "english": "RSSI",
+    "translation": "RSSI",
     "file": "stat/alerts/rescue_off.wav",
     "english": "Rescue – Off",
     "translation": "Rescue – Off",

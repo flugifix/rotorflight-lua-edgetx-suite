@@ -911,6 +911,8 @@ return {
         lq_alert = "Linkqualität",
         lq_warn = "Warnung (%)",
         lq_critical = "Kritisch (%)",
+        rssi_alert = "RSSI",
+        trss_alert = "Downlink",
         adjustment_events = "Einstellungsansagen",
         fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Ansage %",
@@ -964,11 +966,16 @@ return {
         help_lq_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 70 %.",
         help_lq_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 50 %.",
         help_telemetry_lost = "Ansage, wenn der Flugregler des scharfen Modells bei stehender Verbindung verstummt, und erneut, wenn er wieder sendet. Einen Verbindungsverlust meldet der Sender selbst. Standard: aus.",
+        help_rssi_alert = "Scharf: sagt die Reserve der aktiven Empfängerantenne (ANT) an der Warn- oder kritischen Stufe; 0 % ist die Empfindlichkeitsgrenze der Paketrate, 100 % sind -40 dBm. Still ohne Grenze. Standard: aus.",
+        help_trss_alert = "Scharf: dasselbe für das Signal am Sendermodul, den Downlink, mit eigenen Stufen. Standard: aus.",
+        help_headroom_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 15 %.",
+        help_headroom_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 8 %.",
+        help_headroom_hold = "So lange muss die Reserve auf oder unter einer Stufe bleiben, bevor sie gesagt wird; ein kurzes Antennenloch bleibt still. 0 sagt sofort. Standard: 2 s.",
         help_dropouts_alert = "Ansage, wenn beim scharfen Modell zu oft Telemetrie-Frames fehlen: so viele Lücken wie Aussetzer innerhalb von Zeitfenster (s). Die Erholung bleibt still, und es vibriert nie. Standard: aus.",
         help_dropouts_count = "Wie viele Lücken in den Telemetrie-Frames des Flugreglers innerhalb des Zeitfensters den Alarm auslösen (1 bis 50). Standard: 3.",
         help_dropouts_window = "Die Zeit, über die die Lücken gezählt werden, in Sekunden (4 bis 60). Standard: 10 s.",
-        help_link_repeat = "Wie oft die Alarme Linkqualität und Telemetrie-Aussetzer sprechen, solange ihr Zustand anhält, alle 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
-        help_link_haptic = "Ob der Sender bei der kritischen Linkqualität und bei Telemetrie verloren vibriert. Telemetrie-Aussetzer vibriert nie. Standard: an.",
+        help_link_repeat = "Wie oft die Alarme Linkqualität, Telemetrie-Aussetzer, RSSI und Downlink sprechen, solange sie anhalten, alle 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
+        help_link_haptic = "Ob der Sender bei der kritischen Stufe von Linkqualität, RSSI und Downlink und bei Telemetrie verloren vibriert. Telemetrie-Aussetzer vibriert nie. Standard: an.",
         help_rescue_active = "Spricht einmal, sobald der Flugregler eine Rettung beginnt, in welcher Phase auch immer. Standard: aus.",
         help_rescue_off = "Spricht einmal, wenn die Rettung vorbei ist und der Flugregler wieder normal steuert. Standard: aus.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
@@ -1002,7 +1009,7 @@ return {
         help_message = "Ansagen des SmartFuel-Stands, solange das Modell verbunden ist.\nDen Wert berechnet der Flugregler, wenn SmartFuel dort an ist (Setup > Power > SmartFuel, ab MSP API 12.0.9).\nSonst berechnet ihn der Sender aus der lokalen Quelle in Setup > Power > Einstellungen."
       },
       settings_audio_events_link = {
-        help_message = "Alarme zur Funkverbindung und zur Telemetrie des Flugreglers.\nLinkqualität: Ansage, wenn sie auf eine Stufe fällt.\nWarnung (%): die obere Stufe, ohne Vibration.\nKritisch (%): die untere Stufe, mit Vibration, wenn Haptisch an ist.\nTelemetrie verloren: scharf, der Flugregler verstummt.\nTelemetrie-Aussetzer: scharf, zu oft fehlen seine Frames.\nAussetzer: wie viele Lücken sie auslösen.\nZeitfenster (s): die Zeit, über die sie gezählt werden.\nWiederholung: wie oft Linkqualität und Telemetrie-Aussetzer sprechen, alle 10 s.\nHaptisch: vibriert bei Kritisch und bei Telemetrie verloren."
+        help_message = "Alarme zu Funkverbindung und Telemetrie.\nLinkqualität: gesagt, wenn sie auf eine Stufe fällt; Warnung (%) und Kritisch (%) sind ihre Stufen, nur Kritisch vibriert.\nTelemetrie verloren: scharf, der Flugregler schweigt.\nTelemetrie-Aussetzer: scharf, die Frames fehlen zu oft; Aussetzer: wie viele Lücken ihn auslösen, Zeitfenster (s): die Zeit.\nRSSI und Downlink: die Reserve am Empfänger und am Sendermodul.\nHaltezeit (s): so lange muss eine Stufe erst anstehen. Wiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s. Haptisch: vibriert bei Kritisch und Telemetrie verloren."
       },
       settings_audio_events_rescue = {
         help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetry.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
