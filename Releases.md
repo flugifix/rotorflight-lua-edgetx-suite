@@ -336,6 +336,9 @@
   - Red can never stand above yellow: the page holds *Battery red at* at or below *Battery yellow at* and pulls it down when yellow is lowered beneath it, and the theme draws a stored pair with red above yellow as if red were equal to yellow.
   - The steps are read once when the theme is built; the gauge still decides its colour once per change of the fuel reading or of the not-full verdict. The flight screen's gauge and the *Battery* page take the same steps.
   - `Layout.SETTINGS` can declare a whole-number row (`min`, `max`, optionally `notAbove`) beside its list rows; the settings page draws it as a number field.
+- **The shipped dashboard themes have a documentation page, with a picture of each screen (`docs/dashboard/themes.md`, `docs/images/dashboard/themes/`, `docs/dashboard/urban-theme.md`)**:
+  - Every theme the suite ships -- Default, RF Status, @AERC, @AERC Nitro, @RT-RC, @RT-RC Nitro, @SRB-RC and Urban -- is shown on a TX16S MK3 before, during and after a flight (the two nitro themes during and after it), with a short list of what each screen carries, so a pilot can pick one without trying them all on the radio.
+  - The page also says what every theme has in common: which screen the flight puts on, the connecting screen before the first one, and where a theme is chosen and configured. The Design page and the dashboard index link to it.
 
 ### Bug Fixes & Improvements
 - **Bus servo writes use the packed index when no PWM servo is configured (`app/pages/setup/servos/bus/page.lua`, `app/pages/setup/servos/pwm/page.lua`) (fixes #659)**: With bus servos enabled and zero PWM servos, the packed total of 18 was read as 18 PWM servos, so bus servo n was sent as index 18 + n and rejected. The PWM count now subtracts the bus channels at 18, not only above 18. The PWM Output selector lists no servo in that case instead of listing 18 entries, and Save is refused there, so servo 0 (which is bus servo 1 on such a board) is never written.

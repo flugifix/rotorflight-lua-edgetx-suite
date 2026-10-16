@@ -23,6 +23,8 @@ translations, like every other theme's, so it speaks the language of the package
 
 ## What it shows
 
+![Urban before, during and after the flight, on a TX16S MK3](../images/dashboard/themes/urban.png)
+
 **On the ground and in flight** one screen, which does not change shape at spool-up:
 
 - **Top bar** — in full screen two buttons at the left, the menu and the tool, then the clock; up to four stacked
