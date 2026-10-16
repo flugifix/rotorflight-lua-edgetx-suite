@@ -210,8 +210,9 @@ local LQ_HYSTERESIS = 5
 -- The TX power alert: the transmitter's power (`TPWR`) as a share of the most it may send with,
 -- spoken as a percentage. Higher is worse, so its levels are lines the share climbs to, and a level
 -- is left only once the share has fallen this many points below its line. The share moves in the
--- module's power steps (10, 25, 50, 100, 250 mW and so on), so a step that lands on a line does not
--- announce again each time the module steps down and back up.
+-- module's power steps (10, 25, 50, 100, 250 mW and so on): a share that only wobbles around a line
+-- stays on its level, but a whole step down leaves it, and the climb back is a new announcement once
+-- it has lasted the hold.
 local TX_POWER_WARN = 60
 local TX_POWER_CRITICAL = 85
 local TX_POWER_HOLD = 2
@@ -1422,8 +1423,9 @@ end
 --- into the slot the channels would take). So it is asked only after the connect chain, only while
 --- the model is disarmed -- the suite's MSP traffic stops while armed for the same reason
 --- (tasks/msp/runtime.lua) -- and one frame per audio pass. A read an arming cuts short starts again
---- after the disarm. The answer is kept for the rest of the connection; the reset on the connection
---- edge drops it.
+--- after the disarm. The answer is kept for the rest of the connection. The next connection asks
+--- again once it is disarmed; one that comes up while the model is still armed -- a link that dropped
+--- in flight -- uses the last connection's answer until then.
 ---
 --- In the tool the ELRS Link page may be walking the same parameter list (elrslink_task.lua), and
 --- that walk drops every entry that is not the one it asked for. While it runs -- it stamps
@@ -1433,8 +1435,13 @@ local function txPowerModuleRead(audioState, armed, now)
   if st and st.done then return st end
   if armed then
     audioState.txPowerRead = nil
-    return nil
+    -- Armed without an answer of this connection: where the link dropped and came back in flight,
+    -- the module and its settings are the ones the last connection read (Audio.resetConnectionState
+    -- keeps that answer), and nothing may be sent to ask again before the disarm.
+    return audioState.txPowerLast
   end
+  -- Disarmed, this connection asks for itself: the module may have been changed meanwhile.
+  audioState.txPowerLast = nil
   if not connectChainDone() then return nil end
   local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
   local pageAt = session and tonumber(session.elrsProbeAt) or nil
@@ -1679,8 +1686,11 @@ function Audio.resetConnectionState(audioState)
   audioState.lqNotQualityLogged = nil
   -- The TX power alert's episode and what the module said about its power. The pilot may have
   -- changed the module's power settings since, so the next connection asks again -- two reads
-  -- where lib/elrs_power.lua already knows the module's field ids.
+  -- where lib/elrs_power.lua already knows the module's field ids. The answer is kept aside for a
+  -- link that comes back while the model is still armed, which may not ask (txPowerModuleRead).
   audioState.txPower = nil
+  local read = audioState.txPowerRead
+  if read and read.done then audioState.txPowerLast = read end
   audioState.txPowerRead = nil
   audioState.packCheckDone = false
   audioState.packJudged = false
@@ -2056,9 +2066,10 @@ function Audio.process(self, opts)
   audioState.txPowerWanted = txPowerOn
   if txPowerOn then
     txPowerAlert(self, audioState, events, now, opts)
-  elseif audioState.txPower ~= nil or audioState.txPowerRead ~= nil then
+  elseif audioState.txPower ~= nil or audioState.txPowerRead ~= nil or audioState.txPowerLast ~= nil then
     audioState.txPower = nil
     audioState.txPowerRead = nil
+    audioState.txPowerLast = nil
     alertCleared(audioState, "tpwr")
   end
 

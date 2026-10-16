@@ -250,7 +250,9 @@ function PowerRead.step(st, crsf, push, now)
   end
 
   if st.phase == nil then
-    while true do
+    -- Device information is taken only once this conversation has pinged: an answer that was
+    -- already waiting is another reader's (the dashboard pings once for the link's generation).
+    while st.pingAt ~= nil do
       local data = crsf.popFrame(FRAME_DEVICE_INFO)
       if data == nil then break end
       local key, count = PowerRead.identity(data)
