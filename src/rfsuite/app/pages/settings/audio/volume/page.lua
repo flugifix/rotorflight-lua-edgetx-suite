@@ -290,10 +290,15 @@ function M.onSave(ctx)
   for _, field in ipairs(CONFIG_SCHEMA) do
     ctx.preferences.audio[field.key] = ui.config[field.key]
   end
+  -- Saved in Off with Connected only never set, it stays out of the file, so a mode picked later
+  -- still starts from that mode's own reading of it.
+  if not ui.connectedOnlySet and ui.config.volume_mode == MODE_OFF then
+    ctx.preferences.audio.connected_only = nil
+  end
   local ok, err = ctx.savePreferences()
   if ok then
     ui.dirty = false
-    ui.connectedOnlySet = true
+    ui.connectedOnlySet = ctx.preferences.audio.connected_only ~= nil
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
     end
@@ -364,7 +369,7 @@ function M.build(ctx)
     -- Kept in the file and not acted on (lib/audio.lua); said here, so the empty picker is not
     -- taken for a setting that was never made.
     local missing = t(i18n, "gvar_missing", "GV%d is not on this radio, so the master volume is off. Pick one it has.")
-    appendNote(children, x, cursorY + 2, w, string.format(missing, math.floor(gv)))
+    appendNote(children, x, cursorY + 2, w, string.format(missing, math.tointeger(math.floor(math.min(gv, 99999))) or 0))
     return
   end
 

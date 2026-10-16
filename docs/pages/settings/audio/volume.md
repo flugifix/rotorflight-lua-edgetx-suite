@@ -22,7 +22,7 @@ The two cannot be combined because they multiply: the level scales the sound fil
 * **Connected only:** shown in both modes, under *Mode*.
   * **On:** the mode acts only while the radio's link to the model is up, so bench and menu work stays at the radio's own volume. In *Master volume* the pot rules until the link comes up, the *Normal Level* is written then, and `-1024` is written when the link goes down (unless a critical alert is still active, see below).
   * **Off:** the mode acts from the moment the dashboard or the tool starts, and the link changes nothing. In *Master volume* the pot therefore stays overridden for as long as the mode is on.
-  * Until it is set, it follows the mode: in *Callout level* the earlier *Connected only* of the level, in *Master volume* on, which is how the master volume always behaved. A file written before this setting existed reads the same way, and so does a mode picked on the page before *Connected only* is touched or saved.
+  * Until it is set, it follows the mode: in *Callout level* the earlier *Connected only* of the level, in *Master volume* on, which is how the master volume always behaved. A file written before this setting existed reads the same way, and so does a mode picked on the page before *Connected only* is touched or saved in one of the two modes; a save in *Off* does not store it.
   * For adjustment announcements made where neither the dashboard nor the tool runs (by the [background decoder](../../../reference/background-decoder.md), or by the service widget on its own), *on* means that the radio's RF link is up.
 
 ## Callout level
