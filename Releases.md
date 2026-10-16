@@ -53,6 +53,14 @@
   - A relative link that leaves `docs/` is pointed at the file on GitHub, and each section is ordered by the `sidebar_position` of its pages, the order of the tiles on the radio.
   - A pull request that touches the documentation builds the site with `--strict`, so a link the site cannot resolve turns the job red.
 
+- **A critical level for the ESC and MCU temperature alerts, and the ESC alert speaks its temperature (`lib/audio.lua`, `app/pages/settings/audio/events/category_page.lua`, `lib/preferences.lua`, `i18n/en.lua`, `i18n/de.lua`, `docs/audio/events.md`)**:
+  - *Settings* > *Audio* > *Events* > *ESC Temperature* gains a *Critical* row under each alert: 110 °C for the ESC, kept with the model as the warning level is, and 95 °C for the MCU, radio-wide. The existing threshold rows are now labelled *Warning* and keep their keys and values.
+  - Both alerts work like the link quality alert: a rise into a level is spoken at once, falling back is not spoken, a level is left only once the reading is more than 5 °C below it, and *Haptic* vibrates at the critical level only -- the warning level, which vibrated before, now speaks without vibration.
+  - The master volume (*Settings* > *Audio* > *Volume*) goes to its *Alert Level* at the critical level of either alert, for as long as the alert stays there. Before, the ESC alert raised it at its only threshold and the MCU alert never did.
+  - The *Volume* page's help is rewritten in one line per setting; its *Alert Level* line names every critical alert rather than a list, and the details moved to `docs/pages/settings/audio/volume.md`.
+  - The ESC alert now says the temperature after its words, as the MCU alert already did, in the unit set under *Settings* > *Localization*. No new sound file.
+  - A settings file written before keeps its warning levels; the critical levels start at their defaults. With both alerts off, which is the default, nothing changes.
+
 # 0.2.0
 
 ### Features & Enhancements
@@ -391,13 +399,6 @@
   - Red can never stand above yellow: the page holds *Battery red at* at or below *Battery yellow at* and pulls it down when yellow is lowered beneath it, and the theme draws a stored pair with red above yellow as if red were equal to yellow.
   - The steps are read once when the theme is built; the gauge still decides its colour once per change of the fuel reading or of the not-full verdict. The flight screen's gauge and the *Battery* page take the same steps.
   - `Layout.SETTINGS` can declare a whole-number row (`min`, `max`, optionally `notAbove`) beside its list rows; the settings page draws it as a number field.
-- **A critical level for the ESC and MCU temperature alerts, and the ESC alert speaks its temperature (`lib/audio.lua`, `app/pages/settings/audio/events/category_page.lua`, `lib/preferences.lua`, `i18n/en.lua`, `i18n/de.lua`, `docs/audio/events.md`)**:
-  - *Settings* > *Audio* > *Events* > *ESC Temperature* gains a *Critical* row under each alert: 110 °C for the ESC, kept with the model as the warning level is, and 95 °C for the MCU, radio-wide. The existing threshold rows are now labelled *Warning* and keep their keys and values.
-  - Both alerts work like the link quality alert: a rise into a level is spoken at once, falling back is not spoken, a level is left only once the reading is more than 5 °C below it, and *Haptic* vibrates at the critical level only -- the warning level, which vibrated before, now speaks without vibration.
-  - The master volume (*Settings* > *Audio* > *Volume*) goes to its *Alert Level* at the critical level of either alert, for as long as the alert stays there. Before, the ESC alert raised it at its only threshold and the MCU alert never did.
-  - The *Volume* page's help is rewritten in one line per setting; its *Alert Level* line names every critical alert rather than a list, and the details moved to `docs/pages/settings/audio/volume.md`.
-  - The ESC alert now says the temperature after its words, as the MCU alert already did, in the unit set under *Settings* > *Localization*. No new sound file.
-  - A settings file written before keeps its warning levels; the critical levels start at their defaults. With both alerts off, which is the default, nothing changes.
 
 ### Bug Fixes & Improvements
 - **Bus servo writes use the packed index when no PWM servo is configured (`app/pages/setup/servos/bus/page.lua`, `app/pages/setup/servos/pwm/page.lua`) (fixes #659)**: With bus servos enabled and zero PWM servos, the packed total of 18 was read as 18 PWM servos, so bus servo n was sent as index 18 + n and rejected. The PWM count now subtracts the bus channels at 18, not only above 18. The PWM Output selector lists no servo in that case instead of listing 18 entries, and Save is refused there, so servo 0 (which is bus servo 1 on such a board) is never written.
