@@ -858,6 +858,7 @@ return {
         section_profiles = "PID/Raten-Profil",
         section_esc = "ESC-Temperatur",
         section_mcu = "MCU-Temperatur",
+        section_esc_load = "ESC-Last",
         section_link = "Linkqualität",
         section_adjustment = "Einstellungsansagen",
         section_fuel = "Kraftstoff",
@@ -901,6 +902,7 @@ return {
         esc_critical = "Kritisch",
         esc_critical_model = "Kritisch [Modell]",
         mcu_temperature = "MCU-Temperatur",
+        esc_load = "ESC-Last",
         section_telemetry = "Telemetrie",
         telemetry_lost = "Telemetrie verloren",
         dropouts_alert = "Telemetrie-Aussetzer",
@@ -947,8 +949,12 @@ return {
         help_mcu_temperature = "Sagt die Temperatur der MCU des Flugreglers, wenn sie die Warn- oder kritische Stufe darunter erreicht. Die Erholung bleibt still. Standard: aus.",
         help_mcu_threshold = "Die untere MCU-Stufe, in der Einheit aus Einstellungen > Lokalisierung. Wird ohne Vibration gesagt. Gilt immer radioweit. Standard: 80 °C.",
         help_mcu_critical = "Die obere MCU-Stufe. Vibriert zusätzlich, wenn Haptisch an ist. Gilt immer radioweit. Standard: 95 °C.",
-        help_esc_repeat = "Wie oft der ESC- oder MCU-Alarm spricht, solange die Temperatur auf einer Stufe bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal.",
-        help_esc_haptic = "Ob der Sender bei den ESC- und MCU-Temperaturalarmen auf der kritischen Stufe vibriert. Standard: an.",
+        help_esc_load = "Sagt die Last, den Strom in % der ESC-Strombegrenzung (Setup > Power > Einstellungen), auf der Warn- oder kritischen Stufe darunter. Nur scharf; ohne Begrenzung still. Standard: aus.",
+        help_esc_load_warn = "Die untere Laststufe in Prozent. Wird ohne Vibration gesagt. Standard: 80 %.",
+        help_esc_load_critical = "Die obere Laststufe in Prozent; über 100 % liegt über der Begrenzung. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 100 %.",
+        help_esc_load_hold = "So lange muss die Last auf oder über einer Stufe bleiben, bevor sie gesagt wird; ein kurzer Schub bleibt still. 0 sagt sofort. Standard: 5 s.",
+        help_esc_repeat = "Wie oft der ESC- oder MCU-Temperaturalarm oder der ESC-Last-Alarm spricht, solange er anhält, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal.",
+        help_esc_haptic = "Ob der Sender bei den ESC- und MCU-Temperaturalarmen auf der kritischen Stufe und auf der kritischen ESC-Last-Stufe vibriert. Standard: an.",
         help_adjustment_events = "Sagt den neuen Wert, wenn eine Adjustment-Funktion eine Einstellung ändert, sobald er eine Sekunde steht; mit dem Namen der Funktion, wenn es eine andere als zuletzt ist. Standard: aus.",
         help_fuel_alerts = "Sagt den SmartFuel-Stand beim Unterschreiten der darunter gewählten Stufen und warnt bei 0 %. Standard: an.",
         help_fuel_callout_percent = "Die Stufen, bei denen der fallende Stand gesagt wird, jede einmal. Nur bei 10% sagt nur die 10-%-Stufe. Standard: alle 10 %.",
@@ -987,7 +993,7 @@ return {
         help_message = "Ansage bei einem Wechsel des PID- oder Raten-Profils."
       },
       settings_audio_events_esc = {
-        help_message = "Temperaturalarme für den ESC und die MCU des Flugreglers, mit der Temperatur gesagt.\nESC-Temperatur: Ansage, wenn der ESC eine Stufe erreicht; die Erholung bleibt still.\nWarnung: die untere Stufe, ohne Vibration. Beim Modell gespeichert.\nKritisch: die obere Stufe, mit Vibration, wenn Haptisch an ist. Beim Modell gespeichert.\nMCU-Temperatur: dieselben zwei Stufen für die MCU, radioweit.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert auf der kritischen Stufe."
+        help_message = "ESC-Temperatur: sagt die Temperatur auf einer Stufe; die Erholung bleibt still. Warnung und Kritisch sind die zwei Stufen, beim Modell gespeichert; nur Kritisch vibriert.\nMCU-Temperatur: dieselben zwei Stufen, radioweit.\nESC-Last: der Strom in % der ESC-Strombegrenzung (Setup > Power > Einstellungen); nur scharf, ohne Begrenzung still. Warnung und Kritisch (%) sind ihre zwei Stufen, Vibration bei Kritisch; Haltezeit (s) ist, wie lange die Last erst anliegen muss.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert auf den kritischen Stufen."
       },
       settings_audio_events_adjustment = {
         help_message = "Ansage von Werten, die über die Adjustment-Funktionen des Flugreglers geändert werden."
@@ -1123,7 +1129,12 @@ return {
         publish_sensors = "SmFt / SmCp senden",
         esc_current_limit = "ESC-Strombegrenzung",
         value_not_set = "NICHT GESETZT",
-        help_esc_current_limit = "Die Strombegrenzung, die der Regler zulaesst, in Ampere. Die ESC-Last im Dashboard ist ein Prozentsatz davon. Ein AM32-, Scorpion- oder YGE-Regler meldet seine eigene Begrenzung und traegt sie beim ersten Oeffnen seiner Einstellungsseite selbst ein; von Hand wird sie nur fuer einen Regler gesetzt, der das nicht tut. Bleibt sie auf NICHT GESETZT, zeigt eine ESC-Last-Kachel keinen Wert.",
+        help_esc_current_limit = "Die Begrenzung, die der Regler zulaesst, in Ampere; ESC-Last und ihr Alarm sind ein Prozentsatz davon. AM32, Scorpion und YGE tragen sie von ihrer Seite ein; die Beschriftung zeigt die Herkunft.",
+        origin_hand = "von Hand",
+        origin_am32 = "AM32",
+        origin_scorpion = "Scorpion",
+        origin_yge = "YGE",
+        origin_unknown = "unbekannt",
         value_auto = "AUTO",
         value_electric = "ELEKTRO",
         value_nitro = "NITRO",
@@ -1133,7 +1144,7 @@ return {
         help_model_type = "Waehle den Modelltyp fuer SmartFuel- und Audioverhalten.",
         help_calcfuel_local = "Waehle die lokale SmartFuel-Quelle als Fallback, wenn Firmware-SmartFuel nicht verfuegbar ist.",
         help_publish_sensors = "Sendet Restkapazitaet und geschaetzten Verbrauch als Telemetriesensoren SmFt und SmCp, fuer Logikschalter, Spezialfunktionen und die Telemetrieseiten. Dashboard und Ansagen brauchen sie nicht.",
-        help_message = "Modelltyp, lokale SmartFuel-Quelle, ob SmFt und SmCp als Sensoren gesendet werden, und die Strombegrenzung, die der Regler zulaesst. Nichts davon wird zum Flugcontroller geschrieben: die Werte werden auf dem Sender gespeichert, je Flugcontroller.",
+        help_message = "Power-Einstellungen, auf dem Sender je Flugcontroller gespeichert; nichts davon wird zu ihm geschrieben.\nModelltyp: wofuer SmartFuel-Schaetzung und Ansagen das Modell halten.\nLokale SmartFuel-Quelle: die Schaetzung des Senders, wenn der Flugcontroller keine rechnet.\nSmFt / SmCp senden: Restkapazitaet und Verbrauch als zwei Telemetriesensoren senden.\nESC-Strombegrenzung: die Grenze, von der die ESC-Last ein Prozentsatz ist; die Beschriftung zeigt die Herkunft.",
         saved_title = "Gespeichert",
         saved_message = "Power-Einstellungen gespeichert",
         save_error_title = "Fehler",

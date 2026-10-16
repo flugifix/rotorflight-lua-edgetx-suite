@@ -2,6 +2,14 @@
 
 ### Features & Enhancements
 
+- **ESC load is announced, under *Settings* → *Audio* → *Events* → *ESC*, and the ESC current limit says where it came from (`app/pages/settings/audio/events/category_page.lua`, `lib/audio.lua`, `ui/home.lua`, `app/pages/setup/esc_motors/esc_tools/esc_current_limit.lua`, `app/pages/setup/esc_motors/esc_tools/escmfg/am32/page.lua`, `escmfg/scorp/page.lua`, `escmfg/yge/page.lua`, `app/pages/setup/power/preferences/page.lua`, `app/pages/setup/power/preferences/help.lua`, `i18n/en.lua`, `i18n/de.lua`, `bin/accounting/budgets.lua`, `docs/audio/events.md`, `docs/pages/setup/power/preferences.md`) (#726)**:
+  - *ESC Load*, off by default and radio-wide, speaks "ESC Load" and the load in percent -- the current as a share of the *ESC Current Limit* -- while the model is armed: *Warning (%)* 80, *Critical (%)* 100, *Hold (s)* 5, all configurable. A level is entered once the load has stayed at or above it for the hold and is spoken at once; it is left 5 points below its line; recovering is silent; only the critical level vibrates (*Haptic*). *Repeat* and *Haptic* are the ESC page's own. Without a limit on file it stays silent.
+  - The load is now computed on the tool's path as well, from the same current and the same limit as the dashboard's `esc_load`, so the alert speaks whichever of the two is running.
+  - The current limit keeps its origin: AM32, Scorpion or YGE when that family's page stored it, by hand when it was typed in on *Setup* → *Power* → *Preferences*, whose row label shows it. A limit stored before this reads as unknown, never as by hand.
+  - One new file per language, `stat/alerts/escload.wav` ("ESC Load" / "ESC-Last"), built with `bin/sound-generator/` from new entries in its word lists.
+
+### Features & Enhancements
+
 - **The Volume page offers one mode at a time, *Connected only* for both, and the radio's own picker for the global variable (`app/pages/settings/audio/volume/`, `lib/audio_volume.lua`, `lib/audio.lua`, `lib/preferences.lua`, `i18n/en.lua`, `i18n/de.lua`, `docs/pages/settings/audio/volume.md`)**:
   - *Settings* > *Audio* > *Volume* opens with a *Mode*: *Off (radio default)*, *Callout level* or *Master volume*, and shows only the rows of the chosen mode. The callout level and the master volume multiply, so a level under a master volume the suite sets could only make the announcements quieter; the two are no longer active together.
   - *Connected only* sits under *Mode* and applies to both. In *Master volume*, on lets the pot rule until the link is up and again once it is down, as the master volume always did, except that a critical alert still raises it to the *Alert Level* with the link down, and it is what a mode picked on the page starts with until *Connected only* is set; off sets the *Normal Level* from the start and the link changes nothing.

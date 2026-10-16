@@ -516,6 +516,12 @@
     "needs_translation": false
   },
   {
+    "file": "stat/alerts/escload.wav",
+    "english": "ESC Load",
+    "translation": "ESC Load",
+    "needs_translation": false
+  },
+  {
     "file": "stat/alerts/fuel.wav",
     "english": "Fuel",
     "translation": "Fuel",

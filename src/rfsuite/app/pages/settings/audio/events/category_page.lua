@@ -72,6 +72,14 @@ local CONFIG_SCHEMA = {
   -- same silicon with the same rating in every aircraft, so a copy of these levels per model
   -- would be one more place to keep in step and nothing else.
   { key = "mcu_threshold",     type = "number", default = 80, min = 40, max = 150, section = "esc" },
+  -- The current as a percentage of the speed controller's limit (Setup > Power > Preferences).
+  -- Radio-wide: the load is already a share of the model's own limit, so the same percentages
+  -- mean the same in every model. Above 100 is a load past the limit, which is why the range is.
+  { key = "esc_load",          type = "bool", default = false, section = "esc" },
+  { key = "esc_load_warn",     type = "number", default = 80, min = 10, max = 200, section = "esc" },
+  { key = "esc_load_critical", type = "number", default = 100, min = 10, max = 200, section = "esc" },
+  -- Seconds the load has to stay at or above a level before it is spoken.
+  { key = "esc_load_hold",     type = "number", default = 5, min = 0, max = 30, section = "esc" },
   { key = "mcu_critical",      type = "number", default = 95, min = 40, max = 150, section = "esc" },
   { key = "esc_repeat",        type = "number", default = 0, min = 0, max = 10, section = "esc" },
   { key = "esc_haptic",        type = "bool", default = true,  section = "esc" },
@@ -213,6 +221,16 @@ local SECTIONS = {
         temperature = true, enabledBy = "mcu_temperature" },
       { kind = "number", key = "mcu_critical", labelKey = "esc_critical", labelFallback = "Critical", suffix = "°C",
         temperature = true, enabledBy = "mcu_temperature" },
+      -- The level labels of the link quality alert and the hold label of the voltage alert: the
+      -- rows mean the same thing, and the subheader says which alert they belong to.
+      { kind = "subheader", labelKey = "section_esc_load", labelFallback = "ESC Load" },
+      { kind = "bool", key = "esc_load", labelKey = "esc_load", labelFallback = "ESC Load" },
+      { kind = "number", key = "esc_load_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
+        step = 5, enabledBy = "esc_load" },
+      { kind = "number", key = "esc_load_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
+        step = 5, enabledBy = "esc_load" },
+      { kind = "number", key = "esc_load_hold", labelKey = "voltage_hold", labelFallback = "Hold (s)",
+        suffix = " s", enabledBy = "esc_load" },
       { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
       { kind = "choice", key = "esc_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
       { kind = "bool", key = "esc_haptic", labelKey = "alert_haptic", labelFallback = "Haptic" },
@@ -354,6 +372,10 @@ local ROW_HELP = {
       esc_critical = t(i18n, "help_esc_critical"),
       mcu_temperature = t(i18n, "help_mcu_temperature"),
       mcu_threshold = t(i18n, "help_mcu_threshold"),
+      esc_load = t(i18n, "help_esc_load"),
+      esc_load_warn = t(i18n, "help_esc_load_warn"),
+      esc_load_critical = t(i18n, "help_esc_load_critical"),
+      esc_load_hold = t(i18n, "help_esc_load_hold"),
       mcu_critical = t(i18n, "help_mcu_critical"),
       esc_repeat = t(i18n, "help_esc_repeat"),
       esc_haptic = t(i18n, "help_esc_haptic"),

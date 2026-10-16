@@ -3923,6 +3923,17 @@ function M.run(event, touchState)
           end
           ts.current = currentValue or ts.current
           ts.watts = wattsValue or ts.watts
+          -- ESC load, as the dashboard widget derives it (widgets/dashboard/runtime.lua): this
+          -- tick's current as a share of the limit in the per-model store, and nil -- not the last
+          -- value -- where either is missing, so the ESC load alert judges what the widget's would.
+          local modelPrefs = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.modelPreferences
+          local escLimit = tonumber(type(modelPrefs) == "table" and type(modelPrefs.battery) == "table"
+            and modelPrefs.battery.esc_current_limit or nil)
+          if escLimit and escLimit > 0 and type(currentValue) == "number" then
+            ts.escLoad = currentValue / escLimit * 100
+          else
+            ts.escLoad = nil
+          end
           ts.altitude = Sensors.getValue("altitude") or ts.altitude
           ts.consumedMah = (smart and smart.consumption) or Sensors.getValue("smartconsumption") or ts.consumedMah
 
@@ -4020,6 +4031,7 @@ function M.run(event, touchState)
         state.telemetryState.throttlePercent = nil
         state.telemetryState.current = nil
         state.telemetryState.watts = nil
+        state.telemetryState.escLoad = nil
         state.telemetryState.altitude = nil
         state.telemetryState.consumedMah = nil
         state.telemetryState.batteryCellCount = nil
