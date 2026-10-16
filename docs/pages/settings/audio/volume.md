@@ -28,6 +28,7 @@ The two cannot be combined because they multiply: the level scales the sound fil
 ## Callout level
 
 * **Level:** 1 to 5 (5 the loudest). It applies to the sound file of an announcement, to the number and unit the radio speaks after it, and to the adjustment announcements the background decoder or the service widget makes. Level 3 plays a sound file at a quarter of its amplitude, which is what the radio's own *Wav volume* does at its middle setting 0; 5 plays it at full amplitude, 1 at a sixteenth. Picking *Callout level* with no level stored starts at 3.
+* **Test:** *Play* speaks a sample announcement -- the word "battery" and the number 80 with its unit -- at the *Level* shown, also before it is saved. It writes nothing and works while the model is armed.
 
 ## Master volume
 
@@ -49,3 +50,17 @@ When the suite stops driving the volume while the dashboard or the tool runs (th
 
 > [!NOTE]
 > Retiring the feature does not automatically release the GVAR. The last written value stays in the model file, so the pot will remain overridden until something writes `-1024` again. The same holds when the radio is switched off while the suite holds the volume and the mode is changed before the next start: only a running dashboard or tool that wrote the global variable releases it, so write `-1024` by hand (or pick the mode again, start the dashboard, then change it) before relying on the pot.
+
+### Model chain
+
+Under *Alert Level* the page shows whether the model carries this chain for the global variable picked, one line per link:
+
+* **Input:** the input whose source is the global variable, or that none is.
+* **Logical switch:** the logical switch `a > x` with `a` = the global variable and `x` = `-1024`, or that none is -- or the one that compares the global variable with another `x`, which it names.
+* **Special function:** the *Volume* function switched by that logical switch with that input as its source, or what is wrong: one that has the right switch and another source, or the right source and another switch, each named, or that there is none.
+
+Any slots count, and the names are those EdgeTX shows: an input by its name (or its number), a logical switch as `L01` to `L64`, a special function as `SF1` to `SF64`. A link found reads *OK*. The check also warns about what lets a chain be found and still not do what it should: *Popup* set for the global variable, a second *Volume* function that is on (the one further down the list wins), an input with a weight other than 100, an offset, a curve, a switch or a restriction to some flight modes, a logical switch with an AND switch, a delay or a duration, and a *Volume* function that is switched off. Mixes are not searched for other uses of the global variable.
+
+The model is read when the page opens, when another global variable is picked, and on *Reload* -- not on every pass, and not again when the page is redrawn for anything else. The check only reads; it changes nothing in the model and works while the model is armed. A radio whose firmware does not answer the questions it needs gets a line saying so instead.
+
+* **Test:** *Normal* and *Alarm* set the global variable to the *Normal Level* or the *Alert Level* shown (also before it is saved), speak the sample announcement, and put the earlier value back after 5 seconds -- or at once when the page is left or the model is armed. If the global variable already holds that value, nothing is written; if something else writes to it in those 5 seconds, that value is kept. Every value written is a write into the model, which EdgeTX saves with it. They are available only with the whole chain found, and never while the model is armed; the reason stands under them while they are not. There is no way for the suite to know when the radio has finished speaking, so the 5 seconds are an estimate.
