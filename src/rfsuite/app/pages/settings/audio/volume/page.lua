@@ -578,16 +578,13 @@ end
 
 -- Why Create cannot go ahead, as the line under it says it. A faulty link is named by the check
 -- above; Create never changes a link that is there.
-local CREATE_BLOCKED = {
-  input_fault = { "create_blocked_fault", "A link above is faulty. Create changes no link: fix it by hand, then open the page again." },
-  ls_fault = { "create_blocked_fault", "A link above is faulty. Create changes no link: fix it by hand, then open the page again." },
-  ls_wrong_x = { "create_blocked_fault", "A link above is faulty. Create changes no link: fix it by hand, then open the page again." },
-  sf_fault = { "create_blocked_fault", "A link above is faulty. Create changes no link: fix it by hand, then open the page again." },
-  no_input = { "create_no_input", "No free input is left." },
-  no_lines = { "create_no_lines", "All 64 input lines are used." },
-  no_ls = { "create_no_ls", "No free logical switch is left." },
-  no_sf = { "create_no_sf", "No free special function is left." },
-}
+local function blockedText(i18n, why)
+  if why == "no_input" then return t(i18n, "create_no_input", "No free input is left.") end
+  if why == "no_lines" then return t(i18n, "create_no_lines", "All 64 input lines are used.") end
+  if why == "no_ls" then return t(i18n, "create_no_ls", "No free logical switch is left.") end
+  if why == "no_sf" then return t(i18n, "create_no_sf", "No free special function is left.") end
+  return t(i18n, "create_blocked_fault", "A link above is faulty. Create changes no link: fix it by hand, then open the page again.")
+end
 
 local function linkName(read, kind, slot)
   if kind == "input" then return slotName("input", slot, read.firstInput + slot) end
@@ -704,8 +701,7 @@ local function appendCreate(children, x, y, w, i18n, gv, read, reason, help)
     elseif reason == "uncertain" then
       note = t(i18n, "test_locked_uncertain", "Locked: the arming state is not known.")
     elseif plan.blocked then
-      local entry = CREATE_BLOCKED[plan.blocked]
-      note = entry and t(i18n, entry[1], entry[2]) or nil
+      note = blockedText(i18n, plan.blocked)
     elseif not createAvailable() then
       note = t(i18n, "create_no_api", "This radio cannot write the chain from a script.")
     end
