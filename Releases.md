@@ -333,6 +333,10 @@
   - Red can never stand above yellow: the page holds *Battery red at* at or below *Battery yellow at* and pulls it down when yellow is lowered beneath it, and the theme draws a stored pair with red above yellow as if red were equal to yellow.
   - The steps are read once when the theme is built; the gauge still decides its colour once per change of the fuel reading or of the not-full verdict. The flight screen's gauge and the *Battery* page take the same steps.
   - `Layout.SETTINGS` can declare a whole-number row (`min`, `max`, optionally `notAbove`) beside its list rows; the settings page draws it as a number field.
+- **The documentation under `docs/` is published as a website (`mkdocs.yml`, `bin/docs/`, `.github/workflows/docs.yml`)**:
+  - MkDocs with the Material theme builds the site from `docs/` as it is, with search, a navigation tree and previous/next links; GitHub Pages publishes it on every push to master that touches the documentation. The files stay plain Markdown that reads on GitHub unchanged.
+  - A relative link that leaves `docs/` is pointed at the file on GitHub, and each section is ordered by the `sidebar_position` of its pages, the order of the tiles on the radio.
+  - A pull request that touches the documentation builds the site with `--strict`, so a link the site cannot resolve turns the job red.
 
 ### Bug Fixes & Improvements
 - **Bus servo writes use the packed index when no PWM servo is configured (`app/pages/setup/servos/bus/page.lua`, `app/pages/setup/servos/pwm/page.lua`) (fixes #659)**: With bus servos enabled and zero PWM servos, the packed total of 18 was read as 18 PWM servos, so bus servo n was sent as index 18 + n and rejected. The PWM count now subtracts the bus channels at 18, not only above 18. The PWM Output selector lists no servo in that case instead of listing 18 entries, and Save is refused there, so servo 0 (which is bus servo 1 on such a board) is never written.
@@ -1320,10 +1324,6 @@
   - The warm-up before the two drain rows stopped at the first call that consumed a frame, so the measured call carried one of `smart.lua`'s module loads. It now runs until a call consumes its frame without calling a loader. Both that warm-up and the function script's then hand every frame of the cycle through once, so the measured calls publish no sensor for the first time, as none did with the old single frame.
   - Every row that runs the drain moves (master measured against this change, not the `measured` column): `pass.function` 5 907 -> 8 016 and `pass.service` 5 265 -> 6 258 are over their targets and `unit.telemetry.drain` 2 775 -> 3 066 is inside the last tenth of its own; they are raised to 10 050, 7 850 and 3 850, the previous targets kept as `proposed`. `unit.telemetry.handoff` 261 -> 169 no longer pays a module load, and its target is lowered from 350 to 250. `pass.state` +1 007, `pass.state.armed` +711, `unit.events.wakeup` +790, `unit.events.wakeup.armed` +906, `pass.tuning.state` +909, `pass.tuning.prime` +542, the theme rows +1 007 to +1 091, all of it in each theme's worst pass and none in a sweep.
   - The targets those rises reach are re-based too, each with the previous one kept as `proposed`, so no row warns because of this change: the shipped themes' shared ceiling 14 000 -> 16 200 (the largest theme, @aerc at 13 726, with a 15 % margin), `pass.tuning.prime` 16 700 -> 16 900 (its 10 % floor) and `unit.events.wakeup` 5 600 -> 6 250 (the margin `--emit` gives). `pass.state` keeps 12 200, which is derived from the theme ceiling and stays inside the raised one.
-- **The documentation under `docs/` is published as a website (`mkdocs.yml`, `bin/docs/`, `.github/workflows/docs.yml`)**:
-  - MkDocs with the Material theme builds the site from `docs/` as it is, with search, a navigation tree and previous/next links; GitHub Pages publishes it on every push to master that touches the documentation. The files stay plain Markdown that reads on GitHub unchanged.
-  - A relative link that leaves `docs/` is pointed at the file on GitHub, and each section is ordered by the `sidebar_position` of its pages, the order of the tiles on the radio.
-  - A pull request that touches the documentation builds the site with `--strict`, so a link the site cannot resolve turns the job red.
 # 0.1.6
 
 ### Features & Enhancements
