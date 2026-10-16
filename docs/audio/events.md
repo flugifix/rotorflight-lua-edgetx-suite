@@ -155,7 +155,7 @@ The loss is announced **once**. A model that stays silent keeps the announcement
 
 The flight controller reports its rescue as a state: off, or one of the phases pull-up, flip, climb, hover and exit. Leaving *off* for any phase is the start of a rescue and is spoken at once; coming back to *off* is its end and is spoken at once. The phases in between are not spoken, and neither announcement repeats or vibrates: the pilot usually starts a rescue himself, and a confirmation is all it needs. The two switches are independent, so either announcement can be had without the other.
 
-The state comes from the *Rescue State* sensor (92); where the flight controller does not send it, it is taken from *System Status* (120), which carries the same state. Select either under *Configuration* → *Setup* → *Telemetry*. With neither, nothing is spoken.
+The state comes from the *Rescue State* sensor (92); where the flight controller does not send it, it is taken from *System Status* (120), which carries the same state. Select either under *Configuration* → *Setup* → *Telemetry* (*System Status* is offered there on MSP API 12.10 and later). With neither, nothing is spoken.
 
 Only a change is spoken. A model that connects in the middle of a rescue, or a switch turned on during one, is not announced as a rescue that has just begun; its end is. The announcements do not wait for the model to be armed: a flight controller with rescue enabled (*Flight Tuning* → *Advanced* → *Rescue*) enters it whenever the switch assigned to it is on, so turning that switch on and off with the model disarmed on the bench speaks both, which is a way to check the switch.
 

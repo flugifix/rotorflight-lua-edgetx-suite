@@ -981,7 +981,7 @@ return {
         help_message = "Warnungen zur Funkverbindung und zur Telemetrie des Flugreglers."
       },
       settings_audio_events_rescue = {
-        help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetrie.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
+        help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetry.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",
