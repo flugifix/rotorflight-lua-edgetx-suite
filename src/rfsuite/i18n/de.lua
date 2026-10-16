@@ -896,6 +896,8 @@ return {
         lq_critical = "Kritisch (%)",
         rssi_alert = "RSSI",
         trss_alert = "Downlink",
+        rsnr_alert = "SNR",
+        tsnr_alert = "Downlink-SNR",
         adjustment_events = "Einstellungsansagen",
         fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Ansage %",
@@ -946,8 +948,13 @@ return {
         help_headroom_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 15 %.",
         help_headroom_critical = "Die untere Stufe in Prozent. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 8 %.",
         help_headroom_hold = "So lange muss die Reserve auf oder unter einer Stufe bleiben, bevor sie gesagt wird; ein kurzes Antennenloch bleibt still. 0 sagt sofort. Standard: 2 s.",
-        help_link_repeat = "Wie oft die Alarme Linkqualität, RSSI und Downlink sprechen, solange sie auf einer Stufe bleiben, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
-        help_link_haptic = "Ob der Sender bei der kritischen Stufe von Linkqualität, RSSI und Downlink und bei Telemetrie verloren vibriert. Standard: an.",
+        help_rsnr_alert = "Scharf: sagt, wo der SNR am Empfänger zwischen den beiden Schwellen der dynamischen Leistung der Paketrate liegt, in Prozent.\n0 %: ExpressLRS fordert mehr Leistung an. 100 %: weniger. Still bei FLRC- und FSK-Raten, bei drei Raten von ExpressLRS 3.x und ohne bekannte Rate. Standard: aus.\nMit dynamischer Leistung hält ExpressLRS den SNR absichtlich in diesem Fenster; die Sendeleistung sagt dort mehr.\nAuf 900 MHz ist das Fenster nur 1,5 bis 3,5 dB breit, die Angabe springt in großen Schritten.",
+        help_tsnr_alert = "Scharf: dasselbe für den SNR am Sendermodul, den Downlink, mit eigenen Stufen; die Hinweise zu SNR gelten auch hier. Standard: aus.",
+        help_snr_warn = "Die obere Stufe in Prozent. Wird ohne Vibration gesagt. Standard: 30 %.",
+        help_snr_critical = "Die untere Stufe in Prozent; 0 % ist die Schwelle selbst. Vibriert zusätzlich, wenn Haptisch an ist. Standard: 0 %.",
+        help_snr_hold = "So lange muss der SNR auf oder unter einer Stufe bleiben, bevor er gesagt wird. 0 sagt sofort. Standard: 2 s.",
+        help_link_repeat = "Wie oft die Alarme Linkqualität, RSSI, Downlink und beide SNR sprechen, solange sie auf einer Stufe bleiben, alle 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
+        help_link_haptic = "Ob der Sender bei der kritischen Stufe von Linkqualität, RSSI, Downlink und beiden SNR-Alarmen und bei Telemetrie verloren vibriert. Standard: an.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
         saved_title = "Gespeichert",
         saved_message = "Audio-Ereignisse gespeichert",
@@ -979,7 +986,7 @@ return {
         help_message = "Ansagen des SmartFuel-Stands, solange das Modell verbunden ist.\nDen Wert berechnet der Flugregler, wenn SmartFuel dort an ist (Setup > Power > SmartFuel, ab MSP API 12.0.9).\nSonst berechnet ihn der Sender aus der lokalen Quelle in Setup > Power > Einstellungen."
       },
       settings_audio_events_link = {
-        help_message = "Alarme zur Funkverbindung und zur Telemetrie des Flugreglers.\nLinkqualität: Ansage, wenn sie auf eine Stufe fällt.\nWarnung (%): die obere Stufe, ohne Vibration.\nKritisch (%): die untere Stufe, mit Vibration, wenn Haptisch an ist.\nTelemetrie verloren: scharf, der Flugregler verstummt.\nRSSI: scharf, die Signalreserve des Empfängers über der Grenze der Paketrate.\nDownlink: dasselbe am Sendermodul.\nHaltezeit (s): so lange muss eine Stufe erst anstehen.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert bei Kritisch und bei Telemetrie verloren."
+        help_message = "Linkqualität: Ansage, wenn sie auf eine Stufe fällt.\nWarnung (%): obere Stufe, ohne Vibration.\nKritisch (%): untere Stufe, vibriert, wenn Haptisch an ist.\nTelemetrie verloren: scharf, Flugregler schweigt.\nRSSI: scharf, Reserve am Empfänger über der Grenze der Paketrate.\nDownlink: dasselbe am Sendermodul.\nSNR: scharf, SNR am Empfänger zwischen den Leistungsschwellen der Paketrate.\nDownlink-SNR: dasselbe am Sendermodul.\nHaltezeit (s): so lange muss eine Stufe anstehen.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert bei Kritisch und Telemetrie verloren."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",

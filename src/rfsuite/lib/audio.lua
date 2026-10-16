@@ -238,15 +238,39 @@ local function downlinkRssi(state)
   return tonumber(state.trss)
 end
 
+-- The signal-to-noise ratio at the receiver (`RSNR`) and at the transmitter module (`TSNR`), in
+-- dB. These two entries (`snr = true`) are spoken as where the reading sits between the air rate's
+-- two dynamic-power thresholds (lib/link_rates.lua, LinkRates.snrPercent): 0 % at or below the
+-- one at which ExpressLRS asks for more power, 100 % at or above the one at which it asks for
+-- less. Their hysteresis is one decibel on that scale (LinkRates.snrPointsPerDb) rather than
+-- LINK_HEADROOM_HYSTERESIS: the SNR comes in whole dB and the window between the thresholds is
+-- 1.5 to 8.5 dB wide, so one step of the reading is 12 to 67 points, and five points would let a
+-- reading that flickers by one dB across a line leave and re-enter the level at every flicker.
+-- A level is therefore left only once the reading is MORE than one dB above its line -- on a line
+-- that sits on a whole dB, the second dB above it. On a narrow window that can be past the top of
+-- the scale, so the top clears every level below 100 % (announceLinkHeadroom).
+local function uplinkSnr(state)
+  return tonumber(state.rsnr)
+end
+
+local function downlinkSnr(state)
+  return tonumber(state.tsnr)
+end
+
 local LINK_HEADROOM_ALERTS = {
   { alertKey = "rssi", enableKey = "rssi_alert", warnKey = "rssi_warn", criticalKey = "rssi_critical",
-    holdKey = "rssi_hold", sound = "stat/alerts/rssi.wav", read = uplinkRssi },
+    holdKey = "rssi_hold", sound = "stat/alerts/rssi.wav", read = uplinkRssi,
+    warn = 15, critical = 8, hold = 2 },
   { alertKey = "trss", enableKey = "trss_alert", warnKey = "trss_warn", criticalKey = "trss_critical",
-    holdKey = "trss_hold", sound = "stat/alerts/downlink.wav", read = downlinkRssi },
+    holdKey = "trss_hold", sound = "stat/alerts/downlink.wav", read = downlinkRssi,
+    warn = 15, critical = 8, hold = 2 },
+  { alertKey = "rsnr", enableKey = "rsnr_alert", warnKey = "rsnr_warn", criticalKey = "rsnr_critical",
+    holdKey = "rsnr_hold", sound = "stat/alerts/snr.wav", read = uplinkSnr, snr = true,
+    warn = 30, critical = 0, hold = 2 },
+  { alertKey = "tsnr", enableKey = "tsnr_alert", warnKey = "tsnr_warn", criticalKey = "tsnr_critical",
+    holdKey = "tsnr_hold", sound = "stat/alerts/downlink_snr.wav", read = downlinkSnr, snr = true,
+    warn = 30, critical = 0, hold = 2 },
 }
-local LINK_HEADROOM_WARN = 15
-local LINK_HEADROOM_CRITICAL = 8
-local LINK_HEADROOM_HOLD = 2
 
 -- What separates "the pack is gone" from "the pack is low". A disconnected main battery reads
 -- as no voltage at all, and the lowest a flight pack is ever taken to is far above this, so
@@ -312,6 +336,8 @@ local ALERT_CATEGORY = {
   telemetry_lost  = "link",
   rssi            = "link",
   trss            = "link",
+  rsnr            = "link",
+  tsnr            = "link",
   esc_temperature = "esc",
   mcu_temperature = "esc",
   fuel_empty      = "fuel"
@@ -1445,9 +1471,9 @@ end
 --- the voltage alert. A level is entered once the headroom has stayed at or below its line for
 --- the hold, so a rotor-induced antenna null that is over within the hold stays quiet; a level
 --- that has been entered is spoken at once rather than at the next interval, with the headroom
---- after it. Leaving a level costs LINK_HEADROOM_HYSTERESIS points above its line, recovering is
---- not spoken, and only the critical level buzzes, where the Link page's Haptic is on.
-local function linkHeadroomAlert(audioState, events, alert, headroom, now, opts)
+--- after it. Leaving a level costs `hysteresis` points above its line, recovering is not spoken,
+--- and only the critical level buzzes, where the Link page's Haptic is on.
+local function linkHeadroomAlert(audioState, events, alert, headroom, hysteresis, now, opts)
   local slots = audioState.linkHeadroom
   local slot = slots[alert.alertKey]
   if not slot then
@@ -1459,12 +1485,12 @@ local function linkHeadroomAlert(audioState, events, alert, headroom, now, opts)
   -- nor counts as a recovery.
   if headroom == nil then return end
 
-  local warn = tonumber(events[alert.warnKey]) or LINK_HEADROOM_WARN
-  local critical = tonumber(events[alert.criticalKey]) or LINK_HEADROOM_CRITICAL
+  local warn = tonumber(events[alert.warnKey]) or alert.warn
+  local critical = tonumber(events[alert.criticalKey]) or alert.critical
   -- A critical level above the warning level cannot be crossed second, so the lower of the two
   -- is the critical one. Nothing is refused over it; the pair is just ordered.
   if critical > warn then critical = warn end
-  local hold = tonumber(events[alert.holdKey]) or LINK_HEADROOM_HOLD
+  local hold = tonumber(events[alert.holdKey]) or alert.hold
   if hold < 0 then hold = 0 end
 
   -- When the headroom last went under each line and has stayed there since.
@@ -1488,9 +1514,9 @@ local function linkHeadroomAlert(audioState, events, alert, headroom, now, opts)
 
   local spoken = slot.level or 0
   if level < spoken then
-    if spoken >= 2 and headroom <= critical + LINK_HEADROOM_HYSTERESIS then
+    if spoken >= 2 and headroom <= critical + hysteresis then
       level = 2
-    elseif level < 1 and spoken >= 1 and headroom <= warn + LINK_HEADROOM_HYSTERESIS then
+    elseif level < 1 and spoken >= 1 and headroom <= warn + hysteresis then
       level = 1
     end
   end
@@ -1542,7 +1568,18 @@ local function announceLinkHeadroom(self, audioState, events, enabled, now, opts
   for i = 1, #LINK_HEADROOM_ALERTS do
     local alert = LINK_HEADROOM_ALERTS[i]
     if enabled[i] then
-      linkHeadroomAlert(audioState, events, alert, rates.headroom(alert.read(state), floor), now, opts)
+      local value, hysteresis
+      if alert.snr then
+        value, hysteresis = rates.snrPercent(alert.read(state), row), rates.snrPointsPerDb(row)
+        -- One dB of a 1.5 dB window is 67 points: a warning level of 33 % or more plus that would
+        -- lie past the top of the scale and could never be left. So at the top of the scale (at or
+        -- above the threshold at which ExpressLRS asks for less power) the hysteresis is waived
+        -- and every level below 100 % is left; below it, one dB holds as everywhere else.
+        if value and value >= 100 then hysteresis = 0 end
+      else
+        value, hysteresis = rates.headroom(alert.read(state), floor), LINK_HEADROOM_HYSTERESIS
+      end
+      linkHeadroomAlert(audioState, events, alert, value, hysteresis, now, opts)
     elseif audioState.linkHeadroom[alert.alertKey] ~= nil then
       -- Switched off mid-flight: its episode ends, so switching it on again starts a new one.
       audioState.linkHeadroom[alert.alertKey] = nil
@@ -1724,6 +1761,8 @@ function Audio.resetConnectionState(audioState)
     audioState.lastAlertAt.mcu_temperature = 0
     audioState.lastAlertAt.rssi = 0
     audioState.lastAlertAt.trss = 0
+    audioState.lastAlertAt.rsnr = 0
+    audioState.lastAlertAt.tsnr = 0
     -- Was missing from this list while it was read by one alert only, which is why a
     -- reconnect after a main-power announcement used to carry that alert's timestamp into
     -- the new connection. The interval is now measured for every alert here.
@@ -2046,16 +2085,22 @@ function Audio.process(self, opts)
     end
   end
 
-  -- The link headroom alerts. `linkHeadroomWanted` tells both callers whether to read the
-  -- sensors only these alerts use (`RFMD`, `ANT`, `TRSS`; ui/home.lua and
+  -- The link headroom and SNR alerts. `linkHeadroomWanted` and `linkSnrWanted` tell both
+  -- callers whether to read the sensors only these alerts use (`RFMD` for either, `ANT` and `TRSS`
+  -- for the headroom, `RSNR` and `TSNR` for the SNR; ui/home.lua and
   -- widgets/dashboard/runtime.lua), so a radio with all of them off pays no search for them.
-  local headroomOn = false
+  local headroomOn, rssiOn, snrOn = false, false, false
   for i = 1, #LINK_HEADROOM_ALERTS do
-    local on = prefEnabled(events, LINK_HEADROOM_ALERTS[i].enableKey, false)
+    local alert = LINK_HEADROOM_ALERTS[i]
+    local on = prefEnabled(events, alert.enableKey, false)
     linkHeadroomEnabled[i] = on
-    if on then headroomOn = true end
+    if on then
+      headroomOn = true
+      if alert.snr then snrOn = true else rssiOn = true end
+    end
   end
-  audioState.linkHeadroomWanted = headroomOn
+  audioState.linkHeadroomWanted = rssiOn
+  audioState.linkSnrWanted = snrOn
   if headroomOn then
     announceLinkHeadroom(self, audioState, events, linkHeadroomEnabled, now, opts)
   elseif audioState.linkHeadroom ~= nil then

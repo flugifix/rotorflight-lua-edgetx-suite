@@ -3950,18 +3950,32 @@ function M.run(event, touchState)
 
           ts.rss1 = readFirstSensorNumber(RSS1_SOURCES, ts.rss1)
           ts.rss2 = readFirstSensorNumber(RSS2_SOURCES, ts.rss2)
-          -- The readings only the link headroom alerts use: the air rate, the antenna in use and
-          -- the signal at the transmitter module. Read only while one of those alerts is on
-          -- (`linkHeadroomWanted`, set by lib/audio.lua), into the fields the dashboard widget
-          -- uses, and this pass's reading or nil -- never a held value.
-          if state.audioState and state.audioState.linkHeadroomWanted then
+          -- The readings only the link headroom and SNR alerts use, each read only while an alert
+          -- that needs it is on (flags set by lib/audio.lua): the air rate under either flag, the
+          -- antenna in use and the signal at the transmitter module under `linkHeadroomWanted`,
+          -- the two signal-to-noise ratios under `linkSnrWanted`. Into the fields the dashboard
+          -- widget uses, and this pass's reading or nil -- never a held value.
+          local la = state.audioState
+          local headroomWanted = la and la.linkHeadroomWanted
+          local snrWanted = la and la.linkSnrWanted
+          if headroomWanted or snrWanted then
             ts.rfMode = Sensors.getValue("RFMD")
+          else
+            ts.rfMode = nil
+          end
+          if headroomWanted then
             ts.antenna = Sensors.getValue("ANT")
             ts.trss = Sensors.getValue("TRSS")
           else
-            ts.rfMode = nil
             ts.antenna = nil
             ts.trss = nil
+          end
+          if snrWanted then
+            ts.rsnr = Sensors.getValue("RSNR")
+            ts.tsnr = Sensors.getValue("TSNR")
+          else
+            ts.rsnr = nil
+            ts.tsnr = nil
           end
         end
 
@@ -4023,6 +4037,8 @@ function M.run(event, touchState)
         state.telemetryState.rfMode = nil
         state.telemetryState.antenna = nil
         state.telemetryState.trss = nil
+        state.telemetryState.rsnr = nil
+        state.telemetryState.tsnr = nil
         -- What the link headroom alerts learned about this link (lib/audio.lua, lib/link_rates.lua),
         -- cleared where the dashboard widget clears the same fields on its own state
         -- (widgets/dashboard/runtime.lua, updateConnectionState): the next link may be a

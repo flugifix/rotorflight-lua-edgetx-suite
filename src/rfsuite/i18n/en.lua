@@ -896,6 +896,8 @@ return {
         lq_critical = "Critical (%)",
         rssi_alert = "RSSI",
         trss_alert = "Downlink",
+        rsnr_alert = "SNR",
+        tsnr_alert = "Downlink SNR",
         adjustment_events = "Adjustment Announcements",
         fuel_alerts = "SmartFuel",
         fuel_callout_percent = "Callout %",
@@ -946,8 +948,13 @@ return {
         help_headroom_warn = "The upper level in percent. Spoken without vibration. Default 15 %.",
         help_headroom_critical = "The lower level in percent. Vibrates too if Haptic is on. Default 8 %.",
         help_headroom_hold = "How long the headroom has to stay at or below a level before it is spoken, so a short antenna null stays quiet. 0 speaks at once. Default 2 s.",
-        help_link_repeat = "How often the Link Quality, RSSI and Downlink alerts speak while they stay at a level, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
-        help_link_haptic = "Whether the transmitter vibrates with the critical level of Link Quality, RSSI and Downlink, and with Telemetry Lost. On by default.",
+        help_rsnr_alert = "Armed: speaks where the receiver's SNR sits between the air rate's two dynamic-power thresholds, as a percentage.\n0 %: ExpressLRS asks for more power. 100 %: it asks for less. Silent on FLRC and FSK rates, on three ExpressLRS 3.x rates and without a known rate. Off by default.\nWith dynamic power on, ExpressLRS holds the SNR inside this window on purpose; the transmit power says more there.\nOn 900 MHz the window is only 1.5 to 3.5 dB wide, so the figure moves in large steps.",
+        help_tsnr_alert = "Armed: the same for the SNR at the transmitter module, the downlink, with levels of its own; the notes on SNR apply here too. Off by default.",
+        help_snr_warn = "The upper level in percent. Spoken without vibration. Default 30 %.",
+        help_snr_critical = "The lower level in percent; 0 % is the threshold itself. Vibrates too if Haptic is on. Default 0 %.",
+        help_snr_hold = "How long the SNR has to stay at or below a level before it is spoken. 0 speaks at once. Default 2 s.",
+        help_link_repeat = "How often the Link Quality, RSSI, Downlink and both SNR alerts speak while they stay at a level, 10 s apart: until cleared, or 1 to 10 times. Telemetry Lost speaks once per loss.",
+        help_link_haptic = "Whether the transmitter vibrates with the critical level of Link Quality, RSSI, Downlink and both SNR alerts, and with Telemetry Lost. On by default.",
         help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
         saved_title = "Saved",
         saved_message = "Audio events saved",
@@ -979,7 +986,7 @@ return {
         help_message = "Callouts of the SmartFuel level while the model is connected.\nThe flight controller computes the value when SmartFuel is on there (Setup > Power > SmartFuel, MSP API 12.0.9 or later).\nOtherwise the radio computes it from the local source set in Setup > Power > Preferences."
       },
       settings_audio_events_link = {
-        help_message = "Alerts about the radio link and the flight controller's telemetry.\nLink Quality: speaks the quality when it falls to a level.\nWarning (%): the upper level, without vibration.\nCritical (%): the lower level, with vibration if Haptic is on.\nTelemetry Lost: armed, the flight controller stops sending.\nRSSI: armed, the receiver's signal headroom over the air rate's floor.\nDownlink: the same at the transmitter module.\nHold (s): how long a level has to hold before it is spoken.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at Critical and with Telemetry Lost."
+        help_message = "Link Quality: spoken when it falls to a level.\nWarning (%): upper level, no vibration.\nCritical (%): lower level, vibrates if Haptic is on.\nTelemetry Lost: armed, the flight controller stops sending.\nRSSI: armed, the receiver's headroom over the air rate's floor.\nDownlink: the same at the transmitter module.\nSNR: armed, the receiver's SNR between the air rate's power thresholds.\nDownlink SNR: the same at the transmitter module.\nHold (s): time at a level before it is spoken.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at Critical and on Telemetry Lost."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Mode",

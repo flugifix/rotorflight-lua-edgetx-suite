@@ -43,9 +43,15 @@ it from the `RFMD` reading on the state and the transmitter module's ExpressLRS 
 `LinkRates.resolveGeneration` asks the module for once per connection and keeps on the same state
 (`linkGeneration`, `linkPingSent`) -- the fields the dashboard's own link sources use, so a theme and
 an announcement on the widget share one ping. The tool clears those fields where its connection goes,
-the widget where a new flight-controller connection starts, and both read the sensors only these alerts use (`RFMD`, `ANT`, `TRSS`) only while
-`audioState.linkHeadroomWanted` says one of them is on. Add a further alert of that kind as one more
-entry of `LINK_HEADROOM_ALERTS`, or read its own column off the same row.
+the widget where a new flight-controller connection starts, and both read the sensors only these alerts use -- `ANT` and `TRSS` only while
+`audioState.linkHeadroomWanted` says one of them is on. The SNR and Downlink SNR alerts are two more
+entries of `LINK_HEADROOM_ALERTS` (`snr = true`): they read the row's `snrUp` / `snrDn` columns through
+`LinkRates.snrPercent`, take one dB of that scale as their hysteresis (`LinkRates.snrPointsPerDb`, so a
+level is left only more than one dB above its line; `announceLinkHeadroom` waives it for a reading at
+the top of the scale, which clears every level set below 100 %), and
+read `RSNR` and `TSNR` only while `audioState.linkSnrWanted` says one of them is on (`RFMD` while
+either flag is). Add a further alert of that kind as one more entry of `LINK_HEADROOM_ALERTS`, or read
+its own column off the same row.
 
 ## The switch
 
