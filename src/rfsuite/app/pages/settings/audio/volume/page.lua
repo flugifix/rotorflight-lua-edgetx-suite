@@ -401,7 +401,20 @@ end
 -- A row of buttons with the row's label on the left and its `?` on the right, in the places
 -- appendComboSelect uses. `buttons` is { { text, press, active }, ... }, drawn left to right and
 -- appended in that order, so the rotary reaches them before the row's `?`, as on every other row.
-local TEST_BTN_W, TEST_BTN_GAP = 84, 6
+-- A button is as wide as its text in the button's font (the radio's standard font), with room for
+-- the button's own padding, and never narrower than TEST_BTN_W.
+local TEST_BTN_W, TEST_BTN_GAP, TEST_BTN_PAD = 84, 6, 28
+
+local function buttonWidth(text)
+  local fn = lcd and lcd.sizeText
+  local w = nil
+  if type(fn) == "function" then
+    local ok, tw = pcall(fn, text, 0)
+    if ok then w = tonumber(tw) end
+  end
+  if w == nil then w = #text * 7 end
+  return math.max(TEST_BTN_W, w + TEST_BTN_PAD)
+end
 
 local function appendButtonRow(children, x, y, w, labelText, buttons, help)
   local rowH = Controls.ROW_H
@@ -411,21 +424,28 @@ local function appendButtonRow(children, x, y, w, labelText, buttons, help)
     helpX = right - HELP_BTN_W
     right = helpX - HELP_BTN_GAP
   end
-  local left = right - #buttons * TEST_BTN_W - math.max(#buttons - 1, 0) * TEST_BTN_GAP
+  local widths, total = {}, math.max(#buttons - 1, 0) * TEST_BTN_GAP
+  for i, b in ipairs(buttons) do
+    widths[i] = buttonWidth(b.text)
+    total = total + widths[i]
+  end
+  local left = right - total
   children[#children + 1] = {
     type = "label",
     x = x, y = Controls.labelY(y, rowH), w = left - x - 8,
     text = labelText, color = COLOR_THEME_PRIMARY1, font = SMLSIZE
   }
+  local bx = left
   for i, b in ipairs(buttons) do
     children[#children + 1] = {
       type = "button",
-      x = left + (i - 1) * (TEST_BTN_W + TEST_BTN_GAP), y = Controls.controlY(y, rowH),
-      w = TEST_BTN_W, h = Controls.CTRL_H,
+      x = bx, y = Controls.controlY(y, rowH),
+      w = widths[i], h = Controls.CTRL_H,
       text = b.text,
       active = b.active,
       press = b.press
     }
+    bx = bx + widths[i] + TEST_BTN_GAP
   end
   if helpX then
     children[#children + 1] = {
