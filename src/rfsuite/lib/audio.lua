@@ -207,6 +207,11 @@ local DROPOUTS_SOUND = "stat/alerts/dropouts.wav"
 -- would speak.
 local LQ_HYSTERESIS = 5
 
+-- The same for the two temperature alerts, in degrees Celsius: a reading has to fall this far
+-- below a level before that level is left. A sensor resting on a threshold reads a degree either
+-- side of it from one frame to the next, and each rise would otherwise be a new worsening.
+local TEMP_HYSTERESIS = 5
+
 -- What separates "the pack is gone" from "the pack is low". A disconnected main battery reads
 -- as no voltage at all, and the lowest a flight pack is ever taken to is far above this, so
 -- nothing a discharge can reach falls inside the window.
@@ -222,6 +227,13 @@ local CONNECTION_LOST_SOUND = "stat/alerts/telemetrylost.wav"
 local CONNECTION_OK_SOUND = "stat/alerts/telemetryok.wav"
 local MAIN_POWER_LOST_SOUNDS = { "stat/alerts/mainpower.wav", "stat/alerts/batteryempty.wav", "stat/alerts/lowvoltage.wav" }
 local MAIN_POWER_OK_SOUNDS = { "stat/alerts/mainpowerok.wav", "evt/battery.wav" }
+
+-- Rescue, spoken on its two edges only: out of RESCUE_STATE_OFF (0 in rotorflight-firmware
+-- flight/rescue.h) into any of its phases, and back to it. The phases in between are not spoken.
+-- Files of their own rather than adj/rescue.wav, which is the first word of the rescue
+-- adjustment announcements.
+local RESCUE_ACTIVE_SOUND = "stat/alerts/rescue_on.wav"
+local RESCUE_OFF_SOUND = "stat/alerts/rescue_off.wav"
 
 -- How long an alert whose condition still holds waits before it speaks again. Every repeating
 -- alert in this file already waited exactly this long, with the number written out at each of
@@ -340,9 +352,9 @@ end
 --- Two questions, and the second is where each alert's own history comes in. The repeat count
 --- is spent per episode. The interval is measured from the last announcement, and an alert
 --- that zeroes its timestamp when its condition clears -- as the voltage, BEC and RX alerts do
---- -- therefore speaks at once when the condition returns, while one that keeps its timestamp
---- -- as the ESC and MCU alerts do -- waits the interval out even across a dip below the
---- threshold. Both behaviours are the ones those alerts already had.
+--- -- therefore speaks at once when the condition returns. The link quality and temperature
+--- alerts zero it on a rise into a level instead, and it is their hysteresis, not the
+--- timestamp, that keeps a reading resting on a level from announcing every rise.
 local function alertMaySpeak(audioState, events, alertKey, now)
   local limit = alertRepeatLimit(events, alertKey)
   if limit > 0 then
@@ -363,8 +375,9 @@ end
 --- Book an announcement that was made, and buzz if the pilot asked this category to.
 ---
 --- `haptic` is false for an announcement whose own severity rule says no even when the
---- category is set to buzz: the link alert buzzes at its critical level and not at its
---- warning one, which is a distinction inside that alert rather than a setting.
+--- category is set to buzz: the link quality and the ESC and MCU temperature alerts buzz at
+--- their critical level and not at their warning one, which is a distinction inside each alert
+--- rather than a setting.
 local function alertSpoken(audioState, events, alertKey, now, haptic)
   -- Audio.process builds this table on its first pass, and every alert but the lost-connection
   -- one is reached from inside that pass. That one is called from the caller's own loss branch.
@@ -450,7 +463,7 @@ local function readBatteryPrefs()
   return session.modelPreferences.battery
 end
 
--- The ESC's temperature limit describes the aircraft, so the model's own store wins over
+-- The ESC's temperature levels describe the aircraft, so the model's own store wins over
 -- the radio-wide default in the transmitter's own store. Reached the same way readBatteryPrefs above
 -- reaches the other half of the same file.
 local function readAudioEventPrefs()
@@ -461,6 +474,30 @@ local function readAudioEventPrefs()
   return session.modelPreferences.audio_events
 end
 
+-- The ESC's two temperature levels. They describe one aircraft's hardware, so the model's own
+-- values win over the radio-wide ones, each level on its own: a model may carry a warning level
+-- of its own and take the critical level from the radio. A critical level below the warning
+-- level cannot be crossed second, so the higher of the two is the critical one; nothing is
+-- refused over it, the pair is just ordered.
+local function escTemperatureLevels(events)
+  local modelEvents = readAudioEventPrefs()
+  local warn = tonumber(modelEvents and modelEvents.esc_threshold)
+    or tonumber(events.esc_threshold) or 90
+  local critical = tonumber(modelEvents and modelEvents.esc_critical)
+    or tonumber(events.esc_critical) or 110
+  if critical < warn then critical = warn end
+  return warn, critical
+end
+
+-- The same two levels for the flight controller's MCU, with one difference: no
+-- `scope = "model"`, so both are read out of the global table only.
+local function mcuTemperatureLevels(events)
+  local warn = tonumber(events.mcu_threshold) or 80
+  local critical = tonumber(events.mcu_critical) or 95
+  if critical < warn then critical = warn end
+  return warn, critical
+end
+
 local function is_critical_active(self, now, events)
   local audioState = self and self.audioState
   if not audioState then return false end
@@ -469,13 +506,28 @@ local function is_critical_active(self, now, events)
     return true
   end
 
+  -- A temperature counts from its critical level: the warning level is spoken at the pilot's
+  -- own volume, and only the level that also vibrates raises it. It counts for as long as the
+  -- alert stays at that level, so the volume is not let go a few degrees before the alert is.
   if prefEnabled(events, "esc_temperature", false) then
-    local audioEventPrefs = readAudioEventPrefs()
-    local escThreshold = tonumber(audioEventPrefs and audioEventPrefs.esc_threshold)
-      or tonumber((self.preferences and self.preferences.audio_events and self.preferences.audio_events.esc_threshold) or 90)
     local escTemp = tonumber(self.state and self.state.escTemp)
-    if escTemp ~= nil and escTemp >= escThreshold then
-      return true
+    if escTemp ~= nil then
+      local _, critical = escTemperatureLevels(events)
+      if escTemp >= critical or ((tonumber(audioState.escTempLevel) or 0) >= 2
+          and escTemp >= critical - TEMP_HYSTERESIS) then
+        return true
+      end
+    end
+  end
+
+  if prefEnabled(events, "mcu_temperature", false) then
+    local mcuTemp = tonumber(self.state and self.state.mcuTemp)
+    if mcuTemp ~= nil then
+      local _, critical = mcuTemperatureLevels(events)
+      if mcuTemp >= critical or ((tonumber(audioState.mcuTempLevel) or 0) >= 2
+          and mcuTemp >= critical - TEMP_HYSTERESIS) then
+        return true
+      end
     end
   end
 
@@ -802,6 +854,61 @@ local function tryPlayEventFile(audioState, now, relativePath, opts)
   return true
 end
 
+--- A temperature alert with a warning and a critical level, for the ESC and the MCU alike.
+---
+--- The shape of the link quality alert, turned the other way up because a temperature gets
+--- worse by rising: a worsening is announced at once and the level it has entered gets its own
+--- repeats, recovering is not announced, leaving a level costs TEMP_HYSTERESIS degrees more than
+--- entering it, and only the critical level vibrates. The words are the same at both levels and
+--- the temperature follows them, in the unit set under Settings > Localization.
+---
+--- `warn` and `critical` come ordered, from escTemperatureLevels or mcuTemperatureLevels.
+local function announceTemperatureLevel(self, audioState, events, opts, now, alert, temp, warn, critical)
+  local levelKey = alert.levelKey
+  local alertKey = alert.alertKey
+  local spoken = tonumber(audioState[levelKey]) or 0
+  local level = 0
+  if temp >= critical then
+    level = 2
+  elseif temp >= warn then
+    level = 1
+  end
+
+  if level < spoken then
+    if spoken >= 2 and temp >= critical - TEMP_HYSTERESIS then
+      level = 2
+    elseif level < 1 and spoken >= 1 and temp >= warn - TEMP_HYSTERESIS then
+      level = 1
+    end
+  end
+
+  if level < spoken then
+    audioState[levelKey] = level
+    alertCleared(audioState, alertKey)
+  elseif level > 0 then
+    if level > spoken then
+      audioState.lastAlertAt[alertKey] = 0
+      alertCleared(audioState, alertKey)
+    end
+    if alertMaySpeak(audioState, events, alertKey, now) then
+      if tryPlayEventFile(audioState, now, alert.sound, opts) then
+        if type(playNumber) == "function" then
+          local value, unit = spokenTemperature(self, temp)
+          local ok, err = pcall(playNumber, value, unit, 0, audio_volume)
+          if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
+        end
+        alertSpoken(audioState, events, alertKey, now, level >= 2)
+        audioState[levelKey] = level
+      end
+    end
+  end
+end
+
+-- What tells the two temperature alerts apart. A table each, built once, so that a pass that
+-- judges them builds nothing.
+local ESC_TEMPERATURE_ALERT = { alertKey = "esc_temperature", levelKey = "escTempLevel", sound = "evt/esctemp.wav" }
+local MCU_TEMPERATURE_ALERT = { alertKey = "mcu_temperature", levelKey = "mcuTempLevel", sound = "stat/alerts/mcu.wav" }
+
 local function fuelThresholdList(selection)
   local sel = tonumber(selection) or 10
   if sel == 0 then return { 100, 10 } end
@@ -1025,6 +1132,47 @@ local function announceGovernorEvent(self, events, opts)
   local file = GOVERNOR_FILE_MAP[value]
   if type(file) ~= "string" then return false end
   return tryPlayEventFile(audioState, now, "gov/" .. file, opts)
+end
+
+-- A change between two readings of the rescue state is spoken at once, the start of a rescue
+-- and its end each under a switch of its own; no repeat and no vibration. A first reading -- after
+-- a connect, or after the switches were off -- is only recorded, so a rescue already under way
+-- is not announced as if it had just begun. While both switches are off nothing is tracked.
+--
+-- `rescueWanted` tells both callers whether to read the state at all (ui/home.lua and
+-- widgets/dashboard/runtime.lua): a radio that never switches this on pays no sensor search
+-- for it, which on a flight controller sending neither Rescue State nor System Status is two
+-- searches that find nothing.
+local function announceRescueEvent(self, events, opts)
+  local audioState = self.audioState
+  local announceActive = prefEnabled(events, "rescue_active", false)
+  local announceOff = prefEnabled(events, "rescue_off", false)
+  audioState.rescueWanted = announceActive or announceOff
+  if not (announceActive or announceOff) then
+    audioState.lastValues.rescue = nil
+    return
+  end
+
+  local value = roundProfileValue(self.state.rescue)
+  if value == nil then return end
+  local active = value ~= 0
+  local last = audioState.lastValues.rescue
+  if last == active then return end
+  if last == nil then
+    audioState.lastValues.rescue = active
+    return
+  end
+
+  -- Left unrecorded while the previous file's cooldown runs, so the next pass speaks it.
+  local now = nowSeconds()
+  if now < (audioState.nextAllowedAt or 0) then return end
+
+  audioState.lastValues.rescue = active
+  if active and announceActive then
+    tryPlayEventFile(audioState, now, RESCUE_ACTIVE_SOUND, opts)
+  elseif not active and announceOff then
+    tryPlayEventFile(audioState, now, RESCUE_OFF_SOUND, opts)
+  end
 end
 
 local function announceBatteryCapacityEvent(self, opts)
@@ -1601,6 +1749,8 @@ function Audio.resetConnectionState(audioState)
   audioState.smartfuelIsElectric = nil
   audioState.smartfuelEmptySound = nil
   audioState.lqLevel = nil
+  audioState.escTempLevel = nil
+  audioState.mcuTempLevel = nil
   audioState.lqNotQualityLogged = nil
   audioState.dropoutSamples = nil
   audioState.dropoutsActive = nil
@@ -1798,6 +1948,8 @@ function Audio.process(self, opts)
     announceGovernorEvent(self, events, opts)
   end
 
+  announceRescueEvent(self, events, opts)
+
   announceProfileEvent(self, "pid_profile", self.state.profile, "evt/profile.wav", opts)
   announceProfileEvent(self, "rate_profile", self.state.rateProfile, "evt/rates.wav", opts)
   announceBatteryCapacityEvent(self, opts)
@@ -1871,50 +2023,18 @@ function Audio.process(self, opts)
   end
 
   if prefEnabled(events, "esc_temperature", false) then
-    local modelEvents = readAudioEventPrefs()
-    local threshold = tonumber(modelEvents and modelEvents.esc_threshold)
-      or tonumber(events.esc_threshold) or 90
     local escTemp = tonumber(self.state.escTemp)
     if type(escTemp) == "number" then
-      if escTemp >= threshold then
-        if alertMaySpeak(audioState, events, "esc_temperature", now) then
-          if tryPlayEventFile(audioState, now, "evt/esctemp.wav", opts) then
-            alertSpoken(audioState, events, "esc_temperature", now)
-          end
-        end
-      else
-        -- The repeat count starts over, so a temperature that comes back up is a new episode
-        -- and a capped repeat can speak for it. The timestamp is deliberately kept: a reading
-        -- resting on the threshold would otherwise announce on every dip and rise instead of
-        -- once per interval, which is the reason this branch has always left it standing.
-        alertCleared(audioState, "esc_temperature")
-      end
+      local warn, critical = escTemperatureLevels(events)
+      announceTemperatureLevel(self, audioState, events, opts, now, ESC_TEMPERATURE_ALERT, escTemp, warn, critical)
     end
   end
 
-  -- The same shape as the ESC alert above, with one difference: no `scope = "model"`. The
-  -- ESC's limit describes one aircraft's hardware, while the flight controller's MCU is the
-  -- same silicon with the same rating in every model, so this threshold is radio-wide and
-  -- is read out of the global table only.
   if prefEnabled(events, "mcu_temperature", false) then
-    local threshold = tonumber(events.mcu_threshold) or 80
     local mcuTemp = tonumber(self.state.mcuTemp)
-    if type(mcuTemp) ~= "number" then
-      -- nothing to judge this pass
-    elseif mcuTemp >= threshold then
-      if alertMaySpeak(audioState, events, "mcu_temperature", now) then
-        if tryPlayEventFile(audioState, now, "stat/alerts/mcu.wav", opts) then
-          if type(playNumber) == "function" then
-            local spoken, unit = spokenTemperature(self, mcuTemp)
-            local ok, err = pcall(playNumber, spoken, unit, 0, audio_volume)
-            if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
-          end
-          alertSpoken(audioState, events, "mcu_temperature", now)
-        end
-      end
-    else
-      -- The same reading as the ESC alert above, for the same reason.
-      alertCleared(audioState, "mcu_temperature")
+    if type(mcuTemp) == "number" then
+      local warn, critical = mcuTemperatureLevels(events)
+      announceTemperatureLevel(self, audioState, events, opts, now, MCU_TEMPERATURE_ALERT, mcuTemp, warn, critical)
     end
   end
 

@@ -172,9 +172,10 @@ When neither packed sensor is received, the page says so in one line instead of 
   Config* on MSP API 12.10 and later.
 - **Reload looks for every sensor again**, after one was discovered or deleted while the page was
   open. A sensor the model does not have is otherwise looked for again every two seconds.
-- **Where the suite uses these sensors:** arm state, governor state and the three profiles are
-  read from their own sensors, and from the packed sensors only when the own sensor is missing.
-  This page shows both, whichever the suite uses.
+- **Where the suite uses these sensors:** arm state, governor state, the rescue state and the three
+  profiles are read from their own sensors, and from the packed sensors only when the own sensor is missing.
+  This page shows both for the five shared fields above, whichever the suite uses; the rescue state it shows
+  from the packed sensor only.
 
 ## Related
 

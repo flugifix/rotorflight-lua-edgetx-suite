@@ -207,6 +207,7 @@ return {
       audio_events_adjustment = { name = "Einstellungen" },
       audio_events_fuel = { name = "SmartFuel" },
       audio_events_link = { name = "Link" },
+      audio_events_rescue = { name = "Rettung" },
       audio_volume = { name = "Lautstärke" },
       msp_speed = { name = "MSP-Geschwindigkeit" },
       api_tester = { name = "API Tester" },
@@ -840,7 +841,7 @@ return {
         saved_message = "Lautstärke-Einstellungen gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen",
-        help_message = "Die WAV-Lautstärkestufe legt einen festen Pegel für alle RFSuite-Ansagen fest. 'Sender-Standard' überlässt es dem Sender; die Stufen 1 bis 5 setzen ihn explizit, wobei 5 am lautesten ist. 'Nur wenn verbunden' beschränkt die Anpassung auf aktive Flüge.\n\nDie Master-Lautstärke ermöglicht es der Suite, die Gesamtlautstärke des Senders über eine globale Variable vorübergehend zu überschreiben. Dazu wird ein freier GV-Platz gewählt und im Modellspeicher ein Input, ein logischer Schalter und eine Spezialfunktion eingerichtet:\n\n  1. Inputs: Input anlegen (z. B. I15 'Vol'), Quelle = GV<n>, Gewichtung 100\n  2. Logischer Schalter: L10: a > x | a = GV<n> | x = -1024\n  3. Spezialfunktion: SF: L10 -> Lautstärke = I15 (Vol)\n\nBei Verbindung schreibt die Suite die normale Stufe in die gewählte GV. Bei einem anhaltenden kritischen Alarm (Unterspannung, ESC-Übertemperatur, Tank leer) wird stattdessen die Alarm-Stufe geschrieben. Bei Trennung oder deaktivierter Funktion wird -1024 geschrieben, sodass L10 abfällt und dein Lautstärkeregler wieder übernimmt."
+        help_message = "Legt fest, wie laut die Suite spricht, und lässt sie die Gesamtlautstärke setzen; die Modell-Einrichtung steht in der Doku.\nWAV-Lautstärkestufe: Sender-Standard belässt es bei der WAV-Lautstärke des Senders; 1 bis 5 setzt sie für jede Ansage, 5 am lautesten.\nNur wenn verbunden: die Stufe gilt nur bei verbundenem Flugregler.\nGlobale Variable: die GV, in die die Suite die Gesamtlautstärke schreibt, -1024 beim Freigeben; Aus schaltet die Funktion ab.\nNormale Stufe (%): wird bei Verbindung ohne kritischen Alarm geschrieben.\nAlarm-Stufe (%): wird geschrieben, solange ein kritischer Alarm aktiv ist."
       },
       settings_audio_events = {
         section_arming = "Arming-Flags",
@@ -854,6 +855,7 @@ return {
         section_fuel = "Kraftstoff",
         section_smartfuel = "SmartFuel",
         section_connect = "Beim Verbinden",
+        section_rescue = "Rettung",
         section_alert_behaviour = "Verhalten der Warnungen",
         alert_repeat = "Wiederholung",
         alert_haptic = "Haptisch",
@@ -886,8 +888,10 @@ return {
         pid_profile = "PID-Profil",
         rate_profile = "Raten-Profil",
         esc_temperature = "ESC-Temperatur",
-        esc_threshold = "Schwellwert",
-        esc_threshold_model = "Schwellwert [Modell]",
+        esc_threshold = "Warnung",
+        esc_threshold_model = "Warnung [Modell]",
+        esc_critical = "Kritisch",
+        esc_critical_model = "Kritisch [Modell]",
         mcu_temperature = "MCU-Temperatur",
         section_telemetry = "Telemetrie",
         telemetry_lost = "Telemetrie verloren",
@@ -910,6 +914,8 @@ return {
         battery_profile = "Akkukapazität",
         initial_fuel = "SmartFuel",
         model_announcement = "Modellname",
+        rescue_active = "Rettung aktiv",
+        rescue_off = "Rettung beendet",
         help_model_announcement = "Spielt die nach dem Modell benannte Sounddatei SOUNDS/<Name>.wav einmal beim Verbinden. Fehlt die Datei auf der Karte, bleibt es still. Standard: aus.",
         help_battery_profile = "Sagt die Kapazität des aktiven Akkuprofils in mAh beim Verbinden und bei jedem Profilwechsel; ohne eingestellte Kapazität die Profilnummer. Standard: an.",
         help_pack_not_full = "Einmal beim Verbinden: warnt, wenn die Spannung pro Zelle unter Max Zellspannung (Setup > Power > Batterie) minus der Toleranz liegt, gesagt wie unter Spannung > Ansage als. Standard: aus.",
@@ -927,12 +933,14 @@ return {
         help_voltage_haptic = "Ob der Sender bei Spannung, Hauptstrom verloren und dem BEC/RX-Alarm vibriert. Standard: an.",
         help_pid_profile = "Sagt die Nummer des PID-Profils bei einem Wechsel. Standard: an.",
         help_rate_profile = "Sagt die Nummer des Raten-Profils bei einem Wechsel. Standard: an.",
-        help_esc_temperature = "Warnt, wenn die ESC-Temperatur den Schwellwert darunter erreicht. Standard: aus.",
-        help_esc_threshold = "Die ESC-Temperatur, ab der gewarnt wird, in der Einheit aus Einstellungen > Lokalisierung. Mit verbundenem Modell bei diesem gespeichert (die Zeile zeigt [Modell]). Standard: 90 °C.",
-        help_mcu_temperature = "Warnt mit der Temperatur, wenn die MCU des Flugreglers den Schwellwert darunter erreicht. Standard: aus.",
-        help_mcu_threshold = "Die MCU-Temperatur, ab der gewarnt wird, in der Einheit aus Einstellungen > Lokalisierung. Gilt immer radioweit. Standard: 80 °C.",
-        help_esc_repeat = "Wie oft die ESC- oder MCU-Warnung spricht, solange die Temperatur am oder über dem Schwellwert bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal.",
-        help_esc_haptic = "Ob der Sender bei den ESC- und MCU-Temperaturwarnungen vibriert. Standard: an.",
+        help_esc_temperature = "Sagt die ESC-Temperatur, wenn sie die Warn- oder kritische Stufe darunter erreicht. Die Erholung bleibt still. Standard: aus.",
+        help_esc_threshold = "Die untere ESC-Stufe, in der Einheit aus Einstellungen > Lokalisierung. Wird ohne Vibration gesagt. Mit verbundenem Modell bei diesem gespeichert (die Zeile zeigt [Modell]). Standard: 90 °C.",
+        help_esc_critical = "Die obere ESC-Stufe. Vibriert zusätzlich, wenn Haptisch an ist. Mit verbundenem Modell bei diesem gespeichert (die Zeile zeigt [Modell]). Standard: 110 °C.",
+        help_mcu_temperature = "Sagt die Temperatur der MCU des Flugreglers, wenn sie die Warn- oder kritische Stufe darunter erreicht. Die Erholung bleibt still. Standard: aus.",
+        help_mcu_threshold = "Die untere MCU-Stufe, in der Einheit aus Einstellungen > Lokalisierung. Wird ohne Vibration gesagt. Gilt immer radioweit. Standard: 80 °C.",
+        help_mcu_critical = "Die obere MCU-Stufe. Vibriert zusätzlich, wenn Haptisch an ist. Gilt immer radioweit. Standard: 95 °C.",
+        help_esc_repeat = "Wie oft der ESC- oder MCU-Alarm spricht, solange die Temperatur auf einer Stufe bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal.",
+        help_esc_haptic = "Ob der Sender bei den ESC- und MCU-Temperaturalarmen auf der kritischen Stufe vibriert. Standard: an.",
         help_adjustment_events = "Sagt den neuen Wert, wenn eine Adjustment-Funktion eine Einstellung ändert, sobald er eine Sekunde steht; mit dem Namen der Funktion, wenn es eine andere als zuletzt ist. Standard: aus.",
         help_fuel_alerts = "Sagt den SmartFuel-Stand beim Unterschreiten der darunter gewählten Stufen und warnt bei 0 %. Standard: an.",
         help_fuel_callout_percent = "Die Stufen, bei denen der fallende Stand gesagt wird, jede einmal. Nur bei 10% sagt nur die 10-%-Stufe. Standard: alle 10 %.",
@@ -947,6 +955,8 @@ return {
         help_dropouts_window = "Die Zeit, über die die Lücken gezählt werden, in Sekunden (4 bis 60). Standard: 10 s.",
         help_link_repeat = "Wie oft die Alarme Linkqualität und Telemetrie-Aussetzer sprechen, solange ihr Zustand anhält, alle 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
         help_link_haptic = "Ob der Sender bei der kritischen Linkqualität und bei Telemetrie verloren vibriert. Telemetrie-Aussetzer vibriert nie. Standard: an.",
+        help_rescue_active = "Spricht einmal, sobald der Flugregler eine Rettung beginnt, in welcher Phase auch immer. Standard: aus.",
+        help_rescue_off = "Spricht einmal, wenn die Rettung vorbei ist und der Flugregler wieder normal steuert. Standard: aus.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
         saved_title = "Gespeichert",
         saved_message = "Audio-Ereignisse gespeichert",
@@ -969,7 +979,7 @@ return {
         help_message = "Ansage bei einem Wechsel des PID- oder Raten-Profils."
       },
       settings_audio_events_esc = {
-        help_message = "Temperaturwarnungen für den ESC und die MCU des Flugreglers."
+        help_message = "Temperaturalarme für den ESC und die MCU des Flugreglers, mit der Temperatur gesagt.\nESC-Temperatur: Ansage, wenn der ESC eine Stufe erreicht; die Erholung bleibt still.\nWarnung: die untere Stufe, ohne Vibration. Beim Modell gespeichert.\nKritisch: die obere Stufe, mit Vibration, wenn Haptisch an ist. Beim Modell gespeichert.\nMCU-Temperatur: dieselben zwei Stufen für die MCU, radioweit.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert auf der kritischen Stufe."
       },
       settings_audio_events_adjustment = {
         help_message = "Ansage von Werten, die über die Adjustment-Funktionen des Flugreglers geändert werden."
@@ -979,6 +989,9 @@ return {
       },
       settings_audio_events_link = {
         help_message = "Alarme zur Funkverbindung und zur Telemetrie des Flugreglers.\nLinkqualität: Ansage, wenn sie auf eine Stufe fällt.\nWarnung (%): die obere Stufe, ohne Vibration.\nKritisch (%): die untere Stufe, mit Vibration, wenn Haptisch an ist.\nTelemetrie verloren: scharf, der Flugregler verstummt.\nTelemetrie-Aussetzer: scharf, zu oft fehlen seine Frames.\nAussetzer: wie viele Lücken sie auslösen.\nZeitfenster (s): die Zeit, über die sie gezählt werden.\nWiederholung: wie oft Linkqualität und Telemetrie-Aussetzer sprechen, alle 10 s.\nHaptisch: vibriert bei Kritisch und bei Telemetrie verloren."
+      },
+      settings_audio_events_rescue = {
+        help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetry.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
       },
       setup_power_smartfuel = {
         section_mode = "SmartFuel Modus",
