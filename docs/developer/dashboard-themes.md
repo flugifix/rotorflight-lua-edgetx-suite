@@ -351,8 +351,10 @@ and the frame does not say.** `RFMD` carries an enumeration value whose meaning 
 whichever module filled it, and ExpressLRS renumbered that enumeration between 3.x and 4.x: the
 same byte is a different rate on each, and the common rates are exactly where the two overlap
 (byte 10 is `D250` on 3.x and `D50Hz` on 4.x). So the widget asks the module. Once the link is
-up and `RFMD` has a reading — and only for a theme that declares one of these two sources — it
-sends the transmitter module one CRSF device ping, and the device-information frame the module
+up and `RFMD` has a reading — and only for a theme that declares one of these two sources, or while
+one of the audio's RSSI and Downlink alerts is on — it sends the transmitter module one CRSF device
+ping (`LinkRates.resolveGeneration`, which the theme and the audio run on the same widget state, so
+they share the one ping and the one answer), and the device-information frame the module
 answers with carries its release number. `lib/link_rates.lua` holds a table for each generation
 (3.0.0 to 3.6.4, and 4.0.0 to 4.1.0; neither changed within its generation) and names its
 sources line by line.
@@ -381,7 +383,9 @@ to the handset for exactly this reason — *"OpenTX's value is signed and will d
 -dBm properly"* — so both numbers are negative dBm and directly comparable. `rssi - floor` is
 therefore the headroom in dB, and `(rssi - floor) / (-30 - floor)` a fraction of the way from the
 floor to a -30 dBm best case. A theme clamps that itself: an RSSI below the floor is a link that
-is still working past what the rate is specified for, which happens.
+is still working past what the rate is specified for, which happens. `LinkRates.headroom(rssi,
+floor)` in `lib/link_rates.lua` is that arithmetic with -40 dBm as the top instead of -30, clamped to 0..100 and rounded
+down, as the audio's RSSI and Downlink alerts and the Urban theme's link bars compute it.
 
 **`link_diversity` only ever rises, and that is deliberate.** A receiver with one radio and two
 antennas spends most of its packets on one of them, so a pass that sees only the first antenna

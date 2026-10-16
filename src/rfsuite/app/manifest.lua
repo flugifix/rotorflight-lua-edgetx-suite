@@ -466,7 +466,8 @@ local manifest = {
     settings_audio_events_page = {
       title = "@i18n(app.modules.audio_events.name)@",
       -- One page per category. The icons are the ones the matching setup pages already carry,
-      -- except On Connect, which matches no setup page and carries its own.
+      -- except On Connect, which matches no setup page and carries its own. Rescue takes the icon
+      -- of the flight tuning page that configures it.
       pages = {
         { id = "audio_events_connect", title = "@i18n(app.modules.audio_events_connect.name)@", menuId = "settings_audio_events_connect_page", icon = "@pages/settings/audio/events/connect/icon.png" },
         { id = "audio_events_arming", title = "@i18n(app.modules.audio_events_arming.name)@", menuId = "settings_audio_events_arming_page", icon = "@pages/setup/controls/modes/icon.png" },
@@ -476,7 +477,8 @@ local manifest = {
         { id = "audio_events_esc", title = "@i18n(app.modules.audio_events_esc.name)@", menuId = "settings_audio_events_esc_page", icon = "@pages/setup/esc_motors/telemetry/icon.png" },
         { id = "audio_events_adjustment", title = "@i18n(app.modules.audio_events_adjustment.name)@", menuId = "settings_audio_events_adjustment_page", icon = "@pages/setup/controls/adjustments/icon.png" },
         { id = "audio_events_fuel", title = "@i18n(app.modules.audio_events_fuel.name)@", menuId = "settings_audio_events_fuel_page", icon = "@pages/setup/power/smartfuel/icon.png" },
-        { id = "audio_events_link", title = "@i18n(app.modules.audio_events_link.name)@", menuId = "settings_audio_events_link_page", icon = "@pages/tools/diagnostics/elrs_link/icon.png" }
+        { id = "audio_events_link", title = "@i18n(app.modules.audio_events_link.name)@", menuId = "settings_audio_events_link_page", icon = "@pages/tools/diagnostics/elrs_link/icon.png" },
+        { id = "audio_events_rescue", title = "@i18n(app.modules.audio_events_rescue.name)@", menuId = "settings_audio_events_rescue_page", icon = "@pages/flight_tuning/advanced/rescue/icon.png" }
       }
     },
     settings_audio_events_connect_page = {
@@ -513,6 +515,10 @@ local manifest = {
     },
     settings_audio_events_link_page = {
       title = "@i18n(app.modules.audio_events_link.name)@",
+      pages = {}
+    },
+    settings_audio_events_rescue_page = {
+      title = "@i18n(app.modules.audio_events_rescue.name)@",
       pages = {}
     },
     settings_audio_volume_page = {

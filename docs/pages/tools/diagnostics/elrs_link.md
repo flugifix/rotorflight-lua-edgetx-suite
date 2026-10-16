@@ -41,6 +41,11 @@ is on. ExpressLRS registers both fields in its *TX Power* folder after *Packet R
 and ratio alone need. A part the module does not give reads *?*: a module without the fields, and
 a dual-band module built for the CE domain, whose *Max Power* labels are pairs, one limit per band,
 and do not say which band applies. To change either value, use the module's own ExpressLRS script.
+The packet rate also sets the link's **sensitivity floor**: the weakest signal, in dBm, ExpressLRS
+specifies its receiver to decode at that rate -- about -105 dBm at 500 Hz LoRa, down to -123 dBm at
+25 Hz. The RSSI and Downlink alerts under *Settings* → *Audio* → *Events* → *Link Quality* speak a
+signal's headroom above that floor, so a faster rate gives the same signal less headroom (see
+[Audio Events](../../../audio/events.md)).
 
 ## Settings
 

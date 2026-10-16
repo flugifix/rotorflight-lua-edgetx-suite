@@ -349,11 +349,23 @@ return {
     ["page.settings_audio_events_adjustment_page.build"] = { target = 2300, measured = 2009 },
     ["page.settings_audio_events_arming_page.build"] = { target = 2300, measured = 2006 },
     ["page.settings_audio_events_connect_page.build"] = { target = 5150, measured = 4108 },
-    ["page.settings_audio_events_esc_page.build"] = { target = 6000, measured = 5910 },
+    -- Raised when the page gained a Critical row under each of its two temperature alerts (two
+    -- number rows) and then its ESC Load section (a subheader, a switch and three number rows):
+    -- about 700 each, as every number row on these pages costs. Target at the margin the sibling
+    -- rows were set at: measured x 1.25, rounded up to the next 50, from the higher of the two
+    -- measurements (7205, taken with the ESC Load rows).
+    ["page.settings_audio_events_esc_page.build"] = { target = 9050, measured = 7205, proposed = 6000 },
     ["page.settings_audio_events_fuel_page.build"] = { target = 5550, measured = 5189 },
     ["page.settings_audio_events_governor_page.build"] = { target = 6300, measured = 6008 },
-    ["page.settings_audio_events_link_page.build"] = { target = 10200, measured = 8160, proposed = 5750 },
+    -- Raised when the page gained the telemetry dropouts alert (a switch and two number rows), the
+    -- RSSI and Downlink alerts (two subheaders, two switches and six number rows), the SNR and
+    -- Downlink SNR alerts (the same ten rows once more), and then the TX Power alert (a subheader,
+    -- a switch, three number rows, a second switch and a choice). Target: measured x 1.25, rounded
+    -- up to the next 50, from the highest of the measurements (14514, taken with the four link
+    -- alerts; the TX Power rows are measured by the gate).
+    ["page.settings_audio_events_link_page.build"] = { target = 18150, measured = 14514, proposed = 5750 },
     ["page.settings_audio_events_profiles_page.build"] = { target = 2650, measured = 2498 },
+    ["page.settings_audio_events_rescue_page.build"] = { target = 1600, measured = 1272 },
     ["page.settings_audio_events_voltage_page.build"] = { target = 6100, measured = 5112 },
     ["page.settings_audio_volume_page.build"] = { target = 2100, measured = 1674 },
     ["page.settings_dashboard_inflight_page.build"] = { target = 10200, measured = 8152 },

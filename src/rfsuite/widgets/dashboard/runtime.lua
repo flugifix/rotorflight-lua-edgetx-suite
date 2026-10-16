@@ -1929,12 +1929,24 @@ local function updateConnectionState(self)
       -- Nothing is announced here. The gate shuts on `connected`, i.e. on the RF link, and a lost
       -- link is the radio's own announcement; a flight controller that stops sending with the
       -- link up never shuts it, and lib/audio.lua hears that case from the telemetry frames.
+      --
+      -- The skipped-frame count goes with the connection, as the tool's does when its telemetry
+      -- stops being ready: after an armed flight the telemetry read stops while the link is down,
+      -- so the last count would otherwise stand until the next read. That read resumes on the
+      -- first pass the link is back, and the gate reopens no sooner than the ready hold after it,
+      -- so the dropouts alert already starts its window from a fresh reading; this keeps the
+      -- state from carrying the previous connection's count at all.
+      if self.state then self.state.skippedFrames = nil end
       if self.audioState and DashboardAudio and type(DashboardAudio.resetConnectionState) == "function" then
         DashboardAudio.resetConnectionState(self.audioState)
       elseif self.audioState then
         self.audioState.initialized = false
         self.audioState.modelAnnounced = false
       end
+      -- After an armed flight the telemetry read stops while the link is down, so the rescue
+      -- state would stand as last read and pass for this connection's first reading. Dropped
+      -- here, the first reading after the link returns is only recorded, as on the tool's path.
+      if self.state then self.state.rescue = nil end
     end
   end
 
@@ -2821,6 +2833,19 @@ local function readTelemetry(state, audioState)
     setField("armDisableFlags", math.max(0, math.floor(armDisableFlagsValue + 0.5)))
   end
   setField("governor", roundInt(getSensor("governor") or state.governor, state.governor or 0))
+  -- The rescue state (rotorflight-firmware flight/rescue.h, 0 = off), for lib/audio.lua. The
+  -- last reading, taken at most TELEMETRY_READ_SECONDS (0.5 s) ago because this runs only when
+  -- a read is due, and nil while nothing answers. Assigned rather than set through setField,
+  -- which never clears: the announcement speaks on a change between two readings, so neither a
+  -- value held over from the last connection nor a 0 standing in for a sensor not found yet
+  -- may pass for one. Nothing draws it, so it does not mark the telemetry as changed. Read only
+  -- while one of its announcements is on (`rescueWanted`, set by lib/audio.lua), so a radio that
+  -- never switches them on pays no sensor search for it.
+  if audioState and audioState.rescueWanted then
+    state.rescue = roundInt(getSensor("rescue"), nil)
+  else
+    state.rescue = nil
+  end
   -- The governor MODE, which is configuration rather than telemetry: the connect chain reads it
   -- once over MSP (tasks/events/common/governor_config.lua) and leaves it on the session. It is
   -- carried onto the state here so that an object needing it reads precomputed state, which is
@@ -2977,6 +3002,46 @@ local function readTelemetry(state, audioState)
     state.tpwr = getSensor("TPWR")
   else
     state.tpwr = nil
+  end
+
+  -- The readings only lib/audio.lua's link headroom and SNR alerts use, each read only while an
+  -- alert that needs it is on (flags set by lib/audio.lua): the air rate under either flag, the
+  -- antenna in use and the signal at the transmitter module under `linkHeadroomWanted`, the two
+  -- signal-to-noise ratios under `linkSnrWanted`. So a radio that never switches one on pays no
+  -- sensor search for them; this pass's reading or nil, assigned rather than set through setField,
+  -- because nothing draws them. ui/home.lua reads the same ones into the same fields for the tool.
+  local headroomWanted = audioState and audioState.linkHeadroomWanted
+  local snrWanted = audioState and audioState.linkSnrWanted
+  if headroomWanted or snrWanted then
+    state.rfMode = getSensor("RFMD")
+  else
+    state.rfMode = nil
+  end
+  if headroomWanted then
+    state.antenna = getSensor("ANT")
+    state.trss = getSensor("TRSS")
+  else
+    state.antenna = nil
+    state.trss = nil
+  end
+  if snrWanted then
+    state.rsnr = getSensor("RSNR")
+    state.tsnr = getSensor("TSNR")
+  else
+    state.rsnr = nil
+    state.tsnr = nil
+  end
+
+  -- The skipped-frame counter, for the telemetry dropouts alert in lib/audio.lua: the last
+  -- reading, taken at most TELEMETRY_READ_SECONDS (0.5 s) ago because this runs only when a read
+  -- is due, or nil while nothing answers. Assigned rather than set through setField, because
+  -- nothing draws it and a reading must not mark the telemetry as changed. Read only while that
+  -- alert is on (`dropoutsWanted`, set by lib/audio.lua), so a radio that never switches it on pays
+  -- no sensor search for it.
+  if audioState and audioState.dropoutsWanted then
+    state.skippedFrames = getSensor("skipped_frames")
+  else
+    state.skippedFrames = nil
   end
 
   if telemetryChanged then updateDerivedFlightState(state) end
@@ -3680,9 +3745,14 @@ function Runtime.new(zone, options)
       self.state.linkRfModeTick = nil
       self.state.linkGeneration = nil
       self.state.linkPingSent = nil
-      -- And the reading only the audio's TX power alert takes (readTelemetry), so the new session's
+      -- And the readings only the audio's link alerts take (readTelemetry), so the new session's
       -- first pass judges its own link rather than the last one's.
       self.state.tpwr = nil
+      self.state.rfMode = nil
+      self.state.antenna = nil
+      self.state.trss = nil
+      self.state.rsnr = nil
+      self.state.tsnr = nil
       -- The flight clock and the statistics are the record's; the event runtime drops them on
       -- the connect edge of its own link detector, which follows this one once the link has held
       -- for its CONNECT_STABLE_SECONDS -- not on the disconnect before it, which the post-flight

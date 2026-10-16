@@ -132,7 +132,11 @@ Besides the flight controller's own values, the decoder creates two sensors of i
 `*Cnt` rising is the simplest confirmation that custom telemetry is arriving at all; `*Skp`
 rising alongside it points at the radio link rather than at the flight controller. They are
 ordinary sensors and can be deleted on the radio's own telemetry screen if you do not want the
-rows — nothing in the suite depends on them being visible.
+rows. The *Telemetry Dropouts* announcement reads `*Skp` while it is switched on; nothing else in
+the suite depends on them. When the decoding moves between the background function script, the
+dashboard and the tool, `*Skp` continues from the value on the radio rather than jumping, and the
+dashboard or the tool starts it over at 0 after a lost link (see
+[Audio events](../audio/events.md#telemetry-dropouts)).
 
 ## Related
 

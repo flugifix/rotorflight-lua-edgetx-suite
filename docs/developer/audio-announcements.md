@@ -26,6 +26,23 @@ names**, or an announcement works under the widget and is silently mute under th
 symmetry is the reason the tool builds its `telemetryState` the way the widget's `readTelemetry`
 does, rounding included; if you read a new field, check both sides write it.
 
+**A sensor that only your announcement needs is read only while it is switched on.** Both callers
+read their telemetry over and over, and a sensor the radio does not carry costs a name search each
+time it is retried. So the announcement says whether it wants the reading -- the dropouts alert sets
+`audioState.dropoutsWanted` on every pass of `Audio.process` -- and both callers read the sensor
+only while that flag is set, and leave the field nil otherwise:
+
+```lua
+if audioState and audioState.dropoutsWanted then
+  state.skippedFrames = getSensor("skipped_frames")
+else
+  state.skippedFrames = nil
+end
+```
+
+A radio that never switches the announcement on then pays nothing for it. The first pass after it
+is switched on reads nothing yet; the reading arrives one pass later.
+
 `Audio.process` throttles itself to 0.25–0.60 s depending on the screen height, so it is cheap to
 call and you do not need a throttle of your own. Under the widget a call that would share a pass
 with the telemetry read waits one logic tick (0.1 s), so two passes can be that much further apart
@@ -55,6 +72,21 @@ conversation that gets no answer ends after a budget of tries to send a frame (`
 always ends), not after a time, since a slow radio sends one frame per pass and a time limit
 would end a read that is still being answered. The caller keeps one table per attempt, so an
 attempt an arming cuts short starts the count afresh after the disarm.
+**An announcement measured against the air rate** -- the RSSI and Downlink headroom alerts -- needs
+the row of `lib/link_rates.lua` for the rate the link runs. `linkRateRow` in `lib/audio.lua` resolves
+it from the `RFMD` reading on the state and the transmitter module's ExpressLRS generation, which
+`LinkRates.resolveGeneration` asks the module for once per connection and keeps on the same state
+(`linkGeneration`, `linkPingSent`) -- the fields the dashboard's own link sources use, so a theme and
+an announcement on the widget share one ping. The tool clears those fields where its connection goes,
+the widget where a new flight-controller connection starts, and both read the sensors only these alerts use -- `ANT` and `TRSS` only while
+`audioState.linkHeadroomWanted` says one of them is on. The SNR and Downlink SNR alerts are two more
+entries of `LINK_HEADROOM_ALERTS` (`snr = true`): they read the row's `snrUp` / `snrDn` columns through
+`LinkRates.snrPercent`, take one dB of that scale as their hysteresis (`LinkRates.snrPointsPerDb`, so a
+level is left only more than one dB above its line; `announceLinkHeadroom` waives it for a reading at
+the top of the scale, which clears every level set below 100 %), and
+read `RSNR` and `TSNR` only while `audioState.linkSnrWanted` says one of them is on (`RFMD` while
+either flag is). Add a further alert of that kind as one more entry of `LINK_HEADROOM_ALERTS`, or read
+its own column off the same row.
 
 ## The switch
 
