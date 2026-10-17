@@ -1042,7 +1042,7 @@ function G.applyColumns(colIndices)
   S.points, S.curveEmpty = {}, {}
   S.curveLo, S.curveHi = {}, {}
   -- S.rbSrc goes with the cache: once the cache is emptied it would be the only holder of the
-  -- previous window's buckets until the new extraction ends and replaces it.
+  -- bucket set the last re-bucketing read from, until the new extraction ends and replaces it.
   S.cache, S.extEntry, S.rbSrc = {}, nil, nil
   for k = 1, #curves do
     S.scrMin[k], S.scrMax[k] = {}, {}
