@@ -56,13 +56,14 @@ controller reports one, and otherwise *No telemetry*, *Ready* or *Armed - OK*.
 with its totals, and a table of the last flight — cell voltage, headspeed on PID profiles 1 to 3,
 current, ESC temperature, BEC voltage and voltage sags — each with the latest reading, the
 flight's minimum and its maximum. The cell voltage row's cell count, minimum and maximum are those
-of the pack the flight was flown on, so a pack of another cell count plugged in after the landing
-changes only the latest reading. Beneath it the flight time and the capacity used, and a bar
-with the transmitter power, the lowest link quality, the highest MCU temperature and the
-skipped frames; the transmitter power and the skipped frames follow the link while the flight
-controller still answers, and once it has stopped they keep the reading taken last -- what the
-radio held for the two sensors when the screen was last built, normally the last reading the link
-delivered. The header of the table says *Disconnected* once the flight controller has stopped
+of the pack the flight was flown on (its count is taken at the disarm, with the landing voltage;
+where the pack read 0 V then, the count of the pack plugged in is used), so a pack of another
+cell count plugged in after the landing changes only the latest reading. Beneath it the flight
+time and the capacity used, and a bar with the transmitter power, the lowest link quality, the
+highest MCU temperature and the skipped frames; the transmitter power and the skipped frames
+follow the link while the flight controller still answers, and once it has stopped they keep the
+last reading taken while it answered -- or, where the screen was loaded again after the link had
+gone, what the radio still held for the two sensors then. The header of the table says *Disconnected* once the flight controller has stopped
 answering.
 
 ## Full screen

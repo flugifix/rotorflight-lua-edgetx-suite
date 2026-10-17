@@ -1850,12 +1850,22 @@ local function statsRows(state)
     -- The least the pack reached against the theme's own minimum, the bound the gauge and the
     -- flight view's cell row are drawn against. Without a minimum on file there is nothing to
     -- compare with and the figure carries no closure at all.
-    -- The minimum is a PACK voltage for the live cell count and the figure is the flown pack's,
-    -- so the two are compared per cell: the same answer as before while both counts agree, and
-    -- no false alarm once a pack of another cell count is plugged in after the landing.
-    local cellMinBound = vMin / liveCells
+    -- The flown pack's least reached is compared per cell, against the minimum per cell of the
+    -- count the host worked `v_min` out for (`_boundsCells`, widgets/dashboard/runtime.lua,
+    -- updateVoltageThemeConfig): that count follows the live pack, so after a pack of another
+    -- count is plugged in the two are still compared cell for cell. A `v_min` without such a
+    -- count is a pack voltage of the pilot's own and is compared as it is. Either way the answer
+    -- is the one before this change while both counts agree.
+    local boundCells = tonumber(cfg._boundsCells)
+    local cellMinBound = (boundCells and boundCells > 0) and (vMin / boundCells) or nil
     cellMinColor = function()
-      local v = perCell(lastStat(state, "minVoltage", "lastMinVoltage"), cells)
+      local raw = lastStat(state, "minVoltage", "lastMinVoltage")
+      if cellMinBound == nil then
+        raw = num(raw)
+        if raw ~= nil and raw > 0 and raw < vMin then return C.crit end
+        return C.text
+      end
+      local v = perCell(raw, cells)
       if v ~= nil and v < cellMinBound then return C.crit end
       return C.text
     end
