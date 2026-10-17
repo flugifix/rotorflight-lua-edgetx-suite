@@ -992,7 +992,8 @@ local RAISE_OFF_BY_DEFAULT = { dropouts = true }
 ---
 --- The Alert Level is written BEFORE the file is handed over, so the announcement is heard at it,
 --- and only where the file will be handed over: the cooldown tryPlayEventFile applies is open and
---- the sound pack has the file. A refused announcement therefore raises nothing. Back to the Normal
+--- the sound pack has the file. An announcement refused for either reason therefore raises
+--- nothing. Back to the Normal
 --- Level BOOST_SECONDS after the last critical announcement, on a later refresh; another one inside
 --- that time extends it, and since the master volume is written only when the value it should
 --- carry changes, an extension writes nothing. The level written follows the Volume page's mode,

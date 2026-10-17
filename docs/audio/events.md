@@ -64,7 +64,7 @@ Monitors the main pack voltage and the model's power supply.
 | Hold | `voltage_hold` | 2 s | Radio | How long the reading has to stay below the warning threshold before the alert speaks (0 to 10 s). A hold of 0 announces on the first reading below the level, which is the behaviour before this setting existed. |
 | Reset (mV/cell) | `voltage_reset` | 100 mV | Radio | How far above the warning threshold the pack has to come back, in millivolts per cell, before the alert counts as cleared (50 to 500 mV per cell, in steps of 50). Editable while *Voltage alert* is on. |
 | Main power lost | `main_power_lost` | Off | Radio | Announces that the main pack has gone while the flight controller is still alive on a BEC or a backup battery, with the BEC voltage spoken. |
-| Raise Volume | `main_power_raise` | On | Radio | *Master volume* mode only -- see *Raise Volume* below. *Main power lost* is spoken at the *Alert Level*; the pack coming back is not. |
+| Raise Volume | `main_power_raise` | On | Radio | *Master volume* mode only -- see *Raise Volume* below. *Main power lost* is spoken at the *Alert Level*; the pack coming back does not raise it. |
 | Announce as | `voltage_announce` | Pack | Radio | How a flight pack voltage is spoken: *Pack* says the pack voltage with one decimal, *Cell* the voltage per cell with two. It applies to the voltage alert, to the pack coming back after *Main power lost*, and to *Pack Not Full* on the *On Connect* page. The BEC voltage spoken with *Main power lost*, and the BEC / receiver alerts of *Setup* → *Power* → *Alerts*, are not flight pack readings and are spoken as they are. Where no cell count is known, the pack voltage is spoken. |
 | Repeat | `voltage_repeat` | Until cleared | Radio | How often an alert on this page speaks while its condition holds -- see *Repeat and Haptic* below. |
 | Haptic | `voltage_haptic` | On | Radio | Transmitter vibration alongside the voltage, main power and BEC / receiver alerts. |
@@ -73,7 +73,7 @@ Monitors the main pack voltage and the model's power supply.
 #### Sag Under Load, and a Pack That Is Genuinely Gone
 - **Warning threshold:** it is not set on this page. It is the flight controller's own `vbatwarningcellvoltage` times the cell count, so the alert and the flight controller judge the same pack.
 - **Hold (`voltage_hold`):** a hard collective pull drags the reading under that line for a moment, and a pack that sags is not a pack that is down. The alert waits for the hold time, then repeats every 10 seconds while the voltage stays low.
-- **Reset (`voltage_reset`):** the alert counts as cleared -- which starts a fresh *Repeat* count, as the step into the critical level below also does -- only once the pack is back above the warning threshold plus this margin per cell. The margin is per cell because the threshold is: 100 mV per cell is 0.3 V on a 3S pack and 1.2 V on 12S. Before this setting the margin was a fixed 0.5 V for any pack, which is 0.17 V per cell on 3S but 0.04 V on 12S, so on a 12S pack the recovery after a sag could end the episode and a *Repeat* of *Once* speak again at every sag. Announcements stay at least 10 seconds apart either way.
+- **Reset (`voltage_reset`):** the alert counts as cleared -- which starts a fresh *Repeat* count, as the step into the critical level below also does -- only once the pack is back above the warning threshold plus this margin per cell. The margin is per cell because the threshold is: 100 mV per cell is 0.3 V on a 3S pack and 1.2 V on 12S. Before this setting the margin was a fixed 0.5 V for any pack, which is 0.17 V per cell on 3S but 0.04 V on 12S, so on a 12S pack the recovery after a sag could end the episode and a *Repeat* of *Once* speak again at every sag. Announcements stay at least 10 seconds apart either way, except the step into the critical level below, which is spoken at once.
 - **Announce as (`voltage_announce`):** the voltage per cell reads the same on every pack, so a pilot who flies several pack sizes hears one number to judge. It is the pack voltage divided by the cell count the warning threshold uses -- the flight controller's configured cell count, or the detected one where the configuration says auto -- not a separate sensor.
 - **The critical level (`vbatmincellvoltage`):** the flight controller's minimum cell voltage times the cell count, the level its own Battery page calls the alarm. Once the pack has also stayed under that line for *Hold*, the alert enters its critical level the way the temperature and link quality alerts do: the same announcement is made at once, even within 10 seconds of the warning's, and the *Repeat* count starts again, so a *Repeat* of *Once* says it a second time. The critical level stays until the alert clears (the pack back above the warning threshold plus *Reset*), so a pack recovering for a moment between two pulls does not announce it anew. Only the critical level raises the master volume (*Raise Volume* above). Where the board sends no minimum, 3.30 V per cell is taken, that page's default; a minimum above the warning threshold is taken as the warning threshold.
 - **Main Power Lost (`main_power_lost`):** for a setup with a backup guard or a separate receiver battery. It needs the pack to have read a real voltage since the connection began, to read as gone rather than merely low, and a BEC voltage beside it -- without one there is nothing left to say anything is still powered. It repeats every 10 seconds while the pack stays away, and announces once more, with the pack voltage as set under *Announce as*, when the pack comes back. Those three tests are also what the dashboard publishes as `state.mainPowerLost` for a theme to draw ([dashboard themes](../developer/dashboard-themes.md)) -- one definition, so a screen and the announcement cannot disagree. The switch on this page governs the announcement alone; a theme drawing the condition does so whether or not anything is spoken.
@@ -194,7 +194,7 @@ Callouts of the SmartFuel level while the model is connected. The flight control
 | Callout % | `fuel_callout_percent` | Every 10% | Radio | The steps at which the falling level is spoken, each once: *Only at 10%*, or every 5%, 10%, 20%, 25% or 50%. |
 | Repeat | `fuel_repeat_below_zero` | Once | Radio | How often the empty battery / fuel alarm speaks while fuel is at 0% -- *Until cleared*, or 1 to 10 announcements ten seconds apart. The descending percentage callouts are not repeated: each step is spoken once as it is passed. |
 | Haptic | `fuel_haptic_below_zero` | Off | Radio | Transmitter vibration alongside the empty alarm. |
-| Raise Volume | `fuel_empty_raise` | On | Radio | *Master volume* mode only -- see *Raise Volume* below. The empty alarm at 0% is spoken at the *Alert Level*; the percentage callouts above it are not. |
+| Raise Volume | `fuel_empty_raise` | On | Radio | *Master volume* mode only -- see *Raise Volume* below. The empty alarm at 0% is spoken at the *Alert Level*; the percentage callouts above it do not raise it. |
 
 ### 9. Link Quality
 
@@ -213,7 +213,7 @@ this page reloads the dashboard.
 | Warning (%) | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical (%) | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
 | Telemetry Lost | `telemetry_lost` | Off | Radio | Announces a flight controller that stops sending telemetry while the model is armed and the radio link is up, and announces it again when its telemetry is back. |
-| Raise Volume | `telemetry_lost_raise` | On | Radio | *Master volume* mode only -- see *Raise Volume* below. The lost telemetry announcement is spoken at the *Alert Level*; its return is not. |
+| Raise Volume | `telemetry_lost_raise` | On | Radio | *Master volume* mode only -- see *Raise Volume* below. The lost telemetry announcement is spoken at the *Alert Level*; its return does not raise it. |
 | Telemetry Dropouts | `dropouts_alert` | Off | Radio | Speaks "Telemetry Dropouts" while the model is armed and the flight controller's telemetry frames go missing too often -- see *Telemetry Dropouts* below. |
 | Raise Volume | `dropouts_raise` | Off | Radio | *Master volume* mode only -- see *Raise Volume* below. The dropouts alert, which has one level, is spoken at the *Alert Level*. Off by default: a stuttering telemetry stream is not a danger in itself. |
 | Dropouts | `dropouts_count` | 3 | Radio | How many gaps in the telemetry frames within the window set the alert off (1 to 50). |
@@ -326,7 +326,7 @@ the page that switches an alert on is the page that says how it behaves.
 | SmartFuel | `fuel_repeat_below_zero`, `fuel_haptic_below_zero` | The empty battery / fuel alarm below 0%. |
 
 - **Repeat** is *Until cleared*, or a count from 1 to 10. Announcements are ten seconds apart
-  either way; a count simply stops after that many and starts over once the condition has
+  either way, except a rise into a level of an alert with two, which is spoken at once; a count simply stops after that many and starts over once the condition has
   cleared, or once an alert with two levels enters a level -- for the low-voltage alert, its
   step into the critical level. *Until cleared* is what every alert did before this setting existed, and is the
   default everywhere except SmartFuel, which kept the single announcement it already had.
@@ -358,13 +358,15 @@ such announcement. Another one within those 8 seconds extends the time and write
   controller's minimum cell voltage times the cell count for *Hold*, until the alert clears --
   the warning threshold alone does not raise it. Confirmations (telemetry back, main power back,
   the two rescue announcements) and the other announcements never raise it.
-- **One switch per alarm**, *Raise Volume*, right under the alarm's own switch and shown only while
-  that switch is on; on for every alarm except *Telemetry Dropouts*. The BEC and the receiver voltage alert share one, *Raise Volume
-  BEC/RX* on the Voltage page, since only one of them is on at a time. The switches act only in
+- **One switch per alarm**, *Raise Volume*, right under the alarm's own switch (on the SmartFuel
+  page, after the empty alarm's *Repeat* and *Haptic*) and shown only while that switch is on; on for
+  every alarm except *Telemetry Dropouts*. The BEC and the receiver voltage alert share one, *Raise Volume
+  BEC/RX* on the Voltage page, since only one of them is on at a time; that row is always shown, the alert having no switch on
+  that page. The switches act only in
   *Master volume*: in *Off* and *Callout level* they change nothing.
 - **Only what is spoken raises it.** A reading that stays inside its hold, an alert whose
-  *Repeat* count is spent, a file the sound pack lacks, an announcement the radio is still busy
-  with the previous one for: none of them raises the volume.
+  *Repeat* count is spent, a file the sound pack lacks, an announcement held back by the quarter of a
+  second the suite leaves after handing over the previous one: none of them raises the volume.
 - **Two writes per raise**, one before the announcement and one 8 seconds after the last, each a
   change of the global variable that EdgeTX saves with the model. An alert that repeats every
   10 seconds is back at the *Normal Level* before its next announcement, so each repeat raises it
