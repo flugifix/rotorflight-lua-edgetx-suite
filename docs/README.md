@@ -35,8 +35,8 @@ with a status, and the page index says for each page whether the tool's own in-a
 [_template.md](_template.md).
 
 Every change a pilot can observe updates the file that describes it, in the same pull
-request. The rule is in [GEMINI.md](../GEMINI.md) under *Documentation Maintenance* and in
-`.agents/rules/documentation.md`, in the same shape as the rule for `Releases.md`.
+request. The rule is in [CONTRIBUTING.md](../CONTRIBUTING.md) under *Documentation*, beside
+the rule for `Releases.md`.
 
 A pull request that changes `src/` and no file here has to say why in its body, on a line
 beginning with `Documentation:`. The `Documentation rule` job in `.github/workflows/pr.yml`

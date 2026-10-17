@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the documentation rule on a pull request.
 
-`GEMINI.md` and `.agents/rules/documentation.md` ask that a change a pilot can observe
+`CONTRIBUTING.md` (under *Documentation*) asks that a change a pilot can observe
 updates its file under `docs/` in the same pull request, and that a pull request which
 needs no documentation change says so in its body. Nothing checked either half, so both
 rested on the author remembering at the moment they are least likely to.
@@ -67,8 +67,7 @@ def verdict(paths, body):
         "\n"
         "      Documentation: no page -- this only renames a local variable.\n"
         "\n"
-        "  The rule is in GEMINI.md under Documentation Maintenance and in\n"
-        "  .agents/rules/documentation.md." % (OBSERVABLE_PREFIX, DOCUMENTATION_PREFIX))
+        "  The rule is in CONTRIBUTING.md under Documentation." % (OBSERVABLE_PREFIX, DOCUMENTATION_PREFIX))
 
 
 #: The control. Every case states a verdict that is known without running anything, and
