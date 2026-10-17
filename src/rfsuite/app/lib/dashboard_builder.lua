@@ -13,20 +13,26 @@ local FALLBACK_ICON = "@pages/settings/dashboard/settings/icon.png"
 local OVERRIDES_ICON = "@pages/settings/dashboard/overrides/icon.png"
 local DEBUG_PREFIX = "[dashboard.builder] "
 
-local function debugLog(message)
-  if Log and type(Log.emit) == "function" then
-    Log.emit("dashboard.builder", DEBUG_PREFIX .. tostring(message), "debug")
+-- The build reports in ONE debug line, written when it ends, for the reason lib.lua's theme scan
+-- does: opened from the dashboard, the build runs inside the widget's per-call instruction limit,
+-- and a line per theme and per theme page -- built whether or not the level lets it out -- is a
+-- cost that grows with every theme that ships. `buildLog` is a table only while that line is
+-- wanted, so nothing is collected below the debug level.
+local buildLog = nil
+
+local function logTheme(t)
+  if buildLog then
+    local pages = type(t.pages) == "table" and #t.pages or 0
+    buildLog[#buildLog + 1] = pages > 0 and (tostring(t.path) .. "(" .. pages .. " pages)") or tostring(t.path)
   end
 end
 
+-- The theme path as hex, which is how it travels inside a menu id. One call into C for the whole
+-- string rather than a concatenation per byte; theme paths are folder names, far shorter than
+-- anything string.byte could not return at once.
 local function hexEncode(input)
-  if type(input) ~= "string" then return "" end
-  local result = ""
-  for i = 1, string.len(input) do
-    local byte = string.byte(input, i)
-    result = result .. string.format("%02x", byte)
-  end
-  return result
+  if type(input) ~= "string" or input == "" then return "" end
+  return string.format(string.rep("%02x", #input), string.byte(input, 1, -1))
 end
 
 -- Every theme is reachable in two scopes, and the menu id says which: the grid of the Settings
@@ -47,7 +53,6 @@ local function buildThemePageMenu(t, token, themeIcon, menus, scope)
   for i = 1, #t.pages do
     local page = t.pages[i]
     local pageMenuId = scope.menuPrefix .. token .. "_" .. page.id .. "_page"
-    debugLog("page entry theme=" .. tostring(t.path) .. " page=" .. tostring(page.id) .. " menuId=" .. tostring(pageMenuId))
     pages[#pages + 1] = {
       id = scope.idPrefix .. token .. "_" .. page.id,
       title = page.title,
@@ -74,8 +79,7 @@ local function buildThemePageMenu(t, token, themeIcon, menus, scope)
 end
 
 -- One theme's entry in a scope's list, with the menus it opens registered beside it.
-local function buildThemeEntry(t, index, menus, scope)
-  local token = hexEncode(t.path)
+local function buildThemeEntry(t, token, index, menus, scope)
   local themeIcon = t.iconPath or FALLBACK_ICON
   local menuId
   if type(t.pages) == "table" then
@@ -88,7 +92,6 @@ local function buildThemeEntry(t, index, menus, scope)
       themePath = t.path
     }
   end
-  debugLog("menu entry name=" .. tostring(t.name) .. " path=" .. tostring(t.path) .. " menuId=" .. tostring(menuId))
   return {
     id = scope.idPrefix .. token,
     title = t.name,
@@ -117,7 +120,7 @@ end
 
 local function buildDashboardSettingsThemeMenus()
   local themes = DashboardLib.getConfigurableThemes(DashboardLib.listThemes())
-  debugLog("buildDashboardSettingsThemeMenus configurable count=" .. tostring(#themes))
+  buildLog = (Log and Log.wanted("debug") == true) and {} or nil
 
   local entries = {}
   local modelEntries = {}
@@ -145,11 +148,17 @@ local function buildDashboardSettingsThemeMenus()
 
   for i = 1, #themes do
     local t = themes[i]
-    entries[#entries + 1] = buildThemeEntry(t, #entries + 1, menus, STANDARD_SCOPE)
-    modelEntries[#modelEntries + 1] = buildThemeEntry(t, i, menus, MODEL_SCOPE)
+    local token = hexEncode(t.path)
+    entries[#entries + 1] = buildThemeEntry(t, token, #entries + 1, menus, STANDARD_SCOPE)
+    modelEntries[#modelEntries + 1] = buildThemeEntry(t, token, i, menus, MODEL_SCOPE)
+    logTheme(t)
   end
 
-  debugLog("buildDashboardSettingsThemeMenus entries=" .. tostring(#entries))
+  if buildLog then
+    Log.emit("dashboard.builder", string.format("%sthemes=%d entries=%d: %s", DEBUG_PREFIX, #themes,
+      #entries, table.concat(buildLog, ", ")), "debug")
+    buildLog = nil
+  end
 
   return entries, menus
 end
