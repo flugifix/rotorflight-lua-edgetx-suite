@@ -108,8 +108,8 @@ local function copyFromPrefs(prefs)
   ui.config.volume_mode = mode
   ui.config.connected_only = Rules.connectedOnly(audio, mode)
   -- Until the pilot sets Connected only, or a save has stored it, it shows how the file is read. A
-  -- file that opens in Master volume without it was written before the setting existed, and its
-  -- master volume waited for the link: that reading is kept, also on coming back to Master volume.
+  -- file that opens in Master volume without it reads as one written before the setting existed,
+  -- whose master volume waited for the link: that reading is kept, also on coming back to Master volume.
   ui.connectedOnlySet = audio.connected_only ~= nil
   ui.masterBeforeSetting = not ui.connectedOnlySet and mode == MODE_MASTER
 end
@@ -144,8 +144,9 @@ local function onModeSelected(value)
   if value == MODE_LEVEL and (tonumber(ui.config.level) or 0) <= 0 then
     ui.config.level = LEVEL_START
   end
-  -- Unset, a mode picked here starts from the level's own switch, which is off unless the pilot
-  -- turned it on: a new Master volume setup starts with Connected only off.
+  -- Unset, a mode picked here starts from `level_connected_only`, the callout level's switch from
+  -- before the page offered one mode, which a fresh file has off: a new Master volume setup starts
+  -- with Connected only off.
   if not ui.connectedOnlySet then
     if value == MODE_MASTER and ui.masterBeforeSetting then
       ui.config.connected_only = true
@@ -808,7 +809,8 @@ function M.onSave(ctx)
   if ok then
     ui.dirty = false
     ui.connectedOnlySet = ctx.preferences.audio.connected_only ~= nil
-    -- The file now carries a mode, so it no longer reads the way a file before the setting did.
+    -- The file now holds `volume_mode` (and Connected only, unless saved in Off without it set), so it
+    -- no longer reads the way a file before the setting did.
     ui.masterBeforeSetting = false
     if ctx and type(ctx.reportSave) == "function" then
       ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Settings saved") })
