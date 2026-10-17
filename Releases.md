@@ -49,7 +49,7 @@
 ### Features & Enhancements
 
 - **Telemetry dropouts are announced, on the *Link* page (headed *Link Quality*) under *Settings* → *Audio* → *Events* (`app/pages/settings/audio/events/category_page.lua`, `lib/audio.lua`, `lib/sensors.lua`, `tasks/events/telemetry_bg/drain.lua`, `ui/home.lua`, `widgets/dashboard/runtime.lua`, `i18n/en.lua`, `i18n/de.lua`, `docs/audio/events.md`, `docs/developer/audio-announcements.md`)**:
-  - Three new rows: *Telemetry Dropouts* (off by default), *Dropouts* (1 to 50, default 3) and *Window (s)* (4 to 60, default 10), all radio-wide. While the model is armed, "Telemetry Dropouts" is spoken when the flight controller's telemetry frames have gone missing *Dropouts* times within the last *Window* seconds.
+  - Three new rows under the *Telemetry* subheader, after *Telemetry Lost*: *Telemetry Dropouts* (off by default), *Dropouts* (1 to 50, default 3) and *Window (s)* (4 to 60, default 10), all radio-wide. While the model is armed, "Telemetry Dropouts" is spoken when the flight controller's telemetry frames have gone missing *Dropouts* times within the last *Window* seconds.
   - The source is the skipped-frame counter the suite already publishes itself (`*Skp`, `tasks/events/telemetry_bg/drain.lua`), now readable as `skipped_frames` in `lib/sensors.lua`, on both the tool's and the dashboard's path, and only while the alert is on. The counter is cumulative since the link came up, so what is compared is its rise within the window; a counter that starts over (the widget's and the tool's decoder reset it when the link is lost) is a new start, never an alert.
   - `*Skp` no longer jumps when the decoding moves between the background function script, the dashboard and the tool (`tasks/events/telemetry_bg/drain.lua`): each of them kept a count of its own and published it to the same sensor, and one that resumed counted the step from the frames its queue had kept to the live ones as a gap. A decoder that resumes now continues from the `*Skp` the radio shows -- unless it has just been reset by a lost link and no decoder has published since -- and counts no gap in its first second; after a lost link the dashboard's and the tool's count starts over at 0 rather than 1. Without this, opening and closing the tool while armed could read as a burst of dropouts. `*Cnt` is unchanged.
   - Spoken at once when the count is reached, then repeated as the page's *Repeat* says while the rise stays at or above the count; it stays one alert until the rise has stayed below the count for a whole window, so a rate resting on the count does not start a new alert at every gap. Recovery is not spoken, and the alert never vibrates. The page's help is rewritten to one line per row.
@@ -79,12 +79,6 @@
   - The *Volume* page's help is rewritten in one line per setting; its *Alert Level* line names every critical alert rather than a list, and the details moved to `docs/pages/settings/audio/volume.md`.
   - The ESC alert now says the temperature after its words, as the MCU alert already did, in the unit set under *Settings* > *Localization*. No new sound file.
   - A settings file written before keeps its warning levels; the critical levels start at their defaults. With both alerts off, which is the default, nothing changes.
-
-### Bug Fixes & Improvements
-
-- **The Telemetry Dropouts rows are back under the *Telemetry* subheader on the *Link* page (headed *Link Quality*) under *Settings* → *Audio* → *Events* (`app/pages/settings/audio/events/category_page.lua`, `docs/audio/events.md`)**:
-  - *Telemetry Dropouts*, *Dropouts* and *Window (s)* follow *Telemetry Lost* again, where they were added. Since the link alerts were merged one after another they sat at the end of the *Downlink SNR* rows, and read as if they belonged to that alert.
-  - Only the order changes: the keys, defaults, ranges and help texts are the same, and a settings file written before reads as it did. The table in `docs/audio/events.md` follows the page.
 
 # 0.2.0
 
