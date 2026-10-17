@@ -302,8 +302,12 @@ local SCHEMES = {
       tick = rgb(0x90969C, COLOR_THEME_DISABLED),
       disabled = rgb(0xF83C00, 0xFF8000),
       warning = rgb(0xE03030, 0xFF0000),
-      ok = rgb(0x22C55E, GREEN or 0x00FF00),
-      warn = rgb(0xF0C000, 0xFF8000),
+      -- `ok` and `warn` are words as well as fills -- the arm state, the ESC status, a temperature
+      -- at its warning step, a tool's run state -- so on this white background they are a shade
+      -- darker than the battery fills below: the bright amber of `bar_low` reads at about 1.7 : 1
+      -- against white, the darker one at about 4.7 : 1.
+      ok = rgb(0x168A40, GREEN or 0x00FF00),
+      warn = rgb(0xA06800, 0xFF8000),
       crit = rgb(0xE03030, 0xFF0000),
       neut = rgb(0x4A4A4A, COLOR_THEME_SECONDARY1),
       bar_ok = rgb(0x22C55E, GREEN or 0x00FF00),
