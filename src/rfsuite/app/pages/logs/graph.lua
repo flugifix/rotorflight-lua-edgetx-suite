@@ -709,6 +709,11 @@ local function beginExtract(t0, t1)
   S.resetK = 1
   S.phase = "reset"
   S.progress = 0
+  -- The bucket set the last re-bucketing read from is not read again: the extraction ends by
+  -- assigning the next one. Kept until then, it would sit beside the new set whenever the
+  -- caller had emptied the cache. Released only after the phase has moved on, so a call
+  -- stopped in here never leaves "rebkt" without its source.
+  S.rbSrc = nil
 end
 
 -- A min/max envelope: two points per bucket, so a spike between two samples is
@@ -1041,9 +1046,7 @@ function G.applyColumns(colIndices)
   S.scrMin, S.scrMax = {}, {}
   S.points, S.curveEmpty = {}, {}
   S.curveLo, S.curveHi = {}, {}
-  -- S.rbSrc goes with the cache: once the cache is emptied it would be the only holder of the
-  -- bucket set the last re-bucketing read from, until the new extraction ends and replaces it.
-  S.cache, S.extEntry, S.rbSrc = {}, nil, nil
+  S.cache, S.extEntry = {}, nil
   for k = 1, #curves do
     S.scrMin[k], S.scrMax[k] = {}, {}
     S.points[k] = EMPTY_PTS
