@@ -218,13 +218,18 @@ whitespace-only diff buries the change a reviewer is looking for.
 
 | Workflow | Trigger | What it produces |
 | --- | --- | --- |
-| `pr.yml` | pull request | The per-locale installation archives as a build check, plus the instruction-budget gate (`bin/accounting/measure.lua --check`), the i18n precompiler test, the documentation-rule check (`bin/docs/verify_documentation_rule.py`), the translation-coverage report (`bin/i18n/check_translations.py`) and the resolver self-test (`.vscode/scripts/resolve_i18n_tags.py --self-test`) |
-| `checks.yml` | called by the workflows below | Four gates, reusable: the instruction budget, the i18n precompiler test, the resolver self-test and the translation-coverage report. The **documentation rule is deliberately not one of them** — it can be satisfied by a `Documentation:` line in the pull request body, and a push or a tag has no such body, so running it here would have demanded a `docs/` change from a release tag. It lives in `pr.yml`, the only caller that has a body to offer. `push.yml`, `snapshot.yml` and `release.yml` run this as a `needs:` of the job that builds or publishes, so a red gate stops the release. `pr.yml` does not use it — rewriting the workflow that has been protecting master belongs in its own change — so a gate added to `checks.yml` has to be added to `pr.yml` as well |
+| `pr.yml` | pull request | The per-locale installation archives as a build check, plus the instruction-budget gate (`bin/accounting/measure.lua --check`), the i18n precompiler test, the documentation-rule check (`bin/docs/verify_documentation_rule.py`), the translation-coverage report (`bin/i18n/check_translations.py`), the resolver self-test (`.vscode/scripts/resolve_i18n_tags.py --self-test`), the release-notes file check and the release-notes rule (`bin/release/verify_release_notes_rule.py`) |
+| `checks.yml` | called by the workflows below | The gates, reusable: the instruction budget, the i18n precompiler test, the resolver self-test, the translation-coverage report, the erase confirmation and the release-notes file check. The **documentation rule is deliberately not one of them** — it can be satisfied by a `Documentation:` line in the pull request body, and a push or a tag has no such body, so running it here would have demanded a `docs/` change from a release tag. It lives in `pr.yml`, the only caller that has a body to offer. `push.yml`, `snapshot.yml` and `release.yml` run this as a `needs:` of the job that builds or publishes, so a red gate stops the release. `pr.yml` does not use it — rewriting the workflow that has been protecting master belongs in its own change — so a gate added to `checks.yml` has to be added to `pr.yml` as well |
 | `push.yml` | push | The per-locale installation archives, behind the gates in `checks.yml` |
-| `snapshot.yml` | tag `snapshot/*` | A snapshot release with the per-locale archives, behind the gates |
-| `release.yml` | tag `release/*` | A GitHub release, with notes extracted from `Releases.md`, behind the gates |
+| `snapshot.yml` | tag `snapshot/*` | A snapshot release with the per-locale archives, behind the gates; stops first if a release note is still pending under `release-notes/` |
+| `release.yml` | tag `release/*` | A GitHub release, with notes extracted from `Releases.md`, behind the gates; stops first if a release note is still pending under `release-notes/` |
 | `testing.yml` | tag `testing/*` | A raw `src` artifact, then deletes the tag again. Ships no archive and runs no gate |
 | `docs.yml` | pull request or push touching `docs/`, `mkdocs.yml` or `bin/docs/` | The documentation site, built with `mkdocs build --strict`; on master it is published with GitHub Pages |
+
+Release notes wait under `release-notes/`, one file per pull request, until the release is cut:
+`python bin/release/collect_release_notes.py` files them under the version in
+`src/rfsuite/lib/version.lua`, and the result is committed before the tag. The format is in
+[release-notes/README.md](release-notes/README.md).
 
 A release tag of the form `release/<x>.<y>.<z>-<suffix>` is published as a Release Candidate;
 without the suffix it is published as a Release. The version baked into the package itself

@@ -169,3 +169,53 @@ jobs:
 
       - name: Check the erase asks before it erases
         run: lua5.3 bin/dashboard/verify_erase_confirm.lua
+
+  release-notes:
+    name: Release notes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prove the checks can go red
+        run: |
+          python bin/release/collect_release_notes.py --self-test
+          python bin/release/verify_release_notes_rule.py --self-test
+
+      - name: Check the pending release notes
+        run: python bin/release/collect_release_notes.py --check
+
+  release-notes-rule:
+    name: Release notes rule
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # the check diffs against the base commit, which a shallow clone does not carry
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Write the pull request body to a file
+        # through the environment, never interpolated into the script: a pull request
+        # body is text anybody can write
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$PR_BODY" > pr-body.txt
+
+      - name: Check the release notes rule
+        run: |
+          python bin/release/verify_release_notes_rule.py \
+            --base '${{ github.event.pull_request.base.sha }}' \
+            --body-file pr-body.txt

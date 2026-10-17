@@ -1035,7 +1035,7 @@ perform, exactly as a press does.
    makes a new theme ship its cost with the pull request that adds it. See
    `bin/accounting/README.md`.
 6. The documentation: this page for a change to the contract, `docs/dashboard/` for what a pilot
-   sees, and an entry in `Releases.md`.
+   sees, and a release note under `release-notes/` (see `release-notes/README.md`).
 
 ## Related
 
