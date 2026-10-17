@@ -620,12 +620,17 @@ function MenuRegistry.new(manifest, i18n, options)
   end
 
   -- One step of the build of the menu on screen. Answers true on the step that completes it; the
-  -- menu then has its entries, and the next draw shows them.
+  -- menu then has its entries, and finishCurrentMenu makes them the ones the next draw shows.
   function self.stepCurrentMenu()
-    if not stepDynamicMenu(self.currentMenuId) then return false end
+    return stepDynamicMenu(self.currentMenuId)
+  end
+
+  -- Called once the menu on screen is no longer pending. It may run more than once for one build:
+  -- a pass stopped between completing the build and asking for the screen calls it again on the
+  -- next pass, and it leaves the same state either way.
+  function self.finishCurrentMenu()
     self._cardsCache.data = nil
     syncCurrentEntry()
-    return true
   end
 
   function self.getCurrentEntryId()

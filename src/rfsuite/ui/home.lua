@@ -3713,11 +3713,23 @@ function M.run(event, touchState)
     -- installed theme -- is built one step per pass (app/menu_registry.lua, stepCurrentMenu), so
     -- no single pass carries the whole build: opened from the dashboard, every pass is a widget
     -- call and is stopped at the widget's instruction limit, and a build stopped there would start
-    -- over on the next pass. A pass that opened a menu or built the screen takes no step; the one
-    -- that completes the build asks for the screen, which then shows the whole grid.
-    if not transitionedMenuThisTick and not builtThisPass and not state.isClosing
-      and state.menu.isCurrentMenuPending() and state.menu.stepCurrentMenu() then
-      scheduleBuildUI(false)
+    -- over on the next pass. A pass that opened a menu or built the screen takes no step. The menu
+    -- being stepped is noted before the step and forgotten only once the screen has been asked
+    -- for, so a pass stopped anywhere between the step that completes the build and that request
+    -- leaves the note behind, and the next pass makes the request instead.
+    if not transitionedMenuThisTick and not builtThisPass and not state.isClosing then
+      local onScreen = state.menu.getCurrentMenuId()
+      if state.menu.isCurrentMenuPending() then
+        state.steppedMenuId = onScreen
+        state.menu.stepCurrentMenu()
+      end
+      if state.steppedMenuId ~= nil and not state.menu.isCurrentMenuPending() then
+        if state.steppedMenuId == onScreen then
+          state.menu.finishCurrentMenu()
+          scheduleBuildUI(false)
+        end
+        state.steppedMenuId = nil
+      end
     end
 
     local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil
