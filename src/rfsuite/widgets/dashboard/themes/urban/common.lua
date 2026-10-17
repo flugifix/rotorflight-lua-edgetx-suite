@@ -687,6 +687,19 @@ function M.cells(state)
   return c
 end
 
+-- The cell count of the pack the flight that ended was flown on: the count the host takes at the
+-- disarm together with the landing voltage (`state.lastFlightEndingCells`,
+-- widgets/dashboard/runtime.lua, updateDerivedFlightState), or nil while it holds none -- in flight,
+-- since the arm clears it, and after a landing on a pack that read 0 V. A figure of the ended
+-- flight's record is divided by this count rather than by M.cells: the live count follows whatever
+-- pack is plugged in after the landing. The host's own statistics box does the same
+-- (widgets/dashboard/objects/text/stats.lua).
+function M.flownCells(state)
+  local c = state and state.lastFlightEndingCells
+  if type(c) ~= "number" or c <= 0 then return nil end
+  return c
+end
+
 -- mm:ss below an hour, h:mm from one hour on -- the shipped themes' formatDuration.
 function M.duration(seconds)
   local v = math.max(0, math.floor((num(seconds) or 0) + 0.5))

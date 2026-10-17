@@ -1226,19 +1226,23 @@ end
 -- One extreme of the flight record as a reader for the per-frame sweep: the flight in progress
 -- where it has taken a value for the key, the flight that ended otherwise -- the rule the host's
 -- own boxes read the record by (objects/common.lua, Utils.statFromRecord). `cells` divides a pack
--- reading down to a cell.
+-- reading down to a cell: the live count for the flight in progress, and for the flight that ended
+-- the count of the pack it was flown on where the host took one (Common.flownCells), since a pack
+-- plugged in after the landing changes the live count.
 local function extremeReader(state, key, cells)
   return function()
     local flight = state.flight
     if type(flight) ~= "table" then return nil end
     local rec = flight.current
     local v = type(rec) == "table" and rec[key] or nil
+    local div = cells
     if v == nil then
       rec = flight.last
       v = type(rec) == "table" and rec[key] or nil
+      if cells then div = Common.flownCells(state) or cells end
     end
     if type(v) ~= "number" then return nil end
-    if cells then return v / cells end
+    if div then return v / div end
     return v
   end
 end
@@ -1440,6 +1444,14 @@ end
 -- power, the least link quality, the hottest the flight controller got, and the skipped packets.
 -- The host keeps no record of the power, so that cell is the reading the link delivered last,
 -- under the flight view's label rather than one marked as a maximum.
+--
+-- The power and the skipped packets come from the host's snapshot, which holds only what the
+-- phase module standing names: postflight.lua hands the host this list. While the flight
+-- controller still answers, the two cells follow the link; once it stops, the host no longer
+-- rebuilds the snapshot (widgets/dashboard/runtime.lua, `isPostflightOffline`) and they keep the
+-- last reading.
+L.STATS_SOURCES = { "TPWR", "*Skp" }
+
 function L.statsStatusBar(nodes, state, x, y, w, h, font, fontH, lastStat)
   local textY = y + math.floor((h - fontH) / 2)
   local shown = armingOverride(nodes, state, x, textY, w, fontH, font)
@@ -1609,13 +1621,18 @@ end
 local function statsRows(state)
   local cfg = state.themeConfig or {}
 
-  -- The voltage row is per CELL, with the cell count in the label. The count is a render key
-  -- term, so the label can be a constant of this build.
-  local cells = Common.cells(state)
-  local function perCell(v)
+  -- The voltage row is per CELL, with the cell count in the label. The label, the Min and the Max
+  -- belong to the flight that ended, so they take the count of the pack it was flown on where the
+  -- host took one at the disarm (Common.flownCells); the Latest column is the live reading and
+  -- takes the live count, which follows a pack plugged in after the landing. This view is built
+  -- after the disarm, and the flown count changes only on an arm or a disarm edge, both of which
+  -- rebuild it; the live count is a render key term. So both can be constants of this build.
+  local liveCells = Common.cells(state)
+  local cells = Common.flownCells(state) or liveCells
+  local function perCell(v, n)
     v = num(v)
     if v == nil or v <= 0 then return nil end
-    return v / cells
+    return v / n
   end
   local vMin = num(tonumber(cfg.v_min))
   local cellMinColor = C.text
@@ -1631,9 +1648,9 @@ local function statsRows(state)
   end
   local voltage = {
     label = T.cell_voltage .. " (" .. tostring(cells) .. "S)", sample = "4.20",
-    latest = scaled(function() return perCell(state.voltage) end, 2),
-    min = scaled(function() return perCell(lastStat(state, "minVoltage", "lastMinVoltage")) end, 2),
-    max = scaled(function() return perCell(lastStat(state, "maxVoltage", "lastFlightMaxVoltage")) end, 2),
+    latest = scaled(function() return perCell(state.voltage, liveCells) end, 2),
+    min = scaled(function() return perCell(lastStat(state, "minVoltage", "lastMinVoltage"), cells) end, 2),
+    max = scaled(function() return perCell(lastStat(state, "maxVoltage", "lastFlightMaxVoltage"), cells) end, 2),
     -- The flight view's own cell-row colour, so the two screens cannot disagree about the pack.
     latestColor = SOURCES_BY_ID.cell_voltage.color(state),
     minColor = cellMinColor,

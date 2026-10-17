@@ -1,0 +1,3 @@
+- **Urban's statistics screen shows the transmitter power, the skipped frames and the per-cell figures of the flight that ended (`widgets/dashboard/themes/urban`, `docs/dashboard/urban-theme.md`)**:
+  - The *TPWR* and *Skp* cells of the bottom bar no longer read `-` after every flight: the post-flight module declares the two readings, so they follow the link while the flight controller answers and keep the last reading once it has stopped (#606).
+  - The cell voltage row's cell count, minimum and maximum, the *Telemetry* tiles' cell voltage range of the last flight and the *Battery* page's lowest cell voltage are divided by the cell count of the pack the flight was flown on, not by that of a pack plugged in after the landing (#606).

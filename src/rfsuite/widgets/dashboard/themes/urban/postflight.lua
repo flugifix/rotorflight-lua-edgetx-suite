@@ -25,6 +25,14 @@ function Theme.build(zone, state, ctx)
   return Layout.buildStats(zone, state or {}, ctx)
 end
 
+-- The readings the statistics view takes from the host's snapshot rather than from the flight
+-- record: the transmitter power and the skipped packets of its bottom bar (layout.lua,
+-- L.STATS_SOURCES). The host resolves only what the phase module standing names, so without this
+-- the first snapshot after the disarm drops both and the two cells read "-".
+function Theme.sources()
+  return Layout.STATS_SOURCES or {}
+end
+
 function Theme.renderKey(zone, state)
   if type(Layout.renderKey) ~= "function" then return "urban" end
   return Layout.renderKey(zone, state)
