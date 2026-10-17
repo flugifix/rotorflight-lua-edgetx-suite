@@ -2786,6 +2786,15 @@ return {
         urban_temp_colors = "Temperaturfarben",
         urban_temp_colors_early = "Früh",
         urban_link_switch = "Schalter Linkseite",
+        -- The Deck theme's settings pages that Urban has no counterpart for, their rows, and the
+        -- kinds a card shows that are not a single reading.
+        deck_page_cards = "Karten",
+        deck_page_values = "Wertkarten",
+        deck_left_card = "Linke Karte",
+        deck_big_card = "Große Karte",
+        deck_value_card = "Wertkarte",
+        deck_kind_image = "Modellbild",
+        deck_kind_arm = "Scharf/entschärft",
         urban_key = "Taste",
         urban_key_none = "Nichts",
         urban_key_menu = "Suite: Schnellmenü",
