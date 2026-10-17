@@ -13,9 +13,28 @@ jobs:
     name: Gates
     uses: ./.github/workflows/checks.yml
 
+  release-notes-collected:
+    # The notes of a release are the section of Releases.md for its version. A note still
+    # waiting under release-notes/ is in no section yet, so a tag cut before collecting
+    # would publish without it; stop here, before anything is built.
+    name: Release notes collected
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: No release note may still be pending
+        run: python bin/release/collect_release_notes.py --require-empty
+
   build-zips:
     name: Build per-locale ZIPs
-    needs: gates
+    needs: [gates, release-notes-collected]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

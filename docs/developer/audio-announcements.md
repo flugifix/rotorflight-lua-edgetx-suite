@@ -180,4 +180,4 @@ paths, or it will report two thirds of the pack as dead.
 4. `i18n/en.lua` and `i18n/de.lua` — the label, any new header, and the page's `help_message`.
 5. `bin/sound-generator/json/*.json` — the line to speak; `--check` must come back clean.
 6. `docs/audio/events.md` — the announcement, its switch, its default and what fires it.
-7. `Releases.md` — an entry under the active release header.
+7. `release-notes/<short-name>.feature.md` — the release note, filed under its release when it is cut (see `release-notes/README.md`).

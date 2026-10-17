@@ -11,18 +11,29 @@ A pull request that changes what a pilot can observe carries three things beside
 checked, or asked for, by a job in `.github/workflows/pr.yml`.
 
 
-## Release notes (`Releases.md`)
+## Release notes (`release-notes/`)
 
 - **Mandatory:** with every feature, enhancement, bug fix, UI change, performance
-  optimization or build-system change, `Releases.md` is kept up to date, and the updated file
-  is committed as part of the pull request so the release notes stay in sync with master at all
-  times.
-- Record the change under the active / upcoming release header (e.g. `# 0.2.x`), in one of the
-  sections `Features & Enhancements`, `Bug Fixes & Improvements` and
-  `Performance & Build System`.
-- Reference the affected module or page path in parentheses (e.g. `(setup/esc_motors/esc_tools)`),
-  and keep the description concise and accurate: what changed, its technical impact, and the
-  issue or pull request it belongs to where there is one.
+  optimization or build-system change, a release note is added as one new file under
+  `release-notes/` -- do not edit `Releases.md` directly:
+  - Name it `release-notes/<short-name>.<section>.md`, where the section is `feature`
+    (`Features & Enhancements`), `fix` (`Bug Fixes & Improvements`) or `build`
+    (`Performance & Build System`).
+  - Write the entry as a list item exactly as it should read in `Releases.md`, with no
+    header and no `***` line.
+  - Reference the affected module or page path in parentheses (e.g. `(setup/esc_motors/esc_tools)`),
+    and keep the description concise and accurate: what changed, its technical impact, and the
+    issue or pull request it belongs to where there is one. Do not write a version or the PR's
+    own number: the release is decided when it is cut, and the number is added from the merge commit.
+- **A pull request that needs no release note says so.** If it changes `src/` and adds no
+  file under `release-notes/`, its body carries a line of its own beginning with `Release notes:`
+  (a bullet and bold markers are allowed) and the reason, for example
+  `Release notes: none -- this only renames a local variable.`
+  The `Release notes rule` job reads that line (`bin/release/verify_release_notes_rule.py`); it does
+  not judge the reason, it only makes sure the rule cannot be skipped in silence.
+- At release time `python bin/release/collect_release_notes.py` files the pending notes under
+  the version in `src/rfsuite/lib/version.lua`. The format and the release flow are in
+  [release-notes/README.md](release-notes/README.md).
 
 
 ## Documentation (`docs/`)

@@ -93,8 +93,7 @@ off the console while it still reaches the log ring, the card sink and serial; o
 - **Sensors**: Centralized in `src/rfsuite/lib/sensors.lua`. Maps 4-character OpenTX/EdgeTX sensor names to human-readable internal aliases.
 - **MSP Tasks**: Background communication logic lives in `src/rfsuite/tasks/msp/`.
 
-## Release Notes Maintenance (`Releases.md`)
-- **Mandatory PR Requirement**: every PR keeps `Releases.md` up to date. The rule is in [CONTRIBUTING.md](CONTRIBUTING.md) under *Release notes*.
+- **Mandatory PR Requirement**: every PR carries a release note under `release-notes/`, or says in its body why not, on a line beginning with `Release notes:`. The rule is in [CONTRIBUTING.md](CONTRIBUTING.md) under *Release notes*.
 
 ## Documentation Maintenance (`docs/`)
 - **Mandatory PR Requirement**: every PR that changes what a pilot can observe updates `docs/`, or says in its body why not, on a line beginning with `Documentation:`. The rule is in [CONTRIBUTING.md](CONTRIBUTING.md) under *Documentation*.
