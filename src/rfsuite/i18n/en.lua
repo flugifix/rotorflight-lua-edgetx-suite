@@ -1017,7 +1017,7 @@ return {
         help_message = "Announces a change of PID or rate profile."
       },
       settings_audio_events_esc = {
-        help_message = "ESC Temperature: speaks the temperature at a level; recovering is silent. Warning and Critical are the two levels, kept with the model, and only Critical vibrates.\nMCU Temperature: the same two levels for the MCU, radio-wide.\nESC Load: the current as a % of ESC Current Limit (Setup > Power > Preferences); armed only, silent without a limit. Warning and Critical (%) are its two levels.\nHold (s): how long the load must stay at a level first; only Critical vibrates.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at the critical levels."
+        help_message = "ESC Temperature: speaks the temperature at a level; recovering is silent. Warning and Critical are the two levels, kept with the model, and only Critical vibrates.\nMCU Temperature: the same two levels for the MCU, radio-wide.\nESC Load: the current as a % of ESC Current Limit (Setup > Power > Preferences); armed only, silent without a limit. Warning and Critical (%) are its two levels; only Critical vibrates.\nHold (s): how long the load must stay at a level first.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at the critical levels."
       },
       settings_audio_events_adjustment = {
         help_message = "Announces values changed with the flight controller's adjustment functions."

@@ -991,7 +991,7 @@ return {
         help_dropouts_alert = "Ansage, wenn beim scharfen Modell zu oft Telemetrie-Frames fehlen: so viele Lücken wie Aussetzer innerhalb von Zeitfenster (s). Die Erholung bleibt still, und es vibriert nie. Standard: aus.",
         help_dropouts_count = "Wie viele Lücken in den Telemetrie-Frames des Flugreglers innerhalb des Zeitfensters den Alarm auslösen (1 bis 50). Standard: 3.",
         help_dropouts_window = "Die Zeit, über die die Lücken gezählt werden, in Sekunden (4 bis 60). Standard: 10 s.",
-        help_link_repeat = "Wie oft die Alarme Linkqualität, Telemetrie-Aussetzer, RSSI, Downlink, beide SNR und Sendeleistung sprechen, alle 10 s: bis behoben oder 1 bis 10 Mal. Telemetrie verloren spricht einmal pro Verlust.",
+        help_link_repeat = "Wie oft Linkqualität, Telemetrie-Aussetzer, RSSI, Downlink, beide SNR und Sendeleistung sprechen, solange sie anhalten, alle 10 s: bis behoben oder 1–10 Mal. Telemetrie verloren: einmal pro Verlust.",
         help_link_haptic = "Ob der Sender bei der kritischen Stufe von Linkqualität, RSSI, Downlink, beiden SNR-Alarmen und Sendeleistung und bei Telemetrie verloren vibriert. Telemetrie-Aussetzer vibriert nie. Standard: an.",
         help_rescue_active = "Spricht einmal, sobald der Flugregler eine Rettung beginnt, in welcher Phase auch immer. Standard: aus.",
         help_rescue_off = "Spricht einmal, wenn die Rettung vorbei ist und der Flugregler wieder normal steuert. Standard: aus.",
@@ -1017,7 +1017,7 @@ return {
         help_message = "Ansage bei einem Wechsel des PID- oder Raten-Profils."
       },
       settings_audio_events_esc = {
-        help_message = "ESC-Temperatur: sagt die Temperatur auf einer Stufe; die Erholung bleibt still. Warnung und Kritisch sind die zwei Stufen, beim Modell gespeichert; nur Kritisch vibriert.\nMCU-Temperatur: dieselben zwei Stufen, radioweit.\nESC-Last: der Strom in % der ESC-Strombegrenzung (Setup > Power > Einstellungen); nur scharf, ohne Begrenzung still. Warnung und Kritisch (%) sind ihre zwei Stufen.\nHaltezeit (s): so lange muss die Last erst anliegen; nur Kritisch vibriert.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert auf den kritischen Stufen."
+        help_message = "ESC-Temperatur: sagt die Temperatur auf einer Stufe; die Erholung bleibt still. Warnung und Kritisch sind die zwei Stufen, beim Modell gespeichert; nur Kritisch vibriert.\nMCU-Temperatur: dieselben zwei Stufen, radioweit.\nESC-Last: der Strom in % der ESC-Strombegrenzung (Setup > Power > Einstellungen); nur scharf, ohne Begrenzung still. Warnung und Kritisch (%) sind ihre zwei Stufen; nur Kritisch vibriert.\nHaltezeit (s): so lange muss die Last auf einer Stufe bleiben.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert auf den kritischen Stufen."
       },
       settings_audio_events_adjustment = {
         help_message = "Ansage von Werten, die über die Adjustment-Funktionen des Flugreglers geändert werden."
@@ -2425,7 +2425,7 @@ return {
         tx_power = "Sendeleistung",
         power_dynamic = "dynamisch",
         power_fixed = "fest",
-        help_message = "Vergleicht die Link-Einstellungen des ExpressLRS-Moduls mit denen des Flight Controllers.\nRotorflight: Telemetrie-Modus, Link-Rate und -Verhältnis auf dem Board.\nELRS-Modul: Paketrate und Telemetrie-Verhältnis des Moduls.\nSendeleistung: Max Power des Moduls und ob dynamische Leistung an ist; nur lesend.\nPrüfen: liest beide Seiten neu und schreibt nichts.\nRF -> ELRS: stellt das Modul auf Rate und Verhältnis des Flight Controllers; fragt vorher, nie im scharfen Zustand.\nELRS -> RF: stellt den Flight Controller auf die des Moduls und speichert; fragt vorher, nie im scharfen Zustand."
+        help_message = "Vergleicht die Link-Einstellungen des ExpressLRS-Moduls mit denen des Flight Controllers.\nRotorflight: Telemetrie-Modus, Link-Rate und -Verhältnis auf dem Board.\nELRS-Modul: Paketrate und Telemetrie-Verhältnis des Moduls.\nSendeleistung: Max Power des Moduls und ob dynamische Leistung an ist; nur lesend.\nPrüfen: liest beide Seiten neu und schreibt nichts.\nRF -> ELRS: stellt das Modul auf Rate und Verhältnis des Flight Controllers; fragt vorher; nicht bei scharfem Modell.\nELRS -> RF: stellt den Flight Controller auf die des Moduls und speichert; fragt vorher; nicht bei scharfem Modell."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",
