@@ -1002,7 +1002,7 @@ return {
         help_arming_flags = "Speaks when the model is armed and when it is disarmed. On by default.",
         help_governor_state = "Speaks the governor's state when it changes, once the new state has held for a moment. Choose below which states are spoken. On by default.",
         help_governor_state_row = "Whether this state is spoken when the governor enters it. Shown only while Governor State is on. On by default.",
-        help_voltage_alert = "Speaks when the pack voltage falls below Warn cell voltage (Setup > Power > Battery) times the cell count, with the voltage spoken as set under Announce as. On by default.",
+        help_voltage_alert = "Speaks when the pack voltage falls below Warn cell voltage (Setup > Power > Battery) times the cell count, and anew below Min cell voltage, the voltage as set under Announce as. On by default.",
         help_voltage_hold = "How long the voltage has to stay below that line before it is spoken, so a short sag under load stays quiet. 0 speaks at once. Default 2 s.",
         help_voltage_reset = "How far above that line the voltage has to come back, in millivolts per cell, before the alert counts as cleared and Repeat starts over (50 to 500). Default 100 mV.",
         help_main_power_lost = "Speaks when the main pack is gone while the flight controller still runs on a BEC or backup battery, with the BEC voltage, and again with the pack voltage when the pack is back. Off by default.",
@@ -1057,7 +1057,7 @@ return {
         help_rescue_off = "Speaks once when the rescue is over and the flight controller is back to normal control. Off by default.",
         help_raise_critical = "Master volume mode only: this alert's critical level is spoken at the Alert Level, and the Normal Level is back 8 s after the last time. Vibration unchanged. On by default.",
         help_raise_event = "Master volume mode only: this alert is spoken at the Alert Level, and the Normal Level is back 8 s after the last time. Vibration unchanged. On by default.",
-        help_voltage_raise = "Master volume mode only: spoken at the Alert Level once the pack has also held under Min cell voltage (Setup > Power > Battery) times the cells for Hold. On by default.",
+        help_voltage_raise = "Master volume mode only: spoken at the Alert Level from the moment the pack has also held under Min cell voltage times the cells for Hold, until cleared. On by default.",
         help_bec_rx_raise = "Master volume mode only: the BEC/RX alert of Setup > Power > Alerts is spoken at the Alert Level, the Normal Level back 8 s after the last time. On by default.",
         help_fuel_empty_raise = "Master volume mode only: the warning at 0 % is spoken at the Alert Level, not the steps above it; the Normal Level is back 8 s later. On by default.",
         help_dropouts_raise = "Master volume mode only: Telemetry Dropouts is spoken at the Alert Level, and the Normal Level is back 8 s after the last time. Off by default.",
@@ -1077,7 +1077,7 @@ return {
         help_message = "Announces the governor's state as it changes."
       },
       settings_audio_events_voltage = {
-        help_message = "Alerts about the flight pack's voltage and the model's power supply.\nVoltage: speaks below Warn cell voltage times the cell count.\nHold (s): how long it has to stay below first; 0 speaks at once.\nReset (mV/cell): how far per cell it must recover above the line.\nMain Power Lost: the pack is gone while a BEC keeps the model running.\nAnnounce as: the pack voltage, or the voltage per cell.\nRepeat: how often an alert speaks until cleared, 10 s apart.\nHaptic: vibrates with these alerts.\nRaise Volume: Master volume only; at the Alert Level, Voltage below Min cell voltage."
+        help_message = "Alerts about the flight pack's voltage and the model's power supply.\nVoltage: speaks below Warn cell voltage times the cell count, anew below Min.\nHold (s): how long it has to stay below first; 0 speaks at once.\nReset (mV/cell): how far per cell it must recover above the line.\nMain Power Lost: the pack is gone while a BEC keeps the model running.\nAnnounce as: the pack voltage, or the voltage per cell.\nRepeat: how often an alert speaks until cleared, 10 s apart.\nHaptic: vibrates with these alerts.\nRaise Volume: Master volume only; at the Alert Level, Voltage below Min cell voltage."
       },
       settings_audio_events_profiles = {
         help_message = "Announces a change of PID or rate profile."

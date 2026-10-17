@@ -2289,6 +2289,7 @@ function Audio.resetConnectionState(audioState)
   audioState.mainPowerLostActive = false
   audioState.voltageLowSince = nil
   audioState.voltageCriticalSince = nil
+  audioState.voltageLevel = nil
   audioState.connectionSoundMissingLogged = nil
   audioState.telemetryWatchFrom = nil
   audioState.telemetryQuiet = nil
@@ -2537,9 +2538,10 @@ function Audio.process(self, opts)
           if type(audioState.voltageLowSince) ~= "number" then
             audioState.voltageLowSince = now
           end
-          -- The critical level is the same announcement, made while the reading has stayed at or
-          -- under the minimum line for the same hold: it raises the master volume, the warning
-          -- level does not. What is spoken, when, and how often is the warning level's in both.
+          -- The critical level is the same announcement, entered once the reading has stayed at
+          -- or under the minimum line for the same hold. It is entered the way the temperature and
+          -- link quality levels are: spoken at once, with a repeat count of its own, and it raises
+          -- the master volume, which the warning level does not.
           if voltage <= minimum then
             if type(audioState.voltageCriticalSince) ~= "number" then
               audioState.voltageCriticalSince = now
@@ -2548,19 +2550,35 @@ function Audio.process(self, opts)
             audioState.voltageCriticalSince = nil
           end
           if (now - audioState.voltageLowSince) >= hold then
-            local critical = audioState.voltageCriticalSince ~= nil
-              and (now - audioState.voltageCriticalSince) >= hold
+            -- Once spoken, the critical level stays until the alert ends (the reading back over
+            -- the reset line): a pack that has been held under its minimum is not well again
+            -- between two pulls, and a level that could be left and re-entered under a pumping
+            -- collective would be announced anew at every pull.
+            local spoken = tonumber(audioState.voltageLevel) or 0
+            local level = 1
+            if spoken >= 2 or (audioState.voltageCriticalSince ~= nil
+                and (now - audioState.voltageCriticalSince) >= hold) then
+              level = 2
+            end
+            local entered = false
+            if level >= 2 and spoken < 2 then
+              audioState.lastAlertAt.voltage = 0
+              alertCleared(audioState, "voltage")
+              entered = true
+            end
             -- A throttle that survives a reload of the module, beside the per-alert interval:
             -- the tool and the widget each hold their own audio state, and this is what keeps
-            -- one from repeating what the other has just said.
+            -- one from repeating what the other has just said. The step into the critical level
+            -- is not held back by it: that announcement is new, not a repeat.
             local globalLast = getGlobalLowVoltageAt()
-            if now - globalLast >= ALERT_REPEAT_SECONDS and alertMaySpeak(audioState, events, "voltage", now) then
-              if tryPlayAlertFile(self, audioState, events, now, "evt/lowvbat.wav", opts, "voltage", critical) then
+            if (entered or now - globalLast >= ALERT_REPEAT_SECONDS) and alertMaySpeak(audioState, events, "voltage", now) then
+              if tryPlayAlertFile(self, audioState, events, now, "evt/lowvbat.wav", opts, "voltage", level >= 2) then
                 -- The value the line was crossed at. The alert said only THAT it had been
                 -- crossed, and a pilot deciding whether to land now wants to know by how far.
                 playPackVoltage(events, voltage, cells, opts)
                 alertSpoken(audioState, events, "voltage", now)
                 setGlobalLowVoltageAt(now)
+                audioState.voltageLevel = level
               end
             end
           end
@@ -2570,6 +2588,7 @@ function Audio.process(self, opts)
           if voltage >= reset then
             audioState.lastAlertAt.voltage = 0
             alertCleared(audioState, "voltage")
+            audioState.voltageLevel = nil
           end
         end
       end

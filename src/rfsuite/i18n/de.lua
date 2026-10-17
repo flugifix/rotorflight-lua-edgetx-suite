@@ -1002,7 +1002,7 @@ return {
         help_arming_flags = "Ansage beim Scharfschalten und beim Entschärfen des Modells. Standard: an.",
         help_governor_state = "Sagt den Governor-Status bei einer Änderung, sobald der neue Zustand einen Moment anliegt. Darunter wählst du, welche Zustände gesprochen werden. Standard: an.",
         help_governor_state_row = "Ob dieser Zustand gesagt wird, wenn der Governor ihn erreicht. Nur sichtbar, solange Governor-Status an ist. Standard: an.",
-        help_voltage_alert = "Ansage, wenn die Akkuspannung unter Warn Zellspannung (Setup > Power > Batterie) mal Zellenzahl fällt; die Spannung wird gesagt wie unter Ansage als gewählt. Standard: an.",
+        help_voltage_alert = "Ansage, wenn die Akkuspannung unter Warn Zellspannung (Setup > Power > Batterie) mal Zellenzahl fällt, und erneut unter Min Zellspannung; die Spannung wie unter Ansage als. Standard: an.",
         help_voltage_hold = "So lange muss die Spannung unter dieser Schwelle bleiben, bevor sie gesagt wird; ein kurzer Einbruch unter Last bleibt still. 0 sagt sofort. Standard: 2 s.",
         help_voltage_reset = "So weit muss die Spannung über diese Schwelle zurückkommen, in Millivolt pro Zelle, bis die Warnung als behoben gilt und die Wiederholung neu beginnt (50 bis 500). Standard: 100 mV.",
         help_main_power_lost = "Ansage, wenn der Hauptakku weg ist und der Flugregler über BEC oder Stützakku weiterläuft, mit der BEC-Spannung, und erneut mit der Akkuspannung, wenn der Akku zurück ist. Standard: aus.",
@@ -1057,7 +1057,7 @@ return {
         help_rescue_off = "Spricht einmal, wenn die Rettung vorbei ist und der Flugregler wieder normal steuert. Standard: aus.",
         help_raise_critical = "Nur im Modus Master-Lautstärke: die kritische Stufe dieses Alarms mit der Alarm-Stufe, 8 s nach dem letzten Mal wieder die normale Stufe. Vibration unverändert. Standard: an.",
         help_raise_event = "Nur im Modus Master-Lautstärke: dieser Alarm mit der Alarm-Stufe, 8 s nach dem letzten Mal wieder die normale Stufe. Vibration unverändert. Standard: an.",
-        help_voltage_raise = "Nur im Modus Master-Lautstärke: mit der Alarm-Stufe, sobald der Akku auch Haltezeit lang unter Min Zellspannung (Setup > Power > Batterie) mal Zellen blieb. Standard: an.",
+        help_voltage_raise = "Nur im Modus Master-Lautstärke: mit der Alarm-Stufe, ab dem Moment, in dem der Akku auch Haltezeit lang unter Min Zellspannung mal Zellen blieb, bis behoben. Standard: an.",
         help_bec_rx_raise = "Nur im Modus Master-Lautstärke: der BEC/RX-Alarm aus Setup > Power > Alarme mit der Alarm-Stufe, 8 s nach dem letzten Mal wieder die normale Stufe. Standard: an.",
         help_fuel_empty_raise = "Nur im Modus Master-Lautstärke: die Warnung bei 0 % mit der Alarm-Stufe, nicht die Stufen darüber; 8 s später wieder die normale Stufe. Standard: an.",
         help_dropouts_raise = "Nur im Modus Master-Lautstärke: Telemetrie-Aussetzer mit der Alarm-Stufe, 8 s nach dem letzten Mal wieder die normale Stufe. Standard: aus.",
@@ -1077,7 +1077,7 @@ return {
         help_message = "Ansage des Governor-Status bei einer Änderung."
       },
       settings_audio_events_voltage = {
-        help_message = "Warnungen zu Flugakku und Stromversorgung.\nSpannung: Ansage unter Warn Zellspannung mal Zellenzahl.\nHaltezeit (s): so lange muss sie darunter bleiben; 0 sagt sofort.\nRückstellung (mV/Zelle): so weit pro Zelle über die Schwelle, bis behoben.\nHauptstrom verloren: der Akku ist weg, ein BEC versorgt das Modell weiter.\nAnsage als: die Akkuspannung oder die Spannung pro Zelle.\nWiederholung: wie oft eine Warnung bis behoben spricht, alle 10 s.\nHaptisch: der Sender vibriert bei diesen Warnungen.\nLautstärke anheben: nur Master-Lautstärke; Alarm-Stufe, Spannung unter Min Zellspannung."
+        help_message = "Warnungen zu Flugakku und Stromversorgung.\nSpannung: Ansage unter Warn Zellspannung mal Zellenzahl, erneut unter Min.\nHaltezeit (s): so lange muss sie darunter bleiben; 0 sagt sofort.\nRückstellung (mV/Zelle): so weit pro Zelle über die Schwelle, bis behoben.\nHauptstrom verloren: der Akku ist weg, ein BEC versorgt das Modell weiter.\nAnsage als: die Akkuspannung oder die Spannung pro Zelle.\nWiederholung: wie oft eine Warnung bis behoben spricht, alle 10 s.\nHaptisch: der Sender vibriert bei diesen Warnungen.\nLautstärke anheben: nur Master-Lautstärke; Alarm-Stufe, Spannung unter Min Zellspannung."
       },
       settings_audio_events_profiles = {
         help_message = "Ansage bei einem Wechsel des PID- oder Raten-Profils."
