@@ -326,6 +326,11 @@ off the widget state — `voltage`, `bec_voltage`, `current`, `watts`, `rpm`, `f
 `esc_status`, `esc_status_level`, `esc_status_live`, `esc_status_live_level` — and, for anything
 else, the sensor of that name from `lib/sensors.lua`.
 
+`model_name` is resolved by the snapshot itself (`widgets/dashboard/derived.lua`, `Derived.build`):
+one `model.getInfo()` per build serves the name, `edgetx_model_name` and `edgetx_model_bitmap`, and
+the name is the craft name, then the EdgeTX model name, then `--`. `mapTelemetrySource` keeps the
+same order for a caller outside the snapshot; a change to one belongs in both.
+
 ### `link_packet_rate`, `link_floor`, `link_diversity`
 
 Not sensors. The three are read out of the CRSF link-statistics frame the *transmitter module*
