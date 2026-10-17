@@ -11,6 +11,11 @@ local Common = nil
 -- The mode rules lib/audio.lua acts on (lib/audio_volume.lua), so the page shows what the suite
 -- will do with the file rather than a second reading of it.
 local Rules = nil
+-- Loaded only in the mode that needs them: the model chain's reader (Master volume), the arming
+-- state (Master volume's tests), the announcement module (both tests, on a press).
+local Chain = nil
+local Armed = nil
+local Audio = nil
 
 -- ─── Config schema ────────────────────────────────────────────────────────────
 
@@ -264,6 +269,308 @@ local function appendPercentField(children, x, y, w, labelText, key, help)
   )
 end
 
+-- ─── Model chain and tests ───────────────────────────────────────────────────
+
+-- A shared library through the suite's own module cache where there is one, so the page and the
+-- tool use the same lib/audio.lua and lib/armed.lua rather than a second copy of each.
+local function requireShared(path)
+  if _G.rfsuite and _G.rfsuite.require then
+    return _G.rfsuite.require(path)
+  end
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, "t")
+  if type(chunk) ~= "function" then return nil end
+  local ok, mod = pcall(chunk)
+  if ok then return mod end
+  return nil
+end
+
+local function getAudio()
+  if Audio == nil then Audio = requireShared("lib/audio.lua") or false end
+  return Audio or nil
+end
+
+-- Why a test that writes into the model is refused right now: "armed", "uncertain" (the arming
+-- state cannot be told: the link is up and no arming flags are reported), or nil when it is not.
+-- It fails CLOSED: without lib/armed.lua, or with a question that raises, the page cannot tell,
+-- and "cannot tell" is not "disarmed".
+local function lockReason()
+  if Armed == nil then Armed = requireShared("lib/armed.lua") or false end
+  if type(Armed) ~= "table" or type(Armed.isArmed) ~= "function"
+    or type(Armed.isUncertain) ~= "function" then return "uncertain" end
+  local ok, armed = pcall(Armed.isArmed)
+  if not ok then return "uncertain" end
+  if armed == true then return "armed" end
+  local okU, uncertain = pcall(Armed.isUncertain)
+  if not okU or uncertain == true then return "uncertain" end
+  return nil
+end
+
+-- What the model holds for the global variable being shown, read once per visit and per global
+-- variable: on opening the page, on picking another one, and on Reload. Every other rebuild --
+-- Connected only, a `?` sheet closing, the arming edge -- draws the same answer again, because a
+-- walk reads every input, logical switch and special function of the model.
+local function getDiagnosis(gv)
+  if ui.diag and ui.diag.gv == gv then return ui.diag.result end
+  if not Chain then Chain = loadModule("app/pages/settings/audio/volume/chain.lua") end
+  local result = { readable = false }
+  local base = gvarSourceBase()
+  if base ~= nil then result = Chain.read(gv, base + gv - 1) end
+  ui.diag = { gv = gv, result = result }
+  return result
+end
+
+-- How long the Normal and Alarm tests hold their value before the earlier one is put back, in
+-- getTime() ticks of 10 ms. There is no query for "has the radio finished speaking", so this is
+-- an estimate: the sample is a word and a number, about two seconds, plus whatever was queued.
+local TEST_HOLD_TICKS = 500
+
+-- How often, in getTime() ticks of 10 ms, Master volume's test row asks for the arming state
+-- again. The tool rebuilds the page on an arming edge, but not when the arming flags first arrive
+-- or go away, so the page asks for that rebuild itself.
+local LOCK_POLL_TICKS = 100
+
+local pageWakeup
+
+-- The page has a wakeup only while there is something for it to do: a test holding its value, or
+-- Master volume's test row watching the arming state. ui/home.lua calls a page's wakeup on every
+-- pass while the craft is not armed.
+local function updateWakeup()
+  if ui.test or ui.lockPoll then M.wakeup = pageWakeup else M.wakeup = nil end
+end
+
+-- A test's earlier value goes back only while the global variable still holds what the test
+-- wrote. If something else wrote to it in between -- the suite's own master volume on a change of
+-- the link, a critical alert -- that newer value is the one to keep. Should that writer have
+-- written the very value the test held, the restore cannot tell; the suite is then told to write
+-- what it wants again on its next refresh rather than trust what it wrote last.
+local function restoreTest()
+  local pending = ui.test
+  ui.test = nil
+  updateWakeup()
+  if type(pending) ~= "table" or type(model) ~= "table" then return end
+  if type(model.getGlobalVariable) ~= "function" or type(model.setGlobalVariable) ~= "function" then return end
+  local ok, current = pcall(model.getGlobalVariable, pending.idx, 0)
+  if ok and current == pending.wrote then
+    pcall(model.setGlobalVariable, pending.idx, 0, pending.prev)
+    local audio = getAudio()
+    if audio and type(audio.forgetMasterVolume) == "function" then audio.forgetMasterVolume() end
+  end
+end
+
+-- Called only while the craft is NOT armed; the arming edge is covered by the rebuild it causes
+-- (see M.build). A test holding its value puts the earlier one back after the hold. Once a second
+-- the page asks for the arming state again and rebuilds when the answer has changed -- the flags
+-- arriving, or going away, is no arming edge -- and the rebuild puts a held value back at once
+-- when the answer is no longer "disarmed".
+pageWakeup = function()
+  local now = getTime and getTime() or 0
+  local pending = ui.test
+  if pending and now >= pending.untilTick then restoreTest() end
+  local poll = ui.lockPoll
+  if poll and now >= poll.nextTick then
+    poll.nextTick = now + LOCK_POLL_TICKS
+    if lockReason() ~= poll.reason then
+      ui.lockPoll = nil
+      updateWakeup()
+      if ui.test then restoreTest() end
+      if type(poll.rebuild) == "function" then poll.rebuild() end
+    end
+  end
+end
+
+-- Normal or Alarm: the global variable at that level, the sample at the radio's own Wav volume
+-- (the master volume carries the level), then the earlier value back. Not an edit of the page.
+local function startMasterTest(gv, pct)
+  if lockReason() ~= nil then return end
+  local result = ui.diag and ui.diag.gv == gv and ui.diag.result
+  if not (result and result.complete) then return end
+  local audio = getAudio()
+  if not audio or type(audio.volumeRaw) ~= "function" or type(audio.playSample) ~= "function" then return end
+  if type(model) ~= "table" or type(model.getGlobalVariable) ~= "function"
+    or type(model.setGlobalVariable) ~= "function" then return end
+  -- A second press inside the hold starts from the value before the first one.
+  restoreTest()
+  local idx = gv - 1
+  local ok, prev = pcall(model.getGlobalVariable, idx, 0)
+  if not ok or prev == nil then return end
+  local raw = audio.volumeRaw(tonumber(pct) or 0)
+  -- Every accepted model.setGlobalVariable marks the model for a save, so a level the variable
+  -- already holds -- the suite's own Normal, most of the time -- is played without a write and
+  -- without a restore.
+  if raw ~= prev then
+    if not pcall(model.setGlobalVariable, idx, 0, raw) then return end
+    ui.test = { idx = idx, prev = prev, wrote = raw, untilTick = (getTime and getTime() or 0) + TEST_HOLD_TICKS }
+    updateWakeup()
+  end
+  audio.playSample(nil)
+end
+
+-- A row of buttons with the row's label on the left and its `?` on the right, in the places
+-- appendComboSelect uses. `buttons` is { { text, press, active }, ... }, drawn left to right and
+-- appended in that order, so the rotary reaches them before the row's `?`, as on every other row.
+-- A button is as wide as its text in the button's font (the radio's standard font), with room for
+-- the button's own padding, and never narrower than TEST_BTN_W.
+local TEST_BTN_W, TEST_BTN_GAP, TEST_BTN_PAD = 84, 6, 28
+
+local function buttonWidth(text)
+  local fn = lcd and lcd.sizeText
+  local w = nil
+  if type(fn) == "function" then
+    local ok, tw = pcall(fn, text, 0)
+    if ok then w = tonumber(tw) end
+  end
+  if w == nil then w = #text * 7 end
+  return math.max(TEST_BTN_W, w + TEST_BTN_PAD)
+end
+
+local function appendButtonRow(children, x, y, w, labelText, buttons, help)
+  local rowH = Controls.ROW_H
+  local right = x + w - 10
+  local helpX = nil
+  if help.helpText then
+    helpX = right - HELP_BTN_W
+    right = helpX - HELP_BTN_GAP
+  end
+  local widths, total = {}, math.max(#buttons - 1, 0) * TEST_BTN_GAP
+  for i, b in ipairs(buttons) do
+    widths[i] = buttonWidth(b.text)
+    total = total + widths[i]
+  end
+  local left = right - total
+  children[#children + 1] = {
+    type = "label",
+    x = x, y = Controls.labelY(y, rowH), w = left - x - 8,
+    text = labelText, color = COLOR_THEME_PRIMARY1, font = SMLSIZE
+  }
+  local bx = left
+  for i, b in ipairs(buttons) do
+    children[#children + 1] = {
+      type = "button",
+      x = bx, y = Controls.controlY(y, rowH),
+      w = widths[i], h = Controls.CTRL_H,
+      text = b.text,
+      active = b.active,
+      press = b.press
+    }
+    bx = bx + widths[i] + TEST_BTN_GAP
+  end
+  if helpX then
+    children[#children + 1] = {
+      type = "button",
+      x = helpX, y = y + math.floor((rowH - HELP_BTN_H) / 2),
+      w = HELP_BTN_W, h = HELP_BTN_H,
+      text = "?",
+      press = function() help.onHelp(help.helpText, help.helpTitle) end
+    }
+  end
+  children[#children + 1] = {
+    type = "rectangle",
+    x = x, y = y + rowH, w = w, h = 1,
+    color = COLOR_THEME_SECONDARY2, filled = true
+  }
+  return rowH + 1
+end
+
+-- The diagnosis: a heading row with the chain recipe behind its `?`, one line per link -- the
+-- slot found and OK, or what is wrong -- then a line per warning. Returns the height drawn.
+-- Names as EdgeTX shows them: an input by its name (or its number behind the input symbol), a
+-- switch by its position name (L01..L64, SA..), a special function by its number.
+local function sourceName(source)
+  local ok, name = false, nil
+  if type(_G.getSourceName) == "function" and source then ok, name = pcall(_G.getSourceName, source) end
+  if ok and type(name) == "string" and name ~= "" then return name end
+  return tostring(source)
+end
+
+local function switchName(switch)
+  local ok, name = false, nil
+  if type(_G.getSwitchName) == "function" and switch then ok, name = pcall(_G.getSwitchName, switch) end
+  if ok and type(name) == "string" and name ~= "" then return name end
+  return tostring(switch)
+end
+
+local function slotName(kind, slot, key)
+  if kind == "input" then
+    if key then return sourceName(key) end
+    return string.format("I%d", slot + 1)
+  elseif kind == "ls" then
+    if key then return switchName(key) end
+    return string.format("L%02d", slot + 1)
+  end
+  return string.format("SF%d", slot + 1)
+end
+
+local function appendDiagnosis(children, x, y, w, i18n, gv, result, help)
+  local startY = y
+  local headLabel = t(i18n, "chain", "Model chain")
+  y = y + appendButtonRow(children, x, y, w, headLabel, {}, help)
+  local function line(text)
+    y = y + appendNote(children, x, y + 2, w, text)
+  end
+  if not result.readable then
+    line(t(i18n, "chain_unreadable", "This radio does not answer the questions the check needs."))
+    return y - startY
+  end
+  local okText = t(i18n, "chain_ok", "OK")
+  local inputName = result.input and slotName("input", result.input, result.inputSource)
+  local lsName = result.ls and slotName("ls", result.ls, result.lsSwitch)
+
+  local inputLabel = t(i18n, "chain_input", "Input")
+  if inputName then
+    line(string.format("%s: %s  %s", inputLabel, inputName, okText))
+  else
+    line(string.format(t(i18n, "chain_input_none", "%s: none has GV%d as its source"), inputLabel, gv))
+  end
+
+  local lsLabel = t(i18n, "chain_ls", "Logical switch")
+  if lsName then
+    line(string.format("%s: %s  %s", lsLabel, lsName, okText))
+  elseif result.lsWrongX then
+    line(string.format(t(i18n, "chain_ls_wrong_x", "%s: %s is GV%d > %d, it needs -1024"),
+      lsLabel, slotName("ls", result.lsWrongX.slot, nil), gv, result.lsWrongX.x or 0))
+  else
+    line(string.format(t(i18n, "chain_ls_none", "%s: none is a > x with GV%d and -1024"), lsLabel, gv))
+  end
+
+  local sfLabel = t(i18n, "chain_sf", "Special function")
+  if result.complete then
+    line(string.format("%s: %s  %s", sfLabel, slotName("sf", result.sf), okText))
+  elseif result.sfFault and result.sfFault.kind == "source" then
+    line(string.format(t(i18n, "chain_sf_source", "%s: %s takes %s as its source, not the input"),
+      sfLabel, slotName("sf", result.sfFault.slot), sourceName(result.sfFault.source)))
+  elseif result.sfFault then
+    line(string.format(t(i18n, "chain_sf_switch", "%s: %s is switched by %s, not by a logical switch above"),
+      sfLabel, slotName("sf", result.sfFault.slot), switchName(result.sfFault.switch)))
+  else
+    line(string.format(t(i18n, "chain_sf_none", "%s: no Volume function joins the two"), sfLabel))
+  end
+
+  local warn = result.warn or {}
+  if warn.popup then line(t(i18n, "gvar_popup_warning", "Note: This GV has 'Popup' enabled in EdgeTX model settings.")) end
+  if warn.weight then line(string.format(t(i18n, "chain_warn_weight", "Warning: the input's weight is %d, not 100."), warn.weight)) end
+  if warn.offset then line(string.format(t(i18n, "chain_warn_offset", "Warning: the input has an offset of %d."), warn.offset)) end
+  if warn.curve then line(t(i18n, "chain_warn_curve", "Warning: the input has a curve.")) end
+  if warn.inputSwitch then line(t(i18n, "chain_warn_input_switch", "Warning: the input has a switch.")) end
+  if warn.flightModes then line(t(i18n, "chain_warn_flight_modes", "Warning: the input is limited to some flight modes.")) end
+  if warn.side then
+    -- As the input's Side choice names it (EdgeTX's x>0 for the positive half, x<0 for the other).
+    local side = (warn.side == 2 and "x>0") or (warn.side == 1 and "x<0") or tostring(warn.side)
+    line(string.format(t(i18n, "chain_warn_side", "Warning: the input's Side is %s, not both sides."), side))
+  end
+  if warn.lines then
+    line(string.format(t(i18n, "chain_warn_lines", "Warning: the input has %d lines; the first one that is on is used."), warn.lines))
+  end
+  if warn.andSwitch then line(t(i18n, "chain_warn_and", "Warning: the logical switch has an AND switch.")) end
+  if warn.delay then line(t(i18n, "chain_warn_delay", "Warning: the logical switch has a delay.")) end
+  if warn.duration then line(t(i18n, "chain_warn_duration", "Warning: the logical switch has a duration.")) end
+  if warn.sfOff then line(t(i18n, "chain_warn_sf_off", "Warning: the special function is switched off.")) end
+  if warn.secondSf then
+    line(string.format(t(i18n, "chain_warn_second_sf", "Warning: %s is a second Volume function that is on."),
+      slotName("sf", warn.secondSf)))
+  end
+  return y - startY
+end
+
 -- ─── Module API ──────────────────────────────────────────────────────────────
 
 function M.getHeaderActions()
@@ -273,6 +580,9 @@ end
 
 function M.onReload(ctx)
   ensureDeps()
+  -- Reload reads the model again too, after any test has put its value back.
+  restoreTest()
+  ui.diag = nil
   copyFromPrefs(ctx.preferences)
   ui.dirty = false
 end
@@ -319,6 +629,12 @@ function M.build(ctx)
 
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
   ui.runtime.openHelp = ctx.openHelp
+  -- Only Master volume's tests wait for the arming state; it sets this again below.
+  ui.lockPoll = nil
+  updateWakeup()
+  -- A test still holding its value goes back on the rebuild an arming edge causes, whichever mode
+  -- the page shows by then: while armed the page has no wakeup to do it later.
+  if ui.test and lockReason() ~= nil then restoreTest() end
 
   local modeLabel = t(i18n, "mode", "Mode")
   cursorY = cursorY + Controls.appendComboSelect(
@@ -344,7 +660,7 @@ function M.build(ctx)
 
   if mode == MODE_LEVEL then
     local levelLabel = t(i18n, "level", "Level")
-    Controls.appendComboSelect(
+    cursorY = cursorY + Controls.appendComboSelect(
       children, x, cursorY, w,
       levelLabel,
       getLevelOptions(),
@@ -352,6 +668,16 @@ function M.build(ctx)
       ui.runtime.getValueSetter("level"),
       helpOpts(t(i18n, "help_level"), levelLabel)
     )
+    -- The level shown, saved or not: the combo's setter has already put it in ui.config. Armed
+    -- or not -- it writes nothing.
+    local testLabel = t(i18n, "test", "Test")
+    appendButtonRow(children, x, cursorY, w, testLabel, {
+      { text = t(i18n, "test_play", "Play"),
+        press = function()
+          local audio = getAudio()
+          if audio and type(audio.playSample) == "function" then audio.playSample(ui.config.level) end
+        end }
+    }, helpOpts(t(i18n, "help_test_level"), testLabel))
     return
   end
 
@@ -383,18 +709,51 @@ function M.build(ctx)
   cursorY = cursorY + appendPercentField(children, x, cursorY, w, alertLabel, "master_alert",
     helpOpts(t(i18n, "help_master_alert"), alertLabel))
 
-  if type(model) == "table" and type(model.getGlobalVariableDetails) == "function" then
-    local ok, details = pcall(model.getGlobalVariableDetails, gv - 1)
-    if ok and type(details) == "table" then
-      if details.popup and details.popup ~= 0 and details.popup ~= false then
-        appendNote(children, x, cursorY, w, t(i18n, "gvar_popup_warning", "Warning: GVAR popup is enabled"))
-      end
-    end
+  -- Whether the model carries the chain this global variable needs (its popup included).
+  local result = getDiagnosis(gv)
+  local chainLabel = t(i18n, "chain", "Model chain")
+  cursorY = cursorY + appendDiagnosis(children, x, cursorY, w, i18n, gv, result,
+    helpOpts(t(i18n, "help_chain"), chainLabel))
+
+  -- Normal and Alarm write into the model, so they wait for a disarmed craft and a complete
+  -- chain; the reason stands under them while they wait. An arming edge rebuilds the page, and a
+  -- test still holding its value has then been put back at the top of the build.
+  local reason = lockReason()
+  -- The arming flags arriving or going away is no arming edge, so nothing would rebuild the page
+  -- for it; while not armed the page asks itself, once a second.
+  if reason ~= "armed" then
+    ui.lockPoll = { reason = reason, rebuild = ctx.requestRebuild,
+      nextTick = (getTime and getTime() or 0) + LOCK_POLL_TICKS }
+    updateWakeup()
+  end
+  local usable = reason == nil and result.complete == true
+  local function isUsable() return usable end
+  local testLabel = t(i18n, "test", "Test")
+  cursorY = cursorY + appendButtonRow(children, x, cursorY, w, testLabel, {
+    { text = t(i18n, "test_normal", "Normal"), active = isUsable,
+      press = function() startMasterTest(gv, ui.config.master_normal) end },
+    { text = t(i18n, "test_alarm", "Alarm"), active = isUsable,
+      press = function() startMasterTest(gv, ui.config.master_alert) end },
+  }, helpOpts(t(i18n, "help_test_master"), testLabel))
+  if reason == "armed" then
+    appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_armed", "Locked while the model is armed."))
+  elseif reason == "uncertain" then
+    appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_uncertain", "Locked: the arming state is not known."))
+  elseif not usable then
+    appendNote(children, x, cursorY + 2, w, t(i18n, "test_locked_chain", "Needs the whole chain above."))
   end
 end
 
 function M.onClose()
+  -- A test still holding its value puts the earlier one back before the page goes, and nothing
+  -- read from the model outlives the visit (resetPageState clears only what it knows of).
+  ui.lockPoll = nil
+  restoreTest()
+  ui.diag = nil
   Common.resetPageState(ui)
+  Chain = nil
+  Armed = nil
+  Audio = nil
   Controls = nil
   Common = nil
   Rules = nil

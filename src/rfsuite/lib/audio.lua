@@ -2188,6 +2188,39 @@ function Audio.playNumber(value, unit)
   return (pcall(playNumber, value, unit or 0, 0, audio_volume)) == true
 end
 
+--- The value a master-volume percentage is written to the global variable as: 0..100 % onto
+--- -1024..1024, the span the Volume special function reads. Exported for the Volume page's
+--- Normal and Alarm tests, which write what the announcements' own path would.
+Audio.volumeRaw = pct_to_vol_raw
+
+--- Forget which master-volume value this Lua state wrote last, so that its next refresh writes the
+--- value it wants even when that is the value it wrote before. For the Volume page's tests: a test
+--- that puts the earlier value back over the same value the suite wrote meanwhile (a link coming
+--- up, a critical alert) would otherwise leave the suite believing its own value still stands.
+function Audio.forgetMasterVolume()
+  master_gvar_last = nil
+end
+
+-- What the Volume page's tests play: a word and a number, the shape most announcements have, so
+-- the level is heard on both halves of it (the level reaches playFile and playNumber alike).
+local SAMPLE_FILE = "evt/battery.wav"
+local SAMPLE_VALUE = 80
+
+--- Play the sample at `level` (1..5), or at the radio's own Wav volume with `level` nil -- NOT
+--- at the level the settings file holds: the page's test plays what it shows, before a save.
+--- Nothing of this module's own level is touched. Returns true when the file was found and
+--- handed to playFile.
+function Audio.playSample(level)
+  local lv = tonumber(level)
+  if lv ~= nil and (lv < 1 or lv > 5) then lv = nil end
+  local path = resolveEventPath(SAMPLE_FILE)
+  local play, number = _G.playFile, _G.playNumber
+  if not path or type(play) ~= "function" then return false end
+  if not pcall(play, path, lv) then return false end
+  if type(number) == "function" then pcall(number, SAMPLE_VALUE, unitPercent(), 0, lv) end
+  return true
+end
+
 function Audio.resetConnectionState(audioState)
   if type(audioState) ~= "table" then
     return
