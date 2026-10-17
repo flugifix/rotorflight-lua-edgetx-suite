@@ -752,10 +752,11 @@ local function appendCreate(children, x, y, w, i18n, gv, read, reason, help)
     elseif plan.blocked then
       -- Before the save line: saving alone would not make Create available.
       note = blockedText(i18n, plan.blocked)
+    elseif not createAvailable() then
+      -- Nor would it on a radio that cannot write the chain.
+      note = t(i18n, "create_no_api", "This radio cannot write the chain from a script.")
     elseif not saved then
       note = t(i18n, "create_save_first", "Save the page first: Create works on the saved Mode and GV.")
-    elseif not createAvailable() then
-      note = t(i18n, "create_no_api", "This radio cannot write the chain from a script.")
     end
     if note then y = y + appendNote(children, x, y + 2, w, note) end
   end
