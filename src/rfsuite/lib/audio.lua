@@ -943,11 +943,28 @@ local function firstResolvedSound(candidates)
   return nil
 end
 
+-- Why tryPlayEventFile handed nothing over, as its second return value. A missing file has
+-- nothing to play on any later pass either, because resolveEventPath caches the miss, so an
+-- announcement that meets one is done with; a cooldown or a failed hand-over is worth another
+-- try on the next pass. announcementDone below is that rule.
+local PLAY_COOLDOWN = "cooldown"
+local PLAY_NO_FILE = "nofile"
+local PLAY_FAILED = "failed"
+
+-- The files already reported missing, so a sound pack without one says so once rather than at
+-- every announcement that asks for it.
+local missingFileLogged = {}
+
+--- Returns true when the file was handed to playFile; false and PLAY_NO_FILE when the sound pack
+--- has no such file; false alone when playFile is missing or raised.
 local function playResolvedEventFile(relativePath, opts)
   local path = resolveEventPath(relativePath)
   if not path then
-    emitLog(opts, "playFile: file not found for " .. tostring(relativePath), "warn")
-    return false
+    if not missingFileLogged[relativePath] then
+      missingFileLogged[relativePath] = true
+      emitLog(opts, "playFile: file not found for " .. tostring(relativePath), "warn")
+    end
+    return false, PLAY_NO_FILE
   end
   if type(playFile) == "function" then
     emitLog(opts, "playFile -> " .. tostring(path) .. (audio_volume and (" @" .. audio_volume) or ""), "debug")
@@ -970,23 +987,42 @@ local function scheduleAudioCooldown(audioState, now, seconds)
   audioState.nextAllowedAt = now + (seconds or 0.25)
 end
 
+--- Hand one file of the sound pack to EdgeTX, unless the previous file's cooldown still runs.
+---
+--- Returns true when the file was handed over. Otherwise false and the reason: PLAY_COOLDOWN,
+--- PLAY_NO_FILE (the sound pack has no such file) or PLAY_FAILED (playFile is missing or
+--- raised). A caller that only asks whether something played reads the first value as before.
 local function tryPlayEventFile(audioState, now, relativePath, opts)
   if not audioState.lastAlertAt then
     audioState.lastAlertAt = { voltage = 0, esc_temperature = 0 }
   end
   if now < (audioState.nextAllowedAt or 0) then
     emitLog(opts, "cooldown active; skip " .. tostring(relativePath), "debug")
-    return false
+    return false, PLAY_COOLDOWN
   end
 
-  if not playResolvedEventFile(relativePath, opts) then
+  local played, why = playResolvedEventFile(relativePath, opts)
+  if not played then
+    if why == PLAY_NO_FILE then
+      -- Reported once per file, where the miss was found.
+      return false, PLAY_NO_FILE
+    end
     emitLog(opts, "failed to play " .. tostring(relativePath), "warn")
-    return false
+    return false, PLAY_FAILED
   end
 
   scheduleAudioCooldown(audioState, now, 0.25)
   emitLog(opts, "played " .. tostring(relativePath), "info")
   return true
+end
+
+--- Is an announcement done with, so that its repeat interval and repeat count may be booked?
+--- Yes when its file was handed over, and yes when the sound pack has no file for it: nothing
+--- will ever play, and an announcement left unbooked would be tried again on every pass for as
+--- long as its condition holds. No when the cooldown refused it or the hand-over failed; then
+--- it is tried again on the next pass.
+local function announcementDone(played, why)
+  return played == true or why == PLAY_NO_FILE
 end
 
 -- The Raise Volume switch of each alarm on its Settings > Audio > Events page, by the alarm's key.
@@ -1025,7 +1061,8 @@ local RAISE_OFF_BY_DEFAULT = { dropouts = true }
 --- that time extends it, and since the master volume is written only when the value it should
 --- carry changes, an extension writes nothing. The level written follows the Volume page's mode,
 --- so outside Master volume this changes nothing at all. The caller has already decided that the
---- alarm may speak (alertMaySpeak), and the haptic is booked by the caller as before.
+--- alarm may speak (alertMaySpeak), and the haptic is booked by the caller as before. Returns what
+--- tryPlayEventFile returns, the reason included.
 local function tryPlayAlertFile(self, audioState, events, now, relativePath, opts, alertKey, critical)
   if critical and now >= (audioState.nextAllowedAt or 0) then
     local key = RAISE_KEYS[alertKey]
@@ -1074,13 +1111,16 @@ local function announceTemperatureLevel(self, audioState, events, opts, now, ale
       alertCleared(audioState, alertKey)
     end
     if alertMaySpeak(audioState, events, alertKey, now) then
-      if tryPlayAlertFile(self, audioState, events, now, alert.sound, opts, alertKey, level >= 2) then
-        if type(playNumber) == "function" then
+      local played, why = tryPlayAlertFile(self, audioState, events, now, alert.sound, opts, alertKey, level >= 2)
+      if announcementDone(played, why) then
+        if played and type(playNumber) == "function" then
           local value, unit = spokenTemperature(self, temp)
           local ok, err = pcall(playNumber, value, unit, 0, audio_volume)
           if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
         end
-        alertSpoken(audioState, events, alertKey, now, level >= 2)
+        -- Booked without a file as well, the level included: a level left unbooked would count
+        -- as newly entered on the next pass and start over at once.
+        alertSpoken(audioState, events, alertKey, now, played and level >= 2)
         audioState[levelKey] = level
       end
     end
@@ -1625,6 +1665,13 @@ local function announceMainPowerEvent(self, events, opts)
   end
 
   local audioState = self.audioState
+  -- Nothing is judged while the flight controller's frames stay away (Audio.process,
+  -- telemetryQuiet): the pack and BEC readings are its last ones, and a lost pack would be
+  -- announced again every interval from a reading nobody sends any more. Whatever has been
+  -- announced stays as it is, so the pack coming back is still spoken once the frames do.
+  if audioState.telemetryQuiet == true then
+    return
+  end
   local voltage = tonumber(self.state and self.state.voltage)
   if type(voltage) ~= "number" then
     return
@@ -1797,12 +1844,13 @@ local function linkHeadroomAlert(self, audioState, events, alert, headroom, hyst
       alertCleared(audioState, key)
     end
     if alertMaySpeak(audioState, events, key, now) then
-      if tryPlayAlertFile(self, audioState, events, now, alert.sound, opts, key, level >= 2) then
-        if type(playNumber) == "function" then
+      local played, why = tryPlayAlertFile(self, audioState, events, now, alert.sound, opts, key, level >= 2)
+      if announcementDone(played, why) then
+        if played and type(playNumber) == "function" then
           local ok, err = pcall(playNumber, headroom, unitPercent(), 0, audio_volume)
           if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
         end
-        alertSpoken(audioState, events, key, now, level >= 2)
+        alertSpoken(audioState, events, key, now, played and level >= 2)
         slot.level = level
       end
     end
@@ -2126,12 +2174,14 @@ local function txPowerAlert(self, audioState, events, now, opts)
       alertCleared(audioState, "tpwr")
     end
     if alertMaySpeak(audioState, events, "tpwr", now) then
-      if tryPlayAlertFile(self, audioState, events, now, "stat/alerts/txpower.wav", opts, "tpwr", level >= 2) then
-        if type(playNumber) == "function" then
+      local played, why = tryPlayAlertFile(self, audioState, events, now, "stat/alerts/txpower.wav", opts, "tpwr",
+        level >= 2)
+      if announcementDone(played, why) then
+        if played and type(playNumber) == "function" then
           local ok, err = pcall(playNumber, share, unitPercent(), 0, audio_volume)
           if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
         end
-        alertSpoken(audioState, events, "tpwr", now, level >= 2)
+        alertSpoken(audioState, events, "tpwr", now, played and level >= 2)
         slot.level = level
       end
     end
@@ -2478,6 +2528,14 @@ function Audio.process(self, opts)
       Audio.announceConnectionLost(self, rf_link_up(), opts)
     end
   end
+  -- While the frames stay away, every reading the flight controller sends -- pack voltage, BEC,
+  -- ESC and MCU temperature, ESC load, and the fuel estimate built from them -- holds its last
+  -- value: the radio keeps a sensor that has stopped updating for as long as the link streams. An
+  -- alert judging such a reading would announce it again every interval, and a critical one
+  -- would raise the master volume each time. So those alerts are not judged at all until a frame
+  -- arrives: nothing is spoken and nothing they have counted is reset. The link alerts read the
+  -- radio's own link statistics, which stay live, and are judged as before.
+  local fcQuiet = quiet
 
   -- A frame that arrived after the loss was announced is the recovery, and nothing else is: a
   -- gate that re-opens after the link went as well can do so on the flight controller's last
@@ -2570,7 +2628,7 @@ function Audio.process(self, opts)
       -- episode -- and with it the Repeat count -- at every sag.
       local reset = warn + voltageResetPerCell(events) * cells
       local voltage = tonumber(self.state.voltage)
-      if type(voltage) == "number" and voltage > 0 then
+      if type(voltage) == "number" and voltage > 0 and not fcQuiet then
         if voltage <= warn then
           -- The reading has to STAY under the line for the hold before anything is said. A pack
           -- sags under a hard collective pull and is back within a beat or two, and the alert
@@ -2617,11 +2675,13 @@ function Audio.process(self, opts)
             -- that announcement is new, not a repeat.
             local globalLast = getGlobalLowVoltageAt()
             if (entered or now - globalLast >= ALERT_REPEAT_SECONDS) and alertMaySpeak(audioState, events, "voltage", now) then
-              if tryPlayAlertFile(self, audioState, events, now, "evt/lowvbat.wav", opts, "voltage", level >= 2) then
+              local played, why = tryPlayAlertFile(self, audioState, events, now, "evt/lowvbat.wav", opts, "voltage",
+                level >= 2)
+              if announcementDone(played, why) then
                 -- The value the line was crossed at. The alert said only THAT it had been
                 -- crossed, and a pilot deciding whether to land now wants to know by how far.
-                playPackVoltage(events, voltage, cells, opts)
-                alertSpoken(audioState, events, "voltage", now)
+                if played then playPackVoltage(events, voltage, cells, opts) end
+                alertSpoken(audioState, events, "voltage", now, played)
                 setGlobalLowVoltageAt(now)
                 audioState.voltageLevel = level
               end
@@ -2642,7 +2702,7 @@ function Audio.process(self, opts)
 
   if prefEnabled(events, "esc_temperature", false) then
     local escTemp = tonumber(self.state.escTemp)
-    if type(escTemp) == "number" then
+    if type(escTemp) == "number" and not fcQuiet then
       local warn, critical = escTemperatureLevels(events)
       announceTemperatureLevel(self, audioState, events, opts, now, ESC_TEMPERATURE_ALERT, escTemp, warn, critical)
     end
@@ -2650,7 +2710,7 @@ function Audio.process(self, opts)
 
   if prefEnabled(events, "mcu_temperature", false) then
     local mcuTemp = tonumber(self.state.mcuTemp)
-    if type(mcuTemp) == "number" then
+    if type(mcuTemp) == "number" and not fcQuiet then
       local warn, critical = mcuTemperatureLevels(events)
       announceTemperatureLevel(self, audioState, events, opts, now, MCU_TEMPERATURE_ALERT, mcuTemp, warn, critical)
     end
@@ -2680,7 +2740,7 @@ function Audio.process(self, opts)
       end
     else
       local load = tonumber(self.state.escLoad)
-      if type(load) == "number" then
+      if type(load) == "number" and not fcQuiet then
         local warn = tonumber(events.esc_load_warn) or 80
         local critical = tonumber(events.esc_load_critical) or 100
         -- A critical level below the warning level cannot be reached second, so the higher of
@@ -2728,12 +2788,14 @@ function Audio.process(self, opts)
             alertCleared(audioState, "esc_load")
           end
           if alertMaySpeak(audioState, events, "esc_load", now) then
-            if tryPlayAlertFile(self, audioState, events, now, ESC_LOAD_SOUND, opts, "esc_load", level >= 2) then
-              if type(playNumber) == "function" then
+            local played, why = tryPlayAlertFile(self, audioState, events, now, ESC_LOAD_SOUND, opts, "esc_load",
+              level >= 2)
+            if announcementDone(played, why) then
+              if played and type(playNumber) == "function" then
                 local ok, err = pcall(playNumber, math.floor(load + 0.5), unitPercent(), 0, audio_volume)
                 if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
               end
-              alertSpoken(audioState, events, "esc_load", now, level >= 2)
+              alertSpoken(audioState, events, "esc_load", now, played and level >= 2)
               audioState.escLoadLevel = level
             end
           end
@@ -2781,14 +2843,15 @@ function Audio.process(self, opts)
           alertCleared(audioState, "lq")
         end
         if alertMaySpeak(audioState, events, "lq", now) then
-          if tryPlayAlertFile(self, audioState, events, now, "stat/alerts/lq.wav", opts, "lq", level >= 2) then
-            if type(playNumber) == "function" then
+          local played, why = tryPlayAlertFile(self, audioState, events, now, "stat/alerts/lq.wav", opts, "lq", level >= 2)
+          if announcementDone(played, why) then
+            if played and type(playNumber) == "function" then
               local ok, err = pcall(playNumber, math.floor(lq + 0.5), unitPercent(), 0, audio_volume)
               if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
             end
             -- The warning level does not buzz even when the category is set to, which is the
             -- distinction this alert has always drawn between its two levels.
-            alertSpoken(audioState, events, "lq", now, level >= 2)
+            alertSpoken(audioState, events, "lq", now, played and level >= 2)
             audioState.lqLevel = level
           end
         end
@@ -2859,7 +2922,9 @@ function Audio.process(self, opts)
     if armed then
       local bec = tonumber(self.state and (self.state.bec_voltage or self.state.becVoltage))
       local alertType = tonumber(batteryPrefs and batteryPrefs.alert_type) or 0
-      if type(bec) == "number" and bec > 0 and (alertType == 1 or alertType == 2) then
+      -- While the flight controller is silent the reading is its last one: neither judged nor
+      -- averaged, and nothing the two alerts have counted is reset (fcQuiet above).
+      if not fcQuiet and type(bec) == "number" and bec > 0 and (alertType == 1 or alertType == 2) then
         local avgBEC = pushBecAverage(audioState, bec)
 
         -- Switched on under Setup > Power > Alerts rather than here, but they are voltage
@@ -2867,9 +2932,12 @@ function Audio.process(self, opts)
         if alertType == 1 then
           local threshold = normalizeAlertVoltage(batteryPrefs and batteryPrefs.becalertvalue, 6.5)
           if avgBEC < threshold then
-            if alertMaySpeak(audioState, events, "bec_voltage", now)
-              and tryPlayAlertFile(self, audioState, events, now, "evt/becvolt.wav", opts, "bec_voltage", true) then
-              alertSpoken(audioState, events, "bec_voltage", now)
+            if alertMaySpeak(audioState, events, "bec_voltage", now) then
+              local played, why = tryPlayAlertFile(self, audioState, events, now, "evt/becvolt.wav", opts,
+                "bec_voltage", true)
+              if announcementDone(played, why) then
+                alertSpoken(audioState, events, "bec_voltage", now, played)
+              end
             end
           else
             audioState.lastAlertAt.bec_voltage = 0
@@ -2880,9 +2948,12 @@ function Audio.process(self, opts)
         elseif alertType == 2 then
           local threshold = normalizeAlertVoltage(batteryPrefs and batteryPrefs.rxalertvalue, 7.4)
           if avgBEC < threshold then
-            if alertMaySpeak(audioState, events, "rx_voltage", now)
-              and tryPlayAlertFile(self, audioState, events, now, "evt/rxvolt.wav", opts, "rx_voltage", true) then
-              alertSpoken(audioState, events, "rx_voltage", now)
+            if alertMaySpeak(audioState, events, "rx_voltage", now) then
+              local played, why = tryPlayAlertFile(self, audioState, events, now, "evt/rxvolt.wav", opts,
+                "rx_voltage", true)
+              if announcementDone(played, why) then
+                alertSpoken(audioState, events, "rx_voltage", now, played)
+              end
             end
           else
             audioState.lastAlertAt.rx_voltage = 0
@@ -2891,7 +2962,7 @@ function Audio.process(self, opts)
           audioState.lastAlertAt.bec_voltage = 0
           alertCleared(audioState, "bec_voltage")
         end
-      else
+      elseif not fcQuiet then
         audioState.lastAlertAt.bec_voltage = 0
         audioState.lastAlertAt.rx_voltage = 0
         alertCleared(audioState, "bec_voltage")
@@ -2929,7 +3000,7 @@ function Audio.process(self, opts)
         if elapsed >= targetSeconds then
           if audioState.flightTimerTriggered ~= true then
             local sound = "evt/elapsed.wav"
-            if tryPlayEventFile(audioState, now, sound, opts) then
+            if announcementDone(tryPlayEventFile(audioState, now, sound, opts)) then
               audioState.flightTimerTriggered = true
               audioState.lastAlertAt.flight_time = now
             end
@@ -2959,7 +3030,7 @@ function Audio.process(self, opts)
     end
 
     local fuelValue = tonumber(self.state.fuel)
-    if type(fuelValue) == "number" then
+    if type(fuelValue) == "number" and not fcQuiet then
       if fuelValue < 0 then fuelValue = 0 end
       if fuelValue > 100 then fuelValue = 100 end
       if fuelValue > 0 then
@@ -2991,8 +3062,9 @@ function Audio.process(self, opts)
 
       if fuelValue <= 0 and audioState.fuelSeenPositive == true then
         if alertMaySpeak(audioState, events, "fuel_empty", now) then
-          if tryPlayAlertFile(self, audioState, events, now, emptyFuelSound, opts, "fuel_empty", true) then
-            alertSpoken(audioState, events, "fuel_empty", now)
+          local played, why = tryPlayAlertFile(self, audioState, events, now, emptyFuelSound, opts, "fuel_empty", true)
+          if announcementDone(played, why) then
+            alertSpoken(audioState, events, "fuel_empty", now, played)
           end
         end
       else
@@ -3040,7 +3112,9 @@ function Audio.process(self, opts)
 
   -- Once the callout has fired it stays fired for the session.
   if not audioState.initialFuelAnnounced and audioState.initialized and initialFuelWanted(events) then
-    if self.state and self.state.fuelTelemetrySeen == true then
+    -- Held while the flight controller is silent, not given up: the estimate would be its last
+    -- one, and the callout is still made once the frames come back.
+    if self.state and self.state.fuelTelemetrySeen == true and not fcQuiet then
       local fuel = tonumber(self.state.fuel)
       -- Same reason as the battery capacity above: this announcement is meant once per
       -- connection, and a caller that rebuilds its audio state for its own reasons has not
