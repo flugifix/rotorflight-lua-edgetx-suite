@@ -983,8 +983,8 @@ return {
         help_headroom_warn = "The upper level in percent. Spoken without vibration. Default 15 %.",
         help_headroom_critical = "The lower level in percent. Vibrates too if Haptic is on. Default 8 %.",
         help_headroom_hold = "How long the headroom has to stay at or below a level before it is spoken, so a short antenna null stays quiet. 0 speaks at once. Default 2 s.",
-        help_rsnr_alert = "Armed: speaks where the receiver's SNR sits between the air rate's two dynamic-power thresholds, as a percentage.\n0 %: ExpressLRS asks for more power. 100 %: it asks for less. Silent on FLRC and FSK rates, on three ExpressLRS 3.x rates and without a known rate. Off by default.\nWith dynamic power on, ExpressLRS holds the SNR inside this window on purpose; the transmit power says more there.\nOn 900 MHz the window is only 1.5 to 3.5 dB wide, so the figure moves in large steps.",
-        help_tsnr_alert = "Armed: the same for the SNR at the transmitter module, the downlink, with levels of its own; the notes on SNR apply here too. Off by default.",
+        help_rsnr_alert = "Armed: speaks where the receiver's SNR sits between the air rate's dynamic-power thresholds; at 0 % ExpressLRS asks for more power, at 100 % for less. Silent without a threshold. Off by default.",
+        help_tsnr_alert = "Armed: the same for the SNR at the transmitter module, the downlink, with levels of its own. Off by default.",
         help_snr_warn = "The upper level in percent. Spoken without vibration. Default 30 %.",
         help_snr_critical = "The lower level in percent; 0 % is the threshold itself. Vibrates too if Haptic is on. Default 0 %.",
         help_snr_hold = "How long the SNR has to stay at or below a level before it is spoken. 0 speaks at once. Default 2 s.",
@@ -1017,7 +1017,7 @@ return {
         help_message = "Announces a change of PID or rate profile."
       },
       settings_audio_events_esc = {
-        help_message = "ESC Temperature: speaks the temperature at a level; recovering is silent. Warning and Critical are the two levels, kept with the model, and only Critical vibrates.\nMCU Temperature: the same two levels for the MCU, radio-wide.\nESC Load: the current as a % of ESC Current Limit (Setup > Power > Preferences); armed only, silent without a limit. Warning and Critical (%) are its two levels, with vibration at Critical; Hold (s) is how long the load must stay at a level first.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at the critical levels."
+        help_message = "ESC Temperature: speaks the temperature at a level; recovering is silent. Warning and Critical are the two levels, kept with the model, and only Critical vibrates.\nMCU Temperature: the same two levels for the MCU, radio-wide.\nESC Load: the current as a % of ESC Current Limit (Setup > Power > Preferences); armed only, silent without a limit. Warning and Critical (%) are its two levels.\nHold (s): how long the load must stay at a level first; only Critical vibrates.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at the critical levels."
       },
       settings_audio_events_adjustment = {
         help_message = "Announces values changed with the flight controller's adjustment functions."
@@ -2425,7 +2425,7 @@ return {
         tx_power = "TX Power",
         power_dynamic = "dynamic",
         power_fixed = "fixed",
-        help_message = "Compares the ExpressLRS module's link settings with the flight controller's.\nRotorflight: the telemetry mode, link rate and ratio stored on the board.\nELRS Module: the module's packet rate and telemetry ratio.\nTX Power: the module's Max Power and whether dynamic power is on; read only.\nProbe: reads both sides again and writes nothing.\nRF -> ELRS: sets the module to the flight controller's rate and ratio.\nELRS -> RF: sets the flight controller to the module's and saves it.\nBoth ask first, and neither writes while the model is armed."
+        help_message = "Compares the ExpressLRS module's link settings with the flight controller's.\nRotorflight: the telemetry mode, link rate and ratio stored on the board.\nELRS Module: the module's packet rate and telemetry ratio.\nTX Power: the module's Max Power and whether dynamic power is on; read only.\nProbe: reads both sides again and writes nothing.\nRF -> ELRS: sets the module to the flight controller's rate and ratio; asks first, never while armed.\nELRS -> RF: sets the flight controller to the module's and saves it; asks first, never while armed."
       },
       diagnostics_validate_sensors = {
         status_ok = "OK",

@@ -80,6 +80,13 @@
   - The ESC alert now says the temperature after its words, as the MCU alert already did, in the unit set under *Settings* > *Localization*. No new sound file.
   - A settings file written before keeps its warning levels; the critical levels start at their defaults. With both alerts off, which is the default, nothing changes.
 
+### Bug Fixes & Improvements
+
+- **The `?` texts of the ESC, Link and *ELRS Link* pages keep to one line per setting (`i18n/en.lua`, `i18n/de.lua`)**:
+  - *Settings* → *Audio* → *Events* → *Link Quality*: the *SNR* row's own `?` is a single line, in English and German; what the SNR can and cannot tell with dynamic power on, on 900 MHz and on rates without a threshold stays in `docs/audio/events.md`, where it already was. The *Downlink SNR* row no longer points at those notes, and the German *Repeat* row fits its line.
+  - *ESC*: the page's `?` gives *Hold (s)* a line of its own instead of folding it into the *ESC Load* line.
+  - *Tools* → *Diagnostics* → *ELRS Link*: the closing line about asking first and never writing while armed moved into the *RF -> ELRS* and *ELRS -> RF* lines it is about.
+
 # 0.2.0
 
 ### Features & Enhancements
