@@ -138,6 +138,7 @@ end
 
 local function onModeSelected(value)
   ui.config.volume_mode = value
+  ui.createResult = nil
   if value == MODE_LEVEL and (tonumber(ui.config.level) or 0) <= 0 then
     ui.config.level = LEVEL_START
   end
@@ -222,6 +223,8 @@ local function appendGvarPicker(children, x, y, w, labelText, help)
       shown = value
       if gv == (tonumber(ui.config.master_gvar) or 0) then return end
       ui.config.master_gvar = gv
+      -- What the last Create did belongs to the variable it was made for.
+      ui.createResult = nil
       -- Normal and Alert are drawn only with a variable picked.
       ui.runtime.markDirty()
     end
@@ -671,9 +674,13 @@ local function confirmCreate(i18n, gv, shown)
     ui.createResult = { gv = gv, text = text }
     if type(ui.rebuild) == "function" then ui.rebuild() end
   end
-  local reason = lockReason()
-  if reason == "armed" then return finish(t(i18n, "test_locked_armed", "Locked while the model is armed.")) end
-  if reason ~= nil then return finish(t(i18n, "test_locked_uncertain", "Locked: the arming state is not known.")) end
+  -- Locked at Yes: nothing is written, and no result is kept -- the rebuild draws the lock's own
+  -- reason under Create, which goes away with the lock.
+  if lockReason() ~= nil then
+    ui.createResult = nil
+    if type(ui.rebuild) == "function" then ui.rebuild() end
+    return
+  end
   ui.diag = nil
   local read = getDiagnosis(gv)
   local plan = Chain.plan(read)
@@ -723,9 +730,11 @@ local function appendCreate(children, x, y, w, i18n, gv, read, reason, help)
     elseif not createAvailable() then
       note = t(i18n, "create_no_api", "This radio cannot write the chain from a script.")
     end
-    if note and not result then y = y + appendNote(children, x, y + 2, w, note) end
+    if note then y = y + appendNote(children, x, y + 2, w, note) end
   end
-  if result then y = y + appendNote(children, x, y + 2, w, result) end
+  -- While locked, the lock's reason stands alone under Create; otherwise what the last Yes did
+  -- stands under any other reason.
+  if result and reason == nil then y = y + appendNote(children, x, y + 2, w, result) end
   return y - startY
 end
 

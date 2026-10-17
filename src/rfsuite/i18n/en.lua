@@ -903,7 +903,7 @@ return {
         help_test_level = "Test: Play speaks a sample announcement at the Level shown, also before it is saved.",
         help_chain = "Model chain: what the master volume needs; all slots are searched, mixes are not. Before removing it, set the GV to -1024 (or save Mode Off with the tool open), or the pot stays overridden.\nInput: one line, the GV as its source, weight 100, both sides.\nLogical switch: a > x with a = the GV and x = -1024.\nSpecial function: Volume, switched by that logical switch, with that input as its source.",
         help_test_master = "Test: Normal and Alarm set the GV to that level, speak a sample and put the earlier value back after 5 s; only with the whole chain, not while armed or the arming state is unknown.",
-        help_create = "Create: after a preview with No preselected, writes only the missing links into the last free slots; it changes and removes nothing, and the volume follows the GV at once."
+        help_create = "Create: after a preview with No preselected, writes only the missing links into the last free slots; it changes and removes nothing. The volume then follows whatever the GV holds."
       },
       settings_audio_events = {
         section_arming = "Arming Flags",

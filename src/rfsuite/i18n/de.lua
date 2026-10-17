@@ -903,7 +903,7 @@ return {
         help_test_level = "Test: Abspielen spricht eine Beispiel-Ansage in der angezeigten Stufe, auch vor dem Speichern.",
         help_chain = "Modell-Kette: was die Master-Lautstärke braucht; alle Plätze werden gesucht, Mischer nicht. Vor dem Löschen GV auf -1024 setzen (oder bei offenem Tool Modus Aus speichern), sonst wirkt das Poti nicht.\nGeber: eine Zeile, die GV als Quelle, Gewicht 100, beide Seiten.\nLogikschalter: a > x mit a = die GV und x = -1024.\nSpezialfunktion: Lautstärke, geschaltet von diesem Logikschalter, mit diesem Geber als Quelle.",
         help_test_master = "Test: Normal und Alarm setzen die GV auf diese Stufe, sprechen eine Beispiel-Ansage und stellen nach 5 s den vorigen Wert her; nur mit ganzer Kette, nicht wenn scharf oder der Zustand unbekannt ist.",
-        help_create = "Anlegen: schreibt nach einer Vorschau (Nein vorgewählt) nur fehlende Glieder in die letzten freien Plätze; ändert und löscht nichts, die Lautstärke folgt der GV sofort."
+        help_create = "Anlegen: schreibt nach einer Vorschau (Nein vorgewählt) nur fehlende Glieder in die letzten freien Plätze; ändert und löscht nichts. Die Lautstärke folgt dann dem Wert der GV."
       },
       settings_audio_events = {
         section_arming = "Arming-Flags",

@@ -104,9 +104,11 @@ function M.read(gv, gvSource)
   -- Inputs whose source is GVx: by mix source number, the line that carries it.
   local inputs, firstFound = {}, nil
   for i = 0, MAX_INPUTS - 1 do
-    local count = tonumber(call(getInputsCount, i)) or 0
+    local answer = tonumber(call(getInputsCount, i))
+    local count = answer or 0
     lines = lines + count
-    if count == 0 then free.input = i end
+    -- Free only on the firmware's own answer: an input it could not count is not taken as empty.
+    if answer == 0 then free.input = i end
     for l = 0, count - 1 do
       local line = call(getInput, i, l)
       if type(line) == "table" and tonumber(line.source) == gvSource then
