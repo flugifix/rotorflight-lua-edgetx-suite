@@ -101,9 +101,6 @@
 
 - **The checked-in theme index lists Urban's *Telemetry* settings page (`app/pages/settings/dashboard/theme_index.lua`)**:
   - Urban declares five settings pages and the checked-in index -- the list a radio that cannot list folders reads, which the packager regenerates for a build -- named four: the *Telemetry* page came after the row was written. The row is now the one the packager generates from Urban's `init.lua`.
-
-### Bug Fixes & Improvements
-
 - **The `?` texts of the ESC, Link and *ELRS Link* pages keep to one line per setting (`i18n/en.lua`, `i18n/de.lua`)**:
   - *Settings* → *Audio* → *Events* → *Link* (headed *Link Quality*): the *SNR* row's own `?` is a single line, in English and German; what the SNR can and cannot tell with dynamic power on, on 900 MHz and on rates without a threshold stays in `docs/audio/events.md`, where it already was. The *Downlink SNR* row no longer points at those notes, and the German *Repeat* row fits its line.
   - *ESC*: the page's `?` gives *Hold (s)* a line of its own instead of folding it into the *ESC Load* line.
