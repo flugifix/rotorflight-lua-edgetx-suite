@@ -327,7 +327,8 @@ the page that switches an alert on is the page that says how it behaves.
 
 - **Repeat** is *Until cleared*, or a count from 1 to 10. Announcements are ten seconds apart
   either way; a count simply stops after that many and starts over once the condition has
-  cleared. *Until cleared* is what every alert did before this setting existed, and is the
+  cleared, or once an alert with two levels enters a level -- for the low-voltage alert, its
+  step into the critical level. *Until cleared* is what every alert did before this setting existed, and is the
   default everywhere except SmartFuel, which kept the single announcement it already had.
 - **Haptic** is the transmitter's vibration alongside the voice: one short pulse per
   announcement. It defaults to on for the

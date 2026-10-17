@@ -1007,7 +1007,7 @@ return {
         help_voltage_reset = "So weit muss die Spannung über diese Schwelle zurückkommen, in Millivolt pro Zelle, bis die Warnung als behoben gilt und die Wiederholung neu beginnt (50 bis 500). Standard: 100 mV.",
         help_main_power_lost = "Ansage, wenn der Hauptakku weg ist und der Flugregler über BEC oder Stützakku weiterläuft, mit der BEC-Spannung, und erneut mit der Akkuspannung, wenn der Akku zurück ist. Standard: aus.",
         help_voltage_announce = "Akku sagt die Akkuspannung, Zelle die Spannung pro Zelle mit zwei Nachkommastellen. Für Spannung, den wiederkehrenden Akku und Akku nicht voll, nicht für eine BEC-Spannung. Standard: Akku.",
-        help_voltage_repeat = "Wie oft eine Spannungswarnung spricht, solange ihr Zustand anhält, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Spannung ist behoben über Schwelle plus Rückstellung.\nGilt für Spannung, Hauptstrom verloren und den BEC/RX-Alarm aus Setup > Power > Alarme.",
+        help_voltage_repeat = "Wie oft Spannung, Hauptstrom verloren und der BEC/RX-Alarm sprechen, solange sie anhalten, alle 10 s: bis behoben oder 1 bis 10 Mal. Spannung zählt neu unter Min und über Schwelle plus Rückstellung.",
         help_voltage_haptic = "Ob der Sender bei Spannung, Hauptstrom verloren und dem BEC/RX-Alarm vibriert. Standard: an.",
         help_pid_profile = "Sagt die Nummer des PID-Profils bei einem Wechsel. Standard: an.",
         help_rate_profile = "Sagt die Nummer des Raten-Profils bei einem Wechsel. Standard: an.",

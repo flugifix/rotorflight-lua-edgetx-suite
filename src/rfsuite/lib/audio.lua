@@ -2566,10 +2566,11 @@ function Audio.process(self, opts)
               alertCleared(audioState, "voltage")
               entered = true
             end
-            -- A throttle that survives a reload of the module, beside the per-alert interval:
-            -- the tool and the widget each hold their own audio state, and this is what keeps
-            -- one from repeating what the other has just said. The step into the critical level
-            -- is not held back by it: that announcement is new, not a repeat.
+            -- A throttle that survives a reload of the module, beside the per-alert interval. It
+            -- lives in this Lua state's globals, and EdgeTX runs widgets in a state of their own
+            -- (radio/src/lua/widgets.cpp, lua_newstate), so it does not keep the dashboard and the
+            -- tool from both speaking. The step into the critical level is not held back by it:
+            -- that announcement is new, not a repeat.
             local globalLast = getGlobalLowVoltageAt()
             if (entered or now - globalLast >= ALERT_REPEAT_SECONDS) and alertMaySpeak(audioState, events, "voltage", now) then
               if tryPlayAlertFile(self, audioState, events, now, "evt/lowvbat.wav", opts, "voltage", level >= 2) then

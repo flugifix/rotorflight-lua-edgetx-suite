@@ -1007,7 +1007,7 @@ return {
         help_voltage_reset = "How far above that line the voltage has to come back, in millivolts per cell, before the alert counts as cleared and Repeat starts over (50 to 500). Default 100 mV.",
         help_main_power_lost = "Speaks when the main pack is gone while the flight controller still runs on a BEC or backup battery, with the BEC voltage, and again with the pack voltage when the pack is back. Off by default.",
         help_voltage_announce = "Pack speaks the pack voltage, Cell the voltage per cell with two decimals. For Voltage, the pack coming back and Pack Not Full (On Connect), not for a BEC voltage. Default Pack.",
-        help_voltage_repeat = "How often a voltage alert speaks while its condition lasts, 10 s apart: until cleared, or 1 to 10 times. Voltage is cleared once it is back above the line plus Reset.\nApplies to Voltage, Main Power Lost and the BEC/RX alert of Setup > Power > Alerts.",
+        help_voltage_repeat = "How often Voltage, Main Power Lost and the BEC/RX alert speak while they last, 10 s apart: until cleared, or 1 to 10 times. Voltage counts anew below Min and once back above the line plus Reset.",
         help_voltage_haptic = "Whether the transmitter vibrates with Voltage, Main Power Lost and the BEC/RX alert. On by default.",
         help_pid_profile = "Speaks the PID profile's number when it changes. On by default.",
         help_rate_profile = "Speaks the rate profile's number when it changes. On by default.",

@@ -4,5 +4,6 @@
   - Before, the volume followed a condition: the low-voltage alert raised it from the first reading under the warning threshold, before *Hold*, so a sag that never got spoken wrote the global variable twice; a telemetry loss held it raised for 120 seconds; a temperature for as long as it stayed critical. None of these raises it any more unless the alarm is spoken.
   - A *Raise Volume* switch under each alarm on its *Events* page, shown while that alarm is on, 15 switches for 16 alarms (the BEC and receiver alert share one, on the *Voltage* page), on by default except *Telemetry Dropouts*. They act only in *Master volume*, and vibration stays as the page sets it.
   - With *Connected only* on, the link going down now writes `-1024` at once also while the volume is raised.
+  - The last part of the *Volume* page rework (#742); it replaces the raise before the voltage *Hold* (#599, its first site).
   - A settings file in *Off* or *Callout level*, the default, hears nothing different; the switches are written to the file on the first save of their page.
   - The *Voltage* page draws two more rows with its alert on, the default, so its build budget is raised from 6100 to 7950 (`bin/accounting/budgets.lua`, the measured 6335 times 1.25).
