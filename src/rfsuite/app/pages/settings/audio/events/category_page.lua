@@ -282,6 +282,11 @@ local SECTIONS = {
         enabledBy = "lq_alert" },
       { kind = "subheader", labelKey = "section_telemetry", labelFallback = "Telemetry" },
       { kind = "bool", key = "telemetry_lost", labelKey = "telemetry_lost", labelFallback = "Telemetry Lost" },
+      { kind = "bool", key = "dropouts_alert", labelKey = "dropouts_alert", labelFallback = "Telemetry Dropouts" },
+      { kind = "number", key = "dropouts_count", labelKey = "dropouts_count", labelFallback = "Dropouts",
+        enabledBy = "dropouts_alert" },
+      { kind = "number", key = "dropouts_window", labelKey = "dropouts_window", labelFallback = "Window (s)",
+        suffix = " s", enabledBy = "dropouts_alert" },
       -- The level rows take the labels of the link quality rows above and the hold row the label of
       -- the voltage page's: they say the same thing, and the subheader tells the alerts apart.
       { kind = "subheader", labelKey = "section_tx_power", labelFallback = "TX Power" },
@@ -328,11 +333,6 @@ local SECTIONS = {
         enabledBy = "tsnr_alert" },
       { kind = "number", key = "tsnr_hold", labelKey = "voltage_hold", labelFallback = "Hold (s)", suffix = " s",
         enabledBy = "tsnr_alert" },
-      { kind = "bool", key = "dropouts_alert", labelKey = "dropouts_alert", labelFallback = "Telemetry Dropouts" },
-      { kind = "number", key = "dropouts_count", labelKey = "dropouts_count", labelFallback = "Dropouts",
-        enabledBy = "dropouts_alert" },
-      { kind = "number", key = "dropouts_window", labelKey = "dropouts_window", labelFallback = "Window (s)",
-        suffix = " s", enabledBy = "dropouts_alert" },
       { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
       { kind = "choice", key = "link_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
       { kind = "bool", key = "link_haptic", labelKey = "alert_haptic", labelFallback = "Haptic" },

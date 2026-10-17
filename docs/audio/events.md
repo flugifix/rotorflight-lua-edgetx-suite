@@ -198,6 +198,15 @@ Alerts about the radio link and the flight controller's telemetry.
 | Warning (%) | `lq_warn` | 70% | Radio | First warning threshold (1 to 100%). |
 | Critical (%) | `lq_critical` | 50% | Radio | Critical link alarm threshold (1 to 100%). |
 | Telemetry Lost | `telemetry_lost` | Off | Radio | Announces a flight controller that stops sending telemetry while the model is armed and the radio link is up, and announces it again when its telemetry is back. |
+| Telemetry Dropouts | `dropouts_alert` | Off | Radio | Speaks "Telemetry Dropouts" while the model is armed and the flight controller's telemetry frames go missing too often -- see *Telemetry Dropouts* below. |
+| Dropouts | `dropouts_count` | 3 | Radio | How many gaps in the telemetry frames within the window set the alert off (1 to 50). |
+| Window (s) | `dropouts_window` | 10 s | Radio | The time the gaps are counted over (4 to 60 seconds). |
+| TX Power | `tpwr_alert` | Off | Radio | While armed, speaks the transmitter's power as a percentage of its maximum when it climbs to the warning or critical level. Speaks only where the ExpressLRS module reports dynamic power on -- see *TX Power* below. |
+| Warning (%) | `tpwr_warn` | 60% | Radio | The lower TX power level (1 to 100% of the maximum). Spoken without vibration. |
+| Critical (%) | `tpwr_critical` | 85% | Radio | The upper TX power level (1 to 100% of the maximum). A critical level entered below the warning level is taken as the warning level. |
+| Hold (s) | `tpwr_hold` | 2 s | Radio | How long the power has to stay at or above a level before it is spoken (0 to 10 s; 0 speaks at once). |
+| Own Maximum | `tpwr_limit` | Off | Radio | Takes *Maximum (mW)* below as 100% instead of the Max Power read from the module. |
+| Maximum (mW) | `tpwr_max` | 100 mW | Radio | The power taken as 100% while *Own Maximum* is on: 25, 50, 100, 250, 500, 1000 or 2000 mW. |
 | RSSI | `rssi_alert` | Off | Radio | While the model is armed, speaks "RSSI" and the receiver's signal headroom in percent when it falls to the warning or critical level -- see *RSSI and Downlink Headroom* below. |
 | Warning (%) | `rssi_warn` | 15% | Radio | The upper level of the RSSI alert (1 to 100%). |
 | Critical (%) | `rssi_critical` | 8% | Radio | The lower level of the RSSI alert (1 to 100%). |
@@ -214,15 +223,6 @@ Alerts about the radio link and the flight controller's telemetry.
 | Warning (%) | `tsnr_warn` | 30% | Radio | The upper level of the Downlink SNR alert (0 to 100%). |
 | Critical (%) | `tsnr_critical` | 0% | Radio | The lower level of the Downlink SNR alert (0 to 100%). |
 | Hold (s) | `tsnr_hold` | 2 s | Radio | How long the SNR has to stay at or below a level before the Downlink SNR alert speaks it (0 to 10 seconds). |
-| Telemetry dropouts | `dropouts_alert` | Off | Radio | Speaks "Telemetry Dropouts" while the model is armed and the flight controller's telemetry frames go missing too often -- see *Telemetry Dropouts* below. |
-| Dropouts | `dropouts_count` | 3 | Radio | How many gaps in the telemetry frames within the window set the alert off (1 to 50). |
-| Window | `dropouts_window` | 10 s | Radio | The time the gaps are counted over (4 to 60 seconds). |
-| TX Power | `tpwr_alert` | Off | Radio | While armed, speaks the transmitter's power as a percentage of its maximum when it climbs to the warning or critical level. Speaks only where the ExpressLRS module reports dynamic power on -- see *TX Power* below. |
-| Warning (%) | `tpwr_warn` | 60% | Radio | The lower TX power level (1 to 100% of the maximum). Spoken without vibration. |
-| Critical (%) | `tpwr_critical` | 85% | Radio | The upper TX power level (1 to 100% of the maximum). A critical level entered below the warning level is taken as the warning level. |
-| Hold (s) | `tpwr_hold` | 2 s | Radio | How long the power has to stay at or above a level before it is spoken (0 to 10 s; 0 speaks at once). |
-| Own Maximum | `tpwr_limit` | Off | Radio | Takes *Maximum (mW)* below as 100% instead of the Max Power read from the module. |
-| Maximum (mW) | `tpwr_max` | 100 mW | Radio | The power taken as 100% while *Own Maximum* is on: 25, 50, 100, 250, 500, 1000 or 2000 mW. |
 | Repeat | `link_repeat` | Until cleared | Radio | How often the link quality, RSSI, Downlink, both SNR, dropouts and TX power alerts speak while their condition holds -- see *Repeat and Haptic* below. |
 | Haptic | `link_haptic` | On | Radio | Transmitter vibration alongside the link quality, RSSI, Downlink, both SNR and TX power alerts at their **critical** level, and alongside the lost telemetry announcement. Never alongside the dropouts alert. |
 
