@@ -1016,7 +1016,12 @@ function Runtime.getState()
   return state
 end
 
-function Runtime.getProgress()
+--- Startup progress as four plain results: done, total, active, queueIdle.
+--
+-- The dashboard asks this on every logic tick to learn whether the startup reads are done; a
+-- table per call would be garbage at the tick rate for as long as the widget runs, so the values
+-- come back as results. getProgress() below wraps them in a table for callers that want one.
+function Runtime.getProgressValues()
   local total = 0
   local done = 0
 
@@ -1037,6 +1042,12 @@ function Runtime.getProgress()
   end
 
   local active = (state.available == true) and ((done < total) or (queueIdle == false))
+  return done, total, active, queueIdle
+end
+
+--- The same values as getProgressValues(), in a new table on every call.
+function Runtime.getProgress()
+  local done, total, active, queueIdle = Runtime.getProgressValues()
   return {
     active = active,
     done = done,
