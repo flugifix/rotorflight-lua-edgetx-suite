@@ -27,6 +27,11 @@ Always available. A theme appears here when it ships a settings module and does 
 itself standalone; a theme with neither is configured nowhere, and one whose module offers
 nothing opens a page saying so.
 
+The tiles are made when the grid is opened, from the themes installed on the radio. While that
+is under way the grid shows *Loading...*, and then all of its tiles at once; with the shipped
+themes that is a moment. The more themes there are, the longer it takes, and once made the grid
+opens at once until the tool is closed.
+
 ## Settings
 
 | Setting | What it does |
