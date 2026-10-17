@@ -845,7 +845,7 @@ return {
         save_error_message = "Save failed",
         help_message = "One mode at a time, because a callout level under the master volume can only make the announcements quieter.\nOff (radio default): the radio's own volumes; the suite writes nothing.\nCallout level: every announcement at the level set here; the master volume stays with the pot.\nMaster volume: the suite sets the radio's whole volume through a global variable; the model setup is on the docs page.",
         help_mode = "Mode: Off leaves the volume to the radio; Callout level sets how loud the announcements play; Master volume sets the radio's whole volume through a global variable.",
-        help_connected_only = "Connected only: on, the mode acts only while the link is up (the Alert Level also in a critical alert); off, from the start, and in Master volume the pot then stays overridden.",
+        help_connected_only = "Connected only: off, where a new setup starts, the mode acts from the start and in Master volume the pot stays overridden; on, only while the link is up (the Alert Level also in a critical alert).",
         help_level = "Level: 1 to 5 for every announcement and the number after it; 3 plays as loud as the radio's Wav volume 0, 5 is the loudest.",
         help_master_gvar = "Global Variable: the GV the suite writes the master volume to, -1024 when it lets go. Only the GVs this radio has are listed; Mode Off turns the master volume off.",
         help_master_normal = "Normal Level (%): written while no critical alert is active; with Connected only on, only while the link is up.",
