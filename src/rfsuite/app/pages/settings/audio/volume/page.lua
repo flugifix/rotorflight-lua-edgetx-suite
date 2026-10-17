@@ -586,9 +586,27 @@ local function blockedText(i18n, why)
   return t(i18n, "create_blocked_fault", "A link above is faulty. Create changes no link: fix it by hand, then open the page again.")
 end
 
+-- EdgeTX's CHAR_INPUT (radio/src/translations/untranslated.h), which it draws before the number of
+-- an input that has no name of its own.
+local INPUT_SYMBOL = "\xC2\x8E"
+
+-- A link's name as EdgeTX shows it once the link is there. EdgeTX names only a slot that is in use
+-- (getSourceName / getSwitchName answer nil for an empty one), so a slot still to be written is
+-- named the way EdgeTX names it after the write (radio/src/strhelpers.cpp): the input symbol and a
+-- two-digit number, or L01..L64.
 local function linkName(read, kind, slot)
-  if kind == "input" then return slotName("input", slot, read.firstInput + slot) end
-  if kind == "ls" then return slotName("ls", slot, read.lsBase + slot) end
+  if kind == "input" then
+    local ok, name = false, nil
+    if type(_G.getSourceName) == "function" then ok, name = pcall(_G.getSourceName, read.firstInput + slot) end
+    if ok and type(name) == "string" and name ~= "" then return name end
+    return INPUT_SYMBOL .. string.format("%02d", slot + 1)
+  end
+  if kind == "ls" then
+    local ok, name = false, nil
+    if type(_G.getSwitchName) == "function" then ok, name = pcall(_G.getSwitchName, read.lsBase + slot) end
+    if ok and type(name) == "string" and name ~= "" then return name end
+    return string.format("L%02d", slot + 1)
+  end
   return slotName("sf", slot)
 end
 
