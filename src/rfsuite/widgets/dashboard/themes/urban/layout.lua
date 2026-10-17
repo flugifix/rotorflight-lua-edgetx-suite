@@ -1895,21 +1895,22 @@ end
 -- label's colour is a constant of the build, so without the term the warn colour would never
 -- clear. The picked pack is not a term: nothing drawn depends on it.
 --
--- This runs every 0.5 s inside the host's STATE pass: one sensor read, no table allocation,
--- no probe of the card or the settings. What a build reads beyond this (the radio's battery
--- range, the image on the card) is read at build time and is not a term.
+-- This runs every 0.5 s inside the host's STATE pass: one sensor read, no probe of the card or
+-- the settings. The key is one `..` expression, so no list is built to be joined; a term string
+-- or the key itself is allocated only when Lua does not already hold it as a short string --
+-- with unchanged inputs and no long model-image path, nothing. What a build reads beyond this
+-- (the radio's battery range, the image on the card) is read at build time and is not a term.
 function L.renderKey(zone, state)
   local derived = state and state.derived or nil
   local bp = state and type(state.batteryPick) == "table" and state.batteryPick or nil
-  return table.concat({
-    "urban",
-    tostring(zone and zone.w or 0),
-    tostring(zone and zone.h or 0),
-    tostring(Common.cells(state or {})),
+  return "urban"
+    .. "|" .. tostring(zone and zone.w or 0)
+    .. "|" .. tostring(zone and zone.h or 0)
+    .. "|" .. tostring(Common.cells(state or {}))
     -- The picture the host resolved -- which follows the craft name and the cell count as well
     -- as the EdgeTX bitmap -- and whether a second antenna has been seen, which adds a bar.
-    tostring(derived and derived.model_image or ""),
-    L.diversity(state) and "div" or "",
+    .. "|" .. tostring(derived and derived.model_image or "")
+    .. "|" .. (L.diversity(state) and "div" or "")
     -- The phase, and it is `themePhase` rather than `flightMode` on purpose.
     --
     -- A host that knows the two refinement phases puts the widget into `armed` on the arm edge
@@ -1926,10 +1927,9 @@ function L.renderKey(zone, state)
     --
     -- `flightMode` is the fallback for a host that publishes no `themePhase`: there the two
     -- refinement phases do not exist either, so the term is what it always was.
-    tostring(state and (state.themePhase or state.flightMode) or ""),
-    tostring(txBatteryStep()),
-    tostring(bp and bp.pending or false)
-  }, "|")
+    .. "|" .. tostring(state and (state.themePhase or state.flightMode) or "")
+    .. "|" .. tostring(txBatteryStep())
+    .. "|" .. tostring(bp and bp.pending or false)
 end
 
 if type(_G) == "table" then _G.__rfsuiteThemeUrbanLayoutModule = L end
