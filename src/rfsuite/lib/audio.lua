@@ -1459,8 +1459,11 @@ function Audio.packNotFull(state, memo, events)
     return nil
   end
 
-  local fullCell = normalizeCellVoltage(bc.vbatmaxcellvoltage, 4.2)
-  local margin = tonumber(events and events.pack_not_full_margin) or 100
+  -- Full cell voltage, not Max: Max is the top of a cell's range, which the flight controller
+  -- uses to detect the cell count (4.30 V by default, above what a charged pack reads). Full is
+  -- what the firmware's own "battery not full" warning compares with, and without a margin.
+  local fullCell = normalizeCellVoltage(bc.vbatfullcellvoltage, 4.1)
+  local margin = tonumber(events and events.pack_not_full_margin) or 0
   if margin < 0 then margin = 0 end
   local perCell = voltage / cells
 

@@ -39,7 +39,7 @@ translations, like every other theme's, so it speaks the language of the package
   below, and green above that — or orange instead of green when the pack was not full when it
   was plugged in. The two steps are set on the *Look* page, 20 % for yellow and 0 % for red unless
   they are changed. The not-full verdict is the suite's own, taken once per connection against
-  the flight controller's *Max cell voltage* less the *Margin* of the *Pack Not Full* announcement
+  the flight controller's *Full cell voltage* less the *Margin* of the *Pack Not Full* announcement
   (*Settings* → *Audio* → *Events* → *On Connect*), and it is drawn whether or not that
   announcement is switched on. Yellow and red still come first: a not-full pack that runs down
   turns yellow and then red like any other.
