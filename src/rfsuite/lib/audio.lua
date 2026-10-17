@@ -1132,7 +1132,7 @@ end
 local ESC_TEMPERATURE_ALERT = { alertKey = "esc_temperature", levelKey = "escTempLevel", sound = "evt/esctemp.wav" }
 local MCU_TEMPERATURE_ALERT = { alertKey = "mcu_temperature", levelKey = "mcuTempLevel", sound = "stat/alerts/mcu.wav" }
 
-local function fuelThresholdList(selection)
+local function coarseFuelThresholds(selection)
   local sel = tonumber(selection) or 10
   if sel == 0 then return { 100, 10 } end
   if sel == 5 then return { 100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5 } end
@@ -1142,6 +1142,51 @@ local function fuelThresholdList(selection)
   if sel == 50 then return { 100, 50, 10 } end
   if sel > 0 then return { sel } end
   return { 100, 90, 80, 70, 60, 50, 40, 30, 20, 10 }
+end
+
+-- The levels *Finer below* offers (Settings > Audio > Events > SmartFuel). Any other value, the
+-- missing key included, is Off: the callout steps are the coarse ones alone, exactly as before
+-- the setting existed. *Finer step* outside its three values reads as its default, 5 %.
+local FUEL_FINER_BELOW = { [10] = true, [15] = true, [20] = true, [25] = true, [30] = true, [40] = true, [50] = true }
+local FUEL_FINER_STEP = { [1] = true, [2] = true, [5] = true }
+
+-- The list the callout last asked for, kept with the three settings it was built from: the
+-- callout runs on every audio pass and its settings change only when a page is saved.
+local fuelThresholdsFor = { selection = false, below = false, step = false, list = nil }
+
+--- The levels at which the falling SmartFuel level is spoken, highest first (the crossing test
+--- in Audio.process speaks the lowest one passed and relies on that order).
+---
+--- With *Finer below* at T and a *Finer step* of s: the coarse steps above T, then T itself,
+--- then every multiple of s below T down to s. So every 20 % with finer steps of 5 % below 30 %
+--- is 100, 80, 60, 40, 30, 25, 20, 15, 10, 5; with 2 % below 25 % the finer part is 25, 24, 22 … 2.
+local function fuelThresholdList(selection, finerBelow, finerStep)
+  local cache = fuelThresholdsFor
+  if cache.list and cache.selection == selection and cache.below == finerBelow and cache.step == finerStep then
+    return cache.list
+  end
+
+  local list = coarseFuelThresholds(selection)
+  local below = tonumber(finerBelow)
+  if below and FUEL_FINER_BELOW[below] then
+    local step = tonumber(finerStep)
+    if not (step and FUEL_FINER_STEP[step]) then step = 5 end
+    local merged = {}
+    for i = 1, #list do
+      if list[i] > below then merged[#merged + 1] = list[i] end
+    end
+    merged[#merged + 1] = below
+    local level = below - (below % step)
+    if level == below then level = level - step end
+    while level >= step do
+      merged[#merged + 1] = level
+      level = level - step
+    end
+    list = merged
+  end
+
+  cache.selection, cache.below, cache.step, cache.list = selection, finerBelow, finerStep, list
+  return list
 end
 
 local function resolveSmartfuelModel(self)
@@ -1682,13 +1727,22 @@ local function announceMainPowerEvent(self, events, opts, fcQuiet)
 
   if not lost then
     if voltage > MAIN_POWER_LOST_VOLTS and audioState.mainPowerLostActive then
-      audioState.mainPowerLostActive = false
       audioState.lastAlertAt.main_power = 0
       alertCleared(audioState, "main_power")
-      emitLog(opts, "main power back at " .. string.format("%.1f", voltage) .. " V", "info")
+      -- The flag says what has been announced, so it goes only once the pack coming back has
+      -- been: refused by the cooldown after another announcement in this pass, it is tried again
+      -- on the next one. A sound pack with neither file has nothing to say, so that is done too.
       local soundFile = firstResolvedSound(MAIN_POWER_OK_SOUNDS)
-      if soundFile and tryPlayEventFile(audioState, now, soundFile, opts) then
-        playPackVoltage(events, voltage, flightPackCells(self.state, sessionBatteryConfig()), opts)
+      local played, why = false, PLAY_NO_FILE
+      if soundFile then
+        played, why = tryPlayEventFile(audioState, now, soundFile, opts)
+      end
+      if announcementDone(played, why) then
+        audioState.mainPowerLostActive = false
+        emitLog(opts, "main power back at " .. string.format("%.1f", voltage) .. " V", "info")
+        if played then
+          playPackVoltage(events, voltage, flightPackCells(self.state, sessionBatteryConfig()), opts)
+        end
       end
     end
     return
@@ -3088,7 +3142,8 @@ function Audio.process(self, opts)
           if lastCallout == nil then
             audioState.lastFuelCallout = currentRounded
           else
-            local thresholds = fuelThresholdList(events.fuel_callout_percent)
+            local thresholds = fuelThresholdList(events.fuel_callout_percent, events.fuel_finer_below,
+              events.fuel_finer_step)
             local lowestCrossed = nil
             for i = 1, #thresholds do
               local threshold = thresholds[i]
@@ -3098,14 +3153,18 @@ function Audio.process(self, opts)
             end
             if lowestCrossed then
               local calloutSound = isElectricModel and "evt/battery.wav" or "stat/alerts/fuel.wav"
-              if tryPlayEventFile(audioState, now, calloutSound, opts) then
-                if type(playNumber) == "function" then
-                  emitLog(opts, "fuel callout playNumber -> " .. tostring(lowestCrossed), "info")
-                  local ok, err = pcall(playNumber, lowestCrossed, unitPercent(), 0, audio_volume)
-                  if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
-                end
+              local played, why = tryPlayEventFile(audioState, now, calloutSound, opts)
+              if played and type(playNumber) == "function" then
+                emitLog(opts, "fuel callout playNumber -> " .. tostring(lowestCrossed), "info")
+                local ok, err = pcall(playNumber, lowestCrossed, unitPercent(), 0, audio_volume)
+                if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
               end
-              audioState.lastFuelCallout = currentRounded
+              -- The step is passed only once it was spoken, or once the sound pack turned out to
+              -- have no file for it. Refused by the cooldown after another announcement in this
+              -- pass, it is still crossed on the next one and spoken then.
+              if announcementDone(played, why) then
+                audioState.lastFuelCallout = currentRounded
+              end
             elseif currentRounded > lastCallout then
               audioState.lastFuelCallout = currentRounded
             end

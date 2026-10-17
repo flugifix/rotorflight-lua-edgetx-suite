@@ -990,6 +990,11 @@ return {
         fuel_callout_20 = "Alle 20%",
         fuel_callout_25 = "Alle 25%",
         fuel_callout_50 = "Alle 50%",
+        fuel_callout_1 = "Alle 1%",
+        fuel_callout_2 = "Alle 2%",
+        fuel_finer_below = "Feiner unter",
+        fuel_finer_step = "Feine Stufe",
+        fuel_finer_off = "Aus",
         battery_profile = "Akkukapazität",
         initial_fuel = "SmartFuel",
         model_announcement = "Modellname",
@@ -1029,6 +1034,8 @@ return {
         help_adjustment_events = "Sagt den neuen Wert, wenn eine Adjustment-Funktion eine Einstellung ändert, sobald er eine Sekunde steht; mit dem Namen der Funktion, wenn es eine andere als zuletzt ist. Standard: aus.",
         help_fuel_alerts = "Sagt den SmartFuel-Stand beim Unterschreiten der darunter gewählten Stufen und warnt bei 0 %. Standard: an.",
         help_fuel_callout_percent = "Die Stufen, bei denen der fallende Stand gesagt wird, jede einmal. Nur bei 10% sagt nur die 10-%-Stufe. Standard: alle 10 %.",
+        help_fuel_finer_below = "Ab diesem Stand abwärts feinere Stufen: der Stand selbst, dann jede Feine Stufe darunter, statt der Stufen von Ansage % dort. Standard: aus.",
+        help_fuel_finer_step = "Die feine Stufe, gesagt an ihren Vielfachen: 2 % unter 25 % sagt 25, 24, 22 und so weiter bis 2 %. Nur wirksam, wenn Feiner unter gesetzt ist. Standard: 5 %.",
         help_fuel_repeat_below_zero = "Wie oft die Leer-Warnung spricht, solange der Stand bei 0 % bleibt, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Standard: einmal.",
         help_fuel_haptic_below_zero = "Ob der Sender bei der Leer-Warnung vibriert. Standard: aus.",
         help_lq_alert = "Sagt die Linkqualität in Prozent, wenn sie auf die Warn- oder kritische Stufe fällt. Die Erholung bleibt still, ebenso ein Empfänger ohne Linkqualität. Standard: aus.",
@@ -1092,7 +1099,7 @@ return {
         help_message = "Ansage von Werten, die über die Adjustment-Funktionen des Flugreglers geändert werden."
       },
       settings_audio_events_fuel = {
-        help_message = "Ansagen des SmartFuel-Stands bei Verbindung: berechnet vom Flugregler, wenn SmartFuel dort an ist (ab MSP API 12.0.9), sonst vom Sender (Setup > Power > Einstellungen).\nSmartFuel: der fallende Stand an den Stufen unten und eine Warnung bei 0 %.\nAnsage %: die Stufen, an denen der Stand gesagt wird.\nWiederholung: wie oft die Warnung bei 0 % spricht, alle 10 s.\nHaptisch: vibriert bei der Warnung bei 0 %.\nLautstärke anheben: nur Master-Lautstärke; die Warnung bei 0 % mit der Alarm-Stufe."
+        help_message = "Ansagen des SmartFuel-Stands bei Verbindung: berechnet vom Flugregler, wenn SmartFuel dort an ist (ab MSP API 12.0.9), sonst vom Sender (Setup > Power > Einstellungen).\nSmartFuel: der fallende Stand an den Stufen unten und eine Warnung bei 0 %.\nAnsage %: die Stufen, an denen der Stand gesagt wird.\nFeiner unter, Feine Stufe: ab diesem Stand abwärts jede feine Stufe.\nWiederholung: wie oft die Warnung bei 0 % spricht, alle 10 s.\nHaptisch: vibriert bei der Warnung bei 0 %.\nLautstärke anheben: nur Master-Lautstärke; die Warnung bei 0 % mit der Alarm-Stufe."
       },
       settings_audio_events_link = {
         help_message = "Linkqualität, RSSI, Downlink und beide SNR: gesagt auf jeder Stufe; die Signalalarme als Reserve über der Grenze bzw. SNR zwischen den Schwellen; nur Kritisch vibriert.\nLautstärke anheben: nur Master-Lautstärke; die oberste Stufe mit der Alarm-Stufe.\nTelemetrie verloren: scharf, der Flugregler schweigt.\nTelemetrie-Aussetzer: scharf, Frames fehlen zu oft; Aussetzer: Lücken, Zeitfenster (s): die Zeit.\nSendeleistung: scharf, in % des Maximums, nur dynamisch; Eigenes Maximum setzt es.\nHaltezeit (s): so lange muss eine Stufe anstehen. Wiederholung: wie oft, alle 10 s. Haptisch: bei Kritisch."

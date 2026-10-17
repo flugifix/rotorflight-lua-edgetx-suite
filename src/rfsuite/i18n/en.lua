@@ -990,6 +990,11 @@ return {
         fuel_callout_20 = "Every 20%",
         fuel_callout_25 = "Every 25%",
         fuel_callout_50 = "Every 50%",
+        fuel_callout_1 = "Every 1%",
+        fuel_callout_2 = "Every 2%",
+        fuel_finer_below = "Finer below",
+        fuel_finer_step = "Finer step",
+        fuel_finer_off = "Off",
         battery_profile = "Battery Capacity",
         initial_fuel = "SmartFuel",
         model_announcement = "Model Name",
@@ -1029,6 +1034,8 @@ return {
         help_adjustment_events = "Speaks the new value when an adjustment function changes a setting, once it has held for a second; with the function's name when it differs from the last one. Off by default.",
         help_fuel_alerts = "Speaks the SmartFuel level as it falls past the steps chosen below, and warns when it reaches 0 %. On by default.",
         help_fuel_callout_percent = "The steps at which the falling level is spoken, each once. Only at 10% speaks just the 10 % step. Default every 10 %.",
+        help_fuel_finer_below = "From this level down the steps are finer: the level itself, then every Finer step below it, in place of the Callout % steps there. Default off.",
+        help_fuel_finer_step = "The finer step, spoken at its multiples: 2 % below 25 % speaks 25, 24, 22 and on down to 2 %. Used only while Finer below is set. Default 5 %.",
         help_fuel_repeat_below_zero = "How often the empty warning speaks while the level stays at 0 %, 10 s apart: until cleared, or 1 to 10 times. Default once.",
         help_fuel_haptic_below_zero = "Whether the transmitter vibrates with the empty warning. Off by default.",
         help_lq_alert = "Speaks the link quality in percent when it falls to the warning or critical level. Recovering is silent, and so is a receiver that reports no link quality. Off by default.",
@@ -1092,7 +1099,7 @@ return {
         help_message = "Announces values changed with the flight controller's adjustment functions."
       },
       settings_audio_events_fuel = {
-        help_message = "Callouts of the SmartFuel level while connected: computed by the flight controller with SmartFuel on (MSP API 12.0.9 or later), else by the radio (Setup > Power > Preferences).\nSmartFuel: the falling level at the steps below, and a warning at 0 %.\nCallout %: the steps at which the level is spoken.\nRepeat: how often the warning at 0 % speaks, 10 s apart.\nHaptic: vibrates with the warning at 0 %.\nRaise Volume: Master volume only; the warning at 0 % at the Alert Level."
+        help_message = "Callouts of the SmartFuel level while connected: computed by the flight controller with SmartFuel on (MSP API 12.0.9 or later), else by the radio (Setup > Power > Preferences).\nSmartFuel: the falling level at the steps below, and a warning at 0 %.\nCallout %: the steps at which the level is spoken.\nFiner below, Finer step: from that level down, every finer step instead.\nRepeat: how often the warning at 0 % speaks, 10 s apart.\nHaptic: vibrates with the warning at 0 %.\nRaise Volume: Master volume only; the warning at 0 % at the Alert Level."
       },
       settings_audio_events_link = {
         help_message = "Link Quality, RSSI, Downlink and both SNR: spoken at each level; the signal ones as headroom over the air rate's floor or SNR between its thresholds; only Critical vibrates.\nRaise Volume: Master volume only; the top level at the Alert Level.\nTelemetry Lost: armed, the controller stops.\nTelemetry Dropouts: armed, frames missing too often; Dropouts: how many gaps, Window (s): the time.\nTX Power: armed, power in % of the maximum, dynamic only; Own Maximum sets it.\nHold (s): how long a level must hold first. Repeat: how often an alert speaks, 10 s apart. Haptic: vibrates at Critical."
