@@ -23,6 +23,8 @@ come from the suite's translations, so it speaks the language of the package tha
 
 ## What it shows
 
+![Grid before, during and after the flight, on a TX16S MK3](../images/dashboard/themes/grid.png)
+
 **On the ground and in flight** one screen, which does not change shape at spool-up:
 
 - **Top bar** — Urban's: in full screen the menu and the tool buttons at the left, then the
