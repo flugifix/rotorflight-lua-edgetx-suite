@@ -343,10 +343,10 @@ the page that switches an alert on is the page that says how it behaves.
   when the model connects and is latched for the rest of that connection. **Neither is
   Rescue**, whose two announcements are spoken once per change of state.
 - **A file the sound pack lacks** leaves its announcement silent and without vibration. The
-  alerts in the table above, and the flight timer, count it as made: such an alert is tried again
-  after the usual ten seconds and spends its *Repeat* count as if it had spoken. *Main Power Lost*,
-  *Telemetry Lost* and *Telemetry Dropouts* look for their file first and stay silent without one.
-  The log names a missing file once.
+  alerts in the table above count it as made: such an alert is tried again after the usual ten
+  seconds and spends its *Repeat* count as if it had spoken. The flight timer counts it as made
+  for that flight. The log names such a file once. *Main Power Lost*, *Telemetry Lost* and
+  *Telemetry Dropouts* look for their file first and stay silent without one.
 
 ## While the Flight Controller Is Silent
 
@@ -360,18 +360,20 @@ test *Telemetry Lost* is spoken on (also when that announcement is off):
 - **Held:** low pack voltage, *Main Power Lost*, the BEC / receiver alert, ESC temperature, MCU
   temperature, ESC load, the empty SmartFuel alarm, the SmartFuel percentage callouts and the
   SmartFuel level spoken on connect.
-- **Not held:** the link alerts (link quality, RSSI, Downlink, both SNR, TX power, telemetry
-  dropouts, telemetry lost), which read the radio's own link statistics; the flight timer; the
-  announcements made on a change -- arming, governor, profiles, rescue -- which a value that
-  stands still never sets off; and the pack check, made once when the model connects.
-- **Nothing a held alert has counted starts over.** Its *Repeat* count, its level and its *Hold*
-  time stand as they were, and it is judged again from the first frame that arrives: a SmartFuel
-  step passed during the silence, or the level on connect, is spoken then, and *Main Power
-  Back* is still announced when the pack reads again.
+- **Not held:** the link alerts (link quality, RSSI, Downlink, both SNR, TX power), which read
+  the radio's own link statistics; telemetry dropouts and telemetry lost, which watch the frames
+  arriving; the flight timer; the announcements made on a change or once on connect -- arming,
+  governor, profiles, rescue, the model name -- which a value that stands still never sets off;
+  and the pack check, made once when the model connects.
+- **Nothing a held alert has counted starts over.** Its *Repeat* count and its level stand as
+  they were, and it is judged again from the first frame that arrives: a SmartFuel step passed
+  during the silence, or the level on connect, is spoken then, and *Main Power Back* is still
+  announced when the pack reads again. A *Hold* that had begun keeps its start, so a reading
+  still past the line when the frames return can be spoken at once.
 - A held alert is not spoken, so it raises nothing under *Raise Volume*.
 - The test needs the time of the flight controller's last telemetry frame, and a frame received
-  during the current connection: until one has arrived, or with a flight controller whose
-  telemetry never records one, nothing is held.
+  since the suite's first audio pass of the current connection: until one has arrived, or with a
+  flight controller whose telemetry never records one, nothing is held.
 
 ## Raise Volume
 
