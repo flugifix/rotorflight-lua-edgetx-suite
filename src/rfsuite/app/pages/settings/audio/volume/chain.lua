@@ -231,10 +231,14 @@ function M.read(gv, gvSource)
   -- The flight modes and timers name switches too (model.getFlightMode, model.getTimer); a radio
   -- without either getter has none of them counted. FM0 has no switch.
   local getFlightMode, getTimer = api("getFlightMode"), api("getTimer")
+  local fmSwitch = {}
   if getFlightMode then
     for fm = 1, MAX_FLIGHT_MODES - 1 do
       local mode = call(getFlightMode, fm)
-      if type(mode) == "table" then nameSwitch(mode.switch) end
+      if type(mode) == "table" then
+        nameSwitch(mode.switch)
+        fmSwitch[fm] = tonumber(mode.switch)
+      end
     end
   end
   if getTimer then
@@ -268,14 +272,16 @@ function M.read(gv, gvSource)
   -- The global variable in each flight mode, as EdgeTX's getter answers it: the value the mode
   -- uses, which is FM0's while the mode keeps EdgeTX's default ("use FM0's value"). A mode with
   -- a value of its own shows only as a different value. The input and the logical switch read the
-  -- ACTIVE mode's value (mixer.cpp), and the suite writes FM0's.
+  -- ACTIVE mode's value (mixer.cpp), and the suite writes FM0's. A mode with no switch is never
+  -- active (getFlightMode in edgetx.cpp): a mode the firmware answers switch 0 for is skipped, one
+  -- whose switch cannot be read still counts.
   local ownModes = nil
   local getGlobalVariable = api("getGlobalVariable")
   if getGlobalVariable then
     local base = tonumber(call(getGlobalVariable, gv - 1, 0))
     if base ~= nil then
       for fm = 1, MAX_FLIGHT_MODES - 1 do
-        local v = tonumber(call(getGlobalVariable, gv - 1, fm))
+        local v = fmSwitch[fm] ~= 0 and tonumber(call(getGlobalVariable, gv - 1, fm)) or nil
         if v ~= nil and v ~= base then
           ownModes = ownModes or {}
           ownModes[#ownModes + 1] = fm
@@ -351,7 +357,8 @@ function M.read(gv, gvSource)
   local details = api("getGlobalVariableDetails")
   local gvDetails = details and call(details, gv - 1)
   if type(gvDetails) == "table" and gvDetails.popup and gvDetails.popup ~= 0 then warn.popup = true end
-  -- The flight modes (1..8) whose value of GVx is not FM0's: there the chain follows that value.
+  -- The flight modes (1..8) with a switch whose value of GVx is not FM0's: there the chain follows
+  -- that value.
   warn.gvModes = ownModes
 
   return result
