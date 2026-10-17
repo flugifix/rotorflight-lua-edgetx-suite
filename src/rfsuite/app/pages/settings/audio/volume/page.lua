@@ -314,7 +314,7 @@ end
 -- What the model holds for the global variable being shown, read once per visit and per global
 -- variable: on opening the page, on picking another one, and on Reload. Every other rebuild --
 -- Connected only, a `?` sheet closing, the arming edge -- draws the same answer again, because a
--- walk reads every input, logical switch and special function of the model.
+-- walk reads every input, mix line, logical switch and special function of the model.
 local function getDiagnosis(gv)
   if ui.diag and ui.diag.gv == gv then return ui.diag.result end
   if not Chain then Chain = loadModule("app/pages/settings/audio/volume/chain.lua") end

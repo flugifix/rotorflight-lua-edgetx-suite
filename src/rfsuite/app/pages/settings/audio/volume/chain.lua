@@ -9,8 +9,8 @@
 --   a Volume special function switched by that logical switch, with that input as its source
 --                                                     (model.getCustomFunction: `switch`, `func`, `value`)
 -- Any slots will do, so all of them are searched: whatever combination forms a complete chain
--- counts. Mixes are not searched -- a mix that also uses GVx is the pilot's own business, and
--- reading every line of every channel would cost more than the whole rest of this.
+-- counts. Mixes are not searched for GVx -- a mix that also uses it is the pilot's own business --
+-- but every mix line is read for the switch and the source it names (see `free` below).
 --
 -- The encodings, from radio/src at EdgeTX 2.12:
 --   * an input's `source` and a logical switch's `v1` are mix source numbers; GV n is
@@ -106,9 +106,11 @@ local function sfValueIsSource(cf)
   return func == tonumber(G.FUNC_ADJUST_GVAR) and (mode == 1 or mode == 2)
 end
 
--- EdgeTX's MAX_FLIGHT_MODES and MAX_TIMERS on every colour radio (radio/src/dataconstants.h).
+-- EdgeTX's MAX_FLIGHT_MODES, MAX_TIMERS and MAX_OUTPUT_CHANNELS on every colour radio
+-- (radio/src/dataconstants.h).
 local MAX_FLIGHT_MODES = 9
 local MAX_TIMERS = 3
+local MAX_CHANNELS = 32
 
 --- What the model holds for global variable `gv` (1-based), whose mix source number is `gvSource`.
 ---
@@ -129,8 +131,8 @@ local MAX_TIMERS = 3
 ---   free      { input, ls, sf }: the LAST free slot of each kind, 0-based, or nil when none is free
 ---             -- an input with no line, a logical switch with no function, a special function with no
 ---             switch (EdgeTX's own CFN_EMPTY; function 0 is a real function, Override channel) -- and
----             an empty input or logical switch counts as free only while no input line, logical
----             switch, special function, flight mode or timer still names it. `inputNamed` /
+---             an empty input or logical switch counts as free only while no input line, mix line,
+---             logical switch, special function, flight mode or timer still names it. `inputNamed` /
 ---             `lsNamed` are true when an empty one was passed over for that reason.
 ---   lines     the input lines the model uses; EdgeTX holds 64 in all (MAX_EXPOS), and inserting
 ---             one more silently writes nothing.
@@ -185,6 +187,21 @@ function M.read(gv, gvSource)
         if inputs[firstInput + i] == nil and tonumber(line.source) == gvSource then
           inputs[firstInput + i] = { slot = i, line = line, lines = count }
           if firstFound == nil then firstFound = firstInput + i end
+        end
+      end
+    end
+  end
+
+  -- Every mix line names a switch and a source (model.getMixesCount, model.getMix: `switch`,
+  -- `source`); a radio without either getter has no mix counted.
+  local getMixesCount, getMix = api("getMixesCount"), api("getMix")
+  if getMixesCount and getMix then
+    for ch = 0, MAX_CHANNELS - 1 do
+      for l = 0, (tonumber(call(getMixesCount, ch)) or 0) - 1 do
+        local mix = call(getMix, ch, l)
+        if type(mix) == "table" then
+          nameSwitch(mix.switch)
+          nameSource(mix.source)
         end
       end
     end
