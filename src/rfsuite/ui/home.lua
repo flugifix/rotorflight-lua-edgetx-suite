@@ -391,6 +391,7 @@ local CONN_GLYPH = {
 -- string on screen, even though both locales carry the same mark: ui/tiles.lua is a pure
 -- renderer and is handed the resolved text rather than a locale of its own.
 local ARMED_BADGE_TEXT = "@i18n(app.model_armed_badge)@"
+local MENU_PENDING_TEXT = "@i18n(app.loading)@"
 
 -- The one line the strip carries. It says what the state is and what it costs, because the
 -- tool stays usable around it -- it is a status, not a demand.
@@ -3025,6 +3026,22 @@ function M.buildUI()
           appendPageBuildError(children, contentX, contentY, contentW, pageBodyH, state.i18n, currentMenuId, err)
         end
       end
+    elseif state.menu.isCurrentMenuPending() then
+      -- A menu still being built (see stepCurrentMenu in M.run) shows a notice in place of its
+      -- tiles until the build is done, and then the whole grid at once. No tile is on screen, so
+      -- none can hold the focus or be pressed.
+      state.cards = {}
+      state.focusIndex = 0
+      local lineH = Tiles.lineHeight(MIDSIZE, 24)
+      children[#children + 1] = {
+        type  = "label",
+        x = contentX, y = contentY + math.max(0, math.floor((pageBodyHeight() - bannerH - lineH) / 2)),
+        w = contentW,
+        text  = MENU_PENDING_TEXT,
+        color = COLOR_THEME_PRIMARY1,
+        font  = MIDSIZE,
+        align = CENTER
+      }
     else
       local gridItems = state.menu.getCards()
       local computedCols = Tiles.computeColumns(contentW, profile.menuMinCardWidth, profile.menuMaxColumns)
@@ -3381,6 +3398,7 @@ function M.run(event, touchState)
     local now = getTime and getTime() or 0
     local transitionedMenuThisTick = false
     local deferBackground = false
+    local builtThisPass = false
 
     local armed = isModelArmed()
 
@@ -3603,6 +3621,7 @@ function M.run(event, touchState)
       local doGc = state.pendingGcAfterBuild == true
       state.pendingGcAfterBuild = false
       M.buildUI()
+      builtThisPass = true
       if doGc and collectgarbage then
         collectgarbage("collect")
       end
@@ -3688,6 +3707,29 @@ function M.run(event, touchState)
       state.pendingMenuOpen = nil
       transitionedMenuThisTick = true
       scheduleBuildUI(true)
+    end
+
+    -- A menu whose entries are made while the tool runs -- the dashboard theme menu, one tile per
+    -- installed theme -- is built one step per pass (app/menu_registry.lua, stepCurrentMenu), so
+    -- no single pass carries the whole build: opened from the dashboard, every pass is a widget
+    -- call and is stopped at the widget's instruction limit, and a build stopped there would start
+    -- over on the next pass. A pass that opened a menu or built the screen takes no step. The menu
+    -- being stepped is noted before the step and forgotten only once the screen has been asked
+    -- for, so a pass stopped anywhere between the step that completes the build and that request
+    -- leaves the note behind, and the next pass makes the request instead.
+    if not transitionedMenuThisTick and not builtThisPass and not state.isClosing then
+      local onScreen = state.menu.getCurrentMenuId()
+      if state.menu.isCurrentMenuPending() then
+        state.steppedMenuId = onScreen
+        state.menu.stepCurrentMenu()
+      end
+      if state.steppedMenuId ~= nil and not state.menu.isCurrentMenuPending() then
+        if state.steppedMenuId == onScreen then
+          state.menu.finishCurrentMenu()
+          scheduleBuildUI(false)
+        end
+        state.steppedMenuId = nil
+      end
     end
 
     local currentMenuId = state.menu and state.menu.getCurrentMenuId and state.menu.getCurrentMenuId() or nil

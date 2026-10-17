@@ -14,30 +14,46 @@ function MenuRegistry.new(manifest, i18n, options)
 
   local menus = manifest.menus or {}
   local dashboardBuilder = nil
+  -- The build of each dynamic menu that has started and not finished, by menu id. Kept for as
+  -- long as the registry is, so leaving the menu and coming back carries on where it stopped.
+  local pendingBuilds = {}
 
-  local function ensureDynamicMenu(menuId)
-    if type(menuId) ~= "string" or menuId == "" then return end
-    local menu = menus[menuId]
-    if type(menu) ~= "table" or menu._dynamicThemes ~= true then
-      return
-    end
-    if menu._dynamicThemesLoaded == true then
-      return
-    end
+  -- A menu whose entries are made while the tool runs -- the dashboard theme menu, one tile per
+  -- installed theme -- and are not made yet. Such a menu is opened like any other; it shows no
+  -- entries until its build is complete, and the build is taken one step per call of
+  -- stepDynamicMenu rather than all at once, because opened from the dashboard every call runs
+  -- inside the widget's instruction limit, and the theme menu grows with every theme installed.
+  local function isDynamicMenuPending(menuId)
+    local menu = type(menuId) == "string" and menus[menuId] or nil
+    return type(menu) == "table" and menu._dynamicThemes == true and menu._dynamicThemesLoaded ~= true
+  end
 
+  -- One step of the menu's build. Answers true on the step that completes it, which is when its
+  -- entries and the menus they open are put in place, all of them at once.
+  local function stepDynamicMenu(menuId)
+    if not isDynamicMenuPending(menuId) then return false end
+
+    -- Loading the builder brings the theme library with it, so it is a step of its own.
     if not dashboardBuilder then
       dashboardBuilder = assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/app/lib/dashboard_builder.lua", "t"))()
+      return false
     end
 
-    local entries, themeMenus = dashboardBuilder.buildDashboardSettingsThemeMenus()
-    menu.pages = entries
+    local job = pendingBuilds[menuId]
+    if job == nil then
+      job = dashboardBuilder.newThemeMenuBuild()
+      pendingBuilds[menuId] = job
+    end
+    if not job.step() then return false end
+
+    for dynamicMenuId, menuDef in pairs(job.menus) do
+      menus[dynamicMenuId] = menuDef
+    end
+    local menu = menus[menuId]
+    menu.pages = job.entries
     menu._dynamicThemesLoaded = true
-
-    if type(themeMenus) == "table" then
-      for dynamicMenuId, menuDef in pairs(themeMenus) do
-        menus[dynamicMenuId] = menuDef
-      end
-    end
+    pendingBuilds[menuId] = nil
+    return true
   end
 
   local self = {
@@ -315,7 +331,6 @@ function MenuRegistry.new(manifest, i18n, options)
 
   local function getCurrentContainer()
     if self.currentMenuId then
-      ensureDynamicMenu(self.currentMenuId)
       return self.menus[self.currentMenuId]
     end
     return nil
@@ -450,7 +465,6 @@ function MenuRegistry.new(manifest, i18n, options)
 
         self.activeSectionId = sectionId
         self.currentEntryId = entryId
-        ensureDynamicMenu(entry.menuId)
         resetBreadcrumbForSection(section)
 
         if entry.menuId and self.menus[entry.menuId] then
@@ -478,7 +492,6 @@ function MenuRegistry.new(manifest, i18n, options)
         end
 
         self.currentEntryId = id
-        ensureDynamicMenu(entry.menuId)
         if entry.menuId and self.menus[entry.menuId] then
           self.currentMenuId = entry.menuId
           pushBreadcrumb("menu", entry.menuId, resolveTitle(self.menus[entry.menuId]))
@@ -598,6 +611,26 @@ function MenuRegistry.new(manifest, i18n, options)
     cache.data = cards
 
     return cards
+  end
+
+  -- Whether the menu on screen is still being built (see isDynamicMenuPending). The tool draws a
+  -- wait notice in its place and calls stepCurrentMenu once per pass until it is done.
+  function self.isCurrentMenuPending()
+    return isDynamicMenuPending(self.currentMenuId)
+  end
+
+  -- One step of the build of the menu on screen. Answers true on the step that completes it; the
+  -- menu then has its entries, and finishCurrentMenu makes them the ones the next draw shows.
+  function self.stepCurrentMenu()
+    return stepDynamicMenu(self.currentMenuId)
+  end
+
+  -- Called once the menu on screen is no longer pending. It may run more than once for one build:
+  -- a pass stopped between completing the build and asking for the screen calls it again on the
+  -- next pass, and it leaves the same state either way.
+  function self.finishCurrentMenu()
+    self._cardsCache.data = nil
+    syncCurrentEntry()
   end
 
   function self.getCurrentEntryId()
