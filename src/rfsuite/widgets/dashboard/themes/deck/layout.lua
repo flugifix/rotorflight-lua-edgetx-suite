@@ -1388,8 +1388,8 @@ local function stateCell(state, capChars)
       local level = derived and derived.esc_status_live_level or nil
       local esc = derived and derived.esc_status_live or nil
       if type(esc) == "string" and esc ~= "" and type(level) == "number" and level >= 2 then
-        if level >= 3 then return fit(esc), C.bar_crit end
-        return fit(esc), C.bar_low
+        if level >= 3 then return fit(esc), C.crit end
+        return fit(esc), C.warn
       end
     end
     return armedText(), armedColor()
