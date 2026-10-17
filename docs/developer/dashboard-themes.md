@@ -136,7 +136,9 @@ Two consequences worth knowing before writing a theme:
   the bench with keeps standing. A postflight or offline module can rely on the last flight's
   numbers still being there; it cannot rely on anything live. The split exists so that a theme
   can say which of the two it is showing — in `postflight` the model is still on the link and
-  can be armed again, in `offline` nothing on the screen can change any more.
+  can be armed again, in `offline` nothing on the screen can change any more. The theme outlives
+  the link too: a model's own theme stays on the post-flight screen once its preferences have gone
+  with the link, until the next flight controller connects (see below).
 - **A model that never publishes `armflags` never leaves preflight.** The arm reading is what
   every phase decision is built on, and the widget deliberately distinguishes *read as disarmed*
   from *never read at all*.
@@ -179,7 +181,10 @@ values for whoever turns it back on. With it on, the first of these that names a
 model's phase override, then the model's own theme — both only while per-model settings are allowed
 on the radio and on for that model (`DashboardLib.modelOverridesActive`) — then the global phase override, then the global theme, then `system/default`. A
 model theme is a context of its own, so an unset phase override falls back to the model's theme
-rather than jumping to the global one.
+rather than jumping to the global one. The model's preferences leave with the link, so the widget
+keeps the path its model's own theme resolved for the post-flight slot, and the `postflight` and
+`offline` screens use it while no model preferences are present; only the path is kept, the
+model's theme settings are not, and the next connect edge drops it.
 
 ## What a phase module returns
 

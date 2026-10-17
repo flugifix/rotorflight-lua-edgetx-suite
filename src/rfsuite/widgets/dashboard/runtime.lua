@@ -2575,6 +2575,8 @@ local function selectedThemePath(value)
   return nil
 end
 
+-- Answers the path and the reason it was chosen; a reason beginning with `model_` means the
+-- model's own theme answered.
 local function resolveThemePathForState(dashboard, modelPrefs, flightMode, lib)
   -- `armed` and `offline` refine the ground and the post-flight screen rather than standing
   -- beside them, so they have no slot of their own: each resolves through the theme chosen for
@@ -2591,7 +2593,7 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode, lib)
   if themePathMemo.dashboard == dashboard
     and themePathMemo.modelPrefs == modelPrefs
     and themePathMemo.slotMode == slotMode then
-    return themePathMemo.chosen
+    return themePathMemo.chosen, themePathMemo.reason
   end
 
   local modelDashboard = modelPrefs and modelPrefs.dashboard or {}
@@ -2666,8 +2668,39 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode, lib)
   themePathMemo.modelPrefs = modelPrefs
   themePathMemo.slotMode = slotMode
   themePathMemo.chosen = chosen
+  themePathMemo.reason = reason
 
-  return chosen
+  return chosen, reason
+end
+
+-- After a flight the post-flight screen belongs to the model that has just flown, and the link
+-- going -- the pack unplugged -- takes that model's preferences with it: the MSP runtime drops
+-- them from the session together with the board's id, and a preferences reload in the
+-- disconnected stretch has no id to load them by. So the theme the model's own preferences
+-- resolve for the post-flight screen is kept on the widget while they are there, and answers for
+-- the post-flight screens while they are not. Only that one path is kept, nothing else of the
+-- preferences, and only where the model's own theme chose it: a model drawing the radio's theme
+-- keeps following the radio's settings. The connect edge drops it, and the next model's
+-- preferences set it again.
+local function noteModelTheme(self, dashboard, modelPrefs)
+  if modelPrefs == nil then return end
+  if modelPrefs == self._modelThemePrefs and dashboard == self._modelThemeDashboard then return end
+  self._modelThemePrefs = modelPrefs
+  self._modelThemeDashboard = dashboard
+  local chosen, reason = resolveThemePathForState(dashboard, modelPrefs, "postflight", self.dashboardLib)
+  local kept = nil
+  if type(reason) == "string" and string.sub(reason, 1, 6) == "model_" then kept = chosen end
+  if kept ~= self.modelTheme then
+    logGv("model theme kept for the post-flight screen: %s", tostring(kept))
+  end
+  self.modelTheme = kept
+end
+
+local function themePathFor(self, dashboard, modelPrefs, flightMode)
+  if modelPrefs == nil and self.modelTheme and (flightMode == "postflight" or flightMode == "offline") then
+    return self.modelTheme
+  end
+  return (resolveThemePathForState(dashboard, modelPrefs, flightMode, self.dashboardLib))
 end
 
 -- Everything reloadActiveTheme reads out of the per-model preferences sits under `dashboard`:
@@ -3485,7 +3518,7 @@ function Runtime.new(zone, options)
     -- it. Cleared first, so a load that raises is retried by the same tests as it was before.
     self._themeReloadPending = nil
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, self.flightMode, self.dashboardLib)
+    local selectedTheme = themePathFor(self, (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, self.flightMode)
     local nextConfig = {}
     if self.dashboardLib and self.dashboardLib.getThemeConfig then
       nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, {}, modelPrefs)
@@ -3787,6 +3820,11 @@ function Runtime.new(zone, options)
       self._batteryPickPicked = nil
       self._viewStack = nil
       self.modelPreferences = nil
+      -- The post-flight theme kept for the model that flew before (noteModelTheme) belongs to that
+      -- session; this one sets its own once its preferences arrive.
+      self.modelTheme = nil
+      self._modelThemePrefs = nil
+      self._modelThemeDashboard = nil
       -- Clear the reference so the identity check fails on the next frame
       -- and the slow-path signature comparison is triggered.  Keep the
       -- signature itself so that an identical modelPrefs content (same model,
@@ -3852,7 +3890,9 @@ function Runtime.new(zone, options)
     end
 
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, nextMode, self.dashboardLib)
+    local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
+    noteModelTheme(self, dashboardPrefs, modelPrefs)
+    local selectedTheme = themePathFor(self, dashboardPrefs, modelPrefs, nextMode)
 
     -- A different table is not a different preference set. The connect chain
     -- (tasks/events/onconnect/tasks/uid.lua), the MSP publisher (tasks/msp/runtime.lua) and
