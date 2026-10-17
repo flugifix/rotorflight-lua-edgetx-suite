@@ -81,7 +81,7 @@ SELF_TEST = (
      True, "the statement is there, as a bold bullet"),
     ([], [SRC], "We will add release notes later.\n",
      False, "the words appear inside a sentence, which is not a statement"),
-    ([], [SRC], "Release notes:\n", False, "a marker with no reason after it is not a statement"),
+    ([], [SRC], "Release notes:" + "\n", False, "a marker with no reason after it is not a statement"),
     ([], [SRC], "<!-- Release notes: say why, or delete this line -->\n",
      False, "a template placeholder left in a comment is not a statement"),
     ([], ["README.md", ".github/workflows/pr.yml"], "",

@@ -319,7 +319,8 @@ def self_test():
                 "# 0.2.0\n\n### Bug Fixes & Improvements\n\n- **Old**\n")
         expect("the entries land at the end of the 0.2.1 section, in section order", text == want)
         if text != want:
-            print("        got:\n" + "\n".join("        | " + l for l in text.split("\n")))
+            print("        got:")
+            print("\n".join("        | " + l for l in text.split("\n")))
         expect("the filed files are deleted and the README stays",
                os.listdir(os.path.join(root, NOTES_DIR)) == ["README.md"])
         with open(os.devnull, "w") as null:
