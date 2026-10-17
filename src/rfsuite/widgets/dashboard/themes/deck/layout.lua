@@ -2395,10 +2395,11 @@ end
 -- clear. The picked pack is not a term: nothing drawn depends on it.
 --
 -- This runs every 0.5 s inside the host's STATE pass: one sensor read, no probe of the card or
--- the settings. The key is one `..` expression, so no list is built to be joined; a term string
--- or the key itself is allocated only when Lua does not already hold it as a short string --
--- with unchanged inputs and no long model-image path, nothing. What a build reads beyond this
--- (the radio's battery range, the image on the card) is read at build time and is not a term.
+-- the settings. The key is one `..` expression, so no list is built to be joined. What a call
+-- still allocates is the key itself: Lua 5.3 makes a new string for every key over 40 bytes,
+-- and the model picture's path (the suite logo's when there is no picture) puts it over. What a
+-- build reads beyond this (the radio's battery range, the image on the card) is read at build
+-- time and is not a term.
 function L.renderKey(zone, state)
   local derived = state and state.derived or nil
   local bp = state and type(state.batteryPick) == "table" and state.batteryPick or nil
