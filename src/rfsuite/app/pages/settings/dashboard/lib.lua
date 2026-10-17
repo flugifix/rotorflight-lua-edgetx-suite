@@ -162,14 +162,25 @@ local function appendTheme(themes, nextId, entry, loadBasePath, log)
   return nextId + 1
 end
 
+-- A stop at the instruction limit that lands inside one of the scan's pcalls says nothing about
+-- the theme: it is raised on, so the scan's step is stopped and the item taken again on the next
+-- one, rather than recorded as a theme that failed to load.
+local function raiseLimitStop(err)
+  if type(err) == "string" and string.find(err, "CPU limit", 1, true) then
+    error(err, 0)
+  end
+end
+
 local function loadThemeIndex()
   local ok, chunk = pcall(loadScript, INDEX_PATH, "t")
+  if not ok then raiseLimitStop(chunk) end
   if not ok or type(chunk) ~= "function" then
     debugLog("theme index missing path=%s", INDEX_PATH)
     return nil
   end
 
   local loadedOk, index = pcall(chunk)
+  if not loadedOk then raiseLimitStop(index) end
   if not loadedOk or type(index) ~= "table" then
     debugLog("theme index invalid path=%s", INDEX_PATH)
     return nil
@@ -232,28 +243,28 @@ local function collectDirectoryEntries(listBasePath)
   return nil
 end
 
--- One entry of a theme folder's listing: the theme it holds, if it holds one. The theme is
--- stored at the index its id names -- the scan gives ids in the order it stores themes, so the
--- two are the same -- which makes the entry safe to take again: a call stopped part way through
--- it leaves at most the same theme in the same place.
-local function scanEntry(rawEntry, loadBasePath, source, themes, nextId, log)
-  if type(rawEntry) ~= "string" or rawEntry == "" then return nextId end
+-- One entry of a theme folder's listing: the theme it holds, under the id it is given, or nil
+-- when the entry holds none. It stores nothing; the scan does (see newThemeScan).
+local function scanEntry(rawEntry, loadBasePath, source, id, log)
+  if type(rawEntry) ~= "string" or rawEntry == "" then return nil end
   local trimmed = string.gsub(rawEntry, "[/\\]+$", "")
   local folder = string.match(trimmed, "([^/\\]+)$") or trimmed
   if folder == "." or folder == ".." or folder == "" or string.match(folder, "%.%a+$") then
-    return nextId
+    return nil
   end
 
   local initPath = loadBasePath .. folder .. "/init.lua"
   local ok, chunk = pcall(loadScript, initPath, "t")
+  if not ok then raiseLimitStop(chunk) end
   if not (ok and chunk) then
     scanSkipped(log, "%s/%s (no init.lua)", source, folder)
-    return nextId
+    return nil
   end
   local initOk, initTable = pcall(chunk)
+  if not initOk then raiseLimitStop(initTable) end
   if not (initOk and type(initTable) == "table" and type(initTable.name) == "string") then
     scanSkipped(log, "%s/%s (init.lua %s)", source, folder, initOk and "returned no theme" or "failed")
-    return nextId
+    return nil
   end
 
   local configurePath = nil
@@ -261,8 +272,8 @@ local function scanEntry(rawEntry, loadBasePath, source, themes, nextId, log)
     configurePath = loadBasePath .. folder .. "/" .. initTable.configure
   end
 
-  themes[nextId] = {
-    id = nextId,
+  return {
+    id = id,
     name = initTable.name,
     source = source,
     folder = folder,
@@ -273,7 +284,6 @@ local function scanEntry(rawEntry, loadBasePath, source, themes, nextId, log)
     pages = themePages(initTable.pages, loadBasePath, folder, log),
     standalone = initTable.standalone == true
   }
-  return nextId + 1
 end
 
 local SCAN_SOURCES = {
@@ -293,8 +303,10 @@ local function appendDefaultTheme(themes, log)
   local defaultPath = "system/default"
   local initPath = SYSTEM_THEMES_LOAD_PATH .. "default/init.lua"
   local ok, chunk = pcall(loadScript, initPath, "t")
+  if not ok then raiseLimitStop(chunk) end
   if ok and chunk then
     local initOk, initTable = pcall(chunk)
+    if not initOk then raiseLimitStop(initTable) end
     if initOk and type(initTable) == "table" and type(initTable.name) == "string" then
       local configurePath = nil
       if type(initTable.configure) == "string" and initTable.configure ~= "" then
@@ -332,17 +344,27 @@ function M.newThemeScan(forceRefresh)
   local job = { themes = nil }
   local useCache = forceRefresh ~= true
   local log = debugOn and { skipped = {} } or nil
-  local themes, nextId = {}, 1
-  local sourceIndex, entries, entryIndex, firstId = 1, nil, 1, 1
+  local themes = {}
+  -- Where the scan stands, as ONE value that a step replaces rather than changes: the source
+  -- being read, its listing once taken, the entry next in it, the id the next theme gets, and the
+  -- id that source started at. A call stopped part way through an item therefore leaves the
+  -- position that item started from, and the item is taken again into the same slot under the
+  -- same id -- nothing finished is lost and nothing is stored twice. (A skipped entry's note in
+  -- the debug line can then appear twice; that is all.)
+  local pos = { source = 1, entries = nil, entry = 1, id = 1, first = 1 }
 
   local function finish()
     -- Both fallbacks run only when nothing was found, and the index is the packager's list of
-    -- the shipped themes: bounded, and on a card that has its theme folders, never reached.
+    -- the shipped themes: bounded, and on a card that has its theme folders, never reached. They
+    -- fill a list of their own that replaces the empty one in one assignment, so a call stopped
+    -- part way through them leaves nothing behind and the next step runs them again.
     if #themes == 0 then
-      nextId = loadIndexedThemes(themes, nextId, log)
-    end
-    if #themes == 0 then
-      appendDefaultTheme(themes, log)
+      local fallback = {}
+      loadIndexedThemes(fallback, 1, log)
+      if #fallback == 0 then
+        appendDefaultTheme(fallback, log)
+      end
+      themes = fallback
     end
 
     -- Themes found per folder as found/listed; `index` appears only when the checked-in list
@@ -372,25 +394,27 @@ function M.newThemeScan(forceRefresh)
 
     local budget = SCAN_ITEMS_PER_STEP
     while budget > 0 do
-      local src = SCAN_SOURCES[sourceIndex]
+      local at = pos
+      local src = SCAN_SOURCES[at.source]
       if src == nil then return finish() end
-      if entries == nil then
+      if at.entries == nil then
         local listed = collectDirectoryEntries(src.list)
         if type(listed) == "table" then
-          entries, entryIndex, firstId = listed, 1, nextId
+          pos = { source = at.source, entries = listed, entry = 1, id = at.id, first = at.id }
         else
           -- A folder that is not on the card, the user folder on most radios.
           if log then log[src.source] = "unlisted(" .. type(listed) .. ")" end
-          sourceIndex = sourceIndex + 1
+          pos = { source = at.source + 1, entries = nil, entry = 1, id = at.id, first = at.id }
         end
         budget = budget - 1
-      elseif entryIndex > #entries then
-        if log then log[src.source] = string.format("%s/%s", nextId - firstId, #entries) end
-        entries = nil
-        sourceIndex = sourceIndex + 1
+      elseif at.entry > #at.entries then
+        if log then log[src.source] = string.format("%s/%s", at.id - at.first, #at.entries) end
+        pos = { source = at.source + 1, entries = nil, entry = 1, id = at.id, first = at.id }
       else
-        nextId = scanEntry(entries[entryIndex], src.load, src.source, themes, nextId, log)
-        entryIndex = entryIndex + 1
+        local theme = scanEntry(at.entries[at.entry], src.load, src.source, at.id, log)
+        if theme then themes[at.id] = theme end
+        pos = { source = at.source, entries = at.entries, entry = at.entry + 1,
+          id = theme and at.id + 1 or at.id, first = at.first }
         budget = budget - 1
       end
     end

@@ -125,9 +125,9 @@ local THEMES_PER_STEP = 4
 -- what it already stored -- so the work is cut into steps that each fit a call, and what a step
 -- finishes is kept in the job rather than in the call. The first steps take the theme scan, a few
 -- folder entries each (newThemeScan in app/pages/settings/dashboard/lib.lua), every later one up
--- to THEMES_PER_STEP themes. Each theme is stored by its index and the job moves past
--- it only once both of its entries are in, so a step stopped part way through repeats that one
--- theme and nothing before it.
+-- to THEMES_PER_STEP themes. Each theme is stored by its index and the job moves past it only
+-- once both of its entries are in, so a step stopped part way through repeats that one theme and
+-- nothing before it.
 --
 -- `step()` answers true once the menu is complete, and from then on `entries` and `menus` hold
 -- it; until then neither is filled, so a caller has the whole menu or none of it.
@@ -141,8 +141,9 @@ local function newThemeMenuBuild()
       Log.emit("dashboard.builder", string.format("%sthemes=%d entries=%d: %s", DEBUG_PREFIX, #themes,
         #entries, table.concat(buildLog, ", ")), "debug")
     end
-    job.entries = entries
+    -- `entries` last: it is what says the job is complete.
     job.menus = menus
+    job.entries = entries
     return true
   end
 
