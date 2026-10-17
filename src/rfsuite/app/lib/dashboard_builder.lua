@@ -123,8 +123,9 @@ local THEMES_PER_STEP = 4
 -- The menu, built over as many calls as it takes. Opened from the dashboard, the tool runs
 -- inside the widget's per-call instruction limit, and a call stopped there leaves behind only
 -- what it already stored -- so the work is cut into steps that each fit a call, and what a step
--- finishes is kept in the job rather than in the call. The first step takes the theme scan, every
--- later one up to THEMES_PER_STEP themes. Each theme is stored by its index and the job moves past
+-- finishes is kept in the job rather than in the call. The first steps take the theme scan, a few
+-- folder entries each (newThemeScan in app/pages/settings/dashboard/lib.lua), every later one up
+-- to THEMES_PER_STEP themes. Each theme is stored by its index and the job moves past
 -- it only once both of its entries are in, so a step stopped part way through repeats that one
 -- theme and nothing before it.
 --
@@ -132,7 +133,7 @@ local THEMES_PER_STEP = 4
 -- it; until then neither is filled, so a caller has the whole menu or none of it.
 local function newThemeMenuBuild()
   local job = { entries = nil, menus = nil }
-  local themes, entries, modelEntries, menus, buildLog
+  local scan, themes, entries, modelEntries, menus, buildLog
   local nextTheme = 1
 
   local function finish()
@@ -149,7 +150,9 @@ local function newThemeMenuBuild()
     if job.entries then return true end
 
     if themes == nil then
-      local found = DashboardLib.getConfigurableThemes(DashboardLib.listThemes())
+      scan = scan or DashboardLib.newThemeScan()
+      if not scan.step() then return false end
+      local found = DashboardLib.getConfigurableThemes(scan.themes)
       local first, firstModel, firstMenus = {}, {}, {}
       -- The overview is a page, and its theme entries are what its buttons open: the menu
       -- registry opens an entry of the current menu id's list, and that id is the page's own. Its

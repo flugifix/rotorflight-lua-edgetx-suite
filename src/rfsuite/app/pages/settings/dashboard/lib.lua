@@ -30,17 +30,17 @@ local function debugLog(fmt, ...)
   end
 end
 
--- The theme scan reports in ONE debug line, written where listThemes ends, not in a line per
+-- The theme scan reports in ONE debug line, written where the scan ends, not in a line per
 -- folder and per theme: every line is a Log.emit, and opened from the dashboard the scan runs
 -- inside the widget's per-call instruction limit. The line keeps what a missing theme is
 -- diagnosed with -- how many entries each folder listed and how many became themes, every
--- folder or page entry that was skipped and why, and the themes found. `scanLog` is a table only
--- while that line is wanted, so nothing is collected below the debug level.
-local scanLog = nil
-
-local function scanSkipped(fmt, ...)
-  if scanLog then
-    scanLog.skipped[#scanLog.skipped + 1] = string.format(fmt, ...)
+-- folder or page entry that was skipped and why, and the themes found. A scan's `log` is a table
+-- only while that line is wanted, so nothing is collected below the debug level. It belongs to
+-- the scan rather than to this module, because a scan may be taken over several calls and
+-- another scan may run to its end in between.
+local function scanSkipped(log, fmt, ...)
+  if log then
+    log.skipped[#log.skipped + 1] = string.format(fmt, ...)
   end
 end
 
@@ -106,7 +106,7 @@ end
 -- folder. An entry that fails any of it is dropped rather than costing the theme its page, and
 -- a list that ends up shorter than two entries is dropped altogether, so everywhere else the
 -- presence of the list is what says the theme is split.
-local function themePages(declared, loadBasePath, folder)
+local function themePages(declared, loadBasePath, folder, log)
   if type(declared) ~= "table" then return nil end
 
   local pages = {}
@@ -125,19 +125,19 @@ local function themePages(declared, loadBasePath, folder)
       end
       pages[#pages + 1] = { id = id, title = title, iconPath = iconPath }
     else
-      scanSkipped("%s page %s (id=%s: invalid or repeated)", folder, i, id)
+      scanSkipped(log, "%s page %s (id=%s: invalid or repeated)", folder, i, id)
     end
   end
 
   if #pages < MIN_THEME_PAGES then
-    scanSkipped("%s pages (%s valid, %s needed)", folder, #pages, MIN_THEME_PAGES)
+    scanSkipped(log, "%s pages (%s valid, %s needed)", folder, #pages, MIN_THEME_PAGES)
     return nil
   end
 
   return pages
 end
 
-local function appendTheme(themes, nextId, entry, loadBasePath)
+local function appendTheme(themes, nextId, entry, loadBasePath, log)
   if type(entry) ~= "table" then return nextId end
   if type(entry.name) ~= "string" or entry.name == "" then return nextId end
   if type(entry.folder) ~= "string" or entry.folder == "" then return nextId end
@@ -156,7 +156,7 @@ local function appendTheme(themes, nextId, entry, loadBasePath)
     configure = entry.configure,
     configurePath = configurePath,
     iconPath = themeIconPath(loadBasePath, entry.folder),
-    pages = themePages(entry.pages, loadBasePath, entry.folder),
+    pages = themePages(entry.pages, loadBasePath, entry.folder, log),
     standalone = entry.standalone == true
   }
   return nextId + 1
@@ -178,7 +178,7 @@ local function loadThemeIndex()
   return index
 end
 
-local function loadIndexedThemes(themes, nextId)
+local function loadIndexedThemes(themes, nextId, log)
   local index = loadThemeIndex()
   if type(index) ~= "table" then
     return nextId
@@ -196,12 +196,12 @@ local function loadIndexedThemes(themes, nextId)
     end
 
     if loadBasePath then
-      nextId = appendTheme(themes, nextId, entry, loadBasePath)
+      nextId = appendTheme(themes, nextId, entry, loadBasePath, log)
     end
   end
 
-  if scanLog then
-    scanLog.index = string.format("%s/%s", nextId - firstId, #index)
+  if log then
+    log.index = string.format("%s/%s", nextId - firstId, #index)
   end
   return nextId
 end
@@ -232,125 +232,178 @@ local function collectDirectoryEntries(listBasePath)
   return nil
 end
 
-local function scanThemes(listBasePath, loadBasePath, source, themes, nextId)
-  local entries = collectDirectoryEntries(listBasePath)
-  if type(entries) ~= "table" then
-    if scanLog then scanLog[source] = "unlisted(" .. type(entries) .. ")" end
+-- One entry of a theme folder's listing: the theme it holds, if it holds one. The theme is
+-- stored at the index its id names -- the scan gives ids in the order it stores themes, so the
+-- two are the same -- which makes the entry safe to take again: a call stopped part way through
+-- it leaves at most the same theme in the same place.
+local function scanEntry(rawEntry, loadBasePath, source, themes, nextId, log)
+  if type(rawEntry) ~= "string" or rawEntry == "" then return nextId end
+  local trimmed = string.gsub(rawEntry, "[/\\]+$", "")
+  local folder = string.match(trimmed, "([^/\\]+)$") or trimmed
+  if folder == "." or folder == ".." or folder == "" or string.match(folder, "%.%a+$") then
     return nextId
   end
-  local firstId = nextId
 
-  for i = 1, #entries do
-    local rawEntry = entries[i]
-    if type(rawEntry) == "string" and rawEntry ~= "" then
-      local trimmed = string.gsub(rawEntry, "[/\\]+$", "")
-      local folder = string.match(trimmed, "([^/\\]+)$") or trimmed
-      if folder ~= "." and folder ~= ".." and folder ~= "" and not string.match(folder, "%.%a+$") then
-        local initPath = loadBasePath .. folder .. "/init.lua"
-        local ok, chunk = pcall(loadScript, initPath, "t")
-        if ok and chunk then
-          local initOk, initTable = pcall(chunk)
-          if initOk and type(initTable) == "table" and type(initTable.name) == "string" then
-            local configurePath = nil
-            if type(initTable.configure) == "string" and initTable.configure ~= "" then
-              configurePath = loadBasePath .. folder .. "/" .. initTable.configure
-            end
+  local initPath = loadBasePath .. folder .. "/init.lua"
+  local ok, chunk = pcall(loadScript, initPath, "t")
+  if not (ok and chunk) then
+    scanSkipped(log, "%s/%s (no init.lua)", source, folder)
+    return nextId
+  end
+  local initOk, initTable = pcall(chunk)
+  if not (initOk and type(initTable) == "table" and type(initTable.name) == "string") then
+    scanSkipped(log, "%s/%s (init.lua %s)", source, folder, initOk and "returned no theme" or "failed")
+    return nextId
+  end
 
-            themes[#themes + 1] = {
-              id = nextId,
-              name = initTable.name,
-              source = source,
-              folder = folder,
-              path = asThemePath(source, folder),
-              configure = initTable.configure,
-              configurePath = configurePath,
-              iconPath = themeIconPath(loadBasePath, folder),
-              pages = themePages(initTable.pages, loadBasePath, folder),
-              standalone = initTable.standalone == true
-            }
-            nextId = nextId + 1
-          else
-            scanSkipped("%s/%s (init.lua %s)", source, folder, initOk and "returned no theme" or "failed")
-          end
+  local configurePath = nil
+  if type(initTable.configure) == "string" and initTable.configure ~= "" then
+    configurePath = loadBasePath .. folder .. "/" .. initTable.configure
+  end
+
+  themes[nextId] = {
+    id = nextId,
+    name = initTable.name,
+    source = source,
+    folder = folder,
+    path = asThemePath(source, folder),
+    configure = initTable.configure,
+    configurePath = configurePath,
+    iconPath = themeIconPath(loadBasePath, folder),
+    pages = themePages(initTable.pages, loadBasePath, folder, log),
+    standalone = initTable.standalone == true
+  }
+  return nextId + 1
+end
+
+local SCAN_SOURCES = {
+  { list = SYSTEM_THEMES_LIST_PATH, load = SYSTEM_THEMES_LOAD_PATH, source = "system" },
+  { list = USER_THEMES_LIST_PATH, load = USER_THEMES_LOAD_PATH, source = "user" },
+}
+
+-- How many items one step of a scan takes on: listing a folder is one, and so is each entry of
+-- the listing, which loads that theme's init.lua and looks for its icons. A budget rather than a
+-- measured optimum, like the caps in lib/precompile.lua: it bounds what one call may do, so a
+-- card with many themes takes more steps rather than a dearer one.
+local SCAN_ITEMS_PER_STEP = 4
+
+-- Fallback when nothing was found: ensure at least the default theme is available.
+local function appendDefaultTheme(themes, log)
+  debugLog("no themes found, entering default fallback")
+  local defaultPath = "system/default"
+  local initPath = SYSTEM_THEMES_LOAD_PATH .. "default/init.lua"
+  local ok, chunk = pcall(loadScript, initPath, "t")
+  if ok and chunk then
+    local initOk, initTable = pcall(chunk)
+    if initOk and type(initTable) == "table" and type(initTable.name) == "string" then
+      local configurePath = nil
+      if type(initTable.configure) == "string" and initTable.configure ~= "" then
+        configurePath = SYSTEM_THEMES_LOAD_PATH .. "default/" .. initTable.configure
+      end
+      themes[#themes + 1] = {
+        id = 1,
+        name = initTable.name,
+        source = "system",
+        folder = "default",
+        path = defaultPath,
+        configure = initTable.configure,
+        configurePath = configurePath,
+        iconPath = themeIconPath(SYSTEM_THEMES_LOAD_PATH, "default"),
+        pages = themePages(initTable.pages, SYSTEM_THEMES_LOAD_PATH, "default", log),
+        standalone = initTable.standalone == true
+      }
+      debugLog("fallback default accepted")
+    end
+  else
+    debugLog("fallback default init failed path=%s", initPath)
+  end
+end
+
+--- The theme scan as a job that can be taken over several calls: `job.step()` does a bounded
+--- part of it and answers true once it is complete, and `job.themes` is the list from then on --
+--- the same list listThemes answers, and the one it caches. A call stopped part way through a
+--- step repeats at most the item it was on.
+---
+--- Opened from the dashboard, the tool runs inside the widget's per-call instruction limit, and
+--- the scan loads every installed theme's init.lua; a caller there that cannot afford the whole
+--- scan in one call takes it a step at a time (app/lib/dashboard_builder.lua).
+function M.newThemeScan(forceRefresh)
+  refreshDebug()
+  local job = { themes = nil }
+  local useCache = forceRefresh ~= true
+  local log = debugOn and { skipped = {} } or nil
+  local themes, nextId = {}, 1
+  local sourceIndex, entries, entryIndex, firstId = 1, nil, 1, 1
+
+  local function finish()
+    -- Both fallbacks run only when nothing was found, and the index is the packager's list of
+    -- the shipped themes: bounded, and on a card that has its theme folders, never reached.
+    if #themes == 0 then
+      nextId = loadIndexedThemes(themes, nextId, log)
+    end
+    if #themes == 0 then
+      appendDefaultTheme(themes, log)
+    end
+
+    -- Themes found per folder as found/listed; `index` appears only when the checked-in list
+    -- was read because the scan found nothing.
+    if log then
+      local paths = {}
+      for i = 1, #themes do
+        paths[i] = themes[i].path
+      end
+      debugLog("listThemes count=%s system=%s user=%s%s skipped=%s themes=%s", #themes,
+        log.system or "-", log.user or "-", log.index and (" index=" .. log.index) or "",
+        #log.skipped > 0 and table.concat(log.skipped, ", ") or "none", table.concat(paths, ","))
+    end
+
+    themesCache = themes
+    job.themes = themes
+    return true
+  end
+
+  function job.step()
+    if job.themes then return true end
+    if useCache and type(themesCache) == "table" then
+      debugLog("listThemes cache hit count=%s", #themesCache)
+      job.themes = themesCache
+      return true
+    end
+
+    local budget = SCAN_ITEMS_PER_STEP
+    while budget > 0 do
+      local src = SCAN_SOURCES[sourceIndex]
+      if src == nil then return finish() end
+      if entries == nil then
+        local listed = collectDirectoryEntries(src.list)
+        if type(listed) == "table" then
+          entries, entryIndex, firstId = listed, 1, nextId
         else
-          scanSkipped("%s/%s (no init.lua)", source, folder)
+          -- A folder that is not on the card, the user folder on most radios.
+          if log then log[src.source] = "unlisted(" .. type(listed) .. ")" end
+          sourceIndex = sourceIndex + 1
         end
+        budget = budget - 1
+      elseif entryIndex > #entries then
+        if log then log[src.source] = string.format("%s/%s", nextId - firstId, #entries) end
+        entries = nil
+        sourceIndex = sourceIndex + 1
+      else
+        nextId = scanEntry(entries[entryIndex], src.load, src.source, themes, nextId, log)
+        entryIndex = entryIndex + 1
+        budget = budget - 1
       end
     end
+    return false
   end
 
-  if scanLog then
-    scanLog[source] = string.format("%s/%s", nextId - firstId, #entries)
-  end
-  return nextId
+  return job
 end
 
 function M.listThemes(forceRefresh)
-  refreshDebug()
-  if forceRefresh ~= true and type(themesCache) == "table" then
-    debugLog("listThemes cache hit count=%s", #themesCache)
-    return themesCache
-  end
-
-  local themes = {}
-  local nextId = 1
-
-  scanLog = debugOn and { skipped = {} } or nil
-  nextId = scanThemes(SYSTEM_THEMES_LIST_PATH, SYSTEM_THEMES_LOAD_PATH, "system", themes, nextId)
-  nextId = scanThemes(USER_THEMES_LIST_PATH, USER_THEMES_LOAD_PATH, "user", themes, nextId)
-
-  if #themes == 0 then
-    nextId = loadIndexedThemes(themes, nextId)
-  end
-
-  -- Fallback: ensure at least the default theme is available
-  if #themes == 0 then
-    debugLog("no themes found, entering default fallback")
-    local defaultPath = "system/default"
-    local initPath = SYSTEM_THEMES_LOAD_PATH .. "default/init.lua"
-    local ok, chunk = pcall(loadScript, initPath, "t")
-    if ok and chunk then
-      local initOk, initTable = pcall(chunk)
-      if initOk and type(initTable) == "table" and type(initTable.name) == "string" then
-        local configurePath = nil
-        if type(initTable.configure) == "string" and initTable.configure ~= "" then
-          configurePath = SYSTEM_THEMES_LOAD_PATH .. "default/" .. initTable.configure
-        end
-        themes[#themes + 1] = {
-          id = 1,
-          name = initTable.name,
-          source = "system",
-          folder = "default",
-          path = defaultPath,
-          configure = initTable.configure,
-          configurePath = configurePath,
-          iconPath = themeIconPath(SYSTEM_THEMES_LOAD_PATH, "default"),
-          pages = themePages(initTable.pages, SYSTEM_THEMES_LOAD_PATH, "default"),
-          standalone = initTable.standalone == true
-        }
-        debugLog("fallback default accepted")
-      end
-    else
-      debugLog("fallback default init failed path=%s", initPath)
-    end
-  end
-
-  -- Themes found per folder as found/listed; `index` appears only when the checked-in list was
-  -- read because the scan found nothing.
-  if scanLog then
-    local paths = {}
-    for i = 1, #themes do
-      paths[i] = themes[i].path
-    end
-    debugLog("listThemes count=%s system=%s user=%s%s skipped=%s themes=%s", #themes,
-      scanLog.system or "-", scanLog.user or "-", scanLog.index and (" index=" .. scanLog.index) or "",
-      #scanLog.skipped > 0 and table.concat(scanLog.skipped, ", ") or "none", table.concat(paths, ","))
-    scanLog = nil
-  end
-
-  themesCache = themes
-
-  return themes
+  local job = M.newThemeScan(forceRefresh)
+  while not job.step() do end
+  return job.themes
 end
 
 function M.invalidateThemeCache()
