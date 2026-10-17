@@ -12,10 +12,13 @@ local Common = nil
 -- will do with the file rather than a second reading of it.
 local Rules = nil
 -- Loaded only in the mode that needs them: the model chain's reader (Master volume), the arming
--- state (Master volume's tests), the announcement module (both tests, on a press).
+-- state (Master volume's tests and Create), the announcement module (both tests, on a press), the
+-- chain's writer and the confirm dialog (Create, on a press).
 local Chain = nil
 local Armed = nil
 local Audio = nil
+local Create = nil
+local ConfirmDialog = nil
 
 -- ─── Config schema ────────────────────────────────────────────────────────────
 
@@ -135,6 +138,7 @@ end
 
 local function onModeSelected(value)
   ui.config.volume_mode = value
+  ui.createResult = nil
   if value == MODE_LEVEL and (tonumber(ui.config.level) or 0) <= 0 then
     ui.config.level = LEVEL_START
   end
@@ -219,6 +223,8 @@ local function appendGvarPicker(children, x, y, w, labelText, help)
       shown = value
       if gv == (tonumber(ui.config.master_gvar) or 0) then return end
       ui.config.master_gvar = gv
+      -- What the last Create did belongs to the variable it was made for.
+      ui.createResult = nil
       -- Normal and Alert are drawn only with a variable picked.
       ui.runtime.markDirty()
     end
@@ -308,7 +314,7 @@ end
 -- What the model holds for the global variable being shown, read once per visit and per global
 -- variable: on opening the page, on picking another one, and on Reload. Every other rebuild --
 -- Connected only, a `?` sheet closing, the arming edge -- draws the same answer again, because a
--- walk reads every input, logical switch and special function of the model.
+-- walk reads every input, mix line, logical switch and special function of the model.
 local function getDiagnosis(gv)
   if ui.diag and ui.diag.gv == gv then return ui.diag.result end
   if not Chain then Chain = loadModule("app/pages/settings/audio/volume/chain.lua") end
@@ -547,6 +553,13 @@ local function appendDiagnosis(children, x, y, w, i18n, gv, result, help)
 
   local warn = result.warn or {}
   if warn.popup then line(t(i18n, "gvar_popup_warning", "Note: This GV has 'Popup' enabled in EdgeTX model settings.")) end
+  if warn.gvModes then
+    -- As EdgeTX names the flight modes (FM1..FM8).
+    local names = {}
+    for _, fm in ipairs(warn.gvModes) do names[#names + 1] = "FM" .. tostring(fm) end
+    line(string.format(t(i18n, "chain_warn_gv_modes", "Warning: in %s, GV%d has its own value, not the suite's."),
+      table.concat(names, ", "), gv))
+  end
   if warn.weight then line(string.format(t(i18n, "chain_warn_weight", "Warning: the input's weight is %d, not 100."), warn.weight)) end
   if warn.offset then line(string.format(t(i18n, "chain_warn_offset", "Warning: the input has an offset of %d."), warn.offset)) end
   if warn.curve then line(t(i18n, "chain_warn_curve", "Warning: the input has a curve.")) end
@@ -571,6 +584,188 @@ local function appendDiagnosis(children, x, y, w, i18n, gv, result, help)
   return y - startY
 end
 
+-- ─── Creating the chain ──────────────────────────────────────────────────────
+
+-- Why Create cannot go ahead, as the line under it says it. A faulty link is named by the check
+-- above; Create never changes a link that is there.
+local function blockedText(i18n, why)
+  if why == "no_input" then return t(i18n, "create_no_input", "No free input is left.") end
+  if why == "no_input_named" then
+    return t(i18n, "create_no_input_named", "No free input: the empty ones are still named elsewhere.")
+  end
+  if why == "no_lines" then return t(i18n, "create_no_lines", "All 64 input lines are used.") end
+  if why == "no_ls" then return t(i18n, "create_no_ls", "No free logical switch is left.") end
+  if why == "no_ls_named" then
+    return t(i18n, "create_no_ls_named", "No free logical switch: the empty ones are still named elsewhere.")
+  end
+  if why == "no_sf" then return t(i18n, "create_no_sf", "No free special function is left.") end
+  return t(i18n, "create_blocked_fault", "A link above is faulty. Create changes no link: fix it by hand, then open the page again.")
+end
+
+-- EdgeTX's CHAR_INPUT (radio/src/translations/untranslated.h), which it draws before the number of
+-- an input that has no name of its own.
+local INPUT_SYMBOL = "\xC2\x8E"
+
+-- A link's name as EdgeTX shows it once the link is there. EdgeTX names only a slot that is in use
+-- (getSourceName / getSwitchName answer nil for an empty one), so a slot still to be written is
+-- named the way EdgeTX names it after the write (radio/src/strhelpers.cpp): the input symbol and a
+-- two-digit number, or L01..L64.
+local function linkName(read, kind, slot)
+  if kind == "input" then
+    local ok, name = false, nil
+    if type(_G.getSourceName) == "function" then ok, name = pcall(_G.getSourceName, read.firstInput + slot) end
+    if ok and type(name) == "string" and name ~= "" then return name end
+    return INPUT_SYMBOL .. string.format("%02d", slot + 1)
+  end
+  if kind == "ls" then
+    local ok, name = false, nil
+    if type(_G.getSwitchName) == "function" then ok, name = pcall(_G.getSwitchName, read.lsBase + slot) end
+    if ok and type(name) == "string" and name ~= "" then return name end
+    return string.format("L%02d", slot + 1)
+  end
+  return slotName("sf", slot)
+end
+
+-- The preview: one line per link, as EdgeTX's own lists show it, the links that are there as
+-- "present", then that nothing else changes.
+local function previewText(i18n, gv, read, plan)
+  local gvName = sourceName(read.gvSource)
+  local inputName = linkName(read, "input", plan.input.slot)
+  local lsName = linkName(read, "ls", plan.ls.slot)
+  local sfName = linkName(read, "sf", plan.sf.slot)
+  local present = t(i18n, "create_present", "%s %s: present")
+  local lines = {}
+  if plan.input.create then
+    lines[#lines + 1] = string.format(t(i18n, "create_input", "Input %s: %s, weight 100%%"), inputName, gvName)
+  else
+    lines[#lines + 1] = string.format(present, t(i18n, "chain_input", "Input"), inputName)
+  end
+  if plan.ls.create then
+    lines[#lines + 1] = string.format(t(i18n, "create_ls", "Logical switch %s: a>x %s -1024"), lsName, gvName)
+  else
+    lines[#lines + 1] = string.format(present, t(i18n, "chain_ls", "Logical switch"), lsName)
+  end
+  lines[#lines + 1] = string.format(t(i18n, "create_sf", "Special function %s: %s Volume %s"), sfName, lsName, inputName)
+  lines[#lines + 1] = t(i18n, "create_note", "Nothing else in the model changes, and the suite never removes these.")
+  return table.concat(lines, "\n")
+end
+
+local function createAvailable()
+  return type(model) == "table" and type(model.insertInput) == "function"
+    and type(model.setLogicalSwitch) == "function" and type(model.setCustomFunction) == "function"
+    and lvgl ~= nil and type(lvgl.confirm) == "function"
+end
+
+-- Whether the settings the suite acts on -- the stored preferences, which lib/audio.lua reads --
+-- are Master volume with global variable `gv`. Until they are, the suite does not drive that
+-- variable, and a chain created for it would set the volume from whatever value it holds.
+local function savedFor(gv)
+  local prefs = ui.prefs
+  local audio = type(prefs) == "table" and prefs.audio or nil
+  if type(audio) ~= "table" then return false end
+  return Rules.mode(audio) == MODE_MASTER and tonumber(audio.master_gvar) == gv
+end
+
+-- What the line under Create says after a Yes, from the check run again on the model as it is
+-- now -- that check is what says whether the chain was made, not the writes returning.
+local function createOutcome(i18n, gv, read, plan, out)
+  local names = {}
+  for _, kind in ipairs(out.created) do names[#names + 1] = linkName(read, kind, plan[kind].slot) end
+  local list = table.concat(names, ", ")
+  ui.diag = nil
+  local after = getDiagnosis(gv)
+  if out.failed then
+    local failedName = linkName(read, out.failed, plan[out.failed].slot)
+    if #names == 0 then
+      return string.format(t(i18n, "create_failed", "%s could not be written; nothing was created."), failedName)
+    end
+    return string.format(t(i18n, "create_partial",
+      "Created %s; then %s could not be written. Nothing was removed; Create offers the rest."), list, failedName)
+  end
+  if after.complete then
+    return string.format(t(i18n, "create_done", "Created %s. The check above reads the chain complete."), list)
+  end
+  return string.format(t(i18n, "create_incomplete", "Created %s, but the check above does not read the chain complete."), list)
+end
+
+-- Yes in the preview. The dialog may have stood for a while: the arming state, the page's mode and
+-- global variable and the model are all read again, and nothing is written unless the model still
+-- asks for exactly the links the preview listed.
+local function confirmCreate(i18n, gv, shown)
+  if not ui.loaded or ui.config.volume_mode ~= MODE_MASTER or (tonumber(ui.config.master_gvar) or 0) ~= gv then return end
+  local function finish(text)
+    ui.createResult = { gv = gv, text = text }
+    if type(ui.rebuild) == "function" then ui.rebuild() end
+  end
+  -- Locked at Yes, or the settings not saved for this variable: nothing is written, and no result
+  -- is kept -- the rebuild draws the reason under Create, which goes away with it.
+  if lockReason() ~= nil or not savedFor(gv) then
+    ui.createResult = nil
+    if type(ui.rebuild) == "function" then ui.rebuild() end
+    return
+  end
+  ui.diag = nil
+  local read = getDiagnosis(gv)
+  local plan = Chain.plan(read)
+  if not Chain.samePlan(plan, shown) then
+    return finish(t(i18n, "create_changed", "The model changed since the preview; nothing was written."))
+  end
+  if not Create then Create = loadModule("app/pages/settings/audio/volume/create.lua") end
+  local out = Create.write(plan, read)
+  finish(createOutcome(i18n, gv, read, plan, out))
+end
+
+local function startCreate(i18n, gv)
+  if lockReason() ~= nil or not savedFor(gv) or not createAvailable() then return end
+  local read = ui.diag and ui.diag.gv == gv and ui.diag.result
+  local plan = read and Chain.plan(read)
+  if not plan or plan.blocked then return end
+  if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
+  -- No fallback: without the preview nothing is written.
+  ConfirmDialog.show({
+    title = t(i18n, "create_title", "Create the chain?"),
+    message = previewText(i18n, gv, read, plan),
+    onConfirm = function() confirmCreate(i18n, gv, plan) end,
+    onCancel = function() end
+  })
+end
+
+-- The Create row, under the check: shown while the chain is not complete. Its button opens the
+-- preview; the line under it says why it cannot, or what the last Yes did.
+local function appendCreate(children, x, y, w, i18n, gv, read, reason, help)
+  local startY = y
+  local plan = Chain.plan(read)
+  local result = ui.createResult and ui.createResult.gv == gv and ui.createResult.text or nil
+  if plan then
+    local saved = savedFor(gv)
+    local usable = reason == nil and saved and not plan.blocked and createAvailable()
+    local function isUsable() return usable end
+    local label = t(i18n, "create", "Create")
+    y = y + appendButtonRow(children, x, y, w, label, {
+      { text = t(i18n, "create_preview", "Preview"), active = isUsable, press = function() startCreate(i18n, gv) end },
+    }, help)
+    local note = nil
+    if reason == "armed" then
+      note = t(i18n, "test_locked_armed", "Locked while the model is armed.")
+    elseif reason == "uncertain" then
+      note = t(i18n, "test_locked_uncertain", "Locked: the arming state is not known.")
+    elseif plan.blocked then
+      -- Before the save line: saving alone would not make Create available.
+      note = blockedText(i18n, plan.blocked)
+    elseif not createAvailable() then
+      -- Nor would it on a radio that cannot write the chain.
+      note = t(i18n, "create_no_api", "This radio cannot write the chain from a script.")
+    elseif not saved then
+      note = t(i18n, "create_save_first", "Save the page first: Create works on the saved Mode and GV.")
+    end
+    if note then y = y + appendNote(children, x, y + 2, w, note) end
+  end
+  -- While locked, the lock's reason stands alone under Create; otherwise what the last Yes did
+  -- stands under any other reason.
+  if result and reason == nil then y = y + appendNote(children, x, y + 2, w, result) end
+  return y - startY
+end
+
 -- ─── Module API ──────────────────────────────────────────────────────────────
 
 function M.getHeaderActions()
@@ -583,6 +778,7 @@ function M.onReload(ctx)
   -- Reload reads the model again too, after any test has put its value back.
   restoreTest()
   ui.diag = nil
+  ui.createResult = nil
   copyFromPrefs(ctx.preferences)
   ui.dirty = false
 end
@@ -629,6 +825,7 @@ function M.build(ctx)
 
   ui.runtime.setRequestRebuild(ctx.requestRebuild)
   ui.runtime.openHelp = ctx.openHelp
+  ui.rebuild = ctx.requestRebuild
   -- Only Master volume's tests wait for the arming state; it sets this again below.
   ui.lockPoll = nil
   updateWakeup()
@@ -726,6 +923,13 @@ function M.build(ctx)
       nextTick = (getTime and getTime() or 0) + LOCK_POLL_TICKS }
     updateWakeup()
   end
+  -- Create, while the chain is not complete; locked on the same reasons as the tests, and until
+  -- the mode and global variable shown are saved (the host rebuilds the page after a save).
+  ui.prefs = ctx.preferences
+  local createLabel = t(i18n, "create", "Create")
+  cursorY = cursorY + appendCreate(children, x, cursorY, w, i18n, gv, result, reason,
+    helpOpts(t(i18n, "help_create"), createLabel))
+
   local usable = reason == nil and result.complete == true
   local function isUsable() return usable end
   local testLabel = t(i18n, "test", "Test")
@@ -750,10 +954,15 @@ function M.onClose()
   ui.lockPoll = nil
   restoreTest()
   ui.diag = nil
+  ui.createResult = nil
+  ui.rebuild = nil
+  ui.prefs = nil
   Common.resetPageState(ui)
   Chain = nil
   Armed = nil
   Audio = nil
+  Create = nil
+  ConfirmDialog = nil
   Controls = nil
   Common = nil
   Rules = nil
