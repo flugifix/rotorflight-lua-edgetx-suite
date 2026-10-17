@@ -134,9 +134,10 @@ fullscreen mode. It has a page of its own: [Urban theme](urban-theme.md).
 Built on Urban and drawn from code in the same way, taking the whole screen in fullscreen mode:
 Urban's top bar over a battery panel down the left — the battery percentage, the cell voltage,
 the capacity used and a fill bar — beside a grid of value tiles, and a status bar at the foot
-with the model name, the arm state, the transmitter power and the skipped telemetry frames. The
-screen keeps its shape in flight; after the flight it shows Urban's statistics screen in Grid's
-colours. It has a page of its own: [Grid theme](grid-theme.md).
+with the model name, the arm state, the transmitter power and the skipped telemetry frames, or
+the reasons arming is blocked. The screen keeps its shape in flight; after the flight it shows
+Urban's statistics screen in Grid's colours. It has a page of its own:
+[Grid theme](grid-theme.md).
 
 ![Grid before, during and after the flight](../images/dashboard/themes/grid.png)
 
