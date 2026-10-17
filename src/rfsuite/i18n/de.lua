@@ -1077,7 +1077,7 @@ return {
         help_message = "Ansage des Governor-Status bei einer Änderung."
       },
       settings_audio_events_voltage = {
-        help_message = "Warnungen zu Flugakku und Stromversorgung.\nSpannung: Ansage unter Warn Zellspannung mal Zellenzahl, erneut unter Min.\nLautstärke anheben, Lautstärke anheben BEC/RX: nur Master-Lautstärke; Alarm-Stufe, Spannung erst unter Min.\nHaltezeit (s): so lange muss sie darunter bleiben; 0 sagt sofort.\nRückstellung (mV/Zelle): so weit pro Zelle über die Schwelle, bis behoben.\nHauptstrom verloren: Akku weg, ein BEC versorgt das Modell weiter.\nAnsage als: Akkuspannung oder Spannung pro Zelle.\nWiederholung: wie oft eine Warnung bis behoben spricht, alle 10 s.\nHaptisch: vibriert bei diesen Warnungen."
+        help_message = "Spannung: Ansage unter Warn Zellspannung mal Zellenzahl, erneut unter Min.\nLautstärke anheben: nur Master-Lautstärke; Alarm-Stufe, Spannung erst unter Min.\nHaltezeit (s): so lange muss sie darunter bleiben; 0 sagt sofort.\nRückstellung (mV/Zelle): so weit pro Zelle über die Schwelle, bis behoben.\nHauptstrom verloren: Akku weg, ein BEC versorgt das Modell weiter.\nAnsage als: Akkuspannung oder Spannung pro Zelle.\nWiederholung: wie oft eine Warnung bis behoben spricht, alle 10 s.\nHaptisch: vibriert bei diesen Warnungen.\nLautstärke anheben BEC/RX: ebenso für den BEC/RX-Alarm aus Setup > Power."
       },
       settings_audio_events_profiles = {
         help_message = "Ansage bei einem Wechsel des PID- oder Raten-Profils."

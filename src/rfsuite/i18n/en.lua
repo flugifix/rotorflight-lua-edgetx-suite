@@ -1077,7 +1077,7 @@ return {
         help_message = "Announces the governor's state as it changes."
       },
       settings_audio_events_voltage = {
-        help_message = "Alerts about the flight pack's voltage and the model's power supply.\nVoltage: speaks below Warn cell voltage times the cell count, anew below Min.\nRaise Volume, Raise Volume BEC/RX: Master volume only; at the Alert Level, Voltage only below Min.\nHold (s): how long it has to stay below first; 0 speaks at once.\nReset (mV/cell): how far per cell it must recover above the line.\nMain Power Lost: the pack is gone while a BEC keeps the model running.\nAnnounce as: pack voltage, or voltage per cell.\nRepeat: how often an alert speaks until cleared, 10 s apart.\nHaptic: vibrates with these alerts."
+        help_message = "Voltage: speaks below Warn cell voltage times the cell count, anew below Min.\nRaise Volume: Master volume only; at the Alert Level, Voltage only below Min.\nHold (s): how long it has to stay below first; 0 speaks at once.\nReset (mV/cell): how far per cell it must recover above the line.\nMain Power Lost: the pack is gone while a BEC keeps the model running.\nAnnounce as: pack voltage, or voltage per cell.\nRepeat: how often an alert speaks until cleared, 10 s apart.\nHaptic: vibrates with these alerts.\nRaise Volume BEC/RX: the same for the BEC/RX alert of Setup > Power > Alerts."
       },
       settings_audio_events_profiles = {
         help_message = "Announces a change of PID or rate profile."
