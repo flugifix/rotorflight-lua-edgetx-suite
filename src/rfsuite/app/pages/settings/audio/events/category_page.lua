@@ -610,9 +610,16 @@ local ROW_HELP = {
 
 local FUEL_CALLOUT_VALUES = { [0] = true, [5] = true, [10] = true, [20] = true, [25] = true, [50] = true }
 -- The same two lists lib/audio.lua accepts (FUEL_FINER_BELOW, FUEL_FINER_STEP); 0 is Off.
+-- The levels are shown as numbers with the unit, as the TX power maximum is, so their options
+-- are built once here; only Off is a word, and its label is set when a page is built.
 local FUEL_FINER_BELOW_LIST = { 0, 10, 15, 20, 25, 30, 40, 50 }
 local FUEL_FINER_BELOW_VALUES = {}
-for i = 1, #FUEL_FINER_BELOW_LIST do FUEL_FINER_BELOW_VALUES[FUEL_FINER_BELOW_LIST[i]] = true end
+local FUEL_FINER_BELOW_OPTIONS = {}
+for i = 1, #FUEL_FINER_BELOW_LIST do
+  local level = FUEL_FINER_BELOW_LIST[i]
+  FUEL_FINER_BELOW_VALUES[level] = true
+  FUEL_FINER_BELOW_OPTIONS[i] = { value = level, label = tostring(level) .. "%" }
+end
 local FUEL_FINER_STEP_VALUES = { [1] = true, [2] = true, [5] = true }
 
 -- The own maximum of the TX power alert, in mW: the power steps ExpressLRS offers above its lowest
@@ -839,15 +846,10 @@ function M.new(sectionKey)
     return ui.runtime.fuelCalloutSet
   end
 
-  -- *Finer below*: Off, or the level below which the callout speaks every *Finer step*. The
-  -- levels are shown as numbers with the unit, as the TX power maximum is; Off is a word.
+  -- *Finer below*: Off, or the level below which the callout speaks every *Finer step*.
   local function getFuelFinerBelowOptions(i18n)
-    local options = { { value = 0, label = t(i18n, "fuel_finer_off", "Off") } }
-    for i = 2, #FUEL_FINER_BELOW_LIST do
-      local level = FUEL_FINER_BELOW_LIST[i]
-      options[i] = { value = level, label = tostring(level) .. "%" }
-    end
-    return options
+    FUEL_FINER_BELOW_OPTIONS[1].label = t(i18n, "fuel_finer_off", "Off")
+    return FUEL_FINER_BELOW_OPTIONS
   end
 
   local function getFuelFinerBelowGetter()
