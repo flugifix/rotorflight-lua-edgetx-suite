@@ -80,6 +80,12 @@
   - The ESC alert now says the temperature after its words, as the MCU alert already did, in the unit set under *Settings* > *Localization*. No new sound file.
   - A settings file written before keeps its warning levels; the critical levels start at their defaults. With both alerts off, which is the default, nothing changes.
 
+### Bug Fixes & Improvements
+
+- **The Telemetry Dropouts rows are back under the *Telemetry* subheader on the *Link* page (headed *Link Quality*) under *Settings* → *Audio* → *Events* (`app/pages/settings/audio/events/category_page.lua`, `docs/audio/events.md`)**:
+  - *Telemetry Dropouts*, *Dropouts* and *Window (s)* follow *Telemetry Lost* again, where they were added. Since the link alerts were merged one after another they sat at the end of the *Downlink SNR* rows, and read as if they belonged to that alert.
+  - Only the order changes: the keys, defaults, ranges and help texts are the same, and a settings file written before reads as it did. The table in `docs/audio/events.md` follows the page.
+
 # 0.2.0
 
 ### Features & Enhancements
