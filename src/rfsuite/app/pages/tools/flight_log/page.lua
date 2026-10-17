@@ -30,8 +30,9 @@ local t = nil
 
 -- The rows kept for display. Everything past this still counts towards the totals.
 local MAX_ROWS = 300
--- Lines parsed per wakeup. The line count is the binding cap rather than a byte budget, so a
--- file of wide rows takes the same number of passes as one of narrow rows.
+-- Lines parsed per wakeup, a chunk read from the card counting as one. It is a line count rather
+-- than a byte budget, so a file of wide rows takes about the number of passes one of narrow rows
+-- does.
 local LINES_PER_WAKEUP = 90
 
 local ROW_H = 34

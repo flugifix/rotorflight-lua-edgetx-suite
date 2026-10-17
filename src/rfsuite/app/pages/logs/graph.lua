@@ -97,6 +97,7 @@ local function resetState()
   S.buf = nil
   S.bufpos = 1
   S.filePos = 0
+  S.skipRow = false
 
   S.headerLine = nil
   S.columns = {}
@@ -153,6 +154,20 @@ local function feedLine(onLine, str, s, e, off)
   return nil
 end
 
+-- Gives up the unfinished line that starts at byte `off` of the file: pumpLines skips to the next
+-- line end. One debug line per dropped line, reached through the global the log module publishes;
+-- debug, because a level that always reaches the log ring would let one damaged file push
+-- everything else out of it, and at debug nothing is formatted unless the level is switched on.
+local function dropRow(off)
+  S.skipRow = true
+  local Log = type(_G) == "table" and _G.rfsuite and _G.rfsuite.Log
+  if type(Log) == "table" and type(Log.emitf) == "function" then
+    pcall(Log.emitf, "rfsuite.logs", "debug",
+      "%s: no line end within %d bytes from byte %d, skipped to the next line",
+      tostring(S.path), MAX_LINE_LEN, off)
+  end
+end
+
 -- Feeds complete lines to onLine(str, s, e, offset) for at most maxIters iterations,
 -- where a fed line and a chunk refill each count as one. Returns "cap" when the
 -- caller should yield, "eof" at the end of the file, "stop" when onLine returned
@@ -172,6 +187,11 @@ end
 -- line it completes is joined to the unfinished line before it, and that line is fed with the
 -- refill and counted as an iteration of its own; a refill in a call's last iteration still feeds
 -- it, one iteration over maxIters, where the joined buffer left it to the next call.
+--
+-- The unfinished line is bounded as well, not only the complete one: once it holds more than
+-- MAX_LINE_LEN bytes and a carriage return, no line end can make it a line feedLine passes, so it
+-- is dropped there and the pump skips to the next line end instead of copying a growing string on
+-- every refill. The lines it feeds, and their offsets, are the ones it fed before.
 local function pumpLines(onLine, maxIters)
   local n = maxIters
   while n > 0 do
@@ -190,21 +210,41 @@ local function pumpLines(onLine, maxIters)
       end
     else
       local rest = nil
-      if buf ~= nil and S.bufpos <= #buf then rest = string.sub(buf, S.bufpos) end
+      if buf ~= nil and S.bufpos <= #buf then
+        if #buf - S.bufpos + 1 > MAX_LINE_LEN + 1 then
+          dropRow(S.filePos - #buf + S.bufpos - 1)
+        else
+          rest = string.sub(buf, S.bufpos)
+        end
+      end
       local data = io.read(S.fh, CHUNK_SIZE)
       if data == nil or data == "" then
         S.buf, S.bufpos = nil, 1
+        S.skipRow = false
         if rest ~= nil and #rest <= MAX_LINE_LEN then
           onLine(rest, 1, #rest, S.filePos - #rest)   -- a file whose last line has no newline
         end
         return "eof"
       end
       S.filePos = S.filePos + #data
-      local dnl = rest and string.find(data, "\n", 1, true)
-      if rest == nil then
+      local dnl = (rest or S.skipRow) and string.find(data, "\n", 1, true)
+      if S.skipRow then
+        -- Inside a dropped row: nothing up to its line end is a line.
+        if dnl == nil then
+          S.buf, S.bufpos = nil, 1
+        else
+          S.buf, S.bufpos = data, dnl + 1
+          S.skipRow = false
+        end
+      elseif rest == nil then
         S.buf, S.bufpos = data, 1
       elseif dnl == nil then
-        S.buf, S.bufpos = rest .. data, 1   -- no line ends in this chunk: keep collecting
+        if #rest + #data > MAX_LINE_LEN + 1 then
+          dropRow(S.filePos - #data - #rest)
+          S.buf, S.bufpos = nil, 1
+        else
+          S.buf, S.bufpos = rest .. data, 1   -- no line ends in this chunk: keep collecting
+        end
       else
         S.buf, S.bufpos = data, dnl + 1
         n = n - 1
@@ -828,6 +868,7 @@ function G.open(path, opts)
       end
       S.fh = fh
       S.buf, S.bufpos, S.filePos = nil, 1, 0
+      S.skipRow = false
     end
     return true
   end
@@ -1253,6 +1294,7 @@ function G.tick()
     io.seek(S.fh, e.off)
     S.filePos = e.off
     S.buf, S.bufpos = nil, 1
+    S.skipRow = false
     S.curDate, S.day = e.date, e.day
     S.phase = "extract"
     return false
