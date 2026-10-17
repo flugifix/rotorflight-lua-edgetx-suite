@@ -1041,7 +1041,9 @@ function G.applyColumns(colIndices)
   S.scrMin, S.scrMax = {}, {}
   S.points, S.curveEmpty = {}, {}
   S.curveLo, S.curveHi = {}, {}
-  S.cache, S.extEntry = {}, nil
+  -- S.rbSrc goes with the cache: once the cache is emptied it would be the only holder of the
+  -- previous window's buckets until the new extraction ends and replaces it.
+  S.cache, S.extEntry, S.rbSrc = {}, nil, nil
   for k = 1, #curves do
     S.scrMin[k], S.scrMax[k] = {}, {}
     S.points[k] = EMPTY_PTS
