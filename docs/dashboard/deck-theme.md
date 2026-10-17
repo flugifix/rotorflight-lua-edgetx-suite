@@ -60,7 +60,8 @@ come from the suite's translations, so it speaks the language of the package tha
   reading's name with its unit in brackets, the figure, and under it the least and the most the
   flight reached (the flight in progress where it has a value, the last flight before that) --
   or, where the columns are too narrow for both, the most alone, and nothing where even that does
-  not fit. A raw telemetry sensor shows the radio's own least and most of it. Every figure shares
+  not fit. The cell voltage of the last flight is divided by the cell count of the pack it was
+  flown on. A raw telemetry sensor shows the radio's own least and most of it. Every figure shares
   one size; a reading in words (ESC status, air rate) takes the largest size up to that one in
   which it fits. A column set to nothing gives its width to the others.
 - **Battery strip** — across the foot: the cell count, the pack voltage and the capacity used,
@@ -77,7 +78,9 @@ voltage the widget works out for the model, as Urban's cell voltage row does.
 link cluster: the model with its totals, a table of the last flight with the latest reading, the
 minimum and the maximum of each row, the flight time and the capacity used beneath it, and a bar
 with the transmitter power, the lowest link quality, the highest MCU temperature and the skipped
-frames. The [Urban page](urban-theme.md#what-it-shows) lists the rows.
+frames. The [Urban page](urban-theme.md#what-it-shows) lists the rows and says how the cell
+voltage row counts the cells of the pack that flew and how long the transmitter power and the
+skipped frames follow the link; both hold for Deck's screen too.
 
 ## Full screen
 
@@ -138,7 +141,8 @@ power, the air rate's sensitivity floor, whether a second antenna has been seen,
 skipped-frame count and the speed controller's live status -- plus whatever a card that is drawn
 needs; a raw telemetry sensor on a card also declares the radio's least and most of it, for the
 range under the figure. The *Telemetry* and *ELRS* pages name their own readings, as on Urban. The
-statistics screen declares nothing and reads the flight record. A reading the model does not
+statistics screen declares only the transmitter power and the skipped-frame count of its bar
+(`TPWR`, `*Skp`) and reads everything else from the flight record. A reading the model does not
 carry shows `-`.
 
 ## What it does not do yet

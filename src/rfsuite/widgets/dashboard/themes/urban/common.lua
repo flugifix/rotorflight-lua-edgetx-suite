@@ -693,10 +693,14 @@ end
 -- since the arm clears it, and after a landing on a pack that read 0 V. A figure of the ended
 -- flight's record is divided by this count rather than by M.cells: the live count follows whatever
 -- pack is plugged in after the landing. The host's own statistics box does the same
--- (widgets/dashboard/objects/text/stats.lua).
+-- (widgets/dashboard/objects/text/stats.lua). Rounded and capped as M.cells is, so a label and a
+-- gauge never disagree about the same count.
 function M.flownCells(state)
-  local c = state and state.lastFlightEndingCells
-  if type(c) ~= "number" or c <= 0 then return nil end
+  local c = tonumber(state and state.lastFlightEndingCells)
+  if c == nil or c <= 0 then return nil end
+  c = math.floor(c + 0.5)
+  if c < 1 then return 1 end
+  if c > 14 then return 14 end
   return c
 end
 

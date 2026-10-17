@@ -1130,7 +1130,8 @@ L.DEFAULT_TILES = {
 -- every theme load and again on every phase change, with the module being drawn -- which is why
 -- it belongs to the flight view and not to the statistics one. The statistics view reads the
 -- flight record, so a reading a pilot put on the flight screen costs nothing once the flight is
--- over.
+-- over; the two link figures of its bottom bar are the exception, with a list of their own
+-- (L.STATS_SOURCES).
 --
 -- Two halves. The readings the flight view draws whatever the five slots say:
 --
@@ -1335,8 +1336,9 @@ end
 -- bottom bar
 -- ---------------------------------------------------------------------------
 
--- A reading the host resolves only because this theme declared it (L.sources): the transmitter
--- module's power and the receiver's skipped-packet count. Nil where nothing answers.
+-- A reading the host resolves only because this theme declared it (L.sources for the flight view,
+-- L.STATS_SOURCES for the statistics view): the transmitter module's power and the receiver's
+-- skipped-packet count. Nil where nothing answers.
 local function derivedNumber(state, name, altName)
   local d = state.derived
   if d == nil then return nil end
@@ -1440,18 +1442,20 @@ function L.statusBar(nodes, state, x, y, w, h, font, fontH)
   for i = nodesBefore + 1, #nodes do nodes[i].visible = shown end
 end
 
+-- The readings the statistics view's bar takes from the host's snapshot, which holds only what
+-- the phase module standing names: postflight.lua hands the host this list. While the flight
+-- controller still answers, the two cells follow the link. Once it stops, the host rebuilds the
+-- snapshot only on a theme load (widgets/dashboard/runtime.lua, `isPostflightOffline`,
+-- reloadActiveTheme), so they keep the reading taken last: the last one the link delivered, or
+-- what the radio still holds for the sensor where the statistics view loaded after the link had
+-- gone.
+L.STATS_SOURCES = { "TPWR", "*Skp" }
+
 -- The statistics view's bar, four link and board figures in four equal cells: the transmitter
 -- power, the least link quality, the hottest the flight controller got, and the skipped packets.
 -- The host keeps no record of the power, so that cell is the reading the link delivered last,
--- under the flight view's label rather than one marked as a maximum.
---
--- The power and the skipped packets come from the host's snapshot, which holds only what the
--- phase module standing names: postflight.lua hands the host this list. While the flight
--- controller still answers, the two cells follow the link; once it stops, the host no longer
--- rebuilds the snapshot (widgets/dashboard/runtime.lua, `isPostflightOffline`) and they keep the
--- last reading.
-L.STATS_SOURCES = { "TPWR", "*Skp" }
-
+-- under the flight view's label rather than one marked as a maximum. The power and the skipped
+-- packets are the snapshot's (L.STATS_SOURCES above).
 function L.statsStatusBar(nodes, state, x, y, w, h, font, fontH, lastStat)
   local textY = y + math.floor((h - fontH) / 2)
   local shown = armingOverride(nodes, state, x, textY, w, fontH, font)
@@ -1639,10 +1643,14 @@ local function statsRows(state)
   if vMin ~= nil then
     -- The least the pack reached against the theme's own minimum, the bound the gauge and the
     -- flight view's cell row are drawn against. Without a minimum on file there is nothing to
-    -- compare with and the figure carries no closure at all.
+    -- compare with and the figure carries no closure at all. The minimum is a PACK voltage for
+    -- the live cell count and the figure is the flown pack's, so the two are compared per cell:
+    -- the same answer as before while both counts agree, and no false alarm once a pack of
+    -- another cell count is plugged in after the landing.
+    local cellMinBound = vMin / liveCells
     cellMinColor = function()
-      local v = num(lastStat(state, "minVoltage", "lastMinVoltage"))
-      if v ~= nil and v > 0 and v < vMin then return C.crit end
+      local v = perCell(lastStat(state, "minVoltage", "lastMinVoltage"), cells)
+      if v ~= nil and v < cellMinBound then return C.crit end
       return C.text
     end
   end

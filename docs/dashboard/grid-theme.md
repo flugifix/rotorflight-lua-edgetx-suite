@@ -65,7 +65,9 @@ come from the suite's translations, so it speaks the language of the package tha
 table of the last flight with the latest reading, the minimum and the maximum of each row, the
 flight time and the capacity used beneath it, and -- where the status bar is shown -- a bar with
 the transmitter power, the lowest link quality, the highest MCU temperature and the skipped
-frames. The [Urban page](urban-theme.md#what-it-shows) lists the rows.
+frames. The [Urban page](urban-theme.md#what-it-shows) lists the rows and says how the cell
+voltage row counts the cells of the pack that flew and how long the transmitter power and the
+skipped frames follow the link; both hold for Grid's screen too.
 
 ## Full screen
 
@@ -127,8 +129,9 @@ What Urban's flight screen declares whatever its rows show -- the transmitter's 
 power, the air rate's sensitivity floor, whether a second antenna has been seen, the
 skipped-frame count and the speed controller's live status -- plus whatever a tile that is
 actually drawn needs: a slot past the last cell of the grid declares nothing. The *Telemetry* and
-*ELRS* pages name their own readings, as on Urban. The statistics screen declares nothing and
-reads the flight record. A reading the model does not carry shows `-`.
+*ELRS* pages name their own readings, as on Urban. The statistics screen declares only the
+transmitter power and the skipped-frame count of its bar (`TPWR`, `*Skp`) and reads everything
+else from the flight record. A reading the model does not carry shows `-`.
 
 ## What it does not do yet
 

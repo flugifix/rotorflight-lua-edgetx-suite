@@ -138,7 +138,9 @@ function M.sources(_, state)
 end
 
 -- The cell count divides the cell tile's figure and its range, and it is fixed at build time, as
--- it is in the flight view; a pack with another count rebuilds the view.
+-- it is in the flight view; a pack with another count rebuilds the view. The range of the flight
+-- that ended is the exception: it is divided by the count of the pack that flew
+-- (layout.lua, extremeReader), which the reader takes per frame and no key needs to carry.
 function M.renderKey(_, state)
   local UD = K.UD
   if UD == nil or type(UD.cells) ~= "function" then return "" end

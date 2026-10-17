@@ -60,8 +60,10 @@ of the pack the flight was flown on, so a pack of another cell count plugged in 
 changes only the latest reading. Beneath it the flight time and the capacity used, and a bar
 with the transmitter power, the lowest link quality, the highest MCU temperature and the
 skipped frames; the transmitter power and the skipped frames follow the link while the flight
-controller still answers and keep the last reading once it has stopped. The header of the table
-says *Disconnected* once the flight controller has stopped answering.
+controller still answers, and once it has stopped they keep the reading taken last -- what the
+radio held for the two sensors when the screen was last built, normally the last reading the link
+delivered. The header of the table says *Disconnected* once the flight controller has stopped
+answering.
 
 ## Full screen
 
@@ -118,10 +120,11 @@ allows. Six places on the screen open a page over it, and a seventh opens the su
   the lowest cell voltage of the flight and the reserve the fuel figure keeps back. The cell
   voltages are the pack voltage divided by the cell count, as on the flight screen: no telemetry
   carries each cell's own voltage. After a flight its lowest cell voltage is divided by the cell
-  count of the pack it was flown on, not by that of a pack plugged in since. The limits and the reserve are read from the flight controller
-  on connecting, and read *-* until they have been. Like every other place that takes a press, the
-  gauge has the radio's frame around it while *Frames on tap areas* is on. A key can open the page
-  as well: choose *Theme: Battery* for it on the *Keys* page.
+  count of the pack it was flown on, not by that of a pack plugged in since. The limits and the
+  reserve are read from the flight controller on connecting, and read *-* until they have been.
+  Like every other place that takes a press, the gauge has the radio's frame around it while
+  *Frames on tap areas* is on. A key can open the page as well: choose *Theme: Battery* for it on
+  the *Keys* page.
 - **The governor row and the status line** of the left panel open *Status*: the arm state in
   large letters with what stands in its way under it -- the reasons the flight controller names,
   *Ready to arm* while there are none. The arm state takes the colours *Arm state colours* on the
