@@ -195,7 +195,7 @@ Rotorflight is an open-source community project. Anybody can join in and help to
 * testing new software versions, new features and fixes; and providing feedback
 * participating in discussions on new features
 * create or update content on the [documentation website](https://doc.rotorflight.org/contributing/editing-the-docs/)
-* [contributing](https://doc.rotorflight.org/contributing/) to the software development - fixing bugs, implementing new features and improvements
+* [contributing](https://doc.rotorflight.org/contributing/) to the software development - fixing bugs, implementing new features and improvements; what a pull request to this repository carries is in [CONTRIBUTING.md](CONTRIBUTING.md)
 * [translating](https://doc.rotorflight.org/contributing/) Rotorflight into a new language, or helping to maintain an existing translation
 
 

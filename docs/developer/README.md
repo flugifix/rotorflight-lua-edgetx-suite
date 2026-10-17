@@ -5,7 +5,8 @@ sidebar_label: Developer
 
 # Developer guides
 
-For contributors. [DEVELOPMENT.md](../../DEVELOPMENT.md) covers the workspace, the build
+For contributors. [CONTRIBUTING.md](../../CONTRIBUTING.md) says what every pull request
+carries; [DEVELOPMENT.md](../../DEVELOPMENT.md) covers the workspace, the build
 and CI; [GEMINI.md](../../GEMINI.md) the code conventions, logging and the reactive-closure
 rule for the dashboard; `bin/accounting/README.md` the instruction budget. These files are
 the "how do I add one of these" guides that none of the three carries, ordered by how often a

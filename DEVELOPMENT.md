@@ -4,7 +4,8 @@ Everything in this file is about working on RFSuite. If you only want to install
 the [README](README.md) is the whole story.
 
 The project conventions the sources follow — module loading, UI helpers, logging, memory
-handling and the i18n rules — are in [GEMINI.md](GEMINI.md).
+handling and the i18n rules — are in [GEMINI.md](GEMINI.md). What every pull request carries —
+a release note, its documentation — is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 
 ## Repository layout
@@ -239,8 +240,8 @@ is not part of the installation archive: the packager stages `src/` only, so not
 `docs/` reaches a radio.
 
 Every change a pilot can observe is documented in the same pull request that makes it. The
-rule is in [GEMINI.md](GEMINI.md) under *Documentation Maintenance* and in
-`.agents/rules/documentation.md`, in the same shape as the rule for `Releases.md`. The page
+rule is in [CONTRIBUTING.md](CONTRIBUTING.md) under *Documentation*, beside the rule for
+`Releases.md`. The page
 template is `docs/_template.md`, and `docs/pages/README.md` lists every page with whether its
 file is written yet.
 
