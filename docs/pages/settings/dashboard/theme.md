@@ -63,8 +63,9 @@ The model's own theme settings are edited under
   *the settings file could not be written to the SD card* where the card refused a file.
 - **The post-flight screen keeps the model's theme after the battery is unplugged.** A model with
   a theme of its own shows that theme on its post-flight screen also once the flight controller
-  has stopped answering, until the next flight controller connects. The model's own theme settings
-  are not carried over: in that stretch the theme uses the standard values.
+  has stopped answering, until the next flight controller connects. Usually the model's own theme
+  settings stay too; where the widget had to let go of the model's file as the link went, only the
+  theme is kept, and in that stretch it uses the standard values.
 - **The theme list is kept between visits.** The page lists the theme folders when it is first
   opened and keeps that list while the tool runs, until the tool drops the page from its cache of
   recently opened pages. The page has no *Reload*: a theme copied onto the card while the tool is
