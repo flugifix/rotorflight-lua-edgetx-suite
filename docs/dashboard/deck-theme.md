@@ -24,6 +24,8 @@ come from the suite's translations, so it speaks the language of the package tha
 
 ## What it shows
 
+![Deck before, during and after the flight, on a TX16S MK3](../images/dashboard/themes/deck.png)
+
 **On the ground and in flight** one screen, which does not change shape at spool-up:
 
 - **Header** — in full screen the menu and the tool buttons at the left; the model name; in the

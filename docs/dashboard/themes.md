@@ -141,6 +141,19 @@ Urban's statistics screen in Grid's colours. It has a page of its own:
 
 ![Grid before, during and after the flight](../images/dashboard/themes/grid.png)
 
+### Deck
+
+Built on Urban and drawn from code in the same way, taking the whole screen in fullscreen mode:
+under a header with the model name, the link bars, the clock and the radio battery, a column of
+three cards on the left — by default the model picture with the flight count, total time and
+battery profile, the arm state, and the governor — a big card with the head speed, its highest
+value and the throttle, a row of four value cards with the least and the most of the flight under
+each figure, and a battery strip across the foot. The screen keeps its shape in flight; after the
+flight it shows Urban's statistics screen under Deck's header. It has a page of its own:
+[Deck theme](deck-theme.md).
+
+![Deck before, during and after the flight](../images/dashboard/themes/deck.png)
+
 ## Related
 
 - [Design](../pages/settings/dashboard/theme.md) — choosing the theme, per flight phase and per
