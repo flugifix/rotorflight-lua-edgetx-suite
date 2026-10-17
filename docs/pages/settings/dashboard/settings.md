@@ -34,6 +34,13 @@ nothing opens a page saying so.
 | Per-Model Settings | The first tile, only while a flight controller is connected and per-model settings are on for its model (see [*Design*](theme.md)). Opens [the list of what that model changes](overrides.md), and from there the settings of each theme that model draws, for that model alone. |
 | *(one tile per theme)* | Opens that theme's standard settings. What the page holds is the theme's own business; several of the shipped themes offer the battery voltage bounds their gauges are scaled to. |
 
+### Default
+
+| Setting | What it does |
+| --- | --- |
+| Minimum, Maximum | The battery voltage the gauge spans. |
+| Colour at alert levels | Off by default. On, the link quality box turns amber at the *Warning (%)* and red at the *Critical (%)* of the *Link Quality* announcement (*Settings* → *Audio* → *Events* → *Link Quality*) — but only while that announcement is switched on; with it off, or with this setting off, the box draws as it always did. |
+
 A theme may split its settings into pages. Its tile then opens a second grid, one tile per
 page, and each of those opens part of the theme's settings — the same settings, divided so a
 page fits the screen. Themes that do not split show their settings directly.

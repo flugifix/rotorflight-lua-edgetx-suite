@@ -2738,6 +2738,8 @@ return {
       settings_dashboard_settings = {
         section_dashboard_settings = "Settings",
         section_default_voltage = "Default Theme Voltage",
+        section_default_link = "Default Theme Link Quality",
+        default_link_colors = "Colour at alert levels",
         theme_config = "Configuration",
         connection_guard = "Connection Required",
         selected_theme = "Selected",
@@ -2783,9 +2785,6 @@ return {
         urban_status_bar = "Status bar",
         urban_bar_colors = "Colour the bars",
         urban_bar_colors_warn = "Only on warning",
-        urban_lq_warn = "Link good above",
-        urban_rssi_warn = "Signal good above",
-        urban_tpwr_max = "TX power limit",
         urban_units = "Units beside the values",
         urban_temp_colors = "Temperature colours",
         urban_temp_colors_early = "Early",

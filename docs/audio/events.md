@@ -192,6 +192,12 @@ Callouts of the SmartFuel level while the model is connected. The flight control
 
 Alerts about the radio link and the flight controller's telemetry.
 
+The warning and critical levels set here also colour the dashboard: the Urban theme's link bars
+turn amber and red at them, and the Default theme's link quality box does where its *Colour at
+alert levels* setting is on. A theme reads every alert's levels from one place, `state.alerts`
+([dashboard themes](../developer/dashboard-themes.md)), so a screen and the voice agree; saving
+this page reloads the dashboard.
+
 | Setting | Switch / Key | Default | Scope | Description |
 | --- | --- | --- | --- | --- |
 | Link Quality | `lq_alert` | Off | Radio | Spoken warning when RC link quality drops below defined levels. A receiver that reports no link quality stays silent: the value that arrives in its place is a signal strength in dBm, not a percentage. |
