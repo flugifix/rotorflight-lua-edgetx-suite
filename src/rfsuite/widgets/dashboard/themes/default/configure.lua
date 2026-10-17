@@ -14,6 +14,10 @@ local THEME_PATH = "system/default"
 local THEME_DEFAULTS = {
   v_min = 18.0,
   v_max = 25.2,
+  -- Colour the link quality box amber and red at the Link Quality announcement's two levels
+  -- (preflight.lua and inflight.lua read them off `state.alerts`). Off, so the box draws as it
+  -- always did until the pilot asks for it.
+  link_colors = false,
 }
 
 local ui = {
@@ -21,6 +25,7 @@ local ui = {
   config = {
     v_min_tenths = 180,
     v_max_tenths = 252,
+    link_colors = false,
   }
 }
 
@@ -47,6 +52,7 @@ local function loadConfig(prefs)
 
   ui.config.v_min_tenths = math.floor((vMin * 10) + 0.5)
   ui.config.v_max_tenths = math.floor((vMax * 10) + 0.5)
+  ui.config.link_colors = cfg.link_colors == true
   ui.loaded = true
 end
 
@@ -60,6 +66,7 @@ local function saveConfig(prefs)
   DashboardLib.setThemeConfig(prefs, THEME_PATH, {
     v_min = (tonumber(ui.config.v_min_tenths) or 180) / 10,
     v_max = (tonumber(ui.config.v_max_tenths) or 252) / 10,
+    link_colors = ui.config.link_colors == true,
   }, modelPrefs)
 
   -- The model's file is written whenever a flight controller is connected, but it carries
@@ -205,6 +212,26 @@ function M.build(ctx)
       return string.format("%.1fV", (tonumber(value) or 252) / 10)
     end
   })
+
+  local linkTitle = "Default Theme Link Quality"
+  local colorsLabel = "Colour at alert levels"
+  if i18n and i18n.t then
+    local title = i18n.t("app.pages.settings_dashboard_settings.section_default_link")
+    if title and title ~= "app.pages.settings_dashboard_settings.section_default_link" and title ~= "" then
+      linkTitle = title
+    end
+    local label = i18n.t("app.pages.settings_dashboard_settings.default_link_colors")
+    if label and label ~= "app.pages.settings_dashboard_settings.default_link_colors" and label ~= "" then
+      colorsLabel = label
+    end
+  end
+
+  Controls.appendSectionHeader(children, x, cursorY, w, linkTitle, true, function() end)
+  cursorY = cursorY + Controls.SECTION_H
+
+  Controls.appendRadioSwitch(children, x, cursorY, w, colorsLabel,
+    function() return ui.config.link_colors == true end,
+    function(value) ui.config.link_colors = value == true end)
 end
 
 return function(ctx)

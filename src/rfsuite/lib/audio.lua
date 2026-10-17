@@ -3026,4 +3026,68 @@ function Audio.process(self, opts)
   end
 end
 
+--- Every alert's levels as the announcements above apply them, for a dashboard theme to colour the
+--- same reading by: `{ on, warn, critical }` per alert, resolved and ordered the way the alert
+--- itself resolves and orders them, so a theme and the voice cannot disagree about where a level
+--- lies. `on` is the alert's own switch; a theme decides for itself whether it colours a reading
+--- whose alert is off. Units are the alert's own: percent for the link alerts (link quality, the
+--- headroom of LinkRates.headroom, the position of LinkRates.snrPercent, the share of the TX power
+--- maximum), degrees Celsius for the temperatures, percent of the ESC's limit for its load.
+---
+--- `events` is `preferences.audio_events`; the ESC's temperature levels take the connected model's
+--- own values where it has them, as the alert does. `audioState` is optional and is read for one
+--- thing only: the transmitter module's Max Power, once the TX power alert has read it.
+---
+--- Each alert is one entry, so an alert that is removed takes its entry with it: a theme reading an
+--- entry that is not there gets nil, never a placeholder.
+function Audio.alertLevels(events, audioState)
+  events = events or {}
+  local function levels(enableKey, warn, critical, worseUp)
+    -- Ordered as the alerts order them: the critical level is the one crossed second.
+    if worseUp then
+      if critical < warn then critical = warn end
+    elseif critical > warn then
+      critical = warn
+    end
+    return { on = prefEnabled(events, enableKey, false), warn = warn, critical = critical }
+  end
+
+  local alerts = {}
+  alerts.lq = levels("lq_alert", tonumber(events.lq_warn) or 70, tonumber(events.lq_critical) or 50)
+  for i = 1, #LINK_HEADROOM_ALERTS do
+    local alert = LINK_HEADROOM_ALERTS[i]
+    alerts[alert.alertKey] = levels(alert.enableKey, tonumber(events[alert.warnKey]) or alert.warn,
+      tonumber(events[alert.criticalKey]) or alert.critical)
+  end
+
+  -- The TX power alert's levels are shares of a maximum, so the maximum comes with them: the
+  -- pilot's own where Own Maximum is on, the module's Max Power once the alert has read it, and
+  -- the pilot's Maximum (mW) setting until then.
+  local tpwr = levels("tpwr_alert", tonumber(events.tpwr_warn) or TX_POWER_WARN,
+    tonumber(events.tpwr_critical) or TX_POWER_CRITICAL, true)
+  local maximum = nil
+  if not prefEnabled(events, "tpwr_limit", false) and type(audioState) == "table" then
+    local read = audioState.txPowerRead
+    if not (type(read) == "table" and read.done) then read = audioState.txPowerLast end
+    maximum = type(read) == "table" and tonumber(read.maxMilliwatts) or nil
+  end
+  if maximum == nil or maximum <= 0 then maximum = tonumber(events.tpwr_max) or TX_POWER_OWN_MAX end
+  tpwr.max = maximum
+  alerts.tpwr = tpwr
+
+  local escWarn, escCritical = escTemperatureLevels(events)
+  alerts.escTemp = levels("esc_temperature", escWarn, escCritical, true)
+  local mcuWarn, mcuCritical = mcuTemperatureLevels(events)
+  alerts.mcuTemp = levels("mcu_temperature", mcuWarn, mcuCritical, true)
+  alerts.escLoad = levels("esc_load", tonumber(events.esc_load_warn) or 80,
+    tonumber(events.esc_load_critical) or 100, true)
+
+  alerts.skipped = {
+    on = prefEnabled(events, "dropouts_alert", false),
+    count = clampedSetting(events, "dropouts_count", 3, 1, 50),
+    window = clampedSetting(events, "dropouts_window", 10, 4, 60),
+  }
+  return alerts
+end
+
 return Audio

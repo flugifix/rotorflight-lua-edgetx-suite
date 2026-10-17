@@ -94,19 +94,10 @@ L.SETTINGS = {
   { page = "topbar", key = "bar_colors", values = { "always", "warn" },        default = "always" },
   -- The status bar's transmitter power.
   { page = "topbar", key = "tpwr",       values = ON_OFF,                      default = "on" },
-  -- One number rather than the pair the bar actually draws with: what a pilot is deciding is
-  -- where "good" ends, and the critical step follows it thirty points down -- 80 / 50 at the
-  -- default.
-  { page = "topbar", key = "lq_warn",    values = { "90", "80", "70", "60", "50" }, default = "80" },
-  -- The signal bar's warning step, in percent of the headroom above the floor; the critical step
-  -- is half of it -- 15 / 8 at the default. A stored value not in this list lands on the default.
-  { page = "topbar", key = "rssi_warn",  values = { "25", "20", "15", "10" },  default = "15" },
-  -- The most the transmitter module sends with, in mW: the full scale of the link view's TPWR bar.
-  -- No link frame carries it -- dynamic power moves the reported power below it -- so it is the
-  -- pilot's to say. The values are ExpressLRS's power levels; the bar turns amber from 60 % of the
-  -- limit and red from 85 %, where dynamic power is close to having nothing left to add.
-  { page = "topbar", key = "tpwr_max",   values = { "25", "50", "100", "250", "500", "1000", "2000" },
-    default = "100" },
+  -- The link bars' warning and critical steps are not settings of this theme: they are the levels
+  -- of the announcements (Settings > Audio > Events > Link), read off `state.alerts` (L.alertSteps),
+  -- so a bar turns amber where the voice speaks. A value an older version of this theme stored
+  -- for its own steps stays in the settings file and is no longer read.
   { page = "rows",   key = "units",      values = ON_OFF,                      default = "off" },
   { page = "rows",   key = "temp_colors", values = { "off", "standard", "early" }, default = Common.TEMP_COLORS_DEFAULT },
 }
@@ -143,15 +134,6 @@ function L.settingsLabels()
     bar_colors = { label = "@i18n(app.pages.settings_dashboard_settings.urban_bar_colors)@",
                    values = { always = "@i18n(app.pages.setup_adjustments.channel_always)@",
                               warn = "@i18n(app.pages.settings_dashboard_settings.urban_bar_colors_warn)@" } },
-    lq_warn = { label = "@i18n(app.pages.settings_dashboard_settings.urban_lq_warn)@",
-                values = { ["90"] = "90 %", ["80"] = "80 %", ["70"] = "70 %",
-                           ["60"] = "60 %", ["50"] = "50 %" } },
-    rssi_warn = { label = "@i18n(app.pages.settings_dashboard_settings.urban_rssi_warn)@",
-                  values = { ["25"] = "25 %", ["20"] = "20 %", ["15"] = "15 %",
-                             ["10"] = "10 %" } },
-    tpwr_max = { label = "@i18n(app.pages.settings_dashboard_settings.urban_tpwr_max)@",
-                 values = { ["25"] = "25 mW", ["50"] = "50 mW", ["100"] = "100 mW", ["250"] = "250 mW",
-                            ["500"] = "500 mW", ["1000"] = "1000 mW", ["2000"] = "2000 mW" } },
     units = { label = "@i18n(app.pages.settings_dashboard_settings.urban_units)@", values = onOff() },
     temp_colors = { label = "@i18n(app.pages.settings_dashboard_settings.urban_temp_colors)@",
                     values = { off = "@i18n(app.pages.flight_tuning_advanced_pid_controller.tbl_off)@",
@@ -418,6 +400,20 @@ local function rssiPercent(dbm, floor)
 end
 L.rssiPercent = rssiPercent
 
+-- The warning and critical steps of one announcement's levels (`state.alerts`, which the host
+-- resolves when it builds the theme), or nil where it publishes none for that announcement -- a
+-- bar then draws without steps rather than at a guessed one. The steps hold whether or not the
+-- announcement itself is switched on: the bar colours the reading either way.
+local function alertSteps(state, key)
+  local alerts = state and state.alerts
+  local levels = type(alerts) == "table" and alerts[key] or nil
+  if type(levels) ~= "table" then return nil end
+  local warn, crit = tonumber(levels.warn), tonumber(levels.critical)
+  if warn == nil or crit == nil then return nil end
+  return warn, crit
+end
+L.alertSteps = alertSteps
+
 -- A link bar's fill as a reactive `size`: `full` pixels at 100, clamped to 0..100, worked out
 -- once per change of the reading rather than on every frame.
 local function barLength(read, full, fh)
@@ -487,11 +483,10 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
   -- The link bars, stacked: RQ, TQ, the receiver's first antenna and -- once the link has shown
   -- that a second one is there -- the second. Each bar is its reading across the width, with
   -- notches at its warning and critical steps, green / amber / red by those steps (or neutral
-  -- while fine, where the pilot chose colour only on warning).
-  local lqWarn = tonumber(setting(state, "lq_warn")) or 80
-  local lqCrit = math.max(0, lqWarn - 30)
-  local rsWarn = tonumber(setting(state, "rssi_warn")) or 15
-  local rsCrit = math.floor(rsWarn / 2 + 0.5)
+  -- while fine, where the pilot chose colour only on warning). The steps are the announcements'
+  -- levels: link quality's for both link-quality bars, the RSSI alert's for the signal bars.
+  local lqWarn, lqCrit = alertSteps(state, "lq")
+  local rsWarn, rsCrit = alertSteps(state, "rssi")
   local bars = {}
   if setting(state, "lq_bar") == "on" then
     bars[#bars + 1] = { read = Common.field(state, "lq"), warn = lqWarn, crit = lqCrit }
@@ -563,8 +558,8 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
       if v == lastV then return lastColor end
       lastV = v
       if v == nil then lastColor = C.track
-      elseif v <= crit then lastColor = C.crit
-      elseif v <= warn then lastColor = C.warn
+      elseif crit and v <= crit then lastColor = C.crit
+      elseif warn and v <= warn then lastColor = C.warn
       else lastColor = good end
       return lastColor
     end
@@ -579,8 +574,10 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
         size = barLength(read, fwMax, fh)
       }
       local nh = math.max(2, math.floor(barH * 0.45))
-      Common.rect(nodes, barX + math.floor(barW * crit / 100), by + barH - nh, 2, nh, C.tick, true, 0)
-      Common.rect(nodes, barX + math.floor(barW * warn / 100), by + barH - nh, 2, nh, C.tick, true, 0)
+      if crit then
+        Common.rect(nodes, barX + math.floor(barW * crit / 100), by + barH - nh, 2, nh, C.tick, true, 0)
+        Common.rect(nodes, barX + math.floor(barW * warn / 100), by + barH - nh, 2, nh, C.tick, true, 0)
+      end
     else
       Common.rect(nodes, barX, by, barW, barH, C.track, true, 0)
       nodes[#nodes + 1] = {
@@ -592,8 +589,10 @@ function L.topBar(nodes, state, x, y, w, h, font, fontH, ctx, showLink)
           return math.floor(barW * v / 100), barH
         end
       }
-      Common.rect(nodes, barX + math.floor(barW * crit / 100), by, 1, barH, C.tick, true, 0)
-      Common.rect(nodes, barX + math.floor(barW * warn / 100), by, 1, barH, C.tick, true, 0)
+      if crit then
+        Common.rect(nodes, barX + math.floor(barW * crit / 100), by, 1, barH, C.tick, true, 0)
+        Common.rect(nodes, barX + math.floor(barW * warn / 100), by, 1, barH, C.tick, true, 0)
+      end
     end
   end
 end
@@ -620,8 +619,10 @@ function L.barLines(nodes, barX, by, barW, barH, outlined, warn, crit, read, col
   }
   if outlined then
     local nh = math.max(2, math.floor(barH * 0.45))
-    vline(nodes, barX + math.floor(barW * crit / 100) + 1, by + barH - nh, by + barH - 1, C.tick, 2)
-    vline(nodes, barX + math.floor(barW * warn / 100) + 1, by + barH - nh, by + barH - 1, C.tick, 2)
+    if crit then
+      vline(nodes, barX + math.floor(barW * crit / 100) + 1, by + barH - nh, by + barH - 1, C.tick, 2)
+      vline(nodes, barX + math.floor(barW * warn / 100) + 1, by + barH - nh, by + barH - 1, C.tick, 2)
+    end
     local x1, y1 = barX + barW - 1, by + barH - 1
     local edges = {
       { { barX, by }, { x1, by } }, { { barX, y1 }, { x1, y1 } },
@@ -632,8 +633,10 @@ function L.barLines(nodes, barX, by, barW, barH, outlined, warn, crit, read, col
         color = C.frame, thickness = 1 }
     end
   else
-    vline(nodes, barX + math.floor(barW * crit / 100), by, by + barH - 1, C.tick, 1)
-    vline(nodes, barX + math.floor(barW * warn / 100), by, by + barH - 1, C.tick, 1)
+    if crit then
+      vline(nodes, barX + math.floor(barW * crit / 100), by, by + barH - 1, C.tick, 1)
+      vline(nodes, barX + math.floor(barW * warn / 100), by, by + barH - 1, C.tick, 1)
+    end
   end
 end
 

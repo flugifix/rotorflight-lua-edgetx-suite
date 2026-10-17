@@ -3499,6 +3499,14 @@ function Runtime.new(zone, options)
     self.themePath = selectedTheme
     self.state.themeConfig = nextConfig
     updateVoltageThemeConfig(self)
+    -- The announcements' levels, for a theme to colour the same readings by. Resolved here, with
+    -- the theme configuration and before the theme loads, because a box reads a level once when it
+    -- is built: saving the announcement settings reloads the preferences, which tears the theme
+    -- down and brings the next pass here. Read-only for the theme; a fresh table per reload.
+    if DashboardAudio and type(DashboardAudio.alertLevels) == "function" then
+      self.state.alerts = DashboardAudio.alertLevels(self.preferences and self.preferences.audio_events,
+        self.audioState)
+    end
     -- The phase key, and the key every other phase resolves to for this theme, are kept so that
     -- the pass below can compare MODULES rather than phase names: a phase change that resolves
     -- to the module already on screen is not a reason to tear the scene down.

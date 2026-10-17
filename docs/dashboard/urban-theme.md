@@ -82,12 +82,18 @@ allows. Six places on the screen open a page over it, and a seventh opens the su
   *2RSS*, the second once one has been seen) and at the transmitter (*TRSS*), the signal-to-noise
   ratio at the receiver and at the transmitter (*SNR*, `9 / 8dB`) and the transmitter power
   (*TPWR*) -- and at the foot the least link quality of the flight (*RQ min*). The signal bars show
-  the headroom over the air rate's sensitivity floor, the SNR bar runs from -10 dB to +10 dB, and
-  the bars take the warning steps the *Top Bar* page sets for the link bars; the SNR bar turns
-  amber at 4 dB and red at 0 dB. The *TPWR* bar is the power as a share of the *TX power limit*
-  set on the *Top Bar* page and warns the other way round, amber from 60 % of the limit and red
-  from 85 %: dynamic power raises the power as the link weakens. On an FLRC or FSK rate, which reports no signal-to-noise ratio,
-  *SNR* reads `-`. *RQ min* is the flight record's: the flight in progress, the last flight
+  the headroom over the air rate's sensitivity floor; the SNR bar shows where the receiver's
+  signal-to-noise ratio sits between the two thresholds ExpressLRS's dynamic power uses for the air
+  rate, empty at the one where it asks for more power and full at the one where it asks for less,
+  and stays empty on a rate whose thresholds are not known. The *TPWR* bar is the power as a share
+  of the maximum the *TX Power* announcement uses -- *Maximum (mW)* where *Own Maximum* is on, the
+  module's own Max Power where that announcement had read it when the dashboard was last loaded,
+  *Maximum (mW)* otherwise; the module is read only while that announcement is on, and a read that
+  finishes after the dashboard was loaded is taken at its next load (a save of the settings, or the
+  change to the post-flight screen) -- and warns
+  the other way round: dynamic power raises the power as the link weakens. Each bar turns amber
+  and red at the levels of its announcement, see [the link steps](#the-link-steps) below. On an FLRC
+  or FSK rate, which reports no signal-to-noise ratio, *SNR* reads `-`. *RQ min* is the flight record's: the flight in progress, the last flight
   otherwise, `-` until the model has been armed once. The *Link view switch* on the *Top Bar*
   page opens the same page while the switch is in the chosen position, in full screen and in the
   widget's zone alike; in the zone it only shows.
@@ -142,6 +148,25 @@ quick menu. A key set to the tool does nothing while the model is armed. MDL, SY
 nothing while another page is on top. A radio without one of these keys simply never uses its
 setting.
 
+## The link steps
+
+The link bars, in the top bar and on the *ELRS* page, turn amber and red where the link
+announcements under *System* → *Settings* → *Audio* → *Events* → *Link* speak: each bar
+takes the *Warning (%)* and *Critical (%)* of its announcement, whether or not that announcement is
+switched on, so the colour on the screen and the voice agree.
+
+| Bar | Its steps |
+| --- | --- |
+| RQ, TQ | *Link Quality*: 70 % and 50 % by default. |
+| 1RSS, 2RSS | *RSSI*: 15 % and 8 % of the headroom by default. |
+| TRSS | *Downlink*: 15 % and 8 % by default. |
+| SNR | *SNR*: 30 % and 0 % by default. |
+| TPWR | *TX Power*: 60 % and 85 % of the maximum by default; amber and red as the power rises. |
+
+Earlier versions of this theme had settings of their own for these steps on the *Top Bar* page
+(*Link good above*, *Signal good above*, *TX power limit*). They are gone; a value stored for them
+stays in the settings file and is no longer read.
+
 ## Settings
 
 | Page | Setting | What it does |
@@ -159,9 +184,6 @@ setting.
 | Top Bar | Transmitter battery | The radio battery at the right end of the top bar. On by default. |
 | Top Bar | Status bar: TPWR | The transmitter power in the bottom bar. On by default. |
 | Top Bar | Colour the bars | *Always* (default) colours a good link green; *Only on warning* leaves it neutral until a bar drops to its warning step. |
-| Top Bar | Link good above | Where the link-quality bars turn amber, 50 % to 90 %, default 80 %; they turn red thirty points lower. |
-| Top Bar | Signal good above | Where the signal bars turn amber, 10 % to 25 % of the headroom, default 15 %; they turn red at half of it. |
-| Top Bar | TX power limit | The most the transmitter module sends with, 25 mW to 2000 mW, default 100 mW: the full scale of the *TPWR* bar on the *ELRS* page. Set it to the module's own maximum, or to the limit set in the module. |
 | Top Bar | Link view switch | A switch position that shows the *ELRS* link page while it is held. None by default: the page then opens only by a tap on the link bars. |
 | Keys | Key PAGE >, Key PAGE < | What each page key does in full screen: *Nothing*, *Suite: Quick menu* (default), *Theme: Tuning* (the *Profile & Tuning* page), *Theme: ELRS link* (the *ELRS* link page), *Theme: Telemetry* (the *Telemetry* page), *Theme: Battery* (the *Battery* page), *Theme: Status* (the *Status* page), *Suite: Main menu*, *Suite: Flight log* or *Suite: Exit full screen*. *Suite* marks what the dashboard does on every theme, *Theme* a page Urban draws itself. *Suite: Flight log* opens the suite's tool on its *Flight Log* page, as the quick menu's *FLIGHT LOG* does, and does nothing while that page's preview switch is off or the model is armed. |
 | Keys | Key MDL, Key SYS, Key TELE | The same choice for these keys. Defaults: MDL *Nothing*, SYS *Suite: Main menu*, TELE *Suite: Quick menu*. |

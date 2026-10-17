@@ -2738,6 +2738,8 @@ return {
       settings_dashboard_settings = {
         section_dashboard_settings = "Einstellungen",
         section_default_voltage = "Standard-Spannung",
+        section_default_link = "Standard-Linkqualität",
+        default_link_colors = "Bei Alarmstufen färben",
         theme_config = "Design-Konfiguration",
         connection_guard = "Verbindung erforderlich",
         selected_theme = "Ausgewählt",
@@ -2780,9 +2782,6 @@ return {
         urban_status_bar = "Statusleiste",
         urban_bar_colors = "Balken einfärben",
         urban_bar_colors_warn = "Nur bei Warnung",
-        urban_lq_warn = "Link gut ab",
-        urban_rssi_warn = "Signal gut ab",
-        urban_tpwr_max = "Sendeleistung max",
         urban_units = "Einheiten neben den Werten",
         urban_temp_colors = "Temperaturfarben",
         urban_temp_colors_early = "Früh",
