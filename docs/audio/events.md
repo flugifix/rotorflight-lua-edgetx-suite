@@ -342,9 +342,11 @@ the page that switches an alert on is the page that says how it behaves.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
   when the model connects and is latched for the rest of that connection. **Neither is
   Rescue**, whose two announcements are spoken once per change of state.
-- **A file the sound pack lacks** leaves its alert silent and without vibration, but the alert
-  counts the announcement as made: it is tried again after the usual ten seconds and spends its
-  *Repeat* count as if it had spoken. The log names each missing file once.
+- **A file the sound pack lacks** leaves its announcement silent and without vibration. The
+  alerts in the table above, and the flight timer, count it as made: such an alert is tried again
+  after the usual ten seconds and spends its *Repeat* count as if it had spoken. *Main Power Lost*,
+  *Telemetry Lost* and *Telemetry Dropouts* look for their file first and stay silent without one.
+  The log names a missing file once.
 
 ## While the Flight Controller Is Silent
 
@@ -367,8 +369,9 @@ test *Telemetry Lost* is spoken on (also when that announcement is off):
   step passed during the silence, or the level on connect, is spoken then, and *Main Power
   Back* is still announced when the pack reads again.
 - A held alert is not spoken, so it raises nothing under *Raise Volume*.
-- The test needs the time of the flight controller's last telemetry frame; where none has been
-  recorded yet, nothing is held.
+- The test needs the time of the flight controller's last telemetry frame, and a frame received
+  during the current connection: until one has arrived, or with a flight controller whose
+  telemetry never records one, nothing is held.
 
 ## Raise Volume
 

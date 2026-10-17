@@ -1659,17 +1659,17 @@ end
 -- announcement speaks without a second reading of it. `mainPowerLostActive` stays here and is
 -- not that fact: it is set only where the sound actually played, so it says what has been
 -- announced rather than what is true.
-local function announceMainPowerEvent(self, events, opts)
+local function announceMainPowerEvent(self, events, opts, fcQuiet)
   if not prefEnabled(events, "main_power_lost", false) then
     return
   end
 
   local audioState = self.audioState
-  -- Nothing is judged while the flight controller's frames stay away (Audio.process,
-  -- telemetryQuiet): the pack and BEC readings are its last ones, and a lost pack would be
-  -- announced again every interval from a reading nobody sends any more. Whatever has been
-  -- announced stays as it is, so the pack coming back is still spoken once the frames do.
-  if audioState.telemetryQuiet == true then
+  -- Nothing is judged while the flight controller's frames stay away (`fcQuiet`, Audio.process):
+  -- the pack and BEC readings are its last ones, and a lost pack would be announced again every
+  -- interval from a reading nobody sends any more. Whatever has been announced stays as it is,
+  -- so the pack coming back is still spoken once the frames do.
+  if fcQuiet then
     return
   end
   local voltage = tonumber(self.state and self.state.voltage)
@@ -2385,6 +2385,7 @@ function Audio.resetConnectionState(audioState)
   audioState.connectionSoundMissingLogged = nil
   audioState.telemetryWatchFrom = nil
   audioState.telemetryQuiet = nil
+  audioState.telemetryFrameSeen = nil
 
   -- `connectionLostPending`, `connectionLostAt` and `flightArmed` are deliberately NOT cleared
   -- here. Every caller runs this function at the moment the connection goes down, and a flight
@@ -2535,7 +2536,16 @@ function Audio.process(self, opts)
   -- would raise the master volume each time. So those alerts are not judged at all until a frame
   -- arrives: nothing is spoken and nothing they have counted is reset. The link alerts read the
   -- radio's own link statistics, which stay live, and are judged as before.
-  local fcQuiet = quiet
+  --
+  -- Held only once a frame has been stamped during this connection. The stamp is never cleared,
+  -- so on a later connection that stamps none -- a flight controller sending no custom telemetry
+  -- frames, or a pass that runs before this Lua state's drain is woken -- the previous
+  -- connection's stamp would otherwise read as a silence and keep every one of these alerts
+  -- quiet for the whole connection.
+  if frameAt ~= nil and frameAt >= audioState.telemetryWatchFrom then
+    audioState.telemetryFrameSeen = true
+  end
+  local fcQuiet = quiet and audioState.telemetryFrameSeen == true
 
   -- A frame that arrived after the loss was announced is the recovery, and nothing else is: a
   -- gate that re-opens after the link went as well can do so on the flight controller's last
@@ -2589,7 +2599,7 @@ function Audio.process(self, opts)
   -- Deliberately not gated on `initialized`: the first pass after a connect carries the pack's
   -- resting voltage, which is the reading this check is about.
   announcePackNotFullEvent(self, events, opts)
-  announceMainPowerEvent(self, events, opts)
+  announceMainPowerEvent(self, events, opts, fcQuiet)
 
   if prefEnabled(events, "voltage_alert", true) then
     -- Resolve cell count: prefer MSP batteryConfig, fall back to telemetry state,
