@@ -110,30 +110,43 @@ function Derived.build(state, sources)
   if type(state) ~= "table" then return end
   if not (Utils and type(Utils.mapTelemetrySource) == "function") then return end
 
+  local craftName = nil
+  if _G.rfsuite and type(_G.rfsuite.session) == "table" then
+    craftName = _G.rfsuite.session.modelName
+  end
+  -- One read of the radio's model per build: each call returns a new table, and the name,
+  -- the bitmap and the model_name fallback below all come from the same answer.
+  local info = nil
+  if model and type(model.getInfo) == "function" then
+    info = model.getInfo()
+  end
+
   local snap = {}
   if type(sources) == "table" then
     for i = 1, #sources do
       local source = sources[i]
-      if type(source) == "string" and source ~= "" then
+      -- model_name is set below for every build, so it is not resolved here as well.
+      if type(source) == "string" and source ~= "" and source ~= "model_name" then
         snap[source] = Utils.mapTelemetrySource(source, state)
       end
     end
   end
 
   -- Read by the image and text objects whether or not any box declares them as a source.
-  snap.model_name = Utils.mapTelemetrySource("model_name", state)
-  if model and type(model.getInfo) == "function" then
-    local info = model.getInfo()
-    if info then
-      snap.edgetx_model_name = info.name
-      snap.edgetx_model_bitmap = info.bitmap
-    end
+  -- The same order as Utils.mapTelemetrySource("model_name"): the craft name, then the
+  -- EdgeTX model name, then "--".
+  if type(craftName) == "string" and craftName ~= "" then
+    snap.model_name = craftName
+  elseif info and type(info.name) == "string" and info.name ~= "" then
+    snap.model_name = info.name
+  else
+    snap.model_name = "--"
+  end
+  if info then
+    snap.edgetx_model_name = info.name
+    snap.edgetx_model_bitmap = info.bitmap
   end
 
-  local craftName = nil
-  if _G.rfsuite and type(_G.rfsuite.session) == "table" then
-    craftName = _G.rfsuite.session.modelName
-  end
   snap.model_image, snap.model_image_caption = resolveModelImage(
     craftName, snap.edgetx_model_name, snap.edgetx_model_bitmap, state.batteryCellCount)
 
