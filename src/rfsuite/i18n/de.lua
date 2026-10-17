@@ -2800,6 +2800,20 @@ return {
         urban_fuel_low = "Akku gelb bei",
         urban_fuel_crit = "Akku rot bei",
         urban_key_exit = "Suite: Vollbild aus",
+        -- The Grid theme's settings pages that Urban has no counterpart for, and their rows.
+        grid_page_layout = "Anordnung",
+        grid_page_tiles = "Kacheln",
+        grid_left = "Linkes Feld",
+        grid_left_card = "Akkukarte",
+        grid_left_gauge = "Akkuanzeige",
+        grid_left_width = "Breite linkes Feld",
+        grid_width_narrow = "Schmal",
+        grid_width_normal = "Normal",
+        grid_width_wide = "Breit",
+        grid_size = "Rastergröße",
+        grid_extra = "Zusatzkachel",
+        grid_extra_model = "Modellbild",
+        grid_extra_profiles = "Profile P/R/B",
         -- The Telemetry page: what each tile of the telemetry view shows.
         urban_tile = "Kachel"
       },
@@ -3335,6 +3349,8 @@ return {
       urban_bus_voltage = "Bus-Spannung",
       urban_mcu_voltage = "MCU-Spannung",
       urban_rsnr = "RSNR",
+      -- The Grid theme's battery card: the word beside the cell voltage.
+      grid_cell = "Zelle",
       urban_battery = "Akku",
       urban_batt_crit = "krit",
       urban_batt_low = "niedrig",

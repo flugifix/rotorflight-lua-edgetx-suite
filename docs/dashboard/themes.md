@@ -5,7 +5,7 @@ sidebar_label: Themes
 
 # Dashboard themes
 
-A theme decides what the *RFSuite* dashboard widget draws. The suite ships eight of them, and
+A theme decides what the *RFSuite* dashboard widget draws. The suite ships nine of them, and
 every theme draws three screens: one before the flight, one in flight and one after it. This page
 shows each shipped theme on them, and says how to choose one.
 
@@ -128,6 +128,18 @@ A theme drawn from code rather than from a grid of boxes, which takes the whole 
 fullscreen mode. It has a page of its own: [Urban theme](urban-theme.md).
 
 ![Urban before, during and after the flight](../images/dashboard/themes/urban.png)
+
+### Grid
+
+Built on Urban and drawn from code in the same way, taking the whole screen in fullscreen mode:
+Urban's top bar over a battery panel down the left — the battery percentage, the cell voltage,
+the capacity used and a fill bar — beside a grid of value tiles, and a status bar at the foot
+with the model name, the arm state, the transmitter power and the skipped telemetry frames, or
+the reasons arming is blocked. The screen keeps its shape in flight; after the flight it shows
+Urban's statistics screen in Grid's colours. It has a page of its own:
+[Grid theme](grid-theme.md).
+
+![Grid before, during and after the flight](../images/dashboard/themes/grid.png)
 
 ## Related
 
