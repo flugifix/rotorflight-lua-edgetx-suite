@@ -676,7 +676,7 @@ function Sensors.resolveName(source)
     return memo
   end
   local resolved = resolveNameUncached(source)
-  resolvedNames[source] = (resolved == nil) and false or resolved
+  if resolved == nil then resolvedNames[source] = false else resolvedNames[source] = resolved end
   return resolved
 end
 
