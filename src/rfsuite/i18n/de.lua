@@ -874,6 +874,7 @@ return {
         chain_warn_duration = "Warnung: der Logikschalter hat eine Dauer.",
         chain_warn_sf_off = "Warnung: die Spezialfunktion ist ausgeschaltet.",
         chain_warn_second_sf = "Warnung: %s ist eine zweite Lautstärke-Funktion und ist an.",
+        chain_warn_gv_modes = "Warnung: in %s hat GV%d einen eigenen Wert, nicht den der Suite.",
         test = "Test",
         test_play = "\xEF\x81\x8B Abspielen",
         test_normal = "\xEF\x81\x8B Normal",
@@ -891,8 +892,11 @@ return {
         create_note = "Sonst ändert sich nichts im Modell, und die Suite löscht diese nie.",
         create_blocked_fault = "Ein Glied oben ist fehlerhaft. Anlegen ändert kein Glied: von Hand beheben, dann die Seite neu öffnen.",
         create_no_input = "Kein Geber ist mehr frei.",
+        create_no_input_named = "Kein Geber frei: die leeren werden anderswo noch genannt.",
         create_no_lines = "Alle 64 Geberzeilen sind belegt.",
         create_no_ls = "Kein Logikschalter ist mehr frei.",
+        create_no_ls_named = "Kein Logikschalter frei: die leeren werden anderswo noch genannt.",
+        create_save_first = "Erst die Seite speichern: Anlegen arbeitet mit gespeichertem Modus und GV.",
         create_no_sf = "Keine Spezialfunktion ist mehr frei.",
         create_no_api = "Dieser Sender kann die Kette nicht per Skript schreiben.",
         create_changed = "Das Modell hat sich seit der Vorschau geändert; nichts wurde geschrieben.",
@@ -903,7 +907,7 @@ return {
         help_test_level = "Test: Abspielen spricht eine Beispiel-Ansage in der angezeigten Stufe, auch vor dem Speichern.",
         help_chain = "Modell-Kette: was die Master-Lautstärke braucht; alle Plätze werden gesucht, Mischer nicht. Vor dem Löschen GV auf -1024 setzen (oder bei offenem Tool Modus Aus speichern), sonst wirkt das Poti nicht.\nGeber: eine Zeile, die GV als Quelle, Gewicht 100, beide Seiten.\nLogikschalter: a > x mit a = die GV und x = -1024.\nSpezialfunktion: Lautstärke, geschaltet von diesem Logikschalter, mit diesem Geber als Quelle.",
         help_test_master = "Test: Normal und Alarm setzen die GV auf diese Stufe, sprechen eine Beispiel-Ansage und stellen nach 5 s den vorigen Wert her; nur mit ganzer Kette, nicht wenn scharf oder der Zustand unbekannt ist.",
-        help_create = "Anlegen: schreibt nach einer Vorschau (Nein vorgewählt) nur fehlende Glieder in die letzten freien Plätze; ändert und löscht nichts. Die Lautstärke folgt dann dem Wert der GV."
+        help_create = "Anlegen: erst wenn Modus und GV gespeichert sind. Schreibt nach einer Vorschau (Nein vorgewählt) nur fehlende Glieder in die letzten freien, nirgends genannten Plätze; ändert und löscht nichts."
       },
       settings_audio_events = {
         section_arming = "Arming-Flags",

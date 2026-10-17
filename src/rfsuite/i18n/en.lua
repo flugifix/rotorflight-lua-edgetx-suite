@@ -874,6 +874,7 @@ return {
         chain_warn_duration = "Warning: the logical switch has a duration.",
         chain_warn_sf_off = "Warning: the special function is switched off.",
         chain_warn_second_sf = "Warning: %s is a second Volume function that is on.",
+        chain_warn_gv_modes = "Warning: in %s, GV%d has its own value, not the suite's.",
         test = "Test",
         test_play = "\xEF\x81\x8B Play",
         test_normal = "\xEF\x81\x8B Normal",
@@ -891,8 +892,11 @@ return {
         create_note = "Nothing else in the model changes, and the suite never removes these.",
         create_blocked_fault = "A link above is faulty. Create changes no link: fix it by hand, then open the page again.",
         create_no_input = "No free input is left.",
+        create_no_input_named = "No free input: the empty ones are still named elsewhere.",
         create_no_lines = "All 64 input lines are used.",
         create_no_ls = "No free logical switch is left.",
+        create_no_ls_named = "No free logical switch: the empty ones are still named elsewhere.",
+        create_save_first = "Save the page first: Create works on the saved Mode and GV.",
         create_no_sf = "No free special function is left.",
         create_no_api = "This radio cannot write the chain from a script.",
         create_changed = "The model changed since the preview; nothing was written.",
@@ -903,7 +907,7 @@ return {
         help_test_level = "Test: Play speaks a sample announcement at the Level shown, also before it is saved.",
         help_chain = "Model chain: what the master volume needs; all slots are searched, mixes are not. Before removing it, set the GV to -1024 (or save Mode Off with the tool open), or the pot stays overridden.\nInput: one line, the GV as its source, weight 100, both sides.\nLogical switch: a > x with a = the GV and x = -1024.\nSpecial function: Volume, switched by that logical switch, with that input as its source.",
         help_test_master = "Test: Normal and Alarm set the GV to that level, speak a sample and put the earlier value back after 5 s; only with the whole chain, not while armed or the arming state is unknown.",
-        help_create = "Create: after a preview with No preselected, writes only the missing links into the last free slots; it changes and removes nothing. The volume then follows whatever the GV holds."
+        help_create = "Create: only once Mode and GV are saved. After a preview with No preselected, writes only the missing links into the last free slots that nothing else names; it changes and removes nothing."
       },
       settings_audio_events = {
         section_arming = "Arming Flags",

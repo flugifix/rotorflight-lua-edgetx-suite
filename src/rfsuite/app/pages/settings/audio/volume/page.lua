@@ -553,6 +553,13 @@ local function appendDiagnosis(children, x, y, w, i18n, gv, result, help)
 
   local warn = result.warn or {}
   if warn.popup then line(t(i18n, "gvar_popup_warning", "Note: This GV has 'Popup' enabled in EdgeTX model settings.")) end
+  if warn.gvModes then
+    -- As EdgeTX names the flight modes (FM1..FM8).
+    local names = {}
+    for _, fm in ipairs(warn.gvModes) do names[#names + 1] = "FM" .. tostring(fm) end
+    line(string.format(t(i18n, "chain_warn_gv_modes", "Warning: in %s, GV%d has its own value, not the suite's."),
+      table.concat(names, ", "), gv))
+  end
   if warn.weight then line(string.format(t(i18n, "chain_warn_weight", "Warning: the input's weight is %d, not 100."), warn.weight)) end
   if warn.offset then line(string.format(t(i18n, "chain_warn_offset", "Warning: the input has an offset of %d."), warn.offset)) end
   if warn.curve then line(t(i18n, "chain_warn_curve", "Warning: the input has a curve.")) end
@@ -583,8 +590,14 @@ end
 -- above; Create never changes a link that is there.
 local function blockedText(i18n, why)
   if why == "no_input" then return t(i18n, "create_no_input", "No free input is left.") end
+  if why == "no_input_named" then
+    return t(i18n, "create_no_input_named", "No free input: the empty ones are still named elsewhere.")
+  end
   if why == "no_lines" then return t(i18n, "create_no_lines", "All 64 input lines are used.") end
   if why == "no_ls" then return t(i18n, "create_no_ls", "No free logical switch is left.") end
+  if why == "no_ls_named" then
+    return t(i18n, "create_no_ls_named", "No free logical switch: the empty ones are still named elsewhere.")
+  end
   if why == "no_sf" then return t(i18n, "create_no_sf", "No free special function is left.") end
   return t(i18n, "create_blocked_fault", "A link above is faulty. Create changes no link: fix it by hand, then open the page again.")
 end
@@ -643,6 +656,16 @@ local function createAvailable()
     and lvgl ~= nil and type(lvgl.confirm) == "function"
 end
 
+-- Whether the settings the suite acts on -- the stored preferences, which lib/audio.lua reads --
+-- are Master volume with global variable `gv`. Until they are, the suite does not drive that
+-- variable, and a chain created for it would set the volume from whatever value it holds.
+local function savedFor(gv)
+  local prefs = ui.prefs
+  local audio = type(prefs) == "table" and prefs.audio or nil
+  if type(audio) ~= "table" then return false end
+  return Rules.mode(audio) == MODE_MASTER and tonumber(audio.master_gvar) == gv
+end
+
 -- What the line under Create says after a Yes, from the check run again on the model as it is
 -- now -- that check is what says whether the chain was made, not the writes returning.
 local function createOutcome(i18n, gv, read, plan, out)
@@ -674,9 +697,9 @@ local function confirmCreate(i18n, gv, shown)
     ui.createResult = { gv = gv, text = text }
     if type(ui.rebuild) == "function" then ui.rebuild() end
   end
-  -- Locked at Yes: nothing is written, and no result is kept -- the rebuild draws the lock's own
-  -- reason under Create, which goes away with the lock.
-  if lockReason() ~= nil then
+  -- Locked at Yes, or the settings not saved for this variable: nothing is written, and no result
+  -- is kept -- the rebuild draws the reason under Create, which goes away with it.
+  if lockReason() ~= nil or not savedFor(gv) then
     ui.createResult = nil
     if type(ui.rebuild) == "function" then ui.rebuild() end
     return
@@ -693,7 +716,7 @@ local function confirmCreate(i18n, gv, shown)
 end
 
 local function startCreate(i18n, gv)
-  if lockReason() ~= nil or not createAvailable() then return end
+  if lockReason() ~= nil or not savedFor(gv) or not createAvailable() then return end
   local read = ui.diag and ui.diag.gv == gv and ui.diag.result
   local plan = read and Chain.plan(read)
   if not plan or plan.blocked then return end
@@ -714,7 +737,8 @@ local function appendCreate(children, x, y, w, i18n, gv, read, reason, help)
   local plan = Chain.plan(read)
   local result = ui.createResult and ui.createResult.gv == gv and ui.createResult.text or nil
   if plan then
-    local usable = reason == nil and not plan.blocked and createAvailable()
+    local saved = savedFor(gv)
+    local usable = reason == nil and saved and not plan.blocked and createAvailable()
     local function isUsable() return usable end
     local label = t(i18n, "create", "Create")
     y = y + appendButtonRow(children, x, y, w, label, {
@@ -725,6 +749,8 @@ local function appendCreate(children, x, y, w, i18n, gv, read, reason, help)
       note = t(i18n, "test_locked_armed", "Locked while the model is armed.")
     elseif reason == "uncertain" then
       note = t(i18n, "test_locked_uncertain", "Locked: the arming state is not known.")
+    elseif not saved then
+      note = t(i18n, "create_save_first", "Save the page first: Create works on the saved Mode and GV.")
     elseif plan.blocked then
       note = blockedText(i18n, plan.blocked)
     elseif not createAvailable() then
@@ -895,7 +921,9 @@ function M.build(ctx)
       nextTick = (getTime and getTime() or 0) + LOCK_POLL_TICKS }
     updateWakeup()
   end
-  -- Create, while the chain is not complete; locked on the same reasons as the tests.
+  -- Create, while the chain is not complete; locked on the same reasons as the tests, and until
+  -- the mode and global variable shown are saved (the host rebuilds the page after a save).
+  ui.prefs = ctx.preferences
   local createLabel = t(i18n, "create", "Create")
   cursorY = cursorY + appendCreate(children, x, cursorY, w, i18n, gv, result, reason,
     helpOpts(t(i18n, "help_create"), createLabel))
@@ -926,6 +954,7 @@ function M.onClose()
   ui.diag = nil
   ui.createResult = nil
   ui.rebuild = nil
+  ui.prefs = nil
   Common.resetPageState(ui)
   Chain = nil
   Armed = nil
