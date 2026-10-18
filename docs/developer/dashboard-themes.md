@@ -184,7 +184,10 @@ model theme is a context of its own, so an unset phase override falls back to th
 rather than jumping to the global one. The model's preferences leave with the link, so the widget
 keeps the path its model's own theme resolved for the post-flight slot, and the `postflight` and
 `offline` screens use it while no model preferences are present; only the path is kept, the
-model's theme settings are not, and the next connect edge drops it.
+model's theme settings are not, and the next connect edge drops it. Preferences without a
+`dashboard` table count as none: the Setup > Power pages create such a table in the session when
+there is none, so opening one in the tool after the unplug neither clears the kept path nor
+replaces it.
 
 ## What a phase module returns
 

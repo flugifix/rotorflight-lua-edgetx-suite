@@ -2682,8 +2682,20 @@ end
 -- preferences, and only where the model's own theme chose it: a model drawing the radio's theme
 -- keeps following the radio's settings. The connect edge drops it, and the next model's
 -- preferences set it again.
+--
+-- Preferences without a `dashboard` table cannot name a theme, and the disconnected stretch
+-- produces exactly those: the Setup > Power pages create an empty table in the session when
+-- there is none (getBatteryPrefs in app/pages/setup/power/battery/page.lua, and the alerts,
+-- preferences and smartfuel pages alike), so one of them opened in the tool after the unplug
+-- hands the widget a table that says nothing about the model that flew. Such a table counts as
+-- no preferences here, on both sides: it neither clears the kept path nor stands in its way.
+local function themePrefs(modelPrefs)
+  if type(modelPrefs) == "table" and type(modelPrefs.dashboard) == "table" then return modelPrefs end
+  return nil
+end
+
 local function noteModelTheme(self, dashboard, modelPrefs)
-  if modelPrefs == nil then return end
+  if themePrefs(modelPrefs) == nil then return end
   if modelPrefs == self._modelThemePrefs and dashboard == self._modelThemeDashboard then return end
   self._modelThemePrefs = modelPrefs
   self._modelThemeDashboard = dashboard
@@ -2697,7 +2709,7 @@ local function noteModelTheme(self, dashboard, modelPrefs)
 end
 
 local function themePathFor(self, dashboard, modelPrefs, flightMode)
-  if modelPrefs == nil and self.modelTheme and (flightMode == "postflight" or flightMode == "offline") then
+  if themePrefs(modelPrefs) == nil and self.modelTheme and (flightMode == "postflight" or flightMode == "offline") then
     return self.modelTheme
   end
   return (resolveThemePathForState(dashboard, modelPrefs, flightMode, self.dashboardLib))
