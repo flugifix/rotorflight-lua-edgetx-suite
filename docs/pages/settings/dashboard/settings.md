@@ -30,7 +30,9 @@ nothing opens a page saying so.
 The tiles are made when the grid is opened, from the themes installed on the radio. While that
 is under way the grid shows *Loading...*, and then all of its tiles at once; with the shipped
 themes that is a moment. The more themes there are, the longer it takes, and once made the grid
-opens at once until the tool is closed.
+opens at once until the tool is closed -- up to fifteen themes. With sixteen or more, the grid
+shows *Loading...* for a moment each time it is opened or drawn again -- back from a theme's
+page, for one -- while its tiles are made, sixteen at a time, and then all of them at once.
 
 ## Settings
 

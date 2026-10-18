@@ -572,23 +572,13 @@ function MenuRegistry.new(manifest, i18n, options)
     return table.concat(parts, " / ")
   end
 
-  function self.getCards(iconRoot)
-    refreshLocaleCaches()
-    refreshApiVersionCache()
-    local cache = self._cardsCache
-    if cache.data and cache.locale == self._cachedLocale and cache.iconRoot == iconRoot and cache.menuId == self.currentMenuId and cache.version == self._conditionsVersion and cache.apiVersionKey == self._apiVersionKey then
-      return cache.data
-    end
-
-    local entries = getCurrentEntries()
-    local cards = {}
-    for i = 1, #entries do
-      local p = entries[i]
-      local enabled = isEntryEnabled(p)
-      if isEntryVisible(p) and not (enabled == false and p.hideWhenDisabled == true) then
+  -- The card of entry `p` at position `i` of its menu, or nil for an entry the menu does not show.
+  local function makeCard(p, i, iconRoot)
+    local enabled = isEntryEnabled(p)
+    if isEntryVisible(p) and not (enabled == false and p.hideWhenDisabled == true) then
       local row = p.row or math.floor((i - 1) / 3) + 1
       local col = p.col or ((i - 1) % 3) + 1
-      cards[#cards + 1] = {
+      return {
         id = p.id,
         row = row,
         col = col,
@@ -600,17 +590,96 @@ function MenuRegistry.new(manifest, i18n, options)
           lockedByArm = isEntryLockedByArm(p)
         }
       }
+    end
+    return nil
+  end
+
+  local function cardsCacheIsCurrent(key, iconRoot)
+    return key.locale == self._cachedLocale and key.iconRoot == iconRoot and key.menuId == self.currentMenuId
+      and key.version == self._conditionsVersion and key.apiVersionKey == self._apiVersionKey
+  end
+
+  -- The cards of the menu on screen as a job: `step(limit)` makes the cards of up to `limit`
+  -- entries (all of them when `limit` is nil) and answers true once every entry has been seen;
+  -- the cards are then in `build.cards` and are what getCards answers until the menu or anything
+  -- a card shows changes. A step stopped part way repeats only the entry it was on: a card is
+  -- stored at its own index, and the position after it is one value replaced once it is stored.
+  local function startCardsBuild(iconRoot)
+    local entries = getCurrentEntries()
+    local key = {
+      locale = self._cachedLocale,
+      iconRoot = iconRoot,
+      menuId = self.currentMenuId,
+      version = self._conditionsVersion,
+      apiVersionKey = self._apiVersionKey
+    }
+    local cards = {}
+    local pos = { entry = 1, count = 0 }
+    local build = { cards = cards, done = false }
+
+    function build.step(limit)
+      if build.done then return true end
+      local last = #entries
+      if limit ~= nil and pos.entry + limit - 1 < last then
+        last = pos.entry + limit - 1
       end
+      for i = pos.entry, last do
+        local card = makeCard(entries[i], i, iconRoot)
+        if card then
+          cards[pos.count + 1] = card
+          pos = { entry = i + 1, count = pos.count + 1 }
+        else
+          pos = { entry = i + 1, count = pos.count }
+        end
+      end
+      if pos.entry <= #entries then return false end
+
+      -- The data is cleared first and put back last, so a stop between these lines leaves no
+      -- earlier menu's cards under this menu's key.
+      local cache = self._cardsCache
+      cache.data = nil
+      cache.locale = key.locale
+      cache.iconRoot = key.iconRoot
+      cache.menuId = key.menuId
+      cache.version = key.version
+      cache.apiVersionKey = key.apiVersionKey
+      cache.data = cards
+      build.done = true
+      return true
     end
 
-    cache.locale = self._cachedLocale
-    cache.iconRoot = iconRoot
-    cache.menuId = self.currentMenuId
-    cache.version = self._conditionsVersion
-    cache.apiVersionKey = self._apiVersionKey
-    cache.data = cards
+    -- Whether the cards made so far still belong to the menu on screen as it stands now.
+    function build.isCurrent()
+      refreshLocaleCaches()
+      refreshApiVersionCache()
+      return cardsCacheIsCurrent(key, iconRoot)
+    end
 
-    return cards
+    return build
+  end
+
+  function self.newCardsBuild(iconRoot)
+    refreshLocaleCaches()
+    refreshApiVersionCache()
+    return startCardsBuild(iconRoot)
+  end
+
+  function self.getCards(iconRoot)
+    refreshLocaleCaches()
+    refreshApiVersionCache()
+    local cache = self._cardsCache
+    if cache.data and cardsCacheIsCurrent(cache, iconRoot) then
+      return cache.data
+    end
+
+    local build = startCardsBuild(iconRoot)
+    build.step(nil)
+    return build.cards
+  end
+
+  -- How many entries the menu on screen has, shown or not: the most tiles its grid can have.
+  function self.getCurrentEntryCount()
+    return #getCurrentEntries()
   end
 
   -- Whether the menu on screen is still being built (see isDynamicMenuPending). The tool draws a
