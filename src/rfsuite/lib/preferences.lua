@@ -122,7 +122,7 @@ local SCHEMA = {
       governor_state = true,
       voltage_alert = true,
       pack_not_full = false,
-      pack_not_full_margin = 100,
+      pack_not_full_margin = 0,
       pid_profile = true,
       rate_profile = true,
       esc_temperature = false,
@@ -159,10 +159,11 @@ local SCHEMA = {
       -- input, logical switch and special function on the model, this lets the suite override
       -- the pot while flying and release it on disconnect.
       master_gvar          = 0,
-      -- The master level written to the GVAR while connected and no critical alert is active.
+      -- The master level written to the GVAR outside a raised stretch (below).
       master_normal        = 80,
-      -- The master level written to the GVAR while a sustained critical alert is active
-      -- (low voltage, the ESC or MCU temperature at its critical level, empty tank).
+      -- The master level written to the GVAR right before a critical announcement plays and
+      -- for a few seconds after the last one (lib/audio.lua, BOOST_SECONDS), for the alarms whose
+      -- Raise Volume switch is on under Settings > Audio > Events.
       master_alert         = 100,
     },
     -- `volume_mode` (0 off, 1 callout level, 2 master volume) and `connected_only` (for either

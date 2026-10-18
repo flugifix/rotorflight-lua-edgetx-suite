@@ -393,6 +393,16 @@ local CONN_GLYPH = {
 local ARMED_BADGE_TEXT = "@i18n(app.model_armed_badge)@"
 local MENU_PENDING_TEXT = "@i18n(app.loading)@"
 
+-- A menu grid with more entries than this is not drawn in the pass that builds the screen: its
+-- cards and tiles are made this many per pass, behind the notice a menu still being built shows,
+-- and the grid is drawn whole once all of them are made (see stepGridBuild). Opened from the
+-- dashboard every pass is a widget call, stopped at the widget's instruction limit, and a grid
+-- drawn in one pass costs that pass about 400 instructions a tile -- the dashboard theme menu has
+-- one tile per installed theme. A budget, not an optimum: a pass of 16 tiles adds about a third
+-- of the limit to an idle pass, and every fixed menu has fewer entries (the largest 14), so it is
+-- drawn in one pass as before.
+local GRID_TILES_PER_STEP = 16
+
 -- The one line the strip carries. It says what the state is and what it costs, because the
 -- tool stays usable around it -- it is a status, not a demand.
 local ARMED_BANNER_TEXT = "@i18n(app.model_armed_banner)@"
@@ -559,6 +569,12 @@ end
 state = {
   shouldExit   = false,
   cards        = {},
+  -- The grid whose Loading notice is on screen while its tiles are made, a few per pass; see
+  -- GRID_TILES_PER_STEP. Set only by a scene build that completed, so a pass stopped part way
+  -- through a build leaves the previous value, and the grid is asked for again.
+  gridBuild    = nil,
+  -- Set while a scene build runs; still set on the next pass only if that build was stopped.
+  sceneBuildOwed = false,
   i18n         = nil,
   menu         = nil,
   preferences  = nil,
@@ -606,6 +622,7 @@ state = {
   armedFeedbackUntil = nil,
   armedFeedbackText = nil,
   lastSaveSnapshot = nil,
+  lastSaveRevision = nil,
   mspAttached = false,
   mspLastTick = 0,
   fblConnected = false,
@@ -2355,6 +2372,94 @@ local function getRootCardPressHandler(sectionId, cardId)
   return fn
 end
 
+-- The grid of the menu on screen, made over several passes: first its cards, then its tiles,
+-- GRID_TILES_PER_STEP of them per call of stepGridBuild. It holds the widget tables of the tiles,
+-- not the widgets: nothing is drawn until buildScene finds it done and draws the whole grid in one
+-- build, so the screen goes from the Loading notice to the complete grid.
+local function newGridBuild(menuId, x, y, w, profile)
+  return {
+    menuId = menuId,
+    x = x,
+    y = y,
+    w = w,
+    profile = profile,
+    columns = Tiles.computeColumns(w, profile.menuMinCardWidth, profile.menuMaxColumns),
+    cards = state.menu.newCardsBuild(),
+    slots = {},
+    tiles = {},
+    pos = { card = 1, tiles = 0 },
+    done = false
+  }
+end
+
+-- Whether `grid` is still the grid a build of the screen as it stands now would draw.
+local function gridBuildFits(grid, menuId, x, y, w)
+  return grid.menuId == menuId and grid.x == x and grid.y == y and grid.w == w and grid.cards.isCurrent()
+end
+
+-- One step of `grid`. The tiles are placed exactly as the one-pass draw in buildScene places them:
+-- the same rows and columns, laid out by GridLayout over the same bounds, a batch at a time. A
+-- step stopped part way repeats only the tile it was on: what that tile had appended is taken off
+-- again, and the position after a tile is one value, replaced once the tile is complete.
+local function stepGridBuild(grid)
+  local cardsBuild = grid.cards
+  if not cardsBuild.done then
+    cardsBuild.step(GRID_TILES_PER_STEP)
+    return
+  end
+
+  local cards = cardsBuild.cards
+  local total = #cards
+  local columns = grid.columns
+  local profile = grid.profile
+  local first = grid.pos.card
+  local last = math.min(total, first + GRID_TILES_PER_STEP - 1)
+  -- The row count toWrappedItems answers for `total` cards, and the height the draw derives from it.
+  local rows = math.floor(total / columns) + 1
+  local gridH = rows * profile.tileMax + math.max(0, rows - 1) * profile.tileGap
+
+  local items = {}
+  for i = first, last do
+    local card = cards[i]
+    items[#items + 1] = {
+      id = card.id or i,
+      row = math.floor((i - 1) / columns) + 1,
+      col = ((i - 1) % columns) + 1,
+      data = card.data
+    }
+  end
+  local placed = GridLayout.layout(
+    { x = grid.x, y = grid.y, w = grid.w, h = gridH },
+    { rows = rows, cols = columns, gap = profile.tileGap, padding = 2, items = items },
+    {}
+  )
+
+  local tiles = grid.tiles
+  for k = 1, #placed do
+    local i = first + k - 1
+    for n = #tiles, grid.pos.tiles + 1, -1 do tiles[n] = nil end
+    local card     = placed[k]
+    local tileSize = computeTileSize(card.w, card.h, profile)
+    local tileX    = card.x + math.floor((card.w - tileSize) / 2)
+    local tileY    = card.y + math.floor((card.h - tileSize) / 2)
+
+    Tiles.append(
+      tiles, tileX, tileY, tileSize,
+      card.data.icon, card.data.text,
+      i == state.focusIndex,
+      getCardPressHandler(card.id),
+      card.data.enabled,
+      card.data.lockedByArm and ARMED_BADGE_TEXT or nil
+    )
+    grid.slots[i] = card
+    grid.pos = { card = i + 1, tiles = #tiles }
+  end
+
+  if grid.pos.card > total then
+    grid.done = true
+  end
+end
+
 -- A strip across the top of the page body, drawn on root, on a menu and on a page for as long
 -- as the craft is armed. The content below it is moved down by exactly this height rather than
 -- being drawn under it: a warning that covers a value is worse than no warning at all.
@@ -2459,10 +2564,27 @@ end
 
 -- ── Main UI build ─────────────────────────────────────────────────────────────
 
-function M.buildUI()
+-- The notice a menu grid shows in its place while it is not made yet.
+local function appendMenuPendingNotice(children, contentX, contentY, contentW, bannerH)
+  local lineH = Tiles.lineHeight(MIDSIZE, 24)
+  children[#children + 1] = {
+    type  = "label",
+    x = contentX, y = contentY + math.max(0, math.floor((pageBodyHeight() - bannerH - lineH) / 2)),
+    w = contentW,
+    text  = MENU_PENDING_TEXT,
+    color = COLOR_THEME_PRIMARY1,
+    font  = MIDSIZE,
+    align = CENTER
+  }
+end
+
+-- Builds the scene. Answers the grid build whose notice it drew, if it drew one (see
+-- GRID_TILES_PER_STEP); M.buildUI keeps that, and only once the build is through.
+local function buildScene()
   if lvgl == nil then return end
 
   ensureBuildDeps()
+  local loadingGrid = nil
 
   -- Before the build, not after it. A build that allocates more than the LVGL pool can give it
   -- does not come back, so a line written afterwards is the one line that would never appear --
@@ -3032,16 +3154,24 @@ function M.buildUI()
       -- none can hold the focus or be pressed.
       state.cards = {}
       state.focusIndex = 0
-      local lineH = Tiles.lineHeight(MIDSIZE, 24)
-      children[#children + 1] = {
-        type  = "label",
-        x = contentX, y = contentY + math.max(0, math.floor((pageBodyHeight() - bannerH - lineH) / 2)),
-        w = contentW,
-        text  = MENU_PENDING_TEXT,
-        color = COLOR_THEME_PRIMARY1,
-        font  = MIDSIZE,
-        align = CENTER
-      }
+      appendMenuPendingNotice(children, contentX, contentY, contentW, bannerH)
+    elseif state.menu.getCurrentEntryCount() > GRID_TILES_PER_STEP then
+      -- A grid too large for one pass is made over several (stepGridBuild in M.run) behind the
+      -- same notice, and drawn here whole once it is made.
+      local grid = state.gridBuild
+      if grid == nil or not gridBuildFits(grid, currentMenuId, contentX, contentY, contentW) then
+        grid = newGridBuild(currentMenuId, contentX, contentY, contentW, profile)
+      end
+      if grid.done then
+        state.cards = grid.slots
+        state.focusIndex = math.max(0, math.min(state.focusIndex, #grid.slots))
+        table.move(grid.tiles, 1, #grid.tiles, #children + 1, children)
+      else
+        state.cards = {}
+        state.focusIndex = 0
+        appendMenuPendingNotice(children, contentX, contentY, contentW, bannerH)
+        loadingGrid = grid
+      end
     else
       local gridItems = state.menu.getCards()
       local computedCols = Tiles.computeColumns(contentW, profile.menuMinCardWidth, profile.menuMaxColumns)
@@ -3115,6 +3245,19 @@ function M.buildUI()
     lvgl.clear()
   end
   lvgl.build(lyt)
+  return loadingGrid
+end
+
+function M.buildUI()
+  -- Opened from the dashboard a build can be stopped at the widget's instruction limit, and the
+  -- request that started it is already gone, so the build is noted as owed before it starts and
+  -- forgotten only once it is through: a stopped one is made again on the next pass (M.run).
+  state.sceneBuildOwed = true
+  -- After the build, so a stopped one leaves the grid build it had before: one still being made
+  -- goes on being made, and one that is done is drawn by the build made again. A completed build
+  -- of any other scene, or of the whole grid, lets it go.
+  state.gridBuild = buildScene()
+  state.sceneBuildOwed = false
 end
 
 -- ── Init / Run ────────────────────────────────────────────────────────────────
@@ -3591,6 +3734,7 @@ function M.run(event, touchState)
         state.preferences = nil
         state.children = nil
         state.cards = nil
+        state.gridBuild = nil
         state.telemetryState = nil
         state.audioState = nil
         state.cardHandlers = nil
@@ -3616,6 +3760,9 @@ function M.run(event, touchState)
       return 0
     end
 
+    if state.sceneBuildOwed and not state.isClosing then
+      state.pendingBuildUI = true
+    end
     if state.pendingBuildUI and not state.isClosing then
       state.pendingBuildUI = false
       local doGc = state.pendingGcAfterBuild == true
@@ -3677,17 +3824,23 @@ function M.run(event, touchState)
     -- The pipeline's reply-driven steps advance themselves; this drives the phases that wait on
     -- time -- the bound on a flight controller that does not come back, and the bound on the
     -- connect chain. Repaint on what is DISPLAYED rather than on every tick, the same rule the
-    -- start screen follows, or an unchanged notice would be rebuilt at tick rate.
+    -- start screen follows, or an unchanged notice would be rebuilt at tick rate. The progress
+    -- table is a new one on every call, so it is asked for only when the pipeline's revision
+    -- says something may have changed; the snapshot still decides whether that is a repaint.
     if SavePipeline and type(SavePipeline.wakeup) == "function" and not state.isClosing then
       SavePipeline.wakeup()
-      local saveProgress = SavePipeline.getProgress()
-      local snapshot = saveProgress and (tostring(saveProgress.phase) .. "/"
-        .. tostring(saveProgress.done) .. "/" .. tostring(saveProgress.label) .. "/"
-        .. tostring(saveProgress.dismissible)) or nil
-      if snapshot ~= state.lastSaveSnapshot then
-        state.lastSaveSnapshot = snapshot
-        state.saveOverlayVisible = snapshot ~= nil
-        scheduleBuildUI(false)
+      local saveRevision = SavePipeline.getRevision()
+      if saveRevision ~= state.lastSaveRevision then
+        state.lastSaveRevision = saveRevision
+        local saveProgress = SavePipeline.getProgress()
+        local snapshot = saveProgress and (tostring(saveProgress.phase) .. "/"
+          .. tostring(saveProgress.done) .. "/" .. tostring(saveProgress.label) .. "/"
+          .. tostring(saveProgress.dismissible)) or nil
+        if snapshot ~= state.lastSaveSnapshot then
+          state.lastSaveSnapshot = snapshot
+          state.saveOverlayVisible = snapshot ~= nil
+          scheduleBuildUI(false)
+        end
       end
     end
 
@@ -3729,6 +3882,19 @@ function M.run(event, touchState)
           scheduleBuildUI(false)
         end
         state.steppedMenuId = nil
+      end
+
+      -- A grid too large for one pass (GRID_TILES_PER_STEP) is made the same way, one step per
+      -- pass while its notice is on screen. Once it is made the screen is asked for on every such
+      -- pass until a build has drawn it, which is what clears state.gridBuild (M.buildUI).
+      local grid = state.gridBuild
+      if grid ~= nil then
+        if not grid.done then
+          stepGridBuild(grid)
+        end
+        if grid.done then
+          scheduleBuildUI(false)
+        end
       end
     end
 

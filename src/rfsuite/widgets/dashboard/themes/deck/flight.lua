@@ -43,7 +43,9 @@ end
 --
 -- It belongs to this module and not to the statistics one, and that is what the host makes the
 -- list per phase for: the statistics view reads the frozen flight record instead, so a reading a
--- pilot put on the flight screen stops being read the moment the flight is over.
+-- pilot put on the flight screen stops being read the moment the flight is over. The two link
+-- figures of the statistics view's bottom bar are the exception, and postflight.lua names them
+-- itself.
 function Theme.sources(_, state)
   if type(Layout.sources) ~= "function" then return {} end
   return Layout.sources(state or {})

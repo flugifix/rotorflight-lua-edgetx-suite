@@ -1,10 +1,11 @@
 -- The panels the flight view and the statistics view are assembled from.
 --
 -- Split off common.lua only for size: the drawing primitives and the value getters are
--- there, the arrangement is here. Both are loaded once per Lua state and cached on _G, the
--- same way the shipped themes cache theirs. This module is the theme's whole surface to the
--- phase modules: buildFlight, buildStats, sources and renderKey, so that a phase module is
--- one require and a few forwards.
+-- there, the arrangement is here. Both are cached on _G, the same way the shipped themes cache
+-- theirs, until the dashboard releases a theme no widget uses any more (releaseUnusedThemes in
+-- widgets/dashboard/runtime.lua): module state here starts afresh when the theme is shown again.
+-- This module is the theme's whole surface to the phase modules: buildFlight, buildStats,
+-- sources and renderKey, so that a phase module is one require and a few forwards.
 --
 -- The look: a header (the menu and tool glyphs, the model name, the link cluster, the clock and
 -- the radio battery), a left column of three cards, a right column with one big card over a row
@@ -995,7 +996,8 @@ L.DEFAULT_TILES = {
 -- every theme load and again on every phase change, with the module being drawn -- which is why
 -- it belongs to the flight view and not to the statistics one. The statistics view reads the
 -- flight record, so a reading a pilot put on the flight screen costs nothing once the flight is
--- over.
+-- over; the two link figures of its bottom bar are the exception, with a list of their own
+-- (L.STATS_SOURCES).
 --
 -- Two halves. The readings the flight view draws whatever the positions say:
 --
@@ -1104,19 +1106,23 @@ end
 -- One extreme of the flight record as a reader for the per-frame sweep: the flight in progress
 -- where it has taken a value for the key, the flight that ended otherwise -- the rule the host's
 -- own boxes read the record by (objects/common.lua, Utils.statFromRecord). `cells` divides a pack
--- reading down to a cell.
+-- reading down to a cell: the live count for the flight in progress, and for the flight that ended
+-- the count of the pack it was flown on where the host took one (Common.flownCells), since a pack
+-- plugged in after the landing changes the live count.
 local function extremeReader(state, key, cells)
   return function()
     local flight = state.flight
     if type(flight) ~= "table" then return nil end
     local rec = flight.current
     local v = type(rec) == "table" and rec[key] or nil
+    local div = cells
     if v == nil then
       rec = flight.last
       v = type(rec) == "table" and rec[key] or nil
+      if cells then div = Common.flownCells(state) or cells end
     end
     if type(v) ~= "number" then return nil end
-    if cells then return v / cells end
+    if div then return v / div end
     return v
   end
 end
@@ -1883,8 +1889,9 @@ end
 -- the statistics view's bar
 -- ---------------------------------------------------------------------------
 
--- A reading the host resolves only because this theme declared it (L.sources): the transmitter
--- module's power and the receiver's skipped-packet count. Nil where nothing answers.
+-- A reading the host resolves only because this theme declared it (L.sources for the flight view,
+-- L.STATS_SOURCES for the statistics view): the transmitter module's power and the receiver's
+-- skipped-packet count. Nil where nothing answers.
 local function derivedNumber(state, name, altName)
   local d = state.derived
   if d == nil then return nil end
@@ -1960,10 +1967,20 @@ local function armingOverride(nodes, state, x, y, w, fontH, font)
   return function() return list() == nil end
 end
 
+-- The readings the statistics view's bar takes from the host's snapshot, which holds only what
+-- the phase module standing names: postflight.lua hands the host this list. While the flight
+-- controller still answers, the two cells follow the link. Once it stops, the host rebuilds the
+-- snapshot only on a theme load (widgets/dashboard/runtime.lua, `isPostflightOffline`,
+-- reloadActiveTheme), so they keep the reading taken last: the last one the link delivered, or
+-- what the radio still holds for the sensor where the statistics view loaded after the link had
+-- gone.
+L.STATS_SOURCES = { "TPWR", "*Skp" }
+
 -- The statistics view's bar, four link and board figures in four equal cells: the transmitter
 -- power, the least link quality, the hottest the flight controller got, and the skipped packets.
 -- The host keeps no record of the power, so that cell is the reading the link delivered last,
--- under the flight view's label rather than one marked as a maximum.
+-- under the flight view's label rather than one marked as a maximum. The power and the skipped
+-- packets are the snapshot's (L.STATS_SOURCES above).
 function L.statsStatusBar(nodes, state, x, y, w, h, font, fontH, lastStat)
   local textY = y + math.floor((h - fontH) / 2)
   local shown = armingOverride(nodes, state, x, textY, w, fontH, font)
@@ -2107,30 +2124,49 @@ end
 local function statsRows(state)
   local cfg = state.themeConfig or {}
 
-  -- The voltage row is per CELL, with the cell count in the label. The count is a render key
-  -- term, so the label can be a constant of this build.
-  local cells = Common.cells(state)
-  local function perCell(v)
+  -- The voltage row is per CELL, with the cell count in the label. The label, the Min and the Max
+  -- belong to the flight that ended, so they take the count of the pack it was flown on where the
+  -- host took one at the disarm (Common.flownCells); the Latest column is the live reading and
+  -- takes the live count, which follows a pack plugged in after the landing. This view is built
+  -- after the disarm, and the flown count changes only on an arm or a disarm edge, both of which
+  -- rebuild it; the live count is a render key term. So both can be constants of this build.
+  local liveCells = Common.cells(state)
+  local cells = Common.flownCells(state) or liveCells
+  local function perCell(v, n)
     v = num(v)
     if v == nil or v <= 0 then return nil end
-    return v / cells
+    return v / n
   end
   local vMin = num(tonumber(cfg.v_min))
   local cellMinColor = C.text
   if vMin ~= nil then
     -- The least the pack reached against the theme's own minimum (`v_min`). Without a minimum on
     -- file there is nothing to compare with and the figure carries no closure at all.
+    -- The flown pack's least reached is compared per cell, against the minimum per cell of the
+    -- count the host worked `v_min` out for (`_boundsCells`, widgets/dashboard/runtime.lua,
+    -- updateVoltageThemeConfig): that count follows the live pack, so after a pack of another
+    -- count is plugged in the two are still compared cell for cell. A `v_min` without such a
+    -- count is a pack voltage of the pilot's own and is compared as it is. Either way the answer
+    -- is the one before this change while both counts agree.
+    local boundCells = tonumber(cfg._boundsCells)
+    local cellMinBound = (boundCells and boundCells > 0) and (vMin / boundCells) or nil
     cellMinColor = function()
-      local v = num(lastStat(state, "minVoltage", "lastMinVoltage"))
-      if v ~= nil and v > 0 and v < vMin then return C.crit end
+      local raw = lastStat(state, "minVoltage", "lastMinVoltage")
+      if cellMinBound == nil then
+        raw = num(raw)
+        if raw ~= nil and raw > 0 and raw < vMin then return C.crit end
+        return C.text
+      end
+      local v = perCell(raw, cells)
+      if v ~= nil and v < cellMinBound then return C.crit end
       return C.text
     end
   end
   local voltage = {
     label = T.cell_voltage .. " (" .. tostring(cells) .. "S)", sample = "4.20",
-    latest = scaled(function() return perCell(state.voltage) end, 2),
-    min = scaled(function() return perCell(lastStat(state, "minVoltage", "lastMinVoltage")) end, 2),
-    max = scaled(function() return perCell(lastStat(state, "maxVoltage", "lastFlightMaxVoltage")) end, 2),
+    latest = scaled(function() return perCell(state.voltage, liveCells) end, 2),
+    min = scaled(function() return perCell(lastStat(state, "minVoltage", "lastMinVoltage"), cells) end, 2),
+    max = scaled(function() return perCell(lastStat(state, "maxVoltage", "lastFlightMaxVoltage"), cells) end, 2),
     -- The flight view's own cell-row colour, so the two screens cannot disagree about the pack.
     latestColor = SOURCES_BY_ID.cell_voltage.color(state),
     minColor = cellMinColor,
@@ -2394,21 +2430,23 @@ end
 -- word under the model picture is coloured at build time, so without the term the warn colour would never
 -- clear. The picked pack is not a term: nothing drawn depends on it.
 --
--- This runs every 0.5 s inside the host's STATE pass: one sensor read, no table allocation,
--- no probe of the card or the settings. What a build reads beyond this (the radio's battery
--- range, the image on the card) is read at build time and is not a term.
+-- This runs every 0.5 s inside the host's STATE pass: one sensor read, no probe of the card or
+-- the settings. The key is one `..` expression, so no list is built to be joined. What a call
+-- still allocates is the key itself: Lua 5.3 makes a new string for every key over 40 bytes,
+-- and the model picture's path (the suite logo's when there is no picture) puts it over. What a
+-- build reads beyond this (the radio's battery range, the image on the card) is read at build
+-- time and is not a term.
 function L.renderKey(zone, state)
   local derived = state and state.derived or nil
   local bp = state and type(state.batteryPick) == "table" and state.batteryPick or nil
-  return table.concat({
-    "deck",
-    tostring(zone and zone.w or 0),
-    tostring(zone and zone.h or 0),
-    tostring(Common.cells(state or {})),
+  return "deck"
+    .. "|" .. tostring(zone and zone.w or 0)
+    .. "|" .. tostring(zone and zone.h or 0)
+    .. "|" .. tostring(Common.cells(state or {}))
     -- The picture the host resolved -- which follows the craft name and the cell count as well
     -- as the EdgeTX bitmap -- and whether a second antenna has been seen, which adds a bar.
-    tostring(derived and derived.model_image or ""),
-    L.diversity(state) and "div" or "",
+    .. "|" .. tostring(derived and derived.model_image or "")
+    .. "|" .. (L.diversity(state) and "div" or "")
     -- The phase, and it is `themePhase` rather than `flightMode` on purpose.
     --
     -- A host that knows the two refinement phases puts the widget into `armed` on the arm edge
@@ -2425,11 +2463,10 @@ function L.renderKey(zone, state)
     --
     -- `flightMode` is the fallback for a host that publishes no `themePhase`: there the two
     -- refinement phases do not exist either, so the term is what it always was.
-    tostring(state and (state.themePhase or state.flightMode) or ""),
-    tostring(txBatteryStep()),
-    tostring(bp and bp.pending or false),
-    tostring(state and state.lqSource or "")
-  }, "|")
+    .. "|" .. tostring(state and (state.themePhase or state.flightMode) or "")
+    .. "|" .. tostring(txBatteryStep())
+    .. "|" .. tostring(bp and bp.pending or false)
+    .. "|" .. tostring(state and state.lqSource or "")
 end
 
 if type(_G) == "table" then _G.__rfsuiteThemeDeckLayoutModule = L end

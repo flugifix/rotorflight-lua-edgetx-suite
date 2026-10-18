@@ -34,6 +34,9 @@ local DATA_DIR = USER_ROOT .. "/flightlog"
 -- read short, because a truncated read written back would be the file the pilot loses.
 local READ_CAP = 65536
 local READ_CHUNK = 4096
+-- The most of a row the log reader holds while it waits for the row's line end. A flight's line
+-- is a few hundred bytes; this guards against a damaged file, it is not a limit of the format.
+local MAX_LINE_LEN = 1024
 
 M.READ_CAP = READ_CAP
 
@@ -405,30 +408,66 @@ function M.readerClose(reader)
   reader.buffer = ""
 end
 
+-- One line through the suite's logger, reached through the global it publishes so that this
+-- file keeps no dependency of its own. Debug, because the line is written once per dropped row:
+-- a level that always reaches the log ring would let one damaged file push everything else out
+-- of it, and at debug nothing is formatted unless the level is switched on.
+local function logDroppedRow(offset)
+  local Log = type(_G) == "table" and _G.rfsuite and _G.rfsuite.Log
+  if type(Log) == "table" and type(Log.emitf) == "function" then
+    pcall(Log.emitf, "rfsuite.flight_log", "debug",
+      "flight log: no line end within %d bytes at offset %d, skipped to the next line",
+      MAX_LINE_LEN, offset)
+  end
+end
+
 -- Parses at most `maxLines` lines and hands each parsed row to `onRow`. Returns true once the
--- file is exhausted. The line count is the binding cap and the reader pulls as many chunks as
--- those lines need: a fixed byte budget is a line budget that changes with the row width, which
--- makes a long file take an unpredictable number of passes.
+-- file is exhausted. A chunk read counts against the same budget as a line, so one call reads at
+-- most `maxLines` chunks whatever the file holds; on a file of short rows that costs a line per
+-- chunk, which keeps the number of passes close to what the line count alone would give.
+--
+-- A row still waiting for its line end is not collected without a limit: once more than
+-- MAX_LINE_LEN bytes (and a carriage return) of it are held and the next read brings more of the
+-- file, the row is dropped and everything up to the next line end is skipped, so its tail can
+-- never be read as a row of its own. A line whose line end is already in the buffer is parsed
+-- whatever its length, and so is the row held when a read finds the end of the file or fails, so
+-- a last line without a line end is dropped only if a read before that one still brought more of
+-- it.
 function M.readerStep(reader, maxLines, onRow)
   if type(reader) ~= "table" or reader.done then return true end
   local buffer = reader.buffer
   local pos = 1
-  local lines = 0
+  local steps = 0
 
-  while lines < maxLines do
+  while steps < maxLines do
     local line = nil
     local nl = string.find(buffer, "\n", pos, true)
     if nl ~= nil then
       line = string.sub(buffer, pos, nl - 1)
       pos = nl + 1
     elseif not reader.eof then
+      steps = steps + 1
+      local pending = #buffer - pos + 1
       local ok, data = pcall(io.read, reader.handle, READ_CHUNK)
       if not ok or data == nil or data == "" then
         reader.eof = true
       else
-        buffer = string.sub(buffer, pos) .. data
-        pos = 1
+        if not reader.skipping and pending > MAX_LINE_LEN + 1 then
+          logDroppedRow(reader.bytes - pending)
+          reader.skipping = true
+        end
         reader.bytes = reader.bytes + #data
+        if reader.skipping then
+          buffer, pos = "", 1
+          local skipEnd = string.find(data, "\n", 1, true)
+          if skipEnd ~= nil then
+            buffer, pos = data, skipEnd + 1
+            reader.skipping = false
+          end
+        else
+          buffer = string.sub(buffer, pos) .. data
+          pos = 1
+        end
       end
     elseif pos <= #buffer then
       line = string.sub(buffer, pos)
@@ -441,7 +480,7 @@ function M.readerStep(reader, maxLines, onRow)
       if string.sub(line, -1) == "\r" then line = string.sub(line, 1, -2) end
       local row = M.parseRow(line)
       if row ~= nil and type(onRow) == "function" then onRow(row) end
-      lines = lines + 1
+      steps = steps + 1
     end
   end
 

@@ -209,13 +209,19 @@ function M.build(children, zone, state, ctx)
     end), g.font, UD.packColor(state, C.text), LEFT)
   UD.label(children, x + thirdW, footY, w - 2 * thirdW, g.fontH,
     UD.getter(function()
-      -- The flight in progress first, the flight that ended after it: the record's own rule.
+      -- The flight in progress first, the flight that ended after it: the record's own rule. The
+      -- ended flight's minimum is divided by the count of the pack it was flown on where the host
+      -- took one, not by the live count, which follows a pack plugged in after the landing.
       local flight = state.flight
       if type(flight) ~= "table" then return nil end
       local v = type(flight.current) == "table" and flight.current.minVoltage or nil
-      if v == nil and type(flight.last) == "table" then v = flight.last.minVoltage end
+      local div = cells
+      if v == nil and type(flight.last) == "table" then
+        v = flight.last.minVoltage
+        div = UD.flownCells(state) or cells
+      end
       if type(v) ~= "number" or v <= 0 then return nil end
-      return v / cells
+      return v / div
     end, function(v)
       if v == nil then return T.batt_cell_min .. " -" end
       return string.format("%s %.2f V", T.batt_cell_min, v)

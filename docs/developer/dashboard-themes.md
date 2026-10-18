@@ -136,7 +136,9 @@ Two consequences worth knowing before writing a theme:
   the bench with keeps standing. A postflight or offline module can rely on the last flight's
   numbers still being there; it cannot rely on anything live. The split exists so that a theme
   can say which of the two it is showing — in `postflight` the model is still on the link and
-  can be armed again, in `offline` nothing on the screen can change any more.
+  can be armed again, in `offline` nothing on the screen can change any more. The theme outlives
+  the link too: a model's own theme stays on the post-flight screen once its preferences have gone
+  with the link, until the next flight controller connects (see below).
 - **A model that never publishes `armflags` never leaves preflight.** The arm reading is what
   every phase decision is built on, and the widget deliberately distinguishes *read as disarmed*
   from *never read at all*.
@@ -179,7 +181,41 @@ values for whoever turns it back on. With it on, the first of these that names a
 model's phase override, then the model's own theme — both only while per-model settings are allowed
 on the radio and on for that model (`DashboardLib.modelOverridesActive`) — then the global phase override, then the global theme, then `system/default`. A
 model theme is a context of its own, so an unset phase override falls back to the model's theme
-rather than jumping to the global one.
+rather than jumping to the global one. The model's preferences leave with the link, so the widget
+keeps the path its model's own theme resolved for the post-flight slot, and the `postflight` and
+`offline` screens use it while no model preferences are present; only the path is kept, the
+model's theme settings are not, and the next connect edge drops it. Preferences without a
+`dashboard` table count as none: the Setup > Power pages create such a table in the session when
+there is none, so opening one in the tool after the unplug neither clears the kept path nor
+replaces it.
+
+### How long a theme stays loaded
+
+A module a theme loads through `rfsuite.require` is kept in the suite's module cache, and a
+shipped theme also caches its shared modules in a global of its own,
+`__rfsuiteTheme<Folder><File>Module` (`urban/layout.lua` as `__rfsuiteThemeUrbanLayoutModule`,
+`@aerc/common.lua` as `__rfsuiteThemeAercCommonModule`: a leading `@` dropped, the folder cut at
+its first `-`). When a widget moves to a theme in another folder, every theme folder that no
+dashboard widget in the Lua state uses — on screen, or chosen for any of the three slots above — is
+released: its module cache entries, and each global named after one of them that still holds that
+module. The next time that theme is shown it is read from the card again, as on its
+first load. `default` is never released: the box objects of every declarative theme draw with its
+`common.lua`, and its phase modules are the fallback when another theme does not load.
+
+So keep nothing at module level that has to outlive the theme being left: a cache derived from the
+inputs of a build is fine, because it is rebuilt on the first build after a reload; a reading
+that has to persist across a theme switch belongs on the host's `state`. A phase change within one
+theme, and a settings save that keeps the theme, release nothing. A tree on screen, an open view
+and the settings page each keep the module they already hold; only the shared roots are dropped. A
+global named any other way is not released, and stays loaded for the life of the Lua state as
+before. "In use" goes by folder: a theme that loads modules from another folder (`@aerc-n` draws with
+`@aerc/common.lua`, a user copy of Urban with the shipped Urban's modules) does not keep that folder
+in use, so those modules are read from the card again on its next load after a release.
+
+Load a shared module through `rfsuite.require` wherever the theme loads it, `configure.lua`
+included. A module loaded with `loadScript` alone has no cache entry, so its global cannot be
+released with the rest, and the next load of the theme would pair it with fresh copies of the
+modules it requires.
 
 ## What a phase module returns
 
@@ -539,7 +575,7 @@ the first out for itself will not agree with the announcement that speaks it:
 | Field | What it says |
 | --- | --- |
 | `state.mainPowerLost` | The main pack is gone while the flight controller is still answering — it reads as gone rather than merely low, it had read a real voltage earlier in this connection, and a BEC voltage is there beside it. It is the test `lib/audio.lua` makes for its *Main power lost* announcement, decided in one place (`Audio.mainPowerLost`) and published here; it does **not** depend on that announcement being switched on. A theme drawing it would show the voltage slot as running on the reserve and the fuel reading as unknown, because neither is being measured any more. It is refreshed on the telemetry cadence, so like every other reading it stands still on a post-flight screen whose link is gone. |
-| `state.packNotFull` | The pack plugged in was not full: `true` when its voltage per cell was below the flight controller's *Max cell voltage* less the *Margin* of the *Pack Not Full* announcement, `false` once it was judged full, `nil` until it has been judged -- which waits for the connect chain to finish and for a pack voltage, a cell count and the battery configuration read over MSP, so it arrives after the first fuel reading. Judged once per connection and kept for the rest of it, so a pack running down in flight does not turn it `true`; judged again after a reconnect. It is the verdict `lib/audio.lua` speaks for that announcement, decided in one place (`Audio.packNotFull`) and published here on the telemetry cadence; it does **not** depend on that announcement being switched on. Read it with `== true`: `nil` and `false` both mean "nothing to say". Urban draws its fuel gauge orange instead of green while it is `true`. |
+| `state.packNotFull` | The pack plugged in was not full: `true` when its voltage per cell was below the flight controller's *Full cell voltage* less the *Margin* of the *Pack Not Full* announcement, `false` once it was judged full, `nil` until it has been judged -- which waits for the connect chain to finish and for a pack voltage, a cell count and the battery configuration read over MSP, so it arrives after the first fuel reading. Judged once per connection and kept for the rest of it, so a pack running down in flight does not turn it `true`; judged again after a reconnect. It is the verdict `lib/audio.lua` speaks for that announcement, decided in one place (`Audio.packNotFull`) and published here on the telemetry cadence; it does **not** depend on that announcement being switched on. Read it with `== true`: `nil` and `false` both mean "nothing to say". Urban, Grid and Deck draw their fuel gauge orange instead of green while it is `true`. |
 | `state.alerts` | The levels of the announcements under *Settings* → *Audio* → *Events*, one entry per alert, resolved the way the alert itself resolves them — the connected model's own ESC temperature levels where it has them, a pair entered the wrong way round put in order — so a theme colouring the same reading agrees with the voice. `lq`, `rssi`, `trss`, `rsnr`, `tsnr`, `tpwr`, `escTemp`, `mcuTemp` and `escLoad` are each `{ on, warn, critical }`; `skipped` is `{ on, count, window }`, the telemetry dropouts alert. Units are the alert's own: percent for the link entries — the link quality, the headroom over the air rate's sensitivity floor (`rssi`, `trss`), the position between its two SNR thresholds (`rsnr`, `tsnr`) and the share of the TX power maximum (`tpwr`, where higher is worse) — degrees Celsius for the temperatures and percent of the ESC's current limit for `escLoad`. `tpwr` also carries `max`, the maximum in mW its shares are of: the pilot's *Maximum (mW)* where *Own Maximum* is on, otherwise the module's Max Power where the TX power alert (which reads it only while it is on) had read it when the theme was loaded, and *Maximum (mW)* otherwise — a read that finishes later is taken at the next load. `on` is the alert's own switch; whether a theme colours a reading whose alert is off is the theme's choice. Resolved when the theme is loaded — saving the announcement settings reloads it, as saving the theme's own settings does — so a box may read it in a threshold's limit; read-only, a fresh table per load, nothing per frame. An alert the suite does not have is absent rather than a placeholder. Urban's link bars read it, and so does the Default theme's link quality box where its *Colour at alert levels* is on. |
 | `state.eventLog` | What changed on the craft and when: the last thirty transitions, oldest first, each `{ kind, value, text, level, time }`. `kind` is `"armed"`, `"disarmed"`, `"connected"`, `"disconnected"`, `"governor"` or `"esc"`; `value` is the governor state index for `"governor"`; `text` is the speed controller's own verdict for `"esc"`, already in the package's language, and nil otherwise, so the theme names every other kind in its own words; `level` is 1 information, 2 warning, 3 error (the speed controller's levels, which `"esc"` carries and a disconnect takes as 2); `time` is the radio's clock as `HH:MM:SS`, empty on a radio without one. A connection's first governor state is its starting point and is not an entry; its speed controller's first verdict is. An `"esc"` entry exists only while the active theme declares `esc_status_live` — the history reads the verdict the snapshot already resolved and never the sensors. The table is never nil, is kept across connections, and changes only on a transition, so a closure reading the newest entries (`log[#log]`, `log[#log - 1]`, ...) reads a few fields per frame and allocates nothing. |
 

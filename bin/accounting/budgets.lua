@@ -379,7 +379,9 @@ return {
     ["page.settings_audio_events_link_page.build"] = { target = 24900, measured = 15655, proposed = 5750 },
     ["page.settings_audio_events_profiles_page.build"] = { target = 2650, measured = 2498 },
     ["page.settings_audio_events_rescue_page.build"] = { target = 1600, measured = 1272 },
-    ["page.settings_audio_events_voltage_page.build"] = { target = 6100, measured = 5112 },
+    -- Raised when the page gained a Raise Volume row under its alert (drawn while the alert is on,
+    -- the default) and one for the BEC/RX alert: measured x 1.25, rounded up to the next 50.
+    ["page.settings_audio_events_voltage_page.build"] = { target = 7950, measured = 6335, proposed = 6100 },
     ["page.settings_audio_volume_page.build"] = { target = 2100, measured = 1674 },
     ["page.settings_dashboard_inflight_page.build"] = { target = 10200, measured = 8152 },
     ["page.settings_dashboard_quick_menu_page.build"] = { target = 2500, measured = 2364 },

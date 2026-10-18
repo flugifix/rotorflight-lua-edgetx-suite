@@ -1731,14 +1731,16 @@ end
 
 local function updateConnectionState(self)
   local runtimeState = nil
-  local mspProgress = nil
+  local mspDone, mspTotal = nil, nil
   if MspRuntime and type(MspRuntime.getState) == "function" then
     runtimeState = MspRuntime.getState()
   elseif Rf2Runtime and type(Rf2Runtime.getState) == "function" then
     runtimeState = Rf2Runtime.getState()
   end
-  if MspRuntime and type(MspRuntime.getProgress) == "function" then
-    mspProgress = MspRuntime.getProgress()
+  -- The plain-value form, not getProgress(): this runs on every logic tick, and the table form
+  -- would be a new table per tick for as long as the widget runs.
+  if MspRuntime and type(MspRuntime.getProgressValues) == "function" then
+    mspDone, mspTotal = MspRuntime.getProgressValues()
   end
   local connected = type(runtimeState) == "table" and runtimeState.lastConnected == true
   local fblConnected = false
@@ -1783,8 +1785,8 @@ local function updateConnectionState(self)
   local rfReady = self.state.rfTelemetrySeen == true
   
   local tasksDone = true
-  if mspProgress and type(mspProgress.total) == "number" and type(mspProgress.done) == "number" then
-    tasksDone = (mspProgress.done >= mspProgress.total)
+  if type(mspTotal) == "number" and type(mspDone) == "number" then
+    tasksDone = (mspDone >= mspTotal)
   end
 
   local onconnectActive = false
@@ -2575,6 +2577,8 @@ local function selectedThemePath(value)
   return nil
 end
 
+-- Answers the path and the reason it was chosen; a reason beginning with `model_` means the
+-- model's own theme answered.
 local function resolveThemePathForState(dashboard, modelPrefs, flightMode, lib)
   -- `armed` and `offline` refine the ground and the post-flight screen rather than standing
   -- beside them, so they have no slot of their own: each resolves through the theme chosen for
@@ -2591,7 +2595,7 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode, lib)
   if themePathMemo.dashboard == dashboard
     and themePathMemo.modelPrefs == modelPrefs
     and themePathMemo.slotMode == slotMode then
-    return themePathMemo.chosen
+    return themePathMemo.chosen, themePathMemo.reason
   end
 
   local modelDashboard = modelPrefs and modelPrefs.dashboard or {}
@@ -2666,8 +2670,145 @@ local function resolveThemePathForState(dashboard, modelPrefs, flightMode, lib)
   themePathMemo.modelPrefs = modelPrefs
   themePathMemo.slotMode = slotMode
   themePathMemo.chosen = chosen
+  themePathMemo.reason = reason
 
-  return chosen
+  return chosen, reason
+end
+
+-- After a flight the post-flight screen belongs to the model that has just flown, and the link
+-- going -- the pack unplugged -- takes that model's preferences with it: the MSP runtime drops
+-- them from the session together with the board's id, and a preferences reload in the
+-- disconnected stretch has no id to load them by. So the theme the model's own preferences
+-- resolve for the post-flight screen is kept on the widget while they are there, and answers for
+-- the post-flight screens while they are not. Only that one path is kept, nothing else of the
+-- preferences, and only where the model's own theme chose it: a model drawing the radio's theme
+-- keeps following the radio's settings. The connect edge drops it, and the next model's
+-- preferences set it again.
+--
+-- Preferences without a `dashboard` table cannot name a theme, and the disconnected stretch
+-- produces exactly those: the Setup > Power pages create an empty table in the session when
+-- there is none (getBatteryPrefs in app/pages/setup/power/battery/page.lua, and the alerts,
+-- preferences and smartfuel pages alike), so one of them opened in the tool after the unplug
+-- hands the widget a table that says nothing about the model that flew. Such a table counts as
+-- no preferences here, on both sides: it neither clears the kept path nor stands in its way.
+local function themePrefs(modelPrefs)
+  if type(modelPrefs) == "table" and type(modelPrefs.dashboard) == "table" then return modelPrefs end
+  return nil
+end
+
+local function noteModelTheme(self, dashboard, modelPrefs)
+  if themePrefs(modelPrefs) == nil then return end
+  if modelPrefs == self._modelThemePrefs and dashboard == self._modelThemeDashboard then return end
+  self._modelThemePrefs = modelPrefs
+  self._modelThemeDashboard = dashboard
+  local chosen, reason = resolveThemePathForState(dashboard, modelPrefs, "postflight", self.dashboardLib)
+  local kept = nil
+  if type(reason) == "string" and string.sub(reason, 1, 6) == "model_" then kept = chosen end
+  if kept ~= self.modelTheme then
+    logGv("model theme kept for the post-flight screen: %s", tostring(kept))
+  end
+  self.modelTheme = kept
+end
+
+local function themePathFor(self, dashboard, modelPrefs, flightMode)
+  if themePrefs(modelPrefs) == nil and self.modelTheme and (flightMode == "postflight" or flightMode == "offline") then
+    return self.modelTheme
+  end
+  return (resolveThemePathForState(dashboard, modelPrefs, flightMode, self.dashboardLib))
+end
+
+-- Releasing a theme nobody shows any more.
+--
+-- A theme's shared modules (a free-form theme's layout.lua and common.lua, its view kit, a
+-- declarative theme's common.lua) are held in two places once loaded: the suite's module cache
+-- (lib/require.lua) and a global of the theme's own, `__rfsuiteTheme<Folder><File>Module`, which
+-- the module returns on its next load. Nothing else drops either, so a theme shown once used to
+-- stay in memory until the Lua state ended. When a widget moves to a theme in another folder,
+-- every theme folder that no dashboard widget in this state uses -- on screen, or chosen for any
+-- of the three phase slots -- is released: its module cache entries and the globals named after
+-- them. The next load of that theme reads it from the card again, as its first load did.
+--
+-- Dropping the two roots is all this does. A tree on screen, a view, or a settings page loaded
+-- in this state (the tool hosted in the widget) keeps the module it already holds, and that copy
+-- stays valid for as long as it is held. `default` is never released: the shared objects of every
+-- declarative theme (widgets/dashboard/objects/) draw with its common.lua, and its phase modules
+-- are the fallback when another theme fails to load.
+--
+-- The widgets that count as users are kept in `rfsuite.dashboardWidgets`, beside the module cache
+-- they guard, and not in a local of this file: every dashboard widget runs this file anew
+-- (WIDGETS/rfsuite/app.lua loads it per instance), so a local would only ever see the widget that
+-- owns it, while the module cache and the globals are shared by every widget in the state. Weak
+-- keys: a widget the firmware has dropped no longer counts as a user.
+local function liveWidgetRegistry()
+  if type(_G) ~= "table" then return nil end
+  _G.rfsuite = _G.rfsuite or {}
+  local registry = _G.rfsuite.dashboardWidgets
+  if type(registry) ~= "table" then
+    registry = setmetatable({}, { __mode = "k" })
+    _G.rfsuite.dashboardWidgets = registry
+  end
+  return registry
+end
+local THEME_SLOTS = { "preflight", "inflight", "postflight" }
+local DEFAULT_THEME_FOLDER = SYSTEM_THEME_BASE .. "default/"
+
+-- The module cache prefix of a theme path's folder, as the module loader normalises it.
+local function themeFolderKey(themePath)
+  local source, folder = parseThemePath(themePath)
+  return (source == "user" and USER_THEME_BASE or SYSTEM_THEME_BASE) .. folder .. "/"
+end
+
+-- The global a theme module caches itself under, from its path: `@aerc/common.lua` caches as
+-- `__rfsuiteThemeAercCommonModule`, `urban/layout.lua` as `__rfsuiteThemeUrbanLayoutModule` (a
+-- leading `@` dropped, the folder cut at its first `-`, both words capitalised).
+local function themeGlobalName(folder, file)
+  local name = string.match(folder, "^@?([^-]+)")
+  local base = string.match(file, "^([^/]+)%.lua$")
+  if not name or not base then return nil end
+  return "__rfsuiteTheme" .. string.upper(string.sub(name, 1, 1)) .. string.sub(name, 2)
+    .. string.upper(string.sub(base, 1, 1)) .. string.sub(base, 2) .. "Module"
+end
+
+local function releaseUnusedThemes(self)
+  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
+  local sessionPrefs = type(session) == "table" and session.modelPreferences or nil
+  local used = { [DEFAULT_THEME_FOLDER] = true }
+  for w in pairs(liveWidgetRegistry() or { [self] = true }) do
+    local dashboard = (w.preferences and w.preferences.dashboard) or EMPTY_DASHBOARD
+    local modelPrefs = w.modelPreferences or sessionPrefs
+    if w.themePath then used[themeFolderKey(w.themePath)] = true end
+    for i = 1, #THEME_SLOTS do
+      used[themeFolderKey(resolveThemePathForState(dashboard, modelPrefs, THEME_SLOTS[i], w.dashboardLib))] = true
+    end
+  end
+  -- The slots above moved the resolver's one-entry memo; put back the answer this widget's next
+  -- pass asks for.
+  resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD,
+    self.modelPreferences or sessionPrefs, self.flightMode, self.dashboardLib)
+
+  local modules = type(_G) == "table" and _G.rfsuite and _G.rfsuite.modules or nil
+  if type(modules) ~= "table" then return end
+  local count = 0
+  for path in pairs(modules) do
+    local base = nil
+    if string.sub(path, 1, #SYSTEM_THEME_BASE) == SYSTEM_THEME_BASE then
+      base = SYSTEM_THEME_BASE
+    elseif string.sub(path, 1, #USER_THEME_BASE) == USER_THEME_BASE then
+      base = USER_THEME_BASE
+    end
+    local slash = base and string.find(path, "/", #base + 1, true)
+    if slash and not used[string.sub(path, 1, slash)] then
+      local module = modules[path]
+      modules[path] = nil
+      -- Only the global that holds this very module: the name is derived from the path, and two
+      -- folders can derive the same one (`@aerc` and `@aerc-n` both give `Aerc`); a global that holds
+      -- another table is not this entry's to drop.
+      local global = themeGlobalName(string.sub(path, #base + 1, slash - 1), string.sub(path, slash + 1))
+      if global and _G[global] == module then _G[global] = nil end
+      count = count + 1
+    end
+  end
+  if count > 0 then logGv("released %d theme module(s) no widget uses", count) end
 end
 
 -- Everything reloadActiveTheme reads out of the per-model preferences sits under `dashboard`:
@@ -3485,7 +3626,8 @@ function Runtime.new(zone, options)
     -- it. Cleared first, so a load that raises is retried by the same tests as it was before.
     self._themeReloadPending = nil
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, self.flightMode, self.dashboardLib)
+    local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
+    local selectedTheme = themePathFor(self, dashboardPrefs, modelPrefs, self.flightMode)
     local nextConfig = {}
     if self.dashboardLib and self.dashboardLib.getThemeConfig then
       nextConfig = self.dashboardLib.getThemeConfig(self.preferences, selectedTheme, {}, modelPrefs)
@@ -3497,6 +3639,14 @@ function Runtime.new(zone, options)
     nextConfig._customVoltage = hasCustomVoltage
 
     self.themePath = selectedTheme
+    -- Before the new theme loads, so the one being left is not held beside it for longer than
+    -- this widget still has it on screen. Only on a change of folder: a phase change within one
+    -- theme, or a settings save, releases nothing, and pays one string comparison.
+    if selectedTheme ~= self._themeFolderPath then
+      local folder = themeFolderKey(selectedTheme)
+      if self._themeFolder ~= nil and folder ~= self._themeFolder then releaseUnusedThemes(self) end
+      self._themeFolder, self._themeFolderPath = folder, selectedTheme
+    end
     self.state.themeConfig = nextConfig
     updateVoltageThemeConfig(self)
     -- The announcements' levels, for a theme to colour the same readings by. Resolved here, with
@@ -3787,6 +3937,11 @@ function Runtime.new(zone, options)
       self._batteryPickPicked = nil
       self._viewStack = nil
       self.modelPreferences = nil
+      -- The post-flight theme kept for the model that flew before (noteModelTheme) belongs to that
+      -- session; this one sets its own once its preferences arrive.
+      self.modelTheme = nil
+      self._modelThemePrefs = nil
+      self._modelThemeDashboard = nil
       -- Clear the reference so the identity check fails on the next frame
       -- and the slow-path signature comparison is triggered.  Keep the
       -- signature itself so that an identical modelPrefs content (same model,
@@ -3852,7 +4007,9 @@ function Runtime.new(zone, options)
     end
 
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil
-    local selectedTheme = resolveThemePathForState((self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD, modelPrefs, nextMode, self.dashboardLib)
+    local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
+    noteModelTheme(self, dashboardPrefs, modelPrefs)
+    local selectedTheme = themePathFor(self, dashboardPrefs, modelPrefs, nextMode)
 
     -- A different table is not a different preference set. The connect chain
     -- (tasks/events/onconnect/tasks/uid.lua), the MSP publisher (tasks/msp/runtime.lua) and
@@ -4427,6 +4584,9 @@ function Runtime.new(zone, options)
     }
   end
 
+  -- A user of the themes it shows, for releaseUnusedThemes, from its first load on.
+  local registry = liveWidgetRegistry()
+  if registry then registry[widget] = true end
   reloadActiveTheme(widget)
 
   -- The heartbeat mark for widget.background, claimed by the instance built last. A dashboard

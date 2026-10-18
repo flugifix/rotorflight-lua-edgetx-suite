@@ -13,7 +13,17 @@ end
 
 local Controls = loadModule("ui/controls.lua")
 local DashboardLib = loadModule("app/pages/settings/dashboard/lib.lua")
-local Layout = loadModule("widgets/dashboard/themes/grid/layout.lua")
+-- Through the suite's module loader where there is one, as the theme's own modules load it: in the
+-- widget's Lua state (the tool hosted there) the module then has a cache entry beside its global,
+-- and the dashboard releases the two together once no widget uses this theme
+-- (releaseUnusedThemes in widgets/dashboard/runtime.lua).
+local function loadLayout(path)
+  local requireModule = _G.rfsuite and _G.rfsuite.require
+  local mod = type(requireModule) == "function" and requireModule(path) or nil
+  if type(mod) == "table" then return mod end
+  return loadModule(path)
+end
+local Layout = loadLayout("widgets/dashboard/themes/grid/layout.lua")
 
 -- The settings page loads this file for the theme it is configuring and hands that theme to
 -- the factory at the foot of this file, so a copy of this theme under rfsuite.user/dashboard

@@ -728,6 +728,23 @@ function M.cells(state)
   return c
 end
 
+-- The cell count of the pack the flight that ended was flown on: the count the host takes at the
+-- disarm together with the landing voltage (`state.lastFlightEndingCells`,
+-- widgets/dashboard/runtime.lua, updateDerivedFlightState), or nil while it holds none -- in flight,
+-- since the arm clears it, and after a landing on a pack that read 0 V. A figure of the ended
+-- flight's record is divided by this count rather than by M.cells: the live count follows whatever
+-- pack is plugged in after the landing. The host's own statistics box does the same
+-- (widgets/dashboard/objects/text/stats.lua). Rounded and capped as M.cells is, so a label and a
+-- gauge never disagree about the same count.
+function M.flownCells(state)
+  local c = tonumber(state and state.lastFlightEndingCells)
+  if c == nil or c <= 0 then return nil end
+  c = math.floor(c + 0.5)
+  if c < 1 then return 1 end
+  if c > 14 then return 14 end
+  return c
+end
+
 -- mm:ss below an hour, h:mm from one hour on -- the shipped themes' formatDuration.
 function M.duration(seconds)
   local v = math.max(0, math.floor((num(seconds) or 0) + 0.5))
@@ -1262,8 +1279,8 @@ local function ownLookup(state, derived)
 end
 
 -- The picture's own size, so the panel can top-anchor it at its true aspect ratio rather than
--- centring it in its slot. Bitmap.open loads the file, so it is asked once per path for the life
--- of the Lua state; a firmware without Bitmap answers nil and the image fills its slot.
+-- centring it in its slot. Bitmap.open loads the file, so it is asked once per path for as long
+-- as this module is loaded; a firmware without Bitmap answers nil and the image fills its slot.
 local sizes = {}
 
 function M.imageSize(path)

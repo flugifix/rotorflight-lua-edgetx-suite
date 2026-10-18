@@ -845,11 +845,11 @@ return {
         save_error_message = "Speichern fehlgeschlagen",
         help_message = "Immer nur ein Modus, weil eine Ansage-Stufe unter der Master-Lautstärke die Ansagen nur leiser machen kann.\nAus (Sender-Standard): die Lautstärken des Senders; die Suite schreibt nichts.\nAnsage-Stufe: jede Ansage in der hier gewählten Stufe; die Master-Lautstärke bleibt beim Poti.\nMaster-Lautstärke: die Suite setzt die gesamte Lautstärke des Senders über eine globale Variable; die Modell-Einrichtung steht in der Doku.",
         help_mode = "Modus: Aus überlässt die Lautstärke dem Sender; Ansage-Stufe legt fest, wie laut die Ansagen sind; Master-Lautstärke setzt die gesamte Lautstärke des Senders über eine globale Variable.",
-        help_connected_only = "Nur wenn verbunden: aus (so startet eine neue Einrichtung), wirkt der Modus ab Start, bei Master-Lautstärke bleibt das Poti übersteuert; an, nur bei Verbindung (Alarm-Stufe auch im kritischen Alarm).",
+        help_connected_only = "Nur wenn verbunden: aus (so startet eine neue Einrichtung), wirkt der Modus ab Start, bei Master-Lautstärke bleibt das Poti übersteuert; an, nur bei Verbindung.",
         help_level = "Stufe: 1 bis 5 für jede Ansage und die Zahl danach; 3 klingt so laut wie die WAV-Lautstärke 0 des Senders, 5 am lautesten.",
         help_master_gvar = "Globale Variable: die GV, in die die Suite die Master-Lautstärke schreibt, -1024 beim Freigeben. Zur Wahl stehen nur die GVs dieses Senders; Modus Aus schaltet die Master-Lautstärke ab.",
-        help_master_normal = "Normale Stufe (%): wird geschrieben, solange kein kritischer Alarm aktiv ist; mit Nur wenn verbunden nur bei bestehender Verbindung.",
-        help_master_alert = "Alarm-Stufe (%): wird geschrieben, solange ein kritischer Alarm aktiv ist.",
+        help_master_normal = "Normale Stufe (%): die Master-Lautstärke, die die Suite schreibt; mit Nur wenn verbunden nur bei bestehender Verbindung.",
+        help_master_alert = "Alarm-Stufe (%): wird direkt vor der Ansage eines kritischen Alarms geschrieben und bis 8 s nach der letzten gehalten; welche Alarme, sagen die Schalter Lautstärke anheben unter Ereignisse.",
         chain = "Modell-Kette",
         chain_unreadable = "Dieser Sender beantwortet die Fragen der Prüfung nicht.",
         chain_ok = "\xEF\x80\x8C",
@@ -992,20 +992,22 @@ return {
         model_announcement = "Modellname",
         rescue_active = "Rettung aktiv",
         rescue_off = "Rettung beendet",
+        alert_raise = "Lautstärke anheben",
+        bec_rx_raise = "Lautstärke anheben BEC/RX",
         help_model_announcement = "Spielt die nach dem Modell benannte Sounddatei SOUNDS/<Name>.wav einmal beim Verbinden. Fehlt die Datei auf der Karte, bleibt es still. Standard: aus.",
         help_battery_profile = "Sagt die Kapazität des aktiven Akkuprofils in mAh beim Verbinden und bei jedem Profilwechsel; ohne eingestellte Kapazität die Profilnummer. Standard: an.",
-        help_pack_not_full = "Einmal beim Verbinden: warnt, wenn die Spannung pro Zelle unter Max Zellspannung (Setup > Power > Batterie) minus der Toleranz liegt, gesagt wie unter Spannung > Ansage als. Standard: aus.",
-        help_pack_not_full_margin = "Wie weit eine Zelle unter Max Zellspannung liegen darf und noch als voll gilt, in Millivolt pro Zelle (10 bis 500). Standard: 100 mV.",
+        help_pack_not_full = "Einmal beim Verbinden: warnt, wenn die Spannung pro Zelle unter Voll Zellspannung (Setup > Power > Batterie) minus der Toleranz liegt, gesagt wie unter Spannung > Ansage als. Standard: aus.",
+        help_pack_not_full_margin = "Wie weit eine Zelle unter Voll Zellspannung liegen darf und noch als voll gilt, in Millivolt pro Zelle (0 bis 500). Standard: 0 mV.",
         help_initial_fuel = "Sagt den SmartFuel-Stand einmal nach dem Verbinden: beim ersten frischen Wert über 0, sonst nach ein paar Sekunden mit dem aktuellen Wert. Unabhängig vom Schalter der Seite SmartFuel. Standard: an.",
         help_arming_flags = "Ansage beim Scharfschalten und beim Entschärfen des Modells. Standard: an.",
         help_governor_state = "Sagt den Governor-Status bei einer Änderung, sobald der neue Zustand einen Moment anliegt. Darunter wählst du, welche Zustände gesprochen werden. Standard: an.",
         help_governor_state_row = "Ob dieser Zustand gesagt wird, wenn der Governor ihn erreicht. Nur sichtbar, solange Governor-Status an ist. Standard: an.",
-        help_voltage_alert = "Ansage, wenn die Akkuspannung unter Warn Zellspannung (Setup > Power > Batterie) mal Zellenzahl fällt; die Spannung wird gesagt wie unter Ansage als gewählt. Standard: an.",
+        help_voltage_alert = "Ansage, wenn die Akkuspannung unter Warn Zellspannung (Setup > Power > Batterie) mal Zellenzahl fällt, und erneut unter Min Zellspannung; die Spannung wie unter Ansage als. Standard: an.",
         help_voltage_hold = "So lange muss die Spannung unter dieser Schwelle bleiben, bevor sie gesagt wird; ein kurzer Einbruch unter Last bleibt still. 0 sagt sofort. Standard: 2 s.",
         help_voltage_reset = "So weit muss die Spannung über diese Schwelle zurückkommen, in Millivolt pro Zelle, bis die Warnung als behoben gilt und die Wiederholung neu beginnt (50 bis 500). Standard: 100 mV.",
         help_main_power_lost = "Ansage, wenn der Hauptakku weg ist und der Flugregler über BEC oder Stützakku weiterläuft, mit der BEC-Spannung, und erneut mit der Akkuspannung, wenn der Akku zurück ist. Standard: aus.",
         help_voltage_announce = "Akku sagt die Akkuspannung, Zelle die Spannung pro Zelle mit zwei Nachkommastellen. Für Spannung, den wiederkehrenden Akku und Akku nicht voll, nicht für eine BEC-Spannung. Standard: Akku.",
-        help_voltage_repeat = "Wie oft eine Spannungswarnung spricht, solange ihr Zustand anhält, im Abstand von 10 s: bis behoben oder 1 bis 10 Mal. Spannung ist behoben über Schwelle plus Rückstellung.\nGilt für Spannung, Hauptstrom verloren und den BEC/RX-Alarm aus Setup > Power > Alarme.",
+        help_voltage_repeat = "Wie oft Spannung, Hauptstrom verloren und der BEC/RX-Alarm sprechen, solange sie anhalten, alle 10 s: bis behoben oder 1 bis 10 Mal. Spannung zählt neu unter Min und über Schwelle plus Rückstellung.",
         help_voltage_haptic = "Ob der Sender bei Spannung, Hauptstrom verloren und dem BEC/RX-Alarm vibriert. Standard: an.",
         help_pid_profile = "Sagt die Nummer des PID-Profils bei einem Wechsel. Standard: an.",
         help_rate_profile = "Sagt die Nummer des Raten-Profils bei einem Wechsel. Standard: an.",
@@ -1053,6 +1055,12 @@ return {
         help_link_haptic = "Ob der Sender bei der kritischen Stufe von Linkqualität, RSSI, Downlink, beiden SNR-Alarmen und Sendeleistung und bei Telemetrie verloren vibriert. Telemetrie-Aussetzer vibriert nie. Standard: an.",
         help_rescue_active = "Spricht einmal, sobald der Flugregler eine Rettung beginnt, in welcher Phase auch immer. Standard: aus.",
         help_rescue_off = "Spricht einmal, wenn die Rettung vorbei ist und der Flugregler wieder normal steuert. Standard: aus.",
+        help_raise_critical = "Nur im Modus Master-Lautstärke: die kritische Stufe dieses Alarms mit der Alarm-Stufe, 8 s nach dem letzten Mal wieder die normale Stufe. Vibration unverändert. Standard: an.",
+        help_raise_event = "Nur im Modus Master-Lautstärke: dieser Alarm mit der Alarm-Stufe, 8 s nach dem letzten Mal wieder die normale Stufe. Vibration unverändert. Standard: an.",
+        help_voltage_raise = "Nur im Modus Master-Lautstärke: blieb der Akku auch Haltezeit lang unter Min Zellspannung mal Zellen, jede Ansage bis behoben mit der Alarm-Stufe, 8 s danach normal. Standard: an.",
+        help_bec_rx_raise = "Nur im Modus Master-Lautstärke: der BEC/RX-Alarm aus Setup > Power > Alarme mit der Alarm-Stufe, 8 s nach dem letzten Mal wieder die normale Stufe. Standard: an.",
+        help_fuel_empty_raise = "Nur im Modus Master-Lautstärke: die Warnung bei 0 % mit der Alarm-Stufe, nicht die Stufen darüber; 8 s später wieder die normale Stufe. Standard: an.",
+        help_dropouts_raise = "Nur im Modus Master-Lautstärke: Telemetrie-Aussetzer mit der Alarm-Stufe, 8 s nach dem letzten Mal wieder die normale Stufe. Standard: aus.",
         help_message = "In diesem Bereich legst du fest, welche Systemereignisse und Telemetriewerte Sprachausgaben oder Warnungen auslösen.",
         saved_title = "Gespeichert",
         saved_message = "Audio-Ereignisse gespeichert",
@@ -1069,22 +1077,22 @@ return {
         help_message = "Ansage des Governor-Status bei einer Änderung."
       },
       settings_audio_events_voltage = {
-        help_message = "Warnungen zur Spannung des Flugakkus und zur Stromversorgung des Modells.\nSpannung: Ansage unter Warn Zellspannung mal Zellenzahl.\nHaltezeit (s): so lange muss sie darunter bleiben; 0 sagt sofort.\nRückstellung (mV/Zelle): so weit pro Zelle über die Schwelle, bis behoben.\nHauptstrom verloren: der Akku ist weg, ein BEC versorgt das Modell weiter.\nAnsage als: die Akkuspannung oder die Spannung pro Zelle.\nWiederholung: wie oft eine Warnung bis behoben spricht, alle 10 s.\nHaptisch: der Sender vibriert bei diesen Warnungen."
+        help_message = "Spannung: Ansage unter Warn Zellspannung mal Zellenzahl, erneut unter Min.\nLautstärke anheben: nur Master-Lautstärke; Alarm-Stufe, Spannung erst unter Min.\nHaltezeit (s): so lange muss sie darunter bleiben; 0 sagt sofort.\nRückstellung (mV/Zelle): so weit pro Zelle über die Schwelle, bis behoben.\nHauptstrom verloren: Akku weg, ein BEC versorgt das Modell weiter.\nAnsage als: Akkuspannung oder Spannung pro Zelle.\nWiederholung: wie oft eine Warnung bis behoben spricht, alle 10 s.\nHaptisch: vibriert bei diesen Warnungen.\nLautstärke anheben BEC/RX: ebenso für den BEC/RX-Alarm aus Setup > Power."
       },
       settings_audio_events_profiles = {
         help_message = "Ansage bei einem Wechsel des PID- oder Raten-Profils."
       },
       settings_audio_events_esc = {
-        help_message = "ESC-Temperatur: sagt die Temperatur auf einer Stufe; die Erholung bleibt still. Warnung und Kritisch sind die zwei Stufen, beim Modell gespeichert; nur Kritisch vibriert.\nMCU-Temperatur: dieselben zwei Stufen, radioweit.\nESC-Last: der Strom in % der ESC-Strombegrenzung (Setup > Power > Einstellungen); nur scharf, ohne Begrenzung still. Warnung und Kritisch (%) sind ihre zwei Stufen; nur Kritisch vibriert.\nHaltezeit (s): so lange muss die Last auf einer Stufe bleiben.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert auf den kritischen Stufen."
+        help_message = "ESC-Temperatur: gesagt bei Warnung und Kritisch, beim Modell gespeichert; die Erholung bleibt still, nur Kritisch vibriert.\nLautstärke anheben: nur Master-Lautstärke; die kritische Stufe mit der Alarm-Stufe.\nMCU-Temperatur: dieselben zwei Stufen, radioweit.\nESC-Last: der Strom in % der ESC-Strombegrenzung (Setup > Power > Einstellungen), nur scharf, bei Warnung (%) und Kritisch (%).\nHaltezeit (s): so lange muss die Last auf einer Stufe bleiben.\nWiederholung: wie oft ein Alarm spricht, solange er anhält, alle 10 s.\nHaptisch: vibriert auf den kritischen Stufen."
       },
       settings_audio_events_adjustment = {
         help_message = "Ansage von Werten, die über die Adjustment-Funktionen des Flugreglers geändert werden."
       },
       settings_audio_events_fuel = {
-        help_message = "Ansagen des SmartFuel-Stands, solange das Modell verbunden ist.\nDen Wert berechnet der Flugregler, wenn SmartFuel dort an ist (Setup > Power > SmartFuel, ab MSP API 12.0.9).\nSonst berechnet ihn der Sender aus der lokalen Quelle in Setup > Power > Einstellungen."
+        help_message = "Ansagen des SmartFuel-Stands bei Verbindung: berechnet vom Flugregler, wenn SmartFuel dort an ist (ab MSP API 12.0.9), sonst vom Sender (Setup > Power > Einstellungen).\nSmartFuel: der fallende Stand an den Stufen unten und eine Warnung bei 0 %.\nAnsage %: die Stufen, an denen der Stand gesagt wird.\nWiederholung: wie oft die Warnung bei 0 % spricht, alle 10 s.\nHaptisch: vibriert bei der Warnung bei 0 %.\nLautstärke anheben: nur Master-Lautstärke; die Warnung bei 0 % mit der Alarm-Stufe."
       },
       settings_audio_events_link = {
-        help_message = "Alarme zu Funk und Telemetrie.\nLinkqualität, RSSI, Downlink und beide SNR: gesagt, wenn die Stufe erreicht ist; die Signalalarme messen die Reserve über der Grenze bzw. den SNR zwischen den Schwellen; nur Kritisch vibriert.\nTelemetrie verloren: scharf, der Flugregler schweigt.\nTelemetrie-Aussetzer: scharf, Frames fehlen zu oft; Aussetzer: wie viele Lücken, Zeitfenster (s): die Zeit.\nSendeleistung: scharf, in % des Maximums, nur dynamisch; Eigenes Maximum setzt es.\nHaltezeit (s): so lange muss eine Stufe anstehen. Wiederholung: wie oft ein Alarm spricht, alle 10 s. Haptisch: bei Kritisch."
+        help_message = "Linkqualität, RSSI, Downlink und beide SNR: gesagt auf jeder Stufe; die Signalalarme als Reserve über der Grenze bzw. SNR zwischen den Schwellen; nur Kritisch vibriert.\nLautstärke anheben: nur Master-Lautstärke; die oberste Stufe mit der Alarm-Stufe.\nTelemetrie verloren: scharf, der Flugregler schweigt.\nTelemetrie-Aussetzer: scharf, Frames fehlen zu oft; Aussetzer: Lücken, Zeitfenster (s): die Zeit.\nSendeleistung: scharf, in % des Maximums, nur dynamisch; Eigenes Maximum setzt es.\nHaltezeit (s): so lange muss eine Stufe anstehen. Wiederholung: wie oft, alle 10 s. Haptisch: bei Kritisch."
       },
       settings_audio_events_rescue = {
         help_message = "Sagt Beginn und Ende einer Rettung an, je einmal und ohne Vibration. Braucht den Sensor Rescue State (92) oder System Status (120), Setup > Telemetry.\nRettung aktiv: wird angesagt, sobald eine Rettung beginnt.\nRettung beendet: wird angesagt, wenn die Rettung vorbei ist."
@@ -1223,10 +1231,10 @@ return {
         value_current = "STROM",
         value_voltage = "SPANNUNG",
         value_combined = "KOMBINIERT",
-        help_model_type = "Waehle den Modelltyp fuer SmartFuel- und Audioverhalten.",
+        help_model_type = "Akku oder Kraftstoff: das Wort der SmartFuel-Ansagen; die Schaetzung bleibt gleich. AUTO: Elektro, wenn der Flugcontroller Zellenzahl oder Kapazitaet hat, sonst Nitro. Elektro ohne beides: ELEKTRO.",
         help_calcfuel_local = "Waehle die lokale SmartFuel-Quelle als Fallback, wenn Firmware-SmartFuel nicht verfuegbar ist.",
         help_publish_sensors = "Sendet Restkapazitaet und geschaetzten Verbrauch als Telemetriesensoren SmFt und SmCp, fuer Logikschalter, Spezialfunktionen und die Telemetrieseiten. Dashboard und Ansagen brauchen sie nicht.",
-        help_message = "Power-Einstellungen, auf dem Sender je Flugcontroller gespeichert; nichts davon wird zu ihm geschrieben.\nModelltyp: wofuer SmartFuel-Schaetzung und Ansagen das Modell halten.\nLokale SmartFuel-Quelle: die Schaetzung des Senders, wenn der Flugcontroller keine rechnet.\nSmFt / SmCp senden: Restkapazitaet und Verbrauch als zwei Telemetriesensoren senden.\nESC-Strombegrenzung: die Grenze, von der die ESC-Last ein Prozentsatz ist; die Beschriftung zeigt die Herkunft.",
+        help_message = "Power-Einstellungen, auf dem Sender je Flugcontroller gespeichert; nichts davon wird zu ihm geschrieben.\nModelltyp: ob die SmartFuel-Ansagen Akku oder Kraftstoff sagen; AUTO ist Elektro, wenn im Flugcontroller Zellenzahl oder Kapazitaet gesetzt ist.\nLokale SmartFuel-Quelle: die Schaetzung des Senders, wenn der Flugcontroller keine rechnet.\nSmFt / SmCp senden: Restkapazitaet und Verbrauch als zwei Telemetriesensoren senden.\nESC-Strombegrenzung: die Grenze, von der die ESC-Last ein Prozentsatz ist; die Beschriftung zeigt die Herkunft.",
         saved_title = "Gespeichert",
         saved_message = "Power-Einstellungen gespeichert",
         save_error_title = "Fehler",
@@ -1777,8 +1785,6 @@ return {
         link_pick_ratio = "Telemetrierate"
       },
       setup_accelerometer = {
-        help_p4 = "Die Prüfung erfolgt vor dem Start. Fehlende Statusantworten beenden die Überwachung nicht; das Zeitfenster beginnt mit der Startbestätigung.",
-        help_p5 = "Ohne Abschlussmeldung ist die Kalibrierung nicht bestätigt. Die Meldung erklärt, was beobachtet wurde.",
         checking_title = "Prüfen",
         checking_message = "Flugregler vor der Kalibrierung prüfen. Das Modell waagerecht und ruhig halten.",
         starting_title = "Starten",
@@ -1797,7 +1803,7 @@ return {
         calibration_unconfirmed_title = "Kalibrierung nicht bestätigt",
         calibration_not_started_title = "Kalibrierung nicht gestartet",
         save_error_title = "Fehler",
-        help_p3 = "Das Modell vor dem Bestätigen entschärfen und waagerecht und ruhig halten. Bis zum Abschluss ruhig halten; gespeichert wird automatisch.",
+        help_p3 = "Nick: erhöhen gegen eine Drift nach hinten, senken gegen eine Drift nach vorne.",
         title = "Beschleunigungssensor",
         roll = "Roll",
         pitch = "Nick",
@@ -1806,8 +1812,8 @@ return {
         saved_title = "Gespeichert",
         saved_message = "Beschleunigungssensor-Trimmungen gespeichert",
         help_title = "Beschleunigungssensor-Hilfe",
-        help_p1 = "Der Beschleunigungssensor wird verwendet, um den Winkel des Flugcontrollers in Bezug auf den Horizont zu messen. Diese Daten werden zur Stabilisierung des Fluggeraets und zur Bereitstellung der Selbstnivellierungsfunktion verwendet.",
-        help_p2 = "Speichern schreibt diese Werte in das EEPROM.",
+        help_p1 = "Die Trimmung korrigiert eine Drift in Modi wie Winkel, Horizont und Rettung; Speichern schreibt sie ins EEPROM. Taste * kalibriert: entschärfen, Modell bis zur Meldung waagerecht und ruhig halten.",
+        help_p2 = "Roll: erhöhen gegen eine Drift nach links, senken gegen eine Drift nach rechts.",
         msg_calibrate = "Beschleunigungssensor kalibrieren?",
         calibrating_title = "Kalibrierung",
         calibrating_message = "Beschleunigungssensor wird kalibriert. Bitte halten Sie das Modell waagerecht und ruhig.",

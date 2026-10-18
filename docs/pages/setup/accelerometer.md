@@ -21,11 +21,14 @@ arming status and accelerometer presence before sending the start command.
 
 | Setting | What it does |
 | --- | --- |
-| Roll | Roll trim, from -300 to 300 in the page's displayed degree units. |
-| Pitch | Pitch trim, from -300 to 300 in the page's displayed degree units. |
+| Roll | Roll trim, from -300 to 300; the flight controller counts it in tenths of a degree. Raise it to correct a drift to the left, lower it (or go negative) for a drift to the right. |
+| Pitch | Pitch trim, from -300 to 300; the flight controller counts it in tenths of a degree. Raise it to correct a drift to the rear, lower it (or go negative) for a drift to the front. |
 | Save | Writes the edited trims to EEPROM. Held until the page has read the trims from the flight controller on this visit. |
 | Reload | Reads the trims from the flight controller again. |
-| Star / Calibrate | Starts accelerometer calibration after confirmation. |
+| Star (`*`) / Calibrate | Starts accelerometer calibration after confirmation. |
+
+The trims correct a drift in the self-leveling modes, such as Angle, Horizon and Rescue. The page
+shows the raw value, so the number beside its `°` is in tenths of a degree too: 300 is 30°.
 
 ## Calibration
 
@@ -33,7 +36,8 @@ Disarm the model and place it level and still **before confirming**. Keep it sti
 until the completion notice appears. The start command's acknowledgement is only a
 receipt; the page waits for the controller's calibration flag to become active and
 then clear. The controller saves the result itself, so calibration sends no extra
-EEPROM write. The page then reads the trims again.
+EEPROM write. The page then reads the trims again. A completed calibration sounds a beep, at the
+*Level* of Settings > Audio > Volume when that page is set to *Callout level*.
 
 Save, Reload and another calibration are blocked while the operation is pending.
 An armed controller, a missing accelerometer or an already running calibration is
@@ -49,6 +53,9 @@ attempt and a 0.5-second reply window. Missing or invalid samples leave monitori
 active; they cannot report success or end it on their own.
 Preflight and the start request each have a separate five-second bound. The full
 15-second completion window begins when the start acknowledgement arrives.
+
+Once a calibration has been requested, only the **Calibrated** notice confirms it;
+without that notice, success is unconfirmed.
 
 **Calibration not started** means this page did not request calibration: the check
 was refused, no valid preflight status arrived, or the connection or calibration

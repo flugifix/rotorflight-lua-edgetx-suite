@@ -42,6 +42,16 @@ local master_gvar_idx = nil
 local master_gvar_last = nil
 local VOL_GVAR_OFF = -1024
 
+-- How long the master volume stays at the Alert Level after the last critical announcement. A
+-- callout and the number after it take two to four seconds, and EdgeTX may still be playing the
+-- announcement queued before it, so this is an estimate with a margin rather than a measured
+-- length: there is no Lua query for whether the radio is still playing (radio/src/lua/api_general.cpp
+-- exports play and flush calls only). A critical announcement inside the window extends it.
+local BOOST_SECONDS = 8
+-- When the Alert Level ends, on this Lua state's clock (nowSeconds); before it, every refresh of
+-- the master volume asks for the Alert Level. 0 until the first critical announcement.
+local boost_until = 0
+
 -- How long a lost connection stays eligible for a recovery announcement. Past it the pending
 -- flag is dropped without a word: a model that answers again a quarter of an hour later is a
 -- new flight, and "telemetry recovered" belongs to the one that was interrupted.
@@ -83,14 +93,8 @@ local function pct_to_vol_raw(pct)
   return raw
 end
 
-local function is_telemetry_lost_active(self, now)
-  local audioState = self and self.audioState
-  if not audioState or not audioState.connectionLostPending then return false end
-  local lostAt = tonumber(audioState.connectionLostAt) or 0
-  if lostAt <= 0 or (now - lostAt) > CONNECTION_RECOVERY_WINDOW then
-    return false
-  end
-  return true
+local function boost_active(now)
+  return now < boost_until
 end
 
 -- Set by the first refresh_volume_state in this Lua state. The dashboard and the tool reach it on
@@ -178,11 +182,13 @@ local function refresh_volume_state(self, isCritical)
   master_gvar_idx = gv - 1
   local pct = isCritical and (tonumber(prefs.master_alert) or 100) or (tonumber(prefs.master_normal) or 80)
 
-  -- Connected only: the pot rules until the link is up and again once it is down. Without it the
-  -- level is set on the first refresh -- the dashboard or the tool starting -- and the link
-  -- changes nothing, so the pot stays overridden for as long as the mode is on.
+  -- Connected only: the pot rules until the link is up and again once it is down, a raised level
+  -- included -- every critical announcement is made with the link up, and a lost link is the
+  -- radio's own announcement. Without it the level is set on the first refresh -- the dashboard
+  -- or the tool starting -- and the link changes nothing, so the pot stays overridden for as long
+  -- as the mode is on.
   local raw = pct_to_vol_raw(pct)
-  if connectedOnly and not (linkUp or isCritical) then raw = VOL_GVAR_OFF end
+  if connectedOnly and not linkUp then raw = VOL_GVAR_OFF end
   if raw ~= master_gvar_last then
     if pcall(model.setGlobalVariable, master_gvar_idx, 0, raw) then
       master_gvar_last = raw
@@ -647,53 +653,6 @@ local function mcuTemperatureLevels(events)
   return warn, critical
 end
 
-local function is_critical_active(self, now, events)
-  local audioState = self and self.audioState
-  if not audioState then return false end
-
-  if audioState.voltageLowSince ~= nil then
-    return true
-  end
-
-  -- A temperature counts from its critical level: the warning level is spoken at the pilot's
-  -- own volume, and only the level that also vibrates raises it. It counts for as long as the
-  -- alert stays at that level, so the volume is not let go a few degrees before the alert is.
-  if prefEnabled(events, "esc_temperature", false) then
-    local escTemp = tonumber(self.state and self.state.escTemp)
-    if escTemp ~= nil then
-      local _, critical = escTemperatureLevels(events)
-      if escTemp >= critical or ((tonumber(audioState.escTempLevel) or 0) >= 2
-          and escTemp >= critical - TEMP_HYSTERESIS) then
-        return true
-      end
-    end
-  end
-
-  if prefEnabled(events, "mcu_temperature", false) then
-    local mcuTemp = tonumber(self.state and self.state.mcuTemp)
-    if mcuTemp ~= nil then
-      local _, critical = mcuTemperatureLevels(events)
-      if mcuTemp >= critical or ((tonumber(audioState.mcuTempLevel) or 0) >= 2
-          and mcuTemp >= critical - TEMP_HYSTERESIS) then
-        return true
-      end
-    end
-  end
-
-  if prefEnabled(events, "fuel_empty", false) then
-    local fuel = tonumber(self.state and self.state.fuel)
-    if fuel ~= nil and fuel <= 0 and audioState.fuelSeenPositive then
-      return true
-    end
-  end
-
-  if is_telemetry_lost_active(self, now) then
-    return true
-  end
-
-  return false
-end
-
 local function isArmedFromState(state)
   if type(state) ~= "table" then
     return false
@@ -1003,6 +962,54 @@ local function tryPlayEventFile(audioState, now, relativePath, opts)
   return true
 end
 
+-- The Raise Volume switch of each alarm on its Settings > Audio > Events page, by the alarm's key.
+-- The BEC and the RX voltage alert share one: Setup > Power > Alerts switches on one of the two at
+-- a time. Every switch is on unless the pilot turns it off, except the one for telemetry dropouts,
+-- which is off unless turned on. An alarm that is not listed never raises the volume.
+local RAISE_KEYS = {
+  voltage         = "voltage_raise",
+  main_power      = "main_power_raise",
+  bec_voltage     = "bec_rx_raise",
+  rx_voltage      = "bec_rx_raise",
+  lq              = "lq_raise",
+  telemetry_lost  = "telemetry_lost_raise",
+  tpwr            = "tpwr_raise",
+  rssi            = "rssi_raise",
+  trss            = "trss_raise",
+  rsnr            = "rsnr_raise",
+  tsnr            = "tsnr_raise",
+  dropouts        = "dropouts_raise",
+  esc_temperature = "esc_temperature_raise",
+  mcu_temperature = "mcu_temperature_raise",
+  esc_load        = "esc_load_raise",
+  fuel_empty      = "fuel_empty_raise"
+}
+local RAISE_OFF_BY_DEFAULT = { dropouts = true }
+
+--- Hand an alarm's file to EdgeTX, the way tryPlayEventFile does, and raise the master volume for
+--- it where it is a critical announcement: an alarm's upper level, or the only level of an alarm
+--- that has one.
+---
+--- The Alert Level is written BEFORE the file is handed over, so the announcement is heard at it,
+--- and only where the file will be handed over: the cooldown tryPlayEventFile applies is open and
+--- the sound pack has the file. An announcement refused for either reason therefore raises
+--- nothing. Back to the Normal
+--- Level BOOST_SECONDS after the last critical announcement, on a later refresh; another one inside
+--- that time extends it, and since the master volume is written only when the value it should
+--- carry changes, an extension writes nothing. The level written follows the Volume page's mode,
+--- so outside Master volume this changes nothing at all. The caller has already decided that the
+--- alarm may speak (alertMaySpeak), and the haptic is booked by the caller as before.
+local function tryPlayAlertFile(self, audioState, events, now, relativePath, opts, alertKey, critical)
+  if critical and now >= (audioState.nextAllowedAt or 0) then
+    local key = RAISE_KEYS[alertKey]
+    if key and prefEnabled(events, key, not RAISE_OFF_BY_DEFAULT[alertKey]) and resolveEventPath(relativePath) then
+      boost_until = now + BOOST_SECONDS
+      refresh_volume_state(self, true)
+    end
+  end
+  return tryPlayEventFile(audioState, now, relativePath, opts)
+end
+
 --- A temperature alert with a warning and a critical level, for the ESC and the MCU alike.
 ---
 --- The shape of the link quality alert, turned the other way up because a temperature gets
@@ -1040,7 +1047,7 @@ local function announceTemperatureLevel(self, audioState, events, opts, now, ale
       alertCleared(audioState, alertKey)
     end
     if alertMaySpeak(audioState, events, alertKey, now) then
-      if tryPlayEventFile(audioState, now, alert.sound, opts) then
+      if tryPlayAlertFile(self, audioState, events, now, alert.sound, opts, alertKey, level >= 2) then
         if type(playNumber) == "function" then
           local value, unit = spokenTemperature(self, temp)
           local ok, err = pcall(playNumber, value, unit, 0, audio_volume)
@@ -1452,8 +1459,11 @@ function Audio.packNotFull(state, memo, events)
     return nil
   end
 
-  local fullCell = normalizeCellVoltage(bc.vbatmaxcellvoltage, 4.2)
-  local margin = tonumber(events and events.pack_not_full_margin) or 100
+  -- Full cell voltage, not Max: Max is the top of a cell's range, which the flight controller
+  -- uses to detect the cell count (4.30 V by default, above what a charged pack reads). Full is
+  -- what the firmware's own "battery not full" warning compares with, and without a margin.
+  local fullCell = normalizeCellVoltage(bc.vbatfullcellvoltage, 4.1)
+  local margin = tonumber(events and events.pack_not_full_margin) or 0
   if margin < 0 then margin = 0 end
   local perCell = voltage / cells
 
@@ -1621,7 +1631,7 @@ local function announceMainPowerEvent(self, events, opts)
     return
   end
 
-  if tryPlayEventFile(audioState, now, soundFile, opts) then
+  if tryPlayAlertFile(self, audioState, events, now, soundFile, opts, "main_power", true) then
     -- The BEC voltage and not the pack's, because it is the reading that still means
     -- something: it says how much is left of whatever is keeping the receiver alive.
     playVoltage(bec, 1, opts)
@@ -1702,7 +1712,7 @@ end
 --- that has been entered is spoken at once rather than at the next interval, with the headroom
 --- after it. Leaving a level costs `hysteresis` points above its line, recovering is not spoken,
 --- and only the critical level buzzes, where the Link page's Haptic is on.
-local function linkHeadroomAlert(audioState, events, alert, headroom, hysteresis, now, opts)
+local function linkHeadroomAlert(self, audioState, events, alert, headroom, hysteresis, now, opts)
   local slots = audioState.linkHeadroom
   local slot = slots[alert.alertKey]
   if not slot then
@@ -1760,7 +1770,7 @@ local function linkHeadroomAlert(audioState, events, alert, headroom, hysteresis
       alertCleared(audioState, key)
     end
     if alertMaySpeak(audioState, events, key, now) then
-      if tryPlayEventFile(audioState, now, alert.sound, opts) then
+      if tryPlayAlertFile(self, audioState, events, now, alert.sound, opts, key, level >= 2) then
         if type(playNumber) == "function" then
           local ok, err = pcall(playNumber, headroom, unitPercent(), 0, audio_volume)
           if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
@@ -1808,7 +1818,7 @@ local function announceLinkHeadroom(self, audioState, events, enabled, now, opts
       else
         value, hysteresis = rates.headroom(alert.read(state), floor), LINK_HEADROOM_HYSTERESIS
       end
-      linkHeadroomAlert(audioState, events, alert, value, hysteresis, now, opts)
+      linkHeadroomAlert(self, audioState, events, alert, value, hysteresis, now, opts)
     elseif audioState.linkHeadroom[alert.alertKey] ~= nil then
       -- Switched off mid-flight: its episode ends, so switching it on again starts a new one.
       audioState.linkHeadroom[alert.alertKey] = nil
@@ -1931,7 +1941,7 @@ local function announceDropoutsEvent(self, events, opts)
   end
 
   if alertMaySpeak(audioState, events, "dropouts", now)
-      and tryPlayEventFile(audioState, now, DROPOUTS_SOUND, opts) then
+      and tryPlayAlertFile(self, audioState, events, now, DROPOUTS_SOUND, opts, "dropouts", true) then
     alertSpoken(audioState, events, "dropouts", now, false)
   end
 end
@@ -2089,7 +2099,7 @@ local function txPowerAlert(self, audioState, events, now, opts)
       alertCleared(audioState, "tpwr")
     end
     if alertMaySpeak(audioState, events, "tpwr", now) then
-      if tryPlayEventFile(audioState, now, "stat/alerts/txpower.wav", opts) then
+      if tryPlayAlertFile(self, audioState, events, now, "stat/alerts/txpower.wav", opts, "tpwr", level >= 2) then
         if type(playNumber) == "function" then
           local ok, err = pcall(playNumber, share, unitPercent(), 0, audio_volume)
           if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
@@ -2147,8 +2157,6 @@ function Audio.announceConnectionLost(self, rfLinkUp, opts)
   audioState.connectionLostAt = now
   emitLog(opts, "telemetry lost while armed, RF link still up", "info")
 
-  refresh_volume_state(self, true)
-
   if not resolveEventPath(CONNECTION_LOST_SOUND) then
     if not audioState.connectionSoundMissingLogged then
       audioState.connectionSoundMissingLogged = true
@@ -2159,7 +2167,7 @@ function Audio.announceConnectionLost(self, rfLinkUp, opts)
 
   -- Booked through the same path as every other alert so that the pilot's haptic setting for
   -- the link category reaches it. It says itself once per loss, so nothing reads the count.
-  if tryPlayEventFile(audioState, now, CONNECTION_LOST_SOUND, opts) then
+  if tryPlayAlertFile(self, audioState, events, now, CONNECTION_LOST_SOUND, opts, "telemetry_lost", true) then
     alertSpoken(audioState, events, "telemetry_lost", now)
   end
 end
@@ -2186,6 +2194,17 @@ function Audio.playNumber(value, unit)
   if type(playNumber) ~= "function" then return false end
   resolve_undriven_level()
   return (pcall(playNumber, value, unit or 0, 0, audio_volume)) == true
+end
+
+--- Play a sound file by its full path (`/SOUNDS/rf/beep.wav`), at the level the announcements play
+--- at. For a page that sounds a tone of its own: the tones at the root of the pack sit in no
+--- locale folder, so playEventFile cannot resolve them.
+---
+--- Returns true when the file was handed to playFile without an error.
+function Audio.playRawFile(path)
+  if type(path) ~= "string" or path == "" then return false end
+  resolve_undriven_level()
+  return playRawFile(path) == true
 end
 
 --- The value a master-volume percentage is written to the global variable as: 0..100 % onto
@@ -2227,17 +2246,16 @@ function Audio.resetConnectionState(audioState)
   end
 
   local now = nowSeconds()
-  local isCritical = false
   if audioState.connectionLostPending then
     local lostAt = tonumber(audioState.connectionLostAt) or 0
-    if lostAt > 0 and (now - lostAt) <= CONNECTION_RECOVERY_WINDOW then
-      isCritical = true
-    else
+    if lostAt <= 0 or (now - lostAt) > CONNECTION_RECOVERY_WINDOW then
       audioState.connectionLostPending = nil
       audioState.connectionLostAt = nil
     end
   end
-  refresh_volume_state(nil, isCritical)
+  -- The master volume as it stands: raised while a critical announcement's time runs (it is this
+  -- module's, not the connection's, so it outlives the reset), the pilot's own level otherwise.
+  refresh_volume_state(nil, boost_active(now))
 
   audioState.initialized = false
   audioState.modelAnnounced = false
@@ -2285,6 +2303,8 @@ function Audio.resetConnectionState(audioState)
   audioState.packVoltageSeen = false
   audioState.mainPowerLostActive = false
   audioState.voltageLowSince = nil
+  audioState.voltageCriticalSince = nil
+  audioState.voltageLevel = nil
   audioState.connectionSoundMissingLogged = nil
   audioState.telemetryWatchFrom = nil
   audioState.telemetryQuiet = nil
@@ -2350,14 +2370,14 @@ end
 -- not again, so a pilot who set a global variable as the master volume sat at the alert level
 -- until the next connect.
 --
--- `isCritical` is not asked for. It is taken from the pending loss with the same predicate
--- `resetConnectionState` uses, so a caller that waits settles at the level the reset settles
--- it at -- alert level for the recovery window, the pilot's own level after it.
+-- Whether the level is raised is not asked for: it is the time a critical announcement raised it
+-- for, the same test `resetConnectionState` and `Audio.process` make, so a caller that waits ends
+-- a raised level when its time is up, as they do.
 function Audio.refreshConnectionVolume(self)
   if type(self) ~= "table" or type(self.audioState) ~= "table" then
     return
   end
-  refresh_volume_state(self, is_telemetry_lost_active(self, nowSeconds()))
+  refresh_volume_state(self, boost_active(nowSeconds()))
 end
 
 function Audio.process(self, opts)
@@ -2451,8 +2471,10 @@ function Audio.process(self, opts)
   end
 
   local events = (self.preferences and self.preferences.audio_events) or {}
-  local isCritical = is_critical_active(self, now, events)
-  refresh_volume_state(self, isCritical)
+  -- Raised only while the time a critical announcement raised it for runs (tryPlayAlertFile); a
+  -- condition that holds without being spoken -- a sag still inside its hold, an alert whose
+  -- repeats are spent -- raises nothing.
+  refresh_volume_state(self, boost_active(now))
 
   local governorEnabled = prefEnabled(events, "governor_state", true)
   if audioState.lastEnabled.governor_state ~= governorEnabled then
@@ -2485,10 +2507,11 @@ function Audio.process(self, opts)
   if prefEnabled(events, "voltage_alert", true) then
     -- Resolve cell count: prefer MSP batteryConfig, fall back to telemetry state,
     -- then refuse to fire (no valid cell count known yet).
-    local warnBase, cells
+    local warnBase, minBase, cells
     do
       local bc = sessionBatteryConfig()
       local warnV = normalizeCellVoltage(bc and bc.vbatwarningcellvoltage, nil)
+      local minV = normalizeCellVoltage(bc and bc.vbatmincellvoltage, nil)
       -- MSP batteryCellCount == 0 means auto-detect; use telemetry Cel# in that case
       cells = flightPackCells(self.state, bc)
       if warnV and warnV > 0 and cells then
@@ -2498,9 +2521,20 @@ function Audio.process(self, opts)
         warnBase = 3.5 * cells
       end
       -- warnBase stays nil if batteryConfig not loaded yet → skip the alert until config available
+      -- The alert's critical level: the flight controller's own minimum cell voltage, the line its
+      -- Battery page calls the alarm level, with that page's default where the board sends none.
+      if minV and minV > 0 and cells then
+        minBase = minV * cells
+      elseif bc and cells then
+        minBase = 3.3 * cells
+      end
     end
     if warnBase then
       local warn = warnBase
+      -- A minimum above the warning line cannot be crossed second, so the lower of the two is the
+      -- critical one. Nothing is refused over it; the pair is just ordered.
+      local minimum = minBase or warn
+      if minimum > warn then minimum = warn end
       -- The line is per cell, and so is the margin the pack has to recover by before the alert
       -- counts as cleared. A fixed margin of 0.5 V for the whole pack is 0.17 V per cell on 3S
       -- but 0.04 V on 12S, where a pack released from load can come back that far and so end the
@@ -2519,27 +2553,58 @@ function Audio.process(self, opts)
           if type(audioState.voltageLowSince) ~= "number" then
             audioState.voltageLowSince = now
           end
+          -- The critical level is the same announcement, entered once the reading has stayed at
+          -- or under the minimum line for the same hold. It is entered the way the temperature and
+          -- link quality levels are: spoken at once, with a repeat count of its own, and it raises
+          -- the master volume, which the warning level does not.
+          if voltage <= minimum then
+            if type(audioState.voltageCriticalSince) ~= "number" then
+              audioState.voltageCriticalSince = now
+            end
+          else
+            audioState.voltageCriticalSince = nil
+          end
           if (now - audioState.voltageLowSince) >= hold then
-            refresh_volume_state(self, true)
-            -- A throttle that survives a reload of the module, beside the per-alert interval:
-            -- the tool and the widget each hold their own audio state, and this is what keeps
-            -- one from repeating what the other has just said.
+            -- Once spoken, the critical level stays until the alert ends (the reading back over
+            -- the reset line): a pack that has been held under its minimum is not well again
+            -- between two pulls, and a level that could be left and re-entered under a pumping
+            -- collective would be announced anew at every pull.
+            local spoken = tonumber(audioState.voltageLevel) or 0
+            local level = 1
+            if spoken >= 2 or (audioState.voltageCriticalSince ~= nil
+                and (now - audioState.voltageCriticalSince) >= hold) then
+              level = 2
+            end
+            local entered = false
+            if level >= 2 and spoken < 2 then
+              audioState.lastAlertAt.voltage = 0
+              alertCleared(audioState, "voltage")
+              entered = true
+            end
+            -- A throttle that survives a reload of the module, beside the per-alert interval. It
+            -- lives in this Lua state's globals, and EdgeTX runs widgets in a state of their own
+            -- (radio/src/lua/widgets.cpp, lua_newstate), so it does not keep the dashboard and the
+            -- tool from both speaking. The step into the critical level is not held back by it:
+            -- that announcement is new, not a repeat.
             local globalLast = getGlobalLowVoltageAt()
-            if now - globalLast >= ALERT_REPEAT_SECONDS and alertMaySpeak(audioState, events, "voltage", now) then
-              if tryPlayEventFile(audioState, now, "evt/lowvbat.wav", opts) then
+            if (entered or now - globalLast >= ALERT_REPEAT_SECONDS) and alertMaySpeak(audioState, events, "voltage", now) then
+              if tryPlayAlertFile(self, audioState, events, now, "evt/lowvbat.wav", opts, "voltage", level >= 2) then
                 -- The value the line was crossed at. The alert said only THAT it had been
                 -- crossed, and a pilot deciding whether to land now wants to know by how far.
                 playPackVoltage(events, voltage, cells, opts)
                 alertSpoken(audioState, events, "voltage", now)
                 setGlobalLowVoltageAt(now)
+                audioState.voltageLevel = level
               end
             end
           end
         else
           audioState.voltageLowSince = nil
+          audioState.voltageCriticalSince = nil
           if voltage >= reset then
             audioState.lastAlertAt.voltage = 0
             alertCleared(audioState, "voltage")
+            audioState.voltageLevel = nil
           end
         end
       end
@@ -2634,7 +2699,7 @@ function Audio.process(self, opts)
             alertCleared(audioState, "esc_load")
           end
           if alertMaySpeak(audioState, events, "esc_load", now) then
-            if tryPlayEventFile(audioState, now, ESC_LOAD_SOUND, opts) then
+            if tryPlayAlertFile(self, audioState, events, now, ESC_LOAD_SOUND, opts, "esc_load", level >= 2) then
               if type(playNumber) == "function" then
                 local ok, err = pcall(playNumber, math.floor(load + 0.5), unitPercent(), 0, audio_volume)
                 if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
@@ -2687,7 +2752,7 @@ function Audio.process(self, opts)
           alertCleared(audioState, "lq")
         end
         if alertMaySpeak(audioState, events, "lq", now) then
-          if tryPlayEventFile(audioState, now, "stat/alerts/lq.wav", opts) then
+          if tryPlayAlertFile(self, audioState, events, now, "stat/alerts/lq.wav", opts, "lq", level >= 2) then
             if type(playNumber) == "function" then
               local ok, err = pcall(playNumber, math.floor(lq + 0.5), unitPercent(), 0, audio_volume)
               if not ok then emitLog(opts, "playNumber error: " .. tostring(err), "error") end
@@ -2774,7 +2839,7 @@ function Audio.process(self, opts)
           local threshold = normalizeAlertVoltage(batteryPrefs and batteryPrefs.becalertvalue, 6.5)
           if avgBEC < threshold then
             if alertMaySpeak(audioState, events, "bec_voltage", now)
-              and tryPlayEventFile(audioState, now, "evt/becvolt.wav", opts) then
+              and tryPlayAlertFile(self, audioState, events, now, "evt/becvolt.wav", opts, "bec_voltage", true) then
               alertSpoken(audioState, events, "bec_voltage", now)
             end
           else
@@ -2787,7 +2852,7 @@ function Audio.process(self, opts)
           local threshold = normalizeAlertVoltage(batteryPrefs and batteryPrefs.rxalertvalue, 7.4)
           if avgBEC < threshold then
             if alertMaySpeak(audioState, events, "rx_voltage", now)
-              and tryPlayEventFile(audioState, now, "evt/rxvolt.wav", opts) then
+              and tryPlayAlertFile(self, audioState, events, now, "evt/rxvolt.wav", opts, "rx_voltage", true) then
               alertSpoken(audioState, events, "rx_voltage", now)
             end
           else
@@ -2897,7 +2962,7 @@ function Audio.process(self, opts)
 
       if fuelValue <= 0 and audioState.fuelSeenPositive == true then
         if alertMaySpeak(audioState, events, "fuel_empty", now) then
-          if tryPlayEventFile(audioState, now, emptyFuelSound, opts) then
+          if tryPlayAlertFile(self, audioState, events, now, emptyFuelSound, opts, "fuel_empty", true) then
             alertSpoken(audioState, events, "fuel_empty", now)
           end
         end

@@ -171,13 +171,22 @@ local function sharedState()
   _G.rfsuite.tasks = _G.rfsuite.tasks or {}
   local shared = _G.rfsuite.tasks.savePipeline
   if not shared then
-    shared = { run = nil, pending = {}, outcome = nil }
+    shared = { run = nil, pending = {}, outcome = nil, revision = 0 }
     _G.rfsuite.tasks.savePipeline = shared
   end
   return shared
 end
 
 local S = sharedState()
+
+-- getProgress() builds a new table on every call, and whoever draws the notice asks on every run
+-- of the tool. The revision lets it ask only when something it would report may have moved: it is
+-- raised wherever a field getProgress() reads changes. Raising it without a visible change costs
+-- one table; missing a change would leave a stale notice on screen, so when in doubt it is raised.
+-- It lives in the shared state for the same reason the run does.
+local function changed()
+  S.revision = S.revision + 1
+end
 
 --- Does this outcome need no acknowledgement? A save that asked for a restart is a plain success
 -- only once the restart was seen. An answer after the reboot proves only that the board is usable:
@@ -213,6 +222,7 @@ local function finish(status, extra)
   local desc = S.run.desc
   local wasDismissed = S.run.dismissed == true
   S.run = nil
+  changed()
   -- info rather than debug: whether a save reached the board is not a detail, and this is the
   -- one line that says it. `saved` is the pipeline's own verdict, `reboot`/`rebootProven` say
   -- whether the board was asked to restart and whether it was seen to.
@@ -269,6 +279,8 @@ local function enter(phase)
     tostring(S.run.desc and S.run.desc.pageId))
   S.run.phase = phase
   S.run.phaseStarted = now
+  -- Also covers the step index, which queueStep sets just before it enters the write phase.
+  changed()
 end
 
 local function invalidateSessionKeys()
@@ -365,6 +377,7 @@ end
 local function afterCommit()
   S.run.saved = true
   if S.run.dismissRequested == true then S.run.dismissed = true end
+  changed()
   if type(S.run.desc.onSaved) == "function" then
     -- Read before the call: the callback runs while S.run is still live and may end the run.
     local pageId = S.run.desc.pageId
@@ -498,6 +511,7 @@ function M.start(desc)
   }
   S.pending[desc.pageId or ""] = nil
   S.outcome = nil
+  changed()
 
   logf("info", "start page=%s steps=%d reboot=%s client=%s",
     tostring(desc.pageId), #desc.steps, tostring(reboot), tostring(S.run.client))
@@ -511,6 +525,7 @@ function M.wakeup()
   -- has to happen ahead of the guard below, or a successful save's notice would never expire.
   if S.outcome and S.outcome.clearAt and nowSeconds() >= S.outcome.clearAt then
     S.outcome = nil
+    changed()
   end
   if not S.run then return end
   -- The run state is shared and the module handles above are NOT: they are upvalues of THIS
@@ -605,10 +620,12 @@ end
 function M.dismiss()
   if S.outcome then
     S.outcome = nil
+    changed()
     return true
   end
   if not S.run or S.run.saved ~= true then return false end
   S.run.dismissed = true
+  changed()
   return true
 end
 
@@ -622,6 +639,7 @@ function M.dismissWhenStored()
   if not M.blocksNavigation() then return false end
   if S.run.saved == true then
     S.run.dismissed = true
+    changed()
   else
     S.run.dismissRequested = true
   end
@@ -708,6 +726,7 @@ function M.takeResult(pageId)
     if clearsItself(result) then
       S.outcome.clearAt = nowSeconds() + OUTCOME_LINGER_SECONDS
     end
+    changed()
   end
   if type(entry.onDone) == "function" then
     local ok, err = pcall(entry.onDone, entry.result)
@@ -718,10 +737,17 @@ function M.takeResult(pageId)
   return entry.result
 end
 
+--- Moves whenever anything getProgress() reports may have changed. A caller that redraws on a
+-- change compares this number and asks getProgress() for the table only when it moved.
+function M.getRevision()
+  return S.revision
+end
+
 function M.reset()
   S.run = nil
   S.pending = {}
   S.outcome = nil
+  changed()
 end
 
 return M
