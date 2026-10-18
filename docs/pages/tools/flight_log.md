@@ -204,4 +204,13 @@ repaired: it stays in the file as a line of its own, and the next flight's line 
 line rather than running on from it. The page skips such a fragment where it ends before the
 flight's duration, and otherwise shows it with whatever it holds.
 
+A stretch of the file that runs on for more than 1025 bytes (1024 and a carriage return) without a
+line end -- a damaged card block, or text pasted in without line breaks -- can be skipped up to the
+next line end rather than gathered up whole, and the page goes on with the line after it. The file
+is read 4 KiB at a time, and a line that long is skipped where more than 1025 bytes of it are in
+hand and the next read still brings more of the file, and read as it is otherwise. A last line
+without a line end is therefore read as before unless that much of it was already in hand at a
+read that still brought more of it. A flight's own line is a few hundred bytes and never comes near
+it.
+
 *Documented against RFSuite 0.1.7.*
