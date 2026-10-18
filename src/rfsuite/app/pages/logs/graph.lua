@@ -709,6 +709,11 @@ local function beginExtract(t0, t1)
   S.resetK = 1
   S.phase = "reset"
   S.progress = 0
+  -- The bucket set the last re-bucketing read from is not read again: the extraction ends by
+  -- assigning the next one. Kept until then, it would sit beside the new set whenever the
+  -- caller had emptied the cache. Released only after the phase has moved on, so a call
+  -- stopped in here never leaves "rebkt" without its source.
+  S.rbSrc = nil
 end
 
 -- A min/max envelope: two points per bucket, so a spike between two samples is
