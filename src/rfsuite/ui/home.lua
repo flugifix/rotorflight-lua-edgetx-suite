@@ -573,6 +573,8 @@ state = {
   -- GRID_TILES_PER_STEP. Set only by a scene build that completed, so a pass stopped part way
   -- through a build leaves the previous value, and the grid is asked for again.
   gridBuild    = nil,
+  -- Set while a scene build runs; still set on the next pass only if that build was stopped.
+  sceneBuildOwed = false,
   i18n         = nil,
   menu         = nil,
   preferences  = nil,
@@ -3246,10 +3248,15 @@ local function buildScene()
 end
 
 function M.buildUI()
-  -- The last statement, so a build stopped at the instruction limit leaves the grid build it had
-  -- before: one still being made goes on being made, and one that is done asks for the build
-  -- again (M.run). A completed build of any other scene, or of the whole grid, lets it go.
+  -- Opened from the dashboard a build can be stopped at the widget's instruction limit, and the
+  -- request that started it is already gone, so the build is noted as owed before it starts and
+  -- forgotten only once it is through: a stopped one is made again on the next pass (M.run).
+  state.sceneBuildOwed = true
+  -- After the build, so a stopped one leaves the grid build it had before: one still being made
+  -- goes on being made, and one that is done is drawn by the build made again. A completed build
+  -- of any other scene, or of the whole grid, lets it go.
   state.gridBuild = buildScene()
+  state.sceneBuildOwed = false
 end
 
 -- ── Init / Run ────────────────────────────────────────────────────────────────
@@ -3752,6 +3759,9 @@ function M.run(event, touchState)
       return 0
     end
 
+    if state.sceneBuildOwed and not state.isClosing then
+      state.pendingBuildUI = true
+    end
     if state.pendingBuildUI and not state.isClosing then
       state.pendingBuildUI = false
       local doGc = state.pendingGcAfterBuild == true
