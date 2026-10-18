@@ -1849,13 +1849,13 @@ return {
         save_error_message = "Save failed",
         help_title = "Modes Help",
         help_p1 = "Flight modes allow you to map radio channels (AUX) to specific features on the flight controller (such as Stabilize, Governor, etc.).",
-        help_p2 = "Add a range, select the channel, logic, and adjust the slider limits. Press 'Set' to automatically configure limits using your current radio switch position."
+        help_p2 = "Add a range, select the channel and logic, and adjust the Start and End number fields. Press 'Set' to automatically configure limits using your current radio switch position."
       },
       setup_adjustments = {
         title = "Adjustments",
         help_title = "Adjustments Help",
         help_p1 = "Configure Adjustment Function ranges and channels.",
-        help_p2 = "Use Save once after all edits to write every range and then EEPROM.",
+        help_p2 = "Use Save once after all edits to write every changed range and then EEPROM.",
         active_ranges = "Active ranges",
         current_output = "Current Output",
         range = "Range",
