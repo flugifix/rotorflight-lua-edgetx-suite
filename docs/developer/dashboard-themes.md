@@ -202,6 +202,11 @@ and the settings page each keep the module they already hold; only the shared ro
 global named any other way is not released, and stays loaded for the life of the Lua state as
 before.
 
+Load a shared module through `rfsuite.require` wherever the theme loads it, `configure.lua`
+included. A module loaded with `loadScript` alone has no cache entry, so its global cannot be
+released with the rest, and the next load of the theme would pair it with fresh copies of the
+modules it requires.
+
 ## What a phase module returns
 
 A phase module returns a table, and there are two kinds of theme. The widget decides which by
