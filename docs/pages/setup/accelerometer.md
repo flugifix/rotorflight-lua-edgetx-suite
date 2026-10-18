@@ -36,7 +36,8 @@ Disarm the model and place it level and still **before confirming**. Keep it sti
 until the completion notice appears. The start command's acknowledgement is only a
 receipt; the page waits for the controller's calibration flag to become active and
 then clear. The controller saves the result itself, so calibration sends no extra
-EEPROM write. The page then reads the trims again.
+EEPROM write. The page then reads the trims again. A completed calibration sounds a beep, at the
+*Level* of Settings > Audio > Volume when that page is set to *Callout level*.
 
 Save, Reload and another calibration are blocked while the operation is pending.
 An armed controller, a missing accelerometer or an already running calibration is

@@ -402,13 +402,35 @@ function M.onHelp(ctx)
   return { title = "Help", message = "No help available" }
 end
 
+-- lib/audio.lua through the suite's module cache where there is one, so the beep plays at the level
+-- the tool's own announcements are at; looked up on the first beep and again after a failed lookup,
+-- so one load that fails does not leave every later beep at the radio's own volume.
+local Audio = nil
+
+local function beep()
+  if not Audio then
+    local mod = nil
+    if _G.rfsuite and type(_G.rfsuite.require) == "function" then
+      local ok, m = pcall(_G.rfsuite.require, "lib/audio.lua")
+      if ok then mod = m end
+    end
+    if type(mod) ~= "table" then mod = loadModule("lib/audio.lua") end
+    if type(mod) == "table" and type(mod.playRawFile) == "function" then Audio = mod end
+  end
+  if Audio then
+    Audio.playRawFile("/SOUNDS/rf/beep.wav")
+  elseif type(playFile) == "function" then
+    pcall(playFile, "/SOUNDS/rf/beep.wav")
+  end
+end
+
 local function calibrationResult(i18n, result, phase)
   ui.calibrating = false
   ui.calibration = nil
   local message
   if result == "complete" then
     message = pageText(i18n, "calibrated_message", "Accelerometer calibrated successfully and saved to EEPROM.")
-    if type(playFile) == "function" then pcall(playFile, "/SOUNDS/rf/beep.wav") end
+    beep()
     queueAccRead(true)
   elseif result == "armed" then
     message = pageText(i18n, "calibration_armed", "Disarm the model before calibrating.")

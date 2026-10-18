@@ -2196,6 +2196,17 @@ function Audio.playNumber(value, unit)
   return (pcall(playNumber, value, unit or 0, 0, audio_volume)) == true
 end
 
+--- Play a sound file by its full path (`/SOUNDS/rf/beep.wav`), at the level the announcements play
+--- at. For a page that sounds a tone of its own: the tones at the root of the pack sit in no
+--- locale folder, so playEventFile cannot resolve them.
+---
+--- Returns true when the file was handed to playFile without an error.
+function Audio.playRawFile(path)
+  if type(path) ~= "string" or path == "" then return false end
+  resolve_undriven_level()
+  return playRawFile(path) == true
+end
+
 --- The value a master-volume percentage is written to the global variable as: 0..100 % onto
 --- -1024..1024, the span the Volume special function reads. Exported for the Volume page's
 --- Normal and Alarm tests, which write what the announcements' own path would.
