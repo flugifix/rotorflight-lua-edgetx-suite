@@ -373,6 +373,10 @@ such announcement. Another one within those 8 seconds extends the time and write
   again. There is no limit per flight; the alert's own *Repeat* bounds it.
 - **The 8 seconds** are an estimate of an announcement with its number and whatever the radio
   still had queued before it; the radio tells a script nothing about what it is still playing.
+- **The dashboard and the tool** each keep their own time, and the radio never runs the two at
+  once: the dashboard stands still while the tool is open. A tool closed within the 8 seconds of
+  a raise leaves the volume raised, and the dashboard ends it: after a pause of more than 2 seconds
+  it writes its own level again on its next pass, whatever it wrote before.
 - **Vibration is not affected**: *Haptic* stays the page's, whether or not the volume is raised.
 - With *Connected only* on, the link going down writes `-1024` at once, raised or not.
 
