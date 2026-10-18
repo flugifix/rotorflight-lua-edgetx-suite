@@ -260,7 +260,7 @@ local function buildBatteryPayload(batteryConfig)
 		voltageMeterSource = tonumber(batteryConfig.voltageMeterSource) or 0,
 		currentMeterSource = tonumber(batteryConfig.currentMeterSource) or 0,
 		vbatmincellvoltage = tonumber(batteryConfig.vbatmincellvoltage) or 330,
-		vbatmaxcellvoltage = tonumber(batteryConfig.vbatmaxcellvoltage) or 420,
+		vbatmaxcellvoltage = tonumber(batteryConfig.vbatmaxcellvoltage) or 430,
 		vbatfullcellvoltage = tonumber(batteryConfig.vbatfullcellvoltage) or 410,
 		vbatwarningcellvoltage = tonumber(batteryConfig.vbatwarningcellvoltage) or 350,
 		lvcPercentage = tonumber(batteryConfig.lvcPercentage) or 100,

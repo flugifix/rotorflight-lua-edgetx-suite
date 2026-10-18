@@ -42,7 +42,7 @@ local CELL_FIELDS = { "batteryCellCount", "vbatmincellvoltage", "vbatmaxcellvolt
 local CELL_LIMITS = {
 	batteryCellCount = { CELL_COUNT_MIN, CELL_COUNT_MAX, 0 },
 	vbatmincellvoltage = { CELL_VOLTAGE_MIN, CELL_VOLTAGE_MAX, 330 },
-	vbatmaxcellvoltage = { CELL_VOLTAGE_MIN, CELL_VOLTAGE_MAX, 420 },
+	vbatmaxcellvoltage = { CELL_VOLTAGE_MIN, CELL_VOLTAGE_MAX, 430 },
 	vbatfullcellvoltage = { CELL_VOLTAGE_MIN, CELL_VOLTAGE_MAX, 410 },
 	vbatwarningcellvoltage = { CELL_VOLTAGE_MIN, CELL_VOLTAGE_MAX, 350 }
 }
@@ -80,7 +80,7 @@ local ui = {
 	config = {
 		selectedBatteryProfile = 0,
 		capacities = { 0, 0, 0, 0, 0, 0 },
-		vbatmaxcellvoltage = 420,
+		vbatmaxcellvoltage = 430,
 		vbatfullcellvoltage = 410,
 		vbatwarningcellvoltage = 350,
 		vbatmincellvoltage = 330,
@@ -257,7 +257,7 @@ local function loadFromSession()
 
 	-- The board's own values, unclamped: Save sends them back as they were read unless the pilot
 	-- edits one, and an edit is held to the board's range by its setter.
-	ui.config.vbatmaxcellvoltage = tonumber(batteryConfig and batteryConfig.vbatmaxcellvoltage) or 420
+	ui.config.vbatmaxcellvoltage = tonumber(batteryConfig and batteryConfig.vbatmaxcellvoltage) or 430
 	ui.config.vbatfullcellvoltage = tonumber(batteryConfig and batteryConfig.vbatfullcellvoltage) or 410
 	ui.config.vbatwarningcellvoltage = tonumber(batteryConfig and batteryConfig.vbatwarningcellvoltage) or 350
 	ui.config.vbatmincellvoltage = tonumber(batteryConfig and batteryConfig.vbatmincellvoltage) or 330
@@ -458,7 +458,7 @@ end
 local function getMaxCellSetter()
 	if ui.runtime.maxCellSet then return ui.runtime.maxCellSet end
 	ui.runtime.maxCellSet = function(value)
-		setCellValue("vbatmaxcellvoltage", boundCellVoltage("vbatmaxcellvoltage", clampCellVoltage(value, 420)))
+		setCellValue("vbatmaxcellvoltage", boundCellVoltage("vbatmaxcellvoltage", clampCellVoltage(value, 430)))
 	end
 	return ui.runtime.maxCellSet
 end
@@ -525,7 +525,7 @@ local function buildBatteryPayload(batteryConfig)
 		voltageMeterSource = tonumber(batteryConfig.voltageMeterSource) or 0,
 		currentMeterSource = tonumber(batteryConfig.currentMeterSource) or 0,
 		vbatmincellvoltage = tonumber(batteryConfig.vbatmincellvoltage) or 330,
-		vbatmaxcellvoltage = tonumber(batteryConfig.vbatmaxcellvoltage) or 420,
+		vbatmaxcellvoltage = tonumber(batteryConfig.vbatmaxcellvoltage) or 430,
 		vbatfullcellvoltage = tonumber(batteryConfig.vbatfullcellvoltage) or 410,
 		vbatwarningcellvoltage = tonumber(batteryConfig.vbatwarningcellvoltage) or 350,
 		lvcPercentage = tonumber(batteryConfig.lvcPercentage) or 100,
