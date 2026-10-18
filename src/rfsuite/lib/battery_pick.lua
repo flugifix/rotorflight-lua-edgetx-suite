@@ -187,10 +187,10 @@ function M.targetProfile(entry, cfg)
   if explicit ~= nil then
     explicit = math.floor(explicit)
     if explicit >= 1 and explicit <= PROFILE_COUNT then
-      log(string.format("target profile %d from the entry's own profile field", explicit), "info")
+      log(string.format("target profile %s from the entry's own profile field", tostring(explicit)), "info")
       return explicit - 1, "profile"
     end
-    log(string.format("entry declares profile %d, which the board does not have", explicit), "warn")
+    log(string.format("entry declares profile %s, which the board does not have", tostring(explicit)), "warn")
     return nil, "badprofile"
   end
 
@@ -212,11 +212,11 @@ function M.targetProfile(entry, cfg)
   if cfg.hasProfileCells ~= true then
     for i = 0, PROFILE_COUNT - 1 do
       if tonumber(cfg["batteryCapacity_" .. i]) == cap then
-        log(string.format("target profile %d matched on %d mAh", i + 1, math.floor(cap)), "info")
+        log(string.format("target profile %d matched on %s mAh", i + 1, tostring(math.floor(cap))), "info")
         return i, "capacity"
       end
     end
-    log(string.format("no target profile: no board profile is set to %d mAh", math.floor(cap)), "info")
+    log(string.format("no target profile: no board profile is set to %s mAh", tostring(math.floor(cap))), "info")
     return nil, "nomatch"
   end
 
@@ -300,7 +300,7 @@ function M.applyProfile(index0, opts)
   end
   index = math.floor(index)
   if index < 0 or index >= PROFILE_COUNT then
-    log(string.format("profile write refused (%s): profile %d is out of range", reason, index), "warn")
+    log(string.format("profile write refused (%s): profile %s is out of range", reason, tostring(index)), "warn")
     return false, "range"
   end
 

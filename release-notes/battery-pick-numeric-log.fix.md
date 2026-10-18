@@ -1,0 +1,1 @@
+- **Keep malformed oversized battery registry numbers from interrupting profile selection while their refusal is logged (`lib/battery_pick.lua`) (#713).**
