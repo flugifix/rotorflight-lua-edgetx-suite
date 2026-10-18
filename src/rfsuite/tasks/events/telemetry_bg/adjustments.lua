@@ -145,6 +145,10 @@ local ADJUSTMENTS = {
   [79] = { "gov", "min", "throttle" },
   [80] = { "gov", "headspeed" },
   [81] = { "gov", "yaw", "ff" },
+
+  -- adj/ has no word for "master"; no other function is spoken as "cyclic gain" or "yaw gain".
+  [83] = { "cyclic", "gain" },
+  [84] = { "yaw", "gain" },
 }
 
 -- The firmware leaves 1-4 out of its report (`updateAdjustmentData` in `fc/rc_adjustments.c`),

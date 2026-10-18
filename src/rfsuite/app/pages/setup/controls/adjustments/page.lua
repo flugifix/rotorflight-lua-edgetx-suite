@@ -17,6 +17,7 @@ local AdjustmentRangesApi = nil
 local GetAdjRangeApi = nil
 local GetAdjFuncsApi = nil
 local SetAdjustmentRangeApi = nil
+local PidProfileApi = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local ApiVersion = nil
@@ -119,7 +120,14 @@ local ADJUST_FUNCTIONS = {
   {id = 79, labelKey = "fn_gov_min_throttle", labelFallback = "Gov Min Throttle", min = 0, max = 100, minApi = {12, 0, 9}},
   {id = 80, labelKey = "fn_gov_headspeed", labelFallback = "Gov Headspeed", min = 0, max = 10000, minApi = {12, 0, 9}},
   {id = 81, labelKey = "fn_gov_yaw_ff", labelFallback = "Gov Yaw FF", min = 0, max = 250, minApi = {12, 0, 9}},
-  {id = 82, labelKey = "fn_battery_profile", labelFallback = "Battery Profile", min = 1, max = 6}
+  {id = 82, labelKey = "fn_battery_profile", labelFallback = "Battery Profile", min = 1, max = 6},
+  -- 83 and 84 came without an API version change, and a 12.10 firmware without them skips a
+  -- range naming either one without a word (fc/rc_adjustments.c). `masterGain` lists them only
+  -- once a PID profile reply has carried the master gains (session.hasMasterGain).
+  {id = 83, labelKey = "fn_cyclic_master_gain", labelFallback = "Cyclic Master Gain", min = 25, max = 200,
+    minApi = {12, 0, 10}, masterGain = true},
+  {id = 84, labelKey = "fn_yaw_master_gain", labelFallback = "Yaw Master Gain", min = 25, max = 200,
+    minApi = {12, 0, 10}, masterGain = true}
 }
 
 local ui = {
@@ -160,6 +168,7 @@ local function ensureDeps()
   if not GetAdjRangeApi then GetAdjRangeApi = loadModule("tasks/msp/api/get_adjustment_range.lua") end
   if not GetAdjFuncsApi then GetAdjFuncsApi = loadModule("tasks/msp/api/get_adjustment_function_ids.lua") end
   if not SetAdjustmentRangeApi then SetAdjustmentRangeApi = loadModule("tasks/msp/api/set_adjustment_range.lua") end
+  if not PidProfileApi then PidProfileApi = loadModule("tasks/msp/api/pid_profile.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
@@ -234,7 +243,14 @@ end
 
 local function getFunctionById(id)
   local item = ADJUST_FUNCTIONS[(id or 0) + 1]
-  if item and item.id == id then return item end
+  if item and item.id == id then
+    -- A master gain the connected firmware does not have is as unknown here as in the list.
+    if item.masterGain then
+      local session = getSession()
+      if not (session and session.hasMasterGain == true) then return nil end
+    end
+    return item
+  end
   return nil
 end
 
@@ -290,18 +306,21 @@ local function apiVersionIsAtMost(required, current)
   return not ApiVersion.isAtLeast(current, reqPlusOne)
 end
 
-local function functionVisible(def, current)
+local function functionVisible(def, current, hasMasterGain)
   if def.minApi and not apiVersionIsAtLeast(def.minApi, current) then return false end
   if def.maxApi and not apiVersionIsAtMost(def.maxApi, current) then return false end
+  if def.masterGain and not hasMasterGain then return false end
   return true
 end
 
 local function buildFunctionOptions()
   local current = currentApiVersion()
+  local session = getSession()
+  local hasMasterGain = session ~= nil and session.hasMasterGain == true
   local entries = {}
   for i = 1, #ADJUST_FUNCTIONS do
     local def = ADJUST_FUNCTIONS[i]
-    if functionVisible(def, current) then
+    if functionVisible(def, current, hasMasterGain) then
       entries[#entries + 1] = {
         value = def.id,
         label = def.labelFallback
@@ -629,6 +648,29 @@ local function queueSlotRead(slotIndex, requestRebuild, onDone)
   return true
 end
 
+-- On API 12.10, and only while no PID profile reply has answered for this link: one PID profile
+-- read, whose parse records whether the firmware has the master gains and with them functions 83
+-- and 84. It goes out after the table has loaded rather than before, so the page's own reads and
+-- rebuilds keep the passes they had, and it rebuilds the page only when it adds the two functions.
+-- A read that fails leaves them unlisted.
+local function queueMasterGainRead(queue, rebuildFn)
+  local session = getSession()
+  if not (session and session.hasMasterGain == nil and PidProfileApi
+    and apiVersionIsAtLeast({12, 0, 10}, currentApiVersion())) then
+    return
+  end
+  queue:add({
+    command = PidProfileApi.command,
+    simulatorResponse = PidProfileApi.simulatorResponse,
+    processReply = function(_, buf)
+      PidProfileApi.parse(buf)
+      local now = getSession()
+      if now and now.hasMasterGain == true and type(rebuildFn) == "function" then rebuildFn() end
+    end,
+    errorHandler = function() end
+  })
+end
+
 local function startLoad(requestRebuild)
   if ui.runtime.readPending then return false end
 
@@ -687,6 +729,7 @@ local function startLoad(requestRebuild)
     ui.readError = false
     local rebuildFn = requestRebuild or ui.runtime.requestRebuild
     if type(rebuildFn) == "function" then rebuildFn() end
+    queueMasterGainRead(queue, rebuildFn)
   end
 
   -- Step 2a, from API 12.09: the function of every slot in one 42-byte reply, and then the
@@ -1895,6 +1938,7 @@ function M.onClose()
   GetAdjRangeApi = nil
   GetAdjFuncsApi = nil
   SetAdjustmentRangeApi = nil
+  PidProfileApi = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
   ApiVersion = nil

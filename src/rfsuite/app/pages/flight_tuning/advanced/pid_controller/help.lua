@@ -18,6 +18,7 @@ return function(ctx)
   local help_p4 = t(i18n, "help_p4", "Error rotation: Allow errors to be shared between all axes.")
   local help_p5 = t(i18n, "help_p5", "I-term relax: Limit accumulation of I-term during fast movements - helps reduce bounce back after fast stick movements.")
   local help_stick_gain = t(i18n, "help_stick_gain", "Error Decay Stick Gain: the further the cyclic stick is deflected, the faster the cyclic I-term decays, on the ground and in flight; 0 = off.")
+  local help_master_gain = t(i18n, "help_master_gain", "Master Gain: Cyclic scales the roll and pitch P, I, D and Offset gains together, Yaw the tail P, I and D gains, keeping their ratios. Feedforward, Boost and precomp are not scaled.")
 
   local parts = { help_p1 }
   local session = ctx.session or (_G.rfsuite and _G.rfsuite.session)
@@ -31,6 +32,10 @@ return function(ctx)
   if showStickGain then
     parts[#parts + 1] = help_stick_gain
   end
+  -- The same signal the page's Master Gain row goes by: the PID profile reply carried the gains.
+  if session and session.hasMasterGain == true then
+    parts[#parts + 1] = help_master_gain
+  end
   parts[#parts + 1] = help_p2
   parts[#parts + 1] = help_p3
 
@@ -41,6 +46,6 @@ return function(ctx)
 
   return {
     title = t(i18n, "help_title", "PID Controller Help"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end

@@ -707,6 +707,20 @@ function M.build(ctx)
     )
   end
 
+  -- 3b) Master gains (dual field: Cyclic & Yaw). They came without an API version change, so the
+  -- row goes by the PID profile reply that carried them (session.hasMasterGain, set by
+  -- tasks/msp/api/pid_profile.lua) and not by the version; the merged values alone can be left
+  -- over from an earlier board.
+  local session = getSession()
+  if session and session.hasMasterGain == true and type(ui.config.cyclic_master_gain) == "number" then
+    local specMaster = { scale=1, mult=1, min=25, max=200, suffix="%", decimals=0 }
+    cursorY = cursorY + appendDualFieldRow(children, x, cursorY, w,
+      pageText(i18n, "master_gain", "Master Gain"),
+      pageText(i18n, "cyclic", "Cyclic"), "cyclic_master_gain", specMaster,
+      pageText(i18n, "yaw", "Yaw"), "yaw_master_gain", specMaster
+    )
+  end
+
   -- 4) Error limit (triple field: Roll, Pitch, Yaw)
   cursorY = cursorY + appendTripleFieldRow(children, x, cursorY, w, i18n,
     pageText(i18n, "error_limit", "Error limit"),
