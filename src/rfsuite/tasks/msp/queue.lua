@@ -483,6 +483,7 @@ function Queue:processQueue(now)
     -- Kept on the queue, not on the message: a caller may add the same message table again,
     -- and what the board answered last time says nothing about this time.
     self.errorReplySeen = false
+    self.writeHeld = false
   end
 
   local msg = self.currentMessage
@@ -575,9 +576,23 @@ function Queue:processQueue(now)
     pollOk = true
   end
 
+  -- A poll that raised counts as a poll that brought no reply. Returning here instead kept the
+  -- message out of the retry and give-up logic below for as long as the transport kept raising:
+  -- nothing was sent again, its errorHandler never ran and the queue behind it never moved.
+  -- On a failed pcall the second value is the error, so it is said here and then dropped.
+  -- A write already handed to the transport is the exception: the raise says nothing about
+  -- whether the board received and stored it, so it is held -- not sent again, but its current
+  -- reply window is waited out. A reply in that window completes it as usual; otherwise it is
+  -- given up below, on the path a message takes when its retries run out, and the queue moves
+  -- on. A write that completes on silence (completeAfterAttempt, the reboot) is not held: it is
+  -- meant to go out more than once, so it keeps the retries a silent board gives it.
   if not pollOk then
-    self.logf("warn", "poll error cmd=%s client=%s", tostring(msg.command), tostring(msg.client))
-    return
+    self.logf("warn", "poll error cmd=%s rw=%s client=%s err=%s", tostring(msg.command),
+      isWriteMessage(msg) and "W" or "R", tostring(msg.client), tostring(cmd))
+    cmd, buf, err = nil, nil, nil
+    if self.retryCount > 0 and isWriteMessage(msg) and not msg.completeAfterAttempt then
+      self.writeHeld = true
+    end
   end
 
   if cmd then
@@ -645,7 +660,7 @@ function Queue:processQueue(now)
   local canSendByInterval = not self.lastTimeCommandSent or (self.lastTimeCommandSent + commandInterval < now)
   local canSendByTimeout = (self.currentMessageStartTime == nil) or ((now - self.currentMessageStartTime) >= timeoutSeconds)
 
-  if canSendByInterval and canSendByTimeout and self.retryCount <= maxRetries then
+  if canSendByInterval and canSendByTimeout and self.retryCount <= maxRetries and not self.writeHeld then
     local payload = msg.payload or EMPTY_PAYLOAD
     local okSend = self.common and type(self.common.sendRequest) == "function"
       and self.common.sendRequest(msg.command, payload, { write = isWriteMessage(msg) })
@@ -695,20 +710,23 @@ function Queue:processQueue(now)
   -- immediately, and the message is abandoned before the flight controller could physically have
   -- answered. So the last retry is not a retry -- it is a send whose reply is never waited for,
   -- and a link that answers slowly loses the one attempt that would have succeeded.
-  if self.retryCount > maxRetries
+  if (self.retryCount > maxRetries or self.writeHeld)
     and (self.currentMessageStartTime == nil
          or (now - self.currentMessageStartTime) > timeoutSeconds) then
     msg.__retryCount = self.retryCount
     -- The one place a message is given up after its retries, so its reason is decided here:
     -- "refused" when the board answered this command with an error reply on any attempt,
-    -- "max_retries" when no attempt was answered at all.
+    -- "max_retries" when no attempt was answered at all. A write held after a raising poll
+    -- (writeHeld, above) is given up here as well once its reply window has passed, with the
+    -- same two reasons.
     local reason = self.errorReplySeen and "refused" or "max_retries"
     if type(msg.errorHandler) == "function" then
       msg.errorHandler(msg, reason)
     end
-    self.logf("warn", "%s cmd=%s rw=%s client=%s attempts=%d",
+    self.logf("warn", "%s cmd=%s rw=%s client=%s attempts=%d%s",
       reason == "refused" and "refused" or "max retries",
-      tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client), self.retryCount)
+      tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client), self.retryCount,
+      self.writeHeld and " (write held after a poll error)" or "")
     -- Only the message that ran out of retries is given up. Clearing the whole queue here ran
     -- the errorHandler of every other message waiting -- and this one's a second time, since it
     -- has just been called above -- so a single unanswered command took down work belonging to
