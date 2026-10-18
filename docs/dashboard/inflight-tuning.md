@@ -50,6 +50,15 @@ missing, unreachable, outside the range the flight controller reads, or shared w
 slot of the same bank is refused rather than replaced by a standard-layout value, so one press
 never steps two parameters.
 
+A bank is offered only when the value that parks the enable channel in it -- the middle of its
+enable window, held inside the channel's reach of 988 to 2012 µs -- lies inside that window and
+inside no other enable window on the bank channel. A window that starts above 2012 µs, or one
+whose middle also lies in another slot's window, would otherwise step the other window's
+parameters while the screen names this bank's; a window the flight controller never reads
+would step nothing. Such a bank
+stays empty on the screen and the trims step over it; its slots are counted in the **skipped**
+number beside **Set from the board**.
+
 A refused custom step shows **Custom layout not read** until the ground read completes, or
 **Row cannot be stepped** when the selected window is unusable. An empty slot read shows
 **No usable Custom rows** and clears the old row names. A trim press for an unusable row puts
