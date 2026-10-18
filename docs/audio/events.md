@@ -258,7 +258,7 @@ The transmitter module's power (the `TPWR` reading, in mW) is judged as a share 
 - **Levels** as the link quality alert: a level entered is spoken at once with the percentage, recovering is silent, a level is left only 5 points below its line, and only the critical level vibrates. The power moves in the module's steps (for example 100 and 250 mW against a 250 mW maximum, 40% and 100%), so a module that steps down and back up again starts a new announcement each time it climbs back for longer than the hold.
 
 #### What Telemetry Lost Covers, and What It Leaves to the Radio
-Only a flight controller that stops sending while the radio link is still up is announced: the link statistics keep arriving and the radio stays connected, but the flight controller's telemetry frames have stayed away for 6 seconds. The radio cannot tell this case apart on its own until it reports each sensor as lost, 20 seconds later. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once, so a lost link stays silent here -- also when the flight controller's frames stopped with it. A drop while the model is disarmed is a normal power-off and stays silent too.
+Only a flight controller that stops sending while the radio link is still up is announced: the link statistics keep arriving and the radio stays connected, but the flight controller's telemetry frames have stayed away for 6 seconds. The radio cannot tell this case apart on its own until it reports each sensor as lost, 20 seconds later. A lost RF link is what the radio itself announces, and hearing the same event twice is worse than hearing it once, so a lost link stays silent here -- also when the flight controller's frames stopped with it. A drop while the model is disarmed is a normal power-off and stays silent too. The silence counts only after a telemetry frame has arrived during the current connection, so a flight controller that has sent none since the link came up -- one whose telemetry never records a frame, or one that was already silent when the link returned -- is not announced.
 
 The loss is announced **once**. A model that stays silent keeps the announcement's recovery window open, and it is the return that speaks again -- not the silence, however long it lasts.
 
@@ -374,7 +374,8 @@ test *Telemetry Lost* is spoken on (also when that announcement is off):
 - A held alert is not spoken, so it raises nothing under *Raise Volume*.
 - The test needs the time of the flight controller's last telemetry frame, and a frame received
   since the suite's first audio pass of the current connection: until one has arrived, or with a
-  flight controller whose telemetry never records one, nothing is held.
+  flight controller whose telemetry never records one, nothing is held and *Telemetry Lost* is
+  not spoken.
 
 ## Raise Volume
 

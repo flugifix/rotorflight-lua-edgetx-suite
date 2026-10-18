@@ -2189,7 +2189,8 @@ local function txPowerAlert(self, audioState, events, now, opts)
 end
 
 --- The flight controller has stopped sending. Called from `Audio.process` once its telemetry
---- frames have stayed away for TELEMETRY_QUIET_SECONDS.
+--- frames, after at least one arrived during this connection, have stayed away for
+--- TELEMETRY_QUIET_SECONDS.
 ---
 --- `rfLinkUp` is the radio's link at that moment, and it is what keeps this out of EdgeTX's way.
 --- The radio announces a lost RF LINK itself, so that half is deliberately not ours; what is ours
@@ -2516,16 +2517,26 @@ function Audio.process(self, opts)
   -- last frame and the first pass of this connection, so a gate that has just opened is not
   -- taken for a silence that began before it. A Lua state with no drain never stamps the time,
   -- and then nothing is watched at all.
+  --
+  -- A silence counts only once a frame has been stamped during this connection. The stamp is
+  -- never cleared, so on a later connection that stamps none -- a flight controller sending no
+  -- custom telemetry frames, or a pass that runs before this Lua state's drain is woken -- the
+  -- previous connection's stamp would otherwise read as a silence: Telemetry Lost would be
+  -- announced for a flight controller that never sent anything here, and every alert held below
+  -- would stay quiet for the whole connection.
   local rfSession = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
   local frameAt = rfSession and tonumber(rfSession.telemetryFrameAt) or nil
   if audioState.telemetryWatchFrom == nil then
     audioState.telemetryWatchFrom = now
   end
-  local quiet = frameAt ~= nil
+  if frameAt ~= nil and frameAt >= audioState.telemetryWatchFrom then
+    audioState.telemetryFrameSeen = true
+  end
+  local fcQuiet = frameAt ~= nil and audioState.telemetryFrameSeen == true
     and (now - math.max(frameAt, audioState.telemetryWatchFrom)) >= TELEMETRY_QUIET_SECONDS
-  if quiet ~= (audioState.telemetryQuiet == true) then
-    audioState.telemetryQuiet = quiet
-    if quiet then
+  if fcQuiet ~= (audioState.telemetryQuiet == true) then
+    audioState.telemetryQuiet = fcQuiet
+    if fcQuiet then
       Audio.announceConnectionLost(self, rf_link_up(), opts)
     end
   end
@@ -2536,16 +2547,6 @@ function Audio.process(self, opts)
   -- would raise the master volume each time. So those alerts are not judged at all until a frame
   -- arrives: nothing is spoken and nothing they have counted is reset. The link alerts read the
   -- radio's own link statistics, which stay live, and are judged as before.
-  --
-  -- Held only once a frame has been stamped during this connection. The stamp is never cleared,
-  -- so on a later connection that stamps none -- a flight controller sending no custom telemetry
-  -- frames, or a pass that runs before this Lua state's drain is woken -- the previous
-  -- connection's stamp would otherwise read as a silence and keep every one of these alerts
-  -- quiet for the whole connection.
-  if frameAt ~= nil and frameAt >= audioState.telemetryWatchFrom then
-    audioState.telemetryFrameSeen = true
-  end
-  local fcQuiet = quiet and audioState.telemetryFrameSeen == true
 
   -- A frame that arrived after the loss was announced is the recovery, and nothing else is: a
   -- gate that re-opens after the link went as well can do so on the flight controller's last
