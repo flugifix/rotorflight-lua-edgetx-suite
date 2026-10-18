@@ -622,6 +622,17 @@ function Drive:cleanup(force, keepBank)
   self.trimCoolUntil = 0
 end
 
+--- The verdict while the trim block is still being walked: a fault list of one, so that every
+-- gate that refuses on a fault refuses on it too, and a code of its own for the sentence.
+M.TRIMS_PENDING = { "trims_pending" }
+
+--- Whether the setup check still waits for the trim block. Only a configuration that drives rows
+-- from the trims needs it; one that does not has nothing to wait for.
+local function trimsPending(drive)
+  local settings = drive.settings
+  return type(settings) == "table" and settings.trims == true and drive.trimsResolved ~= true
+end
+
 --- The cached setup verdict: a list of fault codes, the string "ok", or nil for "nothing about
 -- this model could be looked at".
 --
@@ -632,9 +643,24 @@ end
 --
 -- The screen reads this same cache -- see inflight/screen.lua M.checkVerdict -- so the sentence
 -- on the ground surface and the refusal below are one answer and not two walks.
+--
+-- Not taken at all while the trims are still being resolved. Without the resolved block a trim
+-- stored as a switch position cannot be turned into the number the trim-mode table is indexed by,
+-- so the trim half of the check is simply not made -- and a verdict cached then let the first
+-- closing after every start through on a trim that still trims. The answer in that state is
+-- M.TRIMS_PENDING while the interlock is closed, which refuses like a fault and says why, and
+-- "not checked" while it is open; neither is cached, so the pass that completes the walk is the
+-- one after which the real verdict is taken. A drive that is still live when its trims go back to
+-- unresolved -- the settings moved under an open surface on the ground -- answers what it has
+-- (nothing, after the forget that came with them) and takes nothing either: the new settings close
+-- the surface by themselves (M.get drops `seeded`), and the next closing waits for the walk.
 function M.verdict(drive)
   if type(drive) ~= "table" then return nil end
   if drive.phase == M.PHASE_LIVE then return drive._checkResult end
+  if trimsPending(drive) then
+    if drive.live == true then return drive._checkResult end
+    return (drive.rawSwitch == true) and M.TRIMS_PENDING or nil
+  end
   if drive._checkedAt == nil then
     drive._checkedAt = drive.radio.now()
     drive._checkResult = Setup.check(drive)
@@ -714,12 +740,37 @@ function Drive:evaluateInterlock(now)
 
   local raw = (self.radio.switchValue(settings.switch) == true)
 
+  -- The trim block, resolved on the ground before the first closing is let through. Until it is,
+  -- the setup check cannot see the trim half (see M.verdict), so the closing is refused and the
+  -- surface says the trims are being checked. The walk is the one ensureTrims takes in the air,
+  -- one slice per pass, and it is only taken while the interlock is closed: the overlay's surface
+  -- is up then in place of the theme, and the pass that completes the walk analyses the whole
+  -- switch list, which is not work to put on a pass the theme -- or the widget's cold start --
+  -- already fills. The switch is tracked meanwhile exactly as the fault gate below tracks it, and
+  -- the first reading seeds, so a widget started with the switch on opens as soon as the walk is
+  -- done and the setup check passes, and not before. The pass that completes the walk returns here
+  -- as well: the check is taken on the next one, not on top of the analysis.
+  if not self.live and self.phase ~= M.PHASE_LIVE and trimsPending(self) then
+    if raw then
+      self:ensureTrims()
+      if not trimsPending(self) then
+        logDrive("trims resolved on the ground: %d trim(s)", type(self.trims) == "table" and #self.trims or 0)
+      end
+    end
+    self.seeded = true
+    if raw ~= self.rawSwitch then
+      self.rawSwitch = raw
+      self.rawSince = now
+    end
+    return false
+  end
+
   -- The setup check, as a gate rather than as a sentence. What it names are the conditions under
   -- which a press would move something other than the parameter on the screen: a bank and a value
   -- pointed at one variable or one channel, so the board reads a step as a bank change and a bank
   -- change as a step; a mixer line that is not there or carries the wrong weight, so the code
   -- never reaches the board; a global variable whose range or precision cannot express the codes;
-  -- a trim the active flight mode still moves the stick neutral with. A FAULT therefore refuses.
+  -- a trim that still moves a stick neutral in a flight mode. A FAULT therefore refuses.
   --
   -- An UNKNOWN does not. The walk answers nil when the radio's seam offered nothing to look at --
   -- no mixer reader, no flight mode data -- and a check that could not run is not a check that
@@ -1622,8 +1673,14 @@ local function publish(widget, drive)
   local prime = drive.prime
   local primePhase, primeDone = nil, nil
   if type(prime) == "table" then primePhase, primeDone = prime.phase, prime.done end
+  -- Whether the interlock is closed and refused because the trims are still being walked. Nothing
+  -- moves an epoch when the switch closes, so the guard below has to notice this one itself. Read
+  -- off the drive rather than through M.verdict, which would take the check on this very pass.
+  local trimsChecking = drive.live ~= true and drive.phase ~= M.PHASE_LIVE
+    and drive.rawSwitch == true and trimsPending(drive)
   if type(snapshot) == "table" and snapshot.epoch == epoch
     and snapshot.reportEpoch == reportEpoch
+    and snapshot.trimsChecking == trimsChecking
     and snapshot.spokenId == drive.spokenId
     and snapshot.live == drive.live
     and snapshot.bank == drive.bank and snapshot.row == drive.row
@@ -1735,8 +1792,10 @@ local function publish(widget, drive)
     active = drive.settings.active == true,
     -- and the third reason nothing is happening: the model's own setup check refused. It is on
     -- the snapshot because the widget decides from the snapshot alone which surface a pass
-    -- belongs to, and a refusal has to reach a surface that can say so.
-    setupFault = type(drive._checkResult) == "table",
+    -- belongs to, and a refusal has to reach a surface that can say so. A closing refused while
+    -- the trims are being walked is that refusal too: its surface says the trims are being checked.
+    setupFault = type(drive._checkResult) == "table" or trimsChecking,
+    trimsChecking = trimsChecking,
     radioEnabled = drive.settings.radio_enabled == true,
     modelEnabled = drive.settings.model_enabled == true,
     live = drive.live,

@@ -41,6 +41,16 @@ Two pages, one for each half:
 Both switches have to be on, and the model's setup check has to pass: a fault refuses the
 interlock rather than letting a press move a parameter other than the one on the screen.
 
+With **Drive rows from the trims** on, the check also needs to know which of the radio's
+switch positions are its trims. The first time the interlock is closed after the widget
+starts, or after these settings change, the surface shows **SETUP: Checking trims** while the
+radio's switch list is read, a slice per pass, and the interlock stays refused until that is
+done; on most radios it is over before the switch's own settling time. A trim the overlay
+claims has to be off in every flight mode, not only the active one. A flight mode that uses
+another mode's trim (EdgeTX's default for FM1 to FM8, which follow FM0) counts as that mode;
+one with a trim of its own, or with an offset of its own on top of another mode's, counts as
+trimming. The fault reads **Trim still active**.
+
 In the **Custom** set layout, the board's adjustment slots determine both the parameter names
 and the channel values used to step them. Plus and minus use the increment and decrement
 windows independently, including when they are not mirrored about channel centre. Touch
