@@ -4300,21 +4300,21 @@ function M.run(event, touchState)
         -- connection state, so there is nothing to announce and nothing to clear, but the
         -- master volume is a radio-side effect and has to keep following the pilot's setting
         -- while the tool waits. `Audio.process` drives it while the connection is up and the
-        -- reset above drives it on the edge, which is what the dashboard widget relies on: it
-        -- runs `process` whether or not the link is up, and passes itself in
-        -- (widgets/dashboard/runtime.lua:346). Gating the whole pass on the edge had left the
-        -- variable written once per loss and then not again at all.
+        -- reset above drives it on the edge. The dashboard widget runs `process` only while it is
+        -- ready, and refreshes the volume the same way as here while it is not
+        -- (widgets/dashboard/runtime.lua, performBackgroundWork). Gating the whole pass on the
+        -- edge had left the variable written once per loss and then not again at all.
         --
         -- It settles on the same level it always did, and that is worth saying plainly rather
         -- than claiming a difference. `resetConnectionState` refreshes the volume with no
-        -- `self` (lib/audio.lua:1263), so `is_rf_connected` reads
+        -- `self` (lib/audio.lua), so `is_rf_connected` reads
         -- `_G.rfsuite.session.rfConnected`; `publishConnected` writes that field from the same
         -- `session.isConnected` this tool copies into `state.rfConnected` at
         -- ui/home.lua:1384 (tasks/events/runtime.lua:125-126), and both of those come from the
         -- one RSSI reading behind `mspState.lastConnected` (tasks/msp/runtime.lua:425, :832).
         -- The two agree today. Passing the state says which of them the tool means instead of
         -- leaving it to a field another module happens to write, and it is the call the widget
-        -- already makes.
+        -- makes as well.
         if Audio and type(Audio.refreshConnectionVolume) == "function" then
           local audioContext = state.audioContext
           audioContext.audioState = state.audioState

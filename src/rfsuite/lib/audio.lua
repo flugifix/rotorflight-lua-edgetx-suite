@@ -52,15 +52,19 @@ local BOOST_SECONDS = 8
 -- the master volume asks for the Alert Level. 0 until the first critical announcement.
 local boost_until = 0
 
--- The dashboard widget and the tool each run their own copy of this module, and EdgeTX never runs
--- the two at the same time: it stops refreshing widgets while a standalone script runs
--- (radio/src/gui/colorlcd/standalone_lua.cpp). The global variable may therefore have been written
--- by the other one while this one was paused -- a tool closed while a critical announcement still
--- holds the Alert Level leaves it there, and the widget, which last wrote the Normal Level itself,
--- would see nothing to write. A pause between two refreshes longer than this is taken for the
--- other one's turn, and the refresh after it writes what it wants whatever it wrote before. Both
--- refresh every few tenths of a second (Audio.process runs every 0.25 to 0.6 s, the tool's audio
--- tick every 0.2 s); a tool session that can raise the volume lasts longer, its start alone.
+-- The dashboard widget and the tool started from the radio's tool list each run their own copy of
+-- this module, and EdgeTX never runs the two at the same time: it stops refreshing widgets while a
+-- standalone script runs (radio/src/gui/colorlcd/standalone_lua.cpp). (The tool opened from the
+-- dashboard runs inside the widget's own Lua state and announces nothing; it is not a second copy.)
+-- The global variable may therefore have been written by the other copy while this one was paused
+-- -- a tool closed while a critical announcement still holds the Alert Level leaves it there, and
+-- the widget, which last wrote the Normal Level itself, would see nothing to write. So what this
+-- state wrote last is trusted only while its refreshes follow each other: on the first refresh,
+-- and on the first after a pause longer than this, the variable is read back and only a value
+-- that differs from what it holds is written. The widget refreshes on its announcement pass while
+-- it is ready (Audio.process, every 0.25 to 0.6 s) and every 0.5 s while it is not
+-- (widgets/dashboard/runtime.lua); the tool on its audio tick, every 0.2 s, ready or not. A
+-- tool session that can raise the volume lasts longer than this, its start alone.
 local VOLUME_GAP_SECONDS = 2
 -- When this Lua state last refreshed the master volume, on its clock (nowSeconds).
 local volume_refreshed_at = nil
@@ -159,9 +163,9 @@ end
 
 local function refresh_volume_state(self, isCritical, now)
   volume_driven = true
-  if volume_refreshed_at ~= nil and now - volume_refreshed_at > VOLUME_GAP_SECONDS then
-    master_gvar_last = nil
-  end
+  -- The first refresh of this state, or the first after a pause: the variable may hold what the
+  -- other state wrote (see VOLUME_GAP_SECONDS), so it is asked below rather than trusted.
+  local stale = volume_refreshed_at == nil or now - volume_refreshed_at > VOLUME_GAP_SECONDS
   volume_refreshed_at = now
   local prefs = self and self.preferences and self.preferences.audio
   if not prefs and type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences then
@@ -197,6 +201,12 @@ local function refresh_volume_state(self, isCritical, now)
     if gv == 0 then return end
   end
   master_gvar_idx = gv - 1
+  -- Every accepted write marks the model for a save, so the value already standing is not written
+  -- again; a read that fails leaves nothing to compare with, and the value is written.
+  if stale then
+    local ok, current = pcall(model.getGlobalVariable, master_gvar_idx, 0)
+    master_gvar_last = ok and tonumber(current) or nil
+  end
   local pct = isCritical and (tonumber(prefs.master_alert) or 100) or (tonumber(prefs.master_normal) or 80)
 
   -- Connected only: the pot rules until the link is up and again once it is down, a raised level
@@ -2385,7 +2395,8 @@ end
 -- is what a caller that is waiting for a connection needs. The tool's audio block is that
 -- caller: gating its whole pass on the edge left the variable written once per loss and then
 -- not again, so a pilot who set a global variable as the master volume sat at the alert level
--- until the next connect.
+-- until the next connect. The dashboard widget calls it too, every 0.5 s while it is not ready,
+-- so a level the tool wrote while the widget was paused does not stand until the next connect.
 --
 -- Whether the level is raised is not asked for: it is the time a critical announcement raised it
 -- for, the same test `resetConnectionState` and `Audio.process` make, so a caller that waits ends
