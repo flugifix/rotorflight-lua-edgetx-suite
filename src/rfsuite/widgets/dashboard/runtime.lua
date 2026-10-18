@@ -3576,10 +3576,12 @@ function Runtime.new(zone, options)
     self.themePath = selectedTheme
     -- Before the new theme loads, so the one being left is not held beside it for longer than
     -- this widget still has it on screen. Only on a change of folder: a phase change within one
-    -- theme, or a settings save, releases nothing.
-    local folder = themeFolderKey(selectedTheme)
-    if self._themeFolder ~= nil and folder ~= self._themeFolder then releaseUnusedThemes(self) end
-    self._themeFolder = folder
+    -- theme, or a settings save, releases nothing, and pays one string comparison.
+    if selectedTheme ~= self._themeFolderPath then
+      local folder = themeFolderKey(selectedTheme)
+      if self._themeFolder ~= nil and folder ~= self._themeFolder then releaseUnusedThemes(self) end
+      self._themeFolder, self._themeFolderPath = folder, selectedTheme
+    end
     self.state.themeConfig = nextConfig
     updateVoltageThemeConfig(self)
     -- The announcements' levels, for a theme to colour the same readings by. Resolved here, with
