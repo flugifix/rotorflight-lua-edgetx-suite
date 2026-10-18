@@ -2431,7 +2431,8 @@ return {
         reserve_alert = "Reserve alert",
         reserve_target = "Reserve target",
         loading_title = "Loading",
-        loading_message = "Reading SmartFuel config"
+        loading_message = "Reading SmartFuel config",
+        help_message = "Read-only snapshot; Reload reads the configuration again.\nSmart Fuel: Remaining fuel after reserve; - while the local estimate is unavailable. Clears and recovers without Reload.\nSmart mAh: Estimated consumption; - while unavailable. Other rows keep their snapshot until Reload."
       },
       diagnostics_elrs_link = {
         title = "ELRS Telemetry",

@@ -2431,7 +2431,8 @@ return {
         reserve_alert = "Reservealarm",
         reserve_target = "Reserveziel",
         loading_title = "Laden",
-        loading_message = "Lese SmartFuel-Konfiguration"
+        loading_message = "Lese SmartFuel-Konfiguration",
+        help_message = "Schreibgeschützte Momentaufnahme; Reload liest die Konfiguration erneut.\nSmartFuel: Restkapazität nach Reserve; - bei fehlender lokaler Schätzung. Ausfall und Wiederkehr erscheinen ohne Reload.\nSmart-mAh: Geschätzter Verbrauch; - bei fehlender Schätzung. Andere Zeilen bleiben bis Reload unverändert."
       },
       diagnostics_elrs_link = {
         title = "ELRS-Telemetrie",
