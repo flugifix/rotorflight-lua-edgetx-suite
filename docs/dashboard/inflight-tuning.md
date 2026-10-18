@@ -52,12 +52,12 @@ never steps two parameters.
 
 A bank is offered only when the value that parks the enable channel in it -- the middle of its
 enable window, held inside the channel's reach of 988 to 2012 µs -- lies inside that window and
-inside no other enable window on the bank channel. A window that starts above 2012 µs, or one
-whose middle also lies in another slot's window, would otherwise step the other window's
-parameters while the screen names this bank's; a window the flight controller never reads
-would step nothing. Such a bank
-stays empty on the screen and the trims step over it; its slots are counted in the **skipped**
-number beside **Set from the board**.
+inside no enable window of another slot on the same two channels. A window that lies beyond
+988 to 2012 µs, or one whose middle also lies in another slot's window, would otherwise step
+the other slot's parameter while the screen names this bank's, and a continuous slot sharing
+the bank's own window would move with every step; a window the flight controller never reads
+would step nothing. Such a bank stays empty on the screen, the walk and the bank trim step over
+it, and its slots are counted in the **skipped** number beside **Set from the board**.
 
 A refused custom step shows **Custom layout not read** until the ground read completes, or
 **Row cannot be stepped** when the selected window is unusable. An empty slot read shows
