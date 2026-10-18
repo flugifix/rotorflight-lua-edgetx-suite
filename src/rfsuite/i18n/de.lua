@@ -1777,8 +1777,6 @@ return {
         link_pick_ratio = "Telemetrierate"
       },
       setup_accelerometer = {
-        help_p4 = "Die Prüfung erfolgt vor dem Start. Fehlende Statusantworten beenden die Überwachung nicht; das Zeitfenster beginnt mit der Startbestätigung.",
-        help_p5 = "Ohne Abschlussmeldung ist die Kalibrierung nicht bestätigt. Die Meldung erklärt, was beobachtet wurde.",
         checking_title = "Prüfen",
         checking_message = "Flugregler vor der Kalibrierung prüfen. Das Modell waagerecht und ruhig halten.",
         starting_title = "Starten",
@@ -1797,7 +1795,7 @@ return {
         calibration_unconfirmed_title = "Kalibrierung nicht bestätigt",
         calibration_not_started_title = "Kalibrierung nicht gestartet",
         save_error_title = "Fehler",
-        help_p3 = "Das Modell vor dem Bestätigen entschärfen und waagerecht und ruhig halten. Bis zum Abschluss ruhig halten; gespeichert wird automatisch.",
+        help_p3 = "Nick: erhöhen gegen eine Drift nach hinten, senken gegen eine Drift nach vorne.",
         title = "Beschleunigungssensor",
         roll = "Roll",
         pitch = "Nick",
@@ -1806,8 +1804,8 @@ return {
         saved_title = "Gespeichert",
         saved_message = "Beschleunigungssensor-Trimmungen gespeichert",
         help_title = "Beschleunigungssensor-Hilfe",
-        help_p1 = "Der Beschleunigungssensor wird verwendet, um den Winkel des Flugcontrollers in Bezug auf den Horizont zu messen. Diese Daten werden zur Stabilisierung des Fluggeraets und zur Bereitstellung der Selbstnivellierungsfunktion verwendet.",
-        help_p2 = "Speichern schreibt diese Werte in das EEPROM.",
+        help_p1 = "Die Trimmung korrigiert eine Drift in Modi wie Winkel, Horizont und Rettung; Speichern schreibt sie ins EEPROM. Taste * kalibriert: entschärfen, Modell bis zur Meldung waagerecht und ruhig halten.",
+        help_p2 = "Roll: erhöhen gegen eine Drift nach links, senken gegen eine Drift nach rechts.",
         msg_calibrate = "Beschleunigungssensor kalibrieren?",
         calibrating_title = "Kalibrierung",
         calibrating_message = "Beschleunigungssensor wird kalibriert. Bitte halten Sie das Modell waagerecht und ruhig.",

@@ -12,22 +12,15 @@ return function(ctx)
   local t = Common and Common.pageT("setup_accelerometer") or function(_, _, fb) return fb end
   local i18n = ctx.i18n
 
-  local help_p1 = t(i18n, "help_p1", "The accelerometer is used to measure the angle of the flight controller in relation to the horizon. This data is used to stabilize the aircraft and provide self-leveling functionality.")
-  local help_p2 = t(i18n, "help_p2", "Saving writes these values to EEPROM.")
+  local help_p1 = t(i18n, "help_p1",
+    "The trims correct a drift in modes such as Angle, Horizon and Rescue; Save writes them to EEPROM. The * button calibrates: disarm, then hold the model level and still until the notice.")
+  local help_p2 = t(i18n, "help_p2", "Roll: raise it to correct a drift to the left, lower it for a drift to the right.")
+  local help_p3 = t(i18n, "help_p3", "Pitch: raise it to correct a drift to the rear, lower it for a drift to the front.")
 
-  local help_p3 = t(i18n, "help_p3",
-    "Disarm and hold the model level and still before confirming. Keep it still until completion; saving is automatic.")
-
-  local help_p4 = t(i18n, "help_p4",
-    "Checking precedes start. Missing samples keep monitoring active; the completion window starts at the start acknowledgement.")
-
-  local help_p5 = t(i18n, "help_p5",
-    "Without a completion notice, success is unconfirmed. The notice explains what was observed.")
-
-  local parts = { help_p1, help_p2, help_p3, help_p4, help_p5 }
+  local parts = { help_p1, help_p2, help_p3 }
 
   return {
     title = t(i18n, "help_title", "Accelerometer Help"),
-    message = table.concat(parts, "\n\n")
+    message = table.concat(parts, "\n")
   }
 end

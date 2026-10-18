@@ -1777,8 +1777,6 @@ return {
         link_pick_ratio = "Telemetry ratio"
       },
       setup_accelerometer = {
-        help_p4 = "Checking precedes start. Missing samples keep monitoring active; the completion window starts at the start acknowledgement.",
-        help_p5 = "Without a completion notice, success is unconfirmed. The notice explains what was observed.",
         checking_title = "Checking",
         checking_message = "Checking the flight controller before calibration. Keep the model level and still.",
         starting_title = "Starting",
@@ -1797,7 +1795,7 @@ return {
         calibration_unconfirmed_title = "Calibration not confirmed",
         calibration_not_started_title = "Calibration not started",
         save_error_title = "Error",
-        help_p3 = "Disarm and hold the model level and still before confirming. Keep it still until completion; saving is automatic.",
+        help_p3 = "Pitch: raise it to correct a drift to the rear, lower it for a drift to the front.",
         title = "Accelerometer",
         roll = "Roll",
         pitch = "Pitch",
@@ -1806,8 +1804,8 @@ return {
         saved_title = "Saved",
         saved_message = "Accelerometer trims saved",
         help_title = "Accelerometer Help",
-        help_p1 = "The accelerometer is used to measure the angle of the flight controller in relation to the horizon. This data is used to stabilize the aircraft and provide self-leveling functionality.",
-        help_p2 = "Saving writes these values to EEPROM.",
+        help_p1 = "The trims correct a drift in modes such as Angle, Horizon and Rescue; Save writes them to EEPROM. The * button calibrates: disarm, then hold the model level and still until the notice.",
+        help_p2 = "Roll: raise it to correct a drift to the left, lower it for a drift to the right.",
         msg_calibrate = "Calibrate the accelerometer?",
         calibrating_title = "Calibrating",
         calibrating_message = "Calibrating accelerometer. Please keep the model level and still.",
