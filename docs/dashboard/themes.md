@@ -34,6 +34,12 @@ A theme's own settings, such as the voltage range its gauges span, are under
   *Connecting FBL...* with a line saying what it is still waiting for, in place of its preflight
   screen.
 
+When local SmartFuel cannot determine the cell count because the maximum cell voltage is
+missing or invalid, current fuel and estimated consumption become unavailable. The dashboard
+stops using the previous estimate or falling back to an older sensor reading. Valid historical
+flight statistics are retained. See [SmartFuel](../pages/setup/power/smartfuel.md) for recovery
+and the distinction between local and flight-controller estimates.
+
 ## The shipped themes
 
 The pictures were taken on a TX16S MK3 (800x480) during a short simulated flight of a 6S

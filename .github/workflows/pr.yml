@@ -170,6 +170,22 @@ jobs:
       - name: Check the erase asks before it erases
         run: lua5.3 bin/dashboard/verify_erase_confirm.lua
 
+  smartfuel-validity:
+    name: SmartFuel estimate validity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+
+      - name: Check invalid inputs and recovery
+        run: |
+          lua5.3 bin/smartfuel/verify_invalid_max.lua
+          lua5.3 bin/smartfuel/verify_readers.lua
+
   release-notes:
     name: Release notes
     runs-on: ubuntu-latest

@@ -226,6 +226,19 @@ whitespace-only diff buries the change a reviewer is looking for.
 | `testing.yml` | tag `testing/*` | A raw `src` artifact, then deletes the tag again. Ships no archive and runs no gate |
 | `docs.yml` | pull request or push touching `docs/`, `mkdocs.yml` or `bin/docs/` | The documentation site, built with `mkdocs build --strict`; on master it is published with GitHub Pages |
 
+The SmartFuel validity check runs in both `pr.yml` and `checks.yml`:
+
+```sh
+lua5.3 bin/smartfuel/verify_invalid_max.lua
+lua5.3 bin/smartfuel/verify_readers.lua
+```
+
+It checks local estimation against controlled sensor/configuration inputs, including loss and
+recovery of a valid maximum cell voltage, stale-value suppression and known-count priority.
+The reader checks exercise the dashboard, home screen and already-built diagnostic labels,
+including recovery without a page rebuild. Both checks run offline with desktop Lua 5.3;
+they do not measure radio timing or hardware behavior.
+
 Release notes wait under `release-notes/`, one file per pull request, until the release is cut:
 `python bin/release/collect_release_notes.py` files them under the version in
 `src/rfsuite/lib/version.lua`, and the result is committed before the tag. The format is in

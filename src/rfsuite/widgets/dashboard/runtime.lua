@@ -3044,15 +3044,21 @@ local function readTelemetry(state, audioState)
   -- before SmartFuel has one -- on an older flight controller, and in the window before the
   -- pack voltage has settled.
   local smart = _G.rfsuite and _G.rfsuite.session and _G.rfsuite.session.smartfuel or nil
-  setField("consumedMah", (smart and smart.consumption) or getSensor("smartconsumption") or state.consumedMah)
-
-  local fuel = (smart and smart.fuel) or getSensor("smartfuel") or getSensor("fuel")
-  if type(fuel) == "number" then
-    local f = fuel
-    if f < 0 then f = 0 end
-    if f > 100 then f = 100 end
-    state.fuelTelemetrySeen = true
-    setField("fuel", f)
+  if smart and smart.unavailable then
+    -- Explicit absence clears the held display too; setField deliberately ignores nil.
+    if state.fuel ~= nil or state.consumedMah ~= nil or state.fuelTelemetrySeen then telemetryChanged = true end
+    state.fuel, state.consumedMah = nil, nil
+    state.fuelTelemetrySeen = false
+  else
+    setField("consumedMah", (smart and smart.consumption) or getSensor("smartconsumption") or state.consumedMah)
+    local fuel = (smart and smart.fuel) or getSensor("smartfuel") or getSensor("fuel")
+    if type(fuel) == "number" then
+      local f = fuel
+      if f < 0 then f = 0 end
+      if f > 100 then f = 100 end
+      state.fuelTelemetrySeen = true
+      setField("fuel", f)
+    end
   end
 
   if type(voltageValue) == "number" then
