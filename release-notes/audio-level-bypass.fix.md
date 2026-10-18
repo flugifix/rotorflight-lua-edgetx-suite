@@ -1,0 +1,3 @@
+- **The accelerometer calibration beep follows the callout level (`setup/accelerometer`, `lib/audio.lua`, `tasks/events/telemetry_bg/adjustments.lua`)**:
+  - With Settings > Audio > Volume set to *Callout level*, the beep of a completed calibration plays at that level, as the announcements do; it played at the radio's own Wav volume before. In *Off* and *Master volume* nothing changes.
+  - The adjustment announcement no longer speaks a bare value at the radio's own Wav volume when the audio module cannot be loaded; the words before it were not spoken in that case either.

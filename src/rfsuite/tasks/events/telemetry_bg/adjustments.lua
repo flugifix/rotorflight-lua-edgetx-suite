@@ -206,12 +206,11 @@ local function announce()
       audio.playEventFile("adj/" .. words[i] .. ".wav")
     end
   end
-  -- Through the audio module when it is reachable, so the value is spoken at the same level as
-  -- the words before it.
+  -- Through the audio module only, so the value is spoken at the same level as the words before
+  -- it. Without the module there is no level to speak it at, and no words either: a bare number
+  -- at the radio's own volume is not said.
   if audio and type(audio.playNumber) == "function" then
     audio.playNumber(state.value or 0, 0)
-  elseif type(playNumber) == "function" then
-    pcall(playNumber, state.value or 0, 0, 0)
   end
 end
 

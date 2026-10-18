@@ -27,7 +27,7 @@ The two cannot be combined because they multiply: the level scales the sound fil
 
 ## Callout level
 
-* **Level:** 1 to 5 (5 the loudest). It applies to the sound file of an announcement, to the number and unit the radio speaks after it, and to the adjustment announcements the background decoder or the service widget makes. Level 3 plays a sound file at a quarter of its amplitude, which is what the radio's own *Wav volume* does at its middle setting 0; 5 plays it at full amplitude, 1 at a sixteenth. Picking *Callout level* with no level stored starts at 3.
+* **Level:** 1 to 5 (5 the loudest). It applies to the sound file of an announcement, to the number and unit the radio speaks after it, to the adjustment announcements the background decoder or the service widget makes, and to the beep of a completed accelerometer calibration. Level 3 plays a sound file at a quarter of its amplitude, which is what the radio's own *Wav volume* does at its middle setting 0; 5 plays it at full amplitude, 1 at a sixteenth. Picking *Callout level* with no level stored starts at 3.
 * **Test:** *Play* (behind a play symbol) speaks a sample announcement -- the word "battery" and the number 80 with its unit -- at the *Level* shown, also before it is saved. It writes nothing and works while the model is armed.
 
 ## Master volume
