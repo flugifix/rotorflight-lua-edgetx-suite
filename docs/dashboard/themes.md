@@ -34,6 +34,15 @@ A theme's own settings, such as the voltage range its gauges span, are under
   *Connecting FBL...* with a line saying what it is still waiting for, in place of its preflight
   screen.
 
+### Automatic voltage bounds
+
+Unless the theme has saved voltage bounds, the dashboard scales its voltage range to the
+battery cell count and the flight controller's minimum and maximum cell voltages. A cell
+count from telemetry takes priority, followed by the configured cell count. If neither is
+available, the dashboard estimates the count from the pack voltage and maximum cell voltage,
+including when the controller supplies its cell limits in centivolts. Saved voltage bounds
+keep their configured range.
+
 ## The shipped themes
 
 The pictures were taken on a TX16S MK3 (800x480) during a short simulated flight of a 6S
