@@ -723,9 +723,10 @@ function Queue:processQueue(now)
     if type(msg.errorHandler) == "function" then
       msg.errorHandler(msg, reason)
     end
-    self.logf("warn", "%s cmd=%s rw=%s client=%s attempts=%d",
-      self.writeHeld and "poll error, write given up" or (reason == "refused" and "refused" or "max retries"),
-      tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client), self.retryCount)
+    self.logf("warn", "%s cmd=%s rw=%s client=%s attempts=%d%s",
+      reason == "refused" and "refused" or "max retries",
+      tostring(msg.command), isWriteMessage(msg) and "W" or "R", tostring(msg.client), self.retryCount,
+      self.writeHeld and " (write held after a poll error)" or "")
     -- Only the message that ran out of retries is given up. Clearing the whole queue here ran
     -- the errorHandler of every other message waiting -- and this one's a second time, since it
     -- has just been called above -- so a single unanswered command took down work belonging to
