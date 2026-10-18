@@ -374,12 +374,12 @@ such announcement. Another one within those 8 seconds extends the time and write
 - **The 8 seconds** are an estimate of an announcement with its number and whatever the radio
   still had queued before it; the radio tells a script nothing about what it is still playing.
 - **The dashboard and the tool** started from the radio's tool list each keep their own 8 seconds,
-  and the radio never runs the two at once: the dashboard stands still while the tool is open, and
-  while the radio shows another of its own screens. A tool closed within the 8 seconds of a raise
-  leaves the volume raised until the dashboard runs again. Its first pass after a pause of more
-  than 2 seconds reads the global variable and writes the level the dashboard wants if the
+  and the radio never runs the two at once: the dashboard stands still while the tool is open. A
+  tool closed within the 8 seconds of a raise leaves the volume raised, and the dashboard ends it
+  when it runs again: its first pass after a pause of more than 2 seconds reads the global variable and writes the level the dashboard wants if the
   variable holds another -- the *Normal Level*, or the *Alert Level* while a raise of its own is
-  still running -- also while the dashboard waits for the model. The tool reads it the same way
+  still running -- also while the dashboard waits for the model or stands behind another screen of
+  the radio. The tool reads it the same way
   when it starts.
 - **The tool opened from the dashboard** runs inside the dashboard and makes no announcements of
   its own. While it is open, the volume is not refreshed: a raise standing when it opens lasts
