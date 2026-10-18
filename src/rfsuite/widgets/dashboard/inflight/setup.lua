@@ -242,8 +242,12 @@ function M.nearestHeadspeedStep(value)
 end
 
 -- TRIM_MODE_NONE, as model.getFlightMode reports it. A row driven from a trim needs the trim
--- switched OFF in the active flight mode, otherwise the same press also moves a stick's neutral.
+-- switched OFF in every flight mode the model can fly, otherwise the same press also moves a
+-- stick's neutral.
 local TRIM_MODE_NONE = 31
+
+-- EdgeTX carries nine flight modes. A model using fewer answers nil past its last one.
+local MAX_FLIGHT_MODES = 9
 
 -- A mixer weight naming a global variable is stored as 1024 plus that variable's source index
 -- (datastructs_private.h). This is the offset the check reads a weight back through.
@@ -989,6 +993,51 @@ local function semanticTrim(trims, stored)
   return 0
 end
 
+--- The trim modes of every flight mode the model answers for, read once, keyed by mode number.
+--
+-- All of them rather than the active one, because the pilot flies the others too, and because a
+-- mode's own entry does not say whether its trim moves: by default a mode is LINKED to another
+-- one's trim (see trimStillTrims), so it can only be answered with the modes it links to in hand.
+local function flightModeTrims(radio)
+  local modes = {}
+  for fm = 0, MAX_FLIGHT_MODES - 1 do
+    local data = radio.flightModeData(fm)
+    if type(data) ~= "table" or type(data.trimsModes) ~= "table" then break end
+    modes[fm] = data.trimsModes
+  end
+  return modes
+end
+
+--- Whether trim `index` still moves its stick's neutral in flight mode `fm`.
+--
+-- Resolved the way the firmware resolves a trim press (edgetx.cpp, setTrimValue and getTrimValue):
+-- a mode's entry is TRIM_MODE_NONE (the trim is off), or `2 * owner + offset`. An entry naming the
+-- mode itself, any entry in FM0, and an odd entry -- the owner's trim plus an offset of this mode's
+-- own -- all move a value, so the trim trims. An even entry naming another mode is a plain link:
+-- the press moves that mode's trim, and the answer is that mode's. FM1 to FM8 are created linked to
+-- FM0, so a model whose FM0 trims are off is off in every mode that still follows FM0 -- and
+-- reading the entries raw would report each of those modes as trimming.
+--
+-- Anything the walk cannot settle is a trim that trims: a link into a mode the radio did not answer
+-- for, the three-position mode, or a chain that does not end within nine steps. None of them can be
+-- shown to leave the stick alone, and the fault is one press of *Set up the model* away.
+local function trimStillTrims(modes, fm, index)
+  local phase = fm
+  for _ = 1, MAX_FLIGHT_MODES do
+    local entries = modes[phase]
+    if entries == nil then return true end
+    local mode = tonumber(entries[index])
+    -- No entry at all: a trim this radio does not have, so there is nothing to move.
+    if mode == nil or mode == TRIM_MODE_NONE then return false end
+    local owner = mode // 2
+    if mode % 2 ~= 0 or owner == phase or phase == 0 or owner >= MAX_FLIGHT_MODES then
+      return true
+    end
+    phase = owner
+  end
+  return true
+end
+
 function M.claimedTrims(settings, trims)
   local claimed = {}
   if type(settings) ~= "table" then return claimed, false end
@@ -1062,8 +1111,9 @@ function M.check(drive, settings, trims)
     looked = checkMixLine(radio, settings.value_ch, settings.value_gvar, faults, "value") or looked
   end
 
-  -- A trim driving a row must be OFF as a trim in the active flight mode. Left on, the same press
-  -- moves the stick neutral the flight controller was calibrated against.
+  -- A trim driving a row must be OFF as a trim in every flight mode, the way M.plan switches it off.
+  -- Left on, the same press moves the stick neutral the flight controller was calibrated against --
+  -- and a mode other than the one active on the ground is still a mode the pilot flies in.
   if settings.trims == true then
     -- Which trims this configuration actually claims, and under what name a fault would be
     -- reported. In navigate mode two trims do the work and every other one is inert, so checking
@@ -1084,13 +1134,17 @@ function M.check(drive, settings, trims)
       faults[#faults + 1] = "trim_claimed_twice"
     end
 
-    local data = radio.flightModeData(radio.flightMode())
-    if type(data) == "table" and type(data.trimsModes) == "table" then
+    -- Each claimed trim is named once, whichever modes it still trims in.
+    local modes = flightModeTrims(radio)
+    if modes[0] ~= nil then
       looked = true
       for i = 1, #claimed do
-        local mode = tonumber(data.trimsModes[claimed[i].index])
-        if mode ~= nil and mode ~= TRIM_MODE_NONE then
-          faults[#faults + 1] = claimed[i].code
+        for fm = 0, MAX_FLIGHT_MODES - 1 do
+          if modes[fm] == nil then break end
+          if trimStillTrims(modes, fm, claimed[i].index) then
+            faults[#faults + 1] = claimed[i].code
+            break
+          end
         end
       end
     end
@@ -1327,9 +1381,6 @@ local GVAR_DETAIL_MIN = -100
 local GVAR_DETAIL_MAX = 100
 local GVAR_DETAIL_PREC = 0
 local GVAR_DETAIL_UNIT = 1
-
--- EdgeTX carries nine flight modes. A model using fewer answers nil past its last one.
-local MAX_FLIGHT_MODES = 9
 
 --- Which OTHER global variables carry one of the two names this setup writes.
 --
@@ -1596,17 +1647,18 @@ function M.plan(radio, settings, trims)
 
   -- A trim that still trims is a trim that moves the stick neutral the flight controller was
   -- calibrated against, with the very press that is meant to move a parameter. It has to be off in
-  -- EVERY flight mode, not only the active one, because the pilot will fly in the others.
+  -- EVERY flight mode, not only the active one, because the pilot will fly in the others. Judged
+  -- the way M.check judges it, so the two cannot disagree: a mode linked to one whose trim is
+  -- already off trims nothing and is left as it is, link and all.
   if settings.trims == true then
     local claimed = M.claimedTrims(settings, trims)
+    local byMode = flightModeTrims(radio)
     for fm = 0, MAX_FLIGHT_MODES - 1 do
-      local data = radio.flightModeData(fm)
-      if type(data) ~= "table" or type(data.trimsModes) ~= "table" then break end
+      if byMode[fm] == nil then break end
       local modes, indexes = nil, {}
       for i = 1, #claimed do
         local index = claimed[i].index
-        local mode = tonumber(data.trimsModes[index])
-        if mode ~= nil and mode ~= TRIM_MODE_NONE then
+        if trimStillTrims(byMode, fm, index) then
           modes = modes or {}
           modes[index] = TRIM_MODE_NONE
           indexes[#indexes + 1] = index

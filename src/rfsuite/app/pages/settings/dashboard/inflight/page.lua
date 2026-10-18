@@ -401,7 +401,7 @@ local function describeCheck(i18n, result)
   end
   if mix then parts[#parts + 1] = t(i18n, "check_mix", "Mixer line missing or wrong") end
   if gvar then parts[#parts + 1] = t(i18n, "check_gvar", "Variable range or precision") end
-  if trim then parts[#parts + 1] = t(i18n, "check_trim", "Trim still active in this flight mode") end
+  if trim then parts[#parts + 1] = t(i18n, "check_trim", "Trim still active in a flight mode") end
   if claim then parts[#parts + 1] = t(i18n, "check_claim", "Walk and adjust need two different trims") end
   return table.concat(parts, " / ")
 end
