@@ -189,6 +189,34 @@ model's theme settings are not, and the next connect edge drops it. Preferences 
 there is none, so opening one in the tool after the unplug neither clears the kept path nor
 replaces it.
 
+### How long a theme stays loaded
+
+A module a theme loads through `rfsuite.require` is kept in the suite's module cache, and a
+shipped theme also caches its shared modules in a global of its own,
+`__rfsuiteTheme<Folder><File>Module` (`urban/layout.lua` as `__rfsuiteThemeUrbanLayoutModule`,
+`@aerc/common.lua` as `__rfsuiteThemeAercCommonModule`: a leading `@` dropped, the folder cut at
+its first `-`). When a widget moves to a theme in another folder, every theme folder that no
+dashboard widget in the Lua state uses — on screen, or chosen for any of the three slots above — is
+released: its module cache entries, and each global named after one of them that still holds that
+module. The next time that theme is shown it is read from the card again, as on its
+first load. `default` is never released: the box objects of every declarative theme draw with its
+`common.lua`, and its phase modules are the fallback when another theme does not load.
+
+So keep nothing at module level that has to outlive the theme being left: a cache derived from the
+inputs of a build is fine, because it is rebuilt on the first build after a reload; a reading
+that has to persist across a theme switch belongs on the host's `state`. A phase change within one
+theme, and a settings save that keeps the theme, release nothing. A tree on screen, an open view
+and the settings page each keep the module they already hold; only the shared roots are dropped. A
+global named any other way is not released, and stays loaded for the life of the Lua state as
+before. "In use" goes by folder: a theme that loads modules from another folder (`@aerc-n` draws with
+`@aerc/common.lua`, a user copy of Urban with the shipped Urban's modules) does not keep that folder
+in use, so those modules are read from the card again on its next load after a release.
+
+Load a shared module through `rfsuite.require` wherever the theme loads it, `configure.lua`
+included. A module loaded with `loadScript` alone has no cache entry, so its global cannot be
+released with the rest, and the next load of the theme would pair it with fresh copies of the
+modules it requires.
+
 ## What a phase module returns
 
 A phase module returns a table, and there are two kinds of theme. The widget decides which by
