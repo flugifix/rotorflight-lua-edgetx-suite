@@ -1673,13 +1673,20 @@ local function publish(widget, drive)
   local prime = drive.prime
   local primePhase, primeDone = nil, nil
   if type(prime) == "table" then primePhase, primeDone = prime.phase, prime.done end
-  -- Whether the interlock is closed and refused because the trims are still being walked. Nothing
-  -- moves an epoch when the switch closes, so the guard below has to notice this one itself. Read
-  -- off the drive rather than through M.verdict, which would take the check on this very pass.
+  -- Whether the interlock is closed and refused because the trims are still being walked -- or have
+  -- just been, and the verdict they wait for is taken on the next pass (Drive:evaluateInterlock), so
+  -- the surface does not drop to the theme for the one pass in between. Read off the drive rather
+  -- than through M.verdict, which would take the check on this very pass.
   local trimsChecking = drive.live ~= true and drive.phase ~= M.PHASE_LIVE
-    and drive.rawSwitch == true and trimsPending(drive)
+    and drive.rawSwitch == true and type(drive.settings) == "table" and drive.settings.trims == true
+    and (trimsPending(drive) or drive._checkedAt == nil)
+  -- and whether the surface has a refusal to show. Neither the switch closing nor a verdict being
+  -- taken moves an epoch -- the first verdict after the walk is taken on a pass after the snapshot
+  -- was built -- so the guard below watches the answer itself.
+  local setupFault = type(drive._checkResult) == "table" or trimsChecking
   if type(snapshot) == "table" and snapshot.epoch == epoch
     and snapshot.reportEpoch == reportEpoch
+    and snapshot.setupFault == setupFault
     and snapshot.trimsChecking == trimsChecking
     and snapshot.spokenId == drive.spokenId
     and snapshot.live == drive.live
@@ -1794,7 +1801,7 @@ local function publish(widget, drive)
     -- the snapshot because the widget decides from the snapshot alone which surface a pass
     -- belongs to, and a refusal has to reach a surface that can say so. A closing refused while
     -- the trims are being walked is that refusal too: its surface says the trims are being checked.
-    setupFault = type(drive._checkResult) == "table" or trimsChecking,
+    setupFault = setupFault,
     trimsChecking = trimsChecking,
     radioEnabled = drive.settings.radio_enabled == true,
     modelEnabled = drive.settings.model_enabled == true,

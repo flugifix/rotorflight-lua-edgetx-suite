@@ -45,7 +45,8 @@ With **Drive rows from the trims** on, the check also needs to know which of the
 switch positions are its trims. The first time the interlock is closed after the widget
 starts, or after these settings change, the surface shows **SETUP: Checking trims** while the
 radio's switch list is read, a slice per pass, and the interlock stays refused until that is
-done; on most radios it is over before the switch's own settling time. A trim the overlay
+done — one pass of the widget for every 32 positions the radio lists, plus one. Until that first closing
+the ground surface reached from the quick settings menu reads *Setup not checked*. A trim the overlay
 claims has to be off in every flight mode, not only the active one. A flight mode that uses
 another mode's trim (EdgeTX's default for FM1 to FM8, which follow FM0) counts as that mode;
 one with a trim of its own, or with an offset of its own on top of another mode's, counts as
