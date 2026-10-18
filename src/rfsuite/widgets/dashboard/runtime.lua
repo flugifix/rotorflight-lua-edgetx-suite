@@ -3452,7 +3452,7 @@ function Runtime.new(zone, options)
     end
 
     local voltage = tonumber(state and state.voltage)
-    local maxCellVoltage = tonumber(batteryConfig and batteryConfig.vbatmaxcellvoltage) or 4.2
+    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
     -- The same rule as readTelemetry's: a voltage below half a cell gives no count.
     if type(voltage) == "number" and voltage > 0 and maxCellVoltage > 0 then
       local implied = math.floor((voltage / maxCellVoltage) + 0.5)
