@@ -104,8 +104,28 @@ Then one item in `SECTIONS[<section>].items` decides how it is drawn — `bool`,
 `enabledBy` (drawn always, editable only while that switch is on) or `requires` (not drawn at
 all while that switch is off).
 
-Nothing else is needed: the loading, clamping, saving and per-page split are generic. A field
-marked `scope = "model"` is stored with the model rather than with the radio.
+The generic path covers `bool` and `number` rows. A `choice` row is generic only when it is a
+Repeat setting: the page supplies `getRepeatOptions`, `getRepeatGetter` and `getRepeatSetter` for
+every choice key that is not handled explicitly. Adding another kind of choice therefore also
+requires its own option list, getter and setter, plus a branch in the `item.kind == "choice"`
+block that selects those functions.
+
+The three current special choices show the complete pattern:
+
+- `fuel_callout_percent` uses `getFuelCalloutOptions`, `getFuelCalloutGetter` and
+  `getFuelCalloutSetter`. Its values must also be present in `FUEL_CALLOUT_VALUES`; loading and
+  the getter fall back to 10 when a stored value is outside that set.
+- `voltage_announce` uses `getAnnounceOptions`, `getAnnounceGetter` and `getAnnounceSetter` for
+  the Pack/Cell pair. The getter and setter normalize every other value to Pack (`0`).
+- `tpwr_max` uses `getTxPowerMaxOptions`, `getTxPowerMaxGetter` and `getTxPowerMaxSetter`. Add a
+  supported power to `TX_POWER_MAX_LIST`; `TX_POWER_MAX_VALUES` is derived from that list, and a
+  stored value outside it falls back to 100 mW.
+
+The choice setter is also where its enabling rule is enforced: the fuel step is editable only
+with `fuel_alerts`, and the TX-power maximum only with `tpwr_limit`. Keep that guard aligned with
+the row's `enabledBy` value. Loading, saving and the per-page split remain generic after these
+choice-specific pieces are supplied. A field marked `scope = "model"` is stored with the model
+rather than with the radio.
 
 The engine reads the same keys through `prefEnabled(events, "key", default)`, and **the default
 passed there must match the schema's**, because a settings file written before your key existed
