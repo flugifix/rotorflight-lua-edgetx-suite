@@ -430,8 +430,9 @@ end
 -- MAX_LINE_LEN bytes (and a carriage return) of it are held and the next read brings more of the
 -- file, the row is dropped and everything up to the next line end is skipped, so its tail can
 -- never be read as a row of its own. A line whose line end is already in the buffer is parsed
--- whatever its length, and so is the row held when a read finds the end of the file, so a last
--- line without a line end is dropped only if a read before that one still brought more of it.
+-- whatever its length, and so is the row held when a read finds the end of the file or fails, so
+-- a last line without a line end is dropped only if a read before that one still brought more of
+-- it.
 function M.readerStep(reader, maxLines, onRow)
   if type(reader) ~= "table" or reader.done then return true end
   local buffer = reader.buffer
