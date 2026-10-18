@@ -537,7 +537,7 @@ function M.deriveStep(work, budget)
     --
     -- One bank is one unit of the budget although it walks every window of the pair. Counted on a
     -- desktop Lua, a full table of 42 distinct windows puts its worst slice at 2 680 instructions,
-    -- below the 2 830 of the scan slice on the documented 36-slot board.
+    -- below the 2 830 of the place slice on the documented 36-slot board.
     while work.at < #work.outBands do
       if budget ~= nil and taken >= budget then return false, nil, nil end
       work.at = work.at + 1
