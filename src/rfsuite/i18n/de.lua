@@ -707,6 +707,8 @@ return {
         ground_error_decay = "Fehlerrückgang am Boden",
         inflight_error_decay = "Fehlerrückgang im Flug",
         error_decay_stick_gain = "Knüppel-Fehlerrückgang",
+        master_gain = "Master-Gain",
+        cyclic = "Zyklisch",
         error_limit = "Fehlergrenze",
         hsi_offset_limit = "HSI-Offset-Grenze",
         error_rotation = "Fehlerrotation",
@@ -723,6 +725,7 @@ return {
         help_p4 = "Fehlerrotation: Ermöglicht das Teilen von Fehlern zwischen allen Achsen.",
         help_p5 = "I-Term-Entspannung: Begrenzung der I-Term-Akkumulation bei schnellen Bewegungen – hilft, das Nachschwingen nach schnellen Steuerbewegungen zu reduzieren. Sollte für große Helis niedriger und für kleine Helis höher sein. Am besten nur so weit reduzieren, wie es für den eigenen Flugstil erforderlich ist.",
         help_stick_gain = "Knüppel-Fehlerrückgang: je weiter der Zyklik-Knüppel ausgelenkt ist, desto schneller baut sich der zyklische I-Term ab, am Boden und im Flug; 0 = aus.",
+        help_master_gain = "Master-Gain: Zyklisch skaliert P, I, D und Offset von Roll und Pitch gemeinsam, Yaw P, I und D des Hecks; die Verhältnisse bleiben. Feedforward, Boost und Precomp nicht.",
         tbl_off = "Aus",
         tbl_on = "Ein",
         tbl_rp = "RP",
@@ -1972,7 +1975,9 @@ return {
         fn_gov_min_throttle = "Gov Min Throttle",
         fn_gov_headspeed = "Gov Head Speed",
         fn_gov_yaw_ff = "Gov Heck FF",
-        fn_battery_profile = "Akku-Profil"
+        fn_battery_profile = "Akku-Profil",
+        fn_cyclic_master_gain = "Zyklisch Master-Gain",
+        fn_yaw_master_gain = "Heck Master-Gain"
       },
       setup_failsafe = {
         title = "Failsafe",
@@ -3218,6 +3223,8 @@ return {
       fn_gov_headspeed = "Gov Head Speed",
       fn_gov_yaw_ff = "Gov Heck FF",
       fn_battery_profile = "Akku-Profil",
+      fn_cyclic_master_gain = "Zyklisch Master-Gain",
+      fn_yaw_master_gain = "Heck Master-Gain",
       fn_unknown = "Funktion",
       -- The in-flight tuning overlay's own screens.
       inflight_title = "TUNING",

@@ -714,6 +714,12 @@ local function doDisconnect(now, reason, keepLink)
   if type(cache) == "table" and type(cache.clear) == "function" then
     cache.clear()
   end
+  -- The same holds for what the last PID profile reply said about the master gains
+  -- (tasks/msp/api/pid_profile.lua): a reflashed board may no longer have them.
+  local root = _G.rfsuite
+  if type(root) == "table" and type(root.session) == "table" then
+    root.session.hasMasterGain = nil
+  end
   state.pendingVersionRead = true
   state.pendingUidRead = true
   -- A refusal (`keepLink`) is an outcome for the UID read as well: tick() stops at the

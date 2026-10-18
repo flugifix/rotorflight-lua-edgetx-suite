@@ -50,13 +50,23 @@ local FIELD_SPEC = {
     {"yaw_inertia_precomp_cutoff", "U8"}
 }
 
--- error_decay_gain_cyclic follows FIELD_SPEC as the last byte from MSP API 12.10 (firmware 4.7)
+-- error_decay_gain_cyclic follows FIELD_SPEC as the next byte from MSP API 12.10 (firmware 4.7)
 -- on. The read takes it whenever the reply carries it, so a shorter reply still parses. The write
 -- sends it only to a flight controller that reports 12.10 or later: firmware 4.6 (API 12.9) leaves
 -- a trailing byte here unread and still acknowledges the write, so the value would be dropped
 -- without a word, while 4.7 reads the byte only when one is left, so a write without it keeps the
 -- stored value.
 local ERROR_DECAY_GAIN_CYCLIC = "error_decay_gain_cyclic"
+
+-- The cyclic and yaw master gains (U8, percent, 25..200) follow it on firmware that has them. They
+-- came without an API version change, so a 12.10 board may or may not send them, and only the
+-- length of the reply tells. Every parse records that answer as `session.hasMasterGain`, and the
+-- MSP runtime clears it on disconnect. The PID Controller row, its help line, the Adjustments
+-- functions 83 and 84 and the write below all go by it: the PID profile pages merge each read into
+-- one shared table and never remove a key, so gains read from an earlier board can still be in it
+-- after a read from a board without them, and must then be neither shown nor sent.
+local CYCLIC_MASTER_GAIN = "cyclic_master_gain"
+local YAW_MASTER_GAIN = "yaw_master_gain"
 
 -- The simulator answers MSP_API_VERSION with 12.9, so its reply ends before the 12.10 field.
 local SIM_RESPONSE = {
@@ -98,6 +108,12 @@ local function sessionApiAtLeast12_10()
     if raw == nil then return false end
     local V = loadApiVersion()
     return V ~= nil and V.isAtLeast(raw, { 12, 0, 10 }) == true
+end
+
+local function sessionHasMasterGain()
+    local root = _G and _G.rfsuite
+    local session = root and root.session
+    return type(session) == "table" and session.hasMasterGain == true
 end
 
 local function expected_bytes(spec)
@@ -145,6 +161,15 @@ function Api.parse(buf)
     if #buf > need then
         out[ERROR_DECAY_GAIN_CYCLIC] = tonumber(buf[need + 1]) or 0
     end
+    local hasMasterGain = #buf >= need + 3
+    if hasMasterGain then
+        out[CYCLIC_MASTER_GAIN] = tonumber(buf[need + 2]) or 0
+        out[YAW_MASTER_GAIN] = tonumber(buf[need + 3]) or 0
+    end
+    local root = _G and _G.rfsuite
+    if type(root) == "table" and type(root.session) == "table" then
+        root.session.hasMasterGain = hasMasterGain
+    end
     return out
 end
 
@@ -161,6 +186,13 @@ function Api.buildWritePayload(data)
     local gain = data[ERROR_DECAY_GAIN_CYCLIC]
     if type(gain) == "number" and sessionApiAtLeast12_10() then
         p[#p+1] = math.floor(gain) & 0xFF
+        -- Only behind the decay gain, which the firmware reads first, and only while this link's
+        -- last reply carried the master gains.
+        local cyclic, yaw = data[CYCLIC_MASTER_GAIN], data[YAW_MASTER_GAIN]
+        if type(cyclic) == "number" and type(yaw) == "number" and sessionHasMasterGain() then
+            p[#p+1] = math.floor(cyclic) & 0xFF
+            p[#p+1] = math.floor(yaw) & 0xFF
+        end
     end
     return p
 end
