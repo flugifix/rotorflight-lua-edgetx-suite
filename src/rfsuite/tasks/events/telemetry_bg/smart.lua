@@ -17,8 +17,8 @@ local lastWake = 0
 local wakeInterval = 1.0
 
 local state = {
-  batterySignature = nil,
-  sourceMode = nil,
+  batterySignature = {},
+  signatureValid = false,
   stabilizeUntil = 0,
   voltageSamples = {},
   voltageStable = false,
@@ -225,60 +225,106 @@ local function scaleField(raw, fallback, minValue, maxValue, scale)
   return value
 end
 
+local FIRMWARE_SOURCE_MIN_API = { 12, 0, 9 }
+
+local function readLegacyLocalSource(batteryPrefs)
+  local source = batteryPrefs and tonumber(batteryPrefs.smartfuel_source) or nil
+  if source == nil then
+    source = batteryPrefs and tonumber(batteryPrefs.calc_local) or nil
+  end
+  return source
+end
+
+local function getFirmwareSource(session, cfg)
+  local apiVersion = ApiVersion and ApiVersion.parse and ApiVersion.parse(session and session.apiVersion)
+  if not (ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(apiVersion, FIRMWARE_SOURCE_MIN_API)) then
+    return nil
+  end
+  local mode = cfg and tonumber(cfg.smartfuel_mode) or nil
+  if mode == nil then
+    local batteryConfig = session and session.battery_config
+    mode = batteryConfig and tonumber(batteryConfig.smartfuelRemoteSource) or nil
+  end
+  return mode
+end
+
+local function pick(cfg, batteryPrefs, key)
+  if cfg and cfg[key] ~= nil then return cfg[key] end
+  if batteryPrefs and batteryPrefs[key] ~= nil then return batteryPrefs[key] end
+  return nil
+end
+
+-- The configuration is a function of the thirteen values read at the top of getSmartConfig and of
+-- nothing else, and they change only when a setting or the flight controller's configuration does
+-- -- while the configuration is read on every wake that computes. So the values it was last built
+-- from are kept here, and the table is rebuilt only when one of them differs. They are compared by
+-- value, not by the identity of the tables they come from: the SmartFuel and battery pages write
+-- into the session's tables in place. The kept table is returned itself, not a copy: a caller
+-- reads it and must not write into it, or every later wake gets the changed configuration.
+local configInputs = {
+  apiVersion = false, mode = false, remoteSource = false, localSource = false, calcLocal = false,
+  publish = false, voltageDropRate = false, chargeDropRate = false, sagGain = false,
+  voltageFallLimit = false, fuelDropRate = false, stabilizeDelay = false, stableWindow = false,
+}
+local smartConfig = nil
+
 local function getSmartConfig(session)
   local cfg = session and session.smartfuel_config or nil
   local batteryPrefs = session and session.modelPreferences and session.modelPreferences.battery or nil
+  local batteryConfig = session and session.battery_config
 
-  local function readLegacyLocalSource()
-    local source = batteryPrefs and tonumber(batteryPrefs.smartfuel_source) or nil
-    if source == nil then
-      source = batteryPrefs and tonumber(batteryPrefs.calc_local) or nil
-    end
-    return source
+  local apiVersion = session and session.apiVersion
+  local mode = cfg and cfg.smartfuel_mode
+  local remoteSource = batteryConfig and batteryConfig.smartfuelRemoteSource
+  local localSource = batteryPrefs and batteryPrefs.smartfuel_source
+  local calcLocal = batteryPrefs and batteryPrefs.calc_local
+  local publish = batteryPrefs and batteryPrefs.smartfuel_publish
+  local voltageDropRate = pick(cfg, batteryPrefs, "voltage_drop_rate")
+  local chargeDropRate = pick(cfg, batteryPrefs, "charge_drop_rate")
+  local sagGain = pick(cfg, batteryPrefs, "sag_gain")
+  local voltageFallLimit = pick(cfg, batteryPrefs, "voltage_fall_limit")
+  local fuelDropRate = pick(cfg, batteryPrefs, "fuel_drop_rate")
+  local stabilizeDelay = pick(cfg, batteryPrefs, "stabilize_delay")
+  local stableWindow = pick(cfg, batteryPrefs, "stable_window")
+
+  local last = configInputs
+  if smartConfig
+    and last.apiVersion == apiVersion and last.mode == mode and last.remoteSource == remoteSource
+    and last.localSource == localSource and last.calcLocal == calcLocal and last.publish == publish
+    and last.voltageDropRate == voltageDropRate and last.chargeDropRate == chargeDropRate
+    and last.sagGain == sagGain and last.voltageFallLimit == voltageFallLimit
+    and last.fuelDropRate == fuelDropRate and last.stabilizeDelay == stabilizeDelay
+    and last.stableWindow == stableWindow then
+    return smartConfig
   end
+  last.apiVersion, last.mode, last.remoteSource = apiVersion, mode, remoteSource
+  last.localSource, last.calcLocal, last.publish = localSource, calcLocal, publish
+  last.voltageDropRate, last.chargeDropRate, last.sagGain = voltageDropRate, chargeDropRate, sagGain
+  last.voltageFallLimit, last.fuelDropRate = voltageFallLimit, fuelDropRate
+  last.stabilizeDelay, last.stableWindow = stabilizeDelay, stableWindow
 
-  local function getFirmwareSource()
-    local apiVersion = ApiVersion and ApiVersion.parse and ApiVersion.parse(session and session.apiVersion)
-    if not (ApiVersion and ApiVersion.isAtLeast and ApiVersion.isAtLeast(apiVersion, { 12, 0, 9 })) then
-      return nil
-    end
-    local mode = cfg and tonumber(cfg.smartfuel_mode) or nil
-    if mode == nil then
-      local batteryConfig = session and session.battery_config
-      mode = batteryConfig and tonumber(batteryConfig.smartfuelRemoteSource) or nil
-    end
-    return mode
-  end
-
-  local function pick(key)
-    if cfg and cfg[key] ~= nil then return cfg[key] end
-    if batteryPrefs and batteryPrefs[key] ~= nil then return batteryPrefs[key] end
-    return nil
-  end
-
-  local source = readLegacyLocalSource()
+  local source = readLegacyLocalSource(batteryPrefs)
   if source == nil then source = 0 end
 
-  local voltageDropRate = tonumber(pick("voltage_drop_rate"))
-  local chargeDropRate = tonumber(pick("charge_drop_rate"))
-  local sagGain = tonumber(pick("sag_gain")) or 40
+  voltageDropRate = tonumber(voltageDropRate)
+  chargeDropRate = tonumber(chargeDropRate)
 
   local voltageFallPerSecond = nil
   if voltageDropRate ~= nil then
     voltageFallPerSecond = voltageDropRate / 1000
   else
-    voltageFallPerSecond = scaleField(pick("voltage_fall_limit"), 0.05, 0, 1, 100)
+    voltageFallPerSecond = scaleField(voltageFallLimit, 0.05, 0, 1, 100)
   end
 
   local fuelDropPerSecond = nil
   if chargeDropRate ~= nil then
     fuelDropPerSecond = chargeDropRate / 100
   else
-    fuelDropPerSecond = scaleField(pick("fuel_drop_rate"), 1.0, 0, 50, 10)
+    fuelDropPerSecond = scaleField(fuelDropRate, 1.0, 0, 50, 10)
   end
 
-  return {
-    firmwareSource = getFirmwareSource(),
+  smartConfig = {
+    firmwareSource = getFirmwareSource(session, cfg),
     source = source,
     -- Whether the two sensors are published at all. Read from the model's own preferences and
     -- deliberately NOT through `pick`: `pick` lets the flight controller's SmartFuel
@@ -291,12 +337,13 @@ local function getSmartConfig(session)
     -- on SmFt survives the update. Nothing inside the suite depends on it either way -- those
     -- consumers are served by the hand-over below.
     publishSensors = (batteryPrefs and batteryPrefs.smartfuel_publish) ~= false,
-    stabilizeDelaySeconds = scaleField(pick("stabilize_delay"), 1.5, 0, 10, 1000),
-    stableWindowVolts = scaleField(pick("stable_window"), 0.15, 0, 1, 100),
+    stabilizeDelaySeconds = scaleField(stabilizeDelay, 1.5, 0, 10, 1000),
+    stableWindowVolts = scaleField(stableWindow, 0.15, 0, 1, 100),
     voltageFallPerSecond = voltageFallPerSecond,
     fuelDropPerSecond = fuelDropPerSecond,
-    sagGain = sagGain
+    sagGain = tonumber(sagGain) or 40
   }
+  return smartConfig
 end
 
 -- Firmware with per-profile battery cells (tasks/msp/api/battery_config.lua, `hasProfileCells`)
@@ -603,19 +650,28 @@ function Smart.wakeup()
     return
   end
 
-  local signature = table.concat({
-    tostring(firmwareSource or "nil"),
-    tostring(sourceMode),
-    tostring(cellCount),
-    tostring(packCapacity),
-    tostring(reserve),
-    tostring((tonumber(batteryConfig.vbatmincellvoltage) or 0)),
-    tostring((tonumber(batteryConfig.vbatfullcellvoltage) or 0))
-  }, ":")
-
-  if state.batterySignature ~= signature or state.sourceMode ~= sourceMode then
-    state.batterySignature = signature
-    state.sourceMode = sourceMode
+  -- The estimate restarts when any of these differs from the values it was started with. Compared
+  -- field by field: joining them into a string to compare cost a table and seven strings on every
+  -- wake that got this far.
+  local minCellVoltage = tonumber(batteryConfig.vbatmincellvoltage) or 0
+  local fullCellVoltage = tonumber(batteryConfig.vbatfullcellvoltage) or 0
+  local signature = state.batterySignature
+  if not state.signatureValid
+    or signature.firmwareSource ~= firmwareSource
+    or signature.sourceMode ~= sourceMode
+    or signature.cellCount ~= cellCount
+    or signature.packCapacity ~= packCapacity
+    or signature.reserve ~= reserve
+    or signature.minCellVoltage ~= minCellVoltage
+    or signature.fullCellVoltage ~= fullCellVoltage then
+    signature.firmwareSource = firmwareSource
+    signature.sourceMode = sourceMode
+    signature.cellCount = cellCount
+    signature.packCapacity = packCapacity
+    signature.reserve = reserve
+    signature.minCellVoltage = minCellVoltage
+    signature.fullCellVoltage = fullCellVoltage
+    state.signatureValid = true
     state.stabilizeUntil = now + cfg.stabilizeDelaySeconds
     resetComputedState()
     logSmart("smart reset source=" .. tostring(sourceMode) .. " cap=" .. tostring(packCapacity), "info")
@@ -687,8 +743,8 @@ end
 
 function Smart.reset()
   clearHandOver()
-  state.batterySignature = nil
-  state.sourceMode = nil
+  state.signatureValid = false
+  smartConfig = nil
   state.stabilizeUntil = 0
   state.lastFuelValue = nil
   state.lastFuelPush = 0
