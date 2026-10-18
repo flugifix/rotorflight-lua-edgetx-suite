@@ -147,8 +147,9 @@ local CONFIG_SCHEMA = {
   { key = "model_announcement",type = "bool", default = false, section = "connect" },
   { key = "pack_not_full",     type = "bool", default = false, section = "connect" },
   -- Millivolts per cell, so the number reads the same whatever the pack is: 100 is a tenth of
-  -- a volt below the configured maximum cell voltage.
-  { key = "pack_not_full_margin", type = "number", default = 100, min = 10, max = 500, section = "connect" },
+  -- a volt below the configured full cell voltage. 0, the default, is the firmware's own rule;
+  -- the range starts there so that the load clamp below cannot turn the default into another value.
+  { key = "pack_not_full_margin", type = "number", default = 0, min = 0, max = 500, section = "connect" },
   { key = "battery_profile",   type = "bool", default = true,  section = "connect" },
   { key = "initial_fuel",      type = "bool", default = true,  section = "connect" },
   -- The start of a rescue and its end, each spoken under a switch of its own. Both default to off,
