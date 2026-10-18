@@ -939,7 +939,12 @@ local function walkTrim(self, now, trim, dirKey, nextKey, step)
   end
 
   if direction ~= 0 and self[nextKey] ~= nil and now >= self[nextKey] then
-    step(self, direction > 0)
+    -- A trim refused at the press and held on walks here once the step is off the wire, which can
+    -- be before the refusal's line has run out: the line goes with the step it no longer describes.
+    local ok = step(self, direction > 0)
+    if ok == true and self.stepRefusedReason == "cooling" then
+      self.stepRefusedUntil, self.stepRefusedReason = nil, nil
+    end
     self[nextKey] = now + NAV_REPEAT_INTERVAL_TICKS
   end
 end
@@ -1074,8 +1079,8 @@ function Drive:pollTrimStep(now)
   -- A press while the TOUCH control owns the value variable -- its pulse, its hold, or the
   -- cool-down after them. The same refusal Drive:press makes for a trim pulse, with the same line,
   -- and like it this press starts nothing later: a trim held until the touch is done is still this
-  -- press. Ahead of the row change below, so a refused trim selects nothing -- above all not under
-  -- a held button, whose surface must not be rebuilt.
+  -- press. Ahead of the row change below, so a trim refused here selects nothing -- above all not
+  -- under a held button, whose surface must not be rebuilt.
   if self.pulseUntil ~= nil or self.holdRow ~= nil or now < (self.coolUntil or 0) then
     self:refuseStep("cooling", now)
     return
