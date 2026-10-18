@@ -427,12 +427,11 @@ end
 -- chunk, which keeps the number of passes close to what the line count alone would give.
 --
 -- A row still waiting for its line end is not collected without a limit: once more than
--- MAX_LINE_LEN bytes (and a carriage return) of it are held and another chunk is needed, the row
--- is dropped and everything up to the next line end is skipped, so its tail can never be read as
--- a row of its own. A line whose line end is already in the buffer is parsed whatever its length.
--- The last line of a file that ends without a line end is parsed when it is no longer than that; a
--- longer one is dropped like any other unfinished row, because the end of the file is seen only by
--- the read that comes after it.
+-- MAX_LINE_LEN bytes (and a carriage return) of it are held and the next read brings more of the
+-- file, the row is dropped and everything up to the next line end is skipped, so its tail can
+-- never be read as a row of its own. A line whose line end is already in the buffer is parsed
+-- whatever its length, and so is the row held when a read finds the end of the file, so a last
+-- line without a line end is dropped only if a read before that one still brought more of it.
 function M.readerStep(reader, maxLines, onRow)
   if type(reader) ~= "table" or reader.done then return true end
   local buffer = reader.buffer
@@ -448,17 +447,17 @@ function M.readerStep(reader, maxLines, onRow)
     elseif not reader.eof then
       steps = steps + 1
       local pending = #buffer - pos + 1
-      if not reader.skipping and pending > MAX_LINE_LEN + 1 then
-        logDroppedRow(reader.bytes - pending)
-        reader.skipping = true
-      end
-      if reader.skipping then buffer, pos = "", 1 end
       local ok, data = pcall(io.read, reader.handle, READ_CHUNK)
       if not ok or data == nil or data == "" then
         reader.eof = true
       else
+        if not reader.skipping and pending > MAX_LINE_LEN + 1 then
+          logDroppedRow(reader.bytes - pending)
+          reader.skipping = true
+        end
         reader.bytes = reader.bytes + #data
         if reader.skipping then
+          buffer, pos = "", 1
           local skipEnd = string.find(data, "\n", 1, true)
           if skipEnd ~= nil then
             buffer, pos = data, skipEnd + 1
