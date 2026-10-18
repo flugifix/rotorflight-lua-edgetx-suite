@@ -13,7 +13,7 @@ a grid of value tiles beside it, both laid out as the pilot chooses.
 
 ## Where to find it
 
-*System* → *Settings* → *Dashboard* → *Design*: choose *Grid* for a flight phase, or for all
+*System* → *Settings* → *Dashboard* → *Theme*: choose *Grid* for a flight phase, or for all
 three. Its settings are under *System* → *Settings* → *Dashboard* → *Settings* → *Grid*, split
 into six pages: *Look*, *Layout*, *Tiles*, *Top Bar*, *Keys* and *Telemetry*. They are stored for
 the radio, and a model can carry its own under

@@ -1,17 +1,17 @@
 ---
-title: Design
-sidebar_label: Design
+title: Theme
+sidebar_label: Theme
 sidebar_position: 10
 ---
 
-# Design
+# Theme
 
 Which dashboard theme the widget shows, and whether a model may use a theme and theme settings
 of its own. The theme chosen here is the one every model shows unless it has settings of its own.
 
 ## Where to find it
 
-*System* → *Settings* → *Dashboard* → *Design*
+*System* → *Settings* → *Dashboard* → *Theme*
 
 Always available. The rows for the connected model need a flight controller that has been read,
 because a model's own values are stored in the file named after that flight controller.

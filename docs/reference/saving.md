@@ -83,7 +83,7 @@ Pages that ask:
 - Setup > Controls: Modes, Adjustments, In-Flight Tuning, Failsafe, Stats, both Beepers pages, and
   Blackbox Configuration and Logging.
 - System > Settings: General and Localization; Audio: Volume and all nine Audio Events pages;
-  Dashboard: Design and Quick Settings.
+  Dashboard: Theme and Quick Settings.
 
 ### Picking another servo with an unsaved change
 

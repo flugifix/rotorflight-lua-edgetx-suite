@@ -173,7 +173,7 @@ scene the dashboard queues for a phase change is keyed on the new module, and a 
 `renderKey(zone, state)` sees the new phase the first time it is called after the change.
 
 The path is resolved per phase as well (`resolveThemePathForState`), which is what the
-*Per-Phase Themes* switch under *System* → *Settings* → *Dashboard* → *Design* acts on. There
+*Per-Phase Themes* switch under *System* → *Settings* → *Dashboard* → *Theme* acts on. There
 are three theme slots, not five: `armed` resolves through the preflight slot and `offline`
 through the postflight one, because each is a refinement of that screen rather than a screen
 beside it. With the switch off, one theme covers every phase and the phase keys keep their

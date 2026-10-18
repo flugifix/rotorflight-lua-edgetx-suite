@@ -12,7 +12,7 @@ gauges against, the values it puts in its rows, the colours it uses. Nothing her
 of the suite: what a tile opens is written by the theme, so two radios with different themes
 installed see different pages.
 
-Which theme a model actually shows is chosen on [*Design*](theme.md), and a theme keeps its
+Which theme a model actually shows is chosen on [*Theme*](theme.md), and a theme keeps its
 settings whether or not it is the one in use.
 
 The theme tiles edit the **standard values**, which every model without settings of its own uses; the first
@@ -38,7 +38,7 @@ page, for one -- while its tiles are made, sixteen at a time, and then all of th
 
 | Setting | What it does |
 | --- | --- |
-| Per-Model Settings | The first tile, only while a flight controller is connected and per-model settings are on for its model (see [*Design*](theme.md)). Opens [the list of what that model changes](overrides.md), and from there the settings of each theme that model draws, for that model alone. |
+| Per-Model Settings | The first tile, only while a flight controller is connected and per-model settings are on for its model (see [*Theme*](theme.md)). Opens [the list of what that model changes](overrides.md), and from there the settings of each theme that model draws, for that model alone. |
 | *(one tile per theme)* | Opens that theme's standard settings. What the page holds is the theme's own business; several of the shipped themes offer the battery voltage bounds their gauges are scaled to. |
 
 ### Default
@@ -61,7 +61,7 @@ page fits the screen. Themes that do not split show their settings directly.
   standard values whether or not a flight controller is connected, and a theme opened from
   *Per-Model Settings* stores the model's values — only those that differ from the standard. A
   model reads its own values only while per-model settings are on for it; switching them off on
-  *Design* keeps the values and ignores them.
+  *Theme* keeps the values and ignores them.
 - A save says *Saved* only when its values reached the card. A theme opened from *Per-Model
   Settings* stores them in the model's own file, so the save reports that file: where the card
   refuses it, the page shows *Save failed: the settings file could not be written to the SD card*,
@@ -72,7 +72,7 @@ page fits the screen. Themes that do not split show their settings directly.
   answer.
 - A card from an earlier version may hold per-model theme settings saved while a flight
   controller was connected. Such a model keeps using them, and they are listed under *Per-Model
-  Settings*, until the switches on *Design* are saved off.
+  Settings*, until the switches on *Theme* are saved off.
 - A card from an earlier version may also hold, in the radio's own settings, a copy of a value
   that was saved for a model. Earlier versions removed that copy whenever the theme was saved for
   a model; this one does not, because such a copy cannot be told apart from a standard value set

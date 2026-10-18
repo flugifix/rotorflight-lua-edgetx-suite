@@ -8,7 +8,7 @@ sidebar_position: 40
 
 RFSuite loads dashboard themes from two folders: the shipped ones from `/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/themes/`, and yours from the user folder at `/SCRIPTS/TOOLS/rfsuite.user/dashboard/`. A theme folder goes directly in there — `/SCRIPTS/TOOLS/rfsuite.user/dashboard/mytheme/init.lua`, with no `themes` level in between.
 
-Both folders are listed, so a theme in the user folder is an additional choice in the theme selector under *System* → *Settings* → *Dashboard* → *Design* rather than a replacement: a copy that keeps the original's `name` appears in the list twice, once for each folder. Give a copy a name of its own.
+Both folders are listed, so a theme in the user folder is an additional choice in the theme selector under *System* → *Settings* → *Dashboard* → *Theme* rather than a replacement: a copy that keeps the original's `name` appears in the list twice, once for each folder. Give a copy a name of its own.
 
 ## Structure of a theme
 
