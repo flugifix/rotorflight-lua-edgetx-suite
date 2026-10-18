@@ -181,6 +181,27 @@ on the radio and on for that model (`DashboardLib.modelOverridesActive`) — the
 model theme is a context of its own, so an unset phase override falls back to the model's theme
 rather than jumping to the global one.
 
+### How long a theme stays loaded
+
+A module a theme loads through `rfsuite.require` is kept in the suite's module cache, and a
+shipped theme also caches its shared modules in a global of its own,
+`__rfsuiteTheme<Folder><File>Module` (`urban/layout.lua` as `__rfsuiteThemeUrbanLayoutModule`,
+`@aerc/common.lua` as `__rfsuiteThemeAercCommonModule`: a leading `@` dropped, the folder cut at
+its first `-`). Both are held only while some dashboard widget uses the theme. When a widget moves
+to a theme in another folder, every theme folder that no dashboard widget uses — on screen, or
+chosen for any of the three slots above — is released: its module cache entries and the globals
+named after them. The next time that theme is shown it is read from the card again, as on its
+first load. `default` is never released: the box objects of every declarative theme draw with its
+`common.lua`, and its phase modules are the fallback when another theme does not load.
+
+So keep nothing at module level that has to outlive the theme being left: a cache derived from the
+inputs of a build is fine, because it is rebuilt on the first build after a reload; a reading
+that has to persist across a theme switch belongs on the host's `state`. A phase change within one
+theme, and a settings save that keeps the theme, release nothing. A tree on screen, an open view
+and the settings page each keep the module they already hold; only the shared roots are dropped. A
+global named any other way is not released, and stays loaded for the life of the Lua state as
+before.
+
 ## What a phase module returns
 
 A phase module returns a table, and there are two kinds of theme. The widget decides which by

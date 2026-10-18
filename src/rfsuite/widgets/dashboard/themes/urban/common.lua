@@ -1255,8 +1255,8 @@ local function ownLookup(state, derived)
 end
 
 -- The picture's own size, so the panel can top-anchor it at its true aspect ratio rather than
--- centring it in its slot. Bitmap.open loads the file, so it is asked once per path for the life
--- of the Lua state; a firmware without Bitmap answers nil and the image fills its slot.
+-- centring it in its slot. Bitmap.open loads the file, so it is asked once per path for as long
+-- as this module is loaded; a firmware without Bitmap answers nil and the image fills its slot.
 local sizes = {}
 
 function M.imageSize(path)

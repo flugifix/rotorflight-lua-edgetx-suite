@@ -1,10 +1,11 @@
 -- The panels the flight view and the statistics view are assembled from.
 --
 -- Split off common.lua only for size: the drawing primitives and the value getters are
--- there, the arrangement is here. Both are loaded once per Lua state and cached on _G, the
--- same way the shipped themes cache theirs. This module is the theme's whole surface to the
--- phase modules: buildFlight, buildStats, sources and renderKey, so that a phase module is
--- one require and a few forwards.
+-- there, the arrangement is here. Both are cached on _G, the same way the shipped themes cache
+-- theirs, until the dashboard releases a theme no widget uses any more (releaseUnusedThemes in
+-- widgets/dashboard/runtime.lua): module state here starts afresh when the theme is shown again.
+-- This module is the theme's whole surface to the phase modules: buildFlight, buildStats,
+-- sources and renderKey, so that a phase module is one require and a few forwards.
 --
 -- The look: a header (the menu and tool glyphs, the model name, the link cluster, the clock and
 -- the radio battery), a left column of three cards, a right column with one big card over a row
