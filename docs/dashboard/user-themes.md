@@ -110,14 +110,22 @@ For governor status boxes (`type = "text"`, `source = "governor"`), thresholds c
   label = "GOV",
   thresholds = {
     { value = "DISARMED", textcolor = "grey" },
-    { value = "SPOOLING", textcolor = "orange" },
+    { value = "SPOOLUP", textcolor = "orange" },
     { value = "ACTIVE", textcolor = "green" },
     { value = "RECOVERY", textcolor = "red" },
   }
 }
 ```
 
-Values match either translated labels or internal state names, ensuring custom color schemes function across all radio languages.
+Use the internal state names in thresholds: `OFF`, `IDLE`, `SPOOLUP`, `RECOVERY`, `ACTIVE`,
+`THROFF`, `LOSTHS`, `AUTOROT`, `BAILOUT`, `DISABLED`, and `DISARMED`. The widget first tries the
+displayed label and then these names, so the internal form keeps a user theme independent of the
+radio language.
+
+Write box and page titles in the plain text you want displayed. The installed archive contains
+the i18n runtime (`i18n/init.lua`) but no locale bundles; `@i18n(...)@` markers in a user theme are
+therefore not translated at runtime. The markers in the themes shipped with RFSuite work because
+the package builder replaces them before the archive is created.
 
 In governor modes OFF and LIMIT the flight controller keeps no governor state, so while the model is armed the box shows the mode instead, and its internal names are `MODE_OFF` and `MODE_LIMIT`. A threshold on a state name such as `OFF` does not match there.
 
