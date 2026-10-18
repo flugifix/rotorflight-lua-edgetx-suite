@@ -664,6 +664,10 @@ function M.verdict(drive)
   if drive._checkedAt == nil then
     drive._checkedAt = drive.radio.now()
     drive._checkResult = Setup.check(drive)
+    -- What the surface shows, kept apart from the cache: a forget (the switch let go, the settings
+    -- moved) empties the cache for the next pass to fill, and the published refusal stands until a
+    -- verdict has actually been taken again -- rather than dropping to the theme for that one pass.
+    drive._checkFault = type(drive._checkResult) == "table"
   end
   return drive._checkResult
 end
@@ -1626,6 +1630,9 @@ function M.get(widget)
     -- and the setup verdict with it: a changed channel, variable or trim is a different question
     -- for the walk, and the answer gates the drive as well as filling the line on the screen.
     drive:forgetVerdict()
+    -- The refusal shown goes too: with the trims to walk again the next verdict can be a while
+    -- coming, and the old one describes settings that are gone.
+    drive._checkFault = nil
     drive.trimsResolved = false
     -- and with it whatever a walk in progress had collected: a half-read list belongs to the
     -- settings it was started under.
@@ -1683,7 +1690,7 @@ local function publish(widget, drive)
   -- and whether the surface has a refusal to show. Neither the switch closing nor a verdict being
   -- taken moves an epoch -- the first verdict after the walk is taken on a pass after the snapshot
   -- was built -- so the guard below watches the answer itself.
-  local setupFault = type(drive._checkResult) == "table" or trimsChecking
+  local setupFault = drive._checkFault == true or trimsChecking
   if type(snapshot) == "table" and snapshot.epoch == epoch
     and snapshot.reportEpoch == reportEpoch
     and snapshot.setupFault == setupFault
