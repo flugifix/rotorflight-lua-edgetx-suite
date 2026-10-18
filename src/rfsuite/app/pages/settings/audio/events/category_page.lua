@@ -155,6 +155,31 @@ local CONFIG_SCHEMA = {
   -- so a radio that never opens this page announces nothing new.
   { key = "rescue_active",     type = "bool", default = false, section = "rescue" },
   { key = "rescue_off",        type = "bool", default = false, section = "rescue" },
+  -- Raise Volume, one switch per alarm: in the Master volume mode of Settings > Audio > Volume the
+  -- master volume goes to the Alert Level right before that alarm's critical announcement plays
+  -- (its upper level, or its only one) and back a few seconds after the last (lib/audio.lua,
+  -- tryPlayAlertFile). On for every alarm, so a pilot who sets up the master volume hears every
+  -- alarm raised without visiting four pages; off for telemetry dropouts, a rate of missed frames
+  -- rather than a danger in itself. The BEC and the RX voltage alert share one switch: only one of
+  -- the two is on at a time (Setup > Power > Alerts). No effect in the other modes, and none on the
+  -- haptic. Each row is drawn only while its alarm is switched on, as the governor's state rows are:
+  -- a volume rule for an alarm that is off says nothing, and a page whose alarms are off costs
+  -- what it did. The BEC/RX row has no switch on its page to follow and is always drawn.
+  { key = "voltage_raise",         type = "bool", default = true,  section = "voltage" },
+  { key = "main_power_raise",      type = "bool", default = true,  section = "voltage" },
+  { key = "bec_rx_raise",          type = "bool", default = true,  section = "voltage" },
+  { key = "esc_temperature_raise", type = "bool", default = true,  section = "esc" },
+  { key = "mcu_temperature_raise", type = "bool", default = true,  section = "esc" },
+  { key = "esc_load_raise",        type = "bool", default = true,  section = "esc" },
+  { key = "lq_raise",              type = "bool", default = true,  section = "link" },
+  { key = "telemetry_lost_raise",  type = "bool", default = true,  section = "link" },
+  { key = "tpwr_raise",            type = "bool", default = true,  section = "link" },
+  { key = "rssi_raise",            type = "bool", default = true,  section = "link" },
+  { key = "trss_raise",            type = "bool", default = true,  section = "link" },
+  { key = "rsnr_raise",            type = "bool", default = true,  section = "link" },
+  { key = "tsnr_raise",            type = "bool", default = true,  section = "link" },
+  { key = "dropouts_raise",        type = "bool", default = false, section = "link" },
+  { key = "fuel_empty_raise",      type = "bool", default = true,  section = "fuel" },
 }
 
 -- One enable per governor state, under the `governor_state` master switch. They default to on,
@@ -211,6 +236,8 @@ local SECTIONS = {
     titleFallback = "Voltage",
     items = {
       { key = "voltage_alert", labelKey = "voltage_alert", labelFallback = "Voltage" },
+      { kind = "bool", key = "voltage_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "voltage_alert" },
       { kind = "number", key = "voltage_hold", labelKey = "voltage_hold", labelFallback = "Hold (s)",
         suffix = " s", enabledBy = "voltage_alert" },
       { kind = "number", key = "voltage_reset", labelKey = "voltage_reset", labelFallback = "Reset (mV/cell)",
@@ -219,12 +246,17 @@ local SECTIONS = {
       -- different event that happens to be read off the same sensor.
       { kind = "subheader", labelKey = "section_main_power", labelFallback = "Main Power" },
       { kind = "bool", key = "main_power_lost", labelKey = "main_power_lost", labelFallback = "Main Power Lost" },
+      { kind = "bool", key = "main_power_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "main_power_lost" },
       { kind = "subheader", labelKey = "section_alert_behaviour", labelFallback = "Alert Behaviour" },
       -- No enabledBy: besides the alert above it governs the main pack coming back and the pack
       -- check on connect, which do not depend on the Voltage switch.
       { kind = "choice", key = "voltage_announce", labelKey = "voltage_announce", labelFallback = "Announce as" },
       { kind = "choice", key = "voltage_repeat", labelKey = "alert_repeat", labelFallback = "Repeat" },
       { kind = "bool", key = "voltage_haptic", labelKey = "alert_haptic", labelFallback = "Haptic" },
+      -- Beside the Repeat and Haptic rows that already govern the BEC/RX alert, which has no row of
+      -- its own on this page: it is switched on under Setup > Power > Alerts.
+      { kind = "bool", key = "bec_rx_raise", labelKey = "bec_rx_raise", labelFallback = "Raise Volume BEC/RX" },
     },
   },
   profiles = {
@@ -240,12 +272,16 @@ local SECTIONS = {
     titleFallback = "ESC Temperature",
     items = {
       { kind = "bool", key = "esc_temperature", labelKey = "esc_temperature", labelFallback = "ESC Temperature" },
+      { kind = "bool", key = "esc_temperature_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "esc_temperature" },
       { kind = "number", key = "esc_threshold", labelKey = "esc_threshold", labelFallback = "Warning", suffix = "°C",
         temperature = true, enabledBy = "esc_temperature" },
       { kind = "number", key = "esc_critical", labelKey = "esc_critical", labelFallback = "Critical", suffix = "°C",
         temperature = true, enabledBy = "esc_temperature" },
       { kind = "subheader", labelKey = "section_mcu", labelFallback = "MCU Temperature" },
       { kind = "bool", key = "mcu_temperature", labelKey = "mcu_temperature", labelFallback = "MCU Temperature" },
+      { kind = "bool", key = "mcu_temperature_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "mcu_temperature" },
       -- The labels of the ESC levels, on purpose: the rows say the same thing, and the
       -- subheader above them is what tells the two pairs apart. modelScopeLabel keys on
       -- the row's own key, so these carry no [Model] marker.
@@ -257,6 +293,8 @@ local SECTIONS = {
       -- rows mean the same thing, and the subheader says which alert they belong to.
       { kind = "subheader", labelKey = "section_esc_load", labelFallback = "ESC Load" },
       { kind = "bool", key = "esc_load", labelKey = "esc_load", labelFallback = "ESC Load" },
+      { kind = "bool", key = "esc_load_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "esc_load" },
       { kind = "number", key = "esc_load_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
         step = 5, enabledBy = "esc_load" },
       { kind = "number", key = "esc_load_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
@@ -273,13 +311,19 @@ local SECTIONS = {
     titleFallback = "Link Quality",
     items = {
       { kind = "bool", key = "lq_alert", labelKey = "lq_alert", labelFallback = "Link Quality" },
+      { kind = "bool", key = "lq_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "lq_alert" },
       { kind = "number", key = "lq_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
         enabledBy = "lq_alert" },
       { kind = "number", key = "lq_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
         enabledBy = "lq_alert" },
       { kind = "subheader", labelKey = "section_telemetry", labelFallback = "Telemetry" },
       { kind = "bool", key = "telemetry_lost", labelKey = "telemetry_lost", labelFallback = "Telemetry Lost" },
+      { kind = "bool", key = "telemetry_lost_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "telemetry_lost" },
       { kind = "bool", key = "dropouts_alert", labelKey = "dropouts_alert", labelFallback = "Telemetry Dropouts" },
+      { kind = "bool", key = "dropouts_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "dropouts_alert" },
       { kind = "number", key = "dropouts_count", labelKey = "dropouts_count", labelFallback = "Dropouts",
         enabledBy = "dropouts_alert" },
       { kind = "number", key = "dropouts_window", labelKey = "dropouts_window", labelFallback = "Window (s)",
@@ -288,6 +332,8 @@ local SECTIONS = {
       -- the voltage page's: they say the same thing, and the subheader tells the alerts apart.
       { kind = "subheader", labelKey = "section_tx_power", labelFallback = "TX Power" },
       { kind = "bool", key = "tpwr_alert", labelKey = "tpwr_alert", labelFallback = "TX Power" },
+      { kind = "bool", key = "tpwr_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "tpwr_alert" },
       { kind = "number", key = "tpwr_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
         enabledBy = "tpwr_alert" },
       { kind = "number", key = "tpwr_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
@@ -300,6 +346,8 @@ local SECTIONS = {
       -- rows mean the same thing, and the subheader says which alert they belong to.
       { kind = "subheader", labelKey = "rssi_alert", labelFallback = "RSSI" },
       { kind = "bool", key = "rssi_alert", labelKey = "rssi_alert", labelFallback = "RSSI" },
+      { kind = "bool", key = "rssi_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "rssi_alert" },
       { kind = "number", key = "rssi_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
         enabledBy = "rssi_alert" },
       { kind = "number", key = "rssi_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
@@ -308,6 +356,8 @@ local SECTIONS = {
         enabledBy = "rssi_alert" },
       { kind = "subheader", labelKey = "trss_alert", labelFallback = "Downlink" },
       { kind = "bool", key = "trss_alert", labelKey = "trss_alert", labelFallback = "Downlink" },
+      { kind = "bool", key = "trss_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "trss_alert" },
       { kind = "number", key = "trss_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
         enabledBy = "trss_alert" },
       { kind = "number", key = "trss_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
@@ -316,6 +366,8 @@ local SECTIONS = {
         enabledBy = "trss_alert" },
       { kind = "subheader", labelKey = "rsnr_alert", labelFallback = "SNR" },
       { kind = "bool", key = "rsnr_alert", labelKey = "rsnr_alert", labelFallback = "SNR" },
+      { kind = "bool", key = "rsnr_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "rsnr_alert" },
       { kind = "number", key = "rsnr_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
         enabledBy = "rsnr_alert" },
       { kind = "number", key = "rsnr_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
@@ -324,6 +376,8 @@ local SECTIONS = {
         enabledBy = "rsnr_alert" },
       { kind = "subheader", labelKey = "tsnr_alert", labelFallback = "Downlink SNR" },
       { kind = "bool", key = "tsnr_alert", labelKey = "tsnr_alert", labelFallback = "Downlink SNR" },
+      { kind = "bool", key = "tsnr_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "tsnr_alert" },
       { kind = "number", key = "tsnr_warn", labelKey = "lq_warn", labelFallback = "Warning (%)", suffix = "%",
         enabledBy = "tsnr_alert" },
       { kind = "number", key = "tsnr_critical", labelKey = "lq_critical", labelFallback = "Critical (%)", suffix = "%",
@@ -357,6 +411,8 @@ local SECTIONS = {
       { kind = "choice", key = "fuel_repeat_below_zero", labelKey = "alert_repeat", labelFallback = "Repeat",
         enabledBy = "fuel_alerts" },
       { kind = "bool", key = "fuel_haptic_below_zero", labelKey = "alert_haptic", labelFallback = "Haptic" },
+      { kind = "bool", key = "fuel_empty_raise", labelKey = "alert_raise", labelFallback = "Raise Volume",
+        requires = "fuel_alerts" },
     },
   },
   -- The rows in the order lib/audio.lua speaks them after a connect. The dashboard's audio pass
@@ -427,6 +483,7 @@ local ROW_HELP = {
     return texts
   end,
   voltage = function(t, i18n)
+    local event = t(i18n, "help_raise_event")
     return {
       voltage_alert = t(i18n, "help_voltage_alert"),
       voltage_hold = t(i18n, "help_voltage_hold"),
@@ -435,6 +492,9 @@ local ROW_HELP = {
       voltage_announce = t(i18n, "help_voltage_announce"),
       voltage_repeat = t(i18n, "help_voltage_repeat"),
       voltage_haptic = t(i18n, "help_voltage_haptic"),
+      voltage_raise = t(i18n, "help_voltage_raise"),
+      main_power_raise = event,
+      bec_rx_raise = t(i18n, "help_bec_rx_raise"),
     }
   end,
   profiles = function(t, i18n)
@@ -444,6 +504,7 @@ local ROW_HELP = {
     }
   end,
   esc = function(t, i18n)
+    local critical = t(i18n, "help_raise_critical")
     return {
       esc_temperature = t(i18n, "help_esc_temperature"),
       esc_threshold = t(i18n, "help_esc_threshold"),
@@ -457,6 +518,9 @@ local ROW_HELP = {
       mcu_critical = t(i18n, "help_mcu_critical"),
       esc_repeat = t(i18n, "help_esc_repeat"),
       esc_haptic = t(i18n, "help_esc_haptic"),
+      esc_temperature_raise = critical,
+      mcu_temperature_raise = critical,
+      esc_load_raise = critical,
     }
   end,
   adjustment = function(t, i18n)
@@ -470,6 +534,7 @@ local ROW_HELP = {
       fuel_callout_percent = t(i18n, "help_fuel_callout_percent"),
       fuel_repeat_below_zero = t(i18n, "help_fuel_repeat_below_zero"),
       fuel_haptic_below_zero = t(i18n, "help_fuel_haptic_below_zero"),
+      fuel_empty_raise = t(i18n, "help_fuel_empty_raise"),
     }
   end,
   -- The RSSI and Downlink rows share their three level texts, and so do the two SNR alerts:
@@ -481,6 +546,7 @@ local ROW_HELP = {
     local snrWarn = t(i18n, "help_snr_warn")
     local snrCritical = t(i18n, "help_snr_critical")
     local snrHold = t(i18n, "help_snr_hold")
+    local critical = t(i18n, "help_raise_critical")
     return {
       lq_alert = t(i18n, "help_lq_alert"),
       lq_warn = t(i18n, "help_lq_warn"),
@@ -513,6 +579,14 @@ local ROW_HELP = {
       dropouts_window = t(i18n, "help_dropouts_window"),
       link_repeat = t(i18n, "help_link_repeat"),
       link_haptic = t(i18n, "help_link_haptic"),
+      lq_raise = critical,
+      telemetry_lost_raise = t(i18n, "help_raise_event"),
+      tpwr_raise = critical,
+      rssi_raise = critical,
+      trss_raise = critical,
+      rsnr_raise = critical,
+      tsnr_raise = critical,
+      dropouts_raise = t(i18n, "help_dropouts_raise"),
     }
   end,
   rescue = function(t, i18n)

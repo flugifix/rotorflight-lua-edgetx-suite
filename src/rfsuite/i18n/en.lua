@@ -845,11 +845,11 @@ return {
         save_error_message = "Save failed",
         help_message = "One mode at a time, because a callout level under the master volume can only make the announcements quieter.\nOff (radio default): the radio's own volumes; the suite writes nothing.\nCallout level: every announcement at the level set here; the master volume stays with the pot.\nMaster volume: the suite sets the radio's whole volume through a global variable; the model setup is on the docs page.",
         help_mode = "Mode: Off leaves the volume to the radio; Callout level sets how loud the announcements play; Master volume sets the radio's whole volume through a global variable.",
-        help_connected_only = "Connected only: on, the mode acts only while the link is up (the Alert Level also in a critical alert); off, from the start, and in Master volume the pot then stays overridden.",
+        help_connected_only = "Connected only: on, the mode acts only while the link is up; off, from the start, and in Master volume the pot then stays overridden.",
         help_level = "Level: 1 to 5 for every announcement and the number after it; 3 plays as loud as the radio's Wav volume 0, 5 is the loudest.",
         help_master_gvar = "Global Variable: the GV the suite writes the master volume to, -1024 when it lets go. Only the GVs this radio has are listed; Mode Off turns the master volume off.",
-        help_master_normal = "Normal Level (%): written while no critical alert is active; with Connected only on, only while the link is up.",
-        help_master_alert = "Alert Level (%): written while any critical alert is active.",
+        help_master_normal = "Normal Level (%): the master volume the suite writes; with Connected only on, only while the link is up.",
+        help_master_alert = "Alert Level (%): written right before a critical alarm speaks and kept until 8 s after the last one; which alarms, the Raise Volume switches under Events say.",
         chain = "Model chain",
         chain_unreadable = "This radio does not answer the questions the check needs.",
         chain_ok = "\xEF\x80\x8C",
@@ -992,6 +992,8 @@ return {
         model_announcement = "Model Name",
         rescue_active = "Rescue Active",
         rescue_off = "Rescue Off",
+        alert_raise = "Raise Volume",
+        bec_rx_raise = "Raise Volume BEC/RX",
         help_model_announcement = "Plays the sound file named after the model, SOUNDS/<name>.wav, once when the model connects. Nothing is said if the card has no such file. Off by default.",
         help_battery_profile = "Speaks the active battery profile's capacity in mAh when the model connects and whenever the profile changes; the profile number if no capacity is set. On by default.",
         help_pack_not_full = "Once when the model connects: warns if the voltage per cell is below Max cell voltage (Setup > Power > Battery) less the margin below, spoken as set under Voltage > Announce as. Off by default.",
@@ -1000,12 +1002,12 @@ return {
         help_arming_flags = "Speaks when the model is armed and when it is disarmed. On by default.",
         help_governor_state = "Speaks the governor's state when it changes, once the new state has held for a moment. Choose below which states are spoken. On by default.",
         help_governor_state_row = "Whether this state is spoken when the governor enters it. Shown only while Governor State is on. On by default.",
-        help_voltage_alert = "Speaks when the pack voltage falls below Warn cell voltage (Setup > Power > Battery) times the cell count, with the voltage spoken as set under Announce as. On by default.",
+        help_voltage_alert = "Speaks when the pack voltage falls below Warn cell voltage (Setup > Power > Battery) times the cell count, and anew below Min cell voltage, the voltage as set under Announce as. On by default.",
         help_voltage_hold = "How long the voltage has to stay below that line before it is spoken, so a short sag under load stays quiet. 0 speaks at once. Default 2 s.",
         help_voltage_reset = "How far above that line the voltage has to come back, in millivolts per cell, before the alert counts as cleared and Repeat starts over (50 to 500). Default 100 mV.",
         help_main_power_lost = "Speaks when the main pack is gone while the flight controller still runs on a BEC or backup battery, with the BEC voltage, and again with the pack voltage when the pack is back. Off by default.",
         help_voltage_announce = "Pack speaks the pack voltage, Cell the voltage per cell with two decimals. For Voltage, the pack coming back and Pack Not Full (On Connect), not for a BEC voltage. Default Pack.",
-        help_voltage_repeat = "How often a voltage alert speaks while its condition lasts, 10 s apart: until cleared, or 1 to 10 times. Voltage is cleared once it is back above the line plus Reset.\nApplies to Voltage, Main Power Lost and the BEC/RX alert of Setup > Power > Alerts.",
+        help_voltage_repeat = "How often Voltage, Main Power Lost and the BEC/RX alert speak while they last, 10 s apart: until cleared, or 1 to 10 times. Voltage counts anew below Min and once back above the line plus Reset.",
         help_voltage_haptic = "Whether the transmitter vibrates with Voltage, Main Power Lost and the BEC/RX alert. On by default.",
         help_pid_profile = "Speaks the PID profile's number when it changes. On by default.",
         help_rate_profile = "Speaks the rate profile's number when it changes. On by default.",
@@ -1053,6 +1055,12 @@ return {
         help_link_haptic = "Whether the transmitter vibrates with the critical level of Link Quality, RSSI, Downlink, both SNR and TX Power, and with Telemetry Lost. Telemetry Dropouts never vibrates. On by default.",
         help_rescue_active = "Speaks once when the flight controller starts a rescue, whichever phase it starts in. Off by default.",
         help_rescue_off = "Speaks once when the rescue is over and the flight controller is back to normal control. Off by default.",
+        help_raise_critical = "Master volume mode only: this alert's critical level is spoken at the Alert Level, and the Normal Level is back 8 s after the last time. Vibration unchanged. On by default.",
+        help_raise_event = "Master volume mode only: this alert is spoken at the Alert Level, and the Normal Level is back 8 s after the last time. Vibration unchanged. On by default.",
+        help_voltage_raise = "Master volume mode only: once the pack has also held under Min cell voltage times the cells for Hold, each announcement until cleared at the Alert Level, Normal 8 s after. On by default.",
+        help_bec_rx_raise = "Master volume mode only: the BEC/RX alert of Setup > Power > Alerts is spoken at the Alert Level, the Normal Level back 8 s after the last time. On by default.",
+        help_fuel_empty_raise = "Master volume mode only: the warning at 0 % is spoken at the Alert Level, not the steps above it; the Normal Level is back 8 s later. On by default.",
+        help_dropouts_raise = "Master volume mode only: Telemetry Dropouts is spoken at the Alert Level, and the Normal Level is back 8 s after the last time. Off by default.",
         help_message = "Use this section to configure which system events and telemetry values will trigger voice announcements or alerts.",
         saved_title = "Saved",
         saved_message = "Audio events saved",
@@ -1069,22 +1077,22 @@ return {
         help_message = "Announces the governor's state as it changes."
       },
       settings_audio_events_voltage = {
-        help_message = "Alerts about the flight pack's voltage and the model's power supply.\nVoltage: speaks below Warn cell voltage times the cell count.\nHold (s): how long it has to stay below first; 0 speaks at once.\nReset (mV/cell): how far per cell it must recover above the line.\nMain Power Lost: the pack is gone while a BEC keeps the model running.\nAnnounce as: the pack voltage, or the voltage per cell.\nRepeat: how often an alert speaks until cleared, 10 s apart.\nHaptic: vibrates with these alerts."
+        help_message = "Voltage: speaks below Warn cell voltage times the cell count, anew below Min.\nRaise Volume: Master volume only; at the Alert Level, Voltage only below Min.\nHold (s): how long it has to stay below first; 0 speaks at once.\nReset (mV/cell): how far per cell it must recover above the line.\nMain Power Lost: the pack is gone while a BEC keeps the model running.\nAnnounce as: pack voltage, or voltage per cell.\nRepeat: how often an alert speaks until cleared, 10 s apart.\nHaptic: vibrates with these alerts.\nRaise Volume BEC/RX: the same for the BEC/RX alert of Setup > Power > Alerts."
       },
       settings_audio_events_profiles = {
         help_message = "Announces a change of PID or rate profile."
       },
       settings_audio_events_esc = {
-        help_message = "ESC Temperature: speaks the temperature at a level; recovering is silent. Warning and Critical are the two levels, kept with the model, and only Critical vibrates.\nMCU Temperature: the same two levels for the MCU, radio-wide.\nESC Load: the current as a % of ESC Current Limit (Setup > Power > Preferences); armed only, silent without a limit. Warning and Critical (%) are its two levels; only Critical vibrates.\nHold (s): how long the load must stay at a level first.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at the critical levels."
+        help_message = "ESC Temperature: spoken at Warning and Critical, kept with the model; recovering is silent, only Critical vibrates.\nRaise Volume: Master volume only; the critical level at the Alert Level.\nMCU Temperature: the same two levels for the MCU, radio-wide.\nESC Load: the current in % of ESC Current Limit (Setup > Power > Preferences), armed only, at Warning (%) and Critical (%).\nHold (s): how long the load must stay at a level first.\nRepeat: how often an alert speaks while it holds, 10 s apart.\nHaptic: vibrates at the critical levels."
       },
       settings_audio_events_adjustment = {
         help_message = "Announces values changed with the flight controller's adjustment functions."
       },
       settings_audio_events_fuel = {
-        help_message = "Callouts of the SmartFuel level while the model is connected.\nThe flight controller computes the value when SmartFuel is on there (Setup > Power > SmartFuel, MSP API 12.0.9 or later).\nOtherwise the radio computes it from the local source set in Setup > Power > Preferences."
+        help_message = "Callouts of the SmartFuel level while connected: computed by the flight controller with SmartFuel on (MSP API 12.0.9 or later), else by the radio (Setup > Power > Preferences).\nSmartFuel: the falling level at the steps below, and a warning at 0 %.\nCallout %: the steps at which the level is spoken.\nRepeat: how often the warning at 0 % speaks, 10 s apart.\nHaptic: vibrates with the warning at 0 %.\nRaise Volume: Master volume only; the warning at 0 % at the Alert Level."
       },
       settings_audio_events_link = {
-        help_message = "Alerts about the radio link and telemetry.\nLink Quality, RSSI, Downlink and both SNR: spoken when each falls to a level; the signal ones measure the headroom over the air rate's floor or the SNR between its thresholds; only Critical vibrates.\nTelemetry Lost: armed, the controller stops.\nTelemetry Dropouts: armed, its frames go missing too often; Dropouts is how many gaps, Window (s) the time.\nTX Power: armed, power in % of the maximum, dynamic only; Own Maximum sets it.\nHold (s): how long a level must hold first. Repeat: how often an alert speaks, 10 s apart. Haptic: vibrates at Critical."
+        help_message = "Link Quality, RSSI, Downlink and both SNR: spoken at each level; the signal ones as headroom over the air rate's floor or SNR between its thresholds; only Critical vibrates.\nRaise Volume: Master volume only; the top level at the Alert Level.\nTelemetry Lost: armed, the controller stops.\nTelemetry Dropouts: armed, frames missing too often; Dropouts: how many gaps, Window (s): the time.\nTX Power: armed, power in % of the maximum, dynamic only; Own Maximum sets it.\nHold (s): how long a level must hold first. Repeat: how often an alert speaks, 10 s apart. Haptic: vibrates at Critical."
       },
       settings_audio_events_rescue = {
         help_message = "Announces the start and the end of a rescue, once each and without vibration. Needs the Rescue State (92) or System Status (120) sensor, Setup > Telemetry.\nRescue Active: spoken as soon as a rescue starts.\nRescue Off: spoken when the rescue is over."
