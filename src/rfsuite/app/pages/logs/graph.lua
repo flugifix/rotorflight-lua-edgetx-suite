@@ -154,7 +154,7 @@ local function feedLine(onLine, str, s, e, off)
   return nil
 end
 
--- Gives up the unfinished line that starts at byte `off` of the file: pumpLines skips to the next
+-- Gives up the unfinished line starting at offset `off` of the file: pumpLines skips to the next
 -- line end. One debug line per dropped line, reached through the global the log module publishes;
 -- debug, because a level that always reaches the log ring would let one damaged file push
 -- everything else out of it, and at debug nothing is formatted unless the level is switched on.
@@ -163,7 +163,7 @@ local function dropRow(off)
   local Log = type(_G) == "table" and _G.rfsuite and _G.rfsuite.Log
   if type(Log) == "table" and type(Log.emitf) == "function" then
     pcall(Log.emitf, "rfsuite.logs", "debug",
-      "%s: no line end within %d bytes from byte %d, skipped to the next line",
+      "%s: no line end within %d bytes at offset %d, skipped to the next line",
       tostring(S.path), MAX_LINE_LEN, off)
   end
 end

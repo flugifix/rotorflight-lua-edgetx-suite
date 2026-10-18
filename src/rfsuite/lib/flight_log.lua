@@ -416,7 +416,7 @@ local function logDroppedRow(offset)
   local Log = type(_G) == "table" and _G.rfsuite and _G.rfsuite.Log
   if type(Log) == "table" and type(Log.emitf) == "function" then
     pcall(Log.emitf, "rfsuite.flight_log", "debug",
-      "flight log: no line end within %d bytes from byte %d, skipped to the next line",
+      "flight log: no line end within %d bytes at offset %d, skipped to the next line",
       MAX_LINE_LEN, offset)
   end
 end
