@@ -403,18 +403,19 @@ function M.onHelp(ctx)
 end
 
 -- lib/audio.lua through the suite's module cache where there is one, so the beep plays at the level
--- the tool's own announcements are at; loaded on the first beep, and not again after a failure.
+-- the tool's own announcements are at; looked up on the first beep and again after a failed lookup,
+-- so one load that fails does not leave every later beep at the radio's own volume.
 local Audio = nil
 
 local function beep()
-  if Audio == nil then
+  if not Audio then
     local mod = nil
     if _G.rfsuite and type(_G.rfsuite.require) == "function" then
       local ok, m = pcall(_G.rfsuite.require, "lib/audio.lua")
       if ok then mod = m end
     end
     if type(mod) ~= "table" then mod = loadModule("lib/audio.lua") end
-    Audio = (type(mod) == "table" and type(mod.playRawFile) == "function") and mod or false
+    if type(mod) == "table" and type(mod.playRawFile) == "function" then Audio = mod end
   end
   if Audio then
     Audio.playRawFile("/SOUNDS/rf/beep.wav")
