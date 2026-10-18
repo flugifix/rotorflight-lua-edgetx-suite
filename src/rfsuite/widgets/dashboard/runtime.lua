@@ -1731,14 +1731,16 @@ end
 
 local function updateConnectionState(self)
   local runtimeState = nil
-  local mspProgress = nil
+  local mspDone, mspTotal = nil, nil
   if MspRuntime and type(MspRuntime.getState) == "function" then
     runtimeState = MspRuntime.getState()
   elseif Rf2Runtime and type(Rf2Runtime.getState) == "function" then
     runtimeState = Rf2Runtime.getState()
   end
-  if MspRuntime and type(MspRuntime.getProgress) == "function" then
-    mspProgress = MspRuntime.getProgress()
+  -- The plain-value form, not getProgress(): this runs on every logic tick, and the table form
+  -- would be a new table per tick for as long as the widget runs.
+  if MspRuntime and type(MspRuntime.getProgressValues) == "function" then
+    mspDone, mspTotal = MspRuntime.getProgressValues()
   end
   local connected = type(runtimeState) == "table" and runtimeState.lastConnected == true
   local fblConnected = false
@@ -1783,8 +1785,8 @@ local function updateConnectionState(self)
   local rfReady = self.state.rfTelemetrySeen == true
   
   local tasksDone = true
-  if mspProgress and type(mspProgress.total) == "number" and type(mspProgress.done) == "number" then
-    tasksDone = (mspProgress.done >= mspProgress.total)
+  if type(mspTotal) == "number" and type(mspDone) == "number" then
+    tasksDone = (mspDone >= mspTotal)
   end
 
   local onconnectActive = false
