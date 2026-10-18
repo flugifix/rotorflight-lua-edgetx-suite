@@ -22,7 +22,9 @@ The two cannot be combined because they multiply: the level scales the sound fil
 * **Connected only:** shown in both modes, under *Mode*.
   * **On:** the mode acts only while the radio's link to the model is up, so bench and menu work stays at the radio's own volume. In *Master volume* the pot rules until the link comes up, the *Normal Level* is written then, and `-1024` is written when the link goes down, also while an alarm has the volume raised.
   * **Off:** the mode acts from the moment the dashboard or the tool starts, and the link changes nothing. In *Master volume* the pot therefore stays overridden for as long as the mode is on.
-  * Until it is set, it follows the mode: in *Callout level* the earlier *Connected only* of the level, in *Master volume* on, which is how the master volume always behaved. A file written before this setting existed reads the same way, and so does a mode picked on the page before *Connected only* is touched or saved in one of the two modes; a save in *Off* does not store it.
+  * **A settings file written before this setting existed** is read the way each layer behaved: in *Callout level* the connected-only switch the callout level had before this page offered one mode (off unless that file had turned it on), in *Master volume* on, which is how the master volume always behaved. The page shows that, and shows it again when *Master volume* is picked once more before a save.
+  * **A new setup starts with it off.** Otherwise, until *Connected only* is set, a mode picked on the page starts from that earlier callout-level switch, which a fresh install has off -- so picking *Master volume* on a fresh install starts with *Connected only* off, and the pot stays overridden while the mode is on. Turn it on to keep bench and menu work at the pot's volume.
+  * It is stored on the first save in *Callout level* or *Master volume*, and by any save once it has been set; a save in *Off* without it set does not store it.
   * For adjustment announcements made where neither the dashboard nor the tool runs (by the [background decoder](../../../reference/background-decoder.md), or by the service widget on its own), *on* means that the radio's RF link is up.
 
 ## Callout level
@@ -41,7 +43,7 @@ The suite changes the entire radio's volume during flight. It writes the *Normal
 The setting is radio-wide: every model memory that carries the chain below uses the same global variable.
 
 **Radio Setup (once per model):**
-1. **Settings > Audio > Volume:** set *Mode* to *Master volume* and *Global Variable* to a free global variable (e.g. **GV9**). Set your desired *Normal* and *Alert* volume levels.
+1. **Settings > Audio > Volume:** set *Mode* to *Master volume* and *Global Variable* to a free global variable (e.g. **GV9**). Set your desired *Normal* and *Alert* volume levels, and turn *Connected only* on if the pot should rule until the model is connected.
 2. **Inputs:** Add one input, e.g. `I15 "Vol"`, **Source = GV9**, weight 100. (Give it its own slot and leave it out of the mixer).
 3. **Logical Switch:** Create a logical switch `L10: a > x` with **a = GV9**, **x = -1024**. This is true while the suite is driving the volume.
 4. **Special Function:** Create a special function `SF: L10 -> Volume = I15 (Vol)`. (Use the **input**, not the GVAR).
