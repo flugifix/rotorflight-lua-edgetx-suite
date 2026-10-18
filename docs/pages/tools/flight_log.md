@@ -208,7 +208,8 @@ A stretch of the file that runs on for more than 1025 bytes (1024 and a carriage
 line end -- a damaged card block, or text pasted in without line breaks -- is skipped up to the next
 line end rather than gathered up whole, and the page goes on with the line after it. The file is
 read 4 KiB at a time, so a line that long is skipped when more than 1025 bytes of it are in hand and
-another read is still needed to reach its end -- always, for a last line without a line end -- and
-read as it is otherwise. A flight's own line is a few hundred bytes and never comes near it.
+the next read still brings more of the file, and read as it is otherwise -- so is a last line
+without a line end once the read after it finds the end of the file. A flight's own line is a few
+hundred bytes and never comes near it.
 
 *Documented against RFSuite 0.1.7.*
