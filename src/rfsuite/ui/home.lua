@@ -606,6 +606,7 @@ state = {
   armedFeedbackUntil = nil,
   armedFeedbackText = nil,
   lastSaveSnapshot = nil,
+  lastSaveRevision = nil,
   mspAttached = false,
   mspLastTick = 0,
   fblConnected = false,
@@ -3677,17 +3678,23 @@ function M.run(event, touchState)
     -- The pipeline's reply-driven steps advance themselves; this drives the phases that wait on
     -- time -- the bound on a flight controller that does not come back, and the bound on the
     -- connect chain. Repaint on what is DISPLAYED rather than on every tick, the same rule the
-    -- start screen follows, or an unchanged notice would be rebuilt at tick rate.
+    -- start screen follows, or an unchanged notice would be rebuilt at tick rate. The progress
+    -- table is a new one on every call, so it is asked for only when the pipeline's revision
+    -- says something may have changed; the snapshot still decides whether that is a repaint.
     if SavePipeline and type(SavePipeline.wakeup) == "function" and not state.isClosing then
       SavePipeline.wakeup()
-      local saveProgress = SavePipeline.getProgress()
-      local snapshot = saveProgress and (tostring(saveProgress.phase) .. "/"
-        .. tostring(saveProgress.done) .. "/" .. tostring(saveProgress.label) .. "/"
-        .. tostring(saveProgress.dismissible)) or nil
-      if snapshot ~= state.lastSaveSnapshot then
-        state.lastSaveSnapshot = snapshot
-        state.saveOverlayVisible = snapshot ~= nil
-        scheduleBuildUI(false)
+      local saveRevision = SavePipeline.getRevision()
+      if saveRevision ~= state.lastSaveRevision then
+        state.lastSaveRevision = saveRevision
+        local saveProgress = SavePipeline.getProgress()
+        local snapshot = saveProgress and (tostring(saveProgress.phase) .. "/"
+          .. tostring(saveProgress.done) .. "/" .. tostring(saveProgress.label) .. "/"
+          .. tostring(saveProgress.dismissible)) or nil
+        if snapshot ~= state.lastSaveSnapshot then
+          state.lastSaveSnapshot = snapshot
+          state.saveOverlayVisible = snapshot ~= nil
+          scheduleBuildUI(false)
+        end
       end
     end
 
