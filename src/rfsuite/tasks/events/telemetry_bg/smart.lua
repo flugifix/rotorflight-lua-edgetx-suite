@@ -259,7 +259,8 @@ end
 -- -- while the configuration is read on every wake that computes. So the values it was last built
 -- from are kept here, and the table is rebuilt only when one of them differs. They are compared by
 -- value, not by the identity of the tables they come from: the SmartFuel and battery pages write
--- into the session's tables in place.
+-- into the session's tables in place. The kept table is returned itself, not a copy: a caller
+-- reads it and must not write into it, or every later wake gets the changed configuration.
 local configInputs = {
   apiVersion = false, mode = false, remoteSource = false, localSource = false, calcLocal = false,
   publish = false, voltageDropRate = false, chargeDropRate = false, sagGain = false,
