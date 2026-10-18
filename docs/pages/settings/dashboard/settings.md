@@ -31,8 +31,8 @@ The tiles are made when the grid is opened, from the themes installed on the rad
 is under way the grid shows *Loading...*, and then all of its tiles at once; with the shipped
 themes that is a moment. The more themes there are, the longer it takes, and once made the grid
 opens at once until the tool is closed -- up to fifteen themes. With sixteen or more, the grid
-shows *Loading...* for a moment each time it is opened or redrawn, while its tiles are drawn a few
-at a time.
+shows *Loading...* for a moment each time it comes on screen -- opened, or back from a theme's
+page or the help -- while its tiles are made, sixteen at a time, and then all of them at once.
 
 ## Settings
 

@@ -2373,7 +2373,7 @@ end
 
 -- The grid of the menu on screen, made over several passes: first its cards, then its tiles,
 -- GRID_TILES_PER_STEP of them per call of stepGridBuild. It holds the widget tables of the tiles,
--- not the widgets: nothing is drawn until M.buildUI finds it done and draws the whole grid in one
+-- not the widgets: nothing is drawn until buildScene finds it done and draws the whole grid in one
 -- build, so the screen goes from the Loading notice to the complete grid.
 local function newGridBuild(menuId, x, y, w, profile)
   return {
@@ -2396,7 +2396,7 @@ local function gridBuildFits(grid, menuId, x, y, w)
   return grid.menuId == menuId and grid.x == x and grid.y == y and grid.w == w and grid.cards.isCurrent()
 end
 
--- One step of `grid`. The tiles are placed exactly as the one-pass draw in M.buildUI places them:
+-- One step of `grid`. The tiles are placed exactly as the one-pass draw in buildScene places them:
 -- the same rows and columns, laid out by GridLayout over the same bounds, a batch at a time. A
 -- step stopped part way repeats only the tile it was on: what that tile had appended is taken off
 -- again, and the position after a tile is one value, replaced once the tile is complete.
