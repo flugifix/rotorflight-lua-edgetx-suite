@@ -63,8 +63,8 @@ time and the capacity used, and a bar with the transmitter power, the lowest lin
 highest MCU temperature and the skipped frames; the transmitter power and the skipped frames
 follow the link while the flight controller still answers, and once it has stopped they keep the
 last reading taken while it answered -- or, where the screen was loaded again after the link had
-gone, what the radio still held for the two sensors then. The header of the table says *Disconnected* once the flight controller has stopped
-answering.
+gone, what the radio still held for the two sensors then. The header of the table says
+*Disconnected* once the flight controller has stopped answering.
 
 ## Full screen
 
