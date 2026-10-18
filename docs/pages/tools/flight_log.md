@@ -125,6 +125,10 @@ the registry entry and from nowhere else:
    written either**, and the log says which profiles tied. `profile=` on the entry settles it,
    and so does `cells=` where it equals the non-zero cell count of exactly one of them.
 
+An invalid explicit `profile=` or a capacity that matches no board profile is refused and logged
+even when its numeric value is too large for an integer. An explicit valid `profile=` still wins
+outright and the capacity is then ignored, as in step 1.
+
 Whether the flight controller keeps a cell count per profile is read off its battery
 configuration reply: firmware that does sends the six cell counts after the six capacities.
 Where the reply has no such block, the profiles share one cell count, `cells=` is not used, and
