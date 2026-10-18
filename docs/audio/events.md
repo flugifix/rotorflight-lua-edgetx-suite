@@ -342,11 +342,12 @@ the page that switches an alert on is the page that says how it behaves.
 - **The pack check is not in the table**, because it has no condition to hold: it speaks once
   when the model connects and is latched for the rest of that connection. **Neither is
   Rescue**, whose two announcements are spoken once per change of state.
-- **A file the sound pack lacks** leaves its announcement silent and without vibration. The
-  alerts in the table above count it as made: such an alert is tried again after the usual ten
-  seconds and spends its *Repeat* count as if it had spoken. The flight timer counts it as made
-  for that flight. The log names such a file once. *Main Power Lost*, *Telemetry Lost* and
-  *Telemetry Dropouts* look for their file first and stay silent without one.
+- **A file the sound pack lacks** leaves its announcement silent and without vibration.
+  *Main Power Lost*, *Telemetry Lost* and *Telemetry Dropouts* look for their file first and stay
+  silent without one; the latter two log it once per connection. The other alerts in the table
+  above count it as made: such an alert is tried again after the usual ten seconds and spends its
+  *Repeat* count as if it had spoken, and the log names the file once. The flight timer counts it
+  as made for that flight.
 
 ## While the Flight Controller Is Silent
 
