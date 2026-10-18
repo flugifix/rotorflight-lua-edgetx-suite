@@ -2753,9 +2753,9 @@ local function releaseUnusedThemes(self)
     if slash and not used[string.sub(path, 1, slash)] then
       local module = modules[path]
       modules[path] = nil
-      -- Only the global that holds this very module: two folders can derive one name (`@aerc` and
-      -- `@aerc-n`, or a user folder named like a shipped one), and a global set some other way is
-      -- not this entry's to drop.
+      -- Only the global that holds this very module: the name is derived from the path, and two
+      -- folders can derive the same one (`@aerc` and `@aerc-n` both give `Aerc`); a global that holds
+      -- another table is not this entry's to drop.
       local global = themeGlobalName(string.sub(path, #base + 1, slash - 1), string.sub(path, slash + 1))
       if global and _G[global] == module then _G[global] = nil end
       count = count + 1
