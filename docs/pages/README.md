@@ -131,7 +131,7 @@ a page file are in [_template.md](../_template.md), and the mechanics are explai
 | Page | File | In-app help | Conditions | Status |
 | --- | --- | --- | --- | --- |
 | General | `settings/general.md` | yes | always available | to write |
-| Dashboard → Design | [settings/dashboard/theme.md](settings/dashboard/theme.md) | yes | always available | written |
+| Dashboard → Theme | [settings/dashboard/theme.md](settings/dashboard/theme.md) | yes | always available | written |
 | Dashboard → Settings (one page per configurable theme) | [settings/dashboard/settings.md](settings/dashboard/settings.md) | yes | always available | written |
 | Dashboard → Settings → Per-Model Settings (and each theme's settings for the model) | [settings/dashboard/overrides.md](settings/dashboard/overrides.md) | yes | shown only while a flight controller is connected and per-model settings are on for its model | written |
 | Dashboard → Quick Settings | [settings/dashboard/quick_menu.md](settings/dashboard/quick_menu.md) | yes | always available | written |

@@ -14,7 +14,7 @@ at the foot -- each card showing what the pilot puts on it.
 
 ## Where to find it
 
-*System* → *Settings* → *Dashboard* → *Design*: choose *Deck* for a flight phase, or for all
+*System* → *Settings* → *Dashboard* → *Theme*: choose *Deck* for a flight phase, or for all
 three. Its settings are under *System* → *Settings* → *Dashboard* → *Settings* → *Deck*, split
 into six pages: *Look*, *Cards*, *Value Cards*, *Top Bar*, *Keys* and *Telemetry*. They are stored
 for the radio, and a model can carry its own under

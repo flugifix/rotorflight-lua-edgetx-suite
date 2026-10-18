@@ -11,9 +11,9 @@ shows each shipped theme on them, and says how to choose one.
 
 ## Choosing a theme
 
-*System* → *Settings* → *Dashboard* → *Design*. The theme chosen there is the one every model
+*System* → *Settings* → *Dashboard* → *Theme*. The theme chosen there is the one every model
 shows. A different theme for the inflight or the postflight screen alone, and a theme of a
-model's own, are switched on on the same page; [Design](../pages/settings/dashboard/theme.md)
+model's own, are switched on on the same page; [Theme](../pages/settings/dashboard/theme.md)
 describes every row of it. A model's own theme stays on its post-flight screen after the battery
 is unplugged, until the next flight controller connects.
 
@@ -166,7 +166,7 @@ statistics screen under Deck's header. It has a page of its own: [Deck theme](de
 
 ## Related
 
-- [Design](../pages/settings/dashboard/theme.md) — choosing the theme, per flight phase and per
+- [Theme](../pages/settings/dashboard/theme.md) — choosing the theme, per flight phase and per
   model.
 - [User themes](user-themes.md) — copying a shipped theme and changing what it shows.
 - [developer/dashboard-themes.md](../developer/dashboard-themes.md) — how a theme is built.

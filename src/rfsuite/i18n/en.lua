@@ -155,7 +155,7 @@ return {
       dashboard = { name = "Dashboard" },
       activelook = { name = "ActiveLook" },
       localization = { name = "Localization" },
-      dashboard_theme = { name = "Design" },
+      dashboard_theme = { name = "Theme" },
       dashboard_settings = { name = "Settings" },
       dashboard_overrides = { name = "Per-Model Settings" },
       dashboard_inflight = { name = "In-Flight Tuning" },
