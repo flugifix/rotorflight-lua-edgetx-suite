@@ -579,9 +579,10 @@ function Queue:processQueue(now)
   -- message out of the retry and give-up logic below for as long as the transport kept raising:
   -- nothing was sent again, its errorHandler never ran and the queue behind it never moved.
   -- On a failed pcall the second value is the error, so it is said here and then dropped.
-  -- A write that has gone out is the exception: the raise says nothing about whether the board
-  -- received and stored it, so it is not sent again. Unless the silence completes it, it is given
-  -- up below, on the path a message takes when its retries run out, and the queue moves on.
+  -- A write already handed to the transport is the exception: the raise says nothing about
+  -- whether the board received and stored it, so it is not sent again. Unless the silence
+  -- completes it, it is given up below, on the path a message takes when its retries run out,
+  -- and the queue moves on.
   local endWrite = false
   if not pollOk then
     self.logf("warn", "poll error cmd=%s rw=%s client=%s err=%s", tostring(msg.command),

@@ -113,10 +113,11 @@ Client.__index = Client
 --                              "refused"     the retries ran out and the flight controller had
 --                                            answered at least one of them with an error reply;
 --                              "max_retries" the retries ran out and no attempt was answered;
---                                            a write that has gone out is given up with one of
---                                            these two as soon as polling for its reply fails,
---                                            without waiting for the retries, so that it is
---                                            never sent again into a transport in that state;
+--                                            a write already handed to the transport is given up
+--                                            with one of these two as soon as polling for its
+--                                            reply fails, without waiting for the retries, so
+--                                            that the queue does not send it again into a
+--                                            transport in that state;
 --                              "cleared"     the request was dropped before it was answered, for
 --                                            example when the link went, the API version is not
 --                                            supported, the model was armed, or release() was
