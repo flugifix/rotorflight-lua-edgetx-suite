@@ -2687,8 +2687,21 @@ end
 -- declarative theme (widgets/dashboard/objects/) draw with its common.lua, and its phase modules
 -- are the fallback when another theme fails to load.
 --
--- Weak keys: a widget the firmware has dropped no longer counts as a user.
-local liveWidgets = setmetatable({}, { __mode = "k" })
+-- The widgets that count as users are kept in `rfsuite.dashboardWidgets`, beside the module cache
+-- they guard, and not in a local of this file: every dashboard widget runs this file anew
+-- (WIDGETS/rfsuite/app.lua loads it per instance), so a local would only ever see the widget that
+-- owns it, while the module cache and the globals are shared by every widget in the state. Weak
+-- keys: a widget the firmware has dropped no longer counts as a user.
+local function liveWidgetRegistry()
+  if type(_G) ~= "table" then return nil end
+  _G.rfsuite = _G.rfsuite or {}
+  local registry = _G.rfsuite.dashboardWidgets
+  if type(registry) ~= "table" then
+    registry = setmetatable({}, { __mode = "k" })
+    _G.rfsuite.dashboardWidgets = registry
+  end
+  return registry
+end
 local THEME_SLOTS = { "preflight", "inflight", "postflight" }
 local DEFAULT_THEME_FOLDER = SYSTEM_THEME_BASE .. "default/"
 
@@ -2713,7 +2726,7 @@ local function releaseUnusedThemes(self)
   local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
   local sessionPrefs = type(session) == "table" and session.modelPreferences or nil
   local used = { [DEFAULT_THEME_FOLDER] = true }
-  for w in pairs(liveWidgets) do
+  for w in pairs(liveWidgetRegistry() or { [self] = true }) do
     local dashboard = (w.preferences and w.preferences.dashboard) or EMPTY_DASHBOARD
     local modelPrefs = w.modelPreferences or sessionPrefs
     if w.themePath then used[themeFolderKey(w.themePath)] = true end
@@ -2738,9 +2751,13 @@ local function releaseUnusedThemes(self)
     end
     local slash = base and string.find(path, "/", #base + 1, true)
     if slash and not used[string.sub(path, 1, slash)] then
+      local module = modules[path]
       modules[path] = nil
+      -- Only the global that holds this very module: two folders can derive one name (`@aerc` and
+      -- `@aerc-n`, or a user folder named like a shipped one), and a global set some other way is
+      -- not this entry's to drop.
       local global = themeGlobalName(string.sub(path, #base + 1, slash - 1), string.sub(path, slash + 1))
-      if global and type(_G[global]) == "table" then _G[global] = nil end
+      if global and _G[global] == module then _G[global] = nil end
       count = count + 1
     end
   end
@@ -4513,7 +4530,8 @@ function Runtime.new(zone, options)
   end
 
   -- A user of the themes it shows, for releaseUnusedThemes, from its first load on.
-  liveWidgets[widget] = true
+  local registry = liveWidgetRegistry()
+  if registry then registry[widget] = true end
   reloadActiveTheme(widget)
 
   -- The heartbeat mark for widget.background, claimed by the instance built last. A dashboard

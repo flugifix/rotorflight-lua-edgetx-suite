@@ -187,10 +187,10 @@ A module a theme loads through `rfsuite.require` is kept in the suite's module c
 shipped theme also caches its shared modules in a global of its own,
 `__rfsuiteTheme<Folder><File>Module` (`urban/layout.lua` as `__rfsuiteThemeUrbanLayoutModule`,
 `@aerc/common.lua` as `__rfsuiteThemeAercCommonModule`: a leading `@` dropped, the folder cut at
-its first `-`). Both are held only while some dashboard widget uses the theme. When a widget moves
-to a theme in another folder, every theme folder that no dashboard widget uses — on screen, or
-chosen for any of the three slots above — is released: its module cache entries and the globals
-named after them. The next time that theme is shown it is read from the card again, as on its
+its first `-`). When a widget moves to a theme in another folder, every theme folder that no
+dashboard widget in the Lua state uses — on screen, or chosen for any of the three slots above — is
+released: its module cache entries, and each global named after one of them that still holds that
+module. The next time that theme is shown it is read from the card again, as on its
 first load. `default` is never released: the box objects of every declarative theme draw with its
 `common.lua`, and its phase modules are the fallback when another theme does not load.
 
@@ -200,7 +200,9 @@ that has to persist across a theme switch belongs on the host's `state`. A phase
 theme, and a settings save that keeps the theme, release nothing. A tree on screen, an open view
 and the settings page each keep the module they already hold; only the shared roots are dropped. A
 global named any other way is not released, and stays loaded for the life of the Lua state as
-before.
+before. "In use" goes by folder: a theme that loads modules from another folder (`@aerc-n` draws with
+`@aerc/common.lua`, a user copy of Urban with the shipped Urban's modules) does not keep that folder
+in use, so those modules are read from the card again on its next load after a release.
 
 Load a shared module through `rfsuite.require` wherever the theme loads it, `configure.lua`
 included. A module loaded with `loadScript` alone has no cache entry, so its global cannot be
