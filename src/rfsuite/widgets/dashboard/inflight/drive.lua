@@ -1200,7 +1200,8 @@ function Drive:fastTick(now)
   -- the touch's cool-down. Each trim path refuses for itself instead -- the adjust trim while the
   -- touch control owns the variable (Drive:pollTrimStep), the walk and bank trims while any value
   -- stands on it (walkTrim). Only once the trim block is resolved, though: until then no trim can
-  -- be read at all, and the walk that resolves it is kept off a pass that has a pulse to end.
+  -- be read at all, and the walk that resolves it is kept off while a touch pulse or hold owns the
+  -- variable, as it always was.
   local touching = (self.pulseUntil ~= nil) or (self.holdRow ~= nil)
   if self:tuning() and (self.trimsResolved or not touching) then
     self:pollNavigate(now)
