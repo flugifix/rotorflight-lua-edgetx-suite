@@ -72,11 +72,12 @@ In the **Standard** set layout every cell sends its documented value, whatever t
 slot for it holds. Where a slot holds a different function on the cell's own channels and
 windows, a step on that cell changes that function and not the parameter the row names, so the
 second line names those cells, each with the function its slot holds — for example **Pitch P
-steps Roll D** — as many as fit, with every other differing slot (empty, other windows, another
-step) counted as **+N more**. Where the row's name does not fit, the cell is named by its bank
-letter and row number (**F5** is bank F, fifth row). When no cell is named, the line counts the
-differences (**board differs in N**). *Set up the flight controller* writes the set onto
-the board.
+steps Roll D** — as many as fit, with every other differing slot counted as **+N more**: empty,
+on other channels or windows, or differing in a limit or the step. Where the row's name does not
+fit, the cell is named by its bank letter and row number (**F5** is bank F, fifth row). When no
+cell is named, the line counts the differences (**board differs in N**), or, when the step is
+the only difference, says so (**step differs: set the board up again**). *Set up the flight
+controller* writes the set onto the board.
 
 Values are read here and nowhere else: the receiver map, the board's adjustment slot table,
 and nine reads that between them answer every parameter of the set. It happens by itself once
