@@ -61,9 +61,9 @@ return {
     -- under-measurement (1 826). Counts-only, the loop runs to its poll caps, which
     -- is what a pass on the radio could always cost.
     ["pass.splash"] = { target = 7100, measured = 2439 },
-    ["pass.standby.build"] = { target = 14000, measured = 13975 },
+    ["pass.standby.build"] = { target = 14000, measured = 13616 },
     ["pass.standby.state"] = { target = 12000, measured = 10145 },
-    ["sweep.standby"] = { target = 950, measured = 916 },
+    ["sweep.standby"] = { target = 950, measured = 910 },
 
     -- The cold start, before the link is up and the first scene is on screen. It is
     -- the pass that loads modules, and it is the closest any pass comes to the

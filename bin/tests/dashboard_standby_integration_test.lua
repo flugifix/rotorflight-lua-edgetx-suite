@@ -144,6 +144,19 @@ do
     widget.state.standbyInfoKind == "controller_missing")
   widget:refresh(0, nil)
   check("standby build pass does not probe provider", calls.request == afterState)
+  local standbyTree = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}
+  local suiteButton, suiteGlyphLines = nil, 0
+  for i = 1, #standbyTree do
+    local node = standbyTree[i]
+    if node.type == "button" and node.x == 748 and node.y == 8 and node.w == 44 and node.h == 44 then
+      suiteButton = node
+    elseif node.type == "line" and node.color == WHITE then
+      suiteGlyphLines = suiteGlyphLines + 1
+    end
+  end
+  check("standby uses the existing fullscreen Suite launch control",
+    suiteButton and suiteButton.color == COLOR_THEME_PRIMARY1
+      and type(suiteButton.press) == "function" and suiteGlyphLines == 6)
 
   check("active standby has cached localized texts before global reload",
     type(widget._standbyTexts) == "table"

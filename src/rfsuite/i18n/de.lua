@@ -3145,7 +3145,6 @@ return {
       connecting_fbl = "Verbinde mit FBL...",
       standby = {
         screen_title = "Standby",
-        module_count = "%d information modules",
         layout_invalid = "Standby layout does not fit",
         module_clock = "Clock",
         module_date = "Date",

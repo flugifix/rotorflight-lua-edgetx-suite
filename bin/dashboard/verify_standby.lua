@@ -92,14 +92,14 @@ local scene = standby.build({ w = 480, h = 320 }, "Please wait...", cache.text, 
 check("standby scene builds", type(scene) == "table" and #scene > 3)
 local infoScene = standby.build({ w = 480, h = 320 }, "Exact connection reason", cache.text, default, values, cache,
   { text = "Flight controller not detected", level = "info" })
-check("general information strip uses calm theme accent", infoScene[8].color == COLOR_THEME_SECONDARY1)
-check("general information strip preserves exact status below", infoScene[10].text == "Exact connection reason")
+check("general information strip uses calm theme accent", infoScene[6].color == COLOR_THEME_SECONDARY1)
+check("general information strip preserves exact status below", infoScene[8].text == "Exact connection reason")
 local warningScene = standby.build({ w = 480, h = 320 }, "Unsupported API 9.9", cache.text, default, values, cache,
   { text = "Compatibility check failed", level = "warning" })
-check("warning information uses warning marker", warningScene[8].color == COLOR_THEME_WARNING)
+check("warning information uses warning marker", warningScene[6].color == COLOR_THEME_WARNING)
 local utf8InfoScene = standby.build({ w = 480, h = 320 }, "Waiting", cache.text, default, values, cache,
   { text = string.rep("Pr\195\169requis", 200), level = "info" })
-local fittedInfo = utf8InfoScene[9].text
+local fittedInfo = utf8InfoScene[7].text
 local fittedPrefix = string.sub(fittedInfo, 1, -4)
 local asciiPrefix = string.gsub(fittedPrefix, "\195\169", "")
 check("long UTF-8 information is visibly bounded",
@@ -115,12 +115,16 @@ for i = 1, #largestScene do
   if node.type == "rectangle" and node.radius then tileCount = tileCount + 1 end
 end
 check("largest eight-item scene renders every tile", largestCache.valueOverflow == false and tileCount == 8)
-check("tile captions use the theme accent", scene[12].color == COLOR_THEME_SECONDARY1)
-check("status line clears small tool control", scene[3].x + scene[3].w <= 480 - 20 - 1 - 6)
+check("tile captions use the theme accent", scene[10].color == COLOR_THEME_SECONDARY1)
+local compactHeaderLabels = 0
+for i = 1, #scene do
+  local node = scene[i]
+  if node.type == "label" and node.y < 75 then compactHeaderLabels = compactHeaderLabels + 1 end
+end
+check("header omits duplicate battery and module count", compactHeaderLabels == 1 and scene[3].text == "Standby")
 local largeScene = standby.build({ w = 800, h = 480 }, string.rep("W", 80), cache.text, default, values, cache)
-check("status line clears large tool control", largeScene[3].x + largeScene[3].w <= 800 - 44 - 8 - 6)
-check("status line preserves the full reason", largeScene[10].text == string.rep("W", 80))
-local valueClosure = scene[13].text
+check("status line preserves the full reason", largeScene[8].text == string.rep("W", 80))
+local valueClosure = scene[11].text
 check("scene exposes reactive value", type(valueClosure) == "function")
 local before = valueClosure()
 cache.snapshotValues.clock = "12:35"

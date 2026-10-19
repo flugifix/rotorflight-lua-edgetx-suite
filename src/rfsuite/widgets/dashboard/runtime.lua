@@ -855,7 +855,6 @@ local function standbyTexts(self, items, infoKind)
   local timerDetail = t("widgets.dashboard.standby.timer_detail", "EdgeTX model timer")
   self._standbyTexts = {
     screen_title = t("widgets.dashboard.standby.screen_title", "Standby"),
-    module_count = t("widgets.dashboard.standby.module_count", "%d information modules"),
     layout_invalid = t("widgets.dashboard.standby.layout_invalid", "Standby layout does not fit"),
     module_clock = t("widgets.dashboard.standby.module_clock", "Clock"),
     module_date = t("widgets.dashboard.standby.module_date", "Date"),

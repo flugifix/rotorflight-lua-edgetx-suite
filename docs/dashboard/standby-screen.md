@@ -5,7 +5,7 @@ sidebar_label: Standby screen
 
 # Standby screen
 
-When enabled, the fullscreen dashboard uses one configurable standby surface while it waits for the flight controller. The Rotorflight logo, current connection reason, and Suite tool entry remain available.
+When enabled, the fullscreen dashboard uses one configurable standby surface while it waits for the flight controller. The header keeps the Rotorflight logo, title, and standard Suite tool entry. Radio information appears only in selected tiles, while the current connection reason remains available below them.
 
 ![Layout preview with example data; approximate fonts](../images/dashboard/standby-screen.png)
 

@@ -371,8 +371,6 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
   local compact = h < 400
   local logoW = compact and math.min(145, math.floor(w * 0.34)) or math.min(210, math.floor(w * 0.30))
   local logoH = math.floor(logoW * 84 / 400 + 0.5)
-  local toolSize = h > 350 and 44 or 20
-  local toolMargin = h > 350 and 8 or 1
   local headerY = compact and 6 or 8
   local titleY = compact and 47 or 72
   local footerH = 64
@@ -382,19 +380,12 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
   local contentWidth = w - contentMargin * 2
   local infoX = compact and 18 or 24
   local infoWidth = w - (compact and 28 or 40)
-  local batteryRight = w - toolSize - toolMargin - 8
   local children = {
     { type = "rectangle", x = 0, y = 0, w = w, h = h, color = COLOR_THEME_PRIMARY3, filled = true },
     { type = "image", x = contentMargin, y = headerY, w = logoW, h = logoH,
       file = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png" },
-    { type = "label", x = math.max(logoW + 22, batteryRight - 130), y = headerY + 5,
-      w = 130, text = function() local snap = cache.snapshotValues or values; return tostring(snap.tx_battery or "-") end,
-      align = RIGHT, color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
-    { type = "label", x = contentMargin, y = titleY, w = math.floor(w * 0.5),
+    { type = "label", x = contentMargin, y = titleY, w = contentWidth,
       text = i18n("screen_title", "Standby"), color = COLOR_THEME_PRIMARY2, font = MIDSIZE },
-    { type = "label", x = math.floor(w * 0.5), y = titleY + 4, w = math.floor(w * 0.5) - (compact and 10 or 16),
-      text = string.format(i18n("module_count", "%d information modules"), #items),
-      align = RIGHT, color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
     { type = "rectangle", x = contentMargin, y = headerDividerY, w = contentWidth, h = 1,
       color = COLOR_THEME_SECONDARY1, filled = true },
     { type = "rectangle", x = 0, y = footerY, w = w, h = 23, color = COLOR_THEME_SECONDARY2, filled = true },
