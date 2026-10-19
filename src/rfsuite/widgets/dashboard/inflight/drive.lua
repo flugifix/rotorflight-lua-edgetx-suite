@@ -433,8 +433,8 @@ end
 --
 -- Refused, silently, while a value stands on the wire: moving the enable channel under a
 -- magnitude that sits inside a step window is how one press ends up counted against another
--- parameter. That is the same refusal the chip and the bank trim make, and the write lands on the
--- first pass after the pulse has gone.
+-- parameter. The chip and the bank trim are refused for the same reason (the bank trim says so
+-- on the screen, see walkTrim), and this write lands on the first pass after the pulse has gone.
 function Drive:ensureBankArmed()
   local settings = self.settings
   if not settings or (settings.bank_gvar or 0) <= 0 then return false, "no_gvar" end
@@ -504,10 +504,17 @@ end
 --- A press on the minus or plus control. Refused inside the cool-down, which is one pulse long:
 -- the flight controller needs REPEAT_DELAY between steps, and two taps closer together than that
 -- would look like one held position rather than two steps.
+--
+-- Refused just the same while a TRIM pulse or the cool-down after it is running. Both paths drive
+-- the one value variable, so a tap inside a trim's pulse either replaces its magnitude before the
+-- board has counted it -- the trim's step is lost -- or, in the same direction, stretches the
+-- plateau past REPEAT_DELAY into a second step. The trim path refuses a touch pulse the same way
+-- (Drive:pollTrimStep).
 function Drive:press(row, up)
   if not self:tuning() then return false, "not_live" end
   local now = self.radio.now()
-  if self.pulseUntil ~= nil or now < (self.coolUntil or 0) then
+  if self.pulseUntil ~= nil or now < (self.coolUntil or 0)
+    or self.trimPulseUntil ~= nil or now < (self.trimCoolUntil or 0) then
     -- Said on the screen rather than returned to a caller that drops it. The pilot's own report
     -- after three rounds is "sometimes no step at all", and his card log shows what that is: a
     -- tap inside the cool-down writes nothing, logs nothing and looks exactly like a control that
@@ -534,7 +541,17 @@ end
 
 --- The release of a held control. The value falls away at the end of the pulse rather than here,
 -- so a control tapped faster than the flight controller's own trigger delay still produces a step.
+--
+-- A hold outlasts its pulse, and the cool-down the pulse's end set runs out under the finger. So
+-- the release of a hold starts one of its own: without it the next press -- a tap, or a trim on
+-- the next pass -- would put its magnitude straight onto the hold's, with no 0 between them for
+-- the flight controller to see. For a tap, and a hold let go inside its pulse, the pulse's own end
+-- sets the later cool-down and this changes nothing.
 function Drive:release()
+  if self.holdRow ~= nil then
+    local cool = self.radio.now() + self:pulseTicks()
+    if cool > (self.coolUntil or 0) then self.coolUntil = cool end
+  end
   self.holdRow = nil
   self.holdUp = nil
   self.holdSince = nil
@@ -908,7 +925,12 @@ local function walkTrim(self, now, trim, dirKey, nextKey, step)
   if direction ~= self[dirKey] then
     self[dirKey] = direction
     if direction ~= 0 then
-      step(self, direction > 0)
+      -- A walk or bank step is refused while a value stands on the wire ("busy"), and the edge is
+      -- booked either way, so the press is spent. Said on the screen with the line every other
+      -- step that comes too soon gets, rather than looking like a trim that is not wired up. Once,
+      -- at the press: a held trim's repeats do not move the refusal's deadline.
+      local _, reason = step(self, direction > 0)
+      if reason == "busy" then self:refuseStep("cooling", now) end
       self[nextKey] = now + NAV_REPEAT_DELAY_TICKS
     else
       self[nextKey] = nil
@@ -917,7 +939,12 @@ local function walkTrim(self, now, trim, dirKey, nextKey, step)
   end
 
   if direction ~= 0 and self[nextKey] ~= nil and now >= self[nextKey] then
-    step(self, direction > 0)
+    -- A trim refused at the press and held on walks here once the step is off the wire, which can
+    -- be before the refusal's line has run out: the line goes with the step it no longer describes.
+    local ok = step(self, direction > 0)
+    if ok == true and self.stepRefusedReason == "cooling" then
+      self.stepRefusedUntil, self.stepRefusedReason = nil, nil
+    end
     self[nextKey] = now + NAV_REPEAT_INTERVAL_TICKS
   end
 end
@@ -1049,6 +1076,16 @@ function Drive:pollTrimStep(now)
   -- clock says otherwise, and that is the whole of what makes a short press step at all.
   if row == nil then return end
 
+  -- A press while the TOUCH control owns the value variable -- its pulse, its hold, or the
+  -- cool-down after them. The same refusal Drive:press makes for a trim pulse, with the same line,
+  -- and like it this press starts nothing later: a trim held until the touch is done is still this
+  -- press. Ahead of the row change below, so a trim refused here selects nothing -- above all not
+  -- under a held button, whose surface must not be rebuilt.
+  if self.pulseUntil ~= nil or self.holdRow ~= nil or now < (self.coolUntil or 0) then
+    self:refuseStep("cooling", now)
+    return
+  end
+
   self.row = row
   -- A press while a trim pulse or the cool-down after it is still running -- this trim's again, or
   -- in `rows` mode another row's trim reached without a pass seeing the first one come up. It
@@ -1162,10 +1199,16 @@ function Drive:fastTick(now)
     return
   end
 
-  -- A running touch pulse suspends both trim paths: the pilot's thumb and the pilot's finger must
-  -- not both be writing the same variable.
-  local pulsing = (self.pulseUntil ~= nil) or (self.holdRow ~= nil)
-  if self:tuning() and not pulsing then
+  -- The pilot's thumb and the pilot's finger must not both be writing the same variable, and the
+  -- trims are read through a touch pulse rather than suspended by it: a trim press nobody read was
+  -- lost without a word, and one held across the pulse was first seen after it and stepped inside
+  -- the touch's cool-down. Each trim path refuses for itself instead -- the adjust trim while the
+  -- touch control owns the variable (Drive:pollTrimStep), the walk and bank trims while any value
+  -- stands on it (walkTrim). Only once the trim block is resolved, though: until then no trim can
+  -- be read at all, and the walk that resolves it is kept off while a touch pulse or hold owns the
+  -- variable, as it always was.
+  local touching = (self.pulseUntil ~= nil) or (self.holdRow ~= nil)
+  if self:tuning() and (self.trimsResolved or not touching) then
     self:pollNavigate(now)
     self:pollTrimStep(now)
   end
@@ -1175,9 +1218,9 @@ function Drive:fastTick(now)
     self.pulseCode = nil
     self.coolUntil = now + self:pulseTicks()
   end
-  -- The trim's pulse ends on its own clock, and it ends on every pass -- including one the touch
-  -- path took over above. A magnitude left standing by a pulse nothing is looking at any more is
-  -- precisely the state this module exists to make impossible.
+  -- The trim's pulse ends on its own clock, and it ends on every pass, whatever the trims were
+  -- doing on it. A magnitude left standing by a pulse nothing is looking at any more is precisely
+  -- the state this module exists to make impossible.
   if self.trimPulseUntil ~= nil and now >= self.trimPulseUntil then
     self.trimPulseUntil = nil
     self.trimCode = nil

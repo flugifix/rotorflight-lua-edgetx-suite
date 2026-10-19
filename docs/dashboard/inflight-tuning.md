@@ -124,6 +124,12 @@ One parameter at a time, not a grid:
   before the flight controller can count it as a step of its own -- during the previous press's
   pulse or the pause after it -- shows **too fast - one step at a time**, as a tap on a step
   control does, and steps nothing even if the trim is still held when the pause is over.
+  The trims and the step controls share one value, so they wait for each other: a tap during a
+  trim's pulse or the pause after it, and a step press of a trim while a step control is pulsing,
+  held or in its pause, are refused with the same line. Letting go of a held step control starts
+  that pause as well, for the next tap as for the next trim step. A walk or bank trim waits for
+  the value only: pressed while a step is still on the wire it shows that line too instead of
+  moving; held on, it walks at its usual repeat once the step is off the wire, and the line goes.
 
 A profile change while the surface is live is named on the screen, and every cached value
 belonging to that profile is marked unknown until the reads have been sent again.
