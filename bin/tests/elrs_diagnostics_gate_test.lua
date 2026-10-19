@@ -1,8 +1,8 @@
 local root = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]bin[/\\]tests[/\\]") or ".")
-local now, armChanges, pushes = 0, 0, {}
+local now, armChanges, pushes, invalidations = 0, 0, {}, 0
 local provider = {
   acquire = function() return true end, release = function() end,
-  drain = function() return true end, invalidate = function() end,
+  drain = function() return true end, invalidate = function() invalidations = invalidations + 1 end,
   publish = function() end, currentIdentity = function() return "model" end,
 }
 local armed = {
@@ -47,6 +47,7 @@ assert(#pushes == 0 and not Task.isRunning(), "arming transition did not stop th
 
 armChanges, pushes = 0, {}
 Task.start(Task.MODE_PROBE)
+assert(invalidations == 2, "read-only diagnostics did not preempt the paused parameter reader")
 for i = 1, 4 do now = i; Task.wakeup() end
 assert(not Task.isRunning() and Task.getRateField(), "simulated read-only probe did not finish")
 for i = 1, #pushes do assert(pushes[i].kind ~= 0x2D, "read-only simulated probe emitted a parameter write") end

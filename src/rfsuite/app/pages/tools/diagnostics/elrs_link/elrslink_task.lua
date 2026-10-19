@@ -1000,7 +1000,9 @@ function M.start(mode)
     manualSyncMode = mode or SYNC_MODE_OFF
     M.reset()
     local provider = configProvider()
-    if provider and manualSyncMode ~= SYNC_MODE_OFF then provider.invalidate(nil) end
+    -- The hosted tool pauses the dashboard audio loop. Preempt any audio or standby parameter
+    -- read before waiting for this task's lease; invalidate supplies the bounded late-frame drain.
+    if provider then provider.invalidate(nil) end
     yesArmCount = armChangeCount()
     taskComplete = false
     return true
