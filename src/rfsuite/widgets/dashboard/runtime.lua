@@ -851,33 +851,40 @@ local function standbyJobStep(self)
   local dashboard = (self.preferences and self.preferences.dashboard) or {}
   local items = DashboardStandby.decode(dashboard[DashboardStandby.KEY_LAYOUT])
   local values = self._standbyCache.snapshotValues or {}
-  local t = self.i18n and self.i18n.t
-  local function translated(value, key, fallback)
-    if value and value ~= key then return value end
-    return fallback
-  end
+  local t = (self.i18n and self.i18n.t) or function(_, fallback) return fallback end
   local texts = {
-    layout_invalid = translated(t and t("widgets.dashboard.standby.layout_invalid"), "widgets.dashboard.standby.layout_invalid", "Standby layout does not fit"),
-    module_clock = translated(t and t("widgets.dashboard.standby.module_clock"), "widgets.dashboard.standby.module_clock", "Clock"),
-    module_date = translated(t and t("widgets.dashboard.standby.module_date"), "widgets.dashboard.standby.module_date", "Date"),
-    module_tx_battery = translated(t and t("widgets.dashboard.standby.module_tx_battery"), "widgets.dashboard.standby.module_tx_battery", "TX battery"),
-    module_model = translated(t and t("widgets.dashboard.standby.module_model"), "widgets.dashboard.standby.module_model", "Selected model"),
-    module_timer1 = translated(t and t("widgets.dashboard.standby.module_timer1"), "widgets.dashboard.standby.module_timer1", "Timer 1"),
-    module_timer2 = translated(t and t("widgets.dashboard.standby.module_timer2"), "widgets.dashboard.standby.module_timer2", "Timer 2"),
-    module_timer3 = translated(t and t("widgets.dashboard.standby.module_timer3"), "widgets.dashboard.standby.module_timer3", "Timer 3"),
-    module_tx_gps = translated(t and t("widgets.dashboard.standby.module_tx_gps"), "widgets.dashboard.standby.module_tx_gps", "TX GPS"),
-    module_uptime = translated(t and t("widgets.dashboard.standby.module_uptime"), "widgets.dashboard.standby.module_uptime", "Radio uptime"),
-    module_firmware = translated(t and t("widgets.dashboard.standby.module_firmware"), "widgets.dashboard.standby.module_firmware", "Firmware"),
-    module_elrs = translated(t and t("widgets.dashboard.standby.module_elrs"), "widgets.dashboard.standby.module_elrs", "ELRS TX configuration"),
-    gps_fix = translated(t and t("widgets.dashboard.standby.gps_fix"), "widgets.dashboard.standby.gps_fix", "Fix"),
-    gps_no_fix = translated(t and t("widgets.dashboard.standby.gps_no_fix"), "widgets.dashboard.standby.gps_no_fix", "No fix"),
-    elrs_reading = translated(t and t("widgets.dashboard.standby.elrs_reading"), "widgets.dashboard.standby.elrs_reading", "Reading"),
-    elrs_unavailable = translated(t and t("widgets.dashboard.standby.elrs_unavailable"), "widgets.dashboard.standby.elrs_unavailable", "Unavailable"),
-    elrs_last_read = translated(t and t("widgets.dashboard.standby.elrs_last_read"), "widgets.dashboard.standby.elrs_last_read", "Last read %d s ago"),
-    elrs_packet_rate = translated(t and t("widgets.dashboard.standby.elrs_packet_rate"), "widgets.dashboard.standby.elrs_packet_rate", "Packet Rate"),
-    elrs_telemetry_ratio = translated(t and t("widgets.dashboard.standby.elrs_telemetry_ratio"), "widgets.dashboard.standby.elrs_telemetry_ratio", "Telemetry Ratio"),
-    elrs_max_power = translated(t and t("widgets.dashboard.standby.elrs_max_power"), "widgets.dashboard.standby.elrs_max_power", "Max Power"),
-    elrs_dynamic = translated(t and t("widgets.dashboard.standby.elrs_dynamic"), "widgets.dashboard.standby.elrs_dynamic", "Dynamic"),
+    screen_title = t("widgets.dashboard.standby.screen_title", "Standby"),
+    module_count = t("widgets.dashboard.standby.module_count", "%d information modules"),
+    layout_invalid = t("widgets.dashboard.standby.layout_invalid", "Standby layout does not fit"),
+    module_clock = t("widgets.dashboard.standby.module_clock", "Clock"),
+    module_date = t("widgets.dashboard.standby.module_date", "Date"),
+    module_tx_battery = t("widgets.dashboard.standby.module_tx_battery", "TX battery"),
+    module_model = t("widgets.dashboard.standby.module_model", "Selected model"),
+    module_timer1 = t("widgets.dashboard.standby.module_timer1", "Timer 1"),
+    module_timer2 = t("widgets.dashboard.standby.module_timer2", "Timer 2"),
+    module_timer3 = t("widgets.dashboard.standby.module_timer3", "Timer 3"),
+    module_tx_gps = t("widgets.dashboard.standby.module_tx_gps", "TX GPS"),
+    module_uptime = t("widgets.dashboard.standby.module_uptime", "Radio uptime"),
+    module_firmware = t("widgets.dashboard.standby.module_firmware", "Firmware"),
+    module_elrs = t("widgets.dashboard.standby.module_elrs", "ELRS TX configuration"),
+    gps_fix = t("widgets.dashboard.standby.gps_fix", "Fix"),
+    gps_no_fix = t("widgets.dashboard.standby.gps_no_fix", "No fix"),
+    elrs_reading = t("widgets.dashboard.standby.elrs_reading", "Reading"),
+    elrs_unavailable = t("widgets.dashboard.standby.elrs_unavailable", "Unavailable"),
+    elrs_last_read = t("widgets.dashboard.standby.elrs_last_read", "Last read %d s ago"),
+    elrs_packet_rate = t("widgets.dashboard.standby.elrs_packet_rate", "Packet Rate"),
+    elrs_telemetry_ratio = t("widgets.dashboard.standby.elrs_telemetry_ratio", "Telemetry Ratio"),
+    elrs_max_power = t("widgets.dashboard.standby.elrs_max_power", "Max Power"),
+    elrs_dynamic = t("widgets.dashboard.standby.elrs_dynamic", "Dynamic"),
+    tx_battery_detail = t("widgets.dashboard.standby.tx_battery_detail", "Radio battery"),
+    model_detail = t("widgets.dashboard.standby.model_detail", "EdgeTX model"),
+    timer1_detail = t("widgets.dashboard.standby.timer_detail", "EdgeTX model timer"),
+    timer2_detail = t("widgets.dashboard.standby.timer_detail", "EdgeTX model timer"),
+    timer3_detail = t("widgets.dashboard.standby.timer_detail", "EdgeTX model timer"),
+    tx_gps_detail = t("widgets.dashboard.standby.tx_gps_detail", "Internal transmitter GPS"),
+    uptime_detail = t("widgets.dashboard.standby.uptime_detail", "Since radio power-on"),
+    firmware_detail = t("widgets.dashboard.standby.firmware_detail", "Radio firmware"),
+    date_detail = t("widgets.dashboard.standby.date_detail", "Radio date"),
   }
   local function text(key, fallback)
     return texts[key] or fallback

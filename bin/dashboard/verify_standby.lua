@@ -65,13 +65,12 @@ local utf8Values = standby.snapshot(default, cache)
 check("UTF-8 model truncates at a codepoint", utf8Values.model == "Model\195\169LongEn...")
 local scene = standby.build({ w = 480, h = 320 }, "Please wait...", cache.text, default, values, cache)
 check("standby scene builds", type(scene) == "table" and #scene > 3)
-check("tile labels use readable primary text", scene[5].color == COLOR_THEME_PRIMARY1)
+check("tile labels use readable primary text", scene[9].color == COLOR_THEME_PRIMARY1)
 check("status line clears small tool control", scene[3].x + scene[3].w <= 480 - 20 - 1 - 6)
 local largeScene = standby.build({ w = 800, h = 480 }, string.rep("W", 80), cache.text, default, values, cache)
 check("status line clears large tool control", largeScene[3].x + largeScene[3].w <= 800 - 44 - 8 - 6)
-check("status line preserves the full reason", largeScene[3].text == string.rep("W", 80))
-local valueClosure
-for i = 1, #scene do if type(scene[i].text) == "function" then valueClosure = scene[i].text; break end end
+check("status line preserves the full reason", largeScene[7].text == string.rep("W", 80))
+local valueClosure = scene[10].text
 check("scene exposes reactive value", type(valueClosure) == "function")
 local before = valueClosure()
 cache.snapshotValues.clock = "12:35"
@@ -95,5 +94,22 @@ tick = 401
 local longElrsValues = standby.snapshot(elrsFull, elrsCache)
 check("arbitrary ELRS label remains exact", string.find(longElrsValues.elrs, string.rep("LongRate", 20), 1, true) ~= nil)
 check("arbitrary ELRS overflow invalidates layout", elrsCache.valueOverflow == true)
+
+local elrsWide = standby.decode("elrs:wide")
+local wideCache = { text = elrsCache.text }
+standby.setElrsSnapshot(wideCache, {
+  status = "ready", readAt = 3, identity = "wide", packetRate = "D250", telemetryRatio = "Std",
+  maxPower = "250", dynamic = "Dyn", fields = { maxPower = { unit = "mW" } },
+}, 3)
+tick = 500
+local wideValues = standby.snapshot(elrsWide, wideCache)
+standby.build({ w = 800, h = 480 }, "Waiting", wideCache.text, elrsWide, wideValues, wideCache)
+standby.setElrsSnapshot(wideCache, {
+  status = "ready", readAt = 4, identity = "wide", packetRate = string.rep("ExactRate", 12), telemetryRatio = "Std",
+  maxPower = "250", dynamic = "Dyn", fields = { maxPower = { unit = "mW" } },
+}, 4)
+tick = 601
+standby.snapshot(elrsWide, wideCache)
+check("wide ELRS field overflow invalidates its cell", wideCache.valueOverflow == true)
 
 print(string.format("standby regression: %d checks passed", passed))

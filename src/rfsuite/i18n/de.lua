@@ -3144,6 +3144,8 @@ return {
       status_disarmed = "DISARMED",
       connecting_fbl = "Verbinde mit FBL...",
       standby = {
+        screen_title = "Standby",
+        module_count = "%d information modules",
         layout_invalid = "Standby layout does not fit",
         module_clock = "Clock",
         module_date = "Date",
@@ -3164,7 +3166,14 @@ return {
         elrs_packet_rate = "Packet Rate",
         elrs_telemetry_ratio = "Telemetry Ratio",
         elrs_max_power = "Max Power",
-        elrs_dynamic = "Dynamic"
+        elrs_dynamic = "Dynamic",
+        tx_battery_detail = "Radio battery",
+        model_detail = "EdgeTX model",
+        timer_detail = "EdgeTX model timer",
+        tx_gps_detail = "Internal transmitter GPS",
+        uptime_detail = "Since radio power-on",
+        firmware_detail = "Radio firmware",
+        date_detail = "Radio date"
       },
       please_wait_for_telemetry = "Bitte warten, Telemetrie wird empfangen",
       waiting_for_msp_link = "Warte auf MSP-Link",

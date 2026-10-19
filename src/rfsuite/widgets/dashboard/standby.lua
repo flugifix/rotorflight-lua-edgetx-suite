@@ -100,15 +100,17 @@ local function measure(text, font)
     local ok, w, h = pcall(lcd.sizeText, tostring(text), font)
     if ok and type(w) == "number" and type(h) == "number" then return w, h end
   end
+  if font == DBLSIZE then return #tostring(text) * 20, 38 end
   return #tostring(text) * (font == MIDSIZE and 12 or 8), font == MIDSIZE and 24 or 18
 end
 
 local function layout(items, width, height, labels)
   local columns = width >= 700 and 4 or 2
-  local gap, margin = 6, math.floor(width * 0.03)
+  local compact = height < 400
+  local gap, margin = compact and 6 or 10, compact and 10 or 16
   local colW = math.floor((width - margin * 2 - gap * (columns - 1)) / columns)
-  local top = height >= 440 and 150 or 116
-  local available = height - top - 8
+  local top, footer = compact and 82 or 112, compact and 54 or 50
+  local available = height - top - footer - gap
   local rows, used, y, rowHeight = {}, 0, top, 0
   local current = {}
   local function finishRow()
@@ -123,20 +125,30 @@ local function layout(items, width, height, labels)
     local boxW = span * colW + (span - 1) * gap
     local label = labels and labels[item.type] or item.type
     local lw, lh = measure(label, SMLSIZE)
-    local font = item.size == "small" and SMLSIZE or MIDSIZE
+    local font = item.type == "elrs" and SMLSIZE
+      or (item.type == "clock" and item.size ~= "small" and (compact and MIDSIZE or DBLSIZE))
+      or MIDSIZE
     local vw, vh = measure(WORST[item.type] or "-", font)
-    local lines = item.type == "elrs" and 5 or 1
+    local lines = 1
     if item.type == "elrs" then
+      local columnsPerLine = boxW >= 600 and 4 or 2
+      local fieldWidth = math.floor((boxW - 16 - gap * (columnsPerLine - 1)) / columnsPerLine)
       for n = 1, #ELRS_WORST do
         local spec = ELRS_WORST[n]
         local line = labels and labels[spec[1]] or spec[2]
         line = spec[3] and (line .. ": " .. spec[3]) or string.gsub(line, "%%d", "99999+")
         local lineW = measure(line, font)
-        if lineW > boxW - 16 then return nil, "width" end
+        if n == 1 then
+          if lineW > boxW - 16 then return nil, "width" end
+        elseif lineW > fieldWidth then return nil, "width" end
       end
     elseif vw > boxW - 16 then return nil, "width" end
     if lw > boxW - 16 then return nil, "width" end
-    local needed = lh + vh * lines + 22
+    local _, detailHeight = measure("Ag", SMLSIZE)
+    local verticalPadding = compact and 20 or 34
+    local needed = item.type == "elrs"
+      and (lh + vh * (boxW >= 600 and 1 or 2) + detailHeight + verticalPadding)
+      or (lh + vh * lines + detailHeight + verticalPadding)
     rowHeight = math.max(rowHeight, needed)
     current[#current + 1] = { item = item, x = margin + used * (colW + gap), w = boxW, font = font,
       lineHeight = vh, valueY = lh + 11 }
@@ -163,10 +175,21 @@ local function valuesFit(items, values, width, height, labels, rows)
   for r = 1, #rows do
     for i = 1, #rows[r].items do
       local box = rows[r].items[i]
-      local value = tostring(values[box.item.type] or "-")
-      for line in string.gmatch(value .. "\n", "([^\n]*)\n") do
-        local lineW = measure(line, box.font)
-        if lineW > box.w - 16 then return false end
+      if box.item.type == "elrs" then
+        local fieldColumns = box.w >= 600 and 4 or 2
+        local gap = height < 400 and 6 or 10
+        local fieldW = math.floor((box.w - 16 - gap * (fieldColumns - 1)) / fieldColumns)
+        local lines = values._elrsLines or {}
+        for n = 1, #lines do
+          local lineW = measure(lines[n], box.font)
+          if lineW > (n == 1 and box.w - 16 or fieldW) then return false end
+        end
+      else
+        local value = tostring(values[box.item.type] or "-")
+        for line in string.gmatch(value .. "\n", "([^\n]*)\n") do
+          local lineW = measure(line, box.font)
+          if lineW > box.w - 16 then return false end
+        end
       end
     end
   end
@@ -287,6 +310,10 @@ function M.snapshot(items, cache)
   local now = type(getTime) == "function" and getTime() or 0
   if cache.snapshotValues and now < (cache.snapshotAt or 0) + 100 then return cache.snapshotValues, cache.snapshotKey end
   local values = readValues(cache)
+  values._elrsLines = {}
+  for line in string.gmatch(tostring(values.elrs or "-") .. "\n", "([^\n]*)\n") do
+    values._elrsLines[#values._elrsLines + 1] = line
+  end
   if cache.zoneW and cache.zoneH and cache.labels then
     cache.valueOverflow = not valuesFit(items, values, cache.zoneW, cache.zoneH, cache.labels)
   end
@@ -307,21 +334,37 @@ function M.build(zone, statusLine, i18n, items, values, cache)
   local valid, _, rows = M.validate(items, w, h, labels)
   cache.valueOverflow = valid and not valuesFit(items, values, w, h, labels, rows)
   local ok = valid and not cache.valueOverflow
-  local logoW = math.floor(w * 0.32)
+  local compact = h < 400
+  local logoW = compact and math.min(145, math.floor(w * 0.34)) or math.min(210, math.floor(w * 0.30))
   local logoH = math.floor(logoW * 84 / 400 + 0.5)
   local toolSize = h > 350 and 44 or 20
   local toolMargin = h > 350 and 8 or 1
-  local statusX = math.floor(w * 0.39)
-  local statusRight = w - toolSize - toolMargin - 6
+  local headerY = compact and 6 or 8
+  local titleY = compact and 47 or 72
+  local footerH = compact and 54 or 50
+  local footerY = h - footerH
+  local batteryRight = w - toolSize - toolMargin - 8
   local children = {
     { type = "rectangle", x = 0, y = 0, w = w, h = h, color = COLOR_THEME_PRIMARY3, filled = true },
-    { type = "image", x = math.floor(w * 0.04), y = math.floor(h * 0.04), w = logoW, h = logoH, file = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png" },
-    { type = "label", x = statusX, y = math.floor(h * 0.055), w = math.max(0, statusRight - statusX),
-      h = math.max(20, (h >= 440 and 150 or 116) - math.floor(h * 0.055) - 8),
-      text = tostring(statusLine or ""), align = RIGHT, color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
+    { type = "image", x = compact and 10 or 16, y = headerY, w = logoW, h = logoH,
+      file = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png" },
+    { type = "label", x = math.max(logoW + 22, batteryRight - 130), y = headerY + 5,
+      w = 130, text = function() local snap = cache.snapshotValues or values; return tostring(snap.tx_battery or "-") end,
+      align = RIGHT, color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
+    { type = "label", x = compact and 10 or 16, y = titleY, w = math.floor(w * 0.5),
+      text = i18n("screen_title", "Standby"), color = COLOR_THEME_PRIMARY2, font = MIDSIZE },
+    { type = "label", x = math.floor(w * 0.5), y = titleY + 4, w = math.floor(w * 0.5) - (compact and 10 or 16),
+      text = string.format(i18n("module_count", "%d information modules"), #items),
+      align = RIGHT, color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
+    { type = "rectangle", x = 0, y = footerY, w = w, h = 1, color = COLOR_THEME_SECONDARY2, filled = true },
+    { type = "label", x = compact and 10 or 16, y = footerY + 8, w = w - (compact and 20 or 32),
+      h = footerH - 16, text = tostring(statusLine or ""),
+      color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
   }
   if not ok then
-    children[#children + 1] = { type = "label", x = 10, y = math.floor(h * 0.48), w = w - 20, text = i18n("layout_invalid", "Standby layout does not fit"), align = CENTER, color = COLOR_THEME_WARNING, font = MIDSIZE }
+    children[#children + 1] = { type = "label", x = 10, y = math.floor(h * 0.46), w = w - 20,
+      text = i18n("layout_invalid", "Standby layout does not fit"), align = CENTER,
+      color = COLOR_THEME_WARNING, font = MIDSIZE }
     return children
   end
   for r = 1, #rows do
@@ -333,10 +376,49 @@ function M.build(zone, statusLine, i18n, items, values, cache)
     local label = labels[item.type]
     children[#children + 1] = { type = "rectangle", x = x, y = y, w = boxW, h = row.h, color = COLOR_THEME_SECONDARY2, filled = true, radius = 5 }
     children[#children + 1] = { type = "label", x = x + 8, y = y + 5, w = boxW - 16, text = label, color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
-    children[#children + 1] = { type = "label", x = x + 8, y = y + box.valueY, w = boxW - 16,
-      text = function() local snap = cache.snapshotValues or values; return tostring(snap[item.type] or "-") end,
-      color = function() return item.type == "tx_battery" and cache.batteryLow and COLOR_THEME_WARNING or COLOR_THEME_PRIMARY1 end,
-      font = box.font }
+    if item.type == "elrs" then
+      local fieldColumns = boxW >= 600 and 4 or 2
+      local fieldGap = compact and 6 or 10
+      local fieldW = math.floor((boxW - 16 - fieldGap * (fieldColumns - 1)) / fieldColumns)
+      for field = 1, 4 do
+        local column = (field - 1) % fieldColumns
+        local line = math.floor((field - 1) / fieldColumns)
+        children[#children + 1] = { type = "label", x = x + 8 + column * (fieldW + fieldGap),
+          y = y + box.valueY + line * box.lineHeight, w = fieldW,
+          text = function()
+            local snap = cache.snapshotValues or values
+            return snap._elrsLines and snap._elrsLines[field + 1] or "-"
+          end,
+          color = COLOR_THEME_PRIMARY1, font = box.font }
+      end
+      children[#children + 1] = { type = "label", x = x + 8, y = y + row.h - 20, w = boxW - 16,
+        text = function()
+          local snap = cache.snapshotValues or values
+          return snap._elrsLines and snap._elrsLines[1] or "-"
+        end,
+        color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
+    else
+      children[#children + 1] = { type = "label", x = x + 8, y = y + box.valueY, w = boxW - 16,
+        text = function() local snap = cache.snapshotValues or values; return tostring(snap[item.type] or "-") end,
+        color = function() return item.type == "tx_battery" and cache.batteryLow and COLOR_THEME_WARNING or COLOR_THEME_PRIMARY1 end,
+        font = box.font }
+      local detail = ""
+      if item.type == "tx_battery" then detail = i18n("tx_battery_detail", "Radio battery")
+      elseif item.type == "model" then detail = i18n("model_detail", "EdgeTX model")
+      elseif item.type == "timer1" or item.type == "timer2" or item.type == "timer3" then
+        detail = i18n("timer_detail", "EdgeTX model timer")
+      elseif item.type == "tx_gps" then detail = i18n("tx_gps_detail", "Internal transmitter GPS")
+      elseif item.type == "uptime" then detail = i18n("uptime_detail", "Since radio power-on")
+      elseif item.type == "firmware" then detail = i18n("firmware_detail", "Radio firmware")
+      elseif item.type == "date" then detail = i18n("date_detail", "Radio date") end
+      children[#children + 1] = { type = "label", x = x + 8, y = y + row.h - 20, w = boxW - 16,
+        text = function()
+          local snap = cache.snapshotValues or values
+          if item.type == "clock" then return tostring(snap.date or "-") end
+          return detail
+        end,
+        color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
+    end
     end
   end
   return children
