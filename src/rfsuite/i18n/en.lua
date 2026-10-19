@@ -2762,11 +2762,14 @@ return {
         saved_message = "Keys saved",
         save_error_title = "Error",
         save_error_message = "Save failed",
-        help_message = "Radio-wide fullscreen shortcuts, including before FC connection. Theme keeps theme/host defaults; " ..
-          "Nothing disables a key. Other actions override the theme. Tool and Flight Log keep safety guards. " ..
-          "Short RTN stays Back/Close; long RTN leaves fullscreen.\nPAGE >: action for the next-page key.\nPAGE <: " ..
-          "action for the previous-page key.\nMDL: action for the model key.\nSYS: action for the system key.\nTELE: " ..
-          "action for the telemetry key.",
+        help_intro = "Radio-wide fullscreen shortcuts, including before FC connection.",
+        help_actions = "Theme keeps theme/host defaults; Nothing disables a key. Other actions override the theme.",
+        help_safety = "Tool and Flight Log keep safety guards. Short RTN stays Back/Close; long RTN leaves fullscreen.",
+        help_page_down = "PAGE >: action for the next-page key.",
+        help_page_up = "PAGE <: action for the previous-page key.",
+        help_mdl = "MDL: action for the model key.",
+        help_sys = "SYS: action for the system key.",
+        help_tele = "TELE: action for the telemetry key.",
       },
       settings_dashboard_quick_menu = {
         place = "Position %d",

@@ -2790,11 +2790,14 @@ return {
         saved_message = "Tasten gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen",
-        help_message = "Senderweite Vollbildtasten, auch vor der FC-Verbindung. Theme nutzt Theme/Host-Standards; Nichts " ..
-          "deaktiviert eine Taste. Andere Aktionen haben Vorrang. Suite und Flugbuch behalten ihre " ..
-          "Schutzbedingungen. Kurzes RTN bleibt Zurück/Schließen; langes RTN verlässt das Vollbild.\nPAGE >: " ..
-          "Aktion der nächsten Seitentaste.\nPAGE <: Aktion der vorherigen Seitentaste.\nMDL: Aktion der " ..
-          "Modelltaste.\nSYS: Aktion der Systemtaste.\nTELE: Aktion der Telemetrietaste.",
+        help_intro = "Senderweite Vollbildtasten, auch vor der FC-Verbindung.",
+        help_actions = "Theme nutzt Theme/Host-Standards; Nichts deaktiviert eine Taste. Andere Aktionen haben Vorrang.",
+        help_safety = "Suite und Flugbuch behalten Schutzbedingungen. RTN bleibt Zurück/Schließen; langes RTN verlässt Vollbild.",
+        help_page_down = "PAGE >: Aktion der nächsten Seitentaste.",
+        help_page_up = "PAGE <: Aktion der vorherigen Seitentaste.",
+        help_mdl = "MDL: Aktion der Modelltaste.",
+        help_sys = "SYS: Aktion der Systemtaste.",
+        help_tele = "TELE: Aktion der Telemetrietaste.",
       },
       settings_dashboard_quick_menu = {
         place = "Position %d",
