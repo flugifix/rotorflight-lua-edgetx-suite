@@ -14,11 +14,27 @@ local PARAMETER_ENTRY, PARAMETER_READ = 0x2B, 0x2C
 local MODULE, RADIO, ELRS_LUA = 0xEE, 0xEA, 0xEF
 local TYPE_TEXT_SELECTION = 9
 local PING_RETRY, READ_RETRY = 1.0, 0.5
-local MAX_PINGS, MAX_SENDS, MAX_FIELDS, MAX_CHUNKS, MAX_POPS = 4, 48, 48, 8, 2
+local MAX_PINGS, MAX_SENDS, MAX_FIELDS, MAX_CHUNKS, MAX_POPS, MAX_FIELD_BYTES = 4, 48, 48, 8, 2, 512
 local ELRS_SERIAL = { 0x45, 0x4C, 0x52, 0x53 }
 
 local lease, generation, active, last = nil, 0, nil, nil
 local quarantine = false
+local quarantineUntil = nil
+local powerDecoder = nil
+
+local function getPowerDecoder()
+  if powerDecoder then return powerDecoder end
+  if type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.require) == "function" then
+    powerDecoder = _G.rfsuite.require("lib/elrs_power.lua")
+  elseif type(loadScript) == "function" then
+    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/elrs_power.lua", "t")
+    if type(chunk) == "function" then
+      local ok, loaded = pcall(chunk)
+      if ok then powerDecoder = loaded end
+    end
+  end
+  return powerDecoder
+end
 
 function M.currentIdentity()
   local parts = {}
@@ -122,6 +138,9 @@ local function finish(st, status, reason, now)
       maxPower = st.values.maxPower, dynamic = st.values.dynamic, fields = st.fields,
     }
   end
+  if st.pingAt ~= nil or st.requestAt ~= nil then
+    quarantine, quarantineUntil = true, nil
+  end
   active = nil
   lease = nil
 end
@@ -144,10 +163,15 @@ local function takeField(st)
       st.fields[kind] = field
       st.values[kind] = field.selectedLabel
       if kind == "maxPower" then
-        local mw = string.lower(field.unit or "") == "mw" and tonumber(field.selectedLabel) or nil
-        field.milliwatts = mw and mw > 0 and mw or nil
+        local decoder = getPowerDecoder()
+        field.milliwatts = decoder and decoder.maxPowerMilliwatts({
+          options = field.options, value = field.selectedIndex, unit = field.unit,
+        }) or nil
       elseif kind == "dynamic" then
-        if string.lower(field.options[1] or "") == "off" then field.enabled = field.selectedIndex > 0 end
+        local decoder = getPowerDecoder()
+        if decoder then
+          field.enabled = decoder.dynamicOn({ options = field.options, value = field.selectedIndex })
+        end
       end
     end
   end
@@ -163,23 +187,26 @@ local function takeEntry(st, data)
   local remain = data[4]
   if type(remain) ~= "number" or remain < 0 or remain >= MAX_CHUNKS then return end
   if st.expectedRemain ~= nil and remain ~= st.expectedRemain then return end
+  if st.chunk >= MAX_CHUNKS or #st.buf + (#data - 4) > MAX_FIELD_BYTES then nextField(st); return end
   for i = 5, #data do st.buf[#st.buf + 1] = data[i] end
   if remain > 0 then
     st.chunk, st.expectedRemain, st.requestAt = st.chunk + 1, remain - 1, nil
   else
+    st.requestAt = nil
     takeField(st)
   end
 end
 
 function M.acquire(owner)
   if type(owner) ~= "string" or owner == "" then return false end
+  if quarantine then return false end
   if lease == nil or lease == owner then lease = owner; return true end
   return false
 end
 
 function M.release(owner, dirty)
   if lease == owner then
-    if dirty then quarantine = true end
+    if dirty then quarantine, quarantineUntil = true, nil end
     lease = nil
   end
 end
@@ -187,9 +214,18 @@ end
 function M.request(identityKey, context)
   context = context or {}
   local owner = context.owner or "standby"
+  if (active and active.identity ~= identityKey) or (last and last.identity ~= identityKey) then
+    M.invalidate(identityKey)
+  end
+  if active then
+    if active.owner == owner then return true, "reading" end
+    return false, "busy"
+  end
   if last and last.identity == identityKey and not context.force then return true, "ready" end
-  if not M.acquire(owner) then return false, "busy" end
-  if active and active.owner == owner and active.identity == identityKey and not active.done then return true, "reading" end
+  if quarantine then
+    if lease ~= nil and lease ~= owner then return false, "busy" end
+    lease = owner
+  elseif not M.acquire(owner) then return false, "busy" end
   generation = generation + 1
   active = {
     owner = owner, identity = identityKey, generation = generation, status = "reading",
@@ -201,7 +237,7 @@ end
 
 function M.cancel(owner, reason)
   if active and (owner == nil or active.owner == owner) then
-    if active.pingAt ~= nil or active.requestAt ~= nil then quarantine = true end
+    if active.pingAt ~= nil or active.requestAt ~= nil then quarantine, quarantineUntil = true, nil end
     generation = generation + 1
     active = nil
   end
@@ -215,11 +251,26 @@ function M.invalidate(identityKey)
 end
 
 function M.snapshot(identityKey)
-  if last and (identityKey == nil or last.identity == identityKey) then return last end
   if active and (identityKey == nil or active.identity == identityKey) then
-    return { status = "reading", identity = active.identity }
+    return { status = "reading", identity = active.identity, previous = last }
   end
+  if last and (identityKey == nil or last.identity == identityKey) then return last end
   return { status = "unavailable", reason = "not_read", identity = identityKey }
+end
+
+function M.drain(context)
+  if not quarantine then return true, false end
+  context = context or {}
+  if active and context.owner ~= active.owner then return false, false end
+  local crsf = context.crsf
+  if type(crsf) ~= "table" or type(crsf.popFrame) ~= "function" then return false, false end
+  local now = context.now or nowSeconds()
+  if quarantineUntil == nil then quarantineUntil = now + READ_RETRY end
+  crsf.popFrame(PARAMETER_ENTRY)
+  crsf.popFrame(DEVICE_INFO)
+  if now < quarantineUntil then return false, true end
+  quarantine, quarantineUntil = false, nil
+  return true, true
 end
 
 function M.publish(identityKey, snapshot, now)
@@ -239,6 +290,7 @@ function M.step(context)
   local st = active
   if not st or st.done then return M.snapshot(context and context.identity) end
   context = context or {}
+  if context.owner ~= st.owner then return M.snapshot(context.identity) end
   if context.identity ~= nil and context.identity ~= st.identity then
     M.invalidate(context.identity)
     return M.snapshot(context.identity)
@@ -251,11 +303,11 @@ function M.step(context)
   local now = context.now or nowSeconds()
   st.now = now
   if st.phase == "drain" then
-    if st.drainUntil == nil then st.drainUntil = now + READ_RETRY end
-    for _ = 1, MAX_POPS do if crsf.popFrame(PARAMETER_ENTRY) == nil then break end end
-    for _ = 1, MAX_POPS do if crsf.popFrame(DEVICE_INFO) == nil then break end end
-    if now < st.drainUntil then return M.snapshot(st.identity) end
-    quarantine, st.phase, st.drainUntil = false, "ping", nil
+    local drained = M.drain({ owner = st.owner, crsf = crsf, now = now })
+    if not drained then return M.snapshot(st.identity) end
+    st.phase = "ping"
+    -- The drain used this pass's complete pop budget. Start discovery on the next pass.
+    return M.snapshot(st.identity)
   end
   if st.phase == "ping" then
     local popped = 0
@@ -267,6 +319,7 @@ function M.step(context)
       if key == false then finish(st, "unavailable", "not_elrs", now); return last end
       if key then
         st.moduleIdentity, st.moduleName, st.fieldCount = key, name, math.min(count, MAX_FIELDS)
+        st.pingAt = nil
         st.field, st.chunk, st.buf, st.phase = 1, 0, {}, "read"
         st.requestAt, st.expectedRemain = nil, nil
         if st.fieldCount <= 0 then finish(st, "unavailable", "no_fields", now) end
@@ -308,7 +361,10 @@ end
 M.classify = classify
 M.parseSelection = parseSelection
 M.identity = identity
-M.limits = { pings = MAX_PINGS, sends = MAX_SENDS, fields = MAX_FIELDS, chunks = MAX_CHUNKS, pops = MAX_POPS }
+M.limits = {
+  pings = MAX_PINGS, sends = MAX_SENDS, fields = MAX_FIELDS,
+  chunks = MAX_CHUNKS, pops = MAX_POPS, fieldBytes = MAX_FIELD_BYTES,
+}
 
 if type(_G) == "table" then
   _G.rfsuite = _G.rfsuite or {}

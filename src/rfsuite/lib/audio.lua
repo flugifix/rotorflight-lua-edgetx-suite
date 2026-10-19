@@ -1986,8 +1986,8 @@ local function connectChainDone()
   return progress.total > 0 and progress.done >= progress.total
 end
 
---- The transmitter module's maximum power and dynamic-power state for this connection, as the
---- table lib/elrs_power.lua fills in; `done` set once it has answered or given up.
+--- The transmitter module's maximum power and dynamic-power state for this connection, copied
+--- from the shared ELRS configuration snapshot; `done` is set once it has answered or given up.
 ---
 --- The module is asked over the CRSF parameter protocol, and every frame sent to it goes out in
 --- place of one RC channels frame (EdgeTX radio/src/pulses/crossfire.cpp, the Lua frame is copied
@@ -2317,9 +2317,9 @@ function Audio.resetConnectionState(audioState)
   audioState.dropoutsBelowSince = nil
   audioState.dropoutsSoundMissingLogged = nil
   -- The TX power alert's episode and what the module said about its power. The pilot may have
-  -- changed the module's power settings since, so the next connection asks again -- two reads
-  -- where lib/elrs_power.lua already knows the module's field ids. The answer is kept aside for a
-  -- link that comes back while the model is still armed, which may not ask (txPowerModuleRead).
+  -- changed the module's power settings since, so the next connection asks again. The answer is
+  -- kept aside for a link that comes back while the model is still armed, which may not ask
+  -- (txPowerModuleRead).
   audioState.txPower = nil
   local read = audioState.txPowerRead
   if read and read.done then audioState.txPowerLast = read end

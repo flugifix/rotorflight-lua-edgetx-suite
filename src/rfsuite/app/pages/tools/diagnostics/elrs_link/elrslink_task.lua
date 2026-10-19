@@ -49,7 +49,6 @@ local READ_TIMEOUT_MAX_SECONDS = 8.0
 local READ_TIMEOUT_SECONDS = 0.5
 local PING_RETRY_SECONDS = 1.0
 local WRITE_DELAY_SECONDS = 0.25
-local MAX_CRSF_POPS_PER_PASS = 2
 
 local SYNC_MODE_OFF = 0
 local SYNC_MODE_ROTORFLIGHT_TO_ELRS = 1
@@ -889,19 +888,18 @@ function M.wakeup()
     end
 
     local provider = configProvider()
-    if not provider or not provider.acquire("diagnostics") then return end
+    if not CrsfManager then CrsfManager = loadModule("lib/crsf.lua") end
+    if not provider or not CrsfManager then return end
+    local drained, usedPopBudget = provider.drain({ owner = "diagnostics", crsf = CrsfManager, now = now })
+    if not drained or usedPopBudget or not provider.acquire("diagnostics") then return end
 
     if state == "idle" then
         configWaitStartedAt = 0
         probeStartedAt = now
         state = "ping"
         nextActionAt = 0
-        logMsg("Starting ELRS link probe (pinging 0x00 from 0xEA)")
+        logMsg("Starting ELRS link probe (pinging 0xEE from 0xEA)")
         setStatus("status_pinging_module")
-    end
-
-    if not CrsfManager then
-      CrsfManager = loadModule("lib/crsf.lua")
     end
 
     -- Simulator logic: inject dummy frames
@@ -942,14 +940,10 @@ function M.wakeup()
 
     -- Process frames via CrsfManager
     if CrsfManager then
-        for _ = 1, MAX_CRSF_POPS_PER_PASS do
-            local data = CrsfManager.popFrame(CRSF_FRAMETYPE_DEVICE_INFO)
-            if data then handleDeviceInfo(data) else break end
-        end
-        for _ = 1, MAX_CRSF_POPS_PER_PASS do
-            local data = CrsfManager.popFrame(CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY)
-            if data then handleParameterEntry(data) else break end
-        end
+        local info = CrsfManager.popFrame(CRSF_FRAMETYPE_DEVICE_INFO)
+        if info then handleDeviceInfo(info) end
+        local entry = CrsfManager.popFrame(CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY)
+        if entry then handleParameterEntry(entry) end
     end
 
     if taskComplete then return end
@@ -1005,6 +999,8 @@ end
 function M.start(mode)
     manualSyncMode = mode or SYNC_MODE_OFF
     M.reset()
+    local provider = configProvider()
+    if provider and manualSyncMode ~= SYNC_MODE_OFF then provider.invalidate(nil) end
     yesArmCount = armChangeCount()
     taskComplete = false
     return true
@@ -1028,6 +1024,8 @@ function M.getRatioField() return ratioField end
 function M.selectOption(kind, index)
     local field = (kind == "rate") and rateField or ratioField
     if type(field) ~= "table" or type(index) ~= "number" then return false end
+    local provider = configProvider()
+    if provider then provider.invalidate(nil) end
 
     local label = field.options and field.options[index + 1] or nil
     clearPendingWrites()

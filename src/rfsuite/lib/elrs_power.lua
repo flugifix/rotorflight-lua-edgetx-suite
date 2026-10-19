@@ -14,54 +14,18 @@
 --   "Dynamic"    "Off;Dyn;AUX9;AUX10;AUX11;AUX12". Every choice but Off is dynamic power: an AUX
 --                choice adds a switch that boosts to the maximum (4.1.0 src/src/dynpower.cpp:106-113).
 --
--- Parameter ids are given out in registration order, and what is registered depends on the
--- hardware and the build (an RF Band field on dual-band modules, Antenna Mode on dual-radio ones),
--- so the same firmware numbers the fields differently on two modules. The first read of a module
--- therefore walks the list by name until both fields are found; the ids it found are kept for that
--- module, and every later read asks for the two fields directly. A field that does not belong to
--- the two is left after its first chunk, which carries its name.
---
--- One conversation is driven by `PowerRead.step`, a pass at a time, on a table the caller keeps
--- (the state of one connection). The frame multiplexer (lib/crsf.lua) and the push function are
--- passed in, so the whole conversation can be checked without a radio.
+-- lib/elrs_config.lua owns the one bounded parameter conversation. This module keeps the public
+-- power-field decoders and a compatibility step wrapper for older callers.
 
 local PowerRead = {}
 
-local FRAME_DEVICE_PING = 0x28
-local FRAME_DEVICE_INFO = 0x29
-local FRAME_PARAMETER_ENTRY = 0x2B
-local FRAME_PARAMETER_READ = 0x2C
-
--- The ping goes to the transmitter module from the radio, as lib/link_rates.lua's does; a parameter
--- read names the ExpressLRS Lua script as its origin, as the ELRS Link page's does.
 local ADDRESS_MODULE = 0xEE
-local ADDRESS_RADIO = 0xEA
-local ADDRESS_ELRS_LUA = 0xEF
-local PING_PAYLOAD = { ADDRESS_MODULE, ADDRESS_RADIO }
 local SERIAL_ELRS = { 0x45, 0x4C, 0x52, 0x53 }  -- 'E' 'L' 'R' 'S'
 
 local TYPE_TEXT_SELECTION = 9
 
--- How long an unanswered request waits before it is sent again.
-local PING_RETRY_SECONDS = 1.0
-local REQUEST_RETRY_SECONDS = 0.5
-
--- How many tries one conversation may make to send a frame, in all, before the values are left
--- unknown. Every try counts -- a repeat, and one the full output buffer refused -- so that the
--- conversation ends on any radio. A budget in tries rather than seconds, because a radio running
--- its passes slowly sends one frame per pass and would run out of seconds while the module is
--- still answering. The longest first read measured is 12 frames, the ping included (a dual-band
--- module with RF Band and Antenna Mode ahead of the power fields, Max Power in two chunks); 36 is
--- three tries per frame of that read on average, so a slow or lossy module still finishes, and a
--- module that never answers is left after 36 pings. An attempt an arming cuts short starts again
--- after the disarm on a fresh table, with a fresh count.
-local FRAME_BUDGET = 36
-
--- Field ids per module, for the life of this Lua state. The key is the module's name, versions and
--- field count off its device information: the same key is the same numbering.
-local idsByModule = {}
-
-PowerRead.FRAME_BUDGET = FRAME_BUDGET
+-- Compatibility value; the shared provider owns the actual bound.
+PowerRead.FRAME_BUDGET = 48
 
 --- The module's identity and field count from a device-information payload; nil where the payload
 --- is not the transmitter module's answer, false where the module is not ExpressLRS.
@@ -145,91 +109,19 @@ function PowerRead.dynamicOn(field)
   return field.value > 0
 end
 
-local function clearBuffer(st)
-  local buf = st.buf
-  for i = #buf, 1, -1 do buf[i] = nil end
-  st.chunk = 0
-  st.expectRemain = nil
-  st.requestAt = nil
-end
-
 local function finish(st)
   st.done = true
   st.phase = nil
 end
 
--- The next field to ask for, or the end of the conversation.
-local function nextField(st)
-  clearBuffer(st)
-  if st.phase == "read" then
-    if st.field == st.maxId then
-      st.field = st.dynamicId
-      return
-    end
-    finish(st)
-    return
-  end
-  if st.maxId and st.dynamicId then
-    idsByModule[st.key] = { max = st.maxId, dynamic = st.dynamicId }
-    finish(st)
-    return
-  end
-  st.field = st.field + 1
-  if st.field > (st.fieldCount or 0) then finish(st) end
-end
-
--- One whole field has arrived.
-local function takeField(st, bytes)
-  local field = PowerRead.parseSelection(bytes)
-  local kind = field and PowerRead.classify(field.name) or nil
-  if st.phase == "read" then
-    local expected = (st.field == st.maxId) and "max" or "dynamic"
-    if kind ~= expected then
-      -- The module numbers its fields differently from when the ids were kept (a new build with
-      -- the same name and version is the case this covers): forget them and walk again.
-      idsByModule[st.key] = nil
-      st.phase = "walk"
-      st.maxId, st.dynamicId = nil, nil
-      st.maxMilliwatts, st.dynamic = nil, nil
-      st.field = 0
-      nextField(st)
-      return
-    end
-  end
-  if kind == "max" then
-    st.maxId = st.field
-    st.maxMilliwatts = PowerRead.maxPowerMilliwatts(field)
-  elseif kind == "dynamic" then
-    st.dynamicId = st.field
-    st.dynamic = PowerRead.dynamicOn(field)
-  end
-  nextField(st)
-end
-
--- One parameter-entry frame for the field asked for.
-local function takeEntry(st, data)
-  local remain = data[4]
-  if type(remain) ~= "number" then return end
-  -- The reply carries how many chunks remain, not which one this is; a chunk that is not the one
-  -- asked for is a late answer to an earlier request and is dropped.
-  if st.expectRemain ~= nil and remain ~= st.expectRemain then return end
-  if st.chunk == 0 and st.phase == "walk" then
-    -- The name is in the first chunk. A field that is neither of the two is left here.
-    local name = cString(data, 7)
-    if PowerRead.classify(name) == nil then
-      nextField(st)
-      return
-    end
-  end
-  local buf = st.buf
-  for i = 5, #data do buf[#buf + 1] = data[i] end
-  if remain > 0 then
-    st.chunk = st.chunk + 1
-    st.expectRemain = remain - 1
-    st.requestAt = nil
-    return
-  end
-  takeField(st, buf)
+local function configProvider()
+  local config = type(_G) == "table" and _G.rfsuite and _G.rfsuite.elrs_config or nil
+  if config or type(loadScript) ~= "function" then return config end
+  local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/elrs_config.lua", "t")
+  if type(chunk) ~= "function" then return nil end
+  local ok, loaded = pcall(chunk)
+  if ok then return loaded end
+  return nil
 end
 
 --- Drive one conversation one step. `st` is the caller's table for one connection; `crsf` is the
@@ -239,14 +131,7 @@ end
 --- sends at most one per call, and a caller calls it only while the model is disarmed.
 function PowerRead.step(st, crsf, push, now)
   if st.done then return end
-  local config = type(_G) == "table" and _G.rfsuite and _G.rfsuite.elrs_config or nil
-  if not config and type(loadScript) == "function" then
-    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/elrs_config.lua", "t")
-    if type(chunk) == "function" then
-      local ok, loaded = pcall(chunk)
-      if ok then config = loaded end
-    end
-  end
+  local config = configProvider()
   if not config then finish(st); return end
   local identityKey = config.currentIdentity()
   local accepted = config.request(identityKey, { owner = "legacy_power" })
@@ -265,10 +150,10 @@ function PowerRead.step(st, crsf, push, now)
   end
 end
 
---- Forget the ids kept for every module. For a caller that knows the module was replaced or
---- reflashed; nothing in the suite calls it on its own.
+--- Forget the shared module snapshot and stop an in-flight legacy read.
 function PowerRead.forget()
-  for k in pairs(idsByModule) do idsByModule[k] = nil end
+  local config = configProvider()
+  if config then config.invalidate(nil) end
 end
 
 return PowerRead
