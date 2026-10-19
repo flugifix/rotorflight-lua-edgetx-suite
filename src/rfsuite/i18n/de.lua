@@ -3276,6 +3276,8 @@ return {
       inflight_board_differs = "Flugregler weicht ab in",
       inflight_board_unmapped = "Kanäle nicht in der Empfängerzuordnung",
       inflight_board_unknown = "Flugregler nicht verglichen",
+      inflight_board_steps = "verstellt",
+      inflight_board_more = "weitere",
       inflight_backup_none = "Keine Sicherung",
       inflight_backup_held = "Sicherung in Profil",
       inflight_transfer_busy = "Profil wird kopiert",

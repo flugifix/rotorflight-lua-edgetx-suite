@@ -1677,7 +1677,11 @@ local function publish(widget, drive)
     compareState = { verdict = compare.verdict, count = compare.count,
       -- Whether the step is the whole of the difference. It travels because the pilot can fix
       -- that one on the radio, in one field, and the sentence on screen is a different sentence.
-      stepOnly = compare.stepOnly }
+      stepOnly = compare.stepOnly,
+      -- The cells whose slot holds another function, and which one: a step there moves that
+      -- function rather than the parameter the row names, so the sentence names them. It is the
+      -- finished comparison's own list, complete when the verdict is, and read and never written.
+      named = compare.named }
   end
 
   local activeId = drive:functionId(drive.bank, drive.row)
