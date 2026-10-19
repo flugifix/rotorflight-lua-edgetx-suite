@@ -361,6 +361,11 @@ function M.describeCheck(result, t)
     return t("widgets.dashboard.inflight_check_ok", "Setup OK")
   end
   if type(result) ~= "table" then return "" end
+  -- The interlock refused because the trim block is still being walked (inflight/drive.lua,
+  -- M.TRIMS_PENDING). Not a fault the pilot has to fix, so it is the whole sentence.
+  if result[1] == "trims_pending" then
+    return t("widgets.dashboard.inflight_check_trims_pending", "Checking trims")
+  end
 
   local unset, mix, gvar, trim, claim = false, false, false, false, false
   local same, twice = false, false
@@ -391,7 +396,7 @@ function M.describeCheck(result, t)
   if same then parts[#parts + 1] = t("widgets.dashboard.inflight_check_same", "Bank and value share a variable or a channel") end
   if mix then parts[#parts + 1] = t("widgets.dashboard.inflight_check_mix", "Mixer line missing or wrong") end
   if gvar then parts[#parts + 1] = t("widgets.dashboard.inflight_check_gvar", "Variable range or precision") end
-  if trim then parts[#parts + 1] = t("widgets.dashboard.inflight_check_trim", "Trim still active here") end
+  if trim then parts[#parts + 1] = t("widgets.dashboard.inflight_check_trim", "Trim still active") end
   if claim then parts[#parts + 1] = t("widgets.dashboard.inflight_check_claim", "Walk and adjust need two trims") end
   if twice then parts[#parts + 1] = t("widgets.dashboard.inflight_check_twice", "One trim is claimed twice") end
   return table.concat(parts, " / ")
