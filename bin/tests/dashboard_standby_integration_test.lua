@@ -1,4 +1,6 @@
 local root = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]bin[/\\]tests[/\\]") or ".")
+local runtimePath = root .. "/src/rfsuite/widgets/dashboard/runtime.lua"
+if arg and arg[1] == "--runtime" and arg[2] then runtimePath = arg[2] end
 local Stubs = assert(loadfile(root .. "/bin/accounting/stubs/edgetx.lua"))()
 local FC = assert(loadfile(root .. "/bin/accounting/stubs/fc.lua"))()
 
@@ -109,7 +111,7 @@ do
     calls.cancelOwners[#calls.cancelOwners + 1] = owner
   end
 
-  local Runtime = assert(loadfile(root .. "/src/rfsuite/widgets/dashboard/runtime.lua"))()
+  local Runtime = assert(loadfile(runtimePath))()
   local widget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
   widget.preferences.dashboard = widget.preferences.dashboard or {}
   widget.preferences.dashboard.standby_enabled = true
@@ -145,7 +147,9 @@ do
     local before = calls.request
     Stubs.tick()
     widget:refresh(0, nil)
-    check(name, calls.request == before and widget._standbyActive ~= true)
+    check(name, calls.request == before and widget._standbyActive ~= true
+      and not (widget._job and widget._job.kind == "standby")
+      and not (type(widget.renderKey) == "string" and string.sub(widget.renderKey, 1, 8) == "standby|"))
   end
   excluded("armed state excludes standby", function() widget.state.armed = true end)
   excluded("prior flight excludes standby", function()
