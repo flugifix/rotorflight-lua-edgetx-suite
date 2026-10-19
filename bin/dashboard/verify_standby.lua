@@ -20,6 +20,10 @@ local default = standby.decode(nil)
 check("default has three items", #default == 3)
 check("default fits 480x320", standby.validate(default, 480, 320))
 check("default fits 800x480", standby.validate(default, 800, 480))
+local de = assert(loadfile("src/rfsuite/i18n/de.lua"))()
+local deStandby = de.widgets.dashboard.standby
+check("German default fits 480x320", standby.validate(default, 480, 320, deStandby))
+check("German default fits 800x480", standby.validate(default, 800, 480, deStandby))
 
 local empty, emptyErr = standby.decode("-")
 check("empty is preserved", #empty == 0 and emptyErr == nil)
@@ -41,6 +45,8 @@ local elrsLabels = {
 }
 check("ELRS composite fits supported full row", standby.validate(elrsFull, 480, 320, elrsLabels))
 check("ELRS composite fits supported large row", standby.validate(elrsFull, 800, 480, elrsLabels))
+check("German ELRS composite fits 480x320", standby.validate(elrsFull, 480, 320, deStandby))
+check("German ELRS composite fits 800x480", standby.validate(elrsFull, 800, 480, deStandby))
 for _, malformedValue in ipairs({ ",clock:small", "clock:small,", "clock:small,,date:wide" }) do
   local malformedList, grammarErr = standby.decode(malformedValue)
   check("comma grammar rejected " .. malformedValue, #malformedList == 0 and grammarErr == "malformed")
