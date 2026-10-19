@@ -534,22 +534,59 @@ local function runScenario(themePath, passes)
   }
 end
 
-local function runStandbyScenario(layout, gps)
+local function bytes(value)
+  local out = {}; for i = 1, #value do out[#out + 1] = string.byte(value, i) end
+  out[#out + 1] = 0; return out
+end
+local function append(out, values) for i = 1, #values do out[#out + 1] = values[i] end end
+local function elrsInfo(count)
+  local out = { 0xEA, 0xEE }; append(out, bytes("ELRS TX"))
+  append(out, { 0x45, 0x4C, 0x52, 0x53, 0, 0, 0, 1, 0, 4, 1, 0, count }); return out
+end
+local function elrsField(id, name, options, selected, unit)
+  local out = { 0xEA, 0xEE, id, 0, 0, 9 }; append(out, bytes(name)); append(out, bytes(table.concat(options, ";")))
+  append(out, { selected, 0, #options - 1, 0 }); append(out, bytes(unit or "")); return out
+end
+
+local function runStandbyScenario(layout, gps, elrsReplies)
   World.reset()
   local savedGps = _G.getTxGPS
   _G.getTxGPS = function() return gps end
+  local fields = {
+    elrsField(1, "Packet Rate", { "D250", "500Hz" }, 1),
+    elrsField(2, "Telem Ratio", { "Std", "Race", "Off", "1:128" }, 3),
+    elrsField(3, "Max Power", { "25", "1000" }, 1, "mW"),
+    elrsField(4, "Dynamic", { "Off", "Dyn", "AUX9" }, 2),
+  }
+  Stubs.onPush = function(command, data)
+    if not elrsReplies then return true end
+    if command == 0x28 then Stubs.pushFrame(0x29, elrsInfo(#fields))
+    elseif command == 0x2C and fields[data[3]] then Stubs.pushFrame(0x2B, fields[data[3]]) end
+    return true
+  end
   local Runtime = World.require("widgets/dashboard/runtime.lua")
   local widget = Runtime.new(ZONE, {})
   widget.preferences = widget.preferences or {}
   widget.preferences.dashboard = { theme_preflight = "system/default", standby_enabled = true, standby_layout = layout }
-  local worst = {}
+  local worst, raised = {}, 0
   for i = 1, 120 do
     local class = passClass(widget)
+    local logSeq = _G.rfsuite.log_history_seq or 0
     local n = count(widget.refresh, widget, 0, nil)
     if n > (worst[class] or 0) then worst[class] = n end
+    local history = _G.rfsuite.log_history or {}
+    local added = (_G.rfsuite.log_history_seq or 0) - logSeq
+    for k = math.max(1, #history - added + 1), #history do
+      if string.find(history[k].msg, "job step error (", 1, true) == 1 then raised = raised + 1 end
+    end
   end
   _G.getTxGPS = savedGps
-  return worst
+  if widget.state.fblConnected == true then error("accounting: standby scenario unexpectedly connected to an FC") end
+  if widget._treeKind ~= "standby" or not widget.built then error("accounting: standby scene was not built") end
+  if raised > 0 or (widget._jobFaults.standby or 0) > 0 then error("accounting: standby build raised") end
+  local control = sweepControl(1000)
+  local sweep, refs = sweepCost(Stubs.lvgl.refs, control)
+  return { worst = worst, sweep = sweep, refs = refs }
 end
 
 --- Run one scenario ARMED, with telemetry that moves between passes.
@@ -855,7 +892,6 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
     error("accounting: the dashboard settled without a connected flight controller (isConnected="
       .. tostring(session.isConnected) .. ", mcu_id=" .. tostring(session.mcu_id) .. ")")
   end
-
   installDeferredLink()
 
   local ToolHost = World.require("widgets/dashboard/tool_host.lua")
@@ -894,6 +930,11 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   end
   local state = upvalue(home.run, "state")
   for _, condition in ipairs(TOOL_CONDITIONS) do state.menu.setCondition(condition, true) end
+  if pagePath == "settings/dashboard/standby/page.lua" then
+    state.preferences.dashboard = state.preferences.dashboard or {}
+    state.preferences.dashboard.standby_layout = "clock:small,date:small,tx_battery:small,model:small,"
+      .. "timer1:small,timer2:small,timer3:small,uptime:small"
+  end
 
   local function settled(want)
     local quiet = 0
@@ -1134,11 +1175,19 @@ addRow("pass.swap", base.worst.swap or 0)
 -- zero that reads as free.
 addRow("pass.splash", base.startupWorst.splash or base.worst.splash or 0)
 do
-  local missing = runStandbyScenario("clock:small,date:small,tx_battery:small,timer1:small", nil)
-  local gps = runStandbyScenario("clock:small,date:small,tx_gps:wide", { fix = true, numsat = 12 })
-  local elrs = runStandbyScenario("elrs:full", nil)
-  addRow("pass.standby.build", math.max(missing.standby or 0, gps.standby or 0, elrs.standby or 0), "largest accepted layout, GPS and ELRS states")
-  addRow("pass.standby.state", math.max(missing.state or 0, gps.state or 0, elrs.state or 0), "cached snapshot and reactive sweep")
+  local largest = runStandbyScenario("clock:small,date:small,tx_battery:small,model:small,timer1:small,timer2:small,timer3:small,uptime:small", nil, false)
+  local gps = runStandbyScenario("clock:small,date:small,tx_gps:wide", { fix = true, numsat = 12 }, false)
+  local elrsNoReply = runStandbyScenario("elrs:full", nil, false)
+  local elrsReady = runStandbyScenario("elrs:full", nil, true)
+  local runs = { largest, gps, elrsNoReply, elrsReady }
+  local build, state, sweep, refs = 0, 0, 0, 0
+  for i = 1, #runs do
+    build = math.max(build, runs[i].worst.standby or 0); state = math.max(state, runs[i].worst.state or 0)
+    sweep = math.max(sweep, runs[i].sweep); refs = math.max(refs, runs[i].refs)
+  end
+  addRow("pass.standby.build", build, "eight-item layout, GPS, ELRS ready and no-response states")
+  addRow("pass.standby.state", state, "cached no-FC snapshot and provider step")
+  addRow("sweep.standby", sweep, refs .. " reactive references")
 end
 addRow("pass.startup.worst", base.coldWorst, base.settlePasses .. " passes to settle")
 

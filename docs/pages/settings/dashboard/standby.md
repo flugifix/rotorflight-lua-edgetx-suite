@@ -31,7 +31,7 @@ The transmitter battery uses the radio's battery minimum, maximum, and warning s
 
 The optional ELRS tile reads the active transmitter module and never writes a parameter. It preserves the module's Packet Rate, Telemetry Ratio, Max Power, and Dynamic labels. Max Power is the configured ceiling, not the currently emitted RF power. The tile marks a completed snapshot with its read age; it starts a bounded refresh when the standby screen is entered again or the model/module identity changes. EdgeTX routes CRSF to the internal module when both internal and external CRSF modules are active.
 
-The radio simulator covers layout, routing, and source-state transitions. Read timing and labels on physical ELRS and internal-GPS hardware still require hardware validation.
+Offline regressions cover configuration, source formatting, fit, and state routing. The final packaged screen and read timing on physical ELRS and internal-GPS hardware still require validation.
 
 The existing connection reason and progress remain visible. Flight link loss and the postflight or offline summary keep their existing surfaces.
 
