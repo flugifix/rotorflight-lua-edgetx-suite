@@ -28,6 +28,11 @@ local function field(id, name, options, selected, unit)
   local out = { 0xEA, 0xEE, id, 0, 0, 9 }; add(out, str(name)); add(out, str(table.concat(options, ";")))
   add(out, { selected, 0, #options - 1, 0 }); add(out, str(unit or "")); return out
 end
+local function selectionBytes(value)
+  local out = {}
+  for i = 5, #value do out[#out + 1] = value[i] end
+  return out
+end
 local function transport()
   local q, sent, stats = {}, {}, { pops = 0 }
   local crsf = { popFrame = function(kind)
@@ -66,6 +71,12 @@ local function read(dynamicLabel)
   assert(got.dynamic == dynamicLabel and got.fields.dynamic.enabled == (dynamicLabel ~= "Off"))
 end
 read("AUX9"); read("Off")
+do
+  local hidden = field(1, "Dynamic", { "Off", "Dyn" }, 1)
+  hidden[6] = 128 + 9
+  local parsed = Config.parseSelection(selectionBytes(hidden))
+  assert(parsed and parsed.selectedLabel == "Dyn", "hidden text selection was rejected")
+end
 do
   local crsf, push, put, sent = transport()
   _G.rfsuite.require = function(path)
@@ -165,9 +176,40 @@ do
     "disabling one audio state cancelled another state's reader")
   audioRead(primary, true, 10.9)
   handoffAfterAbort(crsf, 10.9)
+
+  drain(crsf)
+  assert(Config.acquire("diagnostics"), "diagnostics did not acquire the real provider")
+  local retained = Config.snapshot(Config.currentIdentity())
+  local blocked = {}
+  for i = 1, 6 do
+    assert(audioRead(blocked, false, 12 + i * 0.1) == nil, "busy audio read returned a result")
+  end
+  assert(Config.request("different-model", { owner = "hosted-standby", force = true }) == false,
+    "foreign identity replaced the diagnostics owner")
+  assert(Config.snapshot(Config.currentIdentity()) == retained,
+    "a refused foreign identity request invalidated the completed snapshot")
+  Config.release("diagnostics")
+  local hostedPushes = {}
+  local function hostedPush(kind, payload)
+    hostedPushes[#hostedPushes + 1] = { kind, payload }
+    return true
+  end
+  assert(Config.request("hosted-model", { owner = "hosted-tool", force = true }),
+    "refused audio refresh armed quarantine or retained the lease")
+  Config.step({ owner = "hosted-tool", identity = "hosted-model", crsf = crsf, push = hostedPush, now = 13 })
+  Config.step({ owner = "hosted-tool", identity = "hosted-model", crsf = crsf, push = hostedPush, now = 13.6 })
+  Config.step({ owner = "hosted-tool", identity = "hosted-model", crsf = crsf, push = hostedPush, now = 13.7 })
+  put(0x29, info(0))
+  Config.step({ owner = "hosted-tool", identity = "hosted-model", crsf = crsf, push = hostedPush, now = 13.8 })
+  assert(Config.snapshot("hosted-model").reason == "no_fields",
+    "hosted third owner did not complete after diagnostics contention")
 end
 do
   local Power = assert(loadfile(root .. "/src/rfsuite/lib/elrs_power.lua"))()
+  Config.publish(Config.currentIdentity(), {
+    status = "ready", maxPower = "1000", dynamic = "Off",
+    fields = { maxPower = { milliwatts = 1000 }, dynamic = { enabled = false } },
+  }, 14)
   local crsf, push = transport(); local legacy = {}
   Power.step(legacy, crsf, push, 0)
   assert(legacy.done and legacy.maxMilliwatts == 1000 and legacy.dynamic == false)
@@ -244,14 +286,39 @@ do
   drain(crsf)
   assert(Config.acquire("diagnostics")); Config.release("diagnostics", true)
   put(0x2B, field(1, "Packet Rate", { "stale" }, 0))
+  local deviceInfo = info(4)
+  put(0x29, deviceInfo)
   assert(not Config.acquire("next"), "dirty diagnostic release bypassed quarantine")
   local before = stats.pops
   assert(not Config.drain({ crsf = crsf, now = 0.1 }))
-  assert(stats.pops - before == Config.limits.pops, "drain exceeded its shared pop budget")
+  assert(stats.pops - before == 1 and stats.pops - before <= Config.limits.pops,
+    "drain did not limit itself to the stale parameter reply")
   assert(not Config.acquire("next"), "diagnostic acquired before the drain deadline")
   assert(Config.drain({ crsf = crsf, now = 0.7 }))
   assert(crsf.popFrame(0x2B) == nil and Config.acquire("next"))
+  local LinkRates = assert(loadfile(root .. "/src/rfsuite/lib/link_rates.lua"))()
+  assert(LinkRates.resolveGeneration({}, crsf, function() error("preserved reply should avoid a ping") end) == 4,
+    "quarantine stole link rates' device-info reply")
   Config.release("next")
+end
+do
+  Config.invalidate(nil); local crsf, _, put, sent = transport()
+  drain(crsf)
+  local refused = 4
+  local function congestedPush(kind, payload)
+    sent[#sent + 1] = { kind, payload }
+    if refused > 0 then refused = refused - 1; return false end
+    return true
+  end
+  assert(Config.request("congested", { owner = "test" }))
+  for i = 0, 4 do
+    Config.step({ owner = "test", identity = "congested", crsf = crsf, push = congestedPush, now = i })
+  end
+  assert(#sent == 5 and Config.snapshot("congested").status == "reading",
+    "refused discovery pushes consumed the accepted-ping allowance")
+  put(0x29, info(0))
+  Config.step({ owner = "test", identity = "congested", crsf = crsf, push = congestedPush, now = 4.1 })
+  assert(Config.snapshot("congested").reason == "no_fields", "provider did not complete after congestion cleared")
 end
 do
   Config.invalidate(nil); local crsf, push, put = transport()

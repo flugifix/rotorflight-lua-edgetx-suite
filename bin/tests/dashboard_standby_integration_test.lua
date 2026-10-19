@@ -1,7 +1,13 @@
 local source = string.sub(debug.getinfo(1, "S").source, 2)
 local root = string.match(source, "^(.*)[/\\]bin[/\\]tests[/\\]") or "."
 local runtimePath = root .. "/src/rfsuite/widgets/dashboard/runtime.lua"
-if arg and arg[1] == "--runtime" and arg[2] then runtimePath = arg[2] end
+local standbyPath = root .. "/src/rfsuite/widgets/dashboard/standby.lua"
+if arg then
+  for i = 1, #arg - 1 do
+    if arg[i] == "--runtime" then runtimePath = arg[i + 1] end
+    if arg[i] == "--standby" then standbyPath = arg[i + 1] end
+  end
+end
 local Stubs = assert(loadfile(root .. "/bin/accounting/stubs/edgetx.lua"))()
 local FC = assert(loadfile(root .. "/bin/accounting/stubs/fc.lua"))()
 
@@ -24,21 +30,56 @@ install()
 Stubs.installTool()
 do
   local Page = assert(loadfile(root .. "/src/rfsuite/app/pages/settings/dashboard/standby/page.lua"))()
-  local writes, reports, saveSucceeds = 0, {}, false
+  local writes, reports, saveSucceeds = 0, {}, true
   local ctx = {
-    preferences = { dashboard = { standby_enabled = false, standby_layout = "-" } },
+    preferences = { dashboard = { standby_enabled = false, standby_layout = "clock:small,model:full" } },
     i18n = {}, children = {}, x = 0, y = 0, w = 600,
     requestRebuild = function() end,
     reportSave = function(report) reports[#reports + 1] = report end,
     savePreferences = function() writes = writes + 1; return saveSucceeds, saveSucceeds and nil or "control" end,
   }
   Page.onReload(ctx)
+  ctx.children = {}
+  Page.build(ctx)
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "button" and node.text == "Move down" then node.press(); break end
+  end
   Page.onSave(ctx)
-  check("invalid draft never calls preference writer", writes == 0)
+  check("valid edited layout saves while standby remains off", writes == 1
+    and ctx.preferences.dashboard.standby_enabled == false
+    and ctx.preferences.dashboard.standby_layout == "model:full,clock:small")
+
+  ctx.preferences.dashboard.standby_layout = "clock:small,model:full"
+  Page.onReload(ctx)
+  ctx.children = {}
+  Page.build(ctx)
+  for removed = 1, 2 do
+    for i = 1, #ctx.children do
+      local node = ctx.children[i]
+      if node.type == "button" and node.text == "Remove" then node.press(); break end
+    end
+    ctx.children = {}
+    Page.build(ctx)
+  end
+  Page.onSave(ctx)
+  check("disabled invalid draft saves the off state", writes == 2
+    and ctx.preferences.dashboard.standby_enabled == false)
+  check("disabled invalid draft preserves the prior saved layout",
+    ctx.preferences.dashboard.standby_layout == "clock:small,model:full")
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "toggle" then node.set(true); break end
+  end
+  Page.onSave(ctx)
+  check("enabled invalid draft refuses the preference writer", writes == 2)
+  check("enabled invalid draft preserves the prior saved layout",
+    ctx.preferences.dashboard.standby_layout == "clock:small,model:full")
 
   ctx.preferences.dashboard.standby_enabled = false
   ctx.preferences.dashboard.standby_layout = "clock:small,model:full"
   Page.onReload(ctx)
+  saveSucceeds = false
   ctx.children = {}
   Page.build(ctx)
   for i = 1, #ctx.children do
@@ -46,7 +87,7 @@ do
     if node.type == "toggle" then node.set(true); break end
   end
   Page.onSave(ctx)
-  check("failed save calls writer once", writes == 1)
+  check("failed save calls writer once for this attempt", writes == 3)
   check("failed save restores enabled preference", ctx.preferences.dashboard.standby_enabled == false)
   check("failed save restores layout preference",
     ctx.preferences.dashboard.standby_layout == "clock:small,model:full")
@@ -161,6 +202,23 @@ do
   Page.onClose()
 end
 
+-- Timer detail captions use the same item-specific keys populated by the runtime. A generic
+-- fallback would make every translated timer caption silently display English.
+do
+  local Standby = assert(loadfile(standbyPath))()
+  local cache = {}
+  local labels = { timer1_detail = "Localized timer one" }
+  local tree = Standby.build({ x = 0, y = 0, w = 800, h = 480 }, "waiting",
+    function(key, fallback) return labels[key] or fallback end,
+    Standby.decode("timer1:small"), { timer1 = "00:42" }, cache, { text = "info", level = "info" })
+  local localized = false
+  for i = 1, #tree do
+    local node = tree[i]
+    if node.type == "label" and node.text == "Localized timer one" then localized = true; break end
+  end
+  check("timer tile uses its item-specific localized detail key", localized)
+end
+
 -- Use the actual dashboard runtime with the accounting radio/FC surface. The provider methods
 -- are observed at their public boundary; no copy of the standby predicate lives in this test.
 install()
@@ -212,6 +270,7 @@ do
   widget.state.hadInflightFlight = false
   widget.flightMode = "preflight"
 
+  local treesBeforeEntry = #Stubs.lvgl.trees
   Stubs.tick()
   widget:refresh(0, nil)
   local afterState = calls.request
@@ -220,6 +279,10 @@ do
     widget.state.standbyInfoKind == "controller_missing")
   widget:refresh(0, nil)
   check("standby build pass does not probe provider", calls.request == afterState)
+  check("standby entry builds one scene", #Stubs.lvgl.trees == treesBeforeEntry + 1)
+  widget:refresh(0, nil)
+  check("standby entry does not enqueue a nil-to-false overflow rebuild",
+    #Stubs.lvgl.trees == treesBeforeEntry + 1 and widget._job == nil)
   local standbyTree = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}
   local suiteButton, suiteGlyphLines = nil, 0
   for i = 1, #standbyTree do
@@ -348,6 +411,75 @@ do
 
   second:background()
 
+  -- Once the normal dashboard is already up, a standby-only prerequisite change must not enqueue
+  -- another scene build. Cover both the default-off case and an enabled feature excluded by flight
+  -- history; the active-standby transition above separately proves its text cache is invalidated.
+  local originalIsFblConnected = MspRuntime.isFblConnected
+  local EventsRuntime = assert(_G.rfsuite.require("tasks/events/runtime.lua"))
+  local originalEventActive = EventsRuntime.isOnconnectActive
+  local originalEventProgress = EventsRuntime.getOnconnectProgress
+  local originalEventPending = EventsRuntime.getOnconnectPendingTaskName
+  local savedResolved = _G.rfsuite.session and _G.rfsuite.session.modelPreferencesResolved
+  MspRuntime.getState = function()
+    return { lastConnected = true, versionReadCompleted = true, unsupportedApi = false,
+      values = { apiVersion = "12.0" } }
+  end
+  MspRuntime.getProgressValues = function() return 1, 1 end
+  MspRuntime.isFblConnected = function() return true end
+  EventsRuntime.isOnconnectActive = function() return false end
+  EventsRuntime.getOnconnectProgress = function() return { done = 1, total = 1 } end
+  EventsRuntime.getOnconnectPendingTaskName = function() return nil end
+  if _G.rfsuite.session then _G.rfsuite.session.modelPreferencesResolved = true end
+  local function readyWidget(enabled, flown)
+    local readyWidget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
+    readyWidget.preferences.dashboard = readyWidget.preferences.dashboard or {}
+    readyWidget.preferences.dashboard.standby_enabled = enabled
+    readyWidget.preferences.audio_events = readyWidget.preferences.audio_events or {}
+    readyWidget.preferences.audio_events.tpwr_alert = false
+    readyWidget.state.batteryTelemetrySeen = true
+    readyWidget.state.rfTelemetrySeen = true
+    readyWidget.pendingSince = -1000
+    for _ = 1, 8 do Stubs.tick(); readyWidget:refresh(0, nil) end
+    if flown then
+      readyWidget.state.hadInflightFlight = true
+      for _ = 1, 3 do Stubs.tick(); readyWidget:refresh(0, nil) end
+    end
+    return readyWidget
+  end
+  local function infoChangeDoesNotBuild(name, readyWidget)
+    for _ = 1, 3 do readyWidget:refresh(0, nil) end
+    local treesBefore = #Stubs.lvgl.trees
+    local keyBefore, builtBefore = readyWidget.renderKey, readyWidget.built
+    local textsBefore = { marker = name }
+    readyWidget._standbyTexts = textsBefore
+    readyWidget.state.standbyInfoKind = "stale-standby-only-value"
+    readyWidget._lastWorkTick = nil
+    readyWidget._lastLogicTick = -1000
+    Stubs.tick()
+    readyWidget:refresh(0, nil)
+    local statePassStable = readyWidget.renderKey == keyBefore and readyWidget.built == builtBefore
+      and readyWidget._job == nil
+    readyWidget:refresh(0, nil)
+    check(name .. " module=" .. tostring(readyWidget._standbyModule)
+      .. " trees=" .. tostring(treesBefore) .. "->" .. tostring(#Stubs.lvgl.trees)
+      .. " ready=" .. tostring(readyWidget.connectionReady)
+      .. " info=" .. tostring(readyWidget.state.standbyInfoKind)
+      .. " status=" .. tostring(readyWidget.statusLine),
+      readyWidget.connectionReady == true and builtBefore == true
+        and readyWidget.state.standbyInfoKind ~= "stale-standby-only-value"
+        and readyWidget._standbyModule == nil and readyWidget._standbyTexts == textsBefore
+        and statePassStable and #Stubs.lvgl.trees == treesBefore)
+  end
+  infoChangeDoesNotBuild("feature-off prerequisite change does not rebuild ready dashboard",
+    readyWidget(false, false))
+  infoChangeDoesNotBuild("flight-excluded prerequisite change does not rebuild ready dashboard",
+    readyWidget(true, true))
+  MspRuntime.isFblConnected = originalIsFblConnected
+  EventsRuntime.isOnconnectActive = originalEventActive
+  EventsRuntime.getOnconnectProgress = originalEventProgress
+  EventsRuntime.getOnconnectPendingTaskName = originalEventPending
+  if _G.rfsuite.session then _G.rfsuite.session.modelPreferencesResolved = savedResolved end
+
   for key, value in pairs(original) do Config[key] = value end
   MspRuntime.getState = originalMspState
 end
@@ -402,12 +534,13 @@ do
     and firstModule.consumerCount() == 1)
   check("standby entry holds the shared ELRS provider", first._standbyElrsConfig == sharedConfig)
 
+  local releasedCache = first._standbyCache
   first.preferences.dashboard.standby_enabled = false
   first._job = nil
   first:refresh(0, nil)
   check("disabled exit evicts last standby display module", first._standbyModule == nil
     and first._standbyCache == nil and first._standbyElrsConfig == nil and first._standbyCrsf == nil
-    and firstModule._testCache == nil and _G.rfsuite.modules[standbyPath] == nil)
+    and _G.rfsuite.modules[standbyPath] == nil)
   check("standby exit retains shared ELRS provider", _G.rfsuite.modules[configPath] == sharedConfig)
 
   first.preferences.dashboard.standby_enabled = true
@@ -415,7 +548,8 @@ do
   first:refresh(0, nil)
   local reloadedModule = first._standbyModule
   check("standby re-entry reloads a fresh display module", standbyLoads == 2
-    and reloadedModule ~= nil and reloadedModule ~= firstModule)
+    and reloadedModule ~= nil and reloadedModule ~= firstModule
+    and first._standbyCache ~= nil and first._standbyCache ~= releasedCache)
 
   local second = newWidget(true)
   second:refresh(0, nil)
@@ -425,7 +559,7 @@ do
   check("first widget exit retains module for second widget", first._standbyModule == nil
     and first._standbyCache == nil and first._standbyElrsConfig == nil
     and second._standbyModule == reloadedModule and _G.rfsuite.modules[standbyPath] == reloadedModule
-    and reloadedModule.consumerCount() == 1 and reloadedModule._testCache == nil)
+    and reloadedModule.consumerCount() == 1)
   second:background()
   check("last widget exit evicts shared standby display module", second._standbyModule == nil
     and _G.rfsuite.modules[standbyPath] == nil and reloadedModule.consumerCount() == 0)

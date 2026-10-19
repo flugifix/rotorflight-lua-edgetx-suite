@@ -2051,8 +2051,13 @@ local function updateConnectionState(self)
 
   if self.state.standbyInfoKind ~= standbyInfoKind then
     self.state.standbyInfoKind = standbyInfoKind
-    self._standbyTexts = nil
-    self.renderKey = nil
+    -- The prerequisite caption belongs only to a loaded standby surface. Connection-state
+    -- transitions continue to invalidate their own surfaces below; changing this standby-only
+    -- value must not rebuild the normal dashboard when the feature is disabled or absent.
+    if self._standbyModule ~= nil then
+      self._standbyTexts = nil
+      self.renderKey = nil
+    end
   end
 
   if self.connectionReady ~= ready then
@@ -4509,8 +4514,10 @@ function Runtime.new(zone, options)
       end
       local splashKey = (useStandby and "standby|" or "splash|") .. tostring(statusLine) .. "|info="
         .. tostring(self.state.standbyInfoKind) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
-        .. (fullscreenSplash and "|fs" or "") .. (useStandby and "|" .. tostring(dashboardPrefs.standby_layout)
-          .. "|overflow=" .. tostring(self._standbyCache and self._standbyCache.valueOverflow) or "")
+        .. (fullscreenSplash and "|fs" or "") .. (useStandby
+          and ("|" .. tostring(dashboardPrefs.standby_layout)
+            .. "|overflow=" .. tostring(self._standbyCache and self._standbyCache.valueOverflow == true))
+          or "")
       if self.renderKey ~= splashKey then
         self.renderKey = splashKey
         self.built = false

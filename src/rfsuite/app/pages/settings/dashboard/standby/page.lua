@@ -57,14 +57,16 @@ function M.onSave(ctx)
   deps()
   local items = {}; for i = 1, Standby.MAX_ITEMS do if ui.items[i].type ~= NONE then items[#items + 1] = ui.items[i] end end
   local labels = fitLabels(ctx.i18n)
-  if not Standby.validate(items, LCD_W or 480, LCD_H or 320, labels) then
+  local valid = Standby.validate(items, LCD_W or 480, LCD_H or 320, labels)
+  if ui.enabled and not valid then
     ctx.reportSave({ title = t(ctx.i18n, "invalid_title", "Layout not saved"), message = t(ctx.i18n, "invalid_message", "Every selected item must fit on one screen.") }); return
   end
+  local encodedLayout = valid and Standby.encode(items) or nil
   ctx.preferences.dashboard = ctx.preferences.dashboard or {}
   local previousEnabled = ctx.preferences.dashboard[Standby.KEY_ENABLED]
   local previousLayout = ctx.preferences.dashboard[Standby.KEY_LAYOUT]
   ctx.preferences.dashboard[Standby.KEY_ENABLED] = ui.enabled
-  ctx.preferences.dashboard[Standby.KEY_LAYOUT] = Standby.encode(items)
+  if encodedLayout ~= nil then ctx.preferences.dashboard[Standby.KEY_LAYOUT] = encodedLayout end
   local ok, err = ctx.savePreferences()
   if ok then ui.dirty = false; ctx.reportSave({ ok = true, title = t(ctx.i18n, "saved_title", "Saved"), message = t(ctx.i18n, "saved_message", "Standby screen saved") })
   else

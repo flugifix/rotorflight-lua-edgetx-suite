@@ -51,6 +51,7 @@ assert(configLoads == 1, "diagnostics start did not load the ELRS provider")
 armChanges = 1
 Task.wakeup()
 assert(#pushes == 0 and not Task.isRunning(), "arming transition did not stop the sync before a write")
+assert(configLoads == 1, "diagnostics completion loaded the provider a second time")
 
 armChanges, pushes = 0, {}
 Task.start(Task.MODE_PROBE)
@@ -65,5 +66,52 @@ assert(#pushes == 1 and pushes[1].kind == 0x2D,
   "one selected option writes=" .. tostring(#pushes) .. " kind=" .. tostring(pushes[1] and pushes[1].kind))
 now = 6; Task.wakeup()
 assert(#pushes == 1, "diagnostics emitted more than one write for one selected option")
+
+do
+  local savedLoadScript = loadScript
+  local resetCount = 0
+  loadScript = function(path)
+    local relative = string.match(path, "/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
+    if relative == "app/pages/settings/common.lua" then
+      return function() return { pageT = function() return function(_, _, fallback) return fallback end end } end
+    end
+    if relative == "app/pages/setup_wizard/msp.lua" then return function() return {} end end
+    if relative == "app/pages/setup_wizard/log.lua" then
+      return function() return { emit = function() end, wanted = function() return false end,
+        changed = function() return false end } end
+    end
+    return nil
+  end
+  local procedures = assert(loadfile(root .. "/src/rfsuite/app/pages/setup_wizard/proc_radio.lua"))()
+  local link
+  for i = 1, #procedures do if procedures[i].id == "link" then link = procedures[i] end end
+  assert(link and type(link.leave) == "function", "setup wizard link procedure has no leave lifecycle")
+  local wizard = { data = { linkProbed = true, linkSignature = "reading",
+    linkTask = { reset = function() resetCount = resetCount + 1 end } } }
+  link.leave(wizard)
+  assert(resetCount == 1 and wizard.data.linkProbed == nil and wizard.data.linkSignature == nil,
+    "setup wizard link exit retained its diagnostics task")
+
+  local WizardPage = assert(loadfile(root .. "/src/rfsuite/app/pages/setup_wizard/page.lua"))()
+  local pageUi, leaveCurrent
+  for index = 1, 20 do
+    local name, value = debug.getupvalue(WizardPage.onClose, index)
+    if name == "leaveCurrent" then leaveCurrent = value end
+    if name == "ui" then pageUi = value break end
+    if name == nil then break end
+  end
+  assert(pageUi, "setup wizard page state was not reachable for the close lifecycle control")
+  pageUi.view, pageUi.procedures, pageUi.procIndex = "run", { link }, 1
+  pageUi.data = { linkProbed = true, linkSignature = "reading",
+    linkTask = { reset = function() resetCount = resetCount + 1 end } }
+  for index = 1, 10 do
+    local name, value = debug.getupvalue(leaveCurrent, index)
+    if name == "wiz" then value.data = pageUi.data break end
+    if name == nil then break end
+  end
+  WizardPage.onClose()
+  assert(resetCount == 2, "closing the setup wizard did not release the link task: " .. tostring(resetCount))
+  loadScript = savedLoadScript
+end
 
 print("elrs_diagnostics_gate_test: ok")

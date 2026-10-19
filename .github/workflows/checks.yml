@@ -128,7 +128,7 @@ jobs:
         run: lua5.3 bin/dashboard/verify_erase_confirm.lua
 
   dashboard-voltage:
-    name: Dashboard voltage bounds
+    name: Dashboard regressions
     runs-on: ubuntu-latest
 
     steps:
@@ -140,6 +140,18 @@ jobs:
 
       - name: Check automatic and saved voltage bounds
         run: lua5.3 bin/dashboard/verify_voltage_bounds.lua
+
+      - name: Check dashboard standby geometry and formatting
+        run: lua5.3 bin/dashboard/verify_standby.lua
+
+      - name: Check dashboard standby integration
+        run: lua5.3 bin/tests/dashboard_standby_integration_test.lua
+
+      - name: Check shared ELRS configuration reads
+        run: lua5.3 bin/tests/elrs_config_test.lua
+
+      - name: Check ELRS diagnostics ownership gate
+        run: lua5.3 bin/tests/elrs_diagnostics_gate_test.lua
 
   release-notes:
     name: Release notes

@@ -470,7 +470,7 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
           rounded = 2, thickness = 1 }
       elseif item.type == "model" then detail = i18n("model_detail", "EdgeTX model")
       elseif item.type == "timer1" or item.type == "timer2" or item.type == "timer3" then
-        detail = i18n("timer_detail", "EdgeTX model timer")
+        detail = i18n(item.type .. "_detail", "EdgeTX model timer")
       elseif item.type == "tx_gps" then detail = i18n("tx_gps_detail", "Internal transmitter GPS")
       elseif item.type == "uptime" then detail = i18n("uptime_detail", "Since radio power-on")
       elseif item.type == "firmware" then detail = i18n("firmware_detail", "Radio firmware")

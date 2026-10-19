@@ -59,19 +59,26 @@ A reading only one alert uses is read only while that alert is on: the engine se
 while it is set, and give nil otherwise. A radio with the alert off then pays no sensor search.
 
 An alert that needs something the transmitter module knows but no telemetry frame carries asks
-the module itself. The TX power alert does that for the module's Max Power and dynamic-power
-setting through `lib/elrs_power.lua`, which drives one CRSF parameter conversation a pass at a
-time on a table the caller keeps, with the frame multiplexer (`lib/crsf.lua`) and
-`crossfireTelemetryPush` passed in, so it can be checked without a radio. Three rules come with
-that: every frame sent replaces one RC channels frame, so nothing is sent while the model is
-armed and at most one frame per pass; nothing is sent before the connect sequence is through;
-and in the tool, *Diagnostics* → *ELRS Link* talks to the same module and drops every entry it
-did not ask for, so the alert stands aside while that page stamps `session.elrsProbeAt`. A
-conversation that gets no answer ends after a budget of tries to send a frame (`FRAME_BUDGET`,
-36: three per frame of the longest first read measured, 12; a refused try counts too, so it
-always ends), not after a time, since a slow radio sends one frame per pass and a time limit
-would end a read that is still being answered. The caller keeps one table per attempt, so an
-attempt an arming cuts short starts the count afresh after the disarm.
+the module itself. The TX power alert reads the module's Max Power and dynamic-power setting
+through the bounded, read-only provider in `lib/elrs_config.lua`; `lib/elrs_power.lua` decodes the
+completed fields. Every frame sent replaces one RC channels frame, so the alert sends nothing
+while the model is armed, sends at most one request per pass, and waits until the connection
+sequence is complete. The provider
+serializes each parameter conversation with an owner lease because replies carry no transaction
+ID. The diagnostics page, standby screen, and TX-power alert therefore take turns instead of
+consuming one another's replies, and share only completed snapshots. An explicit refresh first
+quarantines copied replies left in that owner's queue: a quarantine pass pops exactly one
+Parameter Entry (`0x2B`) and never pops Device Info (`0x29`). A normal pass pops at most two
+replies and sends at most one request. A read stops after four accepted discovery pings, 48 total
+push attempts across discovery and parameter reads, 48 fields, eight chunks per field, or 512
+bytes per field. The alert cancels its owned read while armed or before the connection sequence is
+complete, and starts a fresh owned read after those conditions clear.
+
+The provider is one intentionally retained shared singleton, separate from the standby display
+module that is unloaded when the surface closes. Other consumers keep local references to the
+provider, so the standby exit cannot evict it from the module registry. Its retained protocol
+state is bounded to at most one active transaction and one last snapshot containing the four
+matched fields; its heap cost has not been measured.
 **An announcement measured against the air rate** -- the RSSI and Downlink headroom alerts -- needs
 the row of `lib/link_rates.lua` for the rate the link runs. `linkRateRow` in `lib/audio.lua` resolves
 it from the `RFMD` reading on the state and the transmitter module's ExpressLRS generation, which

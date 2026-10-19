@@ -97,7 +97,7 @@ end
 
 local function parseSelection(bytes)
   local fieldType = bytes[2]
-  if type(fieldType) ~= "number" or fieldType >= 128 or fieldType % 128 ~= TYPE_TEXT_SELECTION then return nil end
+  if type(fieldType) ~= "number" or fieldType % 128 ~= TYPE_TEXT_SELECTION then return nil end
   local name, after = cString(bytes, 3)
   if not name then return nil end
   local optionText, valueAt = cString(bytes, after)
@@ -214,6 +214,9 @@ end
 function M.request(identityKey, context)
   context = context or {}
   local owner = context.owner or "standby"
+  -- A refused request must not disturb the current owner's transaction or arm its quarantine.
+  if active and active.owner ~= owner then return false, "busy" end
+  if lease ~= nil and lease ~= owner then return false, "busy" end
   if (active and active.identity ~= identityKey) or (last and last.identity ~= identityKey) then
     M.invalidate(identityKey)
   end
@@ -269,8 +272,9 @@ function M.drain(context)
   if type(crsf) ~= "table" or type(crsf.popFrame) ~= "function" then return false, false end
   local now = context.now or nowSeconds()
   if quarantineUntil == nil then quarantineUntil = now + READ_RETRY end
+  -- Parameter replies cannot be attributed after an interrupted conversation. Device-info
+  -- replies can: leave them for the consumer that sent the discovery ping (for example link rates).
   crsf.popFrame(PARAMETER_ENTRY)
-  crsf.popFrame(DEVICE_INFO)
   if now < quarantineUntil then return false, true end
   quarantine, quarantineUntil = false, nil
   return true, true
@@ -331,11 +335,14 @@ function M.step(context)
     end
     if st.phase == "ping" and (st.pingAt == nil or now - st.pingAt >= PING_RETRY) then
       if st.pings >= MAX_PINGS then finish(st, "unavailable", "timeout", now); return last end
+      if st.sent >= MAX_SENDS then finish(st, "unavailable", "timeout", now); return last end
       st.sent = st.sent + 1
-      st.pings = st.pings + 1
       local ok, queued = pcall(push, DEVICE_PING, { MODULE, RADIO })
       if ok and queued == nil then finish(st, "unavailable", "no_crsf", now); return last end
-      if ok and queued then st.pingAt = now end
+      if ok and queued then
+        st.pings = st.pings + 1
+        st.pingAt = now
+      end
     end
     return M.snapshot(st.identity)
   end

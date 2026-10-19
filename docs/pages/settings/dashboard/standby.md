@@ -26,7 +26,7 @@ Always available.
 
 Selecting ELRS for a new position starts it at Wide, the smallest supported size.
 
-The Suite checks the selected locale, actual font metrics, bounded display formats, and radio screen size before saving. If all items do not fit readably on one screen, the edit is refused and the last valid saved screen remains active.
+The Suite checks the selected locale, actual font metrics, bounded display formats, and radio screen size before enabling a layout. If all items do not fit readably on one screen, the layout cannot be enabled. Switching the standby screen off still saves; an invalid draft is discarded and the last valid saved layout is retained.
 The initial layout contains Clock, TX battery, and Selected model. TX GPS is optional, is not part of the initial layout, and is read only when its tile is selected.
 
 The screen reserves a fixed information strip for the highest-priority connection prerequisite. It derives this summary from the dashboard's existing connection state, while the exact connection reason and progress remain visible below it. The strip does not add another radio or telemetry probe.
@@ -41,4 +41,4 @@ Offline regressions cover configuration, source formatting, fit, and state routi
 
 The existing connection reason and progress remain visible. Flight link loss and the postflight or offline summary keep their existing surfaces.
 
-*Documented against RFSuite 0.1.x.*
+*Documented against RFSuite 0.2.1.*

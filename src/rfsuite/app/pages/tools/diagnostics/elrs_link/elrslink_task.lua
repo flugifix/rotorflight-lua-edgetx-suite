@@ -471,7 +471,7 @@ local function completeTask()
     local wrote = state == "write" or state == "write_rf"
     state = "done"
     taskComplete = true
-    local provider = configProvider()
+    local provider = elrsConfig
     if provider then
         if wrote then provider.invalidate(nil) end
         provider.release("diagnostics", dirty)
