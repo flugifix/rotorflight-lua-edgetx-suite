@@ -3,11 +3,11 @@
 local M = {}
 
 M.KEYS = {
-  { id = "pageDown", pref = "key_page_down", label = "@i18n(app.pages.settings_dashboard_keys.page_down)@" },
-  { id = "pageUp", pref = "key_page_up", label = "@i18n(app.pages.settings_dashboard_keys.page_up)@" },
-  { id = "mdl", pref = "key_mdl", label = "@i18n(app.pages.settings_dashboard_keys.mdl)@" },
-  { id = "sys", pref = "key_sys", label = "@i18n(app.pages.settings_dashboard_keys.sys)@" },
-  { id = "tele", pref = "key_tele", label = "@i18n(app.pages.settings_dashboard_keys.tele)@" },
+  { id = "pageDown", pref = "key_page_down" },
+  { id = "pageUp", pref = "key_page_up" },
+  { id = "mdl", pref = "key_mdl" },
+  { id = "sys", pref = "key_sys" },
+  { id = "tele", pref = "key_tele" },
 }
 M.OPTIONS = {
   { value = "theme", label = "@i18n(app.pages.settings_dashboard_keys.theme)@" },

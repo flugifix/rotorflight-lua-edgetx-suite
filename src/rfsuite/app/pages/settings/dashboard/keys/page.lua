@@ -4,6 +4,13 @@ local function loadModule(path)
 end
 local M = {}
 local Controls, Common, Keys, t
+local LABELS = {
+  pageDown = "@i18n(app.pages.settings_dashboard_keys.page_down)@",
+  pageUp = "@i18n(app.pages.settings_dashboard_keys.page_up)@",
+  mdl = "@i18n(app.pages.settings_dashboard_keys.mdl)@",
+  sys = "@i18n(app.pages.settings_dashboard_keys.sys)@",
+  tele = "@i18n(app.pages.settings_dashboard_keys.tele)@",
+}
 local ui = { loaded = false, dirty = false, config = {} }
 
 local function ensureDeps()
@@ -66,7 +73,7 @@ function M.build(ctx)
   local y = ctx.y
   for i = 1, #Keys.KEYS do
     local entry = Keys.KEYS[i]
-    y = y + Controls.appendComboSelect(ctx.children, ctx.x, y, ctx.w, entry.label,
+    y = y + Controls.appendComboSelect(ctx.children, ctx.x, y, ctx.w, LABELS[entry.id],
       Keys.OPTIONS, ui.config[entry.pref], ui.runtime.getValueSetter(entry.pref))
   end
 end
