@@ -112,17 +112,20 @@ do
   end
 
   local Runtime = assert(loadfile(runtimePath))()
-  local MspRuntime = assert(_G.rfsuite.require("tasks/msp/runtime.lua"))
-  local originalFbl = MspRuntime.isFblConnected
-  local forceFbl = false
-  MspRuntime.isFblConnected = function()
-    if forceFbl then return true end
-    return type(originalFbl) == "function" and originalFbl() or false
+  local MspRuntime = assert(_G.__rfsuite_msp_runtime_module
+    or _G.rfsuite.require("tasks/msp/runtime.lua"))
+  local originalMspState = MspRuntime.getState
+  local forceRawConnected = false
+  MspRuntime.getState = function()
+    if forceRawConnected then return { lastConnected = true, versionReadCompleted = false } end
+    return { lastConnected = false, versionReadCompleted = false }
   end
   local widget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
   widget.preferences.dashboard = widget.preferences.dashboard or {}
   widget.preferences.dashboard.standby_enabled = true
   widget.preferences.dashboard.standby_layout = "elrs:full"
+  widget.preferences.audio_events = widget.preferences.audio_events or {}
+  widget.preferences.audio_events.tpwr_alert = false
   widget.state.fblConnected = false
   widget.state.armed = false
   widget.state.hadInflightFlight = false
@@ -148,19 +151,20 @@ do
     and widget._standbyCache.elrs and widget._standbyCache.elrs.packetRate ~= nil)
 
   widget._job = nil
-  widget._standbyActive = false
-  widget.state.armed, widget.state.hadInflightFlight = false, false
+  widget._standbyActive = true
+  widget.state.fblConnected, widget.state.armed, widget.state.hadInflightFlight = false, false, false
   widget.flightMode = "preflight"
-  forceFbl = true
-  local beforeFblRequest, beforeFblStep = calls.request, calls.step
+  widget._standbyCache.elrs = { status = "reading", identity = "integration-model" }
+  forceRawConnected = true
+  local beforeRawRequest, beforeRawStep = calls.request, calls.step
   Stubs.tick()
   widget:refresh(0, nil)
-  check("detected FBL keeps standby render while yielding module transport",
-    calls.request == beforeFblRequest and calls.step == beforeFblStep
-      and widget._standbyActive ~= true
+  check("raw MSP link yields probing but keeps standby render and refreshes cancelled status",
+    calls.request == beforeRawRequest and calls.step == beforeRawStep
+      and widget._standbyActive ~= true and widget._standbyCache.elrs.status ~= "reading"
       and ((widget._job and widget._job.kind == "standby")
         or (type(widget.renderKey) == "string" and string.sub(widget.renderKey, 1, 8) == "standby|")))
-  forceFbl = false
+  forceRawConnected = false
 
   local function excluded(name, setup)
     widget._job = nil
@@ -217,7 +221,7 @@ do
     and second._standbyCache.elrs.packetRate ~= widget._standbyCache.elrs.packetRate)
 
   for key, value in pairs(original) do Config[key] = value end
-  MspRuntime.isFblConnected = originalFbl
+  MspRuntime.getState = originalMspState
 end
 
 Stubs.releaseCard()
