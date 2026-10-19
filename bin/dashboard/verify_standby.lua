@@ -58,9 +58,17 @@ check("snapshot reads transmitter battery safely", type(values) == "table" and v
 check("snapshot uses firmware version", values.firmware == "2.12.0")
 check("missing GPS fix stays unknown", values.tx_gps == "-")
 check("model display is bounded", #values.model == 15)
-check("timer display is bounded", values.timer1 == "999:59")
+check("timer overflow remains explicit", values.timer1 == ">999:59")
+model.getInfo = function() return { name = "Übergrößenmodell" } end
+tick = 201
+local utf8Values = standby.snapshot(default, cache)
+check("UTF-8 model truncates at a codepoint", utf8Values.model == "Übergrößenmo...")
 local scene = standby.build({ w = 480, h = 320 }, "Please wait...", cache.text, default, values, cache)
 check("standby scene builds", type(scene) == "table" and #scene > 3)
+check("status line clears small tool control", scene[3].x + scene[3].w <= 480 - 20 - 1 - 6)
+local largeScene = standby.build({ w = 800, h = 480 }, string.rep("W", 80), cache.text, default, values, cache)
+check("status line clears large tool control", largeScene[3].x + largeScene[3].w <= 800 - 44 - 8 - 6)
+check("status line is visibly bounded", string.sub(largeScene[3].text, -3) == "...")
 local valueClosure
 for i = 1, #scene do if type(scene[i].text) == "function" then valueClosure = scene[i].text; break end end
 check("scene exposes reactive value", type(valueClosure) == "function")

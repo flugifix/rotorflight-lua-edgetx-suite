@@ -64,11 +64,11 @@ end
 
 local WORST = {
   clock = "23:59", date = "2099-12-31", tx_battery = "12.0 V  100%", model = "WWWWWWWWWWWWWWW",
-  timer1 = "-999:59", timer2 = "-999:59", timer3 = "-999:59", tx_gps = "Fix · 99",
-  uptime = "999:59", firmware = "WWWWWWWWWWWWWWWWWWWW",
+  timer1 = "<-999:59", timer2 = "<-999:59", timer3 = "<-999:59", tx_gps = "Fix · 99+",
+  uptime = ">999:59", firmware = "WWWWWWWWWWWWWWWWWWWW",
 }
 local ELRS_WORST = {
-  { "elrs_last_read", "Last read 99999 s ago", nil },
+  { "elrs_last_read", "Last read 99999+ s ago", nil },
   { "elrs_packet_rate", "Packet Rate", "1000Hz Full" },
   { "elrs_telemetry_ratio", "Telemetry Ratio", "1:128" },
   { "elrs_max_power", "Max Power", "25/250 mW" },
@@ -109,7 +109,7 @@ local function layout(items, width, height, labels)
       for n = 1, #ELRS_WORST do
         local spec = ELRS_WORST[n]
         local line = labels and labels[spec[1]] or spec[2]
-        line = spec[3] and (line .. ": " .. spec[3]) or string.gsub(line, "%%%%d", "99999")
+        line = spec[3] and (line .. ": " .. spec[3]) or string.gsub(line, "%%d", "99999+")
         local lineW = measure(line, font)
         if lineW > boxW - 16 then return nil, "width" end
       end
@@ -149,14 +149,21 @@ local function timerValue(index)
   if type(value) == "table" then value = value.value end
   if type(value) ~= "number" then return nil end
   local sign = value < 0 and "-" or ""
-  value = math.min(59999, math.abs(math.floor(value)))
+  value = math.abs(math.floor(value))
+  if value > 59999 then return sign == "-" and "<-999:59" or ">999:59" end
   return string.format("%s%d:%02d", sign, math.floor(value / 60), value % 60)
 end
 
 local function bounded(value, limit)
   if type(value) ~= "string" or value == "" then return "-" end
-  if #value <= limit then return value end
-  return string.sub(value, 1, limit - 3) .. "..."
+  local positions, i = {}, 1
+  while i <= #value do
+    positions[#positions + 1] = i
+    local byte = string.byte(value, i)
+    i = i + (byte < 0x80 and 1 or byte < 0xE0 and 2 or byte < 0xF0 and 3 or 4)
+  end
+  if #positions <= limit then return value end
+  return string.sub(value, 1, positions[limit - 2] - 1) .. "..."
 end
 
 local function battery(cache)
@@ -183,14 +190,16 @@ local function readValues(cache)
     tx_battery = battery(cache),
     model = bounded(type(info) == "table" and info.name or nil, 15),
     timer1 = timerValue(1), timer2 = timerValue(2), timer3 = timerValue(3),
-    uptime = string.format("%d:%02d", math.floor(now / 360000), math.floor(now / 6000) % 60),
+    uptime = now > 359999999 and ">999:59"
+      or string.format("%d:%02d", math.floor(now / 360000), math.floor(now / 6000) % 60),
     firmware = bounded(version, 20),
     elrs = M.elrsText(cache, type(getTime) == "function" and getTime() / 100 or 0),
   }
   if type(gps) == "table" then
     if gps.fix == true or gps.fix == 1 then
       local fix = cache.text and cache.text("gps_fix", "Fix") or "Fix"
-      values.tx_gps = type(gps.numsat) == "number" and string.format("%s · %d", fix, gps.numsat) or fix
+      values.tx_gps = type(gps.numsat) == "number"
+        and string.format("%s · %s", fix, gps.numsat > 99 and "99+" or tostring(math.max(0, math.floor(gps.numsat)))) or fix
     elseif gps.fix == false or gps.fix == 0 then
       values.tx_gps = cache.text and cache.text("gps_no_fix", "No fix") or "No fix"
     else
@@ -216,7 +225,10 @@ function M.elrsText(cache, now)
   if type(snap) ~= "table" or snap.status == "unavailable" then return text and text("elrs_unavailable", "Unavailable") or "Unavailable" end
   if snap.status == "reading" then return text and text("elrs_reading", "Reading") or "Reading" end
   local age = math.max(0, math.floor((now or cache.elrsNow or 0) - (snap.readAt or now or 0)))
-  local lines = { string.format(text and text("elrs_last_read", "Last read %d s ago") or "Last read %d s ago", age) }
+  local ageText = age > 99999 and "99999+" or tostring(age)
+  local ageFormat = text and text("elrs_last_read", "Last read %s s ago") or "Last read %s s ago"
+  ageFormat = string.gsub(ageFormat, "%%d", "%%s")
+  local lines = { string.format(ageFormat, ageText) }
   local fields = {
     { "elrs_packet_rate", "Packet Rate", snap.packetRate },
     { "elrs_telemetry_ratio", "Telemetry Ratio", snap.telemetryRatio },
@@ -228,6 +240,12 @@ function M.elrsText(cache, now)
     local value = tostring(row[3] or "-")
     if row[1] == "elrs_max_power" and snap.fields and snap.fields.maxPower and snap.fields.maxPower.unit
         and snap.fields.maxPower.unit ~= "" then value = value .. " " .. tostring(snap.fields.maxPower.unit) end
+    local supported = row[1] == "elrs_packet_rate" and string.match(value, "^[%w%.%-]+[Hh][Zz].*$")
+      or row[1] == "elrs_telemetry_ratio" and (value == "Std" or value == "Race" or value == "Off"
+        or string.match(value, "^1:%d+$"))
+      or row[1] == "elrs_max_power" and string.match(value, "^%d+/?%d*%s*[%a]*$")
+      or row[1] == "elrs_dynamic" and (value == "Off" or value == "Dyn" or string.match(value, "^AUX%d+$"))
+    if not supported then return text and text("elrs_unavailable", "Unavailable") or "Unavailable" end
     lines[#lines + 1] = (text and text(row[1], row[2]) or row[2]) .. ": " .. value
   end
   return table.concat(lines, "\n")
@@ -254,10 +272,15 @@ function M.build(zone, statusLine, i18n, items, values, cache)
   local ok = M.validate(items, w, h, labels)
   local logoW = math.floor(w * 0.32)
   local logoH = math.floor(logoW * 84 / 400 + 0.5)
+  local toolSize = h > 350 and 44 or 20
+  local toolMargin = h > 350 and 8 or 1
+  local statusX = math.floor(w * 0.39)
+  local statusRight = w - toolSize - toolMargin - 6
   local children = {
     { type = "rectangle", x = 0, y = 0, w = w, h = h, color = COLOR_THEME_PRIMARY3, filled = true },
     { type = "image", x = math.floor(w * 0.04), y = math.floor(h * 0.04), w = logoW, h = logoH, file = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png" },
-    { type = "label", x = math.floor(w * 0.39), y = math.floor(h * 0.055), w = math.floor(w * 0.57), text = tostring(statusLine or ""), align = RIGHT, color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
+    { type = "label", x = statusX, y = math.floor(h * 0.055), w = math.max(0, statusRight - statusX),
+      text = bounded(tostring(statusLine or ""), 36), align = RIGHT, color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
   }
   if not ok then
     children[#children + 1] = { type = "label", x = 10, y = math.floor(h * 0.48), w = w - 20, text = i18n("layout_invalid", "Standby layout does not fit"), align = CENTER, color = COLOR_THEME_WARNING, font = MIDSIZE }

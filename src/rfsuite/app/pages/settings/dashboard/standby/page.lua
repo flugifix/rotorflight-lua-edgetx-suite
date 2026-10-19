@@ -76,7 +76,8 @@ end
 function M.build(ctx)
   deps(); ensure(ctx.preferences); ui.runtime.setRequestRebuild(ctx.requestRebuild)
   local children, x, w, i18n, y = ctx.children, ctx.x, ctx.w, ctx.i18n, ctx.y
-  y = y + Controls.appendRadioSwitch(children, x, y, w, t(i18n, "enabled", "Standby screen"), ui.enabled, ui.runtime.getValueSetter("enabled"))
+  y = y + Controls.appendRadioSwitch(children, x, y, w, t(i18n, "enabled", "Standby screen"), ui.enabled,
+    function(value) ui.enabled = value == true; ui.dirty = true; ctx.requestRebuild() end)
   local types, sizes, fmt = typeOptions(i18n), sizeOptions(i18n), t(i18n, "position", "Position %d")
   for i = 1, Standby.MAX_ITEMS do
     y = y + Controls.appendComboSelect(children, x, y, w, string.format(fmt, i), types, ui.items[i].type, function(value) ui.items[i].type = value; ui.dirty = true; ctx.requestRebuild() end)

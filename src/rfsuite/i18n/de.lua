@@ -2779,7 +2779,7 @@ return {
         saved_message = "Standby screen saved",
         save_error_title = "Error",
         save_error_message = "Save failed",
-        help_message = "Shows radio information while the dashboard waits for a flight controller. Add, remove and order items with the position rows. Every saved layout must fit on one screen; an invalid edit is not saved. TX GPS reports the transmitter's internal GPS, and no fix is a waiting state."
+        help_message = "Standby screen: show one fullscreen surface while waiting for the flight controller.\nPositions: add, remove, and move up or down up to eight items.\nSize: choose Small, Wide, or Full row; ELRS needs Wide or Full row.\nFit: Save refuses a layout that does not fit and keeps the last valid screen."
       },
       settings_dashboard_theme = {
         section_dashboard_theme = "Dashboard-Design",

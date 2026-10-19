@@ -67,6 +67,12 @@ local function elrsModules()
   Crsf = Crsf or requireModule("lib/crsf.lua")
   return ElrsConfig, Crsf
 end
+local function cancelStandbyElrs(self, reason)
+  if self._standbyActive and ElrsConfig and type(ElrsConfig.cancel) == "function" then
+    ElrsConfig.cancel(self._standbyElrsOwner, reason)
+  end
+  self._standbyActive = false
+end
 local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")
 local Sensors = requireModule("lib/sensors.lua")
@@ -3486,6 +3492,8 @@ function Runtime.new(zone, options)
     mspAttached = false,
     mspLastTick = 0
   }
+  _G.rfsuite.dashboardStandbyOwnerSeq = (_G.rfsuite.dashboardStandbyOwnerSeq or 0) + 1
+  widget._standbyElrsOwner = "standby:" .. tostring(_G.rfsuite.dashboardStandbyOwnerSeq)
 
   -- Initialize i18n context for the widget using system locale. buildI18nContext is the same
   -- call the preferences reload makes after a language changed, so the widget's context is built
@@ -4199,6 +4207,7 @@ function Runtime.new(zone, options)
     -- runner itself, so nothing below may run beside it; once it is closed the next pass finds
     -- the scene dropped and builds it again.
     if self._toolHost ~= nil then
+      cancelStandbyElrs(self, "tool_open")
       self._passWork = "tool"
       local ToolHost = toolHostModule()
       if type(ToolHost) == "table" then
@@ -4221,6 +4230,11 @@ function Runtime.new(zone, options)
        -- We need to ensure LVGL knows the widget's offset if it doesn't handle it.
        -- However, in Fullscreen, offset is usually 0,0.
        lvgl.onEvent(event, touchState)
+    end
+    if self._toolHost ~= nil then
+      cancelStandbyElrs(self, "tool_open")
+      self._passEndAt = nowSeconds()
+      return
     end
 
     if self.zone then
@@ -4344,7 +4358,7 @@ function Runtime.new(zone, options)
     if self._standbyActive and ElrsConfig and MspRuntime and type(MspRuntime.getState) == "function" then
       local runtimeState = MspRuntime.getState()
       if type(runtimeState) == "table" and runtimeState.lastConnected == true then
-        ElrsConfig.cancel("standby", "fc_startup")
+        ElrsConfig.cancel(self._standbyElrsOwner, "fc_startup")
         self._standbyActive = false
       end
     end
@@ -4352,7 +4366,8 @@ function Runtime.new(zone, options)
 
     local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
     local standbyEnabled = dashboardPrefs.standby_enabled == true
-    local standbyActive = event ~= nil and not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline"
+    local standbyActive = event ~= nil and self._toolHost == nil and not ready
+      and self.flightMode ~= "postflight" and self.flightMode ~= "offline"
       and standbyEnabled and self.state.fblConnected ~= true and self.state.armed ~= true
       and self.state.hadInflightFlight ~= true
     if standbyActive then
@@ -4370,8 +4385,8 @@ function Runtime.new(zone, options)
             if self._standbyElrsIdentity ~= identity then Config.invalidate(identity); self._standbyElrsIdentity = identity end
           end
           local identity = self._standbyElrsIdentity
-          Config.request(identity, { owner = "standby", force = self._standbyActive ~= true })
-          local snapshot = Config.step({ owner = "standby", identity = identity, crsf = CrsfModule,
+          Config.request(identity, { owner = self._standbyElrsOwner, force = self._standbyActive ~= true })
+          local snapshot = Config.step({ owner = self._standbyElrsOwner, identity = identity, crsf = CrsfModule,
             push = crossfireTelemetryPush, now = nowSeconds(), allow = true })
           self._standbyCache = self._standbyCache or {}
           Standby.setElrsSnapshot(self._standbyCache, snapshot, nowSeconds())
@@ -4380,7 +4395,7 @@ function Runtime.new(zone, options)
       self._standbyCache = self._standbyCache or {}
       Standby.snapshot(standbyItems, self._standbyCache)
     elseif self._standbyActive and ElrsConfig then
-      ElrsConfig.cancel("standby", "standby_left")
+      ElrsConfig.cancel(self._standbyElrsOwner, "standby_left")
     end
     self._standbyActive = standbyActive
 
@@ -4619,6 +4634,7 @@ function Runtime.new(zone, options)
     -- Off screen. The overlay's own tick refuses to drive from here and cleans up instead, which
     -- is what makes a widget scrolled away stop writing the two variables.
     self._foreground = false
+    cancelStandbyElrs(self, "widget_background")
 
     -- Still running, so still passing: the heartbeat, as traceInstructionUsage publishes it at
     -- the top of refresh. A dashboard on a screen page the radio does not start on is called
