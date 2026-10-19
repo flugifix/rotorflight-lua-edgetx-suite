@@ -57,6 +57,16 @@ local PreferencesModule = requireModule("lib/preferences.lua")
 local ModelPreferences = requireModule("lib/model_preferences.lua")
 local DashboardAudio = requireModule("lib/audio.lua")
 local DashboardSplash = requireModule("widgets/dashboard/splash.lua")
+local DashboardStandby, ElrsConfig, Crsf = nil, nil, nil
+local function standbyModule()
+  DashboardStandby = DashboardStandby or requireModule("widgets/dashboard/standby.lua")
+  return DashboardStandby
+end
+local function elrsModules()
+  ElrsConfig = ElrsConfig or requireModule("lib/elrs_config.lua")
+  Crsf = Crsf or requireModule("lib/crsf.lua")
+  return ElrsConfig, Crsf
+end
 local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")
 local Sensors = requireModule("lib/sensors.lua")
@@ -799,6 +809,53 @@ local function splashJobStep(self)
   -- at the scene build below, so the usage line never reports a count belonging to a
   -- tree that has already been cleared.
   self._lastChildCount = #splash
+  return true
+end
+
+local function standbyJobStep(self)
+  local DashboardStandby = standbyModule()
+  self._standbyCache = self._standbyCache or {}
+  local dashboard = (self.preferences and self.preferences.dashboard) or {}
+  local items = DashboardStandby.decode(dashboard[DashboardStandby.KEY_LAYOUT])
+  local values = DashboardStandby.snapshot(items, self._standbyCache)
+  local t = self.i18n and self.i18n.t
+  local function translated(value, key, fallback)
+    if value and value ~= key then return value end
+    return fallback
+  end
+  local texts = {
+    layout_invalid = translated(t and t("widgets.dashboard.standby.layout_invalid"), "widgets.dashboard.standby.layout_invalid", "Standby layout does not fit"),
+    module_clock = translated(t and t("widgets.dashboard.standby.module_clock"), "widgets.dashboard.standby.module_clock", "Clock"),
+    module_date = translated(t and t("widgets.dashboard.standby.module_date"), "widgets.dashboard.standby.module_date", "Date"),
+    module_tx_battery = translated(t and t("widgets.dashboard.standby.module_tx_battery"), "widgets.dashboard.standby.module_tx_battery", "TX battery"),
+    module_model = translated(t and t("widgets.dashboard.standby.module_model"), "widgets.dashboard.standby.module_model", "Selected model"),
+    module_timer1 = translated(t and t("widgets.dashboard.standby.module_timer1"), "widgets.dashboard.standby.module_timer1", "Timer 1"),
+    module_timer2 = translated(t and t("widgets.dashboard.standby.module_timer2"), "widgets.dashboard.standby.module_timer2", "Timer 2"),
+    module_timer3 = translated(t and t("widgets.dashboard.standby.module_timer3"), "widgets.dashboard.standby.module_timer3", "Timer 3"),
+    module_tx_gps = translated(t and t("widgets.dashboard.standby.module_tx_gps"), "widgets.dashboard.standby.module_tx_gps", "TX GPS"),
+    module_uptime = translated(t and t("widgets.dashboard.standby.module_uptime"), "widgets.dashboard.standby.module_uptime", "Radio uptime"),
+    module_firmware = translated(t and t("widgets.dashboard.standby.module_firmware"), "widgets.dashboard.standby.module_firmware", "Firmware"),
+    module_elrs = translated(t and t("widgets.dashboard.standby.module_elrs"), "widgets.dashboard.standby.module_elrs", "ELRS TX configuration"),
+    gps_fix = translated(t and t("widgets.dashboard.standby.gps_fix"), "widgets.dashboard.standby.gps_fix", "Fix"),
+    gps_no_fix = translated(t and t("widgets.dashboard.standby.gps_no_fix"), "widgets.dashboard.standby.gps_no_fix", "No fix"),
+    elrs_reading = translated(t and t("widgets.dashboard.standby.elrs_reading"), "widgets.dashboard.standby.elrs_reading", "Reading"),
+    elrs_unavailable = translated(t and t("widgets.dashboard.standby.elrs_unavailable"), "widgets.dashboard.standby.elrs_unavailable", "Unavailable"),
+    elrs_last_read = translated(t and t("widgets.dashboard.standby.elrs_last_read"), "widgets.dashboard.standby.elrs_last_read", "Last read %d s ago"),
+    elrs_packet_rate = translated(t and t("widgets.dashboard.standby.elrs_packet_rate"), "widgets.dashboard.standby.elrs_packet_rate", "Packet Rate"),
+    elrs_telemetry_ratio = translated(t and t("widgets.dashboard.standby.elrs_telemetry_ratio"), "widgets.dashboard.standby.elrs_telemetry_ratio", "Telemetry Ratio"),
+    elrs_max_power = translated(t and t("widgets.dashboard.standby.elrs_max_power"), "widgets.dashboard.standby.elrs_max_power", "Max Power"),
+    elrs_dynamic = translated(t and t("widgets.dashboard.standby.elrs_dynamic"), "widgets.dashboard.standby.elrs_dynamic", "Dynamic"),
+  }
+  local function text(key, fallback)
+    return texts[key] or fallback
+  end
+  local children = DashboardStandby.build(self.zone, self.statusLine, text, items, values, self._standbyCache)
+  local Controls = requireModule("widgets/dashboard/fullscreen_controls.lua")
+  if type(Controls) == "table" and type(Controls.appendTool) == "function" then Controls.appendTool(children, self) end
+  lvgl.clear()
+  lvgl.build(children)
+  self.built = true
+  self._lastChildCount = #children
   return true
 end
 
@@ -4284,7 +4341,43 @@ function Runtime.new(zone, options)
     end
 
     -- STATE pass: the background half, then invalidation checks that only enqueue.
+    if self._standbyActive and ElrsConfig and MspRuntime and type(MspRuntime.getState) == "function" then
+      local runtimeState = MspRuntime.getState()
+      if type(runtimeState) == "table" and runtimeState.lastConnected == true then
+        ElrsConfig.cancel("standby", "fc_startup")
+        self._standbyActive = false
+      end
+    end
     local ready = performBackgroundWork(self, false)
+
+    local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
+    local standbyEnabled = dashboardPrefs.standby_enabled == true
+    local standbyActive = event ~= nil and not ready and self.flightMode ~= "postflight" and self.flightMode ~= "offline"
+      and standbyEnabled and self.state.fblConnected ~= true and self.state.armed ~= true
+      and self.state.hadInflightFlight ~= true
+    if standbyActive then
+      local Standby = standbyModule()
+      local standbyItems = Standby.decode(dashboardPrefs.standby_layout)
+      local wantsElrs = false
+      for i = 1, #standbyItems do if standbyItems[i].type == "elrs" then wantsElrs = true; break end end
+      if wantsElrs then
+        local Config, CrsfModule = elrsModules()
+        if Config then
+          local identity = Config.currentIdentity()
+          if self._standbyElrsIdentity ~= identity then Config.invalidate(identity); self._standbyElrsIdentity = identity end
+          Config.request(identity, { owner = "standby", force = self._standbyActive ~= true })
+          local snapshot = Config.step({ owner = "standby", identity = identity, crsf = CrsfModule,
+            push = crossfireTelemetryPush, now = nowSeconds(), allow = true })
+          self._standbyCache = self._standbyCache or {}
+          Standby.setElrsSnapshot(self._standbyCache, snapshot, nowSeconds())
+        end
+      end
+      self._standbyCache = self._standbyCache or {}
+      Standby.snapshot(standbyItems, self._standbyCache)
+    elseif self._standbyActive and ElrsConfig then
+      ElrsConfig.cancel("standby", "standby_left")
+    end
+    self._standbyActive = standbyActive
 
     -- `offline` is the post-flight phase with the link already gone, which is exactly the case
     -- this splash must not cover: the summary is what the pilot walked back to the bench for.
@@ -4292,8 +4385,15 @@ function Runtime.new(zone, options)
       local statusLine = self.statusLine or "Please wait..."
       -- Full screen and the zone are two splashes, because only the first carries the tool control.
       local fullscreenSplash = event ~= nil
-      local splashKey = "splash|" .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
-        .. (fullscreenSplash and "|fs" or "")
+      local useStandby = fullscreenSplash and dashboardPrefs.standby_enabled == true
+      if useStandby then
+        local DashboardStandby = standbyModule()
+        local items = DashboardStandby.decode(dashboardPrefs[DashboardStandby.KEY_LAYOUT])
+        self._standbyCache = self._standbyCache or {}
+        DashboardStandby.snapshot(items, self._standbyCache)
+      end
+      local splashKey = (useStandby and "standby|" or "splash|") .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
+        .. (fullscreenSplash and "|fs" or "") .. (useStandby and "|" .. tostring(dashboardPrefs[DashboardStandby.KEY_LAYOUT]) or "")
       if self.renderKey ~= splashKey then
         self.renderKey = splashKey
         self.built = false
@@ -4301,7 +4401,9 @@ function Runtime.new(zone, options)
       -- A splash that keeps raising falls back to the bare label, not to the failure surface,
       -- which is drawn by the same builder.
       if not self.built then
-        if not jobCapped(self, "splash") then
+        if useStandby and not jobCapped(self, "standby") then
+          self._job = { kind = "standby", step = standbyJobStep }
+        elseif not useStandby and not jobCapped(self, "splash") then
           self._job = { kind = "splash", step = splashJobStep, fullscreenSplash = fullscreenSplash }
         elseif not jobCapped(self, "failed_label") then
           self._job = { kind = "failed_label", step = failedLabelJobStep }

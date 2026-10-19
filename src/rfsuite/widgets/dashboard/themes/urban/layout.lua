@@ -41,6 +41,7 @@ end
 
 local Common = requireModule("widgets/dashboard/themes/urban/common.lua")
 if not Common then return {} end
+local RadioStatus = requireModule("lib/radio_status.lua")
 
 local L = {}
 local C = Common.C
@@ -354,9 +355,7 @@ end
 -- pill follows the pack at the cost of a rebuild only when it actually moves -- a cadence of
 -- minutes on a radio battery.
 function L.txVoltage()
-  local ok, v = pcall(getValue, "tx-voltage")
-  if ok and type(v) == "number" and v > 0 then return v end
-  return nil
+  return RadioStatus and RadioStatus.txVoltage() or nil
 end
 
 -- The percentage needs the radio's own battery range, which getGeneralSettings answers with
@@ -367,24 +366,8 @@ end
 -- The third answer is "low": below the radio's own battery warning, as a share of the same
 -- range.
 function L.txBattery()
-  local volts = L.txVoltage()
-  local vMin, vMax, vWarn = 6.6, 8.4, nil
-  local okG, g = pcall(getGeneralSettings)
-  if okG and type(g) == "table" then
-    if type(g.battMin) == "number" and g.battMin > 0 then vMin = g.battMin end
-    if type(g.battMax) == "number" and g.battMax > vMin then vMax = g.battMax end
-    if type(g.battWarn) == "number" and g.battWarn > 0 then vWarn = g.battWarn end
-  end
-  local pct, low = nil, false
-  if volts then
-    pct = math.floor((volts - vMin) / (vMax - vMin) * 100 + 0.5)
-    if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
-    if vWarn then
-      local warnPct = math.ceil(100 - (100 * (vMax - vWarn) / (vMax - vMin)))
-      low = pct < warnPct
-    end
-  end
-  return volts, pct, low
+  if RadioStatus then return RadioStatus.txBattery() end
+  return nil, nil, false
 end
 
 -- The signal strength as the bar shows it: the headroom of a reading in dBm above the

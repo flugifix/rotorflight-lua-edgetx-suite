@@ -61,6 +61,8 @@ return {
     -- under-measurement (1 826). Counts-only, the loop runs to its poll caps, which
     -- is what a pass on the radio could always cost.
     ["pass.splash"] = { target = 7100, measured = 2439 },
+    ["pass.standby.build"] = { target = 9000, measured = 0 },
+    ["pass.standby.state"] = { target = 12000, measured = 0 },
 
     -- The cold start, before the link is up and the first scene is on screen. It is
     -- the pass that loads modules, and it is the closest any pass comes to the
@@ -385,6 +387,7 @@ return {
     ["page.settings_audio_volume_page.build"] = { target = 2100, measured = 1674 },
     ["page.settings_dashboard_inflight_page.build"] = { target = 10200, measured = 8152 },
     ["page.settings_dashboard_quick_menu_page.build"] = { target = 2500, measured = 2364 },
+    ["page.settings_dashboard_standby_page.build"] = { target = 6800, measured = 5404 },
     ["page.settings_dashboard_theme_page.build"] = { target = 13250, measured = 10585 },
     ["page.settings_general_page.build"] = { target = 2200, measured = 1747 },
     ["page.settings_localization_page.build"] = { target = 2350, measured = 1878 },
