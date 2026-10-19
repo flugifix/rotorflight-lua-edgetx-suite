@@ -1330,6 +1330,11 @@ function M.transferRefusal(widget, drive)
   -- commit, and it would leave the pilot believing an undo exists where none does.
   if (backup - 1) == active0 then return "same" end
   if queueOf() == nil then return "no_link" end
+  -- The session belongs to the flight controller it was read from (see M.tick), and after a
+  -- reconnect the board on the link says which one it is only once the UID read has answered. Until
+  -- then a restore would copy a spare profile of a board nobody has identified, so both transfers
+  -- wait, with the line that says the board is being read.
+  if drive.board ~= nil and boardOnLink() ~= drive.board then return "reading" end
   return nil
 end
 

@@ -186,7 +186,8 @@ changed.
   the backup line, the comparison and the read go, the board is read again in full, slot table
   included, and with the interlock on a fresh backup of its active profile follows. The board
   is known by the identity the suite reads on every connect (API version and MCU id), which
-  answers a moment after the link is back; until it has, nothing ends.
+  answers a moment after the link is back; until it has, nothing ends, and *Backup* and
+  *Restore* wait with *The board is being read: try again in a moment*.
 - Releasing the interlock, closing the fullscreen, backgrounding the widget or losing the
   link all take the value variable back to zero, in the flight mode it was written in, and
   end whichever of the three surfaces was up. The next opening of the interlock is an opening
