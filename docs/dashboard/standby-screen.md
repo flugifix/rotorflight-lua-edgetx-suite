@@ -11,7 +11,7 @@ When enabled, the fullscreen dashboard uses one configurable standby surface whi
 
 *Layout preview with example data; approximate fonts.*
 
-The initial layout contains Clock, TX battery, and Selected model. TX GPS is optional and is read only when its tile is selected.
+The initial layout contains Clock, TX battery, and Selected model. The battery tile keeps its voltage and percentage beside a filled battery symbol; the fill follows the same radio battery range and warning level as the text. TX GPS is optional and is read only when its tile is selected.
 
 A fixed information strip summarizes the highest-priority prerequisite from the connection state already held by the dashboard. The exact connection reason and progress remain visible below it. The strip adds no new radio or telemetry polling.
 

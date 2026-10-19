@@ -31,7 +31,7 @@ The screen reserves a fixed information strip for the highest-priority connectio
 
 ## Notes
 
-The transmitter battery uses the radio's battery minimum, maximum, and warning settings. TX GPS is the GPS built into the transmitter; *No fix* is a waiting state and does not describe the aircraft. The API provides no reception timestamp, so the screen makes no freshness claim. Missing readings remain unavailable rather than becoming zero.
+The transmitter battery uses the radio's battery minimum, maximum, and warning settings for both its text and filled battery symbol. TX GPS is the GPS built into the transmitter; *No fix* is a waiting state and does not describe the aircraft. The API provides no reception timestamp, so the screen makes no freshness claim. Missing readings remain unavailable rather than becoming zero.
 
 The optional ELRS tile reads the active transmitter module and never writes a parameter. It preserves the module's Packet Rate, Telemetry Ratio, Max Power, and Dynamic labels. Max Power is the configured ceiling, not the currently emitted RF power. The tile marks a completed snapshot with its read age; it starts a bounded refresh when the standby screen is entered again or the model/module identity changes. EdgeTX routes CRSF to the internal module when both internal and external CRSF modules are active.
 

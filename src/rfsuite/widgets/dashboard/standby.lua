@@ -255,6 +255,7 @@ local function battery(cache)
   local volts, pct, low = nil, nil, false
   if RadioStatus then volts, pct, low = RadioStatus.txBattery() end
   cache.batteryLow = low
+  cache.batteryPercent = pct
   if not volts or not pct then return "-" end
   return string.format("%.1f V  %d%%", volts, pct)
 end
@@ -262,8 +263,11 @@ end
 local function readValues(cache, items)
   local dt = safeCall(getDateTime)
   local info = model and safeCall(model.getInfo) or nil
-  local wantsGps = false
-  for i = 1, #(items or {}) do if items[i].type == "tx_gps" then wantsGps = true; break end end
+  local wantsGps, wantsBattery = false, false
+  for i = 1, #(items or {}) do
+    local itemType = items[i].type
+    if itemType == "tx_gps" then wantsGps = true elseif itemType == "tx_battery" then wantsBattery = true end
+  end
   local gps = wantsGps and safeCall(getTxGPS) or nil
   local version = nil
   if type(getVersion) == "function" then
@@ -274,7 +278,7 @@ local function readValues(cache, items)
   local values = {
     clock = type(dt) == "table" and string.format("%02d:%02d", dt.hour or 0, dt.min or 0) or "-",
     date = type(dt) == "table" and string.format("%04d-%02d-%02d", dt.year or 0, dt.mon or 0, dt.day or 0) or "-",
-    tx_battery = battery(cache),
+    tx_battery = wantsBattery and battery(cache) or nil,
     model = bounded(type(info) == "table" and info.name or nil, 15),
     timer1 = timerValue(1), timer2 = timerValue(2), timer3 = timerValue(3),
     uptime = now > 359999999 and ">999:59"
@@ -443,7 +447,26 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
           or COLOR_THEME_PRIMARY1,
         font = box.font }
       local detail = ""
-      if item.type == "tx_battery" then detail = i18n("tx_battery_detail", "Radio battery")
+      if item.type == "tx_battery" then
+        detail = i18n("tx_battery_detail", "Radio battery")
+        local batteryW = compact and 30 or 36
+        local batteryH = compact and 12 or 14
+        local terminalW = 3
+        local batteryX = x + boxW - 8 - batteryW - terminalW
+        local batteryY = y + row.h - 20
+        children[#children + 1] = { type = "rectangle", x = batteryX + batteryW,
+          y = batteryY + 3, w = terminalW, h = batteryH - 6,
+          color = COLOR_THEME_PRIMARY1, filled = true }
+        children[#children + 1] = { type = "hline", x = batteryX + 2,
+          y = batteryY + math.floor(batteryH / 2), w = 1, h = batteryH - 4,
+          size = function()
+            local pct = cache.batteryPercent or 0
+            return math.max(0, math.floor((batteryW - 4) * pct / 100)), batteryH - 4
+          end,
+          color = function() return cache.batteryLow and COLOR_THEME_WARNING or COLOR_THEME_SECONDARY1 end }
+        children[#children + 1] = { type = "rectangle", x = batteryX, y = batteryY,
+          w = batteryW, h = batteryH, color = COLOR_THEME_PRIMARY1, filled = false,
+          rounded = 2, thickness = 1 }
       elseif item.type == "model" then detail = i18n("model_detail", "EdgeTX model")
       elseif item.type == "timer1" or item.type == "timer2" or item.type == "timer3" then
         detail = i18n("timer_detail", "EdgeTX model timer")
@@ -451,12 +474,11 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
       elseif item.type == "uptime" then detail = i18n("uptime_detail", "Since radio power-on")
       elseif item.type == "firmware" then detail = i18n("firmware_detail", "Radio firmware")
       elseif item.type == "date" then detail = i18n("date_detail", "Radio date") end
-      children[#children + 1] = { type = "label", x = x + 8, y = y + row.h - 21, w = boxW - 16,
-        text = function()
-          local snap = cache.snapshotValues or values
-          if item.type == "clock" then return tostring(snap.date or "-") end
-          return detail
-        end,
+      local detailW = item.type == "tx_battery" and boxW - 57 or boxW - 16
+      children[#children + 1] = { type = "label", x = x + 8, y = y + row.h - 21, w = detailW,
+        text = item.type == "clock"
+          and function() local snap = cache.snapshotValues or values; return tostring(snap.date or "-") end
+          or detail,
         color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
     end
     end

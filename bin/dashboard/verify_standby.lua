@@ -2,6 +2,13 @@ MIDSIZE, SMLSIZE = 2, 1
 LCD_W, LCD_H = 480, 320
 lcd = { sizeText = function(text, font) return #text * (font == MIDSIZE and 10 or 7), font == MIDSIZE and 22 or 16 end }
 
+local batterySample = { volts = nil, pct = nil, low = false }
+rfsuite = { require = function(path)
+  if path == "lib/radio_status.lua" then
+    return { txBattery = function() return batterySample.volts, batterySample.pct, batterySample.low end }
+  end
+end }
+
 local standby = assert(loadfile("src/rfsuite/widgets/dashboard/standby.lua"))()
 local passed = 0
 local function check(name, condition)
@@ -69,6 +76,41 @@ tick = 201
 local utf8Values = standby.snapshot(default, cache)
 check("UTF-8 model truncates at a codepoint", utf8Values.model == "Model\195\169LongEn...")
 check("unselected GPS remains skipped after snapshot cadence", gpsCalls == 0)
+
+local modelOnly = standby.decode("model:full")
+local modelOnlyCache = { text = cache.text }
+batterySample.volts, batterySample.pct = 8.0, 50
+tick = 250
+local modelOnlyValues = standby.snapshot(modelOnly, modelOnlyCache)
+check("unselected battery leaves no sampled value", modelOnlyValues.tx_battery == nil
+  and modelOnlyCache.batteryPercent == nil)
+
+local batteryItems = standby.decode("tx_battery:small")
+local batteryCache = { text = cache.text }
+batterySample.volts, batterySample.pct, batterySample.low = nil, nil, false
+tick = 260
+local emptyBatteryValues = standby.snapshot(batteryItems, batteryCache)
+local emptyBatteryScene = standby.build({ w = 480, h = 320 }, "Waiting", cache.text,
+  batteryItems, emptyBatteryValues, batteryCache)
+local batterySize, batteryColor
+for i = 1, #emptyBatteryScene do
+  local node = emptyBatteryScene[i]
+  if node.type == "hline" and type(node.size) == "function" then batterySize, batteryColor = node.size, node.color end
+end
+local emptyWidth = batterySize()
+check("unknown battery draws an empty outline", emptyWidth == 0)
+batterySample.volts, batterySample.pct, batterySample.low = 7.8, 50, false
+tick = 361
+standby.snapshot(batteryItems, batteryCache)
+local halfWidth = batterySize()
+check("battery graphic follows cached percentage", halfWidth > 0 and halfWidth < 30
+  and batteryColor() == COLOR_THEME_SECONDARY1)
+batterySample.volts, batterySample.pct, batterySample.low = 6.8, 100, true
+tick = 462
+standby.snapshot(batteryItems, batteryCache)
+local fullWidth = batterySize()
+check("battery graphic reaches full and uses warning color", fullWidth > halfWidth
+  and batteryColor() == COLOR_THEME_WARNING)
 
 local gpsItems = standby.decode("tx_gps:wide")
 local gpsCache = { text = cache.text }

@@ -1194,7 +1194,9 @@ do
   local gps = runStandbyScenario("clock:small,date:small,tx_gps:wide", { fix = true, numsat = 12 }, false)
   local elrsNoReply = runStandbyScenario("elrs:full", nil, false)
   local elrsReady = runStandbyScenario("elrs:full", nil, true)
-  local runs = { largest, composite, gps, elrsNoReply, elrsReady }
+  local batteries = runStandbyScenario("tx_battery:small,tx_battery:small,tx_battery:small,tx_battery:small,"
+    .. "tx_battery:small,tx_battery:small,tx_battery:small,tx_battery:small", nil, false, 8)
+  local runs = { largest, composite, gps, elrsNoReply, elrsReady, batteries }
   local build, state, sweep, refs = 0, 0, 0, 0
   for i = 1, #runs do
     build = math.max(build, runs[i].worst.standby or 0); state = math.max(state, runs[i].worst.state or 0)
