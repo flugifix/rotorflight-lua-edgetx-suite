@@ -1,4 +1,5 @@
-local root = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]bin[/\\]tests[/\\]") or ".")
+local source = string.sub(debug.getinfo(1, "S").source, 2)
+local root = string.match(source, "^(.*)[/\\]bin[/\\]tests[/\\]") or "."
 local runtimePath = root .. "/src/rfsuite/widgets/dashboard/runtime.lua"
 if arg and arg[1] == "--runtime" and arg[2] then runtimePath = arg[2] end
 local Stubs = assert(loadfile(root .. "/bin/accounting/stubs/edgetx.lua"))()

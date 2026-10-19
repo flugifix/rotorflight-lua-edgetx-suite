@@ -1,4 +1,5 @@
-local root = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]bin[/\\]tests[/\\]") or ".")
+local source = string.sub(debug.getinfo(1, "S").source, 2)
+local root = string.match(source, "^(.*)[/\\]bin[/\\]tests[/\\]") or "."
 _G.rfsuite = {}
 local currentFilename = "model01.yml"
 model = {
@@ -6,7 +7,7 @@ model = {
   getModule = function(i) return { Type = i == 0 and 5 or 0, subType = 0 } end,
 }
 loadScript = function(path)
-  local relative = path:match("/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
+  local relative = string.match(path, "/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
   if not relative then return nil end
   return loadfile(root .. "/src/rfsuite/" .. relative)
 end

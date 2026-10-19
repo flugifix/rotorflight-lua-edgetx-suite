@@ -1,4 +1,5 @@
-local root = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]bin[/\\]tests[/\\]") or ".")
+local source = string.sub(debug.getinfo(1, "S").source, 2)
+local root = string.match(source, "^(.*)[/\\]bin[/\\]tests[/\\]") or "."
 local now, armChanges, pushes, invalidations, configLoads = 0, 0, {}, 0, 0
 local provider = {
   acquire = function() return true end, release = function() end,
@@ -30,7 +31,7 @@ crossfireTelemetryPush = function(kind, payload)
   return true
 end
 loadScript = function(path)
-  local relative = path:match("/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
+  local relative = string.match(path, "/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
   if relative == "lib/elrs_config.lua" then
     configLoads = configLoads + 1
     return function() return provider end
