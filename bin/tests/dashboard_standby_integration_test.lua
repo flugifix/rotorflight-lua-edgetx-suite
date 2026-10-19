@@ -139,6 +139,16 @@ do
   widget:refresh(0, nil)
   check("standby build pass does not probe provider", calls.request == afterState)
 
+  check("active standby has cached localized texts before global reload",
+    type(widget._standbyTexts) == "table"
+      and type(widget.renderKey) == "string" and string.sub(widget.renderKey, 1, 8) == "standby|")
+  widget:reload(true)
+  check("global reload invalidates standby texts and visible render key",
+    widget._standbyTexts == nil and widget.renderKey == nil)
+  widget.preferences.dashboard = widget.preferences.dashboard or {}
+  widget.preferences.dashboard.standby_enabled = true
+  widget.preferences.dashboard.standby_layout = "elrs:full"
+
   local identityBefore = calls.identity
   widget._job = nil
   Stubs.tick()
