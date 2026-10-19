@@ -4366,16 +4366,17 @@ function Runtime.new(zone, options)
 
     local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
     local standbyEnabled = dashboardPrefs.standby_enabled == true
-    local standbyActive = event ~= nil and self._toolHost == nil and not ready
+    local standbyRenderActive = event ~= nil and self._toolHost == nil and not ready
       and self.flightMode ~= "postflight" and self.flightMode ~= "offline"
-      and standbyEnabled and self.state.fblConnected ~= true and self.state.armed ~= true
+      and standbyEnabled and self.state.armed ~= true
       and self.state.hadInflightFlight ~= true
-    if standbyActive then
+    local standbyProbeActive = standbyRenderActive and self.state.fblConnected ~= true
+    if standbyRenderActive then
       local Standby = standbyModule()
       local standbyItems = Standby.decode(dashboardPrefs.standby_layout)
       local wantsElrs = false
       for i = 1, #standbyItems do if standbyItems[i].type == "elrs" then wantsElrs = true; break end end
-      if wantsElrs then
+      if wantsElrs and standbyProbeActive then
         local Config, CrsfModule = elrsModules()
         if Config then
           local identityNow = type(getTime) == "function" and getTime() or 0
@@ -4391,13 +4392,15 @@ function Runtime.new(zone, options)
           self._standbyCache = self._standbyCache or {}
           Standby.setElrsSnapshot(self._standbyCache, snapshot, nowSeconds())
         end
+      elseif self._standbyActive and ElrsConfig then
+        ElrsConfig.cancel(self._standbyElrsOwner, "fc_startup")
       end
       self._standbyCache = self._standbyCache or {}
       Standby.snapshot(standbyItems, self._standbyCache)
     elseif self._standbyActive and ElrsConfig then
       ElrsConfig.cancel(self._standbyElrsOwner, "standby_left")
     end
-    self._standbyActive = standbyActive
+    self._standbyActive = standbyProbeActive
 
     -- `offline` is the post-flight phase with the link already gone, which is exactly the case
     -- this splash must not cover: the summary is what the pilot walked back to the bench for.
@@ -4405,7 +4408,7 @@ function Runtime.new(zone, options)
       local statusLine = self.statusLine or "Please wait..."
       -- Full screen and the zone are two splashes, because only the first carries the tool control.
       local fullscreenSplash = event ~= nil
-      local useStandby = fullscreenSplash and standbyActive
+      local useStandby = fullscreenSplash and standbyRenderActive
       if useStandby then
         local DashboardStandby = standbyModule()
         local items = DashboardStandby.decode(dashboardPrefs[DashboardStandby.KEY_LAYOUT])
@@ -4413,7 +4416,8 @@ function Runtime.new(zone, options)
         DashboardStandby.snapshot(items, self._standbyCache)
       end
       local splashKey = (useStandby and "standby|" or "splash|") .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
-        .. (fullscreenSplash and "|fs" or "") .. (useStandby and "|" .. tostring(dashboardPrefs[DashboardStandby.KEY_LAYOUT]) or "")
+        .. (fullscreenSplash and "|fs" or "") .. (useStandby and "|" .. tostring(dashboardPrefs[DashboardStandby.KEY_LAYOUT])
+          .. "|overflow=" .. tostring(self._standbyCache and self._standbyCache.valueOverflow) or "")
       if self.renderKey ~= splashKey then
         self.renderKey = splashKey
         self.built = false

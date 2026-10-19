@@ -68,12 +68,31 @@ check("standby scene builds", type(scene) == "table" and #scene > 3)
 check("status line clears small tool control", scene[3].x + scene[3].w <= 480 - 20 - 1 - 6)
 local largeScene = standby.build({ w = 800, h = 480 }, string.rep("W", 80), cache.text, default, values, cache)
 check("status line clears large tool control", largeScene[3].x + largeScene[3].w <= 800 - 44 - 8 - 6)
-check("status line is visibly bounded", string.sub(largeScene[3].text, -3) == "...")
+check("status line preserves the full reason", largeScene[3].text == string.rep("W", 80))
 local valueClosure
 for i = 1, #scene do if type(scene[i].text) == "function" then valueClosure = scene[i].text; break end end
 check("scene exposes reactive value", type(valueClosure) == "function")
 local before = valueClosure()
 cache.snapshotValues.clock = "12:35"
 check("reactive value updates without rebuild", valueClosure() ~= before)
+
+local elrsCache = { text = function(_, fallback) return fallback end }
+standby.setElrsSnapshot(elrsCache, {
+  status = "ready", readAt = 1, identity = "one", packetRate = "D250", telemetryRatio = "Std",
+  maxPower = "25/250", dynamic = "AUX9", fields = { maxPower = { unit = "mW" } },
+}, 1)
+tick = 300
+local elrsValues = standby.snapshot(elrsFull, elrsCache)
+standby.build({ w = 480, h = 320 }, "Waiting", elrsCache.text, elrsFull, elrsValues, elrsCache)
+check("exact D-rate label is preserved", string.find(elrsValues.elrs, "Packet Rate: D250", 1, true) ~= nil)
+check("supported ELRS labels fit", elrsCache.valueOverflow == false)
+standby.setElrsSnapshot(elrsCache, {
+  status = "ready", readAt = 2, identity = "one", packetRate = string.rep("LongRate", 20), telemetryRatio = "Race",
+  maxPower = "1000", dynamic = "Off", fields = { maxPower = { unit = "mW" } },
+}, 2)
+tick = 401
+local longElrsValues = standby.snapshot(elrsFull, elrsCache)
+check("arbitrary ELRS label remains exact", string.find(longElrsValues.elrs, string.rep("LongRate", 20), 1, true) ~= nil)
+check("arbitrary ELRS overflow invalidates layout", elrsCache.valueOverflow == true)
 
 print(string.format("standby regression: %d checks passed", passed))

@@ -136,6 +136,22 @@ function M.validate(items, width, height, labels)
   return rows ~= nil, err
 end
 
+local function valuesFit(items, values, width, height, labels)
+  local rows = layout(items, width, height, labels)
+  if not rows then return false end
+  for r = 1, #rows do
+    for i = 1, #rows[r].items do
+      local box = rows[r].items[i]
+      local value = tostring(values[box.item.type] or "-")
+      for line in string.gmatch(value .. "\n", "([^\n]*)\n") do
+        local lineW = measure(line, box.font)
+        if lineW > box.w - 16 then return false end
+      end
+    end
+  end
+  return true
+end
+
 local function safeCall(fn, ...)
   if type(fn) ~= "function" then return nil end
   local ok, value = pcall(fn, ...)
@@ -240,12 +256,6 @@ function M.elrsText(cache, now)
     local value = tostring(row[3] or "-")
     if row[1] == "elrs_max_power" and snap.fields and snap.fields.maxPower and snap.fields.maxPower.unit
         and snap.fields.maxPower.unit ~= "" then value = value .. " " .. tostring(snap.fields.maxPower.unit) end
-    local supported = row[1] == "elrs_packet_rate" and string.match(value, "^[%w%.%-]+[Hh][Zz].*$")
-      or row[1] == "elrs_telemetry_ratio" and (value == "Std" or value == "Race" or value == "Off"
-        or string.match(value, "^1:%d+$"))
-      or row[1] == "elrs_max_power" and string.match(value, "^%d+/?%d*%s*[%a]*$")
-      or row[1] == "elrs_dynamic" and (value == "Off" or value == "Dyn" or string.match(value, "^AUX%d+$"))
-    if not supported then return text and text("elrs_unavailable", "Unavailable") or "Unavailable" end
     lines[#lines + 1] = (text and text(row[1], row[2]) or row[2]) .. ": " .. value
   end
   return table.concat(lines, "\n")
@@ -256,6 +266,9 @@ function M.snapshot(items, cache)
   local now = type(getTime) == "function" and getTime() or 0
   if cache.snapshotValues and now < (cache.snapshotAt or 0) + 100 then return cache.snapshotValues, cache.snapshotKey end
   local values = readValues(cache)
+  if cache.zoneW and cache.zoneH and cache.labels then
+    cache.valueOverflow = not valuesFit(items, values, cache.zoneW, cache.zoneH, cache.labels)
+  end
   local key = {}
   for i = 1, #items do key[#key + 1] = items[i].type .. "=" .. tostring(values[items[i].type]) end
   cache.snapshotValues, cache.snapshotKey, cache.snapshotAt = values, table.concat(key, "|"), now
@@ -269,7 +282,9 @@ function M.build(zone, statusLine, i18n, items, values, cache)
   local labels = {}
   for i = 1, #M.TYPES do local id = M.TYPES[i]; labels[id] = i18n(TYPE_KEYS[id], id) end
   for i = 1, #ELRS_WORST do labels[ELRS_WORST[i][1]] = i18n(ELRS_WORST[i][1], ELRS_WORST[i][2]) end
-  local ok = M.validate(items, w, h, labels)
+  cache.zoneW, cache.zoneH, cache.labels = w, h, labels
+  cache.valueOverflow = not valuesFit(items, values, w, h, labels)
+  local ok = M.validate(items, w, h, labels) and not cache.valueOverflow
   local logoW = math.floor(w * 0.32)
   local logoH = math.floor(logoW * 84 / 400 + 0.5)
   local toolSize = h > 350 and 44 or 20
@@ -280,7 +295,8 @@ function M.build(zone, statusLine, i18n, items, values, cache)
     { type = "rectangle", x = 0, y = 0, w = w, h = h, color = COLOR_THEME_PRIMARY3, filled = true },
     { type = "image", x = math.floor(w * 0.04), y = math.floor(h * 0.04), w = logoW, h = logoH, file = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png" },
     { type = "label", x = statusX, y = math.floor(h * 0.055), w = math.max(0, statusRight - statusX),
-      text = bounded(tostring(statusLine or ""), 36), align = RIGHT, color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
+      h = math.max(20, (h >= 440 and 150 or 116) - math.floor(h * 0.055) - 8),
+      text = tostring(statusLine or ""), align = RIGHT, color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
   }
   if not ok then
     children[#children + 1] = { type = "label", x = 10, y = math.floor(h * 0.48), w = w - 20, text = i18n("layout_invalid", "Standby layout does not fit"), align = CENTER, color = COLOR_THEME_WARNING, font = MIDSIZE }
