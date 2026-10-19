@@ -632,7 +632,9 @@ local function finalize()
 end
 
 function M.reset()
-    local provider = configProvider()
+    -- A page build resets an unstarted task. Do not load the provider just to release a lease this
+    -- task cannot yet own; start/wakeup loads it when a parameter conversation can actually run.
+    local provider = ElrsConfig
     if provider then provider.release("diagnostics", state == "ping" or state == "read" or state == "write") end
     taskComplete = false
     configWaitStartedAt = 0

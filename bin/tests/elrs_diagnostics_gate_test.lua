@@ -1,5 +1,5 @@
 local root = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]bin[/\\]tests[/\\]") or ".")
-local now, armChanges, pushes, invalidations = 0, 0, {}, 0
+local now, armChanges, pushes, invalidations, configLoads = 0, 0, {}, 0, 0
 local provider = {
   acquire = function() return true end, release = function() end,
   drain = function() return true end, invalidate = function() invalidations = invalidations + 1 end,
@@ -19,7 +19,7 @@ _G.rfsuite = {
 }
 _G.rfsuite.require = function(path)
   if path == "lib/armed.lua" then return armed end
-  if path == "lib/elrs_config.lua" then return provider end
+  if path == "lib/elrs_config.lua" then configLoads = configLoads + 1; return provider end
   if path == "lib/crsf.lua" then return crsf end
   return nil
 end
@@ -31,7 +31,10 @@ crossfireTelemetryPush = function(kind, payload)
 end
 loadScript = function(path)
   local relative = path:match("/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
-  if relative == "lib/elrs_config.lua" then return function() return provider end end
+  if relative == "lib/elrs_config.lua" then
+    configLoads = configLoads + 1
+    return function() return provider end
+  end
   if relative == "lib/armed.lua" then return function() return armed end end
   if relative == "lib/crsf.lua" then return function() return crsf end end
   if relative == "lib/elrs_power.lua" then return loadfile(root .. "/src/rfsuite/lib/elrs_power.lua") end
@@ -39,8 +42,11 @@ loadScript = function(path)
 end
 
 local Task = assert(loadfile(root .. "/src/rfsuite/app/pages/tools/diagnostics/elrs_link/elrslink_task.lua"))()
+Task.reset()
+assert(configLoads == 0, "idle diagnostics reset cold-loaded the ELRS provider")
 
 Task.start(Task.MODE_ROTORFLIGHT_TO_ELRS)
+assert(configLoads == 1, "diagnostics start did not load the ELRS provider")
 armChanges = 1
 Task.wakeup()
 assert(#pushes == 0 and not Task.isRunning(), "arming transition did not stop the sync before a write")

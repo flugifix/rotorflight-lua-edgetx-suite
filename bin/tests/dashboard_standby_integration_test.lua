@@ -112,6 +112,13 @@ do
   end
 
   local Runtime = assert(loadfile(runtimePath))()
+  local MspRuntime = assert(_G.rfsuite.require("tasks/msp/runtime.lua"))
+  local originalFbl = MspRuntime.isFblConnected
+  local forceFbl = false
+  MspRuntime.isFblConnected = function()
+    if forceFbl then return true end
+    return type(originalFbl) == "function" and originalFbl() or false
+  end
   local widget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
   widget.preferences.dashboard = widget.preferences.dashboard or {}
   widget.preferences.dashboard.standby_enabled = true
@@ -139,6 +146,21 @@ do
   check("identity refreshes on its bounded cadence", calls.identity > identityBefore)
   check("ELRS snapshot reaches standby cache", widget._standbyCache
     and widget._standbyCache.elrs and widget._standbyCache.elrs.packetRate ~= nil)
+
+  widget._job = nil
+  widget._standbyActive = false
+  widget.state.armed, widget.state.hadInflightFlight = false, false
+  widget.flightMode = "preflight"
+  forceFbl = true
+  local beforeFblRequest, beforeFblStep = calls.request, calls.step
+  Stubs.tick()
+  widget:refresh(0, nil)
+  check("detected FBL keeps standby render while yielding module transport",
+    calls.request == beforeFblRequest and calls.step == beforeFblStep
+      and widget._standbyActive ~= true
+      and ((widget._job and widget._job.kind == "standby")
+        or (type(widget.renderKey) == "string" and string.sub(widget.renderKey, 1, 8) == "standby|")))
+  forceFbl = false
 
   local function excluded(name, setup)
     widget._job = nil
@@ -195,6 +217,7 @@ do
     and second._standbyCache.elrs.packetRate ~= widget._standbyCache.elrs.packetRate)
 
   for key, value in pairs(original) do Config[key] = value end
+  MspRuntime.isFblConnected = originalFbl
 end
 
 Stubs.releaseCard()
