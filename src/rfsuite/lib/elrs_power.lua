@@ -239,90 +239,29 @@ end
 --- sends at most one per call, and a caller calls it only while the model is disarmed.
 function PowerRead.step(st, crsf, push, now)
   if st.done then return end
-  if type(push) ~= "function" or type(crsf) ~= "table" or type(crsf.popFrame) ~= "function" then
+  local config = type(_G) == "table" and _G.rfsuite and _G.rfsuite.elrs_config or nil
+  if not config and type(loadScript) == "function" then
+    local chunk = loadScript("/SCRIPTS/TOOLS/rfsuite-core/lib/elrs_config.lua", "t")
+    if type(chunk) == "function" then
+      local ok, loaded = pcall(chunk)
+      if ok then config = loaded end
+    end
+  end
+  if not config then finish(st); return end
+  local identityKey = config.currentIdentity()
+  local accepted = config.request(identityKey, { owner = "legacy_power" })
+  if not accepted then return end
+  local snapshot = config.step({
+    owner = "legacy_power", identity = identityKey, crsf = crsf, push = push, now = now,
+  })
+  if snapshot and snapshot.status ~= "reading" then
+    local max = snapshot.fields and snapshot.fields.maxPower
+    local dynamic = snapshot.fields and snapshot.fields.dynamic
+    local dynamicValue = nil
+    if dynamic then dynamicValue = dynamic.enabled end
+    st.maxMilliwatts = max and max.milliwatts or nil
+    st.dynamic = dynamicValue
     finish(st)
-    return
-  end
-  if st.sent == nil then
-    st.sent = 0
-    st.buf = st.buf or {}
-    -- Parameter entries that are still waiting are another conversation's: a late answer to an
-    -- earlier connection's read, or the ELRS Link page's walk, which reaches every Lua state's
-    -- queue. lib/crsf.lua keeps them for this reader once it has asked for the type, and one for a
-    -- field of the same id would pass for this conversation's answer with the value of before.
-    -- Device information is left alone, because another reader may be waiting for its answer.
-    while crsf.popFrame(FRAME_PARAMETER_ENTRY) ~= nil do end
-  end
-  if st.phase == nil then
-    -- Device information is taken only once this conversation has pinged: an answer that was
-    -- already waiting is another reader's (the dashboard pings once for the link's generation).
-    while st.pingAt ~= nil do
-      local data = crsf.popFrame(FRAME_DEVICE_INFO)
-      if data == nil then break end
-      local key, count = PowerRead.identity(data)
-      if key == false then
-        -- The module answered and is not ExpressLRS: nothing to read.
-        finish(st)
-        return
-      end
-      if key then
-        st.key = key
-        st.fieldCount = count
-        local ids = idsByModule[key]
-        if ids then
-          st.phase = "read"
-          st.maxId, st.dynamicId = ids.max, ids.dynamic
-          st.field = ids.max
-        else
-          st.phase = "walk"
-          st.field = 1
-          if count <= 0 then
-            finish(st)
-            return
-          end
-        end
-        clearBuffer(st)
-        break
-      end
-    end
-    if st.phase == nil then
-      if st.pingAt == nil or (now - st.pingAt) >= PING_RETRY_SECONDS then
-        if st.sent >= FRAME_BUDGET then
-          finish(st)
-          return
-        end
-        st.sent = st.sent + 1
-        local ok, queued = pcall(push, FRAME_DEVICE_PING, PING_PAYLOAD)
-        -- Nil is EdgeTX saying no module runs the CRSF protocol; false is a full output buffer,
-        -- which the next call tries again.
-        if ok and queued == nil then
-          finish(st)
-          return
-        end
-        if ok and queued then st.pingAt = now end
-      end
-      return
-    end
-  end
-
-  -- An entry counts only while a request of this conversation is out; one that arrives between the
-  -- answer and the next request is a repeat of an answer already taken.
-  while not st.done do
-    local data = crsf.popFrame(FRAME_PARAMETER_ENTRY)
-    if data == nil then break end
-    if st.requestAt ~= nil and data[2] == ADDRESS_MODULE and data[3] == st.field then takeEntry(st, data) end
-  end
-  if st.done then return end
-
-  if st.requestAt == nil or (now - st.requestAt) >= REQUEST_RETRY_SECONDS then
-    -- The budget is spent: the answer to the last frame had its chance until now.
-    if st.sent >= FRAME_BUDGET then
-      finish(st)
-      return
-    end
-    st.sent = st.sent + 1
-    local ok, queued = pcall(push, FRAME_PARAMETER_READ, { ADDRESS_MODULE, ADDRESS_ELRS_LUA, st.field, st.chunk })
-    if ok and queued then st.requestAt = now end
   end
 end
 

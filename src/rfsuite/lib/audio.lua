@@ -19,9 +19,9 @@ local AUDIO_PACK_BASE = "/SOUNDS/"
 local AUDIO_DEFAULT_FALLBACK = "en"
 local AUDIO_ROOT_BASE = "/audio/"
 local localeModule = nil
--- lib/elrs_power.lua and lib/crsf.lua, loaded the first time the TX power alert is on, so a radio
+-- lib/elrs_config.lua and lib/crsf.lua, loaded the first time the TX power alert is on, so a radio
 -- that never switches it on never loads either.
-local powerReadModule = nil
+local elrsConfigModule = nil
 -- lib/link_rates.lua and lib/crsf.lua, loaded the first time a link headroom alert is on, so a
 -- radio that never switches one on never loads either.
 local linkRatesModule = nil
@@ -309,11 +309,6 @@ local TX_POWER_HOLD = 2
 local TX_POWER_HYSTERESIS = 5
 -- The own maximum, in mW, where the pilot has switched it on and not chosen a value.
 local TX_POWER_OWN_MAX = 100
--- How long after the ELRS Link page last drove its own walk of the module's parameters the TX power
--- alert keeps out of the same conversation (see txPowerModuleRead).
-local TX_POWER_PAGE_QUIET_SECONDS = 1.0
-
-
 -- The same for the link headroom alerts below, in percentage points of the headroom scale
 -- (lib/link_rates.lua, LinkRates.headroom): a level is left only once the headroom has climbed
 -- this far above its line. On the scale's usual span of 60 to 80 dB one point is under a dB,
@@ -2003,9 +1998,8 @@ end
 --- again once it is disarmed; one that comes up while the model is still armed -- a link that dropped
 --- in flight -- uses the last connection's answer until then.
 ---
---- In the tool the ELRS Link page may be walking the same parameter list (elrslink_task.lua), and
---- that walk drops every entry that is not the one it asked for. While it runs -- it stamps
---- `session.elrsProbeAt` on every pass -- this read stands aside and starts afresh afterwards.
+--- The shared ELRS configuration provider serializes this read with the diagnostics page and the
+--- standby screen. All three consume one completed snapshot instead of competing for 0x2B replies.
 local function txPowerModuleRead(audioState, armed, now)
   local st = audioState.txPowerRead
   if st and st.done then return st end
@@ -2019,21 +2013,32 @@ local function txPowerModuleRead(audioState, armed, now)
   -- Disarmed, this connection asks for itself: the module may have been changed meanwhile.
   audioState.txPowerLast = nil
   if not connectChainDone() then return nil end
-  local session = type(_G) == "table" and _G.rfsuite and _G.rfsuite.session or nil
-  local pageAt = session and tonumber(session.elrsProbeAt) or nil
-  if pageAt and (now - pageAt) < TX_POWER_PAGE_QUIET_SECONDS then
-    audioState.txPowerRead = nil
-    return nil
-  end
-  if not powerReadModule then powerReadModule = loadCoreModule("lib/elrs_power.lua") end
+  if not elrsConfigModule then elrsConfigModule = loadCoreModule("lib/elrs_config.lua") end
   if not crsfModule then crsfModule = loadCoreModule("lib/crsf.lua") end
-  if not powerReadModule then return nil end
-  if not st then
-    st = {}
+  if not elrsConfigModule then return nil end
+  local identity = elrsConfigModule.currentIdentity()
+  local fresh = audioState.txPowerRequested ~= identity
+  local accepted = elrsConfigModule.request(identity, { owner = "audio", force = fresh })
+  if not accepted then return nil end
+  audioState.txPowerRequested = identity
+  local snapshot = elrsConfigModule.step({
+    owner = "audio", identity = identity, crsf = crsfModule,
+    push = _G.crossfireTelemetryPush, now = now, allow = true,
+  })
+  if snapshot and snapshot.status ~= "reading" then
+    local max = snapshot.fields and snapshot.fields.maxPower
+    local dynamic = snapshot.fields and snapshot.fields.dynamic
+    local dynamicValue = nil
+    if dynamic then dynamicValue = dynamic.enabled end
+    st = {
+      done = true,
+      maxMilliwatts = max and max.milliwatts or nil,
+      dynamic = dynamicValue,
+    }
     audioState.txPowerRead = st
+    return st
   end
-  powerReadModule.step(st, crsfModule, _G.crossfireTelemetryPush, now)
-  return st
+  return nil
 end
 
 --- The TX power alert for one pass, called while it is on.
@@ -2319,6 +2324,7 @@ function Audio.resetConnectionState(audioState)
   local read = audioState.txPowerRead
   if read and read.done then audioState.txPowerLast = read end
   audioState.txPowerRead = nil
+  audioState.txPowerRequested = nil
   audioState.packCheckDone = false
   audioState.packJudged = false
   audioState.packNotFull = nil

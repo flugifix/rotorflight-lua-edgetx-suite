@@ -37,7 +37,6 @@ local CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY = 0x2B
 local CRSF_FRAMETYPE_PARAMETER_READ = 0x2C
 local CRSF_FRAMETYPE_PARAMETER_WRITE = 0x2D
 
-local CRSF_ADDRESS_BROADCAST = 0x00
 local CRSF_ADDRESS_RADIO_TRANSMITTER = 0xEA
 local CRSF_ADDRESS_CRSF_TRANSMITTER = 0xEE
 local CRSF_ADDRESS_ELRS_LUA = 0xEF
@@ -50,6 +49,7 @@ local READ_TIMEOUT_MAX_SECONDS = 8.0
 local READ_TIMEOUT_SECONDS = 0.5
 local PING_RETRY_SECONDS = 1.0
 local WRITE_DELAY_SECONDS = 0.25
+local MAX_CRSF_POPS_PER_PASS = 2
 
 local SYNC_MODE_OFF = 0
 local SYNC_MODE_ROTORFLIGHT_TO_ELRS = 1
@@ -89,6 +89,11 @@ local moduleRatioLabel = nil
 local PowerRead = nil
 local moduleMaxPower = nil
 local moduleDynamicPower = nil
+local moduleMaxPowerLabel = nil
+local moduleDynamicPowerLabel = nil
+local moduleMaxPowerField = nil
+local moduleDynamicPowerField = nil
+local moduleName = nil
 local maxPowerSeen = false
 local dynamicPowerSeen = false
 local pendingWrites = {}
@@ -104,6 +109,12 @@ local failWrite
 local writeRefusal
 local statusI18nKey = "status_idle"
 local statusDetail = nil
+local ElrsConfig = nil
+
+local function configProvider()
+    if not ElrsConfig then ElrsConfig = loadModule("lib/elrs_config.lua") end
+    return ElrsConfig
+end
 
 -- Every status this task reports, as a key and fallback pair in the form the packager
 -- translates in place: an installed suite carries no translation bundle, so the fallback it
@@ -354,9 +365,21 @@ local function parseTelemetryField()
         if powerKind == "max" then
             maxPowerSeen = true
             moduleMaxPower = PowerRead.maxPowerMilliwatts(field)
+            moduleMaxPowerLabel = field and field.options[field.value + 1] or nil
+            moduleMaxPowerField = field and {
+                id = currentField, name = field.name, options = field.options,
+                selectedIndex = field.value, selectedLabel = moduleMaxPowerLabel,
+                unit = field.unit, milliwatts = moduleMaxPower,
+            } or nil
         else
             dynamicPowerSeen = true
             moduleDynamicPower = PowerRead.dynamicOn(field)
+            moduleDynamicPowerLabel = field and field.options[field.value + 1] or nil
+            moduleDynamicPowerField = field and {
+                id = currentField, name = field.name, options = field.options,
+                selectedIndex = field.value, selectedLabel = moduleDynamicPowerLabel,
+                unit = field.unit, enabled = moduleDynamicPower,
+            } or nil
         end
         logMsg("parseTelemetryField: power field " .. powerKind .. " maxPower=" .. tostring(moduleMaxPower)
             .. " dynamic=" .. tostring(moduleDynamicPower))
@@ -445,8 +468,15 @@ local function findRatioTarget(field, targetRatio)
 end
 
 local function completeTask()
+    local dirty = state == "ping" or state == "read" or state == "write"
+    local wrote = state == "write" or state == "write_rf"
     state = "done"
     taskComplete = true
+    local provider = configProvider()
+    if provider then
+        if wrote then provider.invalidate(nil) end
+        provider.release("diagnostics", dirty)
+    end
 end
 
 local function syncRotorflightToElrs(fcConfig)
@@ -556,6 +586,21 @@ end
 
 local function finalize()
     local session = getSession()
+    local provider = configProvider()
+    if provider and manualSyncMode == SYNC_MODE_OFF then
+        provider.publish(provider.currentIdentity(), {
+            status = (moduleRateLabel or moduleRatioLabel or moduleMaxPowerLabel or moduleDynamicPowerLabel)
+                and "ready" or "unavailable",
+            reason = "diagnostics",
+            moduleName = moduleName,
+            packetRate = moduleRateLabel, telemetryRatio = moduleRatioLabel,
+            maxPower = moduleMaxPowerLabel, dynamic = moduleDynamicPowerLabel,
+            fields = {
+                packetRate = rateField, telemetryRatio = ratioField,
+                maxPower = moduleMaxPowerField, dynamic = moduleDynamicPowerField,
+            },
+        }, nowSeconds())
+    end
     local fcConfig = session and session.crsfTelemetryConfig
     
     local moduleRate = parseRateFromLabel(moduleRateLabel)
@@ -588,6 +633,8 @@ local function finalize()
 end
 
 function M.reset()
+    local provider = configProvider()
+    if provider then provider.release("diagnostics", state == "ping" or state == "read" or state == "write") end
     taskComplete = false
     configWaitStartedAt = 0
     probeStartedAt = 0
@@ -604,6 +651,11 @@ function M.reset()
     moduleRatioLabel = nil
     moduleMaxPower = nil
     moduleDynamicPower = nil
+    moduleMaxPowerLabel = nil
+    moduleDynamicPowerLabel = nil
+    moduleMaxPowerField = nil
+    moduleDynamicPowerField = nil
+    moduleName = nil
     maxPowerSeen = false
     dynamicPowerSeen = false
     clearFieldData()
@@ -645,6 +697,7 @@ local function handleDeviceInfo(data)
     end
 
     deviceId = srcAddr
+    moduleName = newName
     fieldCount = data[offset + 12] or 0
     logMsg("handleDeviceInfo: found ELRS module '" .. tostring(newName) .. "' at " .. string.format("0x%02X", deviceId) .. " with " .. tostring(fieldCount) .. " fields")
     
@@ -818,7 +871,7 @@ function M.wakeup()
     if not session or session.isConnected ~= true or session.telemetryType ~= "crsf" then
         if not isSimulation() then
             setStatus("status_requires_active_link")
-            taskComplete = true
+            completeTask()
             return
         end
     end
@@ -830,10 +883,13 @@ function M.wakeup()
         elseif (now - configWaitStartedAt) >= DISCOVERY_TIMEOUT_SECONDS then
             logMsg("Skipping ELRS link probe: CRSF telemetry config not ready", "warn")
             setStatus("status_rotorflight_config_not_ready")
-            taskComplete = true
+            completeTask()
         end
         return
     end
+
+    local provider = configProvider()
+    if not provider or not provider.acquire("diagnostics") then return end
 
     if state == "idle" then
         configWaitStartedAt = 0
@@ -884,20 +940,13 @@ function M.wakeup()
         end
     end
 
-    -- While this walk is talking to the module, the TX power alert in the same Lua state stays out
-    -- of the conversation (lib/audio.lua, txPowerModuleRead): both ask for parameter entries, and
-    -- each drops the entries it did not ask for.
-    if session and (state == "ping" or state == "read") then
-        session.elrsProbeAt = now
-    end
-
     -- Process frames via CrsfManager
     if CrsfManager then
-        while true do
+        for _ = 1, MAX_CRSF_POPS_PER_PASS do
             local data = CrsfManager.popFrame(CRSF_FRAMETYPE_DEVICE_INFO)
             if data then handleDeviceInfo(data) else break end
         end
-        while true do
+        for _ = 1, MAX_CRSF_POPS_PER_PASS do
             local data = CrsfManager.popFrame(CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY)
             if data then handleParameterEntry(data) else break end
         end
@@ -908,7 +957,7 @@ function M.wakeup()
     if state == "ping" and (now - probeStartedAt) >= DISCOVERY_TIMEOUT_SECONDS then
         logMsg("ELRS probe failed: discovery timeout (no device info response)", "warn")
         setStatus("status_no_module")
-        taskComplete = true
+        completeTask()
         return
     end
 
@@ -923,8 +972,8 @@ function M.wakeup()
 
     if state == "ping" then
         if type(crossfireTelemetryPush) == "function" then
-            logMsg("pinging 0x00 from 0xEA")
-            crossfireTelemetryPush(CRSF_FRAMETYPE_DEVICE_PING, {CRSF_ADDRESS_BROADCAST, CRSF_ADDRESS_RADIO_TRANSMITTER})
+            logMsg("pinging 0xEE from 0xEA")
+            crossfireTelemetryPush(CRSF_FRAMETYPE_DEVICE_PING, {CRSF_ADDRESS_CRSF_TRANSMITTER, CRSF_ADDRESS_RADIO_TRANSMITTER})
         end
         nextActionAt = now + PING_RETRY_SECONDS
     elseif state == "read" then
