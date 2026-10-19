@@ -33,6 +33,7 @@ local elrsLabels = {
   elrs_telemetry_ratio = "Telemetry Ratio", elrs_max_power = "Max Power", elrs_dynamic = "Dynamic",
 }
 check("ELRS composite fits supported full row", standby.validate(elrsFull, 480, 320, elrsLabels))
+check("ELRS composite fits supported large row", standby.validate(elrsFull, 800, 480, elrsLabels))
 for _, malformedValue in ipairs({ ",clock:small", "clock:small,", "clock:small,,date:wide" }) do
   local malformedList, grammarErr = standby.decode(malformedValue)
   check("comma grammar rejected " .. malformedValue, #malformedList == 0 and grammarErr == "malformed")
@@ -47,7 +48,11 @@ local tick = 100
 getTime = function() return tick end
 getDateTime = function() return { year = 2026, mon = 10, day = 19, hour = 12, min = 34 } end
 getVersion = function() return "2.12.0", "tx16s-simu" end
-getTxGPS = function() return { fix = nil } end
+local gpsCalls = 0
+getTxGPS = function()
+  gpsCalls = gpsCalls + 1
+  return { fix = true, numsat = 7 }
+end
 model = {
   getInfo = function() return { name = string.rep("W", 30) } end,
   getTimer = function(index) return { value = index == 0 and 999999 or 0 } end,
@@ -56,21 +61,66 @@ local cache = { text = function(_, fallback) return fallback end }
 local values, key = standby.snapshot(default, cache)
 check("snapshot reads transmitter battery safely", type(values) == "table" and values.tx_battery == "-")
 check("snapshot uses firmware version", values.firmware == "2.12.0")
-check("missing GPS fix stays unknown", values.tx_gps == "-")
+check("default snapshot skips unselected GPS getter", gpsCalls == 0 and values.tx_gps == nil)
 check("model display is bounded", #values.model == 15)
 check("timer overflow remains explicit", values.timer1 == ">999:59")
 model.getInfo = function() return { name = "Model\195\169LongEnough" } end
 tick = 201
 local utf8Values = standby.snapshot(default, cache)
 check("UTF-8 model truncates at a codepoint", utf8Values.model == "Model\195\169LongEn...")
+check("unselected GPS remains skipped after snapshot cadence", gpsCalls == 0)
+
+local gpsItems = standby.decode("tx_gps:wide")
+local gpsCache = { text = cache.text }
+tick = 300
+local gpsValues = standby.snapshot(gpsItems, gpsCache)
+check("selected GPS reads and formats transmitter fix", gpsCalls == 1 and gpsValues.tx_gps == "Fix · 7")
+tick = 350
+local cachedGpsValues = standby.snapshot(gpsItems, gpsCache)
+check("selected GPS snapshot respects one-second cache", gpsCalls == 1 and cachedGpsValues == gpsValues)
+tick = 401
+local refreshedGpsValues = standby.snapshot(gpsItems, gpsCache)
+check("selected GPS refreshes after bounded cadence", gpsCalls == 2 and refreshedGpsValues.tx_gps == "Fix · 7")getTxGPS = function() gpsCalls = gpsCalls + 1; return { fix = nil } end
+tick = 502
+local unknownGpsValues = standby.snapshot(gpsItems, gpsCache)
+check("selected GPS with missing fix stays unknown", gpsCalls == 3 and unknownGpsValues.tx_gps == "-")
+getTxGPS = function() gpsCalls = gpsCalls + 1; return nil end
+tick = 603
+local unavailableGpsValues = standby.snapshot(gpsItems, gpsCache)
+check("selected unavailable GPS stays unknown", gpsCalls == 4 and unavailableGpsValues.tx_gps == "-")
 local scene = standby.build({ w = 480, h = 320 }, "Please wait...", cache.text, default, values, cache)
 check("standby scene builds", type(scene) == "table" and #scene > 3)
-check("tile labels use readable primary text", scene[9].color == COLOR_THEME_PRIMARY1)
+local infoScene = standby.build({ w = 480, h = 320 }, "Exact connection reason", cache.text, default, values, cache,
+  { text = "Flight controller not detected", level = "info" })
+check("general information strip uses calm theme accent", infoScene[8].color == COLOR_THEME_SECONDARY1)
+check("general information strip preserves exact status below", infoScene[10].text == "Exact connection reason")
+local warningScene = standby.build({ w = 480, h = 320 }, "Unsupported API 9.9", cache.text, default, values, cache,
+  { text = "Compatibility check failed", level = "warning" })
+check("warning information uses warning marker", warningScene[8].color == COLOR_THEME_WARNING)
+local utf8InfoScene = standby.build({ w = 480, h = 320 }, "Waiting", cache.text, default, values, cache,
+  { text = string.rep("Pr\195\169requis", 200), level = "info" })
+local fittedInfo = utf8InfoScene[9].text
+local fittedPrefix = string.sub(fittedInfo, 1, -4)
+local asciiPrefix = string.gsub(fittedPrefix, "\195\169", "")
+check("long UTF-8 information is visibly bounded",
+  string.sub(fittedInfo, -3) == "..." and not string.find(asciiPrefix, "[\128-\255]"))
+local largest = standby.decode("elrs:full,clock:small,date:small,tx_battery:small,model:small,timer1:small,timer2:small,timer3:small")
+check("largest eight-item layout validates at 800x480", standby.validate(largest, 800, 480, elrsLabels))
+local largestCache = { text = cache.text }
+local largestValues = standby.snapshot(largest, largestCache)
+local largestScene = standby.build({ w = 800, h = 480 }, "Waiting", cache.text, largest, largestValues, largestCache)
+local tileCount = 0
+for i = 1, #largestScene do
+  local node = largestScene[i]
+  if node.type == "rectangle" and node.radius then tileCount = tileCount + 1 end
+end
+check("largest eight-item scene renders every tile", largestCache.valueOverflow == false and tileCount == 8)
+check("tile captions use the theme accent", scene[12].color == COLOR_THEME_SECONDARY1)
 check("status line clears small tool control", scene[3].x + scene[3].w <= 480 - 20 - 1 - 6)
 local largeScene = standby.build({ w = 800, h = 480 }, string.rep("W", 80), cache.text, default, values, cache)
 check("status line clears large tool control", largeScene[3].x + largeScene[3].w <= 800 - 44 - 8 - 6)
-check("status line preserves the full reason", largeScene[7].text == string.rep("W", 80))
-local valueClosure = scene[10].text
+check("status line preserves the full reason", largeScene[10].text == string.rep("W", 80))
+local valueClosure = scene[13].text
 check("scene exposes reactive value", type(valueClosure) == "function")
 local before = valueClosure()
 cache.snapshotValues.clock = "12:35"

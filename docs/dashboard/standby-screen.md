@@ -7,6 +7,14 @@ sidebar_label: Standby screen
 
 When enabled, the fullscreen dashboard uses one configurable standby surface while it waits for the flight controller. The Rotorflight logo, current connection reason, and Suite tool entry remain available.
 
+![Layout preview with example data; approximate fonts](../images/dashboard/standby-screen.png)
+
+*Layout preview with example data; approximate fonts.*
+
+The initial layout contains Clock, TX battery, and Selected model. TX GPS is optional and is read only when its tile is selected.
+
+A fixed information strip summarizes the highest-priority prerequisite from the connection state already held by the dashboard. The exact connection reason and progress remain visible below it. The strip adds no new radio or telemetry polling.
+
 The screen never pages, rotates, scrolls, or hides selected items. Layouts that do not fit the current radio and locale are rejected by the settings page. The widget retains its normal connection splash when the option is off and in non-fullscreen zones.
 
 The standby surface does not replace flight state. An active-flight link loss, postflight view, or offline summary continues to use the existing dashboard behavior.

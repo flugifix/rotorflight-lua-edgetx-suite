@@ -548,7 +548,7 @@ local function elrsField(id, name, options, selected, unit)
   append(out, { selected, 0, #options - 1, 0 }); append(out, bytes(unit or "")); return out
 end
 
-local function runStandbyScenario(layout, gps, elrsReplies)
+local function runStandbyScenario(layout, gps, elrsReplies, expectedTiles)
   World.reset()
   local savedGps = _G.getTxGPS
   _G.getTxGPS = function() return gps end
@@ -584,6 +584,18 @@ local function runStandbyScenario(layout, gps, elrsReplies)
   if widget.state.fblConnected == true then error("accounting: standby scenario unexpectedly connected to an FC") end
   if widget._treeKind ~= "standby" or not widget.built then error("accounting: standby scene was not built") end
   if raised > 0 or (widget._jobFaults.standby or 0) > 0 then error("accounting: standby build raised") end
+  if expectedTiles then
+    local tree = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}
+    local tiles = 0
+    for i = 1, #tree do
+      local node = tree[i]
+      if node.type == "rectangle" and node.radius == 7 then tiles = tiles + 1 end
+    end
+    if widget._standbyCache.valueOverflow or tiles ~= expectedTiles then
+      error("accounting: standby scene rendered " .. tostring(tiles) .. " of " .. tostring(expectedTiles)
+        .. " expected tiles (overflow=" .. tostring(widget._standbyCache.valueOverflow) .. ")")
+    end
+  end
   local control = sweepControl(1000)
   local sweep, refs = sweepCost(Stubs.lvgl.refs, control)
   return { worst = worst, sweep = sweep, refs = refs }
@@ -1176,17 +1188,19 @@ addRow("pass.swap", base.worst.swap or 0)
 addRow("pass.splash", base.startupWorst.splash or base.worst.splash or 0)
 do
   local largest = runStandbyScenario("elrs:full,clock:small,date:small,tx_battery:small,model:small,"
-    .. "timer1:small,timer2:small,timer3:small", nil, true)
+    .. "timer1:small,timer2:small,timer3:small", nil, true, 8)
+  local composite = runStandbyScenario("elrs:wide,elrs:wide,elrs:wide,elrs:wide,"
+    .. "timer1:small,timer2:small,timer3:small,timer1:small", nil, true, 8)
   local gps = runStandbyScenario("clock:small,date:small,tx_gps:wide", { fix = true, numsat = 12 }, false)
   local elrsNoReply = runStandbyScenario("elrs:full", nil, false)
   local elrsReady = runStandbyScenario("elrs:full", nil, true)
-  local runs = { largest, gps, elrsNoReply, elrsReady }
+  local runs = { largest, composite, gps, elrsNoReply, elrsReady }
   local build, state, sweep, refs = 0, 0, 0, 0
   for i = 1, #runs do
     build = math.max(build, runs[i].worst.standby or 0); state = math.max(state, runs[i].worst.state or 0)
     sweep = math.max(sweep, runs[i].sweep); refs = math.max(refs, runs[i].refs)
   end
-  addRow("pass.standby.build", build, "eight-item layout, GPS, ELRS ready and no-response states")
+  addRow("pass.standby.build", build, "eight-item simple and composite layouts, GPS, ELRS ready and no-response states")
   addRow("pass.standby.state", state, "cached no-FC snapshot and provider step")
   addRow("sweep.standby", sweep, refs .. " reactive references")
 end

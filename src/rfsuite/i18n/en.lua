@@ -3178,7 +3178,14 @@ return {
         tx_gps_detail = "Internal transmitter GPS",
         uptime_detail = "Since radio power-on",
         firmware_detail = "Radio firmware",
-        date_detail = "Radio date"
+        date_detail = "Radio date",
+        info_controller_missing = "Flight controller not detected",
+        info_api_unsupported = "Compatibility check failed",
+        info_suite_loading = "Suite is preparing this model",
+        info_receiver_telemetry_missing = "Receiver telemetry is missing",
+        info_battery_telemetry_missing = "Battery telemetry is missing",
+        info_starting = "Dashboard startup is pending",
+        info_partial_telemetry = "Some telemetry is unavailable"
       },
       please_wait_for_telemetry = "Please wait for telemetry",
       waiting_for_msp_link = "Waiting for MSP link",

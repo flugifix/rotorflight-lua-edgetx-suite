@@ -25,7 +25,9 @@ Always available.
 | Size | Gives the selected item a small, wide, or full-row tile. The ELRS summary needs a wide or full row. |
 
 The Suite checks the selected locale, actual font metrics, bounded display formats, and radio screen size before saving. If all items do not fit readably on one screen, the edit is refused and the last valid saved screen remains active.
-The initial layout contains Clock, TX battery, and Selected model.
+The initial layout contains Clock, TX battery, and Selected model. TX GPS is optional, is not part of the initial layout, and is read only when its tile is selected.
+
+The screen reserves a fixed information strip for the highest-priority connection prerequisite. It derives this summary from the dashboard's existing connection state, while the exact connection reason and progress remain visible below it. The strip does not add another radio or telemetry probe.
 
 ## Notes
 

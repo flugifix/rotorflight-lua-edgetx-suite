@@ -116,8 +116,12 @@ do
   local MspRuntime = assert(_G.__rfsuite_msp_runtime_module
     or _G.rfsuite.require("tasks/msp/runtime.lua"))
   local originalMspState = MspRuntime.getState
-  local forceRawConnected = false
+  local originalMspProgress = MspRuntime.getProgressValues
+  local forceRawConnected, forceUnsupported = false, false
   MspRuntime.getState = function()
+    if forceUnsupported then
+      return { lastConnected = true, versionReadCompleted = true, unsupportedApi = true, refusedApiVersion = "9.9" }
+    end
     if forceRawConnected then return { lastConnected = true, versionReadCompleted = false } end
     return { lastConnected = false, versionReadCompleted = false }
   end
@@ -136,6 +140,8 @@ do
   widget:refresh(0, nil)
   local afterState = calls.request
   check("eligible fullscreen drives standby provider", afterState > 0 and calls.step > 0)
+  check("missing controller selects the general prerequisite summary",
+    widget.state.standbyInfoKind == "controller_missing")
   widget:refresh(0, nil)
   check("standby build pass does not probe provider", calls.request == afterState)
 
@@ -167,6 +173,7 @@ do
   widget.flightMode = "preflight"
   widget._standbyCache.elrs = { status = "reading", identity = "integration-model" }
   forceRawConnected = true
+  MspRuntime.getProgressValues = function() return 0, 1 end
   local beforeRawRequest, beforeRawStep = calls.request, calls.step
   Stubs.tick()
   widget:refresh(0, nil)
@@ -175,7 +182,24 @@ do
       and widget._standbyActive ~= true and widget._standbyCache.elrs.status ~= "reading"
       and ((widget._job and widget._job.kind == "standby")
         or (type(widget.renderKey) == "string" and string.sub(widget.renderKey, 1, 8) == "standby|")))
+  widget._job = nil
+  Stubs.tick()
+  widget:refresh(0, nil)
+  check("raw MSP startup takes priority over missing-controller summary: "
+      .. tostring(widget.state.standbyInfoKind),
+    widget.state.standbyInfoKind == "suite_loading")
+  check("summary transition invalidates cached localized prerequisite",
+    widget._standbyTexts == nil)
+  MspRuntime.getProgressValues = originalMspProgress
   forceRawConnected = false
+
+  forceUnsupported = true
+  widget._job = nil
+  Stubs.tick()
+  widget:refresh(0, nil)
+  check("unsupported API has the highest compatibility summary priority",
+    widget.state.standbyInfoKind == "api_unsupported")
+  forceUnsupported = false
 
   local function excluded(name, setup)
     widget._job = nil

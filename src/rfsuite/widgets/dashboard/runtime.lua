@@ -847,7 +847,7 @@ local function splashJobStep(self)
   return true
 end
 
-local function standbyTexts(self, items)
+local function standbyTexts(self, items, infoKind)
   if self._standbyTexts then return self._standbyTexts end
   local t = (self.i18n and self.i18n.t) or function(_, fallback) return fallback end
   local selected = {}
@@ -893,6 +893,21 @@ local function standbyTexts(self, items)
     self._standbyTexts.module_firmware = t("widgets.dashboard.standby.module_firmware", "Firmware")
     self._standbyTexts.firmware_detail = t("widgets.dashboard.standby.firmware_detail", "Radio firmware")
   end
+  if infoKind == "controller_missing" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_controller_missing", "Flight controller not detected")
+  elseif infoKind == "api_unsupported" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_api_unsupported", "Compatibility check failed")
+  elseif infoKind == "suite_loading" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_suite_loading", "Suite is preparing this model")
+  elseif infoKind == "receiver_telemetry_missing" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_receiver_telemetry_missing", "Receiver telemetry is missing")
+  elseif infoKind == "battery_telemetry_missing" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_battery_telemetry_missing", "Battery telemetry is missing")
+  elseif infoKind == "starting" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_starting", "Dashboard startup is pending")
+  elseif infoKind == "partial_telemetry" then
+    self._standbyTexts.info_text = t("widgets.dashboard.standby.info_partial_telemetry", "Some telemetry is unavailable")
+  end
   return self._standbyTexts
 end
 
@@ -905,11 +920,13 @@ local function standbyJobStep(self)
     items = DashboardStandby.decode(dashboard[DashboardStandby.KEY_LAYOUT])
   end
   local values = self._standbyCache.snapshotValues or {}
-  local texts = standbyTexts(self, items)
+  local infoKind = self.state and self.state.standbyInfoKind or nil
+  local texts = standbyTexts(self, items, infoKind)
   local function text(key, fallback)
     return texts[key] or fallback
   end
-  local children = DashboardStandby.build(self.zone, self.statusLine, text, items, values, self._standbyCache)
+  local info = { text = texts.info_text or "", level = infoKind == "api_unsupported" and "warning" or "info" }
+  local children = DashboardStandby.build(self.zone, self.statusLine, text, items, values, self._standbyCache, info)
   local Controls = requireModule("widgets/dashboard/fullscreen_controls.lua")
   if type(Controls) == "table" and type(Controls.appendTool) == "function" then Controls.appendTool(children, self) end
   lvgl.clear()
@@ -1989,15 +2006,18 @@ local function updateConnectionState(self)
   local ready = (rawReady and self.readySince ~= nil and (now - self.readySince) >= holdSeconds) or softTimeoutReady
   local t = (self.i18n and type(self.i18n.t) == "function") and self.i18n.t or nil
 
-  local statusLine = nil
+  local statusLine, standbyInfoKind = nil, nil
   if not connected then
+    standbyInfoKind = "controller_missing"
     statusLine = (t and t("widgets.dashboard.waiting_for_msp_link")) or "Waiting for MSP link"
     self.batteryDialogState = "pending"
   elseif refused then
+    standbyInfoKind = "api_unsupported"
     local fmt = (t and t("widgets.dashboard.api_unsupported"))
       or "MSP API %s not supported, needs Rotorflight 4.6+"
     statusLine = string.format(fmt, tostring(runtimeState.refusedApiVersion or "?"))
   elseif not tasksDone then
+    standbyInfoKind = "suite_loading"
     local pDone = 0
     local pTotal = 0
     local showNumbers = false
@@ -2017,13 +2037,23 @@ local function updateConnectionState(self)
       statusLine = headline
     end
   elseif not rfReady then
+    standbyInfoKind = "receiver_telemetry_missing"
     statusLine = (t and t("widgets.dashboard.waiting_for_receiver_telemetry")) or "Waiting for receiver telemetry (1RSS/2RSS)"
   elseif not batteryReady then
+    standbyInfoKind = "battery_telemetry_missing"
     statusLine = (t and t("widgets.dashboard.waiting_for_battery_telemetry")) or "Waiting for battery telemetry"
   elseif not ready then
+    standbyInfoKind = "starting"
     statusLine = (t and t("widgets.dashboard.connected_starting")) or "Connected, starting dashboard..."
   elseif softTimeoutReady then
+    standbyInfoKind = "partial_telemetry"
     statusLine = (t and t("widgets.dashboard.connected_partial_telemetry")) or "Connected with partial telemetry"
+  end
+
+  if self.state.standbyInfoKind ~= standbyInfoKind then
+    self.state.standbyInfoKind = standbyInfoKind
+    self._standbyTexts = nil
+    self.renderKey = nil
   end
 
   if self.connectionReady ~= ready then
@@ -4478,7 +4508,8 @@ function Runtime.new(zone, options)
         self._standbyCache = self._standbyCache or {}
         DashboardStandby.snapshot(items, self._standbyCache)
       end
-      local splashKey = (useStandby and "standby|" or "splash|") .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
+      local splashKey = (useStandby and "standby|" or "splash|") .. tostring(statusLine) .. "|info="
+        .. tostring(self.state.standbyInfoKind) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
         .. (fullscreenSplash and "|fs" or "") .. (useStandby and "|" .. tostring(dashboardPrefs.standby_layout)
           .. "|overflow=" .. tostring(self._standbyCache and self._standbyCache.valueOverflow) or "")
       if self.renderKey ~= splashKey then
