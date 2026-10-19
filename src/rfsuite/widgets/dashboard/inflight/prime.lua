@@ -166,10 +166,14 @@ end
 -- the drop, so the signature alone would name the old board for the whole of that window. One form
 -- only: the runtime builds the signature in the same publish that takes the id in, so an id with no
 -- signature beside it is a moment that has not been published yet, and is answered as unknown.
+-- The UID reply sets the id first and publishes only after the model preferences are read, so a
+-- pass stopped in between leaves the new id beside the old board's signature; the id the
+-- signature was last built from (`signatureMcuId`) tells the two apart.
 local function boardOnLink()
   local state = mspState()
   local values = state and state.values
   if type(values) ~= "table" or values.mcuId == nil then return nil end
+  if state.signatureMcuId ~= values.mcuId then return nil end
   local session = _G.rfsuite and _G.rfsuite.session or nil
   local signature = (type(session) == "table") and session.signature or nil
   return signature
