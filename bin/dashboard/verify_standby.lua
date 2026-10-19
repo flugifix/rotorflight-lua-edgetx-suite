@@ -138,6 +138,13 @@ local unavailableGpsValues = standby.snapshot(gpsItems, gpsCache)
 check("selected unavailable GPS stays unknown", gpsCalls == 4 and unavailableGpsValues.tx_gps == "-")
 local scene = standby.build({ w = 480, h = 320 }, "Please wait...", cache.text, default, values, cache)
 check("standby scene builds", type(scene) == "table" and #scene > 3)
+local roundedTiles, invalidRadius = 0, false
+for i = 1, #scene do
+  local node = scene[i]
+  if node.radius ~= nil then invalidRadius = true end
+  if node.type == "rectangle" and node.rounded == 5 then roundedTiles = roundedTiles + 1 end
+end
+check("standby tiles use native rounded property", not invalidRadius and roundedTiles == #default)
 local infoScene = standby.build({ w = 480, h = 320 }, "Exact connection reason", cache.text, default, values, cache,
   { text = "Flight controller not detected", level = "info" })
 check("general information strip uses calm theme accent", infoScene[6].color == COLOR_THEME_SECONDARY1)
@@ -160,7 +167,7 @@ local largestScene = standby.build({ w = 800, h = 480 }, "Waiting", cache.text, 
 local tileCount = 0
 for i = 1, #largestScene do
   local node = largestScene[i]
-  if node.type == "rectangle" and node.radius then tileCount = tileCount + 1 end
+  if node.type == "rectangle" and node.rounded == 7 then tileCount = tileCount + 1 end
 end
 check("largest eight-item scene renders every tile", largestCache.valueOverflow == false and tileCount == 8)
 check("tile captions use the theme accent", scene[10].color == COLOR_THEME_SECONDARY1)

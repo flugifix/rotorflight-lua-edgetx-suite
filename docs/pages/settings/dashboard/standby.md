@@ -24,6 +24,8 @@ Always available.
 | Position 1-8 | Chooses and orders up to eight items: clock, date, transmitter battery, selected EdgeTX model, model timers, transmitter GPS, radio uptime, firmware, or the optional ELRS summary. A dash or Remove deletes an item; Move up and Move down retain its size. |
 | Size | Gives the selected item a small, wide, or full-row tile. The ELRS summary needs a wide or full row. |
 
+Selecting ELRS for a new position starts it at Wide, the smallest supported size.
+
 The Suite checks the selected locale, actual font metrics, bounded display formats, and radio screen size before saving. If all items do not fit readably on one screen, the edit is refused and the last valid saved screen remains active.
 The initial layout contains Clock, TX battery, and Selected model. TX GPS is optional, is not part of the initial layout, and is read only when its tile is selected.
 

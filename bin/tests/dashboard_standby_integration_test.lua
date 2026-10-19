@@ -82,6 +82,50 @@ do
       break
     end
   end
+
+  ctx.preferences.dashboard.standby_layout = "-"
+  Page.onReload(ctx)
+  ctx.children = {}
+  Page.build(ctx)
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "choice" and node.title == "Position 1" then
+      for option = 1, #node.values do
+        if node.values[option] == "ELRS TX configuration" then node.set(option); break end
+      end
+      break
+    end
+  end
+  ctx.children = {}
+  Page.build(ctx)
+  local elrsSize
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "choice" and node.title == "Size" then elrsSize = node.get(); break end
+  end
+  check("selecting ELRS chooses a supported wide size", elrsSize == 2)
+  Page.onSave(ctx)
+  check("fresh ELRS selection saves without an invalid intermediate size",
+    ctx.preferences.dashboard.standby_layout == "elrs:wide")
+
+  ctx.preferences.dashboard.standby_layout = "-"
+  Page.onReload(ctx)
+  ctx.children = {}
+  Page.build(ctx)
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "choice" and node.title == "Position 1" then node.set(2); break end
+  end
+  ctx.children = {}
+  Page.build(ctx)
+  local ordinarySize
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "choice" and node.title == "Size" then ordinarySize = node.get(); break end
+  end
+  check("ordinary new item keeps the supported small size", ordinarySize == 1)
+  Page.onSave(ctx)
+  check("ordinary new item saves at small size", ctx.preferences.dashboard.standby_layout == "clock:small")
   Page.onClose()
 end
 

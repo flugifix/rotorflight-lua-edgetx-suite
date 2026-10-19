@@ -80,7 +80,13 @@ function M.build(ctx)
     function(value) ui.enabled = value == true; ui.dirty = true; ctx.requestRebuild() end)
   local types, sizes, fmt = typeOptions(i18n), sizeOptions(i18n), t(i18n, "position", "Position %d")
   for i = 1, Standby.MAX_ITEMS do
-    y = y + Controls.appendComboSelect(children, x, y, w, string.format(fmt, i), types, ui.items[i].type, function(value) ui.items[i].type = value; ui.dirty = true; ctx.requestRebuild() end)
+    y = y + Controls.appendComboSelect(children, x, y, w, string.format(fmt, i), types, ui.items[i].type,
+      function(value)
+        ui.items[i].type = value
+        if value == "elrs" and ui.items[i].size == "small" then ui.items[i].size = "wide" end
+        ui.dirty = true
+        ctx.requestRebuild()
+      end)
     if ui.items[i].type ~= NONE then
       y = y + Controls.appendComboSelect(children, x, y, w, t(i18n, "size", "Size"), sizes, ui.items[i].size, function(value) ui.items[i].size = value; ui.dirty = true; ctx.requestRebuild() end)
       local bw = math.floor((w - 12) / 3)

@@ -1,1 +1,1 @@
-- Add an optional, single-screen fullscreen standby dashboard with ordered radio-information modules, a graphical transmitter-battery level, a reserved prerequisite summary, and fit-validated Suite settings (`settings/dashboard/standby`).
+- Add an optional, single-screen fullscreen standby dashboard with ordered radio-information modules, a graphical transmitter-battery level, a reserved prerequisite summary, native EdgeTX tile rendering, and fit-validated Suite settings that start ELRS at a supported size (`settings/dashboard/standby`).

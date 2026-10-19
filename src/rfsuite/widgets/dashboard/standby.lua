@@ -416,7 +416,8 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
     local item = box.item
     local x, y, boxW = box.x, row.y, box.w
     local label = labels[item.type]
-    children[#children + 1] = { type = "rectangle", x = x, y = y, w = boxW, h = row.h, color = COLOR_THEME_SECONDARY2, filled = true, radius = compact and 5 or 7 }
+    children[#children + 1] = { type = "rectangle", x = x, y = y, w = boxW, h = row.h,
+      color = COLOR_THEME_SECONDARY2, filled = true, rounded = compact and 5 or 7 }
     children[#children + 1] = { type = "label", x = x + 8, y = y + 5, w = boxW - 16, text = label, color = COLOR_THEME_SECONDARY1, font = SMLSIZE }
     if item.type == "elrs" then
       local fieldColumns = boxW >= 600 and 4 or 2
