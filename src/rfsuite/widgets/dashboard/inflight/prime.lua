@@ -163,15 +163,16 @@ end
 -- MCU id and which the tool pages already keep their reads by. It is answered only while the
 -- runtime holds an MCU id for THIS link: the runtime drops the id on every disconnect and sets it
 -- again when the UID read answers, while the signature stays at the previous board's name across
--- the drop, so the signature alone would name the old board for the whole of that window.
+-- the drop, so the signature alone would name the old board for the whole of that window. One form
+-- only: the runtime builds the signature in the same publish that takes the id in, so an id with no
+-- signature beside it is a moment that has not been published yet, and is answered as unknown.
 local function boardOnLink()
   local state = mspState()
   local values = state and state.values
   if type(values) ~= "table" or values.mcuId == nil then return nil end
   local session = _G.rfsuite and _G.rfsuite.session or nil
   local signature = (type(session) == "table") and session.signature or nil
-  if signature ~= nil then return signature end
-  return values.mcuId
+  return signature
 end
 
 local function queueOf()
@@ -1332,9 +1333,12 @@ function M.transferRefusal(widget, drive)
   if queueOf() == nil then return "no_link" end
   -- The session belongs to the flight controller it was read from (see M.tick), and after a
   -- reconnect the board on the link says which one it is only once the UID read has answered. Until
-  -- then a restore would copy a spare profile of a board nobody has identified, so both transfers
-  -- wait, with the line that says the board is being read.
-  if drive.board ~= nil and boardOnLink() ~= drive.board then return "reading" end
+  -- then a restore would copy a spare profile of a board nobody has identified, and a backup would
+  -- lay down an undo no board can be named for, so both transfers wait, with the line that says the
+  -- board is being read. That holds for the first board as well: an undo taken there would be
+  -- inherited by whichever board identified itself first.
+  local onLink = boardOnLink()
+  if onLink == nil or (drive.board ~= nil and onLink ~= drive.board) then return "reading" end
   return nil
 end
 
@@ -1628,7 +1632,9 @@ end
 -- would step the new board's slots by the old board's table. The profiles last seen are the old
 -- board's too, so the first reading of the new one seeds them rather than announcing a change. The
 -- per-link latches are the ones M.tick clears when it sees the link down, cleared here as well
--- because a widget in the background never ran that pass.
+-- because a widget in the background never ran that pass. The automatic backup is not asked for
+-- here: the link drop took the surface off the ground (Drive:setPhase(nil) through M.cleanup), and
+-- its return to the ground with the interlock on raises that request, which waits for the new read.
 local function boardChanged(drive, board)
   drive:endSession()
   drive.prime = nil
@@ -1678,7 +1684,7 @@ function M.tick(widget, drive)
   -- before the flight is still the one the restore puts back. A board that has not identified
   -- itself on this link ends nothing either: nothing is known to have changed, and the automatic
   -- run and the automatic backup below wait for the identity anyway (`tasksDone` holds until the
-  -- UID read has answered).
+  -- MSP runtime holds an MCU id for this link).
   local board = boardOnLink()
   if board ~= nil and board ~= drive.board then
     if drive.board == nil then
