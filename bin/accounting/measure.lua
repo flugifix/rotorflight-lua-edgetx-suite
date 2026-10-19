@@ -932,8 +932,8 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   for _, condition in ipairs(TOOL_CONDITIONS) do state.menu.setCondition(condition, true) end
   if pagePath == "settings/dashboard/standby/page.lua" then
     state.preferences.dashboard = state.preferences.dashboard or {}
-    state.preferences.dashboard.standby_layout = "clock:small,date:small,tx_battery:small,model:small,"
-      .. "timer1:small,timer2:small,timer3:small,uptime:small"
+    state.preferences.dashboard.standby_layout = "elrs:full,elrs:full,elrs:full,elrs:full,"
+      .. "elrs:full,elrs:full,elrs:full,elrs:full"
   end
 
   local function settled(want)
@@ -1175,7 +1175,8 @@ addRow("pass.swap", base.worst.swap or 0)
 -- zero that reads as free.
 addRow("pass.splash", base.startupWorst.splash or base.worst.splash or 0)
 do
-  local largest = runStandbyScenario("clock:small,date:small,tx_battery:small,model:small,timer1:small,timer2:small,timer3:small,uptime:small", nil, false)
+  local largest = runStandbyScenario("elrs:full,clock:small,date:small,tx_battery:small,model:small,"
+    .. "timer1:small,timer2:small,timer3:small", nil, true)
   local gps = runStandbyScenario("clock:small,date:small,tx_gps:wide", { fix = true, numsat = 12 }, false)
   local elrsNoReply = runStandbyScenario("elrs:full", nil, false)
   local elrsReady = runStandbyScenario("elrs:full", nil, true)

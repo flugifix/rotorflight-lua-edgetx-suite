@@ -92,13 +92,14 @@ local function layout(items, width, height, labels)
   local rows, used, y, rowHeight = {}, 0, top, 0
   local current = {}
   local function finishRow()
-    if #current == 0 then return end
+    if #current == 0 then return true end
     rows[#rows + 1] = { items = current, y = y, h = rowHeight }
     y, used, rowHeight, current = y + rowHeight + gap, 0, 0, {}
+    return y - gap - top <= available
   end
   for i = 1, #items do
     local item, span = items[i], math.min(units(items[i].size), columns)
-    if used > 0 and used + span > columns then finishRow() end
+    if used > 0 and used + span > columns and not finishRow() then return nil, "fit" end
     local boxW = span * colW + (span - 1) * gap
     local label = labels and labels[item.type] or item.type
     local lw, lh = measure(label, SMLSIZE)
@@ -121,7 +122,7 @@ local function layout(items, width, height, labels)
       lineHeight = vh, valueY = lh + 11 }
     used = used + span
   end
-  finishRow()
+  if not finishRow() then return nil, "fit" end
   if y - gap - top > available then return nil, "fit" end
   return rows
 end
@@ -133,11 +134,11 @@ function M.validate(items, width, height, labels)
     if items[i].type == "elrs" and items[i].size == "small" then return false, "size" end
   end
   local rows, err = layout(items, width, height, labels)
-  return rows ~= nil, err
+  return rows ~= nil, err, rows
 end
 
-local function valuesFit(items, values, width, height, labels)
-  local rows = layout(items, width, height, labels)
+local function valuesFit(items, values, width, height, labels, rows)
+  rows = rows or layout(items, width, height, labels)
   if not rows then return false end
   for r = 1, #rows do
     for i = 1, #rows[r].items do
@@ -283,8 +284,9 @@ function M.build(zone, statusLine, i18n, items, values, cache)
   for i = 1, #M.TYPES do local id = M.TYPES[i]; labels[id] = i18n(TYPE_KEYS[id], id) end
   for i = 1, #ELRS_WORST do labels[ELRS_WORST[i][1]] = i18n(ELRS_WORST[i][1], ELRS_WORST[i][2]) end
   cache.zoneW, cache.zoneH, cache.labels = w, h, labels
-  cache.valueOverflow = not valuesFit(items, values, w, h, labels)
-  local ok = M.validate(items, w, h, labels) and not cache.valueOverflow
+  local valid, _, rows = M.validate(items, w, h, labels)
+  cache.valueOverflow = valid and not valuesFit(items, values, w, h, labels, rows)
+  local ok = valid and not cache.valueOverflow
   local logoW = math.floor(w * 0.32)
   local logoH = math.floor(logoW * 84 / 400 + 0.5)
   local toolSize = h > 350 and 44 or 20
@@ -302,7 +304,6 @@ function M.build(zone, statusLine, i18n, items, values, cache)
     children[#children + 1] = { type = "label", x = 10, y = math.floor(h * 0.48), w = w - 20, text = i18n("layout_invalid", "Standby layout does not fit"), align = CENTER, color = COLOR_THEME_WARNING, font = MIDSIZE }
     return children
   end
-  local rows = layout(items, w, h, labels)
   for r = 1, #rows do
     local row = rows[r]
     for i = 1, #row.items do

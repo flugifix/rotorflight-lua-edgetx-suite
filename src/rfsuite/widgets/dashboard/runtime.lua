@@ -70,6 +70,11 @@ end
 local function cancelStandbyElrs(self, reason)
   if self._standbyActive and ElrsConfig and type(ElrsConfig.cancel) == "function" then
     ElrsConfig.cancel(self._standbyElrsOwner, reason)
+    if self._standbyCache and self._standbyElrsIdentity and type(ElrsConfig.snapshot) == "function" then
+      local Standby = standbyModule()
+      local now = type(getTime) == "function" and getTime() / 100 or 0
+      Standby.setElrsSnapshot(self._standbyCache, ElrsConfig.snapshot(self._standbyElrsIdentity), now)
+    end
   end
   self._standbyActive = false
 end
@@ -4355,14 +4360,19 @@ function Runtime.new(zone, options)
     end
 
     -- STATE pass: the background half, then invalidation checks that only enqueue.
-    if self._standbyActive and ElrsConfig and MspRuntime and type(MspRuntime.getState) == "function" then
+    local standbyFcDetected = false
+    if MspRuntime and type(MspRuntime.getState) == "function" then
       local runtimeState = MspRuntime.getState()
-      if type(runtimeState) == "table" and runtimeState.lastConnected == true then
-        ElrsConfig.cancel(self._standbyElrsOwner, "fc_startup")
-        self._standbyActive = false
+      standbyFcDetected = type(runtimeState) == "table" and runtimeState.lastConnected == true
+      if self._standbyActive and ElrsConfig and standbyFcDetected then
+        cancelStandbyElrs(self, "fc_startup")
       end
     end
     local ready = performBackgroundWork(self, false)
+    if MspRuntime and type(MspRuntime.getState) == "function" then
+      local runtimeState = MspRuntime.getState()
+      standbyFcDetected = type(runtimeState) == "table" and runtimeState.lastConnected == true
+    end
 
     local dashboardPrefs = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
     local standbyEnabled = dashboardPrefs.standby_enabled == true
@@ -4370,7 +4380,7 @@ function Runtime.new(zone, options)
       and self.flightMode ~= "postflight" and self.flightMode ~= "offline"
       and standbyEnabled and self.state.armed ~= true
       and self.state.hadInflightFlight ~= true
-    local standbyProbeActive = standbyRenderActive and self.state.fblConnected ~= true
+    local standbyProbeActive = standbyRenderActive and self.state.fblConnected ~= true and not standbyFcDetected
     if standbyRenderActive then
       local Standby = standbyModule()
       local standbyItems = Standby.decode(dashboardPrefs.standby_layout)
@@ -4393,12 +4403,12 @@ function Runtime.new(zone, options)
           Standby.setElrsSnapshot(self._standbyCache, snapshot, nowSeconds())
         end
       elseif self._standbyActive and ElrsConfig then
-        ElrsConfig.cancel(self._standbyElrsOwner, "fc_startup")
+        cancelStandbyElrs(self, "fc_startup")
       end
       self._standbyCache = self._standbyCache or {}
       Standby.snapshot(standbyItems, self._standbyCache)
     elseif self._standbyActive and ElrsConfig then
-      ElrsConfig.cancel(self._standbyElrsOwner, "standby_left")
+      cancelStandbyElrs(self, "standby_left")
     end
     self._standbyActive = standbyProbeActive
 
