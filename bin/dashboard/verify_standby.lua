@@ -59,10 +59,10 @@ check("snapshot uses firmware version", values.firmware == "2.12.0")
 check("missing GPS fix stays unknown", values.tx_gps == "-")
 check("model display is bounded", #values.model == 15)
 check("timer overflow remains explicit", values.timer1 == ">999:59")
-model.getInfo = function() return { name = "Übergrößenmodell" } end
+model.getInfo = function() return { name = "Model\195\169LongEnough" } end
 tick = 201
 local utf8Values = standby.snapshot(default, cache)
-check("UTF-8 model truncates at a codepoint", utf8Values.model == "Übergrößenmo...")
+check("UTF-8 model truncates at a codepoint", utf8Values.model == "Model\195\169LongEn...")
 local scene = standby.build({ w = 480, h = 320 }, "Please wait...", cache.text, default, values, cache)
 check("standby scene builds", type(scene) == "table" and #scene > 3)
 check("status line clears small tool control", scene[3].x + scene[3].w <= 480 - 20 - 1 - 6)

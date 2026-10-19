@@ -19,7 +19,7 @@ Always available.
 | Setting | What it does |
 | --- | --- |
 | Standby screen | Replaces the fullscreen connection splash before a flight controller is ready. The normal splash remains in widget zones. |
-| Position 1–8 | Chooses and orders up to eight items: clock, date, transmitter battery, selected EdgeTX model, model timers, transmitter GPS, radio uptime, firmware, or the optional ELRS summary. A dash or Remove deletes an item; Move up and Move down retain its size. |
+| Position 1-8 | Chooses and orders up to eight items: clock, date, transmitter battery, selected EdgeTX model, model timers, transmitter GPS, radio uptime, firmware, or the optional ELRS summary. A dash or Remove deletes an item; Move up and Move down retain its size. |
 | Size | Gives the selected item a small, wide, or full-row tile. The ELRS summary needs a wide or full row. |
 
 The Suite checks the selected locale, actual font metrics, bounded display formats, and radio screen size before saving. If all items do not fit readably on one screen, the edit is refused and the last valid saved screen remains active.
