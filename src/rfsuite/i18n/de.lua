@@ -2783,7 +2783,7 @@ return {
         theme = "Theme",
         none = "Nichts",
         menu = "Schnellmenü",
-        suite_tool = "Suite-Tool",
+        suite_tool = "Hauptmenü",
         flight_log = "Flugbuch",
         exit = "Vollbild verlassen",
         saved_title = "Gespeichert",

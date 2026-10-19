@@ -2755,7 +2755,7 @@ return {
         theme = "Theme",
         none = "Nothing",
         menu = "Quick menu",
-        suite_tool = "Suite tool",
+        suite_tool = "Main menu",
         flight_log = "Flight log",
         exit = "Exit fullscreen",
         saved_title = "Saved",

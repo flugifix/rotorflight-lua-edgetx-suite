@@ -17,7 +17,7 @@ connects. These choices belong to the radio and apply to every theme and model.
 
 | Setting | What it does |
 | --- | --- |
-| PAGE >, PAGE <, MDL, SYS, TELE | One action per key. **Theme** (default) uses the theme binding, then the host fallback. **Nothing** disables the key. **Quick menu**, **Suite tool**, **Flight log** and **Exit fullscreen** override any theme binding. A radio without one of these keys never sends it; its saved choice still remains. |
+| PAGE >, PAGE <, MDL, SYS, TELE | One action per key. **Theme** (default) uses the theme binding, then the host fallback. **Nothing** disables the key. **Quick menu**, **Main menu**, **Flight log** and **Exit fullscreen** override any theme binding. A radio without one of these keys never sends it; its saved choice still remains. |
 
 ## Notes
 
