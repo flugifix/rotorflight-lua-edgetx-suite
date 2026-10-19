@@ -2756,7 +2756,7 @@ return {
         saved_message = "Standby screen saved",
         save_error_title = "Error",
         save_error_message = "Save failed",
-        help_message = "Standby screen: show one fullscreen surface while waiting for the flight controller.\nMove up and Move down reorder items; Remove deletes the chosen item from positions 1-8.\nSize: choose Small, Wide, or Full row; ELRS needs Wide or Full row. Enabling refuses a layout that does not fit. Switching the screen off still saves and keeps the last valid layout."
+        help_message = "Standby screen: show one fullscreen surface while waiting for the flight controller.\nPosition 1: choose and order tiles; Move up and Move down reorder them, and Remove deletes one.\nSize: choose Small, Wide, or Full row; ELRS needs Wide or Full row. Turning on requires a fitting layout; turning off keeps the last valid layout."
       },
       settings_dashboard_theme = {
         section_dashboard_theme = "Dashboard Theme",

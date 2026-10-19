@@ -2784,7 +2784,7 @@ return {
         saved_message = "Standby-Bildschirm gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen",
-        help_message = "Standby-Bildschirm: zeigt beim Warten auf den Flight Controller eine Vollbildansicht.\nNach oben und Nach unten ordnen Elemente um; Entfernen löscht das gewählte Element aus den Positionen 1-8.\nGröße: Klein, Breit oder Ganze Zeile wählen; ELRS benötigt Breit oder Ganze Zeile. Ein unpassendes Layout kann nicht eingeschaltet werden. Ausschalten wird trotzdem gespeichert und behält das letzte gültige Layout."
+        help_message = "Standby-Bildschirm: zeigt beim Warten auf den Flight Controller eine Vollbildansicht.\nPosition 1: Kacheln wählen und ordnen; Nach oben und Nach unten sortieren, Entfernen löscht eine.\nGröße: Klein, Breit oder Ganze Zeile wählen; ELRS braucht Breit oder Ganze Zeile. Einschalten verlangt ein passendes Layout; Ausschalten behält das letzte gültige."
       },
       settings_dashboard_theme = {
         section_dashboard_theme = "Dashboard-Design",
