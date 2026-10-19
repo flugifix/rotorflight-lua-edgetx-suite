@@ -202,6 +202,7 @@ do
   widget._job = nil
   widget:refresh(0, nil)
   check("standby enters after hosted tool closes", widget._standbyActive == true)
+  local firstCache = widget._standbyCache
   beforeCancel = calls.cancel
   widget:background()
   check("background transition releases standby owner", calls.cancel > beforeCancel
@@ -218,11 +219,108 @@ do
   local secondOwner = calls.requestOwners[#calls.requestOwners]
   check("separate widgets use separate standby owners", firstOwner ~= nil and secondOwner ~= nil
     and type(firstOwner) == "string" and type(secondOwner) == "string" and firstOwner ~= secondOwner)
-  check("separate widgets keep separate standby caches", second._standbyCache ~= widget._standbyCache
-    and second._standbyCache.elrs.packetRate ~= widget._standbyCache.elrs.packetRate)
+  check("separate widgets keep separate standby caches", widget._standbyCache == nil
+    and second._standbyCache ~= firstCache
+    and second._standbyCache.elrs.packetRate ~= firstCache.elrs.packetRate)
+
+  second:background()
 
   for key, value in pairs(original) do Config[key] = value end
   MspRuntime.getState = originalMspState
+end
+
+-- Standby is a display-only module. Exercise its lifetime through the actual loader and runtime:
+-- disabled widgets must not load it, active widgets share one instance, and the last exit must
+-- release every widget-held reference without evicting the shared ELRS provider.
+install()
+do
+  local standbyPath = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/standby.lua"
+  local configPath = "/SCRIPTS/TOOLS/rfsuite-core/lib/elrs_config.lua"
+  _G.rfsuite.clearModule("widgets/dashboard/standby.lua")
+  local sharedConfig = assert(_G.rfsuite.require("lib/elrs_config.lua"))
+  local originalLoadScript = loadScript
+  local standbyLoads = 0
+  _G.loadScript = function(path, mode)
+    if path == standbyPath then standbyLoads = standbyLoads + 1 end
+    return originalLoadScript(path, mode)
+  end
+
+  local Runtime = assert(loadfile(runtimePath))()
+  local MspRuntime = assert(_G.__rfsuite_msp_runtime_module
+    or _G.rfsuite.require("tasks/msp/runtime.lua"))
+  local originalMspState = MspRuntime.getState
+  MspRuntime.getState = function()
+    return { lastConnected = false, versionReadCompleted = false }
+  end
+
+  local function newWidget(enabled)
+    local widget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
+    widget.preferences.dashboard = widget.preferences.dashboard or {}
+    widget.preferences.dashboard.standby_enabled = enabled
+    widget.preferences.dashboard.standby_layout = "elrs:full"
+    widget.preferences.audio_events = widget.preferences.audio_events or {}
+    widget.preferences.audio_events.tpwr_alert = false
+    widget.state.fblConnected, widget.state.armed = false, false
+    widget.state.hadInflightFlight, widget.flightMode = false, "preflight"
+    return widget
+  end
+
+  local first = newWidget(false)
+  first:refresh(0, nil)
+  check("disabled standby does not load display module", standbyLoads == 0
+    and _G.rfsuite.modules[standbyPath] == nil and first._standbyModule == nil)
+
+  first.preferences.dashboard.standby_enabled = true
+  first._job = nil
+  first:refresh(0, nil)
+  local firstModule = first._standbyModule
+  check("standby entry loads and owns display module", standbyLoads == 1
+    and firstModule ~= nil and _G.rfsuite.modules[standbyPath] == firstModule
+    and firstModule.consumerCount() == 1)
+  check("standby entry holds the shared ELRS provider", first._standbyElrsConfig == sharedConfig)
+
+  first.preferences.dashboard.standby_enabled = false
+  first._job = nil
+  first:refresh(0, nil)
+  check("disabled exit evicts last standby display module", first._standbyModule == nil
+    and first._standbyCache == nil and first._standbyElrsConfig == nil and first._standbyCrsf == nil
+    and firstModule._testCache == nil and _G.rfsuite.modules[standbyPath] == nil)
+  check("standby exit retains shared ELRS provider", _G.rfsuite.modules[configPath] == sharedConfig)
+
+  first.preferences.dashboard.standby_enabled = true
+  first._job = nil
+  first:refresh(0, nil)
+  local reloadedModule = first._standbyModule
+  check("standby re-entry reloads a fresh display module", standbyLoads == 2
+    and reloadedModule ~= nil and reloadedModule ~= firstModule)
+
+  local second = newWidget(true)
+  second:refresh(0, nil)
+  check("two widgets share one loaded standby display module", standbyLoads == 2
+    and second._standbyModule == reloadedModule and reloadedModule.consumerCount() == 2)
+  first:background()
+  check("first widget exit retains module for second widget", first._standbyModule == nil
+    and first._standbyCache == nil and first._standbyElrsConfig == nil
+    and second._standbyModule == reloadedModule and _G.rfsuite.modules[standbyPath] == reloadedModule
+    and reloadedModule.consumerCount() == 1 and reloadedModule._testCache == nil)
+  second:background()
+  check("last widget exit evicts shared standby display module", second._standbyModule == nil
+    and _G.rfsuite.modules[standbyPath] == nil and reloadedModule.consumerCount() == 0)
+  check("two-widget exit still retains shared ELRS provider", _G.rfsuite.modules[configPath] == sharedConfig)
+
+  first._foreground = true
+  first._job = nil
+  first:refresh(0, nil)
+  check("backgrounded widget re-entry reloads display module", standbyLoads == 3
+    and first._standbyModule ~= nil)
+  first._toolHost = { phase = "run", home = { run = function() return 0 end }, cpuHits = 0 }
+  first:refresh(0, nil)
+  check("hosted tool exit evicts standby display module", first._standbyModule == nil
+    and first._standbyElrsConfig == nil and _G.rfsuite.modules[standbyPath] == nil
+    and first._treeKind ~= "standby")
+
+  MspRuntime.getState = originalMspState
+  _G.loadScript = originalLoadScript
 end
 
 Stubs.releaseCard()
