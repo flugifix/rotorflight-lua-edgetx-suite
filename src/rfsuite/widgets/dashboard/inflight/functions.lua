@@ -712,6 +712,16 @@ function M.recordMatches(actual, wanted)
   return true, nil
 end
 
+-- Whether a slot listens on the same channels through the same windows as the record wanted, so
+-- that the wire state of that cell selects it, whatever function it holds.
+local function firesOnCell(actual, wanted)
+  return (tonumber(actual.enaChannel) or -1) == wanted.enaChannel
+    and windowsEqual(actual.enaRange, wanted.enaRange)
+    and (tonumber(actual.adjChannel) or -1) == wanted.adjChannel
+    and windowsEqual(actual.adjRange1, wanted.adjRange1)
+    and windowsEqual(actual.adjRange2, wanted.adjRange2)
+end
+
 --- How many slot records one pass may hold against the set. The same order of work as the
 -- derivation's own slice, for the same reason: the reactive sweep of the tree standing after the
 -- call comes out of the same instruction budget the call itself is billed against.
@@ -738,7 +748,11 @@ function M.newComparison(records, map, bankChannel, valueChannel, steps)
     -- cause, and the pilot can act on "the step you chose is not the step on the board" where he
     -- cannot act on "thirty-six slots differ".
     steps = 0,
-    list = {}
+    list = {},
+    -- The cells whose slot holds ANOTHER function, with the function it holds. Kept apart from
+    -- `list` because these are the cells where a step lands on a parameter other than the one the
+    -- row names, and the ground surface names them; every other difference it only counts.
+    named = {}
   }
 end
 
@@ -768,6 +782,12 @@ function M.compareStep(work, budget)
         work.differ = work.differ + 1
         if reason == "step" then work.steps = work.steps + 1 end
         work.list[#work.list + 1] = { slot0 = cell.slot0, id = cell.id, reason = reason }
+        -- recordMatches tests the function first, so a slot holding another function is always
+        -- reported as that, whatever else about it differs as well. It is NAMED only where its
+        -- channels and windows are the cell's own: only then does a step on that cell fire it.
+        if reason == "function" and work.named ~= nil and firesOnCell(actual, cell.record) then
+          work.named[#work.named + 1] = { bank = cell.bank, row = cell.row, id = cell.id, held = held }
+        end
       end
     end
   end
@@ -789,7 +809,8 @@ function M.compareStep(work, budget)
     -- the setting is in, and the one where the screen can name the remedy exactly.
     stepOnly = (work.steps > 0) and (work.steps == work.differ) and (work.empty == 0),
     count = work.empty + work.differ,
-    slots = work.list
+    slots = work.list,
+    named = work.named
   }
 end
 

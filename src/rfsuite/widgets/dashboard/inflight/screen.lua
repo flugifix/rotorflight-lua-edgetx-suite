@@ -1027,7 +1027,62 @@ end
 -- otherwise indistinguishable -- and how many of its slots the overlay had to leave out, since a
 -- continuous slot has no park position and a pilot who configured one and cannot find it on the
 -- screen has no other way of learning why.
-local function describeSet(snapshot, t)
+--
+-- The standard layout drives every cell with the documented value whatever the board's slot
+-- holds, so a cell whose slot holds ANOTHER function steps that function in the air while the row
+-- names the documented one. Those cells are named here, each with the function its slot really
+-- holds: by the row's own name where that fits, by bank letter and row number where it does not,
+-- and as many of them as the line has room for, the rest counted.
+local namedCache = {}
+
+local function namedPart(entry, short, verb)
+  local cell
+  if short then
+    cell = (Functions.STANDARD_BANK_LABELS[entry.bank] or tostring(entry.bank)) .. tostring(entry.row)
+  else
+    cell = Functions.nameOf(entry.id)
+  end
+  return cell .. " " .. verb .. " " .. Functions.nameOf(entry.held)
+end
+
+-- The list in one form, or nil when not even its first cell fits. `force` takes the first cell
+-- whatever its width, for the last rung, where the caller's cut keeps its front.
+local function namedList(named, count, t, width, font, short, force)
+  local verb = t("widgets.dashboard.inflight_board_steps", "steps")
+  local more = t("widgets.dashboard.inflight_board_more", "more")
+  local text, shown = nil, 0
+  for i = 1, #named do
+    local part = namedPart(named[i], short, verb)
+    local candidate = (text == nil) and part or (text .. ", " .. part)
+    local rest = count - shown - 1
+    local probe = candidate
+    if rest > 0 then probe = candidate .. ", +" .. tostring(rest) .. " " .. more end
+    if not textFits(probe, width, font) and not (force and text == nil) then break end
+    text, shown = candidate, shown + 1
+  end
+  if text == nil then return nil end
+  local rest = count - shown
+  if rest > 0 then text = text .. ", +" .. tostring(rest) .. " " .. more end
+  return text
+end
+
+-- Kept for the one comparison on screen: the closure that draws the line runs on every refresh,
+-- and the list behind it changes only when the board is read again.
+local function describeNamed(compare, t, width, font)
+  local named = compare.named
+  local count = math.max(tonumber(compare.count) or 0, #named)
+  local c = namedCache
+  if c.named == named and c.count == count and c.width == width and c.font == font and c.t == t then
+    return c.text
+  end
+  local text = namedList(named, count, t, width, font, false, false)
+    or namedList(named, count, t, width, font, true, false)
+    or namedList(named, count, t, width, font, true, true)
+  c.named, c.count, c.width, c.font, c.t, c.text = named, count, width, font, t, text
+  return text
+end
+
+local function describeSet(snapshot, t, width, font)
   if snapshot.setSource == "standard" then
     local text = t("widgets.dashboard.inflight_set_standard", "Standard set")
     local compare = snapshot.compare
@@ -1037,6 +1092,9 @@ local function describeSet(snapshot, t)
     elseif verdict == "empty" then
       return text .. " - " .. t("widgets.dashboard.inflight_board_empty", "board empty")
     elseif verdict == "differ" then
+      if type(compare.named) == "table" and #compare.named > 0 then
+        return describeNamed(compare, t, width or math.huge, font)
+      end
       -- Named rather than counted when the step is all of it: the pilot changed a field on the
       -- radio and the remedy is one button, not thirty-six slots to look at.
       if compare.stepOnly == true then
@@ -1222,7 +1280,7 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
   local lineFont = m.small
   if m.font ~= m.small and snapNow ~= nil
     and textFits(checkText, lineW, m.font)
-    and textFits(describeSet(snapNow, t), lineW, m.font)
+    and textFits(describeSet(snapNow, t, lineW, m.font), lineW, m.font)
     and textFits(describePrime(snapNow, t, ground), lineW, m.font)
     and textFits(describeBackup(snapNow, t, ground), lineW, m.font) then
     lineFont = m.font
@@ -1244,7 +1302,7 @@ function M.buildGround(children, widget, m, w, h, t, p, interactive)
     text = function()
       local snap = state.inflight
       if type(snap) ~= "table" then return "" end
-      return fitText(describeSet(snap, t), lineW, lineFont)
+      return fitText(describeSet(snap, t, lineW, lineFont), lineW, lineFont)
     end
   }
   y = y + m.statusLineH

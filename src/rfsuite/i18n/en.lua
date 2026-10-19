@@ -3282,6 +3282,8 @@ return {
       inflight_board_differs = "board differs in",
       inflight_board_unmapped = "channels not on the receiver map",
       inflight_board_unknown = "board not compared",
+      inflight_board_steps = "steps",
+      inflight_board_more = "more",
       inflight_backup_none = "No backup",
       inflight_backup_held = "Backup in profile",
       inflight_transfer_busy = "Copying profile",

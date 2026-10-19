@@ -1795,16 +1795,20 @@ local function publish(widget, drive)
     transferState = { kind = transfer.kind, state = transfer.state, reason = transfer.reason }
   end
 
-  -- What the board's own slot table said when it was held against the standard set. Only the
-  -- verdict and the count travel: the list of slots behind it is the ground half's own table and
-  -- goes on being appended to, and the screen has room for a sentence rather than for a list.
+  -- What the board's own slot table said when it was held against the standard set. The verdict,
+  -- the count and the cells named below travel; the full list of slots behind them stays the ground
+  -- half's own, and the screen has room for a sentence rather than for a list.
   local compare = drive.compare
   local compareState = nil
   if type(compare) == "table" then
     compareState = { verdict = compare.verdict, count = compare.count,
       -- Whether the step is the whole of the difference. It travels because the pilot can fix
       -- that one on the radio, in one field, and the sentence on screen is a different sentence.
-      stepOnly = compare.stepOnly }
+      stepOnly = compare.stepOnly,
+      -- The cells whose slot holds another function, and which one: a step there moves that
+      -- function rather than the parameter the row names, so the sentence names them. It is the
+      -- finished comparison's own list, complete when the verdict is, and read and never written.
+      named = compare.named }
   end
 
   local activeId = drive:functionId(drive.bank, drive.row)
