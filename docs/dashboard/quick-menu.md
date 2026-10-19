@@ -5,19 +5,21 @@ sidebar_label: Quick menu
 
 # Quick menu
 
-The screen the dashboard widget shows when it is put full screen: a short list of things a
-pilot wants to reach from the flight line without leaving the dashboard for the tool.
+A short list of things a pilot wants to reach from the flight line without leaving the
+dashboard for the tool. It opens over a theme that takes fullscreen, including Default, or
+directly when a theme leaves fullscreen to the menu.
 
 ## Where to find it
 
 Put the *RFSuite* widget full screen the way EdgeTX puts any widget full screen — the widget's
-own context menu on the screen it sits on, then *Full screen*. The quick menu is what full
-screen shows; there is no other way in and no way for the widget to open it by itself.
+own context menu on the screen it sits on, then *Full screen*. With Default, fullscreen
+shows the dashboard; press its menu control at the top right or either page key to open
+the quick menu. Closing the menu returns to the dashboard.
 
-A dashboard theme can take full screen for itself instead (a theme author's choice, see
-[dashboard themes](../developer/dashboard-themes.md#a-theme-that-takes-fullscreen)). Full screen
-then shows the theme, and the quick menu opens over it from the theme's menu control or with
-the page keys.
+Other themes can also take full screen for themselves (a theme author's choice, see
+[dashboard themes](../developer/dashboard-themes.md#a-theme-that-takes-fullscreen)); their
+menu control or page-key bindings open the quick menu over the theme. A theme that does not
+take fullscreen opens the quick menu directly.
 
 One exception is the [in-flight tuning overlay](inflight-tuning.md): while the interlock
 switch has brought it up, it takes full screen instead and the quick menu is not drawn.
