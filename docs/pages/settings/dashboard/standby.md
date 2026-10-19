@@ -7,6 +7,8 @@ sidebar_position: 40
 # Standby screen
 
 The standby screen shows radio information in the fullscreen dashboard while it waits for a flight controller. It is disabled by default.
+The dashboard loads this surface only while it is shown and releases its scene, cached readings,
+and module reference when the surface closes.
 
 ## Where to find it
 

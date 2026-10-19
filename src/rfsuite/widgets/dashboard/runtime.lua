@@ -57,26 +57,48 @@ local PreferencesModule = requireModule("lib/preferences.lua")
 local ModelPreferences = requireModule("lib/model_preferences.lua")
 local DashboardAudio = requireModule("lib/audio.lua")
 local DashboardSplash = requireModule("widgets/dashboard/splash.lua")
-local DashboardStandby, ElrsConfig, Crsf = nil, nil, nil
-local function standbyModule()
-  DashboardStandby = DashboardStandby or requireModule("widgets/dashboard/standby.lua")
-  return DashboardStandby
+local function standbyModule(self)
+  if self._standbyModule then return self._standbyModule end
+  local module = requireModule("widgets/dashboard/standby.lua")
+  if module and type(module.acquire) == "function" then module.acquire(self._standbyModuleOwner) end
+  self._standbyModule = module
+  return module
 end
-local function elrsModules()
-  ElrsConfig = ElrsConfig or requireModule("lib/elrs_config.lua")
-  Crsf = Crsf or requireModule("lib/crsf.lua")
-  return ElrsConfig, Crsf
+local function elrsModules(self)
+  self._standbyElrsConfig = self._standbyElrsConfig or requireModule("lib/elrs_config.lua")
+  self._standbyCrsf = self._standbyCrsf or requireModule("lib/crsf.lua")
+  return self._standbyElrsConfig, self._standbyCrsf
 end
 local function cancelStandbyElrs(self, reason)
-  if self._standbyActive and ElrsConfig and type(ElrsConfig.cancel) == "function" then
-    ElrsConfig.cancel(self._standbyElrsOwner, reason)
-    if self._standbyCache and self._standbyElrsIdentity and type(ElrsConfig.snapshot) == "function" then
-      local Standby = standbyModule()
+  local config = self._standbyElrsConfig
+  if self._standbyActive and config and type(config.cancel) == "function" then
+    config.cancel(self._standbyElrsOwner, reason)
+    if self._standbyCache and self._standbyElrsIdentity and type(config.snapshot) == "function" then
+      local Standby = standbyModule(self)
       local now = type(getTime) == "function" and getTime() / 100 or 0
-      Standby.setElrsSnapshot(self._standbyCache, ElrsConfig.snapshot(self._standbyElrsIdentity), now)
+      Standby.setElrsSnapshot(self._standbyCache, config.snapshot(self._standbyElrsIdentity), now)
     end
   end
   self._standbyActive = false
+end
+local function releaseStandby(self, reason)
+  cancelStandbyElrs(self, reason)
+  if self._job and self._job.kind == "standby" then self._job = nil end
+  if self._treeKind == "standby" then
+    if lvgl and type(lvgl.clear) == "function" then lvgl.clear() end
+    self.built = false
+    self.renderKey = nil
+    self._treeKind = nil
+    self._treeKey = nil
+  end
+  local module = self._standbyModule
+  self._standbyModule = nil
+  self._standbyCache = nil
+  self._standbyElrsIdentity = nil
+  self._standbyElrsIdentityAt = nil
+  self._standbyElrsConfig = nil
+  self._standbyCrsf = nil
+  if module and type(module.release) == "function" then module.release(self._standbyModuleOwner) end
 end
 local MspRuntime = requireModule("tasks/msp/runtime.lua")
 local I18nModule = requireModule("i18n/init.lua")
@@ -824,7 +846,7 @@ local function splashJobStep(self)
 end
 
 local function standbyJobStep(self)
-  local DashboardStandby = standbyModule()
+  local DashboardStandby = standbyModule(self)
   self._standbyCache = self._standbyCache or {}
   local dashboard = (self.preferences and self.preferences.dashboard) or {}
   local items = DashboardStandby.decode(dashboard[DashboardStandby.KEY_LAYOUT])
@@ -3499,6 +3521,7 @@ function Runtime.new(zone, options)
   }
   _G.rfsuite.dashboardStandbyOwnerSeq = (_G.rfsuite.dashboardStandbyOwnerSeq or 0) + 1
   widget._standbyElrsOwner = "standby:" .. tostring(_G.rfsuite.dashboardStandbyOwnerSeq)
+  widget._standbyModuleOwner = "standby-module:" .. tostring(_G.rfsuite.dashboardStandbyOwnerSeq)
 
   -- Initialize i18n context for the widget using system locale. buildI18nContext is the same
   -- call the preferences reload makes after a language changed, so the widget's context is built
@@ -4212,7 +4235,7 @@ function Runtime.new(zone, options)
     -- runner itself, so nothing below may run beside it; once it is closed the next pass finds
     -- the scene dropped and builds it again.
     if self._toolHost ~= nil then
-      cancelStandbyElrs(self, "tool_open")
+      releaseStandby(self, "tool_open")
       self._passWork = "tool"
       local ToolHost = toolHostModule()
       if type(ToolHost) == "table" then
@@ -4237,7 +4260,7 @@ function Runtime.new(zone, options)
        lvgl.onEvent(event, touchState)
     end
     if self._toolHost ~= nil then
-      cancelStandbyElrs(self, "tool_open")
+      releaseStandby(self, "tool_open")
       self._passEndAt = nowSeconds()
       return
     end
@@ -4364,7 +4387,7 @@ function Runtime.new(zone, options)
     if MspRuntime and type(MspRuntime.getState) == "function" then
       local runtimeState = MspRuntime.getState()
       standbyFcDetected = type(runtimeState) == "table" and runtimeState.lastConnected == true
-      if self._standbyActive and ElrsConfig and standbyFcDetected then
+      if self._standbyActive and self._standbyElrsConfig and standbyFcDetected then
         cancelStandbyElrs(self, "fc_startup")
       end
     end
@@ -4382,12 +4405,12 @@ function Runtime.new(zone, options)
       and self.state.hadInflightFlight ~= true
     local standbyProbeActive = standbyRenderActive and self.state.fblConnected ~= true and not standbyFcDetected
     if standbyRenderActive then
-      local Standby = standbyModule()
+      local Standby = standbyModule(self)
       local standbyItems = Standby.decode(dashboardPrefs.standby_layout)
       local wantsElrs = false
       for i = 1, #standbyItems do if standbyItems[i].type == "elrs" then wantsElrs = true; break end end
       if wantsElrs and standbyProbeActive then
-        local Config, CrsfModule = elrsModules()
+        local Config, CrsfModule = elrsModules(self)
         if Config then
           local identityNow = type(getTime) == "function" and getTime() or 0
           if self._standbyElrsIdentity == nil or identityNow >= (self._standbyElrsIdentityAt or 0) + 100 then
@@ -4402,13 +4425,13 @@ function Runtime.new(zone, options)
           self._standbyCache = self._standbyCache or {}
           Standby.setElrsSnapshot(self._standbyCache, snapshot, nowSeconds())
         end
-      elseif self._standbyActive and ElrsConfig then
+      elseif self._standbyActive and self._standbyElrsConfig then
         cancelStandbyElrs(self, "fc_startup")
       end
       self._standbyCache = self._standbyCache or {}
       Standby.snapshot(standbyItems, self._standbyCache)
-    elseif self._standbyActive and ElrsConfig then
-      cancelStandbyElrs(self, "standby_left")
+    elseif self._standbyModule then
+      releaseStandby(self, "standby_left")
     end
     self._standbyActive = standbyProbeActive
 
@@ -4420,13 +4443,13 @@ function Runtime.new(zone, options)
       local fullscreenSplash = event ~= nil
       local useStandby = fullscreenSplash and standbyRenderActive
       if useStandby then
-        local DashboardStandby = standbyModule()
+        local DashboardStandby = standbyModule(self)
         local items = DashboardStandby.decode(dashboardPrefs[DashboardStandby.KEY_LAYOUT])
         self._standbyCache = self._standbyCache or {}
         DashboardStandby.snapshot(items, self._standbyCache)
       end
       local splashKey = (useStandby and "standby|" or "splash|") .. tostring(statusLine) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)
-        .. (fullscreenSplash and "|fs" or "") .. (useStandby and "|" .. tostring(dashboardPrefs[DashboardStandby.KEY_LAYOUT])
+        .. (fullscreenSplash and "|fs" or "") .. (useStandby and "|" .. tostring(dashboardPrefs.standby_layout)
           .. "|overflow=" .. tostring(self._standbyCache and self._standbyCache.valueOverflow) or "")
       if self.renderKey ~= splashKey then
         self.renderKey = splashKey
@@ -4648,7 +4671,7 @@ function Runtime.new(zone, options)
     -- Off screen. The overlay's own tick refuses to drive from here and cleans up instead, which
     -- is what makes a widget scrolled away stop writing the two variables.
     self._foreground = false
-    cancelStandbyElrs(self, "widget_background")
+    releaseStandby(self, "widget_background")
 
     -- Still running, so still passing: the heartbeat, as traceInstructionUsage publishes it at
     -- the top of refresh. A dashboard on a screen page the radio does not start on is called

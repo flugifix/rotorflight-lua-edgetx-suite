@@ -1,4 +1,24 @@
 local M = {}
+local MODULE_PATH = "widgets/dashboard/standby.lua"
+local consumers = {}
+
+function M.acquire(owner)
+  if owner ~= nil then consumers[owner] = true end
+end
+
+function M.release(owner)
+  if owner ~= nil then consumers[owner] = nil end
+  if next(consumers) == nil and type(_G) == "table" and type(_G.rfsuite) == "table"
+      and type(_G.rfsuite.clearModule) == "function" then
+    _G.rfsuite.clearModule(MODULE_PATH)
+  end
+end
+
+function M.consumerCount()
+  local count = 0
+  for _ in pairs(consumers) do count = count + 1 end
+  return count
+end
 local function loadRadioStatus()
   if _G.rfsuite and type(_G.rfsuite.require) == "function" then return _G.rfsuite.require("lib/radio_status.lua") end
   if type(loadScript) ~= "function" then return nil end
@@ -263,7 +283,7 @@ function M.elrsText(cache, now)
 end
 
 function M.snapshot(items, cache)
-  cache = cache or M._testCache or {}; M._testCache = cache
+  cache = cache or {}
   local now = type(getTime) == "function" and getTime() or 0
   if cache.snapshotValues and now < (cache.snapshotAt or 0) + 100 then return cache.snapshotValues, cache.snapshotKey end
   local values = readValues(cache)
@@ -277,7 +297,7 @@ function M.snapshot(items, cache)
 end
 
 function M.build(zone, statusLine, i18n, items, values, cache)
-  cache = cache or M._testCache or {}; M._testCache = cache
+  cache = cache or {}
   cache.text = i18n
   local w, h = zone.w or LCD_W, zone.h or LCD_H
   local labels = {}
@@ -312,7 +332,7 @@ function M.build(zone, statusLine, i18n, items, values, cache)
     local x, y, boxW = box.x, row.y, box.w
     local label = labels[item.type]
     children[#children + 1] = { type = "rectangle", x = x, y = y, w = boxW, h = row.h, color = COLOR_THEME_SECONDARY2, filled = true, radius = 5 }
-    children[#children + 1] = { type = "label", x = x + 8, y = y + 5, w = boxW - 16, text = label, color = COLOR_THEME_PRIMARY2, font = SMLSIZE }
+    children[#children + 1] = { type = "label", x = x + 8, y = y + 5, w = boxW - 16, text = label, color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
     children[#children + 1] = { type = "label", x = x + 8, y = y + box.valueY, w = boxW - 16,
       text = function() local snap = cache.snapshotValues or values; return tostring(snap[item.type] or "-") end,
       color = function() return item.type == "tx_battery" and cache.batteryLow and COLOR_THEME_WARNING or COLOR_THEME_PRIMARY1 end,
