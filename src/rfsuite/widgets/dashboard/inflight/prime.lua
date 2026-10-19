@@ -157,6 +157,28 @@ local function mspState()
   return state
 end
 
+--- The flight controller on this link, or nil while it has not said which one it is.
+--
+-- The name is `session.signature`, which tasks/msp/runtime.lua builds from the API version and the
+-- MCU id and which the tool pages already keep their reads by. It is answered only while the
+-- runtime holds an MCU id for THIS link: the runtime drops the id on every disconnect and sets it
+-- again when the UID read answers, while the signature stays at the previous board's name across
+-- the drop, so the signature alone would name the old board for the whole of that window. One form
+-- only: the runtime builds the signature in the same publish that takes the id in, so an id with no
+-- signature beside it is a moment that has not been published yet, and is answered as unknown.
+-- The UID reply sets the id first and publishes only after the model preferences are read, so a
+-- pass stopped in between leaves the new id beside the old board's signature; the id the
+-- signature was last built from (`signatureMcuId`) tells the two apart.
+local function boardOnLink()
+  local state = mspState()
+  local values = state and state.values
+  if type(values) ~= "table" or values.mcuId == nil then return nil end
+  if state.signatureMcuId ~= values.mcuId then return nil end
+  local session = _G.rfsuite and _G.rfsuite.session or nil
+  local signature = (type(session) == "table") and session.signature or nil
+  return signature
+end
+
 local function queueOf()
   local state = mspState()
   if state == nil or type(state.queue) ~= "table" or type(state.queue.add) ~= "function" then return nil end
@@ -1313,6 +1335,14 @@ function M.transferRefusal(widget, drive)
   -- commit, and it would leave the pilot believing an undo exists where none does.
   if (backup - 1) == active0 then return "same" end
   if queueOf() == nil then return "no_link" end
+  -- The session belongs to the flight controller it was read from (see M.tick), and after a
+  -- reconnect the board on the link says which one it is only once the UID read has answered. Until
+  -- then a restore would copy a spare profile of a board nobody has identified, and a backup would
+  -- lay down an undo no board can be named for, so both transfers wait, with the line that says the
+  -- board is being read. That holds for the first board as well: an undo taken there would be
+  -- inherited by whichever board identified itself first.
+  local onLink = boardOnLink()
+  if onLink == nil or (drive.board ~= nil and onLink ~= drive.board) then return "reading" end
   return nil
 end
 
@@ -1591,6 +1621,42 @@ function M.passHasRoom(widget, drive)
   return false
 end
 
+--- Another flight controller has answered, and the tuning session is not carried over to it.
+--
+-- The undo record, the comparison snapshot and the board read behind them all describe the board
+-- they were taken from. Kept for another one, the automatic backup found a record whose profile
+-- NUMBER matched and made none, the comparison after the flight measured the new board against the
+-- old one's snapshot, and the restore copied the new board's spare profile over the one it flies.
+--
+-- So the session ends as it does when the interlock is released on the ground (inflight/drive.lua,
+-- Drive:endSession), and more goes with it, because a closed interlock keeps the board and this
+-- does not. The run that read the slot table goes, so no value re-read can be made against the old
+-- board's table, and the automatic run is armed again, which reads the new board in full. The set
+-- goes back to what this build knows (Drive:seedSet): a set derived from the old board's windows
+-- would step the new board's slots by the old board's table. The profiles last seen are the old
+-- board's too, so the first reading of the new one seeds them rather than announcing a change. The
+-- per-link latches are the ones M.tick clears when it sees the link down, cleared here as well
+-- because a widget in the background never ran that pass. The automatic backup is not asked for
+-- here: the link drop took the surface off the ground (Drive:setPhase(nil) through M.cleanup), and
+-- its return to the ground with the interlock on raises that request, which waits for the new read.
+local function boardChanged(drive, board)
+  drive:endSession()
+  drive.prime = nil
+  drive.readAgain = nil
+  drive.primeInterrupted = nil
+  drive:seedSet()
+  drive.profile = nil
+  drive.rateProfile = nil
+  drive.profileChanged = nil
+  drive.profileSettleAt = nil
+  drive.profileBannerUntil = nil
+  drive._primeAutoDone = false
+  drive._primeLinkSince = nil
+  drive._primeFails = nil
+  drive.board = board
+  logPrime("another flight controller answered: the tuning session ended, the board is read again")
+end
+
 --- One pass of the ground half.
 --
 -- Costs two table reads while armed or disconnected, which is what it does for the whole of a
@@ -1613,6 +1679,23 @@ function M.tick(widget, drive)
     -- to the question of whether it can be read at all.
     drive._primeFails = nil
     return
+  end
+
+  -- Which flight controller the session belongs to. The first one to identify itself is recorded,
+  -- and the session ends only when a DIFFERENT one does. A reconnect to the same board -- after a
+  -- battery change, a short fade on the ground, or a link lost in the air, which comes back after
+  -- the landing because nothing is asked of an armed board -- ends nothing, so the undo laid down
+  -- before the flight is still the one the restore puts back. A board that has not identified
+  -- itself on this link ends nothing either: nothing is known to have changed, and the automatic
+  -- run and the automatic backup below wait for the identity anyway (`tasksDone` holds until the
+  -- MSP runtime holds an MCU id for this link).
+  local board = boardOnLink()
+  if board ~= nil and board ~= drive.board then
+    if drive.board == nil then
+      drive.board = board
+    else
+      boardChanged(drive, board)
+    end
   end
 
   -- Neither the parse below nor the derivation slice after it may go on a pass that is already

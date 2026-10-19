@@ -178,6 +178,16 @@ changed.
   about to show is measured against a snapshot that has to survive the switch. What the new
   read costs is the nine value reads and not the whole slot table — a layout does not change
   because a switch moved.
+- **The tuning session belongs to the flight controller it was read from.** The link coming
+  back to the same board ends nothing — after a battery change, a short fade on the ground, or
+  a link lost in the air, which comes back after the landing because nothing is asked of an
+  armed board — so the backup taken before the flight is still the one *Restore* puts back.
+  When a *different* flight controller identifies itself on the same model, the session ends:
+  the backup line, the comparison and the read go, the board is read again in full, slot table
+  included, and with the interlock on a fresh backup of its active profile follows. The board
+  is known by the identity the suite reads on every connect (API version and MCU id), which
+  answers a moment after the link is back; until it has, nothing ends, and *Backup* and
+  *Restore* wait with *The board is being read: try again in a moment*.
 - Releasing the interlock, closing the fullscreen, backgrounding the widget or losing the
   link all take the value variable back to zero, in the flight mode it was written in, and
   end whichever of the three surfaces was up. The next opening of the interlock is an opening

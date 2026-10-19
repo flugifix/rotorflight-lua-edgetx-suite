@@ -678,7 +678,9 @@ function Drive:forgetVerdict()
   self._checkResult = nil
 end
 
---- The tuning session is over: the pilot has closed the feature while standing on the ground.
+--- The tuning session is over: the pilot has closed the feature while standing on the ground, or
+-- a different flight controller has identified itself on the link (inflight/prime.lua,
+-- boardChanged, which also lets go of the board read below).
 --
 -- His ruling after the fourth radio round is that closing it on the ground or after the flight
 -- starts everything fresh, so the next opening of the interlock is a NEW session and not a
@@ -700,7 +702,9 @@ end
 --
 -- NOT reached when the widget goes to the background, nor when the feature is switched off in the
 -- settings. Neither of those is the pilot closing the overlay on the flight line, and a theme
--- reload or a tool session would otherwise throw his undo away between two flights.
+-- reload or a tool session would otherwise throw his undo away between two flights. Nor when the
+-- link drops and comes back to the same board: a battery change, a fade on the ground and a link
+-- lost in the air all come back to the board the undo was taken from.
 function Drive:endSession()
   self.backup = nil
   self.primedValues = nil
