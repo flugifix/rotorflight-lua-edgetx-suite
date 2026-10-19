@@ -22,6 +22,7 @@ local localeModule = nil
 -- lib/elrs_config.lua and lib/crsf.lua, loaded the first time the TX power alert is on, so a radio
 -- that never switches it on never loads either.
 local elrsConfigModule = nil
+local audioOwnerSequence = 0
 -- lib/link_rates.lua and lib/crsf.lua, loaded the first time a link headroom alert is on, so a
 -- radio that never switches one on never loads either.
 local linkRatesModule = nil
@@ -1986,9 +1987,18 @@ local function connectChainDone()
   return progress.total > 0 and progress.done >= progress.total
 end
 
+local function txPowerOwner(audioState, create)
+  if audioState.txPowerOwner == nil and create then
+    audioOwnerSequence = audioOwnerSequence + 1
+    audioState.txPowerOwner = "audio:" .. tostring(audioOwnerSequence)
+  end
+  return audioState.txPowerOwner
+end
+
 local function cancelTxPowerRead(audioState, reason)
-  if elrsConfigModule and type(elrsConfigModule.cancel) == "function" then
-    elrsConfigModule.cancel("audio", reason)
+  local owner = txPowerOwner(audioState, false)
+  if owner and elrsConfigModule and type(elrsConfigModule.cancel) == "function" then
+    elrsConfigModule.cancel(owner, reason)
   end
   audioState.txPowerRequested = nil
 end
@@ -2029,11 +2039,12 @@ local function txPowerModuleRead(audioState, armed, now)
   if not elrsConfigModule then return nil end
   local identity = elrsConfigModule.currentIdentity()
   local fresh = audioState.txPowerRequested ~= identity
-  local accepted = elrsConfigModule.request(identity, { owner = "audio", force = fresh })
+  local owner = txPowerOwner(audioState, true)
+  local accepted = elrsConfigModule.request(identity, { owner = owner, force = fresh })
   if not accepted then return nil end
   audioState.txPowerRequested = identity
   local snapshot = elrsConfigModule.step({
-    owner = "audio", identity = identity, crsf = crsfModule,
+    owner = owner, identity = identity, crsf = crsfModule,
     push = _G.crossfireTelemetryPush, now = now, allow = true,
   })
   if snapshot and snapshot.status ~= "reading" then

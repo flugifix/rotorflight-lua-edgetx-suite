@@ -221,6 +221,9 @@ function M.request(identityKey, context)
     if active.owner == owner then return true, "reading" end
     return false, "busy"
   end
+  -- A completed transaction can still have copied replies in another widget manager's RX queue.
+  -- Every explicit refresh drains that owner's queue before it sends a discovery ping.
+  if context.force then quarantine, quarantineUntil = true, nil end
   if last and last.identity == identityKey and not context.force then return true, "ready" end
   if quarantine then
     if lease ~= nil and lease ~= owner then return false, "busy" end

@@ -92,20 +92,24 @@ do
   end
   local audioRead = assert(namedUpvalue(Audio.process, "txPowerModuleRead"))
   local state = {}
-  assert(audioRead(state, false, 0) == nil and sent[1][1] == 0x28,
+  assert(audioRead(state, false, 0) == nil and #sent == 0)
+  assert(audioRead(state, false, 0.6) == nil and #sent == 0)
+  assert(audioRead(state, false, 0.7) == nil and sent[1][1] == 0x28,
     "audio accepted the previous ready snapshot instead of forcing a connection refresh")
-  put(0x29, info(2)); assert(audioRead(state, false, 0.1) == nil)
-  assert(audioRead(state, false, 0.2) == nil)
+  put(0x29, info(2)); assert(audioRead(state, false, 0.8) == nil)
+  assert(audioRead(state, false, 0.9) == nil)
   put(0x2B, field(1, "Max Power", { "100", "1000" }, 1, "mW"))
-  assert(audioRead(state, false, 0.3) == nil)
-  assert(audioRead(state, false, 0.4) == nil)
+  assert(audioRead(state, false, 1.0) == nil)
+  assert(audioRead(state, false, 1.1) == nil)
   put(0x2B, field(2, "Dynamic", { "Off", "Dyn" }, 0))
-  local result = audioRead(state, false, 0.5)
+  local result = audioRead(state, false, 1.2)
   assert(result and result.done and result.maxMilliwatts == 1000 and result.dynamic == false,
     "audio did not complete the forced refresh with an explicit Off result")
 
   local function startAudioRead(target, at)
     assert(audioRead(target, false, at) == nil)
+    assert(audioRead(target, false, at + 0.6) == nil)
+    assert(audioRead(target, false, at + 0.7) == nil)
     assert(Config.snapshot(Config.currentIdentity()).status == "reading")
   end
   local function handoffAfterAbort(crsfTransport, at)
@@ -117,36 +121,49 @@ do
   end
 
   local armedState = {}
-  startAudioRead(armedState, 1)
-  assert(audioRead(armedState, true, 1.1) == nil)
-  handoffAfterAbort(crsf, 1.1)
+  startAudioRead(armedState, 2)
+  assert(audioRead(armedState, true, 2.8) == nil)
+  handoffAfterAbort(crsf, 2.8)
 
   local resetState = {}
-  startAudioRead(resetState, 2)
+  startAudioRead(resetState, 4)
   Audio.resetConnectionState(resetState)
   assert(resetState.txPowerRequested == nil)
-  handoffAfterAbort(crsf, 2.1)
+  handoffAfterAbort(crsf, 4.8)
 
   local disabledState = {}
-  startAudioRead(disabledState, 3)
+  startAudioRead(disabledState, 6)
   Audio.process({
     audioState = disabledState, state = { zoneH = 320 },
     preferences = { audio_events = { tpwr_alert = false } },
   })
   assert(disabledState.txPowerRequested == nil, "disabling the alert retained the audio owner")
-  handoffAfterAbort(crsf, 3.1)
+  handoffAfterAbort(crsf, 6.8)
 
   local chainState = {}
-  startAudioRead(chainState, 4)
+  startAudioRead(chainState, 8)
   _G.rfsuite.modules = {
     ["/SCRIPTS/TOOLS/rfsuite-core/tasks/events/runtime.lua"] = {
       getOnconnectProgress = function() return { total = 1, done = 0 } end,
     },
   }
-  assert(audioRead(chainState, false, 4.1) == nil and chainState.txPowerRequested == nil,
+  assert(audioRead(chainState, false, 8.8) == nil and chainState.txPowerRequested == nil,
     "connect-chain priority retained the audio owner")
   _G.rfsuite.modules = nil
-  handoffAfterAbort(crsf, 4.1)
+  handoffAfterAbort(crsf, 8.8)
+
+  local primary, secondary = {}, {}
+  startAudioRead(primary, 10)
+  assert(audioRead(secondary, false, 10.8) == nil and secondary.txPowerOwner ~= primary.txPowerOwner)
+  secondary.txPowerRequested = "integration-model"
+  Audio.process({
+    audioState = secondary, state = { zoneH = 320 },
+    preferences = { audio_events = { tpwr_alert = false } },
+  })
+  assert(Config.snapshot(Config.currentIdentity()).status == "reading",
+    "disabling one audio state cancelled another state's reader")
+  audioRead(primary, true, 10.9)
+  handoffAfterAbort(crsf, 10.9)
 end
 do
   local Power = assert(loadfile(root .. "/src/rfsuite/lib/elrs_power.lua"))()
@@ -156,17 +173,23 @@ do
   assert(Power.FRAME_BUDGET == Config.limits.sends)
 end
 do
-  local identity = Config.currentIdentity(); local crsf, push, _, sent = transport()
+  local identity = Config.currentIdentity(); local crsf, push, put, sent = transport()
   assert(Config.request(identity, { owner = "test" }))
   Config.step({ owner = "test", identity = identity, crsf = crsf, push = push, now = 0 })
   assert(#sent == 0, "a completed snapshot must be reused without traffic")
   assert(Config.request(identity, { owner = "test", force = true }))
+  put(0x29, info(2))
+  put(0x2B, field(1, "Packet Rate", { "stale" }, 0))
   local refreshing = Config.step({ owner = "test", identity = identity, crsf = crsf, push = push, now = 0 })
   assert(refreshing.status == "reading" and refreshing.previous and refreshing.previous.status == "ready")
-  assert(#sent == 1 and sent[1][1] == 0x28, "a connection-entry refresh must start a fresh read")
+  assert(#sent == 0, "a forced refresh accepted a copied reply before draining its RX queue")
   local before = #sent
-  local foreign = Config.step({ owner = "intruder", identity = identity, crsf = crsf, push = push, now = 1, allow = false })
+  local foreign = Config.step({ owner = "intruder", identity = identity, crsf = crsf, push = push, now = 0.1, allow = false })
   assert(foreign.status == "reading" and #sent == before, "a foreign owner changed the active transaction")
+  Config.step({ owner = "test", identity = identity, crsf = crsf, push = push, now = 0.6 })
+  assert(#sent == 0, "the final drain pass also sent discovery")
+  Config.step({ owner = "test", identity = identity, crsf = crsf, push = push, now = 0.7 })
+  assert(#sent == 1 and sent[1][1] == 0x28, "a connection-entry refresh did not start fresh discovery")
   Config.cancel("test", "test")
 end
 do
