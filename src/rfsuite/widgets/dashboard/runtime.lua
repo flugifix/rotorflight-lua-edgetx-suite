@@ -71,7 +71,7 @@ local function elrsModules(self)
 end
 local function cancelStandbyElrs(self, reason)
   local config = self._standbyElrsConfig
-  if self._standbyActive and config and type(config.cancel) == "function" then
+  if self._standbyElrsActive and config and type(config.cancel) == "function" then
     config.cancel(self._standbyElrsOwner, reason)
     if self._standbyCache and self._standbyElrsIdentity and type(config.snapshot) == "function" then
       local Standby = standbyModule(self)
@@ -79,6 +79,7 @@ local function cancelStandbyElrs(self, reason)
       Standby.setElrsSnapshot(self._standbyCache, config.snapshot(self._standbyElrsIdentity), now)
     end
   end
+  self._standbyElrsActive = false
   self._standbyActive = false
 end
 local function releaseStandby(self, reason)
@@ -95,8 +96,10 @@ local function releaseStandby(self, reason)
   self._standbyModule = nil
   self._standbyCache = nil
   self._standbyItems = nil
+  self._standbyLayout = nil
   self._standbyTexts = nil
   self._standbySnapshotTexts = nil
+  self._standbyTextI18n = nil
   self._standbyFullscreen = nil
   self._standbyElrsIdentity = nil
   self._standbyElrsIdentityAt = nil
@@ -873,6 +876,10 @@ local function standbyTexts(self, items, infoKind)
     elrs_telemetry_ratio = t("widgets.dashboard.standby.elrs_telemetry_ratio", "Telemetry Ratio"),
     elrs_max_power = t("widgets.dashboard.standby.elrs_max_power", "Max Power"),
     elrs_dynamic = t("widgets.dashboard.standby.elrs_dynamic", "Dynamic"),
+    elrs_rate_short = t("widgets.dashboard.standby.elrs_rate_short", "Rate"),
+    elrs_ratio_short = t("widgets.dashboard.standby.elrs_ratio_short", "TLM"),
+    elrs_power_short = t("widgets.dashboard.standby.elrs_power_short", "Max"),
+    elrs_dynamic_short = t("widgets.dashboard.standby.elrs_dynamic_short", "Dyn"),
     tx_battery_detail = t("widgets.dashboard.standby.tx_battery_detail", "Radio battery"),
     model_detail = t("widgets.dashboard.standby.model_detail", "EdgeTX model"),
     timer1_detail = timerDetail,
@@ -920,29 +927,40 @@ local function standbyTexts(self, items, infoKind)
   return self._standbyTexts
 end
 
+local function invalidateStandbyTextState(self)
+  self._standbyTexts, self._standbySnapshotTexts, self._standbyTextI18n = nil, nil, nil
+  local cache = self._standbyCache
+  if cache then
+    cache.text, cache.gpsDetailItems = nil, nil
+    cache.snapshotValues, cache.snapshotAt, cache.snapshotGpsDetails = nil, nil, nil
+    cache.elrsCompact = nil
+  end
+end
+
 local function prepareStandbyTextCache(self, items)
   self._standbyCache = self._standbyCache or {}
+  if self._standbyTextI18n ~= self.i18n then
+    invalidateStandbyTextState(self)
+    self._standbyTextI18n = self.i18n
+  end
   if self._standbySnapshotTexts == nil then
     local t = (self.i18n and self.i18n.t) or function(_, fallback) return fallback end
-    local selected, texts, wantsGpsDetails = {}, {}, false
+    local selected, texts = {}, {}
     for i = 1, #(items or {}) do
       local item = items[i]
       selected[item.type] = true
-      if item.type == "tx_gps" and item.size ~= "small" then wantsGpsDetails = true end
     end
     if selected.tx_gps then
       texts.gps_fix = t("widgets.dashboard.standby.gps_fix", "Fix")
       texts.gps_no_fix = t("widgets.dashboard.standby.gps_no_fix", "No fix")
       texts.gps_satellites = t("widgets.dashboard.standby.gps_satellites", "Sat")
       texts.gps_time_unavailable = t("widgets.dashboard.standby.gps_time_unavailable", "Time status unknown")
-      if wantsGpsDetails then
-        texts.gps_latitude = t("widgets.dashboard.standby.gps_latitude", "Latitude")
-        texts.gps_longitude = t("widgets.dashboard.standby.gps_longitude", "Longitude")
-        texts.gps_altitude = t("widgets.dashboard.standby.gps_altitude", "Altitude")
-        texts.gps_speed = t("widgets.dashboard.standby.gps_speed", "Speed")
-        texts.gps_course = t("widgets.dashboard.standby.gps_course", "Course")
-        texts.gps_hdop = t("widgets.dashboard.standby.gps_hdop", "HDOP")
-      end
+      texts.gps_latitude = t("widgets.dashboard.standby.gps_latitude", "Latitude")
+      texts.gps_longitude = t("widgets.dashboard.standby.gps_longitude", "Longitude")
+      texts.gps_altitude = t("widgets.dashboard.standby.gps_altitude", "Altitude")
+      texts.gps_speed = t("widgets.dashboard.standby.gps_speed", "Speed")
+      texts.gps_course = t("widgets.dashboard.standby.gps_course", "Course")
+      texts.gps_hdop = t("widgets.dashboard.standby.gps_hdop", "HDOP")
     end
     if selected.elrs then
       texts.elrs_reading = t("widgets.dashboard.standby.elrs_reading", "Reading")
@@ -952,6 +970,10 @@ local function prepareStandbyTextCache(self, items)
       texts.elrs_telemetry_ratio = t("widgets.dashboard.standby.elrs_telemetry_ratio", "Telemetry Ratio")
       texts.elrs_max_power = t("widgets.dashboard.standby.elrs_max_power", "Max Power")
       texts.elrs_dynamic = t("widgets.dashboard.standby.elrs_dynamic", "Dynamic")
+      texts.elrs_rate_short = t("widgets.dashboard.standby.elrs_rate_short", "Rate")
+      texts.elrs_ratio_short = t("widgets.dashboard.standby.elrs_ratio_short", "TLM")
+      texts.elrs_power_short = t("widgets.dashboard.standby.elrs_power_short", "Max")
+      texts.elrs_dynamic_short = t("widgets.dashboard.standby.elrs_dynamic_short", "Dyn")
     end
     self._standbySnapshotTexts = texts
   end
@@ -963,12 +985,70 @@ local function prepareStandbyTextCache(self, items)
 end
 
 local function standbyJobStep(self)
+  local job = self._job
+  local dashboard = (self.preferences and self.preferences.dashboard) or EMPTY_DASHBOARD
+  if dashboard.standby_enabled ~= true or self._toolHost ~= nil or self.connectionReady == true
+      or self.flightMode == "postflight" or self.flightMode == "offline"
+      or (self.state and (self.state.armed == true or self.state.hadInflightFlight == true)) then
+    if self._standbyCache and job.previousElrsWidths then
+      self._standbyCache.elrsWidths = job.previousElrsWidths
+    end
+    self.built, self.renderKey = false, nil
+    return true
+  end
+  local moduleWasLoaded = self._standbyModule ~= nil
   local DashboardStandby = standbyModule(self)
   self._standbyCache = self._standbyCache or {}
-  local items = self._standbyItems
-  if not items then
-    local dashboard = (self.preferences and self.preferences.dashboard) or {}
-    items = DashboardStandby.decode(dashboard[DashboardStandby.KEY_LAYOUT])
+  if job.children then
+    if job.zoneW ~= self.zone.w or job.zoneH ~= self.zone.h
+        or job.layout ~= dashboard.standby_layout or job.i18n ~= self.i18n
+        or job.statusLine ~= self.statusLine
+        or job.infoKind ~= (self.state and self.state.standbyInfoKind or nil)
+        or dashboard.standby_enabled ~= true or self._toolHost ~= nil
+        or job.flightMode ~= self.flightMode or job.connectionReady ~= self.connectionReady
+        or job.armed ~= (self.state and self.state.armed == true)
+        or job.hadInflight ~= (self.state and self.state.hadInflightFlight == true)
+        or job.fblConnected ~= (self.state and self.state.fblConnected == true) then
+      self._standbyCache.elrsWidths = job.previousElrsWidths or {}
+      self.built, self.renderKey = false, nil
+      return true
+    end
+    local children = job.children
+    if self._standbyFullscreen == true then
+      local Controls = requireModule("widgets/dashboard/fullscreen_controls.lua")
+      if type(Controls) == "table" and type(Controls.appendTool) == "function" then
+        Controls.appendTool(children, self)
+      end
+    end
+    self._treeKind, self._treeKey = nil, nil
+    lvgl.clear()
+    lvgl.build(children)
+    self._standbyCache.elrsWidths = job.elrsWidths
+    self._standbyCache.elrsActiveWidths = job.elrsWidths
+    self.built = true
+    self._lastChildCount = #children
+    return true
+  end
+  local encodedLayout = dashboard[DashboardStandby.KEY_LAYOUT]
+  local items, itemsChanged = self._standbyItems, false
+  if items == nil or self._standbyLayout ~= encodedLayout then
+    items = DashboardStandby.decode(encodedLayout)
+    self._standbyItems, self._standbyLayout = items, encodedLayout
+    invalidateStandbyTextState(self)
+    self._standbyCache.elrsWidths = self._standbyCache.elrsActiveWidths
+    self._standbyCache.batteryWidths, self._standbyCache.batteryFills = nil, nil
+    itemsChanged = true
+  end
+  prepareStandbyTextCache(self, items)
+  local snapshotInputsChanged = job.snapshotZoneW ~= nil
+    and (job.snapshotZoneW ~= self.zone.w or job.snapshotZoneH ~= self.zone.h
+      or job.snapshotLayout ~= encodedLayout or job.snapshotI18n ~= self.i18n)
+  if itemsChanged or not moduleWasLoaded or snapshotInputsChanged
+      or self._standbyCache.snapshotValues == nil then
+    DashboardStandby.snapshot(items, self._standbyCache, self.zone)
+    job.snapshotZoneW, job.snapshotZoneH = self.zone.w, self.zone.h
+    job.snapshotLayout, job.snapshotI18n = encodedLayout, self.i18n
+    return false
   end
   local values = self._standbyCache.snapshotValues or {}
   local infoKind = self.state and self.state.standbyInfoKind or nil
@@ -977,16 +1057,21 @@ local function standbyJobStep(self)
     return texts[key] or fallback
   end
   local info = { text = texts.info_text or "", level = infoKind == "api_unsupported" and "warning" or "info" }
-  local children = DashboardStandby.build(self.zone, self.statusLine, text, items, values, self._standbyCache, info)
-  if self._standbyFullscreen == true then
-    local Controls = requireModule("widgets/dashboard/fullscreen_controls.lua")
-    if type(Controls) == "table" and type(Controls.appendTool) == "function" then Controls.appendTool(children, self) end
-  end
-  lvgl.clear()
-  lvgl.build(children)
-  self.built = true
-  self._lastChildCount = #children
-  return true
+  job.previousElrsWidths = self._standbyCache.elrsActiveWidths or self._standbyCache.elrsWidths
+  local preparingWidths = {}
+  for width in pairs(job.previousElrsWidths or {}) do preparingWidths[width] = true end
+  self._standbyCache.elrsWidths = preparingWidths
+  job.elrsWidths = {}
+  self._standbyCache.elrsBuildWidths = job.elrsWidths
+  job.children = DashboardStandby.build(self.zone, self.statusLine, text, items, values, self._standbyCache, info)
+  self._standbyCache.elrsBuildWidths = nil
+  job.zoneW, job.zoneH, job.layout = self.zone.w, self.zone.h, dashboard.standby_layout
+  job.i18n, job.statusLine, job.infoKind = self.i18n, self.statusLine, infoKind
+  job.flightMode, job.connectionReady = self.flightMode, self.connectionReady
+  job.armed = self.state and self.state.armed == true
+  job.hadInflight = self.state and self.state.hadInflightFlight == true
+  job.fblConnected = self.state and self.state.fblConnected == true
+  return false
 end
 
 -- The zone view a free-form theme's scene build draws instead of the theme, or nil; defined with
@@ -1858,9 +1943,7 @@ local function reloadPreferencesIfNeeded(self, force, isBackground)
       if type(self.state) ~= "table" then self.state = {} end
       self.state.i18n = self.i18n
     end
-    self._standbyTexts = nil
-    self._standbySnapshotTexts = nil
-    if self._standbyCache then self._standbyCache.text = nil end
+    invalidateStandbyTextState(self)
     self.renderKey = nil
   end
 
@@ -4462,7 +4545,7 @@ function Runtime.new(zone, options)
       -- Which surface the tree on screen is, for the hold gate in the state pass: forgotten before
       -- any build step runs, since a step may clear the tree and then raise, and recorded only
       -- once a build has completed. A one-shot job builds nothing and leaves the record alone.
-      if counted then self._treeKind, self._treeKey = nil, nil end
+      if counted and jobKind ~= "standby" then self._treeKind, self._treeKey = nil, nil end
       local stepOk, stepDone = pcall(self._job.step, self)
       if not stepOk then
         self._job   = nil
@@ -4516,7 +4599,7 @@ function Runtime.new(zone, options)
     if MspRuntime and type(MspRuntime.getState) == "function" then
       local runtimeState = MspRuntime.getState()
       standbyFcDetected = type(runtimeState) == "table" and runtimeState.lastConnected == true
-      if self._standbyActive and self._standbyElrsConfig and standbyFcDetected then
+      if self._standbyElrsActive and self._standbyElrsConfig and standbyFcDetected then
         cancelStandbyElrs(self, "fc_startup")
       end
     end
@@ -4535,13 +4618,23 @@ function Runtime.new(zone, options)
     local standbyProbeActive = standbyRenderActive and self.state.fblConnected ~= true and not standbyFcDetected
     if standbyRenderActive then
       self._standbyFullscreen = event ~= nil
-      local Standby = standbyModule(self)
-      local standbyItems = Standby.decode(dashboardPrefs.standby_layout)
-      self._standbyItems = standbyItems
-      prepareStandbyTextCache(self, standbyItems)
-      local wantsElrs = false
-      for i = 1, #standbyItems do if standbyItems[i].type == "elrs" then wantsElrs = true; break end end
-      if wantsElrs and standbyProbeActive then
+      if self._standbyModule then
+        local Standby = self._standbyModule
+        local encodedLayout = dashboardPrefs.standby_layout
+        local standbyItems = self._standbyItems
+        if standbyItems == nil or self._standbyLayout ~= encodedLayout then
+          standbyItems = Standby.decode(encodedLayout)
+          self._standbyItems, self._standbyLayout = standbyItems, encodedLayout
+          invalidateStandbyTextState(self)
+          if self._standbyCache then
+            self._standbyCache.elrsWidths = self._standbyCache.elrsActiveWidths
+            self._standbyCache.batteryWidths, self._standbyCache.batteryFills = nil, nil
+          end
+        end
+        prepareStandbyTextCache(self, standbyItems)
+        local wantsElrs = false
+        for i = 1, #standbyItems do if standbyItems[i].type == "elrs" then wantsElrs = true; break end end
+        if wantsElrs and standbyProbeActive then
         local Config, CrsfModule = elrsModules(self)
         if Config then
           local identityNow = type(getTime) == "function" and getTime() or 0
@@ -4551,16 +4644,18 @@ function Runtime.new(zone, options)
             if self._standbyElrsIdentity ~= identity then Config.invalidate(identity); self._standbyElrsIdentity = identity end
           end
           local identity = self._standbyElrsIdentity
-          Config.request(identity, { owner = self._standbyElrsOwner, force = self._standbyActive ~= true })
+          Config.request(identity, { owner = self._standbyElrsOwner, force = self._standbyElrsActive ~= true })
+          self._standbyElrsActive = true
           local snapshot = Config.step({ owner = self._standbyElrsOwner, identity = identity, crsf = CrsfModule,
             push = crossfireTelemetryPush, now = nowSeconds(), allow = true })
           self._standbyCache = self._standbyCache or {}
           Standby.setElrsSnapshot(self._standbyCache, snapshot, nowSeconds())
         end
-      elseif self._standbyActive and self._standbyElrsConfig then
-        cancelStandbyElrs(self, "fc_startup")
+        elseif self._standbyElrsActive and self._standbyElrsConfig then
+          cancelStandbyElrs(self, "fc_startup")
+        end
+        Standby.snapshot(standbyItems, self._standbyCache, self.zone)
       end
-      Standby.snapshot(standbyItems, self._standbyCache)
     elseif self._standbyModule then
       releaseStandby(self, "standby_left")
     end
@@ -4574,10 +4669,7 @@ function Runtime.new(zone, options)
       local fullscreenSplash = event ~= nil
       local useStandby = standbyRenderActive
       if useStandby then
-        local DashboardStandby = standbyModule(self)
-        local items = self._standbyItems or DashboardStandby.decode(dashboardPrefs[DashboardStandby.KEY_LAYOUT])
         self._standbyCache = self._standbyCache or {}
-        DashboardStandby.snapshot(items, self._standbyCache)
       end
       local splashKey = (useStandby and "standby|" or "splash|") .. tostring(statusLine) .. "|info="
         .. tostring(self.state.standbyInfoKind) .. "|" .. tostring(self.state.zoneW) .. "x" .. tostring(self.state.zoneH)

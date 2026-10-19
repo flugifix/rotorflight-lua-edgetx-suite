@@ -944,8 +944,8 @@ local function openToolPage(theme, menuId, pagePath, pad, counted, fault)
   for _, condition in ipairs(TOOL_CONDITIONS) do state.menu.setCondition(condition, true) end
   if pagePath == "settings/dashboard/standby/page.lua" then
     state.preferences.dashboard = state.preferences.dashboard or {}
-    state.preferences.dashboard.standby_layout = "elrs:full,elrs:full,elrs:full,elrs:full,"
-      .. "elrs:full,elrs:full,elrs:full,elrs:full"
+    state.preferences.dashboard.standby_layout = "clock+date+tx_battery+model/"
+      .. "timer1+timer2+timer3+uptime/tx_battery+model+timer1+timer2"
   end
 
   local function settled(want)
@@ -1187,25 +1187,27 @@ addRow("pass.swap", base.worst.swap or 0)
 -- zero that reads as free.
 addRow("pass.splash", base.startupWorst.splash or base.worst.splash or 0)
 do
-  local largest = runStandbyScenario("elrs:full,clock:small,date:small,tx_battery:small,model:small,"
-    .. "timer1:small,timer2:small,timer3:small", nil, true, 8)
-  local composite = runStandbyScenario("elrs:wide,elrs:wide,elrs:wide,elrs:wide,"
-    .. "timer1:small,timer2:small,timer3:small,timer1:small", nil, true, 8)
-  local gps = runStandbyScenario("clock:small,date:small,tx_gps:wide", {
+  local largest = runStandbyScenario("clock+date+tx_battery+model/"
+    .. "timer1+timer2+timer3+uptime/tx_battery+model+timer1+timer2", nil, true, 12)
+  local composite = runStandbyScenario("elrs+elrs/elrs+elrs/elrs+elrs", nil, true, 6)
+  local gps = runStandbyScenario("clock+date+tx_battery+model/"
+    .. "timer1+timer2+timer3+uptime/tx_gps", {
     fix = true, numsat = 12, lat = 52.12345, lon = 13.54321,
     alt = 1234, speed = 56, heading = 2712, hdop = 85,
-  }, false, 3)
-  local elrsNoReply = runStandbyScenario("elrs:full", nil, false)
-  local elrsReady = runStandbyScenario("elrs:full", nil, true)
-  local batteries = runStandbyScenario("tx_battery:small,tx_battery:small,tx_battery:small,tx_battery:small,"
-    .. "tx_battery:small,tx_battery:small,tx_battery:small,tx_battery:small", nil, false, 8)
+  }, false, 9)
+  local elrsNoReply = runStandbyScenario("elrs", nil, false, 1)
+  local elrsReady = runStandbyScenario("elrs", nil, true, 1)
+  local batteries = runStandbyScenario("tx_battery+tx_battery+tx_battery+tx_battery/"
+    .. "tx_battery+tx_battery+tx_battery+tx_battery/"
+    .. "tx_battery+tx_battery+tx_battery+tx_battery", nil, false, 12)
   local runs = { largest, composite, gps, elrsNoReply, elrsReady, batteries }
   local build, state, sweep, refs = 0, 0, 0, 0
   for i = 1, #runs do
     build = math.max(build, runs[i].worst.standby or 0); state = math.max(state, runs[i].worst.state or 0)
     sweep = math.max(sweep, runs[i].sweep); refs = math.max(refs, runs[i].refs)
   end
-  addRow("pass.standby.build", build, "eight-item simple and composite layouts, GPS, ELRS ready and no-response states")
+  addRow("pass.standby.build", build,
+    "12-field simple and repeated layouts, six ELRS fields, detailed GPS, ELRS ready and no-response states")
   addRow("pass.standby.state", state, "cached no-FC snapshot and provider step")
   addRow("sweep.standby", sweep, refs .. " reactive references")
 end

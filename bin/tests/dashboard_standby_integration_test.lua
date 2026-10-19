@@ -24,268 +24,174 @@ local function install()
   FC.reset()
 end
 
--- Exercise the actual settings page and its controls. An invalid draft must stop before the
--- writer; a failed writer must leave the live preferences exactly as they were.
+-- Exercise the actual rows-first settings page. Draft removal, salvage, geometry-derived
+-- controls, and writer rollback all pass through the production control callbacks.
 install()
 Stubs.installTool()
 do
   local Page = assert(loadfile(root .. "/src/rfsuite/app/pages/settings/dashboard/standby/page.lua"))()
-  local writes, reports, saveSucceeds = 0, {}, true
-  local ctx = {
-    preferences = { dashboard = { standby_enabled = false, standby_layout = "clock:small,model:full" } },
-    i18n = {}, children = {}, x = 0, y = 0, w = 600,
-    requestRebuild = function() end,
-    reportSave = function(report) reports[#reports + 1] = report end,
-    savePreferences = function() writes = writes + 1; return saveSucceeds, saveSucceeds and nil or "control" end,
-  }
-  Page.onReload(ctx)
-  ctx.children = {}
-  Page.build(ctx)
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "button" and node.text == "Move down" then node.press(); break end
-  end
-  Page.onSave(ctx)
-  check("valid edited layout saves while standby remains off", writes == 1
-    and ctx.preferences.dashboard.standby_enabled == false
-    and ctx.preferences.dashboard.standby_layout == "model:full,clock:small")
-
-  ctx.preferences.dashboard.standby_layout = "clock:small,model:full"
-  Page.onReload(ctx)
-  ctx.children = {}
-  Page.build(ctx)
-  for removed = 1, 2 do
-    for i = 1, #ctx.children do
-      local node = ctx.children[i]
-      if node.type == "button" and node.text == "Remove" then node.press(); break end
-    end
-    ctx.children = {}
-    Page.build(ctx)
-  end
-  Page.onSave(ctx)
-  check("disabled invalid draft saves the off state", writes == 2
-    and ctx.preferences.dashboard.standby_enabled == false)
-  check("disabled invalid draft preserves the prior saved layout",
-    ctx.preferences.dashboard.standby_layout == "clock:small,model:full")
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "toggle" then node.set(true); break end
-  end
-  Page.onSave(ctx)
-  check("enabled invalid draft refuses the preference writer", writes == 2)
-  check("enabled invalid draft preserves the prior saved layout",
-    ctx.preferences.dashboard.standby_layout == "clock:small,model:full")
-
-  ctx.preferences.dashboard.standby_enabled = false
-  ctx.preferences.dashboard.standby_layout = "clock:small,model:full"
-  Page.onReload(ctx)
-  saveSucceeds = false
-  ctx.children = {}
-  Page.build(ctx)
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "toggle" then node.set(true); break end
-  end
-  Page.onSave(ctx)
-  check("failed save calls writer once for this attempt", writes == 3)
-  check("failed save restores enabled preference", ctx.preferences.dashboard.standby_enabled == false)
-  check("failed save restores layout preference",
-    ctx.preferences.dashboard.standby_layout == "clock:small,model:full")
-
-  ctx.children = {}
-  Page.build(ctx)
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "button" and node.text == "Move down" then node.press(); break end
-  end
-  saveSucceeds = true
-  Page.onSave(ctx)
-  check("successful toggle survives save", ctx.preferences.dashboard.standby_enabled == true)
-  check("move preserves item size association",
-    ctx.preferences.dashboard.standby_layout == "model:full,clock:small")
-  Page.onReload(ctx)
-  ctx.children = {}
-  Page.build(ctx)
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "button" and node.text == "Remove" then node.press(); break end
-  end
-  Page.onSave(ctx)
-  check("remove keeps the remaining item and size",
-    ctx.preferences.dashboard.standby_layout == "clock:small")
-  Page.onReload(ctx)
-  ctx.children = {}
-  Page.build(ctx)
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "toggle" then
-      check("saved enable value reads back through actual control", node.get() == true)
-      break
-    end
-  end
-
-  ctx.preferences.dashboard.standby_layout = "-"
-  Page.onReload(ctx)
-  ctx.children = {}
-  Page.build(ctx)
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "choice" and node.title == "Position 1" then
-      for option = 1, #node.values do
-        if node.values[option] == "ELRS TX configuration" then node.set(option); break end
-      end
-      break
-    end
-  end
-  ctx.children = {}
-  Page.build(ctx)
-  local elrsSize
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "choice" and node.title == "Size" then elrsSize = node.get(); break end
-  end
-  check("selecting ELRS chooses a supported wide size", elrsSize == 2)
-  Page.onSave(ctx)
-  check("fresh ELRS selection saves without an invalid intermediate size",
-    ctx.preferences.dashboard.standby_layout == "elrs:wide")
-
-  ctx.preferences.dashboard.standby_layout = "-"
-  Page.onReload(ctx)
-  ctx.children = {}
-  Page.build(ctx)
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "choice" and node.title == "Position 1" then node.set(2); break end
-  end
-  ctx.children = {}
-  Page.build(ctx)
-  local ordinarySize
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "choice" and node.title == "Size" then ordinarySize = node.get(); break end
-  end
-  check("ordinary new item keeps the supported small size", ordinarySize == 1)
-  Page.onSave(ctx)
-  check("ordinary new item saves at small size", ctx.preferences.dashboard.standby_layout == "clock:small")
-
-  local savedLcdW, savedLcdH = LCD_W, LCD_H
-  local savedSizeText = lcd.sizeText
+  local sessionW, sessionH = LCD_W, LCD_H
   LCD_W, LCD_H = 480, 320
-  lcd.sizeText = function(text, font)
-    return #tostring(text) * (font == MIDSIZE and 12 or 8), font == MIDSIZE and 24 or 18
-  end
-  ctx.preferences.dashboard.standby_layout = "tx_gps:small"
-  Page.onReload(ctx)
-  local function choose(position, label)
+  local writes, reports, rebuilds, saveSucceeds = 0, {}, 0, true
+  local ctx = {
+    preferences = { dashboard = {
+      standby_enabled = false,
+      standby_layout = "clock+tx_battery/elrs",
+    } },
+    i18n = {}, children = {}, x = 0, y = 0, w = 600,
+    requestRebuild = function() rebuilds = rebuilds + 1 end,
+    reportSave = function(report) reports[#reports + 1] = report end,
+    savePreferences = function()
+      writes = writes + 1
+      return saveSucceeds, saveSucceeds and nil or "control"
+    end,
+  }
+  local function build()
     ctx.children = {}
     Page.build(ctx)
+    return ctx.children
+  end
+  local function press(label, occurrence)
+    occurrence = occurrence or 1
+    local seen = 0
     for i = 1, #ctx.children do
       local node = ctx.children[i]
-      if node.type == "choice" and node.title == "Position " .. position then
-        for option = 1, #node.values do
-          if node.values[option] == label then node.set(option); return true end
-        end
+      if node.type == "button" and node.text == label then
+        seen = seen + 1
+        if seen == occurrence then node.press(); return true end
       end
     end
     return false
   end
-  check("ordinary clock can be added after saved GPS", choose(2, "Clock"))
-  check("ordinary battery can be added after GPS and clock", choose(3, "TX battery"))
-  Page.onSave(ctx)
-  check("GPS clock battery layout saves on 480x320 with conservative font heights",
-    ctx.preferences.dashboard.standby_layout == "tx_gps:small,clock:small,tx_battery:small")
+  local function hasLabel(value)
+    for i = 1, #ctx.children do
+      if ctx.children[i].type == "label" and ctx.children[i].text == value then return true end
+    end
+    return false
+  end
+  local function countControls(kind, title)
+    local count = 0
+    for i = 1, #ctx.children do
+      local node = ctx.children[i]
+      if node.type == kind and (title == nil or node.title == title) then count = count + 1 end
+    end
+    return count
+  end
 
-  local writesBeforeOverflow = writes
-  ctx.preferences.dashboard.standby_layout = "clock:full,date:full,tx_battery:full,model:full"
   Page.onReload(ctx)
-  Page.onSave(ctx)
-  check("genuine 480x320 overcapacity still refuses the writer", writes == writesBeforeOverflow)
-  check("genuine overcapacity remains the active unsaved draft",
-    ctx.preferences.dashboard.standby_layout == "clock:full,date:full,tx_battery:full,model:full")
+  build()
+  check("editor reconstructs two saved rows", hasLabel("Row 1") and hasLabel("Row 2"))
+  check("editor exposes three filled fields", countControls("choice") == 3)
+  check("editor has no size selectors", countControls("choice", "Size") == 0)
+  check("editor has no move controls", not press("Move up") and not press("Move down"))
+  check("two-row compact screen does not offer another row", not press("+ Row"))
+  check("ELRS placeholder decision is visibly marked",
+    hasLabel("Temporary no-module text: Unavailable."))
 
-  -- The page must map the validator's compact selected-item index back to the visible slot.
-  -- Leave slot 2 empty, then make ELRS in slot 3 invalid at Small: selected index 2 is slot 3.
-  local de = assert(loadfile(root .. "/src/rfsuite/i18n/de.lua"))()
-  local function translated(key)
-    local value = de
-    for part in string.gmatch(key, "[^.]+") do
-      value = type(value) == "table" and value[part] or nil
-      if value == nil then return key end
-    end
-    return value
-  end
-  ctx.i18n = { t = translated }
-  local pageText = de.app.pages.settings_dashboard_standby
-  ctx.preferences.dashboard.standby_layout = "clock:full,tx_battery:full,model:full"
-  Page.onReload(ctx)
-  ctx.children = {}
-  Page.build(ctx)
-  local expectedHeightFit = string.format(pageText.fit_item_height, 3, pageText.module_model)
-  local heightWarning
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "label" and node.text == expectedHeightFit then heightWarning = i; break end
-  end
-  check("third full row identifies selected item 3 as the height overflow", heightWarning ~= nil)
-  local writesBeforeHeightSave, reportsBeforeHeightSave = writes, #reports
+  check("second row can add a fitting equal-share field", press("+ Field", 1))
+  build()
+  check("field addition creates no empty gap", countControls("choice") == 4)
   Page.onSave(ctx)
-  check("height-overflow save refuses the writer", writes == writesBeforeHeightSave)
-  check("height-overflow save message equals its inline warning",
-    #reports == reportsBeforeHeightSave + 1 and reports[#reports].message == expectedHeightFit)
+  check("valid rows-first edit saves while feature remains off", writes == 1
+    and ctx.preferences.dashboard.standby_enabled == false
+    and ctx.preferences.dashboard.standby_layout == "clock+tx_battery/elrs+clock")
 
-  ctx.preferences.dashboard.standby_layout = "clock:small"
   Page.onReload(ctx)
-  ctx.children = {}
-  Page.build(ctx)
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "choice" and node.title == string.format(pageText.position, 3) then
-      for option = 1, #node.values do
-        if node.values[option] == pageText.module_elrs then node.set(option); break end
-      end
-      break
-    end
-  end
-  ctx.children = {}
-  Page.build(ctx)
-  local sizeSeen = 0
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "choice" and node.title == pageText.size then
-      sizeSeen = sizeSeen + 1
-      if sizeSeen == 2 then node.set(1); break end
-    end
-  end
-  ctx.children = {}
-  Page.build(ctx)
-  local expectedFit = string.format(pageText.fit_item_size, 3, pageText.module_elrs)
-  local sizeIndex, warningIndex, nextPositionIndex
-  sizeSeen = 0
-  for i = 1, #ctx.children do
-    local node = ctx.children[i]
-    if node.type == "choice" and node.title == pageText.size then
-      sizeSeen = sizeSeen + 1
-      if sizeSeen == 2 then sizeIndex = i end
-    elseif node.type == "label" and node.text == expectedFit then
-      warningIndex = i
-      check("offending slot warning uses warning color and small font",
-        node.color == COLOR_THEME_WARNING and node.font == SMLSIZE)
-    elseif node.type == "choice" and node.title == string.format(pageText.position, 4) then
-      nextPositionIndex = i
-    end
-  end
-  check("selected-item index maps to visible slot 3 with localized tile name", warningIndex ~= nil)
-  check("inline warning follows offending size and precedes the next position",
-    sizeIndex ~= nil and warningIndex > sizeIndex and nextPositionIndex ~= nil and warningIndex < nextPositionIndex)
-  local writesBeforeInlineSave, reportsBeforeInlineSave = writes, #reports
+  build()
+  check("field removal is available on the populated second row", press("Remove field", 4))
+  build()
   Page.onSave(ctx)
-  check("inline-invalid save refuses the writer", writes == writesBeforeInlineSave)
-  check("save refusal exactly matches the inline warning",
-    #reports == reportsBeforeInlineSave + 1 and reports[#reports].message == expectedFit)
-  ctx.i18n = {}
+  check("field removal compacts the row", writes == 2
+    and ctx.preferences.dashboard.standby_layout == "clock+tx_battery/elrs")
+
+  Page.onReload(ctx)
+  build()
+  check("first saved row can be removed", press("Remove row", 1))
+  build()
+  check("remaining row is renumbered without a stored gap", hasLabel("Row 1") and not hasLabel("Row 2"))
+  check("last row can be removed", press("Remove row", 1))
+  build()
+  Page.onSave(ctx)
+  check("disabled empty draft saves the off state", writes == 3
+    and ctx.preferences.dashboard.standby_enabled == false)
+  check("disabled empty draft preserves the prior layout",
+    ctx.preferences.dashboard.standby_layout == "clock+tx_battery/elrs")
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "toggle" then node.set(true); break end
+  end
+  Page.onSave(ctx)
+  check("enabled empty draft refuses the writer", writes == 3)
+  check("enabled empty draft reports the validation error", reports[#reports]
+    and reports[#reports].title == "Layout not saved")
+
+  ctx.preferences.dashboard.standby_enabled = false
+  ctx.preferences.dashboard.standby_layout = "clock+tx_battery/elrs"
+  Page.onReload(ctx)
+  build()
+  saveSucceeds = false
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "toggle" then node.set(true); break end
+  end
+  Page.onSave(ctx)
+  check("failed writer is called once", writes == 4)
+  check("failed writer restores enabled and layout preferences",
+    ctx.preferences.dashboard.standby_enabled == false
+      and ctx.preferences.dashboard.standby_layout == "clock+tx_battery/elrs")
+
+  saveSucceeds = true
+  ctx.preferences.dashboard.standby_layout = "clock+unsupported+tx_battery//elrs"
+  Page.onReload(ctx)
+  build()
+  check("salvaged saved tokens are visibly reported",
+    hasLabel("Unsupported saved entries were skipped."))
+  Page.onSave(ctx)
+  check("salvaged valid tokens normalize on the next save", writes == 5
+    and ctx.preferences.dashboard.standby_layout == "clock+tx_battery/elrs")
+
+  local savedW, savedH, savedSizeText = LCD_W, LCD_H, lcd.sizeText
+  LCD_W, LCD_H = 320, 480
+  lcd.sizeText = function(value, font)
+    return #tostring(value) * (font == MIDSIZE and 12 or font == DBLSIZE and 20 or 8),
+      font == MIDSIZE and 24 or font == DBLSIZE and 38 or 18
+  end
+  ctx.preferences.dashboard.standby_layout = "clock+tx_battery/elrs"
+  Page.onReload(ctx)
+  build()
+  local firstChoice = nil
+  for i = 1, #ctx.children do
+    if ctx.children[i].type == "choice" then firstChoice = ctx.children[i]; break end
+  end
+  local hasBattery, hasElrs = false, false
+  for i = 1, #(firstChoice and firstChoice.values or {}) do
+    hasBattery = hasBattery or firstChoice.values[i] == "TX battery"
+    hasElrs = hasElrs or firstChoice.values[i] == "ELRS TX configuration"
+  end
+  check("portrait two-field catalogue keeps values that fit at the selected font", hasBattery)
+  check("portrait two-field catalogue excludes ELRS whose worst case does not fit", not hasElrs)
+
+  LCD_W, LCD_H = 800, 480
   lcd.sizeText = savedSizeText
-  LCD_W, LCD_H = savedLcdW, savedLcdH
+  Page.onReload(ctx)
+  build()
+  check("large-screen placeholder decision is visibly marked",
+    hasLabel("Temporary default: Clock and TX battery above the ELRS row."))
+  check("large geometry offers a third row", press("+ Row"))
+  build()
+  Page.onSave(ctx)
+  check("third row saves in row order", writes == 6
+    and ctx.preferences.dashboard.standby_layout == "clock+tx_battery/elrs/clock")
+  build()
+  check("third-row callback removes that row rather than an earlier row", press("Remove row", 3))
+  Page.onSave(ctx)
+  check("row callback captures its own row number", writes == 7
+    and ctx.preferences.dashboard.standby_layout == "clock+tx_battery/elrs")
+  check("editor callbacks requested rebuilds", rebuilds >= 7)
+
+  LCD_W, LCD_H, lcd.sizeText = savedW, savedH, savedSizeText
   Page.onClose()
+  LCD_W, LCD_H = sessionW, sessionH
 end
 
 -- Timer detail captions use the same item-specific keys populated by the runtime. A generic
@@ -303,7 +209,7 @@ do
   local labels = { timer1_detail = "Localized timer one" }
   local tree = Standby.build({ x = 0, y = 0, w = 800, h = 480 }, "waiting",
     function(key, fallback) return labels[key] or fallback end,
-    Standby.decode("timer1:small"), { timer1 = "00:42" }, cache, { text = "info", level = "info" })
+    Standby.decode("timer1"), { timer1 = "00:42" }, cache, { text = "info", level = "info" })
   local localized = false
   for i = 1, #tree do
     local node = tree[i]
@@ -331,22 +237,20 @@ do
     toolBottom == 21 and firstTileY ~= nil and toolBottom < firstTileY)
 
   for _, size in ipairs({ { 240, 68 }, { 480, 45 } }) do
-    local fitText = "Localized layout fit message"
     local tinyTree = Standby.build({ x = 0, y = 0, w = size[1], h = size[2] }, "waiting",
-      function(key, fallback) if key == "layout_invalid" then return fitText end; return fallback end,
+      function(_, fallback) return fallback end,
       Standby.decode(nil), {}, {}, { text = "info", level = "info" })
-    local bounded, foundFit = #tinyTree == 2, false
+    local bounded = #tinyTree == 3
     for i = 1, #tinyTree do
       local node = tinyTree[i]
-      if node.type == "label" and node.text == fitText then foundFit = true end
       if type(node.x) == "number" and type(node.y) == "number" then
         bounded = bounded and node.x >= 0 and node.y >= 0
           and (type(node.w) ~= "number" or node.x + node.w <= size[1])
           and (type(node.h) ~= "number" or node.y + node.h <= size[2])
       end
     end
-    check("minimum standard EdgeTX zone uses bounded localized fit surface "
-        .. size[1] .. "x" .. size[2], bounded and foundFit)
+    check("minimum standard EdgeTX zone uses bounded prerequisite surface "
+        .. size[1] .. "x" .. size[2], bounded)
   end
 end
 
@@ -393,7 +297,7 @@ do
   local widget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
   widget.preferences.dashboard = widget.preferences.dashboard or {}
   widget.preferences.dashboard.standby_enabled = true
-  widget.preferences.dashboard.standby_layout = "elrs:full"
+  widget.preferences.dashboard.standby_layout = "elrs"
   widget.preferences.audio_events = widget.preferences.audio_events or {}
   widget.preferences.audio_events.tpwr_alert = false
   widget.state.fblConnected = false
@@ -404,14 +308,21 @@ do
   local treesBeforeEntry = #Stubs.lvgl.trees
   Stubs.tick()
   widget:refresh(0, nil)
-  local afterState = calls.request
-  check("eligible fullscreen drives standby provider", afterState > 0 and calls.step > 0)
   check("missing controller selects the general prerequisite summary",
     widget.state.standbyInfoKind == "controller_missing")
   widget:refresh(0, nil)
-  check("standby build pass does not probe provider", calls.request == afterState)
-  check("standby entry builds one scene", #Stubs.lvgl.trees == treesBeforeEntry + 1)
+  check("standby initialization job does not probe provider", calls.request == 0 and calls.step == 0)
+  check("standby initializes without clearing the previous tree",
+    #Stubs.lvgl.trees == treesBeforeEntry and widget._job ~= nil)
   widget:refresh(0, nil)
+  check("standby prepares a large scene without clearing the previous tree",
+    #Stubs.lvgl.trees == treesBeforeEntry and widget._job ~= nil and widget._job.children ~= nil)
+  widget:refresh(0, nil)
+  check("standby entry builds one scene", #Stubs.lvgl.trees == treesBeforeEntry + 1)
+  Stubs.tick()
+  widget:refresh(0, nil)
+  local afterState = calls.request
+  check("eligible fullscreen drives standby provider", afterState > 0 and calls.step > 0)
   check("standby entry does not enqueue a nil-to-false overflow rebuild",
     #Stubs.lvgl.trees == treesBeforeEntry + 1 and widget._job == nil)
   local standbyTree = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}
@@ -437,6 +348,7 @@ do
       alt = 6123, speed = 45, heading = 1274, hdop = 123 }
   end
   local deLocale = assert(loadfile(root .. "/src/rfsuite/i18n/de.lua"))()
+  local enLocale = assert(loadfile(root .. "/src/rfsuite/i18n/en.lua"))()
   local function deText(key, fallback)
     local value = deLocale
     for part in string.gmatch(key, "[^.]+") do
@@ -458,6 +370,7 @@ do
     gpsWidget.state.fblConnected, gpsWidget.state.armed = false, false
     gpsWidget.state.hadInflightFlight, gpsWidget.flightMode = false, "preflight"
     Stubs.tick(); gpsWidget:refresh(nil, nil)
+    gpsWidget:refresh(nil, nil)
     local firstGps = gpsWidget._standbyCache and gpsWidget._standbyCache.snapshotValues
     check(name, gpsReads == before + 1 and firstGps
       and firstGps._gpsTime == gpsText.gps_time_unavailable
@@ -465,22 +378,107 @@ do
       and firstGps._gpsLines[6] == gpsText.gps_hdop .. ": 1.23")
     gpsWidget:background()
   end
-  firstGpsSnapshot("first large GPS snapshot is localized before its build pass", "tx_gps:full")
+  firstGpsSnapshot("first large GPS snapshot is localized before its build pass", "tx_gps")
   firstGpsSnapshot("large then small duplicate keeps first-frame GPS detail localization",
-    "tx_gps:wide,tx_gps:small")
+    "tx_gps/tx_gps+clock")
   firstGpsSnapshot("small then large duplicate keeps first-frame GPS detail localization",
-    "tx_gps:small,tx_gps:wide")
+    "tx_gps+clock/tx_gps")
+  local changingWidget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
+  changingWidget.i18n = { t = deText }
+  changingWidget.preferences.dashboard = changingWidget.preferences.dashboard or {}
+  changingWidget.preferences.dashboard.standby_enabled = true
+  changingWidget.preferences.dashboard.standby_layout = "clock"
+  changingWidget.preferences.audio_events = changingWidget.preferences.audio_events or {}
+  changingWidget.preferences.audio_events.tpwr_alert = false
+  changingWidget.state.fblConnected, changingWidget.state.armed = false, false
+  changingWidget.state.hadInflightFlight, changingWidget.flightMode = false, "preflight"
+  for _ = 1, 4 do Stubs.tick(); changingWidget:refresh(nil, nil) end
+  changingWidget.preferences.dashboard.standby_layout = "tx_gps"
+  for _ = 1, 3 do Stubs.tick(); changingWidget:refresh(nil, nil) end
+  local changedValues = changingWidget._standbyCache and changingWidget._standbyCache.snapshotValues
+  local changedTree = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}
+  local changedCaption = false
+  for i = 1, #changedTree do
+    if changedTree[i].type == "label" and changedTree[i].text == gpsText.module_tx_gps then
+      changedCaption = true; break
+    end
+  end
+  check("active layout change refreshes localized module and detail caches", changedCaption
+    and changedValues and changedValues._gpsLines
+    and changedValues._gpsLines[1] == gpsText.gps_latitude .. ": 48.12345°")
+  changingWidget:background()
+  local coldWidget = Runtime.new({ x = 0, y = 0, w = 300, h = 180 }, {})
+  coldWidget.preferences.dashboard = coldWidget.preferences.dashboard or {}
+  coldWidget.preferences.dashboard.standby_enabled = true
+  coldWidget.preferences.dashboard.standby_layout = "tx_gps"
+  coldWidget.preferences.audio_events = coldWidget.preferences.audio_events or {}
+  coldWidget.preferences.audio_events.tpwr_alert = false
+  coldWidget.state.fblConnected, coldWidget.state.armed = false, false
+  coldWidget.state.hadInflightFlight, coldWidget.flightMode = false, "preflight"
+  Stubs.tick(); coldWidget:refresh(nil, nil)
+  coldWidget.preferences.dashboard.standby_enabled = false
+  coldWidget:refresh(nil, nil)
+  check("disabling standby before cold initialization skips module acquisition",
+    coldWidget._job == nil and coldWidget._standbyModule == nil)
+  coldWidget.preferences.dashboard.standby_enabled = true
+  coldWidget:refresh(nil, nil)
+  coldWidget:refresh(nil, nil)
+  check("cold standby snapshot remains a separate cooperative phase",
+    coldWidget._job ~= nil and coldWidget._job.children == nil
+      and coldWidget._standbyCache.snapshotValues ~= nil)
+  coldWidget.zone = { x = 0, y = 0, w = 800, h = 480 }
+  coldWidget.i18n = { t = deText }
+  coldWidget:refresh(nil, nil)
+  local coldValues = coldWidget._standbyCache.snapshotValues
+  check("cold snapshot restarts for changed zone and locale before building",
+    coldWidget._job ~= nil and coldWidget._job.children == nil and coldValues._gpsLines
+      and coldValues._gpsLines[1] == gpsText.gps_latitude .. ": 48.12345°")
+  coldWidget:refresh(nil, nil)
+  coldWidget:refresh(nil, nil)
+  local coldTree, coldCaption = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}, false
+  for i = 1, #coldTree do
+    if coldTree[i].type == "label" and coldTree[i].text == gpsText.module_tx_gps then
+      coldCaption = true; break
+    end
+  end
+  check("cold standby swaps only the rebuilt localized geometry", coldCaption)
+  coldWidget:background()
+  local leaseWidget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
+  leaseWidget.preferences.dashboard = leaseWidget.preferences.dashboard or {}
+  leaseWidget.preferences.dashboard.standby_enabled = true
+  leaseWidget.preferences.dashboard.standby_layout = "elrs"
+  leaseWidget.preferences.audio_events = leaseWidget.preferences.audio_events or {}
+  leaseWidget.preferences.audio_events.tpwr_alert = false
+  leaseWidget.state.fblConnected, leaseWidget.state.armed = false, false
+  leaseWidget.state.hadInflightFlight, leaseWidget.flightMode = false, "preflight"
+  for _ = 1, 5 do Stubs.tick(); leaseWidget:refresh(nil, nil) end
+  local cancelBeforeLayout, requestBeforeLayout, stepBeforeLayout = calls.cancel, calls.request, calls.step
+  leaseWidget.preferences.dashboard.standby_layout = "clock"
+  Stubs.tick(); leaseWidget:refresh(nil, nil)
+  local requestAfterCancel, stepAfterCancel = calls.request, calls.step
+  for _ = 1, 4 do Stubs.tick(); leaseWidget:refresh(nil, nil) end
+  check("removing ELRS cancels its lease once and stops provider work",
+    calls.cancel == cancelBeforeLayout + 1
+      and requestAfterCancel == requestBeforeLayout and stepAfterCancel == stepBeforeLayout
+      and calls.request == requestAfterCancel and calls.step == stepAfterCancel)
+  leaseWidget:background()
   local gpsReadsBeforeZone = gpsReads
   local zoneWidget = Runtime.new({ x = 4, y = 6, w = 300, h = 180 }, {})
   zoneWidget.preferences.dashboard = zoneWidget.preferences.dashboard or {}
   zoneWidget.preferences.dashboard.standby_enabled = true
-  zoneWidget.preferences.dashboard.standby_layout = "clock:small"
+  zoneWidget.preferences.dashboard.standby_layout = "clock"
   zoneWidget.preferences.audio_events = zoneWidget.preferences.audio_events or {}
   zoneWidget.preferences.audio_events.tpwr_alert = false
   zoneWidget.state.fblConnected, zoneWidget.state.armed = false, false
   zoneWidget.state.hadInflightFlight, zoneWidget.flightMode = false, "preflight"
   local zoneTreesBefore, previousTree, requestsBeforeZone = #Stubs.lvgl.trees, Stubs.lvgl.trees[1], calls.request
   Stubs.tick(); zoneWidget:refresh(nil, nil)
+  zoneWidget:refresh(nil, nil)
+  check("normal-zone scene initialization stays cooperative", zoneWidget._job ~= nil
+    and #Stubs.lvgl.trees == zoneTreesBefore)
+  zoneWidget:refresh(nil, nil)
+  check("normal-zone scene prepare stays cooperative", zoneWidget._job ~= nil
+    and zoneWidget._job.children ~= nil and #Stubs.lvgl.trees == zoneTreesBefore)
   zoneWidget:refresh(nil, nil)
   local zoneTree = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}
   local zoneHasTool, zoneContained, zoneNode, zoneOverflow = false, true, false, nil
@@ -506,7 +504,7 @@ do
       .. " changed=" .. tostring(zoneTree ~= previousTree)
       .. " node=" .. tostring(zoneNode) .. " contained=" .. tostring(zoneContained)
       .. " overflow=" .. tostring(zoneOverflow),
-    zoneTreesBefore == 1 and #Stubs.lvgl.trees == 1 and zoneTree ~= previousTree
+    #Stubs.lvgl.trees == zoneTreesBefore + 1 and zoneTree ~= previousTree
       and zoneNode and zoneContained and zoneWidget._treeKind == "standby"
       and zoneWidget._standbyFullscreen == false and not zoneHasTool)
   check("normal non-ELRS standby does not touch the shared ELRS reader",
@@ -514,6 +512,8 @@ do
   check("unselected GPS is not sampled in normal standby", gpsReads == gpsReadsBeforeZone)
   zoneWidget.zone = { x = 0, y = 0, w = 480, h = 320 }
   Stubs.tick(); zoneWidget:refresh(0, nil)
+  zoneWidget:refresh(0, nil)
+  check("fullscreen transition prepares before swapping", zoneWidget._job ~= nil)
   zoneWidget:refresh(0, nil)
   local fullscreenTree = Stubs.lvgl.trees[1] or {}
   local fullscreenHasTool = false
@@ -526,6 +526,8 @@ do
     zoneWidget._treeKind == "standby" and zoneWidget._standbyFullscreen == true and fullscreenHasTool)
   zoneWidget.zone = { x = 4, y = 6, w = 300, h = 180 }
   Stubs.tick(); zoneWidget:refresh(nil, nil)
+  zoneWidget:refresh(nil, nil)
+  check("zone transition prepares before swapping", zoneWidget._job ~= nil)
   zoneWidget:refresh(nil, nil)
   local returnedZoneTree = Stubs.lvgl.trees[1] or {}
   local returnedZoneHasTool = false
@@ -544,18 +546,122 @@ do
   zoneWidget.preferences.dashboard.standby_enabled = false
   Stubs.tick(); zoneWidget:refresh(nil, nil)
   check("disabled normal widget does not sample GPS", gpsReads == gpsReadsBeforeZone)
+
+  local staleWidget = Runtime.new({ x = 0, y = 0, w = 300, h = 180 }, {})
+  staleWidget.preferences.dashboard = staleWidget.preferences.dashboard or {}
+  staleWidget.preferences.dashboard.standby_enabled = true
+  staleWidget.preferences.dashboard.standby_layout = "clock"
+  staleWidget.preferences.audio_events = staleWidget.preferences.audio_events or {}
+  staleWidget.preferences.audio_events.tpwr_alert = false
+  staleWidget.state.fblConnected, staleWidget.state.armed = false, false
+  staleWidget.state.hadInflightFlight, staleWidget.flightMode = false, "preflight"
+  for _ = 1, 4 do Stubs.tick(); staleWidget:refresh(nil, nil) end
+  local treesBeforeStale = #Stubs.lvgl.trees
+  staleWidget.zone = { x = 0, y = 0, w = 480, h = 320 }
+  Stubs.tick(); staleWidget:refresh(nil, nil)
+  staleWidget:refresh(nil, nil)
+  check("standby zone change reaches prepared phase", staleWidget._job ~= nil
+    and staleWidget._job.children ~= nil)
+  staleWidget.zone = { x = 0, y = 0, w = 800, h = 480 }
+  staleWidget.preferences.dashboard.standby_layout = "tx_battery"
+  staleWidget.i18n = { t = deText }
+  staleWidget:refresh(nil, nil)
+  check("changed zone layout and locale discard a prepared standby tree",
+    #Stubs.lvgl.trees == treesBeforeStale and staleWidget._job == nil
+      and staleWidget.built == false)
+  Stubs.tick(); staleWidget:refresh(nil, nil)
+  staleWidget:refresh(nil, nil)
+  staleWidget.preferences.dashboard.standby_enabled = false
+  staleWidget:refresh(nil, nil)
+  check("disabling standby between prepare and swap keeps the visible tree",
+    #Stubs.lvgl.trees == treesBeforeStale and staleWidget._job == nil
+      and staleWidget.built == false)
+  staleWidget.preferences.dashboard.standby_enabled = true
+  for _ = 1, 3 do Stubs.tick(); staleWidget:refresh(nil, nil) end
+  local freshTree, freshCaption = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}, false
+  for i = 1, #freshTree do
+    if freshTree[i].type == "label" and freshTree[i].text == gpsText.module_tx_battery then
+      freshCaption = true; break
+    end
+  end
+  check("fresh standby inputs build after stale prepares are discarded", freshCaption)
+  staleWidget.zone = { x = 0, y = 0, w = 640, h = 360 }
+  Stubs.tick(); staleWidget:refresh(nil, nil)
+  staleWidget:refresh(nil, nil)
+  check("prepared standby keeps ownership of the visible tree",
+    staleWidget._job ~= nil and staleWidget._job.children ~= nil
+      and staleWidget._treeKind == "standby" and #Stubs.lvgl.trees == 1)
+  staleWidget:background()
+  check("background between standby prepare and swap clears the owned tree",
+    staleWidget._job == nil and staleWidget._standbyModule == nil
+      and staleWidget._standbyCache == nil and #Stubs.lvgl.trees == 0)
+
+  local widthWidget = Runtime.new({ x = 0, y = 0, w = 320, h = 320 }, {})
+  widthWidget.preferences.dashboard = widthWidget.preferences.dashboard or {}
+  widthWidget.preferences.dashboard.standby_enabled = true
+  widthWidget.preferences.dashboard.standby_layout = "elrs"
+  widthWidget.preferences.audio_events = widthWidget.preferences.audio_events or {}
+  widthWidget.preferences.audio_events.tpwr_alert = false
+  widthWidget.state.fblConnected, widthWidget.state.armed = false, false
+  widthWidget.state.hadInflightFlight, widthWidget.flightMode = false, "preflight"
+  local function widthCount()
+    local count = 0
+    for _ in pairs(widthWidget._standbyCache and widthWidget._standbyCache.elrsWidths or {}) do
+      count = count + 1
+    end
+    return count
+  end
+  for _, width in ipairs({ 320, 360, 400, 440, 480, 520 }) do
+    widthWidget.zone = { x = 0, y = 0, w = width, h = 320 }
+    for _ = 1, width == 320 and 4 or 3 do Stubs.tick(); widthWidget:refresh(nil, nil) end
+    check("successful ELRS swap retains only its active width " .. tostring(width), widthCount() == 1)
+  end
+  widthWidget.zone = { x = 0, y = 0, w = 560, h = 320 }
+  Stubs.tick(); widthWidget:refresh(nil, nil)
+  widthWidget:refresh(nil, nil)
+  widthWidget.zone = { x = 0, y = 0, w = 600, h = 320 }
+  widthWidget:refresh(nil, nil)
+  check("cancelled ELRS prepare restores the active width set", widthCount() == 1)
+  for _ = 1, 3 do Stubs.tick(); widthWidget:refresh(nil, nil) end
+  check("later ELRS swap still keeps the width set bounded", widthCount() == 1)
+  widthWidget:background()
   getTxGPS = savedGetTxGPS
 
   check("active standby has cached localized texts before global reload",
     type(widget._standbyTexts) == "table"
       and type(widget.renderKey) == "string" and string.sub(widget.renderKey, 1, 8) == "standby|")
+  local rawElrsBeforeReload = widget._standbyCache.elrs
+  widget._standbyCache.snapshotValues = { elrs = "OLD", _elrsDisplays = { [100] = { "OLD", "OLD", "OLD" } } }
+  widget._standbyCache.snapshotAt = getTime()
+  widget._standbyCache.elrsCompact = { "OLD", "OLD", "OLD" }
   widget:reload(true)
   check("global reload invalidates standby texts and visible render key",
-    widget._standbyTexts == nil and widget.renderKey == nil)
+    widget._standbyTexts == nil and widget.renderKey == nil
+      and widget._standbyCache.snapshotValues == nil and widget._standbyCache.snapshotAt == nil
+      and widget._standbyCache.elrsCompact == nil and widget._standbyCache.elrs == rawElrsBeforeReload)
   widget.preferences.dashboard = widget.preferences.dashboard or {}
   widget.preferences.dashboard.standby_enabled = true
-  widget.preferences.dashboard.standby_layout = "elrs:full"
+  widget.preferences.dashboard.standby_layout = "elrs"
+  widget._job = nil
+  widget:refresh(0, nil)
+  widget:refresh(0, nil)
+  widget:refresh(0, nil)
+  local reloadedTree, localizedReactive = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}, false
+  local expectedRate = enLocale.widgets.dashboard.standby.elrs_rate_short .. " "
+  for i = 1, #reloadedTree do
+    local node = reloadedTree[i]
+    if type(node.text) == "function" then
+      local ok, value = pcall(node.text)
+      if ok and type(value) == "string" and string.find(value, expectedRate, 1, true) == 1 then
+        localizedReactive = string.find(value, "OLD", 1, true) == nil
+        break
+      end
+    end
+  end
+  check("active locale reload rebuilds reactive ELRS text before the snapshot cadence",
+    localizedReactive)
 
+  widget._standbyElrsIdentityAt = getTime()
   local identityBefore = calls.identity
   widget._job = nil
   Stubs.tick()
@@ -627,6 +733,7 @@ do
   widget.state.armed, widget.state.hadInflightFlight, widget.flightMode = false, false, "preflight"
   widget._job = nil
   widget:refresh(0, nil)
+  for _ = 1, 4 do widget:refresh(0, nil) end
   check("standby re-entry starts a fresh request", widget._standbyActive == true)
   widget._toolHost = { phase = "run", home = { run = function() return 0 end }, cpuHits = 0 }
   local beforeCancel = calls.cancel
@@ -636,6 +743,7 @@ do
   widget._toolHost = nil
   widget._job = nil
   widget:refresh(0, nil)
+  for _ = 1, 4 do widget:refresh(0, nil) end
   check("standby enters after hosted tool closes", widget._standbyActive == true)
   local firstCache = widget._standbyCache
   beforeCancel = calls.cancel
@@ -647,10 +755,11 @@ do
   local second = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
   second.preferences.dashboard = second.preferences.dashboard or {}
   second.preferences.dashboard.standby_enabled = true
-  second.preferences.dashboard.standby_layout = "elrs:full"
+  second.preferences.dashboard.standby_layout = "elrs"
   second.state.fblConnected, second.state.armed = false, false
   second.state.hadInflightFlight, second.flightMode = false, "preflight"
   second:refresh(0, nil)
+  for _ = 1, 4 do second:refresh(0, nil) end
   local secondOwner = calls.requestOwners[#calls.requestOwners]
   check("separate widgets use separate standby owners", firstOwner ~= nil and secondOwner ~= nil
     and type(firstOwner) == "string" and type(secondOwner) == "string" and firstOwner ~= secondOwner)
@@ -761,7 +870,7 @@ do
     local widget = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
     widget.preferences.dashboard = widget.preferences.dashboard or {}
     widget.preferences.dashboard.standby_enabled = enabled
-    widget.preferences.dashboard.standby_layout = "elrs:full"
+    widget.preferences.dashboard.standby_layout = "elrs"
     widget.preferences.audio_events = widget.preferences.audio_events or {}
     widget.preferences.audio_events.tpwr_alert = false
     widget.state.fblConnected, widget.state.armed = false, false
@@ -777,6 +886,7 @@ do
   first.preferences.dashboard.standby_enabled = true
   first._job = nil
   first:refresh(0, nil)
+  for _ = 1, 4 do first:refresh(0, nil) end
   local firstModule = first._standbyModule
   check("standby entry loads and owns display module", standbyLoads == 1
     and firstModule ~= nil and _G.rfsuite.modules[standbyPath] == firstModule
@@ -795,12 +905,14 @@ do
   first.preferences.dashboard.standby_enabled = true
   first._job = nil
   first:refresh(0, nil)
+  first:refresh(0, nil)
   local reloadedModule = first._standbyModule
   check("standby re-entry reloads a fresh display module", standbyLoads == 2
     and reloadedModule ~= nil and reloadedModule ~= firstModule
     and first._standbyCache ~= nil and first._standbyCache ~= releasedCache)
 
   local second = newWidget(true)
+  second:refresh(0, nil)
   second:refresh(0, nil)
   check("two widgets share one loaded standby display module", standbyLoads == 2
     and second._standbyModule == reloadedModule and reloadedModule.consumerCount() == 2)
@@ -816,6 +928,7 @@ do
 
   first._foreground = true
   first._job = nil
+  first:refresh(0, nil)
   first:refresh(0, nil)
   check("backgrounded widget re-entry reloads display module", standbyLoads == 3
     and first._standbyModule ~= nil)
