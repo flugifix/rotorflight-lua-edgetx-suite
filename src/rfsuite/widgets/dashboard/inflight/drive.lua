@@ -1668,9 +1668,9 @@ local function publish(widget, drive)
     transferState = { kind = transfer.kind, state = transfer.state, reason = transfer.reason }
   end
 
-  -- What the board's own slot table said when it was held against the standard set. Only the
-  -- verdict and the count travel: the list of slots behind it is the ground half's own table and
-  -- goes on being appended to, and the screen has room for a sentence rather than for a list.
+  -- What the board's own slot table said when it was held against the standard set. The verdict,
+  -- the count and the cells named below travel; the full list of slots behind them stays the ground
+  -- half's own, and the screen has room for a sentence rather than for a list.
   local compare = drive.compare
   local compareState = nil
   if type(compare) == "table" then
