@@ -159,6 +159,7 @@ return {
       dashboard_settings = { name = "Einstellungen" },
       dashboard_overrides = { name = "Modell-Einstellungen" },
       dashboard_inflight = { name = "In-Flight-Tuning" },
+      dashboard_keys = { name = "Tasten" },
       dashboard_quick_menu = { name = "Schnelleinstellungen" },
       profile = { name = "Profil" },
       safety = { name = "Sicherheit" },
@@ -2772,6 +2773,28 @@ return {
         saved_message = "In-Flight-Tuning-Einstellungen gespeichert",
         save_error_title = "Fehler",
         save_error_message = "Speichern fehlgeschlagen"
+      },
+      settings_dashboard_keys = {
+        page_down = "PAGE >",
+        page_up = "PAGE <",
+        mdl = "MDL",
+        sys = "SYS",
+        tele = "TELE",
+        theme = "Theme",
+        none = "Nichts",
+        menu = "Schnellmenü",
+        suite_tool = "Suite-Einstellungen",
+        flight_log = "Flugbuch",
+        exit = "Vollbild verlassen",
+        saved_title = "Gespeichert",
+        saved_message = "Tasten gespeichert",
+        save_error_title = "Fehler",
+        save_error_message = "Speichern fehlgeschlagen",
+        help_message = "Senderweite Vollbildtasten, auch vor der FC-Verbindung. Theme nutzt Theme/Host-Standards; Nichts " ..
+          "deaktiviert eine Taste. Andere Aktionen haben Vorrang. Suite und Flugbuch behalten ihre " ..
+          "Schutzbedingungen. Kurzes RTN bleibt Zurück/Schließen; langes RTN verlässt das Vollbild.\nPAGE >: " ..
+          "Aktion der nächsten Seitentaste.\nPAGE <: Aktion der vorherigen Seitentaste.\nMDL: Aktion der " ..
+          "Modelltaste.\nSYS: Aktion der Systemtaste.\nTELE: Aktion der Telemetrietaste.",
       },
       settings_dashboard_quick_menu = {
         place = "Position %d",

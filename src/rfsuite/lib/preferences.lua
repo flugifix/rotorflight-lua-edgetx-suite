@@ -219,7 +219,7 @@ local SCHEMA = {
     -- `quick_menu`: the entries of the widget's quick menu and their order, as the pilot set them
     -- on Settings > Dashboard > Quick Settings. Absent means the menu's default; the empty string is
     -- a menu the pilot has emptied (widgets/dashboard/quick_menu_order.lua).
-    optional = { "model_overrides", "quick_menu" },
+    optional = { "model_overrides", "quick_menu", "key_page_down", "key_page_up", "key_mdl", "key_sys", "key_tele" },
     -- A theme's own configuration is stored here under keys built from the theme's path
     -- (app/pages/settings/dashboard/lib.lua), so the set of key names is not knowable from
     -- a schema and the section keeps whatever it is handed.

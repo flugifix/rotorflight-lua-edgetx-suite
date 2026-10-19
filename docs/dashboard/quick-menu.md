@@ -32,16 +32,19 @@ closed it or armed the model.
 The menu's colours are the radio's, not the dashboard theme's. It uses the same theme colours
 EdgeTX gives every script, so it looks the same whichever dashboard theme is selected.
 
+Hardware shortcuts are set on [Keys](../pages/settings/dashboard/keys.md), for every theme and
+model. They can also open the core menu on the connection screen, before the FC is ready.
+
 ## What it offers
 
 | Entry | What it does |
 | --- | --- |
-| **ERASE BLACKBOX** | Asks first, because the erase cannot be undone — see [the erase confirmation](#the-erase-confirmation). Its **ERASE** answer erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now, closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). Only listed while the model is disarmed. |
+| **ERASE BLACKBOX** | Asks first, because the erase cannot be undone — see [the erase confirmation](#the-erase-confirmation). Its **ERASE** answer erases the flight controller's blackbox storage, then reads the storage summary back so the dashboard shows the free space it has now, closes the menu and leaves full screen (over a theme that takes full screen: closes the menu and shows the theme again). Only listed while the connection is ready and the model is disarmed. |
 | **IN-FLIGHT TUNING** | Opens the in-flight tuning surface at full size. It stays full screen rather than closing. Only listed while the feature is switched on — see below. |
 | **BATTERY** | Brings the battery prompt back, with this model's packs. It stays full screen, the picker taking the menu's place. Only listed while the battery registry has a pack for this model and the model is disarmed. |
 | **MAIN MENU** | Opens the suite's tool, with its whole menu, inside the widget — see [the tool from full screen](#the-tool-from-full-screen). Only listed while the model is disarmed. |
 | **FLIGHT LOG** | Opens the suite's tool inside the widget on its [Flight Log](../pages/tools/flight_log.md) page; the back key there closes it again. Not in the menu as it comes — the pilot adds it on the *Quick Settings* page — and then only listed while the *Flight Log* preview is on and the model is disarmed. |
-| **BATTERY PROFILE** | Opens [the battery profile page](#the-battery-profile-page), where pressing a profile makes it the one in force. Not one of the entries above: a row of its own under them — see [the layout](#the-layout). Only shown while the model is disarmed and the flight controller has reported at least one battery profile with a capacity. |
+| **BATTERY PROFILE** | Opens [the battery profile page](#the-battery-profile-page), where pressing a profile makes it the one in force. Not one of the entries above: a row of its own under them — see [the layout](#the-layout). Only shown while the connection is ready, the model is disarmed and the flight controller has reported at least one battery profile with a capacity. |
 
 That is the menu as it comes, *FLIGHT LOG* aside. Which of the first five entries it shows, and in which order, is the
 pilot's to choose on *System* → *Settings* → *Dashboard* →
@@ -49,7 +52,8 @@ pilot's to choose on *System* → *Settings* → *Dashboard* →
 where the table says it is not listed. BATTERY PROFILE is not chosen there; the menu always draws
 it where it is offered.
 
-**ERASE BLACKBOX and BATTERY PROFILE are not offered while the model is armed** because nothing
+**ERASE BLACKBOX and BATTERY PROFILE are not offered before the connection is ready or while
+the model is armed** because nothing
 they send would arrive: while the model is armed the suite sends no configuration messages to
 the flight controller and drops the ones waiting, so an erase or a profile change pressed in the
 air would never reach the board. A menu that was already open when the model armed still shows

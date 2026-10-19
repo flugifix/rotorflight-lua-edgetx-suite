@@ -253,7 +253,7 @@ function BUILD.erase_blackbox(widget, t)
     id = "erase_blackbox",
     kind = "action",
     title = t("widgets.dashboard.erase_blackbox", "ERASE BLACKBOX"),
-    visibleWhen = "modelDisarmed",
+    visibleWhen = "connectionReadyDisarmed",
     confirm = confirm,
     press = function(report)
          local mspModule = requireModule("tasks/msp/runtime.lua")
@@ -393,7 +393,7 @@ local function warnText(warnWord, warn) return string.format("%s %.2fV", warnWor
 -- BATTERY PROFILE: a choice whose options are pressed on a page of their own (the view
 -- `battery_profile`, battery_profile_menu.lua), so in a menu it is the one row that opens that
 -- page. It is not one of the pilot's entries: the menu draws it under them, always in the same
--- place (M.build). Offered while the model is disarmed and the board has reported a profile
+-- place (M.build). Offered while the connection is ready, the model is disarmed and the board has reported a profile
 -- (`batteryProfileOffered`).
 --
 -- A profile write pressed in the air is dropped with the rest of the MSP queue, and the options of

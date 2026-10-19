@@ -159,6 +159,7 @@ return {
       dashboard_settings = { name = "Settings" },
       dashboard_overrides = { name = "Per-Model Settings" },
       dashboard_inflight = { name = "In-Flight Tuning" },
+      dashboard_keys = { name = "Keys" },
       dashboard_quick_menu = { name = "Quick Settings" },
       profile = { name = "Profile" },
       safety = { name = "Safety" },
@@ -2744,6 +2745,28 @@ return {
         saved_message = "In-flight tuning settings saved",
         save_error_title = "Error",
         save_error_message = "Save failed"
+      },
+      settings_dashboard_keys = {
+        page_down = "PAGE >",
+        page_up = "PAGE <",
+        mdl = "MDL",
+        sys = "SYS",
+        tele = "TELE",
+        theme = "Theme",
+        none = "Nothing",
+        menu = "Quick menu",
+        suite_tool = "Suite tool",
+        flight_log = "Flight log",
+        exit = "Exit fullscreen",
+        saved_title = "Saved",
+        saved_message = "Keys saved",
+        save_error_title = "Error",
+        save_error_message = "Save failed",
+        help_message = "Radio-wide fullscreen shortcuts, including before FC connection. Theme keeps theme/host defaults; " ..
+          "Nothing disables a key. Other actions override the theme. Tool and Flight Log keep safety guards. " ..
+          "Short RTN stays Back/Close; long RTN leaves fullscreen.\nPAGE >: action for the next-page key.\nPAGE <: " ..
+          "action for the previous-page key.\nMDL: action for the model key.\nSYS: action for the system key.\nTELE: " ..
+          "action for the telemetry key.",
       },
       settings_dashboard_quick_menu = {
         place = "Position %d",

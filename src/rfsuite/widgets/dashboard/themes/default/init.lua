@@ -6,6 +6,7 @@ local init = {
   configure = "configure.lua",
   standalone = false,
   fullscreen = "theme",
+  keys = { sys = "openTool", tele = "openView:menu", mdl = "none" },
 }
 
 return init
