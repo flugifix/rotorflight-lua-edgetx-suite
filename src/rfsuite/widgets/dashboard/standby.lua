@@ -29,6 +29,9 @@ function M.decode(value)
   if value == nil then value = DEFAULT end
   if value == "-" then return {} end
   if type(value) ~= "string" or value == "" then return {}, "malformed" end
+  if string.sub(value, 1, 1) == "," or string.sub(value, -1) == "," or string.find(value, ",,", 1, true) then
+    return {}, "malformed"
+  end
   local out = {}
   local count = 0
   for token in string.gmatch(value, "[^,]+") do
@@ -60,9 +63,16 @@ local function units(size)
 end
 
 local WORST = {
-  clock = "23:59", date = "2099-12-31", tx_battery = "12.0 V  100%", model = "WWWWWWWWWWWWWWWW",
+  clock = "23:59", date = "2099-12-31", tx_battery = "12.0 V  100%", model = "WWWWWWWWWWWWWWW",
   timer1 = "-999:59", timer2 = "-999:59", timer3 = "-999:59", tx_gps = "Fix · 99",
-  uptime = "999:59", firmware = "EdgeTX 99.99.99", elrs = "Telemetry Ratio: 1:128",
+  uptime = "999:59", firmware = "WWWWWWWWWWWWWWWWWWWW",
+}
+local ELRS_WORST = {
+  { "elrs_last_read", "Last read 99999 s ago", nil },
+  { "elrs_packet_rate", "Packet Rate", "1000Hz Full" },
+  { "elrs_telemetry_ratio", "Telemetry Ratio", "1:128" },
+  { "elrs_max_power", "Max Power", "25/250 mW" },
+  { "elrs_dynamic", "Dynamic", "AUX12" },
 }
 
 local function measure(text, font)
@@ -95,10 +105,20 @@ local function layout(items, width, height, labels)
     local font = item.size == "small" and SMLSIZE or MIDSIZE
     local vw, vh = measure(WORST[item.type] or "-", font)
     local lines = item.type == "elrs" and 5 or 1
-    if lw > boxW - 16 or (lines == 1 and vw > boxW - 16) then return nil, "width" end
+    if item.type == "elrs" then
+      for n = 1, #ELRS_WORST do
+        local spec = ELRS_WORST[n]
+        local line = labels and labels[spec[1]] or spec[2]
+        line = spec[3] and (line .. ": " .. spec[3]) or string.gsub(line, "%%%%d", "99999")
+        local lineW = measure(line, font)
+        if lineW > boxW - 16 then return nil, "width" end
+      end
+    elseif vw > boxW - 16 then return nil, "width" end
+    if lw > boxW - 16 then return nil, "width" end
     local needed = lh + vh * lines + 22
     rowHeight = math.max(rowHeight, needed)
-    current[#current + 1] = { item = item, x = margin + used * (colW + gap), w = boxW, font = font, lineHeight = vh }
+    current[#current + 1] = { item = item, x = margin + used * (colW + gap), w = boxW, font = font,
+      lineHeight = vh, valueY = lh + 11 }
     used = used + span
   end
   finishRow()
@@ -129,8 +149,14 @@ local function timerValue(index)
   if type(value) == "table" then value = value.value end
   if type(value) ~= "number" then return nil end
   local sign = value < 0 and "-" or ""
-  value = math.abs(math.floor(value))
+  value = math.min(59999, math.abs(math.floor(value)))
   return string.format("%s%d:%02d", sign, math.floor(value / 60), value % 60)
+end
+
+local function bounded(value, limit)
+  if type(value) ~= "string" or value == "" then return "-" end
+  if #value <= limit then return value end
+  return string.sub(value, 1, limit - 3) .. "..."
 end
 
 local function battery(cache)
@@ -154,11 +180,11 @@ local function readValues(cache)
   local values = {
     clock = type(dt) == "table" and string.format("%02d:%02d", dt.hour or 0, dt.min or 0) or "-",
     date = type(dt) == "table" and string.format("%04d-%02d-%02d", dt.year or 0, dt.mon or 0, dt.day or 0) or "-",
-    tx_battery = battery(),
-    model = type(info) == "table" and info.name or "-",
+    tx_battery = battery(cache),
+    model = bounded(type(info) == "table" and info.name or nil, 15),
     timer1 = timerValue(1), timer2 = timerValue(2), timer3 = timerValue(3),
     uptime = string.format("%d:%02d", math.floor(now / 360000), math.floor(now / 6000) % 60),
-    firmware = version or "-",
+    firmware = bounded(version, 20),
     elrs = M.elrsText(cache, type(getTime) == "function" and getTime() / 100 or 0),
   }
   if type(gps) == "table" then
@@ -224,6 +250,7 @@ function M.build(zone, statusLine, i18n, items, values, cache)
   local w, h = zone.w or LCD_W, zone.h or LCD_H
   local labels = {}
   for i = 1, #M.TYPES do local id = M.TYPES[i]; labels[id] = i18n(TYPE_KEYS[id], id) end
+  for i = 1, #ELRS_WORST do labels[ELRS_WORST[i][1]] = i18n(ELRS_WORST[i][1], ELRS_WORST[i][2]) end
   local ok = M.validate(items, w, h, labels)
   local logoW = math.floor(w * 0.32)
   local logoH = math.floor(logoW * 84 / 400 + 0.5)
@@ -246,7 +273,7 @@ function M.build(zone, statusLine, i18n, items, values, cache)
     local label = labels[item.type]
     children[#children + 1] = { type = "rectangle", x = x, y = y, w = boxW, h = row.h, color = COLOR_THEME_SECONDARY2, filled = true, radius = 5 }
     children[#children + 1] = { type = "label", x = x + 8, y = y + 5, w = boxW - 16, text = label, color = COLOR_THEME_PRIMARY2, font = SMLSIZE }
-    children[#children + 1] = { type = "label", x = x + 8, y = y + 27, w = boxW - 16,
+    children[#children + 1] = { type = "label", x = x + 8, y = y + box.valueY, w = boxW - 16,
       text = function() local snap = cache.snapshotValues or values; return tostring(snap[item.type] or "-") end,
       color = function() return item.type == "tx_battery" and cache.batteryLow and COLOR_THEME_WARNING or COLOR_THEME_PRIMARY1 end,
       font = box.font }

@@ -817,7 +817,7 @@ local function standbyJobStep(self)
   self._standbyCache = self._standbyCache or {}
   local dashboard = (self.preferences and self.preferences.dashboard) or {}
   local items = DashboardStandby.decode(dashboard[DashboardStandby.KEY_LAYOUT])
-  local values = DashboardStandby.snapshot(items, self._standbyCache)
+  local values = self._standbyCache.snapshotValues or {}
   local t = self.i18n and self.i18n.t
   local function translated(value, key, fallback)
     if value and value ~= key then return value end
@@ -4363,8 +4363,13 @@ function Runtime.new(zone, options)
       if wantsElrs then
         local Config, CrsfModule = elrsModules()
         if Config then
-          local identity = Config.currentIdentity()
-          if self._standbyElrsIdentity ~= identity then Config.invalidate(identity); self._standbyElrsIdentity = identity end
+          local identityNow = type(getTime) == "function" and getTime() or 0
+          if self._standbyElrsIdentity == nil or identityNow >= (self._standbyElrsIdentityAt or 0) + 100 then
+            local identity = Config.currentIdentity()
+            self._standbyElrsIdentityAt = identityNow
+            if self._standbyElrsIdentity ~= identity then Config.invalidate(identity); self._standbyElrsIdentity = identity end
+          end
+          local identity = self._standbyElrsIdentity
           Config.request(identity, { owner = "standby", force = self._standbyActive ~= true })
           local snapshot = Config.step({ owner = "standby", identity = identity, crsf = CrsfModule,
             push = crossfireTelemetryPush, now = nowSeconds(), allow = true })
@@ -4385,7 +4390,7 @@ function Runtime.new(zone, options)
       local statusLine = self.statusLine or "Please wait..."
       -- Full screen and the zone are two splashes, because only the first carries the tool control.
       local fullscreenSplash = event ~= nil
-      local useStandby = fullscreenSplash and dashboardPrefs.standby_enabled == true
+      local useStandby = fullscreenSplash and standbyActive
       if useStandby then
         local DashboardStandby = standbyModule()
         local items = DashboardStandby.decode(dashboardPrefs[DashboardStandby.KEY_LAYOUT])

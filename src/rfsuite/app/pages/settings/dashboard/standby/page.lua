@@ -39,6 +39,15 @@ end
 local function sizeOptions(i18n)
   return { { value = "small", label = t(i18n, "size_small", "Small") }, { value = "wide", label = t(i18n, "size_wide", "Wide") }, { value = "full", label = t(i18n, "size_full", "Full row") } }
 end
+local function fitLabels(i18n)
+  local labels = {}; for i = 1, #Standby.TYPES do local id = Standby.TYPES[i]; labels[id] = typeLabel(i18n, id) end
+  labels.elrs_last_read = t(i18n, "elrs_last_read", "Last read %d s ago")
+  labels.elrs_packet_rate = t(i18n, "elrs_packet_rate", "Packet Rate")
+  labels.elrs_telemetry_ratio = t(i18n, "elrs_telemetry_ratio", "Telemetry Ratio")
+  labels.elrs_max_power = t(i18n, "elrs_max_power", "Max Power")
+  labels.elrs_dynamic = t(i18n, "elrs_dynamic", "Dynamic")
+  return labels
+end
 local function button(children, x, y, w, text, press)
   children[#children + 1] = { type = "button", x = x, y = y, w = w, h = 36, text = text, press = press }
 end
@@ -47,7 +56,7 @@ function M.onReload(ctx) deps(); fromPrefs(ctx.preferences); ui.dirty = false en
 function M.onSave(ctx)
   deps()
   local items = {}; for i = 1, Standby.MAX_ITEMS do if ui.items[i].type ~= NONE then items[#items + 1] = ui.items[i] end end
-  local labels = {}; for i = 1, #Standby.TYPES do local id = Standby.TYPES[i]; labels[id] = typeLabel(ctx.i18n, id) end
+  local labels = fitLabels(ctx.i18n)
   if not Standby.validate(items, LCD_W or 480, LCD_H or 320, labels) then
     ctx.reportSave({ title = t(ctx.i18n, "invalid_title", "Layout not saved"), message = t(ctx.i18n, "invalid_message", "Every selected item must fit on one screen.") }); return
   end
@@ -81,7 +90,7 @@ function M.build(ctx)
     end
   end
   local selected = {}; for i = 1, Standby.MAX_ITEMS do if ui.items[i].type ~= NONE then selected[#selected + 1] = ui.items[i] end end
-  local labels = {}; for i = 1, #Standby.TYPES do local id = Standby.TYPES[i]; labels[id] = typeLabel(i18n, id) end
+  local labels = fitLabels(i18n)
   local valid, reason = Standby.validate(selected, LCD_W or 480, LCD_H or 320, labels)
   local fitText = t(i18n, "fit_ok", "Fits this screen")
   if not valid then
