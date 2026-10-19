@@ -113,6 +113,7 @@ local function layout(items, width, height, labels)
   local available = height - top - footer - gap
   local rows, used, y, rowHeight = {}, 0, top, 0
   local current = {}
+  local metrics = {}
   local function finishRow()
     if #current == 0 then return true end
     rows[#rows + 1] = { items = current, y = y, h = rowHeight }
@@ -123,35 +124,37 @@ local function layout(items, width, height, labels)
     local item, span = items[i], math.min(units(items[i].size), columns)
     if used > 0 and used + span > columns and not finishRow() then return nil, "fit" end
     local boxW = span * colW + (span - 1) * gap
-    local label = labels and labels[item.type] or item.type
-    local lw, lh = measure(label, SMLSIZE)
-    local font = item.type == "elrs" and SMLSIZE
-      or (item.type == "clock" and item.size ~= "small" and (compact and MIDSIZE or DBLSIZE))
-      or MIDSIZE
-    local vw, vh = measure(WORST[item.type] or "-", font)
-    local lines = 1
-    if item.type == "elrs" then
-      local columnsPerLine = boxW >= 600 and 4 or 2
-      local fieldWidth = math.floor((boxW - 16 - gap * (columnsPerLine - 1)) / columnsPerLine)
-      for n = 1, #ELRS_WORST do
-        local spec = ELRS_WORST[n]
-        local line = labels and labels[spec[1]] or spec[2]
-        line = spec[3] and (line .. ": " .. spec[3]) or string.gsub(line, "%%d", "99999+")
-        local lineW = measure(line, font)
-        if n == 1 then
-          if lineW > boxW - 16 then return nil, "width" end
-        elseif lineW > fieldWidth then return nil, "width" end
-      end
-    elseif vw > boxW - 16 then return nil, "width" end
-    if lw > boxW - 16 then return nil, "width" end
-    local _, detailHeight = measure("Ag", SMLSIZE)
-    local verticalPadding = compact and 20 or 34
-    local needed = item.type == "elrs"
-      and (lh + vh * (boxW >= 600 and 1 or 2) + detailHeight + verticalPadding)
-      or (lh + vh * lines + detailHeight + verticalPadding)
-    rowHeight = math.max(rowHeight, needed)
-    current[#current + 1] = { item = item, x = margin + used * (colW + gap), w = boxW, font = font,
-      lineHeight = vh, valueY = lh + 11 }
+    local metricKey = item.type .. ":" .. item.size .. ":" .. tostring(boxW)
+    local metric = metrics[metricKey]
+    if not metric then
+      local label = labels and labels[item.type] or item.type
+      local lw, lh = measure(label, SMLSIZE)
+      local font = item.type == "elrs" and SMLSIZE
+        or (item.type == "clock" and item.size ~= "small" and (compact and MIDSIZE or DBLSIZE))
+        or MIDSIZE
+      local vw, vh = measure(WORST[item.type] or "-", font)
+      if item.type == "elrs" then
+        local columnsPerLine = boxW >= 600 and 4 or 2
+        local fieldWidth = math.floor((boxW - 16 - gap * (columnsPerLine - 1)) / columnsPerLine)
+        for n = 1, #ELRS_WORST do
+          local spec = ELRS_WORST[n]
+          local line = labels and labels[spec[1]] or spec[2]
+          line = spec[3] and (line .. ": " .. spec[3]) or string.gsub(line, "%%d", "99999+")
+          local lineW = measure(line, font)
+          if lineW > (n == 1 and boxW - 16 or fieldWidth) then return nil, "width" end
+        end
+      elseif vw > boxW - 16 then return nil, "width" end
+      if lw > boxW - 16 then return nil, "width" end
+      local _, detailHeight = measure("Ag", SMLSIZE)
+      local verticalPadding = compact and 20 or 34
+      metric = { font = font, lh = lh, vh = vh,
+        needed = lh + vh * (item.type == "elrs" and (boxW >= 600 and 1 or 2) or 1)
+          + detailHeight + verticalPadding }
+      metrics[metricKey] = metric
+    end
+    rowHeight = math.max(rowHeight, metric.needed)
+    current[#current + 1] = { item = item, x = margin + used * (colW + gap), w = boxW, font = metric.font,
+      lineHeight = metric.vh, valueY = metric.lh + 11 }
     used = used + span
   end
   if not finishRow() then return nil, "fit" end

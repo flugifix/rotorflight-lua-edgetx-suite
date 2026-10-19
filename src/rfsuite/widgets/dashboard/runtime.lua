@@ -94,6 +94,8 @@ local function releaseStandby(self, reason)
   local module = self._standbyModule
   self._standbyModule = nil
   self._standbyCache = nil
+  self._standbyItems = nil
+  self._standbyTexts = nil
   self._standbyElrsIdentity = nil
   self._standbyElrsIdentityAt = nil
   self._standbyElrsConfig = nil
@@ -845,14 +847,13 @@ local function splashJobStep(self)
   return true
 end
 
-local function standbyJobStep(self)
-  local DashboardStandby = standbyModule(self)
-  self._standbyCache = self._standbyCache or {}
-  local dashboard = (self.preferences and self.preferences.dashboard) or {}
-  local items = DashboardStandby.decode(dashboard[DashboardStandby.KEY_LAYOUT])
-  local values = self._standbyCache.snapshotValues or {}
+local function standbyTexts(self, items)
+  if self._standbyTexts then return self._standbyTexts end
   local t = (self.i18n and self.i18n.t) or function(_, fallback) return fallback end
-  local texts = {
+  local selected = {}
+  for i = 1, #(items or {}) do selected[items[i].type] = true end
+  local timerDetail = t("widgets.dashboard.standby.timer_detail", "EdgeTX model timer")
+  self._standbyTexts = {
     screen_title = t("widgets.dashboard.standby.screen_title", "Standby"),
     module_count = t("widgets.dashboard.standby.module_count", "%d information modules"),
     layout_invalid = t("widgets.dashboard.standby.layout_invalid", "Standby layout does not fit"),
@@ -863,12 +864,7 @@ local function standbyJobStep(self)
     module_timer1 = t("widgets.dashboard.standby.module_timer1", "Timer 1"),
     module_timer2 = t("widgets.dashboard.standby.module_timer2", "Timer 2"),
     module_timer3 = t("widgets.dashboard.standby.module_timer3", "Timer 3"),
-    module_tx_gps = t("widgets.dashboard.standby.module_tx_gps", "TX GPS"),
-    module_uptime = t("widgets.dashboard.standby.module_uptime", "Radio uptime"),
-    module_firmware = t("widgets.dashboard.standby.module_firmware", "Firmware"),
     module_elrs = t("widgets.dashboard.standby.module_elrs", "ELRS TX configuration"),
-    gps_fix = t("widgets.dashboard.standby.gps_fix", "Fix"),
-    gps_no_fix = t("widgets.dashboard.standby.gps_no_fix", "No fix"),
     elrs_reading = t("widgets.dashboard.standby.elrs_reading", "Reading"),
     elrs_unavailable = t("widgets.dashboard.standby.elrs_unavailable", "Unavailable"),
     elrs_last_read = t("widgets.dashboard.standby.elrs_last_read", "Last read %d s ago"),
@@ -878,14 +874,38 @@ local function standbyJobStep(self)
     elrs_dynamic = t("widgets.dashboard.standby.elrs_dynamic", "Dynamic"),
     tx_battery_detail = t("widgets.dashboard.standby.tx_battery_detail", "Radio battery"),
     model_detail = t("widgets.dashboard.standby.model_detail", "EdgeTX model"),
-    timer1_detail = t("widgets.dashboard.standby.timer_detail", "EdgeTX model timer"),
-    timer2_detail = t("widgets.dashboard.standby.timer_detail", "EdgeTX model timer"),
-    timer3_detail = t("widgets.dashboard.standby.timer_detail", "EdgeTX model timer"),
-    tx_gps_detail = t("widgets.dashboard.standby.tx_gps_detail", "Internal transmitter GPS"),
-    uptime_detail = t("widgets.dashboard.standby.uptime_detail", "Since radio power-on"),
-    firmware_detail = t("widgets.dashboard.standby.firmware_detail", "Radio firmware"),
+    timer1_detail = timerDetail,
+    timer2_detail = timerDetail,
+    timer3_detail = timerDetail,
     date_detail = t("widgets.dashboard.standby.date_detail", "Radio date"),
   }
+  if selected.tx_gps then
+    self._standbyTexts.module_tx_gps = t("widgets.dashboard.standby.module_tx_gps", "TX GPS")
+    self._standbyTexts.gps_fix = t("widgets.dashboard.standby.gps_fix", "Fix")
+    self._standbyTexts.gps_no_fix = t("widgets.dashboard.standby.gps_no_fix", "No fix")
+    self._standbyTexts.tx_gps_detail = t("widgets.dashboard.standby.tx_gps_detail", "Internal transmitter GPS")
+  end
+  if selected.uptime then
+    self._standbyTexts.module_uptime = t("widgets.dashboard.standby.module_uptime", "Radio uptime")
+    self._standbyTexts.uptime_detail = t("widgets.dashboard.standby.uptime_detail", "Since radio power-on")
+  end
+  if selected.firmware then
+    self._standbyTexts.module_firmware = t("widgets.dashboard.standby.module_firmware", "Firmware")
+    self._standbyTexts.firmware_detail = t("widgets.dashboard.standby.firmware_detail", "Radio firmware")
+  end
+  return self._standbyTexts
+end
+
+local function standbyJobStep(self)
+  local DashboardStandby = standbyModule(self)
+  self._standbyCache = self._standbyCache or {}
+  local items = self._standbyItems
+  if not items then
+    local dashboard = (self.preferences and self.preferences.dashboard) or {}
+    items = DashboardStandby.decode(dashboard[DashboardStandby.KEY_LAYOUT])
+  end
+  local values = self._standbyCache.snapshotValues or {}
+  local texts = standbyTexts(self, items)
   local function text(key, fallback)
     return texts[key] or fallback
   end
@@ -1768,6 +1788,8 @@ local function reloadPreferencesIfNeeded(self, force, isBackground)
       if type(self.state) ~= "table" then self.state = {} end
       self.state.i18n = self.i18n
     end
+    self._standbyTexts = nil
+    self.renderKey = nil
   end
 
   -- The per-model half, no longer nested inside the global one: it never read `prefs`, and with
@@ -4414,6 +4436,7 @@ function Runtime.new(zone, options)
     if standbyRenderActive then
       local Standby = standbyModule(self)
       local standbyItems = Standby.decode(dashboardPrefs.standby_layout)
+      self._standbyItems = standbyItems
       local wantsElrs = false
       for i = 1, #standbyItems do if standbyItems[i].type == "elrs" then wantsElrs = true; break end end
       if wantsElrs and standbyProbeActive then
@@ -4451,7 +4474,7 @@ function Runtime.new(zone, options)
       local useStandby = fullscreenSplash and standbyRenderActive
       if useStandby then
         local DashboardStandby = standbyModule(self)
-        local items = DashboardStandby.decode(dashboardPrefs[DashboardStandby.KEY_LAYOUT])
+        local items = self._standbyItems or DashboardStandby.decode(dashboardPrefs[DashboardStandby.KEY_LAYOUT])
         self._standbyCache = self._standbyCache or {}
         DashboardStandby.snapshot(items, self._standbyCache)
       end
