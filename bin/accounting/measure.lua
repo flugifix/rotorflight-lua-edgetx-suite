@@ -589,7 +589,7 @@ local function runStandbyScenario(layout, gps, elrsReplies, expectedTiles)
     local tiles = 0
     for i = 1, #tree do
       local node = tree[i]
-      if node.type == "rectangle" and node.radius == 7 then tiles = tiles + 1 end
+      if node.type == "rectangle" and node.rounded == 7 then tiles = tiles + 1 end
     end
     if widget._standbyCache.valueOverflow or tiles ~= expectedTiles then
       error("accounting: standby scene rendered " .. tostring(tiles) .. " of " .. tostring(expectedTiles)

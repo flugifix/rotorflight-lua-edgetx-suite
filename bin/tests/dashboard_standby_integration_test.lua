@@ -126,6 +126,38 @@ do
   check("ordinary new item keeps the supported small size", ordinarySize == 1)
   Page.onSave(ctx)
   check("ordinary new item saves at small size", ctx.preferences.dashboard.standby_layout == "clock:small")
+
+  local savedLcdW, savedLcdH = LCD_W, LCD_H
+  LCD_W, LCD_H = 480, 320
+  ctx.preferences.dashboard.standby_layout = "tx_gps:small"
+  Page.onReload(ctx)
+  local function choose(position, label)
+    ctx.children = {}
+    Page.build(ctx)
+    for i = 1, #ctx.children do
+      local node = ctx.children[i]
+      if node.type == "choice" and node.title == "Position " .. position then
+        for option = 1, #node.values do
+          if node.values[option] == label then node.set(option); return true end
+        end
+      end
+    end
+    return false
+  end
+  check("ordinary clock can be added after saved GPS", choose(2, "Clock"))
+  check("ordinary battery can be added after GPS and clock", choose(3, "TX battery"))
+  Page.onSave(ctx)
+  check("GPS clock battery layout saves on 480x320",
+    ctx.preferences.dashboard.standby_layout == "tx_gps:small,clock:small,tx_battery:small")
+
+  local writesBeforeOverflow = writes
+  ctx.preferences.dashboard.standby_layout = "clock:full,date:full,tx_battery:full,model:full"
+  Page.onReload(ctx)
+  Page.onSave(ctx)
+  check("genuine 480x320 overcapacity still refuses the writer", writes == writesBeforeOverflow)
+  check("genuine overcapacity remains the active unsaved draft",
+    ctx.preferences.dashboard.standby_layout == "clock:full,date:full,tx_battery:full,model:full")
+  LCD_W, LCD_H = savedLcdW, savedLcdH
   Page.onClose()
 end
 
