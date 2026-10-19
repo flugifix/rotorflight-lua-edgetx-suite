@@ -1,3 +1,3 @@
 - **Configurable dashboard standby screen and shared ELRS module reads (`widgets/dashboard`, `settings/dashboard/standby`, `lib/elrs_config.lua`)**:
-  - Add an optional single-screen fullscreen standby dashboard with ordered radio-information tiles, a graphical transmitter-battery level, a reserved prerequisite summary, native EdgeTX tile rendering, and fit-validated Suite settings.
+  - Add an optional single-screen standby dashboard for fullscreen and widget-zone use, with ordered radio-information tiles, detailed transmitter-GPS data at larger tile sizes, a graphical transmitter-battery level, a reserved prerequisite summary, native EdgeTX tile rendering, and fit-validated Suite settings that identify the first non-fitting position, tile, and correction.
   - Share bounded, read-only ELRS module snapshots with diagnostics and the TX-power alert, while keeping each consumer's refresh ownership separate.

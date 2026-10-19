@@ -20,6 +20,34 @@ local default = standby.decode(nil)
 check("default has three items", #default == 3)
 check("default fits 480x320", standby.validate(default, 480, 320))
 check("default fits 800x480", standby.validate(default, 800, 480))
+local fixtureSizeText = lcd.sizeText
+lcd.sizeText = function(text, font)
+  return #text * (font == MIDSIZE and 8 or 6), font == MIDSIZE and 17 or 12
+end
+check("default three tiles fit native TX15 font heights", standby.validate(default, 480, 320))
+check("single small GPS fits a 240x91 widget zone",
+  standby.validate(standby.decode("tx_gps:small"), 240, 91))
+check("configured tiles reject a 240x68 widget zone", not standby.validate(default, 240, 68))
+check("configured tiles reject a 480x45 widget zone", not standby.validate(default, 480, 45))
+check("narrow dashboard zone uses one readable column", standby.validate(default, 320, 400))
+lcd.sizeText = function(text, font)
+  return #text * (font == MIDSIZE and 10 or 7), font == MIDSIZE and 24 or 18
+end
+check("default three tiles fit TX15 font heights", standby.validate(default, 480, 320))
+check("default three tiles fit short dashboard zone", standby.validate(default, 480, 272))
+local compactElrs = standby.decode("elrs:wide,clock:small,tx_battery:small")
+check("ELRS wide and two small tiles fit TX15 font heights", standby.validate(compactElrs, 480, 320))
+local compactOverflow = standby.decode("clock:full,tx_battery:full,model:full")
+local overflowValid, overflowReason, _, overflowIndex = standby.validate(compactOverflow, 480, 320)
+check("three full compact rows still reject", not overflowValid and overflowReason == "fit" and overflowIndex == 3)
+local _, compactWidthReason, _, compactWidthIndex = standby.validate(default, 480, 320,
+  { clock = string.rep("W", 100), tx_battery = "TX", model = "Model" })
+check("compact width error identifies its item", compactWidthReason == "width" and compactWidthIndex == 1)
+local _, compactSizeReason, _, compactSizeIndex = standby.validate({ { type = "elrs", size = "small" } }, 480, 320)
+check("compact size error identifies its item", compactSizeReason == "size" and compactSizeIndex == 1)
+local tinyValid, tinyReason, _, tinyIndex = standby.validate(default, 180, 150)
+check("impossibly small zone rejects the whole layout", not tinyValid and tinyReason == "fit" and tinyIndex == 1)
+lcd.sizeText = fixtureSizeText
 local de = assert(loadfile("src/rfsuite/i18n/de.lua"))()
 local deStandby = de.widgets.dashboard.standby
 local function fitLabels(locale)
@@ -82,7 +110,8 @@ getVersion = function() return "2.12.0", "tx16s-simu" end
 local gpsCalls = 0
 getTxGPS = function()
   gpsCalls = gpsCalls + 1
-  return { fix = true, numsat = 7 }
+  return { fix = true, numsat = 7, lat = 52.12345, lon = 13.54321,
+    alt = 1234, speed = 56, heading = 2712, hdop = 85 }
 end
 model = {
   getInfo = function() return { name = string.rep("W", 30) } end,
@@ -91,10 +120,15 @@ model = {
 local cache = { text = function(_, fallback) return fallback end }
 local values, key = standby.snapshot(default, cache)
 check("snapshot reads transmitter battery safely", type(values) == "table" and values.tx_battery == "-")
-check("snapshot uses firmware version", values.firmware == "2.12.0")
+check("default snapshot skips unselected firmware and timers",
+  values.firmware == nil and values.timer1 == nil and values.timer2 == nil and values.timer3 == nil)
 check("default snapshot skips unselected GPS getter", gpsCalls == 0 and values.tx_gps == nil)
+check("clock snapshot retains its date detail", values.date == "2026-10-19")
 check("model display is bounded", #values.model == 15)
-check("timer overflow remains explicit", values.timer1 == ">999:59")
+tick = 101
+local selectedSourceValues = standby.snapshot(standby.decode("firmware:wide,timer1:wide"), { text = cache.text })
+check("selected snapshot uses firmware version", selectedSourceValues.firmware == "2.12.0")
+check("selected timer overflow remains explicit", selectedSourceValues.timer1 == ">999:59")
 model.getInfo = function() return { name = "Model\195\169LongEnough" } end
 tick = 201
 local utf8Values = standby.snapshot(default, cache)
@@ -141,21 +175,80 @@ local gpsCache = { text = cache.text }
 tick = 300
 local gpsValues = standby.snapshot(gpsItems, gpsCache)
 check("selected GPS reads and formats transmitter fix", gpsCalls == 1 and gpsValues.tx_gps == "Fix · 7")
+check("wide GPS formats detailed cached fields", gpsValues._gpsLines
+  and gpsValues._gpsLines[1] == "Latitude: 52.12345°"
+  and gpsValues._gpsLines[3] == "Altitude: 123.4 m"
+  and gpsValues._gpsLines[4] == "Speed: 5.6 m/s"
+  and gpsValues._gpsLines[5] == "Course: 271.2°"
+  and gpsValues._gpsLines[6] == "HDOP: 0.85")
+local gpsBuildCache = { text = cache.text, snapshotValues = gpsValues }
+local gpsScene = standby.build({ w = 480, h = 320 }, "Waiting", cache.text,
+  gpsItems, gpsValues, gpsBuildCache)
+local gpsDetailCount = 0
+for i = 1, #gpsScene do
+  local node = gpsScene[i]
+  if type(node.text) == "function" then
+    local text = node.text()
+    if type(text) == "string" and (string.find(text, "Latitude:", 1, true)
+        or string.find(text, "Longitude:", 1, true) or string.find(text, "Altitude:", 1, true)
+        or string.find(text, "Speed:", 1, true) or string.find(text, "Course:", 1, true)
+        or string.find(text, "HDOP:", 1, true)) then gpsDetailCount = gpsDetailCount + 1 end
+  end
+end
+check("wide GPS scene renders six detailed fields", gpsDetailCount == 6 and gpsBuildCache.valueOverflow == false)
+local gpsTimeFound = false
+for i = 1, #gpsScene do
+  if gpsScene[i].text == "Time status unknown" then gpsTimeFound = true end
+end
+check("wide GPS states the GPS time API limit", gpsTimeFound)
 tick = 350
 local cachedGpsValues = standby.snapshot(gpsItems, gpsCache)
 check("selected GPS snapshot respects one-second cache", gpsCalls == 1 and cachedGpsValues == gpsValues)
 tick = 401
 local refreshedGpsValues = standby.snapshot(gpsItems, gpsCache)
-check("selected GPS refreshes after bounded cadence", gpsCalls == 2 and refreshedGpsValues.tx_gps == "Fix · 7")getTxGPS = function() gpsCalls = gpsCalls + 1; return { fix = nil } end
+check("selected GPS refreshes after bounded cadence", gpsCalls == 2 and refreshedGpsValues.tx_gps == "Fix · 7")
+getTxGPS = function() gpsCalls = gpsCalls + 1; return { fix = false, numsat = 3 } end
 tick = 502
-local unknownGpsValues = standby.snapshot(gpsItems, gpsCache)
-check("selected GPS with missing fix stays unknown", gpsCalls == 3 and unknownGpsValues.tx_gps == "-")
-getTxGPS = function() gpsCalls = gpsCalls + 1; return nil end
+local noFixGpsValues = standby.snapshot(gpsItems, gpsCache)
+check("selected GPS without fix still shows satellites", gpsCalls == 3
+  and noFixGpsValues.tx_gps == "No fix · Sat 3" and noFixGpsValues._gpsLines == nil)
+getTxGPS = function() gpsCalls = gpsCalls + 1; return { fix = nil } end
 tick = 603
+local unknownGpsValues = standby.snapshot(gpsItems, gpsCache)
+check("selected GPS with missing fix stays unknown", gpsCalls == 4 and unknownGpsValues.tx_gps == "-")
+getTxGPS = function() gpsCalls = gpsCalls + 1; return nil end
+tick = 704
 local unavailableGpsValues = standby.snapshot(gpsItems, gpsCache)
-check("selected unavailable GPS stays unknown", gpsCalls == 4 and unavailableGpsValues.tx_gps == "-")
+check("selected unavailable GPS stays unknown", gpsCalls == 5 and unavailableGpsValues.tx_gps == "-")
+getTxGPS = function()
+  gpsCalls = gpsCalls + 1
+  return { fix = true, numsat = 4, lat = math.huge, lon = 181, alt = 1000000,
+    speed = -1, heading = 3600, hdop = 65536 }
+end
+tick = 805
+local malformedGpsValues = standby.snapshot(gpsItems, gpsCache)
+check("detailed GPS rejects non-finite and out-of-range members", gpsCalls == 6
+  and malformedGpsValues._gpsLines[1] == "Latitude: -"
+  and malformedGpsValues._gpsLines[6] == "HDOP: -")
+tick = 906
+local smallGpsValues = standby.snapshot(standby.decode("tx_gps:small"), { text = cache.text })
+check("small GPS does not format unselected detail fields", gpsCalls == 7
+  and smallGpsValues.tx_gps == "Fix · 4" and smallGpsValues._gpsLines == nil)
 local scene = standby.build({ w = 480, h = 320 }, "Please wait...", cache.text, default, values, cache)
 check("standby scene builds", type(scene) == "table" and #scene > 3)
+local tinyScene = standby.build({ w = 240, h = 68 }, "Please wait...", cache.text, default, values, {})
+check("tiny widget zone shows only a readable fit prerequisite", #tinyScene == 2
+  and tinyScene[2].type == "label" and tinyScene[2].y >= 0 and tinyScene[2].y < 68)
+local shortScene = standby.build({ w = 480, h = 275 }, "Please wait...", cache.text, default, values, {})
+local shortLogo, shortDivider, shortFirstTile
+for i = 1, #shortScene do
+  local node = shortScene[i]
+  if node.type == "image" then shortLogo = node
+  elseif node.type == "rectangle" and node.h == 1 then shortDivider = node
+  elseif node.type == "rectangle" and node.rounded == 5 and shortFirstTile == nil then shortFirstTile = node end
+end
+check("short dashboard header keeps logo above divider and tiles", shortLogo and shortDivider and shortFirstTile
+  and shortLogo.y + shortLogo.h <= shortDivider.y and shortDivider.y < shortFirstTile.y)
 local roundedTiles, invalidRadius = 0, false
 for i = 1, #scene do
   local node = scene[i]
@@ -165,14 +258,14 @@ end
 check("standby tiles use native rounded property", not invalidRadius and roundedTiles == #default)
 local infoScene = standby.build({ w = 480, h = 320 }, "Exact connection reason", cache.text, default, values, cache,
   { text = "Flight controller not detected", level = "info" })
-check("general information strip uses calm theme accent", infoScene[6].color == COLOR_THEME_SECONDARY1)
-check("general information strip preserves exact status below", infoScene[8].text == "Exact connection reason")
+check("general information strip uses calm theme accent", infoScene[5].color == COLOR_THEME_SECONDARY1)
+check("general information strip preserves exact status below", infoScene[7].text == "Exact connection reason")
 local warningScene = standby.build({ w = 480, h = 320 }, "Unsupported API 9.9", cache.text, default, values, cache,
   { text = "Compatibility check failed", level = "warning" })
-check("warning information uses warning marker", warningScene[6].color == COLOR_THEME_WARNING)
+check("warning information uses warning marker", warningScene[5].color == COLOR_THEME_WARNING)
 local utf8InfoScene = standby.build({ w = 480, h = 320 }, "Waiting", cache.text, default, values, cache,
   { text = string.rep("Pr\195\169requis", 200), level = "info" })
-local fittedInfo = utf8InfoScene[7].text
+local fittedInfo = utf8InfoScene[6].text
 local fittedPrefix = string.sub(fittedInfo, 1, -4)
 local asciiPrefix = string.gsub(fittedPrefix, "\195\169", "")
 check("long UTF-8 information is visibly bounded",
@@ -188,16 +281,16 @@ for i = 1, #largestScene do
   if node.type == "rectangle" and node.rounded == 7 then tileCount = tileCount + 1 end
 end
 check("largest eight-item scene renders every tile", largestCache.valueOverflow == false and tileCount == 8)
-check("tile captions use the theme accent", scene[10].color == COLOR_THEME_SECONDARY1)
+check("tile captions use the theme accent", scene[9].color == COLOR_THEME_SECONDARY1)
 local compactHeaderLabels = 0
 for i = 1, #scene do
   local node = scene[i]
-  if node.type == "label" and node.y < 75 then compactHeaderLabels = compactHeaderLabels + 1 end
+  if node.type == "label" and node.y < 43 then compactHeaderLabels = compactHeaderLabels + 1 end
 end
-check("header omits duplicate battery and module count", compactHeaderLabels == 1 and scene[3].text == "Standby")
+check("header omits duplicate battery, title, and module count", compactHeaderLabels == 0)
 local largeScene = standby.build({ w = 800, h = 480 }, string.rep("W", 80), cache.text, default, values, cache)
-check("status line preserves the full reason", largeScene[8].text == string.rep("W", 80))
-local valueClosure = scene[11].text
+check("status line preserves the full reason", largeScene[7].text == string.rep("W", 80))
+local valueClosure = scene[10].text
 check("scene exposes reactive value", type(valueClosure) == "function")
 local before = valueClosure()
 cache.snapshotValues.clock = "12:35"

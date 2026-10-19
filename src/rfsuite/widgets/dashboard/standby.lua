@@ -84,7 +84,7 @@ end
 
 local WORST = {
   clock = "23:59", date = "2099-12-31", tx_battery = "12.0 V  100%", model = "WWWWWWWWWWWWWWW",
-  timer1 = "<-999:59", timer2 = "<-999:59", timer3 = "<-999:59", tx_gps = "Fix · 99+",
+  timer1 = "<-999:59", timer2 = "<-999:59", timer3 = "<-999:59", tx_gps = "No fix · Sat 99+",
   uptime = ">999:59", firmware = "WWWWWWWWWWWWWWWWWWWW",
 }
 local ELRS_WORST = {
@@ -93,6 +93,14 @@ local ELRS_WORST = {
   { "elrs_telemetry_ratio", "Telemetry Ratio", "1:128" },
   { "elrs_max_power", "Max Power", "25/250 mW" },
   { "elrs_dynamic", "Dynamic", "AUX12" },
+}
+local GPS_WORST = {
+  { "gps_latitude", "Latitude", "-180.00000°" },
+  { "gps_longitude", "Longitude", "-180.00000°" },
+  { "gps_altitude", "Altitude", "-99999.9 m" },
+  { "gps_speed", "Speed", "9999.9 m/s" },
+  { "gps_course", "Course", "359.9°" },
+  { "gps_hdop", "HDOP", "655.35" },
 }
 
 local function measure(text, font)
@@ -127,27 +135,38 @@ local function fitLine(text, width, font)
   if best > 0 then return string.sub(text, 1, positions[best] - 1) .. "..." end
   return "..."
 end
-local function layout(items, width, height, labels)
-  local columns = width >= 700 and 4 or 2
+local function frameGeometry(height)
   local compact = height < 400
-  local gap, margin = compact and 6 or 10, compact and 10 or 16
+  if height < 160 then return true, 0, 24, nil, true, true end
+  local short = height < 300
+  return compact, short and 34 or compact and 49 or 68,
+    short and 52 or 64, short and 28 or compact and 43 or 60, short, false
+end
+local function layout(items, width, height, labels)
+  local columns = width >= 700 and 4 or width >= 360 and 2 or 1
+  local compact, top, footer, _, _, micro = frameGeometry(height)
+  local gap = micro and 4 or compact and 6 or 10
+  local margin = width < 360 and 6 or compact and 10 or 16
   local colW = math.floor((width - margin * 2 - gap * (columns - 1)) / columns)
-  local top, footer = compact and 82 or 112, 64
   local available = height - top - footer - gap
-  local rows, used, y, rowHeight = {}, 0, top, 0
+  local rows, used, y, rowHeight, rowStart = {}, 0, top, 0, 1
   local current = {}
   local metrics = {}
   local function finishRow()
     if #current == 0 then return true end
     rows[#rows + 1] = { items = current, y = y, h = rowHeight }
     y, used, rowHeight, current = y + rowHeight + gap, 0, 0, {}
-    return y - gap - top <= available
+    return y - gap - top <= available, rowStart
   end
   for i = 1, #items do
     local item = items[i]
-    if item.type == "elrs" and item.size == "small" then return nil, "size" end
+    if item.type == "elrs" and item.size == "small" then return nil, "size", i end
     local span = math.min(units(item.size), columns)
-    if used > 0 and used + span > columns and not finishRow() then return nil, "fit" end
+    if used > 0 and used + span > columns then
+      local fits, offending = finishRow()
+      if not fits then return nil, "fit", offending end
+    end
+    if #current == 0 then rowStart = i end
     local boxW = span * colW + (span - 1) * gap
     local metricKey = item.type .. item.size .. boxW
     local metric = metrics[metricKey]
@@ -157,7 +176,13 @@ local function layout(items, width, height, labels)
       local font = item.type == "elrs" and SMLSIZE
         or (item.type == "clock" and item.size ~= "small" and (compact and MIDSIZE or DBLSIZE))
         or MIDSIZE
-      local vw, vh = measure(WORST[item.type] or "-", font)
+      local worstValue = WORST[item.type] or "-"
+      if item.type == "tx_gps" then
+        worstValue = string.format("%s · %s 99+",
+          labels and labels.gps_no_fix or "No fix",
+          labels and labels.gps_satellites or "Sat")
+      end
+      local vw, vh = measure(worstValue, font)
       if item.type == "elrs" then
         local columnsPerLine = boxW >= 600 and 4 or 2
         local fieldWidth = math.floor((boxW - 16 - gap * (columnsPerLine - 1)) / columnsPerLine)
@@ -166,32 +191,52 @@ local function layout(items, width, height, labels)
           local line = labels and labels[spec[1]] or spec[2]
           line = spec[3] and (line .. ": " .. spec[3]) or string.gsub(line, "%%d", "99999+")
           local lineW = measure(line, font)
-          if lineW > (n == 1 and boxW - 16 or fieldWidth) then return nil, "width" end
+          if lineW > (n == 1 and boxW - 16 or fieldWidth) then return nil, "width", i end
         end
-      elseif vw > boxW - 16 then return nil, "width" end
-      if lw > boxW - 16 then return nil, "width" end
+      elseif item.type == "tx_gps" and item.size ~= "small" then
+        if vw > boxW - 16 then return nil, "width", i end
+        local fieldColumns = boxW >= 600 and 3 or 2
+        local fieldWidth = math.floor((boxW - 16 - gap * (fieldColumns - 1)) / fieldColumns)
+        for n = 1, #GPS_WORST do
+          local spec = GPS_WORST[n]
+          local line = (labels and labels[spec[1]] or spec[2]) .. ": " .. spec[3]
+          if measure(line, SMLSIZE) > fieldWidth then return nil, "width", i end
+        end
+        local timeLine = labels and labels.gps_time_unavailable or "Time status unknown"
+        if measure(timeLine, SMLSIZE) > boxW - 16 then return nil, "width", i end
+      elseif item.type == "tx_gps" then
+        if vw > boxW - 16 then return nil, "width", i end
+        local timeLine = labels and labels.gps_time_unavailable or "Time status unknown"
+        if measure(timeLine, SMLSIZE) > boxW - 16 then return nil, "width", i end
+      elseif vw > boxW - 16 then return nil, "width", i end
+      if lw > boxW - 16 then return nil, "width", i end
       local _, detailHeight = measure("Ag", SMLSIZE)
-      local verticalPadding = compact and 22 or 30
-      metric = { font = font, lh = lh, vh = vh,
-        needed = lh + vh * (item.type == "elrs" and (boxW >= 600 and 1 or 2) or 1)
-          + detailHeight + verticalPadding }
+      local verticalPadding = micro and 22 or compact and 22 or 30
+      local valueLines = item.type == "elrs" and (boxW >= 600 and 1 or 2) or 1
+      local detailLines = item.type == "tx_gps" and item.size ~= "small"
+        and (boxW >= 600 and 3 or 4) or 1
+      metric = { font = font, lh = lh, vh = vh, detailHeight = detailHeight,
+        needed = lh + vh * valueLines + detailHeight * detailLines + verticalPadding
+          + (detailLines > 1 and 4 or 0) }
       metrics[metricKey] = metric
     end
     rowHeight = math.max(rowHeight, metric.needed)
     current[#current + 1] = { item = item, x = margin + used * (colW + gap), w = boxW, font = metric.font,
-      lineHeight = metric.vh, valueY = metric.lh + 13 }
+      lineHeight = metric.vh, detailHeight = metric.detailHeight, valueY = metric.lh + 13 }
     used = used + span
   end
-  if not finishRow() then return nil, "fit" end
-  if y - gap - top > available then return nil, "fit" end
+  local fits, offending = finishRow()
+  if not fits then return nil, "fit", offending end
+  if y - gap - top > available then return nil, "fit", rowStart end
   return rows
 end
 
 function M.validate(items, width, height, labels)
   if type(items) ~= "table" or #items == 0 then return false, "empty" end
   if #items > M.MAX_ITEMS then return false, "count" end
-  local rows, err = layout(items, width, height, labels)
-  return rows ~= nil, err, rows
+  if width < 200 or height < 45 then return false, "fit", nil, 1 end
+  local rows, err, offending = layout(items, width, height, labels)
+  return rows ~= nil, err, rows, offending
 end
 
 local function valuesFit(items, values, width, height, labels, rows)
@@ -202,13 +247,24 @@ local function valuesFit(items, values, width, height, labels, rows)
       local box = rows[r].items[i]
       if box.item.type == "elrs" then
         local fieldColumns = box.w >= 600 and 4 or 2
-        local gap = height < 400 and 6 or 10
+        local _, _, _, _, _, micro = frameGeometry(height)
+        local gap = micro and 4 or height < 400 and 6 or 10
         local fieldW = math.floor((box.w - 16 - gap * (fieldColumns - 1)) / fieldColumns)
         local lines = values._elrsLines or {}
         for n = 1, #lines do
           local lineW = measure(lines[n], box.font)
           if lineW > (n == 1 and box.w - 16 or fieldW) then return false end
         end
+      elseif box.item.type == "tx_gps" and box.item.size ~= "small" then
+        local fieldColumns = box.w >= 600 and 3 or 2
+        local _, _, _, _, _, micro = frameGeometry(height)
+        local gap = micro and 4 or height < 400 and 6 or 10
+        local fieldW = math.floor((box.w - 16 - gap * (fieldColumns - 1)) / fieldColumns)
+        local lines = values._gpsLines or {}
+        for n = 1, #GPS_WORST do
+          if measure(lines[n] or "-", SMLSIZE) > fieldW then return false end
+        end
+        if measure(values._gpsTime or "Time status unknown", SMLSIZE) > box.w - 16 then return false end
       else
         local value = tostring(values[box.item.type] or "-")
         for line in string.gmatch(value .. "\n", "([^\n]*)\n") do
@@ -261,38 +317,79 @@ local function battery(cache)
 end
 
 local function readValues(cache, items)
-  local dt = safeCall(getDateTime)
-  local info = model and safeCall(model.getInfo) or nil
-  local wantsGps, wantsBattery = false, false
+  local selected = {}
+  local wantsGps, wantsGpsDetails = false, false
   for i = 1, #(items or {}) do
     local itemType = items[i].type
-    if itemType == "tx_gps" then wantsGps = true elseif itemType == "tx_battery" then wantsBattery = true end
+    selected[itemType] = true
+    if itemType == "tx_gps" then
+      wantsGps = true
+      if items[i].size ~= "small" then wantsGpsDetails = true end
+    end
   end
+  local dt = (selected.clock or selected.date) and safeCall(getDateTime) or nil
+  local info = selected.model and model and safeCall(model.getInfo) or nil
   local gps = wantsGps and safeCall(getTxGPS) or nil
   local version = nil
-  if type(getVersion) == "function" then
+  if selected.firmware and type(getVersion) == "function" then
     local ok, firmwareVersion = pcall(getVersion)
     if ok and type(firmwareVersion) == "string" and firmwareVersion ~= "" then version = firmwareVersion end
   end
-  local now = type(getTime) == "function" and getTime() or 0
+  local now = selected.uptime and type(getTime) == "function" and getTime() or 0
   local values = {
-    clock = type(dt) == "table" and string.format("%02d:%02d", dt.hour or 0, dt.min or 0) or "-",
-    date = type(dt) == "table" and string.format("%04d-%02d-%02d", dt.year or 0, dt.mon or 0, dt.day or 0) or "-",
-    tx_battery = wantsBattery and battery(cache) or nil,
-    model = bounded(type(info) == "table" and info.name or nil, 15),
-    timer1 = timerValue(1), timer2 = timerValue(2), timer3 = timerValue(3),
-    uptime = now > 359999999 and ">999:59"
-      or string.format("%d:%02d", math.floor(now / 360000), math.floor(now / 6000) % 60),
-    firmware = bounded(version, 20),
-    elrs = M.elrsText(cache, type(getTime) == "function" and getTime() / 100 or 0),
+    clock = selected.clock and (type(dt) == "table"
+      and string.format("%02d:%02d", dt.hour or 0, dt.min or 0) or "-") or nil,
+    date = (selected.clock or selected.date) and (type(dt) == "table"
+      and string.format("%04d-%02d-%02d", dt.year or 0, dt.mon or 0, dt.day or 0) or "-") or nil,
+    tx_battery = selected.tx_battery and battery(cache) or nil,
+    model = selected.model and bounded(type(info) == "table" and info.name or nil, 15) or nil,
+    timer1 = selected.timer1 and timerValue(1) or nil,
+    timer2 = selected.timer2 and timerValue(2) or nil,
+    timer3 = selected.timer3 and timerValue(3) or nil,
+    uptime = selected.uptime and (now > 359999999 and ">999:59"
+      or string.format("%d:%02d", math.floor(now / 360000), math.floor(now / 6000) % 60)) or nil,
+    firmware = selected.firmware and bounded(version, 20) or nil,
+    elrs = selected.elrs and M.elrsText(cache, type(getTime) == "function" and getTime() / 100 or 0) or nil,
   }
+  if wantsGps then
+    values._gpsTime = cache.text and cache.text("gps_time_unavailable", "Time status unknown")
+      or "Time status unknown"
+  end
   if wantsGps and type(gps) == "table" then
     if gps.fix == true or gps.fix == 1 then
       local fix = cache.text and cache.text("gps_fix", "Fix") or "Fix"
       values.tx_gps = type(gps.numsat) == "number"
         and string.format("%s · %s", fix, gps.numsat > 99 and "99+" or tostring(math.max(0, math.floor(gps.numsat)))) or fix
+      local function usable(value, minimum, maximum)
+        return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+          and value >= minimum and value <= maximum
+      end
+      local function scaledGpsValue(key, format, unit, minimum, maximum)
+        local value = gps[key]
+        if not usable(value, minimum, maximum) then return "-" end
+        return string.format(format, value / 10) .. unit
+      end
+      if wantsGpsDetails then
+        local gpsValues = {
+          usable(gps.lat, -90, 90) and string.format("%.5f°", gps.lat) or "-",
+          usable(gps.lon, -180, 180) and string.format("%.5f°", gps.lon) or "-",
+          scaledGpsValue("alt", "%.1f", " m", -999999, 999999),
+          scaledGpsValue("speed", "%.1f", " m/s", 0, 99999),
+          scaledGpsValue("heading", "%.1f", "°", 0, 3599),
+          usable(gps.hdop, 0, 65535) and string.format("%.2f", gps.hdop / 100) or "-",
+        }
+        values._gpsLines = {}
+        for i = 1, #GPS_WORST do
+          local caption = cache.text and cache.text(GPS_WORST[i][1], GPS_WORST[i][2]) or GPS_WORST[i][2]
+          values._gpsLines[i] = caption .. ": " .. gpsValues[i]
+        end
+      end
     elseif gps.fix == false or gps.fix == 0 then
-      values.tx_gps = cache.text and cache.text("gps_no_fix", "No fix") or "No fix"
+      local noFix = cache.text and cache.text("gps_no_fix", "No fix") or "No fix"
+      local sat = cache.text and cache.text("gps_satellites", "Sat") or "Sat"
+      values.tx_gps = type(gps.numsat) == "number"
+        and string.format("%s · %s %s", noFix, sat, gps.numsat > 99 and "99+"
+          or tostring(math.max(0, math.floor(gps.numsat)))) or noFix
     else
       values.tx_gps = "-"
     end
@@ -359,50 +456,80 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
   cache.text = i18n
   local w, h = zone.w or LCD_W, zone.h or LCD_H
   local labels = {}
-  local hasElrs = false
+  local hasElrs, hasGps, hasGpsDetails = false, false, false
   for i = 1, #items do
     local id = items[i].type
     if labels[id] == nil then labels[id] = i18n(TYPE_KEYS[id], id) end
     if id == "elrs" then hasElrs = true end
+    if id == "tx_gps" then
+      hasGps = true
+      if items[i].size ~= "small" then hasGpsDetails = true end
+    end
   end
   if hasElrs then
     for i = 1, #ELRS_WORST do labels[ELRS_WORST[i][1]] = i18n(ELRS_WORST[i][1], ELRS_WORST[i][2]) end
+  end
+  if hasGpsDetails then
+    for i = 1, #GPS_WORST do labels[GPS_WORST[i][1]] = i18n(GPS_WORST[i][1], GPS_WORST[i][2]) end
+  end
+  if hasGps then
+    labels.gps_no_fix = i18n("gps_no_fix", "No fix")
+    labels.gps_satellites = i18n("gps_satellites", "Sat")
+    labels.gps_time_unavailable = i18n("gps_time_unavailable", "Time status unknown")
   end
   cache.zoneW, cache.zoneH, cache.labels = w, h, labels
   local valid, _, rows = M.validate(items, w, h, labels)
   cache.valueOverflow = valid and not valuesFit(items, values, w, h, labels, rows)
   local ok = valid and not cache.valueOverflow
-  local compact = h < 400
-  local logoW = compact and math.min(145, math.floor(w * 0.34)) or math.min(210, math.floor(w * 0.30))
+  local compact, _, footerH, headerDividerY, short, micro = frameGeometry(h)
+  local logoW = short and math.min(100, math.floor(w * 0.28))
+    or compact and math.min(145, math.floor(w * 0.34)) or math.min(210, math.floor(w * 0.30))
   local logoH = math.floor(logoW * 84 / 400 + 0.5)
   local headerY = compact and 6 or 8
-  local titleY = compact and 47 or 72
-  local footerH = 64
   local footerY = h - footerH
-  local headerDividerY = compact and 75 or 103
-  local contentMargin = compact and 10 or 16
+  local contentMargin = w < 360 and 6 or compact and 10 or 16
   local contentWidth = w - contentMargin * 2
-  local infoX = compact and 18 or 24
-  local infoWidth = w - (compact and 28 or 40)
-  local children = {
+  local infoX = contentMargin + 8
+  local infoWidth = w - infoX - contentMargin
+  if w < 200 or h < 90 then
+    return {
+      { type = "rectangle", x = 0, y = 0, w = w, h = h, color = COLOR_THEME_PRIMARY3, filled = true },
+      { type = "label", x = 6, y = math.max(4, math.floor(h * 0.4)), w = math.max(1, w - 12),
+        text = i18n("layout_invalid", "Standby layout does not fit"), align = CENTER,
+        color = COLOR_THEME_WARNING, font = SMLSIZE },
+    }
+  end
+  local stripH, markerY, infoY, statusY, statusH = 23, 5, 3, 27, footerH - 32
+  if short then stripH, markerY, infoY, statusY, statusH = 19, 3, 1, 22, footerH - 26 end
+  local children
+  if micro then
+    children = {
+      { type = "rectangle", x = 0, y = 0, w = w, h = h, color = COLOR_THEME_PRIMARY3, filled = true },
+      { type = "rectangle", x = 0, y = footerY, w = w, h = footerH,
+        color = COLOR_THEME_SECONDARY2, filled = true },
+      { type = "label", x = 4, y = footerY + 3, w = math.max(1, w - 8), h = footerH - 6,
+        text = fitLine(info and info.text or statusLine or "", math.max(1, w - 8), SMLSIZE),
+        color = COLOR_THEME_PRIMARY1, font = SMLSIZE },
+    }
+  else
+    children = {
     { type = "rectangle", x = 0, y = 0, w = w, h = h, color = COLOR_THEME_PRIMARY3, filled = true },
     { type = "image", x = contentMargin, y = headerY, w = logoW, h = logoH,
       file = "/SCRIPTS/TOOLS/rfsuite-core/widgets/dashboard/gfx/logo.png" },
-    { type = "label", x = contentMargin, y = titleY, w = contentWidth,
-      text = i18n("screen_title", "Standby"), color = COLOR_THEME_PRIMARY2, font = MIDSIZE },
     { type = "rectangle", x = contentMargin, y = headerDividerY, w = contentWidth, h = 1,
       color = COLOR_THEME_SECONDARY1, filled = true },
-    { type = "rectangle", x = 0, y = footerY, w = w, h = 23, color = COLOR_THEME_SECONDARY2, filled = true },
-    { type = "rectangle", x = contentMargin, y = footerY + 5, w = 3, h = 13, filled = true,
+    { type = "rectangle", x = 0, y = footerY, w = w, h = stripH, color = COLOR_THEME_SECONDARY2, filled = true },
+    { type = "rectangle", x = contentMargin, y = footerY + markerY, w = 3, h = 13, filled = true,
       color = info and (info.level == "warning" or info.level == "error") and COLOR_THEME_WARNING
         or COLOR_THEME_SECONDARY1 },
-    { type = "label", x = infoX, y = footerY + 3, w = infoWidth, h = 18,
+    { type = "label", x = infoX, y = footerY + infoY, w = infoWidth, h = 18,
       text = fitLine(info and info.text or "", infoWidth, SMLSIZE),
       color = COLOR_THEME_PRIMARY1, font = SMLSIZE },
-    { type = "label", x = contentMargin, y = footerY + 27, w = contentWidth,
-      h = footerH - 32, text = tostring(statusLine or ""),
+    { type = "label", x = contentMargin, y = footerY + statusY, w = contentWidth,
+      h = statusH, text = tostring(statusLine or ""),
       color = COLOR_THEME_PRIMARY2, font = SMLSIZE },
-  }
+    }
+  end
   if not ok then
     children[#children + 1] = { type = "label", x = 10, y = math.floor(h * 0.46), w = w - 20,
       text = i18n("layout_invalid", "Standby layout does not fit"), align = CENTER,
@@ -421,7 +548,7 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
     children[#children + 1] = { type = "label", x = x + 8, y = y + 5, w = boxW - 16, text = label, color = COLOR_THEME_SECONDARY1, font = SMLSIZE }
     if item.type == "elrs" then
       local fieldColumns = boxW >= 600 and 4 or 2
-      local fieldGap = compact and 6 or 10
+      local fieldGap = micro and 4 or compact and 6 or 10
       local fieldW = math.floor((boxW - 16 - fieldGap * (fieldColumns - 1)) / fieldColumns)
       for field = 1, 4 do
         local column = (field - 1) % fieldColumns
@@ -448,7 +575,27 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
           or COLOR_THEME_PRIMARY1,
         font = box.font }
       local detail = ""
-      if item.type == "tx_battery" then
+      if item.type == "tx_gps" and item.size ~= "small" then
+        local fieldColumns = boxW >= 600 and 3 or 2
+        local fieldGap = micro and 4 or compact and 6 or 10
+        local fieldW = math.floor((boxW - 16 - fieldGap * (fieldColumns - 1)) / fieldColumns)
+        local detailY = y + box.valueY + box.lineHeight + 4
+        for field = 1, #GPS_WORST do
+          local column = (field - 1) % fieldColumns
+          local line = math.floor((field - 1) / fieldColumns)
+          children[#children + 1] = { type = "label", x = x + 8 + column * (fieldW + fieldGap),
+            y = detailY + line * box.detailHeight, w = fieldW,
+            text = function()
+              local snap = cache.snapshotValues or values
+              return snap._gpsLines and snap._gpsLines[field] or ""
+            end,
+            color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
+        end
+        children[#children + 1] = { type = "label", x = x + 8,
+          y = detailY + math.ceil(#GPS_WORST / fieldColumns) * box.detailHeight,
+          w = boxW - 16, text = values._gpsTime or labels.gps_time_unavailable,
+          color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
+      elseif item.type == "tx_battery" then
         detail = i18n("tx_battery_detail", "Radio battery")
         local batteryW = compact and 30 or 36
         local batteryH = compact and 12 or 14
@@ -471,16 +618,19 @@ function M.build(zone, statusLine, i18n, items, values, cache, info)
       elseif item.type == "model" then detail = i18n("model_detail", "EdgeTX model")
       elseif item.type == "timer1" or item.type == "timer2" or item.type == "timer3" then
         detail = i18n(item.type .. "_detail", "EdgeTX model timer")
-      elseif item.type == "tx_gps" then detail = i18n("tx_gps_detail", "Internal transmitter GPS")
+      elseif item.type == "tx_gps" then
+        detail = i18n("gps_time_unavailable", "Time status unknown")
       elseif item.type == "uptime" then detail = i18n("uptime_detail", "Since radio power-on")
       elseif item.type == "firmware" then detail = i18n("firmware_detail", "Radio firmware")
       elseif item.type == "date" then detail = i18n("date_detail", "Radio date") end
       local detailW = item.type == "tx_battery" and boxW - 57 or boxW - 16
-      children[#children + 1] = { type = "label", x = x + 8, y = y + row.h - 21, w = detailW,
-        text = item.type == "clock"
-          and function() local snap = cache.snapshotValues or values; return tostring(snap.date or "-") end
-          or detail,
-        color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
+      if not (item.type == "tx_gps" and item.size ~= "small") then
+        children[#children + 1] = { type = "label", x = x + 8, y = y + row.h - 21, w = detailW,
+          text = item.type == "clock"
+            and function() local snap = cache.snapshotValues or values; return tostring(snap.date or "-") end
+            or detail,
+          color = COLOR_THEME_PRIMARY1, font = SMLSIZE }
+      end
     end
     end
   end

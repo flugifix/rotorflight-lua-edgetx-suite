@@ -1191,7 +1191,10 @@ do
     .. "timer1:small,timer2:small,timer3:small", nil, true, 8)
   local composite = runStandbyScenario("elrs:wide,elrs:wide,elrs:wide,elrs:wide,"
     .. "timer1:small,timer2:small,timer3:small,timer1:small", nil, true, 8)
-  local gps = runStandbyScenario("clock:small,date:small,tx_gps:wide", { fix = true, numsat = 12 }, false)
+  local gps = runStandbyScenario("clock:small,date:small,tx_gps:wide", {
+    fix = true, numsat = 12, lat = 52.12345, lon = 13.54321,
+    alt = 1234, speed = 56, heading = 2712, hdop = 85,
+  }, false, 3)
   local elrsNoReply = runStandbyScenario("elrs:full", nil, false)
   local elrsReady = runStandbyScenario("elrs:full", nil, true)
   local batteries = runStandbyScenario("tx_battery:small,tx_battery:small,tx_battery:small,tx_battery:small,"

@@ -2,6 +2,7 @@ local M = {}
 local function load(path) return assert(loadScript("/SCRIPTS/TOOLS/rfsuite-core/" .. path, "t"))() end
 local Common, Controls, Standby, t
 local NONE = ""
+local NOTE_LINE_H = 24
 local ui = { loaded = false, dirty = false, enabled = false, items = {}, runtime = nil }
 local function deps()
   Common = Common or load("app/pages/settings/common.lua")
@@ -39,14 +40,61 @@ end
 local function sizeOptions(i18n)
   return { { value = "small", label = t(i18n, "size_small", "Small") }, { value = "wide", label = t(i18n, "size_wide", "Wide") }, { value = "full", label = t(i18n, "size_full", "Full row") } }
 end
-local function fitLabels(i18n)
-  local labels = {}; for i = 1, #Standby.TYPES do local id = Standby.TYPES[i]; labels[id] = typeLabel(i18n, id) end
+local function fitLabels(i18n, typeChoices)
+  local labels = {}
+  if typeChoices then
+    for i = 2, #typeChoices do labels[typeChoices[i].value] = typeChoices[i].label end
+  else
+    for i = 1, #Standby.TYPES do local id = Standby.TYPES[i]; labels[id] = typeLabel(i18n, id) end
+  end
   labels.elrs_last_read = t(i18n, "elrs_last_read", "Last read %d s ago")
   labels.elrs_packet_rate = t(i18n, "elrs_packet_rate", "Packet Rate")
   labels.elrs_telemetry_ratio = t(i18n, "elrs_telemetry_ratio", "Telemetry Ratio")
   labels.elrs_max_power = t(i18n, "elrs_max_power", "Max Power")
   labels.elrs_dynamic = t(i18n, "elrs_dynamic", "Dynamic")
+  labels.gps_latitude = t(i18n, "gps_latitude", "Latitude")
+  labels.gps_longitude = t(i18n, "gps_longitude", "Longitude")
+  labels.gps_altitude = t(i18n, "gps_altitude", "Altitude")
+  labels.gps_speed = t(i18n, "gps_speed", "Speed")
+  labels.gps_course = t(i18n, "gps_course", "Course")
+  labels.gps_hdop = t(i18n, "gps_hdop", "HDOP")
+  labels.gps_satellites = t(i18n, "gps_satellites", "Sat")
+  labels.gps_time_unavailable = t(i18n, "gps_time_unavailable", "Time status unknown")
   return labels
+end
+local function selectedItems()
+  local items, slots = {}, {}
+  for i = 1, Standby.MAX_ITEMS do
+    if ui.items[i].type ~= NONE then
+      items[#items + 1] = ui.items[i]
+      slots[#slots + 1] = i
+    end
+  end
+  return items, slots
+end
+local function fitMessage(i18n, reason, offendingIndex, items, slots, labels)
+  if reason == "empty" then return t(i18n, "fit_empty", "Add at least one item before saving.") end
+  local item = offendingIndex and items[offendingIndex] or nil
+  local slot = offendingIndex and slots[offendingIndex] or nil
+  if item and slot then
+    local label = labels[item.type] or typeLabel(i18n, item.type)
+    if reason == "size" then
+      return string.format(t(i18n, "fit_item_size", "Position %d (%s): choose Wide or Full row."), slot, label)
+    elseif reason == "width" then
+      return string.format(t(i18n, "fit_item_width", "Position %d (%s): choose a wider size or remove this tile."), slot, label)
+    elseif reason == "fit" then
+      return string.format(t(i18n, "fit_item_height", "Position %d (%s): this row no longer fits. Remove a tile or choose smaller sizes."), slot, label)
+    end
+  end
+  return t(i18n, "invalid_message", "Every selected item must fit readably on one screen.")
+end
+local function appendFitNote(children, x, y, w, text, color)
+  children[#children + 1] = { type = "label", x = x, y = y, w = w, text = text, color = color, font = SMLSIZE }
+  if type(Controls.estimateWrappedTextHeight) == "function" then
+    local height = Controls.estimateWrappedTextHeight(text, w, SMLSIZE)
+    if type(height) == "number" and height > NOTE_LINE_H then return height end
+  end
+  return NOTE_LINE_H
 end
 local function button(children, x, y, w, text, press)
   children[#children + 1] = { type = "button", x = x, y = y, w = w, h = 36, text = text, press = press }
@@ -55,11 +103,11 @@ function M.getHeaderActions() deps(); return { save = true, help = true } end
 function M.onReload(ctx) deps(); fromPrefs(ctx.preferences); ui.dirty = false end
 function M.onSave(ctx)
   deps()
-  local items = {}; for i = 1, Standby.MAX_ITEMS do if ui.items[i].type ~= NONE then items[#items + 1] = ui.items[i] end end
+  local items, slots = selectedItems()
   local labels = fitLabels(ctx.i18n)
-  local valid = Standby.validate(items, LCD_W or 480, LCD_H or 320, labels)
+  local valid, reason, _, offendingIndex = Standby.validate(items, LCD_W or 480, LCD_H or 320, labels)
   if ui.enabled and not valid then
-    ctx.reportSave({ title = t(ctx.i18n, "invalid_title", "Layout not saved"), message = t(ctx.i18n, "invalid_message", "Every selected item must fit on one screen.") }); return
+    ctx.reportSave({ title = t(ctx.i18n, "invalid_title", "Layout not saved"), message = fitMessage(ctx.i18n, reason, offendingIndex, items, slots, labels) }); return
   end
   local encodedLayout = valid and Standby.encode(items) or nil
   ctx.preferences.dashboard = ctx.preferences.dashboard or {}
@@ -81,6 +129,11 @@ function M.build(ctx)
   y = y + Controls.appendRadioSwitch(children, x, y, w, t(i18n, "enabled", "Standby screen"), ui.enabled,
     function(value) ui.enabled = value == true; ui.dirty = true; ctx.requestRebuild() end)
   local types, sizes, fmt = typeOptions(i18n), sizeOptions(i18n), t(i18n, "position", "Position %d")
+  local selected, slots = selectedItems()
+  local labels = fitLabels(i18n, types)
+  local valid, reason, _, offendingIndex = Standby.validate(selected, LCD_W or 480, LCD_H or 320, labels)
+  local offendingSlot = offendingIndex and slots[offendingIndex] or nil
+  local fitText = valid and t(i18n, "fit_ok", "Fits this screen") or fitMessage(i18n, reason, offendingIndex, selected, slots, labels)
   for i = 1, Standby.MAX_ITEMS do
     y = y + Controls.appendComboSelect(children, x, y, w, string.format(fmt, i), types, ui.items[i].type,
       function(value)
@@ -96,19 +149,10 @@ function M.build(ctx)
       if i < Standby.MAX_ITEMS and ui.items[i + 1].type ~= NONE then button(children, x + bw + 6, y, bw, t(i18n, "move_down", "Move down"), function() ui.items[i + 1], ui.items[i] = ui.items[i], ui.items[i + 1]; ui.dirty = true; ctx.requestRebuild() end) end
       button(children, x + (bw + 6) * 2, y, bw, t(i18n, "remove", "Remove"), function() table.remove(ui.items, i); ui.items[#ui.items + 1] = { type = NONE, size = "small" }; ui.dirty = true; ctx.requestRebuild() end)
       y = y + 42
+      if i == offendingSlot then y = y + appendFitNote(children, x, y, w, fitText, COLOR_THEME_WARNING) end
     end
   end
-  local selected = {}; for i = 1, Standby.MAX_ITEMS do if ui.items[i].type ~= NONE then selected[#selected + 1] = ui.items[i] end end
-  local labels = fitLabels(i18n)
-  local valid, reason = Standby.validate(selected, LCD_W or 480, LCD_H or 320, labels)
-  local fitText = t(i18n, "fit_ok", "Fits this screen")
-  if not valid then
-    if reason == "empty" then fitText = t(i18n, "fit_empty", "Add at least one item before saving.")
-    elseif reason == "size" then fitText = t(i18n, "fit_size", "Choose Wide or Full row for the ELRS item.")
-    elseif reason == "width" then fitText = t(i18n, "fit_width", "Make the item wider or remove it.")
-    else fitText = t(i18n, "fit_height", "Remove an item or choose a smaller size.") end
-  end
-  children[#children + 1] = { type = "label", x = x, y = y, w = w, text = fitText, color = valid and COLOR_THEME_PRIMARY1 or COLOR_THEME_WARNING, font = SMLSIZE }
+  if valid or offendingSlot == nil then appendFitNote(children, x, y, w, fitText, valid and COLOR_THEME_PRIMARY1 or COLOR_THEME_WARNING) end
 end
 function M.onClose() Common.resetPageState(ui); Common, Controls, Standby, t = nil, nil, nil, nil end
 function M.hasUnsavedChanges() return ui.dirty == true end

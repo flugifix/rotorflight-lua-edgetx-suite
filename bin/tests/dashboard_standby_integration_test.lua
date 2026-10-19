@@ -169,7 +169,11 @@ do
   check("ordinary new item saves at small size", ctx.preferences.dashboard.standby_layout == "clock:small")
 
   local savedLcdW, savedLcdH = LCD_W, LCD_H
+  local savedSizeText = lcd.sizeText
   LCD_W, LCD_H = 480, 320
+  lcd.sizeText = function(text, font)
+    return #tostring(text) * (font == MIDSIZE and 12 or 8), font == MIDSIZE and 24 or 18
+  end
   ctx.preferences.dashboard.standby_layout = "tx_gps:small"
   Page.onReload(ctx)
   local function choose(position, label)
@@ -188,7 +192,7 @@ do
   check("ordinary clock can be added after saved GPS", choose(2, "Clock"))
   check("ordinary battery can be added after GPS and clock", choose(3, "TX battery"))
   Page.onSave(ctx)
-  check("GPS clock battery layout saves on 480x320",
+  check("GPS clock battery layout saves on 480x320 with conservative font heights",
     ctx.preferences.dashboard.standby_layout == "tx_gps:small,clock:small,tx_battery:small")
 
   local writesBeforeOverflow = writes
@@ -198,6 +202,88 @@ do
   check("genuine 480x320 overcapacity still refuses the writer", writes == writesBeforeOverflow)
   check("genuine overcapacity remains the active unsaved draft",
     ctx.preferences.dashboard.standby_layout == "clock:full,date:full,tx_battery:full,model:full")
+
+  -- The page must map the validator's compact selected-item index back to the visible slot.
+  -- Leave slot 2 empty, then make ELRS in slot 3 invalid at Small: selected index 2 is slot 3.
+  local de = assert(loadfile(root .. "/src/rfsuite/i18n/de.lua"))()
+  local function translated(key)
+    local value = de
+    for part in string.gmatch(key, "[^.]+") do
+      value = type(value) == "table" and value[part] or nil
+      if value == nil then return key end
+    end
+    return value
+  end
+  ctx.i18n = { t = translated }
+  local pageText = de.app.pages.settings_dashboard_standby
+  ctx.preferences.dashboard.standby_layout = "clock:full,tx_battery:full,model:full"
+  Page.onReload(ctx)
+  ctx.children = {}
+  Page.build(ctx)
+  local expectedHeightFit = string.format(pageText.fit_item_height, 3, pageText.module_model)
+  local heightWarning
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "label" and node.text == expectedHeightFit then heightWarning = i; break end
+  end
+  check("third full row identifies selected item 3 as the height overflow", heightWarning ~= nil)
+  local writesBeforeHeightSave, reportsBeforeHeightSave = writes, #reports
+  Page.onSave(ctx)
+  check("height-overflow save refuses the writer", writes == writesBeforeHeightSave)
+  check("height-overflow save message equals its inline warning",
+    #reports == reportsBeforeHeightSave + 1 and reports[#reports].message == expectedHeightFit)
+
+  ctx.preferences.dashboard.standby_layout = "clock:small"
+  Page.onReload(ctx)
+  ctx.children = {}
+  Page.build(ctx)
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "choice" and node.title == string.format(pageText.position, 3) then
+      for option = 1, #node.values do
+        if node.values[option] == pageText.module_elrs then node.set(option); break end
+      end
+      break
+    end
+  end
+  ctx.children = {}
+  Page.build(ctx)
+  local sizeSeen = 0
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "choice" and node.title == pageText.size then
+      sizeSeen = sizeSeen + 1
+      if sizeSeen == 2 then node.set(1); break end
+    end
+  end
+  ctx.children = {}
+  Page.build(ctx)
+  local expectedFit = string.format(pageText.fit_item_size, 3, pageText.module_elrs)
+  local sizeIndex, warningIndex, nextPositionIndex
+  sizeSeen = 0
+  for i = 1, #ctx.children do
+    local node = ctx.children[i]
+    if node.type == "choice" and node.title == pageText.size then
+      sizeSeen = sizeSeen + 1
+      if sizeSeen == 2 then sizeIndex = i end
+    elseif node.type == "label" and node.text == expectedFit then
+      warningIndex = i
+      check("offending slot warning uses warning color and small font",
+        node.color == COLOR_THEME_WARNING and node.font == SMLSIZE)
+    elseif node.type == "choice" and node.title == string.format(pageText.position, 4) then
+      nextPositionIndex = i
+    end
+  end
+  check("selected-item index maps to visible slot 3 with localized tile name", warningIndex ~= nil)
+  check("inline warning follows offending size and precedes the next position",
+    sizeIndex ~= nil and warningIndex > sizeIndex and nextPositionIndex ~= nil and warningIndex < nextPositionIndex)
+  local writesBeforeInlineSave, reportsBeforeInlineSave = writes, #reports
+  Page.onSave(ctx)
+  check("inline-invalid save refuses the writer", writes == writesBeforeInlineSave)
+  check("save refusal exactly matches the inline warning",
+    #reports == reportsBeforeInlineSave + 1 and reports[#reports].message == expectedFit)
+  ctx.i18n = {}
+  lcd.sizeText = savedSizeText
   LCD_W, LCD_H = savedLcdW, savedLcdH
   Page.onClose()
 end
@@ -206,6 +292,13 @@ end
 -- fallback would make every translated timer caption silently display English.
 do
   local Standby = assert(loadfile(standbyPath))()
+  local savedSizeText = lcd.sizeText
+  lcd.sizeText = function(text, font)
+    return #tostring(text) * (font == MIDSIZE and 9 or 6), font == MIDSIZE and 17 or 12
+  end
+  check("default layout fits native TX15 English font heights",
+    Standby.validate(Standby.decode(nil), 480, 320))
+  lcd.sizeText = savedSizeText
   local cache = {}
   local labels = { timer1_detail = "Localized timer one" }
   local tree = Standby.build({ x = 0, y = 0, w = 800, h = 480 }, "waiting",
@@ -217,6 +310,44 @@ do
     if node.type == "label" and node.text == "Localized timer one" then localized = true; break end
   end
   check("timer tile uses its item-specific localized detail key", localized)
+
+  local compactItems = Standby.decode(nil)
+  local compactCache = {}
+  local compactTree = Standby.build({ x = 0, y = 0, w = 480, h = 320 }, "waiting",
+    function(_, fallback) return fallback end, compactItems, {}, compactCache,
+    { text = "info", level = "info" })
+  local Controls = assert(_G.rfsuite.require("widgets/dashboard/fullscreen_controls.lua"))
+  Controls.appendTool(compactTree, { zone = { x = 0, y = 0, w = 480, h = 320 }, state = { armed = false } })
+  local toolBottom, firstTileY
+  for i = 1, #compactTree do
+    local node = compactTree[i]
+    if node.type == "button" and node.x == 459 and node.y == 1 and node.w == 20 and node.h == 20 then
+      toolBottom = node.y + node.h
+    elseif node.type == "rectangle" and node.rounded == 5 then
+      firstTileY = firstTileY and math.min(firstTileY, node.y) or node.y
+    end
+  end
+  check("compact Suite control stays above the first standby tile",
+    toolBottom == 21 and firstTileY ~= nil and toolBottom < firstTileY)
+
+  for _, size in ipairs({ { 240, 68 }, { 480, 45 } }) do
+    local fitText = "Localized layout fit message"
+    local tinyTree = Standby.build({ x = 0, y = 0, w = size[1], h = size[2] }, "waiting",
+      function(key, fallback) if key == "layout_invalid" then return fitText end; return fallback end,
+      Standby.decode(nil), {}, {}, { text = "info", level = "info" })
+    local bounded, foundFit = #tinyTree == 2, false
+    for i = 1, #tinyTree do
+      local node = tinyTree[i]
+      if node.type == "label" and node.text == fitText then foundFit = true end
+      if type(node.x) == "number" and type(node.y) == "number" then
+        bounded = bounded and node.x >= 0 and node.y >= 0
+          and (type(node.w) ~= "number" or node.x + node.w <= size[1])
+          and (type(node.h) ~= "number" or node.y + node.h <= size[2])
+      end
+    end
+    check("minimum standard EdgeTX zone uses bounded localized fit surface "
+        .. size[1] .. "x" .. size[2], bounded and foundFit)
+  end
 end
 
 -- Use the actual dashboard runtime with the accounting radio/FC surface. The provider methods
@@ -296,6 +427,124 @@ do
   check("standby uses the existing fullscreen Suite launch control",
     suiteButton and suiteButton.color == COLOR_THEME_PRIMARY1
       and type(suiteButton.press) == "function" and suiteGlyphLines == 6)
+
+  -- A visible zone receives the same waiting surface at its own dimensions, without the
+  -- fullscreen-only Suite control. Hidden/background and disabled widgets must not sample GPS.
+  local savedGetTxGPS, gpsReads = getTxGPS, 0
+  getTxGPS = function()
+    gpsReads = gpsReads + 1
+    return { fix = true, numsat = 8, lat = 48.12345, lon = 11.54321,
+      alt = 6123, speed = 45, heading = 1274, hdop = 123 }
+  end
+  local deLocale = assert(loadfile(root .. "/src/rfsuite/i18n/de.lua"))()
+  local function deText(key, fallback)
+    local value = deLocale
+    for part in string.gmatch(key, "[^.]+") do
+      value = type(value) == "table" and value[part] or nil
+      if value == nil then return fallback end
+    end
+    return value
+  end
+  local gpsText = deLocale.widgets.dashboard.standby
+  local function firstGpsSnapshot(name, layout)
+    local before = gpsReads
+    local gpsWidget = Runtime.new({ x = 0, y = 0, w = 480, h = 320 }, {})
+    gpsWidget.i18n = { t = deText }
+    gpsWidget.preferences.dashboard = gpsWidget.preferences.dashboard or {}
+    gpsWidget.preferences.dashboard.standby_enabled = true
+    gpsWidget.preferences.dashboard.standby_layout = layout
+    gpsWidget.preferences.audio_events = gpsWidget.preferences.audio_events or {}
+    gpsWidget.preferences.audio_events.tpwr_alert = false
+    gpsWidget.state.fblConnected, gpsWidget.state.armed = false, false
+    gpsWidget.state.hadInflightFlight, gpsWidget.flightMode = false, "preflight"
+    Stubs.tick(); gpsWidget:refresh(nil, nil)
+    local firstGps = gpsWidget._standbyCache and gpsWidget._standbyCache.snapshotValues
+    check(name, gpsReads == before + 1 and firstGps
+      and firstGps._gpsTime == gpsText.gps_time_unavailable
+      and firstGps._gpsLines[1] == gpsText.gps_latitude .. ": 48.12345°"
+      and firstGps._gpsLines[6] == gpsText.gps_hdop .. ": 1.23")
+    gpsWidget:background()
+  end
+  firstGpsSnapshot("first large GPS snapshot is localized before its build pass", "tx_gps:full")
+  firstGpsSnapshot("large then small duplicate keeps first-frame GPS detail localization",
+    "tx_gps:wide,tx_gps:small")
+  firstGpsSnapshot("small then large duplicate keeps first-frame GPS detail localization",
+    "tx_gps:small,tx_gps:wide")
+  local gpsReadsBeforeZone = gpsReads
+  local zoneWidget = Runtime.new({ x = 4, y = 6, w = 300, h = 180 }, {})
+  zoneWidget.preferences.dashboard = zoneWidget.preferences.dashboard or {}
+  zoneWidget.preferences.dashboard.standby_enabled = true
+  zoneWidget.preferences.dashboard.standby_layout = "clock:small"
+  zoneWidget.preferences.audio_events = zoneWidget.preferences.audio_events or {}
+  zoneWidget.preferences.audio_events.tpwr_alert = false
+  zoneWidget.state.fblConnected, zoneWidget.state.armed = false, false
+  zoneWidget.state.hadInflightFlight, zoneWidget.flightMode = false, "preflight"
+  local zoneTreesBefore, previousTree, requestsBeforeZone = #Stubs.lvgl.trees, Stubs.lvgl.trees[1], calls.request
+  Stubs.tick(); zoneWidget:refresh(nil, nil)
+  zoneWidget:refresh(nil, nil)
+  local zoneTree = Stubs.lvgl.trees[#Stubs.lvgl.trees] or {}
+  local zoneHasTool, zoneContained, zoneNode, zoneOverflow = false, true, false, nil
+  for i = 1, #zoneTree do
+    local node = zoneTree[i]
+    if node.type == "button" and type(node.press) == "function" then zoneHasTool = true; break end
+    if type(node.x) == "number" and type(node.y) == "number" then
+      zoneNode = true
+      if node.x < 0 or node.y < 0
+          or (type(node.w) == "number" and node.x + node.w > 300)
+          or (type(node.h) == "number" and node.y + node.h > 180) then
+        zoneContained = false
+        zoneOverflow = tostring(node.type) .. "@" .. tostring(node.x) .. "," .. tostring(node.y)
+          .. "+" .. tostring(node.w) .. "x" .. tostring(node.h)
+      end
+    end
+  end
+  check("normal widget builds standby at the actual zone without Suite control trees="
+      .. tostring(zoneTreesBefore) .. "->" .. tostring(#Stubs.lvgl.trees)
+      .. " kind=" .. tostring(zoneWidget._treeKind)
+      .. " fs=" .. tostring(zoneWidget._standbyFullscreen)
+      .. " tool=" .. tostring(zoneHasTool)
+      .. " changed=" .. tostring(zoneTree ~= previousTree)
+      .. " node=" .. tostring(zoneNode) .. " contained=" .. tostring(zoneContained)
+      .. " overflow=" .. tostring(zoneOverflow),
+    zoneTreesBefore == 1 and #Stubs.lvgl.trees == 1 and zoneTree ~= previousTree
+      and zoneNode and zoneContained and zoneWidget._treeKind == "standby"
+      and zoneWidget._standbyFullscreen == false and not zoneHasTool)
+  check("normal non-ELRS standby does not touch the shared ELRS reader",
+    calls.request == requestsBeforeZone)
+  check("unselected GPS is not sampled in normal standby", gpsReads == gpsReadsBeforeZone)
+  zoneWidget.zone = { x = 0, y = 0, w = 480, h = 320 }
+  Stubs.tick(); zoneWidget:refresh(0, nil)
+  zoneWidget:refresh(0, nil)
+  local fullscreenTree = Stubs.lvgl.trees[1] or {}
+  local fullscreenHasTool = false
+  for i = 1, #fullscreenTree do
+    if fullscreenTree[i].type == "button" and type(fullscreenTree[i].press) == "function" then
+      fullscreenHasTool = true; break
+    end
+  end
+  check("normal-to-fullscreen transition rebuilds with Suite control",
+    zoneWidget._treeKind == "standby" and zoneWidget._standbyFullscreen == true and fullscreenHasTool)
+  zoneWidget.zone = { x = 4, y = 6, w = 300, h = 180 }
+  Stubs.tick(); zoneWidget:refresh(nil, nil)
+  zoneWidget:refresh(nil, nil)
+  local returnedZoneTree = Stubs.lvgl.trees[1] or {}
+  local returnedZoneHasTool = false
+  for i = 1, #returnedZoneTree do
+    if returnedZoneTree[i].type == "button" and type(returnedZoneTree[i].press) == "function" then
+      returnedZoneHasTool = true; break
+    end
+  end
+  check("fullscreen-to-normal transition rebuilds without Suite control",
+    zoneWidget._treeKind == "standby" and zoneWidget._standbyFullscreen == false
+      and not returnedZoneHasTool)
+  zoneWidget:background()
+  check("background releases normal standby display state",
+    zoneWidget._standbyModule == nil and zoneWidget._standbyCache == nil
+      and zoneWidget._standbyFullscreen == nil)
+  zoneWidget.preferences.dashboard.standby_enabled = false
+  Stubs.tick(); zoneWidget:refresh(nil, nil)
+  check("disabled normal widget does not sample GPS", gpsReads == gpsReadsBeforeZone)
+  getTxGPS = savedGetTxGPS
 
   check("active standby has cached localized texts before global reload",
     type(widget._standbyTexts) == "table"
