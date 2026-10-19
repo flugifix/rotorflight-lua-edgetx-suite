@@ -133,8 +133,11 @@ One parameter at a time, not a grid:
   radio is set to. A trim press that steps the selected parameter comes and goes without
   rebuilding the screen; a trim that selects another row or bank redraws it for the new
   selection. A trim press is one step however long the trim is held: a held trim does not
-  repeat, and the next step needs the trim to come up and go down again. A step press that comes
-  before the flight controller can count it as a step of its own -- during the previous press's
+  repeat, and the next step needs the trim to come up and go down again. That holds when the
+  selection moves under it too: in the navigate layout, a walk or bank trim step, a tap on the
+  row list or a bank chip while the adjust trim is held starts no step of its own, and
+  the new row steps at the trim's next press. A step press that comes before the flight
+  controller can count it as a step of its own -- during the previous press's
   pulse or the pause after it -- shows **too fast - one step at a time**, as a tap on a step
   control does, and steps nothing even if the trim is still held when the pause is over.
   The trims and the step controls share one value, so they wait for each other: a tap during a

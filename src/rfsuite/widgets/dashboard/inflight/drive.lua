@@ -1104,7 +1104,7 @@ end
 -- stood on the wire for seconds and stepped many times more often than the trim was pressed.
 -- Ending the pulse on its own clock bounds what one press can do whatever the pass rate. Holding
 -- to repeat stays with the touch controls, whose release is reported by an event rather than
--- sampled.
+-- sampled. Nor does a held trim step again when the selection moves under it (see the edge below).
 --
 -- The pulse is the trim's OWN, deliberately not the touch control's. A held touch button is
 -- published as `holding` and freezes the widget's render key, because a rebuild would delete the
@@ -1124,8 +1124,17 @@ function Drive:pollTrimStep(now)
 
   -- Everything happens at an edge. A trim that reads the same as on the last pass -- held, or let
   -- go and pressed again between two passes -- has had its answer already.
-  if row == self.trimRow and up == self.trimUp then return end
-  self.trimRow, self.trimUp = row, up
+  --
+  -- The edge is the TRIM's, not the row it lands on. In `rows` mode the two are one thing, each row
+  -- having a trim of its own. In `navigate` mode the one adjust trim answers whichever row is
+  -- selected, and the selection can move while it is held -- a walk or bank trim step, a tap on the
+  -- row list or a bank chip -- so an edge keyed on the row read each of those as a new press and
+  -- stepped the new row without the trim coming up. There `trimRow` holds 0 for "the adjust trim"
+  -- instead, never a row number.
+  local key = row
+  if row ~= nil and self:navigateMode() then key = 0 end
+  if key == self.trimRow and up == self.trimUp then return end
+  self.trimRow, self.trimUp = key, up
 
   -- Let go. The magnitude does not fall away here: a pulse still running owns it until its own
   -- clock says otherwise, and that is the whole of what makes a short press step at all.
