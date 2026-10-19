@@ -103,6 +103,50 @@ do
   local result = audioRead(state, false, 0.5)
   assert(result and result.done and result.maxMilliwatts == 1000 and result.dynamic == false,
     "audio did not complete the forced refresh with an explicit Off result")
+
+  local function startAudioRead(target, at)
+    assert(audioRead(target, false, at) == nil)
+    assert(Config.snapshot(Config.currentIdentity()).status == "reading")
+  end
+  local function handoffAfterAbort(crsfTransport, at)
+    assert(not Config.acquire("diagnostics"), "aborted audio read bypassed late-frame quarantine")
+    Config.drain({ owner = "diagnostics", crsf = crsfTransport, now = at })
+    Config.drain({ owner = "diagnostics", crsf = crsfTransport, now = at + 0.6 })
+    assert(Config.acquire("diagnostics"), "aborted audio read retained its lease")
+    Config.release("diagnostics")
+  end
+
+  local armedState = {}
+  startAudioRead(armedState, 1)
+  assert(audioRead(armedState, true, 1.1) == nil)
+  handoffAfterAbort(crsf, 1.1)
+
+  local resetState = {}
+  startAudioRead(resetState, 2)
+  Audio.resetConnectionState(resetState)
+  assert(resetState.txPowerRequested == nil)
+  handoffAfterAbort(crsf, 2.1)
+
+  local disabledState = {}
+  startAudioRead(disabledState, 3)
+  Audio.process({
+    audioState = disabledState, state = { zoneH = 320 },
+    preferences = { audio_events = { tpwr_alert = false } },
+  })
+  assert(disabledState.txPowerRequested == nil, "disabling the alert retained the audio owner")
+  handoffAfterAbort(crsf, 3.1)
+
+  local chainState = {}
+  startAudioRead(chainState, 4)
+  _G.rfsuite.modules = {
+    ["/SCRIPTS/TOOLS/rfsuite-core/tasks/events/runtime.lua"] = {
+      getOnconnectProgress = function() return { total = 1, done = 0 } end,
+    },
+  }
+  assert(audioRead(chainState, false, 4.1) == nil and chainState.txPowerRequested == nil,
+    "connect-chain priority retained the audio owner")
+  _G.rfsuite.modules = nil
+  handoffAfterAbort(crsf, 4.1)
 end
 do
   local Power = assert(loadfile(root .. "/src/rfsuite/lib/elrs_power.lua"))()

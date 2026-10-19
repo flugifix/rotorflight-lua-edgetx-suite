@@ -1986,6 +1986,13 @@ local function connectChainDone()
   return progress.total > 0 and progress.done >= progress.total
 end
 
+local function cancelTxPowerRead(audioState, reason)
+  if elrsConfigModule and type(elrsConfigModule.cancel) == "function" then
+    elrsConfigModule.cancel("audio", reason)
+  end
+  audioState.txPowerRequested = nil
+end
+
 --- The transmitter module's maximum power and dynamic-power state for this connection, copied
 --- from the shared ELRS configuration snapshot; `done` is set once it has answered or given up.
 ---
@@ -2004,6 +2011,7 @@ local function txPowerModuleRead(audioState, armed, now)
   local st = audioState.txPowerRead
   if st and st.done then return st end
   if armed then
+    cancelTxPowerRead(audioState, "armed")
     audioState.txPowerRead = nil
     -- Armed without an answer of this connection: where the link dropped and came back in flight,
     -- the module and its settings are the ones the last connection read (Audio.resetConnectionState
@@ -2012,7 +2020,10 @@ local function txPowerModuleRead(audioState, armed, now)
   end
   -- Disarmed, this connection asks for itself: the module may have been changed meanwhile.
   audioState.txPowerLast = nil
-  if not connectChainDone() then return nil end
+  if not connectChainDone() then
+    cancelTxPowerRead(audioState, "connect_chain")
+    return nil
+  end
   if not elrsConfigModule then elrsConfigModule = loadCoreModule("lib/elrs_config.lua") end
   if not crsfModule then crsfModule = loadCoreModule("lib/crsf.lua") end
   if not elrsConfigModule then return nil end
@@ -2321,10 +2332,10 @@ function Audio.resetConnectionState(audioState)
   -- kept aside for a link that comes back while the model is still armed, which may not ask
   -- (txPowerModuleRead).
   audioState.txPower = nil
+  cancelTxPowerRead(audioState, "connection_reset")
   local read = audioState.txPowerRead
   if read and read.done then audioState.txPowerLast = read end
   audioState.txPowerRead = nil
-  audioState.txPowerRequested = nil
   audioState.packCheckDone = false
   audioState.packJudged = false
   audioState.packNotFull = nil
@@ -2832,7 +2843,9 @@ function Audio.process(self, opts)
   audioState.txPowerWanted = txPowerOn
   if txPowerOn then
     txPowerAlert(self, audioState, events, now, opts)
-  elseif audioState.txPower ~= nil or audioState.txPowerRead ~= nil or audioState.txPowerLast ~= nil then
+  elseif audioState.txPower ~= nil or audioState.txPowerRead ~= nil or audioState.txPowerLast ~= nil
+      or audioState.txPowerRequested ~= nil then
+    cancelTxPowerRead(audioState, "disabled")
     audioState.txPower = nil
     audioState.txPowerRead = nil
     audioState.txPowerLast = nil
