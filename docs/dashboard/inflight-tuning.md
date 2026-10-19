@@ -74,8 +74,8 @@ windows, a step on that cell changes that function and not the parameter the row
 second line names those cells, each with the function its slot holds — for example **Pitch P
 steps Roll D** — as many as fit, with every other differing slot (empty, other windows, another
 step) counted as **+N more**. Where the row's name does not fit, the cell is named by its bank
-letter and row number (**F5** is bank F, fifth row). When no cell is named, the differences are
-counted as before (**board differs in N**). *Set up the flight controller* writes the set onto
+letter and row number (**F5** is bank F, fifth row). When no cell is named, the line counts the
+differences (**board differs in N**). *Set up the flight controller* writes the set onto
 the board.
 
 Values are read here and nowhere else: the receiver map, the board's adjustment slot table,
