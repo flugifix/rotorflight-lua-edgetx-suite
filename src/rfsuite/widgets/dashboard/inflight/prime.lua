@@ -445,8 +445,9 @@ function M.newDerivation(records, map, bankChannel, valueChannel)
     records = records, map = map,
     bankCh = bankChannel, valueCh = valueChannel,
     phase = "scan", at = 0,
-    usable = {}, skipped = {},
+    usable = {}, usableSlot = {}, skipped = {},
     bands = {}, bandSeen = {}, rows = {}, rowSeen = {},
+    enableWindows = {}, enableSeen = {}, refusedBank = {},
     set = {}, rowValues = {}, cellRecord = {}, bankWindows = {}, cells = {}, placed = 0
   }
 end
@@ -472,8 +473,25 @@ function M.deriveStep(work, budget)
         local enableCh = M.auxToWireChannel(record.enaChannel, work.map)
         local valueCh = M.auxToWireChannel(record.adjChannel, work.map)
         if enableCh == work.bankCh and valueCh == work.valueCh then
+          -- Every enable window of the pair, stepped or continuous: the board runs each slot
+          -- whose window holds the bank channel (fc/rc_adjustments.c), and a continuous one then
+          -- sets its parameter from the value channel, so a parked bank value inside its window
+          -- reaches it too. The id is not checked against this build's table on purpose: a newer
+          -- firmware can carry a function the table does not name yet, and it still fires.
+          local enableKey = windowKey(record.enaRange)
+          local continuous = (tonumber(record.adjStep) or 0) <= 0
+          local seen = enableKey ~= nil and work.enableSeen[enableKey] or nil
+          if seen ~= nil then
+            if continuous then seen.continuous = true end
+          elseif enableKey ~= nil then
+            local low, high = Functions.windowBounds(record.enaRange)
+            local window = { key = enableKey, low = low, high = high, continuous = continuous }
+            work.enableSeen[enableKey] = window
+            if low ~= nil then work.enableWindows[#work.enableWindows + 1] = window end
+          end
           if (tonumber(record.adjStep) or 0) > 0 then
             work.usable[#work.usable + 1] = record
+            work.usableSlot[#work.usable] = slot
             local bandKey, bandFrom, bandTo = windowKey(record.enaRange)
             if bandKey ~= nil and work.bandSeen[bandKey] == nil then
               work.bandSeen[bandKey] = true
@@ -522,6 +540,52 @@ function M.deriveStep(work, budget)
       if i > Functions.ROW_COUNT then break end
       work.rowIndex[work.rows[i].key] = i
     end
+    work.phase = "park"
+    work.at = 0
+    return false, nil, nil
+  end
+
+  if work.phase == "park" then
+    -- A bank is offered only when the value that parks it enables that bank and no other. The
+    -- middle of a window is clamped to the channel's travel (functions.lua, bandMidGv), so a
+    -- window that starts past 2012 us is parked inside whichever window holds 2012 us, and two
+    -- overlapping windows can share their middle. Either way every press would step a slot of the
+    -- OTHER window while the screen names this bank's parameters. The test is the firmware's own,
+    -- start inclusive and end exclusive (isRangeActive, fc/rc_modes.h), against every enable
+    -- window of the pair; a continuous slot on the bank's OWN window fails it as well, since every
+    -- pulse in that bank would also move the continuous parameter. A bank that fails it is refused
+    -- rather than moved: its slots are counted as skipped and its cells stay empty, so no step can
+    -- be aimed at it.
+    --
+    -- One bank is one unit of the budget although it walks every window of the pair. Counted on a
+    -- desktop Lua, a full table of 42 distinct windows puts its worst slice at 2 680 instructions,
+    -- below the 2 830 of the place slice on the documented 36-slot board.
+    while work.at < #work.outBands do
+      if budget ~= nil and taken >= budget then return false, nil, nil end
+      work.at = work.at + 1
+      taken = taken + 1
+      local bank = work.at
+      local band = work.bands[bank]
+      local value = work.bankValues[bank]
+      local us = value ~= nil and Functions.gvarToUs(value) or nil
+      local low, high = Functions.windowBounds({ start = band.min, ["end"] = band.max })
+      local ok = us ~= nil and low ~= nil and us >= low and us < high
+      if ok then
+        for i = 1, #work.enableWindows do
+          local window = work.enableWindows[i]
+          if (window.key ~= band.key or window.continuous) and us >= window.low and us < window.high then
+            ok = false
+            break
+          end
+        end
+      end
+      if not ok then
+        work.bankValues[bank] = nil
+        work.refusedBank[bank] = true
+        logPrime("bank %d refused: its parked value does not enable window %s..%s alone",
+          bank, tostring(band.min), tostring(band.max))
+      end
+    end
     work.phase = "place"
     work.at = 0
     return false, nil, nil
@@ -535,6 +599,11 @@ function M.deriveStep(work, budget)
       local record = work.usable[work.at]
       local bank = work.bandIndex[windowKey(record.enaRange) or ""]
       local row = work.rowIndex[windowKey(record.adjRange2) or ""]
+      if bank ~= nil and work.refusedBank[bank] then
+        -- A refused bank's slot is one the overlay cannot drive, which is what `skipped` counts.
+        work.skipped[#work.skipped + 1] = work.usableSlot[work.at]
+        bank = nil
+      end
       if bank ~= nil then
         -- Both windows of every usable slot of the bank, placed or not, as the board reads them:
         -- the cross-check below has to see them all, because the board fires every slot whose
