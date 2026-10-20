@@ -251,25 +251,20 @@ end
 
 -- The firmware keeps SUCCESS, FAILED and REJECTED until the next START or Cancel. A page
 -- opened later must not take that left-over result for its own: the opening poll only
--- learns that the command is supported. IDLE is the clean control. A held SUCCESS is the one
--- exception that is not a report: its wiring is live but unsaved, so it is an unsaved change.
+-- learns that the command is supported. IDLE is the clean control.
 local heldFailures = {}
-for _, held in ipairs({ { 3, "FAILED" }, { 4, "REJECTED" }, { 2, "SUCCESS", true }, { 0, "IDLE" } }) do
+for _, held in ipairs({ { 3, "FAILED" }, { 4, "REJECTED" }, { 2, "SUCCESS" }, { 0, "IDLE" } }) do
   local ok, err = pcall(function()
     local page = newPage()
     queued[2].processReply(queued[2], reply(held[1], 1, 1))
     local children = build(page)
     assert(#statusLabels(children) == 0, "held " .. held[2] .. " showed a stale result on open: "
       .. tostring(statusLabels(children)[1]))
-    assert(page.hasUnsavedChanges() == (held[3] == true), "held " .. held[2] .. " unsaved state wrong on open")
+    assert(not page.hasUnsavedChanges(), "held " .. held[2] .. " dirtied the page on open")
     assert(page.canSave() == true, "held " .. held[2] .. " locked Save on open")
     assert(#queued == 2, "held " .. held[2] .. " queued a request on open")
     assert(press(children, "Detect wiring"), "held " .. held[2] .. " hid Detect wiring")
-    if held[3] then
-      assert(#queued == 2, "held SUCCESS started a run over its unsaved wiring")
-    else
-      assert(queued[#queued].payload[1] == 1, "held " .. held[2] .. " did not allow a new START")
-    end
+    assert(queued[#queued].payload[1] == 1, "held " .. held[2] .. " did not allow a new START")
   end)
   if not ok then heldFailures[#heldFailures + 1] = tostring(err) end
 end
@@ -363,4 +358,16 @@ do
   assert(press(build(page), "Detect wiring"), "capability answered after Reload but action hidden")
 end
 
-print("OK: 20 ESC wiring API/lifecycle cases")
+-- Without lib/armed.lua the page cannot tell, so it refuses to start rather than risk it.
+do
+  local saved = modules["lib/armed.lua"]
+  modules["lib/armed.lua"] = nil
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(0))
+  local before = #queued
+  press(build(page), "Detect wiring")
+  modules["lib/armed.lua"] = saved
+  assert(#queued == before, "start went ahead without lib/armed.lua")
+end
+
+print("OK: 21 ESC wiring API/lifecycle cases")

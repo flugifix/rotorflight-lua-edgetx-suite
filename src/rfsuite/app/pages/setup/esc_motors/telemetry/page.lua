@@ -116,16 +116,8 @@ local function queueTrial(action, quiet)
       elseif quiet and result.state ~= 1 then
         -- The opening poll only learns that the command is supported. A finished state is
         -- kept by the flight controller until the next START or Cancel, so it belongs to an
-        -- earlier run (another visit, another tool) and is not this page's result. A held SUCCESS
-        -- still says one thing that is true now: the detected wiring is live but not stored (the
-        -- firmware does not mark its configuration changed, and a reboot ends the state), so the
-        -- page offers it as an unsaved change without reporting the run.
+        -- earlier run (another visit, another tool) and is not this page's result.
         current.supported = true
-        if result.state == 2 then
-          ui.config.half_duplex = result.half_duplex
-          ui.config.pin_swap = result.pin_swap
-          ui.dirty = true
-        end
       else
         current.supported = true
         current.state = result.state
@@ -205,7 +197,7 @@ local function startTrial()
   local trial = ui.runtime.trial
   local armed = Armed and Armed.isArmed and Armed.isArmed()
   local uncertain = Armed and Armed.isUncertain and Armed.isUncertain()
-  if not trialAvailable() or armed or uncertain then trial.status = "unsafe"; requestPageRebuild(); return end
+  if not Armed or not trialAvailable() or armed or uncertain then trial.status = "unsafe"; requestPageRebuild(); return end
   if ui.dirty or ui.runtime.readComplete ~= true or ui.config.protocol == 0 then
     trial.status = "save_first"; requestPageRebuild(); return
   end
