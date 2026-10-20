@@ -1,0 +1,63 @@
+return function(w)
+  local L, H = w.L, w.math
+  local modes = { {0, L.arm}, {53, L.rescue}, {47, L.trainer} }
+  w.modeListen = w.modeListen or {}
+  local s = w.modeListen
+  local function assigned(id)
+    for i, r in ipairs(w.data.mode_ranges.mode_ranges) do
+      if r.id == id and r.range.start < r.range["end"] then return i, r end
+    end
+  end
+  local function slot(id)
+    local own = assigned(id); if own then return own end
+    for i, r in ipairs(w.data.mode_ranges.mode_ranges) do if r.range.start >= r.range["end"] then return i end end
+  end
+  local function send(i)
+    local r = w.data.mode_ranges.mode_ranges[i]
+    w:action("set_mode_range", { i - 1, r.id, r.auxChannelIndex, H.step(r.range.start), H.step(r.range["end"]), 0, 0 })
+    w.data.mode_ranges_extra.mode_ranges_extra[i] = { id = r.id, modeLogic = 0, linkedTo = 0 }
+    w:touch("mode_ranges")
+  end
+  w.onLive = function(api, d)
+    if api ~= "rc" or not s.id then return end
+    if getTime() > s.untilAt then s.id = nil; w.message = L.detectTimeout; return end
+    if not s.base then s.base = d.channels; return end
+    local peaks = {}
+    for i = 6, #d.channels do peaks[i - 5] = math.abs(d.channels[i] - (s.base[i] or d.channels[i])) end
+    local aux = H.moved(peaks)
+    if not aux then return end
+    local value = d.channels[aux + 5]
+    if s.aux ~= aux or math.abs((s.value or 0) - value) > 25 then s.aux, s.value, s.at = aux, value, getTime(); return end
+    if getTime() - s.at < 40 then return end
+    local i = slot(s.id)
+    if not i then w.message = L.noSlots; s.id = nil; return end
+    local lo, hi = H.switchRange(s.base[aux + 5], value)
+    w.data.mode_ranges.mode_ranges[i] = { id = s.id, auxChannelIndex = aux - 1, range = { start = lo, ["end"] = hi } }
+    send(i); s.id = nil; w.message = L.detected
+  end
+  w.validate = function() if not assigned(0) then w.message = L.armRequired; return false end; return true end
+  local cards = {}
+  for _, mode in ipairs(modes) do
+    local id, label = mode[1], mode[2]
+    local present = false; for _, value in ipairs(w.data.boxids.box_ids) do if value == id then present = true end end
+    if present then
+      cards[#cards + 1] = w:cardDef(label, L.modeHint, {
+        w:value(L.assigned, function()
+          local _, r = assigned(id)
+          if not r then return L.no end
+          return string.format("CH%d  %d-%d", r.auxChannelIndex + 6, r.range.start, r.range["end"])
+        end),
+        w:button(L.assign, function() s.id, s.base, s.untilAt = id, nil, getTime() + 1500; w.message = L.flick end),
+        w:button(L.remove, function()
+          local i, r = assigned(id); if i then r.range.start, r.range["end"] = 1500, 1500; send(i) end
+        end),
+        w:value(L.active, function()
+          local _, r = assigned(id); local c = w.data.rc and w.data.rc.channels
+          local v = r and c and c[r.auxChannelIndex + 6]
+          return v and v >= r.range.start and v < r.range["end"] and L.yes or L.no
+        end)
+      })
+    end
+  end
+  return cards
+end

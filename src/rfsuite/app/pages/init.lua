@@ -33,6 +33,7 @@ local entries = {
   settings_audio_events_rescue_page = definePage("settings/audio/events/rescue"),
   settings_audio_volume_page = definePage("settings/audio/volume"),
   setup_wizard_page = definePage("setup_wizard"),
+  helicopter_setup_page = definePage("helicopter_setup"),
   -- The same page, entered under three names. Which name it was opened under is what bounds the
   -- run to one section, and the page reads that off the menu rather than being told.
   setup_wizard_radio_page = definePage("setup_wizard"),

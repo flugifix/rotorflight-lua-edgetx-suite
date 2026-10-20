@@ -429,6 +429,7 @@ return {
     ["page.setup_servos_pwm_page.build"] = { target = 5950, measured = 4750 },
     ["page.setup_telemetry_page.build"] = { target = 15550, measured = 12427 },
     ["page.setup_wizard_board_page.build"] = { target = 17600, measured = 14070 },
+    ["page.helicopter_setup_page.build"] = { target = 1000, measured = 74 },
     ["page.setup_wizard_page.build"] = { target = 54800, measured = 43805, proposed = 20000 },
     ["page.setup_wizard_radio_page.build"] = { target = 41200, measured = 32957, proposed = 20000 },
     ["page.tools_copy_profiles_page.build"] = { target = 3300, measured = 2635 },

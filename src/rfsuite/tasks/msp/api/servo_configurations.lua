@@ -1,7 +1,8 @@
 -- EdgeTX MSP API: SERVO_CONFIGURATIONS (ported)
 
 local Api = {
-  command = 120
+  command = 120,
+  writeCommand = 212
 }
 
 local SERVO_FIELDS = {
@@ -75,5 +76,15 @@ function Api.parse(buf)
 end
 
 Api.simulatorResponse = SIM_RESPONSE
+
+function Api.buildWritePayload(data)
+  if not data or not data.servo or data.index == nil then return nil end
+  local p = { data.index }
+  for _, field in ipairs(SERVO_FIELDS) do
+    local v = math.floor(data.servo[field[1]]) & 0xFFFF
+    p[#p + 1], p[#p + 2] = v & 255, (v >> 8) & 255
+  end
+  return p
+end
 
 return Api

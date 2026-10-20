@@ -1,0 +1,1 @@
+- Add a separate Helicopter Setup wizard following the Configurator's 19-step sequence, with compact and large-screen layouts, staged MSP work, arming lockout, explicit override cleanup and capability-tested override timeouts (`helicopter_setup`). The existing Setup Assistant is unchanged.

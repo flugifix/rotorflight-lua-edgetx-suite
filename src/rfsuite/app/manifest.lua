@@ -312,7 +312,8 @@ local manifest = {
     wizards_menu = {
       title = "@i18n(app.modules.wizards.name)@",
       pages = {
-        { id = "setup_wizard", title = "@i18n(app.modules.setup_wizard.name)@", menuId = "setup_wizard_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true }
+        { id = "setup_wizard", title = "@i18n(app.modules.setup_wizard.name)@", menuId = "setup_wizard_menu", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true },
+        { id = "helicopter_setup", title = "@i18n(helicopter.name)@", menuId = "helicopter_setup_page", icon = "@pages/setup/icon.png", enabledWhen = "fblConnected", lockedWhileArmed = true, minApiVersion = {12, 0, 9} }
       }
     },
     -- The whole run and its parts, side by side. The parts are not shortcuts into a walk: each
@@ -327,6 +328,10 @@ local manifest = {
     },
     setup_wizard_page = {
       title = "@i18n(app.modules.setup_wizard.all)@",
+      pages = {}
+    },
+    helicopter_setup_page = {
+      title = "@i18n(helicopter.name)@",
       pages = {}
     },
     setup_wizard_radio_page = {
