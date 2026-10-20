@@ -201,6 +201,7 @@ end
 local function startTrial()
   local trial = ui.runtime.trial
   local known = type(Armed) == "table" and type(Armed.isArmed) == "function"
+    and type(Armed.changeCount) == "function"
   local armed = known and Armed.isArmed()
   local uncertain = known and type(Armed.isUncertain) == "function" and Armed.isUncertain()
   if not known or not trialAvailable() or armed or uncertain then trial.status = "unsafe"; requestPageRebuild(); return end
@@ -457,6 +458,8 @@ function M.wakeup(ctx)
     ui.runtime.trial.pending = false
     ui.runtime.trial.mustRead = true
     ui.runtime.trial.supported = nil
+    ui.runtime.trial.cancelRequested = false
+    ui.runtime.readPending = false
     ui.runtime.lastSessionSignature = signature
     ui.loaded = false
     ensureLoaded()

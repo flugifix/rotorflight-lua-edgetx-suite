@@ -383,6 +383,7 @@ do
   page.wakeup({ requestRebuild = function() end })
   queued[#queued].processReply(queued[#queued], configReply)
   page.wakeup({ requestRebuild = function() end })
+  assert(queued[#queued].command == TrialApi.command, "capability poll missing with a failing shared loader")
   queued[#queued].processReply(queued[#queued], reply(0))
   local before = #queued
   assert(press(build(page), "Detect wiring"), "Detect wiring missing with a failing shared loader")
@@ -417,4 +418,51 @@ do
   assert(page.canSave() == false, "detection running on the new board left Save open")
 end
 
-print("OK: 24 ESC wiring API/lifecycle cases")
+-- A Cancel pressed while START was pending belongs to that board: when another flight
+-- controller answers before the START reply, the new board's capability poll sends no Cancel.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(0))
+  assert(press(build(page), "Detect wiring"), "Detect wiring missing")
+  assert(press(build(page), "Cancel"), "Cancel missing while START pending")
+  _G.rfsuite.session.signature = "other board"
+  page.wakeup({ requestRebuild = function() end })
+  queued[#queued].processReply(queued[#queued], configReply)
+  page.wakeup({ requestRebuild = function() end })
+  local poll = queued[#queued]
+  assert(poll.command == TrialApi.command and poll.payload[1] == 0, "new board was not asked the capability")
+  local before = #queued
+  poll.processReply(poll, reply(0))
+  page.wakeup({ requestRebuild = function() end })
+  for i = before + 1, #queued do
+    assert(queued[i].payload[1] ~= TrialApi.ACTION_CANCEL, "a Cancel from the old board was sent to the new one")
+  end
+  assert(page.canSave() == true, "old board's Cancel locked Save on the new board")
+end
+
+-- Another flight controller answering while the configuration read is in flight: the dropped
+-- reply does not leave the read pending for the rest of the visit.
+do
+  queued = {}
+  armed, armedChanges, now = false, 0, 100
+  _G.rfsuite = { session = {
+    signature = "board", apiVersion = "12.0.10", isConnected = true, fblConnected = true,
+    setup_esc_motors_telemetry = {
+      protocol = 1, half_duplex = 0, pin_swap = 0,
+      voltage_correction = 0, current_correction = 0, consumption_correction = 0,
+      parsedCache = ConfigApi.parse(configReply)
+    }
+  } }
+  local page = assert(loadfile(source("src/rfsuite/app/pages/setup/esc_motors/telemetry/page.lua")))()
+  page.wakeup({ requestRebuild = function() end })
+  assert(#queued == 1 and queued[1].command == ConfigApi.command, "configuration read not queued")
+  _G.rfsuite.session.signature = "other board"
+  page.wakeup({ requestRebuild = function() end })
+  assert(#queued == 2 and queued[2].command == ConfigApi.command, "new board's configuration was not read")
+  queued[1].processReply(queued[1], configReply)
+  queued[2].processReply(queued[2], configReply)
+  page.wakeup({ requestRebuild = function() end })
+  assert(queued[#queued].command == TrialApi.command, "new board was not asked the capability")
+end
+
+print("OK: 26 ESC wiring API/lifecycle cases")
