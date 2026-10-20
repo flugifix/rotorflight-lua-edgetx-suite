@@ -950,7 +950,8 @@ the in-flight tuning surface or the suite tool is up. On the connect splash `ctx
 empty until the theme has built, so only the radio-wide choices and the page keys' menu act.
 
 MDL, SYS and TELE open the radio's own menus everywhere but in a widget's fullscreen, where the
-widget gets them and the radio opens nothing; unbound they do nothing there, as before. Not
+widget gets them and the radio opens nothing. On **Theme** and unbound they do nothing there; as
+the radio comes, SYS and TELE are not on Theme (see above). Not
 every radio has them, so a binding is a shortcut, never the only way to something: the menu
 access and the way out a theme owes are a press, the page keys or RTN.
 

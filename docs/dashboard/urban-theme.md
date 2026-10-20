@@ -152,6 +152,11 @@ there are more packs than three rows hold, the packs scroll -- swipe them, or tu
 encoder, which moves from pack to pack -- while *NO BATTERY* stays at the foot, so every pack can
 be picked. RTN closes a page as well.
 
+The radio-wide choice at *System* → *Settings* → *Dashboard* →
+[*Keys*](../pages/settings/dashboard/keys.md) comes first: as the radio comes it holds SYS (Main
+menu) and TELE (quick menu) for every theme, so what this page chooses for those two keys acts
+only once they are put on *Theme* there. Grid and Deck follow the same order.
+
 What the page keys, MDL, SYS and TELE do in full screen is chosen on the *Keys* page. Left at
 their defaults, the page keys and TELE open the quick menu, SYS opens the suite's tool and MDL does
 nothing; outside full screen MDL, SYS and TELE open the radio's own menus as always. A key set to

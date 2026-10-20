@@ -29,8 +29,8 @@ A radio without one of these keys never sends it; its saved choice still remains
 - Save applies the choices to every model; no per-model copy is written. A key left on its
   default stores nothing, so SYS and TELE on **Theme** are stored as Theme.
 - SYS and TELE hold their default for **every** theme, including themes whose full screen is
-  the quick menu: SYS opens the suite tool and TELE the quick menu there as well. Put either on
-  **Theme** to give it back to the theme.
+  the quick menu: SYS opens the suite tool there as well, and TELE answers with the quick menu
+  that is already on screen. Put either on **Theme** to give it back to the theme.
 - A theme binds keys in its full-screen build. Urban, Grid and Deck let the pilot bind them on
   their own *Keys* settings page, which only acts on keys left on **Theme** here. Default binds
   none, so on Default a key on **Theme** does nothing, the page keys aside.

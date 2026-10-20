@@ -93,6 +93,7 @@ end
 
 local function runtimeCancellationCaseIn(source)
   local Stubs = assert(loadfile(ROOT .. "/bin/accounting/stubs/edgetx.lua"))()
+  _G.__keysTestStubs = Stubs
   local FC = assert(loadfile(ROOT .. "/bin/accounting/stubs/fc.lua"))()
   Stubs.install(ROOT)
   FC.install(Stubs)
@@ -194,11 +195,31 @@ end
 local function runtimeCancellationCase(source)
   local saved = {}
   for k, v in pairs(_G) do saved[k] = v end
+  -- The stubs also wrap io/os functions in place and take a temporary card; both are undone here
+  -- whatever the case answered, so a failing run leaves nothing behind for the next one.
+  local ioOpen, osRemove, osRename = io.open, os.remove, os.rename
   local ok, result = pcall(runtimeCancellationCaseIn, source)
+  local stubs = _G.__keysTestStubs
+  if stubs and type(stubs.releaseCard) == "function" then pcall(stubs.releaseCard) end
+  io.open, os.remove, os.rename = ioOpen, osRemove, osRename
   for k in pairs(_G) do if saved[k] == nil then _G[k] = nil end end
   for k, v in pairs(saved) do _G[k] = v end
   if not ok then return "raised: " .. tostring(result) end
   return result
+end
+
+-- `source` with `from` replaced, and how often `from` occurs: a mutant is only built from an
+-- anchor that occurs exactly once.
+local function mutate(source, from, to)
+  local count, at = 0, 1
+  while true do
+    local first, last = string.find(source, from, at, true)
+    if first == nil then break end
+    count, at = count + 1, last + 1
+  end
+  if count ~= 1 then return nil, count end
+  local first, last = string.find(source, from, 1, true)
+  return string.sub(source, 1, first - 1) .. to .. string.sub(source, last + 1), 1
 end
 
 -- A mutant counts as caught only where the case written for it goes red.
@@ -368,7 +389,7 @@ if selfTest then
     print("SELF-TEST FAILED: the checks are red on the unbroken tree")
     os.exit(1)
   end
-  local mutant, count = string.gsub(keysSource, "return ACTIONS%[choice%], true", "return ACTIONS[choice], false", 1)
+  local mutant, count = mutate(keysSource, "return ACTIONS[choice], true", "return ACTIONS[choice], false")
   if count ~= 1 then
     print("SELF-TEST FAILED: the explicit-choice branch was found " .. count .. " times, expected once")
     os.exit(1)
@@ -380,7 +401,7 @@ if selfTest then
     os.exit(1)
   end
   print("(self-test) explicit-choice mutant went red: " .. hit.case .. ": " .. hit.detail)
-  local noDefault, defaultCount = string.gsub(keysSource, 'default = "suite_tool"', 'default = "theme"', 1)
+  local noDefault, defaultCount = mutate(keysSource, 'default = "suite_tool"', 'default = "theme"')
   if defaultCount ~= 1 then
     print("SELF-TEST FAILED: the SYS default was found " .. defaultCount .. " times, expected once")
     os.exit(1)
@@ -392,8 +413,8 @@ if selfTest then
     os.exit(1)
   end
   print("(self-test) no-default mutant went red: " .. hit.case .. ": " .. hit.detail)
-  local oldSave, saveCount = string.gsub(pageSource, "if value == entry.default then value = nil end",
-    'if value == "theme" then value = nil end', 1)
+  local oldSave, saveCount = mutate(pageSource, "if value == entry.default then value = nil end",
+    'if value == "theme" then value = nil end')
   if saveCount ~= 1 then
     print("SELF-TEST FAILED: the page's default check was found " .. saveCount .. " times, expected once")
     os.exit(1)
@@ -406,7 +427,7 @@ if selfTest then
   end
   print("(self-test) Theme-as-absent page mutant went red: " .. hit.case .. ": " .. hit.detail)
   local exitGuard = "    if event == nil then"
-  local runtimeMutant, runtimeCount = string.gsub(runtimeSource, exitGuard, "    if false and event == nil then", 1)
+  local runtimeMutant, runtimeCount = mutate(runtimeSource, exitGuard, "    if false and event == nil then")
   if runtimeCount ~= 1 then
     print("SELF-TEST FAILED: the fullscreen-exit guard was found " .. runtimeCount .. " times, expected once")
     os.exit(1)
