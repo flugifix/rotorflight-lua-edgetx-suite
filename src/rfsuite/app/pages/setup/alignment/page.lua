@@ -19,7 +19,6 @@ local BoardAutoAlignApi = nil
 local ApiVersion = nil
 local Armed = nil
 local AutoAlignLifecycle = nil
-local AutoAlignView = nil
 local LoadingOverlay = nil
 local ConfirmDialog = nil
 local t = nil
@@ -121,7 +120,6 @@ local function ensureDeps()
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
   if not Armed then Armed = loadModule("lib/armed.lua") end
   if not AutoAlignLifecycle then AutoAlignLifecycle = loadModule("app/pages/setup/alignment/auto_align_lifecycle.lua") end
-  if not AutoAlignView then AutoAlignView = loadModule("app/pages/setup/alignment/auto_align_view.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
   if not t then t = Common and Common.pageT("setup_alignment") or nil end
@@ -855,16 +853,21 @@ local function queueAutoAlignRequest(action)
       ui.runtime.autoAlignPending = false
       local result = BoardAutoAlignApi.parse(buf)
       if not result then
-        if ui.runtime.autoAlignSupported == nil then ui.runtime.autoAlignSupported = false end
+        local wasProbe = ui.runtime.autoAlignSupported == nil
+        if wasProbe then ui.runtime.autoAlignSupported = false end
         ui.runtime.autoAlignActive = false
-        ui.runtime.autoAlignNeedsReload = true
-        ui.runtime.readComplete = false
+        if not wasProbe then
+          ui.runtime.autoAlignNeedsReload = true
+          ui.runtime.readComplete = false
+        end
       else
         ui.runtime.autoAlignSupported = true
         ui.runtime.autoAlignState = result.state
         local outcome, active = BoardAutoAlignApi.classify(result.state)
         ui.runtime.autoAlignActive = active
         if active then
+          if ui.runtime.autoAlignStartedAt <= 0 then ui.runtime.autoAlignStartedAt = nowSeconds() end
+          if ui.runtime.autoAlignArmedChanges == nil then ui.runtime.autoAlignArmedChanges = armedChanges end
           ui.runtime.autoAlignPollAt = nowSeconds() + 0.25
         else
           if outcome == "success" then
@@ -873,6 +876,9 @@ local function queueAutoAlignRequest(action)
             ui.display.yaw_degrees = result.yaw_degrees
             ui.dirty = true
             saveToSession()
+          elseif outcome == "unknown" or (outcome == "idle" and ui.runtime.autoAlignStartedAt > 0) then
+            ui.runtime.autoAlignNeedsReload = true
+            ui.runtime.readComplete = false
           end
           showAutoAlignResult(result)
         end
@@ -888,9 +894,14 @@ local function queueAutoAlignRequest(action)
         ui.runtime.autoAlignActive = true
         ui.runtime.autoAlignPollAt = nowSeconds() + 0.25
       else
+        local wasProbe = ui.runtime.autoAlignSupported == nil
         ui.runtime.autoAlignActive = false
-        ui.runtime.autoAlignNeedsReload = true
-        ui.runtime.readComplete = false
+        if wasProbe then
+          ui.runtime.autoAlignSupported = false
+        else
+          ui.runtime.autoAlignNeedsReload = true
+          ui.runtime.readComplete = false
+        end
       end
       if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
     end
@@ -1281,7 +1292,7 @@ function M.build(ctx)
 
   local refreshX = btnStart + btnW + gap
   if ui.runtime.autoAlignSupported == true then
-    AutoAlignView.append(children, ui.runtime.autoAlignSupported, {
+    children[#children + 1] = {
       type = "button", x = refreshX, y = controlY, w = btnW,
       text = ui.runtime.autoAlignActive and pageText(i18n, "auto_align_lift_tail", "Lift Tail")
         or pageText(i18n, "auto_align", "Auto-align"),
@@ -1306,7 +1317,7 @@ function M.build(ctx)
           end
         })
       end
-    })
+    }
     refreshX = refreshX + btnW + gap
   end
 
@@ -1611,7 +1622,6 @@ function M.onClose()
   ApiVersion = nil
   Armed = nil
   AutoAlignLifecycle = nil
-  AutoAlignView = nil
   LoadingOverlay = nil
   ConfirmDialog = nil
   t = nil

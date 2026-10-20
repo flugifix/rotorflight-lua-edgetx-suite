@@ -1,0 +1,265 @@
+local checks = 0
+local function equal(actual, expected, label)
+  checks = checks + 1
+  assert(actual == expected, string.format("%s: expected %s, got %s", label, tostring(expected), tostring(actual)))
+end
+
+LCD_H = 480
+SMLSIZE, DBLSIZE = 1, 2
+WHITE, BLACK, YELLOW = 0xFFFFFF, 0, 0xFFFF00
+COLOR_THEME_PRIMARY1, COLOR_THEME_PRIMARY2, COLOR_THEME_PRIMARY3 = 1, 2, 3
+COLOR_THEME_SECONDARY1, COLOR_THEME_SECONDARY2 = 4, 5
+lvgl = { PAGE_BODY_HEIGHT = 416 }
+
+local ticks = 100
+function getTime() return ticks end
+
+local armedNow, armedLast, armedChanges = false, nil, 0
+local Armed = {}
+function Armed.isArmed()
+  if armedLast ~= nil and armedLast ~= armedNow then armedChanges = armedChanges + 1 end
+  armedLast = armedNow
+  return armedNow
+end
+function Armed.changeCount() return armedChanges end
+function Armed.isUncertain() return false end
+
+local queue = { messages = {}, busy = false }
+function queue:isProcessed() return not self.busy end
+function queue:add(message)
+  self.messages[#self.messages + 1] = message
+  return true
+end
+local function nextMessage()
+  local message = table.remove(queue.messages, 1)
+  assert(message, "expected queued MSP message")
+  return message
+end
+local function reply(bytes)
+  local message = nextMessage()
+  queue.busy = true
+  message.processReply(message, bytes)
+  queue.busy = false
+  return message
+end
+local function failReply()
+  local message = nextMessage()
+  queue.busy = true
+  message.errorHandler(message)
+  queue.busy = false
+  return message
+end
+
+local rebuilds = 0
+local confirmCallback = nil
+local Common = {}
+function Common.pageT()
+  return function(_, _, fallback) return fallback end
+end
+function Common.failPageRead() error("page read failed") end
+function Common.resetPageState(ui)
+  ui.loaded = false
+  ui.dirty = false
+  ui.runtime = nil
+end
+
+local SavePipeline = { takeResult = function() end, start = function() return true end }
+local Controls = {
+  ROW_H = 64,
+  labelY = function(y) return y + 20 end,
+  controlY = function(y) return y + 16 end,
+  estimateWrappedTextHeight = function() return 16 end
+}
+local LoadingOverlay = { append = function(children, definition) children[#children + 1] = definition end }
+local ConfirmDialog = {}
+function ConfirmDialog.show(definition)
+  confirmCallback = definition.onConfirm
+  return true
+end
+
+local actual = {
+  ["tasks/msp/api/board_alignment_config.lua"] = true,
+  ["tasks/msp/api/sensor_alignment.lua"] = true,
+  ["tasks/msp/api/board_auto_align.lua"] = true,
+  ["lib/api_version.lua"] = true,
+  ["app/pages/setup/alignment/auto_align_lifecycle.lua"] = true
+}
+local stubs = {
+  ["app/pages/settings/common.lua"] = Common,
+  ["ui/controls.lua"] = Controls,
+  ["tasks/msp/runtime.lua"] = { getState = function() return { queue = queue } end },
+  ["ui/loading_overlay.lua"] = LoadingOverlay,
+  ["ui/confirm_dialog.lua"] = ConfirmDialog,
+  ["tasks/msp/save_pipeline.lua"] = SavePipeline,
+  ["lib/armed.lua"] = Armed
+}
+
+function loadScript(path)
+  local relative = path:match("/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
+  if stubs[relative] then return function() return stubs[relative] end end
+  if actual[relative] then return assert(loadfile("src/rfsuite/" .. relative)) end
+  if relative == "app/pages/setup/alignment/help.lua" then return function() return function() end end end
+  error("unexpected loadScript path: " .. tostring(path))
+end
+
+local function newSession(id, api)
+  return { signature = api .. ":" .. id, apiVersion = api, fblConnected = true }
+end
+_G.rfsuite = { session = newSession("board-a", "12.10") }
+
+local Page = assert(loadfile("src/rfsuite/app/pages/setup/alignment/page.lua"))()
+local wakeContext = { requestRebuild = function() rebuilds = rebuilds + 1 end }
+local function wake() Page.wakeup(wakeContext) end
+local function clearQueue() queue.messages = {}; queue.busy = false end
+
+local function deliverInitialReads()
+  wake()
+  local board = nextMessage()
+  equal(board.command, 38, "board alignment read command")
+  queue.busy = true
+  board.processReply(board, { 0, 0, 0, 0, 0, 0 })
+  queue.busy = false
+  local sensor = nextMessage()
+  equal(sensor.command, 126, "sensor alignment read command")
+  queue.busy = true
+  sensor.processReply(sensor, { 0, 0, 0 })
+  queue.busy = false
+  equal(#queue.messages, 0, "capability deferred after read callback")
+  wake()
+  equal(#queue.messages, 1, "capability queued on later wakeup")
+  equal(queue.messages[1].command, 0x5F13, "capability command")
+  equal(queue.messages[1].payload[1], 0, "capability poll action")
+  equal(queue.messages[1].isWrite, false, "capability classified read")
+end
+
+local function buildChildren()
+  local children = {}
+  Page.build({ children = children, x = 0, y = 0, w = 800, h = 400, i18n = nil, requestRebuild = wakeContext.requestRebuild })
+  return children
+end
+local function findButton(children, text)
+  for i = 1, #children do
+    if children[i].type == "button" and children[i].text == text then return children[i] end
+  end
+end
+local function numberFields(children)
+  local fields = {}
+  for i = 1, #children do if children[i].type == "numberEdit" then fields[#fields + 1] = children[i] end end
+  return fields
+end
+local function reopen(session)
+  Page.onClose()
+  clearQueue()
+  confirmCallback = nil
+  _G.rfsuite.session = session
+  armedNow, armedLast, armedChanges = false, nil, 0
+  deliverInitialReads()
+end
+
+-- Supported happy path through the real page callbacks and real controls.
+deliverInitialReads()
+reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+local children = buildChildren()
+local auto = findButton(children, "Auto-align")
+equal(type(auto), "table", "supported action visible")
+auto.press()
+equal(type(confirmCallback), "function", "start confirmation captured")
+equal(#queue.messages, 0, "start waits for confirmation")
+confirmCallback()
+equal(#queue.messages, 1, "confirmed start queued")
+equal(queue.messages[1].payload[1], 1, "start action")
+equal(queue.messages[1].isWrite, true, "start classified write")
+equal(queue.messages[1].maxRetries, 0, "start is not retried")
+equal(Page.canSave(), false, "save blocked while start pending")
+equal(Page.onReload(), false, "reload blocked while start pending")
+reply({ 1, 0, 0, 0, 0, 0, 0, 4 })
+equal(Page.canSave(), false, "save blocked while waiting")
+children = buildChildren()
+equal(type(findButton(children, "Lift Tail")), "table", "waiting guidance visible")
+ticks = ticks + 30
+wake()
+equal(queue.messages[1].payload[1], 0, "waiting status poll")
+equal(queue.messages[1].isWrite, false, "status poll classified read")
+reply({ 2, 10, 0, 0xEC, 0xFF, 0x0E, 0x01, 12 })
+equal(Page.canSave(), true, "save enabled after success")
+equal(Page.hasUnsavedChanges(), true, "success marks fields dirty")
+local fields = numberFields(buildChildren())
+equal(fields[1].get(), 10, "success roll getter")
+equal(fields[2].get(), -20, "success pitch getter")
+equal(fields[3].get(), 270, "success yaw getter")
+
+-- Capability rejection hides the action and does not poison the valid page read.
+reopen(newSession("board-b", "12.10"))
+failReply()
+equal(Page.canSave(), true, "capability error keeps normal read valid")
+equal(findButton(buildChildren(), "Auto-align"), nil, "unsupported action hidden")
+equal(#queue.messages, 0, "unsupported capability does not loop")
+
+-- A running procedure discovered by the capability poll gets a fresh local observation window.
+reopen(newSession("board-running", "12.10"))
+reply({ 1, 0, 0, 0, 0, 0, 0, 2 })
+equal(Page.canSave(), false, "discovered running procedure blocks save")
+ticks = ticks + 30; wake()
+equal(queue.messages[1].command, 0x5F13, "discovered running procedure is polled")
+clearQueue(); Page.onClose()
+
+-- A lost START reply is polled, while a lost procedure poll forces a normal reload.
+reopen(newSession("board-c", "12.10"))
+reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press(); confirmCallback()
+failReply()
+equal(Page.canSave(), false, "lost start keeps save blocked")
+ticks = ticks + 30; wake()
+equal(queue.messages[1].command, 0x5F13, "lost start followed by status poll")
+failReply()
+equal(Page.canSave(), false, "lost procedure poll keeps save blocked")
+wake()
+equal(queue.messages[1].command, 38, "lost procedure poll reloads alignment")
+
+-- An unknown terminal state is not treated as safe to save.
+Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-unknown", "12.10")
+deliverInitialReads(); reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press(); confirmCallback()
+reply({ 1, 0, 0, 0, 0, 0, 0, 1 })
+ticks = ticks + 30; wake()
+reply({ 99, 0, 0, 0, 0, 0, 0, 0 })
+equal(Page.canSave(), false, "unknown procedure state blocks save")
+wake()
+equal(queue.messages[1].command, 38, "unknown procedure state reloads alignment")
+
+-- A delayed dialog confirmation cannot start after the visit is closed.
+Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-d", "12.10")
+deliverInitialReads(); reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press()
+local staleConfirm = confirmCallback
+Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-e", "12.10")
+staleConfirm()
+equal(#queue.messages, 0, "closed visit confirmation ignored")
+
+-- A response from the previous session and one spanning an armed transition are ignored.
+deliverInitialReads(); reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press(); confirmCallback()
+local staleStart = nextMessage()
+_G.rfsuite.session = newSession("board-f", "12.10")
+staleStart.processReply(staleStart, { 2, 44, 0, 0, 0, 0, 0, 12 })
+equal(#queue.messages, 0, "old session response ignored")
+Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-g", "12.10")
+deliverInitialReads(); reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press(); confirmCallback()
+local armedStart = nextMessage()
+armedNow = true
+armedStart.processReply(armedStart, { 1, 0, 0, 0, 0, 0, 0, 1 })
+equal(findButton(buildChildren(), "Lift Tail"), nil, "armed-transition response ignored")
+
+-- A locally observed timeout locks Save and queues a normal reload.
+Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-h", "12.10")
+armedNow, armedLast, armedChanges = false, nil, 0
+deliverInitialReads(); reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press(); confirmCallback()
+reply({ 1, 0, 0, 0, 0, 0, 0, 1 })
+ticks = ticks + 1700
+wake()
+equal(Page.canSave(), false, "timeout blocks save")
+equal(queue.messages[1].command, 38, "timeout queues normal reload")
+
+print(string.format("board auto-align page: %d checks passed", checks))

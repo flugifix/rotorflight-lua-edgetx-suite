@@ -31,7 +31,8 @@ function Api.classify(state)
   if state == Api.states.timeout then return "timeout", false end
   if state == Api.states.noMatch then return "no_match", false end
   if state == Api.states.rejectedUncalibrated then return "rejected_uncalibrated", false end
-  return "idle", false
+  if state == Api.states.idle then return "idle", false end
+  return "unknown", false
 end
 
 return Api

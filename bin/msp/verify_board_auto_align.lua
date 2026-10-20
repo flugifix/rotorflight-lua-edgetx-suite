@@ -1,6 +1,5 @@
 local Api = assert(loadfile("src/rfsuite/tasks/msp/api/board_auto_align.lua"))()
 local Lifecycle = assert(loadfile("src/rfsuite/app/pages/setup/alignment/auto_align_lifecycle.lua"))()
-local View = assert(loadfile("src/rfsuite/app/pages/setup/alignment/auto_align_view.lua"))()
 local checks = 0
 local function equal(actual, expected, label)
   checks = checks + 1
@@ -30,14 +29,6 @@ equal(Lifecycle.isCurrent(runtime, true, session, "12.0.10:board-a", true, 4, to
 equal(Lifecycle.isCurrent({ generation = 4 }, true, session, "12.0.10:board-a", true, 3, token), false, "replaced runtime callback")
 Lifecycle.invalidate(runtime)
 equal(Lifecycle.isCurrent(runtime, true, session, "12.0.10:board-a", true, 3, token), false, "invalidated callback")
-local children = { { type = "existing" } }
-equal(View.append(children, false, { type = "button", text = "Auto-align" }), 0, "unsupported node count")
-equal(#children, 1, "unsupported child count")
-equal(View.append(children, true, { type = "button", text = "Auto-align", active = true }), 1, "supported node count")
-equal(#children, 2, "supported child count")
-equal(children[2].type, "button", "supported node type")
-equal(children[2].text, "Auto-align", "supported node label")
-equal(children[2].active, true, "supported node active state")
 local expected = {
   idle = { "idle", false }, waitingForTailLift = { "waiting", true }, success = { "success", false },
   rejectedArmed = { "rejected_armed", false }, timeout = { "timeout", false }, noMatch = { "no_match", false },
