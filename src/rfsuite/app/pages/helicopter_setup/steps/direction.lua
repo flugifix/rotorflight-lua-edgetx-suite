@@ -7,7 +7,7 @@ return function(w)
       w:value(L.stick, function() return w.data.rc_command and w.data.rc_command.commands[axis] or "--" end),
       w:button(L.wrongReverse, function() w:invertInput(axis); w.checks["control" .. axis] = nil end),
       w:check("control" .. axis, L.directionCorrect)
-    }, function() w:holdAxes(nil, 0, true) end, "swash")
+    }, function() w:holdAxes(nil, 0, true) end, axis == 1 and "swashRoll" or axis == 2 and "swashPitch" or "swashLift")
   end
   w.validate = function() return w:ack("control1") and w:ack("control2") and w:ack("control4") end
   return cards

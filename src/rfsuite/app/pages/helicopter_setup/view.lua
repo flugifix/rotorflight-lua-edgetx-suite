@@ -1,35 +1,17 @@
--- Small radios get one task above four rows. Large radios get an explanatory
--- column and a separate form. The scene is assembled four objects per wakeup.
+-- Compact illustrated tasks use a drawing beside the controls. Large displays
+-- have a separate instruction column. The scene is published four objects per pass.
 local M = {}
 local function label(x, y, width, text, font)
   return { type = "label", x = x, y = y, w = width, text = text, font = font or SMLSIZE, color = COLOR_THEME_PRIMARY1 }
 end
-local function art(children, kind, x, y, width)
-  local color = COLOR_THEME_SECONDARY1
-  local function line(points)
-    children[#children + 1] = { type = "line", pts = points, color = color, thickness = 2 }
-  end
-  local middle = x + math.floor(width / 2)
-  if kind == "heli" then
-    line({{x+12,y+42},{middle-28,y+24},{middle+12,y+24},{middle+30,y+52},{middle-28,y+52},{x+12,y+42}})
-    line({{middle+24,y+32},{x+width-10,y+20},{x+width-10,y+40},{middle+30,y+44}})
-    line({{middle,y+26},{middle,y+10},{x+15,y+10},{x+width-20,y+10}})
-    line({{middle-28,y+65},{middle+35,y+65}})
-  elseif kind == "pitch" then
-    line({{x+12,y+58},{x+width-12,y+58}})
-    line({{x+12,y+58},{x+width-12,y+25}})
-  elseif kind == "swash" then
-    line({{x+20,y+45},{middle,y+14},{x+width-20,y+45},{middle,y+67},{x+20,y+45}})
-    line({{middle,y+14},{middle,y+67}})
-  else
-    children[#children + 1] = { type = "rectangle", x = middle-35, y = y+30, w = 70, h = 40,
-      color = color, thickness = 2 }
-    line({{middle,y+30},{middle,y+12},{middle+45,y+12}})
-  end
-end
-function M.new(w, ctx)
+function M.new(w, ctx, diagrams)
   local width, height = ctx.w, ctx.h
   local large = width >= 700
+  local compact = width < 400 and {
+    [w.L.swashType]=w.L.shortSwash, [w.L.rotorDirection]=w.L.shortRotation,
+    [w.L.centreOffset]=w.L.shortOffset, [w.L.armCentred]=w.L.shortArm,
+    [w.L.servo1Trim]=w.L.shortTrim1, [w.L.servo2Trim]=w.L.shortTrim2, [w.L.servo3Trim]=w.L.shortTrim3
+  } or {}
   local controlH = large and 44 or width >= 480 and 32 or 26
   local rowY = large and 108 or height <= 272 and 76 or 88
   local rowH = large and 52 or math.min(controlH+6, math.floor((height-2*controlH-31-rowY)/3))
@@ -60,11 +42,17 @@ function M.new(w, ctx)
     all[#all + 1] = label(12, 76, width-24, w.error)
     button(12, 116, width-24, w.L.retry, function() w:retry() end)
   elseif card then
-    local formX, formW = large and math.floor(width * 0.43) or 10, large and math.floor(width * 0.55)-12 or width-20
+    local illustrated = card.art ~= nil
+    local formX = large and math.floor(width * 0.43) or illustrated and math.floor(width * 0.35)+4 or 10
+    local formW = width-formX-(large and 16 or 10)
     all[#all + 1] = label(10, large and 50 or 27, large and formX-24 or width-20, card.title, large and MIDSIZE or SMLSIZE)
     all[#all + 1] = label(10, large and 94 or 48, large and formX-30 or width-20, card.detail)
     if not large then all[#all].h = rowY - 52 end
-    if large and card.art then art(all, card.art, 22, 220, formX-50) end
+    if illustrated then
+      local artY = large and 204 or rowY+4
+      local artH = large and 174 or height-controlH-35-artY
+      diagrams.append(all, w, card, 6, artY, formX-18, artH)
+    end
     for i, r in ipairs(card.rows) do
       local y = rowY + (i-1)*rowH
       local function enabled() return w.canEdit == true and (not r.enabled or r.enabled()) end
@@ -73,7 +61,7 @@ function M.new(w, ctx)
           r.kind == "hold" and "momentaryButton" or "button", r.release)
       else
         local editW = large and 190 or math.floor(formW * 0.48)
-        all[#all + 1] = label(formX, y+3, formW-editW-8, r.label)
+        all[#all + 1] = label(formX, y+3, formW-editW-8, illustrated and compact[r.label] or r.label)
         if r.kind == "value" then
           all[#all + 1] = label(formX+formW-editW, y+3, editW, function() return tostring(r.get() or "--") end)
         elseif r.kind == "choice" then

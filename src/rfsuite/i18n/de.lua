@@ -1,5 +1,23 @@
 return {
   helicopter = {
+    shortSwash = "Scheibentyp",
+    shortRotation = "Drehsinn",
+    shortOffset = "Abweichung",
+    shortArm = "Arm neutral",
+    shortTrim1 = "Servo 1 (%)",
+    shortTrim2 = "Servo 2 (%)",
+    shortTrim3 = "Servo 3 (%)",
+
+    artServoRoles = "Servofunktionen",
+    artTop = "Draufsicht",
+    artSide = "Seitenansicht",
+    artRear = "Von hinten",
+    artFront = "Vorne",
+    artLevel = "Waagerecht",
+    artNeutral = "Neutralstellung",
+    artReference = "9° Referenz",
+    artAgainst = "Korrektur gegen Bewegung",
+
     name = "Helikopter einrichten",
     loading = "Flugregler wird gelesen...",
     ready = "Bereit",
@@ -275,7 +293,7 @@ return {
     controlDirections = "Steuerrichtungen",
     bladePitch = "Blattpitch",
     gyroCheck = "Kreiselprüfung",
-    help = "Geführte Einrichtung. Alle Blätter abnehmen. Loslassen stoppt den Motor.\nZurück: vorherige Aufgabe; am Anfang Speichern oder Verwerfen wählen.\nWeiter: nächste Aufgabe dieses Schritts.\nSpeichern & weiter: Schritt im Flugregler speichern.\nNeustart: Servos bis zum abgeschlossenen Neustart abgesteckt lassen.\nAbschließen: speichern, Übersteuerungen beenden und verlassen.",
+    help = "Geführte Einrichtung. Zeichnungen sind Referenzen. Alle Blätter abnehmen. Loslassen stoppt den Motor.\nZurück: vorherige Aufgabe; am Anfang Speichern oder Verwerfen wählen.\nWeiter: nächste Aufgabe dieses Schritts.\nSpeichern & weiter: Schritt im Flugregler speichern.\nNeustart: Servos bis zum abgeschlossenen Neustart abgesteckt lassen.\nAbschließen: speichern, Übersteuerungen beenden und verlassen.",
     help_title = "Helikopter einrichten",
     calibrated = "Kalibrierung abgeschlossen",
     centreDegrees = "Mittentrimmung (Grad)",

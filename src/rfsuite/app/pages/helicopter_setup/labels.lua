@@ -1,4 +1,22 @@
 local L = {
+  shortSwash = "@i18n(helicopter.shortSwash)@",
+  shortRotation = "@i18n(helicopter.shortRotation)@",
+  shortOffset = "@i18n(helicopter.shortOffset)@",
+  shortArm = "@i18n(helicopter.shortArm)@",
+  shortTrim1 = "@i18n(helicopter.shortTrim1)@",
+  shortTrim2 = "@i18n(helicopter.shortTrim2)@",
+  shortTrim3 = "@i18n(helicopter.shortTrim3)@",
+
+  artServoRoles = "@i18n(helicopter.artServoRoles)@",
+  artTop = "@i18n(helicopter.artTop)@",
+  artSide = "@i18n(helicopter.artSide)@",
+  artRear = "@i18n(helicopter.artRear)@",
+  artFront = "@i18n(helicopter.artFront)@",
+  artLevel = "@i18n(helicopter.artLevel)@",
+  artNeutral = "@i18n(helicopter.artNeutral)@",
+  artReference = "@i18n(helicopter.artReference)@",
+  artAgainst = "@i18n(helicopter.artAgainst)@",
+
   name = "@i18n(helicopter.name)@",
   loading = "@i18n(helicopter.loading)@",
   ready = "@i18n(helicopter.ready)@",

@@ -1,5 +1,23 @@
 return {
   helicopter = {
+    shortSwash = "Swash type",
+    shortRotation = "Rotation",
+    shortOffset = "Offset",
+    shortArm = "Arm neutral",
+    shortTrim1 = "Servo 1 (%)",
+    shortTrim2 = "Servo 2 (%)",
+    shortTrim3 = "Servo 3 (%)",
+
+    artServoRoles = "Servo functions",
+    artTop = "Top view",
+    artSide = "Side view",
+    artRear = "Rear view",
+    artFront = "Front",
+    artLevel = "Level at zero",
+    artNeutral = "Neutral arm",
+    artReference = "9° reference",
+    artAgainst = "Correct against motion",
+
     name = "Helicopter Setup",
     loading = "Reading flight controller...",
     ready = "Ready",
@@ -275,7 +293,7 @@ return {
     controlDirections = "Control directions",
     bladePitch = "Blade pitch",
     gyroCheck = "Gyro check",
-    help = "Guided setup. Remove all blades. Release motor buttons to stop.\nBack: previous task; at the start, choose Save or Discard.\nContinue: next task within this step.\nSave & next: store this step in the flight controller.\nReboot: keep servos unplugged until restart completes.\nFinish: save, release overrides and leave.",
+    help = "Guided setup. Drawings are references. Remove all blades. Release motor buttons to stop.\nBack: previous task; at the start, choose Save or Discard.\nContinue: next task within this step.\nSave & next: store this step in the flight controller.\nReboot: keep servos unplugged until restart completes.\nFinish: save, release overrides and leave.",
     help_title = "Helicopter Setup",
     calibrated = "Calibration complete",
     centreDegrees = "Centre trim (deg)",

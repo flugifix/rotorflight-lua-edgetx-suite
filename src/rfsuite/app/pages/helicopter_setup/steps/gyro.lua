@@ -7,7 +7,7 @@ return function(w)
       cards[#cards + 1] = w:cardDef(a[2], a[3], {
         w:check("gyro" .. axis, L.againstMovement),
         w:button(L.withMovement, function() w.checks["gyro" .. axis] = nil; w:navigate(1, 1) end)
-      }, function() w:release() end, "heli")
+      }, function() w:release() end, axis == 1 and "gyroRoll" or axis == 2 and "gyroPitch" or "gyroYaw")
     end
   end
   w.validate = function() return w:ack("gyro1") and w:ack("gyro2") and (w:motorised() or w:ack("gyro3")) end

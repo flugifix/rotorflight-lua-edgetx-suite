@@ -12,7 +12,7 @@ return function(w)
         w:button(L.reverse, function() s.flags = s.flags ~ 1; w:touch("servo_configurations", false, true) end),
         w:check("servoUp" .. index, L.movesUp),
         w:value(L.output, function() return w.data.servo.servos[index + 1] or "--" end)
-      }, holdAll, "servo")
+      }, holdAll, "servoMove")
     end
     local centre = s.mid > 860 and 1520 or 760
     cards[#cards + 1] = w:cardDef(title, L.servoCentreHint, {
@@ -21,7 +21,7 @@ return function(w)
         set = function(v) s.mid = v; w:touch("servo_configurations", false, true) end },
       w:value(L.centreOffset, function() return math.abs(s.mid - centre) > 100 and L.checkMechanics or L.ready end),
       w:check("servoCentre" .. index, L.armCentred)
-    }, holdAll, "servo")
+    }, holdAll, "servoCentre")
   end
   w.validate = function()
     for _, i in ipairs(w:servos()) do

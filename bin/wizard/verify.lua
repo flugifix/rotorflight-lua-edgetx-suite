@@ -106,9 +106,11 @@ local bad = {}; for i=1,#telem-1 do bad[i]=telem[i] end
 check(api("motor_telemetry").parse(bad) == nil,"telemetry positive/negative length control")
 
 local L = load(PATH .. "labels.lua")
--- Resolve labels from the real English bundle for layout exports.
-local en = load("i18n/en.lua")
-for k in pairs(L) do if en.helicopter[k] then L[k] = en.helicopter[k] end end
+-- Resolve the real locale bundle for geometry checks and scene exports.
+local locale="en"
+for i=1,#arg do if arg[i]=="--locale" then locale=arg[i+1] end end
+local bundle = load("i18n/"..locale..".lua")
+for k in pairs(L) do if bundle.helicopter[k] then L[k] = bundle.helicopter[k] end end
 L.steps = { L.sensors,L.receiver,L.modeSwitches,L.profiles,L.rates,L.swash,L.servoType,L.governor,L.motor,L.connect,
   L.spinTest,L.escTelemetry,L.servoDirectionCentre,L.controlDirections,L.level,L.bladePitch,L.tail,L.gyroCheck,L.finish }
 local function world()
@@ -129,12 +131,18 @@ eq(q.sent[1].payload[1],1,"arming disabled payload")
 local steps = { "sensors","receiver","modes","profiles","rates","swash","servoType","governor","motor","connect",
   "throttle","escTelemetry","servos","direction","level","pitch","tail","gyro","finish" }
 local view = load(PATH .. "view.lua")
+local diagrams = load(PATH .. "diagrams.lua")
+for i=1,#arg do if arg[i]=="--view" then view=assert(loadfile(arg[i+1]))() end end
 local exported = {}
 local function resolve(t)
   local out = {}
   for k,v in pairs(t) do
     if type(v) == "function" then
-      if k=="text" or k=="get" or k=="active" then out[k] = v()
+      if k=="pos" then
+        local x,y=v()
+        assert(type(x)=="number" and type(y)=="number" and x>=0 and y>=0,"LVGL pos returns two coordinates")
+        out[k]={x,y}
+      elseif k=="text" or k=="get" or k=="active" or k=="pts" or k=="visible" or k=="color" then out[k] = v()
       elseif k=="display" and t.get then out[k] = v(t.get()) end
     elseif type(v)=="table" then out[k] = resolve(v)
     else out[k] = v end
@@ -149,13 +157,45 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
     for c, card in ipairs(w.cards) do
       w.card = c
       local job
-      measure("view",function() job = view.new(w,{ w=size[1],h=size[2] }) end)
+      measure("view",function() job = view.new(w,{ w=size[1],h=size[2] },diagrams) end)
       while not job.done do measure("view slice",function() job:step() end) end
       measure("reactive",function() resolve(job.children) end)
       for _,item in ipairs(job.children) do
         if item.y and item.h then check(item.y+item.h<=size[2],name.." fits height") end
+        if item.type=="line" then
+          local pts=type(item.pts)=="function" and item.pts() or item.pts
+          for _,point in ipairs(pts) do
+            check(type(point)=="table" and #point==2 and point[1]%1==0 and point[2]%1==0 and
+              point[1]>=0 and point[2]>=0 and point[1]<size[1] and point[2]<size[2],name.." safe LVGL points")
+          end
+        end
+      end
+      if card.art then
+        local lines=0
+        for _,item in ipairs(job.children) do if item.type=="line" then lines=lines+1 end end
+        check(lines>=4,name.." illustrates the task on "..size[1].."x"..size[2])
       end
       if c==1 then exported[#exported+1] = {step=n,name=name,width=size[1],height=size[2],children=resolve(job.children)} end
+      if (n==13 and c==2) or ((n==14 or n==18) and c>1) then
+        exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
+      end
+      if n==6 then
+        local old=w.data.mixer_config.swash_type
+        w.data.mixer_config.swash_type=2
+        exported[#exported+1] = {step=n,name=name,task="120",width=size[1],height=size[2],children=resolve(job.children)}
+        local p120=resolve(job.children)
+        w.data.mixer_config.swash_type=5
+        local p90=resolve(job.children)
+        local changed=false
+        for i,item in ipairs(p120) do
+          if item.type=="line" and type(job.children[i].pts)=="function" then
+            if item.pts[2][1]~=p90[i].pts[2][1] or item.pts[2][2]~=p90[i].pts[2][2] then changed=true end
+            eq(#item.pts,#p90[i].pts,"changing swash geometry preserves point count")
+          end
+        end
+        check(changed,"changing swash type updates existing geometry")
+        w.data.mixer_config.swash_type=old
+      end
     end
   end
 end

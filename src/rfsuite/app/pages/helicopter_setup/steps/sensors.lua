@@ -16,11 +16,11 @@ return function(w)
       w:n("board_alignment_config", "roll_degrees", L.roll, -180, 180, true),
       w:n("board_alignment_config", "pitch_degrees", L.pitch, -180, 180, true),
       w:n("board_alignment_config", "yaw_degrees", L.yaw, -180, 180, true)
-    }, nil, "heli"),
+    }, nil, "board"),
     w:cardDef(L.checkOrientation, L.orientationHint, {
       w:value(L.roll, function() return (w.data.attitude or {}).roll or "--" end),
       w:value(L.pitch, function() return (w.data.attitude or {}).pitch or "--" end),
       w:check("orientation", L.directionCorrect)
-    }, nil, "heli")
+    }, nil, "board")
   }
 end

@@ -33,8 +33,13 @@ The wizard draws its own navigation instead of the Suite header.
 | Hold | A momentary motor control. Releasing the button stops the motor; motor overrides also lapse in firmware without refresh. |
 | ? | Full instructions for the current task and the navigation help. |
 
-On 320- and 480-pixel displays, each task has at most four control rows.
-An 800×480 display has a separate instruction column and occasional line drawings.
+On 320- and 480-pixel displays, illustrated tasks put a compact mechanical sketch
+beside at most four control rows. The 800×480 layout has a separate instruction
+column and a larger sketch. Numbered swash links follow the selected 120/135/140/90L/90V
+geometry without rebuilding the scene; Direct shows each servo function instead.
+Board orientation, servo lift/neutral, roll/pitch/collective response, swash levelling,
+blade-pitch reference and opposing gyro correction have distinct diagrams. These
+are reference sketches, not a live attitude display or a mechanical measurement.
 The short instruction area may show only its first lines; **?** opens the full text.
 
 ## Step sequence and settings
@@ -103,6 +108,11 @@ starting an EdgeTX or flight-controller simulator.
 The preview images are approximate renders of the actual scene definitions, using
 desktop fonts. They are not native EdgeTX screenshots or radio acceptance evidence.
 
+[320×240 illustrated tasks](../images/helicopter_setup/illustrations-narrow.png) ·
+[480×272 illustrated tasks](../images/helicopter_setup/illustrations-small.png) ·
+[800×480 illustrated tasks](../images/helicopter_setup/illustrations-large.png)
+
+[320×240 all steps](../images/helicopter_setup/overview-narrow.png) ·
 [Small-display preview sheet](../images/helicopter_setup/overview-small.png) ·
 [Large-display preview sheet](../images/helicopter_setup/overview-large.png)
 

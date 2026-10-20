@@ -40,24 +40,28 @@ def render(scene):
     large = width >= 700
     size = 20 if large else 13 if width >= 480 else 12
     for item in scene['children']:
+        if item.get('visible') is False:
+            continue
         kind = item['type']
         x, y, w, h = (item.get(k, 0) for k in ('x', 'y', 'w', 'h'))
+        x, y = item.get('pos', (x, y))
+        color = '#156db2' if item.get('color') == 4 else '#26394c'
         if kind == 'rectangle':
             if item.get('filled'):
                 draw.rectangle((x,y,x+w,y+h), fill='#edf1f5')
             else:
-                draw.rectangle((x,y,x+w,y+h), outline='#74889b', width=2)
+                draw.rectangle((x,y,x+w,y+h), outline=color, width=item.get('thickness', 2))
         elif kind == 'line':
-            draw.line([tuple(p) for p in item['pts']], fill='#74889b', width=2)
+            draw.line([tuple(p) for p in item['pts']], fill=color, width=item.get('thickness', 2), joint='curve')
         elif kind == 'label':
             face = font((26 if large else 17) if item.get('font') == 1 else size)
             text = str(item.get('text', ''))
             lines = wrap(draw, text, face, w)
-            line_h = size + 3
+            line_h = face.size + 3
             if h:
                 lines = lines[:max(1, int(h / line_h))]
             for n,line in enumerate(lines):
-                draw.text((x,y+n*line_h),line,font=face,fill='#26394c')
+                draw.text((x,y+n*line_h),line,font=face,fill=color)
         elif kind in ('button','momentaryButton','choice','numberEdit'):
             draw.rounded_rectangle((x,y,x+w,y+h),radius=4,fill='#fff',outline='#9caab8',width=1)
             face = font(size)
@@ -85,25 +89,44 @@ def main():
     parser.add_argument('output',type=Path)
     args = parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
-    scenes = json.loads(args.scenes.read_text())
-    for width,height,label in ((480,272,'small'),(800,480,'large')):
+    scenes = json.loads(args.scenes.read_text(encoding="utf-8"))
+    pictures = 0
+    for width,height,label in ((320,240,'narrow'),(480,272,'small'),(800,480,'large')):
         selected = [s for s in scenes if s['width']==width and s['height']==height]
+        for s in selected:
+            suffix = f'-task-{s["task"]}' if 'task' in s else ''
+            render(s).save(args.output/f'{s["step"]:02d}-{label}{suffix}.png')
+            pictures += 1
+        selected = [s for s in selected if 'task' not in s]
         selected.sort(key=lambda s:s['step'])
-        scale = 1 if label=='small' else 0.6
+        scale = 0.6 if label=='large' else 1
         tile_w,tile_h = round(width*scale),round(height*scale)
         sheet = Image.new('RGB',(tile_w*3+40,(tile_h+32)*math.ceil(len(selected)/3)+62),'#fff')
         draw = ImageDraw.Draw(sheet)
         draw.text((12,10),f'Helicopter Setup - {width} x {height} code previews (desktop fonts)',font=font(18),fill='#26394c')
         for i,s in enumerate(selected):
             picture = render(s)
-            picture.save(args.output/f'{s["step"]:02d}-{label}.png')
             if scale != 1:
                 picture=picture.resize((tile_w,tile_h),Image.Resampling.LANCZOS)
             x,y=10+(i%3)*(tile_w+10),46+(i//3)*(tile_h+32)
             sheet.paste(picture,(x,y))
             draw.text((x,y+tile_h+3),f'{s["step"]:02d} {s["name"]}',font=font(14),fill='#26394c')
         sheet.save(args.output/f'overview-{label}.png')
-    print(f'Rendered {len(scenes)} exported scenes; 38 individual images and two overview sheets.')
+        # Native-size detail sheet: the drawing must be assessable without zooming
+        # out to all 19 steps. All four panels come from the actual Lua scene.
+        focus = [s for s in scenes if s['width']==width and s['height']==height and
+                 ((s['step']==6 and s.get('task')=='120') or
+                  (s['step']==13 and s.get('task')==2) or
+                  (s['step'] in (15,16) and 'task' not in s))]
+        focus.sort(key=lambda s:s['step'])
+        detail = Image.new('RGB',(width*2+30,(height+28)*2+48),'#fff')
+        draw = ImageDraw.Draw(detail)
+        draw.text((10,10),f'{width} x {height} - illustrated tasks (example values)',font=font(16),fill='#26394c')
+        for i,s in enumerate(focus):
+            x,y=10+(i%2)*(width+10),42+(i//2)*(height+28)
+            detail.paste(render(s),(x,y))
+        detail.save(args.output/f'illustrations-{label}.png')
+    print(f'Rendered {pictures} individual images, three overview sheets and three illustration sheets.')
 
 
 if __name__=='__main__':

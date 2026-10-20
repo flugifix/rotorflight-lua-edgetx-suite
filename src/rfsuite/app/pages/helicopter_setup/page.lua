@@ -4,7 +4,7 @@ local BASE = "/SCRIPTS/TOOLS/rfsuite-core/"
 local PATH = "app/pages/helicopter_setup/"
 local modules, stage, w, context, viewJob, scene, sceneKey = {}, 1
 local deps = { "tasks/msp/runtime.lua", PATH .. "transport.lua", PATH .. "math.lua", PATH .. "labels.lua",
-  PATH .. "controller.lua", PATH .. "forms.lua", PATH .. "workflow.lua", PATH .. "view.lua", "lib/armed.lua" }
+  PATH .. "controller.lua", PATH .. "forms.lua", PATH .. "workflow.lua", PATH .. "view.lua", "lib/armed.lua", PATH .. "diagrams.lua" }
 local keys = { "sensors", "receiver", "modes", "profiles", "rates", "swash", "servoType", "governor", "motor",
   "connect", "throttle", "escTelemetry", "servos", "direction", "level", "pitch", "tail", "gyro", "finish" }
 local function key()
@@ -49,7 +49,7 @@ function M.wakeup(ctx)
     return
   end
   if (w.cards or w.error or w.confirmExit) and sceneKey ~= key() then
-    viewJob = modules[8].new(w, context); viewJob.key = key(); return
+    viewJob = modules[8].new(w, context, modules[10]); viewJob.key = key(); return
   end
   w:tick()
   w.canEdit = w:usable()
