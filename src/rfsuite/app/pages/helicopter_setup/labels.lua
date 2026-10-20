@@ -275,6 +275,7 @@ local L = {
   bladePitch = "@i18n(helicopter.bladePitch)@",
   gyroCheck = "@i18n(helicopter.gyroCheck)@",
   help = "@i18n(helicopter.help)@",
+  help_title = "@i18n(helicopter.help_title)@",
 }
 L.steps = { L.sensors, L.receiver, L.modeSwitches, L.profiles, L.rates, L.swash, L.servoType, L.governor, L.motor,
   L.connect, L.spinTest, L.escTelemetry, L.servoDirectionCentre, L.controlDirections, L.level, L.bladePitch, L.tail, L.gyroCheck, L.finish }

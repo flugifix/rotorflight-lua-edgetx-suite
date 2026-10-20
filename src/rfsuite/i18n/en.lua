@@ -275,7 +275,8 @@ return {
     controlDirections = "Control directions",
     bladePitch = "Blade pitch",
     gyroCheck = "Gyro check",
-    help = "Guided helicopter setup. Remove all blades before bench tests.\nBack: previous task; at the start, choose Save or Discard.\nContinue: next task within this step.\nSave & next: store this step in the flight controller.\nReboot: keep servos unplugged until restart completes.\nFinish: save, release overrides and leave.\nHold: releasing the button stops the motor.",
+    help = "Guided setup. Remove all blades. Release motor buttons to stop.\nBack: previous task; at the start, choose Save or Discard.\nContinue: next task within this step.\nSave & next: store this step in the flight controller.\nReboot: keep servos unplugged until restart completes.\nFinish: save, release overrides and leave.",
+    help_title = "Helicopter Setup",
   },
   app = {
     loading = "Loading...",

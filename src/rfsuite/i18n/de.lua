@@ -275,7 +275,8 @@ return {
     controlDirections = "Steuerrichtungen",
     bladePitch = "Blattpitch",
     gyroCheck = "Kreiselprüfung",
-    help = "Geführte Helikoptereinrichtung. Vor Tests alle Blätter abnehmen.\nZurück: vorherige Aufgabe; am Anfang Speichern oder Verwerfen wählen.\nWeiter: nächste Aufgabe dieses Schritts.\nSpeichern & weiter: Schritt im Flugregler speichern.\nNeustart: Servos bis zum abgeschlossenen Neustart abgesteckt lassen.\nAbschließen: speichern, Übersteuerungen beenden und verlassen.\nHalten: Loslassen stoppt den Motor.",
+    help = "Geführte Einrichtung. Alle Blätter abnehmen. Loslassen stoppt den Motor.\nZurück: vorherige Aufgabe; am Anfang Speichern oder Verwerfen wählen.\nWeiter: nächste Aufgabe dieses Schritts.\nSpeichern & weiter: Schritt im Flugregler speichern.\nNeustart: Servos bis zum abgeschlossenen Neustart abgesteckt lassen.\nAbschließen: speichern, Übersteuerungen beenden und verlassen.",
+    help_title = "Helikopter einrichten",
   },
   app = {
     loading = "Lade...",

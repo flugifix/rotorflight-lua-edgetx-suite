@@ -58,7 +58,7 @@ function M.attach(w)
       get = function() return self.data.mixer_input.inputs[axis][key] end,
       set = function(v) self.data.mixer_input.inputs[axis][key] = v; self:touch("mixer_input", false, true) end }
   end
-  function w:reverse(axis)
+  function w:invertInput(axis)
     local r = self.data.mixer_input.inputs[axis]; r.rate = -r.rate; self:touch("mixer_input", false, true)
   end
   function w:ack(key)

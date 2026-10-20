@@ -46,7 +46,9 @@ function M.new(w, ctx)
     function() return not w.transition end)
   button(width-controlH-6, 2, controlH, "?", function()
     local current = w.cards and w.cards[w.card]
-    if w.openHelp then w.openHelp((current and current.detail .. "\n\n" or "") .. w.L.help, w.L.name) end
+    local firstBreak = string.find(w.L.help, "\n", 1, true)
+    local message = current and firstBreak and current.detail .. string.sub(w.L.help, firstBreak) or w.L.help
+    if w.openHelp then w.openHelp(message, w.L.name) end
   end)
   local card = w.cards and w.cards[w.card]
   if w.confirmExit then

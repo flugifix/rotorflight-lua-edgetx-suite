@@ -5,7 +5,7 @@ return function(w)
     local axis = a[1]
     cards[#cards + 1] = w:cardDef(a[2], a[3], {
       w:value(L.stick, function() return w.data.rc_command and w.data.rc_command.commands[axis] or "--" end),
-      w:button(L.wrongReverse, function() w:reverse(axis); w.checks["control" .. axis] = nil end),
+      w:button(L.wrongReverse, function() w:invertInput(axis); w.checks["control" .. axis] = nil end),
       w:check("control" .. axis, L.directionCorrect)
     }, function() w:holdAxes(nil, 0, true) end, "swash")
   end
