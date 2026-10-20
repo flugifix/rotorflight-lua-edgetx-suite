@@ -103,6 +103,9 @@ These are additional checks; assertions and budget thresholds are not weakened.
 
 The per-call instruction probe covers step definitions, view preparation, scene
 slices, reactive sweeps, API decode, save callbacks and real page wakeup/build.
+A second complete traversal uses the rendered page's own choice and navigation
+callbacks, measuring wakeup, scene assembly and every reactive getter together
+in each frame under the same 14,000-instruction test ceiling.
 The Suite's package, syntax, translation, accounting and host page-budget checks
 remain separate required checks.
 

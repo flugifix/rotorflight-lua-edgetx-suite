@@ -179,10 +179,10 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
       if (n==6 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
-      if n==6 and c==1 then
+      if n==6 then
         local old=w.data.mixer_config.swash_type
         w.data.mixer_config.swash_type=2
-        exported[#exported+1] = {step=n,name=name,task="120",width=size[1],height=size[2],children=resolve(job.children)}
+        if c==1 then exported[#exported+1] = {step=n,name=name,task="120",width=size[1],height=size[2],children=resolve(job.children)} end
         local p120=resolve(job.children)
         w.data.mixer_config.swash_type=5
         local p90=resolve(job.children)
@@ -310,6 +310,44 @@ for _=1,500 do
   ctx.children={};measure("page build",function() page.build(ctx) end)
   measure("page sweep",function() resolve(ctx.children) end)
 end
+page.onClose()
+-- Walk the actual page through its rendered callbacks. Construction and every
+-- reactive getter share this measured frame, as they do in the dashboard host.
+local frameClosed,frameVisited=false,{}
+local frameCtx={children={},x=0,y=0,w=480,h=272,requestRebuild=function() end,
+  requestClose=function() frameClosed=true end}
+page.build(frameCtx)
+for _=1,5000 do
+  measure("hosted frame",function()
+    page.wakeup(frameCtx)
+    frameCtx.children={};page.build(frameCtx);resolve(frameCtx.children)
+  end)
+  pump();ticks=ticks+5
+  if frameClosed then break end
+  for _,item in ipairs(frameCtx.children) do
+    local active=type(item.active)~="function" or item.active()
+    if item.type=="label" and type(item.text)=="string" then
+      local number=item.text:match("^(%d+)/19")
+      if number then frameVisited[tonumber(number)]=true end
+    end
+    if active and item.type=="choice" and item.set and
+      (item.values[1]==L.no or item.values[1]=="@i18n(helicopter.no)@") and
+      (item.values[2]==L.yes or item.values[2]=="@i18n(helicopter.yes)@") then
+      measure("page input",function() item.set(2) end)
+    end
+    if active and item.type=="button" and item.press then
+      local caption=type(item.text)=="function" and item.text() or item.text
+      local key=type(caption)=="string" and caption:match("^@i18n%(helicopter%.([%w_]+)%)@$")
+      if key=="continue" or key=="saveNext" or key=="finish" or
+        caption==L.continue or caption==L.saveNext or caption==L.finish then
+        measure("page input",item.press)
+      end
+    end
+  end
+end
+check(frameClosed,"actual rendered page completes the whole wizard")
+local frameCount=0;for _ in pairs(frameVisited) do frameCount=frameCount+1 end
+eq(frameCount,19,"actual page callbacks visit all nineteen steps")
 page.onClose()
 -- Follow all 19 steps with explicit positive physical answers. No simulator or
 -- radio events are synthesized; these are calls into the actual page controller.
