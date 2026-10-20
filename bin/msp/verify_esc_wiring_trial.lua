@@ -465,4 +465,33 @@ do
   assert(queued[#queued].command == TrialApi.command, "new board was not asked the capability")
 end
 
-print("OK: 26 ESC wiring API/lifecycle cases")
+-- A poll that only says "still running" does not rebuild the page (a rebuild puts the focus back
+-- on the first control, so Cancel could not be reached while detection runs); a change does.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(0))
+  local rebuilds = 0
+  local ctx = { requestRebuild = function() rebuilds = rebuilds + 1 end }
+  page.wakeup(ctx)
+  assert(press(build(page), "Detect wiring"), "Detect wiring missing")
+  local start = queued[#queued]
+  page.wakeup(ctx)                                   -- build() took its own requestRebuild
+  rebuilds = 0
+  start.processReply(start, reply(1))
+  local afterStart = rebuilds
+  assert(afterStart > 0, "the start's RUNNING answer did not rebuild the page")
+  for _ = 1, 3 do
+    now = now + 50
+    page.wakeup(ctx)
+    local poll = queued[#queued]
+    assert(poll.payload[1] == 0, "running trial was not polled")
+    poll.processReply(poll, reply(1))
+  end
+  assert(rebuilds == afterStart, "unchanged RUNNING polls rebuilt the page " .. (rebuilds - afterStart) .. " times")
+  now = now + 50
+  page.wakeup(ctx)
+  queued[#queued].processReply(queued[#queued], reply(3))
+  assert(rebuilds > afterStart, "the FAILED end did not rebuild the page")
+end
+
+print("OK: 27 ESC wiring API/lifecycle cases")

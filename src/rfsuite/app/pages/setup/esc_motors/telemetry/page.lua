@@ -81,6 +81,14 @@ local function trialBusy()
   return trial and (trial.active or trial.pending) or false
 end
 
+-- What the page draws from a trial reply: a reply that changes none of it needs no rebuild.
+local function drawnState()
+  local trial = ui.runtime.trial
+  return table.concat({ tostring(trial.status), tostring(trial.active), tostring(trialBusy()),
+    tostring(trial.supported), tostring(trial.mustRead), tostring(ui.dirty),
+    tostring(ui.config.half_duplex), tostring(ui.config.pin_swap) }, "|")
+end
+
 local function trialAvailable()
   local session = getSession()
   local api = session and session.apiVersion
@@ -112,6 +120,9 @@ local function queueTrial(action, quiet)
         or buildSessionSignature() ~= signature then return end
       if armedEpoch ~= nil and Armed and Armed.changeCount and Armed.changeCount() ~= armedEpoch then return end
       local wasActive = current.active == true
+      -- What the page draws from this reply. A poll that only says "still running" changes none
+      -- of it, and a rebuild for it would put the focus back on the first control every 0.5 s.
+      local before = drawnState()
       current.pending = false
       local result = EscSensorTrialApi.parse(buf)
       if not result then
@@ -163,7 +174,8 @@ local function queueTrial(action, quiet)
         current.mustRead = true
         queueTrial(EscSensorTrialApi.ACTION_CANCEL, false)
       end
-      if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
+      local after = drawnState()
+      if after ~= before and type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
     end,
     errorHandler = function()
       if ui.runtime ~= runtime or ui.runtime.trial ~= trial or getSession() ~= session
