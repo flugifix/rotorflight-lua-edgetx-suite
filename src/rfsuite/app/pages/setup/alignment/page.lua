@@ -119,7 +119,11 @@ local function ensureDeps()
   if not SensorAlignmentApi then SensorAlignmentApi = loadModule("tasks/msp/api/sensor_alignment.lua") end
   if not BoardAutoAlignApi then BoardAutoAlignApi = loadModule("tasks/msp/api/board_auto_align.lua") end
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
-  if not Armed then Armed = loadModule("lib/armed.lua") end
+  -- The shared copy: lib/armed.lua counts arm/disarm changes per Lua state, and only the copy
+  -- the tool asks on every pass sees them.
+  if not Armed then
+    Armed = (_G.rfsuite and _G.rfsuite.require and _G.rfsuite.require("lib/armed.lua")) or loadModule("lib/armed.lua")
+  end
   if not AutoAlignLifecycle then AutoAlignLifecycle = loadModule("app/pages/setup/alignment/auto_align_lifecycle.lua") end
   if not LoadingOverlay then LoadingOverlay = loadModule("ui/loading_overlay.lua") end
   if not ConfirmDialog then ConfirmDialog = loadModule("ui/confirm_dialog.lua") end
@@ -817,7 +821,8 @@ local function showAutoAlignResult(result)
   local state = result.state
   local message
   if state == BoardAutoAlignApi.states.success then
-    message = pageText(nil, "auto_align_success", "Alignment loaded into the fields. Review it, then select Save to keep it.")
+    message = pageText(nil, "auto_align_success",
+      "Alignment applied and loaded into the fields. Save stores it now; otherwise the flight controller stores it at the next disarm.")
   elseif state == BoardAutoAlignApi.states.rejectedArmed then
     message = pageText(nil, "auto_align_armed", "Disarm the model before starting auto-align.")
   elseif state == BoardAutoAlignApi.states.rejectedUncalibrated then
@@ -842,7 +847,9 @@ local function queueAutoAlignRequest(action)
   end
   local mspState = MspRuntime and MspRuntime.getState()
   local queue = mspState and mspState.queue
-  if not queue or type(queue.add) ~= "function" or not queue:isProcessed() then return false end
+  if not queue or type(queue.add) ~= "function" then return false end
+  -- Polls wait for an idle queue; the START the pilot confirmed is queued behind whatever is there.
+  if action ~= BoardAutoAlignApi.actions.start and not queue:isProcessed() then return false end
   local signature = currentSessionSignature()
   local armedChanges = Armed and type(Armed.changeCount) == "function" and Armed.changeCount() or nil
   local token = AutoAlignLifecycle.capture(ui.runtime, session, signature, armedChanges)
@@ -1056,7 +1063,7 @@ function M.wakeup(ctx)
     and session and session.fblConnected == true then
     if queueAlignmentRead(false) then ui.runtime.autoAlignNeedsReload = false end
   elseif ui.runtime.autoAlignNeedsProbe and not ui.runtime.autoAlignPending then
-    if queueAutoAlignProbe() or ui.runtime.autoAlignSupported == false then
+    if queueAutoAlignProbe() or ui.runtime.autoAlignSupported ~= nil then
       ui.runtime.autoAlignNeedsProbe = false
     end
   end
@@ -1332,7 +1339,10 @@ function M.build(ctx)
             ui.runtime.autoAlignStartedAt = nowSeconds()
             ui.runtime.autoAlignArmedChanges = armedChanges
             ui.runtime.autoAlignState = BoardAutoAlignApi.states.idle
-            queueAutoAlignRequest(BoardAutoAlignApi.actions.start)
+            if not queueAutoAlignRequest(BoardAutoAlignApi.actions.start) then
+              ui.runtime.autoAlignStartedAt = 0
+              ui.runtime.autoAlignArmedChanges = nil
+            end
             if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
           end
         })

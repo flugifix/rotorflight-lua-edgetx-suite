@@ -355,4 +355,25 @@ ticks = ticks + 30; wake()
 reply({ 4, 0, 0, 0, 0, 0, 0, 0 })
 equal(dialogsShown, 1, "own TIMEOUT result shown")
 
+-- A confirmed START is queued even while other traffic is in the queue; polls still wait.
+Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-busy", "12.10")
+armedNow, armedLast, armedChanges = false, nil, 0
+deliverInitialReads(); reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press()
+queue.busy = true
+confirmCallback()
+queue.busy = false
+equal(queue.messages[1] and queue.messages[1].payload[1], 1, "confirmed start queued behind busy traffic")
+equal(Page.canSave(), false, "busy-queue start locks save")
+
+-- The page asks the tool's shared lib/armed.lua: only that copy sees the arm/disarm changes.
+do
+  local asked = nil
+  Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-shared-armed", "12.10")
+  _G.rfsuite.require = function(path) asked = path; return Armed end
+  wake()
+  _G.rfsuite.require = nil
+  equal(asked, "lib/armed.lua", "page took the shared lib/armed.lua")
+end
+
 print(string.format("board auto-align page: %d checks passed", checks))
