@@ -327,7 +327,7 @@ for _=1,5000 do
   for _,item in ipairs(frameCtx.children) do
     local active=type(item.active)~="function" or item.active()
     if item.type=="label" and type(item.text)=="string" then
-      local number=item.text:match("^(%d+)/19")
+      local number=string.match(item.text,"^(%d+)/19")
       if number then frameVisited[tonumber(number)]=true end
     end
     if active and item.type=="choice" and item.set and
@@ -337,7 +337,7 @@ for _=1,5000 do
     end
     if active and item.type=="button" and item.press then
       local caption=type(item.text)=="function" and item.text() or item.text
-      local key=type(caption)=="string" and caption:match("^@i18n%(helicopter%.([%w_]+)%)@$")
+      local key=type(caption)=="string" and string.match(caption,"^@i18n%(helicopter%.([%w_]+)%)@$")
       if key=="continue" or key=="saveNext" or key=="finish" or
         caption==L.continue or caption==L.saveNext or caption==L.finish then
         measure("page input",item.press)

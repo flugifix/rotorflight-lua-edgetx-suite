@@ -23,7 +23,7 @@ const {heli,adjust,rate}=context;
 const cases=[];
 function add(fn,args,expected){cases.push({fn,args,expected:expected??null});}
 for(const rate of [-1500,-1000,250,1000,2000]) for(const measurement of [1,4.5,9,18,30]) add('calibrated',[rate,measurement],heli.calibratedRate(rate,9,measurement));
-for(const peaks of [[],[0,0],[299,0],[300,150],[300,151],[500,0,100],[500,500],[120,10],[250,124]]) for(const minimum of [100,250,300]){
+for(const peaks of [ [],[0,0],[299,0],[300,150],[300,151],[500,0,100],[500,500],[120,10],[250,124]]) for(const minimum of [100,250,300]){
  const n=heli.movedChannel(peaks,[],minimum);add('moved',[peaks,null,minimum],n<0?null:n+1);
 }
 for(const a of [1000,1500,2000]) for(const b of [1000,1500,2000]){const r=heli.rangeForSwitch(a,b);add('switchRange',[a,b],[r.start,r.end]);}
@@ -36,7 +36,7 @@ for(const ratesType of [6,4,0]) for(const raw of [0,50,99,100,101,200]){
  add('collective',[{rates_type:ratesType,rcRates_4:raw,rates_4:100}],heli.collectiveAtFullStick(t));
 }
 const styles=[{cyclic:180,yaw:270,expo:{cyclic:40,yaw:50}},{cyclic:250,yaw:400,expo:{cyclic:40,yaw:50}},{cyclic:400,yaw:600,expo:{cyclic:30,yaw:40}}];
-function luaTuning(t){const o={rates_type:t.rates_type};for(const [n,a] of ['roll','pitch','yaw','collective'].entries()) for(const [src,dst] of [['rc_rate','rcRates_'],['srate','rates_'],['rc_expo','rcExpo_']]) o[dst+(n+1)]=Math.round(t[a+'_'+src]*100);return o;}
+function luaTuning(t){const o={rates_type:t.rates_type};for(const [n,a] of ['roll','pitch','yaw','collective'].entries()) for(const [src,dst] of [ ['rc_rate','rcRates_'],['srate','rates_'],['rc_expo','rcExpo_']]) o[dst+(n+1)]=Math.round(t[a+'_'+src]*100);return o;}
 for(const type of [4,6]) for(const initial of [4,6,0]) for(let i=0;i<3;i++){
  const t={rates_type:initial};
  for(const axis of ['roll','pitch','yaw','collective']){t[axis+'_rc_rate']=1;t[axis+'_srate']=0.8;t[axis+'_rc_expo']=0.3;}

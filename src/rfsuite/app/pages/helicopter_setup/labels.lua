@@ -1,4 +1,6 @@
 local L = {
+  receiverUsb = "@i18n(helicopter.receiverUsb)@",
+  receiverUsbHint = "@i18n(helicopter.receiverUsbHint)@",
   calibrationFailed = "@i18n(helicopter.calibrationFailed)@",
   releaseTest = "@i18n(helicopter.releaseTest)@",
   swashLayout = "@i18n(helicopter.swashLayout)@",

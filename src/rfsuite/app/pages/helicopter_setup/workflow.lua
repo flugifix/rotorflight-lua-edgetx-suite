@@ -58,6 +58,8 @@ function M.attach(w)
       payload=function() return self.bus.apis[api].buildPayload(action) end})
   end
   function w:startTrial(api)
+    -- A receiver wiring trial reopens the UART carrying this MSP connection.
+    if api == "rx_serial_trial" then self.message=self.L.receiverUsbHint;return end
     if not self:usable() or self.trial then return end
     if api ~= "board_auto_align" and not self:canDetect(api == "rx_serial_trial" and 64 or 1024) then
       self.message=self.L.saveFirst;return
@@ -71,7 +73,7 @@ function M.attach(w)
       for _,key in ipairs(keys) do self.trial.before[key]=self.data[name][key] end
     end
     self:trialRequest(api,1,function(d,error)
-      if error then self.trial = nil; self.message = self.L.unsupported
+      if error then self:stopTrial(); self.message = self.L.unsupported
       else self:trialReply(d) end
     end)
   end
@@ -80,7 +82,8 @@ function M.attach(w)
     if not d then self.message = self.L.unsupported; self:stopTrial(); return end
     self.trialDetails=d.elapsedMs and string.format("%d ms",d.elapsedMs) or nil
     if d.frameDelta then
-      self.trialDetails=self.trialDetails..string.format(" / %d frames / port %d",d.frameDelta,d.portOpen)
+      self.trialDetails=(self.trialDetails or "")..string.format(" / %d frames",d.frameDelta)
+      if d.portOpen~=nil then self.trialDetails=self.trialDetails..string.format(" / port %d",d.portOpen) end
     end
     if d.state == 1 then
       trial.due=getTime()+20

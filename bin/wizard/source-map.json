@@ -256,9 +256,10 @@
         "CORE.status-expiry-during-pending-request",
         "CORE.trial-state-and-diagnostics",
         "CORE.wiring-success-polling-and-teardown",
-        "S01.calibration-alignment"
+        "S01.calibration-alignment",
+        "CORE.receiver-trial-radio-guard"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
+      "adaptation": "Receiver wiring detection is directed to USB Configurator: the trial reinitializes the receiver UART carrying radio MSP. A radio-side guard sends no START. Mapping, protocol/port configuration, live inputs and throttle setup stay in this step."
     },
     {
       "source": "tabs/receiver/channelPresets.js",
@@ -946,9 +947,10 @@
       "contracts": [
         "S02.order-detection-and-throttle",
         "S02.port-selection",
-        "S02.protocol-ids-presets-feature-group"
+        "S02.protocol-ids-presets-feature-group",
+        "CORE.receiver-trial-radio-guard"
       ],
-      "adaptation": "Behavior follows the source; resumable Lua jobs and compact task cards replace web component lifecycle and promises."
+      "adaptation": "Receiver wiring detection is directed to USB Configurator: the trial reinitializes the receiver UART carrying radio MSP. A radio-side guard sends no START. Mapping, protocol/port configuration, live inputs and throttle setup stay in this step."
     },
     {
       "source": "tabs/setup_wizard/StepSensors.svelte",

@@ -19,6 +19,11 @@ The page is greyed out until the flight controller answers
 and requires MSP API 12.09 or later (`minApiVersion = {12, 0, 9}`). It works from
 the TOOLS menu and when the tool is hosted by the dashboard widget.
 
+Receiver setup requires an already working receiver/MSP link. Run automatic
+receiver wiring detection in USB Configurator: that test reinitializes the same
+UART that carries the radio link. ESC wiring detection and board auto-alignment
+remain available on the radio when supported by firmware.
+
 ## Navigation
 
 The wizard draws its own navigation instead of the Suite header.
@@ -47,7 +52,7 @@ The short instruction area may show only its first lines; **?** opens the full t
 | # | Step | Controls and checks |
 | --- | --- | --- |
 | 1 | Board orientation | Confirm servos unplugged and all blades removed. Calibrate the accelerometer with the model level and still. Detect orientation by lifting the tail, or enter roll, pitch and yaw in degrees. After restart, check the live angles and confirm the directions. Automatic alignment requires firmware support. |
-| 2 | Receiver | Choose a free/current receiver UART and serial protocol; detect wiring if supported. Save & reboot is available here. Detect roll, pitch, yaw, collective and throttle channel mapping one stick at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check all stick values. Record at least 300 µs throttle travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. |
+| 2 | Receiver | Choose a free/current receiver UART and serial protocol; use USB Configurator for receiver wiring detection (the trial interrupts the radio MSP link). Save & reboot is available here. Detect roll, pitch, yaw, collective and throttle channel mapping one stick at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check all stick values. Record at least 300 µs throttle travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. |
 | 3 | Mode switches | Assign ARM, RESCUE and TRAINER when the FC exposes them. Move the switch to its intended ON position; a clear AUX movement and settled position determine the active window. Reassign or Remove an assignment. ARM assignment is required. No unrelated mode slots are overwritten. |
 | 4 | Profiles & gain | Detect a two- or three-position switch; select PID + rate profiles, PID only or None. Visit the positions and Use switch. Optional gain uses a knob, or four trim-button values on one spare channel. Mapped gain is 50–150%; button gain is ±5%, bounded to 25–200%. The trim guide gives MAX mix weights 30/40/50/60%, with 100% at rest. Configure those mixes in EdgeTX; this page does not rewrite the transmitter model. |
 | 5 | Rates | Select each rate profile and Keep current, Trainer (180/270°/s), Sport (250/400°/s), or 3D (400/600°/s). Only switch-selected profiles, or the active profile, are offered. Suggest fills a three-position switch in its position order. Collective pitch is preserved. Profiles are selected, read and written sequentially, then the original rate profile is restored. |

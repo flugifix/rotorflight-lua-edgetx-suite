@@ -66,8 +66,7 @@ return function(w)
   return {
     w:cardDef(L.receiver, L.receiverHint, {
       port, protocol,
-      w:button(function() return w.trial and L.cancelDetect or L.detectWiring end,
-        function() if w.trial then w:stopTrial(true) else w:startTrial("rx_serial_trial") end end, function() return w.trial ~= nil or w:canDetect(64) end),
+      w:button(L.receiverUsb, function() w.message=L.receiverUsbHint end),
       w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end)
     }),
     w:cardDef(L.channelOrder, L.channelHint, {

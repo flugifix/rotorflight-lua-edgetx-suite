@@ -76,7 +76,7 @@ end
 -- Explicit wire IDs keep sparse/versioned protocol menus safe.
 function M.protocols(w)
   function w:apiAtLeast(minor)
-    local major, value = tostring(self:session().apiVersion or ""):match("(%d+)%.(%d+)")
+    local major, value = string.match(tostring(self:session().apiVersion or ""), "(%d+)%.(%d+)")
     return tonumber(major or 0) > 12 or tonumber(major or 0) == 12 and tonumber(value or 0) >= minor
   end
   function w:enum(api, key, label, entries, reboot)

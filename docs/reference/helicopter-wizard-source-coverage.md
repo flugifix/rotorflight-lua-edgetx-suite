@@ -34,7 +34,7 @@ sweep in `verify.lua` at 320×240, 480×272, 480×320 and 800×480.
 | # | Source step | Read/write/check coverage | Contract prefix |
 | --- | --- | --- | --- |
 | 1 | Sensors | Accelerometer present/absent; preparation gate; calibration ACK and status completion; signed alignment; start/query, uncalibrated, timeout, rejection and successful auto-align; pending restart; physical orientation answer. | `S01`, `CORE` |
-| 2 | Receiver | Free/current ports; VCP exclusion and soft-serial IDs; preservation of unrelated port functions; RX feature group; explicit serial protocol IDs; saved-connection wiring trials; all four channel presets; collective-first detection and exclusion of previously found channels; raw mapped bars; throttle travel, margins, defaults, missing input and arming threshold. | `S02`, `CORE` |
+| 2 | Receiver | Free/current ports; VCP exclusion and soft-serial IDs; preservation of unrelated port functions; RX feature group; explicit serial protocol IDs; USB guidance and a radio-side wiring-trial guard; all four channel presets; collective-first detection and exclusion of previously found channels; raw mapped bars; throttle travel, margins, defaults, missing input and arming threshold. | `S02`, `CORE` |
 | 3 | Modes | Only advertised ARM/RESCUE/TRAINER; existing/free/full slots; ≥300 µs clear movement, 400 ms settle and detection timeout; indexed write and cleared linkage; remove; ARM switch feedback versus actual STATUS flags for other modes. | `S03` |
 | 4 | Profiles & gain | Existing mode/channel readback; PID+rates, PID-only and None; detection thresholds and accumulated peaks; clustered positions and full travel; paired slot capacity; live profile/knob/button feedback; exact 83/84 gain functions and neutral windows; channel-use plan including channels beyond CH8; EdgeTX trim-mix instructions. | `S04`, `SOURCE` |
 | 5 | Rates | Profiles actually selected by the adjustment range, or the active profile; individual reads on entry; matching preset/custom state; three-position suggestion; only chosen profiles written; collective preserved; original selection restored; chosen state cleared after save. | `S05`, `SOURCE` |
@@ -70,6 +70,11 @@ sweep in `verify.lua` at 320×240, 480×272, 480×320 and 800×480.
 - Back/Next and a save/discard exit replace arbitrary web step jumps. Visit-local
   step state survives an expected reboot. It is not persisted across a new visit
   or transferred to another FC. RTN/EXIT uses the same Back route.
+- Receiver wiring detection is redirected to USB Configurator. Firmware
+  `rxSerialTrialApplyCombo` closes/reinitializes the receiver UART, which carries
+  this wizard's MSP link. A radio-side guard sends no START, even on compatible
+  firmware. The wizard therefore requires an already working receiver/MSP link.
+  ESC wiring detection and board alignment use independent facilities.
 - AUX wire indexes remain identical. Displayed receiver channel numbers follow
   RX_MAP (firmware `rx.c/readRxChannels`, `MSP_RC` versus `MSP_RX_CHANNELS`). For
   example, an ELRS preset can make AUX1 correspond to transmitter CH5; it must

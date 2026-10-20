@@ -143,7 +143,7 @@ return function(h)
     local c=step(w,"modes")
     w.data.rx_map.aux1=4
     eq(w:channelNumber(0),5,"S03 displayed receiver channel follows RX_MAP")
-    check(c[1].rows[1].get():find("CH5",1,true)~=nil,"S03 switch assignment names physical receiver channel")
+    check(string.find(c[1].rows[1].get(),"CH5",1,true)~=nil,"S03 switch assignment names physical receiver channel")
     eq(c[1].rows[4].get(),L.yes,"S03 ARM shows switch position despite arming inhibit")
     eq(c[2].rows[4].get(),L.no,"S03 rescue requires actual mode flag")
     w.data.status.flight_mode_flags=2
@@ -208,7 +208,7 @@ return function(h)
     eq(gr.adjMin,25,"S04 gain minimum")
     eq(gr.adjMax,200,"S04 gain maximum")
     w.data.rc={channels={1500,1500,1500,1500,1000,1654,2012}}
-    check(c[2].rows[4].get():find("-5%%")~=nil,"S04 pressed cyclic-down feedback")
+    check(string.find(c[2].rows[4].get(),"-5%%")~=nil,"S04 pressed cyclic-down feedback")
     w.data.rc.channels[6]=2012
     eq(c[2].rows[4].get(),L.none,"S04 neutral outside button windows")
   end)
@@ -421,17 +421,17 @@ return function(h)
     check(off,"CORE expired status queues legacy OFF")
   end)
   case("CORE.wiring-success-polling-and-teardown",function()
-    local w=world();settle(w);w.data.serial_config.port_1_function_mask=64
-    w.trial={api="rx_serial_trial",untilAt=getTime()+6000,due=0}
-    w.bus.apis.rx_serial_trial=h.api("rx_serial_trial")
-    w:trialReply({state=2,inverted=1,half_duplex=1,pin_swap=0})
+    local w=world();settle(w);w.data.serial_config.port_1_function_mask=1024
+    w.trial={api="esc_sensor_trial",untilAt=getTime()+6000,due=0}
+    w.bus.apis.esc_sensor_trial=h.api("esc_sensor_trial")
+    w:trialReply({state=2,half_duplex=1,pin_swap=0})
     check(w.trial and w.trial.success,"CORE successful wiring remains live for inspection")
     check(not w:trialTick(),"CORE successful trial yields to live polling")
-    eq(w.data.rx_config.serialrx_inverted,1,"CORE detected inversion staged")
+    eq(w.data.esc_sensor_config.half_duplex,1,"CORE detected half-duplex staged")
     w:release()
     check(w.trial==nil,"CORE leaving cancels trial owner")
     local stop=false
-    for _,m in ipairs(q.messages) do if m.command==0x5F12 and m.payload[1]==2 and m.client=="helicopter-cleanup" then stop=true end end
+    for _,m in ipairs(q.messages) do if m.command==0x5F0C and m.payload[1]==2 and m.client=="helicopter-cleanup" then stop=true end end
     check(stop,"CORE stop survives page transport teardown")
     w.trial={api="esc_sensor_trial",untilAt=getTime()-1,due=0};w:trialTick()
     eq(w.message,L.detectTimeout,"CORE trial deadline is explicit")
@@ -492,12 +492,23 @@ return function(h)
     check(w.trial and w.trial.success,"CORE canonical ESC success remains live")
     eq(w.data.esc_sensor_config.half_duplex,1,"CORE canonical half-duplex result applied")
     eq(w.data.esc_sensor_config.pin_swap,1,"CORE canonical pin-swap result applied")
-    check(w.trialDetails:find("5 frames",1,true)~=nil,"CORE canonical frame diagnostics available in help")
+    check(string.find(w.trialDetails,"5 frames",1,true)~=nil,"CORE canonical frame diagnostics available in help")
     w:release();local stop=q.messages[#q.messages]
     eq(stop.command,0x5F0C,"CORE canonical ESC stop command")
     eq(stop.payload[1],2,"CORE canonical ESC cancel action")
     check(stop.isWrite,"CORE ESC cancel is classified as a write")
     h.fixtures[0x5F0C]=nil
+  end)
+  case("CORE.receiver-trial-radio-guard",function()
+    local w=world();settle(w);local sent=#q.sent
+    w:startTrial("rx_serial_trial");drain(w)
+    check(w.trial==nil,"CORE receiver trial cannot own radio transport")
+    eq(w.message,L.receiverUsbHint,"CORE receiver trial directs user to USB")
+    for i=sent+1,#q.sent do check(q.sent[i].command~=0x5F12,"CORE no receiver trial request sent over radio") end
+    local cards=step(w,"receiver")
+    eq(cards[1].rows[3].label,L.receiverUsb,"CORE receiver task explains USB route")
+    cards[1].rows[3].press()
+    eq(w.message,L.receiverUsbHint,"CORE receiver USB button explains connection loss")
   end)
   case("CORE.trial-state-and-diagnostics",function()
     local w=world()
@@ -519,6 +530,19 @@ return function(h)
     eq(e.frameDelta,5,"CORE optional ESC frame diagnostics")
     eq(e.comboCount,4,"CORE optional ESC combination count")
     eq(e.portOpen,1,"CORE optional ESC port-open flag")
+    w.trial={api="esc_sensor_trial",untilAt=getTime()+6000,due=0}
+    w:trialReply(esc.parse({1,0,0,0,52,18,5,0}))
+    check(string.find(w.trialDetails,"5 frames",1,true)~=nil,"CORE partial optional diagnostics are safe")
+    w:stopTrial()
+    w=world();settle(w);w.data.serial_config.port_1_function_mask=1024;w.data.esc_sensor_config.protocol=1
+    w.bus.apis.esc_sensor_trial=esc
+    w:startTrial("esc_sensor_trial")
+    local job=w.bus.jobs[#w.bus.jobs]
+    job.after(nil,"lost START reply")
+    check(w.trial==nil,"CORE failed START releases trial owner")
+    local cancel=q.messages[#q.messages]
+    eq(cancel.command,esc.command,"CORE failed START queues cleanup command")
+    eq(cancel.payload[1],2,"CORE failed START sends CANCEL despite missing ACK")
   end)
   case("CORE.second-pass-edges",function()
     local w=world()
@@ -531,14 +555,14 @@ return function(h)
     check(h.api("rc_config").parse({1,0,1,0,1,0,1})==nil,"CORE truncated RC config refused")
     local parsed=h.api("rc_config").parse(h.api("rc_config").simulatorResponse)
     eq(parsed.rc_deflection,510,"CORE complete RC config positive control")
-    w=world();settle(w);w.data.serial_config.port_1_function_mask=64
-    w.bus.apis.rx_serial_trial=h.api("rx_serial_trial")
-    local inverted=w.data.rx_config.serialrx_inverted
-    w:startTrial("rx_serial_trial");w:trialReply({state=2,inverted=1-inverted,half_duplex=1,pin_swap=1})
+    w=world();settle(w);w.data.serial_config.port_1_function_mask=1024;w.data.esc_sensor_config.protocol=1
+    w.bus.apis.esc_sensor_trial=h.api("esc_sensor_trial")
+    local half=w.data.esc_sensor_config.half_duplex
+    w:startTrial("esc_sensor_trial");w:trialReply({state=2,half_duplex=1-half,pin_swap=1})
     check(w.trial and w.trial.success,"CORE cancel test has applied trial")
     w:stopTrial(true)
-    eq(w.data.rx_config.serialrx_inverted,inverted,"CORE cancel restores original inversion")
-    check(not w.dirty.rx_config and not w.rebootPending,"CORE cancel restores dirty/reboot state")
+    eq(w.data.esc_sensor_config.half_duplex,half,"CORE cancel restores original half-duplex")
+    check(not w.dirty.esc_sensor_config and not w.rebootPending,"CORE cancel restores dirty/reboot state")
     w=world();settle(w);w.data.motor_config.motor_pwm_protocol=5;w.bladesOff=true
     w.data.motor={motor_1=0,motor_2=1000};w:spin(0,1)
     check(w.motorHold==nil,"CORE disabled actual motor blocks spin despite configured output count")

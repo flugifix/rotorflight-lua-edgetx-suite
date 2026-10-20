@@ -23,8 +23,13 @@ MSP queue and API modules. It never opens another telemetry transport.
 | `rc_config` | 66/67 | A complete 12-byte RC configuration is required; truncated throttle/deflection data is refused. |
 | `acc_calibration` / `attitude` | 205 / 108 | Empty calibration command; S16 tenths of degrees roll/pitch and S16 degree yaw. |
 | `board_auto_align` | `0x5F13` | U8 start; query state and three signed alignment angles. Optional firmware extension. |
-| `rx_serial_trial` | `0x5F12` | U8 start/stop; state, combination, inversion, half-duplex, pin swap and elapsed time. Optional firmware extension. |
+| `rx_serial_trial` | `0x5F12` | U8 start/stop; state, combination, inversion, half-duplex, pin swap and elapsed time. Wire codec retained; radio wizard directs detection to USB and sends no START. |
 | `esc_sensor_trial` | `0x5F0C` | U8 start/stop; state, combination, half-duplex, pin swap and elapsed time. Optional firmware extension. |
+
+Receiver setup requires a working MSP radio link. Receiver wiring detection must
+run through USB Configurator: the firmware trial closes/reopens the receiver UART
+that also carries radio MSP. The page explains this instead of starting a trial
+that can disconnect itself. ESC trials and board alignment remain available.
 
 Timeout support is not a version predicate. Pre-extension API 12.10 firmware can
 silently treat a five-byte per-servo/mixer override as permanent. The four-byte
