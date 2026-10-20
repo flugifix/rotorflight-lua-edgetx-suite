@@ -1,0 +1,1 @@
+- Add automatic ESC telemetry wiring detection for supported flight controllers, with disarmed safety gating, progress, cancellation, and Save integration (setup/esc_motors/telemetry, #816).
