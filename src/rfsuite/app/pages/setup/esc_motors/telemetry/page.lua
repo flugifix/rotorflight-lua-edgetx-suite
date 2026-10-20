@@ -106,9 +106,14 @@ local function queueTrial(action, quiet)
       current.pending = false
       local result = EscSensorTrialApi.parse(buf)
       if not result then
-        if not quiet then current.status = "invalid" end
+        if quiet then current.supported = false else current.status = "invalid" end
         current.active = false
         current.mustRead = current.mustRead or wasActive or action ~= EscSensorTrialApi.ACTION_POLL
+      elseif quiet and result.state ~= 1 then
+        -- The opening poll only learns that the command is supported. A finished state is
+        -- kept by the flight controller until the next START or Cancel, so it belongs to an
+        -- earlier run (another visit, another tool) and is not this page's result.
+        current.supported = true
       else
         current.supported = true
         current.state = result.state

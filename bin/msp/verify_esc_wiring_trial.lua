@@ -230,4 +230,72 @@ do
   assert(not press(build(page), "Detect wiring"), "unsupported API showed Detect wiring")
 end
 
-print("OK: 9 ESC wiring API/lifecycle cases")
+local function statusLabels(children)
+  local found = {}
+  for i = 1, #children do
+    local text = children[i].type == "label" and children[i].text or nil
+    if type(text) == "string" and string.find(string.lower(text), "detect", 1, true) then
+      found[#found + 1] = text
+    end
+  end
+  return found
+end
+
+-- The firmware keeps SUCCESS, FAILED and REJECTED until the next START or Cancel. A page
+-- opened later must not take that left-over result for its own: the opening poll only
+-- learns that the command is supported. IDLE is the clean control.
+local heldFailures = {}
+for _, held in ipairs({ { 3, "FAILED" }, { 4, "REJECTED" }, { 2, "SUCCESS" }, { 0, "IDLE" } }) do
+  local ok, err = pcall(function()
+    local page = newPage()
+    queued[2].processReply(queued[2], reply(held[1], 1, 1))
+    local children = build(page)
+    assert(#statusLabels(children) == 0, "held " .. held[2] .. " showed a stale result on open: "
+      .. tostring(statusLabels(children)[1]))
+    assert(not page.hasUnsavedChanges(), "held " .. held[2] .. " dirtied the page on open")
+    assert(page.canSave() == true, "held " .. held[2] .. " locked Save on open")
+    assert(#queued == 2, "held " .. held[2] .. " queued a request on open")
+    assert(press(children, "Detect wiring"), "held " .. held[2] .. " hid Detect wiring")
+    assert(queued[#queued].payload[1] == 1, "held " .. held[2] .. " did not allow a new START")
+  end)
+  if not ok then heldFailures[#heldFailures + 1] = tostring(err) end
+end
+assert(#heldFailures == 0, table.concat(heldFailures, "; "))
+
+-- A run still going when the page opens is adopted and followed to its end.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(1))
+  assert(page.canSave() == false, "adopted running trial did not lock Save")
+  now = now + 50
+  page.wakeup({ requestRebuild = function() end })
+  local poll = queued[#queued]
+  assert(#queued == 3 and poll.payload[1] == 0, "adopted running trial was not polled")
+  poll.processReply(poll, reply(3))
+  assert(#statusLabels(build(page)) == 1 and page.canSave() == false,
+    "adopted trial's FAILED end was not shown or did not require Reload")
+end
+
+-- Positive control: a run this visit started still reports FAILED and requires Reload.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(0))
+  press(build(page), "Detect wiring")
+  queued[#queued].processReply(queued[#queued], reply(1))
+  now = now + 50
+  page.wakeup({ requestRebuild = function() end })
+  queued[#queued].processReply(queued[#queued], reply(3))
+  assert(#statusLabels(build(page)) == 1, "own FAILED result was not shown")
+  assert(page.canSave() == false, "own FAILED result left Save open")
+end
+
+-- A malformed answer to the opening poll hides the action instead of polling again.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], { 1, 2, 3 })
+  page.wakeup({ requestRebuild = function() end })
+  assert(#queued == 2, "malformed capability answer was polled again")
+  assert(not press(build(page), "Detect wiring"), "malformed capability answer showed Detect wiring")
+end
+
+print("OK: 16 ESC wiring API/lifecycle cases")

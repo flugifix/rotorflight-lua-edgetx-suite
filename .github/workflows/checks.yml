@@ -127,6 +127,24 @@ jobs:
       - name: Check the erase asks before it erases
         run: lua5.3 bin/dashboard/verify_erase_confirm.lua
 
+  esc-wiring-detection:
+    # Setup > ESC & Motors > Telemetry drives the flight controller's wiring trial. This runs
+    # the real page against scripted replies: lifecycle, locking, Cancel, stale replies and a
+    # result left in the flight controller by an earlier run.
+    # It measures the tree, so it runs on a push or a tag as well as on a pull request.
+    name: ESC wiring detection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+
+      - name: Check the wiring detection page lifecycle
+        run: lua5.3 bin/msp/verify_esc_wiring_trial.lua
+
   dashboard-voltage:
     name: Dashboard voltage bounds
     runs-on: ubuntu-latest
