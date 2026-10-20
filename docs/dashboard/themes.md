@@ -63,9 +63,9 @@ cell and the lowest link quality.
 In fullscreen, Default shows the dashboard at the full screen size with the same layouts.
 The controls at the top right open the suite tool (while disarmed), open the quick menu,
 and leave fullscreen with **X**. A long press on the return key also leaves fullscreen.
-With the global [Keys](../pages/settings/dashboard/keys.md) choices on Theme, SYS opens the
-suite tool, TELE and the page keys open the quick menu, and MDL does nothing. Explicit global
-choices override those bindings, including before the FC connects. Closing the menu returns to the
+With the global [Keys](../pages/settings/dashboard/keys.md) choices as they come, SYS opens
+the suite tool and TELE opens the quick menu, also before the FC connects; Default binds no key
+itself, so the page keys open the quick menu and MDL does nothing. Closing the menu returns to the
 dashboard.
 
 ![Default before, during and after the flight](../images/dashboard/themes/default.png)

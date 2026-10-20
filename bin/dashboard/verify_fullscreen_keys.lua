@@ -7,8 +7,10 @@
 --
 -- The resolver and Views cases load the real widgets/dashboard/keys.lua and
 -- widgets/dashboard/views.lua from the tree; only firmware key constants, logging and
--- lcd.exitFullScreen are stubbed there. The Runtime exit case uses accounting firmware
--- and flight-controller stubs around the real widgets/dashboard/runtime.lua.
+-- lcd.exitFullScreen are stubbed there. The Keys page case loads the real page and
+-- app/pages/settings/common.lua, with the choice control recorded instead of drawn. The Runtime
+-- exit case uses accounting firmware and flight-controller stubs around the real
+-- widgets/dashboard/runtime.lua.
 
 local ROOT = "."
 do
@@ -41,7 +43,9 @@ end
 local keysSource = readFile(SRC .. "widgets/dashboard/keys.lua")
 local viewsSource = readFile(SRC .. "widgets/dashboard/views.lua")
 local runtimeSource = readFile(SRC .. "widgets/dashboard/runtime.lua")
-if keysSource == nil or viewsSource == nil or runtimeSource == nil then
+local pageSource = readFile(SRC .. "app/pages/settings/dashboard/keys/page.lua")
+local commonSource = readFile(SRC .. "app/pages/settings/common.lua")
+if keysSource == nil or viewsSource == nil or runtimeSource == nil or pageSource == nil or commonSource == nil then
   io.stderr:write("cannot read dashboard key modules\n")
   os.exit(2)
 end
@@ -87,7 +91,7 @@ local function newWidget(Views, base)
   return widget
 end
 
-local function runtimeCancellationCase(source)
+local function runtimeCancellationCaseIn(source)
   local Stubs = assert(loadfile(ROOT .. "/bin/accounting/stubs/edgetx.lua"))()
   local FC = assert(loadfile(ROOT .. "/bin/accounting/stubs/fc.lua"))()
   Stubs.install(ROOT)
@@ -122,27 +126,123 @@ local function runtimeCancellationCase(source)
   Stubs.releaseCard()
 end
 
+-- The Keys page as the tool runs it: loadScript hands it the keys module under test, the real
+-- settings helpers and a choice control that records its rows. Returns the page and the rows.
+local function loadKeysPage(keysSrc, pageSrc)
+  local rows = {}
+  local modules = {
+    ["widgets/dashboard/keys.lua"] = keysSrc,
+    ["app/pages/settings/common.lua"] = commonSource,
+  }
+  local controls = {
+    appendComboSelect = function(_, _, _, _, label, options, selected, onSelect)
+      rows[#rows + 1] = { label = label, options = options, selected = selected, onSelect = onSelect }
+      return 1
+    end,
+  }
+  _G.loadScript = function(path)
+    local rel = string.match(path, "rfsuite%-core/(.+)$")
+    if rel == "ui/controls.lua" then return function() return controls end end
+    local src = rel and modules[rel]
+    if src == nil then return nil end
+    return load(src, "@" .. rel)
+  end
+  local page, err = loadModule(pageSrc, "app/pages/settings/dashboard/keys/page.lua")
+  return page, rows, err
+end
+
+local function keysPageCase(keysSrc, pageSrc)
+  local page, rows, err = loadKeysPage(keysSrc, pageSrc)
+  if page == nil then return "the Keys page did not load: " .. tostring(err) end
+  local prefs = { dashboard = {} }
+  local saved = 0
+  local ctx = {
+    preferences = prefs, x = 0, y = 0, w = 480, children = {},
+    requestRebuild = function() end,
+    savePreferences = function() saved = saved + 1; return true end,
+  }
+  page.onReload(ctx)
+  page.build(ctx)
+  if #rows ~= 5 then return "the page drew " .. #rows .. " key rows, expected 5" end
+  local want = { "theme", "theme", "theme", "suite_tool", "menu" }
+  for i = 1, 5 do
+    if rows[i].selected ~= want[i] then
+      return "row " .. i .. " shows " .. tostring(rows[i].selected) .. " with no preference, expected " .. want[i]
+    end
+  end
+  -- SYS to Theme, PAGE > to Nothing; the rest stay on their defaults.
+  rows[4].onSelect("theme")
+  rows[1].onSelect("none")
+  page.onSave(ctx)
+  if saved ~= 1 then return "the page did not save" end
+  local d = prefs.dashboard
+  if d.key_sys ~= "theme" then return "SYS on Theme was stored as " .. tostring(d.key_sys) .. ", expected theme" end
+  if d.key_page_down ~= "none" then return "PAGE > Nothing was not stored" end
+  if d.key_tele ~= nil or d.key_page_up ~= nil or d.key_mdl ~= nil then
+    return "a key left on its default was stored"
+  end
+  -- A stored default-equal value is dropped on the next save.
+  prefs.dashboard.key_tele = "menu"
+  page.onReload(ctx)
+  page.onSave(ctx)
+  if prefs.dashboard.key_tele ~= nil then return "TELE on its default stayed stored" end
+  page.onClose()
+end
+
+-- The accounting stubs replace globals the other cases read (the event constants among them), so
+-- the runtime case puts every global back as it found it; a later run starts from the same state.
+local function runtimeCancellationCase(source)
+  local saved = {}
+  for k, v in pairs(_G) do saved[k] = v end
+  local ok, result = pcall(runtimeCancellationCaseIn, source)
+  for k in pairs(_G) do if saved[k] == nil then _G[k] = nil end end
+  for k, v in pairs(saved) do _G[k] = v end
+  if not ok then return "raised: " .. tostring(result) end
+  return result
+end
+
+-- A mutant counts as caught only where the case written for it goes red.
+local function redIn(failures, caseId)
+  for i = 1, #failures do
+    if failures[i].case == caseId then return failures[i] end
+  end
+  return nil
+end
+
 local CASES = {
   {
-    id = "invalid choices fall back to Theme",
+    id = "absent and invalid choices fall back to the key's default",
     fn = function(Keys)
-      if Keys.choice("unknown") ~= "theme" or Keys.choice({}) ~= "theme" then
-        return "an invalid stored choice did not resolve to Theme"
+      if Keys.choice("unknown", "mdl") ~= "theme" or Keys.choice({}, "pageDown") ~= "theme" then
+        return "an invalid PAGE/MDL choice did not resolve to Theme"
       end
+      if Keys.choice(nil, "sys") ~= "suite_tool" or Keys.choice("unknown", "tele") ~= "menu" then
+        return "an absent SYS/TELE choice did not resolve to its default"
+      end
+      if Keys.choice("theme", "sys") ~= "theme" then return "a stored Theme on SYS was not kept" end
     end,
   },
   {
-    id = "Theme resolves context before declarations",
+    id = "SYS and TELE default to Main menu and Quick menu over the theme",
     fn = function(Keys)
+      local action, global = Keys.resolve({}, "sys", { sys = "openView:x" })
+      if action ~= "openTool" or not global then return "SYS default did not open the tool" end
+      action, global = Keys.resolve({}, "tele", {})
+      if action ~= "openView:menu" or not global then return "TELE default did not open the menu" end
+      action, global = Keys.resolve({}, "mdl", { mdl = "openView:x" })
+      if action ~= "openView:x" or global then return "MDL is not the theme's by default" end
+    end,
+  },
+  {
+    id = "a key on Theme does only what the theme binds",
+    fn = function(Keys)
+      local dashboard = { key_sys = "theme" }
       local themeKeys = { sys = "none" }
-      local declaredKeys = { sys = "openView:menu" }
-      local action, global = Keys.resolve({}, "sys", themeKeys, declaredKeys)
-      if action ~= "none" or global then return "context binding did not win" end
-      action, global = Keys.resolve({}, "sys", {}, { sys = "openView:menu" })
-      if action ~= "openView:menu" or global then return "declared binding did not fill the gap" end
-      if themeKeys.sys ~= "none" or declaredKeys.sys ~= "openView:menu" then
-        return "resolution mutated a theme binding table"
-      end
+      local action, global = Keys.resolve(dashboard, "sys", themeKeys)
+      if action ~= "none" or global then return "the theme's SYS binding did not apply" end
+      action, global = Keys.resolve(dashboard, "sys", {})
+      if action ~= nil or global then return "an unbound SYS on Theme resolved to " .. tostring(action) end
+      if themeKeys.sys ~= "none" then return "resolution mutated a theme binding table" end
     end,
   },
   {
@@ -154,18 +254,21 @@ local CASES = {
     end,
   },
   {
-    id = "declared keys act before the first build",
+    id = "default TELE acts before the first build and toggles the menu",
     fn = function(_, Views)
       local w = newWidget(Views)
-      w._declaredKeys = { sys = "openView:menu" }
-      local handled = Views.key(w, _G.EVT_SYS_BREAK)
-      if handled ~= true or Views.top(w) ~= "menu" then return "declared SYS did not open the menu" end
+      w._viewCtx = nil
+      local handled = Views.key(w, _G.EVT_TELEM_BREAK)
+      if handled ~= true or Views.top(w) ~= "menu" then return "default TELE did not open the menu" end
+      handled = Views.key(w, _G.EVT_TELEM_BREAK)
+      if handled ~= true or Views.top(w) ~= nil then return "default TELE did not close the menu" end
     end,
   },
   {
     id = "Theme keys yield while another view is on top",
     fn = function(_, Views)
       local w = newWidget(Views)
+      w.preferences.dashboard.key_sys = "theme"
       w._viewCtx.keys.sys = "none"
       Views.navigate(w, "openView:menu")
       local handled = Views.key(w, _G.EVT_SYS_BREAK)
@@ -193,14 +296,17 @@ local CASES = {
     end,
   },
   {
-    id = "only explicit choices act without a theme base",
+    id = "without a theme base only radio-wide choices act",
     fn = function(_, Views)
       local theme = newWidget(Views, false)
       if theme._viewBase ~= nil then return "the no-base fixture has a base" end
-      if Views.key(theme, _G.EVT_MODEL_BREAK) ~= false then return "Theme acted without a base" end
+      if Views.key(theme, _G.EVT_MODEL_BREAK) ~= false then return "MDL on Theme acted without a base" end
+      if Views.key(theme, _G.EVT_TELEM_BREAK) ~= true then return "default TELE did not act without a base" end
       local global = newWidget(Views, false)
       global.preferences.dashboard.key_mdl = "none"
       if Views.key(global, _G.EVT_MODEL_BREAK) ~= true then return "explicit Nothing did not act without a base" end
+      global.preferences.dashboard.key_tele = "theme"
+      if Views.key(global, _G.EVT_TELEM_BREAK) ~= false then return "TELE on Theme acted without a base" end
     end,
   },
   {
@@ -221,6 +327,12 @@ local CASES = {
     end,
   },
   {
+    id = "the Keys page shows defaults and stores only deviations",
+    fn = function(Keys)
+      return keysPageCase(Keys.__source, pageSource)
+    end,
+  },
+  {
     id = "fullscreen exit cancels a pending fullscreen job",
     fn = function()
       return runtimeCancellationCase(runtimeSource)
@@ -228,9 +340,12 @@ local CASES = {
   },
 }
 
-local function runChecks(source, quiet)
+local function runChecks(source, quiet, pageSrc)
   local Keys, Views, err = loadPair(source)
   if Keys == nil then return { { case = "load modules", detail = tostring(err) } }, 0 end
+  Keys.__source = source
+  local realPage = pageSource
+  if pageSrc then pageSource = pageSrc end
   local failures, passes = {}, 0
   for i = 1, #CASES do
     local case = CASES[i]
@@ -242,12 +357,14 @@ local function runChecks(source, quiet)
       print(string.format("%s %-48s %s", bad == nil and "PASS" or "FAIL", case.id, bad or ""))
     end
   end
+  pageSource = realPage
   return failures, passes
 end
 
 if selfTest then
   local real = runChecks(keysSource, true)
-  if #real > 0 then
+  local again = runChecks(keysSource, true)
+  if #real > 0 or #again > 0 then
     print("SELF-TEST FAILED: the checks are red on the unbroken tree")
     os.exit(1)
   end
@@ -257,11 +374,37 @@ if selfTest then
     os.exit(1)
   end
   local failures = runChecks(mutant, true)
-  if #failures == 0 then
+  local hit = redIn(failures, "SYS and TELE default to Main menu and Quick menu over the theme")
+  if hit == nil or #failures == 0 then
     print("SELF-TEST FAILED: treating explicit choices as Theme stayed green")
     os.exit(1)
   end
-  print("(self-test) explicit-choice mutant went red: " .. failures[1].case .. ": " .. failures[1].detail)
+  print("(self-test) explicit-choice mutant went red: " .. hit.case .. ": " .. hit.detail)
+  local noDefault, defaultCount = string.gsub(keysSource, 'default = "suite_tool"', 'default = "theme"', 1)
+  if defaultCount ~= 1 then
+    print("SELF-TEST FAILED: the SYS default was found " .. defaultCount .. " times, expected once")
+    os.exit(1)
+  end
+  failures = runChecks(noDefault, true)
+  hit = redIn(failures, "absent and invalid choices fall back to the key's default")
+  if hit == nil then
+    print("SELF-TEST FAILED: dropping the SYS default stayed green")
+    os.exit(1)
+  end
+  print("(self-test) no-default mutant went red: " .. hit.case .. ": " .. hit.detail)
+  local oldSave, saveCount = string.gsub(pageSource, "if value == entry.default then value = nil end",
+    'if value == "theme" then value = nil end', 1)
+  if saveCount ~= 1 then
+    print("SELF-TEST FAILED: the page's default check was found " .. saveCount .. " times, expected once")
+    os.exit(1)
+  end
+  failures = runChecks(keysSource, true, oldSave)
+  hit = redIn(failures, "the Keys page shows defaults and stores only deviations")
+  if hit == nil or #failures ~= 1 then
+    print("SELF-TEST FAILED: storing Theme as absent stayed green, or turned other cases red")
+    os.exit(1)
+  end
+  print("(self-test) Theme-as-absent page mutant went red: " .. hit.case .. ": " .. hit.detail)
   local exitGuard = "    if event == nil then"
   local runtimeMutant, runtimeCount = string.gsub(runtimeSource, exitGuard, "    if false and event == nil then", 1)
   if runtimeCount ~= 1 then
@@ -274,7 +417,7 @@ if selfTest then
     os.exit(1)
   end
   print("(self-test) fullscreen-exit mutant went red: " .. runtimeBad)
-  print("SELF-TEST PASSED: resolver and early-exit regressions are detected")
+  print("SELF-TEST PASSED: resolver, default, page-storage and early-exit regressions are detected")
   os.exit(0)
 end
 

@@ -1,2 +1,2 @@
 - **Radio-wide dashboard fullscreen keys (`app/pages/settings/dashboard/keys`, `widgets/dashboard`)**:
-  - Add five radio-wide shortcuts for #729. Theme preserves theme bindings, explicit choices override them, and Default declares SYS for Main menu, TELE for Quick menu and MDL for no action.
+  - Add five radio-wide shortcuts for #729. SYS opens the Main menu and TELE the Quick menu by default, for every theme; a key on Theme does what the theme binds and otherwise nothing, and the page keys still open the Quick menu.

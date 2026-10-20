@@ -841,7 +841,9 @@ end
 
 --- Answer a fullscreen key. Returns true when the key was one of the six and answered. Theme
 --- bindings for MDL, SYS and TELE with a view on top return false unless they toggle that view;
---- an explicit radio-wide choice still applies on top.
+--- a radio-wide choice (Settings > Dashboard > Keys, widgets/dashboard/keys.lua) still applies
+--- on top. That includes a key's default there: SYS and TELE are not on Theme unless the pilot
+--- put them there.
 --
 --   PAGE down / up  with the quick menu on top: close it. With any other view on top: open the
 --                   menu over it. With the base layer showing: the base layer's own binding
@@ -851,15 +853,15 @@ end
 --                   base layer showing: its `keys.exit`, else nothing -- a long press on RTN
 --                   still leaves fullscreen, in the firmware.
 --   MDL, SYS, TELE  with the base layer showing: its `keys.mdl` / `keys.sys` / `keys.tele`,
---                   else nothing. With a view on top: a Theme choice does nothing, while an
---                   explicit radio-wide choice still applies.
+--                   else nothing. With a view on top: a key on Theme does nothing, while a
+--                   radio-wide choice still applies.
 --
 -- A key the base layer binds to `openView:<id>`, RTN aside, closes that view again while it is
 -- on top, whatever the rules above say for that key: a bound key toggles its view.
 --
 -- Both page keys do the same, because some radios have only one of them. The runtime calls this
 -- ahead of builds and connection splashes, except while the tool or tuning owns input.
--- Explicit global choices also work without a theme base; Theme keeps legacy behavior.
+-- Radio-wide choices also work without a theme base; a key on Theme answers nothing there.
 function M.key(widget, event)
   local name = keyName(event)
   if name == nil then return false end
@@ -870,12 +872,12 @@ function M.key(widget, event)
   local bound, global
   if KeyBindings then
     local prefs = widget.preferences
-    bound, global = KeyBindings.resolve(prefs and prefs.dashboard, name, keys, widget._declaredKeys)
+    bound, global = KeyBindings.resolve(prefs and prefs.dashboard, name, keys)
   else
     bound = type(keys) == "table" and keys[name] or nil
   end
-  -- A legacy theme's implicit menu did not bind hardware shortcuts. Theme keeps
-  -- that behavior; an explicit radio choice works on those themes as well.
+  -- A theme without a base layer binds no keys of its own, so a key on Theme stays unanswered
+  -- there; a radio-wide choice works on those themes as well.
   if widget._viewBase == nil and not global then return false end
   local after
   if global then

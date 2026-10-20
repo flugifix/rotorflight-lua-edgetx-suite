@@ -928,7 +928,12 @@ out; a theme that relies on a long press on RTN instead declares it with
 
 ### Keys
 
-In this mode the widget answers six keys (a theme without the key answers none, as before):
+In this mode the widget answers six keys (a theme without the key answers none, as before).
+The pilot's radio-wide choices on *Settings → Dashboard →*
+[*Keys*](../pages/settings/dashboard/keys.md) come first: a key not left on **Theme** there does
+the chosen action whatever the theme binds, with a view on top as well. As it comes, SYS opens
+the suite tool and TELE the quick menu that way, so a theme's `ctx.keys.sys` and `ctx.keys.tele`
+act only once the pilot has put those keys on **Theme**. The table is what a key on **Theme** does:
 
 | Key | With a view on top | With the theme showing |
 | --- | --- | --- |
@@ -941,7 +946,8 @@ A key bound to `openView:<id>`, RTN aside, closes that view again while it is on
 than doing what the first column says: pressed twice, it opens the view and closes it.
 
 Both page keys do the same because some radios have only one. The keys are not answered while
-the in-flight tuning surface or the connect splash is up.
+the in-flight tuning surface or the suite tool is up. On the connect splash `ctx.keys` is still
+empty until the theme has built, so only the radio-wide choices and the page keys' menu act.
 
 MDL, SYS and TELE open the radio's own menus everywhere but in a widget's fullscreen, where the
 widget gets them and the radio opens nothing; unbound they do nothing there, as before. Not

@@ -8,6 +8,7 @@ sidebar_position: 29
 
 Choose the dashboard's hardware shortcuts at fullscreen, including before the flight controller
 connects. These choices belong to the radio and apply to every theme and model.
+Out of the box, SYS opens the suite tool and TELE the quick menu; the other keys are the theme's.
 
 ## Where to find it
 
@@ -17,25 +18,34 @@ connects. These choices belong to the radio and apply to every theme and model.
 
 | Setting | What it does |
 | --- | --- |
-| PAGE >, PAGE <, MDL, SYS, TELE | One action per key. **Theme** (default) uses the theme binding, then the host fallback. **Nothing** disables the key. **Quick menu**, **Main menu**, **Flight log** and **Exit fullscreen** override any theme binding. A radio without one of these keys never sends it; its saved choice still remains. |
+| PAGE >, PAGE <, MDL | One action per key, **Theme** by default. **Theme** leaves the key to the theme: it does what the theme binds, and nothing where the theme binds nothing — except the page keys, which then open the quick menu. **Nothing** disables the key. **Quick menu**, **Main menu**, **Flight log** and **Exit fullscreen** override any theme binding. |
+| SYS | As above, **Main menu** by default. |
+| TELE | As above, **Quick menu** by default. |
+
+A radio without one of these keys never sends it; its saved choice still remains.
 
 ## Notes
 
-- Save applies the choices to every model; no per-model copy is written. Saving Theme stores no override.
-- A theme may bind keys in its manifest or fullscreen build. Default uses SYS for the suite tool,
-  TELE for the quick menu and MDL for nothing. Without another binding the host's page keys open the menu.
-- A theme's own views remain theme bindings, rather than choices on this global page.
-- On the connection screen, explicit global actions and declared theme bindings already work.
-  A free-form theme's build-time bindings become available when that theme has built.
+- Save applies the choices to every model; no per-model copy is written. A key left on its
+  default stores nothing, so SYS and TELE on **Theme** are stored as Theme.
+- SYS and TELE hold their default for **every** theme, including themes whose full screen is
+  the quick menu: SYS opens the suite tool and TELE the quick menu there as well. Put either on
+  **Theme** to give it back to the theme.
+- A theme binds keys in its full-screen build. Urban, Grid and Deck let the pilot bind them on
+  their own *Keys* settings page, which only acts on keys left on **Theme** here. Default binds
+  none, so on Default a key on **Theme** does nothing, the page keys aside.
+- On the connection screen, global actions already work. A theme's bindings become available when
+  that theme has built.
 - An opened menu can be closed with its bound menu key. Short RTN keeps the current Back/Close
-  behavior, and long RTN leaves fullscreen. A Theme choice for MDL, SYS or TELE does nothing
-  while another view is on top unless it toggles that view; an explicit radio-wide choice still
+  behavior, and long RTN leaves fullscreen. A key on Theme does nothing while another view is on
+  top unless the theme binds it to that view; a global action — a default included — still
   applies there. Nothing also consumes the key before LVGL sees it.
 - While the suite tool or in-flight tuning owns the fullscreen, these shortcuts do not take its keys.
 - Main menu is refused while armed. Flight log also requires its preview switch.
   The quick menu's FC writes stay hidden until the connection is ready and the model is disarmed.
 - A failed SD-card save reports the error and leaves the page marked as unsaved.
-- Unknown stored action values use Theme. Existing theme configuration is not changed by this page.
+- Unknown stored action values use the key's default. Existing theme configuration is not changed
+  by this page.
 
 ## Related
 

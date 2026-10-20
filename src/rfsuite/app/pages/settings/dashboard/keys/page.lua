@@ -24,8 +24,8 @@ end
 local function copyFromPrefs(prefs)
   local dashboard = type(prefs) == "table" and prefs.dashboard or nil
   for i = 1, #Keys.KEYS do
-    local pref = Keys.KEYS[i].pref
-    ui.config[pref] = Keys.choice(type(dashboard) == "table" and dashboard[pref] or nil)
+    local entry = Keys.KEYS[i]
+    ui.config[entry.pref] = Keys.global(dashboard, entry.id)
   end
   ui.loaded = true
 end
@@ -44,11 +44,13 @@ end
 function M.onSave(ctx)
   ensureDeps()
   ctx.preferences.dashboard = ctx.preferences.dashboard or {}
+  -- A key's default is stored as no entry at all, so a later release can change a default for
+  -- every pilot who never chose; any other choice, Theme included, is stored as chosen.
   for i = 1, #Keys.KEYS do
-    local pref = Keys.KEYS[i].pref
-    local value = Keys.choice(ui.config[pref])
-    if value == "theme" then value = nil end
-    ctx.preferences.dashboard[pref] = value
+    local entry = Keys.KEYS[i]
+    local value = Keys.choice(ui.config[entry.pref], entry.id)
+    if value == entry.default then value = nil end
+    ctx.preferences.dashboard[entry.pref] = value
   end
   local ok, err = ctx.savePreferences()
   if ok then
