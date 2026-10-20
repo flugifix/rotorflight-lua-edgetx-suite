@@ -1279,8 +1279,7 @@ function M.build(ctx)
   -- Buttons
   local btnStart = x + leftPad + magLabelW + magEditW + gap * 2
   local remainingW = w - btnStart - rightPad
-  local buttonCount = ui.runtime.autoAlignSupported == true and 3 or 2
-  local btnW = floor((remainingW - gap * (buttonCount - 1)) / buttonCount)
+  local btnW = floor((remainingW - gap) / 2)
 
   scene.liveRemainingFmt = pageText(i18n, "live_remaining_fmt", "Live (%ds)")
   local liveBtnText = pageText(i18n, "live_view", "Live View")
@@ -1317,10 +1316,37 @@ function M.build(ctx)
     end
   }
 
-  local refreshX = btnStart + btnW + gap
+  children[#children + 1] = {
+    type = "button",
+    x = btnStart + btnW + gap, y = controlY,
+    w = btnW,
+    text = pageText(i18n, "refresh_visual", "Refresh"),
+    active = function() return not ui.liveViewEnabled and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
+    press = function()
+      local mspState = MspRuntime and MspRuntime.getState()
+      local queue = mspState and mspState.queue
+      if queue and type(queue.add) == "function" then
+        requestAttitude(queue, nowSeconds())
+      end
+    end
+  }
+
+  -- Divider line below second row of fields
+  children[#children + 1] = {
+    type = "rectangle",
+    x = x, y = y + 2 * rowH,
+    w = w, h = 1,
+    color = COLOR_THEME_SECONDARY2,
+    filled = true
+  }
+
+  local fieldsH = 2 * rowH
   if ui.runtime.autoAlignSupported == true then
+    -- Row 3: Auto-align spans the row so translated labels have room.
+    local autoAlignY = (Controls and Controls.controlY and Controls.controlY(y + fieldsH, rowH))
+      or (y + fieldsH + math.floor((rowH - 32) / 2))
     children[#children + 1] = {
-      type = "button", x = refreshX, y = controlY, w = btnW,
+      type = "button", x = x + leftPad, y = autoAlignY, w = fieldW,
       text = ui.runtime.autoAlignActive and pageText(i18n, "auto_align_lift_tail", "Lift Tail")
         or pageText(i18n, "auto_align", "Auto-align"),
       active = function() return not ui.liveViewEnabled and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
@@ -1348,35 +1374,18 @@ function M.build(ctx)
         })
       end
     }
-    refreshX = refreshX + btnW + gap
+    fieldsH = fieldsH + rowH
+    children[#children + 1] = {
+      type = "rectangle",
+      x = x, y = y + fieldsH,
+      w = w, h = 1,
+      color = COLOR_THEME_SECONDARY2,
+      filled = true
+    }
   end
 
-  children[#children + 1] = {
-    type = "button",
-    x = refreshX, y = controlY,
-    w = btnW,
-    text = pageText(i18n, "refresh_visual", "Refresh"),
-    active = function() return not ui.liveViewEnabled and not ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending end,
-    press = function()
-      local mspState = MspRuntime and MspRuntime.getState()
-      local queue = mspState and mspState.queue
-      if queue and type(queue.add) == "function" then
-        requestAttitude(queue, nowSeconds())
-      end
-    end
-  }
-
-  -- Divider line below second row of fields
-  children[#children + 1] = {
-    type = "rectangle",
-    x = x, y = y + 2 * rowH,
-    w = w, h = 1,
-    color = COLOR_THEME_SECONDARY2,
-    filled = true
-  }
-
   -- Split layout start
-  local splitY = y + 2 * rowH + 4
+  local splitY = y + fieldsH + 4
   -- Use actual screen height remaining to strictly prevent scrollbars
   local pageBodyH = (lvgl and lvgl.PAGE_BODY_HEIGHT)
   local headerH = 48
@@ -1384,7 +1393,7 @@ function M.build(ctx)
     headerH = 64
   end
   local availH = (h and h > 0) and h or (pageBodyH and (pageBodyH - y)) or ((LCD_H - headerH) - y)
-  local splitH = max(50, availH - (2 * rowH) - 8)
+  local splitH = max(50, availH - fieldsH - 8)
   local leftW = floor(w * 0.40)
   local rightW = w - leftW - 4
   local rightX = x + leftW + 4
