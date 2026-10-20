@@ -2369,6 +2369,7 @@ local function takeFullscreenMode(self)
   local initTable, base, folder = loadThemeInit(self.themePath)
   local themeMode = type(initTable) == "table" and initTable.fullscreen == "theme"
   self._viewBase = themeMode and "theme" or nil
+  self._declaredKeys = type(initTable) == "table" and initTable.keys or nil
   local ready = self.connectionReady == true or self.flightMode == "postflight" or self.flightMode == "offline"
   holder.ready = ready
   self._viewCtx = nil

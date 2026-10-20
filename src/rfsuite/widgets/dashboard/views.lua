@@ -846,22 +846,23 @@ end
 --- put them there.
 --
 --   PAGE down / up  with the quick menu on top: close it. With any other view on top: open the
---                   menu over it. With the base layer showing: the base layer's own binding
---                   for that key (`keys.pageDown` / `keys.pageUp` on its ctx), else the menu.
+--                   menu over it. With the base layer showing: `ctx.keys`, then `init.keys`,
+--                   else nothing.
 --   RTN             with a view on top: that view's `back(widget)` where its module has one --
 --                   for a view of the theme's own, `back(ctx)` -- else `closeView`. With the
 --                   base layer showing: its `keys.exit`, else nothing -- a long press on RTN
 --                   still leaves fullscreen, in the firmware.
---   MDL, SYS, TELE  with the base layer showing: its `keys.mdl` / `keys.sys` / `keys.tele`,
+--   MDL, SYS, TELE  with the base layer showing: `ctx.keys`, then `init.keys`,
 --                   else nothing. With a view on top: a key on Theme does nothing, while a
 --                   radio-wide choice still applies.
 --
 -- A key the base layer binds to `openView:<id>`, RTN aside, closes that view again while it is
 -- on top, whatever the rules above say for that key: a bound key toggles its view.
 --
--- Both page keys do the same, because some radios have only one of them. The runtime calls this
--- ahead of builds and connection splashes, except while the tool or tuning owns input.
--- Radio-wide choices also work without a theme base; a key on Theme answers nothing there.
+-- With the theme base showing and no view on top, unbound Theme keys are consumed without
+-- navigation. The runtime calls this ahead of builds and connection splashes, except while the
+-- tool or tuning owns input. Radio-wide choices also work without a theme base; Theme keys
+-- return false there so LVGL can handle them.
 function M.key(widget, event)
   local name = keyName(event)
   if name == nil then return false end
@@ -872,7 +873,7 @@ function M.key(widget, event)
   local bound, global
   if KeyBindings then
     local prefs = widget.preferences
-    bound, global = KeyBindings.resolve(prefs and prefs.dashboard, name, keys)
+    bound, global = KeyBindings.resolve(prefs and prefs.dashboard, name, keys, widget._declaredKeys)
   else
     bound = type(keys) == "table" and keys[name] or nil
   end
@@ -884,10 +885,8 @@ function M.key(widget, event)
     after = bound
     if top ~= nil and bound == "openView:" .. top then after = "closeView" end
   elseif top == nil then
+    -- An absent base-layer binding is consumed below without navigation, including PAGE keys.
     after = bound
-    if after == nil and (name == "pageDown" or name == "pageUp") then
-      after = "openView:" .. M.DEFAULT_VIEW
-    end
   elseif name ~= "exit" and bound == "openView:" .. top then
     -- The key bound to the view on top: close it, rather than open the menu over it.
     after = "closeView"

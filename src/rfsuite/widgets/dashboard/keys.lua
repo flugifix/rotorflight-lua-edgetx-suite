@@ -45,12 +45,14 @@ function M.global(dashboard, name)
 end
 
 -- The second result distinguishes a radio-wide choice from the theme's binding, and a deliberate
--- Nothing from an absent binding. A key on Theme does what the theme's own `ctx.keys` binds, and
--- nothing else. Short RTN has no preference: view back/close and firmware long RTN keep ownership.
-function M.resolve(dashboard, name, themeKeys)
+-- Nothing from an absent binding. A key on Theme uses `ctx.keys`, then the manifest's `keys`,
+-- then nothing. Short RTN has no preference: view back/close and firmware long RTN keep ownership.
+function M.resolve(dashboard, name, themeKeys, declaredKeys)
   local choice = M.global(dashboard, name)
   if choice ~= "theme" then return ACTIONS[choice], true end
-  return type(themeKeys) == "table" and themeKeys[name] or nil, false
+  local action = type(themeKeys) == "table" and themeKeys[name] or nil
+  if action == nil and type(declaredKeys) == "table" then action = declaredKeys[name] end
+  return action, false
 end
 
 return M

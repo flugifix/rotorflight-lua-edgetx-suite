@@ -13,8 +13,10 @@ directly when a theme leaves fullscreen to the menu.
 
 Put the *RFSuite* widget full screen the way EdgeTX puts any widget full screen — the widget's
 own context menu on the screen it sits on, then *Full screen*. With Default, fullscreen
-shows the dashboard; press its menu control at the top right or either page key to open
-the quick menu. Closing the menu returns to the dashboard.
+shows the dashboard; press its menu control at the top right or TELE (the default global
+shortcut) to open the quick menu. Default binds no keys: PAGE keys left on **Theme** do nothing
+while the dashboard itself is showing.
+Closing the menu returns to the dashboard.
 
 Other themes can also take full screen for themselves (a theme author's choice, see
 [dashboard themes](../developer/dashboard-themes.md#a-theme-that-takes-fullscreen)); their
@@ -168,9 +170,10 @@ full screen — a long press on the return key — works as it does anywhere els
 
 Over a theme that takes full screen, the same X, entries and picker answers close what is open
 and show the theme again instead; the theme's own close control, or a long press on the return
-key, leaves full screen. On a radio with page keys, PAGE opens and closes the menu there, and a
-short press on the return key closes the menu or the picker, and on the battery profile page
-does what its **<** does.
+key, leaves full screen. With a view open, PAGE keys left on **Theme** close the quick menu or
+open it over another view. A key bound to the quick menu also opens and closes it, and a short
+press on the return key closes the menu or the picker, and on the battery
+profile page does what its **<** does.
 
 ## For contributors
 

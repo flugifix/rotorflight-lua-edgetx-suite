@@ -127,6 +127,43 @@ local function runtimeCancellationCaseIn(source)
   Stubs.releaseCard()
 end
 
+local function runtimeDeclaredKeysCaseIn(source)
+  local Stubs = assert(loadfile(ROOT .. "/bin/accounting/stubs/edgetx.lua"))()
+  _G.__keysTestStubs = Stubs
+  local FC = assert(loadfile(ROOT .. "/bin/accounting/stubs/fc.lua"))()
+  Stubs.install(ROOT)
+  FC.install(Stubs)
+  Stubs.reset()
+  FC.reset()
+  local declared = { pageDown = "openView:menu" }
+  local manifest = { name = "Key test", fullscreen = "theme", keys = declared }
+  local realLoadScript = _G.loadScript
+  _G.loadScript = function(path, mode)
+    if path == "/SCRIPTS/TOOLS/rfsuite.user/dashboard/key-test/init.lua" then
+      return function() return manifest end
+    end
+    return realLoadScript(path, mode)
+  end
+  local Runtime, err = loadModule(source, "widgets/dashboard/runtime.lua")
+  if Runtime == nil then return "runtime did not load: " .. tostring(err) end
+  local w = Runtime.new({ x = 0, y = 0, w = 800, h = 480 }, {})
+  w.themePath = "user/key-test"
+  w.theme = {}
+  w:refresh(0)
+  if w._viewBase ~= "theme" then return "the manifest's fullscreen mode was not read" end
+  if w._declaredKeys ~= declared then return "the manifest's keys table was not retained" end
+  local Views = _G.rfsuite.require("widgets/dashboard/views.lua")
+  if Views.key(w, _G.EVT_VIRTUAL_NEXT_PAGE) ~= true or Views.top(w) ~= "menu" then
+    return "the manifest's PAGE > binding did not open the menu before a theme build"
+  end
+  -- A different manifest must drop the previous theme's declarations.
+  manifest = { name = "No keys", fullscreen = "theme" }
+  w.theme = {}
+  w:refresh(0)
+  if w._declaredKeys ~= nil then return "the next theme inherited the previous keys table" end
+  Stubs.releaseCard()
+end
+
 -- The Keys page as the tool runs it: loadScript hands it the keys module under test, the real
 -- settings helpers and a choice control that records its rows. Returns the page and the rows.
 local function loadKeysPage(keysSrc, pageSrc)
@@ -192,13 +229,13 @@ end
 
 -- The accounting stubs replace globals the other cases read (the event constants among them), so
 -- the runtime case puts every global back as it found it; a later run starts from the same state.
-local function runtimeCancellationCase(source)
+local function runtimeCase(source, caseFn)
   local saved = {}
   for k, v in pairs(_G) do saved[k] = v end
   -- The stubs also wrap io/os functions in place and take a temporary card; both are undone here
   -- whatever the case answered, so a failing run leaves nothing behind for the next one.
   local ioOpen, osRemove, osRename = io.open, os.remove, os.rename
-  local ok, result = pcall(runtimeCancellationCaseIn, source)
+  local ok, result = pcall(caseFn, source)
   local stubs = _G.__keysTestStubs
   if stubs and type(stubs.releaseCard) == "function" then pcall(stubs.releaseCard) end
   io.open, os.remove, os.rename = ioOpen, osRemove, osRename
@@ -267,11 +304,112 @@ local CASES = {
     end,
   },
   {
-    id = "page keys retain the host menu fallback",
+    id = "unbound Theme keys are consumed on the base without host fallback",
+    fn = function(Keys, Views)
+      local events = { pageDown = _G.EVT_VIRTUAL_NEXT_PAGE, pageUp = _G.EVT_VIRTUAL_PREV_PAGE,
+        mdl = _G.EVT_MODEL_BREAK, sys = _G.EVT_SYS_BREAK, tele = _G.EVT_TELEM_BREAK }
+      for _, entry in ipairs(Keys.KEYS) do
+        local w = newWidget(Views)
+        w.preferences.dashboard[entry.pref] = "theme"
+        if w._viewBase == nil or Views.top(w) ~= nil then return "the base-layer fixture has a view on top" end
+        local action, global = Keys.resolve(w.preferences.dashboard, entry.id, {})
+        if action ~= nil or global then return entry.id .. " did not resolve to nothing" end
+        local handled = Views.key(w, events[entry.id])
+        if handled ~= true or Views.top(w) ~= nil then
+          return "unbound " .. entry.id .. " changed the base view or was not consumed"
+        end
+      end
+    end,
+  },
+  {
+    id = "PAGE keys keep host navigation over views",
     fn = function(_, Views)
+      for _, spec in ipairs({
+        { name = "pageDown", event = _G.EVT_VIRTUAL_NEXT_PAGE },
+        { name = "pageUp", event = _G.EVT_VIRTUAL_PREV_PAGE },
+      }) do
+        for _, binding in ipairs({ false, "none", "openView:menu" }) do
+          local w = newWidget(Views)
+          w._viewCtx.keys[spec.name] = binding or nil
+          Views.navigate(w, "openView:menu")
+          if Views.top(w) ~= "menu" then return "the quick-menu fixture did not open" end
+          if Views.key(w, spec.event) ~= true or Views.top(w) ~= nil then
+            return spec.name .. " did not close the quick menu on top"
+          end
+          Views.navigate(w, "openView:battery_pick")
+          if Views.top(w) ~= "battery_pick" then return "the other-view fixture did not open" end
+          if Views.key(w, spec.event) ~= true or Views.top(w) ~= "menu" then
+            return spec.name .. " did not open the quick menu over another view"
+          end
+          if Views.key(w, spec.event) ~= true or Views.top(w) ~= "battery_pick" then
+            return spec.name .. " did not reveal the underlying view after closing the menu"
+          end
+          w._viewCtx.keys[spec.name] = "openView:battery_pick"
+          if Views.key(w, spec.event) ~= true or Views.top(w) ~= nil then
+            return spec.name .. " did not toggle its bound view on top"
+          end
+        end
+      end
+    end,
+  },
+  {
+    id = "legacy themes forward all Theme keys to LVGL",
+    fn = function(Keys, Views)
+      local events = { pageDown = _G.EVT_VIRTUAL_NEXT_PAGE, pageUp = _G.EVT_VIRTUAL_PREV_PAGE,
+        mdl = _G.EVT_MODEL_BREAK, sys = _G.EVT_SYS_BREAK, tele = _G.EVT_TELEM_BREAK }
+      for _, entry in ipairs(Keys.KEYS) do
+        for _, top in ipairs({ false, "menu", "battery_pick" }) do
+          for _, binding in ipairs({ false, "none", "openView:menu" }) do
+            local w = newWidget(Views, false)
+            w.preferences.dashboard[entry.pref] = "theme"
+            w._viewCtx.keys[entry.id] = binding or nil
+            if top then Views.navigate(w, "openView:" .. top) end
+            if w._viewBase ~= nil or Views.top(w) ~= (top or nil) then return "the legacy fixture is invalid" end
+            if Views.key(w, events[entry.id]) ~= false or Views.top(w) ~= (top or nil) then
+              return entry.id .. " on Theme was consumed or navigated without a base"
+            end
+          end
+        end
+      end
+    end,
+  },
+  {
+    id = "init keys follow ctx keys and precede nothing",
+    fn = function(Keys, Views)
+      local declared = { pageDown = "openView:menu", mdl = "none", sys = "none" }
+      local ctxKeys = { pageDown = "none" }
+      local action, global = Keys.resolve({}, "pageDown", ctxKeys, declared)
+      if action ~= "none" or global then return "ctx.keys did not win over init.keys" end
+      action, global = Keys.resolve({}, "pageDown", {}, declared)
+      if action ~= "openView:menu" or global then return "init.keys did not precede nothing" end
+      action, global = Keys.resolve({}, "pageUp", {}, declared)
+      if action ~= nil or global then return "a key absent from both tables did not resolve to nothing" end
+      action, global = Keys.resolve({}, "sys", {}, declared)
+      if action ~= "openTool" or not global then return "the global default did not win over init.keys" end
+      action, global = Keys.resolve({ key_page_down = "none" }, "pageDown", {}, declared)
+      if action ~= "none" or not global then return "an explicit choice did not win over init.keys" end
       local w = newWidget(Views)
-      local handled = Views.key(w, _G.EVT_VIRTUAL_NEXT_PAGE)
-      if handled ~= true or Views.top(w) ~= "menu" then return "PAGE > did not open the menu" end
+      w._declaredKeys = declared
+      w._viewCtx.keys.pageDown = "none"
+      if Views.key(w, _G.EVT_VIRTUAL_NEXT_PAGE) ~= true or Views.top(w) ~= nil then
+        return "Views did not prefer ctx.keys"
+      end
+      w._viewCtx.keys.pageDown = nil
+      if Views.key(w, _G.EVT_VIRTUAL_NEXT_PAGE) ~= true or Views.top(w) ~= "menu" then
+        return "Views did not honour init.keys"
+      end
+      if Views.key(w, _G.EVT_VIRTUAL_NEXT_PAGE) ~= true or Views.top(w) ~= nil then
+        return "the declared menu key did not toggle its view"
+      end
+      if declared.pageDown ~= "openView:menu" or ctxKeys.pageDown ~= "none" then
+        return "resolution mutated a theme binding table"
+      end
+    end,
+  },
+  {
+    id = "Runtime reads and clears the init keys table",
+    fn = function()
+      return runtimeCase(runtimeSource, runtimeDeclaredKeysCaseIn)
     end,
   },
   {
@@ -288,12 +426,20 @@ local CASES = {
   {
     id = "Theme keys yield while another view is on top",
     fn = function(_, Views)
-      local w = newWidget(Views)
-      w.preferences.dashboard.key_sys = "theme"
-      w._viewCtx.keys.sys = "none"
-      Views.navigate(w, "openView:menu")
-      local handled = Views.key(w, _G.EVT_SYS_BREAK)
-      if handled ~= false or Views.top(w) ~= "menu" then return "Theme SYS consumed the top view" end
+      for _, spec in ipairs({
+        { name = "mdl", pref = "key_mdl", event = _G.EVT_MODEL_BREAK },
+        { name = "sys", pref = "key_sys", event = _G.EVT_SYS_BREAK },
+        { name = "tele", pref = "key_tele", event = _G.EVT_TELEM_BREAK },
+      }) do
+        for _, binding in ipairs({ false, "none" }) do
+          local w = newWidget(Views)
+          w.preferences.dashboard[spec.pref] = "theme"
+          w._viewCtx.keys[spec.name] = binding or nil
+          Views.navigate(w, "openView:menu")
+          local handled = Views.key(w, spec.event)
+          if handled ~= false or Views.top(w) ~= "menu" then return "Theme " .. spec.name .. " consumed the top view" end
+        end
+      end
     end,
   },
   {
@@ -356,7 +502,7 @@ local CASES = {
   {
     id = "fullscreen exit cancels a pending fullscreen job",
     fn = function()
-      return runtimeCancellationCase(runtimeSource)
+      return runtimeCase(runtimeSource, runtimeCancellationCaseIn)
     end,
   },
 }
@@ -432,7 +578,7 @@ if selfTest then
     print("SELF-TEST FAILED: the fullscreen-exit guard was found " .. runtimeCount .. " times, expected once")
     os.exit(1)
   end
-  local runtimeBad = runtimeCancellationCase(runtimeMutant)
+  local runtimeBad = runtimeCase(runtimeMutant, runtimeCancellationCaseIn)
   if runtimeBad == nil then
     print("SELF-TEST FAILED: disabling early fullscreen-exit cleanup stayed green")
     os.exit(1)
