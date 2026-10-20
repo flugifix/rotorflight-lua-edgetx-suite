@@ -846,6 +846,7 @@ local function queueAutoAlignRequest(action)
   local signature = currentSessionSignature()
   local armedChanges = Armed and type(Armed.changeCount) == "function" and Armed.changeCount() or nil
   local token = AutoAlignLifecycle.capture(ui.runtime, session, signature, armedChanges)
+  local isProbe = action == BoardAutoAlignApi.actions.poll and ui.runtime.autoAlignSupported == nil
   ui.runtime.autoAlignPending = true
   ui.runtime.autoAlignAction = action
   return queue:add({
@@ -867,6 +868,11 @@ local function queueAutoAlignRequest(action)
           ui.runtime.autoAlignNeedsReload = true
           ui.runtime.readComplete = false
         end
+      elseif isProbe and result.state ~= BoardAutoAlignApi.states.waitingForTailLift then
+        -- The capability poll only learns that the command is supported. A finished state is
+        -- kept by the flight controller until the next START, so it belongs to an earlier run
+        -- (another visit, another tool) and is not this page's result.
+        ui.runtime.autoAlignSupported = true
       else
         ui.runtime.autoAlignSupported = true
         ui.runtime.autoAlignState = result.state

@@ -73,8 +73,11 @@ local Controls = {
 }
 local LoadingOverlay = { append = function(children, definition) children[#children + 1] = definition end }
 local ConfirmDialog = {}
+local dialogsShown, lastDialog = 0, nil
 function ConfirmDialog.show(definition)
   confirmCallback = definition.onConfirm
+  dialogsShown = dialogsShown + 1
+  lastDialog = definition.message
   return true
 end
 
@@ -305,5 +308,51 @@ ticks = ticks + 1700
 wake()
 equal(Page.canSave(), false, "timeout blocks save")
 equal(queue.messages[1].command, 38, "timeout queues normal reload")
+
+-- The firmware keeps SUCCESS, TIMEOUT, NO_MATCH and the REJECTED states until the next START.
+-- A page opened (or reloaded) later must not take that left-over result for its own: the
+-- capability poll only learns that the command is supported. IDLE is the clean control.
+local heldStates = {
+  { 2, "SUCCESS" }, { 3, "REJECTED_ARMED" }, { 4, "TIMEOUT" }, { 5, "NO_MATCH" },
+  { 6, "REJECTED_UNCALIBRATED" }, { 0, "IDLE" }
+}
+local heldFailures = {}
+for _, held in ipairs(heldStates) do
+  local ok, err = pcall(function()
+    Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-held-" .. held[2], "12.10")
+    armedNow, armedLast, armedChanges = false, nil, 0
+    deliverInitialReads()
+    dialogsShown, lastDialog = 0, nil
+    reply({ held[1], 90, 0, 0, 0, 0, 0, 12 })
+    equal(dialogsShown, 0, "held " .. held[2] .. " popped a dialog on open (" .. tostring(lastDialog) .. ")")
+    equal(Page.hasUnsavedChanges(), false, "held " .. held[2] .. " dirtied the page on open")
+    equal(numberFields(buildChildren())[1].get(), 0, "held " .. held[2] .. " replaced the read roll")
+    equal(Page.canSave(), true, "held " .. held[2] .. " locked Save on open")
+    equal(#queue.messages, 0, "held " .. held[2] .. " queued a request on open")
+    equal(type(findButton(buildChildren(), "Auto-align")), "table", "held " .. held[2] .. " hid Auto-align")
+    -- Reload polls again; the same left-over state must stay quiet there too.
+    equal(Page.onReload(), true, "held " .. held[2] .. " Reload offered")
+    reply({ 0, 0, 0, 0, 0, 0 })
+    reply({ 0, 0, 0 })
+    wake()
+    equal(queue.messages[1] and queue.messages[1].command, 0x5F13, "held " .. held[2] .. " re-polled after Reload")
+    reply({ held[1], 90, 0, 0, 0, 0, 0, 12 })
+    equal(dialogsShown, 0, "held " .. held[2] .. " popped a dialog after Reload (" .. tostring(lastDialog) .. ")")
+    equal(Page.canSave(), true, "held " .. held[2] .. " locked Save after Reload")
+  end)
+  if not ok then heldFailures[#heldFailures + 1] = tostring(err) end
+end
+equal(#heldFailures, 0, table.concat(heldFailures, "; "))
+
+-- Positive control: a run this visit started still reports its own TIMEOUT.
+Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-own-timeout", "12.10")
+armedNow, armedLast, armedChanges = false, nil, 0
+deliverInitialReads(); reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press(); confirmCallback()
+dialogsShown = 0
+reply({ 1, 0, 0, 0, 0, 0, 0, 1 })
+ticks = ticks + 30; wake()
+reply({ 4, 0, 0, 0, 0, 0, 0, 0 })
+equal(dialogsShown, 1, "own TIMEOUT result shown")
 
 print(string.format("board auto-align page: %d checks passed", checks))

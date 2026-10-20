@@ -1,1 +1,3 @@
-- Add guided board auto-alignment for Rotorflight 4.7, loading detected mounting angles into the existing fields for review and saving (#817) (setup/alignment).
+- **The board alignment can be detected on the Alignment page (`app/pages/setup/alignment/page.lua`, `app/pages/setup/alignment/auto_align_lifecycle.lua`, `app/pages/setup/alignment/help.lua`, `tasks/msp/api/board_auto_align.lua`, `i18n/en.lua`, `i18n/de.lua`, `docs/pages/setup/alignment.md`)**:
+  - *Setup* > *Alignment* gains *Auto-align*: on MSP API 12.10 and a flight controller that answers the auto-alignment command, the pilot holds the model level, confirms, then lifts the tail at least 20 degrees. The button is not shown otherwise.
+  - The detected Roll, Pitch and Yaw are loaded into the fields as unsaved changes for the normal Save. Armed, uncalibrated, timeout and no-match results are reported; while a request is pending or the procedure runs, editing, Save and Reload are locked (#817).
