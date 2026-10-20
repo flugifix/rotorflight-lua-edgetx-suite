@@ -1,19 +1,19 @@
 return function(w)
   local L = w.L
   local initial = w.data.tail_motor_output
-  if initial and initial.output ~= (w:motorised() and 1 or 0) and initial.output ~= 3 then
+  if initial and initial.output ~= (w:motorised() and 1 or 0) and initial.output ~= 3 and initial.output ~= 2 then
     w.dirty.tail_motor_output = true
   end
   w.commit = function()
     local tail = w.data.tail_motor_output
     local expected = w:motorised() and 1 or 0
-    if tail and tail.output ~= expected and tail.output ~= 3 then
+    if tail and tail.output ~= expected and tail.output ~= 3 and tail.output ~= 2 then
       w:write("tail_motor_output", { action = expected + 1 }, function(d)
         if not d or d.result ~= 0 or d.output ~= expected then w:fail("tail_motor_output", d and d.result or "reply")
         else w.data.tail_motor_output = d; w.rebootPending = true end
       end, false, true)
     end
-    if w.startTail ~= w.data.mixer_config.tail_rotor_mode then
+    if (w.startTail ~= 0) ~= w:motorised() then
       w:profileLoop("pid", w.data.status.pid_profile_count, function(d)
         d.governor_tta_gain = w:motorised() and 100 or 0
       end)
@@ -39,5 +39,11 @@ return function(w)
       if not d then return L.unsupported end
       return ({ L.servo4, L.motor2, L.both, L.noPin })[d.output + 1]
     end)
-  }, nil, "swash") }
+  }, nil, "swash"), w:cardDef(L.swashLayout,L.swashLayoutHint,{
+    {kind="choice",label=L.servoOnePosition,values={L.frontPosition,L.rearPosition},
+      get=function() return w.swashRear and 2 or 1 end,
+      set=function(v) w.swashRear=v==2 end,
+      enabled=function() local s=w.data.mixer_config.swash_type;return s>=2 and s<=4 end},
+    w:value(L.tailServo,function() return w:motorised() and L.none or L.servo4 end)
+  },nil,"swash") }
 end

@@ -36,5 +36,5 @@ return function(w)
   end
   local rows = { w:check("unplugged", L.servosUnplugged), row(false, L.cyclicServos) }
   if not w:motorised() then rows[#rows + 1] = row(true, L.tailServo) end
-  return { w:cardDef(L.servoType, L.servoTypeHint, rows, nil, "servo") }
+  return { w:cardDef(L.servoType, L.servoTypeHint, rows, nil, "pulses") }
 end

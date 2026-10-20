@@ -92,10 +92,14 @@ def main():
     scenes = json.loads(args.scenes.read_text(encoding="utf-8"))
     pictures = 0
     for width,height,label in ((320,240,'narrow'),(480,272,'small'),(800,480,'large')):
-        selected = [s for s in scenes if s['width']==width and s['height']==height]
+        selected = [s for s in scenes if s['width']==width and s['height']==height and 'motion' not in s]
+        names=set()
         for s in selected:
             suffix = f'-task-{s["task"]}' if 'task' in s else ''
-            render(s).save(args.output/f'{s["step"]:02d}-{label}{suffix}.png')
+            name=f'{s["step"]:02d}-{label}{suffix}.png'
+            assert name not in names, f'Duplicate preview target: {name}'
+            names.add(name)
+            render(s).save(args.output/name)
             pictures += 1
         selected = [s for s in selected if 'task' not in s]
         selected.sort(key=lambda s:s['step'])
@@ -126,7 +130,17 @@ def main():
             x,y=10+(i%2)*(width+10),42+(i//2)*(height+28)
             detail.paste(render(s),(x,y))
         detail.save(args.output/f'illustrations-{label}.png')
-    print(f'Rendered {pictures} individual images, three overview sheets and three illustration sheets.')
+        motions = sorted({s['motion'] for s in scenes if s['width']==width and s['height']==height and 'motion' in s})
+        for group in motions:
+            frames=[]
+            samples=sorted((s for s in scenes if s['width']==width and s['height']==height and s.get('motion')==group), key=lambda s:s['frame'])
+            for sample in samples:
+                frame=Image.new('RGB',(width,height+26),'white')
+                frame.paste(render(sample),(0,26))
+                ImageDraw.Draw(frame).text((6,5),f"Binding example: {group} = {sample['input']}",font=font(13),fill='#26394c')
+                frames.append(frame)
+            frames[0].save(args.output/f'motion-{group}-{label}.gif',save_all=True,append_images=frames[1:],duration=1000,loop=0)
+    print(f'Rendered {pictures} individual images, three overview sheets, three illustration sheets and 15 binding animations.')
 
 
 if __name__=='__main__':

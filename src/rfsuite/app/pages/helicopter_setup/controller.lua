@@ -27,6 +27,7 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:fail(api, reason)
     self.bus:cancel()
+    self.statusQueued = nil
     self.error = api .. ": " .. tostring(reason)
     self.message, self.transition = self.L.failed, nil
     self:release()
@@ -48,7 +49,10 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:run(fn) self.bus:add({ run = fn }) end
   function w:rebuild() if self.requestRebuild then self.requestRebuild() end end
-  function w:usable() return self.ready and self.locked and not self.error and not self.transition and self:allowed() end
+  function w:usable()
+    return self.ready and self.locked and not self.error and not self.transition and self:allowed()
+      and now() - (self.statusAt or 0) <= 300
+  end
   function w:acceptStatus(d)
     self.data.status, self.statusAt = d, now()
     if self.locked and (d.arming_disable_flags & (1 << 16)) == 0 then
@@ -58,8 +62,10 @@ function M.new(runtime, transport, mathModule, labels)
     for i, id in ipairs(self.data.boxids and self.data.boxids.box_ids or {}) do
       if id == 0 then self.statusArmed = (d.flight_mode_flags & (1 << (i - 1))) ~= 0; break end
     end
-    if self.calibrationAt and now() - self.calibrationAt >= 200 and (d.arming_disable_flags & (1 << 23)) == 0 then
+    if self.calibrationAt and now() - self.calibrationAt >= 200 and (d.arming_disable_flags & ((1 << 12) | (1 << 23))) == 0 then
       self.calibrationAt = nil; self.message = self.L.calibrated
+    elseif self.calibrationAt and now()-self.calibrationAt>=1000 then
+      self.calibrationAt=nil;self.message=self.L.calibrationFailed
     end
   end
   function w:retry()
@@ -76,6 +82,7 @@ function M.new(runtime, transport, mathModule, labels)
     self.dirty[api] = true
     if reboot then self.rebootPending = true end
     if live then self.live[api] = true end
+    self.message = reboot and self.L.pendingReboot or live and self.L.liveApplied or self.L.pendingSave
   end
   function w:field(api, key, value, reboot, live)
     if not self:usable() then return end
@@ -124,7 +131,7 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:release(all)
     local held, motor = self.holds, self.motorHold
-    self.holds, self.motorHold, self.listen = {}, nil, nil
+    self.holds, self.motorHold, self.listen, self.legacyHold = {}, nil, nil, nil
     if self.rx then self.rx.detect, self.rx.record = nil, nil end
     if self.modeListen then self.modeListen.id = nil end
     if self.profile then self.profile.listen, self.profile.record = nil, nil end
@@ -156,7 +163,8 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:hold(kind, index, value)
     if not self:usable() or self.rebootPending then return end
-    if not self.timed then self.message = self.L.persistent end
+    self.message = not self.timed and self.L.persistent or value == 0 and self.L.neutralHold or self.L.holding
+    self.legacyHold = not self.timed
     self.holds[kind .. index] = { kind = kind, index = index, value = value, due = 0 }
   end
   function w:holdAxes(axis, value, passthrough)
@@ -165,8 +173,12 @@ function M.new(runtime, transport, mathModule, labels)
   function w:spin(index, direction)
     if not self:usable() or not self.bladesOff or self.rebootPending then return end
     if index >= (self.data.status.motor_count or 0) then return end
-    if index == 0 and self.data.motor_config.motor_pwm_protocol == 0 and not self.calibratedEsc then return end
-    self.motorHold = { index = index, value = self.percent * 10 * direction, due = 0, untilAt = now() + 1500 }
+    if index == 0 and self.data.motor_config.motor_pwm_protocol == 0 and not self.calibratedEsc then
+      self.message = self.L.calibrateEscFirst; return
+    end
+    self.message = self.L.holding
+    if not self:canSpin(index) then self.message=self.L.motorFailed;return end
+    self.motorHold = { index = index, value = self.percent * 10 * direction, mode="spin", direction=direction, due = 0, untilAt = now() + 1500 }
   end
   function w:stopMotor()
     self.motorHold = nil
@@ -177,13 +189,13 @@ function M.new(runtime, transport, mathModule, labels)
       for i = 0, 1 do self:write("motor_override", { index = i, value = 0 }) end
     end
   end
-  function w:profileLoop(kind, count, apply)
+  function w:profileLoop(kind, count, apply, indexes)
     local status = self.data.status
     local original = kind == "rates" and status.current_control_rate_profile_index + 128 or status.current_pid_profile_index
     local api = kind == "rates" and "rc_tuning" or "governor_profile"
     self.restoreProfile = original
-    for i = 0, math.min(count, 6) - 1 do
-      local index = i
+    for i = 0, math.min(indexes and #indexes or count, 6) - 1 do
+      local index = indexes and indexes[i+1] or i
       self:action("set_pid_profile", { index + (kind == "rates" and 128 or 0) })
       self:read(api, function(d)
         self.profileData = d
@@ -191,7 +203,10 @@ function M.new(runtime, transport, mathModule, labels)
         self.profileOriginal[kind] = self.profileOriginal[kind] or {}
         self.profileOriginal[kind][index] = self.profileOriginal[kind][index] or copy(d)
       end)
-      self:write(api, function() apply(self.profileData, index); return self.profileData end)
+      self:write(api, function()
+        if apply(self.profileData, index) == false then return false end
+        return self.profileData
+      end)
     end
     self:action("set_pid_profile", { original }, function() self.restoreProfile = nil end)
     self:read(api, function(d) self.data[api] = d end)
@@ -225,6 +240,8 @@ function M.new(runtime, transport, mathModule, labels)
         [17] = {"tailCentre", "tailDirection"}, [18] = {"gyro1", "gyro2", "gyro3"}, [19] = {"finish"} })[step]
       for _, name in ipairs(owned or {}) do self.checks[name] = nil end
       if step == 11 or step == 17 then self.bladesOff, self.percent = false, 10 end
+      if step == 11 then self.calibratedEsc, self.escStage = nil, nil end
+      if step == 5 then self.rateStyles, self.rateLoaded = {}, nil end
     end
     self:release()
     self.step, self.card, self.commit, self.cards, self.enter, self.onLive = step, card or 1, nil, nil, nil, nil
@@ -232,6 +249,10 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:next()
     if not self:usable() or not self.cards then return end
+    if self.trial then
+      if self.trial.success then self:reboot() else self.message=self.L.detecting end
+      return
+    end
     if self.step == 1 and (not self:ack("unplugged") or not self:ack("blades")) then return end
     if self.card < #self.cards then self:navigate(self.step, self.card + 1); return end
     if self.validate and not self.validate() then return end
@@ -290,6 +311,7 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:load()
     self.ready, self.error, self.progress, self.transition = false, nil, 0, true
+    self.statusQueued = nil
     self.locked = false
     self:write("arming_disable", { disabled = true })
     self:read("status", function(d)
@@ -313,9 +335,12 @@ function M.new(runtime, transport, mathModule, labels)
           -- The ARM box bit is identified by BOXIDS below, never assumed to be bit zero.
           self:acceptStatus(d)
         end
-      end, api == "tail_motor_output")
+      end, api == "tail_motor_output", api == "tail_motor_output" and {0} or nil)
       self:run(function() self.saved[api] = copy(self.data[api]) end)
     end
+    -- Loading many API blocks can take seconds over telemetry. Read the lock
+    -- again immediately before offering bench controls.
+    self:read("status", function(d) self:acceptStatus(d) end)
     self:run(function()
       self.identity = self:session().mcu_id
       local inputs = self.data.mixer_input.inputs
@@ -350,11 +375,11 @@ function M.new(runtime, transport, mathModule, labels)
     local d = self.data.servo_configurations
     if not d then return {} end
     local swash = self.data.mixer_config.swash_type
-    local cyclic = (swash == 5 or swash == 6) and 2 or 3
+    local cyclic = swash == 0 and 0 or (swash == 5 or swash == 6) and 2 or 3
     local count = math.min(d.servo_count, self.data.status.servo_count or 0)
     for i = 1, 12 do
       local mask = self.data.serial_config["port_" .. i .. "_function_mask"] or 0
-      if (mask & (262144 | 524288)) ~= 0 then count = math.max(0, count - 18); break end
+      if (mask & (262144 | 524288)) ~= 0 then count = math.max(0, d.servo_count - 18); break end
     end
     local list = {}; for i = 0, math.min(cyclic, count, 8) - 1 do list[#list + 1] = i end
     if not self:motorised() and count >= 4 then list[#list + 1] = 3 end
@@ -362,6 +387,7 @@ function M.new(runtime, transport, mathModule, labels)
   end
   function w:tick()
     if not self.active then return end
+    self.animationFrame = (math.floor(now() / 70) % 2)
     if not self:allowed() then
       if not self.suspended then
         self.suspended = true; self.bus:cancel(); self:release(); self.message = self.L.disconnected
@@ -387,6 +413,20 @@ function M.new(runtime, transport, mathModule, labels)
       if not self.bus:idle() then self.bus:tick() end
       return
     end
+    -- STATUS preempts long indexed writes and wiring trials. Check expiry before
+    -- waiting for the transport, so an unanswered request cannot keep a hold alive.
+    if self.ready and not self.error and not self.transition then
+      local age = now() - (self.statusAt or 0)
+      if age > 300 then
+        self:fail("status", self.L.stale); self.message = self.L.stale; return
+      end
+      if age > 100 and not self.statusQueued then
+        self.statusQueued = true
+        self.bus:urgent({ api = "status", after = function(d)
+          self.statusQueued = nil; self:acceptStatus(d)
+        end })
+      end
+    end
     if not self.bus:idle() then self.bus:tick(); return end
     if self.buildRequested and self.ready then
       self.buildRequested = nil
@@ -399,14 +439,6 @@ function M.new(runtime, transport, mathModule, labels)
     end
     if not self.ready or self.error or self.transition then return end
     if self.trialTick and self:trialTick() then return end
-    if now() - (self.statusAt or 0) > 100 then
-      self:read("status", function(d) self:acceptStatus(d) end); return
-    end
-    if now() - (self.statusAt or 0) > 300 then
-      self:release(); self.message = self.L.stale
-      self:read("status", function(d) self:acceptStatus(d) end)
-      return
-    end
     if self.live and next(self.live) then
       local api = next(self.live); self.live[api] = nil; self:sendDirty(api); return
     end
@@ -414,6 +446,8 @@ function M.new(runtime, transport, mathModule, labels)
       local h = self.motorHold
       if now() >= h.untilAt then self:stopMotor(); return end
       if now() >= h.due then
+        if h.mode=="spin" then h.value=self.percent*10*h.direction end
+        if h.mode=="idle" then h.value=self.data.mixer_config.tail_motor_idle end
         h.due = now() + 25
         self.bus:add({ api = "motor_override", write = true, override = true,
           data = { index = h.index, value = h.value } }); return

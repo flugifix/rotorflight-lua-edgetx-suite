@@ -1,7 +1,7 @@
 return function(w)
   local L, H = w.L, w.math
   w.commit = function()
-    if w.dirty.serial_config or w.dirty.rx_config then w:feature(3, true) end
+    if w.dirty.serial_config or w.dirty.rx_config then w:serialReceiver() end
   end
   w.rx = w.rx or { low = 3000, high = 0 }
   local r = w.rx
@@ -52,37 +52,54 @@ return function(w)
       return channels[(w.data.rx_map[keys[n]] or n - 1) + 1] or "--"
     end
   end
+  local port=w:port(L.port,64)
+  local protocol=w:enum("rx_config","serialrx_provider",L.protocol,w:receiverProtocols(),true)
+  local protocolGet,protocolSet=protocol.get,protocol.set
+  protocol.get=function()
+    return (w.data.feature_config.enabledFeatures & (1<<3))~=0 and protocolGet() or 0
+  end
+  protocol.set=function(v)
+    protocolSet(v);w:serialReceiver();w:touch("rx_config",true)
+  end
+  port.enabled=function() return not w.trial end
+  protocol.enabled=port.enabled
   return {
     w:cardDef(L.receiver, L.receiverHint, {
-      w:port(L.port, 64),
-      w:c("rx_config", "serialrx_provider", L.protocol,
-        { "SPEK1024", "SPEK2048", "SBUS", "SUMD", "SUMH", "XBUS1", "XBUS2", "IBUS", "JETI EX", "CRSF",
-          "SRXL", "CUSTOM", "FPORT", "SRXL2", "GHST", "FPORT2", "FBUS" }, true),
-      w:button(L.detectWiring, function() w:startTrial("rx_serial_trial") end),
-      w:button(L.saveReboot, function() w:feature(3, true); w:reboot() end)
+      port, protocol,
+      w:button(function() return w.trial and L.cancelDetect or L.detectWiring end,
+        function() if w.trial then w:stopTrial(true) else w:startTrial("rx_serial_trial") end end, function() return w.trial ~= nil or w:canDetect(64) end),
+      w:button(L.saveReboot, function() w:serialReceiver(); w:reboot() end)
     }),
     w:cardDef(L.channelOrder, L.channelHint, {
       w:button(L.detect, detect),
-      w:button(L.standardOrder, function()
-        for i, key in ipairs(keys) do w.data.rx_map[key] = i - 1 end
-        w:touch("rx_map")
-      end),
+      { kind="choice",label=L.standardOrder,values={"ELRS","FrSky","Futaba / Hitec","DSM / Graupner / JR"},
+        get=function()
+          for i,preset in ipairs({{0,1,3,2,5,4,6,7},{0,1,3,4,2,5,6,7},{0,1,3,5,2,4,6,7},{1,2,3,5,0,4,6,7}}) do
+            local match=true;for n,k in ipairs(keys) do if w.data.rx_map[k]~=preset[n] then match=false end end
+            if match then return i end
+          end;return 0
+        end,
+        set=function(v)
+          local preset=({{0,1,3,2,5,4,6,7},{0,1,3,4,2,5,6,7},{0,1,3,5,2,4,6,7},{1,2,3,5,0,4,6,7}})[v]
+          if not preset then return end
+          r.detect=nil;for i,k in ipairs(keys) do w.data.rx_map[k]=preset[i] end;w:touch("rx_map")
+        end },
       w:value(L.roll, mapped(1)), w:value(L.collective, mapped(4))
     }),
     w:cardDef(L.checkSticks, L.sticksHint, {
       w:value(L.roll, mapped(1)), w:value(L.pitch, mapped(2)), w:value(L.yaw, mapped(3)), w:value(L.collective, mapped(4))
-    }),
+    }, nil, "sticks"),
     w:cardDef(L.throttleRange, L.throttleHint, {
       w:value(L.throttle, mapped(5)),
       w:button(L.record, function() r.low, r.high, r.record = 3000, 0, true end),
-      w:value(L.range, function() return string.format("%d / %d", r.low, r.high) end),
+      w:value(L.range, function() return r.high>0 and string.format("%d / %d", r.low, r.high) or "--" end),
       w:button(L.useRange, function()
         if r.high - r.low < 300 then w.message = L.travelShort; return end
         r.record = nil
         w:field("rc_config", "rc_min_throttle", r.low + 20)
         w:field("rc_config", "rc_max_throttle", r.high - 20)
       end)
-    }),
+    },nil,"throttle"),
     w:cardDef(L.throttleRange, L.armThrottleHint, {
       w:n("rc_config", "rc_min_throttle", L.minimum, 0, 2100),
       w:n("rc_config", "rc_max_throttle", L.maximum, 0, 2100),
@@ -91,8 +108,8 @@ return function(w)
       end),
       w:value(L.throttleLow, function()
         local v = mapped(5)(); local zero = w.data.rc_config.rc_min_throttle
-        if zero == 0 then zero = w.data.rc_config.rc_arm_throttle end
-        return type(v) == "number" and v < zero - 5 and L.yes or L.no
+        if zero == 0 then zero = H.round(w.data.rc_config.rc_center - 0.9 * w.data.rc_config.rc_deflection) end
+        return type(v) == "number" and v > 0 and v < zero - 5 and L.yes or L.no
       end)
     })
   }

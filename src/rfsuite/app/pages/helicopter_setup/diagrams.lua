@@ -3,13 +3,21 @@
 local M = {}
 function M.append(children, w, card, x, y, width, height)
   local ink, accent = COLOR_THEME_PRIMARY1, COLOR_THEME_SECONDARY1
+  local kind,L=card.art,w.L
   local scale = math.min(width / 220, height / 160)
   x, y = x + math.floor((width - 220*scale)/2), y + math.floor((height - 160*scale)/2)
   local function px(v) return math.floor(x + v*scale + 0.5) end
   local function py(v) return math.floor(y + v*scale + 0.5) end
   local function points(p)
     local out = {}
-    for i, v in ipairs(p) do out[i] = { px(v[1]), py(v[2]) } end
+    for i,v in ipairs(p) do
+      local a,b=v[1],v[2]
+      if kind=="heliLift" then
+        local dx,dy=a-38,b-128
+        a,b=15+(38+dx*0.939693+dy*0.342020)*0.9,10+(128-dx*0.342020+dy*0.939693)*0.9
+      end
+      out[i]={px(a),py(b)}
+    end
     return out
   end
   local function line(p, color, thick)
@@ -35,8 +43,119 @@ function M.append(children, w, card, x, y, width, height)
     local ux, uy = dx/length, dy/length
     return line({{a,b},{c,d},{c-ux*9-uy*5,d-uy*9+ux*5},{c,d},{c-ux*9+uy*5,d-uy*9-ux*5}},color or accent,3)
   end
-  local kind, L = card.art, w.L
-  if kind == "swash" then
+  local function meter(a,b,c,get)
+    line({{a,b},{a+c,b}},ink,1)
+    line({{a+c/2,b-4},{a+c/2,b+4}},ink,1)
+    local pts=points({{a+c/2,b-6},{a+c/2,b+6}})
+    local item=line({{a+c/2,b-6},{a+c/2,b+6}},accent,3)
+    local last
+    item.pts=function()
+      local value=math.max(-1,math.min(1,get() or 0))
+      if value~=last then
+        local pos=px(a+c*(value+1)/2)
+        pts[1][1],pts[2][1],last=pos,pos,value
+      end
+      return pts
+    end
+  end
+  if kind == "throttle" then
+    text(5,0,210,L.throttle)
+    rect(28,35,164,55);line({{45,62},{175,62}})
+    line({{45,49},{45,75}});line({{175,49},{175,75}})
+    arrow(63,111,157,111)
+    meter(10,132,196,function()
+      local map=w.data.rx_map.throttle or 4
+      local raw=w.data.rx_channels and w.data.rx_channels.channels[map+1]
+      return raw and (raw-w.data.rc_config.rc_center)/math.max(1,w.data.rc_config.rc_deflection) or 0
+    end)
+    text(5,141,210,L.testOutput)
+  elseif kind == "sticks" then
+    text(5,0,210,L.checkSticks)
+    local keys={"aileron","elevator","rudder","collective"}
+    for i,key in ipairs(keys) do
+      local k=key
+      text(5,21+(i-1)*31,72,({L.roll,L.pitch,L.yaw,L.collective})[i])
+      meter(80,31+(i-1)*31,125,function()
+        local channel=w.data.rx_map[k] or 0
+        local value=w.data.rx_channels and w.data.rx_channels.channels[channel+1]
+        return value and (value-w.data.rc_config.rc_center)/w.data.rc_config.rc_deflection or 0
+      end)
+    end
+    line({{5,149},{210,149}},ink,1)
+  elseif kind == "rates" then
+    text(5,0,210,L.rateCurve)
+    line({{22,26},{22,128},{207,128}})
+    line({{22,77},{207,77}},ink,1)
+    local prepared={}
+    for i,style in ipairs({{180,0.4},{250,0.4},{400,0.3}}) do
+      local p={}
+      for n=0,24 do
+        local v=n/24
+        p[#p+1]={22+185*v,128-100*style[1]/400*(v*(1-style[2])+v^2.75*style[2])}
+      end
+      prepared[i]=points(p)
+    end
+    local curve=line({{22,128},{207,28}},accent,3)
+    curve.pts=function()
+      local style=w.rateStyles[w.rateProfile] or (w.rateMatched or {})[w.rateProfile]
+      return prepared[style or 2]
+    end
+    text(5,140,210,L.artExample)
+    line({{22,128},{22,132}});line({{207,128},{207,132}})
+  elseif kind == "pulses" then
+    text(5,0,210,L.pulseTrain)
+    local prepared,windows={},{}
+    local initial=w.data.servo_configurations.servos[0] or {rate=50,mid=1520}
+    local specs={{math.max(1,initial.rate),initial.mid},{50,1520},{333,1520},{560,760}}
+    local captions={initial.rate.." Hz / "..initial.mid.." us","50 Hz / 1520 us","333 Hz / 1520 us","560 Hz / 760 us"}
+    for i,spec in ipairs(specs) do
+      local pts={}
+      local period=1000/spec[1]
+      local window=math.min(20,period*12)
+      windows[i]=string.format("%.1f ms",window)
+      -- Fixed 50 points per variant: pad the last point for LVGL's live pts.
+      local time=0
+      while time<window and #pts<48 do
+        local a,b=math.min(time,window),math.min(time+spec[2]/1000,window)
+        pts[#pts+1]={10+a*200/window,112};pts[#pts+1]={10+a*200/window,64}
+        pts[#pts+1]={10+b*200/window,64};pts[#pts+1]={10+b*200/window,112}
+        time=time+period
+      end
+      pts[#pts+1]={210,112}
+      while #pts<50 do pts[#pts+1]={210,112} end
+      prepared[i]=points(pts)
+    end
+    local function mode()
+      local s=w.data.servo_configurations.servos[0]
+      return s and s.rate==560 and 4 or s and s.rate==333 and 3 or s and s.rate==50 and 2 or 1
+    end
+    local wave=line({{10,112},{210,112}},accent,2)
+    wave.pts=function() return prepared[mode()] end
+    text(5,29,210,function() return captions[mode()] end)
+    text(5,140,210,function() return windows[mode()] end)
+    line({{10,120},{210,120}});line({{10,117},{10,124}});line({{210,117},{210,124}})
+  elseif kind == "switch" then
+    text(5,0,210,L.move)
+    rect(72,71,75,66);rect(88,86,43,10,accent)
+    local p={points({{109,89},{79,39}}),points({{109,89},{139,39}})}
+    local lever=line({{109,89},{79,39}},accent,4)
+    lever.pts=function() return p[(w.animationFrame or 0)+1] end
+    arrow(65,42,145,42);text(5,141,210,L.artExample)
+    line({{109,96},{109,123}});line({{92,123},{126,123}})
+  elseif kind == "tail" or kind == "tailMotor" or kind == "tail22" then
+    text(5,0,210,L.artTop)
+    line({{199,72},{48,70},{48,87},{199,90},{199,72}},ink,3)
+    rect(34,62,27,32,accent);line({{48,94},{48,127}},ink,3)
+    line({{16,128},{81,128}},accent,4)
+    if kind=="tailMotor" then
+      arrow(93,108,93,142)
+      if w.data.mixer_config.tail_rotor_mode==2 then arrow(9,142,9,108) end
+    else
+      rect(38,105,20,9,accent);line({{58,110},{74,110},{74,98},{194,98}})
+      rect(178,104,26,19);arrow(16,113,16,88)
+    end
+    text(5,141,210,kind=="tail22" and "22°" or L.tail)
+  elseif kind == "swash" then
     -- Configurator swash.js: nose up, servo 1 at the front; 90L/90V use two servos.
     local layouts = { {0,120,240}, {0,-120,120}, {0,-135,135}, {0,-140,140}, {0,-90}, {-45,45} }
     local prepared = {}
@@ -52,7 +171,19 @@ function M.append(children, w, card, x, y, width, height)
       end
       prepared[mode] = geometry
     end
+    for mode=2,4 do
+      local geometry={}
+      for i=1,3 do
+        local rad=layouts[mode][i]*math.pi/180
+        local a,b=108+math.sin(rad)*68,88+math.cos(rad)*48
+        geometry[i]={pts=points({{108,88},{a,b}}),pos={px(a-6),py(b-8)}}
+      end
+      prepared[mode+6]=geometry
+    end
     local function mode() return math.max(1, math.min(6, w.data.mixer_config.swash_type or 1)) end
+    local function variant()
+      local s=mode();return w.swashRear and s>=2 and s<=4 and s+6 or s
+    end
     local captions={L.direct,"120","135","140","90L","90V"}
     local function geometric() return mode() > 1 end
     text(5,0,210,function() return mode()==1 and L.artServoRoles or width<180 and L.artFront or L.artTop end)
@@ -63,17 +194,22 @@ function M.append(children, w, card, x, y, width, height)
     for i=1,3 do
       local index = i
       local item = line({{108,88},{108,40}},accent,3)
-      item.pts = function() return prepared[mode()][index].pts end
+      item.pts = function() return prepared[variant()][index].pts end
       item.visible = function() return mode() <= 4 or index <= 2 end
       local number = { type="label", text=tostring(i), font=SMLSIZE, color=ink,
         pos=function()
-          local p=prepared[mode()][index].pos
+          local p=prepared[variant()][index].pos
           return p[1],p[2]
         end, visible=item.visible }
       children[#children+1] = number
       text(88,41+(i-1)*30,130,({L.pitch,L.roll,L.collective})[i]).visible=function() return mode()==1 end
     end
     text(5,138,210,function() return captions[mode()] end)
+    text(102,121,22,"4").visible=function() return not w:motorised() and mode()>1 end
+    local cw=points({{170,111},{194,111},{194,93},{188,99},{194,93},{200,99}})
+    local ccw=points({{194,111},{170,111},{170,93},{164,99},{170,93},{176,99}})
+    local rotation=line({{170,111},{194,111}},accent,2)
+    rotation.pts=function() return w.data.mixer_config.main_rotor_dir==0 and cw or ccw end
   elseif kind == "swashRoll" or kind == "swashPitch" or kind == "swashLift" or kind == "level" then
     local tilt = (kind=="swashRoll" or kind=="swashPitch") and 13 or 0
     local lift = kind=="swashLift" and 17 or 0
@@ -152,9 +288,13 @@ function M.append(children, w, card, x, y, width, height)
     line({{190,73},{190,49},{203,76},{196,94},{190,80}})
     line({{64,68},{64,47}},ink,3)
     line({{15,45},{131,45}},accent,4)
+    if w.step==1 or w.step==9 or w.step==11 then
+      line({{84,33},{102,57}},accent,3);line({{102,33},{84,57}},accent,3)
+    end
     line({{184,55},{203,90}},accent,3); line({{179,82},{207,63}},accent,3)
     line({{38,111},{34,128},{101,128},{96,111}}); line({{20,128},{116,128}},ink,3)
-    arrow(70,145,24,145); text(89,137,125,L.artFront)
+    arrow(70,145,24,145); text(89,137,125,kind=="heliLift" and "20°" or L.artFront)
   end
+  if card.meter then meter(10,132,196,card.meter) end
 end
 return M

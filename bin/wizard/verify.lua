@@ -176,10 +176,10 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         check(lines>=4,name.." illustrates the task on "..size[1].."x"..size[2])
       end
       if c==1 then exported[#exported+1] = {step=n,name=name,width=size[1],height=size[2],children=resolve(job.children)} end
-      if (n==13 and c==2) or ((n==14 or n==18) and c>1) then
+      if (n==6 and c==2) or (n==13 and c==2) or ((n==14 or n==18) and c>1) then
         exported[#exported+1] = {step=n,name=name,task=c,width=size[1],height=size[2],children=resolve(job.children)}
       end
-      if n==6 then
+      if n==6 and c==1 then
         local old=w.data.mixer_config.swash_type
         w.data.mixer_config.swash_type=2
         exported[#exported+1] = {step=n,name=name,task="120",width=size[1],height=size[2],children=resolve(job.children)}
@@ -196,6 +196,33 @@ for _, size in ipairs({ {320,240},{480,272},{480,320},{800,480} }) do
         check(changed,"changing swash type updates existing geometry")
         w.data.mixer_config.swash_type=old
       end
+    end
+  end
+end
+-- Multi-frame previews prove that parameter/live bindings update one scene.
+for _,size in ipairs({{320,240},{480,272},{800,480}}) do
+  local samples={
+    {name="direction",card=1,group="command",values={-500,0,500,0},apply=function(value)
+      w.data.rc_command={commands={value,0,0,0,0}}
+    end},
+    {name="modes",card=1,group="switch",values={0,1},apply=function(value) w.animationFrame=value end},
+    {name="rates",card=1,group="rates",values={1,2,3},apply=function(value) w.rateStyles[w.rateProfile]=value end},
+    {name="servoType",card=1,group="pulses",values={50,333,560},apply=function(value)
+      w.data.servo_configurations.servos[0].rate=value
+    end},
+    {name="swash",card=1,group="geometry",values={2,5,6},apply=function(value) w.data.mixer_config.swash_type=value end}
+  }
+  for _,sample in ipairs(samples) do
+    for n,name in ipairs(steps) do if sample.name==name then w.step=n;break end end
+    w.cards=load(PATH.."steps/"..sample.name..".lua")(w);w.card=sample.card
+    local job=view.new(w,{w=size[1],h=size[2]},diagrams)
+    while not job.done do job:step() end
+    local count=#job.children
+    for n,value in ipairs(sample.values) do
+      sample.apply(value)
+      exported[#exported+1]={step=w.step,name=sample.name,width=size[1],height=size[2],
+        motion=sample.group,frame=n,input=value,children=resolve(job.children)}
+      eq(#job.children,count,"motion preview retains scene objects")
     end
   end
 end
@@ -320,6 +347,33 @@ w:back()
 check(w.closed and not w.active,"EXIT remains available after link loss")
 eq(#q.messages,queuedBefore,"disconnected exit sends no unguarded MSP")
 _G.rfsuite.session.fblConnected=true
+local mutation
+for i=1,#arg do if arg[i]=="--mutation" then mutation=arg[i+1] end end
+local function contractWorld()
+  local v=world()
+  -- Negative controls inject the former defect only into contract fixtures.
+  if mutation=="rx-ids" then
+    local original=v.receiverProtocols
+    v.receiverProtocols=function(self)
+      local entries=original(self)
+      for _,e in ipairs(entries) do if e[2]=="FBUS" then e[1]=16 end end
+      return entries
+    end
+  elseif mutation=="mode-flag" then v.modeActive=function() return true end
+  elseif mutation=="stale-status" then
+    local original=v.tick
+    v.tick=function(self)
+      if self.ready and getTime()-(self.statusAt or 0)>300 then return end
+      return original(self)
+    end
+  elseif mutation then error("Unknown negative control: "..mutation) end
+  return v
+end
+local contractCases=assert(loadfile("bin/wizard/contracts.lua"))()({
+  world=contractWorld,load=load,H=H,L=L,q=q,check=check,eq=eq,pump=pump,measure=measure,api=api,
+  fixtures=fixtures,advance=function(value) ticks=ticks+value end
+})
+print("Source contracts: "..#contractCases.." scenario groups")
 for name,count in pairs(worst) do print(string.format("BUDGET %-12s %d / 14000",name,count)) end
 if arg[1]=="--export" then
   local function json(v)

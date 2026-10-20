@@ -9,6 +9,10 @@ return function(w)
       w:check("control" .. axis, L.directionCorrect)
     }, function() w:holdAxes(nil, 0, true) end, axis == 1 and "swashRoll" or axis == 2 and "swashPitch" or "swashLift")
   end
+  for i,card in ipairs(cards) do
+    local axis=({1,2,4})[i]
+    card.meter=function() return w.data.rc_command and (w.data.rc_command.commands[axis] or 0)/500 or 0 end
+  end
   w.validate = function() return w:ack("control1") and w:ack("control2") and w:ack("control4") end
   return cards
 end

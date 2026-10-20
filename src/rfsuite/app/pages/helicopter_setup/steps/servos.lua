@@ -8,9 +8,14 @@ return function(w)
     local title = L.servo .. " " .. (index + 1)
     if index ~= 3 then
       cards[#cards + 1] = w:cardDef(title, L.servoDirectionHint, {
-        w:button(L.testUp, function() w:hold("servo", index, 400) end),
-        w:button(L.reverse, function() s.flags = s.flags ~ 1; w:touch("servo_configurations", false, true) end),
-        w:check("servoUp" .. index, L.movesUp),
+        w:button(function() return w.holds["servo"..index] and w.holds["servo"..index].value==400 and L.releaseTest or L.testUp end, function() w:toggleHold("servo", index, 400) end),
+        w:button(L.reverse, function() s.flags = s.flags ~ 1; w.checks["servoUp"..index]=nil; w:touch("servo_configurations", false, true) end),
+        { kind = "choice", label = L.movesUp, values = { L.no, L.yes },
+          get = function() return w.checks["servoUp" .. index] and 2 or 1 end,
+          set = function(v)
+            w.checks["servoUp" .. index] = v == 2
+            if v == 2 then w:hold("servo", index, 0) end
+          end },
         w:value(L.output, function() return w.data.servo.servos[index + 1] or "--" end)
       }, holdAll, "servoMove")
     end

@@ -2,14 +2,28 @@ return function(w)
   local L = w.L
   local function motor() return w.data.motor_telemetry and w.data.motor_telemetry.motors[1] end
   w.commit = function() w:fixMotor() end
-  return {
+  local protocol = w:enum("esc_sensor_config", "protocol", L.protocol, w:telemetryProtocols(), true)
+  local set = protocol.set
+  protocol.set = function(v)
+    set(v)
+    if w.data.esc_sensor_config.protocol == 0 then
+      for i=1,12 do
+        local key="port_"..i.."_function_mask"
+        local mask=w.data.serial_config[key]
+        if mask and (mask & 1024) ~= 0 then w.data.serial_config[key]=mask & (~1024); w:touch("serial_config",true) end
+      end
+    end
+  end
+  local castle=w.data.motor_config.motor_pwm_protocol==9
+  protocol.enabled=function() return not castle and not w.trial end
+  local port=w:port(L.port,1024)
+  port.enabled=function() return not castle and not w.trial and w.data.esc_sensor_config.protocol>0 end
+  local cards={
     w:cardDef(L.escTelemetry, L.telemetryHint, {
-      w:c("esc_sensor_config", "protocol", L.protocol,
-        { L.off, "BLHeli32", "Hobbywing V4", "Hobbywing V5", "Scorpion", "Kontronik", "OMPHobby", "ZTW", "APD",
-          "OpenYGE", "FLYROTOR", "Graupner", "XDFLY", "FrSky F.BUS", "SRXL2" }, true),
-      w:port(L.port, 1024),
-      w:button(L.detectWiring, function() w:startTrial("esc_sensor_trial") end,
-        function() return w.data.esc_sensor_config.protocol > 0 end),
+      protocol, port,
+      w:button(function() return w.trial and L.cancelDetect or L.detectWiring end,
+        function() if w.trial then w:stopTrial(true) else w:startTrial("esc_sensor_trial") end end,
+        function() return w.trial ~= nil or w:canDetect(1024) end),
       w:button(L.saveReboot, function() w:reboot() end)
     }),
     w:cardDef(L.telemetryCheck, L.telemetryCheckHint, {
@@ -19,4 +33,11 @@ return function(w)
       w:value(L.rpm, function() local m = motor(); return m and m.rpm or "--" end)
     })
   }
+  cards[#cards+1]=w:cardDef(L.telemetryCheck,L.telemetryCheckHint,{
+    w:value(L.active,function()
+      local m=motor();return m and (m.voltage>0 or m.temperature>0) and L.receiving or L.noTelemetry
+    end),
+    w:value(L.protocol,function() return castle and "Castle Link" or w.data.esc_sensor_config.protocol==0 and L.off or L.on end)
+  })
+  return cards
 end

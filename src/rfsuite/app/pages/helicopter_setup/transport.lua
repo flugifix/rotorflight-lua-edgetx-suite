@@ -4,6 +4,7 @@ local ROOT = "/SCRIPTS/TOOLS/rfsuite-core/tasks/msp/api/"
 function M.new(runtime, allowed, failed)
   local b = { apis = {}, jobs = {}, first = 1, generation = 0 }
   function b:add(job) self.jobs[#self.jobs + 1] = job end
+  function b:urgent(job) table.insert(self.jobs, self.first, job) end
   function b:idle() return not self.pending and self.first > #self.jobs end
   function b:queue() local s = runtime.getState(); return s and s.queue end
   function b:dropOverrides()
@@ -12,6 +13,12 @@ function M.new(runtime, allowed, failed)
     self.jobs, self.first = jobs, 1
     if self.pending and self.pending.job.override then self.pending = nil end
     local q = self:queue(); if q then q:clear("helicopter-overrides") end
+  end
+  function b:dropApi(name)
+    local keep={}
+    for i=self.first,#self.jobs do if self.jobs[i].api~=name then keep[#keep+1]=self.jobs[i] end end
+    self.jobs,self.first=keep,1
+    if self.pending and self.pending.job.api==name then self.pending=nil end
   end
   function b:cancel()
     self.generation = self.generation + 1
@@ -64,6 +71,10 @@ function M.new(runtime, allowed, failed)
     if j.write and not payload then
       local data = j.data
       if type(data) == "function" then data = data() end
+      if data == false then
+        if container == j then self.first = self.first + 1 else container.current = nil end
+        return
+      end
       payload = api.buildWritePayload(data)
       if not payload then failed(j.api, "payload"); self.jobs, self.first = {}, 1; return end
     end

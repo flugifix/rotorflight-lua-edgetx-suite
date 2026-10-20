@@ -8,6 +8,7 @@ function M.new(w, ctx, diagrams)
   local width, height = ctx.w, ctx.h
   local large = width >= 700
   local compact = width < 400 and {
+    [w.L.servosUnplugged]=w.L.shortUnplugged,[w.L.cyclicServos]=w.L.shortCyclicServos,
     [w.L.swashType]=w.L.shortSwash, [w.L.rotorDirection]=w.L.shortRotation,
     [w.L.centreOffset]=w.L.shortOffset, [w.L.armCentred]=w.L.shortArm,
     [w.L.servo1Trim]=w.L.shortTrim1, [w.L.servo2Trim]=w.L.shortTrim2, [w.L.servo3Trim]=w.L.shortTrim3
@@ -28,8 +29,8 @@ function M.new(w, ctx, diagrams)
     function() return not w.transition end)
   button(width-controlH-6, 2, controlH, "?", function()
     local current = w.cards and w.cards[w.card]
-    local firstBreak = string.find(w.L.help, "\n", 1, true)
-    local message = current and firstBreak and current.detail .. string.sub(w.L.help, firstBreak) or w.L.help
+    local message = current and current.detail.."\n\n"..w.L.help or w.L.help
+    if w.trialDetails then message=message.."\n"..w.trialDetails end
     if w.openHelp then w.openHelp(message, w.L.name) end
   end)
   local card = w.cards and w.cards[w.card]
@@ -79,14 +80,14 @@ function M.new(w, ctx, diagrams)
         end
       end
     end
-    local nextText = w.step == 10 and w.rebootPending and w.L.reboot or w.step == 19 and w.L.finish or
-      w.card == #w.cards and w.L.saveNext or w.L.continue
+    local function nextText() return w.trial and w.trial.success and w.L.saveReboot or w.step == 10 and w.rebootPending and w.L.reboot or w.step == 19 and w.L.finish or
+      w.card == #w.cards and w.L.saveNext or w.L.continue end
     button(width-math.floor(width*0.42)-8, height-controlH-6, math.floor(width*0.42), nextText,
       function() w:next() end, function() return w.canNext == true end)
     all[#all + 1] = label(math.floor(width*0.27)+8, height-controlH, math.floor(width*0.28)-20,
       string.format("%d/%d", w.card, #w.cards))
   end
-  all[#all + 1] = label(10, height-controlH-(large and 40 or 27), width-20, function() return w.message or "" end)
+  all[#all + 1] = label(10, height-controlH-(large and 40 or 27), width-20, function() return w.legacyHold and w.L.persistent or w.message or "" end)
   local job = { all = all, children = {}, index = 1 }
   function job:step()
     for _ = 1, 4 do

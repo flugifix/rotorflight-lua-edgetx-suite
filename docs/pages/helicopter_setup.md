@@ -47,11 +47,11 @@ The short instruction area may show only its first lines; **?** opens the full t
 | # | Step | Controls and checks |
 | --- | --- | --- |
 | 1 | Board orientation | Confirm servos unplugged and all blades removed. Calibrate the accelerometer with the model level and still. Detect orientation by lifting the tail, or enter roll, pitch and yaw in degrees. After restart, check the live angles and confirm the directions. Automatic alignment requires firmware support. |
-| 2 | Receiver | Choose a free/current receiver UART and serial protocol; detect wiring if supported. Save & reboot is available here. Detect roll, pitch, yaw, collective and throttle channel mapping one stick at a time, or select function order. Check all stick values. Record at least 300 µs throttle travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. |
+| 2 | Receiver | Choose a free/current receiver UART and serial protocol; detect wiring if supported. Save & reboot is available here. Detect roll, pitch, yaw, collective and throttle channel mapping one stick at a time, or select ELRS, FrSky, Futaba/Hitec or DSM/Graupner/JR presets. Check all stick values. Record at least 300 µs throttle travel; Use measured range adds a 20 µs margin at each end. Zero limits select firmware defaults. Throttle is low compares the mapped input with the low threshold; it is not permission to arm. |
 | 3 | Mode switches | Assign ARM, RESCUE and TRAINER when the FC exposes them. Move the switch to its intended ON position; a clear AUX movement and settled position determine the active window. Reassign or Remove an assignment. ARM assignment is required. No unrelated mode slots are overwritten. |
 | 4 | Profiles & gain | Detect a two- or three-position switch; select PID + rate profiles, PID only or None. Visit the positions and Use switch. Optional gain uses a knob, or four trim-button values on one spare channel. Mapped gain is 50–150%; button gain is ±5%, bounded to 25–200%. The trim guide gives MAX mix weights 30/40/50/60%, with 100% at rest. Configure those mixes in EdgeTX; this page does not rewrite the transmitter model. |
-| 5 | Rates | Select each rate profile and Keep current, Trainer (180/270°/s), Sport (250/400°/s), or 3D (400/600°/s). Suggest fills profiles 1–3. Collective pitch is preserved. Profiles are selected, read and written sequentially, then the original rate profile is restored. |
-| 6 | Swashplate | Select Direct, 120, 135, 140, 90L or 90V; clockwise/counterclockwise main rotor; variable-pitch, motorised or bidirectional tail. Tail changes reset the yaw input rate to ±250 or ±1000 and set TTA to 0 or 100 on every PID profile. If supported and required, the tail pin is moved between SERVO 4 and MOTOR 2; a refusal blocks advance. A missing command is reported as unsupported. |
+| 5 | Rates | Select each rate profile and Keep current, Trainer (180/270°/s), Sport (250/400°/s), or 3D (400/600°/s). Only switch-selected profiles, or the active profile, are offered. Suggest fills a three-position switch in its position order. Collective pitch is preserved. Profiles are selected, read and written sequentially, then the original rate profile is restored. |
+| 6 | Swashplate | Select Direct, 120, 135, 140, 90L or 90V; clockwise/counterclockwise main rotor; variable-pitch, motorised or bidirectional tail. Tail changes reset the yaw input rate to ±250 or ±1000. Switching between servo and motor tail sets TTA to 0 or 100 on every PID profile; motor-to-bidirectional changes preserve custom TTA. If supported and required, the tail pin is moved between SERVO 4 and MOTOR 2; a refusal blocks advance. A missing command is reported as unsupported. |
 | 7 | Servo type | Servos must be unplugged. Choose cyclic and tail groups separately: 50 Hz/1520 µs, 333 Hz/1520 µs or 560 Hz/760 µs. Changing pulse band resets centre, travel and scale to the matching defaults. Frame-rate changes require restart. Only the PWM servos belonging to the selected swash/tail are used; bus channels are excluded. |
 | 8 | Governor | Off, Limit, Direct, Electric or Nitro, plus Normal, Switch or Function throttle. Switch requires Electric or Nitro. The fast-RPM warning requires motor poles plus an RPM sensor or bidirectional DShot; serial ESC telemetry does not meet that requirement. |
 | 9 | Motor & ESC | Choose throttle protocol, motor pole counts and bidirectional DShot. Enter motor pinion/main gear tooth counts and tail input/output gears for a servo tail, or tail motor poles for a motor tail. Castle telemetry and the ESC_SENSOR feature are kept consistent. |
@@ -60,11 +60,11 @@ The short instruction area may show only its first lines; **?** opens the full t
 | 12 | ESC telemetry | Optional protocol and free/current ESC UART, wiring detection when supported, and Save & reboot. Check live volts, amperes, temperature and RPM. Off needs no serial ESC telemetry; Castle uses its throttle wire. |
 | 13 | Servo direction & centre | Relevant servos are held at centre. Test each swash servo at +20°; it must lift its link. Reverse flips the servo's reverse flag. Set each centre pulse to the arm's specified neutral angle; an offset over 100 µs prompts a mechanics check. Confirm each swash direction and each arm centre. |
 | 14 | Control directions | Roll, pitch and collective use mixer passthrough. Check live RC commands and physical swash response. Wrong reverses the corresponding mixer input rate. Confirm each axis. |
-| 15 | Level the swash | Hold roll, pitch and collective at zero. Adjust three swash trims in 0.1% units, ±100%. Reset clears them. Use a leveller or measure links and confirm level. |
+| 15 | Level the swash | Hold roll, pitch and collective at zero. Adjust roll, pitch and collective trims in 0.1% units, ±100%. Reset clears them. Use a leveller or measure links and confirm level. |
 | 16 | Blade pitch | Hold 9° collective or cyclic. Enter the measured angle in 0.1° units and Apply; the mixer rate is corrected by 9/measured, preserving sign and limiting magnitude to 20–200%. Set cyclic, collective and total pitch limits in degrees. Full-stick collective is applied to all supported Rotorflight/Actual rate profiles, restoring the original selection. Confirm no binding at full travel. |
 | 17 | Tail rotor | Servo tail: hold neutral, set centre trim, check yaw passthrough and reverse if needed; command ±22° to calibrate rate, then ±60° to set CW/CCW limits. Raw yaw limits use 1000 units per 24°. Motor tail: blades-off hold controls for forward, and reverse for bidirectional tails. Idle test is limited to 15 seconds; idle is limited to 25.5% by the MSP U8 field. |
 | 18 | Gyro check | With all overrides released, tilt roll/pitch and, for a servo tail, turn yaw. Confirm correction against motion. If it moves with the model, return to Board orientation. A motor tail omits the servo yaw check inside this step. |
-| 19 | Finish | Review swash, rotor direction, tail, total pitch limit, telemetry, governor and fast RPM. Confirm the final checks, then Finish. Check failsafe, governor behaviour and every control before flight. |
+| 19 | Finish | Review readable swash, rotor direction, tail, collective/cyclic limits, ESC protocol, telemetry, governor/throttle type, fast RPM and ARM assignment. Confirm the final checks, then Finish. Check failsafe, governor behaviour and every control before flight. |
 
 ## Overrides, connection loss and saving
 
@@ -92,6 +92,28 @@ The connection gate batches the initial restart. Receiver wiring and later ESC
 telemetry can need their own restart, as in the Configurator sequence. Unsupported
 automatic wiring/alignment commands do not prevent using the manual settings.
 
+## Feedback and detailed settings
+
+Test buttons show when a held command is active; pressing a servo/mixer test again
+returns it to neutral. Motor controls are momentary and remain disabled until the
+required preparation and output checks pass. The status line distinguishes staged
+changes, live edits, pending restart, running detection and a found combination.
+A successful wiring trial changes Continue to **Save & reboot**. Cancel restores
+the previous wiring flags. No ESC data is labelled as received until voltage or
+temperature confirms reception.
+
+The profile/gain cards show the existing assignments, the current mapped profile
+and knob/button feedback, followed by a paginated channel-use plan. For the trim
+method, create a spare channel with a MAX source at 100% when no button is pressed.
+Add replacement mix actions for cyclic down/up at 30/40%, yaw down/up at 50/60%,
+and disable those trims' effect on the flight sticks. The guide lists the expected
+channel values. Confirm each button in the live feedback before flying.
+
+For detailed adjustments beyond the guided fields, save and leave the wizard,
+then use the Suite's Receiver, Modes, Adjustments, Rates, Mixer, Servos, Governor,
+Motor or Power pages. The wizard's **?** opens the complete current task text.
+It does not jump out of an active bench test through a web-style tab shortcut.
+
 ## Implementation and verification
 
 The reference is [Configurator PR #491](https://github.com/rotorflight/rotorflight-configurator/pull/491),
@@ -104,6 +126,9 @@ are resumed across calls. MSP replies update cached values; they do not rebuild 
 Reactive properties read cached page state. `bin/wizard/verify.lua` exercises the
 protocol, failure paths, lifecycle, geometry and per-call instruction costs without
 starting an EdgeTX or flight-controller simulator.
+
+[Source-to-port coverage and deliberate adaptations](../reference/helicopter-wizard-source-coverage.md)
+record the function inventory, behavior contracts and independent golden vectors.
 
 The preview images are approximate renders of the actual scene definitions, using
 desktop fonts. They are not native EdgeTX screenshots or radio acceptance evidence.

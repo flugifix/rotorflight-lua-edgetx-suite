@@ -1,0 +1,122 @@
+---
+title: Helicopter wizard source coverage
+---
+
+# Helicopter wizard source coverage
+
+The port is compared with Configurator PR 491 at
+[`4a57ba971d7ffef06f39bb66b3f376d150a27e25`](https://github.com/rotorflight/rotorflight-configurator/tree/4a57ba971d7ffef06f39bb66b3f376d150a27e25/src/tabs/setup_wizard).
+The comparison runs in both directions: source behavior to Lua, then Lua controls,
+wire values, failure paths and reactive properties back to the source intention.
+
+The checked-in `bin/wizard/source-map.json` inventories every file in
+`src/tabs/setup_wizard/`, plus the directly used shared helpers. Each entry records
+its fingerprint, named functions, component properties, event kinds, Lua targets,
+contract groups and visual/lifecycle adaptations. `audit_source.py --source <src>`
+refuses a changed fingerprint, an unaccounted wizard file, a missing target or a
+missing contract. Unrelated features in shared configuration/receiver/motor tabs
+are outside this port. This is behavior traceability, **not a claim of 100% JavaScript
+statement or branch coverage**.
+
+`source_contracts.mjs` executes the pinned pure JavaScript helpers to generate
+130 independent golden vectors in `source_vectors.lua`. Normal verification reads
+those vectors; it needs neither the Configurator checkout nor a network connection.
+They cover movement thresholds, switch bands, calibration signs/clamps, mapped and
+stepped gain windows, collective units, style bytes and rounding. Regeneration is a
+maintainer action against an explicit source snapshot, never a package build input.
+
+## The 19 steps
+
+Contract prefixes below refer to `bin/wizard/contracts.lua`. All step definitions,
+including their conditional cards, also pass through the geometry/reactive-property
+sweep in `verify.lua` at 320×240, 480×272, 480×320 and 800×480.
+
+| # | Source step | Read/write/check coverage | Contract prefix |
+| --- | --- | --- | --- |
+| 1 | Sensors | Accelerometer present/absent; preparation gate; calibration ACK and status completion; signed alignment; start/query, uncalibrated, timeout, rejection and successful auto-align; pending restart; physical orientation answer. | `S01`, `CORE` |
+| 2 | Receiver | Free/current ports; VCP exclusion and soft-serial IDs; preservation of unrelated port functions; RX feature group; explicit serial protocol IDs; saved-connection wiring trials; all four channel presets; collective-first detection and exclusion of previously found channels; raw mapped bars; throttle travel, margins, defaults, missing input and arming threshold. | `S02`, `CORE` |
+| 3 | Modes | Only advertised ARM/RESCUE/TRAINER; existing/free/full slots; ≥300 µs clear movement, 400 ms settle and detection timeout; indexed write and cleared linkage; remove; ARM switch feedback versus actual STATUS flags for other modes. | `S03` |
+| 4 | Profiles & gain | Existing mode/channel readback; PID+rates, PID-only and None; detection thresholds and accumulated peaks; clustered positions and full travel; paired slot capacity; live profile/knob/button feedback; exact 83/84 gain functions and neutral windows; channel-use plan including channels beyond CH8; EdgeTX trim-mix instructions. | `S04`, `SOURCE` |
+| 5 | Rates | Profiles actually selected by the adjustment range, or the active profile; individual reads on entry; matching preset/custom state; three-position suggestion; only chosen profiles written; collective preserved; original selection restored; chosen state cleared after save. | `S05`, `SOURCE` |
+| 6 | Swashplate | Swash type, rotor direction and tail mode; Direct roles, common layouts, front/rear reference variants and tail servo number; signed yaw reset; TTA on every PID profile only when servo/motor kind changes; compatible BOTH pin state; unsupported pin command and refused switch. | `S06`, `CORE`, `VISUAL` |
+| 7 | Servo type | Relevant PWM groups and bus exclusion; mixed/custom group readback; unplugged requirement; 50/333/560 Hz and 1520/760 µs; centre/travel/scale reset only across pulse bands; restart on frame-rate change; pulse reference follows selection. | `S07`, `CORE`, `VISUAL` |
+| 8 | Governor | Feature bit overrides a latent stored mode; mode/type writes; Switch only with headspeed control and reset when leaving it; restart; fast-RPM warning distinguishes RPM input/bidirectional DShot from serial ESC telemetry. | `S08` |
+| 9 | Motor & ESC | Versioned sparse protocol IDs, including API 12.09/12.10 Disabled; motor poles; main and tail gearing; motor-tail variant; Castle protocol/feature consistency. | `S09-S12` |
+| 10 | Connection gate | Batch initial restart; unplugged confirmation before it; same visit/FC after reconnect; arming lock reasserted; actual main/tail outputs and required PWM servos; powered/connected/blades confirmations. | `S10`, lifecycle sweep |
+| 11 | ESC & spin | PWM-only high→low→done; actual high/low output gates; cancel releases high output; fresh calibration on revisit; live output marker; main spin guards, 5–50%, default 10%, 250 ms refresh, changed power and release; physical direction answer. | `S11`, `CORE` |
+| 12 | ESC telemetry | Versioned protocols; Off frees ESC function; Castle throttle-wire telemetry; free/current port; saved-config trial eligibility; successful combination kept live, cancel restores prior flags, Save & reboot persists it; V/A/temperature/RPM and explicit receiving/missing feedback. | `S09-S12`, `CORE` |
+| 13 | Servos | Centre all relevant servos; +20° test toggles; reverse preserves other flag bits and invalidates confirmation; affirmative answer returns to centre; mid pulse, band centre and >100 µs mechanics warning; actual output feedback. | `S13` |
+| 14 | Control directions | Passthrough for stabilized roll/pitch/collective; live RC command bars; signed rate reversal invalidates physical confirmation; no automatic claim about mechanical response. | `S14-S15`, `VISUAL` |
+| 15 | Level | Hold three axes at zero; trims are roll, pitch and collective, not servo numbers; ±100% in 0.1% units; individual numeric zero or Reset all; physical level confirmation. | `S14-S15` |
+| 16 | Pitch | Toggle 9° on one axis, others zero; measurement only while held; 9/measured correction from the measured axis with signs preserved on both cyclic axes; 20–200% clamp; cyclic/collective 0–20°, total 0–36°; full-stick 0–25° on all supported rate profiles; unsupported types skipped; selection restored. | `S16`, `SOURCE` |
+| 17 | Tail | Servo zero/passthrough/toggle holds; live yaw; centre ±25°; signed calibration 10–500%; ±22°/±60° and 24° per 1000 raw units; CW/CCW limits; servo confirmations; motor/bidirectional hold variants, idle/use-current-power and release. | `S17`, `CORE` |
+| 18 | Gyro | All overrides released; pilot checks opposing correction; failure returns to orientation; motor tail omits servo yaw check; answers required again on revisit. No animation pretends to prove gyro correction. | `S18-S19`, lifecycle sweep |
+| 19 | Finish | Readable swash/direction/tail, collective and cyclic limits, throttle protocol, Castle/serial telemetry, governor feature/mode/type, RPM and ARM assignment; final confirmation; save/cleanup and arming availability restored on exit. | `S18-S19`, lifecycle sweep |
+
+## Shared behavior and deliberate adaptations
+
+- Browser promises/timers become bounded queue jobs. API loading, decoding,
+  indexed writes, snapshots and profile transactions resume across calls.
+- STATUS preempts long jobs and running detection. Expiry is checked **before**
+  waiting for an MSP reply, releases holds and disables editing. Initial loading
+  finishes with a fresh lock readback. A stale or lost lock cannot be bypassed by
+  an ACK or a busy transaction.
+- Timed servo/mixer support is proved by command 196 timed OFF. The source's
+  version-only assumption is intentionally corrected. API 12.10 without firmware
+  PR 541 uses three-byte permanent holds with explicit warning and cleanup.
+- Every task/step exit drops unsent keepalives and releases held outputs.
+  Wiring STOP belongs to the cleanup queue, so it survives page teardown.
+  Errors block EEPROM/advance; profile transactions attempt to restore selection.
+- Back/Next and a save/discard exit replace arbitrary web step jumps. Visit-local
+  step state survives an expected reboot. It is not persisted across a new visit
+  or transferred to another FC. RTN/EXIT uses the same Back route.
+- AUX wire indexes remain identical. Displayed receiver channel numbers follow
+  RX_MAP (firmware `rx.c/readRxChannels`, `MSP_RC` versus `MSP_RX_CHANNELS`). For
+  example, an ELRS preset can make AUX1 correspond to transmitter CH5; it must
+  not be labelled CH6 simply because five control functions precede it internally.
+- Advanced web-tab shortcuts become task help and the Suite menu routes documented
+  on the page. Ethos screenshots become explicit EdgeTX MAX/trim mix instructions.
+  Decorative receiver/ESC/gear artwork can become labelled fields; it is not
+  required to copy browser SVGs onto the radio.
+- Motor tests additionally stop after 15 seconds. Tail idle is capped at 25.5%,
+  the U8 protocol ceiling, rather than offering a value that wraps on the wire.
+- Mechanical, board, servo-arm, tail and gyro drawings are references. Stick and
+  output markers follow cached MSP values; layout, rotation arrow, rate curve and
+  pulse train follow settings. The switch hint is the source's decorative cue.
+  No scene is rebuilt on an MSP reply. No canvas or image rotation is used.
+
+## Verification and limits
+
+Run:
+
+```text
+lua5.3 bin/wizard/verify.lua
+lua5.3 bin/wizard/verify.lua --locale de
+python bin/wizard/audit_source.py
+python bin/wizard/verify_negative.py --lua lua5.3
+```
+
+The negative controls restore three concrete former defects: wrong FBUS ID,
+false-positive mode feedback and stale status hidden behind a busy request. Each
+must fail its named assertion, alongside a passing positive control in the same run.
+These are additional checks; assertions and budget thresholds are not weakened.
+
+The per-call instruction probe covers step definitions, view preparation, scene
+slices, reactive sweeps, API decode, save callbacks and real page wakeup/build.
+The Suite's package, syntax, translation, accounting and host page-budget checks
+remain separate required checks.
+
+[320×240 live-command example](../images/helicopter_setup/motion-command-narrow.gif) ·
+[480×272 live-command example](../images/helicopter_setup/motion-command-small.gif) ·
+[800×480 live-command example](../images/helicopter_setup/motion-command-large.gif)
+
+[Rate selection](../images/helicopter_setup/motion-rates-small.gif) ·
+[Servo pulse selection](../images/helicopter_setup/motion-pulses-small.gif) ·
+[Layout selection](../images/helicopter_setup/motion-geometry-small.gif) ·
+[Switch hint](../images/helicopter_setup/motion-switch-small.gif)
+
+These previews resolve the **same Lua scene** at explicit example inputs. They use
+desktop fonts and do not establish radio rendering, touch usability, telemetry
+latency or mechanical correctness. Native EdgeTX 2.12 and isolated FC acceptance
+remain required before flight. No EdgeTX or flight-controller simulator is needed
+for these checks.

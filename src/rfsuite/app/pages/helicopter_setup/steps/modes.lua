@@ -45,18 +45,23 @@ return function(w)
         w:value(L.assigned, function()
           local _, r = assigned(id)
           if not r then return L.no end
-          return string.format("CH%d  %d-%d", r.auxChannelIndex + 6, r.range.start, r.range["end"])
+          return string.format("CH%d  %d-%d", w:channelNumber(r.auxChannelIndex), r.range.start, r.range["end"])
         end),
-        w:button(L.assign, function() s.id, s.base, s.untilAt = id, nil, getTime() + 1500; w.message = L.flick end),
+        w:button(function() return s.id==id and L.cancelDetect or L.assign end,function()
+          if s.id==id then s.id=nil;w.message=L.ready;return end
+          s.id,s.base,s.untilAt,s.aux,s.value,s.at=id,nil,getTime()+1500,nil,nil,nil
+          w.message=L.flick
+        end),
         w:button(L.remove, function()
           local i, r = assigned(id); if i then r.range.start, r.range["end"] = 1500, 1500; send(i) end
         end),
         w:value(L.active, function()
+          if id ~= 0 then return w:modeActive(id) and L.yes or L.no end
           local _, r = assigned(id); local c = w.data.rc and w.data.rc.channels
           local v = r and c and c[r.auxChannelIndex + 6]
           return v and v >= r.range.start and v < r.range["end"] and L.yes or L.no
         end)
-      })
+      }, nil, "switch")
     end
   end
   return cards
