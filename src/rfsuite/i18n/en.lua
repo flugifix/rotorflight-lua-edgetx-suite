@@ -2204,7 +2204,7 @@ return {
         view_yaw_fmt = "View Yaw:%0.1f",
         yaw = "Yaw",
         live_view = "Live View",
-        live_view_help = "Toggle Live View to enable real-time 3D model updates. Turning it off keeps focus stable during edits.",
+        live_view_help = "Live View: follows the attitude reported by the flight controller for 60 seconds.",
         recenter_tail = "Recenter Tail",
         refresh_visual = "Refresh",
         live_remaining_fmt = "Live (%ds)",
@@ -2222,9 +2222,6 @@ return {
         help_yaw = "Yaw: sets the board yaw mounting offset.",
         help_mag = "Mag: sets the magnetometer orientation.",
         help_refresh = "Refresh: reads the attitude once and redraws the model.",
-        help_save = "Save: writes the displayed alignment and restarts the flight controller.",
-        help_reload = "Reload: reads the saved alignment again.",
-        help_star = "Star: turns the view so the tail faces you.",
       },
       diagnostics_info = {
         version = "Version",

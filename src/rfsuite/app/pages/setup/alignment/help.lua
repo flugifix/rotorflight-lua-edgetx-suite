@@ -19,10 +19,7 @@ return function(ctx)
     t(i18n, "help_mag", "Mag: sets the magnetometer orientation."),
     t(i18n, "auto_align_help", "Auto-align: hold the model level, start, then lift the tail at least 20 degrees. Review the detected angles before saving."),
     t(i18n, "live_view_help", "Live View: follows the attitude reported by the flight controller for 60 seconds."),
-    t(i18n, "help_refresh", "Refresh: reads the attitude once and redraws the model."),
-    t(i18n, "help_save", "Save: writes the displayed alignment and restarts the flight controller."),
-    t(i18n, "help_reload", "Reload: reads the saved alignment again."),
-    t(i18n, "help_star", "Star: turns the view so the tail faces you.")
+    t(i18n, "help_refresh", "Refresh: reads the attitude once and redraws the model.")
   }
 
   return {

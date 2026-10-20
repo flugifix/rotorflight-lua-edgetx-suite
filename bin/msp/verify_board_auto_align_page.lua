@@ -52,6 +52,7 @@ end
 
 local rebuilds = 0
 local confirmCallback = nil
+local saveRequest = nil
 local Common = {}
 function Common.pageT()
   return function(_, _, fallback) return fallback end
@@ -63,7 +64,7 @@ function Common.resetPageState(ui)
   ui.runtime = nil
 end
 
-local SavePipeline = { takeResult = function() end, start = function() return true end }
+local SavePipeline = { takeResult = function() end, start = function(request) saveRequest = request; return true end }
 local Controls = {
   ROW_H = 64,
   labelY = function(y) return y + 20 end,
@@ -95,7 +96,7 @@ local stubs = {
 }
 
 function loadScript(path)
-  local relative = path:match("/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
+  local relative = string.match(path, "/SCRIPTS/TOOLS/rfsuite%-core/(.+)$")
   if stubs[relative] then return function() return stubs[relative] end end
   if actual[relative] then return assert(loadfile("src/rfsuite/" .. relative)) end
   if relative == "app/pages/setup/alignment/help.lua" then return function() return function() end end end
@@ -187,6 +188,14 @@ local fields = numberFields(buildChildren())
 equal(fields[1].get(), 10, "success roll getter")
 equal(fields[2].get(), -20, "success pitch getter")
 equal(fields[3].get(), 270, "success yaw getter")
+equal(Page.onSave({}), true, "successful alignment starts existing Save pipeline")
+local boardPayload = saveRequest.steps[1].payload
+equal(boardPayload[1], 10, "saved roll low byte")
+equal(boardPayload[2], 0, "saved roll high byte")
+equal(boardPayload[3], 0xEC, "saved pitch low byte")
+equal(boardPayload[4], 0xFF, "saved pitch high byte")
+equal(boardPayload[5], 0x0E, "saved yaw low byte")
+equal(boardPayload[6], 0x01, "saved yaw high byte")
 
 -- Capability rejection hides the action and does not poison the valid page read.
 reopen(newSession("board-b", "12.10"))
@@ -226,6 +235,41 @@ reply({ 99, 0, 0, 0, 0, 0, 0, 0 })
 equal(Page.canSave(), false, "unknown procedure state blocks save")
 wake()
 equal(queue.messages[1].command, 38, "unknown procedure state reloads alignment")
+
+-- A disconnect before the START reply invalidates the request and reloads after reconnect.
+Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-pending-disconnect", "12.10")
+deliverInitialReads(); reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press(); confirmCallback()
+local disconnectedStart = nextMessage()
+_G.rfsuite.session.fblConnected = false
+wake()
+equal(Page.canSave(), false, "pending start disconnect blocks save")
+equal(#queue.messages, 0, "disconnect does not queue a read on a dead link")
+_G.rfsuite.session.fblConnected = true
+equal(Page.onReload(), true, "reconnect releases stuck Reload")
+equal(queue.messages[1].command, 38, "reconnect queues normal alignment read")
+disconnectedStart.processReply(disconnectedStart, { 2, 45, 0, 0, 0, 0, 0, 12 })
+equal(Page.canSave(), false, "disconnected start reply stays stale")
+reply({ 0, 0, 0, 0, 0, 0 })
+reply({ 0, 0, 0 })
+equal(Page.canSave(), true, "reconnect normal read restores save")
+
+-- An arm/disarm edge before the first START reply invalidates and reloads the form.
+Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-pending-arm", "12.10")
+armedNow, armedLast, armedChanges = false, nil, 0
+deliverInitialReads(); reply({ 0, 0, 0, 0, 0, 0, 0, 0 })
+auto = findButton(buildChildren(), "Auto-align"); auto.press(); confirmCallback()
+local armedPendingStart = nextMessage()
+armedNow = true; Armed.isArmed()
+armedNow = false; Armed.isArmed()
+wake()
+equal(Page.canSave(), false, "pending start arm edge blocks save")
+equal(queue.messages[1].command, 38, "pending start arm edge queues normal read")
+armedPendingStart.processReply(armedPendingStart, { 2, 60, 0, 0, 0, 0, 0, 12 })
+equal(Page.canSave(), false, "armed-edge start reply stays stale")
+reply({ 0, 0, 0, 0, 0, 0 })
+reply({ 0, 0, 0 })
+equal(Page.canSave(), true, "arm-edge normal read restores save")
 
 -- A delayed dialog confirmation cannot start after the visit is closed.
 Page.onClose(); clearQueue(); _G.rfsuite.session = newSession("board-d", "12.10")

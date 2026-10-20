@@ -2204,7 +2204,7 @@ return {
         view_yaw_fmt = "Ansicht Gier:%0.1f",
         yaw = "Gier",
         live_view = "Live-Ansicht",
-        live_view_help = "Aktivieren Sie die Live-Ansicht fuer Echtzeit-3D-Modell-Updates. Deaktivieren haelt den Fokus waehrend der Bearbeitung stabil.",
+        live_view_help = "Live-Ansicht: folgt fuer 60 Sekunden der vom Flugcontroller gemeldeten Lage.",
         recenter_tail = "Heck zentrieren",
         refresh_visual = "Aktualisieren",
         live_remaining_fmt = "Live (%ds)",
@@ -2222,9 +2222,6 @@ return {
         help_yaw = "Gier: setzt den Gier-Montageversatz des Boards.",
         help_mag = "Mag: setzt die Ausrichtung des Magnetometers.",
         help_refresh = "Aktualisieren: liest die Lage einmal und zeichnet das Modell neu.",
-        help_save = "Speichern: schreibt die angezeigte Ausrichtung und startet den Flugcontroller neu.",
-        help_reload = "Neu laden: liest die gespeicherte Ausrichtung erneut.",
-        help_star = "Stern: dreht die Ansicht so, dass das Heck zum Nutzer zeigt.",
       },
       diagnostics_info = {
         version = "Version",

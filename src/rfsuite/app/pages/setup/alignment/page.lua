@@ -62,6 +62,7 @@ local function newRuntime()
     generation = 0,
     autoAlignSupported = nil,
     autoAlignPending = false,
+    autoAlignAction = nil,
     autoAlignActive = false,
     autoAlignState = nil,
     autoAlignNeedsProbe = false,
@@ -146,6 +147,7 @@ local function resetAutoAlign(invalidate)
   if not ui.runtime then return end
   if invalidate and AutoAlignLifecycle then AutoAlignLifecycle.invalidate(ui.runtime) end
   ui.runtime.autoAlignPending = false
+  ui.runtime.autoAlignAction = nil
   ui.runtime.autoAlignActive = false
   ui.runtime.autoAlignState = nil
   ui.runtime.autoAlignNeedsProbe = false
@@ -773,7 +775,10 @@ local function queueAlignmentRead(isAutoReload)
           ui.dirty = false
           ui.progress = 100
           ui.runtime.readComplete = readValid
-          if readValid then ui.runtime.autoAlignNeedsProbe = true end
+          if readValid then
+            ui.runtime.autoAlignNeedsReload = false
+            ui.runtime.autoAlignNeedsProbe = true
+          end
           if ui.runtime and type(ui.runtime.requestRebuild) == "function" then
             ui.runtime.requestRebuild()
           end
@@ -842,6 +847,7 @@ local function queueAutoAlignRequest(action)
   local armedChanges = Armed and type(Armed.changeCount) == "function" and Armed.changeCount() or nil
   local token = AutoAlignLifecycle.capture(ui.runtime, session, signature, armedChanges)
   ui.runtime.autoAlignPending = true
+  ui.runtime.autoAlignAction = action
   return queue:add({
     command = BoardAutoAlignApi.command,
     payload = BoardAutoAlignApi.buildPayload(action),
@@ -851,6 +857,7 @@ local function queueAutoAlignRequest(action)
     processReply = function(_, buf)
       if not autoAlignCallbackIsCurrent(token) then return end
       ui.runtime.autoAlignPending = false
+      ui.runtime.autoAlignAction = nil
       local result = BoardAutoAlignApi.parse(buf)
       if not result then
         local wasProbe = ui.runtime.autoAlignSupported == nil
@@ -874,6 +881,9 @@ local function queueAutoAlignRequest(action)
             ui.display.roll_degrees = result.roll_degrees
             ui.display.pitch_degrees = result.pitch_degrees
             ui.display.yaw_degrees = result.yaw_degrees
+            ui.loaded_roll_degrees = result.roll_degrees
+            ui.loaded_pitch_degrees = result.pitch_degrees
+            ui.loaded_yaw_degrees = result.yaw_degrees
             ui.dirty = true
             saveToSession()
           elseif outcome == "unknown" or (outcome == "idle" and ui.runtime.autoAlignStartedAt > 0) then
@@ -888,6 +898,7 @@ local function queueAutoAlignRequest(action)
     errorHandler = function()
       if not autoAlignCallbackIsCurrent(token) then return end
       ui.runtime.autoAlignPending = false
+      ui.runtime.autoAlignAction = nil
       if action == BoardAutoAlignApi.actions.start then
         -- A lost START reply is ambiguous: the controller may already be sampling. Polling is
         -- safe; repeating START would replace the level reference with the lifted attitude.
@@ -1009,7 +1020,7 @@ function M.wakeup(ctx)
     queueAlignmentRead(false)
   end
 
-  if ui.runtime.autoAlignActive then
+  if ui.runtime.autoAlignActive or ui.runtime.autoAlignPending then
     local session = getSession()
     local now = nowSeconds()
     if Armed and type(Armed.isArmed) == "function" then Armed.isArmed() end
@@ -1021,7 +1032,7 @@ function M.wakeup(ctx)
       ui.runtime.autoAlignNeedsReload = true
       ui.runtime.readComplete = false
       if type(ui.runtime.requestRebuild) == "function" then ui.runtime.requestRebuild() end
-    elseif not ui.runtime.autoAlignPending and now >= ui.runtime.autoAlignPollAt then
+    elseif ui.runtime.autoAlignActive and not ui.runtime.autoAlignPending and now >= ui.runtime.autoAlignPollAt then
       if (now - ui.runtime.autoAlignStartedAt) > 16 then
         ui.runtime.autoAlignActive = false
         ui.runtime.autoAlignState = BoardAutoAlignApi.states.timeout
@@ -1034,7 +1045,9 @@ function M.wakeup(ctx)
     end
   end
 
-  if ui.runtime.autoAlignNeedsReload and not ui.runtime.readPending then
+  local session = getSession()
+  if ui.runtime.autoAlignNeedsReload and not ui.runtime.readPending
+    and session and session.fblConnected == true then
     if queueAlignmentRead(false) then ui.runtime.autoAlignNeedsReload = false end
   elseif ui.runtime.autoAlignNeedsProbe and not ui.runtime.autoAlignPending then
     if queueAutoAlignProbe() or ui.runtime.autoAlignSupported == false then
@@ -1071,9 +1084,10 @@ function M.wakeup(ctx)
 end
 
 function M.getHeaderActions()
+  local trialBusy = ui.runtime and (ui.runtime.autoAlignActive or ui.runtime.autoAlignPending)
   return {
-    save = true,
-    reload = true,
+    save = not trialBusy and ui.runtime and ui.runtime.autoAlignNeedsReload ~= true,
+    reload = not trialBusy,
     star = true,
     help = true,
     menu = true
