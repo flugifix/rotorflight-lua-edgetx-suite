@@ -40,6 +40,11 @@ stand now (`-` while its enable channel is outside its range; a `*` marks an out
 - On a flight controller with MSP API 12.09 or later the page reads the function of every
   slot in one reply and the selected slot's own settings, and reads another slot when it is
   selected. An older firmware is read in one read of the whole table.
+- *Cyclic Master Gain* (83) and *Yaw Master Gain* (84) are listed only on firmware that has
+  them (rotorflight-firmware#538), which added them without changing the MSP API version; a
+  firmware without them would skip a slot set to either one without a word. On MSP API 12.10,
+  unless a PID profile has already been read on this connection, the page reads the PID
+  profile once to find out. They are announced as "cyclic gain" and "yaw gain".
 - Save writes each changed slot, then one EEPROM write. While it does, the page is covered by the
   save's progress, and Save or Reload pressed in the header has no effect until the save has finished.
 - Reload discards every unsaved change, on every slot: a slot changed before Reload is not

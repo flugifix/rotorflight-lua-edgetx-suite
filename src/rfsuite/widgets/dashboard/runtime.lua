@@ -24,6 +24,10 @@ local BUILD_BOXES_PER_PASS = 8
 -- so reading faster only spends the pass budget. The state machine downstream reads values
 -- up to half a second old, which the audio events tolerate.
 local TELEMETRY_READ_SECONDS = 0.5
+-- How often the master volume is refreshed while the dashboard is not ready and the
+-- announcements do not run. It has to stay well under VOLUME_GAP_SECONDS in lib/audio.lua: a
+-- longer pause between two refreshes is taken there for another Lua state's turn.
+local VOLUME_REFRESH_SECONDS = 0.5
 
 
 local requireModule = (_G.rfsuite and _G.rfsuite.require)
@@ -3458,7 +3462,7 @@ function Runtime.new(zone, options)
     end
 
     local voltage = tonumber(state and state.voltage)
-    local maxCellVoltage = tonumber(batteryConfig and batteryConfig.vbatmaxcellvoltage) or 4.2
+    local maxCellVoltage = normalizeCellVoltage(batteryConfig and batteryConfig.vbatmaxcellvoltage, 4.2)
     -- The same rule as readTelemetry's: a voltage below half a cell gives no count.
     if type(voltage) == "number" and voltage > 0 and maxCellVoltage > 0 then
       local implied = math.floor((voltage / maxCellVoltage) + 0.5)
@@ -4010,6 +4014,17 @@ function Runtime.new(zone, options)
     -- interval later, and runs them either way, so they are never put off twice in a row.
     if self.startupComplete and not (readThisPass and sinceLastTick < TELEMETRY_READ_SECONDS) then
       processAudioEvents(self)
+    elseif not self.startupComplete and not (readThisPass and sinceLastTick < TELEMETRY_READ_SECONDS)
+      and now - (self._volumeRefreshAt or 0) >= VOLUME_REFRESH_SECONDS then
+      -- Not ready, so nothing above drives the master volume, and the connection edges alone
+      -- would leave it where the last of them put it. The tool may have written it since -- a
+      -- raise it left behind when it was closed within the raise's time -- so it follows the
+      -- pilot's setting here as it does in the tool's own waiting pass (ui/home.lua). The volume
+      -- and nothing else: no announcement, no connection state.
+      self._volumeRefreshAt = now
+      if self.audioState and DashboardAudio and type(DashboardAudio.refreshConnectionVolume) == "function" then
+        DashboardAudio.refreshConnectionVolume(self)
+      end
     end
 
     local modelPrefs = self.modelPreferences or (type(_G) == "table" and _G.rfsuite and type(_G.rfsuite.session) == "table" and _G.rfsuite.session.modelPreferences) or nil

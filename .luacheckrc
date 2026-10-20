@@ -26,6 +26,7 @@ globals = {
   -- os table -- this Lua has none -- so a guard written as os.remove can never pass and the
   -- name has to be spelled the way the radio publishes it.
   "fstat",
+  "dir",
   "del",
   "rename",
   "mkdir",
@@ -98,7 +99,7 @@ local probe_globals = {
   ["model"] = true, ["getValue"] = true, ["getSensor"] = true, ["getFieldInfo"] = true,
   -- Reading the card is a probe like any other: derived.lua stats /IMAGES/ for the model
   -- picture, and an object doing the same would do it once per frame.
-  ["fstat"] = true,
+  ["fstat"] = true, ["dir"] = true,
   -- And writing to it is worse than reading it, so the three that do are subtracted here too.
   -- Without this, naming them above would have quietly widened what an object may do.
   ["del"] = true, ["rename"] = true, ["mkdir"] = true,
@@ -124,7 +125,7 @@ files["src/rfsuite/widgets/dashboard/objects/common.lua"] = { new_globals = glob
 -- to take four names out of it. Verified in both directions -- a planted `model` read in this
 -- file reports "accessing undefined variable 'model'", and removing the entry silences it.
 files["src/rfsuite/widgets/dashboard/inflight/screen.lua"] = {
-  not_globals = { "model", "getValue", "getSensor", "getFieldInfo", "fstat",
+  not_globals = { "model", "getValue", "getSensor", "getFieldInfo", "fstat", "dir",
                   "del", "rename", "mkdir" }
 }
 

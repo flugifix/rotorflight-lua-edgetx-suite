@@ -268,6 +268,34 @@ def apply_transform_pipeline(s: str, basic_mod: str | None, chain: str, stats: d
     return s
 
 
+def _strip_lua_line_comment(line: str) -> str:
+    """Strip a Lua line comment outside a short quoted string.
+
+    The translation-table loader accepts single- and double-quoted strings on
+    one line. Backslash parity decides whether a matching quote closes the
+    string; long-bracket strings and block comments are outside that grammar.
+    """
+    quote = None
+    backslashes = 0
+
+    for index, char in enumerate(line):
+        if quote is not None:
+            if char == '\\':
+                backslashes += 1
+                continue
+            if char == quote and backslashes % 2 == 0:
+                quote = None
+            backslashes = 0
+            continue
+
+        if char == '"' or char == "'":
+            quote = char
+        elif char == '-' and index + 1 < len(line) and line[index + 1] == '-':
+            return line[:index]
+
+    return line
+
+
 def load_translations(path: Path) -> dict:
     if path.suffix.lower() == '.lua':
         with path.open('r', encoding='utf-8') as f:
@@ -275,7 +303,7 @@ def load_translations(path: Path) -> dict:
             
         json_str = ""
         for line in lines:
-            line = re.sub(r'--.*$', '', line)
+            line = _strip_lua_line_comment(line)
             stripped = line.strip()
             if not stripped:
                 continue
@@ -538,6 +566,62 @@ def iter_source_files(root: Path, exts=('.lua', '.ts', '.tsx', '.js', '.jsx', '.
         if p.is_file() and p.suffix.lower() in exts:
             yield p
 
+
+def _test_lua_translation_comment_strings(base: Path) -> bool:
+    line_cases = [
+        ('plain = "Plain - text",\n', 'plain = "Plain - text",\n'),
+        ('double = "Shown as -- when unknown.", -- comment\n',
+         'double = "Shown as -- when unknown.", '),
+        ("single = 'Shown as -- when unknown.', -- comment\n",
+         "single = 'Shown as -- when unknown.', "),
+        (r'odd = "Quote: \" -- kept", -- comment',
+         r'odd = "Quote: \" -- kept", '),
+        (r'even = "Path \\\\" -- comment', r'even = "Path \\\\" '),
+        ('-- full-line comment\n', ''),
+    ]
+    for source, expected in line_cases:
+        actual = _strip_lua_line_comment(source)
+        if actual != expected:
+            print("[self-test] FAIL: Lua comment stripping mismatch: %r != %r"
+                  % (actual, expected))
+            return False
+
+    bundle_path = base / "comment_strings.lua"
+    bundle_path.write_text(
+        'return {\n'
+        '  -- full-line comment\n'
+        '  selftest = {\n'
+        '    plain = "Plain - text",\n'
+        '    double_quoted = "Shown as -- when unknown.", -- inline comment\n'
+        "    single_quoted = 'Shown as -- when unknown.',\n"
+        r'    escaped_double = "Quote: \" -- kept", -- inline comment' '\n'
+        r"    escaped_single = 'Quote: \' -- kept'," '\n'
+        r'    even_backslashes = "Path \\ ", -- inline comment' '\n'
+        '  },\n'
+        '}\n',
+        encoding='utf-8')
+
+    try:
+        loaded = load_translations(bundle_path)
+    except Exception as e:
+        print(f"[self-test] FAIL: quoted comment markers: {type(e).__name__}: {e}")
+        return False
+
+    expected = {
+        "plain": "Plain - text",
+        "double_quoted": "Shown as -- when unknown.",
+        "single_quoted": "Shown as -- when unknown.",
+        "escaped_double": 'Quote: " -- kept',
+        "escaped_single": "Quote: ' -- kept",
+        "even_backslashes": "Path \\ ",
+    }
+    if loaded.get("selftest") != expected:
+        print("[self-test] FAIL: quoted comment markers did not load exactly")
+        return False
+
+    print("[self-test] PASS: quoted comment markers load exactly")
+    return True
+
 def self_test():
     """Prove the exit status can go red, and stays green on a clean tree.
 
@@ -582,6 +666,8 @@ def self_test():
     from contextlib import redirect_stdout
 
     ok = True
+    with tempfile.TemporaryDirectory() as tmp:
+        ok = _test_lua_translation_comment_strings(Path(tmp)) and ok
     for label, key, readonly, expect, expect_changed, expect_wf, expect_fb in cases:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

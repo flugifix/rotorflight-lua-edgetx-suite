@@ -16,9 +16,9 @@ the model changes, next to the standard value it replaces, and lets each of them
 
 The tile is there only while a flight controller is connected and per-model settings are on for
 its model: *Allow per-model settings* and *Own settings for this model* on
-[*Design*](theme.md), or — on a card that has not stored those switches yet — a model that
+[*Theme*](theme.md), or — on a card that has not stored those switches yet — a model that
 already has a theme or theme settings of its own. The grid checks this when it is opened, so a
-switch turned on under *Design* shows the tile the next time the grid is entered.
+switch turned on under *Theme* shows the tile the next time the grid is entered.
 
 ## Settings
 
@@ -50,7 +50,7 @@ With no setting to show, the page says the model uses the standard values.
   card*, or *model settings store not available* where the part of the suite that writes the
   model's file could not be loaded.
 - A reset does not turn per-model settings off: the model keeps *Own settings for this model* on, and its
-  theme choice on *Design* is not touched. Turning them off is done on *Design*, and keeps
+  theme choice on *Theme* is not touched. Turning them off is done on *Theme*, and keeps
   the values.
 - A row whose theme is no longer installed is still listed, as *Theme not installed*, so it can be
   reset.
@@ -60,7 +60,7 @@ With no setting to show, the page says the model uses the standard values.
 
 ## Related
 
-- [Design](theme.md) — the switches that turn per-model settings on.
+- [Theme](theme.md) — the switches that turn per-model settings on.
 - [Settings](settings.md) — the standard theme settings.
 
 *Documented against RFSuite 0.1.7.*

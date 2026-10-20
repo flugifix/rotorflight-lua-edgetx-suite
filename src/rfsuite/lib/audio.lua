@@ -52,6 +52,23 @@ local BOOST_SECONDS = 8
 -- the master volume asks for the Alert Level. 0 until the first critical announcement.
 local boost_until = 0
 
+-- The dashboard widget and the tool started from the radio's tool list each run their own copy of
+-- this module, and EdgeTX never runs the two at the same time: it stops refreshing widgets while a
+-- standalone script runs (radio/src/gui/colorlcd/standalone_lua.cpp). (The tool opened from the
+-- dashboard runs inside the widget's own Lua state and announces nothing; it is not a second copy.)
+-- The global variable may therefore have been written by the other copy while this one was paused
+-- -- a tool closed while a critical announcement still holds the Alert Level leaves it there, and
+-- the widget, which last wrote the Normal Level itself, would see nothing to write. So what this
+-- state wrote last is trusted only while its refreshes follow each other: on the first refresh,
+-- and on the first after a pause longer than this, the variable is read back and only a value
+-- that differs from what it holds is written. The widget refreshes on its announcement pass while
+-- it is ready (Audio.process, every 0.25 to 0.6 s) and every 0.5 s while it is not
+-- (widgets/dashboard/runtime.lua); the tool on its audio tick, every 0.2 s, ready or not. A
+-- tool session that can raise the volume lasts longer than this, its start alone.
+local VOLUME_GAP_SECONDS = 2
+-- When this Lua state last refreshed the master volume, on its clock (nowSeconds).
+local volume_refreshed_at = nil
+
 -- How long a lost connection stays eligible for a recovery announcement. Past it the pending
 -- flag is dropped without a word: a model that answers again a quarter of an hour later is a
 -- new flight, and "telemetry recovered" belongs to the one that was interrupted.
@@ -144,8 +161,12 @@ local function master_gvar_usable(gv)
   return gvar_board_ok
 end
 
-local function refresh_volume_state(self, isCritical)
+local function refresh_volume_state(self, isCritical, now)
   volume_driven = true
+  -- The first refresh of this state, or the first after a pause: the variable may hold what the
+  -- other state wrote (see VOLUME_GAP_SECONDS), so it is asked below rather than trusted.
+  local stale = volume_refreshed_at == nil or now - volume_refreshed_at > VOLUME_GAP_SECONDS
+  volume_refreshed_at = now
   local prefs = self and self.preferences and self.preferences.audio
   if not prefs and type(_G) == "table" and _G.rfsuite and _G.rfsuite.preferences then
     prefs = _G.rfsuite.preferences.audio
@@ -180,6 +201,12 @@ local function refresh_volume_state(self, isCritical)
     if gv == 0 then return end
   end
   master_gvar_idx = gv - 1
+  -- Every accepted write marks the model for a save, so the value already standing is not written
+  -- again; a read that fails leaves nothing to compare with, and the value is written.
+  if stale then
+    local ok, current = pcall(model.getGlobalVariable, master_gvar_idx, 0)
+    master_gvar_last = ok and tonumber(current) or nil
+  end
   local pct = isCritical and (tonumber(prefs.master_alert) or 100) or (tonumber(prefs.master_normal) or 80)
 
   -- Connected only: the pot rules until the link is up and again once it is down, a raised level
@@ -1004,7 +1031,7 @@ local function tryPlayAlertFile(self, audioState, events, now, relativePath, opt
     local key = RAISE_KEYS[alertKey]
     if key and prefEnabled(events, key, not RAISE_OFF_BY_DEFAULT[alertKey]) and resolveEventPath(relativePath) then
       boost_until = now + BOOST_SECONDS
-      refresh_volume_state(self, true)
+      refresh_volume_state(self, true, now)
     end
   end
   return tryPlayEventFile(audioState, now, relativePath, opts)
@@ -2255,7 +2282,7 @@ function Audio.resetConnectionState(audioState)
   end
   -- The master volume as it stands: raised while a critical announcement's time runs (it is this
   -- module's, not the connection's, so it outlives the reset), the pilot's own level otherwise.
-  refresh_volume_state(nil, boost_active(now))
+  refresh_volume_state(nil, boost_active(now), now)
 
   audioState.initialized = false
   audioState.modelAnnounced = false
@@ -2368,7 +2395,8 @@ end
 -- is what a caller that is waiting for a connection needs. The tool's audio block is that
 -- caller: gating its whole pass on the edge left the variable written once per loss and then
 -- not again, so a pilot who set a global variable as the master volume sat at the alert level
--- until the next connect.
+-- until the next connect. The dashboard widget calls it too, every 0.5 s while it is not ready,
+-- so a level the tool wrote while the widget was paused does not stand until the next connect.
 --
 -- Whether the level is raised is not asked for: it is the time a critical announcement raised it
 -- for, the same test `resetConnectionState` and `Audio.process` make, so a caller that waits ends
@@ -2377,7 +2405,8 @@ function Audio.refreshConnectionVolume(self)
   if type(self) ~= "table" or type(self.audioState) ~= "table" then
     return
   end
-  refresh_volume_state(self, boost_active(nowSeconds()))
+  local now = nowSeconds()
+  refresh_volume_state(self, boost_active(now), now)
 end
 
 function Audio.process(self, opts)
@@ -2474,7 +2503,7 @@ function Audio.process(self, opts)
   -- Raised only while the time a critical announcement raised it for runs (tryPlayAlertFile); a
   -- condition that holds without being spoken -- a sag still inside its hold, an alert whose
   -- repeats are spent -- raises nothing.
-  refresh_volume_state(self, boost_active(now))
+  refresh_volume_state(self, boost_active(now), now)
 
   local governorEnabled = prefEnabled(events, "governor_state", true)
   if audioState.lastEnabled.governor_state ~= governorEnabled then

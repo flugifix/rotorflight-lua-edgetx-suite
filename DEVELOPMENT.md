@@ -226,6 +226,18 @@ whitespace-only diff buries the change a reviewer is looking for.
 | `testing.yml` | tag `testing/*` | A raw `src` artifact, then deletes the tag again. Ships no archive and runs no gate |
 | `docs.yml` | pull request or push touching `docs/`, `mkdocs.yml` or `bin/docs/` | The documentation site, built with `mkdocs build --strict`; on master it is published with GitHub Pages |
 
+The dashboard voltage-bounds regression check runs in both `pr.yml` and `checks.yml`:
+
+```sh
+lua5.3 bin/dashboard/verify_voltage_bounds.lua --verbose
+```
+
+It reloads the real dashboard runtime against the accounting firmware/FC stubs and checks
+17 controlled cases: voltage encodings, held/configured cell-count priority, missing or invalid
+configuration, absent or small pack voltage, the legacy session alias and saved voltage bounds.
+To prove the check detects the original defect, pass a pre-fix runtime source with
+`--runtime <file>`; the same expectations must fail. The check does not measure hardware or timing.
+
 The SmartFuel validity check runs in both `pr.yml` and `checks.yml`:
 
 ```sh

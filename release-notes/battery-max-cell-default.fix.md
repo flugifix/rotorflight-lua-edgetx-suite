@@ -1,0 +1,2 @@
+- **Battery setup uses the firmware's default maximum cell voltage (`app/pages/setup/power/battery/page.lua`, `app/pages/setup/power/sources/page.lua`, `docs/pages/setup/power/battery.md`)**:
+  - For #783, missing maximum-cell values now fall back to 4.30 V while values supplied by the flight controller remain unchanged.

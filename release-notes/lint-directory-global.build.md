@@ -1,0 +1,2 @@
+- **Lua lint configuration (`.luacheckrc`)**:
+  - Recognize the EdgeTX `dir` filesystem global while preserving the dashboard restrictions on per-frame filesystem access (#374).

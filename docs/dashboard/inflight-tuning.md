@@ -41,6 +41,19 @@ Two pages, one for each half:
 Both switches have to be on, and the model's setup check has to pass: a fault refuses the
 interlock rather than letting a press move a parameter other than the one on the screen.
 
+With **Drive rows from the trims** on, the check also needs to know which of the radio's
+switch positions are its trims. The first time the interlock is closed after the widget
+starts, or after these settings change, the surface the closing brings up shows **SETUP: Checking
+trims** while the radio's switch list is read, a slice per pass, and the interlock stays refused
+until that is done — about one pass of the widget for every 32 positions the radio lists, plus one.
+Until the check after that first closing is in, the ground surface reached from the quick settings
+menu reads *Setup not checked*, and a fault of the model is shown only once the interlock is
+closed. A trim the overlay
+claims has to be off in every flight mode, not only the active one. A flight mode that uses
+another mode's trim (EdgeTX's default for FM1 to FM8, which follow FM0) counts as that mode;
+one with a trim of its own, or with an offset of its own on top of another mode's, counts as
+trimming. The fault reads **Trim still active**.
+
 In the **Custom** set layout, the board's adjustment slots determine both the parameter names
 and the channel values used to step them. Plus and minus use the increment and decrement
 windows independently, including when they are not mirrored about channel centre. Touch
@@ -49,6 +62,17 @@ the ground first: until it has been read, custom steps are refused. A step windo
 missing, unreachable, outside the range the flight controller reads, or shared with another
 slot of the same bank is refused rather than replaced by a standard-layout value, so one press
 never steps two parameters.
+
+A bank is offered only when the value that parks the enable channel in it -- the middle of its
+enable window, held inside the channel's reach of 988 to 2012 µs -- lies inside that window and
+inside no enable window of another slot on the same two channels. A window that lies beyond
+988 to 2012 µs, or one whose middle also lies in another slot's window, could otherwise step
+another slot's parameter while the screen names this bank's, and a continuous slot sharing
+the bank's own window could move as well; a window the flight controller never reads would
+step nothing. Such a bank keeps its chip, but all its rows read **Unassigned** and no press,
+trim or hold steps anything in it; the walk and the bank trim step over it, and its slots are
+counted in the **skipped** number beside **Set from the board** (beside **No usable Custom
+rows** when every bank is refused).
 
 A refused custom step shows **Custom layout not read** until the ground read completes, or
 **Row cannot be stepped** when the selected window is unusable. An empty slot read shows
@@ -67,6 +91,17 @@ switch.
 The setup check's verdict, how the board's own slots compare with the set, when the values
 were last read, and where the backup sits. Its three actions are *Read values*, *Back up to
 &lt;profile&gt;* and *Restore from &lt;profile&gt;*.
+
+In the **Standard** set layout every cell sends its documented value, whatever the board's
+slot for it holds. Where a slot holds a different function on the cell's own channels and
+windows, a step on that cell changes that function and not the parameter the row names, so the
+second line names those cells, each with the function its slot holds — for example **Pitch P
+steps Roll D** — as many as fit, with every other differing slot counted as **+N more**: empty,
+on other channels or windows, or differing in a limit or the step. Where the row's name does not
+fit, the cell is named by its bank letter and row number (**F5** is bank F, fifth row). When no
+cell is named, the line counts the differences (**board differs in N**), or, when the step is
+the only difference, says so (**step differs: set the board up again**). *Set up the flight
+controller* writes the set onto the board.
 
 Values are read here and nowhere else: the receiver map, the board's adjustment slot table,
 and nine reads that between them answer every parameter of the set. It happens by itself once
@@ -120,10 +155,19 @@ One parameter at a time, not a grid:
   radio is set to. A trim press that steps the selected parameter comes and goes without
   rebuilding the screen; a trim that selects another row or bank redraws it for the new
   selection. A trim press is one step however long the trim is held: a held trim does not
-  repeat, and the next step needs the trim to come up and go down again. A step press that comes
-  before the flight controller can count it as a step of its own -- during the previous press's
+  repeat, and the next step needs the trim to come up and go down again. That holds when the
+  selection moves under it too: in the navigate layout, a walk or bank trim step, a tap on the
+  row list or a bank chip while the adjust trim is held starts no step of its own, and
+  the new row steps at the trim's next press. A step press that comes before the flight
+  controller can count it as a step of its own -- during the previous press's
   pulse or the pause after it -- shows **too fast - one step at a time**, as a tap on a step
   control does, and steps nothing even if the trim is still held when the pause is over.
+  The trims and the step controls share one value, so they wait for each other: a tap during a
+  trim's pulse or the pause after it, and a step press of a trim while a step control is pulsing,
+  held or in its pause, are refused with the same line. Letting go of a held step control starts
+  that pause as well, for the next tap as for the next trim step. A walk or bank trim waits for
+  the value only: pressed while a step is still on the wire it shows that line too instead of
+  moving; held on, it walks at its usual repeat once the step is off the wire, and the line goes.
 
 A profile change while the surface is live is named on the screen, and every cached value
 belonging to that profile is marked unknown until the reads have been sent again.
@@ -156,6 +200,16 @@ changed.
   about to show is measured against a snapshot that has to survive the switch. What the new
   read costs is the nine value reads and not the whole slot table — a layout does not change
   because a switch moved.
+- **The tuning session belongs to the flight controller it was read from.** The link coming
+  back to the same board ends nothing — after a battery change, a short fade on the ground, or
+  a link lost in the air, which comes back after the landing because nothing is asked of an
+  armed board — so the backup taken before the flight is still the one *Restore* puts back.
+  When a *different* flight controller identifies itself on the same model, the session ends:
+  the backup line, the comparison and the read go, the board is read again in full, slot table
+  included, and with the interlock on a fresh backup of its active profile follows. The board
+  is known by the identity the suite reads on every connect (API version and MCU id), which
+  answers a moment after the link is back; until it has, nothing ends, and *Backup* and
+  *Restore* wait with *The board is being read: try again in a moment*.
 - Releasing the interlock, closing the fullscreen, backgrounding the widget or losing the
   link all take the value variable back to zero, in the flight mode it was written in, and
   end whichever of the three surfaces was up. The next opening of the interlock is an opening

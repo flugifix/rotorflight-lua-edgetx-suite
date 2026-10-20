@@ -1,0 +1,1 @@
+- **Automatic voltage bounds (widgets/dashboard)**: Normalize the maximum cell voltage before estimating the battery cell count, so the bounds scale correctly when the flight controller supplies centivolts and no cell count is available (#784).

@@ -173,7 +173,7 @@ scene the dashboard queues for a phase change is keyed on the new module, and a 
 `renderKey(zone, state)` sees the new phase the first time it is called after the change.
 
 The path is resolved per phase as well (`resolveThemePathForState`), which is what the
-*Per-Phase Themes* switch under *System* → *Settings* → *Dashboard* → *Design* acts on. There
+*Per-Phase Themes* switch under *System* → *Settings* → *Dashboard* → *Theme* acts on. There
 are three theme slots, not five: `armed` resolves through the preflight slot and `offline`
 through the postflight one, because each is a refinement of that screen rather than a screen
 beside it. With the switch off, one theme covers every phase and the phase keys keep their
@@ -1069,9 +1069,12 @@ perform, exactly as a press does.
 2. A row in `app/pages/settings/dashboard/theme_index.lua`, or the theme is missing on a radio
    without directory enumeration.
 3. `configure.lua` as a factory, or no `configure` key at all.
-4. Every string a pilot reads through i18n — box titles take the `@i18n(key)@` form, which the
-   packager resolves for a shipped theme and the widget resolves at runtime for a user theme,
-   falling back to the last segment of the key when it cannot.
+4. For a theme shipped from this repository, route every string a pilot reads through i18n. Box
+   titles take the `@i18n(key)@` form and the packager replaces the marker while building each locale.
+   An installed archive contains only `i18n/init.lua`, not the locale bundles, so a theme copied
+   into `rfsuite.user` cannot resolve a new marker at runtime. User themes use plain text for box
+   and page titles. Governor threshold values use the internal names documented in
+   [User themes](../dashboard/user-themes.md), which remain stable across radio languages.
 5. A budget row. `bin/accounting/measure.lua` prices every shipped theme — its worst pass and
    one full sweep of the tree it leaves standing — and every box type the shipped themes
    declare. A theme or a box type with no row in `budgets.lua` fails `--check`, which is what
