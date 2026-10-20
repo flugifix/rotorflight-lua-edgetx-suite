@@ -1,1 +1,2 @@
-- Add radio-wide dashboard fullscreen key bindings, including before the flight controller connects; Theme preserves theme bindings and explicit choices override them. Default declares SYS for the suite tool, TELE for the quick menu and MDL for no action (`settings/dashboard/keys`, `widgets/dashboard`, #729).
+- **Radio-wide dashboard fullscreen keys (`app/pages/settings/dashboard/keys`, `widgets/dashboard`)**:
+  - Add five radio-wide shortcuts for #729. Theme preserves theme bindings, explicit choices override them, and Default declares SYS for Main menu, TELE for Quick menu and MDL for no action.

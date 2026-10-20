@@ -2794,7 +2794,7 @@ return {
         help_page_down = "PAGE >: Aktion der nächsten Seitentaste.",
         help_page_up = "PAGE <: Aktion der vorherigen Seitentaste.",
         help_mdl = "MDL: Modelltaste. RTN bleibt Zurück/Schließen; langes RTN beendet das Vollbild.",
-        help_sys = "SYS: Systemtaste. Die Suite erfordert ein nicht scharfgeschaltetes Modell.",
+        help_sys = "SYS: Systemtaste. Das Hauptmenü erfordert ein nicht scharfgeschaltetes Modell.",
         help_tele = "TELE: Telemetrietaste. Das Flugbuch erfordert seinen Vorschau-Schalter.",
       },
       settings_dashboard_quick_menu = {

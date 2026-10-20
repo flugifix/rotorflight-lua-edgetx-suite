@@ -839,9 +839,9 @@ local function keyName(event)
   return nil
 end
 
---- Answer a key, for a widget whose fullscreen has a base layer. Returns true when the key was
---- one of the six and answered; MDL, SYS and TELE with a view on top return false, unless they
---- are bound to that view.
+--- Answer a fullscreen key. Returns true when the key was one of the six and answered. Theme
+--- bindings for MDL, SYS and TELE with a view on top return false unless they toggle that view;
+--- an explicit radio-wide choice still applies on top.
 --
 --   PAGE down / up  with the quick menu on top: close it. With any other view on top: open the
 --                   menu over it. With the base layer showing: the base layer's own binding
@@ -851,7 +851,8 @@ end
 --                   base layer showing: its `keys.exit`, else nothing -- a long press on RTN
 --                   still leaves fullscreen, in the firmware.
 --   MDL, SYS, TELE  with the base layer showing: its `keys.mdl` / `keys.sys` / `keys.tele`,
---                   else nothing. With a view on top: nothing.
+--                   else nothing. With a view on top: a Theme choice does nothing, while an
+--                   explicit radio-wide choice still applies.
 --
 -- A key the base layer binds to `openView:<id>`, RTN aside, closes that view again while it is
 -- on top, whatever the rules above say for that key: a bound key toggles its view.

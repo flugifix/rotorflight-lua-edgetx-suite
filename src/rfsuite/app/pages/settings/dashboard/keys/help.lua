@@ -9,8 +9,8 @@ return function(ctx)
   local line4 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_mdl")
     or "MDL: model-key action. RTN keeps Back/Close; long RTN exits."
   local line5 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_sys")
-    or "SYS: system-key action. Tool access requires a disarmed model."
+    or "SYS: system-key action. Main menu requires a disarmed model."
   local line6 = i18n and i18n.t and i18n.t("app.pages.settings_dashboard_keys.help_tele")
-    or "TELE: telemetry-key action. Flight Log requires its preview switch."
+    or "TELE: telemetry-key action. Flight log requires its preview switch."
   return { message = table.concat({ line1, line2, line3, line4, line5, line6 }, "\n") }
 end

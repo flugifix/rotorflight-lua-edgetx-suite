@@ -238,6 +238,19 @@ configuration, absent or small pack voltage, the legacy session alias and saved 
 To prove the check detects the original defect, pass a pre-fix runtime source with
 `--runtime <file>`; the same expectations must fail. The check does not measure hardware or timing.
 
+The dashboard fullscreen-key regression check also runs in both workflows:
+
+```sh
+lua5.3 bin/dashboard/verify_fullscreen_keys.lua --self-test
+lua5.3 bin/dashboard/verify_fullscreen_keys.lua
+```
+
+It loads the real key resolver and view router, then checks Theme precedence, declared bindings,
+host page-key fallback, explicit overrides on top of a view, Nothing consumption and operation
+before a theme base exists. It also loads the real runtime and checks that leaving fullscreen
+cancels pending fullscreen builds and splashes before their job step can run. The self-test changes
+the explicit-choice branch and disables the early exit guard; both mutations must be detected.
+
 Release notes wait under `release-notes/`, one file per pull request, until the release is cut:
 `python bin/release/collect_release_notes.py` files them under the version in
 `src/rfsuite/lib/version.lua`, and the result is committed before the tag. The format is in

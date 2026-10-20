@@ -28,9 +28,11 @@ connects. These choices belong to the radio and apply to every theme and model.
 - On the connection screen, explicit global actions and declared theme bindings already work.
   A free-form theme's build-time bindings become available when that theme has built.
 - An opened menu can be closed with its bound menu key. Short RTN keeps the current Back/Close
-  behavior, and long RTN leaves fullscreen. Nothing also consumes the key before LVGL sees it.
+  behavior, and long RTN leaves fullscreen. A Theme choice for MDL, SYS or TELE does nothing
+  while another view is on top unless it toggles that view; an explicit radio-wide choice still
+  applies there. Nothing also consumes the key before LVGL sees it.
 - While the suite tool or in-flight tuning owns the fullscreen, these shortcuts do not take its keys.
-- The suite tool is refused while armed. Flight Log also requires its preview switch.
+- Main menu is refused while armed. Flight log also requires its preview switch.
   The quick menu's FC writes stay hidden until the connection is ready and the model is disarmed.
 - A failed SD-card save reports the error and leaves the page marked as unsaved.
 - Unknown stored action values use Theme. Existing theme configuration is not changed by this page.

@@ -2766,8 +2766,8 @@ return {
         help_page_down = "PAGE >: next-page action.",
         help_page_up = "PAGE <: previous-page action.",
         help_mdl = "MDL: model-key action. RTN keeps Back/Close; long RTN exits.",
-        help_sys = "SYS: system-key action. Tool access requires a disarmed model.",
-        help_tele = "TELE: telemetry-key action. Flight Log requires its preview switch.",
+        help_sys = "SYS: system-key action. Main menu requires a disarmed model.",
+        help_tele = "TELE: telemetry-key action. Flight log requires its preview switch.",
       },
       settings_dashboard_quick_menu = {
         place = "Position %d",

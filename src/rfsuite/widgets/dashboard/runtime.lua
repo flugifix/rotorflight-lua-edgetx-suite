@@ -4342,17 +4342,6 @@ function Runtime.new(zone, options)
 
     -- In EdgeTX, `event` is nil in normal widget mode, and an integer (including 0 for idle) in fullscreen.
     local isInteractive = (event ~= nil)
-    if not isInteractive then
-      -- Leaving fullscreen is the one exit the firmware does not always report -- a long press on
-      -- RTN closes it and Lua may never see the key -- so the ground surface is dropped whenever a
-      -- pass arrives without an event rather than when a close is observed. Ahead of the two
-      -- early returns below, so a pass that returns there drops it as well.
-      self.inflightFullscreen = nil
-      -- The fullscreen views that are open are a fullscreen state and are dropped on the way
-      -- out for the same reason the tuning surface is: a long press on RTN closes fullscreen
-      -- without Lua ever seeing the key. The whole stack is this one field.
-      self._viewStack = nil
-    end
 
     -- A theme reload that fell on a read pass waits for the next logic tick; the deferral itself
     -- is in performBackgroundWork. Queuing a scene job here would build against the theme that
