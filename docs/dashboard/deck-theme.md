@@ -87,8 +87,8 @@ skipped frames follow the link; both hold for Deck's screen too.
 With *Deck* selected, full screen shows the theme itself rather than the quick menu. The theme
 draws no close button: a **long press on RTN** leaves full screen. What opens where:
 
-- **The menu button** opens the [quick menu](quick-menu.md); so do the page keys and TELE, as
-  they come.
+- **The menu button** opens the [quick menu](quick-menu.md); so does TELE by default. Unbound
+  PAGE keys do nothing while the theme itself is showing.
 - **The tool button** opens the suite's tool, only while the model is disarmed; so does SYS, as it
   comes.
 - **The link figure and bars** open the *ELRS* link page.
