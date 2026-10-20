@@ -5,8 +5,10 @@
 --   lua5.3 bin/dashboard/verify_fullscreen_keys.lua --verbose
 --   lua5.3 bin/dashboard/verify_fullscreen_keys.lua --self-test
 --
--- The real widgets/dashboard/keys.lua and widgets/dashboard/views.lua are loaded from the tree.
--- Firmware key constants, logging and lcd.exitFullScreen are the only stubs.
+-- The resolver and Views cases load the real widgets/dashboard/keys.lua and
+-- widgets/dashboard/views.lua from the tree; only firmware key constants, logging and
+-- lcd.exitFullScreen are stubbed there. The Runtime exit case uses accounting firmware
+-- and flight-controller stubs around the real widgets/dashboard/runtime.lua.
 
 local ROOT = "."
 do
@@ -260,8 +262,8 @@ if selfTest then
     os.exit(1)
   end
   print("(self-test) explicit-choice mutant went red: " .. failures[1].case .. ": " .. failures[1].detail)
-  local exitGuard = "    if event == nil then\n      self.inflightFullscreen = nil\n      self._viewStack = nil\n      self._cachedFullscreenKey = nil"
-  local runtimeMutant, runtimeCount = string.gsub(runtimeSource, exitGuard, "    if false and event == nil then\n      self.inflightFullscreen = nil\n      self._viewStack = nil\n      self._cachedFullscreenKey = nil", 1)
+  local exitGuard = "    if event == nil then"
+  local runtimeMutant, runtimeCount = string.gsub(runtimeSource, exitGuard, "    if false and event == nil then", 1)
   if runtimeCount ~= 1 then
     print("SELF-TEST FAILED: the fullscreen-exit guard was found " .. runtimeCount .. " times, expected once")
     os.exit(1)
