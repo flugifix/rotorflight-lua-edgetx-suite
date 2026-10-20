@@ -64,9 +64,14 @@ local function ensureDeps()
   if not ApiVersion then ApiVersion = loadModule("lib/api_version.lua") end
   if not EscSensorTrialApi then EscSensorTrialApi = loadModule("tasks/msp/api/esc_sensor_trial.lua") end
   -- The shared copy: lib/armed.lua counts arm/disarm changes per Lua state, and only the copy
-  -- the tool asks on every pass sees them.
-  if not Armed then
-    Armed = (_G.rfsuite and _G.rfsuite.require and _G.rfsuite.require("lib/armed.lua")) or loadModule("lib/armed.lua")
+  -- the tool asks on every pass sees them. A private copy would not, so where the tool's
+  -- loader exists there is no fallback; a failed load is remembered as false (no retry per pass).
+  if Armed == nil then
+    if _G.rfsuite and _G.rfsuite.require then
+      Armed = _G.rfsuite.require("lib/armed.lua") or false
+    else
+      Armed = loadModule("lib/armed.lua") or false
+    end
   end
   if not t then t = Common and Common.pageT("setup_esc_motors") or nil end
 end
@@ -195,9 +200,10 @@ end
 
 local function startTrial()
   local trial = ui.runtime.trial
-  local armed = Armed and Armed.isArmed and Armed.isArmed()
-  local uncertain = Armed and Armed.isUncertain and Armed.isUncertain()
-  if not Armed or not trialAvailable() or armed or uncertain then trial.status = "unsafe"; requestPageRebuild(); return end
+  local known = type(Armed) == "table" and type(Armed.isArmed) == "function"
+  local armed = known and Armed.isArmed()
+  local uncertain = known and type(Armed.isUncertain) == "function" and Armed.isUncertain()
+  if not known or not trialAvailable() or armed or uncertain then trial.status = "unsafe"; requestPageRebuild(); return end
   if ui.dirty or ui.runtime.readComplete ~= true or ui.config.protocol == 0 then
     trial.status = "save_first"; requestPageRebuild(); return
   end
@@ -450,6 +456,7 @@ function M.wakeup(ctx)
     ui.runtime.trial.active = false
     ui.runtime.trial.pending = false
     ui.runtime.trial.mustRead = true
+    ui.runtime.trial.supported = nil
     ui.runtime.lastSessionSignature = signature
     ui.loaded = false
     ensureLoaded()

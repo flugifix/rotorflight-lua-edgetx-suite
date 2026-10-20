@@ -365,9 +365,56 @@ do
   local page = newPage()
   queued[2].processReply(queued[2], reply(0))
   local before = #queued
-  press(build(page), "Detect wiring")
+  local pressed = press(build(page), "Detect wiring")
   modules["lib/armed.lua"] = saved
+  assert(pressed, "Detect wiring missing in the fail-closed case")
   assert(#queued == before, "start went ahead without lib/armed.lua")
+  assert(statusLabels(build(page))[1] == "Detection needs a live connection and a disarmed model.",
+    "refused start without lib/armed.lua did not say why")
 end
 
-print("OK: 21 ESC wiring API/lifecycle cases")
+-- Where the tool's shared loader exists but cannot load lib/armed.lua, a private copy is no
+-- substitute (it would not see the arm/disarm changes): the start is refused.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(0))
+  _G.rfsuite.require = function() return nil end
+  page.onClose()
+  page.wakeup({ requestRebuild = function() end })
+  queued[#queued].processReply(queued[#queued], configReply)
+  page.wakeup({ requestRebuild = function() end })
+  queued[#queued].processReply(queued[#queued], reply(0))
+  local before = #queued
+  assert(press(build(page), "Detect wiring"), "Detect wiring missing with a failing shared loader")
+  assert(#queued == before, "start went ahead on a private lib/armed.lua copy")
+end
+
+-- A held SUCCESS on open leaves the fields as read: Save writes what the board reported.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(2, 1, 1))
+  assert(page.onSave({ requestRebuild = function() end }) == true, "Save refused after a held SUCCESS")
+  local payload = assert(saveRequest and saveRequest.steps[1] and saveRequest.steps[1].payload)
+  for i = 1, #configReply do
+    assert(payload[i] == configReply[i], "held SUCCESS changed Save byte " .. tostring(i))
+  end
+end
+
+-- Another flight controller answering (a new session signature) asks the capability again,
+-- and a detection running there is adopted rather than left unlocked.
+do
+  local page = newPage()
+  queued[2].processReply(queued[2], reply(0))
+  _G.rfsuite.session.signature = "other board"
+  page.wakeup({ requestRebuild = function() end })
+  local read = queued[#queued]
+  assert(read.command == ConfigApi.command, "new board did not re-read the configuration")
+  read.processReply(read, configReply)
+  page.wakeup({ requestRebuild = function() end })
+  local poll = queued[#queued]
+  assert(poll.command == TrialApi.command and poll.payload[1] == 0, "new board was not asked the capability")
+  poll.processReply(poll, reply(1))
+  assert(page.canSave() == false, "detection running on the new board left Save open")
+end
+
+print("OK: 24 ESC wiring API/lifecycle cases")
